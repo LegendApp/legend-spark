@@ -40,7 +40,8 @@
     "./init-template": "./init-template.cjs",
     "./native": "./native.cjs",
     "./cli": "./bin/spark.cjs",
-    "./schema.json": "./schema.json"
+    "./schema.json": "./schema.json",
+    "./host-extension": "./host-extension.cjs"
   },
   "files": [
     "*.ts",

@@ -271,7 +271,7 @@ export async function dev(
           await appProcess.exited;
         }
         await open();
-        writeJson(settingsFile, { target, goApp });
+        writeJson(settingsFile, { ...(existsSync(settingsFile) ? readJson(settingsFile) : {}), target, goApp });
       } else if (name === "build") {
         if ((await check()) || !canBuild) return;
         writeJson(stateFile(root, "session.json"), { compatible: false, reason: "Preparing custom development build" });
@@ -284,7 +284,7 @@ export async function dev(
         target = "dev";
         restartPending = true;
         await open();
-        writeJson(settingsFile, { target, goApp });
+        writeJson(settingsFile, { ...(existsSync(settingsFile) ? readJson(settingsFile) : {}), target, goApp });
       } else if (name === "open") await open();
     } catch (error) {
       if (!closing) await check();
@@ -375,7 +375,7 @@ export async function dev(
   } finally {
     busy = false;
   }
-  writeJson(settingsFile, { target, goApp });
+  writeJson(settingsFile, { ...(existsSync(settingsFile) ? readJson(settingsFile) : {}), target, goApp });
   await finished;
   process.off("SIGINT", close);
   process.off("SIGTERM", close);

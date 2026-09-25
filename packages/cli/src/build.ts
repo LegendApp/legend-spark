@@ -1,3 +1,4 @@
+import { restoreNativeMetadata } from "./native-metadata.ts";
 import { macOSReleaseSettings } from "./macos-release.ts";
 import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
@@ -25,6 +26,7 @@ import {
   digest,
   hashFiles,
   hostSourceSignature,
+  localSigningIdentity,
   nativePackages,
   readJson,
   runtimeFor,
@@ -188,8 +190,12 @@ async function buildUnlocked(
       return existing;
     }
   }
+  const excludedNames = [...new Set<string>([
+    ...(readAppConfig(root).expo.autolinking?.exclude ?? []),
+    ...chosen.excluded.map((p) => p.name),
+  ])];
   writeJson(stateFile(root, "native-selection.json"), {
-    excluded: chosen.excluded.map((p) => p.name),
+    excluded: excludedNames,
     included: chosen.included.map((p) => ({ name: p.name, root: p.root })),
   });
   const rnConfig = path.join(root, "react-native.config.js");
@@ -210,7 +216,7 @@ async function buildUnlocked(
   if (!isUniversal(root)) {
     pkg.expo ??= {};
     pkg.expo.autolinking ??= {};
-    pkg.expo.autolinking.exclude = chosen.excluded.map((p) => p.name);
+    pkg.expo.autolinking.exclude = excludedNames;
     writeJson(path.join(root, "package.json"), pkg);
   }
   const preparation = digest(
@@ -233,8 +239,11 @@ async function buildUnlocked(
     !existsSync(preparedFile) ||
     readJson(preparedFile).fingerprint !== preparation ||
     !existsSync(path.join(root, "macos/Pods/Manifest.lock"));
+  const nativeConfig = readAppConfig(root).expo;
   if (needsPreparation) {
     const manifest = readFileSync(path.join(root, "package.json"), "utf8");
+    const appJson = path.join(root, "app.json");
+    const originalAppJson = existsSync(appJson) ? readFileSync(appJson, "utf8") : undefined;
     try {
       await run(
         root,
@@ -246,7 +255,10 @@ async function buildUnlocked(
           "--template",
           "expo-desktop-template-bare-minimum@54.81.1-beta.6",
           "--no-install",
-          ...(force ? ["--clean"] : []),
+          // Template renaming is not idempotent (HelloWorld becomes
+          // LegendHelloWorld, then LegendLegendHelloWorld). Native projects
+          // are generated output; recreate them whenever preparation changes.
+          "--clean",
         ],
         { env: { CI: "1" }, capture: true },
       );
@@ -254,6 +266,8 @@ async function buildUnlocked(
       // platform's installed manifest instead of silently adding uninstalled Windows packages.
     } finally {
       writeFileSync(path.join(root, "package.json"), manifest);
+      // Upstream template replacement also rewrites app.json substrings.
+      if (originalAppJson !== undefined) writeFileSync(appJson, originalAppJson);
     }
     // ReactCodegen's source glob must not pick up bindings from a previously larger graph.
     rmSync(path.join(root, "macos/build/generated"), {
@@ -267,6 +281,7 @@ async function buildUnlocked(
     });
     writeJson(preparedFile, { fingerprint: preparation });
   }
+  await restoreNativeMetadata(root, nativeConfig);
   const nativeRoot = path.join(root, "macos");
   const workspace = readdirSync(nativeRoot).find((name) =>
     name.endsWith(".xcworkspace"),
@@ -342,11 +357,11 @@ async function buildUnlocked(
     if (existsSync(hermes))
       await run(root, ["strip", "-S", "-x", hermes], { capture: true });
   }
-  // Local standalone outputs remain ad-hoc. `spark package` signs a separate
-  // staging copy with Developer ID for distribution.
+  // Development apps can opt into a local identity for same-team native plugins.
+  // Standalone outputs remain ad-hoc until `spark package` signs its staging copy.
   await run(
     root,
-    ["codesign", "--force", "--deep", "--sign", "-", destination],
+    ["codesign", "--force", "--deep", "--sign", localSigningIdentity(root, mode), destination],
     { capture: true },
   );
   writeJson(resultFile, result);

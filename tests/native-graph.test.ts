@@ -7,12 +7,28 @@ import {
   goConfigurationIssues,
   hashFiles,
   nativePackages,
+  installedPackages,
+  localSigningIdentity,
   projectEnvironment,
   incompatible,
   selection,
   type NativePackage,
   type Runtime,
 } from "../packages/cli/src/project.ts";
+
+test("local development signing is opt-in and cannot affect distribution builds", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-dev-signing-"));
+  try {
+    expect(localSigningIdentity(root, "dev")).toBe("-");
+    mkdirSync(path.join(root, ".spark"));
+    const settings = path.join(root, ".spark/settings.json");
+    writeFileSync(settings, JSON.stringify({ macOSDevelopmentIdentity: "Apple Development: Example" }));
+    expect(localSigningIdentity(root, "dev")).toBe("Apple Development: Example");
+    for (const mode of ["release", "preview", "go"]) expect(localSigningIdentity(root, mode)).toBe("-");
+    writeFileSync(settings, JSON.stringify({ macOSDevelopmentIdentity: "--invalid" }));
+    expect(() => localSigningIdentity(root, "dev")).toThrow("signing certificate");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 function pkg(name: string, sdk = true, requires: string[] = []): NativePackage {
   return {
@@ -164,4 +180,32 @@ test("an optional peer in a parent workspace is not a native requirement unless 
     writeFileSync(path.join(root, "package.json"), JSON.stringify(manifest));
     expect(nativePackages(root).map(pkg => pkg.name)).toContain("mobile-backend");
   } finally { rmSync(workspace, { recursive: true, force: true }); }
+});
+
+test("single-platform native discovery respects explicit autolinking exclusions", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-native-exclusion-"));
+  try {
+    const module = path.join(root, "node_modules/optional-native");
+    mkdirSync(module, { recursive: true });
+    writeFileSync(path.join(module, "package.json"), JSON.stringify({ name: "optional-native", version: "1.0.0", codegenConfig: { name: "OptionalSpec" } }));
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "probe", dependencies: { "optional-native": "1.0.0" } }));
+    const config = { expo: { name: "Probe", platforms: ["macos"], autolinking: { exclude: ["optional-native"] } } };
+    writeFileSync(path.join(root, "app.json"), JSON.stringify(config));
+    expect(nativePackages(root)).toEqual([]);
+    config.expo.autolinking.exclude = [];
+    writeFileSync(path.join(root, "app.json"), JSON.stringify(config));
+    expect(nativePackages(root).map(pkg => pkg.name)).toEqual(["optional-native"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("dependency discovery accepts packages exposing only subpath entries", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-subpaths-"));
+  try {
+    const module = path.join(root, "node_modules/@example/list");
+    mkdirSync(module, { recursive: true });
+    writeFileSync(path.join(module, "package.json"), JSON.stringify({ name: "@example/list", version: "1.0.0", exports: { "./native": "./native.js" } }));
+    writeFileSync(path.join(module, "native.js"), "module.exports = {};");
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "probe", dependencies: { "@example/list": "1.0.0" } }));
+    expect(installedPackages(root).map(pkg => pkg.name)).toEqual(["@example/list"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -16,7 +16,7 @@
   SparkMarkLaunchComplete();
   self.moduleName = @"main";
   self.dependencyProvider = [RCTAppDependencyProvider new];
-  self.initialProps = SparkInitialProps(@"main", @{});
+  self.initialProps = SparkInitialProps(@"main", self.initialProps ?: @{});
 #if __has_include(<NativeComposeThreadedRuntime/ThreadedRuntime.h>)
   [ThreadedRuntime configureWithReactNativeDelegate:self launchOptions:@{}];
   // Fired before React Native enumerates reload listeners, so workers are

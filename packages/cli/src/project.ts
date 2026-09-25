@@ -87,13 +87,18 @@ export function installedPackages(root: string): Package[] {
       } catch {
         // Packages with exports hiding package.json still have an owning directory.
         try {
-          let dir = path.dirname(req.resolve(name));
-          while (
-            (!existsSync(path.join(dir, "package.json")) || typeof readJson(path.join(dir, "package.json")).name !== "string") &&
-            dir !== path.dirname(dir)
-          )
-            dir = path.dirname(dir);
-          file = path.join(dir, "package.json");
+          // Subpath-only packages (e.g. @legendapp/list/react-native) may
+          // expose neither package.json nor a root entry. Inspect Node's
+          // package search locations without requiring a public root export.
+          const manifest = req.resolve.paths(name)?.map(base => path.join(base, name, "package.json"))
+            .find(candidate => existsSync(candidate));
+          if (manifest) file = manifest;
+          else {
+            let dir = path.dirname(req.resolve(name));
+            while ((!existsSync(path.join(dir, "package.json")) || typeof readJson(path.join(dir, "package.json")).name !== "string") && dir !== path.dirname(dir))
+              dir = path.dirname(dir);
+            file = path.join(dir, "package.json");
+          }
         } catch {
           if (
             current.app &&
@@ -160,7 +165,8 @@ export function nativePackages(root: string): NativePackage[] {
   // Fold it into the mandatory app module's compatibility signature for Go.
   const adapters = installed.filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
     .map(pkg => hashFiles(pkg.root, ["package.json", "AppDelegate.mm", ...readdirSync(pkg.root).filter(name => name.endsWith(".cjs"))])).join(":");
-  const excluded = isUniversal(root) ? readAppConfig(root).expo?.autolinking?.exclude ?? [] : [];
+  const excluded = ["app.json", "desktop.config.json"].some(file => existsSync(path.join(root, file)))
+    ? readAppConfig(root).expo?.autolinking?.exclude ?? [] : [];
   return installed.filter(pkg => !excluded.includes(pkg.name))
     .filter(
       (pkg) =>
@@ -260,6 +266,15 @@ export function hostSourceSignature(root: string) {
     .filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
     .map(pkg => [pkg.name, hashFiles(pkg.root, ["package.json", "AppDelegate.mm", "windows", ...readdirSync(pkg.root).filter(file => file.endsWith(".cjs"))])])));
 }
+export function localSigningIdentity(root: string, mode: string): string {
+  if (mode !== "dev") return "-";
+  const file = stateFile(root, "settings.json");
+  const identity = existsSync(file) ? readJson(file).macOSDevelopmentIdentity : undefined;
+  if (identity === undefined) return "-";
+  if (typeof identity !== "string" || !identity.trim() || identity.startsWith("-"))
+    throw new Error("macOSDevelopmentIdentity must name a signing certificate or its SHA-1 fingerprint");
+  return identity;
+}
 export function runtimeFor(
   root: string,
   packages: NativePackage[],
@@ -292,6 +307,9 @@ export function runtimeFor(
     fingerprint: digest(
       JSON.stringify({
         arch: architecture(platform),
+        // Rebuild cached hosts generated before canonical plist restoration.
+        ...(platform === "macos" ? { nativeMetadataVersion: 1 } : {}),
+        ...(platform === "macos" && mode === "dev" ? { developmentIdentity: localSigningIdentity(root, mode) } : {}),
         ...(platform === "macos" && mode === "release" ? { releaseSettings: macOSReleaseSettings } : {}),
         modules,
         pins,

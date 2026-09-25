@@ -27,10 +27,18 @@ module.exports = function withSparkDesktop(config) {
   });
   config = withAppDelegate(config, (mod) => {
     // Own this adapter; application customizations belong in configuration/plugins.
-    mod.modResults.contents = fs.readFileSync(
-      require.resolve("@legendapp/spark-desktop-host/AppDelegate.mm"),
-      "utf8",
-    );
+    const host = fs.readFileSync(require.resolve("@legendapp/spark-desktop-host/AppDelegate.mm"), "utf8");
+    const extension = mod.extra?.spark?.hostExtension;
+    if (extension) {
+      const root = mod.modRequest.projectRoot;
+      const source = fs.readFileSync(path.resolve(root, extension.source), "utf8");
+      const header = fs.readFileSync(path.resolve(root, extension.header), "utf8");
+      const composed = require("./host-extension.cjs").composeHostExtension(host, source, header);
+      const destination = mod.modResults.path.replace(/\.(mm|m)$/, ".h");
+      if (destination === mod.modResults.path || !fs.existsSync(destination)) throw new Error("Cannot find generated AppDelegate header");
+      fs.writeFileSync(destination, composed.header);
+      mod.modResults.contents = composed.source;
+    } else mod.modResults.contents = host;
     return mod;
   });
   config = withInfoPlist(config, (mod) => {
@@ -51,6 +59,12 @@ module.exports = function withSparkDesktop(config) {
       "react_native_post_install(installer)",
       'react_native_post_install(installer, "#{config[:reactNativePath]}-macos")',
     );
+    // Bun/pnpm may resolve RN and RN macOS into different physical directories.
+    // Appending "-macos" to RN's resolved path is only valid for flat installs.
+    const macOSPath = JSON.stringify(path.relative(path.join(mod.modRequest.projectRoot, "macos"), path.dirname(require.resolve("react-native-macos/package.json", {
+      paths: [mod.modRequest.projectRoot],
+    })))).replace(/#\{/g, "\\#{");
+    mod.modResults.contents = mod.modResults.contents.replaceAll('"#{config[:reactNativePath]}-macos"', macOSPath);
     const selectionFile = statePath(mod.modRequest.projectRoot, "native-selection.json", "macos");
     const included = fs.existsSync(selectionFile) ? JSON.parse(fs.readFileSync(selectionFile, "utf8")).included : [];
     const updatePackage = included.find(pkg => pkg.name === "@legendapp/spark-updates");
