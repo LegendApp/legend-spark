@@ -127,6 +127,89 @@
         },
         "infoPlist": {
           "type": "object"
+        },
+        "lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "plugins": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              }
+            },
+            "mainWindow": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "hidden": {
+                  "type": "boolean"
+                },
+                "glass": {
+                  "type": "boolean"
+                },
+                "autosaveName": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "closeBehavior": {
+                  "enum": [
+                    "close",
+                    "hide",
+                    "request"
+                  ]
+                },
+                "reopenBehavior": {
+                  "enum": [
+                    "default",
+                    "manual",
+                    "visibleWindows"
+                  ]
+                },
+                "toolbarStyle": {
+                  "enum": [
+                    "unified",
+                    "expanded"
+                  ]
+                },
+                "titlebarSeparatorStyle": {
+                  "enum": [
+                    "automatic",
+                    "none",
+                    "line",
+                    "shadow"
+                  ]
+                },
+                "backgroundColors": {
+                  "type": "object",
+                  "required": [
+                    "light",
+                    "dark"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "light": {
+                      "type": "string",
+                      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+                    },
+                    "dark": {
+                      "type": "string",
+                      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+                    }
+                  }
+                }
+              }
+            },
+            "appearance": {
+              "enum": [
+                "system",
+                "light",
+                "dark"
+              ]
+            }
+          }
         }
       }
     },

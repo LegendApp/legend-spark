@@ -1,11 +1,11 @@
 #import "SparkDesktop.h"
+#import "SparkQuitCoordinator.h"
 #import <CommonCrypto/CommonDigest.h>
 #import <sys/file.h>
 #import <fcntl.h>
 #import <unistd.h>
 NSString * const SparkDesktopEvent = @"SparkDesktopEvent";
-static BOOL quitGuard = NO;
-static BOOL quitting = NO;
+static SparkQuitReply jsQuitReply;
 static NSUInteger quitGeneration = 0;
 static NSMutableArray *pendingURLs;
 static NSString *initialURL;
@@ -87,31 +87,28 @@ void SparkOpenURLs(NSArray<NSURL *> *urls) {
   }
 }
 NSArray *SparkPendingURLs(void) { return [pendingURLs copy] ?: @[]; }
+static SparkQuitCoordinator *SparkQuitCoordinatorInstance(void) {
+  static SparkQuitCoordinator *coordinator;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ coordinator = [[SparkQuitCoordinator alloc] initWithReply:^(BOOL allow) {
+    [NSApp replyToApplicationShouldTerminate:allow];
+  } timeout:30]; });
+  return coordinator;
+}
+void SparkRegisterQuitHandler(NSString *identifier, SparkQuitHandler handler) { [SparkQuitCoordinatorInstance() registerHandler:identifier handler:handler]; }
+void SparkRemoveQuitHandler(NSString *identifier) { [SparkQuitCoordinatorInstance() removeHandler:identifier]; }
 void SparkSetQuitGuard(BOOL value) {
-  if (value != quitGuard) {
-    if (value) [NSProcessInfo.processInfo disableSuddenTermination];
-    else [NSProcessInfo.processInfo enableSuddenTermination];
-  }
-  quitGuard = value;
-  if (!value && quitting) { quitting = NO; [NSApp replyToApplicationShouldTerminate:NO]; }
+  if (value) SparkRegisterQuitHandler(@"spark.javascript", ^(SparkQuitReply reply) {
+    jsQuitReply = [reply copy];
+    SparkEmit(@{ @"type": @"beforeQuit", @"requestId": @(++quitGeneration) });
+  });
+  else { jsQuitReply = nil; SparkRemoveQuitHandler(@"spark.javascript"); }
 }
 void SparkReplyQuit(BOOL allow, NSUInteger generation) {
-  if (!quitting || generation != quitGeneration) return;
-  quitting = NO;
-  [NSApp replyToApplicationShouldTerminate:allow];
+  if (!jsQuitReply || generation != quitGeneration) return;
+  SparkQuitReply reply = jsQuitReply; jsQuitReply = nil; reply(allow);
 }
-NSApplicationTerminateReply SparkShouldQuit(void) {
-  if (!quitGuard) return NSTerminateNow;
-  if (quitting) return NSTerminateLater;
-  quitting = YES;
-  NSUInteger generation = ++quitGeneration;
-  // Emit after returning Later so synchronous JS replies cannot race AppKit.
-  dispatch_async(dispatch_get_main_queue(), ^{ SparkEmit(@{ @"type": @"beforeQuit", @"requestId": @(generation) }); });
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-    if (quitting && generation == quitGeneration) SparkReplyQuit(NO, generation);
-  });
-  return NSTerminateLater;
-}
+NSApplicationTerminateReply SparkShouldQuit(void) { return [SparkQuitCoordinatorInstance() requestQuit]; }
 
 BOOL SparkAcquireInstance(void) {
   static int lockFD = -1;
@@ -127,7 +124,9 @@ BOOL SparkAcquireInstance(void) {
   }
   observer = [NSDistributedNotificationCenter.defaultCenter addObserverForName:name object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
     [NSApp activateIgnoringOtherApps:YES];
-    for (NSWindow *window in NSApp.windows) if ([window.identifier isEqual:@"spark.main"]) [window makeKeyAndOrderFront:nil];
+    BOOL visible = NO;
+    for (NSWindow *window in NSApp.orderedWindows) if (window.isVisible && ![window isKindOfClass:NSPanel.class]) { visible = YES; break; }
+    [NSApp.delegate applicationShouldHandleReopen:NSApp hasVisibleWindows:visible];
     SparkEmit(@{ @"type": @"secondInstance", @"arguments": note.userInfo[@"arguments"] ?: @[] });
   }];
   return YES;

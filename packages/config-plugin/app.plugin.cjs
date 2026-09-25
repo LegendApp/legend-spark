@@ -27,18 +27,7 @@ module.exports = function withSparkDesktop(config) {
   });
   config = withAppDelegate(config, (mod) => {
     // Own this adapter; application customizations belong in configuration/plugins.
-    const host = fs.readFileSync(require.resolve("@legendapp/spark-desktop-host/AppDelegate.mm"), "utf8");
-    const extension = mod.extra?.spark?.hostExtension;
-    if (extension) {
-      const root = mod.modRequest.projectRoot;
-      const source = fs.readFileSync(path.resolve(root, extension.source), "utf8");
-      const header = fs.readFileSync(path.resolve(root, extension.header), "utf8");
-      const composed = require("./host-extension.cjs").composeHostExtension(host, source, header);
-      const destination = mod.modResults.path.replace(/\.(mm|m)$/, ".h");
-      if (destination === mod.modResults.path || !fs.existsSync(destination)) throw new Error("Cannot find generated AppDelegate header");
-      fs.writeFileSync(destination, composed.header);
-      mod.modResults.contents = composed.source;
-    } else mod.modResults.contents = host;
+    mod.modResults.contents = fs.readFileSync(require.resolve("@legendapp/spark-desktop-host/AppDelegate.mm"), "utf8");
     return mod;
   });
   config = withInfoPlist(config, (mod) => {

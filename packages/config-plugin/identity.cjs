@@ -16,6 +16,7 @@ function identity(config) {
     LSUIElement: config.extra?.spark?.menuBarOnly === true,
     SparkMenuBarOnly: config.extra?.spark?.menuBarOnly === true,
     SparkProjectIdentifier: projectId,
+    SparkLifecycleConfiguration: require("./lifecycle.cjs").validateLifecycle(config.macos?.lifecycle),
     SparkWindowConfiguration: validateWindow(config.extra?.spark?.window ?? {}),
     ...updatePlist(config),
     // The app may need JS to save edits before accepting a quit request.
