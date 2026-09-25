@@ -2,7 +2,7 @@
 
 This document explains the current Legend Spark source, its ownership boundaries, and the constraints that changes must preserve. Start with [README.md](README.md) for setup and application usage. Feature guides under [docs](docs) contain API details and dated validation evidence.
 
-The implementation is a local macOS 14+ / Apple Silicon prototype with an integrated Windows x64/ARM64 development adapter. Windows prebuilt and custom builds use the shared framework flow, but native Windows acceptance remains pending. Production Windows builds are not implemented. Windows SDK ports are implemented in source and await native compilation and acceptance. Treat original plans and older prototype reports as historical context when a newer implementation or validation report supersedes them.
+The implementation is a local macOS 14+ prototype with Apple Silicon and Intel build targets (Intel native acceptance pending) with an integrated Windows x64/ARM64 development adapter. Windows prebuilt and custom builds use the shared framework flow, but native Windows acceptance remains pending. Production Windows builds are not implemented. Windows SDK ports are implemented in source and await native compilation and acceptance. Treat original plans and older prototype reports as historical context when a newer implementation or validation report supersedes them.
 
 ## Purpose and system boundaries
 
@@ -109,7 +109,7 @@ App/window close guards, incoming launch events, and single-instance forwarding 
 
 The public shared-client name is **Spark Runner**. Legacy `build-go`/`--go-binary` commands alias the new `build-runner`/`--runner-binary` spellings. Persisted `"go"` mode values and existing build/registry paths remain stable; this is a terminology change, not a runtime schema migration.
 
-Each binary embeds `spark-runtime.json`. The current schema contains the framework version, platform, architecture, mode, native package signatures, and a build fingerprint. Runtime discovery also validates the expected application layout. The supported layouts are macOS/arm64 (`Contents/Resources/spark-runtime.json` inside a `.app`) and Windows/x64 or Windows/arm64 (`spark-runtime.json` alongside `MyApp.exe` and its DLLs). Spark Runner discovery filters by platform and target architecture before checking module signatures; it must never select a macOS binary for a Windows project.
+Each binary embeds `spark-runtime.json`. The current schema contains the framework version, platform, architecture, mode, native package signatures, and a build fingerprint. Runtime discovery also validates the expected application layout. The supported layouts are macOS/arm64 or macOS/x64 (`Contents/Resources/spark-runtime.json` inside a `.app`) and Windows/x64 or Windows/arm64 (`spark-runtime.json` alongside `MyApp.exe` and its DLLs). Spark Runner discovery filters by platform and target architecture before checking module signatures; it must never select a macOS binary for a Windows project.
 
 Native signatures include package metadata, native sources/specs, relevant configuration, and host integration. The build fingerprint additionally includes pinned framework/runtime versions, app configuration, and helper inputs. Matching a semver range is not sufficient proof of native compatibility.
 

@@ -42,7 +42,7 @@ export async function downloadAsset(asset: { url: string; size: number; sha256: 
 }
 async function verify(app: string, asset: RunnerAsset, deps: Dependencies) {
   const runtime = readRuntime(app);
-  if (!runtime || runtime.mode !== "go" || runtime.platform !== "macos" || runtime.arch !== "arm64" || runtime.fingerprint !== asset.fingerprint) throw new Error("Downloaded Runner has incompatible runtime metadata");
+  if (!runtime || runtime.mode !== "go" || runtime.platform !== "macos" || runtime.arch !== architecture("macos") || runtime.fingerprint !== asset.fingerprint) throw new Error("Downloaded Runner has incompatible runtime metadata");
   await deps.run(path.dirname(app), ["codesign", "--verify", "--deep", "--strict", app], { capture: true });
   const signature = await deps.run(path.dirname(app), ["codesign", "-dvvv", app], { capture: true });
   if (!signature.includes(`TeamIdentifier=${asset.teamId}\n`) || !signature.includes("Authority=Developer ID Application:")) throw new Error("Runner publisher signature does not match this SDK");
@@ -101,7 +101,7 @@ export async function acquireRunner(platform: DesktopPlatform) {
     const target = `${platform}-${architecture(platform)}`;
     const asset = release.runners[target];
     if (!asset) throw new Error(`This Spark release has no Runner for ${target}. Use a custom development build.`);
-    if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("This release's Runner requires Apple Silicon macOS and arm64 Node.");
+    if (process.platform !== "darwin") throw new Error("This release's macOS Runner requires macOS.");
     app = await installRunner(asset);
   }
   return app;

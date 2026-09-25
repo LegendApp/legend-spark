@@ -291,7 +291,7 @@ export function runtimeFor(
     modules,
     fingerprint: digest(
       JSON.stringify({
-        ...(platform === "windows" ? { arch: architecture(platform) } : {}),
+        arch: architecture(platform),
         ...(platform === "macos" && mode === "release" ? { releaseSettings: macOSReleaseSettings } : {}),
         modules,
         pins,

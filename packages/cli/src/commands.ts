@@ -106,8 +106,8 @@ export async function doctor(root: string) {
     await run(root, ["pwsh.exe", "-File", path.join(windows, "Scripts/rnw-dependencies.ps1")]);
     return;
   }
-  if (process.platform !== "darwin" || process.arch !== "arm64")
-    throw new Error("The prototype supports Apple Silicon macOS only.");
+  if (process.platform !== "darwin")
+    throw new Error("Native macOS builds require macOS.");
   for (const tool of ["node", "pod", "xcodebuild"])
     if (!which(tool))
       throw new Error(

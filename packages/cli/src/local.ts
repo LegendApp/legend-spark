@@ -35,7 +35,7 @@ export function readRuntime(app: string): Runtime | undefined {
   try {
     const windows = existsSync(path.join(app, "spark-runtime.json"));
     const runtime = readJson(path.join(app, windows ? "spark-runtime.json" : "Contents/Resources/spark-runtime.json"));
-    if (runtime.schema !== 1 || runtime.framework !== VERSION || !["macos", "windows"].includes(runtime.platform) || !(runtime.platform === "windows" ? ["arm64", "x64"] : ["arm64"]).includes(runtime.arch) || !runtime.modules || typeof runtime.modules !== "object" || typeof runtime.fingerprint !== "string") return undefined;
+    if (runtime.schema !== 1 || runtime.framework !== VERSION || !["macos", "windows"].includes(runtime.platform) || !["arm64", "x64"].includes(runtime.arch) || !runtime.modules || typeof runtime.modules !== "object" || typeof runtime.fingerprint !== "string") return undefined;
     if (!existsSync(path.join(app, windows ? "MyApp.exe" : "Contents/MacOS")) || windows !== (runtime.platform === "windows")) return undefined;
     return runtime;
   } catch { return undefined; }

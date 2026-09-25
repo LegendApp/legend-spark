@@ -65,7 +65,7 @@ test("packaging entitlements follow the release binary even when the last genera
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test.skipIf(process.platform !== "darwin" || process.arch !== "arm64")("noninteractive package preflight reports missing credentials before building", async () => {
+test.skipIf(process.platform !== "darwin")("noninteractive package preflight reports missing credentials before building", async () => {
   const root = temporary();
   try {
     writeJson(path.join(root, "package.json"), { name: "test" });
@@ -121,17 +121,17 @@ test("signing traverses nested code inside out without following symlinks outsid
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-function harness() {
+function harness(arch: "arm64" | "x64" = "arm64", binaryArch = arch === "x64" ? "x86_64" : "arm64") {
   const root = temporary();
   const source = appFixture(root);
   writeJson(path.join(root, "app.json"), { expo: { name: "Probe", slug: "probe", version: "1.0.0", macos: { bundleIdentifier: "test.probe" } } });
   writeJson(path.join(root, ".spark/native-selection.json"), { included: [] });
-  const runtime: Runtime = { schema: 1, framework: VERSION, platform: "macos", arch: "arm64", mode: "release", fingerprint: "test", modules: {} };
+  const runtime: Runtime = { schema: 1, framework: VERSION, platform: "macos", arch, mode: "release", fingerprint: "test", modules: {} };
   const state = { status: "In Progress", submits: 0, upload: "", badHash: false, invalidSignature: false, uncertainSubmit: false, calls: [] as string[][] };
   const execute: Runner = async (_root, args) => {
     state.calls.push(args);
     if (args[0] === "plutil") return args.includes("json") ? readFileSync(args.at(-1)!, "utf8") : "";
-    if (args[0] === "lipo") return "arm64\n";
+    if (args[0] === "lipo") return binaryArch + "\n";
     if (args[0] === "codesign") {
       if (args.includes("-dvvv")) return state.invalidSignature ? "Signature=adhoc\n" : `Authority=${identity.name}\nTeamIdentifier=${identity.teamId}\nCodeDirectory flags=0x10000(runtime)\nTimestamp=Sep 10, 2026\n`;
       return "";
@@ -281,5 +281,20 @@ test("Runner packaging preserves development mode, needs no embedded JS, and ski
     });
     expect(mode).toBe("go"); expect(result.pending).toBe(false);
     expect(h.state.submits).toBe(1);
+  } finally { h.cleanup(); }
+});
+
+test("Intel packaging validates x86_64 and names the distribution by target", async () => {
+  const h = harness("x64");
+  try {
+    h.state.status = "Accepted";
+    await packageApp(h.root, { waitMs: 0 }, h.dependencies);
+    expect(existsSync(path.join(h.root, "dist/probe-1.0.0-x64.zip"))).toBe(true);
+  } finally { h.cleanup(); }
+});
+test("Intel packaging rejects an ARM executable", async () => {
+  const h = harness("x64", "arm64");
+  try {
+    await expect(packageApp(h.root, { waitMs: 0 }, h.dependencies)).rejects.toThrow("x86_64");
   } finally { h.cleanup(); }
 });

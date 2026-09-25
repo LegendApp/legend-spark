@@ -16,7 +16,7 @@ an existing prototype checkout.
 
 Application JavaScript runs in **Hermes**. Node and Bun are development tools; neither is embedded as the application's JavaScript runtime. The UI uses React Native's native renderer.
 
-**Current scope:** macOS 14+ on Apple Silicon. The packages, CLI, and native runtime are prototypes. A [transferable SDK with optional Spark Runner runtimes](docs/sdk-distribution.md) works outside the checkout; experimental npm packages use the `next` tag; matching SDK archives and macOS development runtimes are distributed through [GitHub prereleases](https://github.com/LegendApp/legend-spark/releases). Windows x64/ARM64 prebuilt and custom development builds are integrated, with native verification still pending; see the [Windows development guide](docs/windows-slice.md). Mobile/web development delegates to Expo. Intel macOS, Linux, and Mac App Store distribution are not supported by this framework's current workflow.
+**Current scope:** macOS 14+ with Apple Silicon and Intel build targets. Intel native compilation and runtime acceptance remain pending; see [Intel macOS](docs/macos-intel.md). The packages, CLI, and native runtime are prototypes. A [transferable SDK with optional Spark Runner runtimes](docs/sdk-distribution.md) works outside the checkout; experimental npm packages use the `next` tag; matching SDK archives and macOS development runtimes are distributed through [GitHub prereleases](https://github.com/LegendApp/legend-spark/releases). Windows x64/ARM64 prebuilt and custom development builds are integrated, with native verification still pending; see the [Windows development guide](docs/windows-slice.md). Mobile/web development delegates to Expo. Linux and Mac App Store distribution are not supported by this framework's current workflow.
 
 The checkout currently targets Expo SDK 54 / React Native 0.81 and pins **Expo Desktop 1.0.0-beta.6**. Expo Desktop owns template creation and native project generation; Expo CLI owns Metro and the development terminal. spark adds desktop actions, runtime compatibility checks, native capabilities, and build orchestration. See the [integration boundary](docs/expo-desktop-integration.md) for the remaining upstream launch requirements.
 
@@ -65,7 +65,7 @@ This is a **local SDK workflow**. Run the following from a clone of this reposit
 
 ### 1. Prepare the SDK
 
-You need Node 24.19.0 or newer and npm, pnpm, Yarn, or Bun as your package manager. Bun is optional; the CLI and SDK installer run on Node. The repository tests and integration scripts also run on Node. Building native binaries also requires an Apple Silicon Mac, full Xcode with first-launch setup completed, and CocoaPods. The SDK pack step uses Git and tar, and fetches pinned upstream Runtimes source and library archives on its first run. Patches are applied in JavaScript.
+You need Node 24.19.0 or newer and npm, pnpm, Yarn, or Bun as your package manager. Bun is optional; the CLI and SDK installer run on Node. The repository tests and integration scripts also run on Node. Building native binaries also requires a Mac, full Xcode with first-launch setup completed, and CocoaPods. The SDK pack step uses Git and tar, and fetches pinned upstream Runtimes source and library archives on its first run. Patches are applied in JavaScript.
 
 ```sh
 npm install
@@ -138,7 +138,7 @@ cd C:\dev\MySparkApp
 npm run windows
 ```
 
-Creation defaults to Windows on a Windows machine. `npm run windows`, `npm run dev`, and `npm start` enter the normal `spark dev` session. Additional Windows native dependencies use the normal custom-build path: the session detects incompatible prebuilt code and offers `b`, or you can run `npx --no-install spark build --dev` explicitly. Windows builds default to the native CPU architecture, including ARM64 on Apple Silicon Parallels; runtime registration distinguishes Windows/x64, Windows/arm64, and macOS/arm64. See the Windows guide for the ARM64 compiler tools and `SPARK_WINDOWS_ARCH` override.
+Creation defaults to Windows on a Windows machine. `npm run windows`, `npm run dev`, and `npm start` enter the normal `spark dev` session. Additional Windows native dependencies use the normal custom-build path: the session detects incompatible prebuilt code and offers `b`, or you can run `npx --no-install spark build --dev` explicitly. Windows builds default to the native CPU architecture, including ARM64 on Apple Silicon Parallels; runtime registration distinguishes Windows/x64, Windows/arm64, macOS/arm64, and macOS/x64. See the Windows guide for the ARM64 compiler tools and `SPARK_WINDOWS_ARCH` override.
 
 For the automated prebuilt → Fast Refresh → added native module → custom-build check, run from the framework checkout with a fresh destination:
 

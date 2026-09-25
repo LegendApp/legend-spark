@@ -122,7 +122,7 @@ The prototype supports static `app.json` configuration. Programmatic app configu
 
 Use Node **24.19.0**, pinned in the checkout's `.nvmrc` (`nvm install && nvm use`). Node 24.12.0 fails to import `AndroidConfig` / `IOSConfig` from Expo's generated CommonJS modules when running Expo Desktop beta. Create/prebuild and the native doctor check the installed Expo Desktop config exports with the actual Node executable on PATH, so incompatible runtimes fail before native generation. This check does not patch Expo or change the Expo Desktop beta pin.
 
-`spark doctor` checks Apple Silicon macOS, Node, CocoaPods, Xcode, and the macOS SDK. Install full Xcode, complete its first-launch/license setup, and select it with the normal Xcode command-line tools settings. Command Line Tools alone cannot build the generated macOS application. Install CocoaPods in a supported Ruby environment and ensure `pod` is on PATH.
+`spark doctor` checks macOS, Node, CocoaPods, Xcode, and the macOS SDK. Install full Xcode, complete its first-launch/license setup, and select it with the normal Xcode command-line tools settings. Command Line Tools alone cannot build the generated macOS application. Install CocoaPods in a supported Ruby environment and ensure `pod` is on PATH.
 
 The CLI diagnoses missing tooling; it does not silently install Xcode or accept licenses. Re-run the build or switch after completing setup. No native prerequisites are invoked for a compatible Spark Runner launch.
 
@@ -150,3 +150,5 @@ Edit the complete templates under `packages/cli/templates/`: `blank-typescript` 
 `spark create` invokes `expo-desktop@1.0.0-beta.5 create-app --template <archive>`. Expo Desktop validates the directory/name, extracts files, assigns app/native identity, installs dependencies, and initializes Git. A template postinstall initializes spark's configuration once. It does not overwrite an existing project ID or user edits. Project basenames must be alphanumeric, following upstream validation; spaces in parent directories are supported.
 
 Direct Expo Desktop template creation is also checked by `npm run test:templates`, including a consumer outside the checkout. These local archives reference local SDK tarballs; they are not a published package distribution. The [integration handoff](expo-desktop-integration.md) documents the npm compatibility pin and remaining build/launch limitations.
+
+See [Intel macOS targets](macos-intel.md) for architecture selection and dual-architecture Runner releases.

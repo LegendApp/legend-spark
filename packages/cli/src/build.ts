@@ -1,5 +1,5 @@
 import { macOSReleaseSettings } from "./macos-release.ts";
-import { projectPlatform } from "./platform.ts";
+import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
 import { buildWindows } from "./windows.ts";
 import { copyHelpers } from "./helpers.ts";
@@ -275,8 +275,9 @@ async function buildUnlocked(
     throw new Error("Prebuild did not produce a macOS workspace.");
   const name = workspace.slice(0, -".xcworkspace".length);
   const configuration = mode === "release" ? "Release" : "Debug";
-  const derived = stateFile(root, "DerivedData");
-  console.log(`Building ${mode === "go" ? "Spark Runner" : mode} runtime (${configuration}, arm64)…`);
+  const xcodeArch = macOSXcodeArchitecture(runtime.arch);
+  const derived = stateFile(root, `DerivedData/macos-${runtime.arch}`);
+  console.log(`Building ${mode === "go" ? "Spark Runner" : mode} runtime (${configuration}, ${runtime.arch})…`);
   // Export once for analysis; native build performs the normal production bundle step.
   await run(
     root,
@@ -289,10 +290,10 @@ async function buildUnlocked(
       "-configuration",
       configuration,
       "-destination",
-      "platform=macOS,arch=arm64",
+      `platform=macOS,arch=${xcodeArch}`,
       "-derivedDataPath",
       derived,
-      "ARCHS=arm64",
+      `ARCHS=${xcodeArch}`,
       "ONLY_ACTIVE_ARCH=YES",
       "CODE_SIGNING_ALLOWED=NO",
       ...(mode === "release" ? macOSReleaseSettings : []),
@@ -308,7 +309,7 @@ async function buildUnlocked(
   const products = path.join(derived, "Build", "Products", configuration);
   const product = readdirSync(products).find((name) => name.endsWith(".app"));
   if (!product) throw new Error("Build completed without an app product.");
-  const destination = stateFile(root, `products/${mode}/${product}`);
+  const destination = stateFile(root, `products/macos-${runtime.arch}/${mode}/${product}`);
   rmSync(destination, { recursive: true, force: true });
   mkdirSync(path.dirname(destination), { recursive: true });
   cpSync(path.join(products, product), destination, { recursive: true, verbatimSymlinks: true });

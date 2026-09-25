@@ -116,18 +116,19 @@ export async function signApp(root: string, app: string, credentials: SigningCre
   return order;
 }
 
-export async function validateApp(root: string, app: string, credentials: SigningCredentials, expected: { runner?: boolean; bundleId: string; version: string; buildVersion: string; entitlements: Entitlements; byPath: Record<string, Entitlements> }, notarized: boolean, execute: Runner = run) {
+export async function validateApp(root: string, app: string, credentials: SigningCredentials, expected: { arch: "arm64" | "x64"; runner?: boolean; bundleId: string; version: string; buildVersion: string; entitlements: Entitlements; byPath: Record<string, Entitlements> }, notarized: boolean, execute: Runner = run) {
   app = realpathSync(app);
   if (expected.runner) {
     const runtime = readJson(path.join(app, "Contents/Resources/spark-runtime.json"));
-    if (runtime.mode !== "go" || runtime.platform !== "macos" || runtime.arch !== "arm64") throw new Error("Distribution app is not a macOS Spark Runner.");
+    if (runtime.mode !== "go" || runtime.platform !== "macos" || runtime.arch !== expected.arch) throw new Error("Distribution app is not a macOS Spark Runner.");
   } else if (!existsSync(path.join(app, "Contents/Resources/main.jsbundle"))) throw new Error("Distribution app is missing its JavaScript bundle.");
   const info = JSON.parse(await execute(root, ["plutil", "-convert", "json", "-o", "-", path.join(app, "Contents/Info.plist")], { capture: true }));
   for (const [key, value] of Object.entries({ CFBundleIdentifier: expected.bundleId, CFBundleShortVersionString: expected.version, CFBundleVersion: expected.buildVersion })) {
     if (info[key] !== value) throw new Error(`Packaged ${key} does not match the release build.`);
   }
   const arches = (await execute(root, ["lipo", "-archs", path.join(app, "Contents/MacOS", info.CFBundleExecutable)], { capture: true })).trim().split(/\s+/);
-  if (arches.length !== 1 || arches[0] !== "arm64") throw new Error("The prototype package must contain an arm64 app.");
+  const expectedArch = expected.arch === "x64" ? "x86_64" : "arm64";
+  if (arches.length !== 1 || arches[0] !== expectedArch) throw new Error(`The package must contain a ${expectedArch} app.`);
   await execute(root, ["codesign", "--verify", "--deep", "--strict", "--verbose=2", app], { capture: true });
   const order = signingOrder(app);
   const targets = await entitlementTargets(root, app, order, expected.entitlements, expected.byPath, execute);

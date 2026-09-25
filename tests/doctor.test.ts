@@ -4,7 +4,7 @@ import { mkdtempSync, symlinkSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-test.skipIf(process.platform !== "darwin" || process.arch !== "arm64")(
+test.skipIf(process.platform !== "darwin")(
   "missing Xcode produces an actionable diagnostic without starting a build",
   async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "spark-doctor-"));

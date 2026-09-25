@@ -18,7 +18,7 @@ npx --no-install spark package
 
 ## First-run setup
 
-Install a Developer ID Application certificate and its private key through Xcode or Keychain Access. Packaging requires Apple Silicon macOS, the native build prerequisites, and access to Apple's notarization service. Mac App Store signing is a separate, unsupported distribution target.
+Install a Developer ID Application certificate and its private key through Xcode or Keychain Access. Packaging requires macOS, the native build prerequisites, and access to Apple's notarization service. Mac App Store signing is a separate, unsupported distribution target.
 
 On first use, spark discovers available Developer ID identities. It uses the only matching identity automatically or presents a numbered choice. It then asks for an existing notarization Keychain profile or offers to create one using Apple's interactive `notarytool store-credentials` command. That tool handles secret input directly; spark does not capture it. Credentials are validated before a native build begins.
 
@@ -91,10 +91,12 @@ npx --no-install spark package --submission-id <submission-id>
 
 Recovery checks the unique upload filename, and acceptance checks Apple's recorded SHA-256 against the exact uploaded ZIP. Keep the `.spark/packaging/` artifacts while a submission is pending. A changed staged artifact is rejected.
 
-After acceptance, spark staples a fresh final copy. The original signed upload stays immutable so an interrupted staple or validation can be retried safely. Final validation checks bundle metadata, arm64 architecture, nested Developer ID signatures, signing team, hardened runtime, secure timestamps, exact entitlements, stapling, and Gatekeeper. The ZIP is extracted and validated again before it appears in `dist/`.
+After acceptance, spark staples a fresh final copy. The original signed upload stays immutable so an interrupted staple or validation can be retried safely. Final validation checks bundle metadata, the selected binary architecture, nested Developer ID signatures, signing team, hardened runtime, secure timestamps, exact entitlements, stapling, and Gatekeeper. The ZIP is extracted and validated again before it appears in `dist/`.
 
 ## Validation status
 
 The orchestration is covered by simulated signing/notarization tests for pending, accepted, rejected, interrupted, and tampered-artifact cases. Signing order was also exercised with real Apple tools and ad-hoc signing on a copy of the local Hello World app. Generated entitlements were checked through a real expo-desktop prebuild.
 
 A real Developer ID-signed, notarized distribution has not yet been submitted or validated. That acceptance check requires an explicitly selected signing identity and notarization profile. Public prebuilt distribution, provisioning profiles, Sparkle update signing, and publishing remain separate work.
+
+See [Intel macOS targets](macos-intel.md) for architecture selection and dual-architecture Runner releases.

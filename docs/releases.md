@@ -6,7 +6,7 @@ URLs and the Runner archive's checksum, size, publisher team and native
 fingerprint. Published projects use the SDK's exact registry version and HTTPS
 archives. Explicit `create --packages <manifest>` retains local SDK development.
 
-The initial hosted Runner target is macOS arm64. Windows requires a custom build
+Runner release manifests support macOS arm64 and x64; availability depends on the assets published for that release. Windows requires a custom build
 and remains experimental pending native acceptance. Users need Node 24.19+ and
 a package manager, but do not need Xcode to download and open the hosted Runner.
 Native builds and notarization require the maintainer's Apple toolchain.
@@ -27,7 +27,7 @@ Native builds and notarization require the maintainer's Apple toolchain.
 
 ## Build and stage
 
-From the clean, committed release revision on an Apple Silicon Mac:
+From the clean, committed release revision on a Mac:
 
 ```sh
 npm ci
@@ -96,7 +96,7 @@ Validate normalized registry metadata as well as tarball installation.
 
 ## Acceptance before promotion
 
-On another Apple Silicon Mac without the checkout, registered SDK, cached Runner,
+On another Mac matching the Runner architecture without the checkout, registered SDK, cached Runner,
 Bun or Xcode:
 
 ```sh
@@ -115,3 +115,5 @@ JavaScript. Record native UI acceptance separately from bundling/test results.
 
 Only after acceptance, promote the exact tested version to npm's `latest` tag
 and publish release notes. No automatic promotion is performed by these scripts.
+
+See [Intel macOS targets](macos-intel.md) for architecture selection and dual-architecture Runner releases.

@@ -20,7 +20,7 @@ export function validateRelease(value: any): ReleaseManifest {
     if (url.href !== asset.url || !/^[A-Za-z0-9._-]+$/.test(url.pathname.split("/").at(-1) ?? "") || !asset.url.startsWith(releaseBase(VERSION) + "/") || url.search || url.hash || !/^[a-f0-9]{64}$/.test(asset.sha256) || !Number.isSafeInteger(asset.size) || asset.size <= 0) throw new Error("Invalid Spark release asset");
   }
   for (const [target, asset] of Object.entries(value.runners) as [string, RunnerAsset][]) {
-    if (target !== "macos-arm64" || path.basename(asset.app) !== asset.app || !asset.app.endsWith(".app") || !/^[A-Z0-9]{10}$/.test(asset.teamId) || !/^[a-f0-9]+$/.test(asset.fingerprint)) throw new Error("Invalid Runner release target");
+    if (!["macos-arm64", "macos-x64"].includes(target) || path.basename(asset.app) !== asset.app || !asset.app.endsWith(".app") || !/^[A-Z0-9]{10}$/.test(asset.teamId) || !/^[a-f0-9]+$/.test(asset.fingerprint)) throw new Error("Invalid Runner release target");
   }
   return value;
 }

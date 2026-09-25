@@ -191,7 +191,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       console.log("Signing credentials configured. Run spark package to prepare a distribution archive.");
       break;
     case "package": {
-      if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("Packaging currently supports Apple Silicon macOS only.");
+      if (process.platform !== "darwin") throw new Error("macOS packaging requires macOS.");
       const result = await packageApp(project(), { force: !!values.force, submissionId: values["submission-id"] as string | undefined });
       if (result.pending) process.exitCode = 2;
       break;

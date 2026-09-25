@@ -2,7 +2,7 @@ import { installedRelease } from "./release.ts";
 import { acquireRunner } from "./runner-install.ts";
 import { spawnProcess } from "./process.ts";
 import { windowsMetroPort, stopWindowsMetro } from "./windows-metro.ts";
-import { projectPlatform } from "./platform.ts";
+import { architecture, projectPlatform } from "./platform.ts";
 import { nodeCommand } from "./windows.ts";
 import { readAppConfig } from "./project.ts";
 import { existsSync, rmSync, watch } from "node:fs";
@@ -203,7 +203,7 @@ export async function dev(
       }
       issues.push(...goConfigurationIssues(readAppConfig(root)));
     }
-    const view = sessionStatus(target, !!current, issues, appProcess?.exitCode === null, !!installedRelease()?.runners[`${platform}-${platform === "macos" ? "arm64" : process.arch}`]);
+    const view = sessionStatus(target, !!current, issues, appProcess?.exitCode === null, !!installedRelease()?.runners[`${platform}-${architecture(platform)}`]);
     if (view.compatible && current && appProcess?.exitCode === null &&
       (launchedRuntime?.app !== current.app || launchedRuntime.fingerprint !== current.runtime.fingerprint)) {
       // Discovery can find a different compatible binary after a native edit.

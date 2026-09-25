@@ -26,7 +26,22 @@ export function windowsArchitecture(
   }
   return "x64";
 }
-export const architecture = (platform: DesktopPlatform) => platform === "windows" ? windowsArchitecture() : "arm64" as const;
+export type MacOSArchitecture = "arm64" | "x64";
+export function macOSArchitecture(
+  machineArch: string = machine(),
+  env: Partial<NodeJS.ProcessEnv> = process.env,
+): MacOSArchitecture {
+  const explicit = env.SPARK_MACOS_ARCH?.toLowerCase();
+  if (explicit !== undefined) {
+    if (explicit === "arm64" || explicit === "x64") return explicit;
+    throw new Error("SPARK_MACOS_ARCH must be arm64 or x64.");
+  }
+  if (machineArch === "arm64" || machineArch === "aarch64") return "arm64";
+  if (["x64", "x86_64"].includes(machineArch)) return "x64";
+  throw new Error(`Unsupported macOS architecture: ${machineArch}.`);
+}
+export const macOSXcodeArchitecture = (arch: MacOSArchitecture) => arch === "x64" ? "x86_64" : "arm64";
+export const architecture = (platform: DesktopPlatform) => platform === "windows" ? windowsArchitecture() : macOSArchitecture();
 export function projectPlatform(root: string): DesktopPlatform {
   if (!["app.json", "desktop.config.json"].some(name => existsSync(path.join(root, name)))) return "macos";
   const platforms = readConfig(root).expo?.platforms ?? ["macos"];

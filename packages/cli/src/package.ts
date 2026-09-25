@@ -63,13 +63,13 @@ async function packageUnlocked(root: string, options: { force?: boolean; submiss
   const entitlements = distributionEntitlements(appEntitlements(root, result.runtime.modules));
   const byPath = config.extra?.spark?.signing?.macos?.entitlementsByPath ?? {};
   const info = JSON.parse(await execute(root, ["plutil", "-convert", "json", "-o", "-", path.join(result.app, "Contents/Info.plist")], { capture: true }));
-  const expected = { runner: options.runner, bundleId: config.macos.bundleIdentifier, version: config.version, buildVersion: info.CFBundleVersion, entitlements, byPath };
+  const expected = { arch: result.runtime.arch, runner: options.runner, bundleId: config.macos.bundleIdentifier, version: config.version, buildVersion: info.CFBundleVersion, entitlements, byPath };
   if (!expected.bundleId || !expected.version || !expected.buildVersion) throw new Error("Bundle identifier and release version metadata must be configured before packaging.");
   const inputHash = artifactHash(result.app);
   const key = digest(JSON.stringify({ recipe: 1, inputHash, identity: identity.hash, entitlements, byPath }));
   const folder = stateFile(root, `packaging/${key}`);
   const app = path.join(folder, path.basename(result.app));
-  const safeName = `${config.slug ?? config.name}-${config.version}-arm64`.replace(/[^A-Za-z0-9._-]/g, "-");
+  const safeName = `${config.slug ?? config.name}-${config.version}-${result.runtime.arch}`.replace(/[^A-Za-z0-9._-]/g, "-");
   const upload = path.join(folder, `${safeName}-${key.slice(0, 16)}-notary.zip`);
   const statePath = path.join(folder, "state.json");
   mkdirSync(folder, { recursive: true });

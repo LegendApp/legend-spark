@@ -9,8 +9,8 @@ import { packSpark } from "./pack-spark.ts";
 
 // Stage an immutable release only from a signed/notarized Runner and clean source.
 const root = path.resolve(import.meta.dirname, "..");
-const runner = process.argv[2] && path.resolve(process.argv[2]);
-if (!runner || !runner.endsWith(".zip") || !existsSync(runner)) throw new Error("Usage: node scripts/prepare-release.ts <signed Runner.zip>");
+const runners = process.argv.slice(2).map(file => path.resolve(file));
+if (!runners.length || runners.some(file => !file.endsWith(".zip") || !existsSync(file))) throw new Error("Usage: node scripts/prepare-release.ts <signed Runner.zip> [additional Runner.zip]");
 if ((await run(root, ["git", "status", "--porcelain"], { capture: true })).trim()) throw new Error("Commit the release source before assembling its artifacts.");
 const revision = (await run(root, ["git", "rev-parse", "HEAD"], { capture: true })).trim();
 const output = path.join(root, "artifacts/releases", VERSION);
@@ -26,22 +26,26 @@ function asset(file: string, name = path.basename(file)): ReleaseAsset {
   return { url: `${releaseBase(VERSION)}/${name}`, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
 }
 try {
-  const unpacked = path.join(stage, "verify-runner");
-  await run(root, ["ditto", "-x", "-k", runner, unpacked], { capture: true });
-  const apps = readdirSync(unpacked).filter(name => name !== "__MACOSX");
-  if (apps.length !== 1 || !apps[0]!.endsWith(".app")) throw new Error("Runner archive must contain exactly one app");
-  const app = path.join(unpacked, apps[0]!);
-  const runtime = readRuntime(app);
-  if (!runtime || runtime.mode !== "go" || runtime.platform !== "macos" || runtime.arch !== "arm64") throw new Error("Runner version or architecture does not match this release");
-  if (runtime.sourceRevision !== revision) throw new Error("Runner was not built from this release revision. Use npm run release:runner.");
-  await run(root, ["codesign", "--verify", "--deep", "--strict", app], { capture: true });
-  const signature = await run(root, ["codesign", "-dvvv", app], { capture: true });
-  const teamId = /^TeamIdentifier=([A-Z0-9]{10})$/m.exec(signature)?.[1];
-  if (!teamId || !signature.includes("Authority=Developer ID Application:") || !/flags=.*\bruntime\b/.test(signature)) throw new Error("Runner requires Developer ID and hardened runtime signing");
-  await run(root, ["xcrun", "stapler", "validate", app], { capture: true });
-  await run(root, ["spctl", "--assess", "--type", "execute", app], { capture: true });
-  manifest.runners["macos-arm64"] = { ...asset(runner, "spark-runner-macos-arm64.zip"), app: apps[0]!, teamId, fingerprint: runtime.fingerprint };
-  rmSync(unpacked, { recursive: true });
+  for (const runner of runners) {
+    const unpacked = path.join(stage, "verify-runner");
+    await run(root, ["ditto", "-x", "-k", runner, unpacked], { capture: true });
+    const apps = readdirSync(unpacked).filter(name => name !== "__MACOSX");
+    if (apps.length !== 1 || !apps[0]!.endsWith(".app")) throw new Error("Runner archive must contain exactly one app");
+    const app = path.join(unpacked, apps[0]!);
+    const runtime = readRuntime(app);
+    if (!runtime || runtime.mode !== "go" || runtime.platform !== "macos") throw new Error("Runner version or architecture does not match this release");
+    if (runtime.sourceRevision !== revision) throw new Error("Runner was not built from this release revision. Use npm run release:runner.");
+    await run(root, ["codesign", "--verify", "--deep", "--strict", app], { capture: true });
+    const signature = await run(root, ["codesign", "-dvvv", app], { capture: true });
+    const teamId = /^TeamIdentifier=([A-Z0-9]{10})$/m.exec(signature)?.[1];
+    if (!teamId || !signature.includes("Authority=Developer ID Application:") || !/flags=.*\bruntime\b/.test(signature)) throw new Error("Runner requires Developer ID and hardened runtime signing");
+    await run(root, ["xcrun", "stapler", "validate", app], { capture: true });
+    await run(root, ["spctl", "--assess", "--type", "execute", app], { capture: true });
+    const target = `macos-${runtime.arch}`;
+    if (manifest.runners[target]) throw new Error(`Duplicate Runner target: ${target}`);
+    manifest.runners[target] = { ...asset(runner, `spark-runner-${target}.zip`), app: apps[0]!, teamId, fingerprint: runtime.fingerprint };
+    rmSync(unpacked, { recursive: true });
+  }
   for (const name of ["@react-native-runtimes/core", "react-native-nitro-modules", "@op-engineering/op-sqlite", "react-native-webview"]) {
     if (!local[name] || path.basename(local[name]) !== local[name]) throw new Error(`Missing patched release archive: ${name}`);
     manifest.packages[name] = asset(path.join(packages, local[name]));

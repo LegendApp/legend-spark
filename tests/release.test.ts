@@ -29,7 +29,8 @@ test("Runner download retries interrupted streams and rejects mismatched bytes",
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("Runner installs atomically, verifies cached apps without Xcode, and never registers rejected signatures", async () => {
+test.each(["arm64", "x64"])("Runner %s installs atomically and verifies cached apps and publisher signatures", async (arch) => {
+  const previousArch = process.env.SPARK_MACOS_ARCH; process.env.SPARK_MACOS_ARCH = arch;
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-runner-install-"));
   const previous = process.env.SPARK_HOME; process.env.SPARK_HOME = root;
   let downloads = 0, rejected = false;
@@ -41,7 +42,7 @@ test("Runner installs atomically, verifies cached apps without Xcode, and never 
       if (argv[0] === "ditto") {
         const app = path.join(argv.at(-1)!, asset.app);
         mkdirSync(path.join(app, "Contents/MacOS"), { recursive: true });
-        writeJson(path.join(app, "Contents/Resources/spark-runtime.json"), { schema: 1, framework: VERSION, platform: "macos", arch: "arm64", mode: "go", fingerprint: asset.fingerprint, modules: {} });
+        writeJson(path.join(app, "Contents/Resources/spark-runtime.json"), { schema: 1, framework: VERSION, platform: "macos", arch, mode: "go", fingerprint: asset.fingerprint, modules: {} });
       }
       if (argv[0] === "codesign" && argv.includes("-dvvv")) return `Authority=Developer ID Application: Test\nTeamIdentifier=${rejected ? "WRONGTEAM1" : asset.teamId}\n`;
       return "";
@@ -58,10 +59,16 @@ test("Runner installs atomically, verifies cached apps without Xcode, and never 
     await expect(installRunner(asset, root, deps)).rejects.toThrow("publisher signature");
     expect(existsSync(path.join(root, "runtimes"))).toBe(false);
     expect(existsSync(app)).toBe(false);
-  } finally { if (previous === undefined) delete process.env.SPARK_HOME; else process.env.SPARK_HOME = previous; rmSync(root, { recursive: true, force: true }); }
+  } finally { if (previousArch === undefined) delete process.env.SPARK_MACOS_ARCH; else process.env.SPARK_MACOS_ARCH = previousArch; if (previous === undefined) delete process.env.SPARK_HOME; else process.env.SPARK_HOME = previous; rmSync(root, { recursive: true, force: true }); }
 });
 
 test("published SDK sessions explain automatic Runner installation", () => {
   expect(sessionStatus("go", false, [], false, true).actions).toContain("Download and open");
   expect(sessionStatus("go", false, [], false, false).message).toContain("register");
+});
+
+test("release manifests accept both macOS Runner architectures", () => {
+  const manifest = release();
+  manifest.runners["macos-x64"] = asset;
+  expect(validateRelease(manifest).runners["macos-x64"]).toEqual(asset);
 });
