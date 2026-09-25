@@ -12,6 +12,15 @@ const shared = {
   expo: { ios: { bundleIdentifier: "com.example.mobile", infoPlist: { Existing: true } }, android: { package: "com.example.mobile" }, extra: { application: "preserved" } },
   expoByPlatform: { ios: { ios: { infoPlist: { IOSOnly: true } } }, macos: { autolinking: { exclude: ["@expo/ui"] } } },
 };
+test("macOS materializes all URL associations before backend base mods", () => {
+  const input = { ...shared, scheme: ["demo", "demo-auth", "demo"] };
+  const mac = toExpo(input, "macos").expo;
+  expect(mac.macos.infoPlist.CFBundleURLTypes).toEqual([
+    { CFBundleURLName: "universal-settings", CFBundleURLSchemes: ["demo", "demo-auth"] },
+  ]);
+  expect(mac.scheme).toEqual(input.scheme);
+  expect(toExpo(input, "ios").expo.macos.infoPlist.CFBundleURLTypes).toBeUndefined();
+});
 test("target configuration composes overrides without mutating shared input", () => {
   const before = JSON.stringify(shared);
   const ios = toExpo(shared, "ios").expo, mac = toExpo(shared, "macos").expo;
@@ -68,7 +77,7 @@ test("desktop Metro selects native package exports while preserving application 
       web: ["browser"], macos: ["custom", "react-native"], windows: ["react-native", "custom"],
     });
     expect(conditions.macos).toEqual(["custom"]);
-    expect(result.server.unstable_serverRoot).toBe(root);
+    expect(result.server.unstable_serverRoot).toBe(path.dirname(root));
   } finally {
     if (previous === undefined) delete process.env.SPARK_PLATFORM; else process.env.SPARK_PLATFORM = previous;
     rmSync(root, { recursive: true, force: true });

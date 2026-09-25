@@ -24,10 +24,26 @@ function withDesktop(config, options = {}) {
   }
   config = { ...config, resolver: { ...config.resolver, unstable_conditionsByPlatform: conditions } };
   const root = path.resolve(config.projectRoot || process.cwd());
-  // Prebuilt hosts request /index.bundle and /.threaded-runtime/entry.bundle.
-  // Keep those URLs relative to the app inside a monorepo; Expo still discovers
-  // workspace watch folders and package dependencies.
-  config = { ...config, server: { ...config.server, unstable_serverRoot: root } };
+  // Keep the configured workspace root so lazy imports outside the app have
+  // valid URLs. Only the prebuilt host's fixed entry URLs are app-relative.
+  const serverRoot = path.resolve(config.server?.unstable_serverRoot || root);
+  const entryPrefix = path.relative(serverRoot, root).split(path.sep).map(encodeURIComponent).join("/");
+  if (entryPrefix && (entryPrefix === ".." || entryPrefix.startsWith("../"))) {
+    throw new Error("Metro's server root must contain the Spark project");
+  }
+  const rewrite = config.server?.rewriteRequestUrl;
+  config = { ...config, server: { ...config.server, unstable_serverRoot: serverRoot,
+    rewriteRequestUrl(value) {
+      const url = new URL(value, "http://localhost");
+      const platform = url.searchParams.get("platform");
+      if (entryPrefix && (!platform || ["macos", "windows"].includes(platform)) &&
+          /^\/(index|\.threaded-runtime\/entry)\.(bundle|map|delta)$/.test(url.pathname)) {
+        url.pathname = `/${entryPrefix}${url.pathname}`;
+        value = value.startsWith("/") ? `${url.pathname}${url.search}${url.hash}` : url.href;
+      }
+      return rewrite ? rewrite(value) : value;
+    },
+  } };
   let core;
   try { core = require.resolve("@react-native-runtimes/core/metro", { paths: [root] }); } catch {}
   if (!core || options.runtimes === false) {

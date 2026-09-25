@@ -110,7 +110,12 @@ function toExpo(value, target) {
     windows: backend.windows ?? { namespace: "DesktopApp", displayName: value.name, packageGuid: guid, projectGuid: guid },
     plugins: [...(["macos", "windows"].includes(selected) ? ["@legendapp/spark/config-plugin"] : []), ...(backend.plugins ?? []).filter(p => (Array.isArray(p) ? p[0] : p) !== "@legendapp/spark-desktop-config" && (Array.isArray(p) ? p[0] : p) !== "@legendapp/spark/config-plugin")],
   };
-  identity(config);
+  const nativeIdentity = identity(config);
+  // Materialize the framework-owned associations before Expo's base mods run.
+  // This also avoids the desktop backend's broken array-valued scheme coercion.
+  if (selected === "macos" && nativeIdentity.CFBundleURLTypes) {
+    config.macos.infoPlist.CFBundleURLTypes = nativeIdentity.CFBundleURLTypes;
+  }
   return { expo: config };
 }
 function merge(base, override) {
