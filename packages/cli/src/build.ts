@@ -52,7 +52,9 @@ export async function analyze(root: string, packages = nativePackages(root)) {
       "--platform",
       "macos",
       "--entry-file",
-      entryFile(root),
+      // Metro resolves export entries from its server root, which can be the
+      // containing workspace rather than this app's project root.
+      path.resolve(root, entryFile(root)),
       "--bundle-output",
       path.join(dir, "app.js"),
       "--sourcemap-output",
