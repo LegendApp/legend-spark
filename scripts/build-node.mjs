@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -6,7 +6,20 @@ import ts from "typescript";
 export function buildCLI(root = path.resolve(import.meta.dirname, "..")) {
   const source = path.join(root, "packages/cli/src");
   const output = path.join(root, "packages/cli/dist");
-  rmSync(output, { recursive: true, force: true });
+  // Running development sessions load helpers from dist after startup. Never
+  // remove the directory while another app may be starting a Metro process.
+  const generated = new Set();
+  function write(relative, content) {
+    const destination = path.join(output, relative);
+    generated.add(relative);
+    const data = Buffer.from(content);
+    if (existsSync(destination) && readFileSync(destination).equals(data)) return;
+    const temporary = `${destination}.${process.pid}.tmp`;
+    try {
+      writeFileSync(temporary, data);
+      renameSync(temporary, destination);
+    } finally { rmSync(temporary, { force: true }); }
+  }
   function visit(relative) {
     const directory = path.join(source, relative);
     mkdirSync(path.join(output, relative), { recursive: true });
@@ -21,10 +34,15 @@ export function buildCLI(root = path.resolve(import.meta.dirname, "..")) {
         });
         const errors = result.diagnostics?.filter(d => d.category === ts.DiagnosticCategory.Error) ?? [];
         if (errors.length) throw new Error(ts.formatDiagnosticsWithColorAndContext(errors, { getCanonicalFileName: f => f, getCurrentDirectory: () => root, getNewLine: () => "\n" }));
-        writeFileSync(path.join(output, name.replace(/\.ts$/, ".js")), result.outputText);
-      } else cpSync(path.join(source, name), path.join(output, name));
+        write(name.replace(/\.ts$/, ".js"), result.outputText);
+      } else write(name, readFileSync(path.join(source, name)));
     }
   }
   visit("");
+  for (const entry of readdirSync(output, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile() || entry.name.endsWith(".tmp")) continue;
+    const relative = path.relative(output, path.join(entry.parentPath, entry.name));
+    if (!generated.has(relative)) rmSync(path.join(output, relative), { force: true });
+  }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) buildCLI();
