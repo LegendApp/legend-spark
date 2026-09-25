@@ -45,17 +45,17 @@ The development terminal explains incompatibilities and offers a build/switch ac
 
 ## Install the experimental prerelease
 
-Download the matching SDK archive from [GitHub releases](https://github.com/LegendApp/legend-spark/releases), extract it to a permanent location, and run its installer. The macOS ARM64 SDK includes a development runtime; it is not a notarized production application.
+The release workflow publishes one npm package, `@legendapp/spark`, containing the CLI and private implementation modules. Published prereleases use the `next` tag and require Node 24.19.0 or newer. Bun is optional.
+
+Once the matching npm package and GitHub assets have been published:
 
 ```sh
-cd /path/to/LegendSparkSDK-0.1.0-prototype.0
-bun install.ts
-bunx @legendapp/spark@next create /absolute/path/to/MyApp
-cd /absolute/path/to/MyApp
-bun run macos
+npx @legendapp/spark@next create MyApp
+cd MyApp
+npm run macos
 ```
 
-Use Bun 1.3.14+ and Node 24.19.0. Keep the extracted SDK directory in place: generated applications reference its archives, and the runtime registry references its binary. npm alone does not register the patched SDK archives, and the CLI does not download a runtime automatically. No Windows binary is included in this prerelease.
+The published CLI resolves patched dependencies from the matching GitHub prerelease and downloads the macOS ARM64 Spark Runner on first desktop launch. A source/local archive without embedded release metadata still needs a registered local SDK. Windows native acceptance remains pending; this release workflow does not supply a Windows Runner.
 
 ## Quick start from source
 

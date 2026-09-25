@@ -6,22 +6,18 @@ Legend Spark adds native desktop APIs and a managed development workflow to Reac
 
 ## Try the experimental release
 
-You need Bun 1.3.14 or newer and the compatible Node version (currently 24.19.0).
-
-The npm package supplies the public API and `spark` command. Creating an app also requires the matching SDK archive set. Download the SDK from the matching [GitHub prerelease](https://github.com/LegendApp/legend-spark/releases), extract it to a permanent location, and follow its installation instructions. Keep the SDK directory in place after installation.
+Requires Node 24.19.0 or newer. The single `@legendapp/spark` npm package contains the CLI and private implementation modules; no separate Spark module installs are needed. Bun is optional.
 
 ```sh
-# In the extracted SDK directory:
-bun install.ts
-
-# With that SDK registered:
-bunx @legendapp/spark@next create MyApp
+npx @legendapp/spark@next create MyApp
 cd MyApp
-bun run macos
+npm run macos
 ```
 
-The development command uses a compatible registered prebuilt runtime. If none is available, build a custom runtime with the native toolchain. JavaScript edits use Fast Refresh; native changes require rebuilding.
+The published CLI uses matching GitHub release assets for patched native dependencies and automatically downloads the macOS ARM64 Spark Runner on first desktop launch. JavaScript edits use Fast Refresh. Native changes require a compatible runtime rebuild and native build tools.
 
-macOS on Apple Silicon is the primary experimental target. Windows development implementations still need native acceptance; Windows production builds are not supported. Mobile and web use Expo workflows with selected shared adapters.
+Source/local archives without embedded release metadata require a registered local SDK; see the repository setup guide.
 
-[Documentation](https://legend.so/spark) · [Source and current setup guide](https://github.com/LegendApp/legend-spark) · [Known Windows limitations](https://github.com/LegendApp/legend-spark/blob/main/docs/windows-issues.md)
+macOS 14+ on Apple Silicon is the primary experimental target. Windows development implementations still need native acceptance; Windows production builds and a downloadable Windows Runner are not supplied by this prerelease workflow. Mobile and web use Expo workflows with selected shared adapters.
+
+[Documentation](https://legend.so/spark) · [Source and setup guide](https://github.com/LegendApp/legend-spark) · [Known Windows limitations](https://github.com/LegendApp/legend-spark/blob/main/docs/windows-issues.md)
