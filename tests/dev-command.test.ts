@@ -1,6 +1,13 @@
 import { expect, test } from "vitest";
 import { devArguments, devTargets } from "../packages/cli/src/dev-command.ts";
 
+test("desktop launch arguments remain separate from Expo options", () => {
+  expect(devArguments(["--app-arg=/tmp/a file.md", "--clear", "--app-arg=--preview", "--app-arg", "x=y"])).toEqual({
+    appArgs: ["/tmp/a file.md", "--preview", "x=y"], expo: ["--clear"],
+  });
+  expect(() => devArguments(["--app-arg"])).toThrow("needs a value");
+});
+
 test("dev consumes spark options and forwards Expo flags and aliases unchanged", () => {
   const expo = ["--go", "--clear", "--offline", "-p", "8123", "--max-workers=2", "-w", "--scheme", "my-app", "--future-expo-flag"];
   expect(devArguments(["--project", "/tmp/My App", ...expo, "--platform=ios", "--runner-binary=/tmp/Go=1.app", "--no-open"])).toEqual({

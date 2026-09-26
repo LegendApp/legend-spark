@@ -27,14 +27,14 @@ import {
   type Runtime,
 } from "./project.ts";
 
-type BundleOptions = { dev?: boolean; minify?: boolean; https?: boolean };
+type BundleOptions = { dev?: boolean; minify?: boolean; https?: boolean; args?: string[] };
 
 export async function launch(root: string, app: string, port?: number, options: BundleOptions = {}) {
   if (readRuntime(app)?.platform === "windows") {
     if (process.platform !== "win32") throw new Error("Launch the Windows runtime on Windows.");
     const nativePort = await windowsMetroPort(root, port ?? 8081, options);
     writeJson(stateFile(root, "windows-connection.json"), { port: nativePort, dev: options.dev ?? true });
-    return spawnProcess([path.join(app, "MyApp.exe")], { cwd: app, env: { ...process.env, ...projectEnvironment(root), SPARK_METRO_PORT: String(nativePort), SPARK_SESSION_FILE: stateFile(root, "windows-connection.json") }, stdout: "inherit", stderr: "inherit" });
+    return spawnProcess([path.join(app, "MyApp.exe"), ...(options.args ?? [])], { cwd: app, env: { ...process.env, ...projectEnvironment(root), SPARK_METRO_PORT: String(nativePort), SPARK_SESSION_FILE: stateFile(root, "windows-connection.json") }, stdout: "inherit", stderr: "inherit" });
   }
   const info = await run(
     root,
@@ -53,7 +53,7 @@ export async function launch(root: string, app: string, port?: number, options: 
   // RN's native packager websocket reads RCT_jsLocation independently of the
   // JS bundle URL. The process argument domain avoids persistent preference edits.
   return spawnProcess(
-    [executable, ...(port ? ["-RCT_jsLocation", `127.0.0.1:${port}`] : [])],
+    [executable, ...(port ? ["-RCT_jsLocation", `127.0.0.1:${port}`] : []), ...(options.args ?? [])],
     {
       cwd: root,
       env: {
@@ -75,6 +75,7 @@ export async function dev(
   goApp: string | undefined,
   expoArgs: string[] = [],
   noOpen = false,
+  appArgs: string[] = [],
 ) {
   const platform = projectPlatform(root);
   preparePatch(root);
@@ -253,7 +254,7 @@ export async function dev(
         appProcess.kill();
         await appProcess.exited;
       }
-      appProcess = await launch(root, current.app, port, bundleOptions);
+      appProcess = await launch(root, current.app, port, { ...bundleOptions, args: appArgs });
       if (closing) { appProcess.kill(); return; }
       launchedRuntime = { app: current.app, fingerprint: current.runtime.fingerprint };
       reopenPending = false;

@@ -8,7 +8,7 @@ import { nodeCommand } from "./windows.ts";
 
 // Consume only spark options. Expo validates its flags, aliases and values.
 export function devArguments(args: string[]) {
-  const spark: { project?: string; platform?: string; prebuiltBinary?: string; noOpen?: boolean } = {};
+  const spark: { project?: string; platform?: string; prebuiltBinary?: string; noOpen?: boolean; appArgs?: string[] } = {};
   const expo: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
@@ -16,6 +16,10 @@ export function devArguments(args: string[]) {
     if (key === "--no-open") {
       if (inline.length) throw new Error("--no-open does not take a value");
       spark.noOpen = true;
+    } else if (key === "--app-arg") {
+      const value = inline.length ? inline.join("=") : args[++i];
+      if (value === undefined) throw new Error("--app-arg needs a value");
+      (spark.appArgs ??= []).push(value);
     } else if (["--project", "--platform", "--runner-binary", "--prebuilt-binary", "--go-binary"].includes(key!)) {
       const value = inline.length ? inline.join("=") : args[++i];
       if (!value || value.startsWith("-")) throw new Error(`${key} needs a value`);
@@ -38,7 +42,7 @@ export async function devCommand(args: string[]) {
   const options = devArguments(args);
   const start = path.resolve(options.project ?? process.cwd());
   if (options.expo.includes("--help") || options.expo.includes("-h")) {
-    console.log("spark dev options:\n  --project <directory>    Application directory\n  --platform <platform>    Initial launch target; all declared platforms stay available\n  --runner-binary <path>  Register and use a Spark Runner\n  --no-open                Wait for a launch key (explicit Expo launch flags still apply)\n\nAll other options belong to expo start:\n");
+    console.log("spark dev options:\n  --project <directory>    Application directory\n  --platform <platform>    Initial launch target; all declared platforms stay available\n  --runner-binary <path>  Register and use a Spark Runner\n  --app-arg <value>        Pass a desktop launch argument (repeatable)\n  --no-open                Wait for a launch key (explicit Expo launch flags still apply)\n\nAll other options belong to expo start:\n");
     const child = spawnProcess(nodeCommand(start, "expo", "expo", ["start", "--help"]), { cwd: start, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
     process.exitCode = await child.exited;
     return;
@@ -51,7 +55,7 @@ export async function devCommand(args: string[]) {
   const expo = [...options.expo];
   if (!options.noOpen && ["ios", "android", "web"].includes(initial)) expo.push(`--${initial}`);
   if (desktop) {
-    await dev(root, options.prebuiltBinary, expo, !!options.noOpen || initial !== desktop || (desktop === "windows" ? process.platform !== "win32" : process.platform !== "darwin"));
+    await dev(root, options.prebuiltBinary, expo, !!options.noOpen || initial !== desktop || (desktop === "windows" ? process.platform !== "win32" : process.platform !== "darwin"), options.appArgs);
   } else {
     if (options.prebuiltBinary) throw new Error("--runner-binary needs a desktop platform in desktop.config.json");
     prepareConfig(root);
