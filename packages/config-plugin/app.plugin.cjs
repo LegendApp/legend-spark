@@ -40,6 +40,7 @@ module.exports = function withSparkDesktop(config) {
     return mod;
   });
   return withPodfile(config, (mod) => {
+    require("./autolinking.cjs").installAutolinkingPatch(mod.modRequest.projectRoot);
     require("./fabric-lifecycle.cjs").installSurfaceLifecyclePatch(mod.modRequest.projectRoot);
     require("./keyboard-events.cjs").installKeyboardEventsPatch(mod.modRequest.projectRoot);
     // The beta template passes the resolved package to use_react_native!, but
