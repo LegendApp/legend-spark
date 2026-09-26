@@ -11,6 +11,39 @@ const { commands } = require("../packages/cli/src/expo-dev-extension.cjs");
 const root = path.resolve(import.meta.dirname, "..");
 const preload = path.join(root, "packages/cli/src/expo-dev-preload.cjs");
 
+test("Metro readiness does not wait for Expo's dependency checks", async () => {
+  const patches = preparePatch(root) as Map<string, string>;
+  const source = [...patches].find(([file]) => file.endsWith("/startAsync.js"))![1];
+  for (const serverFails of [false, true]) {
+    const events: string[] = [];
+    const exports: any = {};
+    const modules: Record<string, unknown> = {
+      "@expo/config": { getConfig: () => ({ exp: { platforms: ["macos"] }, pkg: {} }) },
+      chalk: { gray: (value: string) => value },
+      "../log": { log() {} },
+      "../utils/profile": { profile: (fn: unknown) => fn },
+      "../utils/env": { env: {} },
+      "./resolveOptions": { resolvePortsAsync: async () => ({ metroPort: 19091 }) },
+      "./server/platformBundlers": { getPlatformBundlers: () => ({ macos: "metro" }) },
+      "./server/DevServerManager": { DevServerManager: class {
+        async startAsync() { if (serverFails) throw new Error("server failed"); events.push("listening"); }
+        getNativeDevServerPort() { return 19091; }
+        async watchEnvironmentVariables() {}
+        async bootstrapTypeScriptAsync() {}
+      } },
+      "./doctor/dependencies/validateDependenciesVersions": { validateDependenciesVersionsAsync: async () => {
+        events.push("dependency check");
+        throw new Error("dependency check failed");
+      } },
+    };
+    new Function("require", "exports", source)((name: string) => name.endsWith("expo-dev-extension.cjs")
+      ? { ready: (port: number) => { expect(port).toBe(19091); events.push("ready"); } }
+      : modules[name] ?? {}, exports);
+    await expect(exports.startAsync(root, { dev: true }, {})).rejects.toThrow(serverFails ? "server failed" : "dependency check failed");
+    expect(events).toEqual(serverFails ? [] : ["listening", "ready", "dependency check"]);
+  }
+});
+
 test("desktop keys follow host/target and leave Expo's existing shortcuts available", () => {
   for (const [target, host, label] of [["macos", "darwin", "macOS"], ["windows", "win32", "Windows"]]) {
     const go = commands(target, host, { target: "go", canBuild: false });
