@@ -22,7 +22,8 @@
     "ios": {
       "modulesProvider": {
         "NativeDesktopProcesses": "RNDesktopProcesses"
-      }
+      },
+      "componentProvider": {}
     }
   },
   "spark": {

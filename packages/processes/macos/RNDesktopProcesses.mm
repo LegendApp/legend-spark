@@ -5,6 +5,56 @@
 #import <spawn.h>
 #import <sys/wait.h>
 #import <vector>
+static NSString *ResolveCommandPath(NSString *command)
+{
+  NSString *expandedCommand = [command stringByExpandingTildeInPath];
+  if ([command hasPrefix:@"bundle:"]) {
+    NSString *root = [[[NSBundle mainBundle] resourcePath] stringByResolvingSymlinksInPath];
+    NSString *relative = [command substringFromIndex:7];
+    NSString *candidate = [[[root stringByAppendingPathComponent:relative] stringByStandardizingPath] stringByResolvingSymlinksInPath];
+    if ([candidate hasPrefix:[root stringByAppendingString:@"/"]] && [[NSFileManager defaultManager] isExecutableFileAtPath:candidate]) {
+      return candidate;
+    }
+    return nil;
+  }
+  if ([expandedCommand containsString:@"/"]) {
+    return [[NSFileManager defaultManager] isExecutableFileAtPath:expandedCommand] ? expandedCommand : nil;
+  }
+
+  NSString *homeDirectory = NSHomeDirectory();
+  NSArray<NSString *> *fallbackPaths = @[
+    [homeDirectory stringByAppendingPathComponent:@".local/bin"],
+    [homeDirectory stringByAppendingPathComponent:@".bun/bin"],
+    [homeDirectory stringByAppendingPathComponent:@"bin"],
+    @"/opt/homebrew/bin",
+    @"/usr/local/bin",
+    @"/usr/bin",
+    @"/bin",
+    @"/usr/sbin",
+    @"/sbin",
+  ];
+  NSMutableArray<NSString *> *searchPaths = [NSMutableArray array];
+  NSString *pathValue = [[NSProcessInfo processInfo] environment][@"PATH"];
+  if (pathValue.length > 0) {
+    [searchPaths addObjectsFromArray:[pathValue componentsSeparatedByString:@":"]];
+  }
+  for (NSString *fallback in fallbackPaths) {
+    if (![searchPaths containsObject:fallback]) {
+      [searchPaths addObject:fallback];
+    }
+  }
+
+  NSFileManager *fileManager = [NSFileManager defaultManager];
+  for (NSString *directory in searchPaths) {
+    NSString *candidate = [directory stringByAppendingPathComponent:command];
+    if ([fileManager isExecutableFileAtPath:candidate]) {
+      return candidate;
+    }
+  }
+
+  return nil;
+}
+
 @interface SparkProcess : NSObject
 @property pid_t pid;
 @property BOOL running;
@@ -46,7 +96,12 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
   dispatch_async(dispatch_get_main_queue(), ^{
     NSDictionary *args = SparkArgs(json); NSString *key = args[@"id"];
     if (self.invalidated) { reject(@"E_CLOSED", @"Process module is closed", nil); return; }
-    SparkProcess *process = self.processes[key];
+    if ([method isEqual:@"resolveCommand"]) {
+      NSString *command = args[@"command"];
+      if (![command isKindOfClass:NSString.class] || !command.length) { SparkInvalid(reject, @"Expected a command name"); return; }
+      resolve(SparkJSON(ResolveCommandPath(command) ?: (id)NSNull.null)); return;
+    }
+    SparkProcess *process = key ? self.processes[key] : nil;
     if ([method isEqual:@"spawn"]) {
       if (process) { reject(@"E_EXISTS", @"Process id already exists", nil); return; }
       NSString *executable = args[@"executable"];

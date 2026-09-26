@@ -22,7 +22,8 @@
     "ios": {
       "modulesProvider": {
         "NativeContextMenu": "RNContextMenu"
-      }
+      },
+      "componentProvider": {}
     }
   },
   "spark": {

@@ -100,7 +100,8 @@
     "expo-crypto": "15.0.8",
     "@types/node": "24.13.6",
     "vitest": "5.0.1",
-    "ws": "8.18.3"
+    "ws": "8.18.3",
+    "@legendapp/list": "3.4.0"
   },
   "overrides": {
     "@expo/cli": "54.0.27",

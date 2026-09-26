@@ -14,4 +14,5 @@ Pod::Spec.new do |s|
   s.dependency "React-Core"
   s.dependency "ReactCodegen"
   s.dependency "RNDesktopApp"
+  s.osx.frameworks = "CoreServices"
 end

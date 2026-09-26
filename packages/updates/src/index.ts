@@ -7,6 +7,7 @@ export type UpdateStatus = {
   started: boolean;
   canCheck: boolean;
   automaticallyChecks: boolean;
+  updateCheckInterval: number;
   feedURL?: string;
 };
 export type UpdateEvent = { type: "update"; state: "checking" | "available" | "notAvailable" | "downloading" | "downloaded" | "installing" | "error"; version?: string; message?: string };
@@ -21,3 +22,17 @@ export const setAutomaticUpdateChecks = (enabled: boolean) => call("automatic", 
 export function onUpdateEvent(listener: (event: UpdateEvent) => void) {
   return onDesktopEvent(event => { if (event.type === "update") listener(event as UpdateEvent); });
 }
+
+/** One updater instance backs both the functional API and this settings facade. */
+export const AutoUpdater = {
+  isAvailable: () => Native.isAvailable(),
+  async checkForUpdates() { await checkForUpdates(); return true; },
+  async checkForUpdatesInBackground() { await call("background"); return true; },
+  async getAutomaticallyChecksForUpdates() { return (await getUpdateStatus()).automaticallyChecks; },
+  async setAutomaticallyChecksForUpdates(enabled: boolean) { await setAutomaticUpdateChecks(enabled); return true; },
+  async getUpdateCheckInterval() { return (await getUpdateStatus()).updateCheckInterval; },
+  async setUpdateCheckInterval(seconds: number) {
+    if (!Number.isFinite(seconds) || seconds <= 0) throw new TypeError("Update interval must be positive and finite");
+    await call("interval", { seconds }); return true;
+  },
+};

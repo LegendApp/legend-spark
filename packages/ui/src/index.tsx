@@ -1,7 +1,7 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import type { NativeSyntheticEvent } from "react-native";
 import NativeTextInput from "./SparkTextInputNativeComponent";
-import NativeSelect from "./SparkSelectNativeComponent";
+import { NativeSelect } from "./native-select";
 import { selectionIndex } from "./select";
 import { StyleSheet } from "react-native";
 import NativeButton from "./SparkButtonNativeComponent";
@@ -21,7 +21,5 @@ export function TextInput({ defaultValue = "", onChangeText, style, ...props }: 
 }
 export function Select({ options, value, onValueChange, style, ...props }: SelectProps) {
   selectionIndex(options, value);
-  const itemsJson = useMemo(() => JSON.stringify(options), [options]);
-  const changed = useCallback((event: NativeSyntheticEvent<{ value: string }>) => onValueChange(event.nativeEvent.value), [onValueChange]);
-  return <NativeSelect {...props} itemsJson={itemsJson} value={value} onSelectionChange={changed} style={[{ width: 240, height: 36 }, style]} />;
+  return <NativeSelect {...props} options={options} value={value} onChange={onValueChange} style={[{ width: 240, height: 36 }, style]} />;
 }

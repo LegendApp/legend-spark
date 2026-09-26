@@ -1,4 +1,5 @@
 #import "RNDesktopWindows.h"
+#import "window-manager/LegendWindowRegistry.h"
 #import <RNDesktopApp/SparkDesktop.h>
 #import <React-RCTAppDelegate/RCTRootViewFactory.h>
 #import <React/RCTSurfaceHostingView.h>
@@ -19,6 +20,7 @@ static void Show(NSWindow *window) {
 @end
 @interface SparkWindowDelegate : NSObject <NSWindowDelegate>
 @property NSString *windowID;
+@property (nonatomic, weak) id<NSWindowDelegate> previousDelegate;
 @property BOOL guarded;
 @property BOOL allowingClose;
 @property NSUInteger request;
@@ -28,7 +30,7 @@ static void Show(NSWindow *window) {
 static NSMutableDictionary<NSString *, NSWindow *> *windows;
 static NSMutableDictionary<NSString *, SparkWindowDelegate *> *delegates;
 static NSWindow *Window(NSString *key) {
-  if (!windows) windows = [NSMutableDictionary new];
+  if (!windows) windows = LegendWindowRegistry.sharedRegistry.windows;
   NSWindow *window = windows[key];
   if (!window && [key isEqual:@"main"]) {
     for (NSWindow *candidate in NSApp.windows) {
@@ -40,6 +42,8 @@ static NSWindow *Window(NSString *key) {
 }
 static void Event(NSString *type, NSString *key) { SparkEmit(@{ @"type": type, @"windowId": key }); }
 @implementation SparkWindowDelegate
+- (BOOL)respondsToSelector:(SEL)selector { return [super respondsToSelector:selector] || [self.previousDelegate respondsToSelector:selector]; }
+- (id)forwardingTargetForSelector:(SEL)selector { return [self.previousDelegate respondsToSelector:selector] ? self.previousDelegate : [super forwardingTargetForSelector:selector]; }
 - (void)requestClose {
   if (self.pending) return;
   self.pending = YES; NSUInteger request = ++self.request;
@@ -52,31 +56,38 @@ static void Event(NSString *type, NSString *key) { SparkEmit(@{ @"type": type, @
 }
 - (BOOL)windowShouldClose:(NSWindow *)sender {
   if (self.guarded && !self.allowingClose) { [self requestClose]; return NO; }
-  return YES;
+  return [self.previousDelegate respondsToSelector:@selector(windowShouldClose:)] ? [self.previousDelegate windowShouldClose:sender] : YES;
 }
 - (void)windowWillClose:(NSNotification *)note {
+  BOOL managed = LegendWindowRegistry.sharedRegistry.moduleNames[self.windowID] != nil;
+  if ([self.previousDelegate respondsToSelector:@selector(windowWillClose:)]) [self.previousDelegate windowWillClose:note];
   NSWindow *closing = note.object;
   if (closing.sheetParent) [closing.sheetParent endSheet:closing];
   if (closing.parentWindow) [closing.parentWindow removeChildWindow:closing];
   Event(@"closed", self.windowID);
-  if (![self.windowID isEqual:@"main"]) {
+  if (![self.windowID isEqual:@"main"] && !managed) {
     NSWindow *window = note.object;
     NSView *root = [window.contentView isKindOfClass:NSVisualEffectView.class] ? window.contentView.subviews.firstObject : window.contentView;
     if ([root isKindOfClass:RCTSurfaceHostingView.class]) [((RCTSurfaceHostingView *)root).surface stop];
     [root removeFromSuperview];
     window.contentView = [[NSView alloc] initWithFrame:root.frame];
     [windows removeObjectForKey:self.windowID];
-    // Retain self until the delegate callback returns.
-    dispatch_async(dispatch_get_main_queue(), ^{ [delegates removeObjectForKey:self.windowID]; });
+    [LegendWindowRegistry.sharedRegistry.rootViews removeObjectForKey:self.windowID];
+  }
+  if (![self.windowID isEqual:@"main"]) {
+    // Retain the proxy until its delegate callback returns.
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (delegates[self.windowID] == self) [delegates removeObjectForKey:self.windowID];
+    });
   }
 }
-- (void)windowDidMove:(NSNotification *)note { Event(@"move", self.windowID); }
-- (void)windowDidResize:(NSNotification *)note { Event(@"resize", self.windowID); }
-- (void)windowDidChangeScreen:(NSNotification *)note { Event(@"screenChanged", self.windowID); }
-- (void)windowDidEnterFullScreen:(NSNotification *)note { Event(@"enterFullscreen", self.windowID); }
-- (void)windowDidExitFullScreen:(NSNotification *)note { Event(@"leaveFullscreen", self.windowID); }
-- (void)windowDidBecomeKey:(NSNotification *)note { Event(@"focus", self.windowID); }
-- (void)windowDidResignKey:(NSNotification *)note { Event(@"blur", self.windowID); }
+- (void)windowDidMove:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidMove:)]) [self.previousDelegate windowDidMove:note]; Event(@"move", self.windowID); }
+- (void)windowDidResize:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidResize:)]) [self.previousDelegate windowDidResize:note]; Event(@"resize", self.windowID); }
+- (void)windowDidChangeScreen:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidChangeScreen:)]) [self.previousDelegate windowDidChangeScreen:note]; Event(@"screenChanged", self.windowID); }
+- (void)windowDidEnterFullScreen:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidEnterFullScreen:)]) [self.previousDelegate windowDidEnterFullScreen:note]; Event(@"enterFullscreen", self.windowID); }
+- (void)windowDidExitFullScreen:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidExitFullScreen:)]) [self.previousDelegate windowDidExitFullScreen:note]; Event(@"leaveFullscreen", self.windowID); }
+- (void)windowDidBecomeKey:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidBecomeKey:)]) [self.previousDelegate windowDidBecomeKey:note]; Event(@"focus", self.windowID); }
+- (void)windowDidResignKey:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidResignKey:)]) [self.previousDelegate windowDidResignKey:note]; Event(@"blur", self.windowID); }
 @end
 static void InstallDelegate(NSWindow *window, NSString *key) {
   if (!delegates) delegates = [NSMutableDictionary new];
@@ -84,13 +95,19 @@ static void InstallDelegate(NSWindow *window, NSString *key) {
   SparkWindowDelegate *delegate = [SparkWindowDelegate new];
   delegate.windowID = key;
   delegates[key] = delegate;
+  delegate.previousDelegate = window.delegate;
   window.delegate = delegate;
+}
+extern "C" void SparkRebindWindowDelegate(NSWindow *window, NSString *key, id<NSWindowDelegate> delegate) {
+  SparkWindowDelegate *guard = delegates[key];
+  if (guard) { guard.previousDelegate = delegate; window.delegate = guard; }
+  else window.delegate = delegate;
 }
 static void RequestClose(NSWindow *window, NSString *key) {
   SparkWindowDelegate *delegate = delegates[key];
   if (delegate.guarded && !delegate.allowingClose) { [delegate requestClose]; return; }
   if (window.sheetParent) [window.sheetParent endSheet:window];
-  [window close];
+  [window performClose:nil];
 }
 static NSDictionary *Frame(NSRect frame) {
   return @{ @"x": @(frame.origin.x), @"y": @(frame.origin.y), @"width": @(frame.size.width), @"height": @(frame.size.height) };
@@ -109,7 +126,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
     NSDictionary *args = SparkArgs(json);
     NSString *key = [args[@"id"] isKindOfClass:NSString.class] ? args[@"id"] : @"main";
     NSWindow *main = Window(@"main");
-    if (main) InstallDelegate(main, @"main");
+    // Reading windows must not replace the host lifecycle delegate.
     if ([method isEqual:@"displays"]) {
       NSMutableArray *result = [NSMutableArray new];
       for (NSScreen *screen in NSScreen.screens) [result addObject:@{ @"id": [screen.deviceDescription[@"NSScreenNumber"] stringValue],
@@ -151,6 +168,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
         SparkApplyWindowOptions(window, args);
         SparkRestoreWindow(window, key, args);
         windows[key] = window;
+        LegendWindowRegistry.sharedRegistry.rootViews[key] = window.contentView;
         InstallDelegate(window, key);
         Event(@"opened", key);
       }
@@ -161,7 +179,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
     if (!window) { reject(@"E_NOT_FOUND", @"Window does not exist", nil); return; }
     if ([method isEqual:@"info"]) { resolve(SparkJSON(Info(key, window))); return; }
     if ([method isEqual:@"close"]) RequestClose(window, key);
-    else if ([method isEqual:@"closeGuard"]) { delegates[key].guarded = [args[@"enabled"] boolValue]; delegates[key].pending = NO; delegates[key].request++; }
+    else if ([method isEqual:@"closeGuard"]) { InstallDelegate(window, key); delegates[key].guarded = [args[@"enabled"] boolValue]; delegates[key].pending = NO; delegates[key].request++; }
     else if ([method isEqual:@"replyClose"]) {
       SparkWindowDelegate *delegate = delegates[key];
       if (delegate.pending && delegate.request == [args[@"requestId"] unsignedIntegerValue]) {
@@ -191,17 +209,11 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
 }
 - (void)invalidate {
   dispatch_async(dispatch_get_main_queue(), ^{
-    for (NSString *key in [windows.allKeys copy]) {
-      NSWindow *window = windows[key];
-      window.delegate = nil;
-      if (![key isEqual:@"main"]) {
-        NSView *root = [window.contentView isKindOfClass:NSVisualEffectView.class] ? window.contentView.subviews.firstObject : window.contentView;
-        if ([root isKindOfClass:RCTSurfaceHostingView.class]) [((RCTSurfaceHostingView *)root).surface stop];
-        [root removeFromSuperview]; window.contentView = nil;
-        [window close];
-      }
+    // Windows and Fabric surfaces belong to the application. Retire only guards
+    // whose JavaScript handlers went away; the next runtime may register again.
+    for (SparkWindowDelegate *delegate in delegates.allValues) {
+      delegate.guarded = NO; delegate.pending = NO; delegate.request++;
     }
-    [windows removeAllObjects]; [delegates removeAllObjects];
   });
 }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params {

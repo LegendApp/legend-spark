@@ -20,14 +20,19 @@
     "jsSrcsDir": "src",
     "ios": {
       "modulesProvider": {
-        "NativeDesktopApp": "RNDesktopApp"
-      }
+        "NativeDesktopApp": "RNDesktopApp",
+        "NativeRecentDocuments": "RNRecentDocuments",
+        "NativeAppExit": "RNAppExit"
+      },
+      "componentProvider": {}
     }
   },
   "spark": {
     "sdk": false,
     "nativeModules": [
-      "NativeDesktopApp"
+      "NativeDesktopApp",
+      "NativeRecentDocuments",
+      "NativeAppExit"
     ],
     "pod": "RNDesktopApp",
     "platforms": [

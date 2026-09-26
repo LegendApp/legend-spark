@@ -14,4 +14,6 @@ Pod::Spec.new do |s|
   s.dependency "ReactCodegen"
   s.dependency "RNDesktopApp"
   s.dependency "React-RCTAppDelegate"
+  s.osx.frameworks = "AppKit", "CoreImage", "QuartzCore"
+  s.dependency "React-cxxreact"
 end

@@ -21,8 +21,11 @@
     "jsSrcsDir": "src",
     "ios": {
       "componentProvider": {
-        "DesktopDragView": "RNDesktopDragView"
-      }
+        "DesktopDragView": "RNDesktopDragView",
+        "DragDropView": "RNDragDropView",
+        "TrackDragSource": "RNTrackDragSource"
+      },
+      "modulesProvider": {}
     }
   },
   "spark": {

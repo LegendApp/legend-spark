@@ -1,0 +1,3219 @@
+#include <math.h>
+#import "RNWindowManager.h"
+#import "LegendWindowRegistry.h"
+#if TARGET_OS_OSX
+extern "C" void SparkRebindWindowDelegate(NSWindow *, NSString *, id<NSWindowDelegate>);
+#endif
+
+#import <React-RCTAppDelegate/RCTRootViewFactory.h>
+#import <React/RCTBridge.h>
+#import <React/RCTBridgeModule.h>
+#import <React/RCTRootView.h>
+#import <React/RCTUIKit.h>
+#import <React/RCTUtils.h>
+#import <TargetConditionals.h>
+
+#include <cmath>
+#include <cxxreact/ReactMarker.h>
+
+#if TARGET_OS_OSX && !__has_include(<RNDesktopApp/SparkDesktop.h>)
+extern double LegendMainWindowFirstVisibleTimeMs;
+extern double LegendMainWindowReactRootAttachedTimeMs;
+#endif
+
+#if TARGET_OS_OSX
+#import <AppKit/AppKit.h>
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+#import <RNDesktopApp/SparkDesktop.h>
+#endif
+#import <CoreImage/CoreImage.h>
+#import <CoreGraphics/CoreGraphics.h>
+#import <objc/runtime.h>
+#import <QuartzCore/QuartzCore.h>
+#endif
+
+@protocol RNWindowManagerRootViewFactoryProvider <NSObject>
+- (RCTRootViewFactory *)rootViewFactory;
+#if TARGET_OS_OSX
+- (NSWindow *)window;
+#endif
+@end
+
+#if TARGET_OS_OSX
+static char LegendManagedFullscreenPresentationKey;
+static NSString * const LegendApplicationReopenRequestedNotification = @"LegendApplicationReopenRequestedNotification";
+static NSString * const LegendMainWindowCloseRequestedNotification = @"LegendMainWindowCloseRequestedNotification";
+extern "C" void LegendPrepareSidebarSplitViewStartup(NSWindow *, NSDictionary *) __attribute__((weak_import));
+extern "C" BOOL LegendAttachSidebarSplitViewStartupRoot(NSWindow *, NSView *, void (^)(void)) __attribute__((weak_import));
+extern "C" void LegendFinishSidebarSplitViewStartup(NSWindow *) __attribute__((weak_import));
+static NSString * const LegendMainWindowStartupSplitViewKey = @"LegendMainWindowStartupSplitView";
+
+extern "C" NSDictionary *LegendMainWindowStartupSplitViewConfiguration(void)
+{
+  NSDictionary *configuration = [NSUserDefaults.standardUserDefaults dictionaryForKey:LegendMainWindowStartupSplitViewKey];
+  return [configuration[@"restoreOnLaunch"] isEqual:@NO] ? nil : configuration;
+}
+
+static NSString * const LegendRestorableWindowOptionsDefaultsKey = @"LegendRestorableWindowOptions";
+static NSMutableDictionary<NSString *, NSWindow *> *LegendPrecreatedWindows;
+static BOOL LegendApplicationIsTerminating = NO;
+
+static NSString *LegendManagedWindowFrameAutosaveName(NSString *identifier)
+{
+  NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier ?: @"legend-app";
+  return [NSString stringWithFormat:@"LegendManagedWindow.%@.%@", bundleIdentifier, identifier ?: @""];
+}
+
+static NSArray<NSDictionary *> *LegendReadRestorableWindowOptions(void)
+{
+  NSArray *records = [NSUserDefaults.standardUserDefaults arrayForKey:LegendRestorableWindowOptionsDefaultsKey];
+  if (![records isKindOfClass:NSArray.class]) {
+    return @[];
+  }
+  NSMutableArray<NSDictionary *> *options = [NSMutableArray new];
+  for (NSString *record in records) {
+    if (![record isKindOfClass:NSString.class]) {
+      continue;
+    }
+    NSData *data = [record dataUsingEncoding:NSUTF8StringEncoding];
+    id value = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    if ([value isKindOfClass:NSDictionary.class]) {
+      [options addObject:value];
+    }
+  }
+  return options;
+}
+
+static NSDictionary *LegendFindRestorableWindowOptions(NSString *identifier)
+{
+  for (NSDictionary *record in LegendReadRestorableWindowOptions()) {
+    if ([record[@"identifier"] isEqualToString:identifier]) {
+      return record;
+    }
+  }
+  return nil;
+}
+
+static NSDictionary *LegendRestorableWindowOptions(NSDictionary *options)
+{
+  static NSArray<NSString *> *keys;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    keys = @[
+      @"deferOrderFront", @"hasShadow", @"height", @"identifier", @"level", @"moduleName",
+      @"representedURL", @"restoreOnLaunch", @"title", @"transparentBackground", @"width", @"windowStyle",
+      @"x", @"y",
+    ];
+  });
+  NSMutableDictionary *restorableOptions = [NSMutableDictionary new];
+  for (NSString *key in keys) {
+    id value = options[key];
+    if (value != nil) {
+      restorableOptions[key] = value;
+    }
+  }
+  return restorableOptions;
+}
+
+static void LegendWriteRestorableWindowOptions(NSArray<NSDictionary *> *options)
+{
+  NSMutableArray<NSString *> *records = [NSMutableArray new];
+  for (NSDictionary *record in options) {
+    NSData *data = [NSJSONSerialization dataWithJSONObject:record options:0 error:nil];
+    NSString *json = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+    if (json) {
+      [records addObject:json];
+    }
+  }
+  [NSUserDefaults.standardUserDefaults setObject:records forKey:LegendRestorableWindowOptionsDefaultsKey];
+}
+
+static void LegendSetRestorableWindowOptions(NSString *identifier, NSDictionary *options)
+{
+  if (identifier.length == 0) {
+    return;
+  }
+  NSMutableArray<NSDictionary *> *records = [LegendReadRestorableWindowOptions() mutableCopy];
+  NSIndexSet *matchingIndexes = [records indexesOfObjectsPassingTest:^BOOL(NSDictionary *record, NSUInteger index, BOOL *stop) {
+    return [record[@"identifier"] isEqualToString:identifier];
+  }];
+  if (matchingIndexes.count > 0) {
+    [records removeObjectsAtIndexes:matchingIndexes];
+  }
+  if (options != nil) {
+    [records addObject:LegendRestorableWindowOptions(options)];
+  }
+  LegendWriteRestorableWindowOptions(records);
+}
+
+static void LegendRemovePrecreatedWindow(NSString *identifier)
+{
+  NSWindow *window = LegendPrecreatedWindows[identifier];
+  [LegendPrecreatedWindows removeObjectForKey:identifier];
+  [window close];
+}
+
+extern "C" NSWindow *LegendTakePrecreatedWindow(NSString *identifier)
+{
+  NSWindow *window = LegendPrecreatedWindows[identifier];
+  [LegendPrecreatedWindows removeObjectForKey:identifier];
+  return window;
+}
+
+static inline NSAppearance *LegendDarkAppearance()
+{
+  if (@available(macOS 10.14, *)) {
+    return [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+  } else if (@available(macOS 10.10, *)) {
+    return [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
+  }
+  return nil;
+}
+
+
+
+static NSAppearance *LegendAppearanceForName(NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0 || [value isEqualToString:@"system"]) {
+    return nil;
+  }
+
+  if ([value isEqualToString:@"light"]) {
+    return [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  }
+
+  if ([value isEqualToString:@"dark"]) {
+    return [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua] ?: LegendDarkAppearance();
+  }
+
+  return nil;
+}
+
+static void LegendApplyWindowAppearance(NSWindow *window, NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0) {
+    return;
+  }
+
+  window.appearance = LegendAppearanceForName(value);
+  [window displayIfNeeded];
+}
+
+static void LegendApplyTitleVisibility(NSWindow *window, NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0) {
+    return;
+  }
+
+  if ([value isEqualToString:@"hidden"]) {
+    window.titleVisibility = NSWindowTitleHidden;
+  } else if ([value isEqualToString:@"visible"]) {
+    window.titleVisibility = NSWindowTitleVisible;
+  }
+}
+
+static void LegendApplyToolbarStyle(NSWindow *window, NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0) {
+    return;
+  }
+
+  if (@available(macOS 11.0, *)) {
+    if ([value isEqualToString:@"automatic"]) {
+      window.toolbarStyle = NSWindowToolbarStyleAutomatic;
+    } else if ([value isEqualToString:@"expanded"]) {
+      window.toolbarStyle = NSWindowToolbarStyleExpanded;
+    } else if ([value isEqualToString:@"preference"]) {
+      window.toolbarStyle = NSWindowToolbarStylePreference;
+    } else if ([value isEqualToString:@"unified"]) {
+      window.toolbarStyle = NSWindowToolbarStyleUnified;
+    } else if ([value isEqualToString:@"unifiedCompact"]) {
+      window.toolbarStyle = NSWindowToolbarStyleUnifiedCompact;
+    }
+  }
+}
+
+static void LegendApplyTitlebarSeparatorStyle(NSWindow *window, NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0) {
+    return;
+  }
+
+  if (@available(macOS 11.0, *)) {
+    if ([value isEqualToString:@"automatic"]) {
+      window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleAutomatic;
+    } else if ([value isEqualToString:@"none"]) {
+      window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+    } else if ([value isEqualToString:@"line"]) {
+      window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleLine;
+    } else if ([value isEqualToString:@"shadow"]) {
+      window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleShadow;
+    }
+  }
+}
+
+static NSColor *LegendColorFromHexString(NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0) {
+    return nil;
+  }
+
+  if ([value isEqualToString:@"system"]) {
+    return NSColor.windowBackgroundColor;
+  }
+
+  NSString *hex = [value hasPrefix:@"#"] ? [value substringFromIndex:1] : value;
+  if (hex.length != 6 && hex.length != 8) {
+    return nil;
+  }
+
+  unsigned long long raw = 0;
+  NSScanner *scanner = [NSScanner scannerWithString:hex];
+  if (![scanner scanHexLongLong:&raw]) {
+    return nil;
+  }
+
+  CGFloat red = 0;
+  CGFloat green = 0;
+  CGFloat blue = 0;
+  CGFloat alpha = 1;
+
+  if (hex.length == 8) {
+    red = ((raw >> 24) & 0xff) / 255.0;
+    green = ((raw >> 16) & 0xff) / 255.0;
+    blue = ((raw >> 8) & 0xff) / 255.0;
+    alpha = (raw & 0xff) / 255.0;
+  } else {
+    red = ((raw >> 16) & 0xff) / 255.0;
+    green = ((raw >> 8) & 0xff) / 255.0;
+    blue = (raw & 0xff) / 255.0;
+  }
+
+  return [NSColor colorWithSRGBRed:red green:green blue:blue alpha:alpha];
+}
+
+static BOOL LegendAppearanceIsDark(NSAppearance *appearance)
+{
+  if (@available(macOS 10.14, *)) {
+    NSAppearanceName match = [appearance bestMatchFromAppearancesWithNames:@[
+      NSAppearanceNameDarkAqua,
+      NSAppearanceNameAqua,
+    ]];
+    return [match isEqualToString:NSAppearanceNameDarkAqua];
+  }
+
+  return NO;
+}
+
+static BOOL LegendWindowUsesDarkAppearance(NSWindow *window)
+{
+  if (window.appearance != nil) {
+    return LegendAppearanceIsDark(window.appearance);
+  }
+  if (NSApp.appearance != nil) {
+    return LegendAppearanceIsDark(NSApp.appearance);
+  }
+
+  NSString *interfaceStyle = [NSUserDefaults.standardUserDefaults stringForKey:@"AppleInterfaceStyle"];
+  return [interfaceStyle caseInsensitiveCompare:@"Dark"] == NSOrderedSame ||
+    LegendAppearanceIsDark(NSApp.effectiveAppearance);
+}
+
+static NSColor *LegendWindowStartupBackgroundColor(NSWindow *window, NSString *value)
+{
+  NSColor *configuredColor = LegendColorFromHexString(value);
+  if (configuredColor != nil) {
+    return configuredColor;
+  }
+
+  return LegendWindowUsesDarkAppearance(window)
+    ? [NSColor colorWithSRGBRed:25.0 / 255.0 green:26.0 / 255.0 blue:27.0 / 255.0 alpha:1]
+    : [NSColor colorWithSRGBRed:245.0 / 255.0 green:246.0 / 255.0 blue:248.0 / 255.0 alpha:1];
+}
+
+static void LegendApplyBackgroundColorToView(NSView *view, NSColor *backgroundColor)
+{
+  if (!view || !backgroundColor) {
+    return;
+  }
+
+  if ([view respondsToSelector:@selector(setBackgroundColor:)]) {
+    [(id)view setBackgroundColor:backgroundColor];
+  }
+  view.wantsLayer = YES;
+  view.layer.backgroundColor = backgroundColor.CGColor;
+}
+
+static BOOL LegendViewIsTitlebarContainer(NSView *view)
+{
+  NSString *className = NSStringFromClass(view.class);
+  return [className isEqualToString:@"NSTitlebarContainerView"] ||
+    [className isEqualToString:@"NSTitlebarView"] ||
+    [className isEqualToString:@"NSTitlebarBackgroundView"];
+}
+
+static NSVisualEffectMaterial LegendVisualEffectMaterialForTitlebarMaterial(NSString *value)
+{
+  if ([value isEqualToString:@"hudWindow"]) {
+    return NSVisualEffectMaterialHUDWindow;
+  }
+  if ([value isEqualToString:@"sidebar"]) {
+    return NSVisualEffectMaterialSidebar;
+  }
+  if ([value isEqualToString:@"windowBackground"]) {
+    return NSVisualEffectMaterialWindowBackground;
+  }
+  if ([value isEqualToString:@"titlebar"]) {
+    return NSVisualEffectMaterialTitlebar;
+  }
+  if ([value isEqualToString:@"glass"] || [value isEqualToString:@"headerView"]) {
+    if (@available(macOS 10.14, *)) {
+      return NSVisualEffectMaterialHeaderView;
+    }
+    return NSVisualEffectMaterialTitlebar;
+  }
+  return NSVisualEffectMaterialTitlebar;
+}
+
+static NSVisualEffectBlendingMode LegendVisualEffectBlendingModeForName(NSString *value)
+{
+  return [value isEqualToString:@"withinWindow"] ? NSVisualEffectBlendingModeWithinWindow : NSVisualEffectBlendingModeBehindWindow;
+}
+
+static NSVisualEffectState LegendVisualEffectStateForName(NSString *value)
+{
+  if ([value isEqualToString:@"active"]) {
+    return NSVisualEffectStateActive;
+  }
+  if ([value isEqualToString:@"inactive"]) {
+    return NSVisualEffectStateInactive;
+  }
+  return NSVisualEffectStateFollowsWindowActiveState;
+}
+
+static NSRect LegendTitlebarMaterialFrame(NSWindow *window, NSView *frameView)
+{
+  NSRect frameBounds = frameView.bounds;
+  NSRect contentLayoutRect = [frameView convertRect:window.contentLayoutRect fromView:nil];
+  CGFloat materialMinY = NSMaxY(contentLayoutRect);
+  CGFloat materialHeight = NSMaxY(frameBounds) - materialMinY;
+
+  if (materialHeight <= 0 || materialHeight > NSHeight(frameBounds)) {
+    materialHeight = MAX(0, NSHeight(window.frame) - NSHeight(window.contentLayoutRect));
+    materialMinY = NSMaxY(frameBounds) - materialHeight;
+  }
+
+  return NSMakeRect(0, materialMinY, NSWidth(frameBounds), materialHeight);
+}
+
+API_AVAILABLE(macos(26.0))
+static NSView *LegendCreateOverscannedGlassEffectView(NSRect frame)
+{
+  NSView *containerView = [[NSView alloc] initWithFrame:frame];
+  containerView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  containerView.wantsLayer = YES;
+  containerView.layer.backgroundColor = NSColor.clearColor.CGColor;
+  containerView.layer.masksToBounds = YES;
+
+  CGFloat overscan = 48;
+  NSRect glassFrame = NSMakeRect(-overscan, 0, NSWidth(frame) + overscan, NSHeight(frame) + overscan);
+  NSGlassEffectView *glassView = [[NSGlassEffectView alloc] initWithFrame:glassFrame];
+  glassView.cornerRadius = 0;
+  glassView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  glassView.wantsLayer = YES;
+  glassView.layer.backgroundColor = NSColor.clearColor.CGColor;
+  [containerView addSubview:glassView];
+
+  return containerView;
+}
+
+static void LegendApplyTitlebarBackgroundColor(NSView *view, NSColor *backgroundColor)
+{
+  BOOL isTitlebarContainer = LegendViewIsTitlebarContainer(view);
+
+  if (isTitlebarContainer) {
+    LegendApplyBackgroundColorToView(view, backgroundColor);
+  }
+
+  for (NSView *subview in view.subviews) {
+    LegendApplyTitlebarBackgroundColor(subview, backgroundColor);
+  }
+}
+
+static BOOL LegendUsesFullSizeContentLayout(NSWindow *window);
+
+static void LegendApplyWindowBackgroundColor(NSWindow *window, NSString *value)
+{
+  NSColor *backgroundColor = LegendColorFromHexString(value);
+  if (!backgroundColor) {
+    return;
+  }
+
+  window.backgroundColor = backgroundColor;
+  window.opaque = backgroundColor.alphaComponent >= 1;
+
+  NSView *contentView = window.contentView;
+  if (contentView) {
+    // System window backing must remain behind AppKit-managed sidebar materials.
+    LegendApplyBackgroundColorToView(contentView, [value isEqualToString:@"system"] ? NSColor.clearColor : backgroundColor);
+  }
+
+  NSView *frameView = contentView.superview;
+  if (frameView) {
+    NSColor *titlebarBackgroundColor = LegendUsesFullSizeContentLayout(window) ? NSColor.clearColor : backgroundColor;
+    LegendApplyTitlebarBackgroundColor(frameView, titlebarBackgroundColor);
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSView *currentFrameView = window.contentView.superview;
+      if (currentFrameView) {
+        LegendApplyTitlebarBackgroundColor(currentFrameView, titlebarBackgroundColor);
+      }
+    });
+  }
+}
+
+static char LegendManagedRootViewKey;
+static char LegendContentLayoutModeKey;
+static char LegendTitlebarControlMetadataKey;
+static char LegendToolbarControlMetadataKey;
+static char LegendToolbarWindowIdentifierKey;
+static char LegendToolbarSearchFieldKey;
+static char LegendToolbarSearchItemKey;
+static char LegendToolbarSearchWidthKey;
+static char LegendToolbarSearchButtonKey;
+static char LegendToolbarSearchContainerKey;
+static char LegendToolbarSearchWidthConstraintKey;
+static const CGFloat LegendToolbarSearchCollapsedSize = 34;
+
+// AppKit synchronizes all toolbars with the same identifier as a family.
+// Our windows own independent item state, including across React reloads.
+static NSToolbar *LegendCreateToolbar(NSString *windowIdentifier)
+{
+  NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:
+    [@"LegendToolbar." stringByAppendingString:NSUUID.UUID.UUIDString]];
+  objc_setAssociatedObject(toolbar, &LegendToolbarWindowIdentifierKey,
+    windowIdentifier ?: @"", OBJC_ASSOCIATION_COPY_NONATOMIC);
+  toolbar.displayMode = NSToolbarDisplayModeIconOnly;
+  toolbar.showsBaselineSeparator = NO;
+  return toolbar;
+}
+
+static NSString *LegendToolbarWindowIdentifier(NSToolbar *toolbar)
+{
+  return objc_getAssociatedObject(toolbar, &LegendToolbarWindowIdentifierKey) ?: @"";
+}
+
+static RCTUIView *LegendManagedRootView(NSWindow *window)
+{
+  id associatedRootView = objc_getAssociatedObject(window, &LegendManagedRootViewKey);
+  if ([associatedRootView isKindOfClass:RCTUIView.class]) {
+    return associatedRootView;
+  }
+
+  if ([window.contentView isKindOfClass:RCTUIView.class]) {
+    return (RCTUIView *)window.contentView;
+  }
+
+  return nil;
+}
+
+static void LegendEnsureRootViewContainer(NSWindow *window, RCTUIView *rootView)
+{
+  if (!window || !rootView || window.contentView != rootView) {
+    return;
+  }
+
+  NSView *containerView = [[NSView alloc] initWithFrame:rootView.frame];
+  containerView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  LegendApplyBackgroundColorToView(containerView, window.backgroundColor);
+
+  window.contentView = containerView;
+  [containerView addSubview:rootView];
+  objc_setAssociatedObject(window, &LegendManagedRootViewKey, rootView, OBJC_ASSOCIATION_ASSIGN);
+}
+
+static void LegendApplyContentLayoutModeOption(NSWindow *window, NSString *contentLayoutMode)
+{
+  if (!window || ![contentLayoutMode isKindOfClass:NSString.class]) {
+    return;
+  }
+
+  objc_setAssociatedObject(window, &LegendContentLayoutModeKey, contentLayoutMode, OBJC_ASSOCIATION_COPY_NONATOMIC);
+}
+
+static BOOL LegendUsesFullSizeContentLayout(NSWindow *window)
+{
+  id contentLayoutMode = objc_getAssociatedObject(window, &LegendContentLayoutModeKey);
+  return [contentLayoutMode isKindOfClass:NSString.class] && [(NSString *)contentLayoutMode isEqualToString:@"fullSize"];
+}
+
+static void LegendPrepareWindowForDisplay(NSWindow *window, NSString *backgroundColor)
+{
+  LegendApplyWindowBackgroundColor(window, backgroundColor);
+  [window.contentView displayIfNeeded];
+  [window displayIfNeeded];
+}
+
+static void LegendApplyContentLayoutMode(NSWindow *window, NSNumber *maskNumber, BOOL usesTitlebarBackground)
+{
+  if (usesTitlebarBackground) {
+    window.styleMask = window.styleMask | NSWindowStyleMaskFullSizeContentView;
+    return;
+  }
+
+  if (maskNumber && (maskNumber.unsignedIntegerValue & NSWindowStyleMaskFullSizeContentView) == 0) {
+    window.styleMask = window.styleMask & ~NSWindowStyleMaskFullSizeContentView;
+  }
+}
+
+static BOOL LegendDictionaryHasKey(NSDictionary *dictionary, NSString *key)
+{
+  return [dictionary isKindOfClass:NSDictionary.class] && dictionary[key] != nil;
+}
+
+static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window);
+
+static NSURL *LegendURLFromString(NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0) {
+    return nil;
+  }
+
+  NSURL *url = [NSURL URLWithString:value];
+  if (url.scheme.length > 0) {
+    return url;
+  }
+
+  return [NSURL fileURLWithPath:value];
+}
+
+static void LegendApplyWindowTitleAndRepresentedURL(NSWindow *window,
+                                                    NSString *title,
+                                                    BOOL hasRepresentedURL,
+                                                    id representedURLValue,
+                                                    NSString *fallbackTitle)
+{
+  NSURL *representedURL = [representedURLValue isKindOfClass:NSString.class]
+    ? LegendURLFromString((NSString *)representedURLValue)
+    : nil;
+
+  if (hasRepresentedURL) {
+    if ([representedURLValue isKindOfClass:NSNull.class]) {
+      window.representedURL = nil;
+    } else if (representedURL.fileURL && representedURL.path.length > 0) {
+      window.representedURL = representedURL;
+    } else {
+      window.representedURL = representedURL;
+    }
+  }
+
+  if (!title && representedURL.lastPathComponent.length > 0) {
+    title = representedURL.lastPathComponent;
+  }
+  window.title = title ?: fallbackTitle ?: @"";
+}
+
+static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
+{
+  if (!window || ![options isKindOfClass:NSDictionary.class]) {
+    return;
+  }
+
+  BOOL hasTitle = LegendDictionaryHasKey(options, @"title");
+  BOOL hasRepresentedURL = LegendDictionaryHasKey(options, @"representedURL");
+  id representedURLValue = hasRepresentedURL ? options[@"representedURL"] : nil;
+  NSString *title = [options[@"title"] isKindOfClass:NSString.class] ? options[@"title"] : nil;
+  if (hasTitle || hasRepresentedURL) {
+    LegendApplyWindowTitleAndRepresentedURL(window, title, hasRepresentedURL, representedURLValue, nil);
+  }
+
+  NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
+  if (windowStyle[@"startupSplitView"] == NSNull.null && LegendFinishSidebarSplitViewStartup) {
+    LegendFinishSidebarSplitViewStartup(window);
+  }
+  NSNumber *maskNumber = [windowStyle[@"mask"] isKindOfClass:NSNumber.class] ? windowStyle[@"mask"] : nil;
+  NSNumber *transparentTitlebar = [windowStyle[@"titlebarAppearsTransparent"] isKindOfClass:NSNumber.class]
+    ? windowStyle[@"titlebarAppearsTransparent"]
+    : nil;
+  NSString *titleVisibility = [windowStyle[@"titleVisibility"] isKindOfClass:NSString.class]
+    ? windowStyle[@"titleVisibility"]
+    : nil;
+  NSString *toolbarStyle = [windowStyle[@"toolbarStyle"] isKindOfClass:NSString.class] ? windowStyle[@"toolbarStyle"] : nil;
+  NSString *contentLayoutMode = [windowStyle[@"contentLayoutMode"] isKindOfClass:NSString.class]
+    ? windowStyle[@"contentLayoutMode"]
+    : nil;
+  NSString *titlebarSeparatorStyle = [windowStyle[@"titlebarSeparatorStyle"] isKindOfClass:NSString.class]
+    ? windowStyle[@"titlebarSeparatorStyle"]
+    : nil;
+  NSString *backgroundColor = [windowStyle[@"backgroundColor"] isKindOfClass:NSString.class]
+    ? windowStyle[@"backgroundColor"]
+    : nil;
+  NSString *appearance = [windowStyle[@"appearance"] isKindOfClass:NSString.class]
+    ? windowStyle[@"appearance"]
+    : nil;
+  BOOL hasToolbarKey = LegendDictionaryHasKey(windowStyle, @"hasToolbar");
+  BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
+  BOOL usesTitlebarBackground = transparentTitlebar.boolValue && backgroundColor.length > 0;
+
+  if (maskNumber) {
+    window.styleMask = maskNumber.unsignedIntegerValue;
+  }
+  LegendApplyContentLayoutModeOption(window, contentLayoutMode);
+  LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
+  if (transparentTitlebar != nil) {
+    window.titlebarAppearsTransparent = transparentTitlebar.boolValue;
+  }
+  LegendApplyTitleVisibility(window, titleVisibility);
+  if (hasToolbarKey) {
+    if (hasToolbar && !window.toolbar) {
+      NSToolbar *toolbar = LegendCreateToolbar([options[@"identifier"] isKindOfClass:NSString.class] ? options[@"identifier"] : @"main");
+      window.toolbar = toolbar;
+    } else if (!hasToolbar) {
+      window.toolbar = nil;
+    }
+  }
+  LegendApplyToolbarStyle(window, toolbarStyle);
+  LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
+  LegendApplyWindowAppearance(window, appearance);
+  LegendApplyWindowBackgroundColor(window, backgroundColor);
+
+  RCTUIView *rootView = LegendManagedRootView(window);
+  if (usesTitlebarBackground && rootView) {
+    LegendEnsureRootViewContainer(window, rootView);
+    LegendSizeRootViewToWindow(rootView, window);
+  }
+}
+
+static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
+{
+  if (!rootView || !window) {
+    return;
+  }
+
+  NSView *contentView = window.contentView;
+  if (contentView && contentView != rootView && (window.styleMask & NSWindowStyleMaskFullSizeContentView) != 0) {
+    rootView.frame = LegendUsesFullSizeContentLayout(window)
+      ? contentView.bounds
+      : [contentView convertRect:window.contentLayoutRect fromView:nil];
+  } else {
+    rootView.frame = contentView ? contentView.bounds : NSMakeRect(0, 0, window.frame.size.width, window.frame.size.height);
+  }
+  rootView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  [rootView setNeedsLayout:YES];
+}
+
+extern "C" void LegendPrecreateRestorableWindows(void)
+{
+  if (LegendPrecreatedWindows != nil) {
+    return;
+  }
+
+  LegendPrecreatedWindows = [NSMutableDictionary new];
+  for (NSDictionary *options in LegendReadRestorableWindowOptions()) {
+    NSString *identifier = [options[@"identifier"] isKindOfClass:NSString.class] ? options[@"identifier"] : nil;
+    if (identifier.length == 0 || ![options[@"restoreOnLaunch"] boolValue]) {
+      continue;
+    }
+
+    NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class]
+      ? options[@"windowStyle"]
+      : @{};
+    NSNumber *maskNumber = [windowStyle[@"mask"] isKindOfClass:NSNumber.class] ? windowStyle[@"mask"] : nil;
+    NSNumber *widthNumber = [windowStyle[@"width"] isKindOfClass:NSNumber.class]
+      ? windowStyle[@"width"]
+      : ([options[@"width"] isKindOfClass:NSNumber.class] ? options[@"width"] : nil);
+    NSNumber *heightNumber = [windowStyle[@"height"] isKindOfClass:NSNumber.class]
+      ? windowStyle[@"height"]
+      : ([options[@"height"] isKindOfClass:NSNumber.class] ? options[@"height"] : nil);
+    CGFloat width = widthNumber ? MAX(widthNumber.doubleValue, 1) : 400;
+    CGFloat height = heightNumber ? MAX(heightNumber.doubleValue, 1) : 300;
+    NSUInteger styleMask = maskNumber
+      ? maskNumber.unsignedIntegerValue
+      : (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable);
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, width, height)
+                                                   styleMask:styleMask
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO];
+    window.releasedWhenClosed = NO;
+    LegendApplyWindowOptions(window, options);
+
+    NSNumber *levelNumber = [options[@"level"] isKindOfClass:NSNumber.class] ? options[@"level"] : nil;
+    if (levelNumber) {
+      window.level = levelNumber.integerValue;
+    }
+    NSNumber *hasShadow = [options[@"hasShadow"] isKindOfClass:NSNumber.class] ? options[@"hasShadow"] : nil;
+    if (hasShadow) {
+      window.hasShadow = hasShadow.boolValue;
+    }
+    BOOL transparentBackground = [options[@"transparentBackground"] boolValue];
+    NSString *backgroundColor = [windowStyle[@"backgroundColor"] isKindOfClass:NSString.class]
+      ? windowStyle[@"backgroundColor"]
+      : nil;
+    NSColor *startupBackgroundColor = transparentBackground
+      ? NSColor.clearColor
+      : LegendWindowStartupBackgroundColor(window, backgroundColor);
+    window.backgroundColor = startupBackgroundColor;
+    window.opaque = !transparentBackground && startupBackgroundColor.alphaComponent >= 1;
+
+    NSView *placeholder = [[NSView alloc] initWithFrame:window.contentView.bounds];
+    placeholder.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    LegendApplyBackgroundColorToView(placeholder, startupBackgroundColor);
+    window.contentView = placeholder;
+
+    NSString *autosaveName = LegendManagedWindowFrameAutosaveName(identifier);
+    [window setFrameAutosaveName:autosaveName];
+    if (![window setFrameUsingName:autosaveName]) {
+      NSNumber *originX = [options[@"x"] isKindOfClass:NSNumber.class] ? options[@"x"] : nil;
+      NSNumber *originY = [options[@"y"] isKindOfClass:NSNumber.class] ? options[@"y"] : nil;
+      if (originX || originY) {
+        NSPoint origin = window.frame.origin;
+        origin.x = originX ? originX.doubleValue : origin.x;
+        origin.y = originY ? originY.doubleValue : origin.y;
+        [window setFrameOrigin:origin];
+      } else {
+        [window center];
+      }
+    }
+
+    if (LegendPrepareSidebarSplitViewStartup) {
+      LegendPrepareSidebarSplitViewStartup(window, windowStyle[@"startupSplitView"]);
+    }
+    LegendPrecreatedWindows[identifier] = window;
+    if (![options[@"deferOrderFront"] boolValue]) {
+      [window makeKeyAndOrderFront:nil];
+      if (levelNumber) {
+        [window orderFrontRegardless];
+      }
+    }
+  }
+}
+#endif
+
+@interface RNWindowManager ()
+#if TARGET_OS_OSX
+<NSWindowDelegate, NSSearchFieldDelegate, NSToolbarDelegate>
+#endif
+@property (nonatomic, strong) NSMutableDictionary<NSString *, id> *windows;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, RCTUIView *> *rootViews;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *moduleNames;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray<NSTitlebarAccessoryViewController *> *> *titlebarAccessoryControllers;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSView *> *titlebarMaterialViews;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray<NSDictionary *> *> *toolbarItemConfigs;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, CIFilter *> *windowBlurFilters;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary *> *windowOptions;
+@property (nonatomic, strong) NSMutableSet<NSString *> *closeRequestIdentifiers;
+@property (nonatomic, strong, nullable) id displaySleepActivity;
+@property (nonatomic, assign) BOOL hasListeners;
+@property (nonatomic, assign) BOOL mainWindowObserversInstalled;
+#if TARGET_OS_OSX
+- (void)sendToolbarSearchEventForField:(NSSearchField *)searchField submitted:(BOOL)submitted shiftKey:(BOOL)shiftKey;
+- (void)recordWindowOptions:(NSDictionary *)options identifier:(NSString *)identifier moduleName:(NSString *)moduleName;
+#endif
+@end
+
+@implementation RNWindowManager
+
+RCT_EXPORT_MODULE(NativeWindowManager)
+
++ (BOOL)requiresMainQueueSetup
+{
+  return YES;
+}
+
+- (instancetype)init
+{
+  if (self = [super init]) {
+#if TARGET_OS_OSX
+    LegendWindowRegistry *registry = LegendWindowRegistry.sharedRegistry;
+    _windows = (id)registry.windows;
+    _rootViews = (id)registry.rootViews;
+    _moduleNames = registry.moduleNames;
+    _titlebarAccessoryControllers = registry.titlebarAccessoryControllers;
+    _titlebarMaterialViews = registry.titlebarMaterialViews;
+    _toolbarItemConfigs = registry.toolbarItemConfigs;
+    _windowBlurFilters = registry.windowBlurFilters;
+    _windowOptions = registry.windowOptions;
+    _closeRequestIdentifiers = registry.closeRequestIdentifiers;
+    for (NSString *identifier in _moduleNames.allKeys) {
+      NSWindow *window = _windows[identifier];
+      SparkRebindWindowDelegate(window, identifier, self);
+      [self bindChromeForWindow:window];
+    }
+    [self bindChromeForWindow:[RNWindowManager getMainWindow]];
+#else
+    _windows = [NSMutableDictionary new];
+    _rootViews = [NSMutableDictionary new];
+    _moduleNames = [NSMutableDictionary new];
+    _titlebarAccessoryControllers = [NSMutableDictionary new];
+    _titlebarMaterialViews = [NSMutableDictionary new];
+    _toolbarItemConfigs = [NSMutableDictionary new];
+    _windowBlurFilters = [NSMutableDictionary new];
+    _windowOptions = [NSMutableDictionary new];
+    _closeRequestIdentifiers = [NSMutableSet new];
+#endif
+#if TARGET_OS_OSX
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(sparkDesktopEvent:) name:SparkDesktopEvent object:nil];
+#endif
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(applicationReopenRequested:)
+                                               name:LegendApplicationReopenRequestedNotification
+                                             object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(mainWindowCloseRequested:)
+                                               name:LegendMainWindowCloseRequestedNotification
+                                             object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(applicationWillTerminate:)
+                                               name:NSApplicationWillTerminateNotification
+                                             object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(windowDidBecomeKey:)
+                                               name:NSWindowDidBecomeKeyNotification
+                                             object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(screensChanged:)
+                                               name:NSApplicationDidChangeScreenParametersNotification
+                                             object:nil];
+#endif
+  }
+  return self;
+}
+
+#if TARGET_OS_OSX
+- (void)bindChromeControlView:(NSView *)view
+{
+  BOOL managed = objc_getAssociatedObject(view, &LegendToolbarControlMetadataKey) != nil ||
+    objc_getAssociatedObject(view, &LegendTitlebarControlMetadataKey) != nil ||
+    objc_getAssociatedObject(view, &LegendToolbarSearchItemKey) != nil;
+  if (managed && [view isKindOfClass:NSControl.class]) {
+    ((NSControl *)view).target = self;
+    if ([view isKindOfClass:NSSearchField.class]) ((NSSearchField *)view).delegate = self;
+  }
+  for (NSView *child in view.subviews) [self bindChromeControlView:child];
+}
+
+- (void)bindChromeForWindow:(NSWindow *)window
+{
+  NSToolbar *toolbar = window.toolbar;
+  if (objc_getAssociatedObject(toolbar, &LegendToolbarWindowIdentifierKey)) {
+    toolbar.delegate = self;
+    for (NSToolbarItem *item in toolbar.items) {
+      if (objc_getAssociatedObject(item, &LegendToolbarControlMetadataKey)) item.target = self;
+      [self bindChromeControlView:item.view];
+    }
+  }
+  for (NSTitlebarAccessoryViewController *controller in window.titlebarAccessoryViewControllers) {
+    [self bindChromeControlView:controller.view];
+  }
+}
+#endif
+
+- (NSArray<NSString *> *)supportedEvents
+{
+  return @[
+    @"onWindowClosed",
+    @"onWindowCloseRequested",
+    @"onMainWindowMoved",
+    @"onMainWindowResized",
+    @"onWindowMoved",
+    @"onWindowResized",
+    @"onApplicationReopenRequested",
+    @"onWindowFocused",
+    @"onTitlebarControlPressed",
+    @"onToolbarItemSelected",
+    @"onToolbarSearch",
+    @"onDisplaysChanged",
+  ];
+}
+
+- (void)startObserving
+{
+  self.hasListeners = YES;
+#if TARGET_OS_OSX
+  [self setupMainWindowObservers];
+#endif
+}
+
+- (void)stopObserving
+{
+  self.hasListeners = NO;
+  // Native observers belong to this module, not a JS subscription. React may
+  // briefly remove every listener while effects update or a document closes.
+  // Keep lifecycle/restoration tracking alive until dealloc; event emission is
+  // already gated by hasListeners.
+}
+
+- (dispatch_queue_t)methodQueue
+{
+  return dispatch_get_main_queue();
+}
+
+- (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
+    (const facebook::react::ObjCTurboModule::InitParams &)params
+{
+  return std::make_shared<facebook::react::NativeWindowManagerSpecJSI>(params);
+}
+
+- (NSDictionary *)parseObjectJSON:(NSString *)json
+{
+  NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
+  if (!data) {
+    return @{};
+  }
+
+  id value = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+  return [value isKindOfClass:NSDictionary.class] ? value : @{};
+}
+
+- (NSString *)jsonStringFromObject:(id)object
+{
+  id value = object ?: [NSNull null];
+  NSData *data = [NSJSONSerialization dataWithJSONObject:value options:0 error:nil];
+  return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"null";
+}
+
+#if TARGET_OS_OSX
+- (void)removeTitlebarMaterialForIdentifier:(NSString *)identifier
+{
+  NSView *materialView = self.titlebarMaterialViews[identifier];
+  [materialView removeFromSuperview];
+  [self.titlebarMaterialViews removeObjectForKey:identifier];
+}
+
+- (NSView *)createTitlebarMaterialView:(NSString *)material frame:(NSRect)frame
+{
+  if ([material isEqualToString:@"glass"]) {
+    if (@available(macOS 26.0, *)) {
+      return LegendCreateOverscannedGlassEffectView(frame);
+    }
+  }
+
+  NSVisualEffectView *effectView = [[NSVisualEffectView alloc] initWithFrame:frame];
+  effectView.material = LegendVisualEffectMaterialForTitlebarMaterial(material);
+  effectView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+  effectView.state = NSVisualEffectStateFollowsWindowActiveState;
+  effectView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  effectView.wantsLayer = YES;
+  effectView.layer.backgroundColor = NSColor.clearColor.CGColor;
+  return effectView;
+}
+
+- (void)applyTitlebarMaterialFromOptions:(NSDictionary *)options toWindow:(NSWindow *)window identifier:(NSString *)identifier
+{
+  NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
+  if (!LegendDictionaryHasKey(windowStyle, @"titlebarMaterial")) {
+    return;
+  }
+
+  NSString *material = [windowStyle[@"titlebarMaterial"] isKindOfClass:NSString.class] ? windowStyle[@"titlebarMaterial"] : nil;
+  [self removeTitlebarMaterialForIdentifier:identifier];
+
+  if (material.length == 0 || [material isEqualToString:@"none"]) {
+    return;
+  }
+
+  NSView *frameView = window.contentView.superview;
+  if (!frameView) {
+    return;
+  }
+
+  NSView *materialView = [self createTitlebarMaterialView:material frame:LegendTitlebarMaterialFrame(window, frameView)];
+  if ([materialView isKindOfClass:NSVisualEffectView.class]) {
+    NSVisualEffectView *effectView = (NSVisualEffectView *)materialView;
+    NSString *blendingMode = [windowStyle[@"titlebarMaterialBlendingMode"] isKindOfClass:NSString.class]
+      ? windowStyle[@"titlebarMaterialBlendingMode"]
+      : nil;
+    NSString *state = [windowStyle[@"titlebarMaterialState"] isKindOfClass:NSString.class]
+      ? windowStyle[@"titlebarMaterialState"]
+      : nil;
+    effectView.blendingMode = LegendVisualEffectBlendingModeForName(blendingMode);
+    effectView.state = LegendVisualEffectStateForName(state);
+  }
+
+  materialView.translatesAutoresizingMaskIntoConstraints = YES;
+  materialView.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
+  [frameView addSubview:materialView positioned:NSWindowAbove relativeTo:window.contentView];
+  self.titlebarMaterialViews[identifier] = materialView;
+}
+
+- (void)removeTitlebarControlsForIdentifier:(NSString *)identifier fromWindow:(NSWindow *)window
+{
+  NSArray<NSTitlebarAccessoryViewController *> *controllers = self.titlebarAccessoryControllers[identifier] ?: @[];
+  for (NSTitlebarAccessoryViewController *controller in controllers) {
+    NSUInteger index = [window.titlebarAccessoryViewControllers indexOfObjectIdenticalTo:controller];
+    if (index != NSNotFound) {
+      [window removeTitlebarAccessoryViewControllerAtIndex:index];
+    }
+  }
+  [self.titlebarAccessoryControllers removeObjectForKey:identifier];
+}
+
+- (void)applyTitlebarControlsFromOptions:(NSDictionary *)options toWindow:(NSWindow *)window identifier:(NSString *)identifier
+{
+  NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
+  if (!LegendDictionaryHasKey(windowStyle, @"titlebarControls")) {
+    return;
+  }
+
+  [self removeTitlebarControlsForIdentifier:identifier fromWindow:window];
+
+  NSArray *titlebarControls = [windowStyle[@"titlebarControls"] isKindOfClass:NSArray.class]
+    ? windowStyle[@"titlebarControls"]
+    : @[];
+  NSMutableArray<NSTitlebarAccessoryViewController *> *controllers = [NSMutableArray new];
+
+  for (id controlCandidate in titlebarControls) {
+    if (![controlCandidate isKindOfClass:NSDictionary.class]) {
+      continue;
+    }
+
+    NSDictionary *control = (NSDictionary *)controlCandidate;
+    NSString *type = [control[@"type"] isKindOfClass:NSString.class] ? control[@"type"] : nil;
+    NSString *controlId = [control[@"id"] isKindOfClass:NSString.class] ? control[@"id"] : nil;
+    if (![type isEqualToString:@"button"] || controlId.length == 0) {
+      continue;
+    }
+
+    NSString *label = [control[@"label"] isKindOfClass:NSString.class] ? control[@"label"] : controlId;
+    NSString *systemImageName = [control[@"systemImageName"] isKindOfClass:NSString.class] ? control[@"systemImageName"] : nil;
+    NSImage *image = nil;
+    if (systemImageName.length > 0) {
+      if (@available(macOS 11.0, *)) {
+        image = [NSImage imageWithSystemSymbolName:systemImageName accessibilityDescription:label];
+      }
+    }
+
+    NSSegmentedControl *segmentedControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    segmentedControl.segmentCount = 1;
+    segmentedControl.segmentStyle = NSSegmentStyleSeparated;
+    segmentedControl.trackingMode = NSSegmentSwitchTrackingMomentary;
+    segmentedControl.target = self;
+    segmentedControl.action = @selector(titlebarControlPressed:);
+    segmentedControl.controlSize = NSControlSizeRegular;
+    [segmentedControl setEnabled:LegendDictionaryHasKey(control, @"enabled") ? [control[@"enabled"] boolValue] : YES forSegment:0];
+    if (image) {
+      [segmentedControl setImage:image forSegment:0];
+      [segmentedControl setImageScaling:NSImageScaleProportionallyDown forSegment:0];
+    } else {
+      [segmentedControl setLabel:label forSegment:0];
+    }
+    if (@available(macOS 10.13, *)) {
+      [segmentedControl setToolTip:[control[@"tooltip"] isKindOfClass:NSString.class] ? control[@"tooltip"] : label forSegment:0];
+    }
+    CGFloat segmentWidth = image ? 36 : MAX(84, [label sizeWithAttributes:@{NSFontAttributeName: segmentedControl.font ?: [NSFont systemFontOfSize:NSFont.systemFontSize]}].width + 24);
+    [segmentedControl setWidth:segmentWidth forSegment:0];
+    segmentedControl.frame = NSMakeRect(0, 0, segmentWidth, MAX(28, segmentedControl.fittingSize.height));
+    objc_setAssociatedObject(segmentedControl, &LegendTitlebarControlMetadataKey, @{
+      @"controlId": controlId,
+      @"windowIdentifier": identifier ?: @"",
+    }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    NSTitlebarAccessoryViewController *controller = [NSTitlebarAccessoryViewController new];
+    controller.view = segmentedControl;
+    NSString *placement = [control[@"placement"] isKindOfClass:NSString.class] ? control[@"placement"] : @"left";
+    controller.layoutAttribute = [placement isEqualToString:@"right"] ? NSLayoutAttributeRight : NSLayoutAttributeLeft;
+    [window addTitlebarAccessoryViewController:controller];
+    [controllers addObject:controller];
+  }
+
+  self.titlebarAccessoryControllers[identifier] = controllers;
+}
+
+- (void)titlebarControlPressed:(id)sender
+{
+  id metadata = objc_getAssociatedObject(sender, &LegendTitlebarControlMetadataKey);
+  NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
+    ? metadata
+    : @{};
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSString *controlId = [representedObject[@"controlId"] isKindOfClass:NSString.class]
+    ? representedObject[@"controlId"]
+    : @"";
+
+  [self sendWindowEventWithName:@"onTitlebarControlPressed"
+                           body:@{@"identifier": identifier, @"controlId": controlId}];
+}
+
+- (NSString *)toolbarItemIdentifierForConfig:(NSDictionary *)config
+{
+  NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : nil;
+  return itemId.length > 0 ? [@"legend.toolbar." stringByAppendingString:itemId] : nil;
+}
+
+- (NSDictionary *)toolbarItemConfigForIdentifier:(NSToolbarItemIdentifier)itemIdentifier toolbar:(NSToolbar *)toolbar
+{
+  if (![itemIdentifier hasPrefix:@"legend.toolbar."]) {
+    return nil;
+  }
+
+  NSArray<NSDictionary *> *configs = self.toolbarItemConfigs[toolbar.identifier] ?: @[];
+  for (NSDictionary *config in configs) {
+    NSString *configIdentifier = [self toolbarItemIdentifierForConfig:config];
+    if ([configIdentifier isEqualToString:itemIdentifier]) {
+      return config;
+    }
+  }
+  return nil;
+}
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarItemIdentifiersForToolbar:(NSToolbar *)toolbar
+{
+  NSMutableArray<NSToolbarItemIdentifier> *leadingIdentifiers = [NSMutableArray new];
+  NSMutableArray<NSToolbarItemIdentifier> *trailingIdentifiers = [NSMutableArray new];
+  NSArray<NSDictionary *> *configs = self.toolbarItemConfigs[toolbar.identifier] ?: @[];
+  for (NSDictionary *config in configs) {
+    NSString *itemIdentifier = [self toolbarItemIdentifierForConfig:config];
+    if (itemIdentifier.length > 0) {
+      NSString *placement = [config[@"placement"] isKindOfClass:NSString.class] ? config[@"placement"] : @"trailing";
+      if ([placement isEqualToString:@"leading"]) {
+        [leadingIdentifiers addObject:itemIdentifier];
+      } else {
+        [trailingIdentifiers addObject:itemIdentifier];
+      }
+    }
+  }
+  NSMutableArray<NSToolbarItemIdentifier> *identifiers = [NSMutableArray new];
+  [identifiers addObjectsFromArray:leadingIdentifiers];
+  [identifiers addObject:NSToolbarFlexibleSpaceItemIdentifier];
+  [identifiers addObjectsFromArray:trailingIdentifiers];
+  return identifiers;
+}
+
+- (NSToolbar *)ensureToolbarForWindow:(NSWindow *)window identifier:(NSString *)identifier
+{
+  NSToolbar *toolbar = window.toolbar;
+  if (!toolbar || !objc_getAssociatedObject(toolbar, &LegendToolbarWindowIdentifierKey)) {
+    toolbar = LegendCreateToolbar(identifier);
+    window.toolbar = toolbar;
+  }
+  toolbar.delegate = self;
+  toolbar.allowsUserCustomization = NO;
+  toolbar.autosavesConfiguration = NO;
+  return toolbar;
+}
+
+- (void)applyToolbarItemsFromOptions:(NSDictionary *)options toWindow:(NSWindow *)window identifier:(NSString *)identifier
+{
+  NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
+  if (!LegendDictionaryHasKey(windowStyle, @"toolbarItems")) {
+    return;
+  }
+
+  NSArray *toolbarItems = [windowStyle[@"toolbarItems"] isKindOfClass:NSArray.class] ? windowStyle[@"toolbarItems"] : @[];
+  NSToolbar *toolbar = [self ensureToolbarForWindow:window identifier:identifier];
+  NSMutableArray<NSDictionary *> *configs = [NSMutableArray new];
+  for (id item in toolbarItems) {
+    if ([item isKindOfClass:NSDictionary.class]) {
+      [configs addObject:item];
+    }
+  }
+  self.toolbarItemConfigs[toolbar.identifier] = configs;
+
+  while (toolbar.items.count > 0) {
+    [toolbar removeItemAtIndex:toolbar.items.count - 1];
+  }
+  for (NSToolbarItemIdentifier itemIdentifier in [self toolbarDefaultItemIdentifiers:toolbar]) {
+    [toolbar insertItemWithItemIdentifier:itemIdentifier atIndex:toolbar.items.count];
+  }
+}
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
+{
+  NSMutableArray<NSToolbarItemIdentifier> *identifiers = [[self toolbarItemIdentifiersForToolbar:toolbar] mutableCopy];
+  [identifiers addObject:NSToolbarSpaceItemIdentifier];
+  return identifiers;
+}
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
+{
+  return [self toolbarItemIdentifiersForToolbar:toolbar];
+}
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarSelectableItemIdentifiers:(NSToolbar *)toolbar
+{
+  return @[];
+}
+
+- (NSImage *)toolbarSearchImageWithLabel:(NSString *)label
+{
+  if (@available(macOS 11.0, *)) {
+    return [NSImage imageWithSystemSymbolName:@"magnifyingglass" accessibilityDescription:label ?: @"Search"];
+  }
+  return [NSImage imageNamed:NSImageNameTouchBarSearchTemplate];
+}
+
+- (void)focusToolbarSearchField:(NSSearchField *)searchField
+{
+  id metadata = objc_getAssociatedObject(searchField, &LegendToolbarControlMetadataKey);
+  NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
+    ? metadata
+    : @{};
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSWindow *window = (NSWindow *)self.windows[identifier];
+  [window makeKeyAndOrderFront:nil];
+  [window makeFirstResponder:searchField];
+}
+
+- (void)setToolbarSearchItem:(NSToolbarItem *)toolbarItem
+                    expanded:(BOOL)expanded
+                       value:(NSString *)value
+                       focus:(BOOL)focus
+                  sendChange:(BOOL)sendChange
+                    animated:(BOOL)animated
+{
+  if (!toolbarItem) {
+    return;
+  }
+
+  id associatedField = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchFieldKey);
+  id associatedButton = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchButtonKey);
+  id associatedContainer = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchContainerKey);
+  id associatedWidthConstraint = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchWidthConstraintKey);
+  if (![associatedField isKindOfClass:NSSearchField.class]) {
+    return;
+  }
+
+  NSSearchField *searchField = (NSSearchField *)associatedField;
+  NSButton *button = [associatedButton isKindOfClass:NSButton.class] ? (NSButton *)associatedButton : nil;
+  NSView *container = [associatedContainer isKindOfClass:NSView.class] ? (NSView *)associatedContainer : toolbarItem.view;
+  NSLayoutConstraint *widthConstraint = [associatedWidthConstraint isKindOfClass:NSLayoutConstraint.class]
+    ? (NSLayoutConstraint *)associatedWidthConstraint
+    : nil;
+  NSNumber *widthNumber = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchWidthKey);
+  CGFloat width = [widthNumber isKindOfClass:NSNumber.class] ? widthNumber.doubleValue : 240;
+  CGFloat targetWidth = expanded ? width : LegendToolbarSearchCollapsedSize;
+
+  if (value) {
+    searchField.stringValue = value;
+  }
+  if (expanded) {
+    searchField.hidden = NO;
+    button.hidden = NO;
+  }
+  if (focus) {
+    [self focusToolbarSearchField:searchField];
+  }
+  if (container) {
+    NSRect frame = container.frame;
+    frame.size.width = targetWidth;
+    if (animated) {
+      [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.18;
+        context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+        widthConstraint.animator.constant = targetWidth;
+        container.animator.frame = frame;
+        searchField.animator.alphaValue = expanded ? 1 : 0;
+        button.animator.alphaValue = expanded ? 0 : 1;
+        [container.superview.animator layoutSubtreeIfNeeded];
+        [container.animator layoutSubtreeIfNeeded];
+      } completionHandler:^{
+        button.hidden = expanded;
+        searchField.hidden = !expanded;
+      }];
+    } else {
+      widthConstraint.constant = targetWidth;
+      container.frame = frame;
+      searchField.alphaValue = expanded ? 1 : 0;
+      button.alphaValue = expanded ? 0 : 1;
+      button.hidden = expanded;
+      searchField.hidden = !expanded;
+      [container layoutSubtreeIfNeeded];
+    }
+  }
+  if (sendChange) {
+    [self sendToolbarSearchEventForField:searchField submitted:NO shiftKey:NO];
+  }
+}
+
+- (void)collapseToolbarSearchItem:(NSToolbarItem *)toolbarItem animated:(BOOL)animated
+{
+  [self setToolbarSearchItem:toolbarItem
+                    expanded:NO
+                       value:nil
+                       focus:NO
+                  sendChange:NO
+                    animated:animated];
+}
+
+- (void)expandToolbarSearchItem:(NSToolbarItem *)toolbarItem
+                          value:(NSString *)value
+                          focus:(BOOL)focus
+                     sendChange:(BOOL)sendChange
+                       animated:(BOOL)animated
+{
+  [self setToolbarSearchItem:toolbarItem
+                    expanded:YES
+                       value:value
+                       focus:focus
+                  sendChange:sendChange
+                    animated:animated];
+}
+
+- (NSToolbarItem *)toolbar:(NSToolbar *)toolbar
+    itemForItemIdentifier:(NSToolbarItemIdentifier)itemIdentifier
+willBeInsertedIntoToolbar:(BOOL)flag
+{
+  NSDictionary *config = [self toolbarItemConfigForIdentifier:itemIdentifier toolbar:toolbar];
+  if (!config) {
+    return nil;
+  }
+
+  NSString *type = [config[@"type"] isKindOfClass:NSString.class] ? config[@"type"] : nil;
+  if ([type isEqualToString:@"button"] || [type isEqualToString:@"menuButton"]) {
+    NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
+    NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
+    NSString *tooltip = [config[@"tooltip"] isKindOfClass:NSString.class] ? config[@"tooltip"] : label;
+    NSString *systemImageName = [config[@"systemImageName"] isKindOfClass:NSString.class] ? config[@"systemImageName"] : nil;
+    NSImage *image = nil;
+    if (systemImageName.length > 0) {
+      if (@available(macOS 11.0, *)) {
+        image = [NSImage imageWithSystemSymbolName:systemImageName accessibilityDescription:label];
+      }
+    }
+    NSArray *menuItems = [config[@"menuItems"] isKindOfClass:NSArray.class] ? config[@"menuItems"] : @[];
+    NSNumber *widthNumber = [config[@"width"] isKindOfClass:NSNumber.class] ? config[@"width"] : nil;
+    BOOL isMenuButton = [type isEqualToString:@"menuButton"] || menuItems.count > 0;
+
+    NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+    toolbarItem.label = label;
+    toolbarItem.paletteLabel = label;
+    toolbarItem.toolTip = tooltip;
+    toolbarItem.enabled = LegendDictionaryHasKey(config, @"enabled") ? [config[@"enabled"] boolValue] : YES;
+    NSString *placement = [config[@"placement"] isKindOfClass:NSString.class] ? config[@"placement"] : @"trailing";
+    if (@available(macOS 10.15, *)) {
+      toolbarItem.bordered = LegendDictionaryHasKey(config, @"bordered") ? [config[@"bordered"] boolValue] : YES;
+    }
+    if (@available(macOS 11.0, *)) {
+      toolbarItem.navigational = [placement isEqualToString:@"leading"];
+    }
+    NSDictionary *metadata = @{
+      @"itemId": itemId,
+      @"menuItems": menuItems,
+      @"value": [config[@"value"] isKindOfClass:NSString.class] ? config[@"value"] : @"",
+      @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar),
+    };
+    if (isMenuButton) {
+      NSButton *button = [NSButton buttonWithTitle:label target:self action:@selector(toolbarButtonItemPressed:)];
+      button.bezelStyle = NSBezelStyleRounded;
+      button.controlSize = NSControlSizeRegular;
+      button.enabled = toolbarItem.enabled;
+      button.toolTip = tooltip;
+      if (LegendDictionaryHasKey(config, @"monospacedDigits") && [config[@"monospacedDigits"] boolValue]) {
+        button.font = [NSFont monospacedDigitSystemFontOfSize:NSFont.systemFontSize weight:NSFontWeightSemibold];
+      }
+      if (image) {
+        button.image = image;
+        button.imagePosition = NSImageLeft;
+      }
+      NSFont *font = button.font ?: [NSFont systemFontOfSize:NSFont.systemFontSize];
+      CGFloat buttonWidth = widthNumber ? widthNumber.doubleValue : MAX(148, [label sizeWithAttributes:@{NSFontAttributeName: font}].width + (image ? 64 : 52));
+      button.frame = NSMakeRect(0, 0, buttonWidth, MAX(28, button.fittingSize.height));
+      objc_setAssociatedObject(button, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      toolbarItem.view = button;
+    } else {
+      toolbarItem.image = image;
+      toolbarItem.target = self;
+      toolbarItem.action = @selector(toolbarButtonItemPressed:);
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return toolbarItem;
+  }
+
+  if ([type isEqualToString:@"label"]) {
+    NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
+    NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
+    NSString *text = [config[@"text"] isKindOfClass:NSString.class] ? config[@"text"] : @"";
+    NSNumber *widthNumber = [config[@"width"] isKindOfClass:NSNumber.class] ? config[@"width"] : nil;
+    CGFloat width = widthNumber ? widthNumber.doubleValue : MAX(44, [text sizeWithAttributes:nil].width + 12);
+
+    NSTextField *textField = [NSTextField labelWithString:text];
+    textField.translatesAutoresizingMaskIntoConstraints = NO;
+    textField.alignment = NSTextAlignmentRight;
+    textField.font = [NSFont monospacedDigitSystemFontOfSize:NSFont.systemFontSize weight:NSFontWeightSemibold];
+    textField.textColor = NSColor.labelColor;
+    textField.toolTip = label;
+    [textField.widthAnchor constraintEqualToConstant:width].active = YES;
+
+    NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+    toolbarItem.view = textField;
+    toolbarItem.label = label;
+    toolbarItem.paletteLabel = label;
+    toolbarItem.toolTip = label;
+    return toolbarItem;
+  }
+
+  if ([type isEqualToString:@"search"]) {
+    NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
+    NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
+    NSString *placeholder = [config[@"placeholder"] isKindOfClass:NSString.class] ? config[@"placeholder"] : @"Search";
+    NSString *value = [config[@"value"] isKindOfClass:NSString.class] ? config[@"value"] : @"";
+    NSNumber *widthNumber = [config[@"width"] isKindOfClass:NSNumber.class] ? config[@"width"] : nil;
+    CGFloat width = widthNumber ? widthNumber.doubleValue : 240;
+    BOOL collapses = LegendDictionaryHasKey(config, @"collapses") && [config[@"collapses"] boolValue];
+    NSDictionary *metadata = @{
+      @"itemId": itemId,
+      @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar),
+    };
+
+    NSSearchField *searchField = nil;
+    NSToolbarItem *toolbarItem = nil;
+    if (collapses) {
+      CGFloat initialWidth = value.length > 0 ? width : LegendToolbarSearchCollapsedSize;
+      NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, initialWidth, LegendToolbarSearchCollapsedSize)];
+      container.translatesAutoresizingMaskIntoConstraints = NO;
+      NSLayoutConstraint *containerWidthConstraint = [container.widthAnchor constraintEqualToConstant:initialWidth];
+      containerWidthConstraint.active = YES;
+      [container.heightAnchor constraintEqualToConstant:LegendToolbarSearchCollapsedSize].active = YES;
+
+      NSButton *searchButton = [NSButton buttonWithImage:[self toolbarSearchImageWithLabel:label]
+                                                  target:self
+                                                  action:@selector(toolbarSearchButtonPressed:)];
+      searchButton.translatesAutoresizingMaskIntoConstraints = NO;
+      searchButton.bordered = YES;
+      searchButton.bezelStyle = NSBezelStyleCircular;
+      searchButton.controlSize = NSControlSizeRegular;
+      searchButton.imagePosition = NSImageOnly;
+      searchButton.toolTip = placeholder;
+      searchButton.enabled = LegendDictionaryHasKey(config, @"enabled") ? [config[@"enabled"] boolValue] : YES;
+      [container addSubview:searchButton];
+      [NSLayoutConstraint activateConstraints:@[
+        [searchButton.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
+        [searchButton.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
+        [searchButton.widthAnchor constraintEqualToConstant:LegendToolbarSearchCollapsedSize],
+        [searchButton.heightAnchor constraintEqualToConstant:LegendToolbarSearchCollapsedSize],
+      ]];
+
+      searchField = [[NSSearchField alloc] initWithFrame:NSMakeRect(0, 0, width, 28)];
+      searchField.translatesAutoresizingMaskIntoConstraints = NO;
+      searchField.hidden = value.length == 0;
+      searchField.alphaValue = value.length > 0 ? 1 : 0;
+      searchButton.hidden = value.length > 0;
+      searchButton.alphaValue = value.length > 0 ? 0 : 1;
+      [container addSubview:searchField];
+      [NSLayoutConstraint activateConstraints:@[
+        [searchField.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [searchField.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [searchField.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [searchField.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
+      ]];
+      toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+      toolbarItem.view = container;
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarSearchFieldKey, searchField, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarSearchWidthKey, @(width), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarSearchButtonKey, searchButton, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarSearchContainerKey, container, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarSearchWidthConstraintKey, containerWidthConstraint, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      objc_setAssociatedObject(searchButton, &LegendToolbarSearchItemKey, toolbarItem, OBJC_ASSOCIATION_ASSIGN);
+      objc_setAssociatedObject(searchField, &LegendToolbarSearchItemKey, toolbarItem, OBJC_ASSOCIATION_ASSIGN);
+    } else if (@available(macOS 11.0, *)) {
+      NSSearchToolbarItem *searchToolbarItem = [[NSSearchToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+      searchField = searchToolbarItem.searchField;
+      toolbarItem = searchToolbarItem;
+    } else {
+      searchField = [[NSSearchField alloc] initWithFrame:NSMakeRect(0, 0, width, 28)];
+      toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+      toolbarItem.view = searchField;
+    }
+
+    searchField.placeholderString = placeholder;
+    searchField.stringValue = value;
+    searchField.delegate = self;
+    searchField.target = self;
+    searchField.action = @selector(toolbarSearchSubmitted:);
+    searchField.enabled = LegendDictionaryHasKey(config, @"enabled") ? [config[@"enabled"] boolValue] : YES;
+    searchField.controlSize = NSControlSizeRegular;
+    objc_setAssociatedObject(searchField, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    toolbarItem.label = label;
+    toolbarItem.paletteLabel = label;
+    toolbarItem.toolTip = placeholder;
+    toolbarItem.enabled = searchField.enabled;
+    if (collapses) {
+      searchField.enabled = toolbarItem.enabled;
+    } else {
+      toolbarItem.minSize = NSMakeSize(MIN(width, 120), 28);
+      toolbarItem.maxSize = NSMakeSize(width, 28);
+    }
+    return toolbarItem;
+  }
+
+  if (![type isEqualToString:@"segmented"]) {
+    return nil;
+  }
+
+  NSArray *segments = [config[@"segments"] isKindOfClass:NSArray.class] ? config[@"segments"] : @[];
+  NSMutableArray<NSString *> *labels = [NSMutableArray new];
+  NSMutableArray<NSString *> *systemImageNames = [NSMutableArray new];
+  NSMutableArray<NSString *> *values = [NSMutableArray new];
+  NSInteger selectedSegment = -1;
+  NSString *selectedValue = [config[@"selectedValue"] isKindOfClass:NSString.class] ? config[@"selectedValue"] : nil;
+
+  for (id segment in segments) {
+    if ([segment isKindOfClass:NSDictionary.class]) {
+      NSDictionary *segmentConfig = (NSDictionary *)segment;
+      NSString *label = [segmentConfig[@"label"] isKindOfClass:NSString.class] ? segmentConfig[@"label"] : @"";
+      NSString *value = [segmentConfig[@"value"] isKindOfClass:NSString.class] ? segmentConfig[@"value"] : label;
+      if (label.length > 0 && value.length > 0) {
+        NSString *systemImageName = [segmentConfig[@"systemImageName"] isKindOfClass:NSString.class]
+          ? segmentConfig[@"systemImageName"]
+          : @"";
+        if ([value isEqualToString:selectedValue]) {
+          selectedSegment = values.count;
+        }
+        [labels addObject:label];
+        [systemImageNames addObject:systemImageName];
+        [values addObject:value];
+      }
+    }
+  }
+
+  if (labels.count == 0) {
+    return nil;
+  }
+
+  NSSegmentedControl *control = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+  control.segmentCount = labels.count;
+  control.trackingMode = NSSegmentSwitchTrackingSelectOne;
+  control.target = self;
+  control.action = @selector(toolbarSegmentedControlChanged:);
+  control.controlSize = NSControlSizeRegular;
+  control.segmentStyle = NSSegmentStyleAutomatic;
+  control.selectedSegment = selectedSegment >= 0 ? selectedSegment : 0;
+
+  CGFloat totalWidth = 0;
+  for (NSInteger index = 0; index < labels.count; index += 1) {
+    NSString *systemImageName = systemImageNames[index];
+    NSImage *image = nil;
+    if (systemImageName.length > 0) {
+      if (@available(macOS 11.0, *)) {
+        image = [NSImage imageWithSystemSymbolName:systemImageName accessibilityDescription:labels[index]];
+      }
+    }
+    if (image) {
+      [control setImage:image forSegment:index];
+      [control setToolTip:labels[index] forSegment:index];
+    } else {
+      [control setLabel:labels[index] forSegment:index];
+    }
+
+    NSFont *font = control.font ?: [NSFont systemFontOfSize:NSFont.systemFontSize];
+    CGFloat width = image ? 38 : MAX(76, [labels[index] sizeWithAttributes:@{NSFontAttributeName: font}].width + 28);
+    [control setWidth:width forSegment:index];
+    totalWidth += width;
+  }
+
+  NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
+  objc_setAssociatedObject(control, &LegendToolbarControlMetadataKey, @{
+    @"itemId": itemId,
+    @"values": values,
+    @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar),
+  }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  control.frame = NSMakeRect(0, 0, totalWidth, control.fittingSize.height);
+
+  NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+  toolbarItem.view = control;
+  toolbarItem.label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
+  toolbarItem.paletteLabel = toolbarItem.label;
+  return toolbarItem;
+}
+
+- (void)toolbarMenuSliderChanged:(NSSlider *)sender
+{
+  NSDictionary *metadata = objc_getAssociatedObject(sender, &LegendToolbarControlMetadataKey);
+  NSInteger value = (NSInteger)llround(sender.doubleValue);
+  NSTextField *readout = [sender.superview viewWithTag:731];
+  readout.stringValue = [NSString stringWithFormat:@"%ld%@", (long)value, metadata[@"suffix"] ?: @""];
+  [self sendWindowEventWithName:@"onToolbarItemSelected" body:@{
+    @"identifier": metadata[@"windowIdentifier"], @"itemId": metadata[@"itemId"],
+    @"value": [NSString stringWithFormat:@"%@:%ld", metadata[@"value"], (long)value],
+  }];
+}
+
+- (void)toolbarMenuItemSelected:(NSMenuItem *)sender
+{
+  NSDictionary *representedObject = [sender.representedObject isKindOfClass:NSDictionary.class]
+    ? sender.representedObject
+    : @{};
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSString *itemId = [representedObject[@"itemId"] isKindOfClass:NSString.class]
+    ? representedObject[@"itemId"]
+    : @"";
+  NSString *value = [representedObject[@"value"] isKindOfClass:NSString.class]
+    ? representedObject[@"value"]
+    : @"";
+
+  [self sendWindowEventWithName:@"onToolbarItemSelected"
+                           body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
+}
+
+- (void)toolbarSearchButtonPressed:(id)sender
+{
+  NSToolbarItem *toolbarItem = [sender isKindOfClass:NSToolbarItem.class]
+    ? (NSToolbarItem *)sender
+    : nil;
+  if (!toolbarItem) {
+    id associatedItem = objc_getAssociatedObject(sender, &LegendToolbarSearchItemKey);
+    if ([associatedItem isKindOfClass:NSToolbarItem.class]) {
+      toolbarItem = (NSToolbarItem *)associatedItem;
+    }
+  }
+
+  [self expandToolbarSearchItem:toolbarItem value:nil focus:YES sendChange:YES animated:YES];
+}
+
+- (void)toolbarButtonItemPressed:(id)sender
+{
+  id metadata = objc_getAssociatedObject(sender, &LegendToolbarControlMetadataKey);
+  NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
+    ? metadata
+    : @{};
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSString *itemId = [representedObject[@"itemId"] isKindOfClass:NSString.class]
+    ? representedObject[@"itemId"]
+    : @"";
+  NSString *value = [representedObject[@"value"] isKindOfClass:NSString.class]
+    ? representedObject[@"value"]
+    : @"";
+  NSArray *menuItems = [representedObject[@"menuItems"] isKindOfClass:NSArray.class]
+    ? representedObject[@"menuItems"]
+    : @[];
+
+  if (menuItems.count > 0) {
+    NSMenu *menu = [NSMenu new];
+    menu.autoenablesItems = NO;
+    for (id itemCandidate in menuItems) {
+      if (![itemCandidate isKindOfClass:NSDictionary.class]) {
+        continue;
+      }
+      NSDictionary *itemConfig = (NSDictionary *)itemCandidate;
+      if (LegendDictionaryHasKey(itemConfig, @"separator") && [itemConfig[@"separator"] boolValue]) {
+        [menu addItem:NSMenuItem.separatorItem];
+        continue;
+      }
+      NSString *itemLabel = [itemConfig[@"label"] isKindOfClass:NSString.class] ? itemConfig[@"label"] : @"";
+      NSString *itemValue = [itemConfig[@"value"] isKindOfClass:NSString.class] ? itemConfig[@"value"] : @"";
+      if (itemLabel.length == 0 || itemValue.length == 0) {
+        continue;
+      }
+      NSDictionary *sliderConfig = [itemConfig[@"slider"] isKindOfClass:NSDictionary.class] ? itemConfig[@"slider"] : nil;
+      if (sliderConfig) {
+        double minimum = [sliderConfig[@"min"] doubleValue];
+        double maximum = [sliderConfig[@"max"] doubleValue];
+        double initial = [sliderConfig[@"value"] doubleValue];
+        if (!isfinite(minimum) || !isfinite(maximum) || !isfinite(initial) || maximum <= minimum) continue;
+        NSString *suffix = [sliderConfig[@"suffix"] isKindOfClass:NSString.class] ? sliderConfig[@"suffix"] : @"";
+        NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 280, 68)];
+        NSTextField *label = [NSTextField labelWithString:itemLabel];
+        label.frame = NSMakeRect(16, 42, 190, 18);
+        [container addSubview:label];
+        NSTextField *readout = [NSTextField labelWithString:@""];
+        readout.tag = 731;
+        readout.alignment = NSTextAlignmentRight;
+        readout.frame = NSMakeRect(210, 42, 54, 18);
+        [container addSubview:readout];
+        NSSlider *slider = [NSSlider sliderWithValue:MAX(minimum, MIN(maximum, initial)) minValue:minimum maxValue:maximum target:self action:@selector(toolbarMenuSliderChanged:)];
+        slider.frame = NSMakeRect(16, 12, 248, 24);
+        slider.continuous = YES;
+        slider.accessibilityLabel = itemLabel;
+        slider.enabled = LegendDictionaryHasKey(itemConfig, @"enabled") ? [itemConfig[@"enabled"] boolValue] : YES;
+        readout.stringValue = [NSString stringWithFormat:@"%.0f%@", slider.doubleValue, suffix];
+        objc_setAssociatedObject(slider, &LegendToolbarControlMetadataKey, @{
+          @"windowIdentifier": identifier, @"itemId": itemId, @"value": itemValue, @"suffix": suffix,
+        }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [container addSubview:slider];
+        NSMenuItem *sliderItem = [NSMenuItem new];
+        sliderItem.view = container;
+        [menu addItem:sliderItem];
+        continue;
+      }
+      NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:itemLabel action:@selector(toolbarMenuItemSelected:) keyEquivalent:@""];
+      item.target = self;
+      item.enabled = LegendDictionaryHasKey(itemConfig, @"enabled") ? [itemConfig[@"enabled"] boolValue] : YES;
+      item.state = LegendDictionaryHasKey(itemConfig, @"selected") && [itemConfig[@"selected"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+      NSString *itemSystemImageName = [itemConfig[@"systemImageName"] isKindOfClass:NSString.class] ? itemConfig[@"systemImageName"] : nil;
+      if (itemSystemImageName.length > 0) {
+        if (@available(macOS 11.0, *)) {
+          item.image = [NSImage imageWithSystemSymbolName:itemSystemImageName accessibilityDescription:itemLabel];
+        }
+      }
+      item.representedObject = @{
+        @"itemId": itemId,
+        @"value": itemValue,
+        @"windowIdentifier": identifier,
+      };
+      [menu addItem:item];
+    }
+
+    if (menu.numberOfItems > 0) {
+      if ([sender isKindOfClass:NSView.class]) {
+        NSView *senderView = (NSView *)sender;
+        [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(0, NSHeight(senderView.bounds) + 4) inView:senderView];
+      } else {
+        NSEvent *event = NSApp.currentEvent;
+        NSWindow *window = (NSWindow *)self.windows[identifier];
+        if (event && window.contentView) {
+          [NSMenu popUpContextMenu:menu withEvent:event forView:window.contentView];
+        } else {
+          [menu popUpMenuPositioningItem:nil atLocation:NSZeroPoint inView:nil];
+        }
+      }
+      return;
+    }
+  }
+
+  [self sendWindowEventWithName:@"onToolbarItemSelected"
+                           body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
+}
+
+- (void)toolbarSegmentedControlChanged:(NSSegmentedControl *)sender
+{
+  id metadata = objc_getAssociatedObject(sender, &LegendToolbarControlMetadataKey);
+  NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
+    ? metadata
+    : @{};
+  NSArray *values = [representedObject[@"values"] isKindOfClass:NSArray.class] ? representedObject[@"values"] : @[];
+  NSInteger selectedSegment = sender.selectedSegment;
+  NSString *value = selectedSegment >= 0 && selectedSegment < values.count && [values[selectedSegment] isKindOfClass:NSString.class]
+    ? values[selectedSegment]
+    : @"";
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSString *itemId = [representedObject[@"itemId"] isKindOfClass:NSString.class]
+    ? representedObject[@"itemId"]
+    : @"";
+
+  [self sendWindowEventWithName:@"onToolbarItemSelected"
+                           body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
+}
+
+- (void)sendToolbarSearchEventForField:(NSSearchField *)searchField
+                             submitted:(BOOL)submitted
+                              shiftKey:(BOOL)shiftKey
+{
+  id metadata = objc_getAssociatedObject(searchField, &LegendToolbarControlMetadataKey);
+  NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
+    ? metadata
+    : @{};
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSString *itemId = [representedObject[@"itemId"] isKindOfClass:NSString.class]
+    ? representedObject[@"itemId"]
+    : @"";
+
+  [self sendWindowEventWithName:@"onToolbarSearch"
+                           body:@{
+                             @"identifier": identifier,
+                             @"itemId": itemId,
+                             @"shiftKey": @(shiftKey),
+                             @"submitted": @(submitted),
+                             @"value": searchField.stringValue ?: @"",
+                           }];
+}
+
+- (void)controlTextDidChange:(NSNotification *)notification
+{
+  if ([notification.object isKindOfClass:NSSearchField.class]) {
+    [self sendToolbarSearchEventForField:(NSSearchField *)notification.object submitted:NO shiftKey:NO];
+  }
+}
+
+- (BOOL)control:(NSControl *)control textView:(NSTextView *)textView doCommandBySelector:(SEL)commandSelector
+{
+  if ([control isKindOfClass:NSSearchField.class] && commandSelector == @selector(cancelOperation:)) {
+    [control.window makeFirstResponder:nil];
+    return YES;
+  }
+  return NO;
+}
+
+- (void)controlTextDidEndEditing:(NSNotification *)notification
+{
+  if ([notification.object isKindOfClass:NSSearchField.class]) {
+    NSSearchField *searchField = (NSSearchField *)notification.object;
+    if (searchField.stringValue.length == 0) {
+      id associatedItem = objc_getAssociatedObject(searchField, &LegendToolbarSearchItemKey);
+      if ([associatedItem isKindOfClass:NSToolbarItem.class]) {
+        [self collapseToolbarSearchItem:(NSToolbarItem *)associatedItem animated:YES];
+      }
+    }
+  }
+}
+
+- (void)toolbarSearchSubmitted:(NSSearchField *)sender
+{
+  NSEvent *currentEvent = NSApp.currentEvent;
+  BOOL shiftKey = currentEvent && ((currentEvent.modifierFlags & NSEventModifierFlagShift) != 0);
+  [self sendToolbarSearchEventForField:sender submitted:YES shiftKey:shiftKey];
+}
+#endif
+
+- (NSString *)successJson
+{
+  return [self jsonStringFromObject:@{@"success": @YES}];
+}
+
+- (NSString *)failureJson:(NSString *)message
+{
+  return [self jsonStringFromObject:@{@"success": @NO, @"message": message ?: @""}];
+}
+
+- (NSString *)getConstantsJson
+{
+#if TARGET_OS_OSX
+  return [self jsonStringFromObject:@{
+    @"STYLE_MASK_BORDERLESS": @(NSWindowStyleMaskBorderless),
+    @"STYLE_MASK_TITLED": @(NSWindowStyleMaskTitled),
+    @"STYLE_MASK_CLOSABLE": @(NSWindowStyleMaskClosable),
+    @"STYLE_MASK_MINIATURIZABLE": @(NSWindowStyleMaskMiniaturizable),
+    @"STYLE_MASK_RESIZABLE": @(NSWindowStyleMaskResizable),
+    @"STYLE_MASK_UNIFIED_TITLE_AND_TOOLBAR": @(NSWindowStyleMaskUnifiedTitleAndToolbar),
+    @"STYLE_MASK_FULL_SCREEN": @(NSWindowStyleMaskFullScreen),
+    @"STYLE_MASK_FULL_SIZE_CONTENT_VIEW": @(NSWindowStyleMaskFullSizeContentView),
+    @"STYLE_MASK_UTILITY_WINDOW": @(NSWindowStyleMaskUtilityWindow),
+    @"STYLE_MASK_DOC_MODAL_WINDOW": @(NSWindowStyleMaskDocModalWindow),
+    @"STYLE_MASK_NONACTIVATING_PANEL": @(NSWindowStyleMaskNonactivatingPanel),
+    @"WINDOW_LEVEL_NORMAL": @(NSNormalWindowLevel),
+    @"WINDOW_LEVEL_FLOATING": @(NSFloatingWindowLevel),
+    @"WINDOW_LEVEL_MODAL_PANEL": @(NSModalPanelWindowLevel),
+    @"WINDOW_LEVEL_MAIN_MENU": @(NSMainMenuWindowLevel),
+    @"WINDOW_LEVEL_STATUS": @(NSStatusWindowLevel),
+    @"WINDOW_LEVEL_SCREEN_SAVER": @(NSScreenSaverWindowLevel),
+  }];
+#else
+  return @"{}";
+#endif
+}
+
+- (NSString *)getReactNativeStartupTimingJson
+{
+  facebook::react::ReactMarker::StartupLogger& startupLogger =
+    facebook::react::ReactMarker::StartupLogger::getInstance();
+  NSMutableDictionary<NSString *, NSNumber *> *timing = [NSMutableDictionary new];
+
+#if TARGET_OS_OSX
+  timing[@"clockOffsetMs"] = @(
+    NSDate.date.timeIntervalSince1970 * 1000 - CACurrentMediaTime() * 1000
+  );
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+  [timing addEntriesFromDictionary:SparkStartupTiming()];
+#else
+  if (LegendMainWindowFirstVisibleTimeMs > 0) {
+    timing[@"mainWindowFirstVisibleTime"] = @(LegendMainWindowFirstVisibleTimeMs);
+  }
+  if (LegendMainWindowReactRootAttachedTimeMs > 0) {
+    timing[@"mainWindowReactRootAttachedTime"] = @(LegendMainWindowReactRootAttachedTimeMs);
+  }
+#endif
+#endif
+
+  double startTime = startupLogger.getAppStartupStartTime();
+  if (std::isnan(startTime)) {
+    startTime = startupLogger.getInitReactRuntimeStartTime();
+  }
+  if (!std::isnan(startTime)) {
+    timing[@"startTime"] = @(startTime);
+  }
+
+  const struct {
+    NSString *key;
+    double value;
+  } markers[] = {
+    {@"initializeRuntimeStart", startupLogger.getInitReactRuntimeStartTime()},
+    {@"executeJavaScriptBundleEntryPointStart", startupLogger.getRunJSBundleStartTime()},
+    {@"executeJavaScriptBundleEntryPointEnd", startupLogger.getRunJSBundleEndTime()},
+    {@"initializeRuntimeEnd", startupLogger.getInitReactRuntimeEndTime()},
+    {@"endTime", startupLogger.getAppStartupEndTime()},
+  };
+  for (const auto& marker : markers) {
+    if (!std::isnan(marker.value)) {
+      timing[marker.key] = @(marker.value);
+    }
+  }
+
+  return [self jsonStringFromObject:timing];
+}
+
+- (NSArray<NSDictionary *> *)displayDictionaries
+{
+#if TARGET_OS_OSX
+  NSMutableArray<NSDictionary *> *displays = [NSMutableArray new];
+  NSScreen *mainScreen = NSScreen.mainScreen;
+  for (NSScreen *screen in NSScreen.screens) {
+    NSNumber *screenNumber = screen.deviceDescription[@"NSScreenNumber"];
+    NSRect frame = screen.frame;
+    NSRect visibleFrame = screen.visibleFrame;
+    NSString *name = @"Display";
+    if (@available(macOS 10.15, *)) {
+      name = screen.localizedName ?: name;
+    }
+    CFUUIDRef uuid = screenNumber ? CGDisplayCreateUUIDFromDisplayID(screenNumber.unsignedIntValue) : nullptr;
+    NSString *persistentId = uuid ? CFBridgingRelease(CFUUIDCreateString(kCFAllocatorDefault, uuid)) : screenNumber.stringValue;
+    if (uuid) CFRelease(uuid);
+    [displays addObject:@{
+      @"persistentId": persistentId ?: @"",
+      @"id": screenNumber.stringValue ?: @"",
+      @"name": name,
+      @"isMain": @(screen == mainScreen),
+      @"scaleFactor": @(screen.backingScaleFactor),
+      @"frame": @{ @"x": @(frame.origin.x), @"y": @(frame.origin.y), @"width": @(frame.size.width), @"height": @(frame.size.height) },
+      @"visibleFrame": @{ @"x": @(visibleFrame.origin.x), @"y": @(visibleFrame.origin.y), @"width": @(visibleFrame.size.width), @"height": @(visibleFrame.size.height) },
+    }];
+  }
+  return displays;
+#else
+  return @[];
+#endif
+}
+
+- (void)getDisplays:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+  resolve([self jsonStringFromObject:[self displayDictionaries]]);
+}
+
+#if TARGET_OS_OSX
+- (RCTUIView *)createReactRootViewWithModuleName:(NSString *)moduleName initialProperties:(NSDictionary *)initialProps
+{
+
+  id appDelegate = NSApplication.sharedApplication.delegate;
+  RCTRootViewFactory *rootViewFactory = nil;
+
+  if ([appDelegate respondsToSelector:@selector(rootViewFactory)]) {
+    rootViewFactory = [(id<RNWindowManagerRootViewFactoryProvider>)appDelegate rootViewFactory];
+  }
+
+  if (rootViewFactory) {
+    RCTUIView *rootView = (RCTUIView *)[rootViewFactory viewWithModuleName:moduleName initialProperties:initialProps];
+    return rootView;
+  }
+
+  RCTBridge *bridge = self.bridge;
+  if (!bridge) {
+    return nil;
+  }
+
+  RCTUIView *rootView = [[RCTRootView alloc] initWithBridge:bridge moduleName:moduleName initialProperties:initialProps];
+  return rootView;
+}
+#endif
+
+- (void)finishWindowRestoration:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    // Adopted windows are removed from this collection by LegendTakePrecreatedWindow.
+    // Close only unclaimed native shells; preserve saved records and document data.
+    for (NSString *identifier in LegendPrecreatedWindows.allKeys) {
+      LegendRemovePrecreatedWindow(identifier);
+    }
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)openWindow:(NSString *)optionsJson resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSDictionary *options = [self parseObjectJSON:optionsJson];
+    NSString *identifier = [options[@"identifier"] isKindOfClass:NSString.class] ? options[@"identifier"] : nil;
+    NSString *moduleName = [options[@"moduleName"] isKindOfClass:NSString.class] ? options[@"moduleName"] : nil;
+    NSAppearance *darkAppearance = LegendDarkAppearance();
+
+    if (moduleName.length == 0) {
+      moduleName = identifier;
+    }
+    if (identifier.length == 0) {
+      identifier = moduleName ?: @"default";
+    }
+
+    // A caller can turn off restoration before the window has been adopted by
+    // React, so remove a native startup shell immediately when requested.
+    if (LegendDictionaryHasKey(options, @"restoreOnLaunch") && ![options[@"restoreOnLaunch"] boolValue]) {
+      LegendSetRestorableWindowOptions(identifier, nil);
+      LegendRemovePrecreatedWindow(identifier);
+    }
+
+    NSString *title = [options[@"title"] isKindOfClass:NSString.class] ? options[@"title"] : nil;
+    title = title ?: moduleName ?: @"New Window";
+    BOOL hasRepresentedURL = LegendDictionaryHasKey(options, @"representedURL");
+    id representedURLValue = hasRepresentedURL ? options[@"representedURL"] : nil;
+
+    NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
+    NSNumber *maskNumber = [windowStyle[@"mask"] isKindOfClass:NSNumber.class] ? windowStyle[@"mask"] : nil;
+    NSNumber *transparentTitlebar = [windowStyle[@"titlebarAppearsTransparent"] isKindOfClass:NSNumber.class]
+      ? windowStyle[@"titlebarAppearsTransparent"]
+      : nil;
+    NSString *titleVisibility = [windowStyle[@"titleVisibility"] isKindOfClass:NSString.class]
+      ? windowStyle[@"titleVisibility"]
+      : nil;
+    NSString *toolbarStyle = [windowStyle[@"toolbarStyle"] isKindOfClass:NSString.class] ? windowStyle[@"toolbarStyle"] : nil;
+    NSString *contentLayoutMode = [windowStyle[@"contentLayoutMode"] isKindOfClass:NSString.class]
+      ? windowStyle[@"contentLayoutMode"]
+      : nil;
+    NSString *titlebarSeparatorStyle = [windowStyle[@"titlebarSeparatorStyle"] isKindOfClass:NSString.class]
+      ? windowStyle[@"titlebarSeparatorStyle"]
+      : nil;
+    NSString *backgroundColor = [windowStyle[@"backgroundColor"] isKindOfClass:NSString.class]
+      ? windowStyle[@"backgroundColor"]
+      : nil;
+    NSString *appearance = [windowStyle[@"appearance"] isKindOfClass:NSString.class]
+      ? windowStyle[@"appearance"]
+      : nil;
+    BOOL usesTitlebarBackground = transparentTitlebar.boolValue && backgroundColor.length > 0;
+    NSNumber *levelNumber = [options[@"level"] isKindOfClass:NSNumber.class] ? options[@"level"] : nil;
+    BOOL transparentBackground = [options[@"transparentBackground"] boolValue];
+    BOOL interceptClose = [options[@"interceptClose"] boolValue];
+    BOOL deferOrderFront = [options[@"deferOrderFront"] boolValue];
+    NSNumber *hasShadowNumber = [options[@"hasShadow"] isKindOfClass:NSNumber.class] ? options[@"hasShadow"] : nil;
+    BOOL shouldApplyHasShadow = hasShadowNumber != nil;
+    BOOL hasShadow = shouldApplyHasShadow ? hasShadowNumber.boolValue : NO;
+    NSNumber *animateFrameChangeNumber = [options[@"animateFrameChange"] isKindOfClass:NSNumber.class]
+      ? options[@"animateFrameChange"]
+      : nil;
+    BOOL animateFrameChange = animateFrameChangeNumber ? animateFrameChangeNumber.boolValue : NO;
+    NSNumber *frameAnimationDurationNumber = [options[@"frameAnimationDurationMs"] isKindOfClass:NSNumber.class]
+      ? options[@"frameAnimationDurationMs"]
+      : nil;
+    NSTimeInterval frameAnimationDuration = frameAnimationDurationNumber ? frameAnimationDurationNumber.doubleValue / 1000.0 : 0;
+    NSNumber *widthNumber = [windowStyle[@"width"] isKindOfClass:NSNumber.class]
+      ? windowStyle[@"width"]
+      : ([options[@"width"] isKindOfClass:NSNumber.class] ? options[@"width"] : nil);
+    NSNumber *heightNumber = [windowStyle[@"height"] isKindOfClass:NSNumber.class]
+      ? windowStyle[@"height"]
+      : ([options[@"height"] isKindOfClass:NSNumber.class] ? options[@"height"] : nil);
+    CGFloat width = widthNumber ? widthNumber.doubleValue : 400;
+    CGFloat height = heightNumber ? heightNumber.doubleValue : 300;
+    NSNumber *minWidthNumber = [windowStyle[@"minWidth"] isKindOfClass:NSNumber.class]
+      ? windowStyle[@"minWidth"]
+      : ([options[@"minWidth"] isKindOfClass:NSNumber.class] ? options[@"minWidth"] : nil);
+    NSNumber *minHeightNumber = [windowStyle[@"minHeight"] isKindOfClass:NSNumber.class]
+      ? windowStyle[@"minHeight"]
+      : ([options[@"minHeight"] isKindOfClass:NSNumber.class] ? options[@"minHeight"] : nil);
+    BOOL hasMinWidth = minWidthNumber != nil;
+    BOOL hasMinHeight = minHeightNumber != nil;
+    CGFloat minWidth = hasMinWidth ? minWidthNumber.doubleValue : 0;
+    CGFloat minHeight = hasMinHeight ? minHeightNumber.doubleValue : 0;
+
+    if (hasMinWidth && width < minWidth) {
+      width = minWidth;
+    }
+    if (hasMinHeight && height < minHeight) {
+      height = minHeight;
+    }
+
+    NSNumber *originX = [options[@"x"] isKindOfClass:NSNumber.class] ? options[@"x"] : nil;
+    NSNumber *originY = [options[@"y"] isKindOfClass:NSNumber.class] ? options[@"y"] : nil;
+    BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
+    NSWindow *existingWindow = (NSWindow *)self.windows[identifier];
+    if (existingWindow) {
+      NSString *existingModuleName = self.moduleNames[identifier] ?: @"";
+      NSString *nextModuleName = moduleName ?: @"";
+      if (![existingModuleName isEqualToString:nextModuleName]) {
+        [self handleWindowClosedForIdentifier:identifier closeWindow:YES];
+        existingWindow = nil;
+      }
+    }
+
+    if (existingWindow && [windowStyle[@"fullscreen"] boolValue] &&
+        (existingWindow.styleMask & NSWindowStyleMaskFullScreen)) {
+      [existingWindow makeKeyAndOrderFront:nil];
+      resolve([self successJson]);
+      return;
+    }
+    if (existingWindow) {
+      RCTUIView *existingRootView = self.rootViews[identifier];
+      NSRect frame = existingWindow.frame;
+      CGFloat newWidth = widthNumber ? width : frame.size.width;
+      CGFloat newHeight = heightNumber ? height : frame.size.height;
+      if (hasMinWidth && newWidth < minWidth) {
+        newWidth = minWidth;
+      }
+      if (hasMinHeight && newHeight < minHeight) {
+        newHeight = minHeight;
+      }
+
+      NSPoint origin = frame.origin;
+      if (originX) {
+        origin.x = originX.doubleValue;
+      }
+      if (originY) {
+        origin.y = originY.doubleValue;
+      }
+
+      NSRect newFrame = NSMakeRect(origin.x, origin.y, newWidth, newHeight);
+      if (animateFrameChange && frameAnimationDuration > 0) {
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+          context.duration = frameAnimationDuration;
+          context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+          [[existingWindow animator] setFrame:newFrame display:YES];
+        } completionHandler:nil];
+      } else {
+        [existingWindow setFrame:newFrame display:YES animate:animateFrameChange];
+      }
+
+      if (maskNumber) {
+        existingWindow.styleMask = maskNumber.unsignedIntegerValue;
+      }
+      LegendApplyContentLayoutModeOption(existingWindow, contentLayoutMode);
+      LegendApplyContentLayoutMode(existingWindow, maskNumber, usesTitlebarBackground);
+      if (transparentTitlebar != nil) {
+        existingWindow.titlebarAppearsTransparent = transparentTitlebar.boolValue;
+      }
+      LegendApplyTitleVisibility(existingWindow, titleVisibility);
+      if (hasToolbar && !existingWindow.toolbar) {
+        NSToolbar *toolbar = LegendCreateToolbar(identifier);
+        existingWindow.toolbar = toolbar;
+      }
+      LegendApplyToolbarStyle(existingWindow, toolbarStyle);
+      LegendApplyTitlebarSeparatorStyle(existingWindow, titlebarSeparatorStyle);
+      [self applyTitlebarControlsFromOptions:options toWindow:existingWindow identifier:identifier];
+      [self applyToolbarItemsFromOptions:options toWindow:existingWindow identifier:identifier];
+      [self applyTitlebarMaterialFromOptions:options toWindow:existingWindow identifier:identifier];
+      LegendApplyWindowAppearance(existingWindow, appearance);
+      LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
+
+      if (levelNumber) {
+        existingWindow.level = levelNumber.integerValue;
+        if (!deferOrderFront || existingWindow.isVisible) {
+          [existingWindow orderFrontRegardless];
+        }
+      }
+      if (shouldApplyHasShadow) {
+        existingWindow.hasShadow = hasShadow;
+        if (hasShadow) {
+          [existingWindow invalidateShadow];
+        }
+      }
+      if (transparentBackground) {
+        existingWindow.opaque = NO;
+        if (!hasToolbar) {
+          existingWindow.backgroundColor = NSColor.clearColor;
+        }
+        NSView *contentView = existingWindow.contentView;
+        contentView.wantsLayer = YES;
+        contentView.layer.backgroundColor = NSColor.clearColor.CGColor;
+        contentView.layer.masksToBounds = NO;
+        existingRootView.backgroundColor = NSColor.clearColor;
+      }
+
+      // A focus-only open must not replace document metadata with the module name.
+      if (LegendDictionaryHasKey(options, @"title") || hasRepresentedURL) {
+        NSString *explicitTitle = [options[@"title"] isKindOfClass:NSString.class] ? options[@"title"] : nil;
+        LegendApplyWindowTitleAndRepresentedURL(existingWindow, explicitTitle, hasRepresentedURL, representedURLValue, existingWindow.title);
+      }
+      if (!appearance && darkAppearance) {
+        existingWindow.appearance = darkAppearance;
+      }
+      existingWindow.delegate = self;
+      if (hasMinWidth || hasMinHeight) {
+        NSSize currentMinSize = existingWindow.minSize;
+        [existingWindow setMinSize:NSMakeSize(hasMinWidth ? minWidth : currentMinSize.width,
+                                              hasMinHeight ? minHeight : currentMinSize.height)];
+      }
+
+      NSDictionary *initialProps = [self initialPropsFromOptions:options];
+      if (existingRootView && initialProps && [existingRootView respondsToSelector:@selector(setAppProperties:)]) {
+        [existingRootView setValue:initialProps forKey:@"appProperties"];
+      }
+      if (usesTitlebarBackground && existingRootView) {
+        LegendEnsureRootViewContainer(existingWindow, existingRootView);
+        LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
+      }
+      LegendSizeRootViewToWindow(existingRootView, existingWindow);
+      LegendPrepareWindowForDisplay(existingWindow, backgroundColor);
+      if (interceptClose) {
+        [self.closeRequestIdentifiers addObject:identifier];
+      } else if (LegendDictionaryHasKey(options, @"interceptClose")) {
+        [self.closeRequestIdentifiers removeObject:identifier];
+      }
+      self.moduleNames[identifier] = moduleName ?: @"";
+      if (!deferOrderFront || existingWindow.isVisible) {
+        [existingWindow makeKeyAndOrderFront:nil];
+      }
+      [self recordWindowOptions:options identifier:identifier moduleName:moduleName];
+      [self finishOpeningWindow:existingWindow options:windowStyle resolve:resolve reject:reject];
+      return;
+    }
+
+    NSUInteger styleMask = maskNumber
+      ? maskNumber.unsignedIntegerValue
+      : (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable);
+    NSWindow *precreatedWindow = LegendTakePrecreatedWindow ? LegendTakePrecreatedWindow(identifier) : nil;
+    NSWindow *window = precreatedWindow ?: [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, width, height)
+                                                   styleMask:styleMask
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO];
+    LegendApplyContentLayoutModeOption(window, contentLayoutMode);
+    LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
+
+    if (appearance) {
+      LegendApplyWindowAppearance(window, appearance);
+    } else if (darkAppearance) {
+      window.appearance = darkAppearance;
+    }
+    window.releasedWhenClosed = NO;
+    LegendApplyWindowTitleAndRepresentedURL(window, title, hasRepresentedURL, representedURLValue, title);
+    if (transparentTitlebar != nil) {
+      window.titlebarAppearsTransparent = transparentTitlebar.boolValue;
+    }
+    LegendApplyTitleVisibility(window, titleVisibility);
+    if (hasToolbar) {
+      NSToolbar *toolbar = LegendCreateToolbar(identifier);
+      window.toolbar = toolbar;
+    }
+    LegendApplyToolbarStyle(window, toolbarStyle);
+    LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
+    [self applyTitlebarControlsFromOptions:options toWindow:window identifier:identifier];
+    [self applyToolbarItemsFromOptions:options toWindow:window identifier:identifier];
+    [self applyTitlebarMaterialFromOptions:options toWindow:window identifier:identifier];
+    LegendApplyWindowBackgroundColor(window, backgroundColor);
+    if (levelNumber) {
+      window.level = levelNumber.integerValue;
+    }
+    if (shouldApplyHasShadow) {
+      window.hasShadow = hasShadow;
+      if (hasShadow) {
+        [window invalidateShadow];
+      }
+    }
+    if (transparentBackground) {
+      window.opaque = NO;
+      if (!hasToolbar) {
+        window.backgroundColor = NSColor.clearColor;
+      }
+      window.contentView.wantsLayer = YES;
+      window.contentView.layer.masksToBounds = NO;
+    }
+
+    if (precreatedWindow) {
+      // Native startup already restored this window to its final AppKit frame.
+    } else if (originX || originY) {
+      NSPoint origin = window.frame.origin;
+      if (originX) {
+        origin.x = originX.doubleValue;
+      }
+      if (originY) {
+        origin.y = originY.doubleValue;
+      }
+      [window setFrameOrigin:origin];
+    } else {
+      [window center];
+    }
+
+    if (hasMinWidth || hasMinHeight) {
+      NSSize currentMinSize = window.minSize;
+      [window setMinSize:NSMakeSize(hasMinWidth ? minWidth : currentMinSize.width,
+                                    hasMinHeight ? minHeight : currentMinSize.height)];
+    }
+
+    NSColor *startupBackgroundColor = transparentBackground
+      ? NSColor.clearColor
+      : LegendWindowStartupBackgroundColor(window, backgroundColor);
+    if (!transparentBackground && backgroundColor.length == 0) {
+      window.backgroundColor = startupBackgroundColor;
+      window.opaque = startupBackgroundColor.alphaComponent >= 1;
+      LegendApplyBackgroundColorToView(window.contentView, startupBackgroundColor);
+    }
+
+    if (!precreatedWindow && [options[@"restoreOnLaunch"] boolValue]) {
+      [window setFrameAutosaveName:LegendManagedWindowFrameAutosaveName(identifier)];
+    }
+    if (!precreatedWindow && LegendPrepareSidebarSplitViewStartup) {
+      LegendPrepareSidebarSplitViewStartup(window, windowStyle[@"startupSplitView"]);
+    }
+    BOOL presentedBeforeReactRoot = precreatedWindow != nil || !deferOrderFront;
+    if (!deferOrderFront && !window.visible) {
+      [window.contentView displayIfNeeded];
+      [window displayIfNeeded];
+      [window makeKeyAndOrderFront:nil];
+      if (levelNumber) {
+        [window orderFrontRegardless];
+      }
+    }
+
+    NSDictionary *initialProps = [self initialPropsFromOptions:options];
+    RCTUIView *rootView = [self createReactRootViewWithModuleName:moduleName initialProperties:initialProps];
+    if (!rootView) {
+      if (presentedBeforeReactRoot) {
+        [window close];
+      }
+      reject(@"no_root_view", @"React root view could not be created", nil);
+      return;
+    }
+
+    rootView.backgroundColor = startupBackgroundColor;
+    __weak NSWindow *weakWindow = window;
+    void (^installRoot)(void) = ^{
+      NSWindow *targetWindow = weakWindow;
+      if (!targetWindow) {
+        return;
+      }
+      [rootView removeFromSuperview];
+      targetWindow.contentView = rootView;
+      if (usesTitlebarBackground) {
+        LegendEnsureRootViewContainer(targetWindow, rootView);
+      }
+      LegendApplyWindowBackgroundColor(targetWindow, backgroundColor);
+      LegendSizeRootViewToWindow(rootView, targetWindow);
+    };
+    if (!LegendAttachSidebarSplitViewStartupRoot ||
+        !LegendAttachSidebarSplitViewStartupRoot(window, rootView, installRoot)) {
+      installRoot();
+    }
+    objc_setAssociatedObject(window, &LegendManagedRootViewKey, rootView, OBJC_ASSOCIATION_ASSIGN);
+    LegendSizeRootViewToWindow(rootView, window);
+    if (transparentBackground) {
+      rootView.backgroundColor = NSColor.clearColor;
+      window.contentView.wantsLayer = YES;
+      window.contentView.layer.backgroundColor = NSColor.clearColor.CGColor;
+      window.contentView.layer.masksToBounds = NO;
+    }
+    rootView.wantsLayer = YES;
+    rootView.layerUsesCoreImageFilters = YES;
+    if (!rootView.layer) {
+      rootView.layer = [CALayer layer];
+    }
+    rootView.layer.masksToBounds = NO;
+    LegendPrepareWindowForDisplay(window, backgroundColor);
+    window.delegate = self;
+
+    window.identifier = identifier;
+    self.windows[identifier] = window;
+    self.rootViews[identifier] = rootView;
+    self.moduleNames[identifier] = moduleName ?: @"";
+    [self recordWindowOptions:options identifier:identifier moduleName:moduleName];
+    if (interceptClose) {
+      [self.closeRequestIdentifiers addObject:identifier];
+    } else {
+      [self.closeRequestIdentifiers removeObject:identifier];
+    }
+
+    [self finishOpeningWindow:window options:windowStyle resolve:resolve reject:reject];
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+#if TARGET_OS_OSX
+// Opening resolves only after AppKit enters its fullscreen Space, so callers
+// can safely focus a presenter on another display afterwards.
+- (void)finishOpeningWindow:(NSWindow *)window options:(NSDictionary *)windowStyle
+                   resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+  if (![windowStyle[@"fullscreen"] boolValue] || (window.styleMask & NSWindowStyleMaskFullScreen)) {
+    resolve([self successJson]);
+    return;
+  }
+  objc_setAssociatedObject(window, &LegendManagedFullscreenPresentationKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  window.collectionBehavior = (window.collectionBehavior & ~NSWindowCollectionBehaviorFullScreenAuxiliary)
+    | NSWindowCollectionBehaviorFullScreenPrimary;
+  __block id entered = nil;
+  __block id closed = nil;
+  __block BOOL finished = NO;
+  void (^finish)(BOOL) = ^(BOOL success) {
+    if (finished) return;
+    finished = YES;
+    [NSNotificationCenter.defaultCenter removeObserver:entered];
+    [NSNotificationCenter.defaultCenter removeObserver:closed];
+    entered = nil;
+    closed = nil;
+    if (success) resolve([self successJson]);
+    else {
+      [window close];
+      reject(@"fullscreen_failed", @"Fullscreen did not complete. Check the selected display and try again.", nil);
+    }
+  };
+  entered = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidEnterFullScreenNotification
+    object:window queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { finish(YES); }];
+  closed = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowWillCloseNotification
+    object:window queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { finish(NO); }];
+  [window makeKeyAndOrderFront:nil];
+  [window toggleFullScreen:nil];
+  // Bound failures where AppKit never sends the completion notification.
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ finish(NO); });
+}
+
+- (NSApplicationPresentationOptions)window:(NSWindow *)window
+    willUseFullScreenPresentationOptions:(NSApplicationPresentationOptions)options
+{
+  if (![objc_getAssociatedObject(window, &LegendManagedFullscreenPresentationKey) boolValue]) return options;
+  return options | NSApplicationPresentationAutoHideMenuBar | NSApplicationPresentationAutoHideDock
+    | NSApplicationPresentationAutoHideToolbar;
+}
+#endif
+
+- (void)setWindowTitle:(NSString *)identifier
+                 title:(NSString *)title
+               resolve:(RCTPromiseResolveBlock)resolve
+                reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSWindow *window = [targetIdentifier isEqualToString:@"main"]
+      ? [RNWindowManager getMainWindow]
+      : (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      reject(@"window_not_found", @"Window not found", nil);
+      return;
+    }
+    window.title = title ?: @"";
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)setWindowToolbarItemText:(NSString *)identifier
+                          itemId:(NSString *)itemId
+                            text:(NSString *)text
+                         resolve:(RCTPromiseResolveBlock)resolve
+                          reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      resolve([self failureJson:@"Window not found"]);
+      return;
+    }
+
+    NSString *toolbarIdentifier = [NSString stringWithFormat:@"legend.toolbar.%@", itemId ?: @""];
+    NSToolbarItem *toolbarItem = nil;
+    for (NSToolbarItem *candidate in window.toolbar.items) {
+      if ([candidate.itemIdentifier isEqualToString:toolbarIdentifier]) {
+        toolbarItem = candidate;
+        break;
+      }
+    }
+    if (!toolbarItem) {
+      resolve([self failureJson:@"Toolbar item not found"]);
+      return;
+    }
+
+    if ([toolbarItem.view isKindOfClass:NSTextField.class]) {
+      ((NSTextField *)toolbarItem.view).stringValue = text ?: @"";
+    } else if ([toolbarItem.view isKindOfClass:NSButton.class]) {
+      ((NSButton *)toolbarItem.view).title = text ?: @"";
+      toolbarItem.label = text ?: @"";
+      toolbarItem.paletteLabel = toolbarItem.label;
+    } else {
+      resolve([self failureJson:@"Toolbar item does not support text"]);
+      return;
+    }
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)setPreventDisplaySleep:(BOOL)enabled
+                       resolve:(RCTPromiseResolveBlock)resolve
+                        reject:(__unused RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    if (enabled && !self.displaySleepActivity) {
+      self.displaySleepActivity = [NSProcessInfo.processInfo
+        beginActivityWithOptions:NSActivityIdleDisplaySleepDisabled
+        reason:@"Legend Slides presentation in progress"];
+    } else if (!enabled && self.displaySleepActivity) {
+      [NSProcessInfo.processInfo endActivity:self.displaySleepActivity];
+      self.displaySleepActivity = nil;
+    }
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)focusToolbarSearchItem:(NSString *)identifier
+                        itemId:(NSString *)itemId
+                         value:(NSString *)value
+                       resolve:(RCTPromiseResolveBlock)resolve
+                        reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSWindow *window = [targetIdentifier isEqualToString:@"main"]
+      ? [RNWindowManager getMainWindow]
+      : (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      reject(@"window_not_found", @"Window not found", nil);
+      return;
+    }
+
+    NSString *toolbarIdentifier = [NSString stringWithFormat:@"legend.toolbar.%@", itemId ?: @""];
+    NSToolbarItem *toolbarItem = nil;
+    for (NSToolbarItem *candidate in window.toolbar.items) {
+      if ([candidate.itemIdentifier isEqualToString:toolbarIdentifier]) {
+        toolbarItem = candidate;
+        break;
+      }
+    }
+    if (!toolbarItem) {
+      resolve([self failureJson:@"Toolbar search item not found"]);
+      return;
+    }
+
+    NSSearchField *searchField = nil;
+    if (@available(macOS 11.0, *)) {
+      if ([toolbarItem isKindOfClass:NSSearchToolbarItem.class]) {
+        searchField = ((NSSearchToolbarItem *)toolbarItem).searchField;
+      }
+    }
+    if (!searchField && [toolbarItem.view isKindOfClass:NSSearchField.class]) {
+      searchField = (NSSearchField *)toolbarItem.view;
+    }
+    if (!searchField) {
+      id associatedField = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchFieldKey);
+      if ([associatedField isKindOfClass:NSSearchField.class]) {
+        [self expandToolbarSearchItem:toolbarItem value:value focus:YES sendChange:YES animated:YES];
+        resolve([self successJson]);
+        return;
+      }
+    }
+    if (!searchField) {
+      resolve([self failureJson:@"Toolbar search field not found"]);
+      return;
+    }
+
+    searchField.stringValue = value ?: @"";
+    [self sendToolbarSearchEventForField:searchField submitted:NO shiftKey:NO];
+    [window makeKeyAndOrderFront:nil];
+    [window makeFirstResponder:searchField];
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)closeWindow:(NSString *)identifier resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      resolve([self failureJson:@"No window to close"]);
+      return;
+    }
+    [self handleWindowClosedForIdentifier:targetIdentifier closeWindow:YES];
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)closeFrontmostWindow:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSWindow *window = NSApp.keyWindow ?: NSApp.mainWindow;
+    if (!window) {
+      resolve([self failureJson:@"No window to close"]);
+      return;
+    }
+    NSString *identifier = [self identifierForWindow:window];
+    if (identifier) {
+      [self handleWindowClosedForIdentifier:identifier closeWindow:YES];
+    } else {
+      [window performClose:nil];
+    }
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)showMainWindow:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSWindow *mainWindow = [RNWindowManager getMainWindow];
+    if (!mainWindow) {
+      resolve([self failureJson:@"Main window not found"]);
+      return;
+    }
+    [NSApp activateIgnoringOtherApps:YES];
+    [mainWindow makeKeyAndOrderFront:nil];
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)hideMainWindow:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSWindow *mainWindow = [RNWindowManager getMainWindow];
+    if (!mainWindow) {
+      resolve([self failureJson:@"Main window not found"]);
+      return;
+    }
+    [mainWindow orderOut:nil];
+    [NSUserDefaults.standardUserDefaults removeObjectForKey:LegendMainWindowStartupSplitViewKey];
+    [self sendWindowEventWithName:@"onWindowClosed"
+                             body:@{@"identifier": @"main", @"moduleName": @"main"}];
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)showWindow:(NSString *)identifier resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      reject(@"window_not_found", @"Window not found", nil);
+      return;
+    }
+
+    [NSApp activateIgnoringOtherApps:YES];
+    [window makeKeyAndOrderFront:nil];
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)setMainWindowOptions:(NSString *)optionsJson resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSWindow *mainWindow = [RNWindowManager getMainWindow];
+    if (!mainWindow) {
+      reject(@"window_not_found", @"Main window not found", nil);
+      return;
+    }
+
+    NSDictionary *options = [self parseObjectJSON:optionsJson];
+    id startupSplitView = options[@"windowStyle"][@"startupSplitView"];
+    if ([startupSplitView isKindOfClass:NSDictionary.class]) {
+      // Persist window chrome only, just like AppKit's saved frame. No document data.
+      if (![startupSplitView isEqual:[NSUserDefaults.standardUserDefaults dictionaryForKey:LegendMainWindowStartupSplitViewKey]]) {
+        [NSUserDefaults.standardUserDefaults setObject:startupSplitView forKey:LegendMainWindowStartupSplitViewKey];
+      }
+    } else if (startupSplitView == NSNull.null) {
+      [NSUserDefaults.standardUserDefaults removeObjectForKey:LegendMainWindowStartupSplitViewKey];
+    }
+    LegendApplyWindowOptions(mainWindow, options);
+    [self applyTitlebarControlsFromOptions:options toWindow:mainWindow identifier:@"main"];
+    [self applyToolbarItemsFromOptions:options toWindow:mainWindow identifier:@"main"];
+    [self applyTitlebarMaterialFromOptions:options toWindow:mainWindow identifier:@"main"];
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)setWindowOptions:(NSString *)identifier
+             optionsJson:(NSString *)optionsJson
+                 resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSDictionary *options = [self parseObjectJSON:optionsJson];
+    [self recordWindowOptions:options
+                   identifier:targetIdentifier
+                   moduleName:self.moduleNames[targetIdentifier] ?: @""];
+    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      reject(@"window_not_found", @"Window not found", nil);
+      return;
+    }
+    LegendApplyWindowOptions(window, options);
+    [self applyTitlebarControlsFromOptions:options toWindow:window identifier:targetIdentifier];
+    [self applyToolbarItemsFromOptions:options toWindow:window identifier:targetIdentifier];
+    [self applyTitlebarMaterialFromOptions:options toWindow:window identifier:targetIdentifier];
+    RCTUIView *rootView = self.rootViews[targetIdentifier];
+    LegendSizeRootViewToWindow(rootView, window);
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)getMainWindowFrame:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSWindow *mainWindow = [RNWindowManager getMainWindow];
+    if (!mainWindow) {
+      reject(@"no_main_window", @"Main window not found", nil);
+      return;
+    }
+    resolve([self jsonStringFromObject:[self frameDictionary:mainWindow.frame]]);
+  });
+#else
+  resolve([self jsonStringFromObject:@{@"x": @0, @"y": @0, @"width": @0, @"height": @0}]);
+#endif
+}
+
+- (void)setMainWindowFrame:(NSString *)frameJson resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSWindow *mainWindow = [RNWindowManager getMainWindow];
+    if (!mainWindow) {
+      reject(@"no_main_window", @"Main window not found", nil);
+      return;
+    }
+    NSDictionary *frameDict = [self parseObjectJSON:frameJson];
+    NSRect newFrame = NSMakeRect([frameDict[@"x"] doubleValue],
+                                 [frameDict[@"y"] doubleValue],
+                                 [frameDict[@"width"] doubleValue],
+                                 [frameDict[@"height"] doubleValue]);
+    [mainWindow setFrame:newFrame display:YES animate:NO];
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)setWindowBlur:(NSString *)identifier
+               radius:(double)radius
+           durationMs:(double)durationMs
+              resolve:(RCTPromiseResolveBlock)resolve
+               reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      reject(@"window_not_found", @"Target window not found for blur animation", nil);
+      return;
+    }
+
+    RCTUIView *rootView = self.rootViews[targetIdentifier];
+    NSView *contentView = window.contentView ?: rootView;
+    if (!contentView) {
+      reject(@"no_content_view", @"Window does not have a content view to blur", nil);
+      return;
+    }
+
+    contentView.wantsLayer = YES;
+    contentView.layerUsesCoreImageFilters = YES;
+    if (!contentView.layer) {
+      contentView.layer = [CALayer layer];
+    }
+    contentView.layer.masksToBounds = NO;
+
+    CIFilter *blurFilter = self.windowBlurFilters[targetIdentifier];
+    if (!blurFilter) {
+      blurFilter = [CIFilter filterWithName:@"CIGaussianBlur"];
+      if (!blurFilter) {
+        reject(@"filter_unavailable", @"CIGaussianBlur filter could not be created", nil);
+        return;
+      }
+      blurFilter.name = @"legendOverlayBlur";
+      [blurFilter setDefaults];
+      [blurFilter setValue:@0 forKey:kCIInputRadiusKey];
+      self.windowBlurFilters[targetIdentifier] = blurFilter;
+    }
+
+    BOOL filterAttached = NO;
+    for (id existingFilter in contentView.layer.filters ?: @[]) {
+      if ([existingFilter isKindOfClass:CIFilter.class] && [[existingFilter name] isEqualToString:@"legendOverlayBlur"]) {
+        filterAttached = YES;
+        break;
+      }
+    }
+    if (!filterAttached) {
+      NSMutableArray *filters = [NSMutableArray arrayWithArray:contentView.layer.filters ?: @[]];
+      [filters addObject:blurFilter];
+      contentView.layer.filters = filters;
+    }
+
+    CGFloat targetRadius = radius;
+    CGFloat currentRadius = [[blurFilter valueForKey:kCIInputRadiusKey] doubleValue];
+    NSTimeInterval durationSeconds = durationMs / 1000.0;
+    if (durationSeconds <= 0) {
+      [CATransaction begin];
+      [CATransaction setDisableActions:YES];
+      [blurFilter setValue:@(targetRadius) forKey:kCIInputRadiusKey];
+      [CATransaction commit];
+      [contentView.layer removeAnimationForKey:@"legendOverlayBlurAnimation"];
+      resolve([self successJson]);
+      return;
+    }
+
+    [contentView.layer removeAnimationForKey:@"legendOverlayBlurAnimation"];
+    CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:@"filters.legendOverlayBlur.inputRadius"];
+    animation.fromValue = @(currentRadius);
+    animation.toValue = @(targetRadius);
+    animation.duration = durationSeconds;
+    animation.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    animation.fillMode = kCAFillModeForwards;
+    animation.removedOnCompletion = NO;
+
+    [CATransaction begin];
+    [CATransaction setCompletionBlock:^{
+      [CATransaction begin];
+      [CATransaction setDisableActions:YES];
+      [blurFilter setValue:@(targetRadius) forKey:kCIInputRadiusKey];
+      [CATransaction commit];
+      resolve([self successJson]);
+    }];
+    [contentView.layer addAnimation:animation forKey:@"legendOverlayBlurAnimation"];
+    [CATransaction commit];
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+#if TARGET_OS_OSX
++ (NSWindow *)getMainWindow
+{
+  // AppKit's window list includes precreated/restored document windows and has
+  // no stable ordering. Both supported hosts own the main window on the delegate.
+  id<RNWindowManagerRootViewFactoryProvider> delegate = (id)NSApplication.sharedApplication.delegate;
+  return [delegate respondsToSelector:@selector(window)] ? delegate.window : nil;
+}
+
+- (void)setupMainWindowObservers
+{
+  if (self.mainWindowObserversInstalled) {
+    return;
+  }
+  NSWindow *mainWindow = [RNWindowManager getMainWindow];
+  if (!mainWindow) {
+    return;
+  }
+  self.mainWindowObserversInstalled = YES;
+  NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+  [center addObserver:self selector:@selector(mainWindowDidMove:) name:NSWindowDidMoveNotification object:mainWindow];
+  [center addObserver:self selector:@selector(mainWindowDidResize:) name:NSWindowDidResizeNotification object:mainWindow];
+  [center addObserver:self selector:@selector(mainWindowDidBecomeKey:) name:NSWindowDidBecomeKeyNotification object:mainWindow];
+}
+
+- (void)mainWindowDidMove:(NSNotification *)notification
+{
+  NSWindow *window = notification.object;
+  [self sendWindowEventWithName:@"onMainWindowMoved" body:[self frameDictionary:window.frame]];
+}
+
+- (void)mainWindowDidResize:(NSNotification *)notification
+{
+  NSWindow *window = notification.object;
+  RCTUIView *rootView = LegendManagedRootView(window);
+  if (rootView) {
+    LegendSizeRootViewToWindow(rootView, window);
+  }
+  [self sendWindowEventWithName:@"onMainWindowResized" body:[self frameDictionary:window.frame]];
+}
+
+- (void)mainWindowDidBecomeKey:(NSNotification *)notification
+{
+  [self sendWindowEventWithName:@"onWindowFocused" body:@{@"identifier": @"main", @"moduleName": @"main"}];
+}
+
+- (void)windowDidBecomeKey:(NSNotification *)notification
+{
+  NSString *identifier = [self identifierForWindow:notification.object];
+  if (!identifier) {
+    return;
+  }
+  [self sendWindowEventWithName:@"onWindowFocused"
+                           body:@{@"identifier": identifier, @"moduleName": self.moduleNames[identifier] ?: @""}];
+}
+
+- (void)windowDidMove:(NSNotification *)notification
+{
+  NSWindow *window = notification.object;
+  NSString *identifier = [self identifierForWindow:window];
+  if (!identifier) {
+    return;
+  }
+  [self sendWindowEventWithName:@"onWindowMoved"
+                           body:@{
+                             @"identifier": identifier,
+                             @"moduleName": self.moduleNames[identifier] ?: @"",
+                             @"frame": [self frameDictionary:window.frame],
+                           }];
+}
+
+- (void)windowDidResize:(NSNotification *)notification
+{
+  NSWindow *window = notification.object;
+  NSString *identifier = [self identifierForWindow:window];
+  if (!identifier) {
+    return;
+  }
+  RCTUIView *rootView = LegendManagedRootView(window);
+  if (rootView) {
+    LegendSizeRootViewToWindow(rootView, window);
+  }
+  [self sendWindowEventWithName:@"onWindowResized"
+                           body:@{
+                             @"identifier": identifier,
+                             @"moduleName": self.moduleNames[identifier] ?: @"",
+                             @"frame": [self frameDictionary:window.frame],
+                           }];
+}
+
+- (void)windowWillClose:(NSNotification *)notification
+{
+  NSString *identifier = [self identifierForWindow:notification.object];
+  if (identifier) {
+    [self handleWindowClosedForIdentifier:identifier closeWindow:NO];
+  }
+}
+
+- (void)sendWindowEventWithName:(NSString *)eventName body:(id)body
+{
+  if (!self.hasListeners) {
+    return;
+  }
+  [self sendEventWithName:eventName body:body];
+}
+
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+- (void)sparkDesktopEvent:(NSNotification *)notification
+{
+  NSDictionary *event = notification.userInfo;
+  if ([event[@"type"] isEqual:@"reopen"]) {
+    // A visible host can have been hidden while other managed windows remained.
+    BOOL mainHidden = [SparkLifecycleConfiguration()[@"mainWindow"][@"hidden"] boolValue] || [SparkLifecycleConfiguration()[@"mainWindow"][@"reopenBehavior"] isEqual:@"visibleWindows"];
+    NSNumber *visible = mainHidden ? event[@"hasVisibleWindows"] : event[@"mainWindowWasVisible"];
+    [self sendWindowEventWithName:@"onApplicationReopenRequested" body:@{@"hasVisibleWindows": visible ?: @NO}];
+  } else if ([event[@"type"] isEqual:@"closeRequested"] && [event[@"windowId"] isEqual:@"main"]) {
+    [self mainWindowCloseRequested:notification];
+  }
+}
+#endif
+
+- (void)applicationReopenRequested:(NSNotification *)notification
+{
+  NSNumber *hasVisibleWindows = notification.userInfo[@"hasVisibleWindows"];
+  [self sendWindowEventWithName:@"onApplicationReopenRequested"
+                           body:@{@"hasVisibleWindows": hasVisibleWindows ?: @NO}];
+}
+
+- (void)applicationWillTerminate:(NSNotification *)notification
+{
+  LegendApplicationIsTerminating = YES;
+}
+
+- (void)mainWindowCloseRequested:(NSNotification *)notification
+{
+  [self sendWindowEventWithName:@"onWindowCloseRequested"
+                           body:@{@"identifier": @"main", @"moduleName": @"main"}];
+}
+
+- (void)screensChanged:(NSNotification *)notification
+{
+  [self sendWindowEventWithName:@"onDisplaysChanged" body:[self displayDictionaries]];
+}
+
+- (BOOL)windowShouldClose:(NSWindow *)window
+{
+  NSString *identifier = [self identifierForWindow:window];
+  if (!identifier) {
+    return NO;
+  }
+
+  if ([self.closeRequestIdentifiers containsObject:identifier]) {
+    [self sendWindowEventWithName:@"onWindowCloseRequested"
+                             body:@{@"identifier": identifier, @"moduleName": self.moduleNames[identifier] ?: @""}];
+    return NO;
+  }
+
+  return YES;
+}
+
+- (NSDictionary *)frameDictionary:(NSRect)frame
+{
+  return @{
+    @"x": @(frame.origin.x),
+    @"y": @(frame.origin.y),
+    @"width": @(frame.size.width),
+    @"height": @(frame.size.height),
+  };
+}
+
+- (NSString *)identifierForWindow:(NSWindow *)window
+{
+  if (!window) {
+    return nil;
+  }
+  for (NSString *identifier in self.windows.allKeys) {
+    if ((NSWindow *)self.windows[identifier] == window) {
+      return identifier;
+    }
+  }
+  return nil;
+}
+
+- (void)handleWindowClosedForIdentifier:(NSString *)identifier closeWindow:(BOOL)shouldCloseWindow
+{
+  NSString *moduleName = self.moduleNames[identifier] ?: @"";
+  NSWindow *window = (NSWindow *)self.windows[identifier];
+  RCTUIView *rootView = self.rootViews[identifier];
+  CIFilter *blurFilter = self.windowBlurFilters[identifier];
+  if (blurFilter) {
+    NSView *contentView = window.contentView ?: rootView;
+    if (contentView.layer) {
+      [contentView.layer removeAnimationForKey:@"legendOverlayBlurAnimation"];
+      NSMutableArray *remainingFilters = [NSMutableArray array];
+      for (id filter in contentView.layer.filters ?: @[]) {
+        if ([filter isKindOfClass:CIFilter.class] && [[filter name] isEqualToString:@"legendOverlayBlur"]) {
+          continue;
+        }
+        [remainingFilters addObject:filter];
+      }
+      contentView.layer.filters = remainingFilters;
+    }
+  }
+  [self.windowBlurFilters removeObjectForKey:identifier];
+  if (window) {
+    [self removeTitlebarMaterialForIdentifier:identifier];
+    [self removeTitlebarControlsForIdentifier:identifier fromWindow:window];
+    NSToolbar *toolbar = window.toolbar;
+    if (toolbar) {
+      if (toolbar.identifier) {
+        [self.toolbarItemConfigs removeObjectForKey:toolbar.identifier];
+      }
+      toolbar.delegate = nil;
+      while (toolbar.items.count > 0) {
+        [toolbar removeItemAtIndex:toolbar.items.count - 1];
+      }
+      window.toolbar = nil;
+    }
+    window.delegate = nil;
+    if (rootView) {
+      [rootView removeFromSuperview];
+      objc_setAssociatedObject(window, &LegendManagedRootViewKey, nil, OBJC_ASSOCIATION_ASSIGN);
+    }
+    NSView *emptyContentView = [[NSView alloc] initWithFrame:window.contentView ? window.contentView.frame : NSZeroRect];
+    emptyContentView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    window.contentView = emptyContentView;
+  } else {
+    [self.titlebarMaterialViews removeObjectForKey:identifier];
+    [self.titlebarAccessoryControllers removeObjectForKey:identifier];
+  }
+  [self.closeRequestIdentifiers removeObject:identifier];
+  [self.toolbarItemConfigs removeObjectForKey:identifier];
+  NSDictionary *windowOptions = self.windowOptions[identifier];
+  if (!LegendApplicationIsTerminating && [windowOptions[@"restoreOnLaunch"] boolValue]) {
+    LegendSetRestorableWindowOptions(identifier, nil);
+  }
+  [self.windows removeObjectForKey:identifier];
+  [self.rootViews removeObjectForKey:identifier];
+  [self.moduleNames removeObjectForKey:identifier];
+  [self.windowOptions removeObjectForKey:identifier];
+  if (shouldCloseWindow && window) {
+    [window close];
+  }
+  [self sendWindowEventWithName:@"onWindowClosed" body:@{@"identifier": identifier ?: @"", @"moduleName": moduleName ?: @""}];
+}
+
+- (void)recordWindowOptions:(NSDictionary *)options identifier:(NSString *)identifier moduleName:(NSString *)moduleName
+{
+  if (identifier.length == 0 || ![options isKindOfClass:NSDictionary.class]) {
+    return;
+  }
+
+  NSDictionary *persistedOptions = LegendFindRestorableWindowOptions(identifier);
+  NSDictionary *previousOptions = self.windowOptions[identifier] ?: persistedOptions ?: @{};
+  NSMutableDictionary *mergedOptions = [previousOptions mutableCopy];
+  [mergedOptions addEntriesFromDictionary:options];
+  NSDictionary *previousWindowStyle = [previousOptions[@"windowStyle"] isKindOfClass:NSDictionary.class]
+    ? previousOptions[@"windowStyle"]
+    : @{};
+  NSDictionary *nextWindowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class]
+    ? options[@"windowStyle"]
+    : nil;
+  if (nextWindowStyle) {
+    NSMutableDictionary *mergedWindowStyle = [previousWindowStyle mutableCopy];
+    [mergedWindowStyle addEntriesFromDictionary:nextWindowStyle];
+    mergedOptions[@"windowStyle"] = mergedWindowStyle;
+  }
+  mergedOptions[@"identifier"] = identifier;
+  if (moduleName.length > 0) {
+    mergedOptions[@"moduleName"] = moduleName;
+  }
+  self.windowOptions[identifier] = mergedOptions;
+
+  if (LegendDictionaryHasKey(options, @"restoreOnLaunch")) {
+    if ([options[@"restoreOnLaunch"] boolValue]) {
+      LegendSetRestorableWindowOptions(identifier, mergedOptions);
+    } else {
+      LegendSetRestorableWindowOptions(identifier, nil);
+      LegendRemovePrecreatedWindow(identifier);
+    }
+  } else if ([mergedOptions[@"restoreOnLaunch"] boolValue]) {
+    LegendSetRestorableWindowOptions(identifier, mergedOptions);
+  }
+}
+
+- (NSDictionary *)initialPropsFromOptions:(NSDictionary *)options
+{
+  id initialPropsCandidate = options[@"initialProperties"];
+  return [initialPropsCandidate isKindOfClass:NSDictionary.class] ? initialPropsCandidate : nil;
+}
+
+- (NSString *)normalizeIdentifier:(NSString *)identifier
+{
+  return [identifier isKindOfClass:NSString.class] && identifier.length > 0 ? identifier : @"default";
+}
+#endif
+
+- (void)invalidate
+{
+  // React's host restarts the existing surfaces on reload. Keep their native
+  // registry, but retire this runtime's observers and event delivery.
+  self.hasListeners = NO;
+#if TARGET_OS_OSX
+  [NSNotificationCenter.defaultCenter removeObserver:self];
+#endif
+  [super invalidate];
+}
+
+- (void)dealloc
+{
+#if TARGET_OS_OSX
+  if (self.displaySleepActivity) {
+    [NSProcessInfo.processInfo endActivity:self.displaySleepActivity];
+    self.displaySleepActivity = nil;
+  }
+  [NSNotificationCenter.defaultCenter removeObserver:self];
+#endif
+}
+
+@end

@@ -39,8 +39,15 @@
       "componentProvider": {
         "SparkButton": "RNSparkButton",
         "SparkTextInput": "RNSparkTextInput",
-        "SparkSelect": "RNSparkSelect"
-      }
+        "SidebarSplitView": "RNSidebarSplitViewComponent",
+        "Sidebar": "RNSidebar",
+        "SidebarItem": "RNSidebarItem",
+        "SFSymbol": "RNSFSymbol",
+        "NativeSelect": "RNNativeSelect",
+        "NativeSegmentedControl": "RNNativeSegmentedControl",
+        "TextInputSearch": "RNTextInputSearch"
+      },
+      "modulesProvider": {}
     },
     "windows": {
       "namespace": "FrameUICodegen",
@@ -57,5 +64,9 @@
       "windows"
     ]
   },
-  "private": true
+  "private": true,
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.4.0"
+  }
 }

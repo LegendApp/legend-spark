@@ -19,14 +19,17 @@
     "jsSrcsDir": "src",
     "ios": {
       "modulesProvider": {
-        "NativeDesktopShortcuts": "RNDesktopShortcuts"
-      }
+        "NativeDesktopShortcuts": "RNDesktopShortcuts",
+        "NativeKeyboardManager": "RNKeyboardManager"
+      },
+      "componentProvider": {}
     }
   },
   "spark": {
     "sdk": true,
     "nativeModules": [
-      "NativeDesktopShortcuts"
+      "NativeDesktopShortcuts",
+      "NativeKeyboardManager"
     ],
     "pod": "RNDesktopShortcuts",
     "platforms": [

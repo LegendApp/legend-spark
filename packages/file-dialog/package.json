@@ -13,7 +13,8 @@
     "ios": {
       "modulesProvider": {
         "NativeFileDialog": "RNFileDialog"
-      }
+      },
+      "componentProvider": {}
     }
   },
   "peerDependencies": {
@@ -25,7 +26,8 @@
     "src",
     "ios",
     "*.podspec",
-    "windows"
+    "windows",
+    "macos"
   ],
   "spark": {
     "sdk": true,

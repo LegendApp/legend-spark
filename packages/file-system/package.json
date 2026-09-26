@@ -21,14 +21,19 @@
     "jsSrcsDir": "src",
     "ios": {
       "modulesProvider": {
-        "NativeDesktopFileSystem": "RNDesktopFileSystem"
-      }
+        "NativeDesktopFileSystem": "RNDesktopFileSystem",
+        "NativeFileScanner": "RNFileScanner",
+        "NativeFileSystemWatcher": "RNFileSystemWatcher"
+      },
+      "componentProvider": {}
     }
   },
   "spark": {
     "sdk": true,
     "nativeModules": [
-      "NativeDesktopFileSystem"
+      "NativeDesktopFileSystem",
+      "NativeFileScanner",
+      "NativeFileSystemWatcher"
     ],
     "pod": "RNDesktopFileSystem",
     "platforms": [

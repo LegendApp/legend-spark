@@ -36,7 +36,15 @@ RCT_EXPORT_MODULE(NativeDesktopGlobalShortcuts)
   dispatch_async(dispatch_get_main_queue(), ^{
     NSDictionary *args = SparkArgs(json); NSString *key = args[@"id"];
     if ([method isEqual:@"register"]) {
-      NSInteger code = KeyCode(args[@"key"]);
+      NSInteger code;
+      if ([args[@"keyCode"] isKindOfClass:NSNumber.class]) {
+        double raw = [args[@"keyCode"] doubleValue];
+        if (raw < 0 || raw > 255 || floor(raw) != raw) { SparkInvalid(reject, @"Invalid key code"); return; }
+        code = (NSInteger)raw;
+      } else {
+        if (![args[@"key"] isKindOfClass:NSString.class] || ![args[@"key"] length]) { SparkInvalid(reject, @"Expected a shortcut key"); return; }
+        code = KeyCode(args[@"key"]);
+      }
       if (code < 0) { reject(@"E_KEY", @"Key is unavailable in the current keyboard layout", nil); return; }
       NSUInteger flags = [args[@"modifiers"] unsignedIntegerValue]; UInt32 modifiers = 0;
       if (flags & NSEventModifierFlagCommand) modifiers |= cmdKey;

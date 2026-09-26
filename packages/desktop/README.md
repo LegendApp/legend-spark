@@ -21,3 +21,7 @@ Source/local archives without embedded release metadata require a registered loc
 macOS 14+ on Apple Silicon is the primary experimental target. Windows development implementations still need native acceptance; Windows production builds and a downloadable Windows Runner are not supplied by this prerelease workflow. Mobile and web use Expo workflows with selected shared adapters.
 
 [Documentation](https://legend.so/spark) · [Source and setup guide](https://github.com/LegendApp/legend-spark) · [Known Windows limitations](https://github.com/LegendApp/legend-spark/blob/main/docs/windows-issues.md)
+
+[Desktop application capabilities](https://github.com/LegendApp/legend-spark/blob/main/docs/desktop-capabilities.md)
+cover managed windows, document helpers, routed commands, native controls,
+settings windows, and the shared desktop integrations.

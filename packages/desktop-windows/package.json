@@ -19,14 +19,19 @@
     "jsSrcsDir": "src",
     "ios": {
       "modulesProvider": {
-        "NativeDesktopWindowManager": "RNDesktopWindows"
-      }
+        "NativeDesktopWindowManager": "RNDesktopWindows",
+        "NativeWindowManager": "RNWindowManager",
+        "NativeWindowControls": "RNWindowControls"
+      },
+      "componentProvider": {}
     }
   },
   "spark": {
     "sdk": true,
     "nativeModules": [
-      "NativeDesktopWindowManager"
+      "NativeDesktopWindowManager",
+      "NativeWindowManager",
+      "NativeWindowControls"
     ],
     "pod": "RNDesktopWindows",
     "platforms": [
@@ -38,7 +43,8 @@
   },
   "dependencies": {
     "@legendapp/spark-desktop-app": "0.0.1-next.2",
-    "@legendapp/spark-window-options": "0.0.1-next.2"
+    "@legendapp/spark-window-options": "0.0.1-next.2",
+    "@legendapp/state": "^3.0.0-beta.42"
   },
   "private": true
 }

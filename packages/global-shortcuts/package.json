@@ -22,7 +22,8 @@
     "ios": {
       "modulesProvider": {
         "NativeDesktopGlobalShortcuts": "RNDesktopGlobalShortcuts"
-      }
+      },
+      "componentProvider": {}
     }
   },
   "spark": {

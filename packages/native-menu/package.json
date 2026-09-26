@@ -13,7 +13,8 @@
     "ios": {
       "modulesProvider": {
         "NativeMenu": "RNNativeMenu"
-      }
+      },
+      "componentProvider": {}
     }
   },
   "peerDependencies": {
@@ -24,7 +25,8 @@
   "files": [
     "src",
     "ios",
-    "*.podspec"
+    "*.podspec",
+    "macos"
   ],
   "spark": {
     "sdk": true,
