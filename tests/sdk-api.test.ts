@@ -168,10 +168,10 @@ test("shortcuts dispatch only their registration and clean up on failure/removal
   await expect(shortcuts.registerShortcut("Cmd+K", () => {})).rejects.toThrow(); expect(subscriptions.get("NativeDesktopShortcuts.shortcut")?.size).toBe(0);
 });
 test("context menus validate location, duplicate ids and cancellation", async () => {
-  await expect(context.showContextMenu([], { x: NaN, y: 0 })).rejects.toThrow("finite");
-  await expect(context.showContextMenu([{ id: "x", title: "A" }, { id: "x", title: "B" }], { x: 0, y: 0 })).rejects.toThrow("unique");
-  handlers.set("NativeContextMenu.showMenu", () => ""); expect(await context.showContextMenu([], { x: 0, y: 0 })).toBeNull();
-  handlers.set("NativeContextMenu.showMenu", () => "selected"); expect(await context.showContextMenu([{ id: "selected", title: "Select" }], { x: 0, y: 0 })).toBe("selected");
+  await expect(context.showContextMenu({ windowId: "main", items: [], position: { x: NaN, y: 0 } })).rejects.toThrow("finite");
+  await expect(context.showContextMenu({ windowId: "main", items: [{ type: "action", id: "x", label: "A" }, { type: "action", id: "x", label: "B" }], position: { x: 0, y: 0 } })).rejects.toThrow("unique");
+  handlers.set("NativeContextMenu.showMenu", () => ""); expect(await context.showContextMenu({ windowId: "main", items: [], position: { x: 0, y: 0 } })).toEqual({ canceled: true });
+  handlers.set("NativeContextMenu.showMenu", () => "selected"); expect(await context.showContextMenu({ windowId: "main", items: [{ type: "action", id: "selected", label: "Select" }], position: { x: 0, y: 0 } })).toEqual({ canceled: false, itemId: "selected" });
 });
 test("dialogs parse selected paths and native cancellation, preserving save conflicts", async () => {
   handlers.set("NativeFileDialog.open", () => '["/tmp/example.txt"]'); expect(await dialogs.openFileDialog()).toEqual({ canceled: false, paths: ["/tmp/example.txt"] });
@@ -417,15 +417,17 @@ test("Windows shared adapters dispatch rich formats to native backends", async (
 
 test("Windows context menus reach native selection and cancellation with item semantics intact", async () => {
   platform.OS = "windows";
-  const items = [{ id: "checked", title: "Checked", checked: true }, { id: "disabled", title: "Disabled", enabled: false }, { id: "sep", title: "", separator: true }];
+  const items: import("../packages/context-menu/src/index").MenuItem[] = [{ type: "checkbox", id: "checked", label: "Checked", checked: true }, { type: "action", id: "disabled", label: "Disabled", disabled: true }, { type: "separator" }];
+  const options = { windowId: "child", items, position: { x: 12.5, y: 40 } };
   handlers.set("NativeContextMenu.showMenu", args => {
-    expect(JSON.parse(args[0])).toEqual(items); expect(JSON.parse(args[1])).toEqual({ x: 12.5, y: 40 }); return "checked";
+    expect(JSON.parse(args[0])).toEqual([{ id: "checked", title: "Checked", checked: true, enabled: true }, { id: "disabled", title: "Disabled", enabled: false }, { separator: true }]);
+    expect(JSON.parse(args[1])).toEqual({ x: 12.5, y: 40, windowId: "child" }); return "checked";
   });
-  expect(await context.showContextMenu(items, { x: 12.5, y: 40 })).toBe("checked");
+  expect(await context.showContextMenu(options)).toEqual({ canceled: false, itemId: "checked" });
   handlers.set("NativeContextMenu.showMenu", () => "");
-  expect(await context.showContextMenu(items, { x: 0, y: 0 })).toBeNull();
+  expect(await context.showContextMenu(options)).toEqual({ canceled: true });
   handlers.set("NativeContextMenu.showMenu", () => { throw nativeError("E_BUSY"); });
-  await expect(context.showContextMenu(items, { x: 0, y: 0 })).rejects.toMatchObject({ code: "E_BUSY" });
+  await expect(context.showContextMenu(options)).rejects.toMatchObject({ code: "E_BUSY" });
 });
 test("Windows dialogs retain four-button indices, parent selection and checkbox results", async () => {
   platform.OS = "windows";
@@ -639,4 +641,18 @@ test("shortcut options are validated before registration and native results are 
   await expect(shortcuts.registerShortcut("Cmd+K", () => {})).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   expect(subscriptions.get("NativeDesktopShortcuts.shortcut")?.size).toBe(0);
   expect(calls.at(-1)?.method).toBe("remove");
+});
+
+
+test("context menus reject invalid native selection and unsupported surface items", async () => {
+  const options = { windowId: "main", position: { x: 0, y: 0 }, items: [{ type: "action" as const, id: "disabled", label: "Disabled", disabled: true }] };
+  for (const result of [null, 5, "disabled", "unknown"]) {
+    handlers.set("NativeContextMenu.showMenu", () => result);
+    await expect(context.showContextMenu(options)).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  calls.length = 0;
+  await expect(context.showContextMenu({ ...options, items: [{ type: "submenu", id: "group", label: "Group", items: [] }] })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(0);
+  handlers.set("NativeContextMenu.showMenu", () => { throw nativeError("E_NOT_FOUND"); });
+  await expect(context.showContextMenu(options)).rejects.toMatchObject({ code: "E_NOT_FOUND" });
 });

@@ -43,3 +43,9 @@ test("shortcut availability is queryable without installed modules", async () =>
   await expect(shortcuts.registerShortcut("Cmd+K", () => {})).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
   await expect(globalShortcuts.registerGlobalShortcut("Cmd+K", () => {})).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
+
+import * as contextMenu from "../packages/context-menu/src/index";
+test("context menus import without installed native modules", async () => {
+  expect(contextMenu.getContextMenuAvailability()).toEqual({ available: false, reason: "missing-module" });
+  await expect(contextMenu.showContextMenu({ windowId: "main", items: [], position: { x: 0, y: 0 } })).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+});

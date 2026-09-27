@@ -161,9 +161,9 @@ function KitchenSink({ runtime, projectId }: Props) {
           const anchor = contextMenuAnchor.current;
           if (!anchor) throw new Error("Context menu anchor is unavailable.");
           const point = await new Promise<{ x: number; y: number }>(resolve => anchor.measureInWindow((x, y, _width, height) => resolve({ x, y: y + height })));
-          const selected = await showContextMenu([{ id: "copy", title: "Copy greeting" }, { id: "checked", title: "Checked item", checked: true }, { id: "disabled", title: "Disabled item", enabled: false }], point);
-          if (selected === "copy") await clipboard.setStringAsync("Hello desktop");
-          return selected ?? "Context menu cancelled";
+          const selected = await showContextMenu({ windowId: "main", items: [{ type: "action", id: "copy", label: "Copy greeting" }, { type: "checkbox", id: "checked", label: "Checked item", checked: true }, { type: "action", id: "disabled", label: "Disabled item", disabled: true }], position: point });
+          if (!selected.canceled && selected.itemId === "copy") await clipboard.setStringAsync("Hello desktop");
+          return selected.canceled ? "Context menu cancelled" : selected.itemId;
         })}>Show context menu</ActionButton></View>
         <ActionButton onPress={() => action(() => clipboard.setStringAsync("Hello desktop"))}>Copy greeting</ActionButton><ActionButton onPress={() => action(() => clipboard.getStringAsync())}>Read clipboard</ActionButton><ActionButton onPress={() => action(clipboard.hasStringAsync)}>Has clipboard text</ActionButton><ActionButton onPress={() => action(() => clipboard.setStringAsync("<b>Hello desktop</b>", { inputFormat: clipboard.StringFormat.HTML }))}>Copy HTML</ActionButton>
       </View><EventResults entries={menuEvents} empty="Press ⌘⇧K or use the Document menu to see the action here." testID="menu-events" /></Card>

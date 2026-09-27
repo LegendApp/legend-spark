@@ -5,4 +5,4 @@ export interface Spec extends TurboModule {
   showMenu(itemsJson: string, locationJson: string): Promise<string>;
 }
 
-export default TurboModuleRegistry.getEnforcing<Spec>("NativeContextMenu");
+export default TurboModuleRegistry.get<Spec>("NativeContextMenu");

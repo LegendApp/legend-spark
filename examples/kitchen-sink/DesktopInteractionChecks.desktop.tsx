@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { Button } from "@legendapp/spark/ui";
 import { showMessage } from "@legendapp/spark/dialogs";
-import { showContextMenu } from "@legendapp/spark/context-menu";
+import { showContextMenu, type MenuItem } from "@legendapp/spark/context-menu";
 import { DragDropView } from "@legendapp/spark/drag-drop";
 import * as notifications from "@legendapp/spark/notifications";
 import * as system from "@legendapp/spark/system";
@@ -43,16 +43,17 @@ export default function DesktopInteractionChecks({ check, onError, onBusy }: {
   }
   async function menus(location: { x: number; y: number }) {
     setInstruction("Choose Continue in the first menu. Check the marked item and disabled item visually. Dismiss the second menu with Escape.");
-    const items = [
-      { id: "marked", title: "Checked item", checked: true },
-      { id: "disabled", title: "Disabled item", enabled: false },
-      { id: "separator", title: "", separator: true },
-      { id: "continue", title: "Continue" },
+    const items: MenuItem[] = [
+      { type: "checkbox", id: "marked", label: "Checked item", checked: true },
+      { type: "action", id: "disabled", label: "Disabled item", disabled: true },
+      { type: "separator" },
+      { type: "action", id: "continue", label: "Continue" },
     ];
-    const first = showContextMenu(items, location);
-    const [selected] = await Promise.all([first, (async () => { await requireError(() => showContextMenu(items, location), "E_BUSY"); })()]);
-    assertContract(selected === "continue", "Menu did not return the selected semantic ID");
-    assertContract(await showContextMenu([{ id: "cancel", title: "Press Escape to dismiss" }], location) === null, "Dismissed menu must return null");
+    const options = { windowId: "main", items, position: location };
+    const first = showContextMenu(options);
+    const [selected] = await Promise.all([first, (async () => { await requireError(() => showContextMenu(options), "E_BUSY"); })()]);
+    assertContract(!selected.canceled && selected.itemId === "continue", "Menu did not return the selected semantic ID");
+    assertContract((await showContextMenu({ windowId: "main", items: [{ type: "action", id: "cancel", label: "Press Escape to dismiss" }], position: location })).canceled, "Dismissed menu must report cancellation");
     setInstruction("Menu assertions finished. Also check placement, disabled/checked states, and keyboard navigation visually.");
   }
   async function tray() {

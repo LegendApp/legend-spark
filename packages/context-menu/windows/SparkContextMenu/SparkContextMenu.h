@@ -76,8 +76,9 @@ struct SparkContextMenu {
         if (current->stopped) { current->busy = false; promise.Resolve(""); return; }
         auto items = Json::JsonArray::Parse(to_hstring(encoded));
         auto position = Json::JsonObject::Parse(to_hstring(location));
-        auto owner = Parent(L"", false);
-        if (!owner || items.Size() == 0) { current->busy = false; promise.Resolve(""); return; }
+        auto owner = Parent(std::wstring(position.GetNamedString(L"windowId")), true);
+        if (!owner) { current->busy = false; promise.Reject(React::ReactError{"E_NOT_FOUND", "Context menu owner window does not exist"}); return; }
+        if (items.Size() == 0) { current->busy = false; promise.Resolve(""); return; }
         if (!IsWindowEnabled(owner)) { current->busy = false; promise.Reject(React::ReactError{"E_BUSY", "Menu parent has a modal operation"}); return; }
         const double x = position.GetNamedNumber(L"x"), y = position.GetNamedNumber(L"y");
         const double scale = static_cast<double>(GetDpiForWindow(owner)) / 96.0;

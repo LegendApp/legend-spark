@@ -47,6 +47,13 @@ RCT_EXPORT_MODULE(NativeContextMenu)
   RCTExecuteOnMainQueue(^{
     NSArray *items = [self parseJSON:itemsJson fallback:@[]];
     NSDictionary *location = [self parseJSON:locationJson fallback:@{}];
+    NSString *windowId = [location[@"windowId"] isKindOfClass:NSString.class] ? location[@"windowId"] : @"";
+    NSWindow *window = nil;
+    NSString *identifier = [@"spark." stringByAppendingString:windowId];
+    for (NSWindow *candidate in NSApp.windows) if ([candidate.identifier isEqual:identifier]) { window = candidate; break; }
+    if (!window) for (NSWindow *candidate in NSApp.windows) if ([candidate.identifier isEqual:windowId]) { window = candidate; break; }
+    NSView *targetView = window.contentView;
+    if (!targetView) { reject(@"E_NOT_FOUND", @"Context menu owner window does not exist", nil); return; }
     if (![items isKindOfClass:[NSArray class]] || items.count == 0) {
       resolve(@"");
       return;
@@ -82,14 +89,6 @@ RCT_EXPORT_MODULE(NativeContextMenu)
     }
 
     if (menu.numberOfItems == 0) {
-      self.pendingResolve(@"");
-      self.pendingResolve = nil;
-      return;
-    }
-
-    NSWindow *window = NSApp.keyWindow ?: NSApp.mainWindow;
-    NSView *targetView = window.contentView;
-    if (!targetView) {
       self.pendingResolve(@"");
       self.pendingResolve = nil;
       return;

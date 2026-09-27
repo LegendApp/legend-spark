@@ -156,7 +156,7 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
       await (await registerShortcut("Command+Shift+9", () => {})).remove();
     });
     await check("context menu: empty menu resolves cancellation", async () => {
-      assert(await showContextMenu([], { x: 10, y: 10 }) === null, "Empty menu should cancel");
+      assert((await showContextMenu({ windowId: "main", items: [], position: { x: 10, y: 10 } })).canceled, "Empty menu should cancel");
     });
     if (driver) {
       await check("clipboard: write and restore every original pasteboard format", async () => {
@@ -210,8 +210,8 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
         finally { sub.remove(); }
       });
       await check("context menu: real popup cancellation", async () => {
-        const selected = showContextMenu([{ id: "one", title: "SDK popup" }], { x: 100, y: 100 });
-        await driverCall("escape"); assert(await selected === null, "Popup cancellation result");
+        const selected = showContextMenu({ windowId: "main", items: [{ type: "action", id: "one", label: "SDK popup" }], position: { x: 100, y: 100 } });
+        await driverCall("escape"); assert((await selected).canceled, "Popup cancellation result");
       });
       await check("links: cold and warm delivery through AppDelegate", async () => {
         const seen: links.OpenEvent[] = [];
