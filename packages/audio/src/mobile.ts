@@ -1,38 +1,38 @@
-import { validateVolume, validateMetadata } from "./media-types";
-import { statusListeners } from "./status-listeners";
+import { SparkError, nativeError } from "@legendapp/spark-desktop-app/src/contracts";
+import { playerHandle, validatePlayerOptions, waitForAudio } from "./player";
 export type * from "./media-types";
 export { createMediaSession } from "./media-session-unavailable";
 import { createAudioPlayer as createExpoPlayer, setAudioModeAsync } from "expo-audio";
-import { validateSource, validateTime, type AudioPlayer, type AudioSource } from "./types";
-export type { AudioPlayer, AudioSource, AudioStatus } from "./types";
-export async function createAudioPlayer(source: AudioSource): Promise<AudioPlayer> {
-  validateSource(source);
+import { validateSource, type AudioPlayer, type AudioSource, type AudioPlayerOptions } from "./types";
+export type { AudioPlayer, AudioSource, AudioStatus, AudioPlayerOptions } from "./types";
+export async function createAudioPlayer(source: AudioSource, options: AudioPlayerOptions = {}): Promise<AudioPlayer> {
+  validateSource(source); validatePlayerOptions(options);
+  options = { ...options };
+  source = { ...source };
+  const input = { ...source };
   await setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: "doNotMix" });
-  const player = createExpoPlayer(source.uri);
-  let removed = false;
-  let ended = false;
-  let failed = false;
+  validatePlayerOptions(options);
+  const player = createExpoPlayer(input.uri);
+  let ended = false, failed = false;
   const subscription = player.addListener("playbackStatusUpdate", status => { if (status.didJustFinish) ended = true; failed = status.playbackState === "error"; });
-  const alive = () => { if (removed) throw new Error("Audio player has been removed"); };
   try {
-    if (!player.isLoaded) await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => { loaded.remove(); reject(new Error("Audio loading timed out")); }, 15_000);
-      const loaded = player.addListener("playbackStatusUpdate", status => {
-        if (status.isLoaded || status.playbackState === "error") { clearTimeout(timer); loaded.remove(); if (status.isLoaded) resolve(); else reject(new Error("Audio could not be loaded")); }
-      });
-    });
-    player.setActiveForLockScreen(true, { title: source.title ?? "Music" });
-  } catch (error) { subscription.remove(); player.remove(); throw error; }
-  const read = async () => { alive(); const status = player.currentStatus; return { playing: status.playing, currentTime: status.currentTime, duration: status.duration, didJustFinish: ended, error: failed ? "Audio could not be decoded or loaded" : null, volume: player.volume }; };
-  const listeners = statusListeners(read);
-  return {
-    async setVolume(volume) { alive(); validateVolume(volume); player.volume = volume; },
-    async setMetadata(metadata) { alive(); validateMetadata(metadata); player.updateLockScreenMetadata(metadata); },
-    addListener(event, listener) { if (event !== "playbackStatusUpdate") throw new TypeError("Unknown audio event"); return listeners.add(listener); },
-    async play() { alive(); ended = false; player.play(); },
-    async pause() { alive(); player.pause(); },
-    async seekTo(seconds) { alive(); validateTime(seconds); ended = false; await player.seekTo(seconds); },
-    getStatus: read,
-    async remove() { if (!removed) { removed = true; listeners.close(); subscription.remove(); player.clearLockScreenControls(); player.remove(); } },
-  };
+    await waitForAudio(async () => { if (failed || player.currentStatus.playbackState === "error") throw new SparkError("E_NATIVE", "Audio could not be loaded"); return player.isLoaded; }, options);
+    player.setActiveForLockScreen(true, { title: input.title ?? "Music" });
+  } catch (cause) {
+    subscription.remove();
+    try { player.remove(); } catch (cleanup) { throw new SparkError("E_NATIVE", "Audio loading and cleanup failed", { cause: new AggregateError([cause, cleanup]) }); }
+    throw nativeError(cause);
+  }
+  return playerHandle({
+    async setVolume(volume) { player.volume = volume; },
+    async setMetadata(metadata) { player.updateLockScreenMetadata(metadata ?? {}); },
+    async play() { ended = false; player.play(); },
+    async pause() { player.pause(); },
+    async seekTo(seconds) { ended = false; await player.seekTo(seconds); },
+    async getStatus() { const status = player.currentStatus; return { playing: status.playing, currentTime: status.currentTime, duration: status.duration, didJustFinish: ended, error: failed ? "Audio could not be decoded or loaded" : null, volume: player.volume }; },
+    async remove() { subscription.remove(); player.clearLockScreenControls(); player.remove(); },
+  });
 }
+
+export { useAudioPlayer } from "./hooks";
+export type { AudioPlayerState, AudioPlayerHookOptions } from "./hooks";

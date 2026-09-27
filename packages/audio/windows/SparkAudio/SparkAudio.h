@@ -115,6 +115,7 @@ struct SparkAudio {
         players->values.emplace(id, entry);
       } else {
         auto found = players->values.find(id);
+        if (found == players->values.end() && method == "remove") { promise.Resolve("null"); co_return; }
         if (found == players->values.end()) throw hresult_invalid_argument(L"Audio player is not available");
         auto entry = found->second; auto player = entry->player; auto session = player.PlaybackSession();
         if (method == "ready") { if (entry->failed) throw hresult_error(E_FAIL, L"Audio could not be decoded or loaded"); promise.Resolve(entry->loaded ? "true" : "false"); co_return; }

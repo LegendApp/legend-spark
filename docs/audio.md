@@ -14,9 +14,12 @@ await player.remove(); // release the player when its owner is finished
 The contract uses Expo-style source, player, and position names, with asynchronous
 commands consistently across backends. It is a deliberately small framework
 contract, not a re-export of every Expo Audio option. Status includes `playing`,
-`currentTime`, `duration`, `didJustFinish`, and `error`. Native creation waits for
-media readiness with a 15-second timeout. Web metadata may load after creation;
-seeking waits for metadata with the same timeout. Inspect status for later failures.
+`currentTime`, `duration`, `didJustFinish`, and `error`. Creation waits for media readiness (metadata on web), with a default 15-second
+readiness timeout. Set `loadTimeoutMs` to change it or pass `signal` to abort loading.
+The timer begins after allocation; it does not time out the native bridge itself.
+Aborting after creation has resolved does not remove a live player. Inspect status
+for later playback failures. Failed loading awaits resource cleanup before rejecting;
+if cleanup also fails, `E_NATIVE` preserves both failures in an AggregateError cause.
 
 Use Expo Audio 1.1.1 and its background-playback plugin in a mobile consumer. The
 native desktop implementations require a rebuilt client. The maintained prebuilt profile
@@ -97,3 +100,27 @@ volume, seek, status cleanup, metadata, command configuration and session replac
 It does not synthesize OS media-key input. Check real system controls and artwork
 visually on both platforms. Windows native compilation/runtime acceptance remains
 pending. Rebuild the native runtime for these additions.
+
+## Resource and React lifecycle
+
+Commands return promises, including argument failures. Each player orders accepted
+commands and snapshots metadata before queuing it. `setMetadata(null)` clears
+metadata; an object replaces it. `remove()` stops callbacks immediately, waits for
+already accepted commands, and releases resources. Concurrent removes share their
+completion. Failed cleanup can be retried; new commands reject with `E_CLOSED` once
+removal starts. Native result shape failures use `E_INVALID_DATA`, and loading
+cancellation/timeout use `E_ABORTED`/`E_TIMEOUT`.
+
+```tsx
+const audio = useAudioPlayer({ uri, title: 'My track' });
+if (audio.status === 'loading') return <Text>Loading audio…</Text>;
+if (audio.status === 'error') return <Text>{String(audio.error)}</Text>;
+// audio.player is ready; the hook owns its cleanup.
+```
+
+The hook creates players in effects. Source/title or load-option changes replace
+the player; an unmounted or superseded load is aborted, and any late-created player
+is removed. Cleanup failures go to `onCleanupError(error, player)` when supplied
+(the player supports retry); otherwise they are logged. For application-wide queue
+ownership, use the factory and await removal yourself. This asynchronous state
+contract intentionally differs from Expo's immediately returned player hook.

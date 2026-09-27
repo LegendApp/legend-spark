@@ -45,5 +45,8 @@
     ],
     "requires": []
   },
-  "private": true
+  "private": true,
+  "dependencies": {
+    "@legendapp/spark-desktop-app": "0.0.1-next.2"
+  }
 }

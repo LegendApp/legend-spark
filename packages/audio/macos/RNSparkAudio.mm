@@ -111,7 +111,8 @@ RCT_EXPORT_MODULE(NativeSparkAudio)
       if (url.isFileURL && ![NSFileManager.defaultManager isReadableFileAtPath:url.path]) { reject(@"E_NOT_FOUND", @"Audio file is not readable", nil); return; }
       self.players[identifier] = [AVPlayer playerWithURL:url]; self.metadata[identifier] = @{@"title": args[@"title"] ?: @"Music"};
       if (!self.sessionID) { self.activeID = identifier; [self publishMetadata:self.metadata[identifier]]; }
-    } else if (!player) { reject(@"E_AUDIO", @"Audio player is not available", nil); return; }
+    } else if (!player && [method isEqual:@"remove"]) { resolve(@"null"); return; }
+    else if (!player) { reject(@"E_AUDIO", @"Audio player is not available", nil); return; }
     else if ([method isEqual:@"ready"]) {
       NSError *error = player.error ?: player.currentItem.error;
       if (error) { reject(@"E_AUDIO", error.localizedDescription, error); return; }
