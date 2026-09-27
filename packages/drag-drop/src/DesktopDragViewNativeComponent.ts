@@ -6,7 +6,7 @@ export interface NativeProps extends ViewProps {
   sourceJson?: string;
   optionsJson?: string;
   disabled?: WithDefault<boolean, false>;
-  onUnavailable?: DirectEventHandler<Payload>;
+  onError?: DirectEventHandler<Payload>;
   onDrop?: DirectEventHandler<Payload>;
   onDragEnter?: DirectEventHandler<Payload>;
   onDragOver?: DirectEventHandler<Payload>;

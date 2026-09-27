@@ -56,7 +56,6 @@
     "./settings/window/options": "./settings-window-options.ts",
     "./settings/observable": "./settings-observable.ts",
     "./ui/classnames": "./ui-classnames.ts",
-    "./drag-drop/views": "./drag-drop-views.ts",
     "./contracts": "./contracts.ts"
   },
   "files": [

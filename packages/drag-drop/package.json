@@ -21,9 +21,7 @@
     "jsSrcsDir": "src",
     "ios": {
       "componentProvider": {
-        "DesktopDragView": "RNDesktopDragView",
-        "DragDropView": "RNDragDropView",
-        "TrackDragSource": "RNTrackDragSource"
+        "DesktopDragView": "RNDesktopDragView"
       },
       "modulesProvider": {}
     }

@@ -78,7 +78,11 @@ struct DragView : implements<DragView, Windows::Foundation::IInspectable> {
     }
     return Operation::None;
   }
-  void Fail(hresult_error const &error) { failure = to_string(error.message()); Json::JsonObject value; value.SetNamedValue(L"message", Json::JsonValue::CreateStringValue(error.message())); Emit(L"unavailable", value); }
+  void Fail(hresult_error const &error, bool unavailable = false) {
+    if (unavailable) failure = to_string(error.message());
+    Json::JsonObject value; value.SetNamedValue(L"message", Json::JsonValue::CreateStringValue(error.message()));
+    value.SetNamedValue(L"unavailable", Json::JsonValue::CreateBooleanValue(unavailable)); Emit(L"error", value);
+  }
   fire_and_forget Start(Microsoft::UI::Input::PointerPoint point, Composition::Input::Pointer pointer) {
     auto keepAlive = get_strong();
     Operation resultOperation = Operation::None;
@@ -103,7 +107,7 @@ struct DragView : implements<DragView, Windows::Foundation::IInspectable> {
         data.SetStorageItems(items);
       }
       if (mounted && !disabled && root == session) resultOperation = co_await operation.StartAsync(session->manager, point);
-    } catch (hresult_error const &error) { /* Failed or cancelled sources report accepted=false. */ }
+    } catch (hresult_error const &error) { if (error.code() != E_ABORT && error.code() != HRESULT_FROM_WIN32(ERROR_CANCELLED)) Fail(error); }
     if (auto strong = view.get()) strong.ReleasePointerCapture(pointer);
     if (operation) { try { operation.Close(); } catch (...) {} operation = nullptr; }
     dragging = false; Json::JsonObject result; result.SetNamedValue(L"accepted", Json::JsonValue::CreateBooleanValue(resultOperation != Operation::None)); result.SetNamedValue(L"operation", Json::JsonValue::CreateStringValue(OperationName(resultOperation))); Emit(L"dragEnd", result);
@@ -146,8 +150,9 @@ struct DropTarget : implements<DropTarget, Drag::IDropOperationTarget> {
   DropTarget(std::shared_ptr<RootState> value) : root(std::move(value)) {}
   IAsyncOperation<Operation> OverAsync(Drag::DragInfo info, Drag::DragUIOverride) {
     auto keepAlive = get_strong(); co_await root->ui;
+    com_ptr<DragView> target;
     try {
-      auto target = root->Target(info.Position());
+      target = root->Target(info.Position());
       auto operation = target ? target->Accept(info) : Operation::None;
       if (operation == Operation::None) target = nullptr;
       auto previous = current.get();
@@ -160,19 +165,20 @@ struct DropTarget : implements<DropTarget, Drag::IDropOperationTarget> {
       over.SetNamedValue(L"x", Json::JsonValue::CreateNumberValue(point.X)); over.SetNamedValue(L"y", Json::JsonValue::CreateNumberValue(point.Y));
       over.SetNamedValue(L"operation", Json::JsonValue::CreateStringValue(OperationName(operation))); target->Emit(L"dragOver", over);
       co_return operation;
-    } catch (...) { co_return Operation::None; }
+    } catch (hresult_error const &error) { if (target) target->Fail(error); co_return Operation::None; }
   }
   IAsyncOperation<Operation> EnterAsync(Drag::DragInfo info, Drag::DragUIOverride ui) { return OverAsync(info, ui); }
   IAsyncAction LeaveAsync(Drag::DragInfo) { auto keepAlive = get_strong(); co_await root->ui; if (auto previous = current.get()) previous->Emit(L"dragLeave"); current = {}; co_return; }
   IAsyncOperation<Operation> DropAsync(Drag::DragInfo info) {
     auto keepAlive = get_strong(); co_await root->ui;
+    com_ptr<DragView> target;
     try {
-      auto target = root->Target(info.Position());
+      target = root->Target(info.Position());
       auto operation = target ? target->Accept(info) : Operation::None; if (operation == Operation::None) co_return operation;
       auto payload = co_await Payload(info, target->Local(info.Position()), target->Types(), operation);
       if (target->Accept(info) != operation) co_return Operation::None;
       target->Emit(L"drop", payload); current = {}; co_return operation;
-    } catch (...) { co_return Operation::None; }
+    } catch (hresult_error const &error) { if (target) target->Fail(error); co_return Operation::None; }
   }
 };
 inline std::shared_ptr<RootState> ForRoot(Composition::RootComponentView const &root) {
@@ -189,7 +195,7 @@ inline void Register(React::IReactPackageBuilder const &package) {
     builder.SetCreateProps([](React::ViewProps const &view, React::IComponentProps const &previous) { auto props = make_self<Props>(); if (previous) { auto old = get_self<Props>(previous); props->source = old->source; props->options = old->options; props->disabled = old->disabled; } props->view = view; return props.as<React::IComponentProps>(); });
     builder.as<Composition::IReactCompositionViewComponentBuilder>().SetViewComponentViewInitializer([](Composition::ViewComponentView const &view) {
       auto state = make_self<DragView>(); state->view = view; view.UserData(state.as<Windows::Foundation::IInspectable>()); auto weak = state->get_weak();
-      view.Mounted([weak](auto const &, React::ComponentView const &) { if (auto self = weak.get()) try { self->mounted = true; auto view = self->view.get(); self->root = ForRoot(view.Root()); self->root->views[view.Tag()] = self->get_weak(); } catch (hresult_error const &error) { self->Fail(error); } });
+      view.Mounted([weak](auto const &, React::ComponentView const &) { if (auto self = weak.get()) try { self->mounted = true; auto view = self->view.get(); self->root = ForRoot(view.Root()); self->root->views[view.Tag()] = self->get_weak(); } catch (hresult_error const &error) { self->Fail(error, true); } });
       view.Unmounted([weak](auto const &, auto const &) { if (auto self = weak.get()) self->Close(); });
       view.Destroying([weak](auto const &, auto const &) { if (auto self = weak.get()) self->Close(true); });
       view.PointerPressed([weak](auto const &, Composition::Input::PointerRoutedEventArgs const &args) { if (auto self = weak.get(); self && !args.Handled() && !self->disabled && !self->source.empty()) { auto point = args.GetCurrentPoint(self->view.get().Tag()); self->pressed = point.Properties().IsLeftButtonPressed(); self->origin = point.Position(); } });
@@ -203,7 +209,7 @@ inline void Register(React::IReactPackageBuilder const &package) {
       });
     });
     builder.SetUpdatePropsHandler([](React::ComponentView const &view, React::IComponentProps const &props, React::IComponentProps const &) { auto state = get_self<DragView>(view.UserData()); auto value = get_self<Props>(props); state->source = value->source; state->options = value->options; state->disabled = value->disabled; });
-    builder.SetUpdateEventEmitterHandler([](React::ComponentView const &view, React::EventEmitter const &emitter) { auto state = get_self<DragView>(view.UserData()); state->emitter = emitter; if (!state->failure.empty()) { Json::JsonObject error; error.SetNamedValue(L"message", Json::JsonValue::CreateStringValue(to_hstring(state->failure))); state->Emit(L"unavailable", error); } });
+    builder.SetUpdateEventEmitterHandler([](React::ComponentView const &view, React::EventEmitter const &emitter) { auto state = get_self<DragView>(view.UserData()); state->emitter = emitter; if (!state->failure.empty()) { Json::JsonObject error; error.SetNamedValue(L"message", Json::JsonValue::CreateStringValue(to_hstring(state->failure))); error.SetNamedValue(L"unavailable", Json::JsonValue::CreateBooleanValue(true)); state->Emit(L"error", error); } });
   });
 }
 }

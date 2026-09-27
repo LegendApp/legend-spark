@@ -16,7 +16,7 @@ packages separately or link parallel native modules for these capabilities.
 | File scanning (macOS) and invalidation watches | `@legendapp/spark/files` |
 | Settings window and observable preferences | `@legendapp/spark/settings/window`, `settings/observable` |
 | Menus, dialogs and context menus | `@legendapp/spark/menus`, `dialogs`, `context-menu` |
-| Drag/drop views | `@legendapp/spark/drag-drop/views` |
+| Drag/drop views | `@legendapp/spark/drag-drop` |
 | Process execution and command lookup | `@legendapp/spark/processes` |
 | System hotkeys | `@legendapp/spark/global-shortcuts`, `global-shortcuts/hotkeys` |
 | Secure storage and updates | `@legendapp/spark/secure-storage`, `updates` |
