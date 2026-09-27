@@ -59,10 +59,10 @@ export function Expansion({ report }: { report: (value: unknown) => void }) {
   async function sql() {
     const db = await openDatabase("kitchen.sqlite");
     try {
-      await db.execute("CREATE TABLE IF NOT EXISTS visits (id INTEGER PRIMARY KEY, label TEXT)");
-      await db.execute("INSERT INTO visits(label) VALUES (?)", ["Hello SQLite"]);
-      return (await db.execute("SELECT count(*) AS count FROM visits")).rows;
-    } finally { db.close(); }
+      await db.run("CREATE TABLE IF NOT EXISTS visits (id INTEGER PRIMARY KEY, label TEXT)");
+      await db.run("INSERT INTO visits(label) VALUES (?)", ["Hello SQLite"]);
+      return (await db.getAll("SELECT count(*) AS count FROM visits"));
+    } finally { await db.close(); }
   }
   return <View style={styles.section}>
     <DesktopFoundations report={report} />

@@ -15,3 +15,8 @@ Base: `5e17417` on `jmeistrich/fix-api-defects`. Local stack starts at `jmeistri
 - [ ] Public export inventory reconciled, TypeScript and relevant tests pass; native checks recorded with actual target coverage.
 
 This is an implementation checklist, not a claim that the whole approved design has landed. Unit checks with mocked native boundaries do not establish native platform parity.
+
+## Verified units
+
+- Shared native-free contracts: 8 focused tests and full TypeScript check passed.
+- SQLite: public backend objects replaced by Spark query/transaction/close types; kitchen-sink callers updated. Real in-memory SQLite tests cover parameters/blobs, commit/rollback, transaction lifetime, close ordering and unsafe values. Native OP-SQLite execution still requires target validation.

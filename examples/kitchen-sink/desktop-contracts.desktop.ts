@@ -23,14 +23,18 @@ export async function runDesktopContracts(check: (id: string, action: () => Prom
     const { openDatabase } = await import("@legendapp/spark/sqlite");
     let db = await openDatabase(`contract-${token.replace(/[^a-zA-Z0-9_-]/g, "")}.sqlite`);
     try {
-      await db.execute("CREATE TABLE checks (id INTEGER PRIMARY KEY, value TEXT, bytes BLOB)");
-      await db.execute("INSERT INTO checks VALUES (?, ?, ?)", [1, "Unicode 👋 and ' parameter", new Uint8Array([0, 128, 255]).buffer]);
-      try { await db.transaction(async transaction => { await transaction.execute("INSERT INTO checks VALUES (2, 'rollback', NULL)"); throw new Error("rollback"); }); } catch {}
-      assertContract(db.executeSync("SELECT count(*) AS total FROM checks").rows[0]?.total === 1, "Transaction rollback failed");
-      db.close(); db = await openDatabase(`contract-${token.replace(/[^a-zA-Z0-9_-]/g, "")}.sqlite`);
-      const row = (await db.execute("SELECT value, bytes FROM checks WHERE id = ?", [1])).rows[0];
-      assertContract(row?.value === "Unicode 👋 and ' parameter" && new Uint8Array(row.bytes as ArrayBuffer)[2] === 255, "Persisted SQLite parameters or blob changed");
-    } finally { db.delete(); }
+      await db.run("CREATE TABLE checks (id INTEGER PRIMARY KEY, value TEXT, bytes BLOB)");
+      await db.run("INSERT INTO checks VALUES (?, ?, ?)", [1, "Unicode 👋 and ' parameter", new Uint8Array([0, 128, 255])]);
+      try { await db.transaction(async transaction => { await transaction.run("INSERT INTO checks VALUES (2, 'rollback', NULL)"); throw new Error("rollback"); }); } catch {}
+      assertContract((await db.getFirst("SELECT count(*) AS total FROM checks"))?.total === 1, "Transaction rollback failed");
+      await db.close(); db = await openDatabase(`contract-${token.replace(/[^a-zA-Z0-9_-]/g, "")}.sqlite`);
+      const row = (await db.getAll("SELECT value, bytes FROM checks WHERE id = ?", [1]))[0];
+      assertContract(row?.value === "Unicode 👋 and ' parameter" && row.bytes instanceof Uint8Array && row.bytes[2] === 255, "Persisted SQLite parameters or blob changed");
+    } finally {
+      await db.close();
+      const { getDirectory, remove } = await import("@legendapp/spark/files");
+      await remove(`${await getDirectory("data")}/contract-${token.replace(/[^a-zA-Z0-9_-]/g, "")}.sqlite`);
+    }
   });
   await check("desktop.runtimes", async () => {
     const { ThreadedRuntime } = await import("@react-native-runtimes/core");

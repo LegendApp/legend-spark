@@ -69,12 +69,12 @@ export async function runExpansionChecks(check: (name: string, action: () => Pro
   await check("SQLite persistence, parameters and transaction rollback", async () => {
     let db = await openDatabase("expansion-test.sqlite");
     try {
-      await db.execute("DROP TABLE IF EXISTS checks"); await db.execute("CREATE TABLE checks (id INTEGER PRIMARY KEY, value TEXT)");
-      await db.execute("INSERT INTO checks VALUES (?, ?)", [1, "literal ' parameter"]);
-      try { await db.transaction(async transaction => { await transaction.execute("INSERT INTO checks VALUES (2, 'rolled back')"); throw new Error("rollback"); }); } catch {}
-      assert((await db.execute("SELECT count(*) AS total FROM checks")).rows[0]?.total === 1, "Transaction did not roll back");
-      db.close(); db = await openDatabase("expansion-test.sqlite");
-      assert((await db.execute("SELECT value FROM checks WHERE id = ?", [1])).rows[0]?.value === "literal ' parameter", "Database did not persist");
-    } finally { db.close(); }
+      await db.run("DROP TABLE IF EXISTS checks"); await db.run("CREATE TABLE checks (id INTEGER PRIMARY KEY, value TEXT)");
+      await db.run("INSERT INTO checks VALUES (?, ?)", [1, "literal ' parameter"]);
+      try { await db.transaction(async transaction => { await transaction.run("INSERT INTO checks VALUES (2, 'rolled back')"); throw new Error("rollback"); }); } catch {}
+      assert((await db.getAll("SELECT count(*) AS total FROM checks"))[0]?.total === 1, "Transaction did not roll back");
+      await db.close(); db = await openDatabase("expansion-test.sqlite");
+      assert((await db.getAll("SELECT value FROM checks WHERE id = ?", [1]))[0]?.value === "literal ' parameter", "Database did not persist");
+    } finally { await db.close(); }
   });
 }
