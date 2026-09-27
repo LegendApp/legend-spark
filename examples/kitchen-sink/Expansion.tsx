@@ -129,7 +129,7 @@ export function Expansion({ report }: { report: (value: unknown) => void }) {
     <EventResults entries={systemEvents} empty="Dock menu selections and system changes appear here." testID="system-events" />
     <Text style={styles.heading} className="text-foreground">SQLite</Text><ActionButton onPress={() => act(sql)}>Insert and count persisted rows</ActionButton>
     <Text style={styles.heading} className="text-foreground">WebView</Text>
-    <WebView source={webSource} style={styles.web} onMessage={event => reportWeb(event.nativeEvent.data)} onError={event => reportWeb(new Error(event.nativeEvent.description))} onShouldStartLoadWithRequest={request => request.url === "about:blank"} />
+    <WebView source={webSource} style={styles.web} onMessage={event => reportWeb(event.data)} onError={event => reportWeb(new Error(event.message))} onNavigationRequest={request => request.uri === "about:blank"} />
     <EventResults entries={webEvents} empty="Use the button inside the WebView to send a message here." testID="webview-events" />
   </View>;
 }

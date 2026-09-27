@@ -20,3 +20,4 @@ This is an implementation checklist, not a claim that the whole approved design 
 
 - Shared native-free contracts: 8 focused tests and full TypeScript check passed.
 - SQLite: public backend objects replaced by Spark query/transaction/close types; kitchen-sink callers updated. Real in-memory SQLite tests cover parameters/blobs, commit/rollback, transaction lifetime, close ordering and unsafe values. Native OP-SQLite execution still requires target validation.
+- WebView: owned component/source/ref/event types replace upstream reexports; kitchen-sink uses plain Spark event payloads. Adapter tests cover source/event translation, unknown backend props and stale refs. Native navigation/message execution remains to be validated.

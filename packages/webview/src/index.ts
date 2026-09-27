@@ -1,2 +1,2 @@
-export { WebView } from "react-native-webview";
-export type { WebViewProps, WebViewMessageEvent, WebViewNavigation } from "react-native-webview";
+export { WebView } from "./WebView";
+export type { WebViewProps, WebViewRef, WebViewSource, WebViewMessageEvent, WebViewNavigation, WebViewNavigationRequest, WebViewErrorEvent } from "./types";

@@ -27,7 +27,7 @@ export default function DesktopLibraryChecks({ check, onError, onBusy }: { check
     <Button disabled={!!activeSource} onPress={() => void run()}>Check WebView</Button>
     {activeSource && <WebView source={activeSource} style={{ height: 180 }}
       injectedJavaScript="document.getElementById('value').textContent = 'native-to-web'; window.ReactNativeWebView.postMessage(document.getElementById('value').textContent); true;"
-      onMessage={event => { if (event.nativeEvent.data === "native-to-web") pending.current?.resolve(); else pending.current?.reject(new Error(`Unexpected WebView message: ${event.nativeEvent.data}`)); }}
-      onError={event => pending.current?.reject(new Error(event.nativeEvent.description))} />}
+      onMessage={event => { if (event.data === "native-to-web") pending.current?.resolve(); else pending.current?.reject(new Error(`Unexpected WebView message: ${event.data}`)); }}
+      onError={event => pending.current?.reject(new Error(event.message))} />}
   </View>;
 }
