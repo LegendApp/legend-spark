@@ -77,22 +77,22 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
     });
     await check("settings: persistence and serialized concurrent updates", async () => {
       try {
-        await settings.remove(token); assert(await settings.get(token) === null, "Missing setting");
+        await settings.remove(token); assert(await settings.get(token) === undefined, "Missing setting");
         await settings.set(token, 0);
-        await Promise.all(Array.from({ length: 15 }, () => settings.update<number>(token, count => (count ?? 0) + 1)));
+        await Promise.all(Array.from({ length: 15 }, () => settings.update<number>(token, count => { if (count !== undefined && typeof count !== "number") throw new Error("Invalid counter"); return (count ?? 0) + 1; })));
         assert(await settings.get(token) === 15, "Concurrent increments lost data");
         await settings.set(token, { text: "hello", enabled: true });
-        assert((await settings.get<{ text: string; enabled: boolean }>(token))?.text === "hello", "Object roundtrip");
+        assert(JSON.stringify(await settings.get(token)) === JSON.stringify({ text: "hello", enabled: true }), "Object roundtrip");
       } finally { await settings.remove(token); }
     });
     if (isolation) await check("Spark Runner isolation: persisted files, settings and Keychain", async () => {
       const key = "sdk-isolation";
       const file = `${await files.getDirectory("data")}/${key}.txt`;
       const context = await app.getAppContext();
-      const previous = await settings.get<string>(key);
+      const previous = await settings.get(key);
       const secret = await secureStore.getItemAsync(key);
       const present = await files.exists(file);
-      assert((previous !== null) === (isolation.expect === "present"), "Settings leaked across projects or did not persist");
+      assert((previous !== undefined) === (isolation.expect === "present"), "Settings leaked across projects or did not persist");
       assert((secret !== null) === (isolation.expect === "present"), "Keychain leaked across projects or did not persist");
       assert(present === (isolation.expect === "present"), "File data leaked across projects or did not persist");
       if (present) assert(await files.readText(file) === context.projectId && previous === context.projectId && secret === context.projectId, "Persisted identity mismatch");

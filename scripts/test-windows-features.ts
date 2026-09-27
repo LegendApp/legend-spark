@@ -80,7 +80,7 @@ function Main() {
    if((await Linking.getInitialURL())==='spark-probe://recovered') {
     if(previous!=='saved before termination') throw Error('Settings did not survive process restart');
     await settings.remove(key);
-   } else { if(previous!==null) throw Error('Test settings key was not isolated'); await settings.set(key,'saved before termination'); }
+   } else { if(previous!==undefined) throw Error('Test settings key was not isolated'); await settings.set(key,'saved before termination'); }
   });
   await check('windows.geometry',async()=>{
   const displays=await Windows.getDisplays();

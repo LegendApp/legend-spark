@@ -128,7 +128,7 @@ function KitchenSink({ runtime, projectId }: Props) {
     const confirmClose = () => documentRef.current.text === documentRef.current.saved || new Promise<boolean>(resolve => Alert.alert("Unsaved document", "Discard your changes?", [{ text: "Keep editing", style: "cancel", onPress: () => resolve(false) }, { text: "Discard", style: "destructive", onPress: () => resolve(true) }]));
     void app.beforeQuit(confirmClose).then(retain).catch(reportWindow);
     void windows.beforeWindowClose("main", confirmClose).then(retain).catch(reportWindow);
-    void settings.get<number>("kitchen-count").then(value => { if (!disposed) setCount(value ?? 0); }).catch(report);
+    void settings.get("kitchen-count", { decode(value) { if (typeof value !== "number") throw new Error("Invalid counter setting"); return value; } }).then(value => { if (!disposed) setCount(value ?? 0); }).catch(report);
     return () => { disposed = true; clearMenus("kitchen-sink"); for (const remove of removers) void remove(); };
   }, [load, report, reportWindow, reportFile, reportMenu, reportLink, save]);
   useEffect(() => {
@@ -155,7 +155,7 @@ function KitchenSink({ runtime, projectId }: Props) {
         <View style={styles.row}><ActionButton onPress={() => action(load)}>Open document</ActionButton><ActionButton onPress={() => action(save)}>Save document</ActionButton><ActionButton disabled={!document.path} onPress={() => action(() => revealInFileManager(document.path))}>Reveal in Finder</ActionButton><ActionButton onPress={() => action(() => files.getDirectory("data"))}>App data directory</ActionButton></View>
         <EventResults entries={fileEvents} empty="Open, save, or change the open file to see filesystem events here." testID="file-events" />
       </Card>
-      <Card title="Settings"><Text className="text-muted">Persistent counter: {count ?? "Loading…"}</Text><ActionButton disabled={count === null} onPress={() => action(async () => { const value = await settings.update<number>("kitchen-count", count => (count ?? 0) + 1); setCount(value); return value; })}>Increment and persist</ActionButton></Card>
+      <Card title="Settings"><Text className="text-muted">Persistent counter: {count ?? "Loading…"}</Text><ActionButton disabled={count === null} onPress={() => action(async () => { const value = await settings.update<number>("kitchen-count", count => { if (count !== undefined && typeof count !== "number") throw new Error("Invalid counter setting"); return (count ?? 0) + 1; }); setCount(value); return value; })}>Increment and persist</ActionButton></Card>
       <Card title="Menus, shortcuts and clipboard"><Text className="text-muted">Use the Document menu or press ⌘⇧K. Right-click-like menus are native popups.</Text><View style={styles.row}>
         <View ref={contextMenuAnchor} collapsable={false} className="max-w-full"><ActionButton onPress={() => action(async () => {
           const anchor = contextMenuAnchor.current;

@@ -77,17 +77,17 @@ export async function settingsLifecycle(store: typeof settings, token: string) {
   try {
     await store.set(reserved, "reserved"); await store.set(escaped, "literal percent");
     assertContract(await store.get(reserved) === "reserved" && await store.get(escaped) === "literal percent", "Windows device-name keys collided");
-    await store.remove(key); assertContract(await store.get(key) === null, "Missing setting must be null");
+    await store.remove(key); assertContract(await store.get(key) === undefined, "Missing setting must be undefined");
     await store.set(key, { text: "Unicode 🌎", array: [true, null, 2] });
     assertContract(JSON.stringify(await store.get(key)) === JSON.stringify({ text: "Unicode 🌎", array: [true, null, 2] }), "JSON settings roundtrip failed");
     await store.set(key, 0);
-    await Promise.all(Array.from({ length: 10 }, () => store.update<number>(key, value => (value ?? 0) + 1)));
+    await Promise.all(Array.from({ length: 10 }, () => store.update<number>(key, value => { if (value !== undefined && typeof value !== "number") throw new Error("Invalid counter"); return (value ?? 0) + 1; })));
     assertContract(await store.get(key) === 10, "Concurrent updates lost data");
     try { await store.update(key, () => { throw new Error("expected failure"); }); } catch {}
-    await store.update<number>(key, value => (value ?? 0) + 1);
+    await store.update<number>(key, value => { if (value !== undefined && typeof value !== "number") throw new Error("Invalid counter"); return (value ?? 0) + 1; });
     assertContract(await store.get(key) === 11, "Failed update poisoned the queue");
     await store.remove(key); await store.remove(key);
-    assertContract(await store.get(key) === null, "Settings deletion failed");
+    assertContract(await store.get(key) === undefined, "Settings deletion failed");
   } finally { await store.remove(key); await store.remove(reserved); await store.remove(escaped); }
 }
 
