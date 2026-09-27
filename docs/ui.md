@@ -1,77 +1,48 @@
-# Native UI
+# Common controls
 
-`@legendapp/spark/ui` defines only the three controls used by the [shared Settings starter](universal-settings.md): `Button`, `TextInput`, and `Select`. It owns their small contracts and selects replaceable implementations. Buttons are actual native controls, with no React Native `Pressable` implementation.
+Import `Button`, `TextInput`, `Select`, and `SegmentedControl` from `@legendapp/spark/ui`. Spark owns their props and consumer events; React Native, Expo UI and AppKit/WinUI implement the controls internally. The separate ordinary `NativeSelect` API and `/ui/select-controls` path are removed. Generated native components and their event envelopes are internal.
+
+All controls accept `disabled`, `accessibilityLabel`, `testID`, layout `style`, `onError`, and a `ref` to `ControlRef`. The ref exposes only `measureInWindow(callback)`, in React Native logical coordinates. A retained ref rejects after unmount; it does not expose backend objects, text setters, or a focus API that every backend cannot support. Button labels default to their text children. Layout styles size the native control; they do not restyle all OS chrome.
 
 ```tsx
-import { Button, TextInput, Select } from '@legendapp/spark/ui';
+import { Button, Select, TextInput } from '@legendapp/spark/ui';
 
-<TextInput defaultValue="" onChangeText={setName} accessibilityLabel="Display name" />
-<Select options={themes} value={theme} onValueChange={setTheme} accessibilityLabel="Appearance" />
-<Button onPress={save} disabled={saving}>Save changes</Button>
+<TextInput value={title} onChangeText={setTitle} accessibilityLabel="Title" />
+<TextInput defaultValue="Initial value" onChangeText={saveDraft} />
+<Select
+  options={[{ label: 'Light', value: 'light' }, { label: 'Dark', value: 'dark' }]}
+  value={theme}
+  onValueChange={setTheme}
+  accessibilityLabel="Theme"
+/>
+<Button onPress={save} disabled={saving}>Save</Button>
 ```
 
-| Platform | Button | TextInput | Select |
-| --- | --- | --- | --- |
-| macOS | AppKit `NSButton` | AppKit `NSTextField` | AppKit `NSPopUpButton` |
-| iOS | Expo UI SwiftUI Button | Expo UI SwiftUI TextField | Expo UI SwiftUI Picker, menu |
-| Android | Expo UI Compose Button | Expo UI Compose TextInput | Expo UI Compose Picker, segmented |
-| Web | HTML button | HTML input | HTML select |
-| Windows | WinUI Button | WinUI TextBox | WinUI ComboBox |
+TextInput is single-line. A controlled input receives `value`; an uncontrolled input receives optional `defaultValue`, read once on mount. They are mutually exclusive types. Switching modes requires a remount. Controlled desktop editing acknowledges native event counts so a render from before a keystroke cannot erase a newer edit. Returning the same controlled value restores that value after an edit. Mobile uses React Native's native TextInput for controlled editing and IME/selection handling: the pinned Expo UI fields provide an uncontrolled contract and are not exposed as Spark refs.
 
-The macOS controls are Fabric components in a standalone pod. Mobile applications install optional peer `@expo/ui@0.2.0-beta.9`, the pinned implementation for Expo 54. Desktop/web implementations do not import it. Compose requires a development build; the universal starter includes `expo-dev-client`. See the [Expo 54 UI documentation](https://docs.expo.dev/versions/v54.0.0/sdk/ui/) and [Compose setup](https://docs.expo.dev/versions/v54.0.0/sdk/ui/jetpack-compose/).
+Select and SegmentedControl use the same `SelectOption` array and controlled `value`/`onValueChange`. Values are unique strings, including an empty string if desired; labels are nonempty strings and may repeat. There is no implicit selection of the first option when the requested value is missing. A native selection callback reports only a validated value, and a parent that retains its current value retains that selection.
 
-## Contracts
+| Control | macOS | Windows | iOS | Android | React Native Web |
+| --- | --- | --- | --- | --- | --- |
+| Button | AppKit | WinUI | Expo SwiftUI | Expo Compose | HTML button |
+| TextInput | AppKit | WinUI | RN TextInput | RN TextInput | HTML input |
+| Select | Popup | ComboBox | Menu picker | Inline choices | HTML select |
+| SegmentedControl | Segmented control | Unsupported | Segmented picker | Inline choices | Button group |
 
-All controls accept `style` for React Native layout and `testID`. Layout styles allocate the spark; they do not promise arbitrary styling of OS-rendered chrome. The iOS adapters own their SwiftUI Host boundaries so controls can sit beside ordinary React Native content. Android/web use React Native layout wrappers. Native appearance and selection presentation can differ by platform.
+Android retains inline selection instead of promising a dropdown absent from the pinned backend. Its choices use native Compose buttons, which support disabled state; the pinned Compose Picker does not. Windows has no segmented-control backend and reports that limitation explicitly.
 
-**Button** accepts string `children`, optional argument-free `onPress`, `disabled` (default false), and `variant` (`default`, `bordered`, `borderless`). Disabled controls do not invoke the action. Defaults are 160 points wide and 36 high on desktop/web, 44 high on iOS, and 48 high on Android. Set a wider spark for longer labels. Icons and arbitrary React children are deferred.
+`getControlAvailability('button' | 'text-input' | 'select' | 'segmented-control')` is a synchronous capability query. Missing or unsupported controls report `SparkError` through `onError` (default `console.error`) and render a disabled fallback containing the current label/text. Runtime host failure also uses this callback. Framework error instructions are not inserted into the application UI. Invalid props throw a shared argument/option error during render; an error boundary can handle them. Optional Expo view implementations load only when their native module is present.
 
-**TextInput** accepts `defaultValue`, optional `onChangeText`, and `accessibilityLabel`. It is deliberately uncontrolled: `defaultValue` initializes the native editor, and changing it after mounting does not replace an edit. Use `onChangeText` to keep application state; remount with a new key to reset the field. Expo UI 54 does not provide a fully controlled text field contract, so this API does not pretend to support `value`. Secure entry, validation, multiline input, and imperative focus/reset are deferred.
+`/ui/uniwind` provides the same four components with its explicit Uniwind integration. Specialized search, split-view, sidebar, glass and symbol components retain separate imports while their contracts are reviewed.
 
-**Select** accepts a nonempty `options` array of `{ label, value }`, a controlled string `value`, `onValueChange`, and `accessibilityLabel`. Values must be unique and the selection must match an option. Reordering options preserves semantic selection. Labels may repeat. Adapters translate values to indices where required by the upstream API. A native menu on iOS/macOS and a segmented picker on Android are appropriate for this small preference choice; large/searchable selections are not yet part of the contract.
+Validation includes mounted React tests for disabled controls, controlled input/selection reconciliation, invalid events, callbacks, unavailable modules, refs and mobile/web adapters. An AppKit fixture executes the actual text and selector implementations for stale edits, defaults, repeated labels and empty values. It substitutes RN bridge declarations, so it does not establish full Fabric integration. Mobile/desktop interactive UI acceptance and Windows compilation remain pending.
 
-Native bridge types, Expo modifier arrays, and backend-specific props are private implementation details. A future upstream implementation can replace a backend when it satisfies these contracts and their behavior checks without changing application imports. This package does not require a framework layout or routing system.
+## Setup and native verification
 
-## Windows appearance
+Mobile applications using Button/Select install optional peer `@expo/ui@0.2.0-beta.9` for Expo 54. Compose requires a development build; the [shared Settings starter](universal-settings.md) includes `expo-dev-client`. Desktop and web do not load Expo UI. See [styling setup](styling.md) for optional Uniwind classes and theme configuration.
 
-On Windows, this package supplies the standard React Native `Appearance` native
-module with a working `setColorScheme` implementation. Use
-`Appearance.setColorScheme("dark")`, `"light"`, or `null` to return to System;
-Uniwind's theme selection uses the same path. Each mounted WinUI control receives
-native theme notifications, and newly mounted controls read the current preference.
-Theme changes do not recreate editors or add theme/state props to the public controls.
-OS changes apply while System is selected. Native acceptance is still pending;
-see [Windows issues](windows-issues.md#foundation-work--2026-09-15).
+On Windows, the package supplies React Native's Appearance native module. Use `Appearance.setColorScheme('dark')`, `'light'`, or `null` to follow the system. Native theme notifications update mounted WinUI controls without recreating their editors. Native theme acceptance remains pending; see [Windows issues](windows-issues.md#foundation-work--2026-09-15).
 
-## Optional Uniwind bindings
+`npm run test:ui` builds a packed kitchen-sink consumer with the test-only driver and exercises native hit targets, actions, text delegates and selection. `npm run test:universal` generates real mobile/Windows projects and bundles the Settings entry for all five targets. These are heavier integration checks than the focused tests above, and have not been rerun for this API change.
 
-Import the same three controls from `@legendapp/spark/ui/uniwind` to add `className` through upstream `withUniwind` on native platforms and `useResolveClassNames` on web. Classes map to the existing layout `style`, with explicit styles taking precedence. The base entry has no Uniwind dependency at runtime. See [styling setup, themes, and limitations](styling.md).
-
-## Integration and verification
-
-The kitchen sink's **Native UI** card exercises activation, disabled state, dynamic labels, remounting, text editing, and semantic selection. The Settings starter demonstrates the same imports across targets.
-
-```sh
-npm run test:ui
-npm run test:universal
-npm run typecheck
-npm test
-```
-
-`test:ui` builds a packed kitchen-sink consumer with the test-only driver. It checks a mounted NSButton hit target, dispatches AppKit actions, and verifies React updates. Text/selection checks invoke the native delegate/action paths, including changed defaults and reordered options with duplicate labels. This is in-app native verification; it does not replace real pointer/keyboard and accessibility testing.
-
-`test:universal` generates real mobile/Windows projects and bundles the shared Settings entry for all five targets. It verifies that shared files and existing generated projects survive target switching and that platform bundles select the expected UI backend. Reports live under the consumer's `.spark` directory.
-
-Native Android and Windows execution remain pending. Windows uses WinUI controls hosted through RNW ContentIsland, with labeled, disabled placeholders if the UI module is absent or native initialization fails. Placeholders preserve layout/test IDs, do not attach action handlers, and do not load unavailable native bindings. Remaining implementations are tracked in [known Windows issues](windows-issues.md). Router, declarative windows, and a larger UI catalog remain deferred.
-
-## Recorded validation — 2026-09-13
-
-- Workspace and generated Settings TypeScript checks passed; 127 unit/codegen tests passed with 533 assertions.
-- The packed macOS Settings app built, and the packed kitchen sink passed all six native UI checks.
-- The shared Settings app built and ran on the iPhone 17 simulator (iOS 26.5). Interactive typing, single-line Return behavior, menu selection, copying preferences, and SecureStore write/read/delete passed. Safe-area layout and the visible empty input were checked after a restart.
-- Web typing, selection, copying, and unavailable secure storage behavior passed through the browser UI.
-- All five shared-screen bundles passed. Real iOS/Android/Windows generation preserved shared files and earlier native projects. A separate check also preserved the already-built macOS project and build record while generating Android/Windows.
-
-Bun execution used the synchronized `/tmp/spark-api-clean` checkout because Bun stalled in Documents on this host. Native Android/Windows execution and macOS pointer/keyboard inspection remain unverified; native Mac UI automation was blocked by the locked desktop. These checks do not establish mobile production distribution or Windows UI support.
-
-The new Windows implementations are source-complete for the three contracts but await native compilation and UI acceptance. Run `npm run test:windows:features` on an interactive Windows machine. These are WinUI controls, not Pressable wrappers.
+The earlier API passed packed macOS Settings/kitchen-sink checks and iPhone 17 simulator interaction on September 13, 2026; web interaction and five-target bundle checks also passed then. That historical evidence does not validate the new controlled-input and adapter behavior. Full target interaction, focus/accessibility behavior and the SwiftUI picker's remount after selection still require acceptance. The pinned SwiftUI picker ignores an unchanged selected index, so Spark remounts it after a choice to honor a parent that retains its existing value.

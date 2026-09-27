@@ -76,8 +76,10 @@ using namespace facebook::react;
       continue;
     }
 
-    [_popUpButton addItemWithTitle:label.length > 0 ? label : value];
-    _popUpButton.lastItem.representedObject = value ?: @"";
+    // addItemWithTitle deduplicates labels; identity belongs to the value.
+    NSMenuItem *menuItem = [[NSMenuItem alloc] initWithTitle:label action:nil keyEquivalent:@""];
+    menuItem.representedObject = value;
+    [_popUpButton.menu addItem:menuItem];
   }
 }
 
@@ -104,7 +106,7 @@ using namespace facebook::react;
 
 - (void)handleSelectionChange:(id)sender
 {
-  if (_isUpdatingSelection) {
+  if (_isUpdatingSelection || !_popUpButton.enabled) {
     return;
   }
 
@@ -138,6 +140,8 @@ using namespace facebook::react;
   }
 
   _popUpButton.enabled = newProps.enabled;
+  _popUpButton.accessibilityLabel = [NSString stringWithUTF8String:newProps.accessibilityLabel.c_str()];
+  _popUpButton.accessibilityIdentifier = [NSString stringWithUTF8String:newProps.testId.c_str()];
 #endif
   [super updateProps:props oldProps:oldProps];
 }
@@ -151,6 +155,7 @@ using namespace facebook::react;
   _isUpdatingSelection = NO;
   [_popUpButton removeAllItems];
   _popUpButton.enabled = YES;
+  _popUpButton.accessibilityLabel = nil; _popUpButton.accessibilityIdentifier = nil;
 #endif
 }
 

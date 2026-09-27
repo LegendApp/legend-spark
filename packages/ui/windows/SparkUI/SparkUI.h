@@ -16,18 +16,17 @@ namespace React = Microsoft::ReactNative;
 namespace Composition = Microsoft::ReactNative::Composition;
 namespace Xaml = Microsoft::UI::Xaml;
 namespace Json = Windows::Data::Json;
-REACT_MODULE(SparkUIAvailability, L"NativeSparkUI")
-struct SparkUIAvailability {
-  REACT_SYNC_METHOD(isAvailable)
-  bool isAvailable() noexcept { return true; }
-};
 struct Props : implements<Props, React::IComponentProps> {
   React::ViewProps view{nullptr};
-  std::string title, defaultText, itemsJson = "[]", value, variant = "default";
-  bool disabled = false;
+  std::string title, defaultText, text, itemsJson = "[]", value, variant = "default";
+  bool disabled = false, controlled = false;
+  int32_t eventCount = 0;
   void SetProp(uint32_t, hstring const &name, React::IJSValueReader const &reader) noexcept {
     if (name == L"title") React::ReadValue(reader, title);
     else if (name == L"defaultText") React::ReadValue(reader, defaultText);
+    else if (name == L"text") React::ReadValue(reader, text);
+    else if (name == L"controlled") React::ReadValue(reader, controlled);
+    else if (name == L"eventCount") React::ReadValue(reader, eventCount);
     else if (name == L"itemsJson") React::ReadValue(reader, itemsJson);
     else if (name == L"value") React::ReadValue(reader, value);
     else if (name == L"variant") React::ReadValue(reader, variant);
@@ -56,10 +55,13 @@ struct Control : implements<Control, Windows::Foundation::IInspectable> {
   std::string kind, failure, items;
   std::vector<std::string> values;
   bool initialized = false, updating = false;
+  int32_t eventCount = 0;
   void Emit(hstring const &name, std::string const &key = "", std::string const &value = "") {
-    if (emitter) emitter.DispatchEvent(name, [key, value](React::IJSValueWriter const &writer) {
+    const auto count = eventCount;
+    if (emitter) emitter.DispatchEvent(name, [key, value, name, count](React::IJSValueWriter const &writer) {
       writer.WriteObjectBegin();
       if (!key.empty()) { writer.WritePropertyName(to_hstring(key)); writer.WriteString(to_hstring(value)); }
+      if (name == L"textChange") { writer.WritePropertyName(L"eventCount"); writer.WriteInt64(count); }
       writer.WriteObjectEnd();
     });
   }
@@ -78,7 +80,7 @@ struct Control : implements<Control, Windows::Foundation::IInspectable> {
       } else if (kind == "TextInput") {
         Xaml::Controls::TextBox input;
         input.TextChanged([weak](auto const &sender, auto const &) {
-          if (auto self = weak.get(); self && !self->updating) self->Emit(L"textChange", "text", to_string(sender.template as<Xaml::Controls::TextBox>().Text()));
+          if (auto self = weak.get(); self && !self->updating && self->control.IsEnabled()) { ++self->eventCount; self->Emit(L"textChange", "text", to_string(sender.template as<Xaml::Controls::TextBox>().Text())); }
         });
         control = input;
       } else {
@@ -113,14 +115,16 @@ struct Control : implements<Control, Windows::Foundation::IInspectable> {
       updating = true;
       control.IsEnabled(!props.disabled);
       Xaml::Automation::AutomationProperties::SetAutomationId(control, props.view.TestId());
-      Xaml::Automation::AutomationProperties::SetName(control, kind == "Button" ? to_hstring(props.title) : props.view.AccessibilityLabel());
+      Xaml::Automation::AutomationProperties::SetName(control, props.view.AccessibilityLabel().empty() && kind == "Button" ? to_hstring(props.title) : props.view.AccessibilityLabel());
       if (kind == "Button") {
         auto button = control.as<Xaml::Controls::Button>();
         button.Content(box_value(to_hstring(props.title)));
         // WinUI owns hover, pressed, keyboard, disabled, and accessibility states.
         button.BorderThickness(props.variant == "borderless" ? Xaml::Thickness{0, 0, 0, 0} : Xaml::Thickness{1, 1, 1, 1});
       } else if (kind == "TextInput") {
-        if (!initialized) control.as<Xaml::Controls::TextBox>().Text(to_hstring(props.defaultText));
+        auto input = control.as<Xaml::Controls::TextBox>();
+        if (!initialized) input.Text(to_hstring(props.defaultText));
+        if (props.controlled && props.eventCount >= eventCount && input.Text() != to_hstring(props.text)) input.Text(to_hstring(props.text));
       } else {
         auto select = control.as<Xaml::Controls::ComboBox>();
         if (items != props.itemsJson) {
@@ -153,6 +157,7 @@ inline void RegisterControls(React::IReactPackageBuilder const &package) {
         if (previous) {
           auto old = get_self<Props>(previous);
           props->title = old->title; props->defaultText = old->defaultText; props->itemsJson = old->itemsJson;
+          props->text = old->text; props->controlled = old->controlled; props->eventCount = old->eventCount;
           props->value = old->value; props->variant = old->variant; props->disabled = old->disabled;
         }
         props->view = view; return props.as<React::IComponentProps>();

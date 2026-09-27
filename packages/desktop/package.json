@@ -50,7 +50,6 @@
     "./shortcuts/keyboard": "./shortcuts-keyboard.ts",
     "./ui/glass": "./ui-glass.ts",
     "./ui/symbol": "./ui-symbol.ts",
-    "./ui/select-controls": "./ui-select-controls.ts",
     "./ui/search": "./ui-search.ts",
     "./settings/window": "./settings-window.ts",
     "./settings/window/options": "./settings-window-options.ts",

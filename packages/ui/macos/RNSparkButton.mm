@@ -30,6 +30,7 @@ using namespace facebook::react;
   _button.title = [NSString stringWithUTF8String:value.title.c_str()];
   _button.enabled = !value.disabled;
   _button.bordered = value.variant != SparkButtonVariant::Borderless;
+  _button.accessibilityLabel = [NSString stringWithUTF8String:value.accessibilityLabel.c_str()];
   _button.accessibilityIdentifier = [NSString stringWithUTF8String:value.testId.c_str()];
   [super updateProps:props oldProps:oldProps];
 }
@@ -43,7 +44,7 @@ using namespace facebook::react;
   _button.title = @"";
   _button.enabled = YES;
   _button.bordered = YES;
-  _button.accessibilityIdentifier = nil;
+  _button.accessibilityIdentifier = nil; _button.accessibilityLabel = nil;
   _button.highlighted = NO;
   if (self.window.firstResponder == _button) [self.window makeFirstResponder:nil];
 }
