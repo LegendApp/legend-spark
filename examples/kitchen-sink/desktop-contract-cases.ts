@@ -134,27 +134,27 @@ export async function richClipboardLifecycle(files: typeof FileSystem, clipboard
 export async function processLifecycle(files: typeof FileSystem, processes: typeof import("@legendapp/spark/processes"), executable: string, windows: boolean, token: string) {
   const command = (script: string) => windows ? ["-NoProfile", "-NonInteractive", "-Command", script] : ["-c", script];
   const env = { SPARK_PROCESS_TEST: "space ü & $value" };
-  const result = await processes.runCommand({ executable, env, args: command(windows ? "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); [Console]::Out.Write($env:SPARK_PROCESS_TEST); [Console]::Error.Write('err'); exit 7" : 'printf %s "$SPARK_PROCESS_TEST"; printf err >&2; exit 7') });
-  assertContract(result.exitCode === 7 && result.stdout === env.SPARK_PROCESS_TEST && result.stderr === "err" && !result.signal, "Process environment, output or exit status changed");
-  const stdin = await processes.runCommand({ executable, input: "input ü\n", args: command(windows ? "[Console]::InputEncoding=[Text.UTF8Encoding]::new($false); [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); [Console]::Out.Write([Console]::In.ReadToEnd())" : "cat") });
-  assertContract(stdin.stdout === "input ü\n", "Initial stdin was not drained before EOF");
-  const binary = await processes.runCommand({ executable, args: command(windows ? "$o=[Console]::OpenStandardOutput(); $o.Write([byte[]](0,255,1),0,3)" : "printf '\\000\\377\\001'") });
-  assertContract(binary.stdoutBase64 === "AP8B", "Binary process output was corrupted");
-  const chunks: string[] = [];
-  const child = await processes.spawn({ executable, args: command(windows ? "[Console]::Out.Write([Console]::In.ReadToEnd())" : "cat") }, chunk => { if (chunk.stream === "stdout") chunks.push(chunk.base64); });
+  const result = await processes.runCommand({ target: { type: "executable", path: executable }, env, args: command(windows ? "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); [Console]::Out.Write($env:SPARK_PROCESS_TEST); [Console]::Error.Write('err'); exit 7" : 'printf %s "$SPARK_PROCESS_TEST"; printf err >&2; exit 7') });
+  assertContract(result.exit.type === "exited" && result.exit.code === 7 && new TextDecoder().decode(result.stdout) === env.SPARK_PROCESS_TEST && new TextDecoder().decode(result.stderr) === "err" && result.exit.type === "exited", "Process environment, output or exit status changed");
+  const stdin = await processes.runCommand({ target: { type: "executable", path: executable }, input: "input ü\n", args: command(windows ? "[Console]::InputEncoding=[Text.UTF8Encoding]::new($false); [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); [Console]::Out.Write([Console]::In.ReadToEnd())" : "cat") });
+  assertContract(new TextDecoder().decode(stdin.stdout) === "input ü\n", "Initial stdin was not drained before EOF");
+  const binary = await processes.runCommand({ target: { type: "executable", path: executable }, args: command(windows ? "$o=[Console]::OpenStandardOutput(); $o.Write([byte[]](0,255,1),0,3)" : "printf '\\000\\377\\001'") });
+  assertContract(binary.stdout.join() === "0,255,1", "Binary process output was corrupted");
+  const chunks: Uint8Array[] = [];
+  const child = await processes.spawn({ target: { type: "executable", path: executable }, args: command(windows ? "[Console]::Out.Write([Console]::In.ReadToEnd())" : "cat"), onOutput: chunk => { if (chunk.stream === "stdout") chunks.push(chunk.bytes); } });
   await child.write("streamed"); await child.closeInput(); const streamed = await child.exited;
-  assertContract(streamed.stdout === "streamed" && chunks.length > 0, "Streaming stdin/stdout did not finish");
-  const timeout = await processes.runCommand({ executable, timeoutMs: 1000, args: command(windows ? "Start-Sleep -Seconds 30" : "sleep 30") });
-  assertContract(timeout.timedOut && timeout.signal, "Process timeout did not terminate the child");
-  const stopped = await processes.spawn({ executable, args: command(windows ? "Start-Sleep -Seconds 30" : "sleep 30") });
-  await stopped.terminate(); assertContract((await stopped.exited).signal, "Explicit termination did not complete");
+  assertContract(new TextDecoder().decode(streamed.stdout) === "streamed" && chunks.length > 0, "Streaming stdin/stdout did not finish");
+  const timeout = await processes.runCommand({ target: { type: "executable", path: executable }, timeoutMs: 1000, args: command(windows ? "Start-Sleep -Seconds 30" : "sleep 30") });
+  assertContract(timeout.timedOut && timeout.exit.type === "terminated", "Process timeout did not terminate the child");
+  const stopped = await processes.spawn({ target: { type: "executable", path: executable }, args: command(windows ? "Start-Sleep -Seconds 30" : "sleep 30") });
+  await stopped.terminate(); assertContract((await stopped.exited).exit.type === "terminated", "Explicit termination did not complete");
   if (windows) {
     const script = `${await files.getDirectory("temp")}/spark-args-${token}.ps1`;
     try {
       await files.writeText(script, "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); ConvertTo-Json -InputObject @($args) -Compress");
       const args = ["with spaces", 'embedded"quote', "ends\\", "", "ü&$()"];
-      const quoted = await processes.runCommand({ executable, args: ["-NoProfile", "-NonInteractive", "-File", script, ...args] });
-      assertContract(JSON.stringify(JSON.parse(quoted.stdout)) === JSON.stringify(args), "Windows argument quoting changed values");
+      const quoted = await processes.runCommand({ target: { type: "executable", path: executable }, args: ["-NoProfile", "-NonInteractive", "-File", script, ...args] });
+      assertContract(JSON.stringify(JSON.parse(new TextDecoder().decode(quoted.stdout))) === JSON.stringify(args), "Windows argument quoting changed values");
     } finally { await files.remove(script); }
   }
 }

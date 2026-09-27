@@ -7,20 +7,6 @@
 #import <vector>
 static NSString *ResolveCommandPath(NSString *command)
 {
-  NSString *expandedCommand = [command stringByExpandingTildeInPath];
-  if ([command hasPrefix:@"bundle:"]) {
-    NSString *root = [[[NSBundle mainBundle] resourcePath] stringByResolvingSymlinksInPath];
-    NSString *relative = [command substringFromIndex:7];
-    NSString *candidate = [[[root stringByAppendingPathComponent:relative] stringByStandardizingPath] stringByResolvingSymlinksInPath];
-    if ([candidate hasPrefix:[root stringByAppendingString:@"/"]] && [[NSFileManager defaultManager] isExecutableFileAtPath:candidate]) {
-      return candidate;
-    }
-    return nil;
-  }
-  if ([expandedCommand containsString:@"/"]) {
-    return [[NSFileManager defaultManager] isExecutableFileAtPath:expandedCommand] ? expandedCommand : nil;
-  }
-
   NSString *homeDirectory = NSHomeDirectory();
   NSArray<NSString *> *fallbackPaths = @[
     [homeDirectory stringByAppendingPathComponent:@".local/bin"],
@@ -46,8 +32,10 @@ static NSString *ResolveCommandPath(NSString *command)
 
   NSFileManager *fileManager = [NSFileManager defaultManager];
   for (NSString *directory in searchPaths) {
+    if (![directory hasPrefix:@"/"]) continue;
     NSString *candidate = [directory stringByAppendingPathComponent:command];
-    if ([fileManager isExecutableFileAtPath:candidate]) {
+    BOOL directoryEntry = NO;
+    if ([fileManager fileExistsAtPath:candidate isDirectory:&directoryEntry] && !directoryEntry && [fileManager isExecutableFileAtPath:candidate]) {
       return candidate;
     }
   }
@@ -62,6 +50,7 @@ static NSString *ResolveCommandPath(NSString *command)
 @property BOOL timedOut;
 @property BOOL truncated;
 @property BOOL ended;
+@property BOOL inputClosed;
 @property dispatch_queue_t inputQueue;
 @end
 @implementation SparkProcess
@@ -83,13 +72,14 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
 - (void)stopAll { for (SparkProcess *process in self.processes.allValues) if (process.running) kill(-process.pid, SIGKILL); }
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 
-- (void)terminate:(SparkProcess *)process {
+- (BOOL)terminate:(SparkProcess *)process {
   if (process.running) {
-    kill(-process.pid, SIGTERM);
+    if (kill(-process.pid, SIGTERM) != 0 && errno != ESRCH) return NO;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
       if (process.running) kill(-process.pid, SIGKILL);
     });
   }
+  return YES;
 }
 
 - (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
@@ -118,6 +108,10 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
         }
       }
       if (![executable hasPrefix:@"/"]) { SparkInvalid(reject, @"Executable path must be absolute"); return; }
+      NSUInteger captureLimit = [args[@"captureLimitBytes"] unsignedIntegerValue];
+      if (captureLimit > 8 * 1024 * 1024) { SparkInvalid(reject, @"Invalid capture limit"); return; }
+      NSData *initialInput = args[@"inputBase64"] ? [[NSData alloc] initWithBase64EncodedString:args[@"inputBase64"] options:0] : nil;
+      if (args[@"inputBase64"] && !initialInput) { SparkInvalid(reject, @"Invalid process input"); return; }
       process = [SparkProcess new];
       process.inputQueue = dispatch_queue_create("desktop.process.input", DISPATCH_QUEUE_SERIAL);
       NSMutableDictionary *environment = [NSProcessInfo.processInfo.environment mutableCopy]; [environment addEntriesFromDictionary:args[@"env"] ?: @{}];
@@ -126,7 +120,11 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
       // Create the process group atomically, before executable code can fork.
       // NSTask + setpgid after launch has a race and cannot provide this contract.
       posix_spawnattr_t attributes; posix_spawnattr_init(&attributes);
-      posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT);
+      // GCD/host threads can block or ignore signals. Child defaults must not
+      // inherit that state or cooperative SIGTERM degrades into forced SIGKILL.
+      sigset_t mask, defaults; sigemptyset(&mask); sigfillset(&defaults);
+      posix_spawnattr_setsigmask(&attributes, &mask); posix_spawnattr_setsigdefault(&attributes, &defaults);
+      posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF);
       posix_spawnattr_setpgroup(&attributes, 0);
       posix_spawn_file_actions_t actions; posix_spawn_file_actions_init(&actions);
       posix_spawn_file_actions_adddup2(&actions, input.fileHandleForReading.fileDescriptor, STDIN_FILENO);
@@ -161,7 +159,7 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
               do { count = read(handle.fileDescriptor, bytes, sizeof(bytes)); } while (count < 0 && errno == EINTR);
               if (count <= 0) break;
               NSData *data = [NSData dataWithBytes:bytes length:(NSUInteger)count];
-              @synchronized(process) { NSUInteger remaining = 8 * 1024 * 1024 - buffer.length; if (data.length > remaining) process.truncated = YES; [buffer appendData:[data subdataWithRange:NSMakeRange(0, MIN(remaining, data.length))]]; }
+              @synchronized(process) { NSUInteger remaining = captureLimit - buffer.length; if (data.length > remaining) process.truncated = YES; [buffer appendData:[data subdataWithRange:NSMakeRange(0, MIN(remaining, data.length))]]; }
               if ([args[@"streamOutput"] boolValue]) dispatch_sync(dispatch_get_main_queue(), ^{ if (!self.invalidated) SparkEmit(@{ @"type": @"processOutput", @"processId": key, @"stream": stream, @"base64": [data base64EncodedStringWithOptions:0] }); });
             }
           } @catch (NSException *exception) { /* Closing the runtime interrupts pipe reads. */ }
@@ -179,24 +177,32 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
           process.ended = YES;
           dispatch_async(process.inputQueue, ^{ @try { [process.input closeFile]; } @catch (NSException *exception) {} });
           if (!self.invalidated) SparkEmit(@{ @"type": @"processExit", @"processId": key, @"result": @{
-            @"exitCode": @(WIFEXITED(terminationStatus) ? WEXITSTATUS(terminationStatus) : WTERMSIG(terminationStatus)), @"signal": @(WIFSIGNALED(terminationStatus)),
-            @"stdout": [[NSString alloc] initWithData:stdoutData encoding:NSUTF8StringEncoding] ?: @"", @"stderr": [[NSString alloc] initWithData:stderrData encoding:NSUTF8StringEncoding] ?: @"",
+            @"exitCode": @(WIFEXITED(terminationStatus) ? WEXITSTATUS(terminationStatus) : WTERMSIG(terminationStatus)), @"terminated": @(WIFSIGNALED(terminationStatus)), @"terminationSignal": WIFSIGNALED(terminationStatus) ? @(WTERMSIG(terminationStatus)) : (id)NSNull.null,
             @"stdoutBase64": [stdoutData base64EncodedStringWithOptions:0], @"stderrBase64": [stderrData base64EncodedStringWithOptions:0],
             @"timedOut": @(process.timedOut), @"outputTruncated": @(process.truncated) } });
           [self.processes removeObjectForKey:key];
         });
       });
-      if (args[@"input"]) { NSData *data = [args[@"input"] dataUsingEncoding:NSUTF8StringEncoding]; dispatch_async(process.inputQueue, ^{ @try { [process.input writeData:data]; } @catch (NSException *exception) {} }); }
+      if (initialInput) { NSData *data = initialInput; dispatch_async(process.inputQueue, ^{ @try { [process.input writeData:data]; } @catch (NSException *exception) {} }); }
       if (args[@"timeoutMs"]) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, [args[@"timeoutMs"] doubleValue] * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
         if (process.running) { process.timedOut = YES; [self terminate:process]; }
       });
     } else {
       if (!process || process.ended) { if ([method isEqual:@"terminate"] || [method isEqual:@"closeInput"]) { resolve(@"null"); return; } reject(@"E_CLOSED", @"Process has exited", nil); return; }
-      if ([method isEqual:@"terminate"]) [self terminate:process];
+      if ([method isEqual:@"terminate"]) {
+        if (![self terminate:process]) { SparkReject(reject, [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]); return; }
+      }
       else if ([method isEqual:@"write"] || [method isEqual:@"closeInput"]) {
+        NSData *data = [method isEqual:@"write"] ? [[NSData alloc] initWithBase64EncodedString:args[@"base64"] options:0] : nil;
+        if ([method isEqual:@"write"] && !data) { SparkInvalid(reject, @"Invalid process input"); return; }
         dispatch_async(process.inputQueue, ^{
-          @try { if ([method isEqual:@"write"]) [process.input writeData:[args[@"text"] dataUsingEncoding:NSUTF8StringEncoding]]; else [process.input closeFile]; resolve(@"null"); }
-          @catch (NSException *exception) { reject(@"E_PIPE", @"Process input is closed", nil); }
+          @try {
+            if ([method isEqual:@"write"]) {
+              if (process.inputClosed) { reject(@"E_CLOSED", @"Process input is closed", nil); return; }
+              [process.input writeData:data];
+            } else if (!process.inputClosed) { [process.input closeFile]; process.inputClosed = YES; }
+            resolve(@"null");
+          } @catch (NSException *exception) { reject(@"E_CLOSED", @"Process input is closed", nil); }
         }); return;
       } else { SparkInvalid(reject, @"Unknown process operation"); return; }
     }

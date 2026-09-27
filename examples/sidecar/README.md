@@ -41,16 +41,16 @@ an app-specific helper. Then call the existing process API:
 ```ts
 import { spawn } from '@legendapp/spark/processes';
 
-const child = await spawn({ executable: 'helper:echo', timeoutMs: 5000 });
+const child = await spawn({ target: { type: 'helper', name: 'echo' }, timeoutMs: 5000 });
 await child.write('hello from React Native\n');
 await child.closeInput();
 const result = await child.exited;
 console.log(result.stdout); // hello from React Native
 ```
 
-Test failure with `args: ['--fail']` and check `exitCode === 7` and `stderr`.
+Test failure with `args: ['--fail']` and check `exit.type === "exited" && exit.code === 7` and decoded `stderr`.
 For large/binary output, use the optional `spawn` output callback; chunks are
-base64 bytes, not independently decodable UTF-8 messages.
+`Uint8Array` bytes; decode text incrementally across chunks.
 
 ## Complete request/response example
 
@@ -78,7 +78,7 @@ Alternatively, create an ordinary desktop app and copy the three TypeScript file
 ```sh
 spark create HelperDemo
 cd HelperDemo
-npm install @legendapp/spark@0.1.0-prototype.0 base64-js@1.5.1
+npm install @legendapp/spark@0.1.0-prototype.0
 # Copy App.tsx, client.ts, service.ts from this example into this directory.
 # Copy worker.c into helpers/worker/worker.c.
 mkdir -p helpers/worker/binaries/macos-arm64

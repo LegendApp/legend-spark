@@ -82,3 +82,9 @@ test("authentication imports without native modules", async () => {
   await expect(auth.getRandomBytesAsync(32)).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
   await expect(auth.createAuthSession()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
+
+import * as processes from "../packages/processes/src/index";
+test("process execution imports safely without installed modules", async () => {
+  expect(processes.getProcessAvailability()).toEqual({ available: false, reason: "missing-module" });
+  await expect(processes.spawn({ target: { type: "executable", path: "/bin/cat" } })).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+});

@@ -58,7 +58,6 @@
     "./settings/observable": "./settings-observable.ts",
     "./ui/classnames": "./ui-classnames.ts",
     "./app/exit": "./app-exit.ts",
-    "./processes/commands": "./processes-commands.ts",
     "./drag-drop/views": "./drag-drop-views.ts",
     "./contracts": "./contracts.ts"
   },

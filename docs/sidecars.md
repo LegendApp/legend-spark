@@ -33,7 +33,7 @@ Legacy `"helpers": { "tool": "bin/tool" }` declarations still copy one file.
 
 The layout is `Contents/Helpers/backend.helper/...` on macOS and
 `Helpers/backend.helper/...` beside the Windows host executable. Internal relative
-paths are preserved. Native lookup resolves `helper:backend` through the generated
+paths are preserved. The helper target resolves `backend` through the generated
 entry metadata; application code does not depend on installation paths. Resolve
 read-only assets relative to the executable, not the inherited working directory.
 Write mutable data into application storage, never into the installed bundle.
@@ -48,8 +48,12 @@ at JavaScript startup. Fast Refresh still handles JavaScript-only edits.
 ```ts
 import { spawn } from '@legendapp/spark/processes';
 
-const child = await spawn({ executable: 'helper:backend', args: ['--stdio'] }, chunk => {
-  // chunk.stream is stdout or stderr; chunk.base64 contains bytes.
+const child = await spawn({
+  target: { type: 'helper', name: 'backend' },
+  args: ['--stdio'],
+  onOutput: chunk => {
+    // chunk.stream is stdout or stderr; chunk.bytes is Uint8Array.
+  },
 });
 await child.write('a request\n');
 await child.closeInput();
@@ -65,7 +69,9 @@ should call `terminate()` from cleanup, including during Fast Refresh.
 
 Processes belong to the native module/runtime, not a durable background service.
 A full runtime teardown stops them; normal application quit stops them.
-`terminate()` requests termination; await `exited` to wait for completion.
+`terminate()` resolves after the process tree exits and both output streams drain.
+Concurrent termination calls join; failed native termination remains retryable.
+`exited` also exposes the captured output and exit result.
 On macOS cancellation sends SIGTERM to the process group, followed by SIGKILL
 if it is still running after two seconds. Root-process exit kills remaining group
 members so descendants cannot hold output pipes open forever. Children must not
@@ -77,18 +83,41 @@ runtime teardown still need native Windows acceptance testing.
 
 Arguments bypass a shell. Environment overrides merge with the inherited process
 environment; do not put secrets in command-line arguments. `cwd` is an optional
-absolute working directory. `input` and `write()` accept UTF-8 strings; arbitrary
-binary stdin is not a public API yet. Writes resolve after the native pipe write,
+absolute working directory. `input` and `write()` accept UTF-8 strings or `Uint8Array`. Writes resolve after the native pipe write,
 so await them rather than queuing unbounded writes.
 
-Output callbacks receive base64 chunks of arbitrary boundaries. Decode bytes and
-spark messages yourself; a chunk is neither a UTF-8 character boundary nor a JSON
-message boundary. Both streams continue draining after their captured result
-reaches 8 MiB per stream; `outputTruncated` reports that cap. Streaming callbacks
-still receive the full output. Use `stdoutBase64`/`stderrBase64` for captured binary
-output; text fields are conveniences. Startup failures reject `spawn`; nonzero
-exit codes are reported through `exited`. `runCommand` closes stdin and waits for
-exit. No automatic retry or restart policy is imposed.
+Output callbacks receive byte chunks with arbitrary boundaries. Decode text with a
+streaming `TextDecoder` when needed; a chunk is neither a UTF-8 character boundary
+nor a protocol message boundary. Both streams continue draining after capture
+reaches `captureLimitBytes` (default and maximum 8 MiB per stream, zero disables
+capture); `outputTruncated` reports discarded captured bytes. Streaming callbacks
+still receive all bytes. Results expose `stdout` and `stderr` as `Uint8Array`.
+
+Targets are explicit: `{ type: "executable", path }` takes an absolute native path
+or local file URL; `{ type: "helper", name }` selects a packaged helper; and
+`{ type: "command", name }` resolves a basename through the host PATH. The lookup
+uses absolute PATH entries only. macOS also checks conventional user/system tool
+locations; Windows uses [SearchPathW](https://learn.microsoft.com/en-us/windows/win32/api/processenv/nf-processenv-searchpathw)
+with an explicit PATH and `.exe` default extension (`.com` may be named explicitly),
+without shell/batch parsing.
+`resolveCommand(name)` returns the resolved absolute path or `null`. Per-process
+`env.PATH` overrides affect the child environment, not host command lookup.
+
+Startup failures reject `spawn`. Nonzero child exit is an expected result:
+`exit` is `{ type: "exited", code }` or `{ type: "terminated", signal }`. The signal
+is the POSIX number on macOS and `null` for Windows job termination. `timedOut`
+marks the native deadline, `aborted` marks an AbortSignal received before exit,
+and capture truncation is reported separately. These flags can overlap a natural
+exit when cancellation races completion. Pre-aborted launches reject `E_ABORTED`;
+once launched, cancellation terminates the process tree and returns partial
+output through `exited`. Invalid native data and transport errors reject.
+
+`runCommand` closes stdin after initial input and waits for exit using the same
+options and result. The separate command-runner object, mock facade, and
+`/processes/commands` import are removed. For sequential work, await each call in
+a loop; use `Promise.all` for explicit concurrency. No retry/restart/batch policy
+is imposed. Callers can inject the `spawn`/`runCommand` functions into their own
+services, as the sidecar example does.
 
 ## Distribution
 
@@ -143,3 +172,9 @@ Validated on macOS on 2026-09-17: the real native sidecar probe passed all nine
 checks, including binary worker requests, crash/restart, readiness/request timeouts,
 and normal app-quit cleanup. Portable client tests also split replies into three-byte
 fragments to exercise framing independently of OS pipe chunking.
+
+The API cleanup is additionally covered by a lightweight test executing the actual
+macOS native implementation (with the React bridge replaced by a test transport).
+It checks binary stdin/stdout, capture limits, SIGTERM/timeouts, nonzero exit and
+descendant cleanup. The prior September 17 app acceptance used the earlier API;
+full RN-host and Windows acceptance of the revised contract remain pending.

@@ -3,7 +3,6 @@ import { MediaSessionDemo } from "./MediaSessionDemo";
 import { DesktopFoundations } from "./DesktopFoundations";
 import { ActionButton } from "./ActionButton";
 import { EventResults, useEventResults } from "./EventResults";
-import { toByteArray } from "base64-js";
 import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { useUniwind, withUniwind } from "uniwind";
@@ -83,20 +82,20 @@ export function Expansion({ report }: { report: (value: unknown) => void }) {
     <Text style={styles.heading} className="text-foreground">Global shortcut and processes</Text>
     <View style={styles.row}>
       <ActionButton disabled={busy} onPress={() => act(toggleShortcut)}>{hotkey ? "Remove global shortcut" : "Register ⌘⇧F12"}</ActionButton>
-      <ActionButton onPress={() => act(() => runCommand({ executable: "/usr/bin/uname", args: ["-a"] }))}>Run /usr/bin/uname</ActionButton>
+      <ActionButton onPress={() => act(() => runCommand({ target: { type: "executable", path: "/usr/bin/uname" }, args: ["-a"] }))}>Run /usr/bin/uname</ActionButton>
       <ActionButton disabled={busy} onPress={() => act(async () => {
         setBusy(true);
         const decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
         reportProcess("Process starting…");
         try {
-          child.current = await spawn({ executable: "/bin/sh", args: ["-c", "printf 'First output\\n'; sleep 1; printf 'Second output\\n'; printf 'Example stderr\\n' >&2"], timeoutMs: 5000 }, chunk => {
-            const text = decoders[chunk.stream].decode(toByteArray(chunk.base64), { stream: true });
+          child.current = await spawn({ target: { type: "executable", path: "/bin/sh" }, args: ["-c", "printf 'First output\\n'; sleep 1; printf 'Second output\\n'; printf 'Example stderr\\n' >&2"], timeoutMs: 5000, onOutput: chunk => {
+            const text = decoders[chunk.stream].decode(chunk.bytes, { stream: true });
             if (text) reportProcess(`${chunk.stream}: ${text}`);
-          });
+          } });
           const result = await child.current.exited;
-          reportProcess(`Process exited with code ${result.exitCode}${result.timedOut ? " (timed out)" : ""}.`);
+          reportProcess(`Process exited with code ${result.exit.type === "exited" ? result.exit.code : "terminated"}${result.timedOut ? " (timed out)" : ""}.`);
           report(result);
-          return `Process exited with code ${result.exitCode}${result.timedOut ? " (timed out)" : ""}.`;
+          return `Process exited with code ${result.exit.type === "exited" ? result.exit.code : "terminated"}${result.timedOut ? " (timed out)" : ""}.`;
         } catch (error) { reportProcess(error); throw error; }
         finally {
           for (const stream of ["stdout", "stderr"] as const) {

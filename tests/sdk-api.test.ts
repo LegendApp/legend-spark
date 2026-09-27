@@ -263,18 +263,18 @@ test("global hotkey conflicts clean subscriptions and distinct registrations dis
 test("process subscriptions exist before launch and survive immediate exit", async () => {
   handlers.set("NativeDesktopProcesses.spawn", args => {
     emit("NativeDesktopApp", "desktop", { type: "processOutput", processId: args.id, stream: "stdout", base64: "aGk=" });
-    emit("NativeDesktopApp", "desktop", { type: "processExit", processId: args.id, result: { exitCode: 0, stdout: "hi" } });
+    emit("NativeDesktopApp", "desktop", { type: "processExit", processId: args.id, result: { exitCode: 0, terminated: false, terminationSignal: null, timedOut: false, outputTruncated: false, stdoutBase64: "aGk=", stderrBase64: "" } });
   });
   const chunks: string[] = [];
-  const child = await processes.spawn({ executable: "/bin/echo", args: ["hi"] }, chunk => chunks.push(chunk.base64));
-  expect(await child.exited).toMatchObject({ stdout: "hi", exitCode: 0 }); expect(chunks).toEqual(["aGk="]);
+  const child = await processes.spawn({ target: { type: "executable", path: "/bin/echo" }, args: ["hi"], onOutput: chunk => chunks.push(new TextDecoder().decode(chunk.bytes)) });
+  expect(await child.exited).toMatchObject({ stdout: new TextEncoder().encode("hi"), exit: { type: "exited", code: 0 } }); expect(chunks).toEqual(["hi"]);
   expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0); await child.terminate();
-  await expect(child.write("late")).rejects.toThrow("exited");
+  await expect(child.write("late")).rejects.toThrow("closed");
 });
 test("process validation and failed launches do not leak listeners", async () => {
-  for (const options of [{ executable: "echo" }, { executable: "helper:../escape" }, { executable: "helper:" }, { executable: "/bin/echo", input: 123 as never }, { executable: "/bin/echo", timeoutMs: -1 }, { executable: "/bin/echo", env: { "BAD=KEY": "x" } }]) await expect(processes.spawn(options)).rejects.toThrow();
+  for (const options of [{ target: { type: "executable", path: "echo" } }, { target: { type: "helper", name: "../escape" } }, { target: { type: "helper", name: "" } }, { target: { type: "executable", path: "/bin/echo" }, input: 123 as never }, { target: { type: "executable", path: "/bin/echo" }, timeoutMs: -1 }, { target: { type: "executable", path: "/bin/echo" }, env: { "BAD=KEY": "x" } }]) await expect(processes.spawn(options as never)).rejects.toThrow();
   handlers.set("NativeDesktopProcesses.spawn", () => { throw nativeError("E_NOT_FOUND"); });
-  await expect(processes.spawn({ executable: "/missing" })).rejects.toThrow("E_NOT_FOUND"); expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0);
+  await expect(processes.spawn({ target: { type: "executable", path: "/missing" } })).rejects.toThrow("E_NOT_FOUND"); expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0);
 });
 test("dialog cancellation, default buttons and input validation", async () => {
   handlers.set("NativeDesktopMessageDialog.show", () => ({ button: 0, checked: false }));
@@ -450,11 +450,11 @@ test("Windows dialogs retain four-button indices, parent selection and checkbox 
 test("Windows process validation accepts drive and UNC executables without allowing relative paths", async () => {
   platform.OS = "windows";
   const processes = await import("../packages/processes/src/index.ts");
-  await processes.spawn({ executable: String.raw`C:\Program Files\tool.exe`, cwd: String.raw`\\server\share\folder`, args: ['a"b', "", "space value"] });
+  await processes.spawn({ target: { type: "executable", path: String.raw`C:\Program Files\tool.exe` }, cwd: String.raw`\\server\share\folder`, args: ['a"b', "", "space value"] });
   expect(calls.at(-1)).toMatchObject({ native: "NativeDesktopProcesses", method: "spawn", args: { executable: String.raw`C:\Program Files\tool.exe`, args: ['a"b', "", "space value"] } });
-  await expect(processes.spawn({ executable: "tool.exe" })).rejects.toThrow("absolute");
-  await expect(processes.spawn({ executable: "C:tool.exe" })).rejects.toThrow("absolute");
-  await expect(processes.spawn({ executable: String.raw`C:\tool.exe`, cwd: "relative" })).rejects.toThrow("cwd");
+  await expect(processes.spawn({ target: { type: "executable", path: "tool.exe" } })).rejects.toThrow("absolute");
+  await expect(processes.spawn({ target: { type: "executable", path: "C:tool.exe" } })).rejects.toThrow("absolute");
+  await expect(processes.spawn({ target: { type: "executable", path: String.raw`C:\tool.exe` }, cwd: "relative" })).rejects.toThrow("absolute");
 });
 
 test("invalid Windows menu contributions leave the last good owner set intact", async () => {

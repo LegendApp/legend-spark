@@ -32,33 +32,66 @@ inline std::string Base64(std::string const &bytes) {
   DWORD length = 0; if (!CryptBinaryToStringA(reinterpret_cast<BYTE const *>(bytes.data()), static_cast<DWORD>(bytes.size()), CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, nullptr, &length)) throw_last_error();
   std::string result(length, '\0'); if (!CryptBinaryToStringA(reinterpret_cast<BYTE const *>(bytes.data()), static_cast<DWORD>(bytes.size()), CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, result.data(), &length)) throw_last_error(); result.resize(length); return result;
 }
-inline std::string UTF8(std::string const &bytes) { return bytes.empty() || MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(), static_cast<int>(bytes.size()), nullptr, 0) ? bytes : ""; }
+inline std::string DecodeBase64(std::string const &encoded) {
+  if (encoded.empty()) return {};
+  DWORD length = 0;
+  if (!CryptStringToBinaryA(encoded.data(), static_cast<DWORD>(encoded.size()), CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT, nullptr, &length, nullptr, nullptr)) throw hresult_invalid_argument(L"Invalid process input");
+  std::string bytes(length, '\0');
+  if (!CryptStringToBinaryA(encoded.data(), static_cast<DWORD>(encoded.size()), CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT, reinterpret_cast<BYTE *>(bytes.data()), &length, nullptr, nullptr)) throw hresult_invalid_argument(L"Invalid process input");
+  bytes.resize(length); return bytes;
+}
+inline std::wstring ResolveCommand(std::wstring const &name) {
+  if (name.empty() || name.find_first_of(L"/\\:") != std::wstring::npos) throw hresult_invalid_argument(L"Expected a command name");
+  DWORD size = GetEnvironmentVariableW(L"PATH", nullptr, 0);
+  if (!size) return {};
+  std::wstring paths(size, L'\0'); GetEnvironmentVariableW(L"PATH", paths.data(), size);
+  std::wstring absolutePaths; size_t start = 0;
+  while (start < paths.size()) {
+    auto end = paths.find(L';', start); auto directory = paths.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
+    directory.resize(wcslen(directory.c_str()));
+    if (directory.size() >= 2 && directory.front() == L'"' && directory.back() == L'"') directory = directory.substr(1, directory.size() - 2);
+    if (std::filesystem::path(directory).is_absolute()) { if (!absolutePaths.empty()) absolutePaths += L';'; absolutePaths += directory; }
+    if (end == std::wstring::npos) break; start = end + 1;
+  }
+  if (absolutePaths.empty()) return {};
+  wchar_t result[32768]{};
+  DWORD count = SearchPathW(absolutePaths.c_str(), name.c_str(), L".exe", 32768, result, nullptr);
+  if (!count) return {};
+  if (count >= 32768) throw hresult_invalid_argument(L"Resolved command path is too long");
+  auto attributes = GetFileAttributesW(result);
+  if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY)) return {};
+  auto extension = std::filesystem::path(result).extension().wstring();
+  if (_wcsicmp(extension.c_str(), L".exe") && _wcsicmp(extension.c_str(), L".com")) return {};
+  return result;
+}
 struct Process : std::enable_shared_from_this<Process> {
   struct Input { std::string text; bool close; std::optional<React::ReactPromise<std::string>> promise; };
   handle process, job, input, output, error;
   std::mutex mutex; std::condition_variable condition; std::deque<Input> queue;
   std::atomic<bool> done{false}, terminated{false}, timedOut{false}, truncated{false};
   bool inputClosed = false;
+  size_t captureLimit = 8 * 1024 * 1024;
   std::string id, stdoutBytes, stderrBytes;
   React::ReactContext context;
+  void StopChecked() { if (job && !TerminateJobObject(job.get(), 1)) throw_last_error(); terminated = true; }
   void Stop() noexcept { terminated = true; if (job) TerminateJobObject(job.get(), 1); }
-  void Write(Input value) { std::lock_guard lock(mutex); if (done || inputClosed) { if (value.promise) { if (value.close) value.promise->Resolve("null"); else value.promise->Reject(React::ReactError{"E_PIPE", "Process input is closed"}); } return; } if (value.close) inputClosed = true; queue.push_back(std::move(value)); condition.notify_one(); }
+  void Write(Input value) { std::lock_guard lock(mutex); if (done || inputClosed) { if (value.promise) { if (value.close) value.promise->Resolve("null"); else value.promise->Reject(React::ReactError{"E_CLOSED", "Process input is closed"}); } return; } if (value.close) inputClosed = true; queue.push_back(std::move(value)); condition.notify_one(); }
   void InputLoop() noexcept {
     while (true) {
       Input value;
       { std::unique_lock lock(mutex); condition.wait(lock, [&]() { return done || !queue.empty(); }); if (queue.empty()) break; value = std::move(queue.front()); queue.pop_front(); }
-      if (done || !input) { if (value.promise) value.promise->Reject(React::ReactError{"E_PIPE", "Process input is closed"}); continue; }
+      if (done || !input) { if (value.promise) value.promise->Reject(React::ReactError{"E_CLOSED", "Process input is closed"}); continue; }
       bool success = true;
       if (value.close) input.close();
       else for (size_t offset = 0; offset < value.text.size();) { DWORD written = 0; if (!WriteFile(input.get(), value.text.data() + offset, static_cast<DWORD>(std::min<size_t>(16384, value.text.size() - offset)), &written, nullptr) || !written) { success = false; break; } offset += written; }
-      if (value.promise) { if (success) value.promise->Resolve("null"); else value.promise->Reject(React::ReactError{"E_PIPE", "Process input is closed"}); }
+      if (value.promise) { if (success) value.promise->Resolve("null"); else value.promise->Reject(React::ReactError{"E_CLOSED", "Process input is closed"}); }
     }
     input.close();
   }
   void Read(HANDLE pipe, std::string &buffer, std::string stream, bool streaming, std::shared_ptr<std::atomic<bool>> active) {
     char bytes[16384]; DWORD count;
     while (ReadFile(pipe, bytes, sizeof(bytes), &count, nullptr) && count) {
-      const auto keep = std::min<size_t>(count, 8 * 1024 * 1024 - buffer.size()); buffer.append(bytes, keep); if (keep < count) truncated = true;
+      const auto keep = std::min<size_t>(count, captureLimit - buffer.size()); buffer.append(bytes, keep); if (keep < count) truncated = true;
       if (streaming && *active) {
         auto flushed = std::make_shared<std::promise<void>>(); auto wait = flushed->get_future();
         auto data = Base64(std::string(bytes, count)); auto key = id;
@@ -77,6 +110,10 @@ struct Process : std::enable_shared_from_this<Process> {
     if (!SetHandleInformation(parentReads ? read.get() : write.get(), HANDLE_FLAG_INHERIT, 0)) throw_last_error();
   }
   void Start(Json::JsonObject const &args) {
+    const auto limit = args.GetNamedNumber(L"captureLimitBytes", 8 * 1024 * 1024);
+    if (limit < 0 || limit > 8 * 1024 * 1024) throw hresult_invalid_argument(L"Invalid capture limit");
+    captureLimit = static_cast<size_t>(limit);
+    const auto initialInput = args.HasKey(L"inputBase64") ? DecodeBase64(to_string(args.GetNamedString(L"inputBase64"))) : std::string{};
     auto executable = std::wstring(args.GetNamedString(L"executable"));
     if (executable.rfind(L"helper:", 0) == 0) {
       const auto name = executable.substr(7); if (name.empty() || name.find_first_not_of(L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != std::wstring::npos) throw hresult_invalid_argument(L"Invalid helper name");
@@ -117,7 +154,7 @@ struct Process : std::enable_shared_from_this<Process> {
     process.attach(info.hProcess); handle thread{info.hThread};
     if (!AssignProcessToJobObject(job.get(), process.get())) { auto error = GetLastError(); TerminateProcess(process.get(), 1); throw hresult_error(HRESULT_FROM_WIN32(error)); }
     if (ResumeThread(thread.get()) == static_cast<DWORD>(-1)) { Stop(); throw_last_error(); }
-    if (args.HasKey(L"input")) Write({to_string(args.GetNamedString(L"input")), false, std::nullopt});
+    if (args.HasKey(L"inputBase64")) Write({initialInput, false, std::nullopt});
   }
 };
 REACT_MODULE(SparkProcesses, L"NativeDesktopProcesses")
@@ -131,7 +168,12 @@ struct SparkProcesses {
     current->context.UIDispatcher().Post([current, method, encoded, promise]() {
       try {
         if (!*current->active) { promise.Reject(React::ReactError{"E_CLOSED", "Process module is closed"}); return; }
-        auto args = Json::JsonObject::Parse(to_hstring(encoded)); auto id = to_string(args.GetNamedString(L"id"));
+        auto args = Json::JsonObject::Parse(to_hstring(encoded));
+        if (method == "resolveCommand") {
+          auto path = ResolveCommand(std::wstring(args.GetNamedString(L"command")));
+          promise.Resolve(to_string(path.empty() ? Json::JsonValue::CreateNullValue().Stringify() : Json::JsonValue::CreateStringValue(path).Stringify())); return;
+        }
+        auto id = to_string(args.GetNamedString(L"id"));
         auto found = current->processes.find(id);
         if (method == "spawn") {
           if (found != current->processes.end()) { promise.Reject(React::ReactError{"E_EXISTS", "Process id already exists"}); return; }
@@ -152,19 +194,21 @@ struct SparkProcesses {
             if (input.joinable()) input.join(); if (output.joinable()) output.join(); if (error.joinable()) error.join();
             current->context.UIDispatcher().Post([current, child, exit]() {
               if (*current->active) current->context.EmitJSEvent(L"RCTDeviceEventEmitter", L"desktop", React::JSValueObject{{"type", "processExit"}, {"processId", child->id}, {"result", React::JSValueObject{
-                {"exitCode", static_cast<int64_t>(exit)}, {"signal", child->terminated.load()}, {"timedOut", child->timedOut.load()}, {"outputTruncated", child->truncated.load()},
-                {"stdout", UTF8(child->stdoutBytes)}, {"stderr", UTF8(child->stderrBytes)}, {"stdoutBase64", Base64(child->stdoutBytes)}, {"stderrBase64", Base64(child->stderrBytes)}}});
+                {"exitCode", static_cast<int64_t>(exit)}, {"terminated", child->terminated.load()}, {"terminationSignal", nullptr}, {"timedOut", child->timedOut.load()}, {"outputTruncated", child->truncated.load()},
+                {"stdoutBase64", Base64(child->stdoutBytes)}, {"stderrBase64", Base64(child->stderrBytes)}}});
               current->processes.erase(child->id);
             });
           }).detach();
           current->processes.emplace(id, child);
         } else if (found == current->processes.end() || found->second->done) { if (method == "terminate" || method == "closeInput") promise.Resolve("null"); else promise.Reject(React::ReactError{"E_CLOSED", "Process has exited"}); return; }
-        else if (method == "terminate") found->second->Stop();
-        else if (method == "write" || method == "closeInput") { found->second->Write({method == "write" ? to_string(args.GetNamedString(L"text")) : "", method == "closeInput", promise}); return; }
+        else if (method == "terminate") found->second->StopChecked();
+        else if (method == "write" || method == "closeInput") { found->second->Write({method == "write" ? DecodeBase64(to_string(args.GetNamedString(L"base64"))) : "", method == "closeInput", promise}); return; }
         else throw hresult_invalid_argument(L"Unknown process operation");
         promise.Resolve("null");
-      } catch (hresult_error const &error) { promise.Reject(React::ReactError{"E_PROCESS", to_string(error.message())}); }
-      catch (std::exception const &error) { promise.Reject(React::ReactError{"E_PROCESS", error.what()}); }
+      } catch (hresult_error const &error) { const auto code = error.code();
+        const char *kind = code == E_INVALIDARG ? "E_INVALID_ARGUMENT" : code == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) || code == HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND) ? "E_NOT_FOUND" : code == E_ACCESSDENIED ? "E_PERMISSION_DENIED" : "E_NATIVE";
+        promise.Reject(React::ReactError{kind, to_string(error.message())}); }
+      catch (std::exception const &error) { promise.Reject(React::ReactError{"E_NATIVE", error.what()}); }
     });
   }
 };

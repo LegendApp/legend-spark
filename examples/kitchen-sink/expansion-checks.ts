@@ -38,19 +38,19 @@ export async function runExpansionChecks(check: (name: string, action: () => Pro
     await windows.closeWindow("modal-next");
   });
   await check("process argv, input, stderr and streaming output", async () => {
-    const chunks: string[] = [];
-    const child = await spawn({ executable: "/bin/cat", timeoutMs: 5000 }, chunk => chunks.push(chunk.base64));
+    const chunks: Uint8Array[] = [];
+    const child = await spawn({ target: { type: "executable", path: "/bin/cat" }, timeoutMs: 5000, onOutput: chunk => chunks.push(chunk.bytes) });
     await child.write("Unicode 🦀 input\n"); await child.closeInput();
     const result = await child.exited;
-    assert(result.exitCode === 0 && result.stdout === "Unicode 🦀 input\n" && chunks.length > 0, "Process IO failed");
-    const failure = await runCommand({ executable: "/bin/sh", args: ["-c", "printf error >&2; exit 7"] });
-    assert(failure.exitCode === 7 && failure.stderr === "error", "Exit status or stderr missing");
+    assert(result.exit.type === "exited" && result.exit.code === 0 && new TextDecoder().decode(result.stdout) === "Unicode 🦀 input\n" && chunks.length > 0, "Process IO failed");
+    const failure = await runCommand({ target: { type: "executable", path: "/bin/sh" }, args: ["-c", "printf error >&2; exit 7"] });
+    assert(failure.exit.type === "exited" && failure.exit.code === 7 && new TextDecoder().decode(failure.stderr) === "error", "Exit status or stderr missing");
   });
   await check("process timeouts and cancellation reap children", async () => {
-    const result = await runCommand({ executable: "/bin/sleep", args: ["10"], timeoutMs: 100 });
-    assert(result.timedOut && result.signal, "Timeout did not terminate process");
-    const child = await spawn({ executable: "/bin/sleep", args: ["10"] }); await child.terminate();
-    assert((await child.exited).signal, "Cancellation did not terminate process");
+    const result = await runCommand({ target: { type: "executable", path: "/bin/sleep" }, args: ["10"], timeoutMs: 100 });
+    assert(result.timedOut && result.exit.type === "terminated", "Timeout did not terminate process");
+    const child = await spawn({ target: { type: "executable", path: "/bin/sleep" }, args: ["10"] }); await child.terminate();
+    assert((await child.exited).exit.type === "terminated", "Cancellation did not terminate process");
   });
   await check("global shortcut multiple registrations and conflict cleanup", async () => {
     const first = await registerGlobalShortcut("Cmd+Shift+F18", () => {});

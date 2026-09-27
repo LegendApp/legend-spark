@@ -1,7 +1,7 @@
-import { toByteArray } from "base64-js";
-export type Child = { write(text: string): Promise<void>; closeInput(): Promise<void>; terminate(): Promise<void>; exited: Promise<{ exitCode: number; timedOut: boolean; stderr: string }> };
-export type Spawn = (options: { executable: string; args?: string[] }, output: (chunk: { stream: "stdout" | "stderr"; base64: string }) => void) => Promise<Child>;
-export type HelperOptions = { executable?: string; args?: string[]; readyTimeoutMs?: number; requestTimeoutMs?: number };
+import type { ProcessHandle, ProcessOptions, ProcessTarget } from "@legendapp/spark/processes";
+export type Child = Pick<ProcessHandle, "write" | "closeInput" | "terminate" | "exited">;
+export type Spawn = (options: ProcessOptions) => Promise<Child>;
+export type HelperOptions = { target?: ProcessTarget; args?: string[]; readyTimeoutMs?: number; requestTimeoutMs?: number };
 /** Example-owned protocol, not a framework RPC API. One client may serve all windows. */
 export async function startHelper(spawn: Spawn, options: HelperOptions = {}) {
   const readyTimeout = options.readyTimeoutMs ?? 5000, requestTimeout = options.requestTimeoutMs ?? 5000;
@@ -30,17 +30,17 @@ export async function startHelper(spawn: Spawn, options: HelperOptions = {}) {
     else item.resolve(payload === "-" ? new Uint8Array() : Uint8Array.from(payload.match(/../g)!, byte => parseInt(byte, 16)));
   }
   try {
-    child = await spawn({ executable: options.executable ?? "helper:worker", args: options.args }, chunk => {
+    child = await spawn({ target: options.target ?? { type: "helper", name: "worker" }, args: options.args, onOutput: chunk => {
       if (failure || closing) return;
       try {
-        for (const byte of toByteArray(chunk.base64)) {
+        for (const byte of chunk.bytes) {
           if (chunk.stream === "stderr") { diagnostics = (diagnostics + String.fromCharCode(byte)).slice(-4096); continue; }
           if (byte === 10) { line(buffer); buffer = ""; }
           else { if (byte < 32 || byte > 126 || buffer.length >= 33000) throw Error("Invalid or oversized helper frame"); buffer += String.fromCharCode(byte); }
         }
       } catch (error) { fail(error instanceof Error ? error : new Error(String(error))); }
-    });
-    void child.exited.then(result => { if (!closing) fail(new Error(`Helper exited (${result.exitCode}): ${result.stderr || diagnostics}`)); }, error => fail(new Error(String(error))));
+    } });
+    void child.exited.then(result => { if (!closing) fail(new Error(`Helper exited (${result.exit.type === "exited" ? result.exit.code : "terminated"}): ${new TextDecoder().decode(result.stderr) || diagnostics}`)); }, error => fail(new Error(String(error))));
     if (failure) { await child.terminate(); throw failure; }
     await ready;
   } catch (error) { clearTimeout(readyTimer); await child?.terminate(); await child?.exited; throw error; }
