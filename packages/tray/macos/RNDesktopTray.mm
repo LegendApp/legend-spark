@@ -3,14 +3,15 @@
 
 @interface SparkTrayItem : NSObject
 @property NSString *identifier;
+@property NSString *instanceId;
 @property NSStatusItem *item;
 @property NSDictionary *options;
 - (void)clicked:(id)sender;
 - (void)selected:(NSMenuItem *)sender;
 @end
 @implementation SparkTrayItem
-- (void)clicked:(id)sender { SparkEmit(@{ @"type": @"trayClick", @"trayId": self.identifier }); }
-- (void)selected:(NSMenuItem *)sender { SparkEmit(@{ @"type": @"trayAction", @"trayId": self.identifier, @"itemId": sender.representedObject }); }
+- (void)clicked:(id)sender { SparkEmit(@{ @"type": @"trayClick", @"trayId": self.identifier, @"instanceId": self.instanceId }); }
+- (void)selected:(NSMenuItem *)sender { SparkEmit(@{ @"type": @"trayAction", @"trayId": self.identifier, @"instanceId": self.instanceId, @"itemId": sender.representedObject }); }
 @end
 static NSMenu *Menu(NSArray *items, SparkTrayItem *owner) {
   NSMenu *menu = [NSMenu new]; menu.autoenablesItems = NO;
@@ -36,6 +37,7 @@ RCT_EXPORT_MODULE(NativeDesktopTray)
     NSDictionary *args = SparkArgs(json); NSString *key = args[@"id"];
     if (![key isKindOfClass:NSString.class] || !key.length) { SparkInvalid(reject, @"Tray needs an id"); return; }
     SparkTrayItem *owner = self.items[key];
+    if (owner && ![owner.instanceId isEqual:args[@"instanceId"]]) { if ([method isEqual:@"remove"]) resolve(@"null"); else reject([method isEqual:@"create"] ? @"E_ALREADY_EXISTS" : @"E_NOT_FOUND", @"Tray belongs to a different instance", nil); return; }
     if ([method isEqual:@"remove"]) { if (owner) [NSStatusBar.systemStatusBar removeStatusItem:owner.item]; [self.items removeObjectForKey:key]; resolve(@"null"); return; }
     if (![method isEqual:@"create"] && ![method isEqual:@"update"]) { SparkInvalid(reject, @"Unknown tray operation"); return; }
     if ([method isEqual:@"create"] && owner) { reject(@"E_ALREADY_EXISTS", @"Tray id already exists", nil); return; }
@@ -47,8 +49,14 @@ RCT_EXPORT_MODULE(NativeDesktopTray)
       if (!image) { SparkInvalid(reject, @"Unknown SF Symbol name"); return; }
       [image setTemplate:YES];
     }
+    if ([options[@"imagePath"] length]) {
+      image = [[NSImage alloc] initWithContentsOfFile:options[@"imagePath"]];
+      if (!image) { reject(@"E_INVALID_DATA", @"Tray image could not be decoded", nil); return; }
+      NSSize size = image.size; CGFloat height = MAX(1, NSStatusBar.systemStatusBar.thickness - 4);
+      image.size = NSMakeSize(size.height > 0 ? height * size.width / size.height : height, height);
+    }
     if (![options[@"title"] length] && !image) { SparkInvalid(reject, @"Tray needs a title or symbol"); return; }
-    if (!owner) { owner = [SparkTrayItem new]; owner.identifier = key; owner.item = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength]; self.items[key] = owner; }
+    if (!owner) { owner = [SparkTrayItem new]; owner.identifier = key; owner.instanceId = args[@"instanceId"]; owner.item = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength]; self.items[key] = owner; }
     owner.options = options;
     owner.item.button.title = options[@"title"] ?: @""; owner.item.button.image = image;
     owner.item.button.imagePosition = NSImageLeft; owner.item.button.toolTip = options[@"tooltip"];

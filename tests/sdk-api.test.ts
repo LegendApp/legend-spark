@@ -194,7 +194,7 @@ test("tray validates duplicate menu ids and cleans failed registrations", async 
 test("tray scopes actions, serializes updates and waits before removing", async () => {
   const actions: unknown[] = []; const item = await tray.createTray({ id: "test", macos: { symbol: "star" }, menu: [{ type: "action", id: "open", label: "Open" }], onAction: event => actions.push(event) });
   emit("NativeDesktopApp", "desktop", { type: "trayClick", trayId: "other" });
-  emit("NativeDesktopApp", "desktop", { type: "trayAction", trayId: "test", itemId: "open" }); expect(actions).toHaveLength(1);
+  emit("NativeDesktopApp", "desktop", { type: "trayAction", trayId: "test", instanceId: calls[0].args.instanceId, itemId: "open" }); expect(actions).toHaveLength(1);
   await Promise.all([item.update({ title: "One" }), item.update({ title: "Two" }), item.remove()]);
   await item.remove(); expect(calls.map(call => call.method)).toEqual(["create", "update", "update", "remove"]);
   await expect(item.update({ title: "Late" })).rejects.toThrow("removed");
@@ -601,7 +601,7 @@ test("tray removal joins, stops callbacks immediately and retries native failure
   const item = await tray.createTray({ id: "test", title: "Test", onAction: event => actions.push(event) });
   handlers.set("NativeDesktopTray.remove", () => { throw nativeError("E_NATIVE"); });
   const first = item.remove(); expect(item.remove()).toBe(first);
-  emit("NativeDesktopApp", "desktop", { type: "trayClick", trayId: "test" });
+  emit("NativeDesktopApp", "desktop", { type: "trayClick", trayId: "test", instanceId: calls[0].args.instanceId });
   await expect(first).rejects.toMatchObject({ code: "E_NATIVE" }); expect(actions).toEqual([]);
   handlers.delete("NativeDesktopTray.remove"); await item.remove(); await item.remove();
   expect(calls.filter(call => call.method === "remove")).toHaveLength(2);
@@ -616,7 +616,7 @@ test("tray snapshots accepted updates, filters actions and keeps last successful
   handlers.set("NativeDesktopTray.update", () => { throw nativeError("E_NATIVE"); });
   await expect(item.update({ title: "Failed" })).rejects.toThrow(); handlers.delete("NativeDesktopTray.update");
   await item.update({ tooltip: "Tooltip" }); expect(calls.at(-1)!.args.title).toBe("Initial");
-  for (const itemId of ["open", "mutated", "next"]) emit("NativeDesktopApp", "desktop", { type: "trayAction", trayId: "test", itemId });
+  for (const itemId of ["open", "mutated", "next"]) emit("NativeDesktopApp", "desktop", { type: "trayAction", trayId: "test", instanceId: calls[0].args.instanceId, itemId });
   expect(actions).toEqual([{ type: "action", itemId: "next" }]);
   await expect(item.update({ id: "other" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
   await item.remove();
@@ -738,4 +738,21 @@ test("recent documents and openPath accept native paths without URL interpolatio
   await expect(documents.getRecentDocuments()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   handlers.set("NativeDesktopLinks.canOpen", () => "yes");
   await expect(links.canOpenURL("demo://test")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+});
+
+
+test("tray image inputs are portable and delayed actions cannot reach a reused ID", async () => {
+  const firstActions = vi.fn(), nextActions = vi.fn();
+  const first = await tray.createTray({ id: "image", image: { path: "file:///tmp/icon.png" }, onAction: firstActions });
+  const retired = calls.at(-1)!.args.instanceId;
+  expect(calls.at(-1)!.args.imagePath).toBe("/tmp/icon.png");
+  await expect(first.update({ macos: { symbol: "star" } })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await first.remove();
+  const next = await tray.createTray({ id: "image", title: "Next", onAction: nextActions });
+  const current = calls.at(-1)!.args.instanceId; expect(current).not.toBe(retired);
+  emit("NativeDesktopApp", "desktop", { type: "trayClick", trayId: "image", instanceId: retired }); expect(nextActions).not.toHaveBeenCalled();
+  emit("NativeDesktopApp", "desktop", { type: "trayClick", trayId: "image", instanceId: current }); expect(nextActions).toHaveBeenCalledExactlyOnceWith({ type: "click" });
+  await next.remove(); expect(calls.at(-1)!.args).toEqual({ id: "image", instanceId: current });
+  platform.OS = "windows";
+  const windows = await tray.createTray({ id: "windows", image: { path: "C:\\Icons\\tray.png" } }); await windows.remove();
 });

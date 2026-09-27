@@ -2,6 +2,9 @@
 #include "NativeModules.h"
 #include <shellapi.h>
 #include <windowsx.h>
+#include <wincodec.h>
+#pragma comment(lib, "Windowscodecs.lib")
+#pragma comment(lib, "Ole32.lib")
 #include <map>
 #include <memory>
 #include <vector>
@@ -12,7 +15,7 @@ namespace winrt::SparkTray {
 namespace React = Microsoft::ReactNative;
 namespace Json = Windows::Data::Json;
 struct TrayState : std::enable_shared_from_this<TrayState> {
-  struct Item { std::string id; Json::JsonObject options; HICON icon = nullptr; };
+  struct Item { std::string id, instanceId; Json::JsonObject options; HICON icon = nullptr; };
   HWND hwnd = nullptr; UINT sequence = 0, taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
   React::ReactContext context;
   std::map<UINT, Item> items;
@@ -29,6 +32,24 @@ struct TrayState : std::enable_shared_from_this<TrayState> {
     if (operation == NIM_ADD) { data.uVersion = NOTIFYICON_VERSION_4; Shell_NotifyIconW(NIM_SETVERSION, &data); }
   }
   static HICON Icon(Json::JsonObject const &options) {
+    const auto imagePath = options.GetNamedString(L"imagePath", L"");
+    if (!imagePath.empty()) {
+      com_ptr<IWICImagingFactory> factory; check_hresult(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(factory.put())));
+      com_ptr<IWICBitmapDecoder> decoder; check_hresult(factory->CreateDecoderFromFilename(imagePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnLoad, decoder.put()));
+      com_ptr<IWICBitmapFrameDecode> frame; check_hresult(decoder->GetFrame(0, frame.put()));
+      const UINT width = GetSystemMetrics(SM_CXSMICON), height = GetSystemMetrics(SM_CYSMICON);
+      com_ptr<IWICBitmapScaler> scaler; check_hresult(factory->CreateBitmapScaler(scaler.put())); check_hresult(scaler->Initialize(frame.get(), width, height, WICBitmapInterpolationModeFant));
+      com_ptr<IWICFormatConverter> converter; check_hresult(factory->CreateFormatConverter(converter.put()));
+      check_hresult(converter->Initialize(scaler.get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom));
+      std::vector<BYTE> pixels(width * height * 4); check_hresult(converter->CopyPixels(nullptr, width * 4, static_cast<UINT>(pixels.size()), pixels.data()));
+      BITMAPINFO info{}; info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER); info.bmiHeader.biWidth = width; info.bmiHeader.biHeight = -static_cast<LONG>(height); info.bmiHeader.biPlanes = 1; info.bmiHeader.biBitCount = 32; info.bmiHeader.biCompression = BI_RGB;
+      void *bits = nullptr; auto color = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS, &bits, nullptr, 0); if (!color) throw_last_error();
+      memcpy(bits, pixels.data(), pixels.size()); std::vector<BYTE> maskBits(((width + 15) / 16) * 2 * height, 0);
+      auto mask = CreateBitmap(width, height, 1, 1, maskBits.data()); if (!mask) { DeleteObject(color); throw_last_error(); }
+      ICONINFO iconInfo{}; iconInfo.fIcon = TRUE; iconInfo.hbmColor = color; iconInfo.hbmMask = mask;
+      auto icon = CreateIconIndirect(&iconInfo); const auto error = GetLastError(); DeleteObject(color); DeleteObject(mask);
+      if (!icon) throw hresult_error(HRESULT_FROM_WIN32(error)); return icon;
+    }
     // Windows has no SF Symbols or tray text label. Its app icon identifies the
     // item; title supplies its accessible tooltip when no tooltip is specified.
     HICON large = nullptr, small = nullptr; wchar_t executable[32768]{};
@@ -62,16 +83,16 @@ struct TrayState : std::enable_shared_from_this<TrayState> {
   void Select(UINT key, UINT event, LPARAM position) {
     auto keepAlive = shared_from_this();
     auto found = items.find(key); if (found == items.end()) return;
-    const auto id = found->second.id;
+    const auto id = found->second.id, instanceId = found->second.instanceId;
     auto entries = found->second.options.GetNamedArray(L"menu", Json::JsonArray());
     if (event != NIN_SELECT && event != NIN_KEYSELECT && event != WM_CONTEXTMENU) return;
-    if (entries.Size() == 0) { context.EmitJSEvent(L"RCTDeviceEventEmitter", L"desktop", React::JSValueObject{{"type", "trayClick"}, {"trayId", id}}); return; }
+    if (entries.Size() == 0) { context.EmitJSEvent(L"RCTDeviceEventEmitter", L"desktop", React::JSValueObject{{"type", "trayClick"}, {"trayId", id}, {"instanceId", instanceId}}); return; }
     std::map<UINT, std::string> actions; UINT command = 0; auto menu = Menu(entries, actions, command);
     POINT point{GET_X_LPARAM(position), GET_Y_LPARAM(position)}; if (point.x == -1 && point.y == -1) GetCursorPos(&point);
     SetForegroundWindow(hwnd);
     auto selected = TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, point.x, point.y, hwnd, nullptr);
     DestroyMenu(menu); if (hwnd) PostMessageW(hwnd, WM_NULL, 0, 0);
-    if (actions.count(selected) && items.count(key)) context.EmitJSEvent(L"RCTDeviceEventEmitter", L"desktop", React::JSValueObject{{"type", "trayAction"}, {"trayId", id}, {"itemId", actions.at(selected)}});
+    if (actions.count(selected) && items.count(key)) context.EmitJSEvent(L"RCTDeviceEventEmitter", L"desktop", React::JSValueObject{{"type", "trayAction"}, {"trayId", id}, {"instanceId", instanceId}, {"itemId", actions.at(selected)}});
   }
   static LRESULT CALLBACK Proc(HWND hwnd, UINT message, WPARAM w, LPARAM l) noexcept {
     auto self = reinterpret_cast<TrayState *>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -108,19 +129,25 @@ struct SparkTray {
       try {
         auto args = Json::JsonObject::Parse(to_hstring(encoded)); auto id = to_string(args.GetNamedString(L"id")); current->EnsureWindow();
         UINT key = 0; for (auto const &[number, item] : current->items) if (item.id == id) { key = number; break; }
+        const auto instanceId = to_string(args.GetNamedString(L"instanceId"));
+        if (key && current->items.at(key).instanceId != instanceId) {
+          if (method == "remove") promise.Resolve("null");
+          else promise.Reject(React::ReactError{method == "create" ? "E_ALREADY_EXISTS" : "E_NOT_FOUND", "Tray belongs to a different instance"});
+          return;
+        }
         if (method == "remove") current->Remove(key);
         else if (method == "create" || method == "update") {
           if (method == "create" && key) { promise.Reject(React::ReactError{"E_ALREADY_EXISTS", "Tray id already exists"}); return; }
           if (method == "update" && !key) { promise.Reject(React::ReactError{"E_NOT_FOUND", "Tray was removed"}); return; }
           Json::JsonObject options = key ? Json::JsonObject::Parse(current->items.at(key).options.Stringify()) : Json::JsonObject();
           for (auto const &entry : args) options.SetNamedValue(entry.Key(), entry.Value());
-          if (options.GetNamedString(L"title", L"").empty() && options.GetNamedString(L"symbol", L"").empty()) throw hresult_invalid_argument(L"Tray needs a title or symbol");
+          if (options.GetNamedString(L"title", L"").empty() && options.GetNamedString(L"symbol", L"").empty() && options.GetNamedString(L"imagePath", L"").empty()) throw hresult_invalid_argument(L"Tray needs a title or symbol");
           // Validate menus before replacing a live icon.
           std::map<UINT, std::string> actions; UINT command = 0; auto menu = TrayState::Menu(options.GetNamedArray(L"menu", Json::JsonArray()), actions, command); DestroyMenu(menu);
           auto icon = TrayState::Icon(options); const bool creating = key == 0;
           if (creating) { for (UINT i = 0; i < 65535; ++i) { auto candidate = current->sequence = current->sequence % 65535 + 1; if (!current->items.count(candidate)) { key = candidate; break; } } }
           if (!key) { DestroyIcon(icon); throw hresult_error(E_FAIL, L"Too many tray items"); }
-          TrayState::Item item{id, options, icon};
+          TrayState::Item item{id, instanceId, options, icon};
           try { current->Publish(key, item, creating ? NIM_ADD : NIM_MODIFY); } catch (...) { DestroyIcon(icon); throw; }
           if (!creating) DestroyIcon(current->items.at(key).icon);
           current->items.insert_or_assign(key, std::move(item));
