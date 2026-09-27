@@ -16,18 +16,18 @@ export async function runIntegrationChecks(check: (name: string, action: () => P
   const token = `sdk-integrations-${Date.now()}`;
     await check("notifications: read permission and scoped pending/delivered lists without prompting", async () => {
       const permission = await notifications.getNotificationPermission();
-      assert(["notDetermined", "denied", "authorized", "provisional", "unknown"].includes(permission), "Invalid permission");
+      assert(["undetermined", "denied", "granted", "unknown"].includes(permission.status), "Invalid permission");
       assert(Array.isArray(await notifications.getPendingNotifications()), "Missing pending list");
       assert(Array.isArray(await notifications.getDeliveredNotifications()), "Missing delivered list");
       const listener = await notifications.onNotificationResponse(() => {}); listener.remove();
-      const notification = { id: token, title: "SDK scheduled test", delay: 3600 };
-      if (permission === "authorized" || permission === "provisional") {
+      const notification = { id: token, content: { title: "SDK scheduled test" }, trigger: { type: "delay" as const, delaySeconds: 3600 } };
+      if (permission.granted) {
         try {
-          await notifications.showNotification(notification);
+          await notifications.scheduleNotification(notification);
           await until(async () => (await notifications.getPendingNotifications()).includes(token), "Notification was not scheduled");
         } finally { await notifications.cancelNotification(token); }
         await until(async () => !(await notifications.getPendingNotifications()).includes(token), "Notification cancellation did not complete");
-      } else await rejects(() => notifications.showNotification(notification), "E_NOTIFICATION_PERMISSION");
+      } else await rejects(() => notifications.scheduleNotification(notification), "E_PERMISSION_DENIED");
       await notifications.cancelNotification(token);
     });
     await check("tray: create, duplicate conflict, update, remove and recreate", async () => {

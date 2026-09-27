@@ -190,12 +190,16 @@ test("menu owner ids and patch payloads survive native transport", async () => {
 });
 
 test("notifications validate before transport and distinguish permission reads from prompts", async () => {
-  for (const notification of [{ id: "../bad", title: "test" }, { id: "test", title: " " }, { id: "test", title: "test", delay: 0 }]) expect(() => notifications.showNotification(notification)).toThrow();
+  for (const notification of [{ id: "../bad", content: { title: "test" } }, { id: "test", content: { title: " " } }, { id: "test", content: { title: "test" }, delay: 0 }]) await expect(notifications.showNotification(notification)).rejects.toThrow();
   expect(calls).toHaveLength(0);
-  await notifications.getNotificationPermission(); await notifications.requestNotificationPermission();
-  await notifications.showNotification({ id: "test", title: "Hello", delay: 2, data: { route: "inbox" } });
-  await notifications.cancelNotification("test"); await notifications.clearNotifications();
-  expect(calls.map(call => call.method)).toEqual(["permission", "requestPermission", "show", "cancel", "clear"]);
+  handlers.set("NativeDesktopNotifications.permission", () => "authorized");
+  handlers.set("NativeDesktopNotifications.requestPermission", () => "authorized");
+  expect(await notifications.getNotificationPermission()).toMatchObject({ status: "granted", granted: true }); await notifications.requestNotificationPermission();
+  await notifications.scheduleNotification({ id: "test", content: { title: "Hello", data: { route: "inbox" } }, trigger: { type: "delay", delaySeconds: 2 } });
+  expect(calls.at(-1)?.args).toEqual({ id: "test", title: "Hello", data: { route: "inbox" }, sound: false, delay: 2 });
+  await notifications.cancelNotification("test"); await notifications.dismissNotification("test");
+  await notifications.cancelAllNotifications(); await notifications.dismissAllNotifications();
+  expect(calls.map(call => call.method)).toEqual(["permission", "requestPermission", "show", "cancel", "dismiss", "cancelAll", "dismissAll"]);
 });
 test("notification responses deduplicate queued/live overlap and dispose", async () => {
   const event = { type: "notificationResponse", id: "r1", notificationId: "n1", action: "open", data: {} };
@@ -562,4 +566,52 @@ test("updater subscriptions filter invalid events and unsupported platforms do n
   expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "unsupported-platform" });
   await expect(updates.startUpdates()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
   expect(calls).toHaveLength(0);
+});
+
+
+test("notification permission distinguishes platform prompting and provisional authorization", async () => {
+  for (const [raw, status, granted, canAskAgain] of [["notDetermined", "undetermined", false, true], ["denied", "denied", false, false], ["provisional", "granted", true, true], ["unknown", "unknown", false, null]]) {
+    handlers.set("NativeDesktopNotifications.permission", () => raw);
+    expect(await notifications.getNotificationPermission()).toEqual({ status, granted, canAskAgain, macos: { authorization: raw } });
+  }
+  platform.OS = "windows"; handlers.set("NativeDesktopNotifications.permission", () => "authorized");
+  expect(await notifications.getNotificationPermission()).toEqual({ status: "granted", granted: true, canAskAgain: false });
+});
+
+test("notification scheduling validates trigger and content without partially submitting", async () => {
+  for (const delaySeconds of [0, -1, NaN, Infinity, 315360001]) await expect(notifications.scheduleNotification({ id: "one", content: { title: "Title" }, trigger: { type: "delay", delaySeconds } })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  for (const content of [{ title: "Title", data: { count: 1 } }, { title: "Title", sound: "yes" }, { title: "Title", subtitle: null }, { title: "Title", extra: true }]) await expect(notifications.showNotification({ id: "one", content } as never)).rejects.toThrow();
+  await expect(notifications.cancelNotification(null as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  expect(calls).toHaveLength(0);
+  await notifications.showNotification({ id: "one", content: { title: "Title" } });
+  expect(calls.at(-1)?.args).toEqual({ id: "one", title: "Title", sound: false });
+});
+
+test("notifications reject invalid native output and preserve permission errors", async () => {
+  handlers.set("NativeDesktopNotifications.permission", () => "maybe");
+  await expect(notifications.getNotificationPermission()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  handlers.set("NativeDesktopNotifications.pending", () => ["valid", null]);
+  await expect(notifications.getPendingNotifications()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  const cause = nativeError("E_PERMISSION_DENIED");
+  handlers.set("NativeDesktopNotifications.show", () => { throw cause; });
+  await expect(notifications.showNotification({ id: "test", content: { title: "Title" } })).rejects.toMatchObject({ code: "E_PERMISSION_DENIED", cause });
+});
+
+test("malformed response replay cleans listeners before rejecting", async () => {
+  const listener = vi.fn();
+  handlers.set("NativeDesktopNotifications.responses", () => [{ type: "notificationResponse", id: "bad" }]);
+  await expect(notifications.onNotificationResponse(listener)).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  expect(listener).not.toHaveBeenCalled(); expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0);
+});
+
+test("Windows response replay and live callbacks share validation and disposal", async () => {
+  platform.OS = "windows";
+  const event = { type: "notificationResponse", id: "event", notificationId: "notice", action: "open", data: {} };
+  handlers.set("NativeDesktopApp.notificationResponses", () => { emit("NativeDesktopApp", "desktop", event); return [event]; });
+  const listener = vi.fn(); const sub = await notifications.onNotificationResponse(listener);
+  emit("NativeDesktopApp", "desktop", { ...event, id: "invalid", data: { invalid: 1 } });
+  expect(listener).toHaveBeenCalledTimes(1); sub.remove(); sub.remove();
+  emit("NativeDesktopApp", "desktop", { ...event, id: "later" }); expect(listener).toHaveBeenCalledTimes(1);
+  platform.OS = "ios"; expect(notifications.getNotificationAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
+  await expect(notifications.getNotificationPermission()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
 });

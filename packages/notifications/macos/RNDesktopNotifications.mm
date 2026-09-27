@@ -83,25 +83,27 @@ RCT_EXPORT_MODULE(NativeDesktopNotifications)
       UNNotificationTrigger *trigger = args[@"delay"] ? [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:[args[@"delay"] doubleValue] repeats:NO] : nil;
       UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:Identifier(args[@"id"]) content:content trigger:trigger];
       [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings *settings) {
-        if (settings.authorizationStatus != UNAuthorizationStatusAuthorized && settings.authorizationStatus != UNAuthorizationStatusProvisional) { reject(@"E_NOTIFICATION_PERMISSION", @"Request notification permission from a user action before showing notifications", nil); return; }
+        if (settings.authorizationStatus != UNAuthorizationStatusAuthorized && settings.authorizationStatus != UNAuthorizationStatusProvisional) { reject(@"E_PERMISSION_DENIED", @"Request notification permission from a user action before showing notifications", nil); return; }
         [center addNotificationRequest:request withCompletionHandler:^(NSError *error) { if (error) SparkReject(reject, error); else resolve(@"null"); }];
       }];
-    } else if ([method isEqual:@"cancel"]) {
-      [center removePendingNotificationRequestsWithIdentifiers:@[Identifier(args[@"id"])]];
-      [center removeDeliveredNotificationsWithIdentifiers:@[Identifier(args[@"id"])]]; resolve(@"null");
-    } else if ([method isEqual:@"pending"] || [method isEqual:@"delivered"] || [method isEqual:@"clear"]) {
-      BOOL clear = [method isEqual:@"clear"];
-      if ([method isEqual:@"pending"] || clear) [center getPendingNotificationRequestsWithCompletionHandler:^(NSArray<UNNotificationRequest *> *requests) {
-        NSMutableArray *ids = [NSMutableArray new]; NSMutableArray *nativeIds = [NSMutableArray new];
+    } else if ([method isEqual:@"cancel"] || [method isEqual:@"dismiss"]) {
+      NSArray *ids = @[Identifier(args[@"id"])];
+      if ([method isEqual:@"cancel"]) [center removePendingNotificationRequestsWithIdentifiers:ids];
+      else [center removeDeliveredNotificationsWithIdentifiers:ids];
+      resolve(@"null");
+    } else if ([method isEqual:@"pending"] || [method isEqual:@"cancelAll"]) {
+      [center getPendingNotificationRequestsWithCompletionHandler:^(NSArray<UNNotificationRequest *> *requests) {
+        NSMutableArray *ids = [NSMutableArray new], *nativeIds = [NSMutableArray new];
         for (UNNotificationRequest *request in requests) if (Owns(request)) { [ids addObject:request.content.userInfo[@"sparkId"]]; [nativeIds addObject:request.identifier]; }
-        if (clear) [center removePendingNotificationRequestsWithIdentifiers:nativeIds]; else resolve(SparkJSON(ids));
-        if (clear) [center getDeliveredNotificationsWithCompletionHandler:^(NSArray<UNNotification *> *notifications) {
-          NSMutableArray *delivered = [NSMutableArray new]; for (UNNotification *notification in notifications) if (Owns(notification.request)) [delivered addObject:notification.request.identifier];
-          [center removeDeliveredNotificationsWithIdentifiers:delivered]; resolve(@"null");
-        }];
+        if ([method isEqual:@"cancelAll"]) { [center removePendingNotificationRequestsWithIdentifiers:nativeIds]; resolve(@"null"); }
+        else resolve(SparkJSON(ids));
       }];
-      else [center getDeliveredNotificationsWithCompletionHandler:^(NSArray<UNNotification *> *notifications) {
-        NSMutableArray *ids = [NSMutableArray new]; for (UNNotification *notification in notifications) if (Owns(notification.request)) [ids addObject:notification.request.content.userInfo[@"sparkId"]]; resolve(SparkJSON(ids));
+    } else if ([method isEqual:@"delivered"] || [method isEqual:@"dismissAll"]) {
+      [center getDeliveredNotificationsWithCompletionHandler:^(NSArray<UNNotification *> *notifications) {
+        NSMutableArray *ids = [NSMutableArray new], *nativeIds = [NSMutableArray new];
+        for (UNNotification *notification in notifications) if (Owns(notification.request)) { [ids addObject:notification.request.content.userInfo[@"sparkId"]]; [nativeIds addObject:notification.request.identifier]; }
+        if ([method isEqual:@"dismissAll"]) { [center removeDeliveredNotificationsWithIdentifiers:nativeIds]; resolve(@"null"); }
+        else resolve(SparkJSON(ids));
       }];
     } else if ([method isEqual:@"responses"]) resolve(SparkJSON([delegate.responses copy]));
     else SparkInvalid(reject, @"Unknown notification operation");

@@ -114,20 +114,20 @@ export default function DesktopInteractionChecks({ check, onError, onBusy }: {
   }
   async function notificationChecks() {
     const permission = await notifications.requestNotificationPermission();
-    assertContract(permission === "authorized" || permission === "provisional", `Notification permission: ${permission}. Enable notifications in system settings and retry.`);
+    assertContract(permission.granted, `Notification permission: ${permission.status}. Enable notifications in system settings and retry.`);
     const id = `contract-${Date.now()}`;
     let received!: (value: notifications.NotificationResponse) => void;
     const response = new Promise<notifications.NotificationResponse>(resolve => { received = resolve; });
     const sub = await notifications.onNotificationResponse(value => { if (value.notificationId === id) received(value); });
     try {
-      await notifications.showNotification({ id, title: "Scheduled acceptance", delay: 120 });
+      await notifications.scheduleNotification({ id, content: { title: "Scheduled acceptance" }, trigger: { type: "delay", delaySeconds: 120 } });
       assertContract((await notifications.getPendingNotifications()).includes(id), "Scheduled notification is missing");
       await notifications.cancelNotification(id);
       assertContract(!(await notifications.getPendingNotifications()).includes(id), "Cancellation left a scheduled notification");
       setInstruction("Click the Spark notification to continue within 45 seconds. If hidden, open Notification Center.");
-      await notifications.showNotification({ id, title: "Click to continue", body: "spark notification acceptance", data: { token: id }, sound: false });
+      await notifications.showNotification({ id, content: { title: "Click to continue", body: "spark notification acceptance", data: { token: id }, sound: false } });
       await within(response.then(value => { assertContract(value.action === "open" && value.data.token === id, "Notification response lost its action or data"); }), 45000);
-    } finally { sub.remove(); await notifications.cancelNotification(id); }
+    } finally { sub.remove(); await notifications.cancelNotification(id); await notifications.dismissNotification(id); }
     setInstruction("Scheduling, cancellation, and notification click passed. Cold launch and OS delivery after exit require the separate native lifecycle checks.");
   }
   async function systemChecks() {

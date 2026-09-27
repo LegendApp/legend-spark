@@ -9,17 +9,19 @@ unused native modules and removes Sparkle when updates are unused.
 ```ts
 import {
   requestNotificationPermission, showNotification, onNotificationResponse,
-  cancelNotification,
+  dismissNotification,
 } from "@legendapp/spark/notifications";
 
 // In an Enable Notifications button handler:
 const permission = await requestNotificationPermission();
-if (permission === "authorized" || permission === "provisional") {
+if (permission.granted) {
   await showNotification({
     id: "export-finished",
-    title: "Export finished",
-    body: "Your document is ready.",
-    data: { documentId: "123" },
+    content: {
+      title: "Export finished",
+      body: "Your document is ready.",
+      data: { documentId: "123" },
+    },
   });
 }
 const subscription = await onNotificationResponse(response => {
@@ -27,17 +29,30 @@ const subscription = await onNotificationResponse(response => {
   // this particular interaction. action is open or dismiss.
   console.log(response.action, response.data.documentId);
 });
-await cancelNotification("export-finished");
+await dismissNotification("export-finished");
 subscription.remove();
 ```
 
-`getNotificationPermission()` reads permission without prompting. Showing a
-notification requires authorization and rejects with `E_NOTIFICATION_PERMISSION`
-otherwise. Optional `delay` schedules delivery after at least one second; `sound`
-enables the default sound. IDs are scoped to the project, so `clearNotifications`,
-`getPendingNotifications`, `getDeliveredNotifications`, and cancellation affect
-only that project's notifications. Cancellation removes pending and delivered
-copies. Data values must be strings.
+`getNotificationPermission()` reads permission without prompting. The result has
+`status`, `granted`, and `canAskAgain`; macOS also reports its authorization state,
+including provisional access. Unknown ability to prompt is `null`. Windows has no
+in-app permission prompt, so requesting permission reads settings and
+`canAskAgain` is false. Showing without authorization rejects with
+`E_PERMISSION_DENIED`. Availability is separate: `getNotificationAvailability()`
+can report unsupported targets or missing modules without prompting or throwing
+at import time.
+
+`showNotification({ id, content })` submits immediately.
+`scheduleNotification({ id, content, trigger: { type: 'delay', delaySeconds: 60 } })`
+schedules delivery; supported delays are one second through ten years. `sound`
+defaults to false on both targets. Submission success is OS acceptance, not proof
+of presentation. String data and project-scoped IDs are supported.
+
+`cancelNotification(id)` and `cancelAllNotifications()` affect pending delivery.
+`dismissNotification(id)` and `dismissAllNotifications()` affect delivered
+notifications. Missing IDs succeed. Both families only affect this project's
+notifications. OS removal is asynchronous; lists may briefly reflect the prior
+state. `getPendingNotifications()` and `getDeliveredNotifications()` return IDs.
 
 The native delegate installs before launch finishes and retains the latest 100
 responses for late JS subscribers. Subscriptions deduplicate queued/live overlap.

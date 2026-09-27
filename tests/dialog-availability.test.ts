@@ -27,3 +27,10 @@ test("updater imports without native modules and reports availability", async ()
   await expect(updates.startUpdates()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
   expect(() => updates.onUpdateEvent(() => {})).toThrow();
 });
+
+import * as notifications from "../packages/notifications/src/index";
+test("notifications import without installed modules", async () => {
+  expect(notifications.getNotificationAvailability()).toEqual({ available: false, reason: "missing-module" });
+  await expect(notifications.getNotificationPermission()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+  await expect(notifications.onNotificationResponse(() => {})).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+});

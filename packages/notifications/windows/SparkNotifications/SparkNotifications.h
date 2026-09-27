@@ -115,8 +115,10 @@ struct SparkNotifications {
         value->Ensure(); auto args = Json::JsonObject::Parse(to_hstring(encoded));
         if (method == "permission" || method == "requestPermission") { promise.Resolve(value->notifier.Setting() == Toast::NotificationSetting::Enabled ? "\"authorized\"" : "\"denied\""); return; }
         if (method == "show") value->Show(args);
-        else if (method == "cancel") { auto tag = Hash(args.GetNamedString(L"id")); value->RemovePending(tag); value->Forget(tag); Toast::ToastNotificationManager::History().Remove(tag, value->group, value->appId); }
-        else if (method == "clear") { value->RemovePending(L""); value->Close(); Toast::ToastNotificationManager::History().RemoveGroup(value->group, value->appId); }
+        else if (method == "cancel") value->RemovePending(Hash(args.GetNamedString(L"id")));
+        else if (method == "dismiss") { auto tag = Hash(args.GetNamedString(L"id")); value->Forget(tag); Toast::ToastNotificationManager::History().Remove(tag, value->group, value->appId); }
+        else if (method == "cancelAll") value->RemovePending(L"");
+        else if (method == "dismissAll") { value->Close(); Toast::ToastNotificationManager::History().RemoveGroup(value->group, value->appId); }
         else if (method == "pending" || method == "delivered") {
           Json::JsonArray result;
           if (method == "pending") { for (auto const &item : value->notifier.GetScheduledToastNotifications()) if (item.Group() == value->group) result.Append(Json::JsonValue::CreateStringValue(value->Id(item.Content()))); }
@@ -124,8 +126,8 @@ struct SparkNotifications {
           promise.Resolve(to_string(result.Stringify())); return;
         } else throw hresult_invalid_argument(L"Unsupported notification operation");
         promise.Resolve("null");
-      } catch (hresult_error const &error) { promise.Reject(React::ReactError{error.code() == E_ACCESSDENIED ? "E_NOTIFICATION_PERMISSION" : "E_NOTIFICATION", to_string(error.message())}); }
-      catch (std::exception const &error) { promise.Reject(React::ReactError{"E_NOTIFICATION", error.what()}); }
+      } catch (hresult_error const &error) { promise.Reject(React::ReactError{error.code() == E_ACCESSDENIED ? "E_PERMISSION_DENIED" : "E_NATIVE", to_string(error.message())}); }
+      catch (std::exception const &error) { promise.Reject(React::ReactError{"E_NATIVE", error.what()}); }
     });
   }
 };

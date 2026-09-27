@@ -21,7 +21,7 @@ export function Integrations({ report }: { report: (value: unknown) => void }) {
     mounted.current = true;
     let response: { remove(): void } | undefined;
     let disposed = false;
-    void notifications.getNotificationPermission().then(value => { if (!disposed) setPermission(value); }).catch(reportNotification);
+    void notifications.getNotificationPermission().then(value => { if (!disposed) setPermission(value.status); }).catch(reportNotification);
     void notifications.onNotificationResponse(reportNotification).then(value => { if (disposed) value.remove(); else response = value; }).catch(reportNotification);
     void updates.getUpdateStatus().then(async value => { if (value.available) { await updates.startUpdates(); value = await updates.getUpdateStatus(); } if (!disposed) setUpdateStatus(value); }).catch(reportUpdate);
     let events: { remove(): void } | undefined;
@@ -46,9 +46,9 @@ export function Integrations({ report }: { report: (value: unknown) => void }) {
     <Text style={{ fontSize: 18, fontWeight: "600" }} className="text-foreground">Notifications</Text>
     <Text className="text-muted">Permission: {permission}. The prebuilt runtime shares its host’s notification permission.</Text>
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-      <ActionButton onPress={() => act(async () => setPermission(await notifications.requestNotificationPermission()))}>Enable notifications</ActionButton>
-      <ActionButton onPress={() => act(async () => { await notifications.showNotification({ id: "kitchen-demo", title: "Hello from the kitchen sink", body: "Click to exercise notification responses.", data: { screen: "kitchen" } }); reportNotification("Notification submitted; waiting for a response."); return "Notification submitted."; })}>Send test notification</ActionButton>
-      <ActionButton onPress={() => act(notifications.clearNotifications)}>Clear project notifications</ActionButton>
+      <ActionButton onPress={() => act(async () => setPermission((await notifications.requestNotificationPermission()).status))}>Enable notifications</ActionButton>
+      <ActionButton onPress={() => act(async () => { await notifications.showNotification({ id: "kitchen-demo", content: { title: "Hello from the kitchen sink", body: "Click to exercise notification responses.", data: { screen: "kitchen" } } }); reportNotification("Notification submitted; waiting for a response."); return "Notification submitted."; })}>Send test notification</ActionButton>
+      <ActionButton onPress={() => act(async () => { await notifications.cancelAllNotifications(); await notifications.dismissAllNotifications(); })}>Clear project notifications</ActionButton>
     </View>
     <EventResults entries={notificationEvents} empty="Send a test notification and click it to see its response here." testID="notification-events" />
     <Text style={{ fontSize: 18, fontWeight: "600" }} className="text-foreground">Menu bar</Text>
