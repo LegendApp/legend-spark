@@ -50,3 +50,43 @@ test("auth transport errors reject instead of impersonating user cancellation", 
   await expect(session.open(authURL(session.state))).rejects.toThrow("needs a rebuild");
   expect(f.closed).toHaveLength(1);
 });
+
+test("failed disposal retains ownership, joins callers, and can retry", async () => {
+  let attempts = 0, rejectClose!: (error: Error) => void;
+  const f = fixture({ close: () => ++attempts === 1 ? new Promise((_, reject) => { rejectClose = reject; }) : Promise.resolve() });
+  const session = await f.create();
+  const first = session.dismiss(), second = session.dismiss();
+  await sleep(0); expect(attempts).toBe(1);
+  await expect(f.create()).rejects.toMatchObject({ code: "E_BUSY" });
+  rejectClose(new Error("close failed"));
+  await expect(first).rejects.toMatchObject({ code: "E_NATIVE" });
+  await expect(second).rejects.toMatchObject({ code: "E_NATIVE" });
+  await expect(f.create()).rejects.toMatchObject({ code: "E_BUSY" });
+  await session.dismiss(); expect(attempts).toBe(2);
+  const next = await f.create(); await next.dismiss();
+});
+
+test("failed preparation keeps failed cleanup for the next creation to retry", async () => {
+  let attempts = 0, prepare = 0;
+  const f = fixture({ prepare: async () => { if (++prepare === 1) throw Error("prepare failed"); return "http://127.0.0.1:12345/auth/callback"; }, close: async () => { if (++attempts === 1) throw Error("cleanup failed"); } });
+  await expect(f.create()).rejects.toMatchObject({ code: "E_NATIVE", message: "prepare failed" });
+  const next = await f.create(); expect(attempts).toBe(2); await next.dismiss();
+});
+
+test("timeout includes preparation and expired sessions never launch a browser", async () => {
+  const f = fixture({ prepare: async () => { await sleep(10); return "http://127.0.0.1:12345/auth/callback"; } });
+  const session = await f.create({ timeoutMs: 1 });
+  await expect(session.open(authURL(session.state))).resolves.toEqual({ type: "timeout" });
+  expect(f.opened).toHaveLength(0); expect(f.closed).toHaveLength(1);
+});
+
+test("invalid options and pre-abort reject using shared error codes", async () => {
+  const f = fixture();
+  await expect(f.create({ timeoutMs: 0 })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(f.create({ extra: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(f.create({ redirectUri: "relative" })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(f.create({ signal: AbortSignal.abort() })).rejects.toMatchObject({ code: "E_ABORTED" });
+  const session = await f.create();
+  await expect(session.open("not a URL")).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  const next = await f.create(); await next.dismiss();
+});

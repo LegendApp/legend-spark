@@ -42,11 +42,18 @@ scheme in application configuration and with the provider; preparation does not
 modify OS associations. Desktop claimed-HTTPS callbacks and IPv6 loopback are not
 implemented in this version.
 
-Only one session per JS runtime may be active. Preparation starts the timeout
-(default two minutes, maximum ten), so abandoned sessions release their listener.
+Only one session per JS runtime may be active. The timeout is measured from the
+start of preparation (default two minutes, maximum ten). Native setup must settle
+before creation returns; an already expired session never launches the browser.
 Pass an `AbortSignal` for cancellation or call `dismiss()`. Results are `success`
 (with URL), `cancel`, `dismiss`, or `timeout`; transport/launch failures reject.
-The session can be opened once. Closing a desktop browser tab is not detectable;
+The session can be opened once. Errors use Spark error codes: invalid inputs are
+`E_INVALID_ARGUMENT`, conflicting sessions are `E_BUSY`, malformed adapter results
+are `E_INVALID_DATA`, and a signal already aborted at creation is `E_ABORTED`.
+`dismiss()` stops callbacks immediately, joins concurrent cleanup and can be
+retried after failure. Ownership remains reserved until cleanup succeeds. If
+creation fails before returning a handle, the next creation retries its cleanup.
+ Closing a desktop browser tab is not detectable;
 use cancellation or timeout. Cancellation ends callback handling but cannot close
 the user's desktop browser tab. An in-flight flow does not survive a JS reload.
 
@@ -66,9 +73,14 @@ mobile/web loopback listener. Browser UI and callback completion delegate to
 [Expo WebBrowser](https://docs.expo.dev/versions/v54.0.0/sdk/webbrowser/), and
 cryptography delegates to Expo Crypto. On web, prepare before the interaction,
 then call `session.open()` directly inside the user's gesture. Call
-`maybeCompleteAuthSession()` on the web redirect page; it is a no-op on desktop.
-Unsupported browser dismissal behavior follows Expo (for example, cancellation
-may leave an Android custom tab visible).
+`maybeCompleteAuthSession()` on the web redirect page. This selected Expo method
+returns `{ type: "success" | "failed", message }`; native platforms return the
+unsupported `failed` result. Spark does not reexport the upstream object model.
+
+On Android, Spark opens a Custom Tab and owns its link/foreground subscriptions.
+Cancellation removes those subscriptions and allows a later session immediately;
+Android does not support programmatically closing the tab. iOS/web dismissal
+failures reject and retain ownership until `dismiss()` succeeds on retry.
 
 For a universal project, keep Expo native browser/crypto modules in the mobile
 configuration and exclude `expo-web-browser` and `expo-crypto` from desktop native
@@ -106,5 +118,5 @@ browser-authentication demonstration that avoids displaying callback credentials
 Windows source is included, but compilation and native browser acceptance remain
 pending. Compile `tests/auth-loopback.integration.cpp` with a C++20 Windows toolchain,
 then test Kitchen Sink's authentication demo and registered-URI activation. Mobile
-and browser adapters are typechecked but have not had device/browser acceptance
-in this change. Rebuild the desktop runtime before using the new native methods.
+and browser adapters have mocked transport/lifecycle coverage, including Android
+observer disposal, but have not had device/browser acceptance in this change. Rebuild the desktop runtime before using the new native methods.

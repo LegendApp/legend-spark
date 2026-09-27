@@ -76,3 +76,9 @@ test("linking and document transports report missing modules only when called", 
   await expect(documents.getRecentDocuments()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
   await expect(documents.subscribeToOpenRequests(() => {})).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
+
+import * as auth from "../packages/auth-session/src/index";
+test("authentication imports without native modules", async () => {
+  await expect(auth.getRandomBytesAsync(32)).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+  await expect(auth.createAuthSession()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+});
