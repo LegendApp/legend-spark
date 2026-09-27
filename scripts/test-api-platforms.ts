@@ -32,7 +32,7 @@ for (const platform of ["ios", "android", "web"]) {
   const sourceMap = path.join(output, `${platform}.map`);
   await run(root, [binary(root, "expo"), "export:embed", "--entry-file", "index.ts", "--platform", platform, "--dev", "true", "--max-workers", "2", "--bundle-output", path.join(output, `${platform}.js`), "--sourcemap-output", sourceMap], { capture: true });
   const sources: string[] = readJson(sourceMap).sources;
-  if (sources.some(source => source.includes("NativeDesktop") || source.includes("desktop-app/src") || source.includes("SparkButtonNativeComponent"))) throw new Error(`${platform} bundle loads desktop native modules`);
+  if (sources.some(source => source.includes("NativeDesktop") || (source.includes("desktop-app/src") && !source.includes("desktop-app/src/contracts/")) || source.includes("SparkButtonNativeComponent"))) throw new Error(`${platform} bundle loads desktop native modules`);
   for (const name of ["clipboard", "secure-storage", "desktop-links"]) {
     if (!sources.some(source => source.includes(`@legendapp/spark-${name}/src/index.${platform}.ts`))) throw new Error(`${platform} did not select ${name}'s platform adapter`);
   }

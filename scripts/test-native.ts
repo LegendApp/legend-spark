@@ -12,13 +12,13 @@ import { readJson, writeJson, prepareConfig } from "../packages/cli/src/project.
 // All test effects live in this dedicated app. The driver is absent from Go.
 const reducedApp = `import React, { useEffect } from "react";
 import { Text } from "react-native";
-import { readClipboardText } from "@legendapp/spark/clipboard";
+import { getStringAsync } from "@legendapp/spark/clipboard";
 import { getAppContext } from "@legendapp/spark/app";
 import { writeText, getDirectory } from "@legendapp/spark/files";
 export default function App({ launchArguments = [] }) {
   useEffect(() => {
     const report = launchArguments[launchArguments.indexOf("--spark-test-report") + 1];
-    Promise.all([readClipboardText(), getAppContext(), getDirectory("data")]).then(([text, context, dataDirectory]) =>
+    Promise.all([getStringAsync(), getAppContext(), getDirectory("data")]).then(([text, context, dataDirectory]) =>
       writeText(report, JSON.stringify({ passed: typeof text === "string", context, dataDirectory, results: [{ name: "pruned native APIs execute", passed: typeof text === "string" }] })));
   }, []);
   return <Text>Reduced runtime: app, clipboard and filesystem</Text>;

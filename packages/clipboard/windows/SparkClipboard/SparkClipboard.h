@@ -42,7 +42,7 @@ struct SparkClipboard {
   static fire_and_forget Invoke(std::string method, std::string encoded, React::ReactPromise<std::string> promise) {
     try {
       auto args = Json::JsonObject::Parse(to_hstring(encoded));
-      if (method == "write" || method == "setString" || method == "writeText") {
+      if (method == "write" || method == "setString") {
         if (method != "write") {
           Json::JsonObject content; content.SetNamedValue(args.GetNamedString(L"format", L"plainText") == L"html" ? L"html" : L"text", args.GetNamedValue(L"text")); args = content;
         }
@@ -76,15 +76,15 @@ struct SparkClipboard {
       else {
         auto data = Transfer::Clipboard::GetContent();
         const bool text = data.Contains(Transfer::StandardDataFormats::Text()), html = data.Contains(Transfer::StandardDataFormats::Html()), rtf = data.Contains(Transfer::StandardDataFormats::Rtf());
-        if (method == "hasString" || method == "hasText") promise.Resolve((text || (method == "hasString" && (html || rtf))) ? "true" : "false");
+        if (method == "hasString") promise.Resolve((text || html || rtf) ? "true" : "false");
         else if (method == "formats") { Json::JsonArray formats; for (auto const &format : data.AvailableFormats()) formats.Append(Json::JsonValue::CreateStringValue(format)); promise.Resolve(to_string(formats.Stringify())); }
-        else if (method == "getString" || method == "readText") {
+        else if (method == "getString") {
           hstring value; const bool preferHTML = args.GetNamedString(L"format", L"plainText") == L"html";
-          if (method == "getString" && preferHTML && html) value = Transfer::HtmlFormatHelper::GetStaticFragment(co_await data.GetHtmlFormatAsync());
+          if (preferHTML && html) value = Transfer::HtmlFormatHelper::GetStaticFragment(co_await data.GetHtmlFormatAsync());
           else {
             if (text) value = co_await data.GetTextAsync();
-            else if (method == "getString" && html) value = Windows::Data::Html::HtmlUtilities::ConvertToText(Transfer::HtmlFormatHelper::GetStaticFragment(co_await data.GetHtmlFormatAsync()));
-            else if (method == "getString" && rtf) value = PlainRTF(co_await data.GetRtfAsync());
+            else if (html) value = Windows::Data::Html::HtmlUtilities::ConvertToText(Transfer::HtmlFormatHelper::GetStaticFragment(co_await data.GetHtmlFormatAsync()));
+            else if (rtf) value = PlainRTF(co_await data.GetRtfAsync());
             if (preferHTML && !value.empty()) value = HTML(value);
           }
           promise.Resolve(to_string(Json::JsonValue::CreateStringValue(value).Stringify()));

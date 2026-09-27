@@ -11,3 +11,12 @@ test("dialog entry points import without installed modules and reject actual ope
   await expect(openFileDialog()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
   await expect(showMessage({ title: "Unavailable" })).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
+
+import * as clipboard from "../packages/clipboard/src/desktop";
+import * as storage from "../packages/secure-storage/src/desktop";
+test("desktop Expo subsets report missing native modules without failing at import", async () => {
+  expect(await storage.isAvailableAsync()).toBe(false);
+  await expect(storage.getItemAsync("key")).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+  expect(clipboard.getRichClipboardAvailability()).toEqual({ available: false, reason: "missing-module" });
+  await expect(clipboard.getStringAsync()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+});

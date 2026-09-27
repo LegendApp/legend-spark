@@ -42,7 +42,7 @@ const windows = await import("../packages/desktop-windows/src/index.ts");
 const files = await import("../packages/file-system/src/index.ts");
 const clipboard = await import("../packages/clipboard/src/index.ts");
 const links = await import("../packages/desktop-links/src/index.ts");
-const { secureStorage } = await import("../packages/secure-storage/src/index.ts");
+const secureStore = await import("../packages/secure-storage/src/index.ts");
 const shortcuts = await import("../packages/desktop-shortcuts/src/index.ts");
 const menus = await import("../packages/native-menu/src/index.ts");
 const context = await import("../packages/context-menu/src/index.ts");
@@ -143,10 +143,10 @@ test("failed watchers remove their listener", async () => {
   await expect(files.watch("/missing/a", () => {})).rejects.toThrow(); expect(subscriptions.get("NativeDesktopFileSystem.change")?.size).toBe(0);
 });
 test("clipboard and Keychain preserve empty strings and missing values", async () => {
-  handlers.set("NativeDesktopClipboard.readText", () => ""); handlers.set("NativeDesktopClipboard.hasText", () => false);
-  expect(await clipboard.readClipboardText()).toBe(""); expect(await clipboard.hasClipboardText()).toBe(false); await clipboard.writeClipboardText("hello");
-  expect(await secureStorage.get("key")).toBeNull(); await secureStorage.set("key", ""); expect(calls.at(-1)?.args.value).toBe(""); await secureStorage.remove("key");
-  expect(() => secureStorage.get("")).toThrow(); expect(() => secureStorage.get("x".repeat(201))).toThrow();
+  handlers.set("NativeDesktopClipboard.getString", () => ""); handlers.set("NativeDesktopClipboard.hasString", () => false);
+  expect(await clipboard.getStringAsync()).toBe(""); expect(await clipboard.hasStringAsync()).toBe(false); await clipboard.setStringAsync("hello");
+  expect(await secureStore.getItemAsync("key")).toBeNull(); await secureStore.setItemAsync("key", ""); expect(calls.at(-1)?.args.value).toBe(""); await secureStore.deleteItemAsync("key");
+  await expect(secureStore.getItemAsync("")).rejects.toThrow(); await expect(secureStore.getItemAsync("x".repeat(201))).rejects.toThrow();
 });
 test("links deduplicate queued/live overlap and stop delivery on removal", async () => {
   const cold = { type: "openURL" as const, id: "cold", url: "demo://cold" };
@@ -277,7 +277,7 @@ test("rich clipboard validates file paths before replacing clipboard contents", 
   await clipboard.writeClipboard({ text: "Hello", html: "<b>Hello</b>" });
   expect(calls.at(-1)?.args).toEqual({ text: "Hello", html: "<b>Hello</b>" });
   await expect(clipboard.writeClipboard({ files: ["relative"] })).rejects.toThrow();
-  await expect(clipboard.writeClipboard({ files: ["/tmp/a"], text: "mixed" })).rejects.toThrow();
+  await expect(clipboard.writeClipboard({ files: ["/tmp/a"], text: "mixed" } as never)).rejects.toThrow();
   handlers.set("NativeDesktopClipboard.read", () => ({ text: "Hello", files: ["/tmp/a"] })); expect(await clipboard.readClipboard()).toMatchObject({ files: ["/tmp/a"] });
 });
 test("sleep assertions release once and system events filter unrelated traffic", async () => {
@@ -316,7 +316,7 @@ test("Expo clipboard subset handles formats, boolean results, and native failure
   await expect(clipboard.setStringAsync("fail")).rejects.toThrow("E_CLIPBOARD");
 });
 
-test("Expo SecureStore subset shares legacy storage and rejects unsupported options", async () => {
+test("Expo SecureStore subset preserves empty values and rejects unsupported options", async () => {
   const store = await import("../packages/secure-storage/src/index.ts");
   expect(await store.isAvailableAsync()).toBe(true);
   expect(await store.getItemAsync("missing")).toBeNull();
@@ -334,7 +334,7 @@ test("Expo SecureStore subset shares legacy storage and rejects unsupported opti
   await expect(store.getItemAsync("key")).rejects.toThrow("E_KEYCHAIN");
 });
 
-test("Expo linking separates stable initial URLs, live URLs, and legacy file events", async () => {
+test("Expo linking separates stable initial URLs, live URLs, and file events", async () => {
   handlers.set("NativeDesktopApp.initialURL", () => "demo://initial");
   const received: string[] = [];
   const subscription = links.addEventListener("url", event => received.push(event.url));
@@ -398,12 +398,12 @@ test("Windows shared adapters dispatch rich formats to native backends", async (
   handlers.set("NativeDesktopClipboard.getString", () => "Windows text");
   expect(await win.getStringAsync()).toBe("Windows text");
   expect(await win.setStringAsync("hello")).toBe(true);
-  await win.writeClipboard({ html: "<b>rich</b>", rtf: "{\\rtf1 rich}", imagePNG: "data" });
-  expect(calls.at(-1)).toMatchObject({ native: "NativeDesktopClipboard", method: "write", args: { html: "<b>rich</b>", imagePNG: "data" } });
+  await win.writeClipboard({ html: "<b>rich</b>", rtf: "{\\rtf1 rich}", image: { format: "png", bytes: new Uint8Array([1, 2]) } });
+  expect(calls.at(-1)).toMatchObject({ native: "NativeDesktopClipboard", method: "write", args: { html: "<b>rich</b>", imagePNG: "AQI=" } });
   await win.writeClipboard({ files: [String.raw`C:\Users\test\file.txt`, String.raw`\\server\share\file.txt`] });
-  await expect(win.writeClipboard({ files: ["relative.txt"] })).rejects.toThrow("absolute paths");
+  await expect(win.writeClipboard({ files: ["relative.txt"] })).rejects.toThrow("absolute path");
   handlers.set("NativeDesktopClipboard.write", () => { throw nativeError("E_CLIPBOARD"); });
-  await expect(win.writeClipboard({ imagePNG: "invalid" })).rejects.toMatchObject({ code: "E_CLIPBOARD" });
+  await expect(win.writeClipboard({ image: { format: "png", bytes: new Uint8Array([1]) } })).rejects.toMatchObject({ code: "E_NATIVE", cause: { code: "E_CLIPBOARD" } });
   await store.setItemAsync("sample", "value");
   expect(calls.at(-1)?.native).toBe("NativeDesktopSecureStorage");
   handlers.set("NativeDesktopLinks.canOpen", () => true);
@@ -514,4 +514,15 @@ test("watch cleanup stops callbacks immediately and can retry a failed native un
   emit("NativeDesktopFileSystem", "change", { id, path: "/file" }); expect(listener).not.toHaveBeenCalled();
   handlers.delete("NativeDesktopFileSystem.unwatch"); await watch.remove(); await watch.remove();
   expect(calls.filter(call => call.method === "unwatch")).toHaveLength(2);
+});
+
+test("rich clipboard keeps binary transport private and preserves coexisting OS representations", async () => {
+  handlers.set("NativeDesktopClipboard.read", () => ({ files: ["/tmp/file"], text: "file representation", imagePNG: "AAH/" }));
+  expect(await clipboard.readClipboard()).toEqual({ files: ["/tmp/file"], text: "file representation", image: { format: "png", bytes: new Uint8Array([0, 1, 255]) } });
+  await clipboard.writeClipboard({ image: { format: "png", bytes: new Uint8Array([0, 1, 255]) } });
+  expect(calls.at(-1)?.args).toEqual({ imagePNG: "AAH/" });
+  handlers.set("NativeDesktopClipboard.read", () => ({ imagePNG: "!invalid!" }));
+  await expect(clipboard.readClipboard()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  handlers.set("NativeDesktopSecureStorage.get", () => ({ unexpected: "value" }));
+  await expect(secureStore.getItemAsync("key")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
 });

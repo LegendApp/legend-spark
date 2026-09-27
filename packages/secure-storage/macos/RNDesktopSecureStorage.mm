@@ -1,31 +1,14 @@
 #import "RNDesktopSecureStorage.h"
 #import <RNDesktopApp/SparkDesktop.h>
 #import <Security/Security.h>
-#import <cmath>
 
 static NSDictionary *Failure(NSString *code, NSString *message) {
   return @{ @"error": @{ @"code": code, @"message": message } };
 }
 static NSDictionary *StorageOperation(NSString *method, NSDictionary *args) {
-  if ([method isEqual:@"random"]) {
-    double count = [args[@"count"] doubleValue];
-    if (!std::isfinite(count) || floor(count) != count || count < 16 || count > 1024) return Failure(@"E_INVALID_ARGUMENT", @"Random byte count must be an integer between 16 and 1024");
-    NSMutableData *data = [NSMutableData dataWithLength:(NSUInteger)count];
-    if (SecRandomCopyBytes(kSecRandomDefault, data.length, data.mutableBytes) != errSecSuccess) return Failure(@"E_RANDOM", @"Secure random generation failed");
-    NSString *value = [[[data base64EncodedStringWithOptions:0] stringByReplacingOccurrencesOfString:@"+" withString:@"-"] stringByReplacingOccurrencesOfString:@"/" withString:@"_"];
-    return @{ @"value": [value stringByReplacingOccurrencesOfString:@"=" withString:@""] };
-  }
   NSString *key = args[@"key"];
   if (![key isKindOfClass:NSString.class] || !key.length || key.length > 200) return Failure(@"E_INVALID_ARGUMENT", @"Expected a Keychain key of 1–200 characters");
-  NSString *service = args[@"service"] ?: SparkNamespace();
-  if (![service isKindOfClass:NSString.class] || !service.length) return Failure(@"E_INVALID_ARGUMENT", @"Expected a Keychain service");
-  // Existing standalone applications can explicitly retain their Keychain service.
-  // Go always keeps its project namespace; SDK consumers cannot cross projects.
-  if (![service isEqual:SparkNamespace()]) {
-    NSArray *services = [NSBundle.mainBundle objectForInfoDictionaryKey:@"SparkKeychainServices"];
-    BOOL standalone = ![SparkContext()[@"runtime"][@"mode"] isEqual:@"go"];
-    if (!standalone || ![services isKindOfClass:NSArray.class] || ![services containsObject:service]) return Failure(@"E_INVALID_ARGUMENT", @"Keychain service is not configured for this application");
-  }
+  NSString *service = SparkNamespace();
   NSMutableDictionary *query = [@{ (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
     (__bridge id)kSecAttrService: service, (__bridge id)kSecAttrAccount: key } mutableCopy];
   OSStatus status;
@@ -65,9 +48,6 @@ static NSDictionary *StorageOperation(NSString *method, NSDictionary *args) {
 }
 @implementation RNDesktopSecureStorage
 RCT_EXPORT_MODULE(NativeDesktopSecureStorage)
-- (NSString *)callSync:(NSString *)method args:(NSString *)json {
-  return SparkJSON(StorageOperation(method, SparkArgs(json)));
-}
 - (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
     NSDictionary *result = StorageOperation(method, SparkArgs(json));

@@ -59,7 +59,7 @@ function MainChecks() {
         await check("storage.unavailable", async () => {
           assertContract(!await Storage.isAvailableAsync(), "Web must not claim secure storage");
           try { await Storage.getItemAsync("unavailable-probe"); }
-          catch (error) { assertContract((error as { code?: string }).code === "E_UNAVAILABLE", "Unexpected unavailable error"); return; }
+          catch (error) { assertContract((error as { code?: string }).code === "E_UNSUPPORTED_PLATFORM", "Unexpected unavailable error"); return; }
           throw new Error("Unavailable storage returned a value");
         });
       } else {

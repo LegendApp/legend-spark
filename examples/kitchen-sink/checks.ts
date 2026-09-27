@@ -1,3 +1,4 @@
+import { toByteArray } from "base64-js";
 import { fileConflict } from "./contract-cases";
 import { runAPIChecks } from "./api-checks";
 import { runIntegrationChecks } from "./integration-checks";
@@ -167,10 +168,10 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
         await driverCall("saveClipboard");
         try {
           const imagePNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=";
-          await clipboard.writeClipboard({ text: token, html: `<b>${token}</b>`, rtf: "{\\rtf1\\ansi SDK test}", imagePNG });
+          await clipboard.writeClipboard({ text: token, html: `<b>${token}</b>`, rtf: "{\\rtf1\\ansi SDK test}", image: { format: "png", bytes: toByteArray(imagePNG) } });
           const rich = await clipboard.readClipboard();
-          assert(rich.text === token && rich.html === `<b>${token}</b>` && rich.rtf?.includes("SDK test") && !!rich.imagePNG, "Rich clipboard lost a representation");
-          try { await clipboard.writeClipboard({ imagePNG: "invalid" }); } catch {}
+          assert(rich.text === token && rich.html === `<b>${token}</b>` && rich.rtf?.includes("SDK test") && !!rich.image?.bytes.length, "Rich clipboard lost a representation");
+          try { await clipboard.writeClipboard({ image: { format: "png", bytes: new Uint8Array([1]) } }); } catch {}
           assert(await clipboard.getStringAsync() === token, "Invalid image erased clipboard");
           await clipboard.writeClipboard({ files: [`${root}/text.txt`] });
           assert((await clipboard.readClipboard()).files?.[0] === `${root}/text.txt`, "File URL clipboard failed");

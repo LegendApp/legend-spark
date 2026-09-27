@@ -47,7 +47,7 @@ import { Button, TextInput, Select } from '@legendapp/spark/ui';
 import * as Clipboard from '@legendapp/spark/clipboard';
 import * as SecureStore from '@legendapp/spark/secure-storage';
 import * as Linking from '@legendapp/spark/links';
-import * as Files from '@legendapp/spark/dialogs';
+import * as Files from '@legendapp/spark/files';
 import * as FileSystem from '@legendapp/spark/files';
 import { settings } from '@legendapp/spark/settings';
 import { filesystemLifecycle, settingsLifecycle } from './desktop-contract-cases';

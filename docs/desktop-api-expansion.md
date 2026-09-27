@@ -141,7 +141,7 @@ Omit windowId for an application-modal dialog. Kinds are info/warning/error.
 Concurrent message dialogs reject E_BUSY. Existing open/save file panels remain.
 
 Clipboard adds readClipboard, writeClipboard, getClipboardFormats and
-clearClipboard. Rich content supports text, html, rtf, imagePNG (base64) and files
+clearClipboard. Rich content supports text, html, rtf, image ({ format: "png", bytes: Uint8Array }) and files
 (absolute paths). Multiple rich representations may be written together; a file
 list is written separately. Invalid image data is rejected before clearing the
 clipboard. Reading returns supported formats; this is not a lossless backup API

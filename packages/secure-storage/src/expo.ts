@@ -11,4 +11,3 @@ export async function setItemAsync(key: string, value: string, options: SecureSt
 export async function deleteItemAsync(key: string, options: SecureStoreOptions = {}): Promise<void> {
   validateItem(key, options); await SecureStore.deleteItemAsync(key);
 }
-export const secureStorage = { get: getItemAsync, set: setItemAsync, remove: deleteItemAsync };

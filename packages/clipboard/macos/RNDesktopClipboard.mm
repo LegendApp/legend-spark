@@ -71,14 +71,7 @@ RCT_EXPORT_MODULE(NativeDesktopClipboard)
       [board clearContents]; if (objects.count && ![board writeObjects:objects]) { reject(@"E_CLIPBOARD", @"Could not write clipboard", nil); return; }
       resolve(@"null"); return;
     }
-    if ([method isEqual:@"readText"]) resolve(SparkJSON([board stringForType:NSPasteboardTypeString] ?: @""));
-    else if ([method isEqual:@"hasText"]) resolve(SparkJSON(@([board availableTypeFromArray:@[NSPasteboardTypeString]] != nil)));
-    else if ([method isEqual:@"writeText"]) {
-      if (![args[@"text"] isKindOfClass:NSString.class]) { SparkInvalid(reject, @"Expected clipboard text"); return; }
-      [board clearContents];
-      if (![board setString:args[@"text"] forType:NSPasteboardTypeString]) { reject(@"E_CLIPBOARD", @"Could not write clipboard", nil); return; }
-      resolve(@"null");
-    } else SparkInvalid(reject, @"Unknown clipboard operation");
+    SparkInvalid(reject, @"Unknown clipboard operation");
   });
 }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params {

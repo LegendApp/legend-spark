@@ -1,39 +1,62 @@
 import { Platform } from "react-native";
+import { fromByteArray, toByteArray } from "base64-js";
+import { SparkError, parseNativeResult, invokeNative, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import Native from "./NativeDesktopClipboard";
-async function call<T = void>(method: string, args: object = {}): Promise<T> { return JSON.parse(await Native.call(method, JSON.stringify(args))) as T; }
-export const readClipboardText = () => call<string>("readText");
-export const writeClipboardText = (text: string) => call("writeText", { text });
-export const hasClipboardText = () => call<boolean>("hasText");
-
-export type ClipboardContent = { text?: string; html?: string; rtf?: string; imagePNG?: string; files?: string[] };
-/** imagePNG contains base64-encoded PNG bytes. */
-export async function readClipboard(): Promise<ClipboardContent> { return JSON.parse(await Native.call("read", "{}")); }
-export async function getClipboardFormats(): Promise<string[]> { return JSON.parse(await Native.call("formats", "{}")); }
-export async function clearClipboard() { await Native.call("clear", "{}"); }
-export async function writeClipboard(content: ClipboardContent) {
-  for (const key of Object.keys(content)) if (!["text", "html", "rtf", "imagePNG", "files"].includes(key)) throw new Error(`Unknown clipboard format: ${key}`);
-  if (content.files && (Object.keys(content).length !== 1 || content.files.some(file => Platform.OS === "windows" ? !/^(?:[a-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)/i.test(file) : !file.startsWith("/")))) throw new Error("Files must be absolute paths and written separately from other formats");
-  for (const key of ["text", "html", "rtf", "imagePNG"] as const) if (content[key] !== undefined && typeof content[key] !== "string") throw new Error(`Invalid clipboard ${key}`);
-  await Native.call("write", JSON.stringify(content));
-}
-
-import { StringFormat } from "./formats";
+import { stringOptions } from "./options";
+import type { ClipboardContent, ClipboardWriteContent, GetStringOptions, SetStringOptions } from "./types";
 export { StringFormat } from "./formats";
-export type GetStringOptions = { preferredFormat?: StringFormat };
-export type SetStringOptions = { inputFormat?: StringFormat };
-function stringOptions(options: object, key: string) {
-  if (!options || Object.keys(options).some(name => name !== key)) throw new Error("Unsupported clipboard option");
-  const format = (options as Record<string, unknown>)[key] ?? StringFormat.PLAIN_TEXT;
-  if (format !== StringFormat.PLAIN_TEXT && format !== StringFormat.HTML) throw new Error("Invalid clipboard string format");
-  return format;
+export type { ClipboardContent, ClipboardWriteContent, ClipboardImage, GetStringOptions, SetStringOptions } from "./types";
+export function getRichClipboardAvailability(): Availability {
+  if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
+  return Native ? { available: true } : { available: false, reason: "missing-module" };
 }
-/** Expo-compatible text/HTML subset. Rich desktop formats remain available above. */
+function native() {
+  const availability = getRichClipboardAvailability();
+  if (!availability.available) throw new SparkError(availability.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : "E_MODULE_UNAVAILABLE", "Desktop clipboard module is unavailable");
+  return Native!;
+}
+async function call<T>(method: string, args: object, validate: (value: unknown) => value is T): Promise<T> {
+  return parseNativeResult(await invokeNative(() => native().call(method, JSON.stringify(args))), validate);
+}
+const isVoid = (value: unknown): value is null => value === null;
+/** Expo-compatible text/HTML subset. */
 export async function getStringAsync(options: GetStringOptions = {}): Promise<string> {
-  return call("getString", { format: stringOptions(options, "preferredFormat") });
+  return call("getString", { format: stringOptions(options, "preferredFormat") }, (value): value is string => typeof value === "string");
 }
 export async function setStringAsync(text: string, options: SetStringOptions = {}): Promise<boolean> {
-  if (typeof text !== "string") throw new TypeError("Clipboard text must be a string");
-  await call("setString", { text, format: stringOptions(options, "inputFormat") });
+  if (typeof text !== "string") throw new SparkError("E_INVALID_ARGUMENT", "Clipboard text must be a string");
+  await call("setString", { text, format: stringOptions(options, "inputFormat") }, isVoid);
   return true;
 }
-export const hasStringAsync = (): Promise<boolean> => call("hasString");
+export async function hasStringAsync(): Promise<boolean> { return call("hasString", {}, (value): value is boolean => typeof value === "boolean"); }
+export async function readClipboard(): Promise<ClipboardContent> {
+  const raw = await call("read", {}, (value): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value));
+  const result: ClipboardContent = {};
+  for (const key of ["text", "html", "rtf"] as const) {
+    if (raw[key] !== undefined && typeof raw[key] !== "string") throw new SparkError("E_INVALID_DATA", `Invalid clipboard ${key}`);
+    if (typeof raw[key] === "string") result[key] = raw[key];
+  }
+  if (raw.files !== undefined) {
+    if (!Array.isArray(raw.files) || raw.files.some(value => typeof value !== "string")) throw new SparkError("E_INVALID_DATA", "Invalid clipboard files");
+    try { result.files = raw.files.map(value => nativePath(value, Platform.OS)); }
+    catch (cause) { throw new SparkError("E_INVALID_DATA", "Invalid clipboard file paths", { cause }); }
+  }
+  if (raw.imagePNG !== undefined) {
+    if (typeof raw.imagePNG !== "string" || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(raw.imagePNG)) throw new SparkError("E_INVALID_DATA", "Invalid clipboard image bytes");
+    result.image = { format: "png", bytes: toByteArray(raw.imagePNG) };
+  }
+  return result;
+}
+export async function getClipboardFormats(): Promise<string[]> { return call("formats", {}, (value): value is string[] => Array.isArray(value) && value.every(format => typeof format === "string")); }
+export async function clearClipboard(): Promise<void> { await call("clear", {}, isVoid); }
+export async function writeClipboard(content: ClipboardWriteContent): Promise<void> {
+  if (!content || typeof content !== "object" || Array.isArray(content)) throw new SparkError("E_INVALID_ARGUMENT", "Expected clipboard content");
+  for (const key of Object.keys(content)) if (!["text", "html", "rtf", "image", "files"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown clipboard format: ${key}`);
+  for (const key of ["text", "html", "rtf"] as const) if (content[key] !== undefined && typeof content[key] !== "string") throw new SparkError("E_INVALID_ARGUMENT", `Invalid clipboard ${key}`);
+  if (content.files !== undefined && (!Array.isArray(content.files) || Object.entries(content).some(([key, value]) => key !== "files" && value !== undefined))) throw new SparkError("E_INVALID_ARGUMENT", "Files must be written separately from other formats");
+  const files = content.files?.map(path => nativePath(path, Platform.OS));
+  const { image, ...rest } = content;
+  if (image !== undefined && (!image || image.format !== "png" || !(image.bytes instanceof Uint8Array))) throw new SparkError("E_INVALID_ARGUMENT", "Expected PNG image bytes");
+  await call("write", { ...rest, files, imagePNG: image ? fromByteArray(image.bytes) : undefined }, isVoid);
+}

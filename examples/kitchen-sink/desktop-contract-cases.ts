@@ -1,3 +1,4 @@
+import { toByteArray, fromByteArray } from "base64-js";
 import type * as FileSystem from "@legendapp/spark/files";
 import type { settings } from "@legendapp/spark/settings";
 import { assertContract } from "./contract-cases";
@@ -118,14 +119,16 @@ export async function richClipboardLifecycle(files: typeof FileSystem, clipboard
     const content = await clipboard.readClipboard();
     assertContract(content.text === "plain ü" && content.html?.includes("<b>rich ü</b>") && content.rtf?.includes("rtf"), "Rich text formats did not roundtrip together");
     assertContract((await clipboard.getClipboardFormats()).length >= 3, "Rich clipboard formats are missing");
-    await clipboard.writeClipboard({ imagePNG: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==" });
-    assertContract((await clipboard.readClipboard()).imagePNG?.startsWith("iVBOR"), "Clipboard bitmap was not returned as PNG");
+    await clipboard.writeClipboard({ image: { format: "png", bytes: toByteArray("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==") } });
+    const image = (await clipboard.readClipboard()).image;
+    assertContract(image && fromByteArray(image.bytes).startsWith("iVBOR"), "Clipboard bitmap was not returned as PNG");
     await files.writeText(file, "clipboard file"); await clipboard.writeClipboard({ files: [file] });
     assertContract((await clipboard.readClipboard()).files?.[0]?.replaceAll("\\", "/") === file.replaceAll("\\", "/"), "Clipboard file list did not roundtrip");
     await clipboard.clearClipboard();
     assertContract(Object.keys(await clipboard.readClipboard()).length === 0, "Clear left clipboard formats behind");
   } finally {
-    await clipboard.writeClipboard(original.files?.length ? { files: original.files } : original);
+    const { files: originalFiles, ...originalContent } = original;
+    await clipboard.writeClipboard(originalFiles?.length ? { files: originalFiles } : originalContent);
     await files.remove(file);
   }
 }

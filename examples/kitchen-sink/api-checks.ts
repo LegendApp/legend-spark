@@ -17,15 +17,12 @@ export async function runAPIChecks(check: Check, driver?: TestDriver, expectedIn
   await check("Expo clipboard: string read and presence", async () => {
     await clipboardRead(clipboard);
   }, ["clipboard.read"]);
-  if (driver) await check("Expo clipboard: text, HTML, empty string, legacy interop and restoration", async () => {
+  if (driver) await check("Expo clipboard: text, HTML, empty string and restoration", async () => {
     await native("saveClipboard");
     try {
       await clipboardRoundTrip(clipboard, token);
       assert(await clipboard.setStringAsync(token) === true, "Write must resolve true");
       assert(await clipboard.getStringAsync() === token && await clipboard.hasStringAsync(), "Text roundtrip failed");
-      assert(await clipboard.readClipboardText() === token, "Legacy read must see new write");
-      await clipboard.writeClipboardText("legacy");
-      assert(await clipboard.getStringAsync() === "legacy", "New read must see legacy write");
       const html = `<b>${token}</b>`;
       await clipboard.setStringAsync(html, { inputFormat: clipboard.StringFormat.HTML });
       assert(await clipboard.getStringAsync({ preferredFormat: clipboard.StringFormat.HTML }) === html, "HTML roundtrip failed");
@@ -38,15 +35,15 @@ export async function runAPIChecks(check: Check, driver?: TestDriver, expectedIn
       assert(!await clipboard.hasStringAsync(), "Empty clipboard reports text");
     } finally { await native("restoreClipboard"); }
   }, ["clipboard.roundtrip"]);
-  await check("Expo SecureStore: availability, missing, write, update, delete and legacy interop", async () => {
+  await check("Expo SecureStore: availability, missing, write, update and delete", async () => {
     await secureStorageLifecycle(secureStore, token);
     try {
       await secureStore.deleteItemAsync(token);
       assert(await secureStore.getItemAsync(token) === null, "Missing key must be null");
       assert(await secureStore.setItemAsync(token, "test 🌍") === undefined, "Write must resolve void");
-      assert(await secureStore.secureStorage.get(token) === "test 🌍", "Legacy read mismatch");
-      await secureStore.secureStorage.set(token, "legacy");
-      assert(await secureStore.getItemAsync(token) === "legacy", "New read mismatch");
+      assert(await secureStore.getItemAsync(token) === "test 🌍", "Read mismatch");
+      await secureStore.setItemAsync(token, "updated");
+      assert(await secureStore.getItemAsync(token) === "updated", "Update mismatch");
       await secureStore.setItemAsync(token, "");
       assert(await secureStore.getItemAsync(token) === "", "Empty value is not missing");
       await secureStore.deleteItemAsync(token); await secureStore.deleteItemAsync(token);
@@ -70,8 +67,8 @@ export async function runAPIChecks(check: Check, driver?: TestDriver, expectedIn
   }, ["links.resolution"]);
   if (driver) await check("Expo Linking: live URL events, file separation, removal and stable initial URL", async () => {
     const initial = await links.getInitialURL();
-    const received: string[] = [], legacyFiles: string[] = [];
-    const legacy = await links.onOpen(event => { if (event.type === "openFile") legacyFiles.push(event.url); });
+    const received: string[] = [], openedFiles: string[] = [];
+    const openRequests = await links.onOpen(event => { if (event.type === "openFile") openedFiles.push(event.url); });
     const sub = links.addEventListener("url", event => received.push(event.url));
     const warm = `spark-api-test://${token}/warm`;
     try {
@@ -82,7 +79,7 @@ export async function runAPIChecks(check: Check, driver?: TestDriver, expectedIn
         received.length = 0;
       }
       await native("openURLs", { urls: [warm, "file:///tmp/spark-api-fixture.txt"] });
-      await until(() => received.includes(warm) && legacyFiles.includes("file:///tmp/spark-api-fixture.txt"));
+      await until(() => received.includes(warm) && openedFiles.includes("file:///tmp/spark-api-fixture.txt"));
       assert(received.length === 1, "URL listener received file/duplicate event");
       assert(await links.getInitialURL() === initial, "Warm URL replaced launch URL");
       sub.remove(); sub.remove();
@@ -93,6 +90,6 @@ export async function runAPIChecks(check: Check, driver?: TestDriver, expectedIn
       const later = links.addEventListener("url", event => late.push(event.url));
       try { await delay(100); assert(late.length === 0, "Live listener replayed historical URLs"); }
       finally { later.remove(); }
-    } finally { sub.remove(); legacy.remove(); }
+    } finally { sub.remove(); openRequests.remove(); }
   });
 }
