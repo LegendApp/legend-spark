@@ -20,13 +20,13 @@ export class WindowSession {
     const id = `note-${noteId}`;
     this.noteIds.set(id, noteId);
     if ((await this.host.list()).some(window => window.id === id)) await this.host.show(id);
-    else await this.host.open({ id, noteId, frame: { x: 0, y: 0, width: 700, height: 600 } });
+    else await this.host.open({ id, noteId, frame: fitFrame({ displayId: "", x: 0, y: 0, width: 700, height: 600 }, await this.host.workAreas()) });
     await this.capture();
   }
   async openSettings() {
     await this.restore();
     if ((await this.host.list()).some(window => window.id === "settings")) await this.host.show("settings");
-    else await this.host.open({ id: "settings", frame: { x: 0, y: 0, width: 460, height: 360 } });
+    else await this.host.open({ id: "settings", frame: fitFrame({ displayId: "", x: 0, y: 0, width: 460, height: 360 }, await this.host.workAreas()) });
     await this.capture();
   }
   capture = () => {
@@ -46,8 +46,9 @@ export class WindowSession {
     for (const window of saved) {
       if (window.id !== "main" && window.id !== "settings" && !this.notes.getSnapshot().notes.some(note => note.id === window.noteId && !note.deleted)) continue;
       if (window.noteId) this.noteIds.set(window.id, window.noteId);
-      if (window.id !== "main" && !(await this.host.list()).some(item => item.id === window.id)) await this.host.open(window);
-      await this.host.frame(window.id, fitFrame(window.frame, areas));
+      const frame = fitFrame(window.frame, areas);
+      if (window.id !== "main" && !(await this.host.list()).some(item => item.id === window.id)) await this.host.open({ ...window, frame });
+      await this.host.frame(window.id, frame);
     }
     await this.capture();
   })();

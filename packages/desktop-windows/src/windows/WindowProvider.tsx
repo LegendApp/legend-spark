@@ -1,38 +1,20 @@
 import type { ComponentType, ReactNode } from "react";
 import { createContext, useContext } from "react";
-
-const WindowContext = createContext<string>("");
-
-export const useWindowId = () => useContext(WindowContext);
-
-type WindowProviderProps = {
-  children: ReactNode;
-  id: string;
-};
-
-export function WindowProvider({ children, id }: WindowProviderProps) {
-  return <WindowContext.Provider value={id}>{children}</WindowContext.Provider>;
+import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
+import { windowId } from "../validation";
+const WindowContext = createContext<string | null>(null);
+export function useWindowId(): string {
+  const id = useContext(WindowContext);
+  if (id === null) throw new SparkError("E_UNAVAILABLE", "useWindowId requires a WindowProvider for this React root");
+  return id;
 }
-
-export const withWindowProvider = <P extends Record<string, unknown>>(
-  WrappedComponent: ComponentType<P>,
-  id: string,
-) => {
-  if (typeof WrappedComponent !== "function") {
-    throw new Error(`withWindowProvider: WrappedComponent must be a function, got ${typeof WrappedComponent}`);
-  }
-
-  const WithWindowProvider = (props: P) => {
-    const windowIdentifier = typeof props.windowIdentifier === "string" ? props.windowIdentifier : id;
-    return (
-      <WindowProvider id={windowIdentifier}>
-        <WrappedComponent {...props} />
-      </WindowProvider>
-    );
-  };
-
-  WithWindowProvider.displayName =
-    `WithWindowProvider(${WrappedComponent.displayName ?? WrappedComponent.name ?? "Component"})`;
-
-  return WithWindowProvider;
-};
+export interface WindowProviderProps { children: ReactNode; id: string }
+export function WindowProvider({ children, id }: WindowProviderProps) {
+  windowId(id); return <WindowContext.Provider value={id}>{children}</WindowContext.Provider>;
+}
+export function withWindowProvider<P extends object>(Component: ComponentType<P>, id: string): ComponentType<P> {
+  windowId(id);
+  const Wrapped = (props: P) => <WindowProvider id={id}><Component {...props} /></WindowProvider>;
+  Wrapped.displayName = `Window(${id})`;
+  return Wrapped;
+}

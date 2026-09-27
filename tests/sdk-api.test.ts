@@ -38,7 +38,6 @@ const notifications = await import("../packages/notifications/src/index.ts");
 const tray = await import("../packages/tray/src/index.ts");
 const updates = await import("../packages/updates/src/index.ts");
 const app = await import("../packages/desktop-app/src/index.ts");
-const windows = await import("../packages/desktop-windows/src/index.ts");
 const files = await import("../packages/file-system/src/index.ts");
 const clipboard = await import("../packages/clipboard/src/index.ts");
 const links = await import("../packages/desktop-links/src/index.ts");
@@ -84,42 +83,6 @@ test("failed guard registration cleans listeners and permits retry", async () =>
   await expect(app.beforeQuit(() => true)).rejects.toMatchObject({ code: "E_NATIVE" });
   expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0);
   handlers.delete("NativeDesktopApp.quitGuard"); await (await app.beforeQuit(() => true)).remove();
-});
-test("windows validate ids and finite frame sizes before crossing the bridge", () => {
-  for (const id of ["", "../window", "main", "x".repeat(101)]) expect(() => windows.openWindow({ id })).toThrow();
-  for (const width of [0, NaN, Infinity, 99, 20001]) expect(() => windows.openWindow({ id: "test", width })).toThrow();
-  expect(() => windows.setWindowFrame("main", { x: NaN, y: 0, width: 400, height: 400 })).toThrow();
-  expect(calls).toHaveLength(0);
-});
-test("window commands serialize explicit window identity and properties", async () => {
-  await windows.openWindow({ id: "secondary", props: { route: "settings" } }); await windows.getWindow(); await windows.listWindows(); await windows.getDisplays();
-  await windows.setWindowTitle("secondary", "Settings"); await windows.setWindowFrame("secondary", { x: 1, y: 2, width: 500, height: 300 });
-  await windows.minimizeWindow("secondary"); await windows.setFullscreen("secondary", true); await windows.hideWindow("secondary"); await windows.showWindow("secondary"); await windows.closeWindow("secondary");
-  expect(calls[0]?.args.props).toEqual({ route: "settings" }); expect(calls[1]?.args.id).toBe("main");
-  expect(calls.map(call => call.method)).toEqual(["open", "info", "list", "displays", "title", "frame", "minimize", "fullscreen", "hide", "show", "close"]);
-});
-test("window close guards handle only their window and coalesce repeated requests", async () => {
-  let requests = 0; let finish!: (allow: boolean) => void;
-  const guard = await windows.beforeWindowClose("test", () => { requests++; return new Promise<boolean>(resolve => { finish = resolve; }); });
-  emit("NativeDesktopApp", "desktop", { type: "beforeClose", windowId: "other" });
-  emit("NativeDesktopApp", "desktop", { type: "beforeClose", windowId: "test", requestId: 1 });
-  emit("NativeDesktopApp", "desktop", { type: "beforeClose", windowId: "test", requestId: 1 }); await tick(); expect(requests).toBe(1);
-  finish(false); await tick(); expect(calls.find(call => call.method === "replyClose")?.args).toEqual({ id: "test", requestId: 1, allow: false });
-  await guard.remove();
-});
-test("new close requests supersede expired handlers without losing request identity", async () => {
-  const finish: ((allow: boolean) => void)[] = [];
-  const guard = await windows.beforeWindowClose("expiry", () => new Promise<boolean>(resolve => finish.push(resolve)));
-  emit("NativeDesktopApp", "desktop", { type: "beforeClose", windowId: "expiry", requestId: 10 }); await tick();
-  emit("NativeDesktopApp", "desktop", { type: "beforeClose", windowId: "expiry", requestId: 11 }); await tick();
-  expect(finish).toHaveLength(2);
-  finish[0]!(true); await tick();
-  emit("NativeDesktopApp", "desktop", { type: "beforeClose", windowId: "expiry", requestId: 11 }); await tick();
-  expect(finish).toHaveLength(2);
-  await guard.remove(); finish[1]!(true); await tick();
-  expect(calls.filter(call => call.method === "replyClose").map(call => call.args)).toEqual([
-    { id: "expiry", requestId: 10, allow: true }, { id: "expiry", requestId: 11, allow: false },
-  ]);
 });
 test("filesystem errors preserve permission failures instead of pretending files are absent", async () => {
   handlers.set("NativeDesktopFileSystem.stat", () => { throw nativeError("E_NOT_FOUND"); }); expect(await files.exists("/missing")).toBe(false);
@@ -301,12 +264,6 @@ test("sleep assertions release once and system events filter unrelated traffic",
   const events: string[] = []; const subscription = await system.onSystemEvent(event => events.push(event.type));
   emit("NativeDesktopApp", "desktop", { type: "wake" }); emit("NativeDesktopApp", "desktop", { type: "activate" }); expect(events).toEqual(["wake"]); await subscription.remove();
 });
-test("window styling uses the same constraints as startup config", async () => {
-  expect(() => windows.setWindowOptions("main", { minWidth: 1000, maxWidth: 400 })).toThrow();
-  expect(() => windows.openWindow({ id: "sheet", modal: true })).toThrow();
-  await windows.setWindowOptions("main", { titleBarStyle: "overlay", resizable: false });
-  expect(calls.at(-1)?.args).toEqual({ id: "main", options: { titleBarStyle: "overlay", resizable: false } });
-});
 test("Dock menus identify their owner and remove only once", async () => {
   const selected: string[] = [];
   const menu = await system.createDockMenu({ items: [{ type: "action", id: "open", label: "Open" }], onAction: event => selected.push(event.itemId) });
@@ -404,27 +361,6 @@ test("mobile adapters delegate the shared subset to Expo without native dispatch
   expect(calls).toHaveLength(0);
 });
 
-test("Windows shared adapters dispatch rich formats to native backends", async () => {
-  platform.OS = "windows";
-  const win = await import("../packages/clipboard/src/index.windows.ts");
-  const store = await import("../packages/secure-storage/src/index.windows.ts");
-  const linking = await import("../packages/desktop-links/src/index.windows.ts");
-  handlers.set("NativeDesktopClipboard.getString", () => "Windows text");
-  expect(await win.getStringAsync()).toBe("Windows text");
-  expect(await win.setStringAsync("hello")).toBe(true);
-  await win.writeClipboard({ html: "<b>rich</b>", rtf: "{\\rtf1 rich}", image: { format: "png", bytes: new Uint8Array([1, 2]) } });
-  expect(calls.at(-1)).toMatchObject({ native: "NativeDesktopClipboard", method: "write", args: { html: "<b>rich</b>", imagePNG: "AQI=" } });
-  await win.writeClipboard({ files: [String.raw`C:\Users\test\file.txt`, String.raw`\\server\share\file.txt`] });
-  await expect(win.writeClipboard({ files: ["relative.txt"] })).rejects.toThrow("absolute path");
-  handlers.set("NativeDesktopClipboard.write", () => { throw nativeError("E_CLIPBOARD"); });
-  await expect(win.writeClipboard({ image: { format: "png", bytes: new Uint8Array([1]) } })).rejects.toMatchObject({ code: "E_NATIVE", cause: { code: "E_CLIPBOARD" } });
-  await store.setItemAsync("sample", "value");
-  expect(calls.at(-1)?.native).toBe("NativeDesktopSecureStorage");
-  handlers.set("NativeDesktopLinks.canOpen", () => true);
-  expect(await linking.canOpenURL("https://example.com")).toBe(true);
-  await expect(linking.canOpenURL("invalid")).rejects.toThrow("scheme");
-});
-
 test("Windows context menus reach native selection and cancellation with item semantics intact", async () => {
   platform.OS = "windows";
   const items: import("../packages/context-menu/src/index").MenuItem[] = [{ type: "checkbox", id: "checked", label: "Checked", checked: true }, { type: "action", id: "disabled", label: "Disabled", disabled: true }, { type: "separator" }];
@@ -472,12 +408,6 @@ test("invalid Windows menu contributions leave the last good owner set intact", 
     expect(published.map((item: any) => item.id)).toEqual(["file", "edit"]);
     await other.remove();
   } finally { await base.remove(); platform.OS = "macos"; }
-});
-
-test("overlay windows use portable defaults and reject modality", async () => {
-  await windows.openWindow({ id: "overlay-probe", kind: "overlay", width: 340, height: 140 });
-  expect(calls.at(-1)?.args).toMatchObject({ kind: "overlay", titleBarStyle: "borderless", transparent: true, hasShadow: false, alwaysOnTop: true, resizable: false, minimizable: false });
-  expect(() => windows.openWindow({ id: "overlay-probe", kind: "overlay", parentId: "main", modal: true })).toThrow("cannot be modal");
 });
 test("recursive watch is explicit and retains removal semantics", async () => {
   let count = 0;

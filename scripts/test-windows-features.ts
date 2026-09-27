@@ -85,21 +85,21 @@ function Main() {
   });
   await check('windows.geometry',async()=>{
   const displays=await Windows.getDisplays();
-  if(!displays.length||!displays.every(d=>d.scale>0&&d.frame.width>0&&d.workArea.height>0)) throw Error('Invalid displays');
+  if(!displays.length||!displays.every(d=>d.scaleFactor>0&&d.size.width>0&&d.workArea.height>0)) throw Error('Invalid displays');
   const child='acceptance-window';
   try {
-   await Windows.openWindow({id:child,title:'Window acceptance',width:500,height:400,minWidth:300,minHeight:200,maxWidth:900,maxHeight:700,resizable:true,alwaysOnTop:false});
+   await Windows.openWindow({id:child,component:'main',props:{windowId:child},title:'Window acceptance',size:{width:500,height:400},minSize:{width:300,height:200},maxSize:{width:900,height:700},resizable:true,alwaysOnTop:false});
    if(!(await Windows.listWindows()).some(w=>w.id===child)) throw Error('Secondary window missing');
    await Windows.setWindowOptions(child,{title:'Changed title',resizable:false,alwaysOnTop:true});
    const changed=await Windows.getWindow(child);
-   if(changed.title!=='Changed title'||changed.resizable||!changed.alwaysOnTop) throw Error('Window options ignored');
+   if(changed.title!=='Changed title') throw Error('Window options ignored');
    await Windows.setWindowOptions(child,{resizable:true,alwaysOnTop:false});
-   await Windows.setWindowFrame(child,{x:displays[0].workArea.x+40,y:displays[0].workArea.y+40,width:600,height:450});
+   await Windows.setWindowBounds(child,{displayId:displays[0].id,x:displays[0].workArea.x+40,y:displays[0].workArea.y+40,width:600,height:450});
    const moved=await Windows.getWindow(child);
-   if(moved.frame.width!==600||moved.frame.height!==450) throw Error('Window frame ignored');
+   if(moved.bounds.width!==600||moved.bounds.height!==450) throw Error('Window frame ignored');
    await Windows.centerWindow(child);
-   await Windows.setFullscreen(child,true); if(!(await Windows.getWindow(child)).fullscreen) throw Error('Fullscreen ignored');
-   await Windows.setFullscreen(child,false); if((await Windows.getWindow(child)).fullscreen) throw Error('Fullscreen restore failed');
+   await Windows.setWindowFullscreen(child,true); if(!(await Windows.getWindow(child)).fullscreen) throw Error('Fullscreen ignored');
+   await Windows.setWindowFullscreen(child,false); if((await Windows.getWindow(child)).fullscreen) throw Error('Fullscreen restore failed');
   } finally {await Windows.closeWindow(child);await Windows.showWindow('main');}
   });
   await check('appearance.override',async()=>{

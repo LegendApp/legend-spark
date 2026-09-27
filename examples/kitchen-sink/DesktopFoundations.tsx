@@ -12,7 +12,7 @@ export function DesktopFoundations({ report }: { report: (value: unknown) => voi
   return <View style={{ gap: 10 }}>
     <Text className="text-foreground">Desktop foundations</Text>
     <ActionButton onPress={async () => {
-      await windows.openWindow({ id: "overlay-demo", kind: "overlay", width: 340, height: 140, props: { overlay: true } });
+      await windows.openWindow({ id: "overlay-demo", kind: "overlay", component: "main", size: { width: 340, height: 140 }, props: { windowId: "overlay-demo", windowProps: { overlay: true } } });
       report("Overlay opened without requesting focus. Its background is transparent; click its Close button when finished.");
     }}>Open nonactivating overlay</ActionButton>
     <RecursiveWatchDemo report={report} />

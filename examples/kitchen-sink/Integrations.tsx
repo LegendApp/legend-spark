@@ -37,7 +37,7 @@ export function Integrations({ report }: { report: (value: unknown) => void }) {
       else {
         const item = await createTray({ id: "kitchen", title: "Kitchen Sink", ...(Platform.OS === "macos" ? { macos: { symbol: "cup.and.saucer" } } : {}), tooltip: "Desktop Kitchen Sink", menu: [
           { type: "action", id: "open", label: "Show kitchen sink" }, { type: "separator" }, { type: "checkbox", id: "checked", label: "Checked item", checked: true }, { type: "action", id: "disabled", label: "Disabled item", disabled: true },
-        ], onAction: event => { reportTray(event); if (event.type === "action" && event.itemId === "open") void showWindow().catch(reportTray); } });
+        ], onAction: event => { reportTray(event); if (event.type === "action" && event.itemId === "open") void showWindow("main").catch(reportTray); } });
         if (!mounted.current) await item.remove(); else { tray.current = item; setTrayActive(true); }
       }
     } finally { if (mounted.current) setBusy(false); }

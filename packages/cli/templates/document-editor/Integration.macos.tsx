@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { Button } from "@legendapp/spark/ui";
-import { beforeWindowClose, openWindow, setWindowTitle, onWindowEvent } from "@legendapp/spark/windows";
+import { beforeWindowClose, openWindow, setWindowOptions, addWindowListener } from "@legendapp/spark/windows";
 import { beforeQuit } from "@legendapp/spark/app";
 import { useMenu, type MenuItem } from "@legendapp/spark/menus";
 import { registerShortcut } from "@legendapp/spark/shortcuts";
@@ -21,8 +21,9 @@ export function Integration({ session, windowId, documentId, onReady }: { sessio
   }, onError: error => setError(String(error)) });
   useEffect(() => {
     if (menu.status !== "ready") return;
-    const focus = onWindowEvent(event => { if (event.type === "focus" && event.windowId === windowId) void menu.menu.update({ items }).catch(error => setError(String(error))); });
-    return () => focus.remove();
+    let disposed = false, focus: Awaited<ReturnType<typeof addWindowListener>> | undefined;
+    void addWindowListener(windowId, "focusChanged", event => { if (event.focused) void menu.menu.update({ items }).catch(error => setError(String(error))); }).then(value => { if (disposed) void value.remove(); else focus = value; }).catch(error => setError(String(error)));
+    return () => { disposed = true; void focus?.remove(); };
   }, [menu, windowId]);
   useEffect(() => {
     let removed = false;
@@ -32,7 +33,7 @@ export function Integration({ session, windowId, documentId, onReady }: { sessio
       if (removed) await subscription.remove(); else cleanups.push(() => subscription.remove());
     };
     const actions: Record<string, () => unknown> = { new: () => session.newDocument(), open: () => session.open(), save: () => session.save(), saveAs: () => session.save(true) };
-    const title = () => { const state = session.getSnapshot(); void setWindowTitle(windowId, `${state.file.name}${session.dirty ? " •" : ""}`).catch(e => setError(String(e))); };
+    const title = () => { const state = session.getSnapshot(); void setWindowOptions(windowId, { title: `${state.file.name}${session.dirty ? " •" : ""}` }).catch(e => setError(String(e))); };
     title(); cleanups.push(session.subscribe(title));
     void (async () => {
       await retain(beforeWindowClose(windowId, session.canClose));
@@ -52,7 +53,7 @@ export function Integration({ session, windowId, documentId, onReady }: { sessio
     return () => { removed = true; for (const cleanup of cleanups.reverse()) void Promise.resolve().then(cleanup).catch(console.error); };
   }, [session, windowId, onReady]);
   return <>
-    <Button onPress={() => { void openWindow({ id: `document-${++nextWindow}`, title: session.getSnapshot().file.name, width: 800, height: 600, props: { documentId } }).catch(e => setError(String(e))); }}>Open another view</Button>
+    <Button onPress={() => { const id = `document-${++nextWindow}`; void openWindow({ id, title: session.getSnapshot().file.name, component: "main", size: { width: 800, height: 600 }, props: { windowId: id, windowProps: { documentId } } }).catch(e => setError(String(e))); }}>Open another view</Button>
     {error ? <Text accessibilityRole="alert">{error}</Text> : null}
   </>;
 }

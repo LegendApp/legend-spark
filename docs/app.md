@@ -30,7 +30,8 @@ Every registered guard must return `true`. A false result, thrown/rejected handl
 | `activate`, `deactivate`, `willQuit` | None |
 | `reopen` | `hasVisibleWindows`, `mainWindowWasVisible` |
 | `secondInstance` | `arguments` from the incoming launch |
+| `windowOpened`, `windowClosed` | `windowId`; application-wide registry changes, including reused IDs |
 
-All payloads include `type`. `willQuit` is a notification, not an asynchronous cleanup opportunity. Use `getAppContext()` for initial identity and `/app/documents` for replayable open requests. There is no public raw native event stream or separate `/app/exit` API.
+All payloads include `type`. Window registry events follow logical IDs across instances; use `/windows` listeners to bind to one native window lifetime. `finishWindowRestoration()` completes the macOS startup-shell restoration coordinator after the application has opened its restored roots. `willQuit` is a notification, not an asynchronous cleanup opportunity. Use `getAppContext()` for initial identity and `/app/documents` for replayable open requests. There is no public raw native event stream or separate `/app/exit` API.
 
 Validation: JavaScript tests exercise independent guards, stale replies, concurrent quit calls, invalid native output, and cleanup retries. A native macOS coordinator fixture exercises all-handler approval, joins, vetoes, guard changes and timeouts. The changed macOS bridge/transport passes an Objective-C++ syntax check with RN declarations stubbed. Actual application shutdown and Windows compilation remain pending.

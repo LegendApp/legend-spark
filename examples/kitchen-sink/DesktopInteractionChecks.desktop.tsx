@@ -9,7 +9,7 @@ import * as system from "@legendapp/spark/system";
 import { createTray } from "@legendapp/spark/tray";
 import { registerGlobalShortcut } from "@legendapp/spark/global-shortcuts";
 import { createMenu, type MenuAction } from "@legendapp/spark/menus";
-import { getWindow, openWindow, closeWindow, onWindowEvent } from "@legendapp/spark/windows";
+import { getWindow, openWindow, closeWindow, addWindowListener } from "@legendapp/spark/windows";
 import { assertContract } from "./contract-cases";
 
 async function requireError(action: () => Promise<unknown>, code: string) {
@@ -80,22 +80,23 @@ export default function DesktopInteractionChecks({ check, onError, onBusy }: {
     try {
       await requireError(() => registerGlobalShortcut(accelerator, () => {}), "E_BUSY");
       await within(action, 45000);
-      assertContract(!(await getWindow()).focused, "Shortcut must be tested while another application has focus");
+      assertContract(!(await getWindow("main")).focused, "Shortcut must be tested while another application has focus");
     } finally { await registration.remove(); await registration.remove(); }
     const replacement = await registerGlobalShortcut(accelerator, () => {}); await replacement.remove();
     setInstruction("Global shortcut, conflict rejection, removal, and re-registration passed.");
   }
   async function modalWindows() {
     setInstruction("A modal window will open. Verify the main window cannot receive input, then close the modal with its title-bar close button.");
-    await requireError(() => openWindow({ id: "missing-parent-check", parentId: "absent", modal: true }), "E_NOT_FOUND");
+    await requireError(() => openWindow({ id: "missing-parent-check", parentId: "absent", modal: true, component: "main", kind: "window", props: { windowId: "missing-parent-check", windowProps: {} } }), "E_NOT_FOUND");
     let closed!: () => void;
     const action = new Promise<void>(resolve => { closed = resolve; });
-    const sub = onWindowEvent(event => { if (event.type === "closed" && event.windowId === "contract-modal") closed(); });
+    let sub: Awaited<ReturnType<typeof addWindowListener>> | undefined;
     let opened = false;
     try {
-      await openWindow({ id: "contract-modal", parentId: "main", modal: true, title: "Close this modal to continue", width: 500, height: 400 }); opened = true;
+      await openWindow({ id: "contract-modal", parentId: "main", modal: true, title: "Close this modal to continue", component: "main", size: { width: 500, height: 400 }, kind: "window", props: { windowId: "contract-modal", windowProps: {} } }); opened = true;
+      sub = await addWindowListener("contract-modal", "closed", closed);
       await within(action, 45000); opened = false;
-    } finally { sub.remove(); if (opened) await closeWindow("contract-modal"); }
+    } finally { await sub?.remove(); if (opened) await closeWindow("contract-modal"); }
     setInstruction("Modal closed. Verify the main window accepts input again.");
   }
   async function advancedMenus() {

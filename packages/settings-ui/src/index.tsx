@@ -78,7 +78,7 @@ function useSettingsWindow(windowId: string, title: string, appearance: SidebarS
   const showIfReady = useCallback(() => {
     if (!active.current || !contentReady.current || !splitReady.current || shown.current) return;
     shown.current = true;
-    void import("@legendapp/spark-desktop-windows/src/window-manager").then(async windows => {
+    void import("@legendapp/spark-desktop-windows/src/api").then(async windows => {
       if (!active.current) { shown.current = false; return; }
       await windows.showWindow(windowId);
     }).catch(cause => { shown.current = false; report(cause); });
@@ -86,8 +86,8 @@ function useSettingsWindow(windowId: string, title: string, appearance: SidebarS
   useEffect(() => { active.current = true; showIfReady(); return () => { active.current = false; }; }, [showIfReady]);
   useEffect(() => {
     let current = true;
-    void import("@legendapp/spark-desktop-windows/src/window-manager").then(async windows => {
-      if (current) await windows.setWindowOptions(windowId, { title, windowStyle: { appearance } });
+    void import("@legendapp/spark-desktop-windows/src/api").then(async windows => {
+      if (current) await windows.setWindowOptions(windowId, { title, appearance });
     }).catch(cause => { if (current) report(cause); });
     return () => { current = false; };
   }, [appearance, report, title, windowId]);

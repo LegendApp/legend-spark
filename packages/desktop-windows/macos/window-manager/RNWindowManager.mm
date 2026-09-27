@@ -654,8 +654,13 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
   BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
   BOOL usesTitlebarBackground = transparentTitlebar.boolValue && backgroundColor.length > 0;
 
-  if (maskNumber) {
-    window.styleMask = maskNumber.unsignedIntegerValue;
+  if (maskNumber) window.styleMask = maskNumber.unsignedIntegerValue;
+  if (options[@"level"]) window.level = [options[@"level"] integerValue];
+  if (windowStyle[@"trafficLights"]) for (NSNumber *button in @[@(NSWindowCloseButton), @(NSWindowMiniaturizeButton), @(NSWindowZoomButton)]) [window standardWindowButton:(NSWindowButton)button.integerValue].hidden = ![windowStyle[@"trafficLights"] boolValue];
+  if (windowStyle[@"panelStyle"]) {
+    NSWindowStyleMask mask = window.styleMask & ~(NSWindowStyleMaskUtilityWindow | NSWindowStyleMaskDocModalWindow | NSWindowStyleMaskNonactivatingPanel);
+    NSString *panel = windowStyle[@"panelStyle"];
+    window.styleMask = mask | ([panel isEqual:@"utility"] ? NSWindowStyleMaskUtilityWindow : [panel isEqual:@"documentModal"] ? NSWindowStyleMaskDocModalWindow : NSWindowStyleMaskNonactivatingPanel);
   }
   LegendApplyContentLayoutModeOption(window, contentLayoutMode);
   LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
@@ -1086,7 +1091,8 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     NSSegmentedControl *segmentedControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
     segmentedControl.segmentCount = 1;
     segmentedControl.segmentStyle = NSSegmentStyleSeparated;
-    segmentedControl.trackingMode = NSSegmentSwitchTrackingMomentary;
+    segmentedControl.trackingMode = NSSegmentSwitchTrackingSelectAny;
+    [segmentedControl setSelected:[control[@"selected"] boolValue] forSegment:0];
     segmentedControl.target = self;
     segmentedControl.action = @selector(titlebarControlPressed:);
     segmentedControl.controlSize = NSControlSizeRegular;
@@ -1106,6 +1112,8 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     objc_setAssociatedObject(segmentedControl, &LegendTitlebarControlMetadataKey, @{
       @"controlId": controlId,
       @"windowIdentifier": identifier ?: @"",
+      @"instanceId": objc_getAssociatedObject(window, NSSelectorFromString(@"sparkWindowInstanceId")) ?: @"",
+      @"selected": control[@"selected"] ?: @NO,
     }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     NSTitlebarAccessoryViewController *controller = [NSTitlebarAccessoryViewController new];
@@ -1132,8 +1140,9 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     ? representedObject[@"controlId"]
     : @"";
 
+  if ([sender isKindOfClass:NSSegmentedControl.class]) [(NSSegmentedControl *)sender setSelected:[representedObject[@"selected"] boolValue] forSegment:0];
   [self sendWindowEventWithName:@"onTitlebarControlPressed"
-                           body:@{@"identifier": identifier, @"controlId": controlId}];
+                           body:@{@"identifier": identifier, @"controlId": controlId, @"instanceId": representedObject[@"instanceId"] ?: @""}];
 }
 
 - (NSString *)toolbarItemIdentifierForConfig:(NSDictionary *)config
@@ -1206,7 +1215,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   NSMutableArray<NSDictionary *> *configs = [NSMutableArray new];
   for (id item in toolbarItems) {
     if ([item isKindOfClass:NSDictionary.class]) {
-      [configs addObject:item];
+      NSMutableDictionary *config = [item mutableCopy]; config[@"instanceId"] = objc_getAssociatedObject(window, NSSelectorFromString(@"sparkWindowInstanceId")) ?: @""; [configs addObject:config];
     }
   }
   self.toolbarItemConfigs[toolbar.identifier] = configs;
@@ -1395,6 +1404,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       @"menuItems": menuItems,
       @"value": [config[@"value"] isKindOfClass:NSString.class] ? config[@"value"] : @"",
       @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar),
+      @"instanceId": config[@"instanceId"] ?: @"",
     };
     if (isMenuButton) {
       NSButton *button = [NSButton buttonWithTitle:label target:self action:@selector(toolbarButtonItemPressed:)];
@@ -1457,6 +1467,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     NSDictionary *metadata = @{
       @"itemId": itemId,
       @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar),
+      @"instanceId": config[@"instanceId"] ?: @"",
     };
 
     NSSearchField *searchField = nil;
@@ -1557,7 +1568,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       NSDictionary *segmentConfig = (NSDictionary *)segment;
       NSString *label = [segmentConfig[@"label"] isKindOfClass:NSString.class] ? segmentConfig[@"label"] : @"";
       NSString *value = [segmentConfig[@"value"] isKindOfClass:NSString.class] ? segmentConfig[@"value"] : label;
-      if (label.length > 0 && value.length > 0) {
+      if (label.length > 0 && value != nil) {
         NSString *systemImageName = [segmentConfig[@"systemImageName"] isKindOfClass:NSString.class]
           ? segmentConfig[@"systemImageName"]
           : @"";
@@ -1582,7 +1593,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
   control.action = @selector(toolbarSegmentedControlChanged:);
   control.controlSize = NSControlSizeRegular;
   control.segmentStyle = NSSegmentStyleAutomatic;
-  control.selectedSegment = selectedSegment >= 0 ? selectedSegment : 0;
+  control.selectedSegment = selectedSegment;
 
   CGFloat totalWidth = 0;
   for (NSInteger index = 0; index < labels.count; index += 1) {
@@ -1611,6 +1622,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     @"itemId": itemId,
     @"values": values,
     @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar),
+      @"instanceId": config[@"instanceId"] ?: @"",
   }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   control.frame = NSMakeRect(0, 0, totalWidth, control.fittingSize.height);
 
@@ -1624,12 +1636,13 @@ willBeInsertedIntoToolbar:(BOOL)flag
 - (void)toolbarMenuSliderChanged:(NSSlider *)sender
 {
   NSDictionary *metadata = objc_getAssociatedObject(sender, &LegendToolbarControlMetadataKey);
-  NSInteger value = (NSInteger)llround(sender.doubleValue);
+  double value = sender.doubleValue;
   NSTextField *readout = [sender.superview viewWithTag:731];
-  readout.stringValue = [NSString stringWithFormat:@"%ld%@", (long)value, metadata[@"suffix"] ?: @""];
+  readout.stringValue = [NSString stringWithFormat:@"%g%@", value, metadata[@"suffix"] ?: @""];
   [self sendWindowEventWithName:@"onToolbarItemSelected" body:@{
     @"identifier": metadata[@"windowIdentifier"], @"itemId": metadata[@"itemId"],
-    @"value": [NSString stringWithFormat:@"%@:%ld", metadata[@"value"], (long)value],
+    @"instanceId": metadata[@"instanceId"] ?: @"",
+    @"action": @{ @"type": @"valueChanged", @"itemId": metadata[@"value"], @"value": @(value) },
   }];
 }
 
@@ -1649,7 +1662,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     : @"";
 
   [self sendWindowEventWithName:@"onToolbarItemSelected"
-                           body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
+                           body:@{@"identifier": identifier, @"itemId": itemId, @"action": @{ @"type": @"action", @"itemId": value }, @"instanceId": representedObject[@"instanceId"] ?: @""}];
 }
 
 - (void)toolbarSearchButtonPressed:(id)sender
@@ -1698,8 +1711,8 @@ willBeInsertedIntoToolbar:(BOOL)flag
         [menu addItem:NSMenuItem.separatorItem];
         continue;
       }
-      NSString *itemLabel = [itemConfig[@"label"] isKindOfClass:NSString.class] ? itemConfig[@"label"] : @"";
-      NSString *itemValue = [itemConfig[@"value"] isKindOfClass:NSString.class] ? itemConfig[@"value"] : @"";
+      NSString *itemLabel = [itemConfig[@"title"] isKindOfClass:NSString.class] ? itemConfig[@"title"] : @"";
+      NSString *itemValue = [itemConfig[@"id"] isKindOfClass:NSString.class] ? itemConfig[@"id"] : @"";
       if (itemLabel.length == 0 || itemValue.length == 0) {
         continue;
       }
@@ -1724,9 +1737,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
         slider.continuous = YES;
         slider.accessibilityLabel = itemLabel;
         slider.enabled = LegendDictionaryHasKey(itemConfig, @"enabled") ? [itemConfig[@"enabled"] boolValue] : YES;
-        readout.stringValue = [NSString stringWithFormat:@"%.0f%@", slider.doubleValue, suffix];
+        readout.stringValue = [NSString stringWithFormat:@"%g%@", slider.doubleValue, suffix];
         objc_setAssociatedObject(slider, &LegendToolbarControlMetadataKey, @{
-          @"windowIdentifier": identifier, @"itemId": itemId, @"value": itemValue, @"suffix": suffix,
+          @"windowIdentifier": identifier, @"instanceId": representedObject[@"instanceId"] ?: @"", @"itemId": itemId, @"value": itemValue, @"suffix": suffix,
         }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [container addSubview:slider];
         NSMenuItem *sliderItem = [NSMenuItem new];
@@ -1737,7 +1750,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:itemLabel action:@selector(toolbarMenuItemSelected:) keyEquivalent:@""];
       item.target = self;
       item.enabled = LegendDictionaryHasKey(itemConfig, @"enabled") ? [itemConfig[@"enabled"] boolValue] : YES;
-      item.state = LegendDictionaryHasKey(itemConfig, @"selected") && [itemConfig[@"selected"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+      item.state = LegendDictionaryHasKey(itemConfig, @"checked") && [itemConfig[@"checked"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
       NSString *itemSystemImageName = [itemConfig[@"systemImageName"] isKindOfClass:NSString.class] ? itemConfig[@"systemImageName"] : nil;
       if (itemSystemImageName.length > 0) {
         if (@available(macOS 11.0, *)) {
@@ -1747,7 +1760,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       item.representedObject = @{
         @"itemId": itemId,
         @"value": itemValue,
-        @"windowIdentifier": identifier,
+        @"windowIdentifier": identifier, @"instanceId": representedObject[@"instanceId"] ?: @"",
       };
       [menu addItem:item];
     }
@@ -1770,7 +1783,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
   }
 
   [self sendWindowEventWithName:@"onToolbarItemSelected"
-                           body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
+                           body:@{@"identifier": identifier, @"itemId": itemId, @"value": value, @"instanceId": representedObject[@"instanceId"] ?: @""}];
 }
 
 - (void)toolbarSegmentedControlChanged:(NSSegmentedControl *)sender
@@ -1792,7 +1805,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     : @"";
 
   [self sendWindowEventWithName:@"onToolbarItemSelected"
-                           body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
+                           body:@{@"identifier": identifier, @"itemId": itemId, @"value": value, @"kind": @"selection", @"instanceId": representedObject[@"instanceId"] ?: @""}];
 }
 
 - (void)sendToolbarSearchEventForField:(NSSearchField *)searchField
@@ -1816,6 +1829,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
                              @"itemId": itemId,
                              @"shiftKey": @(shiftKey),
                              @"submitted": @(submitted),
+                             @"instanceId": representedObject[@"instanceId"] ?: @"",
                              @"value": searchField.stringValue ?: @"",
                            }];
 }
@@ -2117,144 +2131,24 @@ willBeInsertedIntoToolbar:(BOOL)flag
     NSNumber *originY = [options[@"y"] isKindOfClass:NSNumber.class] ? options[@"y"] : nil;
     BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
     NSWindow *existingWindow = (NSWindow *)self.windows[identifier];
-    if (existingWindow) {
-      NSString *existingModuleName = self.moduleNames[identifier] ?: @"";
-      NSString *nextModuleName = moduleName ?: @"";
-      if (![existingModuleName isEqualToString:nextModuleName]) {
-        [self handleWindowClosedForIdentifier:identifier closeWindow:YES];
-        existingWindow = nil;
-      }
-    }
-
-    if (existingWindow && [windowStyle[@"fullscreen"] boolValue] &&
-        (existingWindow.styleMask & NSWindowStyleMaskFullScreen)) {
-      [existingWindow makeKeyAndOrderFront:nil];
-      resolve([self successJson]);
-      return;
-    }
-    if (existingWindow) {
-      RCTUIView *existingRootView = self.rootViews[identifier];
-      NSRect frame = existingWindow.frame;
-      CGFloat newWidth = widthNumber ? width : frame.size.width;
-      CGFloat newHeight = heightNumber ? height : frame.size.height;
-      if (hasMinWidth && newWidth < minWidth) {
-        newWidth = minWidth;
-      }
-      if (hasMinHeight && newHeight < minHeight) {
-        newHeight = minHeight;
-      }
-
-      NSPoint origin = frame.origin;
-      if (originX) {
-        origin.x = originX.doubleValue;
-      }
-      if (originY) {
-        origin.y = originY.doubleValue;
-      }
-
-      NSRect newFrame = NSMakeRect(origin.x, origin.y, newWidth, newHeight);
-      if (animateFrameChange && frameAnimationDuration > 0) {
-        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
-          context.duration = frameAnimationDuration;
-          context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-          [[existingWindow animator] setFrame:newFrame display:YES];
-        } completionHandler:nil];
-      } else {
-        [existingWindow setFrame:newFrame display:YES animate:animateFrameChange];
-      }
-
-      if (maskNumber) {
-        existingWindow.styleMask = maskNumber.unsignedIntegerValue;
-      }
-      LegendApplyContentLayoutModeOption(existingWindow, contentLayoutMode);
-      LegendApplyContentLayoutMode(existingWindow, maskNumber, usesTitlebarBackground);
-      if (transparentTitlebar != nil) {
-        existingWindow.titlebarAppearsTransparent = transparentTitlebar.boolValue;
-      }
-      LegendApplyTitleVisibility(existingWindow, titleVisibility);
-      if (hasToolbar && !existingWindow.toolbar) {
-        NSToolbar *toolbar = LegendCreateToolbar(identifier);
-        existingWindow.toolbar = toolbar;
-      }
-      LegendApplyToolbarStyle(existingWindow, toolbarStyle);
-      LegendApplyTitlebarSeparatorStyle(existingWindow, titlebarSeparatorStyle);
-      [self applyTitlebarControlsFromOptions:options toWindow:existingWindow identifier:identifier];
-      [self applyToolbarItemsFromOptions:options toWindow:existingWindow identifier:identifier];
-      [self applyTitlebarMaterialFromOptions:options toWindow:existingWindow identifier:identifier];
-      LegendApplyWindowAppearance(existingWindow, appearance);
-      LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
-
-      if (levelNumber) {
-        existingWindow.level = levelNumber.integerValue;
-        if (!deferOrderFront || existingWindow.isVisible) {
-          [existingWindow orderFrontRegardless];
-        }
-      }
-      if (shouldApplyHasShadow) {
-        existingWindow.hasShadow = hasShadow;
-        if (hasShadow) {
-          [existingWindow invalidateShadow];
-        }
-      }
-      if (transparentBackground) {
-        existingWindow.opaque = NO;
-        if (!hasToolbar) {
-          existingWindow.backgroundColor = NSColor.clearColor;
-        }
-        NSView *contentView = existingWindow.contentView;
-        contentView.wantsLayer = YES;
-        contentView.layer.backgroundColor = NSColor.clearColor.CGColor;
-        contentView.layer.masksToBounds = NO;
-        existingRootView.backgroundColor = NSColor.clearColor;
-      }
-
-      // A focus-only open must not replace document metadata with the module name.
-      if (LegendDictionaryHasKey(options, @"title") || hasRepresentedURL) {
-        NSString *explicitTitle = [options[@"title"] isKindOfClass:NSString.class] ? options[@"title"] : nil;
-        LegendApplyWindowTitleAndRepresentedURL(existingWindow, explicitTitle, hasRepresentedURL, representedURLValue, existingWindow.title);
-      }
-      if (!appearance && darkAppearance) {
-        existingWindow.appearance = darkAppearance;
-      }
-      existingWindow.delegate = self;
-      if (hasMinWidth || hasMinHeight) {
-        NSSize currentMinSize = existingWindow.minSize;
-        [existingWindow setMinSize:NSMakeSize(hasMinWidth ? minWidth : currentMinSize.width,
-                                              hasMinHeight ? minHeight : currentMinSize.height)];
-      }
-
-      NSDictionary *initialProps = [self initialPropsFromOptions:options];
-      if (existingRootView && initialProps && [existingRootView respondsToSelector:@selector(setAppProperties:)]) {
-        [existingRootView setValue:initialProps forKey:@"appProperties"];
-      }
-      if (usesTitlebarBackground && existingRootView) {
-        LegendEnsureRootViewContainer(existingWindow, existingRootView);
-        LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
-      }
-      LegendSizeRootViewToWindow(existingRootView, existingWindow);
-      LegendPrepareWindowForDisplay(existingWindow, backgroundColor);
-      if (interceptClose) {
-        [self.closeRequestIdentifiers addObject:identifier];
-      } else if (LegendDictionaryHasKey(options, @"interceptClose")) {
-        [self.closeRequestIdentifiers removeObject:identifier];
-      }
-      self.moduleNames[identifier] = moduleName ?: @"";
-      if (!deferOrderFront || existingWindow.isVisible) {
-        [existingWindow makeKeyAndOrderFront:nil];
-      }
-      [self recordWindowOptions:options identifier:identifier moduleName:moduleName];
-      [self finishOpeningWindow:existingWindow options:windowStyle resolve:resolve reject:reject];
-      return;
-    }
+    if (existingWindow) { reject(@"E_ALREADY_EXISTS", @"Window ID is already open", nil); return; }
 
     NSUInteger styleMask = maskNumber
       ? maskNumber.unsignedIntegerValue
       : (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable);
     NSWindow *precreatedWindow = LegendTakePrecreatedWindow ? LegendTakePrecreatedWindow(identifier) : nil;
-    NSWindow *window = precreatedWindow ?: [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, width, height)
+    NSWindow *window = precreatedWindow ?: [[([options[@"sparkOverlay"] boolValue] || windowStyle[@"panelStyle"] ? NSPanel.class : NSWindow.class) alloc] initWithContentRect:NSMakeRect(0, 0, width, height)
                                                    styleMask:styleMask
                                                      backing:NSBackingStoreBuffered
                                                        defer:NO];
+    objc_setAssociatedObject(window, NSSelectorFromString(@"sparkWindowInstanceId"), NSUUID.UUID.UUIDString, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if ([options[@"sparkOverlay"] boolValue]) {
+      ((NSPanel *)window).hidesOnDeactivate = NO;
+      window.styleMask |= NSWindowStyleMaskNonactivatingPanel;
+      window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
+    }
+    objc_setAssociatedObject(window, NSSelectorFromString(@"sparkRestoredShell"), @(precreatedWindow != nil), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    LegendApplyWindowOptions(window, options);
     LegendApplyContentLayoutModeOption(window, contentLayoutMode);
     LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
 
@@ -2467,7 +2361,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       ? [RNWindowManager getMainWindow]
       : (NSWindow *)self.windows[targetIdentifier];
     if (!window) {
-      reject(@"window_not_found", @"Window not found", nil);
+      reject(@"E_NOT_FOUND", @"Window not found", nil);
       return;
     }
     window.title = title ?: @"";
@@ -2557,7 +2451,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       ? [RNWindowManager getMainWindow]
       : (NSWindow *)self.windows[targetIdentifier];
     if (!window) {
-      reject(@"window_not_found", @"Window not found", nil);
+      reject(@"E_NOT_FOUND", @"Window not found", nil);
       return;
     }
 
@@ -2570,7 +2464,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       }
     }
     if (!toolbarItem) {
-      resolve([self failureJson:@"Toolbar search item not found"]);
+      reject(@"E_NOT_FOUND", @"Toolbar search item not found", nil);
       return;
     }
 
@@ -2592,11 +2486,11 @@ willBeInsertedIntoToolbar:(BOOL)flag
       }
     }
     if (!searchField) {
-      resolve([self failureJson:@"Toolbar search field not found"]);
+      reject(@"E_NOT_FOUND", @"Toolbar search field not found", nil);
       return;
     }
 
-    searchField.stringValue = value ?: @"";
+    if (value) searchField.stringValue = value;
     [self sendToolbarSearchEventForField:searchField submitted:NO shiftKey:NO];
     [window makeKeyAndOrderFront:nil];
     [window makeFirstResponder:searchField];
@@ -2692,7 +2586,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
     NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
     if (!window) {
-      reject(@"window_not_found", @"Window not found", nil);
+      reject(@"E_NOT_FOUND", @"Window not found", nil);
       return;
     }
 
@@ -2711,7 +2605,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
   RCTExecuteOnMainQueue(^{
     NSWindow *mainWindow = [RNWindowManager getMainWindow];
     if (!mainWindow) {
-      reject(@"window_not_found", @"Main window not found", nil);
+      reject(@"E_NOT_FOUND", @"Main window not found", nil);
       return;
     }
 
@@ -2745,14 +2639,14 @@ willBeInsertedIntoToolbar:(BOOL)flag
   RCTExecuteOnMainQueue(^{
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
     NSDictionary *options = [self parseObjectJSON:optionsJson];
+    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      reject(@"E_NOT_FOUND", @"Window not found", nil);
+      return;
+    }
     [self recordWindowOptions:options
                    identifier:targetIdentifier
                    moduleName:self.moduleNames[targetIdentifier] ?: @""];
-    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
-    if (!window) {
-      reject(@"window_not_found", @"Window not found", nil);
-      return;
-    }
     LegendApplyWindowOptions(window, options);
     [self applyTitlebarControlsFromOptions:options toWindow:window identifier:targetIdentifier];
     [self applyToolbarItemsFromOptions:options toWindow:window identifier:targetIdentifier];
@@ -2815,7 +2709,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
     NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
     if (!window) {
-      reject(@"window_not_found", @"Target window not found for blur animation", nil);
+      reject(@"E_NOT_FOUND", @"Target window not found for blur animation", nil);
       return;
     }
 
@@ -2997,6 +2891,17 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
 - (void)sendWindowEventWithName:(NSString *)eventName body:(id)body
 {
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+  NSString *type = nil;
+  if ([eventName isEqual:@"onTitlebarControlPressed"]) type = @"titleBarAction";
+  else if ([eventName isEqual:@"onToolbarItemSelected"]) type = body[@"action"] ? @"toolbarMenuAction" : [body[@"kind"] isEqual:@"selection"] ? @"toolbarSelectionChanged" : @"toolbarAction";
+  else if ([eventName isEqual:@"onToolbarSearch"]) type = [body[@"submitted"] boolValue] ? @"toolbarSearchSubmitted" : @"toolbarSearchChanged";
+  if (type) {
+    NSMutableDictionary *event = [body mutableCopy]; event[@"type"] = type; event[@"windowId"] = body[@"identifier"] ?: @"";
+    SparkEmit(event); return;
+  }
+#endif
+
   if (!self.hasListeners) {
     return;
   }

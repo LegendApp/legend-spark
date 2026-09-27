@@ -23,7 +23,7 @@ export type UseDocumentAppControllerOptions = {
   onReopenRequested?: (controller: DocumentAppController) => Promise<void> | void;
   ownerId: string;
   reportError: (error: unknown) => void;
-  windowIdentifier?: string;
+  windowId: string;
 };
 
 export type OpenSelectedDocumentPathOptions = {
@@ -143,7 +143,7 @@ export function useDocumentAppController({
   onReopenRequested,
   ownerId,
   reportError,
-  windowIdentifier,
+  windowId,
 }: UseDocumentAppControllerOptions) {
   const [isDocumentWindowOpen, setDocumentWindowOpen] = useState(false);
   const controller = useMemo<DocumentAppController>(() => ({
@@ -177,9 +177,9 @@ export function useDocumentAppController({
   usePrimaryWindowLifecycle({
     onInitialOpen: () => onInitialOpen(launchArguments, controller),
     onReopenRequested: () => onReopenRequested ? onReopenRequested(controller) : onInitialOpen(undefined, controller),
-    onWindowClosed: windowIdentifier ? () => controller.setDocumentWindowOpen(false) : undefined,
-    reportError,
-    windowIdentifier,
+    onWindowClosed: windowId ? () => controller.setDocumentWindowOpen(false) : undefined,
+    onError: reportError,
+    windowId,
   });
 
   return controller;

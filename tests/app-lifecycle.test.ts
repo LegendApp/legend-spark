@@ -55,3 +55,11 @@ test("failed guard creation retains orphan cleanup and retries it before the nex
   await expect(quit()).resolves.toEqual({ quitRequested: true });
   expect(mocks.call.mock.calls.slice(-2).map(([method]) => method)).toEqual(["quitGuard", "quit"]);
 });
+test("application window events follow logical IDs across native generations", () => {
+  const listener = vi.fn(), registration = addAppListener("windowClosed", listener);
+  emit({ type: "closed", windowId: "editor", instanceId: "first" });
+  emit({ type: "closed", windowId: "editor", instanceId: "second" });
+  emit({ type: "closed" });
+  expect(listener.mock.calls).toEqual([[{ type: "windowClosed", windowId: "editor" }], [{ type: "windowClosed", windowId: "editor" }]]);
+  registration.remove();
+});

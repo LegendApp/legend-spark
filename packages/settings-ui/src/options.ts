@@ -1,60 +1,10 @@
-import type {
-  WindowStyleMask,
-  WindowOptions,
-} from "@legendapp/spark-desktop-windows/src/window-manager";
-
-const SETTINGS_WINDOW_DEFAULT_HEIGHT = 640;
-const SETTINGS_WINDOW_DEFAULT_WIDTH = 820;
-const SETTINGS_WINDOW_MIN_HEIGHT = 500;
-const SETTINGS_WINDOW_MIN_WIDTH = 720;
-
-export type CreateSettingsWindowOptionsInput = Omit<
-  WindowOptions,
-  "deferOrderFront" | "windowStyle" | "transparentBackground"
-> & {
-  defaultPageId?: string;
-  windowStyle?: WindowOptions["windowStyle"];
-  transparentBackground?: boolean;
-};
-
-export function createSettingsWindowOptions({
-  defaultPageId,
-  title = "Settings",
-  transparentBackground = true,
-  windowStyle,
-  ...options
-}: CreateSettingsWindowOptionsInput = {}): WindowOptions {
-  const initialProperties = defaultPageId || options.initialProperties
-    ? {
-        ...(options.initialProperties ?? {}),
-        ...(defaultPageId ? { defaultPageId } : {}),
-      }
-    : undefined;
-
+import type { NavigatorWindowOptions } from "@legendapp/spark-desktop-windows/src/windows/types";
+export type CreateSettingsWindowOptionsInput = NavigatorWindowOptions;
+/** SettingsWindow presents the hidden window when its native layout is ready. */
+export function createSettingsWindowOptions(options: CreateSettingsWindowOptionsInput = {}): NavigatorWindowOptions {
   return {
-    ...options,
-    deferOrderFront: true,
-    initialProperties,
-    title,
-    transparentBackground,
-    windowStyle: {
-      hasToolbar: true,
-      height: SETTINGS_WINDOW_DEFAULT_HEIGHT,
-      mask: [
-        "Titled" as WindowStyleMask,
-        "Closable" as WindowStyleMask,
-        "Resizable" as WindowStyleMask,
-        "FullSizeContentView" as WindowStyleMask,
-        "UnifiedTitleAndToolbar" as WindowStyleMask,
-      ],
-      minHeight: SETTINGS_WINDOW_MIN_HEIGHT,
-      minWidth: SETTINGS_WINDOW_MIN_WIDTH,
-      titlebarAppearsTransparent: true,
-      titlebarSeparatorStyle: "none",
-      titleVisibility: "visible",
-      toolbarStyle: "unified",
-      width: SETTINGS_WINDOW_DEFAULT_WIDTH,
-      ...(windowStyle ?? {}),
-    },
+    title: "Settings", transparent: true, size: { width: 820, height: 640 }, minSize: { width: 720, height: 500 }, titleBarStyle: "overlay",
+    ...options, show: false,
+    macos: { ...options.macos, titleBar: { transparent: true, separator: "none", titleVisibility: "visible", ...options.macos?.titleBar }, toolbar: { visible: true, style: "unified", ...options.macos?.toolbar } },
   };
 }

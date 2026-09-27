@@ -35,7 +35,7 @@ export async function runSidecarChecks() {
     const child = await spawn({ target: { type: "helper", name: "echo" }, timeoutMs: 30000 });
     try {
       for (let attempt = 0; attempt < 50; attempt++) {
-        await windows.openWindow({ id: "sidecar-owner-probe", width: 400, height: 300 });
+        await windows.openWindow({ id: "sidecar-owner-probe", component: "main", size: { width: 400, height: 300 }, props: { windowId: "sidecar-owner-probe", windowProps: {} } });
         await windows.closeWindow("sidecar-owner-probe");
         assert(!(await windows.listWindows()).some(window => window.id === "sidecar-owner-probe"), "Closed window remained registered");
       }

@@ -1,238 +1,77 @@
-import { useMount } from "@legendapp/state/react";
-import { type ComponentType, useState } from "react";
+import type { ComponentType } from "react";
 import { AppRegistry } from "react-native";
-import {
-  closeWindow as nativeCloseWindow,
-  openWindow as nativeOpenWindow,
-  type WindowOptions,
-} from "@legendapp/spark-desktop-windows/src/window-manager";
-import type { WindowConfigEntry, WindowsConfig } from "./types";
+import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
+import { openWindow, closeWindow, showWindow } from "../api";
+import type { CloseResult, WindowInfo, WindowOpenOptions } from "../types";
+import { keys, object, validateOptions, windowId } from "../validation";
+import { Platform } from "react-native";
+import type { NavigatorWindowOptions, WindowsConfig, WindowComponentProps } from "./types";
 import { withWindowProvider } from "./WindowProvider";
-
-type WindowOpenOverrides = Omit<WindowOptions, "moduleName" | "identifier"> & {
-  loadComponentBeforeNativeOpen?: boolean;
-};
-
-type RegisteredWindow = {
-  identifier: string;
-  options: WindowOptions;
-  ensureComponent: () => Promise<void>;
-};
-
-export type WindowsNavigator<TConfig extends WindowsConfig> = {
-  open: (window: keyof TConfig, overrides?: WindowOpenOverrides) => Promise<void>;
-  close: (window: keyof TConfig) => Promise<void>;
-  getIdentifier: (window: keyof TConfig) => string;
-  prefetch: (window: keyof TConfig) => Promise<void>;
-};
-
-const cloneInitialProperties = (initialProperties?: Record<string, unknown>) => {
-  if (!initialProperties) {
-    return undefined;
-  }
-
-  return { ...initialProperties };
-};
-
-const normalizeWindowOptions = (moduleName: string, identifier: string, entry?: WindowConfigEntry): WindowOptions => {
-  const baseOptions = entry?.options ? { ...entry.options } : {};
-  const baseWindowStyle = baseOptions.windowStyle ? { ...baseOptions.windowStyle } : undefined;
-  const baseInitialProps = cloneInitialProperties(baseOptions.initialProperties);
-
-  return {
-    ...baseOptions,
-    identifier,
-    moduleName,
-    windowStyle: baseWindowStyle,
-    initialProperties: baseInitialProps,
-  } satisfies WindowOptions;
-};
-
-const mergeWindowOptions = (baseOptions: WindowOptions, overrides?: WindowOpenOverrides): WindowOptions => {
-  if (!overrides) {
-    return { ...baseOptions, windowStyle: baseOptions.windowStyle ? { ...baseOptions.windowStyle } : undefined };
-  }
-
-  const mergedWindowStyle = {
-    ...(baseOptions.windowStyle ?? {}),
-    ...(overrides.windowStyle ?? {}),
-  };
-
-  const hasWindowStyle = Object.keys(mergedWindowStyle).length > 0;
-
-  const mergedInitialProps = overrides.initialProperties
-    ? { ...(baseOptions.initialProperties ?? {}), ...overrides.initialProperties }
-    : baseOptions.initialProperties
-      ? { ...baseOptions.initialProperties }
-      : undefined;
-
-  return {
-    ...baseOptions,
-    ...overrides,
-    identifier: baseOptions.identifier,
-    moduleName: baseOptions.moduleName,
-    windowStyle: hasWindowStyle ? mergedWindowStyle : undefined,
-    initialProperties: mergedInitialProps,
-  } satisfies WindowOptions;
-};
-
-export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TConfig) {
-  const registry = new Map<keyof TConfig, RegisteredWindow>();
-
-  (Object.keys(config) as Array<keyof TConfig>).forEach((key) => {
-    const moduleName = String(key);
-    const entry = config[key];
-    const identifier = entry.identifier ?? moduleName;
-
-    if (!entry.component && !entry.loadComponent) {
-      throw new Error(`Window '${moduleName}' must supply either 'component' or 'loadComponent'.`);
+export type NavigatorOpenOptions<P> = { props: P; options?: NavigatorWindowOptions };
+type OpenArguments<P> = {} extends P ? [options?: { props?: P; options?: NavigatorWindowOptions }] : [options: NavigatorOpenOptions<P>];
+export interface WindowsNavigator<T extends WindowsConfig> {
+  open<K extends keyof T>(name: K, ...args: OpenArguments<WindowComponentProps<T[K]>>): Promise<WindowInfo>;
+  close(name: keyof T): Promise<CloseResult>;
+  show(name: keyof T): Promise<void>;
+  getId(name: keyof T): string;
+  prefetch(name: keyof T): Promise<void>;
+}
+const registrations = new Set<string>();
+function component(value: unknown): value is ComponentType<any> {
+  return typeof value === "function" || (!!value && typeof value === "object" && [Symbol.for("react.memo"), Symbol.for("react.forward_ref"), Symbol.for("react.lazy")].includes((value as any).$$typeof));
+}
+export function createWindowsNavigator<T extends WindowsConfig>(config: T): WindowsNavigator<T> {
+  object(config, "navigator configuration");
+  const ids = new Set<string>();
+  for (const entry of Object.values(config)) {
+    object(entry, "window registration"); keys(entry, ["id", "component", "loadComponent", "options"]); windowId(entry.id);
+    if (entry.id === "main" || ids.has(entry.id) || registrations.has(entry.id)) throw new SparkError("E_ALREADY_EXISTS", "Window ID is already registered or reserved");
+    ids.add(entry.id);
+    if ((entry.component !== undefined) === (entry.loadComponent !== undefined) || (entry.component !== undefined && !component(entry.component)) || (entry.loadComponent !== undefined && typeof entry.loadComponent !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Register exactly one component or loadComponent");
+    if (entry.options) {
+      object(entry.options, "registration options");
+      for (const key of ["id", "component", "props"]) if (key in entry.options) throw new SparkError("E_INVALID_ARGUMENT", "Navigator identity and props cannot be overridden in options");
+      validateOptions({ ...entry.options, id: entry.id, component: "registration" } as WindowOpenOptions, Platform.OS, true);
     }
-
-    let cachedComponent: ComponentType<any> | null = entry.component
-      ? withWindowProvider(entry.component, identifier)
-      : null;
-
-    let componentPromise: Promise<ComponentType<any>> | null = entry.component
-      ? Promise.resolve(cachedComponent as ComponentType<any>)
-      : null;
-
-    const resolveComponent = async (): Promise<ComponentType<any>> => {
-      if (cachedComponent) {
-        return cachedComponent;
-      }
-
-      if (!componentPromise) {
-        componentPromise = (async () => {
-          const loaded = await entry.loadComponent!();
-
-          let resolved: ComponentType<any>;
-
-          if (typeof loaded === "function") {
-            resolved = loaded as ComponentType<any>;
-          } else if (loaded && typeof loaded === "object") {
-            if ("default" in loaded && typeof (loaded as any).default === "function") {
-              resolved = (loaded as any).default as ComponentType<any>;
-            } else {
-              throw new Error(
-                `Window '${moduleName}': loaded module is not a valid component. ` +
-                  `Expected a function or object with default export, got: ${typeof loaded}`,
-              );
-            }
-          } else {
-            throw new Error(`Window '${moduleName}': loaded module is not a valid component. Got: ${typeof loaded}`);
-          }
-
-          cachedComponent = withWindowProvider(resolved, identifier);
-          return cachedComponent;
-        })();
-      }
-
-      const component = await componentPromise;
-      if (!cachedComponent) {
-        cachedComponent = component;
-      }
-      return component;
+  }
+  const registry = new Map<keyof T, { id: string; moduleName: string; options: NavigatorWindowOptions; load(): Promise<void> }>();
+  for (const name of Object.keys(config) as (keyof T)[]) {
+    const entry = config[name], id = entry.id, moduleName = `spark.window.${id}`;
+    let resolved: ComponentType<any> | undefined = entry.component ? withWindowProvider(entry.component, id) : undefined;
+    let pending: Promise<void> | undefined;
+    const load = async () => {
+      if (resolved) return;
+      if (!pending) pending = Promise.resolve().then(() => entry.loadComponent!()).then(value => {
+        const result = value && typeof value === "object" && "default" in value ? value.default : value;
+        if (!component(result)) throw new SparkError("E_INVALID_DATA", "Window loader did not return a React component");
+        resolved = withWindowProvider(result, id);
+      }).catch(cause => { pending = undefined; throw cause; });
+      await pending;
     };
-
     AppRegistry.registerComponent(moduleName, () => {
-      const LazyWindow = (props: any) => {
-        const [componentWrapper, setComponentWrapper] = useState<{ component: ComponentType<any> } | null>(
-          cachedComponent ? { component: cachedComponent } : null,
-        );
-
-        useMount(() => {
-          let mounted = true;
-          if (!componentWrapper) {
-            resolveComponent().then((resolved) => {
-              if (mounted) {
-                setComponentWrapper({ component: resolved });
-              }
-            });
-          }
-
-          return () => {
-            mounted = false;
-          };
-        });
-
-        if (!componentWrapper) {
-          return null;
-        }
-
-        const Component = componentWrapper.component;
-        return <Component {...props} />;
-      };
-
-      return LazyWindow;
+      if (!resolved) throw new SparkError("E_BUSY", "Window component has not finished loading");
+      return resolved;
     });
-
-    registry.set(key, {
-      identifier,
-      options: normalizeWindowOptions(moduleName, identifier, entry),
-      ensureComponent: async () => {
-        await resolveComponent();
-      },
-    });
-  });
-
-  const ensureRegistration = (windowKey: keyof TConfig) => {
-    const registration = registry.get(windowKey);
-    if (!registration) {
-      throw new Error(`Window '${String(windowKey)}' is not registered.`);
-    }
-    return registration;
+    registrations.add(id);
+    registry.set(name, { id, moduleName, options: JSON.parse(JSON.stringify(entry.options ?? {})), load });
+  }
+  const get = (name: keyof T) => {
+    const value = registry.get(name); if (!value) throw new SparkError("E_NOT_FOUND", `Unknown window: ${String(name)}`); return value;
   };
-
-  const open = async (windowKey: keyof TConfig, overrides?: WindowOpenOverrides) => {
-    const registration = ensureRegistration(windowKey);
-    if (overrides && "identifier" in overrides) {
-      throw new TypeError("Set the window identifier in navigator configuration, not open overrides");
-    }
-    const {
-      loadComponentBeforeNativeOpen = false,
-      ...windowOverrides
-    } = overrides ?? {};
-    const componentReadyPromise = registration.ensureComponent();
-    if (loadComponentBeforeNativeOpen) {
-      await componentReadyPromise;
-    }
-    const { options } = registration;
-    const mergedOptions = mergeWindowOptions(options, windowOverrides);
-
-    const result = await nativeOpenWindow(mergedOptions);
-    if (!result?.success) {
-      await componentReadyPromise.catch(() => undefined);
-      throw new Error(`Failed to open window '${String(windowKey)}'.`);
-    }
-    if (!loadComponentBeforeNativeOpen) {
-      try {
-        await componentReadyPromise;
-      } catch (error) {
-        await nativeCloseWindow(mergedOptions.identifier ?? registration.identifier);
-        throw error;
-      }
-    }
-  };
-
-  const close = async (windowKey: keyof TConfig) => {
-    const registration = ensureRegistration(windowKey);
-    const result = await nativeCloseWindow(registration.identifier);
-    if (!result?.success && result?.message && result.message !== "No window to close") {
-      throw new Error(result.message);
-    }
-  };
-
-  const getIdentifier = (windowKey: keyof TConfig) => ensureRegistration(windowKey).identifier;
-
-  const prefetch = async (windowKey: keyof TConfig) => {
-    const registration = ensureRegistration(windowKey);
-    await registration.ensureComponent();
-  };
-
   return {
-    open,
-    close,
-    getIdentifier,
-    prefetch,
-  } satisfies WindowsNavigator<TConfig>;
+    async open(name, ...args) {
+      const registration = get(name), request = args[0] ?? {};
+      object(request, "open request"); keys(request, ["props", "options"]);
+      if (request.options) { object(request.options, "open options"); for (const key of ["id", "component", "props"]) if (key in request.options) throw new SparkError("E_INVALID_ARGUMENT", "Navigator identity and props cannot be overridden in options"); }
+      const options = { ...registration.options, ...request.options, id: registration.id, component: registration.moduleName, props: request.props } as WindowOpenOptions;
+      validateOptions(options, Platform.OS, true);
+      const snapshot = JSON.parse(JSON.stringify(options));
+      // Always load before native creation. Failed loaders remain retryable and leave no native shell.
+      await registration.load(); return openWindow(snapshot);
+    },
+    async close(name) { return closeWindow(get(name).id); },
+    async show(name) { await showWindow(get(name).id); },
+    getId(name) { return get(name).id; },
+    async prefetch(name) { await get(name).load(); },
+  };
 }

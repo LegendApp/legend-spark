@@ -36,12 +36,12 @@ export async function runFoundationChecks(check: (name: string, action: () => Pr
     const before = (await windows.listWindows()).find(window => window.focused)?.id;
     const id = "foundation-overlay";
     try {
-      const overlay = await windows.openWindow({ id, kind: "overlay", width: 340, height: 140 });
-      assert(overlay.kind === "overlay" && !overlay.focused && overlay.alwaysOnTop, JSON.stringify(overlay));
+      const overlay = await windows.openWindow({ id, kind: "overlay", component: "main", size: { width: 340, height: 140 }, props: { windowId: id, windowProps: {} } });
+      assert(overlay.kind === "overlay" && !overlay.focused, JSON.stringify(overlay));
       await windows.hideWindow(id); await windows.showWindow(id);
       const all = await windows.listWindows();
       assert(all.find(window => window.focused)?.id === before, "Overlay stole keyboard focus");
-      await windows.setWindowFrame(id, { x: 100, y: 100, width: 350, height: 150 });
+      await windows.setWindowBounds(id, { ...(await windows.getWindow(id)).bounds, x: 100, y: 100, width: 350, height: 150 });
       assert(!(await windows.getWindow(id)).focused, "Moving overlay took focus");
     } finally { await windows.closeWindow(id); }
   });

@@ -40,9 +40,6 @@
     "./native": "./native.cjs",
     "./cli": "./bin/spark.cjs",
     "./schema.json": "./schema.json",
-    "./windows/managed": "./windows-managed.ts",
-    "./windows/react": "./windows-react.ts",
-    "./windows/controls": "./windows-controls.ts",
     "./ui/split-view": "./ui-split-view.ts",
     "./ui/sidebar": "./ui-sidebar.ts",
     "./app/documents": "./app-documents.ts",
@@ -54,7 +51,9 @@
     "./settings/window": "./settings-window.ts",
     "./settings/observable": "./settings-observable.ts",
     "./ui/classnames": "./ui-classnames.ts",
-    "./contracts": "./contracts.ts"
+    "./contracts": "./contracts.ts",
+    "./windows/macos": "./windows-macos.ts",
+    "./diagnostics": "./diagnostics.ts"
   },
   "files": [
     "*.ts",

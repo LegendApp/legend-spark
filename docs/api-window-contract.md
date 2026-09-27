@@ -1,6 +1,6 @@
 # Spark window API detail
 
-Design appendix to the [full API proposal](./api-contracts.md). Proposed, not implemented. Shared conventions and ownership rules in the main proposal take precedence.
+Design appendix to the [full API proposal](./api-contracts.md). Implemented contract; platform validation status is recorded in [the implementation checklist](api-cleanup.md). Shared conventions and ownership rules in the main proposal take precedence.
 
 ## Canonical windows surface
 
@@ -10,13 +10,13 @@ Use `/windows` for imperative operations, types, root context, hooks, and compon
 
 Every command identifies its target. Remove implicit main/frontmost defaults from the canonical contract. Main-window identity is explicit (`'main'`); `useWindowId()` reads the owning root and throws outside its provider. Focus does not determine ownership.
 
-Named windows are singleton instances. Opening an existing live ID rejects `E_ALREADY_EXISTS`; showing/focusing an existing window is explicit. IDs may be reused after a window closes. Operations address the currently live window with that ID, not a historical instance. If future applications need instance-safe references across ID reuse, add native generation tokens and handles as a separate feature.
+Named windows are singleton instances. Opening an existing live ID rejects `E_ALREADY_EXISTS`; showing/focusing an existing window is explicit. IDs may be reused after a window closes. Operations address the currently live window with that ID, not a historical instance. Listeners and close guards bind to an internal native instance token so they cannot attach to a later window reusing the ID. Commands still address the currently live ID.
 
 The main window is host-created. Applications configure it through host configuration and manipulate it through the same live-window commands. `openWindow` does not recreate it.
 
-### Proposed core types
+### Core types
 
-The following is a proposed public shape, not executable implementation. Advanced macOS types are specified below.
+The public types live in `packages/desktop-windows/src/types.ts`. Advanced macOS groups are described below.
 
 ```ts
 type WindowId = string;
@@ -96,7 +96,7 @@ setWindowFullscreen(id: WindowId, fullscreen: boolean): Promise<void>;
 centerWindow(id: WindowId, options?: { displayId?: DisplayId }): Promise<void>;
 ```
 
-`openWindow` resolves when the native window/root exists, not when application data or layout finishes loading. A hidden opening (`show: false`) supports restoring chrome and mounting content before explicit presentation. Component load failure is rejected by the React navigator before native creation when preloading is requested; otherwise the navigator closes its incomplete native window and rejects.
+`openWindow` resolves when the native window/root exists, not when application data or layout finishes loading. A hidden opening (`show: false`) supports restoring chrome and mounting content before explicit presentation. The React navigator always loads its component before native creation. A failed loader remains retryable and leaves no native shell.
 
 `setWindowOptions` validates all requested fields before applying them. No transactional promise across native setters is implied: native failure may leave partial changes; refresh `getWindow` to inspect state. Identity, parent/modal relationships, component, and initial props are immutable in this initial contract. Dynamic application data belongs to application state, not an implicit props-patching mechanism.
 
@@ -121,7 +121,7 @@ getDisplays(): Promise<DisplayInfo[]>;
 
 For a spanning window, the display containing the largest frame area is its owning display; use the primary display to break a tie. Negative local coordinates are allowed. Native adapters convert using the selected display's scale and orientation. Explicit commands targeting a disconnected display reject; restoration may fall back to the primary display and fit the window into its work area. Persisted bounds should record their coordinate format. Development data using the old format can be explicitly reset; no legacy coordinate conversion API is needed.
 
-With no creation position, use the parent display or primary display and center in its work area. Explicit size/position wins over restoration; restoration supplies only omitted geometry. Numeric ranges and supported native limits need validation shared by runtime and config schema.
+With no creation position, use the parent display or primary display and center in its work area. Explicit size/position wins over restoration; restoration supplies only omitted geometry. Runtime dimensions support 100–20000 logical units; positions support ±10,000,000. Null constraints reset to that range. Host configuration alignment is tracked as a separate remaining unit.
 
 ### Events and close guards
 
@@ -138,15 +138,17 @@ addWindowListener<K extends keyof WindowEventMap>(
   id: WindowId,
   type: K,
   listener: (event: WindowEventMap[K]) => void,
-): Subscription;
+  options?: { onError?: (error: SparkError) => void },
+): Promise<AsyncRegistration>;
 
 beforeWindowClose(
   id: WindowId,
   handler: () => boolean | Promise<boolean>,
+  options?: { onError?: (error: SparkError) => void },
 ): Promise<AsyncRegistration>;
 ```
 
-Listeners receive future events only; no implicit initial snapshot. They stop when the identified live instance closes and do not attach to a later instance reusing its ID. Keep one close guard per live window initially: duplicate registration rejects `E_BUSY`; `true` allows close. A thrown/rejected/timed-out decision vetoes close and reports the failure through the framework's error reporting. Specify the existing native timeout before publishing this guarantee; do not silently change it in an adapter. Forced OS termination cannot be vetoed.
+Listener registration is asynchronous: native acknowledgement binds the subscription to the current instance. Listeners receive future events only; no implicit initial snapshot. They stop when the identified live instance closes and do not attach to a later instance reusing its ID. Keep one close guard per live window initially: duplicate registration rejects `E_BUSY`; `true` allows close. A thrown/rejected/timed-out decision vetoes close and reports the failure through the framework's error reporting. The native deadline is 30 seconds; timeout reports `E_TIMEOUT` through `onError` (default `console.error`). Forced OS termination cannot be vetoed.
 
 A future observable window-state hook must subscribe and obtain its snapshot without missing intervening changes. The imperative event API alone does not promise an atomic snapshot/event handoff.
 
@@ -156,7 +158,7 @@ Use `macos` option groups, with named public types, for features that are genuin
 
 | Existing capability | Canonical home |
 |---|---|
-| Style masks | Translate ordinary bits to common booleans/title-bar options; keep genuinely native panel styles under `macos.panelStyle`. |
+| Style masks | Translate ordinary bits to common booleans/title-bar options; keep native panel styles under creation-only `macos.panelStyle`. |
 | Represented URL | `macos.representedUri`, nullable for clearing. |
 | Window level | `macos.level`; reject conflicting `alwaysOnTop` requests. |
 | Content layout guide, title visibility, material/blending/state, traffic lights | `macos.titleBar` group. |
@@ -169,7 +171,11 @@ Use `macos` option groups, with named public types, for features that are genuin
 | Startup timing | Diagnostics entry point, not window options. |
 | Display sleep prevention | `/system` power assertion; remove the duplicate window-manager convenience API. |
 
-Toolbar events should become typed events: menu slider values must be numeric payloads, not `${id}:${number}` strings. The exact shared menu schema belongs to the next design slice. Specify and test the replacement toolbar types, then update all callers and delete the old types in the same change. The replacement schema is still to be designed; compatibility types are not part of the proposal.
+`MacOSToolbarItem` is a discriminated union of button, menu, label, search and segmented items. Menu entries use the shared action/checkbox/separator/slider schema; this surface rejects submenus, shortcuts, semantic roles and image files. `addMacOSWindowListener` returns an acknowledged registration for typed title-bar, toolbar, search and menu events; slider actions carry a numeric value. Search focus may optionally replace its text, including an empty string. Segmented values may be empty strings; `null` represents no selection.
+
+Use `/app` events `windowOpened` and `windowClosed` for application-wide registry changes across reused IDs. `usePrimaryWindowLifecycle` uses those events and initializes once per owning ID under React Strict Mode. Instance-specific listeners belong to `/windows`.
+
+`/windows/macos` exposes animated `setWindowBounds`, `setWindowBlur`, `focusToolbarSearch` and `setToolbarItemText`. `/app` owns `finishWindowRestoration`; `/diagnostics` owns startup timing. The old window-manager, window-controls and React-only import paths are removed without aliases.
 
 ### React registration and navigation
 

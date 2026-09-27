@@ -6,6 +6,8 @@ export interface AppRuntime { mode: "go" | "dev" | "preview" | "release"; module
 export interface AppContext { projectId: string; name: string; version: string; runtime: AppRuntime; launchArguments: readonly string[] }
 export type QuitResult = { quitRequested: true } | { quitRequested: false; reason: "vetoed" };
 export type AppEventMap = {
+  windowOpened: { type: "windowOpened"; windowId: string };
+  windowClosed: { type: "windowClosed"; windowId: string };
   activate: { type: "activate" };
   deactivate: { type: "deactivate" };
   reopen: { type: "reopen"; hasVisibleWindows: boolean; mainWindowWasVisible: boolean };
@@ -42,6 +44,7 @@ export const hide = (): Promise<void> => command("hide");
 export const activate = (): Promise<void> => command("activate");
 function appEvent(value: DesktopEvent): AppEvent | undefined {
   switch (value.type) {
+    case "opened": case "closed": if (typeof value.windowId === "string" && value.windowId) return { type: value.type === "opened" ? "windowOpened" : "windowClosed", windowId: value.windowId }; break;
     case "activate": case "deactivate": case "willQuit": return { type: value.type };
     case "reopen": if (typeof value.hasVisibleWindows === "boolean" && typeof value.mainWindowWasVisible === "boolean") return { type: "reopen", hasVisibleWindows: value.hasVisibleWindows, mainWindowWasVisible: value.mainWindowWasVisible }; break;
     case "secondInstance": if (strings(value.arguments)) return { type: "secondInstance", arguments: [...value.arguments] }; break;
@@ -49,7 +52,7 @@ function appEvent(value: DesktopEvent): AppEvent | undefined {
 }
 /** Live events only. Initial identity is getAppContext; file/URL replay belongs to documents. */
 export function addAppListener<K extends keyof AppEventMap>(type: K, listener: (event: AppEventMap[K]) => void): Subscription {
-  if (!["activate", "deactivate", "reopen", "secondInstance", "willQuit"].includes(type) || typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected an application event and listener");
+  if (!["activate", "deactivate", "reopen", "secondInstance", "willQuit", "windowOpened", "windowClosed"].includes(type) || typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected an application event and listener");
   const availability = getAppAvailability();
   if (!availability.available) throw new SparkError(availability.reason === "missing-module" ? "E_MODULE_UNAVAILABLE" : "E_UNSUPPORTED_PLATFORM", "Application events are unavailable");
   return onDesktopEvent(value => { const event = appEvent(value); if (event?.type === type) listener(event as AppEventMap[K]); });

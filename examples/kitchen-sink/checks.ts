@@ -104,29 +104,30 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
       await fileConflict({ readText, writeText, writeTextIfUnchanged }, `${root}/document.txt`);
     });
     await check("windows: root creation, props, frame, visibility, title and close guard", async () => {
-      const events: string[] = []; const sub = windows.onWindowEvent(event => { if (event.windowId === token) events.push(event.type); });
+      const events: string[] = []; let sub: Awaited<ReturnType<typeof windows.addWindowListener>> | undefined;
       let guard: Awaited<ReturnType<typeof windows.beforeWindowClose>> | undefined;
       try {
-        await windows.openWindow({ id: token, title: "SDK automated window", width: 420, height: 320, props: { message: token, readyFile: `${root}/window-ready` } });
+        await windows.openWindow({ id: token, title: "SDK automated window", component: "main", size: { width: 420, height: 320 }, props: { windowId: token, windowProps: { message: token, readyFile: `${root}/window-ready` } } });
+        sub = await windows.addWindowListener(token, "closed", () => events.push("closed"));
         await until(() => files.exists(`${root}/window-ready`), "Secondary React root did not mount");
         assert(await files.readText(`${root}/window-ready`) === token, "Secondary root did not receive props");
         assert((await windows.listWindows()).some(window => window.id === token), "Window not listed");
-        await windows.setWindowTitle(token, "Updated title");
-        const frame = (await windows.getWindow(token)).frame;
-        await windows.setWindowFrame(token, { ...frame, width: 500, height: 380 });
-        const info = await windows.getWindow(token); assert(info.title === "Updated title" && info.frame.width === 500, "Window changes failed");
+        await windows.setWindowOptions(token, { title: "Updated title" });
+        const bounds = (await windows.getWindow(token)).bounds;
+        await windows.setWindowBounds(token, { ...bounds, width: 500, height: 380 });
+        const info = await windows.getWindow(token); assert(info.title === "Updated title" && info.bounds.width === 500, "Window changes failed");
         assert((await windows.getDisplays()).length > 0, "No displays reported");
         await windows.hideWindow(token); assert(!(await windows.getWindow(token)).visible, "Window still visible");
         await windows.showWindow(token); assert((await windows.getWindow(token)).visible, "Window not shown");
         let allowClose = false;
-        guard = await windows.beforeWindowClose(token, () => allowClose);
+        guard = await windows.beforeWindowClose(token, () => { events.push("beforeClose"); return allowClose; });
         await windows.closeWindow(token); await until(() => events.includes("beforeClose"), "No close request");
         assert((await windows.getWindow(token)).visible, "Cancelled close destroyed window");
         allowClose = true;
         await windows.closeWindow(token); await until(() => events.includes("closed"), "No close event");
         await until(() => files.exists(`${root}/window-ready.closed`), "Closed React root did not unmount");
         await rejects(() => windows.getWindow(token), "E_NOT_FOUND");
-      } finally { await guard?.remove(); sub.remove(); if ((await windows.listWindows()).some(window => window.id === token)) await windows.closeWindow(token); await windows.showWindow("main"); }
+      } finally { await guard?.remove(); await sub?.remove(); if ((await windows.listWindows()).some(window => window.id === token)) await windows.closeWindow(token); await windows.showWindow("main"); }
     });
     await check("clipboard: native reads", async () => {
       assert(typeof await clipboard.getStringAsync() === "string", "Clipboard text result");
@@ -181,7 +182,7 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
       await check("shortcuts: actual AppKit key interception", async () => {
         let count = 0; const sub = await registerShortcut("Command+Shift+K", () => { count++; }, { windowId: "main" });
         try { await driverCall("key", { key: "k", modifiers: (1 << 20) | (1 << 17) }); await until(() => count === 1, "Shortcut did not dispatch"); }
-        finally { await sub.remove(); }
+        finally { await await sub?.remove(); }
         await driverCall("key", { key: "k", modifiers: (1 << 20) | (1 << 17) }); await delay(100); assert(count === 1, "Removed shortcut fired");
       });
       await check("menus: native selection, checked and disabled state", async () => {
@@ -208,7 +209,7 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
       await check("app: second instance forwards arguments and exits", async () => {
         let received = false; const sub = app.addAppListener("secondInstance", () => { received = true; });
         try { assert(await driverCall("secondInstance") === 0, "Second instance did not exit cleanly"); await until(() => received, "No second-instance event"); }
-        finally { sub.remove(); }
+        finally { await sub?.remove(); }
       });
       await check("context menu: real popup cancellation", async () => {
         const selected = showContextMenu({ windowId: "main", items: [{ type: "action", id: "one", label: "SDK popup" }], position: { x: 100, y: 100 } });
@@ -223,13 +224,13 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
           await driverCall("openURLs", { urls: [`spark-test://${token}/warm`, `file://${root}/text.txt`] });
           await until(() => seen.some(event => event.type === "file") && seen.some(event => event.type === "url" && event.url.endsWith("/warm")), "Warm events missing");
           assert(seen.filter(event => event.type === "url" && event.url.endsWith("/cold")).length === 1, "Queued launch duplicated");
-        } finally { sub.remove(); }
+        } finally { await sub?.remove(); }
       });
       await check("app: quit interception cancels termination", async () => {
         let requested = false;
         const sub = await app.beforeQuit(() => { requested = true; return false; });
         try { assert(!(await app.quit()).quitRequested, "Quit should be vetoed"); assert(requested, "Quit handler did not run"); await delay(100); assert((await app.getAppContext()).projectId, "App no longer responds"); }
-        finally { await sub.remove(); }
+        finally { await await sub?.remove(); }
       });
     }
   } finally { await files.remove(root, { recursive: true }); }

@@ -65,7 +65,7 @@ test('theme and open windows survive a notebook restart', async () => {
   const model = new NotesModel(new Records(storage, 'settings-session', decodeNotebook));
   await model.load(); model.create('window note'); const id = model.getSnapshot().selectedId!;
   model.setTheme('dark');
-  model.setWindows([{ id: `note-${id}`, noteId: id, frame: { x: -1200, y: 50, width: 700, height: 600 } }]);
+  model.setWindows([{ id: `note-${id}`, noteId: id, frame: { displayId: "primary", x: -1200, y: 50, width: 700, height: 600 } }]);
   expect(await model.flush()).toBe(true);
   const reopened = new NotesModel(new Records(storage, 'settings-session', decodeNotebook)); await reopened.load();
   expect(reopened.getSnapshot().theme).toBe('dark');
@@ -73,10 +73,10 @@ test('theme and open windows survive a notebook restart', async () => {
   expect(reopened.getSnapshot().notes[0]?.text).toBe('window note');
 });
 test('disconnected and smaller displays keep restored windows inside the work area', () => {
-  expect(fitFrame({ x: -1200, y: 100, width: 700, height: 600 }, [{ x: 0, y: 24, width: 1000, height: 700 }])).toEqual({ x: 0, y: 100, width: 700, height: 600 });
-  expect(fitFrame({ x: 900, y: 900, width: 1400, height: 1000 }, [{ x: 0, y: 24, width: 1000, height: 700 }])).toEqual({ x: 0, y: 24, width: 1000, height: 700 });
-  const frame = { x: -1100, y: 50, width: 700, height: 600 };
-  expect(fitFrame(frame, [{ x: 0, y: 0, width: 1200, height: 800 }, { x: -1200, y: 0, width: 1200, height: 800 }])).toEqual(frame);
+  expect(fitFrame({ displayId: "primary", x: -1200, y: 100, width: 700, height: 600 }, [{ displayId: "primary", x: 0, y: 24, width: 1000, height: 700 }])).toEqual({ displayId: "primary", x: 0, y: 100, width: 700, height: 600 });
+  expect(fitFrame({ displayId: "primary", x: 900, y: 900, width: 1400, height: 1000 }, [{ displayId: "primary", x: 0, y: 24, width: 1000, height: 700 }])).toEqual({ displayId: "primary", x: 0, y: 24, width: 1000, height: 700 });
+  const frame = { displayId: "secondary", x: 100, y: 50, width: 700, height: 600 };
+  expect(fitFrame(frame, [{ displayId: "primary", x: 0, y: 0, width: 1200, height: 800 }, { displayId: "secondary", x: 0, y: 0, width: 1200, height: 800 }])).toEqual(frame);
 });
 test('multiple views receive edits and deletion without clearing another selected note', async () => {
   const model = new NotesModel({ load: async () => ({ value: null, recovered: false }), save: async () => {} });
@@ -98,17 +98,17 @@ test('concurrent close and quit wait for the newest edit and both veto failed sa
   fail = false; expect(await model.flush()).toBe(true); expect(written.at(-1)).toBe('last edit');
 });
 test('window session validation rejects duplicate IDs and nonfinite geometry', () => {
-  const frame = { x: 0, y: 0, width: 700, height: 600 };
+  const frame = { displayId: "primary", x: 0, y: 0, width: 700, height: 600 };
   expect(() => decodeNotebook({ version: 1, notes: [], selectedId: null, windows: [{ id: 'main', frame }, { id: 'main', frame }] })).toThrow('window session');
   expect(() => decodeNotebook({ version: 1, notes: [], selectedId: null, windows: [{ id: 'main', frame: { ...frame, x: Infinity } }] })).toThrow('window session');
 });
 
 import { WindowSession, type WindowHost } from '../packages/cli/templates/notes-lite/window-session.ts';
 test('restoration is idempotent, skips deleted notes, and quit retains open windows', async () => {
-  const frame = { x: 1800, y: 20, width: 700, height: 600 };
+  const frame = { displayId: "primary", x: 1800, y: 20, width: 700, height: 600 };
   const model = new NotesModel({ load: async () => ({ recovered: false, value: { version: 1, selectedId: 'live', notes: [{ id: 'live', text: 'hello', updatedAt: 0, deleted: false }, { id: 'gone', text: 'deleted', updatedAt: 0, deleted: true }], windows: [{ id: 'main', frame }, { id: 'note-live', noteId: 'live', frame }, { id: 'note-gone', noteId: 'gone', frame }, { id: 'settings', frame }] } }), save: async () => {} });
   const native = new Map([['main', { id: 'main', frame }]]); const opened: string[] = [];
-  const host: WindowHost = { list: async () => [...native.values()], workAreas: async () => [{ x: 0, y: 0, width: 1200, height: 800 }], open: async window => { opened.push(window.id); native.set(window.id, window); }, show: async () => {}, frame: async (id, frame) => { native.get(id)!.frame = frame; } };
+  const host: WindowHost = { list: async () => [...native.values()], workAreas: async () => [{ displayId: "primary", x: 0, y: 0, width: 1200, height: 800 }], open: async window => { opened.push(window.id); native.set(window.id, window); }, show: async () => {}, frame: async (id, frame) => { native.get(id)!.frame = frame; } };
   const session = new WindowSession(model, host);
   await Promise.all([session.restore(), session.restore()]); expect(opened).toEqual(['note-live', 'settings']);
   expect(native.get('main')!.frame.x).toBe(500);
@@ -120,7 +120,7 @@ test('restoration is idempotent, skips deleted notes, and quit retains open wind
 test('failed quit keeps session tracking active and succeeds after retry', async () => {
   let fail = true;
   const model = new NotesModel({ load: async () => ({ recovered: false, value: null }), save: async () => { if (fail) throw Error('disk full'); } });
-  let windows = [{ id: 'main', frame: { x: 0, y: 0, width: 700, height: 600 } }];
+  let windows = [{ id: 'main', frame: { displayId: "primary", x: 0, y: 0, width: 700, height: 600 } }];
   const session = new WindowSession(model, { list: async () => windows, workAreas: async () => [], open: async () => {}, show: async () => {}, frame: async () => {} });
   await session.restore(); expect(await session.quit()).toBe(false);
   windows = [{ ...windows[0]!, frame: { ...windows[0]!.frame, x: 100 } }]; await session.capture();

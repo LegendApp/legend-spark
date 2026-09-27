@@ -38,7 +38,7 @@ export default function App() {
       const after = await getUpdateStatus();
       await startUpdates();
       const again = await getUpdateStatus();
-      const window = await getWindow();
+      const window = await getWindow("main");
       result = { passed: before.available && !before.started && after.started && after.canCheck && !after.automaticallyChecks && again.started && !window.visible, before, after, window };
     } catch (error) { result = { passed: false, error: String(error) }; }
     await writeText(${JSON.stringify(report)}, JSON.stringify(result));

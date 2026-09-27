@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import React, { act, StrictMode } from "react";
 const { create } = createRequire(import.meta.url)("react-test-renderer");
 const { showWindow, setWindowOptions, scrollToIndex, listState } = vi.hoisted(() => ({ showWindow: vi.fn(), setWindowOptions: vi.fn(), scrollToIndex: vi.fn(), listState: { scroll: 0, start: 0, positionAtIndex: (i: number) => i * 100, sizeAtIndex: () => 100 } }));
-vi.mock("@legendapp/spark-desktop-windows/src/window-manager", () => ({ showWindow, setWindowOptions }));
+vi.mock("@legendapp/spark-desktop-windows/src/api", () => ({ showWindow, setWindowOptions }));
 vi.mock("@legendapp/spark-ui/src/appkit-split-view", async () => { const React = await import("react"); return { SidebarSplitView: (props: any) => React.createElement("SplitView", props, props.sidebar, props.content) }; });
 vi.mock("@legendapp/spark-ui/src/classnames", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native", () => ({ Platform: { OS: "macos" }, Pressable: "Pressable", View: "View", Text: "Text", ScrollView: "ScrollView", StyleSheet: { create: (v: unknown) => v, hairlineWidth: 1 } }));
@@ -40,7 +40,7 @@ test("controlled selection keeps parent ownership and both selection modes use t
   await act(async () => selectedSidebar().onSelectionChange("advanced"));
   expect(onSelectionChange).toHaveBeenCalledWith("advanced"); expect(selectedSidebar().selectedPageId).toBe("general");
   await act(async () => rendered.update(React.createElement(SettingsWindow, { pages, windowId: "settings", selectedPageId: "advanced", onSelectionChange })));
-  expect(setWindowOptions).toHaveBeenLastCalledWith("settings", { title: "Advanced", windowStyle: { appearance: "system" } });
+  expect(setWindowOptions).toHaveBeenLastCalledWith("settings", { title: "Advanced", appearance: "system" });
 });
 test("default selection initializes once and removal of a page falls back to the first remaining page", async () => {
   await mount(React.createElement(SettingsWindow, { pages, windowId: "settings", defaultPageId: "advanced" }));
@@ -70,7 +70,7 @@ test("scrolling composition restores parent-vetoed selections and updates the ti
   expect(scrollToIndex).toHaveBeenLastCalledWith(expect.objectContaining({ index: 0, animated: true }));
   await act(async () => rendered.update(React.createElement(VirtualizedSettingsWindow, { pages, windowId: "settings", selectedPageId: "advanced", onSelectionChange })));
   await runFrames(); expect(scrollToIndex).toHaveBeenLastCalledWith(expect.objectContaining({ index: 1 }));
-  expect(setWindowOptions).toHaveBeenLastCalledWith("settings", { title: "Advanced", windowStyle: { appearance: "system" } });
+  expect(setWindowOptions).toHaveBeenLastCalledWith("settings", { title: "Advanced", appearance: "system" });
 });
 test("late scroll completion cannot show an unmounted window", async () => {
   let finish!: () => void;
@@ -80,8 +80,8 @@ test("late scroll completion cannot show an unmounted window", async () => {
   expect(showWindow).not.toHaveBeenCalled();
   await act(async () => { rendered.unmount(); rendered = undefined; finish(); }); expect(showWindow).not.toHaveBeenCalled();
 });
-test("settings options use the same defaultPageId and row emphasis does not claim to disable children", async () => {
-  expect(createSettingsWindowOptions({ defaultPageId: "advanced" }).initialProperties).toEqual({ defaultPageId: "advanced" });
+test("settings options keep initial props outside window options and row emphasis does not claim to disable children", async () => {
+  expect(createSettingsWindowOptions({ title: "Preferences" })).toMatchObject({ title: "Preferences", show: false, size: { width: 820, height: 640 } });
   await mount(React.createElement(SettingsRow, { title: "Setting", muted: true, control: "Control" }));
   expect(rendered.root.findAllByType("View")[0].props.className).toContain("opacity-60");
 });

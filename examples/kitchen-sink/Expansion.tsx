@@ -70,8 +70,8 @@ export function Expansion({ report }: { report: (value: unknown) => void }) {
     <Text style={styles.heading} className="text-foreground">Window styling</Text>
     <View style={styles.row}>
       <ActionButton onPress={() => act(async () => { await windows.setWindowOptions("main", { titleBarStyle: style ? "default" : "overlay" }); setStyle(!style); })}>{style ? "Default title bar" : "Overlay title bar"}</ActionButton>
-      <ActionButton onPress={() => act(() => windows.openWindow({ id: "floating", parentId: "main", title: "Floating child", width: 500, height: 350, minWidth: 300, alwaysOnTop: true, material: "sidebar" }))}>Floating child</ActionButton>
-      <ActionButton onPress={() => act(() => windows.openWindow({ id: "modal", parentId: "main", modal: true, title: "Modal window", width: 450, height: 300 }))}>Modal window</ActionButton>
+      <ActionButton onPress={() => act(() => windows.openWindow({ id: "floating", parentId: "main", title: "Floating child", alwaysOnTop: true, macos: { titleBar: { material: "sidebar" } }, component: "main", size: { width: 500, height: 350 }, minSize: { width: 300, height: 100 }, props: { windowId: "floating", windowProps: {} } }))}>Floating child</ActionButton>
+      <ActionButton onPress={() => act(() => windows.openWindow({ id: "modal", parentId: "main", modal: true, title: "Modal window", component: "main", size: { width: 450, height: 300 }, kind: "window", props: { windowId: "modal", windowProps: {} } }))}>Modal window</ActionButton>
     </View>
     <Text style={styles.heading} className="text-foreground">Drag and drop</Text>
     <DragDropView onDrop={event => { setOver(false); reportDrag({ type: "drop", ...event }); }} onDragEnter={() => setOver(true)} onDragLeave={() => setOver(false)} style={styles.drop} className={over ? "border-border bg-highlight" : "border-border"}>
@@ -121,7 +121,7 @@ export function Expansion({ report }: { report: (value: unknown) => void }) {
       <ActionButton onPress={() => act(system.getSystemInfo)}>System state</ActionButton>
       <ActionButton onPress={() => act(() => system.setAppBadge("3"))}>Dock badge</ActionButton>
       <ActionButton onPress={() => act(() => system.setAppBadge(""))}>Clear badge</ActionButton>
-      <ActionButton onPress={() => act(async () => { await dock.current?.remove(); const value = await (Platform.OS === "windows" ? system.createTaskbarMenu : system.createDockMenu)({ items: dockItems, onAction: event => { reportSystem(`Menu selected: ${event.itemId}`); void windows.showWindow().catch(reportSystem); } }); dock.current = value; resources.current.push(value); })}>Dock menu</ActionButton>
+      <ActionButton onPress={() => act(async () => { await dock.current?.remove(); const value = await (Platform.OS === "windows" ? system.createTaskbarMenu : system.createDockMenu)({ items: dockItems, onAction: event => { reportSystem(`Menu selected: ${event.itemId}`); void windows.showWindow("main").catch(reportSystem); } }); dock.current = value; resources.current.push(value); })}>Dock menu</ActionButton>
       <ActionButton onPress={() => act(async () => { const value = await system.preventSleep({ reason: "Kitchen sink demonstration" }); resources.current.push(value); setTimeout(() => void value.remove().catch(reportSystem), 5000); })}>Prevent sleep for 5 seconds</ActionButton>
       <ActionButton disabled={login === "unavailable" || login === "Loading…"} onPress={() => act(async () => { await system.setLaunchAtLogin(login !== "enabled"); setLogin(await system.getLoginItemStatus()); })}>{login === "enabled" ? "Disable launch at login" : "Enable launch at login"}</ActionButton>
     </View>

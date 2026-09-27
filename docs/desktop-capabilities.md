@@ -6,8 +6,8 @@ packages separately or link parallel native modules for these capabilities.
 
 | Capability | Public entry point |
 | --- | --- |
-| Managed windows, toolbar and restoration | `@legendapp/spark/windows/managed` |
-| Window React helpers and controls | `@legendapp/spark/windows/react`, `windows/controls` |
+| Windows, root registration and hooks | `@legendapp/spark/windows` |
+| AppKit toolbar operations and animation | `@legendapp/spark/windows/macos` |
 | Native split view and sidebar | `@legendapp/spark/ui/split-view`, `ui/sidebar` |
 | Document lifecycle and recent documents | `@legendapp/spark/app/documents`, `app/recent-documents` |
 | Routed commands and persisted bindings | `@legendapp/spark/shortcuts/commands` |

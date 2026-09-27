@@ -64,12 +64,12 @@ function SecondaryWindow(props: Props) {
   if (props.windowProps?.overlay) return <View style={{ flex: 1, padding: 12, backgroundColor: "transparent" }}>
     <View style={{ borderRadius: 12, padding: 12, gap: 8 }} className="bg-background">
       <Text className="text-foreground">Overlay — keyboard focus stays in your app</Text>
-      <Button onPress={() => void windows.closeWindow(props.windowId).catch(console.error)}>Close overlay</Button>
+      <Button onPress={() => void windows.closeWindow(props.windowId!).catch(console.error)}>Close overlay</Button>
     </View>
   </View>;
   return <View style={styles.root} className="bg-background" testID="secondary-window">
     <Text style={styles.title} className="text-foreground">Secondary window</Text><Text className="text-muted">{props.windowProps?.message ?? props.windowId}</Text>
-    <Button onPress={() => void windows.closeWindow(props.windowId).catch(console.error)}>Close this window</Button>
+    <Button onPress={() => void windows.closeWindow(props.windowId!).catch(console.error)}>Close this window</Button>
   </View>;
 }
 function AutomatedChecks({ report, args }: { report: string; args: readonly string[] }) {
@@ -122,7 +122,7 @@ function KitchenSink({ runtime, projectId }: Props) {
   useEffect(() => {
     const removers: Array<() => unknown> = []; let disposed = false;
     function retain(sub: { remove(): unknown }) { if (disposed) void sub.remove(); else removers.push(() => sub.remove()); }
-    for (const type of ["activate", "deactivate", "reopen", "secondInstance", "willQuit"] as const) retain(app.addAppListener(type, reportWindow)); retain(windows.onWindowEvent(reportWindow));
+    for (const type of ["activate", "deactivate", "reopen", "secondInstance", "willQuit"] as const) retain(app.addAppListener(type, reportWindow)); for (const type of ["focusChanged", "boundsChanged", "visibilityChanged", "fullscreenChanged", "closed"] as const) void windows.addWindowListener("main", type, reportWindow).then(retain).catch(reportWindow);
     void registerShortcut("Command+Shift+K", () => reportMenu("Shortcut fired: Command+Shift+K")).then(retain).catch(reportMenu);
     void documents.subscribeToOpenRequests(event => { if (event.type === "file") reportLink(event); }).then(retain).catch(reportLink);
     retain(links.addEventListener("url", event => reportLink({ url: event.url })));
@@ -144,7 +144,7 @@ function KitchenSink({ runtime, projectId }: Props) {
     <ScrollView contentContainerStyle={styles.content} testID="kitchen-sink">
       <Card title="Streaming files and Trash"><FileStreamChecks /></Card>
       <Card title="App and windows"><View style={styles.row}>
-        <ActionButton onPress={() => action(() => windows.openWindow({ id: "demo", title: "Kitchen Sink · Second window", props: { message: "Same JavaScript bundle, separate native window." }, restoreFrame: true }).then(window => { report(window); return `Opened ${window.title}.`; }))}>Open second window</ActionButton>
+        <ActionButton onPress={() => action(() => windows.openWindow({ id: "demo", title: "Kitchen Sink · Second window", restoreBounds: true, component: "main", props: { windowId: "demo", windowProps: { message: "Same JavaScript bundle, separate native window." } } }).then(window => { report(window); return `Opened ${window.title}.`; }))}>Open second window</ActionButton>
         <ActionButton testID="list-windows" onPress={() => action(async () => {
           const [openWindows, displays] = await Promise.all([windows.listWindows(), windows.getDisplays()]);
           report({ windows: openWindows, displays });

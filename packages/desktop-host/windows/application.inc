@@ -40,7 +40,7 @@ struct WindowResources : winrt::implements<WindowResources, RNW::Composition::IC
   void ResourcesChanged(winrt::event_token const &token) noexcept { changed.remove(token); }
   void SetTheme(int value) { theme = value; changed(*this, nullptr); }
 };
-struct Window { RNW::ReactNativeWindow view{nullptr}; UI::AppWindow app{nullptr}; UI::OverlappedPresenter normal{nullptr}; int32_t minWidth = 100, minHeight = 100, maxWidth = 20000, maxHeight = 20000; std::string parentId; bool modal = false; bool overlay = false; bool transparent = false; bool shadow = true; bool disabledByModal = false; bool enabledBeforeModal = false; bool guard = false; bool pending = false; bool allow = false; uint64_t request = 0; HMONITOR monitor = nullptr; bool fullscreen = false; bool closable = true; bool restoreFrame = false; int theme = -1; winrt::com_ptr<WindowResources> resources; winrt::Microsoft::UI::Composition::SpriteVisual background{nullptr}; };
+struct Window { RNW::ReactNativeWindow view{nullptr}; UI::AppWindow app{nullptr}; UI::OverlappedPresenter normal{nullptr}; double minWidth = 100, minHeight = 100, maxWidth = 20000, maxHeight = 20000; std::string instanceId, guardId; std::vector<RNW::ReactPromise<std::string>> closeWaiters; std::string parentId; bool modal = false; bool overlay = false; bool transparent = false; bool shadow = true; bool disabledByModal = false; bool enabledBeforeModal = false; bool guard = false; bool pending = false; bool allow = false; uint64_t request = 0; HMONITOR monitor = nullptr; bool fullscreen = false; bool closable = true; bool restoreFrame = false; int theme = -1; winrt::com_ptr<WindowResources> resources; winrt::Microsoft::UI::Composition::SpriteVisual background{nullptr}; };
 static std::map<std::string, Window> windows;
 static RNW::ReactNativeHost host{nullptr};
 static winrt::Microsoft::UI::Composition::Compositor compositor{nullptr};
@@ -78,7 +78,29 @@ static void UpdateModality() {
   }
 }
 static std::string Id(HWND hwnd) { auto root = GetAncestor(hwnd, GA_ROOT); for (auto const &[id, window] : windows) if (Hwnd(window) == root) return id; return ""; }
-static void Emit(RNW::JSValueObject value) { if (context) context.EmitJSEvent(L"RCTDeviceEventEmitter", L"desktop", std::move(value)); }
+static Json::JsonObject Info(std::string const &id);
+static RNW::JSValue Value(Json::IJsonValue const &value);
+static void FinishClose(std::string const &id, bool closed) {
+  auto found = windows.find(id); if (found == windows.end()) return;
+  auto waiters = std::move(found->second.closeWaiters); found->second.closeWaiters.clear();
+  for (auto const &waiter : waiters) waiter.Resolve(closed ? "{\"closed\":true}" : "{\"closed\":false,\"reason\":\"vetoed\"}");
+}
+static void Emit(RNW::JSValueObject value) {
+  auto id = value.find("windowId"), type = value.find("type");
+  if (id != value.end() && type != value.end()) {
+    auto found = windows.find(id->second.AsString());
+    if (found != windows.end()) {
+      const auto name = type->second.AsString();
+      value["instanceId"] = found->second.instanceId;
+      if (name == "beforeClose" || name == "closeGuardTimeout") value["guardId"] = found->second.guardId;
+      if (name == "move" || name == "resize" || name == "screenChanged") { value["type"] = "boundsChanged"; value["bounds"] = Value(Info(found->first).GetNamedObject(L"bounds")); }
+      else if (name == "focus" || name == "blur") { value["type"] = "focusChanged"; value["focused"] = name == "focus"; }
+      else if (name == "enterFullscreen" || name == "leaveFullscreen") { value["type"] = "fullscreenChanged"; value["fullscreen"] = name == "enterFullscreen"; }
+      else if (name == "visibilityChanged") value["visible"] = !!IsWindowVisible(Hwnd(found->second));
+    }
+  }
+  if (context) context.EmitJSEvent(L"RCTDeviceEventEmitter", L"desktop", std::move(value));
+}
 static void WindowTransitions(std::string const &id) {
   auto found = windows.find(id); if (found == windows.end()) return;
   auto &window = found->second;
@@ -113,52 +135,90 @@ static void WriteJson(RNW::IJSValueWriter const &writer, Json::IJsonValue const 
     default: writer.WriteNull();
   }
 }
-static Json::JsonObject Info(std::string const &id) {
-  auto &window = windows.at(id); auto hwnd = Hwnd(window); RECT frame{}; GetWindowRect(hwnd, &frame);
-  Json::JsonObject result, rect;
-  result.SetNamedValue(L"id", Json::JsonValue::CreateStringValue(to_hstring(id))); result.SetNamedValue(L"title", Json::JsonValue::CreateStringValue(window.app.Title()));
-  result.SetNamedValue(L"kind", Json::JsonValue::CreateStringValue(window.overlay ? L"overlay" : L"window"));
-  result.SetNamedValue(L"visible", Json::JsonValue::CreateBooleanValue(IsWindowVisible(hwnd))); result.SetNamedValue(L"focused", Json::JsonValue::CreateBooleanValue(GetForegroundWindow() == hwnd));
-  result.SetNamedValue(L"minimized", Json::JsonValue::CreateBooleanValue(IsIconic(hwnd)));
-  result.SetNamedValue(L"resizable", Json::JsonValue::CreateBooleanValue((GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_THICKFRAME) != 0));
-  result.SetNamedValue(L"alwaysOnTop", Json::JsonValue::CreateBooleanValue((GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0));
-  result.SetNamedValue(L"fullscreen", Json::JsonValue::CreateBooleanValue(window.app.Presenter().Kind() == UI::AppWindowPresenterKind::FullScreen));
-  result.SetNamedValue(L"minWidth", Json::JsonValue::CreateNumberValue(window.minWidth)); result.SetNamedValue(L"maxWidth", Json::JsonValue::CreateNumberValue(window.maxWidth));
-  rect.SetNamedValue(L"x", Json::JsonValue::CreateNumberValue(frame.left)); rect.SetNamedValue(L"y", Json::JsonValue::CreateNumberValue(frame.top)); rect.SetNamedValue(L"width", Json::JsonValue::CreateNumberValue(frame.right-frame.left)); rect.SetNamedValue(L"height", Json::JsonValue::CreateNumberValue(frame.bottom-frame.top)); result.SetNamedValue(L"frame", rect); return result;
-}
-static Json::JsonObject Rect(RECT const &frame) {
-  Json::JsonObject result;
-  result.SetNamedValue(L"x", Json::JsonValue::CreateNumberValue(frame.left));
-  result.SetNamedValue(L"y", Json::JsonValue::CreateNumberValue(frame.top));
-  result.SetNamedValue(L"width", Json::JsonValue::CreateNumberValue(frame.right - frame.left));
-  result.SetNamedValue(L"height", Json::JsonValue::CreateNumberValue(frame.bottom - frame.top));
-  return result;
-}
-static Json::JsonArray Displays() {
-  struct State { Json::JsonArray result; std::exception_ptr error; } state;
+struct DisplayGeometry { HMONITOR monitor; std::wstring id, persistentId, name; RECT frame, work; double scale; bool primary; };
+static std::vector<DisplayGeometry> DisplayGeometries() {
+  struct State { std::vector<DisplayGeometry> result; std::exception_ptr error; } state;
   const auto enumerated = EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR monitor, HDC, LPRECT, LPARAM param) -> BOOL {
     auto &state = *reinterpret_cast<State *>(param);
     try {
       MONITORINFOEXW info{}; info.cbSize = sizeof(info);
       if (!GetMonitorInfoW(monitor, reinterpret_cast<MONITORINFO *>(&info))) winrt::throw_last_error();
-      UINT dpiX = 96, dpiY = 96; winrt::check_hresult(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY));
-      DISPLAY_DEVICEW device{}; device.cb = sizeof(device); EnumDisplayDevicesW(info.szDevice, 0, &device, 0);
-      Json::JsonObject display;
-      display.SetNamedValue(L"id", Json::JsonValue::CreateStringValue(info.szDevice));
-      display.SetNamedValue(L"name", Json::JsonValue::CreateStringValue(device.DeviceString[0] ? device.DeviceString : info.szDevice));
-      display.SetNamedValue(L"frame", Rect(info.rcMonitor)); display.SetNamedValue(L"workArea", Rect(info.rcWork));
-      display.SetNamedValue(L"scale", Json::JsonValue::CreateNumberValue(dpiX / 96.0)); state.result.Append(display);
+      UINT x = 96, y = 96; winrt::check_hresult(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &x, &y));
+      DISPLAY_DEVICEW device{}; device.cb = sizeof(device); EnumDisplayDevicesW(info.szDevice, 0, &device, EDD_GET_DEVICE_INTERFACE_NAME);
+      state.result.push_back({monitor, info.szDevice, device.DeviceID, device.DeviceString[0] ? device.DeviceString : info.szDevice, info.rcMonitor, info.rcWork, x / 96.0, (info.dwFlags & MONITORINFOF_PRIMARY) != 0});
       return TRUE;
     } catch (...) { state.error = std::current_exception(); return FALSE; }
   }, reinterpret_cast<LPARAM>(&state));
   if (state.error) std::rethrow_exception(state.error);
-  if (!enumerated) winrt::throw_last_error();
+  if (!enumerated || state.result.empty()) winrt::throw_last_error();
   return state.result;
 }
-static int32_t Dimension(Json::JsonObject const &args, wchar_t const *key, int32_t fallback) {
+static DisplayGeometry OwningDisplay(RECT const &frame) {
+  auto displays = DisplayGeometries(); auto best = displays.front(); double area = -1;
+  for (auto const &display : displays) {
+    RECT intersection{}; IntersectRect(&intersection, &frame, &display.frame);
+    double next = static_cast<double>(intersection.right - intersection.left) * (intersection.bottom - intersection.top);
+    if (next > area || (next == area && display.primary)) { best = display; area = next; }
+  }
+  return best;
+}
+static DisplayGeometry DisplayWithId(winrt::hstring const &id) {
+  for (auto const &display : DisplayGeometries()) if (display.id == id.c_str()) return display;
+  throw winrt::hresult_error(HRESULT_FROM_WIN32(ERROR_NOT_FOUND), L"Display is disconnected");
+}
+static Json::JsonObject LogicalRect(RECT const &rect, DisplayGeometry const &display) {
+  Json::JsonObject result;
+  result.SetNamedValue(L"x", Json::JsonValue::CreateNumberValue((rect.left - display.frame.left) / display.scale));
+  result.SetNamedValue(L"y", Json::JsonValue::CreateNumberValue((rect.top - display.frame.top) / display.scale));
+  result.SetNamedValue(L"width", Json::JsonValue::CreateNumberValue((rect.right - rect.left) / display.scale));
+  result.SetNamedValue(L"height", Json::JsonValue::CreateNumberValue((rect.bottom - rect.top) / display.scale));
+  return result;
+}
+static Json::JsonObject Info(std::string const &id) {
+  auto &window = windows.at(id); auto hwnd = Hwnd(window); RECT frame{}; if (!GetWindowRect(hwnd, &frame)) winrt::throw_last_error();
+  if (IsIconic(hwnd)) { WINDOWPLACEMENT placement{}; placement.length = sizeof(placement); if (GetWindowPlacement(hwnd, &placement)) { frame = placement.rcNormalPosition; auto display = OwningDisplay(frame); OffsetRect(&frame, display.work.left - display.frame.left, display.work.top - display.frame.top); } }
+  auto display = OwningDisplay(frame); auto bounds = LogicalRect(frame, display); bounds.SetNamedValue(L"displayId", Json::JsonValue::CreateStringValue(display.id));
+  Json::JsonObject result;
+  result.SetNamedValue(L"id", Json::JsonValue::CreateStringValue(to_hstring(id))); result.SetNamedValue(L"instanceId", Json::JsonValue::CreateStringValue(to_hstring(window.instanceId)));
+  result.SetNamedValue(L"title", Json::JsonValue::CreateStringValue(window.app.Title())); result.SetNamedValue(L"kind", Json::JsonValue::CreateStringValue(window.overlay ? L"overlay" : L"window"));
+  result.SetNamedValue(L"parentId", window.parentId.empty() ? Json::JsonValue::CreateNullValue() : Json::JsonValue::CreateStringValue(to_hstring(window.parentId)));
+  result.SetNamedValue(L"modal", Json::JsonValue::CreateBooleanValue(window.modal)); result.SetNamedValue(L"visible", Json::JsonValue::CreateBooleanValue(IsWindowVisible(hwnd)));
+  result.SetNamedValue(L"focused", Json::JsonValue::CreateBooleanValue(GetForegroundWindow() == hwnd)); result.SetNamedValue(L"minimized", Json::JsonValue::CreateBooleanValue(IsIconic(hwnd)));
+  result.SetNamedValue(L"fullscreen", Json::JsonValue::CreateBooleanValue(window.app.Presenter().Kind() == UI::AppWindowPresenterKind::FullScreen)); result.SetNamedValue(L"bounds", bounds);
+  return result;
+}
+static Json::JsonArray Displays() {
+  Json::JsonArray result;
+  for (auto const &display : DisplayGeometries()) {
+    Json::JsonObject item, size;
+    item.SetNamedValue(L"id", Json::JsonValue::CreateStringValue(display.id)); item.SetNamedValue(L"persistentId", display.persistentId.empty() ? Json::JsonValue::CreateNullValue() : Json::JsonValue::CreateStringValue(display.persistentId));
+    item.SetNamedValue(L"name", Json::JsonValue::CreateStringValue(display.name)); item.SetNamedValue(L"primary", Json::JsonValue::CreateBooleanValue(display.primary));
+    size.SetNamedValue(L"width", Json::JsonValue::CreateNumberValue((display.frame.right - display.frame.left) / display.scale)); size.SetNamedValue(L"height", Json::JsonValue::CreateNumberValue((display.frame.bottom - display.frame.top) / display.scale));
+    item.SetNamedValue(L"size", size); item.SetNamedValue(L"workArea", LogicalRect(display.work, display)); item.SetNamedValue(L"scaleFactor", Json::JsonValue::CreateNumberValue(display.scale)); result.Append(item);
+  }
+  return result;
+}
+static void SetBounds(Window &window, Json::JsonObject const &bounds) {
+  auto display = DisplayWithId(bounds.GetNamedString(L"displayId"));
+  const double width = bounds.GetNamedNumber(L"width"), height = bounds.GetNamedNumber(L"height"), x = bounds.GetNamedNumber(L"x"), y = bounds.GetNamedNumber(L"y");
+  if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width) || !std::isfinite(height) || width < window.minWidth || height < window.minHeight || width > window.maxWidth || height > window.maxHeight || std::abs(x) > 10000000 || std::abs(y) > 10000000) throw winrt::hresult_invalid_argument(L"Bounds are outside window constraints");
+  window.app.MoveAndResize({static_cast<int32_t>(std::round(display.frame.left + x * display.scale)), static_cast<int32_t>(std::round(display.frame.top + y * display.scale)), static_cast<int32_t>(std::round(width * display.scale)), static_cast<int32_t>(std::round(height * display.scale))});
+}
+static Json::JsonObject CanonicalStyle(Json::JsonObject const &options) {
+  Json::JsonObject style;
+  for (auto key : {L"title", L"resizable", L"minimizable", L"alwaysOnTop", L"closable", L"appearance", L"backgroundColor", L"titleBarStyle", L"transparent", L"hasShadow"}) if (options.HasKey(key)) style.SetNamedValue(key, options.GetNamedValue(key));
+  for (auto key : {L"minSize", L"maxSize"}) if (options.HasKey(key)) {
+    bool minimum = std::wstring(key) == L"minSize"; auto value = options.GetNamedValue(key);
+    auto size = value.ValueType() == Json::JsonValueType::Null ? Json::JsonObject() : value.GetObject();
+    style.SetNamedValue(minimum ? L"minWidth" : L"maxWidth", Json::JsonValue::CreateNumberValue(size.GetNamedNumber(L"width", minimum ? 100 : 20000)));
+    style.SetNamedValue(minimum ? L"minHeight" : L"maxHeight", Json::JsonValue::CreateNumberValue(size.GetNamedNumber(L"height", minimum ? 100 : 20000)));
+  }
+  return style;
+}
+static double Dimension(Json::JsonObject const &args, wchar_t const *key, double fallback) {
   const auto value = args.GetNamedNumber(key, fallback);
   if (!std::isfinite(value) || value < 100 || value > 20000) throw winrt::hresult_invalid_argument(L"Invalid window dimension");
-  return static_cast<int32_t>(value);
+  return value;
 }
 static void ApplyAppearance(Window &window) {
   auto foreground = winrt::Windows::UI::ViewManagement::UISettings().GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Foreground);
@@ -175,14 +235,18 @@ static void RestoreFrame(std::string const &id) {
   auto &window = windows.at(id); if (!window.restoreFrame) return;
   try {
     std::ifstream stream(SparkFile(id)); std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-    auto frame = Json::JsonObject::Parse(to_hstring(text));
-    double x = frame.GetNamedNumber(L"x"), y = frame.GetNamedNumber(L"y");
-    if (!std::isfinite(x) || !std::isfinite(y) || std::abs(x) > INT32_MAX / 2 || std::abs(y) > INT32_MAX / 2) return;
-    auto width = Dimension(frame, L"width", 640), height = Dimension(frame, L"height", 480);
-    width = std::clamp(width, window.minWidth, window.maxWidth); height = std::clamp(height, window.minHeight, window.maxHeight);
-    RECT rect{static_cast<LONG>(x), static_cast<LONG>(y), static_cast<LONG>(x) + width, static_cast<LONG>(y) + height};
-    if (MonitorFromRect(&rect, MONITOR_DEFAULTTONULL)) window.app.MoveAndResize({rect.left, rect.top, width, height});
-  } catch (...) { /* Missing or invalid saved geometry uses configured defaults. */ }
+    auto saved = Json::JsonObject::Parse(to_hstring(text)); if (saved.GetNamedNumber(L"version", 0) != 1) return;
+    auto bounds = saved.GetNamedObject(L"bounds"); auto displays = DisplayGeometries(); auto display = displays.front();
+    for (auto const &candidate : displays) if (candidate.primary) display = candidate;
+    auto persistent = saved.GetNamedString(L"persistentId", L"");
+    for (auto const &candidate : displays) if (!persistent.empty() && candidate.persistentId == persistent.c_str()) { display = candidate; break; }
+    auto width = std::clamp(Dimension(bounds, L"width", 640), window.minWidth, window.maxWidth), height = std::clamp(Dimension(bounds, L"height", 480), window.minHeight, window.maxHeight);
+    auto work = LogicalRect(display.work, display); const auto left = work.GetNamedNumber(L"x"), top = work.GetNamedNumber(L"y");
+    bounds.SetNamedValue(L"width", Json::JsonValue::CreateNumberValue(width)); bounds.SetNamedValue(L"height", Json::JsonValue::CreateNumberValue(height));
+    bounds.SetNamedValue(L"x", Json::JsonValue::CreateNumberValue(std::clamp(bounds.GetNamedNumber(L"x"), left, left + std::max(0.0, work.GetNamedNumber(L"width") - width))));
+    bounds.SetNamedValue(L"y", Json::JsonValue::CreateNumberValue(std::clamp(bounds.GetNamedNumber(L"y"), top, top + std::max(0.0, work.GetNamedNumber(L"height") - height))));
+    bounds.SetNamedValue(L"displayId", Json::JsonValue::CreateStringValue(display.id)); SetBounds(window, bounds);
+  } catch (...) { /* Invalid or old development data uses configured defaults. */ }
 }
 static void ApplyOptions(Window &window, Json::JsonObject const &options) {
   static const std::set<std::wstring> supported{L"title", L"width", L"height", L"minWidth", L"minHeight", L"maxWidth", L"maxHeight", L"resizable", L"minimizable", L"alwaysOnTop", L"closable", L"appearance", L"backgroundColor", L"restoreFrame", L"titleBarStyle", L"transparent", L"hasShadow"};
@@ -190,9 +254,9 @@ static void ApplyOptions(Window &window, Json::JsonObject const &options) {
   const auto minWidth = Dimension(options, L"minWidth", window.minWidth), minHeight = Dimension(options, L"minHeight", window.minHeight);
   const auto maxWidth = Dimension(options, L"maxWidth", window.maxWidth), maxHeight = Dimension(options, L"maxHeight", window.maxHeight);
   if (minWidth > maxWidth || minHeight > maxHeight) throw winrt::hresult_invalid_argument(L"Invalid window constraints");
-  auto size = window.app.Size();
-  const auto width = Dimension(options, L"width", std::clamp(size.Width, minWidth, maxWidth));
-  const auto height = Dimension(options, L"height", std::clamp(size.Height, minHeight, maxHeight));
+  auto size = window.app.Size(); const double scale = GetDpiForWindow(Hwnd(window)) / 96.0;
+  const auto width = Dimension(options, L"width", std::clamp(size.Width / scale, minWidth, maxWidth));
+  const auto height = Dimension(options, L"height", std::clamp(size.Height / scale, minHeight, maxHeight));
   if (width < minWidth || width > maxWidth || height < minHeight || height > maxHeight) throw winrt::hresult_invalid_argument(L"Window size is outside its constraints");
   window.minWidth = minWidth; window.minHeight = minHeight; window.maxWidth = maxWidth; window.maxHeight = maxHeight;
   if (options.HasKey(L"titleBarStyle")) {
@@ -236,7 +300,7 @@ static void ApplyOptions(Window &window, Json::JsonObject const &options) {
     }
     window.background.Brush(compositor.CreateColorBrush(winrt::Windows::UI::Color{static_cast<uint8_t>(rgba & 255), static_cast<uint8_t>((rgba >> 24) & 255), static_cast<uint8_t>((rgba >> 16) & 255), static_cast<uint8_t>((rgba >> 8) & 255)}));
   }
-  if (window.app.Presenter().Kind() != UI::AppWindowPresenterKind::FullScreen) window.app.Resize({width, height});
+  if (window.app.Presenter().Kind() != UI::AppWindowPresenterKind::FullScreen) window.app.Resize({static_cast<int32_t>(std::round(width * scale)), static_cast<int32_t>(std::round(height * scale))});
 }
 static void QueueLaunch(std::wstring const &commandLine, bool initial) {
   int count = 0; auto argv = CommandLineToArgvW(commandLine.c_str(), &count);
@@ -301,12 +365,14 @@ static bool ForwardLaunch() {
 static void SaveFrame(std::string const &id, HWND hwnd) {
   if (dataDirectory.empty() || !windows.at(id).restoreFrame || IsIconic(hwnd) || IsZoomed(hwnd) || windows.at(id).fullscreen) return;
   auto file = SparkFile(id), temporary = file; temporary += L".pending";
-  auto text = to_string(Info(id).GetNamedObject(L"frame").Stringify()); std::ofstream stream(temporary, std::ios::binary | std::ios::trunc); stream << text; stream.close();
+  RECT frame{}; if (!GetWindowRect(hwnd, &frame)) return;
+  Json::JsonObject saved; saved.SetNamedValue(L"version", Json::JsonValue::CreateNumberValue(1)); saved.SetNamedValue(L"bounds", Info(id).GetNamedObject(L"bounds")); saved.SetNamedValue(L"persistentId", Json::JsonValue::CreateStringValue(OwningDisplay(frame).persistentId));
+  auto text = to_string(saved.Stringify()); std::ofstream stream(temporary, std::ios::binary | std::ios::trunc); stream << text; stream.close();
   if (stream) MoveFileExW(temporary.c_str(), file.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
 }
 static void FinishQuit(bool allow) {
   if (!quitPending) return;
-  quitPending = false; pendingQuitGuards.clear();
+  quitPending = false; pendingQuitGuards.clear(); if (!allow) FinishClose("main", false);
   if (windows.count("main")) KillTimer(Hwnd(windows.at("main")), 0x4C48);
   auto waiters = std::move(quitWaiters); quitWaiters.clear();
   const auto result = allow ? "{\"quitRequested\":true}" : "{\"quitRequested\":false,\"reason\":\"vetoed\"}";
@@ -342,10 +408,11 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
         Emit({{"type", "reopen"}, {"hasVisibleWindows", visible}, {"mainWindowWasVisible", !!IsWindowVisible(Hwnd(windows.at("main")))}}); ActivateApplication(); return TRUE; } } return FALSE; }
     if (message == WM_GETMINMAXINFO) {
       auto limits = reinterpret_cast<MINMAXINFO *>(lParam); auto const &window = windows.at(id);
-      limits->ptMinTrackSize = {window.minWidth, window.minHeight}; limits->ptMaxTrackSize = {window.maxWidth, window.maxHeight}; return 0;
+      const double scale = GetDpiForWindow(hwnd) / 96.0;
+      limits->ptMinTrackSize = {static_cast<LONG>(std::ceil(window.minWidth * scale)), static_cast<LONG>(std::ceil(window.minHeight * scale))}; limits->ptMaxTrackSize = {static_cast<LONG>(std::floor(window.maxWidth * scale)), static_cast<LONG>(std::floor(window.maxHeight * scale))}; return 0;
     }
     if (message == WM_SHOWWINDOW) PostMessageW(hwnd, WM_APP + 18, 0, 0);
-    if (message == WM_APP + 18) { UpdateModality(); return 0; }
+    if (message == WM_APP + 18) { UpdateModality(); Emit({{"type", "visibilityChanged"}, {"windowId", id}}); return 0; }
     if (message == WM_SETTINGCHANGE || message == WM_THEMECHANGED) ApplyAppearance(windows.at(id));
     if (message == WM_SYSCOMMAND && (wParam & 0xfff0) == SC_CLOSE && !windows.at(id).closable) return 0;
     if (message == WM_EXITSIZEMOVE) SaveFrame(id, hwnd);
@@ -367,12 +434,12 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
       auto found = menuActions.find(LOWORD(wParam)); if (found != menuActions.end() && context) { context.EmitJSEvent(L"RCTDeviceEventEmitter", L"NativeMenuAction", found->second.Copy()); return 0; }
     }
     if (message == WM_TIMER && wParam == 0x4C48) { FinishQuit(false); return 0; }
-    if (message == WM_TIMER && wParam == 0x4C47) { windows.at(id).pending = false; KillTimer(hwnd, 0x4C47); return 0; }
+    if (message == WM_TIMER && wParam == 0x4C47) { windows.at(id).pending = false; KillTimer(hwnd, 0x4C47); FinishClose(id, false); Emit({{"type", "closeGuardTimeout"}, {"windowId", id}}); return 0; }
   }
   return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 static void Attach(std::string id, RNW::ReactNativeWindow view) {
-  Window window; window.view = view; window.app = view.AppWindow(); window.normal = window.app.Presenter().as<UI::OverlappedPresenter>(); window.monitor = MonitorFromWindow(Hwnd(window), MONITOR_DEFAULTTONEAREST); windows.emplace(id, window);
+  Window window; window.instanceId = std::to_string(++generation); window.view = view; window.app = view.AppWindow(); window.normal = window.app.Presenter().as<UI::OverlappedPresenter>(); window.monitor = MonitorFromWindow(Hwnd(window), MONITOR_DEFAULTTONEAREST); windows.emplace(id, window);
   SetPropW(Hwnd(window), (L"Spark.Window." + std::wstring(to_hstring(id))).c_str(), reinterpret_cast<HANDLE>(1));
   SetPropW(Hwnd(window), L"Spark.ReactWindow", reinterpret_cast<HANDLE>(1));
   if (id == "main") SetNotificationWindow(Hwnd(window));
@@ -386,11 +453,12 @@ static void Attach(std::string id, RNW::ReactNativeWindow view) {
     if (window.guard) {
       args.Cancel(true); if (window.pending) return;
       window.pending = true; window.request = ++generation;
-      SetTimer(Hwnd(window), 0x4C47, 30000, nullptr);
+      if (!SetTimer(Hwnd(window), 0x4C47, 30000, nullptr)) { window.pending = false; FinishClose(id, false); return; }
       Emit({{"type", "beforeClose"}, {"windowId", id}, {"requestId", static_cast<int64_t>(window.request)}});
     } else if (id == "main" && !quitGuards.empty()) { args.Cancel(true); RequestQuit(); }
   });
   app.Destroying([id](auto const &, auto const &) {
+    FinishClose(id, true);
     if (id == "main" && !quitAccepted) { quitAccepted = true; Emit({{"type", "willQuit"}}); }
     Emit({{"type", "closed"}, {"windowId", id}});
     if (id != "main") {
@@ -536,7 +604,7 @@ static void Initialize(RNW::ReactNativeWin32App const &app) {
 REACT_MODULE(SparkDesktopApp, L"NativeDesktopApp")
 struct SparkDesktopApp {
   REACT_INIT(Initialize)
-  void Initialize(winrt::Microsoft::ReactNative::ReactContext const &context) noexcept { if (context.Properties().Get(winrt::Microsoft::ReactNative::ReactPropertyId<bool>{L"Spark", L"SecondaryRuntime"}).value_or(false)) return; SparkWin::context = context; SparkWin::quitGuards.clear(); SparkWin::pendingQuitGuards.clear(); SparkWin::quitWaiters.clear(); SparkWin::quitPending = false; SparkWin::quitAccepted = false; SparkWin::shortcuts.clear(); for (auto &[id, window] : SparkWin::windows) { window.guard = false; window.pending = false; } }
+  void Initialize(winrt::Microsoft::ReactNative::ReactContext const &context) noexcept { if (context.Properties().Get(winrt::Microsoft::ReactNative::ReactPropertyId<bool>{L"Spark", L"SecondaryRuntime"}).value_or(false)) return; SparkWin::context = context; SparkWin::quitGuards.clear(); SparkWin::pendingQuitGuards.clear(); SparkWin::quitWaiters.clear(); SparkWin::quitPending = false; SparkWin::quitAccepted = false; SparkWin::shortcuts.clear(); for (auto &[id, window] : SparkWin::windows) { window.guard = false; window.pending = false; window.guardId.clear(); window.closeWaiters.clear(); KillTimer(SparkWin::Hwnd(window), 0x4C47); } }
   REACT_METHOD(addListener) void addListener(std::string) noexcept {}
   REACT_METHOD(removeListeners) void removeListeners(double) noexcept {}
   REACT_METHOD(call)
@@ -577,13 +645,12 @@ struct SparkDesktopWindows {
   void call(std::string method, std::string encoded, winrt::Microsoft::ReactNative::ReactPromise<std::string> promise) noexcept {
     SparkWin::context.UIDispatcher().Post([method, encoded, promise]() {
       using namespace SparkWin;
+      std::string candidateId;
       try {
         auto args = Json::JsonObject::Parse(to_hstring(encoded)); auto id = to_string(args.GetNamedString(L"id", L"main"));
         if (method == "open") {
-          if (windows.count(id)) {
-            auto &existing = windows.at(id); auto hwnd = Hwnd(existing); ShowWindow(hwnd, existing.overlay ? SW_SHOWNOACTIVATE : IsIconic(hwnd) ? SW_RESTORE : SW_SHOW); UpdateModality(); if (!existing.overlay) SetForegroundWindow(hwnd);
-            promise.Resolve(to_string(Info(id).Stringify())); return;
-          }
+          if (id == "main") { promise.Reject(RNW::ReactError{"E_INVALID_ARGUMENT", "Main window is host-created"}); return; }
+          if (windows.count(id)) { promise.Reject(RNW::ReactError{"E_ALREADY_EXISTS", "Window ID is already open"}); return; }
           const auto parentId = to_string(args.GetNamedString(L"parentId", L""));
           const auto kind = args.GetNamedString(L"kind", L"window");
           if (kind != L"window" && kind != L"overlay") throw winrt::hresult_invalid_argument(L"Invalid window kind");
@@ -595,64 +662,81 @@ struct SparkDesktopWindows {
           if (modal) for (auto const &[childId, child] : windows) if (child.parentId == parentId && child.modal) { promise.Reject(RNW::ReactError{"E_BUSY", "Parent already has a modal window"}); return; }
           auto view = RNW::ReactNativeWindow::CreateFromCompositor(compositor); auto app = view.AppWindow();
           app.Title(args.GetNamedString(L"title", SparkWindowsEnv(L"SPARK_PROJECT_NAME"))); app.Resize({static_cast<int32_t>(args.GetNamedNumber(L"width", 640)), static_cast<int32_t>(args.GetNamedNumber(L"height", 480))});
-          RNW::ReactViewOptions options; options.ComponentName(L"main");
-          Json::JsonObject props; props.SetNamedValue(L"windowId", Json::JsonValue::CreateStringValue(to_hstring(id))); props.SetNamedValue(L"windowProps", args.GetNamedObject(L"props", Json::JsonObject()));
+          RNW::ReactViewOptions options; options.ComponentName(args.GetNamedString(L"component"));
+          auto props = args.GetNamedObject(L"props", Json::JsonObject());
           // Write JSON props through the public JSValue writer contract.
           auto propsJson = to_string(props.Stringify());
           options.InitialProps([propsJson](RNW::IJSValueWriter const &writer) { WriteJson(writer, Json::JsonObject::Parse(to_hstring(propsJson))); });
           // Validate all options before attaching/showing a new React root.
-          Json::JsonObject style;
-          for (auto const &pair : args) if (pair.Key() != L"id" && pair.Key() != L"props" && pair.Key() != L"parentId" && pair.Key() != L"modal" && pair.Key() != L"kind") style.SetNamedValue(pair.Key(), pair.Value());
+          auto style = CanonicalStyle(args);
           Window pending; pending.overlay = overlay; pending.view = view; pending.app = app; pending.normal = app.Presenter().as<UI::OverlappedPresenter>();
           try { ApplyOptions(pending, style); } catch (...) { app.Destroy(); throw; }
           if (overlay) {
             auto hwnd = Hwnd(pending);
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW);
           }
-          Attach(id, view);
+          Attach(id, view); candidateId = id;
           auto &attached = windows.at(id); attached.parentId = parentId; attached.modal = modal; attached.overlay = overlay; attached.transparent = pending.transparent; attached.shadow = pending.shadow;
           if (!parentId.empty()) {
             SetLastError(0); SetWindowLongPtrW(Hwnd(attached), GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(Hwnd(windows.at(parentId))));
             if (GetLastError()) { app.Destroy(); throw winrt::hresult_error(HRESULT_FROM_WIN32(GetLastError())); }
           }
-          attached.minWidth = pending.minWidth; attached.minHeight = pending.minHeight; attached.maxWidth = pending.maxWidth; attached.maxHeight = pending.maxHeight; attached.closable = pending.closable; attached.restoreFrame = pending.restoreFrame; attached.theme = pending.theme; attached.resources = pending.resources; attached.background = pending.background;
-          view.ReactNativeIsland().ReactViewHost(RNW::ReactCoreInjection::MakeViewHost(host, options)); RestoreFrame(id); ApplyAppearance(attached); app.Show(!overlay); UpdateModality(); Emit({{"type", "opened"}, {"windowId", id}});
+          attached.minWidth = pending.minWidth; attached.minHeight = pending.minHeight; attached.maxWidth = pending.maxWidth; attached.maxHeight = pending.maxHeight; attached.closable = pending.closable; attached.restoreFrame = args.GetNamedBoolean(L"restoreBounds", false); attached.theme = pending.theme; attached.resources = pending.resources; attached.background = pending.background;
+          view.ReactNativeIsland().ReactViewHost(RNW::ReactCoreInjection::MakeViewHost(host, options));
+          auto displays = DisplayGeometries(); auto display = displays.front();
+          for (auto const &candidate : displays) if (candidate.primary) display = candidate;
+          if (!parentId.empty()) { RECT parentFrame{}; GetWindowRect(Hwnd(windows.at(parentId)), &parentFrame); display = OwningDisplay(parentFrame); }
+          if (args.HasKey(L"position")) display = DisplayWithId(args.GetNamedObject(L"position").GetNamedString(L"displayId"));
+          auto size = args.GetNamedObject(L"size", Json::JsonObject()); double width = std::clamp(size.GetNamedNumber(L"width", 640), attached.minWidth, attached.maxWidth), height = std::clamp(size.GetNamedNumber(L"height", 480), attached.minHeight, attached.maxHeight);
+          auto work = LogicalRect(display.work, display); Json::JsonObject bounds;
+          bounds.SetNamedValue(L"displayId", Json::JsonValue::CreateStringValue(display.id)); bounds.SetNamedValue(L"width", Json::JsonValue::CreateNumberValue(width)); bounds.SetNamedValue(L"height", Json::JsonValue::CreateNumberValue(height));
+          bounds.SetNamedValue(L"x", Json::JsonValue::CreateNumberValue(work.GetNamedNumber(L"x") + (work.GetNamedNumber(L"width") - width) / 2)); bounds.SetNamedValue(L"y", Json::JsonValue::CreateNumberValue(work.GetNamedNumber(L"y") + (work.GetNamedNumber(L"height") - height) / 2));
+          SetBounds(attached, bounds); RestoreFrame(id); bounds = Info(id).GetNamedObject(L"bounds");
+          if (args.HasKey(L"size")) { bounds.SetNamedValue(L"width", Json::JsonValue::CreateNumberValue(width)); bounds.SetNamedValue(L"height", Json::JsonValue::CreateNumberValue(height)); }
+          if (args.HasKey(L"position")) for (auto const &entry : args.GetNamedObject(L"position")) bounds.SetNamedValue(entry.Key(), entry.Value());
+          SetBounds(attached, bounds); ApplyAppearance(attached); if (args.GetNamedBoolean(L"show", true)) app.Show(!overlay); UpdateModality(); Emit({{"type", "opened"}, {"windowId", id}});
           promise.Resolve(to_string(Info(id).Stringify())); return;
         }
         if (method == "displays") { promise.Resolve(to_string(Displays().Stringify())); return; }
         if (method == "list") { Json::JsonArray result; for (auto const &[name, window] : windows) result.Append(Info(name)); promise.Resolve(to_string(result.Stringify())); return; }
         auto found = windows.find(id); if (found == windows.end()) { promise.Reject(RNW::ReactError{"E_NOT_FOUND", "Window not found"}); return; }
         auto &window = found->second; auto hwnd = Hwnd(window);
-        if (method == "info") { promise.Resolve(to_string(Info(id).Stringify())); return; }
-        if (method == "options") ApplyOptions(window, args.GetNamedObject(L"options"));
+        if (args.HasKey(L"instanceId") && to_string(args.GetNamedString(L"instanceId")) != window.instanceId) { promise.Reject(RNW::ReactError{"E_NOT_FOUND", "Window instance has closed"}); return; }
+        if (method == "info" || method == "observe") { promise.Resolve(to_string(Info(id).Stringify())); return; }
+        if (method == "options") ApplyOptions(window, CanonicalStyle(args.GetNamedObject(L"options")));
         else if (method == "center") {
-          MONITORINFO monitor{}; monitor.cbSize = sizeof(monitor);
-          if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor)) winrt::throw_last_error();
-          auto size = window.app.Size();
-          window.app.Move({monitor.rcWork.left + (monitor.rcWork.right - monitor.rcWork.left - size.Width) / 2, monitor.rcWork.top + (monitor.rcWork.bottom - monitor.rcWork.top - size.Height) / 2});
-        } else if (method == "frame") {
-          auto frame = args.GetNamedObject(L"frame"); const auto x = frame.GetNamedNumber(L"x"), y = frame.GetNamedNumber(L"y");
-          if (!std::isfinite(x) || !std::isfinite(y) || x < INT32_MIN || x > INT32_MAX || y < INT32_MIN || y > INT32_MAX) throw winrt::hresult_invalid_argument(L"Invalid frame origin");
-          auto width = Dimension(frame, L"width", window.app.Size().Width), height = Dimension(frame, L"height", window.app.Size().Height);
-          if (width < window.minWidth || width > window.maxWidth || height < window.minHeight || height > window.maxHeight) throw winrt::hresult_invalid_argument(L"Frame is outside window constraints");
-          window.app.MoveAndResize({static_cast<int32_t>(x), static_cast<int32_t>(y), width, height});
+          RECT frame{}; if (!GetWindowRect(hwnd, &frame)) winrt::throw_last_error();
+          auto display = args.HasKey(L"displayId") ? DisplayWithId(args.GetNamedString(L"displayId")) : OwningDisplay(frame);
+          auto bounds = Info(id).GetNamedObject(L"bounds"), work = LogicalRect(display.work, display);
+          bounds.SetNamedValue(L"displayId", Json::JsonValue::CreateStringValue(display.id));
+          bounds.SetNamedValue(L"x", Json::JsonValue::CreateNumberValue(work.GetNamedNumber(L"x") + (work.GetNamedNumber(L"width") - bounds.GetNamedNumber(L"width")) / 2));
+          bounds.SetNamedValue(L"y", Json::JsonValue::CreateNumberValue(work.GetNamedNumber(L"y") + (work.GetNamedNumber(L"height") - bounds.GetNamedNumber(L"height")) / 2)); SetBounds(window, bounds);
+        } else if (method == "bounds") { SetBounds(window, args.GetNamedObject(L"bounds"));
         } else if (method == "fullscreen") {
           if (args.GetNamedBoolean(L"enabled")) window.app.SetPresenter(UI::AppWindowPresenterKind::FullScreen);
           else window.app.SetPresenter(window.normal);
           WindowTransitions(id);
-        } else if (method == "title") window.app.Title(args.GetNamedString(L"title"));
-        else if (method == "closeGuard") { window.guard = args.GetNamedBoolean(L"enabled"); window.pending = false; window.request = ++generation; KillTimer(hwnd, 0x4C47); }
-        else if (method == "replyClose") {
-          if (window.pending && args.GetNamedNumber(L"requestId", 0) == window.request) { window.pending = false; KillTimer(hwnd, 0x4C47); if (args.GetNamedBoolean(L"allow")) { if (id == "main") RequestQuit(); else { window.allow = true; window.app.Destroy(); } } }
-        } else if (method == "close") PostMessageW(hwnd, WM_CLOSE, 0, 0);
-        else if (method == "show") { ShowWindow(hwnd, window.overlay ? SW_SHOWNOACTIVATE : IsIconic(hwnd) ? SW_RESTORE : SW_SHOW); UpdateModality(); if (!window.overlay) SetForegroundWindow(hwnd); }
+        } else if (method == "closeGuard") {
+          auto guardId = to_string(args.GetNamedString(L"guardId")); bool enabled = args.GetNamedBoolean(L"enabled");
+          if (enabled && window.guard && window.guardId != guardId) { promise.Reject(RNW::ReactError{"E_BUSY", "Window already has a close guard"}); return; }
+          if (enabled || window.guardId == guardId) { window.guard = enabled; window.guardId = enabled ? guardId : ""; window.pending = false; window.request = ++generation; KillTimer(hwnd, 0x4C47); FinishClose(id, false); }
+        } else if (method == "replyClose") {
+          if (window.pending && args.GetNamedNumber(L"requestId", 0) == window.request && to_string(args.GetNamedString(L"guardId")) == window.guardId) {
+            window.pending = false; KillTimer(hwnd, 0x4C47);
+            if (args.GetNamedBoolean(L"allow")) { if (id == "main") RequestQuit(); else { window.allow = true; window.app.Destroy(); } } else FinishClose(id, false);
+          }
+        } else if (method == "close") {
+          window.closeWaiters.push_back(promise); if (!window.pending) SendMessageW(hwnd, WM_CLOSE, 0, 0);
+          auto stillOpen = windows.find(id); if (stillOpen != windows.end() && !stillOpen->second.pending && !(id == "main" && quitPending)) FinishClose(id, false);
+          return;
+        } else if (method == "show") { const bool focus = args.GetNamedBoolean(L"focus", true) && !window.overlay; ShowWindow(hwnd, !focus ? SW_SHOWNOACTIVATE : IsIconic(hwnd) ? SW_RESTORE : SW_SHOW); UpdateModality(); if (focus) SetForegroundWindow(hwnd); }
         else if (method == "hide") { window.app.Hide(); UpdateModality(); }
         else if (method == "minimize") ShowWindow(hwnd, SW_MINIMIZE);
         else if (method == "maximize") ShowWindow(hwnd, SW_MAXIMIZE);
         else if (method == "unmaximize") ShowWindow(hwnd, SW_RESTORE);
         else throw winrt::hresult_invalid_argument(L"Unsupported window operation");
         promise.Resolve("null");
-      } catch (winrt::hresult_error const &error) { promise.Reject(RNW::ReactError{"E_WINDOW", to_string(error.message())}); }
+      } catch (winrt::hresult_error const &error) { if (!candidateId.empty() && windows.count(candidateId)) windows.at(candidateId).app.Destroy(); promise.Reject(RNW::ReactError{error.code() == E_INVALIDARG ? "E_INVALID_ARGUMENT" : error.code() == HRESULT_FROM_WIN32(ERROR_NOT_FOUND) ? "E_NOT_FOUND" : "E_NATIVE", to_string(error.message())}); }
     });
   }
 };

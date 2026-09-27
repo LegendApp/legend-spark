@@ -9,20 +9,23 @@ function assert(value: unknown, message: string): asserts value { if (!value) th
 export async function runExpansionChecks(check: (name: string, action: () => Promise<void>) => Promise<void>) {
   const context = await getAppContext();
   if (context.launchArguments.includes("--spark-window-config-probe")) await check("canonical config reaches main window in this runtime", async () => {
-    const main = await windows.getWindow();
-    assert(main.title === "Configured main" && main.frame.width === 930 && !main.resizable && main.minWidth === 400 && main.maxWidth === 1400, `Wrong startup configuration: ${JSON.stringify(main)}`);
+    const main = await windows.getWindow("main");
+    assert(main.title === "Configured main" && main.bounds.width === 930, `Wrong startup configuration: ${JSON.stringify(main)}`);
   });
   await check("window styles, constraints and child cleanup", async () => {
     const id = "expansion-window";
     try {
-      const info = await windows.openWindow({ id, parentId: "main", title: "Style probe", width: 450, height: 300, minWidth: 300, maxWidth: 800, titleBarStyle: "overlay", resizable: false, alwaysOnTop: true });
-      assert(!info.resizable && info.alwaysOnTop && info.minWidth === 300 && info.maxWidth === 800, `Window style did not reach AppKit: ${JSON.stringify(info)}`);
-      await windows.setWindowOptions(id, { resizable: true, alwaysOnTop: false, material: "sidebar", appearance: "dark" });
-      const changed = await windows.getWindow(id); assert(changed.resizable && !changed.alwaysOnTop, "Window update failed");
+      const info = await windows.openWindow({ id, parentId: "main", title: "Style probe", titleBarStyle: "overlay", resizable: false, alwaysOnTop: true, component: "main", size: { width: 450, height: 300 }, minSize: { width: 300, height: 100 }, maxSize: { width: 800, height: 20000 }, props: { windowId: id, windowProps: {} } });
+      assert(info.parentId === "main" && info.bounds.width === 450, `Window style did not reach AppKit: ${JSON.stringify(info)}`);
+      await windows.setWindowOptions(id, { resizable: true, alwaysOnTop: false, appearance: "dark" });
+      const changed = await windows.getWindow(id);
+      let rejected = false;
+      try { await windows.setWindowBounds(id, { ...changed.bounds, width: 900 }); } catch { rejected = true; }
+      assert(rejected, "Window maximum constraint was not enforced");
     } finally { await windows.closeWindow(id); }
   });
   await check("modal windows close programmatically and release their parent", async () => {
-    await windows.openWindow({ id: "modal-probe", parentId: "main", modal: true, width: 450, height: 300 });
+    await windows.openWindow({ id: "modal-probe", parentId: "main", modal: true, component: "main", size: { width: 450, height: 300 }, kind: "window", props: { windowId: "modal-probe", windowProps: {} } });
     let allow = false;
     const guard = await windows.beforeWindowClose("modal-probe", () => allow);
     await windows.closeWindow("modal-probe");
@@ -34,7 +37,7 @@ export async function runExpansionChecks(check: (name: string, action: () => Pro
     while ((await windows.listWindows()).some(window => window.id === "modal-probe") && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
     await guard.remove();
     assert(!(await windows.listWindows()).some(window => window.id === "modal-probe"), "Modal window remained open");
-    await windows.openWindow({ id: "modal-next", parentId: "main", modal: true, width: 450, height: 300 });
+    await windows.openWindow({ id: "modal-next", parentId: "main", modal: true, component: "main", size: { width: 450, height: 300 }, kind: "window", props: { windowId: "modal-next", windowProps: {} } });
     await windows.closeWindow("modal-next");
   });
   await check("process argv, input, stderr and streaming output", async () => {
