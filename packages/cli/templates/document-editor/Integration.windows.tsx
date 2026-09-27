@@ -6,7 +6,7 @@ import { beforeQuit } from "@legendapp/spark/app";
 import { configureMenus, clearMenus, addNativeMenuActionListener } from "@legendapp/spark/menus";
 import { registerShortcut } from "@legendapp/spark/shortcuts";
 import { onOpen } from "@legendapp/spark/links";
-import { readTextFile } from "@legendapp/spark/dialogs";
+import { readText } from "@legendapp/spark/files";
 import { sessions } from "./sessions";
 import type { DocumentSession } from "./document";
 let nextWindow = 0;
@@ -43,7 +43,7 @@ export function Integration({ session, windowId, documentId, onReady }: { sessio
           const match = /^file:\/\/(?:localhost)?(\/.*)$/.exec(event.url);
           if (!match) { setError("Unsupported file URL"); return; }
           const location = decodeURIComponent(match[1]!).replace(/^\/([A-Za-z]:)/, "$1").replace(/\//g, "\\");
-          void readTextFile(location).then(text => session.load({ location, name: location.split("/").pop()! }, text)).catch(e => setError(String(e)));
+          void readText(location).then(text => session.load({ location, name: location.split("/").pop()! }, text)).catch(e => setError(String(e)));
         }));
       }
       if (!removed) onReady(true);

@@ -342,7 +342,7 @@ This map accounts for all 63 original umbrella entries. “Fold” means update 
 | `/shortcuts`, `/global-shortcuts`, `/global-shortcuts/hotkeys` | Keep local/global feature boundaries; fold singleton numeric hotkey interface into the canonical global API or explicit low-level keyboard usage. |
 | `/shortcuts/keyboard` | Retain low-level events/codes with explicit ownership. |
 | `/shortcuts/commands`, `/shortcuts/commands/storage` | Keep commands; fold storage helper into its module if it can remain optional internally, otherwise label it as a distinct persistence integration. No duplicate key syntax. |
-| `/dialogs`, `/message-dialog` | `/dialogs`; IO to files, reveal to links. |
+| `/dialogs`, `/message-dialog` | `/dialogs`; IO and reveal to files. |
 | `/files`, `/files/scanner`, `/files/watchers` | `/files`; keep internal operation modules and operation-scoped lifetimes. |
 | `/settings`, `/settings/paths` | Settings stays; general storage/path helpers move to files. |
 | `/settings/observable` | Retain explicit Legend State integration, shared storage backend. |

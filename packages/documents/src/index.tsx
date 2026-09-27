@@ -75,11 +75,12 @@ export async function openSelectedDocumentPath({
   invalidSelectionMessage,
   isDocumentPath,
 }: OpenSelectedDocumentPathOptions) {
-  const paths = await openFileDialog({
-    allowedFileTypes: [...allowedFileTypes],
-    canChooseFiles: true,
+  const result = await openFileDialog({
+    filters: [{ extensions: allowedFileTypes }],
+    selection: "files",
   });
-  const path = paths?.find(isDocumentPath) ?? null;
+  const paths = result.canceled ? [] : result.paths;
+  const path = paths.find(isDocumentPath) ?? null;
 
   if (path) {
     return path;

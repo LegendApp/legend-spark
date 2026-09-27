@@ -23,7 +23,7 @@ function emit(name: string, event: string, value: unknown) {
 const platform = { OS: "macos" };
 vi.doMock("react-native", () => ({
   Platform: platform,
-  TurboModuleRegistry: { getEnforcing: module },
+  TurboModuleRegistry: { getEnforcing: module, get: module },
   NativeEventEmitter: class {
     constructor(private native: { name: string }) {}
     addListener(event: string, listener: (event: any) => void) {
@@ -168,12 +168,13 @@ test("context menus validate location, duplicate ids and cancellation", async ()
   handlers.set("NativeContextMenu.showMenu", () => ""); expect(await context.showContextMenu([], { x: 0, y: 0 })).toBeNull();
   handlers.set("NativeContextMenu.showMenu", () => "selected"); expect(await context.showContextMenu([{ id: "selected", title: "Select" }], { x: 0, y: 0 })).toBe("selected");
 });
-test("dialogs parse selected URLs and native cancellation, preserving save conflicts", async () => {
-  handlers.set("NativeFileDialog.open", () => '["file:///tmp/example.txt"]'); expect(await dialogs.openFileDialog()).toEqual(["file:///tmp/example.txt"]);
-  handlers.set("NativeFileDialog.open", () => "null"); expect(await dialogs.openFileDialog()).toBeNull();
-  handlers.set("NativeFileDialog.save", () => '"file:///tmp/save.txt"'); expect(await dialogs.saveFileDialog()).toBe("file:///tmp/save.txt");
-  handlers.set("NativeFileDialog.writeTextFileIfUnchanged", () => false); expect(await dialogs.writeTextFileIfUnchanged("/a", "old", "new")).toBe(false);
-  handlers.set("NativeFileDialog.readTextFile", () => "text"); expect(await dialogs.readTextFile("/a")).toBe("text"); await dialogs.writeTextFile("/a", "new"); await dialogs.revealInFinder("/a");
+test("dialogs parse selected paths and native cancellation, preserving save conflicts", async () => {
+  handlers.set("NativeFileDialog.open", () => '["/tmp/example.txt"]'); expect(await dialogs.openFileDialog()).toEqual({ canceled: false, paths: ["/tmp/example.txt"] });
+  handlers.set("NativeFileDialog.open", () => "null"); expect(await dialogs.openFileDialog()).toEqual({ canceled: true });
+  handlers.set("NativeFileDialog.save", () => '"/tmp/save.txt"'); expect(await dialogs.saveFileDialog()).toEqual({ canceled: false, path: "/tmp/save.txt" });
+  handlers.set("NativeFileDialog.writeTextFileIfUnchanged", () => false); expect(await files.writeTextIfUnchanged("/a", "old", "new")).toEqual({ written: false });
+  handlers.set("NativeDesktopFileSystem.readText", () => "text"); expect(await files.readText("/a")).toBe("text"); await files.writeText("/a", "new");
+  handlers.set("NativeFileDialog.revealInFinder", () => true); await files.revealInFileManager("/a");
 });
 test("menu owner ids and patch payloads survive native transport", async () => {
   const configuration = [{ id: "file", title: "File", items: [{ id: "save", title: "Save", checked: true }] }];
@@ -265,7 +266,7 @@ test("dialog cancellation, default buttons and input validation", async () => {
   expect(await messages.confirm("Continue?", { windowId: "main" })).toBe(false);
   expect(calls.at(-1)?.args).toMatchObject({ windowId: "main", defaultButton: 1, cancelButton: 0 });
   await expect(messages.showMessage({ title: "Bad", buttons: [] })).rejects.toThrow();
-  await expect(messages.showMessage({ title: "Bad", defaultButton: 5 })).rejects.toThrow();
+  await expect(messages.showMessage({ title: "Bad", defaultButtonId: "missing" })).rejects.toThrow();
 });
 test("rich clipboard validates file paths before replacing clipboard contents", async () => {
   await clipboard.writeClipboard({ text: "Hello", html: "<b>Hello</b>" });
@@ -419,9 +420,9 @@ test("Windows context menus reach native selection and cancellation with item se
 });
 test("Windows dialogs retain four-button indices, parent selection and checkbox results", async () => {
   platform.OS = "windows";
-  const options = { title: "Save", windowId: "child", buttons: ["Cancel", "Ignore", "Save", "Other"], defaultButton: 2, cancelButton: 0, checkbox: { label: "Remember", checked: true } };
-  handlers.set("NativeDesktopMessageDialog.show", args => { expect(args).toEqual(options); return { button: 2, checked: false }; });
-  expect(await messages.showMessage(options)).toEqual({ button: 2, checked: false });
+  const options = { title: "Save", windowId: "child", buttons: [{ id: "cancel", label: "Cancel" }, { id: "ignore", label: "Ignore" }, { id: "save", label: "Save" }, { id: "other", label: "Other" }], defaultButtonId: "save", cancelButtonId: "cancel", checkbox: { label: "Remember", checked: true } };
+  handlers.set("NativeDesktopMessageDialog.show", args => { expect(args).toEqual({ title: options.title, windowId: options.windowId, checkbox: options.checkbox, buttons: ["Cancel", "Ignore", "Save", "Other"], defaultButton: 2, cancelButton: 0 }); return { button: 2, checked: false }; });
+  expect(await messages.showMessage(options)).toEqual({ buttonId: "save", checked: false });
   for (const code of ["E_BUSY", "E_NOT_FOUND"]) {
     handlers.set("NativeDesktopMessageDialog.show", () => { throw nativeError(code); });
     await expect(messages.showMessage(options)).rejects.toMatchObject({ code });
@@ -465,4 +466,23 @@ test("recursive watch is explicit and retains removal semantics", async () => {
   emit("NativeDesktopFileSystem", "change", { id: args.id, path: "/tree" }); expect(count).toBe(1);
   await sub.remove(); emit("NativeDesktopFileSystem", "change", { id: args.id, path: "/tree" }); expect(count).toBe(1);
   await expect(files.watch("/tree", () => {}, { recursive: "yes" as never })).rejects.toThrow("boolean");
+});
+
+test("dialogs distinguish cancellation, malformed output and unavailable targets", async () => {
+  for (const value of ["", "not-json", "{}", "[]", '[""]', '[7]', '["relative"]']) {
+    handlers.set("NativeFileDialog.open", () => value);
+    await expect(dialogs.openFileDialog()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  for (const value of ["", '""', "{}", "42"]) {
+    handlers.set("NativeFileDialog.save", () => value);
+    await expect(dialogs.saveFileDialog()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  handlers.set("NativeDesktopMessageDialog.show", () => ({ button: -1, checked: true }));
+  expect(await messages.showMessage({ title: "Closed" })).toEqual({ buttonId: null, checked: true });
+  handlers.set("NativeDesktopMessageDialog.show", () => ({ button: 9, checked: false }));
+  await expect(messages.showMessage({ title: "Invalid" })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  platform.OS = "ios";
+  expect(dialogs.getFileDialogAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
+  await expect(dialogs.openFileDialog()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  await expect(messages.showMessage({ title: "Unsupported" })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
 });

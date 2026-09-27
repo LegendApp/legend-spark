@@ -1,3 +1,4 @@
+import { SparkError, invokeNative } from "@legendapp/spark-desktop-app/src/contracts";
 import { NativeEventEmitter, Platform } from "react-native";
 import Native from "./NativeDesktopFileSystem";
 import { absolutePath } from "./path";
@@ -59,3 +60,22 @@ export const writeChunks = (path: string, chunks: AsyncIterable<Uint8Array> | It
 };
 /** Move to the OS Trash/Recycle Bin. Never falls back to permanent deletion. */
 export const trash = (path: string) => call<void>("trash", { path: absolute(path) });
+
+/** Reveal an existing path in Finder or Explorer. */
+export async function revealInFileManager(path: string): Promise<void> {
+  const location = absolute(path);
+  const { fileDialogNative } = await import("@legendapp/spark-file-dialog/src/native");
+  const revealed = await invokeNative(() => fileDialogNative().revealInFinder(location));
+  if (typeof revealed !== "boolean") throw new SparkError("E_INVALID_DATA", "Invalid reveal response");
+  if (!revealed) throw new SparkError("E_NOT_FOUND", "Cannot reveal a missing file");
+}
+/** Compare before replacing. Detects observed changes; this is not an OS-wide atomic compare-and-swap. */
+export async function writeTextIfUnchanged(path: string, expected: string, contents: string): Promise<{ written: boolean }> {
+  const location = absolute(path);
+  if (location.startsWith("file://")) throw new SparkError("E_INVALID_ARGUMENT", "Conditional writes require a native absolute path");
+  if (typeof expected !== "string" || typeof contents !== "string") throw new SparkError("E_INVALID_ARGUMENT", "Expected text strings");
+  const { fileDialogNative } = await import("@legendapp/spark-file-dialog/src/native");
+  const written = await invokeNative(() => fileDialogNative().writeTextFileIfUnchanged(location, expected, contents));
+  if (typeof written !== "boolean") throw new SparkError("E_INVALID_DATA", "Invalid conditional-write response");
+  return { written };
+}

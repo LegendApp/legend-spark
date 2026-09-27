@@ -20,7 +20,6 @@
     "./updates": "./updates.ts",
     "./processes": "./processes.ts",
     "./system": "./system.ts",
-    "./message-dialog": "./message-dialog.ts",
     "./global-shortcuts": "./global-shortcuts.ts",
     "./drag-drop": "./drag-drop.ts",
     "./webview": "./webview.ts",

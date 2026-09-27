@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { Button } from "@legendapp/spark/ui";
-import { showMessage } from "@legendapp/spark/message-dialog";
+import { showMessage } from "@legendapp/spark/dialogs";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { DragDropView } from "@legendapp/spark/drag-drop";
 import * as notifications from "@legendapp/spark/notifications";
@@ -32,13 +32,13 @@ export default function DesktopInteractionChecks({ check, onError, onBusy }: {
     await requireError(() => showMessage({ title: "Missing parent", windowId: "nonexistent-contract-parent" }), "E_NOT_FOUND");
     setInstruction("Check Remember, then press Enter for Continue. In the next dialog, press Escape.");
     const first = showMessage({ title: "Dialog acceptance", message: "Check Remember, then press Enter to choose Continue. Cancel is also available with Escape.",
-      windowId: "main", kind: "warning", buttons: ["Cancel", "Ignore", "Continue", "Other"], defaultButton: 2, cancelButton: 0, checkbox: { label: "Remember", checked: false } });
+      windowId: "main", kind: "warning", buttons: [{ id: "cancel", label: "Cancel" }, { id: "ignore", label: "Ignore" }, { id: "continue", label: "Continue" }, { id: "other", label: "Other" }], defaultButtonId: "continue", cancelButtonId: "cancel", checkbox: { label: "Remember", checked: false } });
     // Attach handlers immediately; an unexpected native rejection must not leak.
     const [selected] = await Promise.all([first, (async () => { await requireError(() => showMessage({ title: "Must reject while busy" }), "E_BUSY"); })()]);
-    assertContract(selected.button === 2 && selected.checked, "Expected Continue (index 2) and checked checkbox");
+    assertContract(selected.buttonId === "continue" && selected.checked, "Expected Continue (index 2) and checked checkbox");
     const cancelled = await showMessage({ title: "Cancel acceptance", message: "Press Escape. Remember should already be checked.", kind: "info",
-      buttons: ["Cancel", "Continue"], defaultButton: 1, cancelButton: 0, checkbox: { label: "Remember", checked: true } });
-    assertContract(cancelled.button === 0 && cancelled.checked, "Escape did not return the configured cancel index and checkbox state");
+      buttons: [{ id: "cancel", label: "Cancel" }, { id: "continue", label: "Continue" }], defaultButtonId: "continue", cancelButtonId: "cancel", checkbox: { label: "Remember", checked: true } });
+    assertContract(cancelled.buttonId === "cancel" && cancelled.checked, "Escape did not return the configured cancel index and checkbox state");
     setInstruction("Dialog assertions finished. Also check parent modality, all button labels, and keyboard focus visually.");
   }
   async function menus(location: { x: number; y: number }) {

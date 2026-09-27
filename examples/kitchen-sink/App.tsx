@@ -13,7 +13,8 @@ import * as secureStore from "@legendapp/spark/secure-storage";
 import { registerShortcut } from "@legendapp/spark/shortcuts";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { configureMenus, clearMenus, addNativeMenuActionListener } from "@legendapp/spark/menus";
-import { openFileDialog, saveFileDialog, revealInFinder } from "@legendapp/spark/dialogs";
+import { openFileDialog, saveFileDialog } from "@legendapp/spark/dialogs";
+import { revealInFileManager } from "@legendapp/spark/files";
 import { AuthChecks } from "./AuthChecks";
 import { AudioChecks } from "./AudioChecks";
 import { FileStreamChecks } from "./FileStreamChecks";
@@ -101,14 +102,16 @@ function KitchenSink({ runtime, projectId }: Props) {
   const [linkEvents, reportLink] = useEventResults(report);
   const action = useCallback(async (fn: () => unknown | Promise<unknown>) => { try { const result = await fn(); if (result !== undefined) report(result); return result; } catch (error) { report(String(error)); throw error; } }, [report]);
   const load = useCallback(async () => {
-    const selected = await openFileDialog({ title: "Open a text document", allowedFileTypes: ["txt", "md", "json"], allowsMultipleSelection: false });
-    if (!selected?.[0]) return "Open cancelled.";
-    const path = selected[0]; const text = await files.readText(path);
+    const selected = await openFileDialog({ title: "Open a text document", filters: [{ extensions: ["txt", "md", "json"] }], multiple: false });
+    if (selected.canceled) return "Open cancelled.";
+    const path = selected.paths[0]; const text = await files.readText(path);
     setDocument({ path, text, saved: text }); await links.noteRecentDocument(path.startsWith("file://") ? path : `file://${encodeURI(path)}`); reportFile(`Opened ${path}`);
   }, [reportFile]);
   const save = useCallback(async () => {
     const current = documentRef.current;
-    const path = current.path || await saveFileDialog({ defaultName: "Hello.txt" });
+    const result = current.path ? { canceled: false as const, path: current.path } : await saveFileDialog({ defaultName: "Hello.txt" });
+    if (result.canceled) return "Save cancelled.";
+    const path = result.path;
     if (!path) return "Save cancelled.";
     await files.writeText(path, current.text); setDocument(previous => ({ ...previous, path, saved: current.text })); reportFile(`Saved ${path}`);
   }, [reportFile]);
@@ -149,7 +152,7 @@ function KitchenSink({ runtime, projectId }: Props) {
       </View><EventResults entries={windowEvents} empty="Open or close a window to see its events here." testID="window-events" /></Card>
       <Card title="Document, dialogs and filesystem"><Text className="text-muted">{document.path || "Untitled"}{document.text !== document.saved ? " · Unsaved" : ""}</Text>
         <TextInput multiline accessibilityLabel="Document text" testID="document-text" style={styles.editor} className="border-border bg-surface text-foreground" value={document.text} onChangeText={text => setDocument(previous => ({ ...previous, text }))} />
-        <View style={styles.row}><ActionButton onPress={() => action(load)}>Open document</ActionButton><ActionButton onPress={() => action(save)}>Save document</ActionButton><ActionButton disabled={!document.path} onPress={() => action(() => revealInFinder(document.path))}>Reveal in Finder</ActionButton><ActionButton onPress={() => action(() => files.getDirectory("data"))}>App data directory</ActionButton></View>
+        <View style={styles.row}><ActionButton onPress={() => action(load)}>Open document</ActionButton><ActionButton onPress={() => action(save)}>Save document</ActionButton><ActionButton disabled={!document.path} onPress={() => action(() => revealInFileManager(document.path))}>Reveal in Finder</ActionButton><ActionButton onPress={() => action(() => files.getDirectory("data"))}>App data directory</ActionButton></View>
         <EventResults entries={fileEvents} empty="Open, save, or change the open file to see filesystem events here." testID="file-events" />
       </Card>
       <Card title="Settings"><Text className="text-muted">Persistent counter: {count ?? "Loading…"}</Text><ActionButton disabled={count === null} onPress={() => action(async () => { const value = await settings.update<number>("kitchen-count", count => (count ?? 0) + 1); setCount(value); return value; })}>Increment and persist</ActionButton></Card>

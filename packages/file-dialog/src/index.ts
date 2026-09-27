@@ -1,89 +1,24 @@
-import { validateDialogOptions } from "./options";
+import { absolutePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import { Platform } from "react-native";
-import NativeFileDialog from "./NativeFileDialog";
+import { parseNativeResult, invokeNative } from "@legendapp/spark-desktop-app/src/contracts";
+import { dialogOptions } from "./options";
+import { fileDialogNative } from "./native";
+import type { OpenFileDialogOptions, OpenFileDialogResult, SaveFileDialogOptions, SaveFileDialogResult } from "./types";
+export type { FileFilter, FileDialogOptions, OpenFileDialogOptions, OpenFileDialogResult, SaveFileDialogOptions, SaveFileDialogResult } from "./types";
+export { getFileDialogAvailability } from "./native";
 
-export type FileDialogOpenOptions = {
-  canChooseFiles?: boolean;
-  canChooseDirectories?: boolean;
-  allowsMultipleSelection?: boolean;
-  directoryURL?: string | null;
-  allowedFileTypes?: string[];
-  message?: string;
-  prompt?: string;
-  title?: string;
-};
-
-export type FileDialogSaveOptions = {
-  defaultName?: string;
-  directory?: string;
-  allowedFileTypes?: string[];
-};
-
-function parseJsonResult<T>(value: string, fallback: T): T {
-  if (!value) {
-    return fallback;
-  }
-
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
+function isNativePath(value: unknown): value is string {
+  if (typeof value !== "string" || value.startsWith("file://")) return false;
+  try { absolutePath(value, Platform.OS); return true; } catch { return false; }
 }
 
-export async function openFileDialog(options: FileDialogOpenOptions = {}) {
-  validateDialogOptions(options, false);
-  if (Platform.OS !== "macos") {
-    return null;
-  }
-
-  const result = await NativeFileDialog.open(JSON.stringify(options));
-  return parseJsonResult<string[] | null>(result, null);
+export async function openFileDialog(options: OpenFileDialogOptions = {}): Promise<OpenFileDialogResult> {
+  const args = dialogOptions(options, "open", Platform.OS);
+  const paths = parseNativeResult(await invokeNative(() => fileDialogNative().open(JSON.stringify(args))), (value): value is string[] | null => value === null || (Array.isArray(value) && value.length > 0 && value.every(isNativePath)));
+  return paths === null ? { canceled: true } : { canceled: false, paths };
 }
-
-export async function saveFileDialog(options: FileDialogSaveOptions = {}) {
-  validateDialogOptions(options, false);
-  if (Platform.OS !== "macos") {
-    return null;
-  }
-
-  const result = await NativeFileDialog.save(JSON.stringify(options));
-  return parseJsonResult<string | null>(result, null);
+export async function saveFileDialog(options: SaveFileDialogOptions = {}): Promise<SaveFileDialogResult> {
+  const args = dialogOptions(options, "save", Platform.OS);
+  const path = parseNativeResult(await invokeNative(() => fileDialogNative().save(JSON.stringify(args))), (value): value is string | null => value === null || isNativePath(value));
+  return path === null ? { canceled: true } : { canceled: false, path };
 }
-
-export function revealInFinder(path: string) {
-  if (Platform.OS !== "macos") {
-    return Promise.resolve(false);
-  }
-
-  return NativeFileDialog.revealInFinder(path);
-}
-
-export function readTextFile(path: string) {
-  if (Platform.OS !== "macos") {
-    return Promise.resolve("");
-  }
-
-  return NativeFileDialog.readTextFile(path);
-}
-
-export function writeTextFile(path: string, contents: string) {
-  if (Platform.OS !== "macos") {
-    return Promise.resolve();
-  }
-
-  return NativeFileDialog.writeTextFile(path, contents);
-}
-
-export function writeTextFileIfUnchanged(path: string, expectedContents: string, contents: string) {
-  if (Platform.OS !== "macos") {
-    return Promise.resolve(false);
-  }
-
-  return NativeFileDialog.writeTextFileIfUnchanged(path, expectedContents, contents);
-}
-
-export { default as NativeFileDialog } from "./NativeFileDialog";
-
-/** Reveal a file in the platform file manager (Finder or Explorer). */
-export const revealInFileManager = revealInFinder;

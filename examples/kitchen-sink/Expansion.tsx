@@ -112,7 +112,7 @@ export function Expansion({ report }: { report: (value: unknown) => void }) {
     <EventResults entries={processEvents} empty="Stream a process to see stdout, stderr, and exit events here." testID="process-events" />
     <Text style={styles.heading} className="text-foreground">Dialogs and rich clipboard</Text>
     <View style={styles.row}>
-      <ActionButton onPress={() => act(() => showMessage({ title: "Keep these changes?", message: "Native sheet with explicit buttons and checkbox.", windowId: "main", buttons: ["Cancel", "Keep"], defaultButton: 1, cancelButton: 0, checkbox: { label: "Remember my choice" } }))}>Confirmation sheet</ActionButton>
+      <ActionButton onPress={() => act(() => showMessage({ title: "Keep these changes?", message: "Native sheet with explicit buttons and checkbox.", windowId: "main", buttons: [{ id: "cancel", label: "Cancel" }, { id: "keep", label: "Keep" }], defaultButtonId: "keep", cancelButtonId: "cancel", checkbox: { label: "Remember my choice" } }))}>Confirmation sheet</ActionButton>
       <ActionButton onPress={() => act(() => clipboard.writeClipboard({ text: "Hello desktop", html: "<b>Hello desktop</b>", rtf: "{\\rtf1\\ansi Hello desktop}" }))}>Copy rich text</ActionButton>
       <ActionButton onPress={() => act(clipboard.readClipboard)}>Read clipboard</ActionButton>
     </View>

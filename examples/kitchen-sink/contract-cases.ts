@@ -13,9 +13,9 @@ export interface SecureStorageBinding {
 }
 export interface LinkingBinding { canOpenURL(url: string): Promise<boolean>; getInitialURL(): Promise<string | null> }
 export interface FileBinding {
-  writeTextFile(path: string, text: string): Promise<unknown>;
-  readTextFile(path: string): Promise<string>;
-  writeTextFileIfUnchanged(path: string, expected: string, text: string): Promise<boolean>;
+  writeText(path: string, text: string): Promise<unknown>;
+  readText(path: string): Promise<string>;
+  writeTextIfUnchanged(path: string, expected: string, text: string): Promise<{ written: boolean }>;
 }
 export function assertContract(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
@@ -55,8 +55,8 @@ export async function linkingResolution(linking: LinkingBinding) {
   assertContract(await linking.canOpenURL("https://example.com"), "No HTTPS handler");
 }
 export async function fileConflict(files: FileBinding, file: string) {
-  await files.writeTextFile(file, "before");
-  assertContract(await files.writeTextFileIfUnchanged(file, "before", "after"), "File save failed");
-  assertContract(!await files.writeTextFileIfUnchanged(file, "wrong", "lost"), "File conflict was ignored");
-  assertContract(await files.readTextFile(file) === "after", "Conflicting save changed the file");
+  await files.writeText(file, "before");
+  assertContract((await files.writeTextIfUnchanged(file, "before", "after")).written, "File save failed");
+  assertContract(!(await files.writeTextIfUnchanged(file, "wrong", "lost")).written, "File conflict was ignored");
+  assertContract(await files.readText(file) === "after", "Conflicting save changed the file");
 }

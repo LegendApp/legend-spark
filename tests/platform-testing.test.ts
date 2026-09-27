@@ -68,7 +68,7 @@ test("secure-storage case detects bad readback and removes its own credential", 
   expect(deleted).toEqual(["unique-key", "unique-key"]);
 });
 test("file case detects an implementation that silently ignores conflicts", async () => {
-  await expect(fileConflict({ writeTextFile: async () => {}, writeTextFileIfUnchanged: async () => true, readTextFile: async () => "after" }, "owned-test-file")).rejects.toThrow("conflict");
+  await expect(fileConflict({ writeText: async () => {}, writeTextIfUnchanged: async () => ({ written: true }), readText: async () => "after" }, "owned-test-file")).rejects.toThrow("conflict");
 });
 
 

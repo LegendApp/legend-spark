@@ -11,7 +11,8 @@ import * as secureStore from "@legendapp/spark/secure-storage";
 import { registerShortcut } from "@legendapp/spark/shortcuts";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { configureMenus, clearMenus, addNativeMenuActionListener } from "@legendapp/spark/menus";
-import { openFileDialog, saveFileDialog, readTextFile, writeTextFile, writeTextFileIfUnchanged } from "@legendapp/spark/dialogs";
+import { openFileDialog, saveFileDialog } from "@legendapp/spark/dialogs";
+import { readText, writeText, writeTextIfUnchanged } from "@legendapp/spark/files";
 import type { TestDriver } from "./test-driver";
 export type Check = { name: string; passed: boolean; error?: string; duration: number };
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -98,7 +99,7 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
       if (isolation.cleanup) { await files.remove(file); await settings.remove(key); await secureStore.deleteItemAsync(key); }
     });
     await check("dialogs: file IO and optimistic save conflicts", async () => {
-      await fileConflict({ readTextFile, writeTextFile, writeTextFileIfUnchanged }, `${root}/document.txt`);
+      await fileConflict({ readText, writeText, writeTextIfUnchanged }, `${root}/document.txt`);
     });
     await check("windows: root creation, props, frame, visibility, title and close guard", async () => {
       const events: string[] = []; const sub = windows.onWindowEvent(event => { if (event.windowId === token) events.push(event.type); });
@@ -192,14 +193,15 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
       });
       await check("dialogs: native open/save cancellation", async () => {
         const opened = openFileDialog({ title: "SDK automated open" });
-        await driverCall("cancelPanel"); assert(await opened === null, "Open cancellation result");
+        await driverCall("cancelPanel"); assert((await opened).canceled, "Open cancellation result");
         const saved = saveFileDialog({ defaultName: "SDK-test.txt" });
-        await driverCall("cancelPanel"); assert(await saved === null, "Save cancellation result");
+        await driverCall("cancelPanel"); assert((await saved).canceled, "Save cancellation result");
       });
       await check("dialogs: native save acceptance serializes a selected path", async () => {
         const saved = saveFileDialog({ defaultName: "accepted.txt", directory: root });
         // The XCTest driver presses Save in the system-owned remote panel.
-        assert(await saved === `${root}/accepted.txt`, "Save panel returned an invalid path");
+        const result = await saved;
+        assert(!result.canceled && result.path === `${root}/accepted.txt`, "Save panel returned an invalid path");
       });
       await check("app: second instance forwards arguments and exits", async () => {
         let received = false; const sub = app.onAppEvent(event => { if (event.type === "secondInstance") received = true; });

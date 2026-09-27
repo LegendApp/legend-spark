@@ -10,4 +10,4 @@ export interface Spec extends TurboModule {
   writeTextFileIfUnchanged(path: string, expectedContents: string, contents: string): Promise<boolean>;
 }
 
-export default TurboModuleRegistry.getEnforcing<Spec>("NativeFileDialog");
+export default TurboModuleRegistry.get<Spec>("NativeFileDialog");

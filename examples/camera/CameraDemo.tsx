@@ -3,7 +3,8 @@ import { Button, View } from "react-native";
 import { Text } from "./CameraText";
 import { Camera, VisionCamera, useCameraDevices, useCameraPermission, useMicrophonePermission, usePhotoOutput, useVideoOutput, type CameraDevice, type Recorder } from "react-native-vision-camera";
 import { NitroImage, type Image } from "react-native-nitro-image";
-import { revealInFinder, saveFileDialog } from "@legendapp/spark/dialogs";
+import { saveFileDialog } from "@legendapp/spark/dialogs";
+import { revealInFileManager } from "@legendapp/spark/files";
 import { writeText } from "@legendapp/spark/files";
 
 export function CameraDemo() {
@@ -28,7 +29,7 @@ export function CameraDemo() {
     {active && device && camera.hasPermission && <CaptureBoundary onError={report}><LiveCamera key={`${device.id}:${audio}`} device={device} audio={audio} report={report} /></CaptureBoundary>}
     <Text>Preview quality must be checked visually; this macOS prototype cannot report the preview’s first-frame event.</Text>
     <Text>Try: resize the window; capture and inspect a photo; record and play a video; stop and restart; unplug and reconnect a USB camera. Check audio playback if enabled.</Text>
-    <Button title="Export hardware test log…" onPress={() => void action(async () => { const result = await saveFileDialog({ defaultName: "camera-test.json", allowedFileTypes: ["json"] }); if (result) { await writeText(result, JSON.stringify({ versions: { reactNativeMacOS: "0.81.7", visionCamera: "5.2.3", nitro: "0.37.0" }, devices: devices.map(d => ({ id: d.id, name: d.localizedName })), cameraPermission: camera.status, microphonePermission: microphone.status, log, visualChecks: "Please record visual quality, orientation, playback and reconnect results separately." }, null, 2)); report(`Saved ${result}`); } })} />
+    <Button title="Export hardware test log…" onPress={() => void action(async () => { const result = await saveFileDialog({ defaultName: "camera-test.json", filters: [{ extensions: ["json"] }] }); if (!result.canceled) { await writeText(result.path, JSON.stringify({ versions: { reactNativeMacOS: "0.81.7", visionCamera: "5.2.3", nitro: "0.37.0" }, devices: devices.map(d => ({ id: d.id, name: d.localizedName })), cameraPermission: camera.status, microphonePermission: microphone.status, log, visualChecks: "Please record visual quality, orientation, playback and reconnect results separately." }, null, 2)); report(`Saved ${result.path}`); } })} />
     {log.map((line, i) => <Text selectable key={i} style={{ fontFamily: "Menlo", fontSize: 11 }}>{line}</Text>)}
   </View>;
 }
@@ -76,7 +77,7 @@ function LiveCamera({ device, audio, report }: { device: CameraDevice; audio: bo
   return <View style={{ gap: 12 }}>
     <Camera device={device} isActive={true} outputs={outputs} style={{ width: "100%", height: 360, backgroundColor: "#101820" }} resizeMode="contain" onError={onError} onStarted={onStarted} onStopped={onStopped} />
     <View style={{ flexDirection: "row", gap: 20 }}><Button title="Take photo" disabled={!ready || busy || recording} onPress={() => void takePhoto()} /><Button title={recording ? "Stop recording" : "Record video (max 60s)"} disabled={!ready || busy} onPress={() => void toggleRecording()} /></View>
-    {lastPath && <><Text selectable>{lastPath}</Text><Button title="Show captured file in Finder" onPress={() => void revealInFinder(lastPath).catch(e => report(String(e)))} /></>}
+    {lastPath && <><Text selectable>{lastPath}</Text><Button title="Show captured file in Finder" onPress={() => void revealInFileManager(lastPath).catch(e => report(String(e)))} /></>}
     {image && <NitroImage image={image} resizeMode="contain" style={{ width: "100%", height: 260 }} />}
   </View>;
 }

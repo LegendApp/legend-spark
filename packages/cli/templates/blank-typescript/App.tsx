@@ -15,8 +15,8 @@ export default function App({ runtime }: { runtime?: { mode: string } }) {
   }, []);
   async function chooseFile() {
     try {
-      const files = await openFileDialog({ title: "Choose a file", allowsMultipleSelection: false });
-      setMessage(files?.join(", ") || "Dialog cancelled");
+      const files = await openFileDialog({ title: "Choose a file", multiple: false });
+      setMessage(files.canceled ? "Dialog cancelled" : files.paths.join(", "));
     } catch (error) { setMessage(String(error)); }
   }
   return <View style={styles.root}>

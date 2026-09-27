@@ -40,3 +40,16 @@ export function parseNativeResult<T>(json: string, validate: (value: unknown) =>
   if (!validate(value)) throw new SparkError("E_INVALID_DATA", "Native response does not match its contract");
   return value;
 }
+
+/** Normalize errors added by Spark's native adapters, preserving the original failure. */
+export function nativeError(cause: unknown): SparkError {
+  if (cause instanceof SparkError) return cause;
+  const original = cause && typeof cause === "object" && "code" in cause ? String(cause.code) : "";
+  const aliases: Record<string, SparkErrorCode> = { E_PERMISSION: "E_PERMISSION_DENIED", E_EXISTS: "E_ALREADY_EXISTS" };
+  const known: readonly string[] = ["E_INVALID_ARGUMENT", "E_INVALID_DATA", "E_UNSUPPORTED_PLATFORM", "E_UNSUPPORTED_OPTION", "E_MODULE_UNAVAILABLE", "E_PERMISSION_DENIED", "E_NOT_FOUND", "E_ALREADY_EXISTS", "E_BUSY", "E_CLOSED", "E_ABORTED", "E_TIMEOUT", "E_NATIVE"];
+  const code = aliases[original] ?? (known.includes(original) ? original as SparkErrorCode : "E_NATIVE");
+  return new SparkError(code, cause instanceof Error ? cause.message : "Native operation failed", { cause });
+}
+export async function invokeNative<T>(operation: () => Promise<T>): Promise<T> {
+  try { return await operation(); } catch (cause) { throw nativeError(cause); }
+}

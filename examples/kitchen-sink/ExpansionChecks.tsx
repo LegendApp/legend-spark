@@ -35,7 +35,7 @@ export function ExpansionChecks({ report }: { report: string }) {
           if (value?.text !== "Native drag regression" || value.x !== 12 || value.y !== 14 || !ended.current) throw new Error(`Missing drag events: ${JSON.stringify(value)}, ended=${ended.current}`);
         });
         await check("native confirmation sheet resolves its explicit button and checkbox", async () => {
-          const message = showMessage({ title: "Regression confirmation", windowId: "main", buttons: ["Cancel", "Keep"], checkbox: { label: "Remember", checked: true } });
+          const message = showMessage({ title: "Regression confirmation", windowId: "main", buttons: [{ id: "cancel", label: "Cancel" }, { id: "keep", label: "Keep" }], checkbox: { label: "Remember", checked: true } });
           // Consume rejection even if the native driver fails before we await the sheet.
           void message.catch(() => undefined);
           const deadline = Date.now() + 3000;
@@ -44,7 +44,7 @@ export function ExpansionChecks({ report }: { report: string }) {
             catch (error) { if (Date.now() >= deadline) throw error; await new Promise(resolve => setTimeout(resolve, 50)); }
           }
           const result = await message;
-          if (result.button !== 1 || !result.checked) throw new Error(JSON.stringify(result));
+          if (result.buttonId !== "keep" || !result.checked) throw new Error(JSON.stringify(result));
         });
       }
       await writeText(report, JSON.stringify({ passed: results.every(result => result.passed), results }));
