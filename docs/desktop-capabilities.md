@@ -13,7 +13,7 @@ packages separately or link parallel native modules for these capabilities.
 | Routed commands and persisted bindings | `@legendapp/spark/shortcuts/commands` |
 | Keyboard events | `@legendapp/spark/shortcuts/keyboard` |
 | Glass, symbols, select/segmented controls, search | `@legendapp/spark/ui/glass`, `ui/symbol`, `ui/select-controls`, `ui/search` |
-| File scanning and detailed directory events | `@legendapp/spark/files/scanner`, `files/watchers` |
+| File scanning (macOS) and invalidation watches | `@legendapp/spark/files` |
 | Settings window and observable preferences | `@legendapp/spark/settings/window`, `settings/observable` |
 | Menus, dialogs and context menus | `@legendapp/spark/menus`, `dialogs`, `context-menu` |
 | Drag/drop views | `@legendapp/spark/drag-drop/views` |

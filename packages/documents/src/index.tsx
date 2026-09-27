@@ -1,9 +1,10 @@
 import { openFileDialog } from "@legendapp/spark-file-dialog";
-import { watchFiles } from "@legendapp/spark-file-system/src/file-system-watcher";
+import { watch } from "@legendapp/spark-file-system";
+import type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { useNativeMenu, type NativeMenuActionHandlers, type NativeMenuConfig } from "@legendapp/spark-native-menu";
 import { addRecentDocumentOpenListener } from "@legendapp/spark-desktop-app/src/recent-documents";
 import { usePrimaryWindowLifecycle } from "@legendapp/spark-desktop-windows/src/windows";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 export { createDocumentTransitionGuard } from "./documentTransition";
 
 export type DocumentAppController = {
@@ -38,7 +39,8 @@ export type GetLaunchDocumentPathOptions = {
 export type UseWatchedDocumentReloadOptions = {
   delayMs?: number;
   enabled?: boolean;
-  onReload: () => void;
+  onReload: () => void | Promise<void>;
+  onError: (error: unknown) => void;
   path: string | null | undefined;
   shouldReload?: () => boolean;
 };
@@ -99,35 +101,36 @@ export function useWatchedDocumentReload({
   delayMs = 100,
   enabled = true,
   onReload,
+  onError,
   path,
   shouldReload,
 }: UseWatchedDocumentReloadOptions) {
+  const handlers = useRef({ onReload, onError, shouldReload });
+  useLayoutEffect(() => { handlers.current = { onReload, onError, shouldReload }; });
   useEffect(() => {
-    if (enabled && path) {
-      let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
-      const subscription = watchFiles([path], () => {
-        if (!shouldReload || shouldReload()) {
-          if (reloadTimeout) {
-            clearTimeout(reloadTimeout);
-          }
-          reloadTimeout = setTimeout(() => {
-            if (!shouldReload || shouldReload()) {
-              onReload();
-            }
-          }, delayMs);
-        }
-      });
-
-      return () => {
-        if (reloadTimeout) {
-          clearTimeout(reloadTimeout);
-        }
-        subscription.remove();
-      };
-    }
-
-    return undefined;
-  }, [delayMs, enabled, onReload, path, shouldReload]);
+    if (!enabled || !path) return;
+    let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
+    let subscription: AsyncRegistration | undefined;
+    let disposed = false;
+    const reportError = (error: unknown) => handlers.current.onError(error);
+    void watch(path, () => {
+      if (disposed) return;
+      if (reloadTimeout) clearTimeout(reloadTimeout);
+      reloadTimeout = setTimeout(() => {
+        void Promise.resolve().then(() => {
+          if (!disposed && (!handlers.current.shouldReload || handlers.current.shouldReload())) return handlers.current.onReload();
+        }).catch(reportError);
+      }, delayMs);
+    }).then(value => {
+      if (disposed) void value.remove().catch(reportError);
+      else subscription = value;
+    }).catch(reportError);
+    return () => {
+      disposed = true;
+      if (reloadTimeout) clearTimeout(reloadTimeout);
+      void subscription?.remove().catch(reportError);
+    };
+  }, [delayMs, enabled, path]);
 }
 
 export function useDocumentAppController({

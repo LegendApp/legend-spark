@@ -54,8 +54,6 @@
     "./ui/symbol": "./ui-symbol.ts",
     "./ui/select-controls": "./ui-select-controls.ts",
     "./ui/search": "./ui-search.ts",
-    "./files/scanner": "./files-scanner.ts",
-    "./files/watchers": "./files-watchers.ts",
     "./settings/window": "./settings-window.ts",
     "./settings/window/options": "./settings-window-options.ts",
     "./settings/observable": "./settings-observable.ts",

@@ -22,3 +22,13 @@ await remove(destination); // void; absence is success
 Whole-file writes replace atomically on supported desktop backends. Conditional writes compare observed UTF-8 text before replacing; another process can still write between those steps. A conflict returns `{ written: false }`; missing files and IO failures reject. Invalid UTF-8 rejects. Use the [streaming APIs](file-streams.md) for bounded memory on large files.
 
 `watch(path, listener, { recursive })` resolves when native registration succeeds and returns an asynchronous `remove()`. Notifications invalidate cached data; they are not an exact change log. Recursive watches require a directory. Removal stops JS callbacks immediately, joins concurrent calls, and permits retry if native cleanup fails. File handles use `close()` with the same cleanup guarantees; new work rejects after closing starts, even if cleanup needs retry.
+
+## Scanning
+
+`scanFiles(paths, { extensions, batchSize, includeHidden, includeStats, skip, onBatch, onProgress, signal })` currently supports macOS. Check `getFileScanAvailability()` when offering this capability. Callbacks belong to that invocation; concurrent scans do not share events. The result contains `totalFiles`, `totalRoots`, and traversal `errors` (partial failures); an invalid native response or failed native operation rejects.
+
+Batches carry `files` with native `path`, `name`, `relativePath`, `extension`, `rootIndex`, optional `size`/`modifiedAt`, and a `skipped` flag. Statistics can be absent when the OS cannot read them. `skip` marks known entries; it does not remove them from results. Extensions omit dots and wildcards. Batches default to 64 entries and accept sizes from 1 to 10000. Enumeration order is filesystem-defined, not sorted. Hidden entries are excluded by default, and package descendants are not traversed.
+
+Abort stops between filesystem operations and suppresses subsequent callbacks. The promise rejects with `E_ABORTED` after native work stops; a pending OS call is not interrupted. Callbacks are synchronous; throwing from a progress callback also cancels and rejects the scan. Await the promise to know the scan and its listeners have been cleaned up.
+
+The previous singleton directory-event API has been removed. Use `watch` and re-read the path: change notifications can be coalesced and cannot promise an exact add/delete log. `useWatchedDocumentReload` now uses this registration and requires an `onError` callback; it disposes registrations that complete after unmount and reads the latest callbacks.

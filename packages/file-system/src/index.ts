@@ -118,3 +118,6 @@ export async function writeTextIfUnchanged(path: string, expected: string, conte
   if (typeof expected !== "string" || typeof contents !== "string") throw new SparkError("E_INVALID_ARGUMENT", "Expected text strings");
   return { written: await call<boolean>("writeTextIfUnchanged", { path: absolute(path), expected, text: contents }) };
 }
+
+export { scanFiles, getFileScanAvailability } from "./file-scanner";
+export type { FileScanOptions, FileScanSkipEntry, ScannedFile, FileScanProgress, FileScanBatch, FileScanResult } from "./file-scanner";

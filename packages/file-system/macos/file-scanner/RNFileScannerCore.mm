@@ -160,7 +160,8 @@ NSDictionary *RNFileScannerRun(NSArray<NSString *> *paths,
                                RNFileScannerOptions *options,
                                RNFileScannerMapFileBlock mapFile,
                                RNFileScannerEmitBatchBlock emitBatch,
-                               RNFileScannerProgressBlock emitProgress)
+                               RNFileScannerProgressBlock emitProgress,
+                               BOOL (^isCancelled)(void))
 {
   NSArray<NSString *> *roots = RNFileScannerNormalizeRoots(paths);
   NSUInteger totalRoots = roots.count;
@@ -177,6 +178,7 @@ NSDictionary *RNFileScannerRun(NSArray<NSString *> *paths,
   NSFileManager *fileManager = [NSFileManager defaultManager];
 
   for (NSUInteger rootIndex = 0; rootIndex < roots.count; rootIndex++) {
+    if (isCancelled && isCancelled()) break;
     @autoreleasepool {
       NSString *rootPath = roots[rootIndex];
       BOOL isDirectory = NO;
@@ -241,6 +243,7 @@ NSDictionary *RNFileScannerRun(NSArray<NSString *> *paths,
 
       NSMutableArray<NSDictionary *> *batch = [NSMutableArray arrayWithCapacity:batchSize];
       for (NSURL *fileURL in enumerator) {
+        if (isCancelled && isCancelled()) break;
         NSNumber *isDirectoryValue = nil;
         [fileURL getResourceValue:&isDirectoryValue forKey:NSURLIsDirectoryKey error:nil];
         if (isDirectoryValue.boolValue) {
@@ -271,10 +274,11 @@ NSDictionary *RNFileScannerRun(NSArray<NSString *> *paths,
         }
       }
 
-      if (batch.count > 0 && emitBatch) {
+      if ((!isCancelled || !isCancelled()) && batch.count > 0 && emitBatch) {
         emitBatch([batch copy], rootIndex, completedRoots, totalRoots);
       }
 
+      if (isCancelled && isCancelled()) break;
       completedRoots += 1;
       if (emitProgress) {
         emitProgress(rootIndex, completedRoots, totalRoots);

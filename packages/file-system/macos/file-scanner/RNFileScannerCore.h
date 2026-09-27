@@ -38,8 +38,9 @@ NSDictionary *RNFileScannerDefaultFileItem(NSURL *fileURL,
 NSDictionary *RNFileScannerRun(NSArray<NSString *> *paths,
                                RNFileScannerOptions *options,
                                RNFileScannerMapFileBlock _Nullable mapFile,
-                               RNFileScannerEmitBatchBlock emitBatch,
-                               RNFileScannerProgressBlock emitProgress);
+                               RNFileScannerEmitBatchBlock _Nullable emitBatch,
+                               RNFileScannerProgressBlock _Nullable emitProgress,
+                               BOOL (^ _Nullable isCancelled)(void));
 NSString *RNFileScannerJSONString(id object);
 id RNFileScannerJSONObjectFromString(NSString *json);
 

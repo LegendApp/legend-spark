@@ -22,8 +22,7 @@
     "ios": {
       "modulesProvider": {
         "NativeDesktopFileSystem": "RNDesktopFileSystem",
-        "NativeFileScanner": "RNFileScanner",
-        "NativeFileSystemWatcher": "RNFileSystemWatcher"
+        "NativeFileScanner": "RNFileScanner"
       },
       "componentProvider": {}
     }
@@ -32,8 +31,7 @@
     "sdk": true,
     "nativeModules": [
       "NativeDesktopFileSystem",
-      "NativeFileScanner",
-      "NativeFileSystemWatcher"
+      "NativeFileScanner"
     ],
     "pod": "RNDesktopFileSystem",
     "platforms": [
