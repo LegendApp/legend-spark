@@ -65,7 +65,8 @@
     "./processes/commands": "./processes-commands.ts",
     "./drag-drop/views": "./drag-drop-views.ts",
     "./global-shortcuts/hotkeys": "./global-shortcuts-hotkeys.ts",
-    "./settings/paths": "./settings-paths.ts"
+    "./settings/paths": "./settings-paths.ts",
+    "./contracts": "./contracts.ts"
   },
   "files": [
     "*.ts",
