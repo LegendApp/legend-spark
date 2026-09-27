@@ -20,3 +20,10 @@ test("desktop Expo subsets report missing native modules without failing at impo
   expect(clipboard.getRichClipboardAvailability()).toEqual({ available: false, reason: "missing-module" });
   await expect(clipboard.getStringAsync()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
+
+import * as updates from "../packages/updates/src/index";
+test("updater imports without native modules and reports availability", async () => {
+  expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "missing-module" });
+  await expect(updates.startUpdates()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+  expect(() => updates.onUpdateEvent(() => {})).toThrow();
+});

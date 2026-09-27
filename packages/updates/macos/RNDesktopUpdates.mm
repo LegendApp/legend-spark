@@ -22,7 +22,7 @@ static NSString *UnavailableReason(void) {
 + (instancetype)shared { static SparkUpdater *updater; static dispatch_once_t once; dispatch_once(&once, ^{ updater = [SparkUpdater new]; }); return updater; }
 - (NSDictionary *)status {
   NSString *reason = UnavailableReason();
-  NSMutableDictionary *result = [@{ @"available": @(!reason), @"started": @(self.started), @"canCheck": @(self.started && self.controller.updater.canCheckForUpdates), @"automaticallyChecks": @(self.started && self.controller.updater.automaticallyChecksForUpdates), @"updateCheckInterval": @(self.started ? self.controller.updater.updateCheckInterval : 3600) } mutableCopy];
+  NSMutableDictionary *result = [@{ @"available": @(!reason), @"started": @(self.started), @"canCheck": @(self.started && self.controller.updater.canCheckForUpdates), @"automaticallyChecks": @(self.started && self.controller.updater.automaticallyChecksForUpdates), @"checkIntervalSeconds": reason ? NSNull.null : @(self.started ? self.controller.updater.updateCheckInterval : 3600) } mutableCopy];
   if (reason) result[@"reason"] = reason;
   if (!reason) result[@"feedURL"] = [NSBundle.mainBundle objectForInfoDictionaryKey:@"SUFeedURL"];
   return result;
@@ -50,30 +50,35 @@ static NSString *UnavailableReason(void) {
 @implementation RNDesktopUpdates
 RCT_EXPORT_MODULE(NativeDesktopUpdates)
 + (BOOL)requiresMainQueueSetup { return YES; }
-- (NSNumber *)isAvailable { return @(UnavailableReason() == nil); }
 - (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   // Sparkle can enter a modal UI loop; do not hold the main dispatch queue.
   [NSRunLoop.mainRunLoop performBlock:^{
     SparkUpdater *updater = [SparkUpdater shared];
     if ([method isEqual:@"status"]) { resolve(SparkJSON([updater status])); return; }
-    if (![@[@"start", @"check", @"background", @"automatic", @"interval"] containsObject:method]) { SparkInvalid(reject, @"Unknown update operation"); return; }
+    if (![@[@"start", @"check", @"background", @"configure"] containsObject:method]) { SparkInvalid(reject, @"Unknown update operation"); return; }
+    NSDictionary *args = SparkArgs(json);
+    if ([method isEqual:@"configure"]) {
+      id enabled = args[@"automaticallyChecks"], interval = args[@"checkIntervalSeconds"];
+      if ((enabled && (![enabled isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)enabled) != CFBooleanGetTypeID())) ||
+          (interval && (![interval isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)interval) == CFBooleanGetTypeID() || !isfinite([interval doubleValue]) || [interval doubleValue] <= 0))) {
+        SparkInvalid(reject, @"Invalid updater configuration"); return;
+      }
+    }
     NSString *reason = UnavailableReason();
-    if (reason) { reject(@"E_UPDATES_UNAVAILABLE", [@"Updates require a configured standalone release app; current state: " stringByAppendingString:reason], nil); return; }
+    if (reason) { reject(@"E_UNAVAILABLE", [@"Updates require a configured standalone release app; current state: " stringByAppendingString:reason], nil); return; }
     NSError *error = nil;
-    if (![updater start:&error]) { reject(@"E_UPDATES_START", error.localizedDescription ?: @"Could not start updater", error); return; }
+    if (![updater start:&error]) { reject(@"E_NATIVE", error.localizedDescription ?: @"Could not start updater", error); return; }
     if ([method isEqual:@"check"]) {
-      if (!updater.controller.updater.canCheckForUpdates) { reject(@"E_UPDATES_BUSY", @"An update session is already running", nil); return; }
+      if (!updater.controller.updater.canCheckForUpdates) { reject(@"E_BUSY", @"An update session is already running", nil); return; }
       [updater.controller checkForUpdates:nil]; resolve(@"null");
     } else if ([method isEqual:@"background"]) {
-      if (!updater.controller.updater.canCheckForUpdates) { reject(@"E_UPDATES_BUSY", @"An update session is already running", nil); return; }
+      if (!updater.controller.updater.canCheckForUpdates) { reject(@"E_BUSY", @"An update session is already running", nil); return; }
       [updater.controller.updater checkForUpdatesInBackground]; resolve(@"null");
-    } else if ([method isEqual:@"interval"]) {
-      double interval = [SparkArgs(json)[@"seconds"] doubleValue];
-      if (!isfinite(interval) || interval <= 0) { SparkInvalid(reject, @"Update interval must be positive and finite"); return; }
-      updater.controller.updater.updateCheckInterval = interval; resolve(@"null");
-    } else if ([method isEqual:@"automatic"]) {
-      updater.controller.updater.automaticallyChecksForUpdates = [SparkArgs(json)[@"enabled"] boolValue]; resolve(@"null");
-    } else resolve(SparkJSON([updater status]));
+    } else if ([method isEqual:@"configure"]) {
+      if (args[@"automaticallyChecks"]) updater.controller.updater.automaticallyChecksForUpdates = [args[@"automaticallyChecks"] boolValue];
+      if (args[@"checkIntervalSeconds"]) updater.controller.updater.updateCheckInterval = [args[@"checkIntervalSeconds"] doubleValue];
+      resolve(@"null");
+    } else resolve(@"null");
   }];
 }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeDesktopUpdatesSpecJSI>(params); }

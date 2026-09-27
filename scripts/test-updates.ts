@@ -34,8 +34,10 @@ export default function App() {
     let result;
     try {
       const before = await getUpdateStatus();
-      const after = await startUpdates();
-      const again = await startUpdates();
+      await startUpdates();
+      const after = await getUpdateStatus();
+      await startUpdates();
+      const again = await getUpdateStatus();
       const window = await getWindow();
       result = { passed: before.available && !before.started && after.started && after.canCheck && !after.automaticallyChecks && again.started && !window.visible, before, after, window };
     } catch (error) { result = { passed: false, error: String(error) }; }

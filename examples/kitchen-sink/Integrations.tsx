@@ -23,9 +23,11 @@ export function Integrations({ report }: { report: (value: unknown) => void }) {
     let disposed = false;
     void notifications.getNotificationPermission().then(value => { if (!disposed) setPermission(value); }).catch(reportNotification);
     void notifications.onNotificationResponse(reportNotification).then(value => { if (disposed) value.remove(); else response = value; }).catch(reportNotification);
-    void updates.getUpdateStatus().then(async value => { if (!disposed) setUpdateStatus(value.available ? await updates.startUpdates() : value); }).catch(reportUpdate);
-    const events = updates.onUpdateEvent(event => reportUpdate(event.state === "error" ? new Error(event.message ?? "Update failed") : event));
-    return () => { disposed = true; mounted.current = false; response?.remove(); events.remove(); void tray.current?.remove().catch(reportTray); tray.current = undefined; };
+    void updates.getUpdateStatus().then(async value => { if (value.available) { await updates.startUpdates(); value = await updates.getUpdateStatus(); } if (!disposed) setUpdateStatus(value); }).catch(reportUpdate);
+    let events: { remove(): void } | undefined;
+    try { events = updates.onUpdateEvent(event => reportUpdate(event.state === "error" ? new Error(event.message ?? "Update failed") : event)); }
+    catch (error) { reportUpdate(error); }
+    return () => { disposed = true; mounted.current = false; response?.remove(); events?.remove(); void tray.current?.remove().catch(reportTray); tray.current = undefined; };
   }, [reportNotification, reportTray, reportUpdate]);
   async function act(fn: () => Promise<unknown>) { try { const result = await fn(); if (result !== undefined) report(result); return result; } catch (error) { report(String(error)); throw error; } }
   async function toggleTray() {
@@ -59,7 +61,7 @@ export function Integrations({ report }: { report: (value: unknown) => void }) {
     <Text className="text-muted">{updateStatus?.available ? "Signed updates configured" : `Updates unavailable: ${updateStatus?.reason ?? "Loading…"}`}</Text>
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
       <ActionButton disabled={!updateStatus?.available} onPress={() => act(updates.checkForUpdates)}>Check for updates</ActionButton>
-      <ActionButton disabled={!updateStatus?.available} onPress={() => act(async () => { await updates.setAutomaticUpdateChecks(!updateStatus?.automaticallyChecks); setUpdateStatus(await updates.getUpdateStatus()); })}>{updateStatus?.automaticallyChecks ? "Disable automatic checks" : "Enable automatic checks"}</ActionButton>
+      <ActionButton disabled={!updateStatus?.available} onPress={() => act(async () => { await updates.configureUpdates({ automaticallyChecks: !updateStatus?.automaticallyChecks }); setUpdateStatus(await updates.getUpdateStatus()); })}>{updateStatus?.automaticallyChecks ? "Disable automatic checks" : "Enable automatic checks"}</ActionButton>
     </View>
     <EventResults entries={updateEvents} empty={updateStatus?.available ? "Check for updates to see progress here." : "Update events require a configured distribution build."} testID="update-events" />
   </View>;

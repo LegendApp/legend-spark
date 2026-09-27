@@ -41,7 +41,8 @@ export async function runIntegrationChecks(check: (name: string, action: () => P
     await check("updates: Prebuilt/development runtimes refuse self-update without starting Sparkle", async () => {
       const status = await updates.getUpdateStatus();
       assert(!status.available && !status.started, "Development updater was enabled");
-      await rejects(updates.checkForUpdates, "E_UPDATES_UNAVAILABLE");
-      await rejects(updates.startUpdates, "E_UPDATES_UNAVAILABLE");
+      const code = !status.available && status.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : "E_UNAVAILABLE";
+      await rejects(updates.checkForUpdates, code);
+      await rejects(updates.startUpdates, code);
     });
 }

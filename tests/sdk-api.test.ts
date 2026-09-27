@@ -223,12 +223,12 @@ test("tray scopes actions, serializes updates and waits before removing", async 
   await expect(item.update({ title: "Late" })).rejects.toThrow("removed");
 });
 test("updates expose availability without starting and preserve native errors", async () => {
-  handlers.set("NativeDesktopUpdates.status", () => ({ available: false, reason: "go" }));
-  expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "go" });
+  handlers.set("NativeDesktopUpdates.status", () => ({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null }));
+  expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null });
   expect(calls.map(call => call.method)).toEqual(["status"]);
-  handlers.set("NativeDesktopUpdates.check", () => { throw nativeError("E_UPDATES_UNAVAILABLE"); });
-  await expect(updates.checkForUpdates()).rejects.toThrow("E_UPDATES_UNAVAILABLE");
-  await updates.startUpdates(); await updates.setAutomaticUpdateChecks(true);
+  handlers.set("NativeDesktopUpdates.check", () => { throw nativeError("E_UNAVAILABLE"); });
+  await expect(updates.checkForUpdates()).rejects.toThrow("E_UNAVAILABLE");
+  await updates.startUpdates(); await updates.configureUpdates({ automaticallyChecks: true });
   const events: unknown[] = []; const sub = updates.onUpdateEvent(event => events.push(event));
   emit("NativeDesktopApp", "desktop", { type: "update", state: "available", version: "2" });
   emit("NativeDesktopApp", "desktop", { type: "trayClick" }); expect(events).toHaveLength(1); sub.remove();
@@ -525,4 +525,41 @@ test("rich clipboard keeps binary transport private and preserves coexisting OS 
   await expect(clipboard.readClipboard()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   handlers.set("NativeDesktopSecureStorage.get", () => ({ unexpected: "value" }));
   await expect(secureStore.getItemAsync("key")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+});
+
+
+test("updater configuration validates every option before native side effects", async () => {
+  for (const config of [{ automaticallyChecks: "yes" }, { checkIntervalSeconds: 0 }, { checkIntervalSeconds: Infinity }, { unknown: true }]) {
+    await expect(updates.configureUpdates(config as never)).rejects.toThrow();
+  }
+  await expect(updates.checkForUpdates({ mode: "unknown" } as never)).rejects.toThrow();
+  expect(calls).toHaveLength(0);
+  await updates.configureUpdates({ automaticallyChecks: false, checkIntervalSeconds: 7200 });
+  expect(calls.at(-1)?.args).toEqual({ automaticallyChecks: false, checkIntervalSeconds: 7200 });
+  await updates.checkForUpdates({ mode: "background" }); expect(calls.at(-1)?.method).toBe("background");
+});
+
+test("updater rejects malformed native status/results and preserves busy causes", async () => {
+  for (const status of [null, {}, { available: true, started: true }, { available: false, reason: "other" }]) {
+    handlers.set("NativeDesktopUpdates.status", () => status);
+    await expect(updates.getUpdateStatus()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  handlers.set("NativeDesktopUpdates.start", () => true);
+  await expect(updates.startUpdates()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  const cause = nativeError("E_BUSY");
+  handlers.set("NativeDesktopUpdates.check", () => { throw cause; });
+  await expect(updates.checkForUpdates()).rejects.toMatchObject({ code: "E_BUSY", cause });
+});
+
+test("updater subscriptions filter invalid events and unsupported platforms do not call native", async () => {
+  const listener = vi.fn(); const sub = updates.onUpdateEvent(listener);
+  for (const event of [null, {}, { type: "update", state: "bogus" }, { type: "update", state: "available", version: 1 }]) emit("NativeDesktopApp", "desktop", event);
+  expect(listener).not.toHaveBeenCalled();
+  emit("NativeDesktopApp", "desktop", { type: "update", state: "available", version: "2" });
+  expect(listener).toHaveBeenCalledTimes(1); sub.remove(); sub.remove();
+  emit("NativeDesktopApp", "desktop", { type: "update", state: "checking" }); expect(listener).toHaveBeenCalledTimes(1);
+  platform.OS = "windows";
+  expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "unsupported-platform" });
+  await expect(updates.startUpdates()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  expect(calls).toHaveLength(0);
 });

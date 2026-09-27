@@ -111,7 +111,7 @@ Import and start the updater once your app is ready:
 ```ts
 import {
   startUpdates, getUpdateStatus, checkForUpdates,
-  setAutomaticUpdateChecks, onUpdateEvent,
+  configureUpdates, onUpdateEvent,
 } from "@legendapp/spark/updates";
 
 const events = onUpdateEvent(event => console.log(event.state));
@@ -121,14 +121,14 @@ if (status.available) await startUpdates();
 // Check for Updates menu item:
 await checkForUpdates();
 // User preference toggle (Sparkle persists it):
-await setAutomaticUpdateChecks(true);
+await configureUpdates({ automaticallyChecks: true });
 // Component/application cleanup:
 events.remove();
 ```
 
 `getUpdateStatus()` does not start Sparkle. Spark Runner runtimes and Debug/custom-development builds
 report why updating is unavailable; attempts to start/check reject with
-`E_UPDATES_UNAVAILABLE`. A configured Release app starts the updater idempotently.
+`E_UNAVAILABLE`. A configured Release app starts the updater idempotently.
 Checks initially default off. Explicitly enabling automatic checks preserves the
 user's preference on subsequent launches. Installation remains an explicit user
 choice. `checkForUpdates()` resolves when the check starts; events describe
@@ -183,3 +183,5 @@ an update or contact the example feed.
 Banner presentation/clicks, tray interaction, and the complete install/relaunch
 flow still require an unlocked GUI session and a distribution acceptance run.
 Those must not be inferred from API tests or successful feed generation.
+
+Updater preferences use `configureUpdates({ automaticallyChecks?, checkIntervalSeconds? })`; omitted fields stay unchanged. All options are validated before starting/configuring the native updater. `checkForUpdates({ mode: "background" })` starts a background check; the default `"interactive"` uses the native updater UI. Commands resolve void when accepted; use `getUpdateStatus()` to read state and `onUpdateEvent()` for progress. `E_BUSY` reports an active update session, and native failures retain their cause. This is a native macOS application updater, not JavaScript OTA updates. Other targets report unavailable.

@@ -1,12 +1,11 @@
-import { NativeEventEmitter } from "react-native";
 import Native from "./NativeDesktopApp";
+import { onDesktopEvent, type DesktopEvent } from "./events";
+export { onDesktopEvent, type DesktopEvent } from "./events";
 export type AppContext = {
   projectId: string; name: string; version: string;
   runtime: { mode?: string; modules?: Record<string, string> };
   launchArguments: string[];
 };
-export type DesktopEvent = { type: string; id?: string; url?: string; windowId?: string; [key: string]: unknown };
-const events = new NativeEventEmitter(Native);
 export async function callApp<T = void>(method: string, args: object = {}): Promise<T> {
   return JSON.parse(await Native.call(method, JSON.stringify(args))) as T;
 }
@@ -14,9 +13,6 @@ export const getAppContext = () => callApp<AppContext>("context");
 export const quit = () => callApp("quit");
 export const hide = () => callApp("hide");
 export const activate = () => callApp("activate");
-export function onDesktopEvent(listener: (event: DesktopEvent) => void) {
-  return events.addListener("desktop", listener);
-}
 export function onAppEvent(listener: (event: DesktopEvent) => void) {
   return onDesktopEvent(event => { if (["activate", "deactivate", "reopen", "beforeQuit", "secondInstance"].includes(event.type)) listener(event); });
 }
