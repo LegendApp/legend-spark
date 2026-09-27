@@ -1,6 +1,8 @@
 /** Filters accept extensions without a dot (for example "txt"). MIME types and UTIs are not supported. */
 export interface FileFilter { extensions: readonly string[] }
 export interface FileDialogOptions {
+  /** Attach to this live Spark window. Omitted presents an unowned dialog. */
+  windowId?: string;
   directory?: string;
   /** Filters are combined into one allowed-extension set. An empty array allows all files. */
   filters?: readonly FileFilter[];

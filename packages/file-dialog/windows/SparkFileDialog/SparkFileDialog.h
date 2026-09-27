@@ -30,6 +30,18 @@ struct SparkFileDialog {
     context.UIDispatcher().Post([save, options, promise]() {
       try {
         auto args = Json::JsonObject::Parse(to_hstring(options));
+        HWND parent = nullptr;
+        if (args.HasKey(L"windowId")) {
+          struct Search { std::wstring property; HWND found = nullptr; } search{L"Spark.Window." + std::wstring(args.GetNamedString(L"windowId"))};
+          EnumWindows([](HWND hwnd, LPARAM value) -> BOOL {
+            auto search = reinterpret_cast<Search *>(value); DWORD process = 0; GetWindowThreadProcessId(hwnd, &process);
+            if (process == GetCurrentProcessId() && GetPropW(hwnd, search->property.c_str())) { search->found = hwnd; return FALSE; }
+            return TRUE;
+          }, reinterpret_cast<LPARAM>(&search));
+          parent = search.found;
+          if (!parent) { promise.Reject(React::ReactError{"E_NOT_FOUND", "Dialog owner does not exist"}); return; }
+          if (!IsWindowEnabled(parent)) { promise.Reject(React::ReactError{"E_BUSY", "Dialog owner already has a modal operation"}); return; }
+        }
         com_ptr<IFileDialog> dialog;
         check_hresult(CoCreateInstance(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(dialog.put())));
         DWORD flags{}; check_hresult(dialog->GetOptions(&flags));
@@ -57,7 +69,7 @@ struct SparkFileDialog {
         for (auto const &item : patterns) { if (!pattern.empty()) pattern += L";"; pattern += item; }
         COMDLG_FILTERSPEC filter{L"Supported files", pattern.c_str()};
         if (!pattern.empty()) check_hresult(dialog->SetFileTypes(1, &filter));
-        auto status = dialog->Show(GetActiveWindow());
+        auto status = dialog->Show(parent);
         if (status == HRESULT_FROM_WIN32(ERROR_CANCELLED)) { promise.Resolve("null"); return; }
         check_hresult(status);
         auto pathFor = [](IShellItem *item) {

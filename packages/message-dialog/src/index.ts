@@ -32,7 +32,7 @@ export async function showMessage(options: MessageDialogOptions): Promise<Messag
   if (new Set(ids).size !== ids.length) throw new SparkError("E_INVALID_ARGUMENT", "Dialog button IDs must be unique");
   for (const id of [options.defaultButtonId, options.cancelButtonId]) if (id !== undefined && !ids.includes(id)) throw new SparkError("E_INVALID_ARGUMENT", "Dialog button ID must identify a button");
   if (options.kind !== undefined && !["info", "warning", "error"].includes(options.kind)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid dialog kind");
-  if (options.windowId !== undefined && !validString(options.windowId)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid owner window ID");
+  if (options.windowId !== undefined && (typeof options.windowId !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(options.windowId))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid owner window ID");
   if (options.message !== undefined && typeof options.message !== "string") throw new SparkError("E_INVALID_ARGUMENT", "message must be a string");
   if (options.checkbox !== undefined && (!options.checkbox || !validString(options.checkbox.label) || (options.checkbox.checked !== undefined && typeof options.checkbox.checked !== "boolean"))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid checkbox options");
   const availability = getMessageDialogAvailability();
@@ -42,6 +42,8 @@ export async function showMessage(options: MessageDialogOptions): Promise<Messag
   return { buttonId: result.button === -1 ? null : ids[result.button], checked: result.checked };
 }
 export async function confirm(message: string, options: ConfirmOptions = {}): Promise<boolean> {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected confirmation options");
+  for (const key of Object.keys(options)) if (!["title", "windowId"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported confirmation option: ${key}`);
   const result = await showMessage({ title: options.title ?? "Confirm", message, windowId: options.windowId, buttons: [{ id: "cancel", label: "Cancel" }, { id: "continue", label: "Continue" }], defaultButtonId: "continue", cancelButtonId: "cancel" });
   return result.buttonId === "continue";
 }

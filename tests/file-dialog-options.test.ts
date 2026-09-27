@@ -11,6 +11,7 @@ test("open/save share extension and directory semantics and reject ignored optio
     expect(dialogOptions({ directory: "C:\\Users", filters: [{ extensions: ["txt"] }] }, kind, "windows")).toMatchObject({ allowedFileTypes: ["txt"] });
     for (const extensions of [["text/plain"], ["txt;*"], [".txt"], []]) expect(() => dialogOptions({ filters: [{ extensions }] }, kind, "windows")).toThrow();
     expect(() => dialogOptions({ directory: "relative" }, kind, "macos")).toThrow();
-    expect(() => dialogOptions({ windowId: "ignored" } as never, kind, "macos")).toThrow("Unsupported");
+    expect(dialogOptions({ windowId: "editor" }, kind, "macos")).toMatchObject({ windowId: "editor" });
+    for (const windowId of ["", "bad.id", "x".repeat(101)]) expect(() => dialogOptions({ windowId }, kind, "macos")).toThrow("owner");
   }
 });

@@ -9,9 +9,9 @@ RCT_EXPORT_MODULE(NativeDesktopMessageDialog)
   [NSRunLoop.mainRunLoop performBlock:^{
     if (![method isEqual:@"show"]) { SparkInvalid(reject, @"Unknown dialog operation"); return; }
     if (self.alert) { reject(@"E_BUSY", @"A message dialog is already open", nil); return; }
-    NSDictionary *args = SparkArgs(json); NSWindow *parent;
+    NSDictionary *args = SparkArgs(json); NSWindow *parent = nil;
     if (args[@"windowId"]) {
-      for (NSWindow *window in NSApp.windows) if ([window.identifier isEqual:[@"spark." stringByAppendingString:args[@"windowId"]]]) parent = window;
+      for (NSWindow *window in NSApp.windows) if ([window.identifier isEqual:args[@"windowId"]] || [window.identifier isEqual:[@"spark." stringByAppendingString:args[@"windowId"]]]) { parent = window; break; }
       if (!parent) { reject(@"E_NOT_FOUND", @"Dialog parent does not exist", nil); return; }
       if (parent.attachedSheet) { reject(@"E_BUSY", @"Parent already has a sheet", nil); return; }
     }

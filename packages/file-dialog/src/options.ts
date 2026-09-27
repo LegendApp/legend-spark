@@ -4,12 +4,14 @@ import type { OpenFileDialogOptions, SaveFileDialogOptions } from "./types";
 
 export function dialogOptions(options: OpenFileDialogOptions | SaveFileDialogOptions, kind: "open" | "save", platform: string) {
   if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected dialog options");
-  const allowed = new Set(["directory", "filters", ...(kind === "open" ? ["selection", "multiple", "title", "message", "prompt", "macos"] : ["defaultName"])]);
+  const allowed = new Set(["windowId", "directory", "filters", ...(kind === "open" ? ["selection", "multiple", "title", "message", "prompt", "macos"] : ["defaultName"])]);
   for (const [key, value] of Object.entries(options)) {
     if (value === undefined) continue;
     if (!allowed.has(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported dialog option: ${key}`);
     if (["directory", "title", "message", "prompt", "defaultName"].includes(key) && (typeof value !== "string" || value.includes("\0"))) throw new SparkError("E_INVALID_ARGUMENT", `${key} must be a string without NUL characters`);
   }
+  if (options.windowId !== undefined && (typeof options.windowId !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(options.windowId))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid dialog owner window ID");
+  const windowId = options.windowId;
   const directory = options.directory === undefined ? undefined : nativePath(options.directory, platform);
   let extensions: string[] | undefined;
   if (options.filters !== undefined) {
@@ -20,11 +22,11 @@ export function dialogOptions(options: OpenFileDialogOptions | SaveFileDialogOpt
       extensions.push(...filter.extensions);
     }
   }
-  if (kind === "save") return { directory, allowedFileTypes: extensions, defaultName: (options as SaveFileDialogOptions).defaultName };
+  if (kind === "save") return { windowId, directory, allowedFileTypes: extensions, defaultName: (options as SaveFileDialogOptions).defaultName };
   const open = options as OpenFileDialogOptions;
   if (open.selection !== undefined && !["files", "directories"].includes(open.selection)) throw new SparkError("E_INVALID_ARGUMENT", "selection must be files or directories");
   if (open.multiple !== undefined && typeof open.multiple !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "multiple must be boolean");
   if (platform === "macos" && open.macos !== undefined && (!open.macos || typeof open.macos !== "object" || Object.keys(open.macos).some(key => key !== "mixedSelection") || (open.macos.mixedSelection !== undefined && typeof open.macos.mixedSelection !== "boolean"))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid macOS dialog options");
   const mixed = platform === "macos" && open.macos?.mixedSelection === true;
-  return { directoryURL: directory, allowedFileTypes: extensions, canChooseFiles: mixed || open.selection !== "directories", canChooseDirectories: mixed || open.selection === "directories", allowsMultipleSelection: open.multiple ?? false, title: open.title, message: open.message, prompt: open.prompt };
+  return { windowId, directoryURL: directory, allowedFileTypes: extensions, canChooseFiles: mixed || open.selection !== "directories", canChooseDirectories: mixed || open.selection === "directories", allowsMultipleSelection: open.multiple ?? false, title: open.title, message: open.message, prompt: open.prompt };
 }
