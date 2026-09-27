@@ -46,3 +46,32 @@ On Windows, the package supplies React Native's Appearance native module. Use `A
 `npm run test:ui` builds a packed kitchen-sink consumer with the test-only driver and exercises native hit targets, actions, text delegates and selection. `npm run test:universal` generates real mobile/Windows projects and bundles the Settings entry for all five targets. These are heavier integration checks than the focused tests above, and have not been rerun for this API change.
 
 The earlier API passed packed macOS Settings/kitchen-sink checks and iPhone 17 simulator interaction on September 13, 2026; web interaction and five-target bundle checks also passed then. That historical evidence does not validate the new controlled-input and adapter behavior. Full target interaction, focus/accessibility behavior and the SwiftUI picker's remount after selection still require acceptance. The pinned SwiftUI picker ignores an unchanged selected index, so Spark remounts it after a choice to honor a parent that retains its existing value.
+
+## Specialized macOS views
+
+Search, sidebar, split view, glass and SF Symbols keep capability-specific subpaths. They expose named props and owned events, layout refs and `onError`; generated native components are private. Availability queries are synchronous and use the shared result: `getSearchAvailability`, `getSidebarAvailability`, `getSplitViewAvailability`, `getGlassAvailability`, and `getSFSymbolAvailability`. Unsupported hosts preserve ordinary view content/layout and report through `onError`. These native implementations currently target macOS; a missing implementation is not advertised as platform parity.
+
+`TextInputSearch` under `/ui/search` is an AppKit search field with the same controlled/default-value distinction and disabled behavior as TextInput. It adds `placeholder`, explicit `appearance`, and a `TextInputSearchRef` with `focus`, `blur`, and measurement. Empty controlled values clear the field, and stale native edit counts cannot overwrite newer typing. Native arrow-key handling is left to the search field instead of unconditionally swallowing arrows. Retained refs reject after unmount.
+
+`Sidebar` under `/ui/sidebar` takes either `items: readonly { id, label, selectable? }[]` or direct `SidebarItem` children (fragments are allowed), never both. IDs are unique nonempty strings. `selectedId` is controlled and nullable; it must reference a selectable row. `onSelectionChange({ id })` reports a requested choice or `null` for deselection. `onContentLayout({ width, height })` reports native content size separately from the standard RN `onLayout` event. Custom rows use `SidebarItem` with `id`, optional numeric/`'auto'` row height, and `onContextMenu({ id, position, windowPosition, modifiers })`. Positions use logical top-left coordinates; windowPosition is relative to the owning window's content, suitable for a context menu with that window's explicit ID.
+
+`SidebarSplitView` under `/ui/split-view` uses named `sidebar` and `content` panes, rather than interpreting child positions. It retains width/minimum/collapsed settings and initial pane metrics. Title-bar customization is grouped:
+
+```tsx
+<SidebarSplitView
+  sidebar={<Navigation />}
+  content={<Editor />}
+  titleBar={{ content: { height: 52, material: 'glass', overlay: { color: '#ffffff', opacity: 0.1 } } }}
+  onResize={event => {
+    if (event.phase === 'ready') showPreparedWindow();
+  }}
+/>
+```
+
+`onResize` reports owned pane dimensions, `contentX`, total `height`, and `phase: 'provisional' | 'ready'`. Both phases update layout. Zero dimensions remain zero, so collapsed panes cannot inherit stale sizes. Initial metrics are a mount-time hint; readiness comes from native layout. Title-bar overlay colors use `#RRGGBB` or `#RRGGBBAA`, with opacity in `[0, 1]` (default 1 when an overlay is supplied). Application-specific chrome presets are not exported.
+
+`GlassView` under `/ui/glass` is the single native glass container, with `glassStyle: 'regular' | 'clear'` and RN `ColorValue` tint. It replaces the overlapping GlassEffectView/GlassSurface wrappers and requires macOS 26; older systems preserve children without an effect and report the host restriction. Colors use RN's standard conversion, including its dynamic/system representations.
+
+`SFSymbol` under `/ui/symbol` retains its Apple-specific name and size/scale/offset options, accepts normal RN style arrays and accessibility props, and reports a missing OS symbol as `E_NOT_FOUND`. Its layout remains intact if no image is available. The redundant placeholder component is removed; applications can use an ordinary View for their own placeholders. `/ui/classnames` remains an explicitly library-specific `clsx`/`tailwind-merge` convenience.
+
+Specialized validation includes mounted React event/layout tests, actual AppKit search clearing/defaults and symbol error tests, and a glass implementation syntax check. Those checks substitute RN declarations and do not establish interactive Fabric, accessibility, glass tint rendering, or sidebar context-menu placement acceptance.

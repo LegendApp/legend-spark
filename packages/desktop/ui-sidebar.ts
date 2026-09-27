@@ -1,1 +1,1 @@
-export * from "@legendapp/spark-ui/src/sidebar/index.ts";
+export * from "@legendapp/spark-ui/src/sidebar/index.tsx";

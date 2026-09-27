@@ -1,6 +1,6 @@
 import type { HostComponent, ViewProps } from "react-native";
 import { codegenNativeComponent } from "react-native";
-import type { DirectEventHandler, Double } from "react-native/Libraries/Types/CodegenTypes";
+import type { DirectEventHandler, Double, Int32 } from "react-native/Libraries/Types/CodegenTypes";
 
 export type SidebarSelectionChangeEvent = Readonly<{
   id: string;
@@ -18,6 +18,7 @@ export interface NativeProps extends ViewProps {
   onSidebarLayout?: DirectEventHandler<SidebarLayoutEvent>;
   onSidebarSelectionChange?: DirectEventHandler<SidebarSelectionChangeEvent>;
   selectedId?: string;
+  selectionRevision?: Int32;
 }
 
 export default codegenNativeComponent<NativeProps>("Sidebar") as HostComponent<NativeProps>;

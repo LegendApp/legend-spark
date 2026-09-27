@@ -22,7 +22,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  type NativeSyntheticEvent,
   View,
 } from "react-native";
 
@@ -85,7 +84,7 @@ function reportSettingsWindowError(error: unknown) {
 
 function useSettingsSplitView(windowIdentifier: string, contentReadyInitially = true) {
   const contentReadyRef = useRef(contentReadyInitially);
-  const [initialPaneMetrics] = useState(() => settingsPaneMetricsByWindowIdentifier.get(windowIdentifier) ?? null);
+  const [initialPaneMetrics] = useState(() => settingsPaneMetricsByWindowIdentifier.get(windowIdentifier));
   const splitReadyRef = useRef(false);
   const windowShownRef = useRef(false);
   const showWindowIfReady = useCallback(() => {
@@ -97,14 +96,14 @@ function useSettingsSplitView(windowIdentifier: string, contentReadyInitially = 
       });
     }
   }, [windowIdentifier]);
-  const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
+  const handleSplitViewResize = useCallback((event: SidebarSplitViewResizeEvent) => {
     const nextMetrics = {
-      contentHeight: Math.round(event.nativeEvent.contentHeight || event.nativeEvent.height),
-      contentWidth: Math.round(event.nativeEvent.contentWidth),
-      sidebarHeight: Math.round(event.nativeEvent.sidebarHeight || event.nativeEvent.height),
-      sidebarWidth: Math.round(event.nativeEvent.sidebarWidth),
+      contentHeight: Math.round(event.contentHeight),
+      contentWidth: Math.round(event.contentWidth),
+      sidebarHeight: Math.round(event.sidebarHeight),
+      sidebarWidth: Math.round(event.sidebarWidth),
     };
-    const layoutReady =
+    const layoutReady = event.phase === "ready" &&
       nextMetrics.contentHeight > 0 &&
       nextMetrics.contentWidth > 0 &&
       nextMetrics.sidebarHeight > 0 &&
@@ -171,26 +170,25 @@ export function SettingsWindow<PageId extends string = string>({
       className={cn("flex-1", backgroundClassName)}
       contentMinWidth={contentMinWidth}
       initialPaneMetrics={initialPaneMetrics}
-      onSplitViewDidResize={handleSplitViewResize}
+      onResize={handleSplitViewResize}
       sidebarMinWidth={sidebarMinWidth}
       style={styles.root}
-    >
-      <View className="min-w-0 flex-1 overflow-hidden" style={styles.pane}>
+      sidebar={<View className="min-w-0 flex-1 overflow-hidden" style={styles.pane}>
         <SettingsSidebar
           onSelectionChange={setSelectedPage}
           pages={pages}
           selectedPage={selectedPage}
         />
         <SettingsToolbarBackground variant="sidebar" />
-      </View>
-      <View
+      </View>}
+      content={<View
         className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)}
         style={styles.pane}
       >
         {selectedPageConfig.render()}
         <SettingsToolbarBackground variant="content" />
-      </View>
-    </SidebarSplitView>
+      </View>}
+    />
   );
 }
 
@@ -296,19 +294,18 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
       className={cn("flex-1", backgroundClassName)}
       contentMinWidth={contentMinWidth}
       initialPaneMetrics={initialPaneMetrics}
-      onSplitViewDidResize={handleSplitViewResize}
+      onResize={handleSplitViewResize}
       sidebarMinWidth={sidebarMinWidth}
       style={styles.root}
-    >
-      <View className="min-w-0 flex-1 overflow-hidden" style={styles.pane}>
+      sidebar={<View className="min-w-0 flex-1 overflow-hidden" style={styles.pane}>
         <SettingsSidebar
           onSelectionChange={scrollToPage}
           pages={pages}
           selectedPage={selectedPage}
         />
         <SettingsToolbarBackground variant="sidebar" />
-      </View>
-      <View className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)} style={styles.pane}>
+      </View>}
+      content={<View className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)} style={styles.pane}>
         <LegendList
           contentInset={settingsContentInset}
           contentContainerStyle={styles.virtualizedSettingsListContent}
@@ -324,8 +321,8 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
           style={styles.virtualizedSettingsList}
         />
         <SettingsToolbarBackground variant="content" />
-      </View>
-    </SidebarSplitView>
+      </View>}
+    />
   );
 }
 

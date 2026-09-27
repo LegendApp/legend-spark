@@ -1,1 +1,1 @@
-export * from "@legendapp/spark-ui/src/text-input-search/index.ts";
+export * from "@legendapp/spark-ui/src/text-input-search/index.tsx";

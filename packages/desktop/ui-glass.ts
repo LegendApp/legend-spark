@@ -1,1 +1,1 @@
-export * from "@legendapp/spark-ui/src/glass-effect-view/index.ts";
+export * from "@legendapp/spark-ui/src/glass-effect-view/index.tsx";

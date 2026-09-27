@@ -1,1 +1,1 @@
-export * from "@legendapp/spark-ui/src/appkit-split-view/index.ts";
+export * from "@legendapp/spark-ui/src/appkit-split-view/index.tsx";

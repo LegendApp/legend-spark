@@ -8,9 +8,6 @@
 using namespace facebook::react;
 
 #if TARGET_OS_OSX
-@interface RNTextInputSearchField : NSSearchField
-@end
-
 static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName)
 {
   if ([appearanceName isEqualToString:@"light"]) {
@@ -24,23 +21,6 @@ static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName
   return nil;
 }
 
-@implementation RNTextInputSearchField
-- (BOOL)performKeyEquivalent:(NSEvent *)event
-{
-  if (event.keyCode == 126 || event.keyCode == 125) {
-    return YES;
-  }
-  return [super performKeyEquivalent:event];
-}
-
-- (void)keyDown:(NSEvent *)event
-{
-  if (event.keyCode == 126 || event.keyCode == 125) {
-    return;
-  }
-  [super keyDown:event];
-}
-@end
 #endif
 
 @interface RNTextInputSearch () <
@@ -53,8 +33,9 @@ static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName
 
 @implementation RNTextInputSearch {
 #if TARGET_OS_OSX
-  RNTextInputSearchField *_textField;
+  NSSearchField *_textField;
   BOOL _hasSetDefaultText;
+  int _eventCount;
 #else
   UIView *_textField;
 #endif
@@ -65,7 +46,7 @@ static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName
   if (self = [super init]) {
     _props = std::make_shared<const TextInputSearchProps>();
 #if TARGET_OS_OSX
-    _textField = [RNTextInputSearchField new];
+    _textField = [NSSearchField new];
     _textField.delegate = self;
     _textField.focusRingType = NSFocusRingTypeNone;
     _textField.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -86,13 +67,15 @@ static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName
 
 - (void)controlTextDidChange:(NSNotification *)notification
 {
-  if (notification.object != _textField) {
+  if (notification.object != _textField || !_textField.enabled) {
     return;
   }
+  ++_eventCount;
   const auto eventEmitter = std::static_pointer_cast<const TextInputSearchEventEmitter>(_eventEmitter);
   if (eventEmitter) {
     eventEmitter->onChangeText(TextInputSearchEventEmitter::OnChangeText{
       .text = _textField.stringValue.UTF8String ?: "",
+      .eventCount = _eventCount,
     });
   }
 }
@@ -107,15 +90,18 @@ static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName
   self.appearance = appearance;
   _textField.appearance = appearance;
 
+  _textField.enabled = !newProps.disabled;
+  _textField.accessibilityLabel = [NSString stringWithUTF8String:newProps.accessibilityLabel.c_str()];
+  _textField.accessibilityIdentifier = [NSString stringWithUTF8String:newProps.testId.c_str()];
   NSString *placeholder = [NSString stringWithUTF8String:newProps.placeholder.c_str()];
   _textField.placeholderString = placeholder;
 
-  if (!_hasSetDefaultText && !newProps.defaultText.empty()) {
+  if (!_hasSetDefaultText) {
     _textField.stringValue = [NSString stringWithUTF8String:newProps.defaultText.c_str()];
     _hasSetDefaultText = YES;
   }
 
-  if (!newProps.text.empty()) {
+  if (newProps.controlled && newProps.eventCount >= _eventCount) {
     NSString *text = [NSString stringWithUTF8String:newProps.text.c_str()];
     if (![_textField.stringValue isEqualToString:text]) {
       _textField.stringValue = text;
@@ -133,7 +119,14 @@ static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName
 - (void)focus
 {
 #if TARGET_OS_OSX
-  [self.window makeFirstResponder:_textField];
+  if (_textField.enabled) [self.window makeFirstResponder:_textField];
+#endif
+}
+
+- (void)blur
+{
+#if TARGET_OS_OSX
+  if (self.window.firstResponder == _textField || _textField.currentEditor == self.window.firstResponder) [self.window makeFirstResponder:nil];
 #endif
 }
 
@@ -143,7 +136,10 @@ static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName
 #if TARGET_OS_OSX
   _textField.stringValue = @"";
   _textField.placeholderString = @"";
-  _hasSetDefaultText = NO;
+  [_textField abortEditing];
+  _hasSetDefaultText = NO; _eventCount = 0; _textField.enabled = YES;
+  _textField.accessibilityLabel = nil; _textField.accessibilityIdentifier = nil;
+  self.appearance = nil; _textField.appearance = nil;
 #endif
 }
 

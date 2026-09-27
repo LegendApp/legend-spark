@@ -3,6 +3,7 @@ import { codegenNativeComponent } from "react-native";
 
 export interface NativeProps extends ViewProps {
   name: string;
+  onSymbolError?: CodegenTypes.DirectEventHandler<Readonly<{ name: string; message: string }>>;
   color?: ColorValue;
   scale?: string;
   size?: CodegenTypes.Double;

@@ -2,6 +2,7 @@
 
 #import <react/renderer/components/RNSparkUISpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSparkUISpec/Props.h>
+#import <react/renderer/components/RNSparkUISpec/EventEmitters.h>
 #import <react/renderer/components/RNSparkUISpec/RCTComponentViewHelpers.h>
 
 using namespace facebook::react;
@@ -16,6 +17,7 @@ using namespace facebook::react;
   UIImageView *_imageView;
 #endif
   NSString *_symbolName;
+  NSString *_reportedMissingName;
   CGFloat _size;
   CGFloat _yOffset;
 }
@@ -56,7 +58,7 @@ using namespace facebook::react;
   }
 
   NSImage *image = _symbolName.length > 0
-    ? [NSImage imageWithSystemSymbolName:_symbolName accessibilityDescription:_symbolName]
+    ? [NSImage imageWithSystemSymbolName:_symbolName accessibilityDescription:newProps.accessibilityLabel.empty() ? nil : [NSString stringWithUTF8String:newProps.accessibilityLabel.c_str()]]
     : nil;
   [image setTemplate:YES];
   _imageView.image = image;
@@ -93,13 +95,30 @@ using namespace facebook::react;
 
   [self setNeedsLayout:YES];
   [super updateProps:props oldProps:oldProps];
+  [self reportMissingSymbol];
+}
+
+- (void)reportMissingSymbol
+{
+  if (_imageView.image) { _reportedMissingName = nil; return; }
+  if (!_symbolName.length || [_reportedMissingName isEqualToString:_symbolName]) return;
+  const auto emitter = std::static_pointer_cast<const SFSymbolEventEmitter>(_eventEmitter);
+  if (!emitter) return;
+  _reportedMissingName = [_symbolName copy];
+  NSString *message = [@"SF Symbol is unavailable on this OS: " stringByAppendingString:_symbolName];
+  emitter->onSymbolError({ .name = _symbolName.UTF8String ?: "", .message = message.UTF8String ?: "" });
+}
+- (void)updateEventEmitter:(EventEmitter::Shared const &)eventEmitter
+{
+  [super updateEventEmitter:eventEmitter];
+  [self reportMissingSymbol];
 }
 
 - (void)prepareForRecycle
 {
   [super prepareForRecycle];
 
-  _symbolName = @"";
+  _symbolName = @""; _reportedMissingName = nil;
   _size = 24;
   _yOffset = 0;
   _imageView.image = nil;

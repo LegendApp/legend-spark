@@ -564,11 +564,7 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
   }
 
   NSInteger row = _tableView.selectedRow;
-  if (row < 0 || row >= (NSInteger)self.itemCount) {
-    return;
-  }
-
-  _selectedId = [self itemIdAtRow:row];
+  _selectedId = row >= 0 && row < (NSInteger)self.itemCount ? [self itemIdAtRow:row] : @"";
   const auto eventEmitter = std::static_pointer_cast<const SidebarEventEmitter>(_eventEmitter);
   if (eventEmitter) {
     eventEmitter->onSidebarSelectionChange(SidebarEventEmitter::OnSidebarSelectionChange{
