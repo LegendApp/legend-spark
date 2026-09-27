@@ -101,7 +101,8 @@
     "@types/node": "24.13.6",
     "vitest": "5.0.1",
     "ws": "8.18.3",
-    "@legendapp/list": "3.4.0"
+    "@legendapp/list": "3.4.0",
+    "react-test-renderer": "19.1.4"
   },
   "overrides": {
     "@expo/cli": "54.0.27",

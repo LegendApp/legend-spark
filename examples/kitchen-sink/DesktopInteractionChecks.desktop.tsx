@@ -8,7 +8,7 @@ import * as notifications from "@legendapp/spark/notifications";
 import * as system from "@legendapp/spark/system";
 import { createTray } from "@legendapp/spark/tray";
 import { registerGlobalShortcut } from "@legendapp/spark/global-shortcuts";
-import { configureMenus, clearMenus, addNativeMenuActionListener, updateMenuItems, commandModifier } from "@legendapp/spark/menus";
+import { createMenu, type MenuAction } from "@legendapp/spark/menus";
 import { getWindow, openWindow, closeWindow, onWindowEvent } from "@legendapp/spark/windows";
 import { assertContract } from "./contract-cases";
 
@@ -100,18 +100,18 @@ export default function DesktopInteractionChecks({ check, onError, onBusy }: {
   }
   async function advancedMenus() {
     setInstruction("Use Command+Shift+Y (macOS) or Control+Shift+Y (Windows) to activate the Parity → Continue item.");
-    let selected!: (event: import("@legendapp/spark/menus").NativeMenuAction) => void;
-    const action = new Promise<import("@legendapp/spark/menus").NativeMenuAction>(resolve => { selected = resolve; });
-    const sub = addNativeMenuActionListener(event => { if (event.ownerId === "contract-binding") selected(event); });
-    configureMenus("contract-base", [{ id: "parity", title: "Parity", items: [{ id: "base", title: "Original" }, { id: "after", title: "After" }] }]);
-    configureMenus("contract-binding", [{ id: "bound", title: "Parity", items: [{ id: "continue", targetTitle: "Original", title: "Continue", placement: { after: "After" }, shortcut: { key: "y", modifiers: commandModifier | (1 << 17) }, payload: { token: "acceptance" } }] }]);
-    updateMenuItems("contract-binding", [{ id: "continue", checked: true }]);
+    let selected!: (event: MenuAction) => void;
+    const action = new Promise<MenuAction>(resolve => { selected = resolve; });
+    const base = await createMenu({ id: "contract-base", items: [{ type: "submenu", id: "parity", label: "Parity", items: [{ type: "action", id: "base", label: "Original" }, { type: "action", id: "after", label: "After" }] }] });
+    let binding: Awaited<ReturnType<typeof createMenu>> | undefined;
     try {
-      let received: import("@legendapp/spark/menus").NativeMenuAction | undefined;
-      await within(action.then(value => { received = value; }), 45000);
-      assertContract(received?.itemId === "continue" && received.menuId === "bound" && received.payload?.token === "acceptance", "Menu action lost semantic identity or payload");
-    } finally { sub.remove(); clearMenus("contract-binding"); clearMenus("contract-base"); }
-    setInstruction("Menu accelerator, targeting, update, and payload assertions passed.");
+      const items: MenuItem[] = [{ type: "submenu", id: "bound", target: { id: "parity" }, label: "Parity", items: [{ type: "checkbox", id: "continue", target: { id: "base" }, label: "Continue", placement: { after: { id: "after" } }, shortcut: "CmdOrCtrl+Shift+Y", checked: false }] }];
+      binding = await createMenu({ id: "contract-binding", items, onAction: selected });
+      if (items[0].type === "submenu" && items[0].items[0].type === "checkbox") items[0].items[0].checked = true;
+      await binding.update({ items });
+      await within(action.then(received => { assertContract(received.type === "action" && received.itemId === "continue", "Menu action lost semantic identity"); }), 45000);
+    } finally { await binding?.remove(); await base.remove(); }
+    setInstruction("Menu accelerator, targeting, update, and action assertions passed.");
   }
   async function notificationChecks() {
     const permission = await notifications.requestNotificationPermission();

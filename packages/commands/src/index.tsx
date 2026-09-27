@@ -7,7 +7,6 @@ import {
   type KeyboardEvent,
 } from "@legendapp/spark-desktop-shortcuts/src/keyboard-manager";
 import { cn } from "@legendapp/spark-ui/src/classnames";
-import type { NativeMenuShortcut } from "@legendapp/spark-native-menu";
 import { SFSymbol } from "@legendapp/spark-ui/src/sf-symbol";
 import { batch, observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
@@ -90,17 +89,7 @@ const modifierCodes = [
   KeyCodes.MODIFIER_FUNCTION,
 ] as const;
 
-const menuModifierCodes = [
-  KeyCodes.MODIFIER_COMMAND,
-  KeyCodes.MODIFIER_SHIFT,
-  KeyCodes.MODIFIER_OPTION,
-  KeyCodes.MODIFIER_CONTROL,
-  KeyCodes.MODIFIER_CAPS_LOCK,
-  KeyCodes.MODIFIER_FUNCTION,
-] as const;
-
 const modifierSet = new Set<number>(modifierCodes);
-const menuModifierSet = new Set<number>(menuModifierCodes);
 const implicitFunctionModifierKeyCodes = new Set<number>([
   KeyCodes.KEY_UP,
   KeyCodes.KEY_DOWN,
@@ -158,12 +147,7 @@ const textToKeyCode = Object.entries(KeyText).reduce<Record<string, number>>((ac
   return acc;
 }, {});
 
-const functionKeyEquivalents: Record<number, number> = {
-  [KeyCodes.KEY_UP]: 0xf700,
-  [KeyCodes.KEY_DOWN]: 0xf701,
-  [KeyCodes.KEY_LEFT]: 0xf702,
-  [KeyCodes.KEY_RIGHT]: 0xf703,
-};
+
 
 function isModifierKeyCode(keyCode: number) {
   return modifierSet.has(keyCode);
@@ -670,49 +654,6 @@ export function useHotkeySuspension({
     }
     return undefined;
   }, [active, router, scope]);
-}
-
-function keyCodeToMenuKeyEquivalent(keyCode: number): string | null {
-  if (functionKeyEquivalents[keyCode] !== undefined) {
-    return String.fromCharCode(functionKeyEquivalents[keyCode]);
-  }
-
-  switch (keyCode) {
-    case KeyCodes.KEY_RETURN:
-      return "\r";
-    case KeyCodes.KEY_TAB:
-      return "\t";
-    case KeyCodes.KEY_SPACE:
-      return " ";
-    case KeyCodes.KEY_ESCAPE:
-      return "\u001b";
-    case KeyCodes.KEY_DELETE:
-    case KeyCodes.KEY_BACKSPACE:
-      return "\u0008";
-    case KeyCodes.KEY_FORWARD_DELETE:
-      return String.fromCharCode(0x007f);
-    default: {
-      const text = KeyText[keyCode];
-      return text && text.length === 1 ? text.toLowerCase() : null;
-    }
-  }
-}
-
-export function hotkeyToMenuShortcut(hotkey: HotkeyValue | null | undefined): NativeMenuShortcut | null {
-  const keyCodes = parseHotkey(hotkey);
-  let modifiers = 0;
-  let keyCode: number | null = null;
-
-  for (const code of keyCodes) {
-    if (menuModifierSet.has(code)) {
-      modifiers |= code;
-    } else if (keyCode === null) {
-      keyCode = code;
-    }
-  }
-
-  const keyEquivalent = keyCode === null ? null : keyCodeToMenuKeyEquivalent(keyCode);
-  return keyEquivalent ? { key: keyEquivalent, modifiers } : null;
 }
 
 export function useHotkeys<HotkeyId extends string>({

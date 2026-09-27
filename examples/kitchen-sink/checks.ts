@@ -11,7 +11,7 @@ import * as links from "@legendapp/spark/links";
 import * as secureStore from "@legendapp/spark/secure-storage";
 import { registerShortcut } from "@legendapp/spark/shortcuts";
 import { showContextMenu } from "@legendapp/spark/context-menu";
-import { configureMenus, clearMenus, addNativeMenuActionListener } from "@legendapp/spark/menus";
+import { createMenu } from "@legendapp/spark/menus";
 import { openFileDialog, saveFileDialog } from "@legendapp/spark/dialogs";
 import { readText, writeText, writeTextIfUnchanged } from "@legendapp/spark/files";
 import type { TestDriver } from "./test-driver";
@@ -184,13 +184,13 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
         await driverCall("key", { key: "k", modifiers: (1 << 20) | (1 << 17) }); await delay(100); assert(count === 1, "Removed shortcut fired");
       });
       await check("menus: native selection, checked and disabled state", async () => {
-        let selected = ""; const sub = addNativeMenuActionListener(event => { if (event.ownerId === token) selected = event.itemId; });
+        let selected = "";
+        const menu = await createMenu({ id: token, items: [{ type: "submenu", id: "sdk-test", label: "SDK Test", items: [{ type: "action", id: "item", label: token }, { type: "action", id: "disabled", label: "SDK Disabled", disabled: true }, { type: "checkbox", id: "checked", label: "SDK Checked", checked: true }] }], onAction: event => { selected = event.itemId; } });
         try {
-          configureMenus(token, [{ id: "sdk-test", title: "SDK Test", items: [{ id: "item", title: token }, { id: "disabled", title: "SDK Disabled", enabled: false }, { id: "checked", title: "SDK Checked", checked: true }] }]);
           await driverCall("menu", { title: token }); await until(() => selected === "item", "Menu action not delivered");
           assert(await driverCall("menuState", { title: "SDK Disabled" }) === "disabled", "Disabled item enabled");
           assert(await driverCall("menuState", { title: "SDK Checked" }) === "checked", "Checked state missing");
-        } finally { clearMenus(token); sub.remove(); }
+        } finally { await menu.remove(); }
       });
       await check("dialogs: native open/save cancellation", async () => {
         const opened = openFileDialog({ title: "SDK automated open" });

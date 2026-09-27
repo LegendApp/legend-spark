@@ -1,18 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Button, StyleSheet, Text, View } from "react-native";
 import { openFileDialog } from "@legendapp/spark/dialogs";
-import { configureMenus, clearMenus, addNativeMenuActionListener } from "@legendapp/spark/menus";
+import { useMenu, type MenuItem } from "@legendapp/spark/menus";
 
-const menus = [{ id: "hello", title: "Hello", items: [{ id: "greet", title: "Say Hello" }] }];
+const menus: MenuItem[] = [{ type: "submenu", id: "hello", label: "Hello", items: [{ type: "action", id: "greet", label: "Say Hello" }] }];
 export default function App({ runtime }: { runtime?: { mode: string } }) {
   const [message, setMessage] = useState("Ready");
-  useEffect(() => {
-    configureMenus("hello-world", menus);
-    const subscription = addNativeMenuActionListener(action => {
-      if (action.ownerId === "hello-world" && action.itemId === "greet") setMessage("Hello from the native menu");
-    });
-    return () => { subscription.remove(); clearMenus("hello-world"); };
-  }, []);
+  useMenu({ id: "hello-world", items: menus, onAction: action => { if (action.itemId === "greet") setMessage("Hello from the native menu"); }, onError: error => setMessage(String(error)) });
   async function chooseFile() {
     try {
       const files = await openFileDialog({ title: "Choose a file", multiple: false });

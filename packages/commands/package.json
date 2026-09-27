@@ -10,7 +10,6 @@
   "dependencies": {
     "@legendapp/spark-ui": "0.0.1-next.2",
     "@legendapp/spark-desktop-shortcuts": "0.0.1-next.2",
-    "@legendapp/spark-native-menu": "0.0.1-next.2",
     "@legendapp/spark-settings": "0.0.1-next.2",
     "@legendapp/state": "^3.0.0-beta.42"
   },

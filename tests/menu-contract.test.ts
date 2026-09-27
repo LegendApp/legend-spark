@@ -23,3 +23,12 @@ test("unsupported surface features reject and cyclic trees cannot reach native s
   expect(() => menuItems(items, support, "macos")).toThrow("acyclic");
   expect(() => menuItems([{ type: "action", id: "x", label: "X", backend: true }] as never, support, "macos")).toThrow("property");
 });
+
+test("semantic targets validate their shape and hidden target overrides remain in publication", () => {
+  const supported = { ...support, targeting: true };
+  const result = menuItems([{ type: "action", id: "copy", label: "Copy", target: { role: "copy" }, hidden: true, placement: { after: { id: "paste" } } }], supported, "macos");
+  expect(result[0]).toMatchObject({ hidden: true, target: { role: "copy" }, placement: { after: { id: "paste" } } });
+  expect(selectableMenuIds(result).size).toBe(0);
+  for (const target of [{ id: "", role: "copy" }, { role: "bad" }, { menu: "unknown" }]) expect(() => menuItems([{ type: "action", id: "x", label: "X", target }] as never, supported, "macos")).toThrow();
+  expect(() => menuItems([{ type: "action", id: "x", label: "X", target: { role: "copy" } }], support, "macos")).toThrow("targeting");
+});

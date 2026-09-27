@@ -2,24 +2,18 @@ import { useEffect } from "react";
 import { Platform } from "react-native";
 import { beforeWindowClose, setWindowTitle, onWindowEvent } from "@legendapp/spark/windows";
 import { beforeQuit } from "@legendapp/spark/app";
-import { configureMenus, clearMenus, addNativeMenuActionListener } from "@legendapp/spark/menus";
-import { registerShortcut, parseAccelerator } from "@legendapp/spark/shortcuts";
+import { createMenu, type MenuItem } from "@legendapp/spark/menus";
+import { registerShortcut } from "@legendapp/spark/shortcuts";
 import { mountSerial } from "./lifetime";
 import type { LifecycleProps } from "./lifecycle-types";
-let activeMenuOwner: string | undefined;
 export function Lifecycle({ title, windowId = "main", flush, quit, commands, onError }: LifecycleProps) {
   useEffect(() => { void setWindowTitle(windowId, title).catch(error => onError(String(error))); }, [title, windowId, onError]);
   useEffect(() => mountSerial(`window-${windowId}`, async retain => {
     const owner = `example-${windowId}`;
-    const menu = () => {
-      if (activeMenuOwner && activeMenuOwner !== owner) clearMenus(activeMenuOwner);
-      configureMenus(owner, [{ id: "file", title: "File", items: commands.map(({ id, title, key }) => ({ id, title, shortcut: parseAccelerator(`${Platform.OS === "windows" ? "Control" : "Command"}+${key}`) })) }]);
-      activeMenuOwner = owner;
-    };
-    menu();
-    await retain(Promise.resolve({ remove: () => { clearMenus(owner); if (activeMenuOwner === owner) activeMenuOwner = undefined; } }));
-    await retain(Promise.resolve(addNativeMenuActionListener(event => { if (event.ownerId === owner) commands.find(command => command.id === event.itemId)?.run(); })));
-    await retain(Promise.resolve(onWindowEvent(event => { if (event.windowId === windowId && event.type === "focus") menu(); })));
+    const items: MenuItem[] = [{ type: "submenu", id: "file", target: { menu: "file" }, label: "File", items: commands.map(({ id, title, key }) => ({ type: "action", id, label: title, shortcut: `CmdOrCtrl+${key}` })) }];
+    const menu = await createMenu({ id: owner, items, onAction: event => { commands.find(command => command.id === event.itemId)?.run(); } });
+    await retain(Promise.resolve(menu));
+    await retain(Promise.resolve(onWindowEvent(event => { if (event.windowId === windowId && event.type === "focus") void menu.update({ items }).catch(error => onError(String(error))); })));
     const guarded = (save: () => Promise<boolean>) => async () => {
       try { return await save(); } catch (error) { onError(String(error)); return false; }
     };

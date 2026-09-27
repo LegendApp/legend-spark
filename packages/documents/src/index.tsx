@@ -1,7 +1,7 @@
 import { openFileDialog } from "@legendapp/spark-file-dialog";
 import { watch } from "@legendapp/spark-file-system";
 import type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
-import { useNativeMenu, type NativeMenuActionHandlers, type NativeMenuConfig } from "@legendapp/spark-native-menu";
+import { useMenu, type MenuAction, type MenuItem } from "@legendapp/spark-native-menu";
 import { addRecentDocumentOpenListener } from "@legendapp/spark-desktop-app/src/recent-documents";
 import { usePrimaryWindowLifecycle } from "@legendapp/spark-desktop-windows/src/windows";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -14,9 +14,9 @@ export type DocumentAppController = {
 };
 
 export type UseDocumentAppControllerOptions = {
-  createMenuHandlers: (controller: DocumentAppController) => NativeMenuActionHandlers;
+  createMenuHandlers: (controller: DocumentAppController) => Record<string, (action: MenuAction) => void>;
   launchArguments?: string[];
-  menus: NativeMenuConfig[];
+  menus: readonly MenuItem[];
   onInitialOpen: (launchArguments: string[] | undefined, controller: DocumentAppController) => Promise<void> | void;
   onRecentDocumentOpen?: (path: string, controller: DocumentAppController) => Promise<void> | void;
   onReopenRequested?: (controller: DocumentAppController) => Promise<void> | void;
@@ -152,11 +152,7 @@ export function useDocumentAppController({
   }), [isDocumentWindowOpen, reportError]);
   const menuHandlers = useMemo(() => createMenuHandlers(controller), [controller, createMenuHandlers]);
 
-  useNativeMenu({
-    handlers: menuHandlers,
-    menus,
-    ownerId,
-  });
+  useMenu({ id: ownerId, items: menus, onAction: action => menuHandlers[action.itemId]?.(action), onError: reportError });
 
   useEffect(() => {
     if (onRecentDocumentOpen) {

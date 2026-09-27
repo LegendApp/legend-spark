@@ -12,7 +12,7 @@ import * as links from "@legendapp/spark/links";
 import * as secureStore from "@legendapp/spark/secure-storage";
 import { registerShortcut } from "@legendapp/spark/shortcuts";
 import { showContextMenu } from "@legendapp/spark/context-menu";
-import { configureMenus, clearMenus, addNativeMenuActionListener } from "@legendapp/spark/menus";
+import { useMenu, type MenuItem } from "@legendapp/spark/menus";
 import { openFileDialog, saveFileDialog } from "@legendapp/spark/dialogs";
 import { revealInFileManager } from "@legendapp/spark/files";
 import { AuthChecks } from "./AuthChecks";
@@ -28,6 +28,8 @@ import { Expansion } from "./Expansion";
 import { Integrations } from "./Integrations";
 import { ThemeToggle } from "./ThemeToggle";
 import { testDriver } from "./test-driver";
+
+const applicationMenuItems: MenuItem[] = [{ type: "submenu", id: "document", label: "Document", items: [{ type: "action", id: "open", label: "Open…", shortcut: "CmdOrCtrl+O" }, { type: "action", id: "save", label: "Save…", shortcut: "CmdOrCtrl+S" }] }];
 
 type Props = Partial<app.AppContext> & { windowId?: string; windowProps?: { overlay?: boolean; message?: string; readyFile?: string } };
 function argument(args: string[], name: string) { const at = args.indexOf(name); return at < 0 ? undefined : args[at + 1]; }
@@ -115,11 +117,10 @@ function KitchenSink({ runtime, projectId }: Props) {
     if (!path) return "Save cancelled.";
     await files.writeText(path, current.text); setDocument(previous => ({ ...previous, path, saved: current.text })); reportFile(`Saved ${path}`);
   }, [reportFile]);
+  useMenu({ id: "kitchen-sink", items: applicationMenuItems, onAction: event => { reportMenu(`Document menu: ${event.itemId}`); void (event.itemId === "open" ? load() : save()).catch(reportFile); }, onError: reportMenu });
   useEffect(() => {
     const removers: Array<() => unknown> = []; let disposed = false;
     function retain(sub: { remove(): unknown }) { if (disposed) void sub.remove(); else removers.push(() => sub.remove()); }
-    configureMenus("kitchen-sink", [{ id: "document", title: "Document", items: [{ id: "open", title: "Open…", shortcut: { key: "o" } }, { id: "save", title: "Save…", shortcut: { key: "s" } }] }]);
-    retain(addNativeMenuActionListener(event => { if (event.ownerId === "kitchen-sink") { reportMenu(`Document menu: ${event.itemId}`); void (event.itemId === "open" ? load() : save()).catch(reportFile); } }));
     retain(app.onAppEvent(reportWindow)); retain(windows.onWindowEvent(reportWindow));
     void registerShortcut("Command+Shift+K", () => reportMenu("Shortcut fired: Command+Shift+K")).then(retain).catch(reportMenu);
     void links.onOpen(event => { if (event.type === "openFile") reportLink(event); }).then(retain).catch(reportLink);
@@ -129,7 +130,7 @@ function KitchenSink({ runtime, projectId }: Props) {
     void app.beforeQuit(confirmClose).then(retain).catch(reportWindow);
     void windows.beforeWindowClose("main", confirmClose).then(retain).catch(reportWindow);
     void settings.get("kitchen-count", { decode(value) { if (typeof value !== "number") throw new Error("Invalid counter setting"); return value; } }).then(value => { if (!disposed) setCount(value ?? 0); }).catch(report);
-    return () => { disposed = true; clearMenus("kitchen-sink"); for (const remove of removers) void remove(); };
+    return () => { disposed = true; for (const remove of removers) void remove(); };
   }, [load, report, reportWindow, reportFile, reportMenu, reportLink, save]);
   useEffect(() => {
     if (!document.path) return;

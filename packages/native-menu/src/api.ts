@@ -1,128 +1,69 @@
 import { NativeEventEmitter, Platform } from "react-native";
-import { useEffect } from "react";
 import NativeMenu from "./NativeMenu";
-import { composeWindowsMenus, patchWindowsMenus } from "./windows-menus";
-
-export type NativeMenuShortcut = {
-  key: string;
-  modifiers?: number;
-};
-
-export type NativeMenuItemPlacement = {
-  before?: string;
-  after?: string;
-};
-
-export const commandModifier = 1 << 20;
-export const optionModifier = 1 << 19;
-export const shiftModifier = 1 << 17;
-export const settingsTargetTitles = ["Settings...", "Settings…", "Preferences...", "Preferences…"];
-export const openTargetTitles = ["Open", "Open...", "Open…"];
-export const saveTargetTitles = ["Save", "Save...", "Save…"];
-export const saveAsTargetTitles = ["Save As", "Save As...", "Save As…"];
-
-export type NativeMenuItem = {
-  id: string;
-  title?: string;
-  targetTitle?: string;
-  targetTitles?: string[];
-  /** Nested native system-menu paths are macOS-only. Windows accepts one item title. */
-  targetPath?: string[];
-  enabled?: boolean;
-  checked?: boolean;
-  hidden?: boolean;
-  placement?: NativeMenuItemPlacement;
-  separator?: boolean;
-  shortcut?: NativeMenuShortcut | null;
-  payload?: Record<string, unknown>;
-};
-
-export type NativeMenuConfig = {
-  id: string;
-  title: string;
-  systemMenu?: "app";
-  placement?: {
-    before?: string;
-    after?: string;
+import { SparkError, asyncRegistration, invokeNative, type Availability, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
+import { menuItems, selectableMenuIds, type MenuItem, type MenuWireItem, type MenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
+import { composeWindowsMenus } from "./windows-menus";
+export type { MenuItem, MenuIcon, MenuRole, MenuAction, MenuTarget, MenuPlacement, MenuLocation } from "@legendapp/spark-desktop-app/src/contracts/menu";
+export interface MenuUpdate { items: readonly MenuItem[] }
+export interface MenuOptions extends MenuUpdate { id: string; onAction?: (action: MenuAction) => void }
+export interface Menu extends AsyncRegistration { readonly id: string; update(options: MenuUpdate): Promise<void> }
+interface Owner { id: string; token: string; items: MenuWireItem[] }
+const owners = new Map<string, Owner>();
+let sequence = 0, queue: Promise<unknown> = Promise.resolve();
+function serial<T>(operation: () => Promise<T>): Promise<T> { const result = queue.then(operation); queue = result.catch(() => {}); return result; }
+export function getMenuAvailability(): Availability {
+  if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
+  return NativeMenu ? { available: true } : { available: false, reason: "missing-module" };
+}
+function available() {
+  const availability = getMenuAvailability();
+  if (!availability.available) throw new SparkError(availability.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : "E_MODULE_UNAVAILABLE", "Application menus are unavailable");
+}
+function snapshot(value: MenuUpdate, token: string, creating = false): MenuWireItem[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new SparkError("E_INVALID_ARGUMENT", "Expected menu options");
+  for (const key of Object.keys(value)) if (!["items", ...(creating ? ["id", "onAction"] : [])].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported menu option: ${key}`);
+  const items = menuItems(value.items, { types: Platform.OS === "macos" ? ["action", "checkbox", "separator", "submenu", "role"] : ["action", "checkbox", "separator", "submenu"], shortcuts: true, targeting: true, icons: Platform.OS === "macos" ? ["symbol", "image"] : [] }, Platform.OS === "windows" ? "windows" : "macos");
+  if (items.some(item => !item.items)) throw new SparkError("E_INVALID_ARGUMENT", "Application menu roots must be submenus");
+  function annotate(items: MenuWireItem[]) { for (const item of items) { item._sparkOwner = token; if (item.items) annotate(item.items); } }
+  annotate(items); return items;
+}
+async function publish(next: Map<string, Owner>): Promise<void> {
+  const values = new Map([...next].map(([id, owner]) => [id, owner.items]));
+  const menus = Platform.OS === "windows" ? composeWindowsMenus(values) : [...values.values()].flat();
+  const result = await invokeNative(() => NativeMenu!.publish(JSON.stringify(menus)));
+  if (result !== undefined && result !== null) throw new SparkError("E_INVALID_DATA", "Native menu publication returned an unexpected result");
+  owners.clear(); for (const [id, owner] of next) owners.set(id, owner);
+}
+export async function createMenu(options: MenuOptions): Promise<Menu> {
+  available();
+  const token = `menu-${Date.now()}-${++sequence}`;
+  const items = snapshot(options, token, true);
+  if (typeof options.id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(options.id)) throw new SparkError("E_INVALID_ARGUMENT", "Expected a menu owner id");
+  if (options.onAction !== undefined && typeof options.onAction !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onAction callback");
+  const id = options.id, onAction = options.onAction;
+  let stopped = false, ready = false, ids = selectableMenuIds(items);
+  const subscription = new NativeEventEmitter(NativeMenu as never).addListener("NativeMenuAction", event => {
+    if (ready && !stopped && event && event.ownerId === token && typeof event.itemId === "string" && ids.has(event.itemId)) onAction?.({ type: "action", itemId: event.itemId });
+  });
+  try { await serial(async () => {
+    if (owners.has(id)) throw new SparkError("E_ALREADY_EXISTS", `Menu owner ${id} already exists`);
+    const next = new Map(owners); next.set(id, { id, token, items }); await publish(next); ready = true;
+  }); } catch (error) { subscription.remove(); throw error; }
+  const registration = asyncRegistration(() => { stopped = true; subscription.remove(); }, () => serial(async () => {
+    if (owners.get(id)?.token !== token) return;
+    const next = new Map(owners); next.delete(id); await publish(next);
+  }));
+  return {
+    id,
+    async update(options) {
+      if (stopped) throw new SparkError("E_CLOSED", "Menu was removed");
+      const items = snapshot(options, token);
+      await serial(async () => {
+        const next = new Map(owners); next.delete(id); next.set(id, { id, token, items });
+        await publish(next); ids = selectableMenuIds(items);
+      });
+    },
+    remove: registration.remove,
   };
-  items: NativeMenuItem[];
-};
-
-export type NativeMenuItemPatch = Omit<Partial<NativeMenuItem>, "separator"> & {
-  id: string;
-};
-
-export type NativeMenuAction = {
-  ownerId: string;
-  menuId: string;
-  itemId: string;
-  payload?: Record<string, unknown>;
-};
-
-export type NativeMenuActionHandlers = Record<string, (action: NativeMenuAction) => void>;
-
-export type UseNativeMenuOptions = {
-  handlers?: NativeMenuActionHandlers;
-  menus: NativeMenuConfig[];
-  onAction?: (action: NativeMenuAction) => void;
-  ownerId: string;
-};
-
-const windowsOwners = new Map<string, NativeMenuConfig[]>();
-function publishWindowsMenus(next: Map<string, NativeMenuConfig[]>) {
-  // Composition can reject unsupported targets. Preserve the last good owners
-  // and native menu when a proposed contribution is invalid.
-  const composed = composeWindowsMenus(next);
-  NativeMenu.configureMenus("spark.windows.menus", JSON.stringify(composed));
-  windowsOwners.clear(); for (const [owner, menus] of next) windowsOwners.set(owner, menus);
 }
-export function configureMenus(ownerId: string, menus: NativeMenuConfig[]) {
-  if (Platform.OS === "windows") { const next = new Map(windowsOwners); next.set(ownerId, JSON.parse(JSON.stringify(menus))); publishWindowsMenus(next); }
-  else if (Platform.OS === "macos") NativeMenu.configureMenus(ownerId, JSON.stringify(menus));
-}
-export function updateMenuItems(ownerId: string, patches: NativeMenuItemPatch[]) {
-  if (Platform.OS === "windows") {
-    const menus = windowsOwners.get(ownerId); if (menus) { const next = new Map(windowsOwners); next.set(ownerId, patchWindowsMenus(menus, patches)); publishWindowsMenus(next); }
-  } else if (Platform.OS === "macos") NativeMenu.updateMenuItems(ownerId, JSON.stringify(patches));
-}
-export function clearMenus(ownerId: string) {
-  if (Platform.OS === "windows") { const next = new Map(windowsOwners); next.delete(ownerId); publishWindowsMenus(next); }
-  else if (Platform.OS === "macos") NativeMenu.clearMenus(ownerId);
-}
-export function clearAllMenus() {
-  if (Platform.OS === "windows") { publishWindowsMenus(new Map()); }
-  else if (Platform.OS === "macos") NativeMenu.clearAllMenus();
-}
-
-export function addNativeMenuActionListener(listener: (action: NativeMenuAction) => void) {
-  if ((Platform.OS !== "macos" && Platform.OS !== "windows")) {
-    return { remove() {} };
-  }
-
-  const emitter = new NativeEventEmitter(NativeMenu as never);
-  return emitter.addListener("NativeMenuAction", listener);
-}
-
-export function useNativeMenu({ handlers, menus, onAction, ownerId }: UseNativeMenuOptions) {
-  useEffect(() => {
-    configureMenus(ownerId, menus);
-
-    const subscription = addNativeMenuActionListener((action) => {
-      if (action.ownerId === ownerId) {
-        const handler = handlers?.[action.itemId];
-        if (handler) {
-          handler(action);
-        } else {
-          onAction?.(action);
-        }
-      }
-    });
-
-    return () => {
-      subscription.remove();
-      clearMenus(ownerId);
-    };
-  }, [handlers, menus, onAction, ownerId]);
-}
-
-export { default as NativeMenu } from "./NativeMenu";
+export { useMenu, type MenuState, type UseMenuOptions } from "./hooks";

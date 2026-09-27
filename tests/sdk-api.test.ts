@@ -181,12 +181,17 @@ test("dialogs parse selected paths and native cancellation, preserving save conf
   handlers.set("NativeDesktopFileSystem.readText", () => "text"); expect(await files.readText("/a")).toBe("text"); await files.writeText("/a", "new");
   await files.revealInFileManager("/a");
 });
-test("menu owner ids and patch payloads survive native transport", async () => {
-  const configuration = [{ id: "file", title: "File", items: [{ id: "save", title: "Save", checked: true }] }];
-  menus.configureMenus("owner", configuration); menus.updateMenuItems("owner", [{ id: "save", enabled: false }]); menus.clearMenus("owner"); menus.clearAllMenus();
-  expect(calls[0]?.args).toEqual(["owner", JSON.stringify(configuration)]); expect(calls.map(call => call.method)).toEqual(["configureMenus", "updateMenuItems", "clearMenus", "clearAllMenus"]);
-  let received: unknown; const sub = menus.addNativeMenuActionListener(event => { received = event; }); const event = { ownerId: "owner", menuId: "file", itemId: "save" };
-  emit("NativeMenu", "NativeMenuAction", event); expect(received).toEqual(event); sub.remove();
+test("application menus publish owned snapshots and filter action identity", async () => {
+  const configuration: import("../packages/native-menu/src/api").MenuItem[] = [{ type: "submenu", id: "file", label: "File", items: [{ type: "checkbox", id: "save", label: "Save", checked: true }] }];
+  const received: unknown[] = [];
+  const menu = await menus.createMenu({ id: "owner", items: configuration, onAction: event => received.push(event) });
+  const native = JSON.parse(calls.at(-1)!.args[0]);
+  expect(native[0].items[0]).toMatchObject({ id: "save", title: "Save", checked: true });
+  emit("NativeMenu", "NativeMenuAction", { ownerId: native[0]._sparkOwner, itemId: "save", private: true });
+  emit("NativeMenu", "NativeMenuAction", { ownerId: "other", itemId: "save" });
+  expect(received).toEqual([{ type: "action", itemId: "save" }]);
+  await menu.update({ items: [] }); await menu.remove(); await menu.remove();
+  expect(calls.map(call => call.method)).toEqual(["publish", "publish", "publish"]);
 });
 
 test("notifications validate before transport and distinguish permission reads from prompts", async () => {
@@ -451,18 +456,17 @@ test("Windows process validation accepts drive and UNC executables without allow
   await expect(processes.spawn({ executable: String.raw`C:\tool.exe`, cwd: "relative" })).rejects.toThrow("cwd");
 });
 
-test("invalid Windows menu contributions leave the last good owner set intact", () => {
+test("invalid Windows menu contributions leave the last good owner set intact", async () => {
   platform.OS = "windows";
+  const base = await menus.createMenu({ id: "base", items: [{ type: "submenu", id: "file", label: "File", items: [{ type: "action", id: "open", label: "Open" }] }] });
   try {
-    menus.clearAllMenus();
-    menus.configureMenus("base", [{ id: "file", title: "File", items: [{ id: "open", title: "Open" }] }]);
-    expect(() => menus.configureMenus("invalid", [{ id: "file", title: "File", items: [{ id: "bad", targetPath: ["Recent", "Clear"] }] }])).toThrow("nested targetPath");
-    menus.configureMenus("other", [{ id: "edit", title: "Edit", items: [] }]);
-    const published = JSON.parse(calls.filter(call => call.method === "configureMenus").at(-1)!.args[1]);
+    await expect(menus.createMenu({ id: "invalid", items: [{ type: "submenu", id: "bound", label: "File", target: { id: "missing" }, items: [] }] })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+    const other = await menus.createMenu({ id: "other", items: [{ type: "submenu", id: "edit", label: "Edit", items: [] }] });
+    const published = JSON.parse(calls.filter(call => call.method === "publish").at(-1)!.args[0]);
     expect(published[0].items.map((item: any) => item.id)).toEqual(["open"]);
-    expect(published.some((menu: any) => menu.items.some((item: any) => item._sparkOwner === "invalid"))).toBe(false);
-    menus.clearAllMenus();
-  } finally { platform.OS = "macos"; }
+    expect(published.map((item: any) => item.id)).toEqual(["file", "edit"]);
+    await other.remove();
+  } finally { await base.remove(); platform.OS = "macos"; }
 });
 
 test("overlay windows use portable defaults and reject modality", async () => {
@@ -735,4 +739,39 @@ test("launcher menus stop callbacks on failed removal and enforce surface suppor
   platform.OS = "windows";
   await expect(system.createDockMenu({ items: [], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
   await expect(system.createTaskbarMenu({ items: [{ type: "submenu", id: "sub", label: "Sub", items: [] }], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+});
+
+test("application menu updates snapshot inputs, serialize and retain last successful owners", async () => {
+  const received: unknown[] = [];
+  const item = await menus.createMenu({ id: "queued", items: [], onAction: event => received.push(event) });
+  let finish!: () => void;
+  handlers.set("NativeMenu.publish", () => new Promise<void>(resolve => { finish = resolve; }));
+  const items: import("../packages/native-menu/src/api").MenuItem[] = [{ type: "submenu", id: "file", label: "Before", items: [{ type: "action", id: "open", label: "Open" }] }];
+  const update = item.update({ items }); if (items[0].type === "submenu") items[0].label = "After";
+  await tick(); expect(JSON.parse(calls.at(-1)!.args[0])[0].title).toBe("Before");
+  const token = JSON.parse(calls.at(-1)!.args[0])[0]._sparkOwner;
+  const removal = item.remove(); expect(item.remove()).toBe(removal);
+  emit("NativeMenu", "NativeMenuAction", { ownerId: token, itemId: "open" }); expect(received).toEqual([]);
+  handlers.delete("NativeMenu.publish"); finish(); await Promise.all([update, removal]);
+  expect(JSON.parse(calls.at(-1)!.args[0])).toEqual([]);
+  await expect(item.update({ items: [] })).rejects.toMatchObject({ code: "E_CLOSED" });
+});
+test("application menu duplicates preserve owners and failed removal can retry", async () => {
+  const menu = await menus.createMenu({ id: "test", items: [] });
+  const before = calls.length;
+  await expect(menus.createMenu({ id: "test", items: [] })).rejects.toMatchObject({ code: "E_ALREADY_EXISTS" }); expect(calls.length).toBe(before);
+  handlers.set("NativeMenu.publish", () => { throw nativeError("E_NATIVE"); });
+  await expect(menu.remove()).rejects.toMatchObject({ code: "E_NATIVE" });
+  handlers.delete("NativeMenu.publish"); await menu.remove();
+  const replacement = await menus.createMenu({ id: "test", items: [] }); await replacement.remove();
+});
+test("failed native menu updates do not commit proposed owner state", async () => {
+  platform.OS = "windows";
+  const menu = await menus.createMenu({ id: "test", items: [{ type: "submenu", id: "file", label: "File", items: [] }] });
+  handlers.set("NativeMenu.publish", () => { throw nativeError("E_NATIVE"); });
+  await expect(menu.update({ items: [{ type: "submenu", id: "bad", label: "Bad", items: [] }] })).rejects.toThrow();
+  handlers.delete("NativeMenu.publish");
+  const other = await menus.createMenu({ id: "other", items: [{ type: "submenu", id: "edit", label: "Edit", items: [] }] });
+  expect(JSON.parse(calls.at(-1)!.args[0]).map((item: any) => item.id)).toEqual(["file", "edit"]);
+  await other.remove(); await menu.remove();
 });

@@ -61,3 +61,9 @@ test("system imports without installed native modules", async () => {
   expect(system.getSystemAvailability()).toEqual({ available: false, reason: "missing-module" });
   await expect(system.getSystemInfo()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
+
+import * as menus from "../packages/native-menu/src/index";
+test("application menus import without installed native modules", async () => {
+  expect(menus.getMenuAvailability()).toEqual({ available: false, reason: "missing-module" });
+  await expect(menus.createMenu({ id: "test", items: [] })).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+});

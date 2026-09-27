@@ -1,42 +1,42 @@
 import { expect, test } from "vitest";
-import { composeWindowsMenus, patchWindowsMenus } from "../packages/native-menu/src/windows-menus.ts";
-import type { NativeMenuConfig } from "../packages/native-menu/src/api.ts";
-test("Windows menu contributions merge by title and restore targeted items when an owner clears", () => {
-  const base: NativeMenuConfig[] = [{ id: "file", title: "File", items: [{ id: "open", title: "Open…", payload: { original: true } }, { id: "save", title: "Save" }] }];
-  const owners = new Map<string, NativeMenuConfig[]>([["base", base], ["editor", [{ id: "editor-file", title: "File", items: [
-    { id: "custom-open", targetTitles: ["Open..."], title: "Open document", payload: { path: "x" }, shortcut: { key: "o", modifiers: 1 << 20 } },
-    { id: "missing", targetTitle: "Absent", title: "Never inserted" }, { id: "recent", title: "Recent", placement: { before: "Save" } },
-  ] }]]]);
-  const menu = composeWindowsMenus(owners)[0]!;
-  expect(menu.items.map(item => item.id)).toEqual(["custom-open", "recent", "save"]);
-  expect(menu.items[0]).toMatchObject({ _sparkOwner: "editor", _sparkMenu: "editor-file", payload: { path: "x" } });
-  expect(base[0]!.items[0]!.title).toBe("Open…");
-  owners.delete("editor"); expect(composeWindowsMenus(owners)[0]!.items).toHaveLength(2);
-  expect(composeWindowsMenus(owners)[0]!.items[0]).toMatchObject({ id: "open", title: "Open…", _sparkOwner: "base" });
+import { composeWindowsMenus } from "../packages/native-menu/src/windows-menus";
+import { menuItems, type MenuItem, type MenuWireItem } from "../packages/desktop-app/src/contracts/menu";
+function wire(items: MenuItem[], owner: string): MenuWireItem[] {
+  const result = menuItems(items, { types: ["action", "checkbox", "separator", "submenu"], shortcuts: true, targeting: true }, "windows");
+  function visit(items: MenuWireItem[]) { for (const item of items) { item._sparkOwner = owner; if (item.items) visit(item.items); } } visit(result); return result;
+}
+test("menu contributions target stable IDs and removing owners restores original actions", () => {
+  const base = wire([{ type: "submenu", id: "file", label: "Localized File", items: [{ type: "action", id: "open", label: "Localized Open" }, { type: "action", id: "save", label: "Save" }] }], "base");
+  const extension = wire([{ type: "submenu", id: "editor", label: "File", target: { id: "file" }, items: [{ type: "action", id: "custom-open", label: "Open document", target: { id: "open" }, placement: { after: { id: "save" } }, shortcut: "CmdOrCtrl+O" }] }], "editor");
+  const owners = new Map([["base", base], ["editor", extension]]);
+  const menu = composeWindowsMenus(owners)[0];
+  expect(menu.items!.map(item => item.id)).toEqual(["save", "custom-open"]);
+  expect(menu.items![1]).toMatchObject({ _sparkOwner: "editor", shortcut: { key: "o", modifiers: 1 << 18 } });
+  expect(base[0].items![0].title).toBe("Localized Open");
+  owners.delete("editor"); expect(composeWindowsMenus(owners)[0].items![0]).toMatchObject({ id: "open", _sparkOwner: "base" });
 });
-test("Windows menu paths preserve original actions and patches retain null shortcut removal", () => {
-  const owners = new Map<string, NativeMenuConfig[]>([["base", [{ id: "file", title: "File", items: [{ id: "save", title: "Save", payload: { original: true } }] }]],
-    ["extension", [{ id: "file2", title: "File", items: [{ id: "bound", targetPath: ["Save"], title: "Save all", checked: true }] }]]]);
-  expect(composeWindowsMenus(owners)[0]!.items[0]).toMatchObject({ id: "save", title: "Save all", checked: true, _sparkOwner: "base", payload: { original: true } });
-  const patched = patchWindowsMenus(owners.get("base")!, [{ id: "save", shortcut: null, enabled: false }]);
-  expect(patched[0]!.items[0]).toMatchObject({ shortcut: null, enabled: false });
-  expect(owners.get("base")![0]!.items[0]!.enabled).toBeUndefined();
+test("same semantic roots and item IDs compose in owner order without matching labels", () => {
+  const first = wire([{ type: "submenu", id: "file-a", label: "File", target: { menu: "file" }, items: [{ type: "action", id: "save", label: "Save" }] }], "one");
+  const second = wire([{ type: "submenu", id: "file-b", label: "Archivo", target: { menu: "file" }, items: [{ type: "checkbox", id: "save", label: "Guardar", checked: true }] }], "two");
+  const result = composeWindowsMenus(new Map([["one", first], ["two", second]]));
+  expect(result).toHaveLength(1); expect(result[0].title).toBe("Archivo"); expect(result[0].items).toHaveLength(1); expect(result[0].items![0]).toMatchObject({ checked: true, _sparkOwner: "two" });
 });
-test("Windows app menu and named root placement have deterministic order", () => {
-  const owners = new Map<string, NativeMenuConfig[]>([["app", [
-    { id: "file", title: "File", items: [] }, { id: "window", title: "Window", items: [] },
-    { id: "edit", title: "Edit", placement: { before: "Window" }, items: [] },
-    { id: "app", title: "My app", systemMenu: "app", items: [] },
-  ]]]);
-  expect(composeWindowsMenus(owners).map(menu => menu.title)).toEqual(["My app", "File", "Edit", "Window"]);
+test("nested targets and ID-based root placement compose deterministically", () => {
+  const items = wire([{ type: "submenu", id: "window", label: "Window", items: [] }, { type: "submenu", id: "tools", label: "Tools", placement: { before: { id: "window" } }, items: [{ type: "submenu", id: "nested", label: "Nested", items: [{ type: "action", id: "x", label: "X" }] }] }], "base");
+  expect(composeWindowsMenus(new Map([["base", items]])).map(item => item.id)).toEqual(["tools", "window"]);
 });
-test("Windows reports missing targets and rejects nested paths without mutating contributions", () => {
-  const owners = new Map<string, NativeMenuConfig[]>([["editor", [{ id: "file", title: "File", items: [{ id: "save", targetTitle: "Absent" }] }]]]);
-  const diagnostics: unknown[] = [];
-  expect(composeWindowsMenus(owners, diagnostic => diagnostics.push(diagnostic))[0]!.items).toEqual([]);
-  expect(diagnostics).toEqual([{ code: "E_MENU_TARGET_NOT_FOUND", ownerId: "editor", menuId: "file", itemId: "save", targets: ["Absent"] }]);
-  owners.get("editor")![0]!.items[0]!.targetPath = ["Recent", "Clear"];
-  const before = JSON.stringify([...owners]);
-  expect(() => composeWindowsMenus(owners)).toThrow("does not support nested targetPath");
-  expect(JSON.stringify([...owners])).toBe(before);
+test("missing targets reject without mutating inputs", () => {
+  for (const input of [{ target: { id: "missing" } }, { placement: { before: { id: "missing" } } }] as const) {
+    const items = wire([{ type: "submenu", id: "file", label: "File", items: [], ...input }], "base");
+    const before = JSON.stringify(items);
+    expect(() => composeWindowsMenus(new Map([["base", items]]))).toThrow("target"); expect(JSON.stringify(items)).toBe(before);
+  }
+});
+
+test("nested targets retain original ID anchors across overlays", () => {
+  const base = wire([{ type: "submenu", id: "file", label: "File", items: [{ type: "submenu", id: "nested", label: "Nested", items: [{ type: "action", id: "base", label: "Base" }] }] }], "base");
+  const first = wire([{ type: "submenu", id: "file", label: "File", items: [{ type: "action", id: "one", label: "One", target: { id: "base" } }] }], "one");
+  const second = wire([{ type: "submenu", id: "file", label: "File", items: [{ type: "action", id: "two", label: "Two", target: { id: "base" } }] }], "two");
+  const result = composeWindowsMenus(new Map([["base", base], ["one", first], ["two", second]]));
+  expect(result[0].items![0].items![0]).toMatchObject({ id: "two", _sparkIdentity: "base", _sparkOwner: "two" });
 });

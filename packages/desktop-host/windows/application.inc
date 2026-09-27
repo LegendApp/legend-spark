@@ -64,7 +64,6 @@ static std::map<std::string, Shortcut> shortcuts;
 static HHOOK keyboardHook = nullptr;
 static std::map<UINT, RNW::JSValueObject> menuActions;
 static HMENU currentMenu = nullptr;
-static std::string menuOwner;
 static Json::JsonArray menus{nullptr};
 static HACCEL acceleratorTable = nullptr;
 static HWND Hwnd(Window const &window) { return winrt::Microsoft::UI::GetWindowFromWindowId(window.app.Id()); }
@@ -422,15 +421,21 @@ static RNW::JSValue Value(Json::IJsonValue const &value) {
 static std::wstring MenuTitle(winrt::hstring const &title) {
   std::wstring result; for (auto c : title) { result += c; if (c == L'&') result += c; } return result;
 }
-static void RebuildMenus() {
-  auto next = CreateMenu(); std::map<UINT, RNW::JSValueObject> actions; std::vector<ACCEL> accelerators; UINT command = 0x5000;
-  for (auto const &value : menus) {
-    auto menu = value.GetObject(); auto popup = CreatePopupMenu();
-    for (auto const &entry : menu.GetNamedArray(L"items")) {
+static HMENU BuildMenuItems(Json::JsonArray const &items, std::map<UINT, RNW::JSValueObject> &actions, std::vector<ACCEL> &accelerators, UINT &command, bool parentEnabled, bool root = false) {
+  auto popup = root ? CreateMenu() : CreatePopupMenu(); if (!popup) throw winrt::hresult_error(E_FAIL, L"Could not allocate application menu");
+  try {
+    for (auto const &entry : items) {
       auto item = entry.GetObject(); if (item.GetNamedBoolean(L"hidden", false)) continue;
-      if (item.GetNamedBoolean(L"separator", false)) { AppendMenuW(popup, MF_SEPARATOR, 0, nullptr); continue; }
-      auto flags = MF_STRING | (item.GetNamedBoolean(L"enabled", true) ? MF_ENABLED : MF_GRAYED) | (item.GetNamedBoolean(L"checked", false) ? MF_CHECKED : 0);
+      if (item.GetNamedBoolean(L"separator", false)) { if (!AppendMenuW(popup, MF_SEPARATOR, 0, nullptr)) throw winrt::hresult_error(E_FAIL, L"Could not add separator"); continue; }
+      const bool enabled = parentEnabled && item.GetNamedBoolean(L"enabled", true);
+      auto flags = MF_STRING | (enabled ? MF_ENABLED : MF_GRAYED) | (item.GetNamedBoolean(L"checked", false) ? MF_CHECKED : 0);
       auto title = MenuTitle(item.GetNamedString(L"title", L""));
+      if (item.HasKey(L"items")) {
+        auto child = BuildMenuItems(item.GetNamedArray(L"items"), actions, accelerators, command, enabled);
+        if (!AppendMenuW(popup, flags | MF_POPUP, reinterpret_cast<UINT_PTR>(child), title.c_str())) { DestroyMenu(child); throw winrt::hresult_error(E_FAIL, L"Could not add submenu"); }
+        continue;
+      }
+      if (command > 0xffff) throw winrt::hresult_invalid_argument(L"Too many application menu actions");
       if (item.HasKey(L"shortcut") && item.GetNamedValue(L"shortcut").ValueType() == Json::JsonValueType::Object) {
         auto shortcut = item.GetNamedObject(L"shortcut"); auto key = shortcut.GetNamedString(L"key", L"");
         if (key.size() == 1 && command <= 0xffff) {
@@ -443,23 +448,39 @@ static void RebuildMenus() {
           else if (c == 0xf728) code = VK_DELETE; else if (c == 0x7f) code = VK_BACK;
           else { auto scan = VkKeyScanW(c); if (scan != -1) { code = LOBYTE(scan); if (HIBYTE(scan) & 1) modifiers |= FSHIFT; if (HIBYTE(scan) & 2) modifiers |= FCONTROL; if (HIBYTE(scan) & 4) modifiers |= FALT; } }
           if (code) {
-            if (item.GetNamedBoolean(L"enabled", true)) accelerators.push_back({modifiers, code, static_cast<WORD>(command)});
+            if (enabled) accelerators.push_back({modifiers, code, static_cast<WORD>(command)});
             title += L"\t"; if (modifiers & FCONTROL) title += L"Ctrl+"; if (modifiers & FALT) title += L"Alt+"; if (modifiers & FSHIFT) title += L"Shift+";
             wchar_t label[80]{}; auto scan = MapVirtualKeyW(code, MAPVK_VK_TO_VSC); if (code == VK_LEFT || code == VK_RIGHT || code == VK_UP || code == VK_DOWN || code == VK_DELETE) scan |= 0x100;
             GetKeyNameTextW(static_cast<LONG>(scan << 16), label, 80); title += label;
           }
         }
       }
-      AppendMenuW(popup, flags, command, title.c_str());
-      actions.emplace(command++, RNW::JSValueObject{{"ownerId", to_string(item.GetNamedString(L"_sparkOwner", to_hstring(menuOwner)))}, {"menuId", to_string(item.GetNamedString(L"_sparkMenu", menu.GetNamedString(L"id")))}, {"itemId", to_string(item.GetNamedString(L"id"))}, {"payload", Value(item.GetNamedObject(L"payload", Json::JsonObject()))}});
+      if (!AppendMenuW(popup, flags, command, title.c_str())) throw winrt::hresult_error(E_FAIL, L"Could not add menu action");
+      if (enabled) actions.emplace(command, RNW::JSValueObject{{"ownerId", to_string(item.GetNamedString(L"_sparkOwner"))}, {"itemId", to_string(item.GetNamedString(L"id"))}});
+      command++;
     }
-    AppendMenuW(next, MF_POPUP, reinterpret_cast<UINT_PTR>(popup), MenuTitle(menu.GetNamedString(L"title")).c_str());
+    return popup;
+  } catch (...) { DestroyMenu(popup); throw; }
+}
+static void RebuildMenus(Json::JsonArray const &configuration) {
+  if (configuration.Size() == 0) {
+    for (auto const &[id, window] : windows) if (currentMenu && GetMenu(Hwnd(window)) == currentMenu) { SetMenu(Hwnd(window), nullptr); DrawMenuBar(Hwnd(window)); }
+    if (currentMenu) DestroyMenu(currentMenu); currentMenu = nullptr; menuActions.clear();
+    if (acceleratorTable) DestroyAcceleratorTable(acceleratorTable); acceleratorTable = nullptr;
+    return;
   }
-  for (auto const &[id, window] : windows) SetMenu(Hwnd(window), nullptr);
-  auto target = GetForegroundWindow(); if (Id(target).empty()) target = Hwnd(windows.at("main")); SetMenu(target, next); DrawMenuBar(target);
+  std::map<UINT, RNW::JSValueObject> actions; std::vector<ACCEL> accelerators; UINT command = 0x5000;
+  auto next = BuildMenuItems(configuration, actions, accelerators, command, true, true);
+  HACCEL keys = nullptr;
+  try {
+    if (!accelerators.empty()) { keys = CreateAcceleratorTableW(accelerators.data(), static_cast<int>(accelerators.size())); if (!keys) throw winrt::hresult_error(E_FAIL, L"Could not create menu accelerators"); }
+    auto target = GetForegroundWindow(); if (Id(target).empty()) { auto main = windows.find("main"); if (main == windows.end()) throw winrt::hresult_error(E_FAIL, L"Main window is unavailable"); target = Hwnd(main->second); }
+    if (!SetMenu(target, next)) throw winrt::hresult_error(E_FAIL, L"Could not attach application menu");
+    for (auto const &[id, window] : windows) if (Hwnd(window) != target && GetMenu(Hwnd(window)) == currentMenu) SetMenu(Hwnd(window), nullptr);
+    DrawMenuBar(target);
+  } catch (...) { if (keys) DestroyAcceleratorTable(keys); DestroyMenu(next); throw; }
   auto old = currentMenu; currentMenu = next; menuActions = std::move(actions); if (old) DestroyMenu(old);
-  if (acceleratorTable) DestroyAcceleratorTable(acceleratorTable);
-  acceleratorTable = accelerators.empty() ? nullptr : CreateAcceleratorTableW(accelerators.data(), static_cast<int>(accelerators.size()));
+  if (acceleratorTable) DestroyAcceleratorTable(acceleratorTable); acceleratorTable = keys;
 }
 static void Initialize(RNW::ReactNativeWin32App const &app) {
   // WinRT activation must follow init_apartment, never static initialization.
@@ -635,14 +656,15 @@ struct SparkNativeMenu {
   REACT_INIT(Initialize) void Initialize(winrt::Microsoft::ReactNative::ReactContext const &context) noexcept { if (context.Properties().Get(winrt::Microsoft::ReactNative::ReactPropertyId<bool>{L"Spark", L"SecondaryRuntime"}).value_or(false)) return; SparkWin::context = context; }
   REACT_METHOD(addListener) void addListener(std::string) noexcept {}
   REACT_METHOD(removeListeners) void removeListeners(double) noexcept {}
-  REACT_METHOD(configureMenus) void configureMenus(std::string owner, std::string json) noexcept { SparkWin::context.UIDispatcher().Post([owner, json]() { SparkWin::menuOwner = owner; SparkWin::menus = SparkWin::Json::JsonArray::Parse(winrt::to_hstring(json)); SparkWin::RebuildMenus(); }); }
-  REACT_METHOD(clearMenus) void clearMenus(std::string owner) noexcept { SparkWin::context.UIDispatcher().Post([owner]() { if (owner == SparkWin::menuOwner) { SparkWin::menus.Clear(); SparkWin::RebuildMenus(); } }); }
-  REACT_METHOD(clearAllMenus) void clearAllMenus() noexcept { clearMenus(SparkWin::menuOwner); }
-  REACT_METHOD(updateMenuItems) void updateMenuItems(std::string owner, std::string json) noexcept { SparkWin::context.UIDispatcher().Post([owner, json]() {
-    if (owner != SparkWin::menuOwner) return; auto patches = SparkWin::Json::JsonArray::Parse(winrt::to_hstring(json));
-    for (auto const &menu : SparkWin::menus) for (auto const &value : menu.GetObject().GetNamedArray(L"items")) for (auto const &patchValue : patches) { auto item = value.GetObject(), patch = patchValue.GetObject(); if (item.GetNamedString(L"id") == patch.GetNamedString(L"id")) for (auto const &pair : patch) item.SetNamedValue(pair.Key(), pair.Value()); }
-    SparkWin::RebuildMenus();
-  }); }
+  REACT_METHOD(publish) void publish(std::string json, RNW::ReactPromise<void> promise) noexcept {
+    SparkWin::context.UIDispatcher().Post([json, promise]() {
+      try {
+        auto next = SparkWin::Json::JsonArray::Parse(winrt::to_hstring(json));
+        SparkWin::RebuildMenus(next); SparkWin::menus = next; promise.Resolve();
+      } catch (winrt::hresult_error const &error) { promise.Reject(RNW::ReactError{"E_NATIVE", winrt::to_string(error.message())}); }
+      catch (std::exception const &error) { promise.Reject(RNW::ReactError{"E_NATIVE", error.what()}); }
+    });
+  }
 };
 
 // Development clients never update themselves. Match the macOS development API
