@@ -164,7 +164,7 @@ test("shortcuts dispatch only their registration and clean up on failure/removal
   let count = 0; const sub = await shortcuts.registerShortcut("Cmd+K", () => { count++; }); const id = calls[0]?.args.id;
   emit("NativeDesktopShortcuts", "shortcut", { id: "other" }); emit("NativeDesktopShortcuts", "shortcut", { id }); expect(count).toBe(1);
   await sub.remove(); await sub.remove(); emit("NativeDesktopShortcuts", "shortcut", { id }); expect(count).toBe(1);
-  handlers.set("NativeDesktopShortcuts.register", () => { throw nativeError("E_SHORTCUT_CONFLICT"); });
+  handlers.set("NativeDesktopShortcuts.register", () => { throw nativeError("E_BUSY"); });
   await expect(shortcuts.registerShortcut("Cmd+K", () => {})).rejects.toThrow(); expect(subscriptions.get("NativeDesktopShortcuts.shortcut")?.size).toBe(0);
 });
 test("context menus validate location, duplicate ids and cancellation", async () => {
@@ -250,8 +250,8 @@ test("global hotkey conflicts clean subscriptions and distinct registrations dis
   emit("NativeDesktopApp", "desktop", { type: "globalShortcut", id: firstID }); expect(hits).toBe(1);
   await first.remove(); await first.remove();
   emit("NativeDesktopApp", "desktop", { type: "globalShortcut", id: firstID }); expect(hits).toBe(1);
-  handlers.set("NativeDesktopGlobalShortcuts.register", () => { throw nativeError("E_SHORTCUT_CONFLICT"); });
-  await expect(globalShortcuts.registerGlobalShortcut("Cmd+Shift+K", () => {})).rejects.toThrow("E_SHORTCUT_CONFLICT");
+  handlers.set("NativeDesktopGlobalShortcuts.register", () => { throw nativeError("E_BUSY"); });
+  await expect(globalShortcuts.registerGlobalShortcut("Cmd+Shift+K", () => {})).rejects.toThrow("E_BUSY");
   expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(1); await second.remove();
 });
 test("process subscriptions exist before launch and survive immediate exit", async () => {
@@ -614,4 +614,29 @@ test("Windows response replay and live callbacks share validation and disposal",
   emit("NativeDesktopApp", "desktop", { ...event, id: "later" }); expect(listener).toHaveBeenCalledTimes(1);
   platform.OS = "ios"; expect(notifications.getNotificationAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
   await expect(notifications.getNotificationPermission()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+});
+
+
+test("shortcut cleanup stops callbacks before native completion and retries failures", async () => {
+  for (const [register, moduleName, eventName] of [[shortcuts.registerShortcut, "NativeDesktopShortcuts", "shortcut"], [globalShortcuts.registerGlobalShortcut, "NativeDesktopGlobalShortcuts", "desktop"]] as const) {
+    const handler = vi.fn(); const sub = await register("CmdOrCtrl+K", handler);
+    const id = calls.at(-1)?.args.id;
+    let fail = true;
+    handlers.set(`${moduleName}.remove`, () => { if (fail) { fail = false; throw new Error("bridge busy"); } return null; });
+    const removal = sub.remove(); expect(sub.remove()).toBe(removal);
+    emit(moduleName === "NativeDesktopShortcuts" ? moduleName : "NativeDesktopApp", eventName, { type: "globalShortcut", id });
+    expect(handler).not.toHaveBeenCalled(); await expect(removal).rejects.toMatchObject({ code: "E_NATIVE" });
+    await sub.remove(); await sub.remove();
+    expect(calls.filter(call => call.native === moduleName && call.method === "remove")).toHaveLength(2);
+  }
+});
+
+test("shortcut options are validated before registration and native results are checked", async () => {
+  for (const options of [{ windowId: "" }, { repeat: "yes" }, { unknown: true }]) await expect(shortcuts.registerShortcut("Cmd+K", () => {}, options as never)).rejects.toThrow();
+  await expect(globalShortcuts.registerGlobalShortcut("Cmd+K", null as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  expect(calls).toHaveLength(0);
+  handlers.set("NativeDesktopShortcuts.register", () => true);
+  await expect(shortcuts.registerShortcut("Cmd+K", () => {})).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  expect(subscriptions.get("NativeDesktopShortcuts.shortcut")?.size).toBe(0);
+  expect(calls.at(-1)?.method).toBe("remove");
 });

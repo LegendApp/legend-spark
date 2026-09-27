@@ -36,30 +36,25 @@ RCT_EXPORT_MODULE(NativeDesktopGlobalShortcuts)
   dispatch_async(dispatch_get_main_queue(), ^{
     NSDictionary *args = SparkArgs(json); NSString *key = args[@"id"];
     if ([method isEqual:@"register"]) {
-      NSInteger code;
-      if ([args[@"keyCode"] isKindOfClass:NSNumber.class]) {
-        double raw = [args[@"keyCode"] doubleValue];
-        if (raw < 0 || raw > 255 || floor(raw) != raw) { SparkInvalid(reject, @"Invalid key code"); return; }
-        code = (NSInteger)raw;
-      } else {
-        if (![args[@"key"] isKindOfClass:NSString.class] || ![args[@"key"] length]) { SparkInvalid(reject, @"Expected a shortcut key"); return; }
-        code = KeyCode(args[@"key"]);
-      }
+      if (![args[@"key"] isKindOfClass:NSString.class] || ![args[@"key"] length]) { SparkInvalid(reject, @"Expected a shortcut key"); return; }
+      NSInteger code = KeyCode(args[@"key"]);
       if (code < 0) { reject(@"E_KEY", @"Key is unavailable in the current keyboard layout", nil); return; }
       NSUInteger flags = [args[@"modifiers"] unsignedIntegerValue]; UInt32 modifiers = 0;
       if (flags & NSEventModifierFlagCommand) modifiers |= cmdKey;
       if (flags & NSEventModifierFlagControl) modifiers |= controlKey;
       if (flags & NSEventModifierFlagShift) modifiers |= shiftKey;
       if (flags & NSEventModifierFlagOption) modifiers |= optionKey;
-      for (NSDictionary *existing in self.registrations.allValues) if ([existing[@"code"] integerValue] == code && [existing[@"modifiers"] unsignedIntValue] == modifiers) { reject(@"E_SHORTCUT_CONFLICT", @"Shortcut already registered", nil); return; }
-      if (self.registrations[key]) { reject(@"E_SHORTCUT_CONFLICT", @"Shortcut id already exists", nil); return; }
+      for (NSDictionary *existing in self.registrations.allValues) if ([existing[@"code"] integerValue] == code && [existing[@"modifiers"] unsignedIntValue] == modifiers) { reject(@"E_BUSY", @"Shortcut already registered", nil); return; }
+      if (self.registrations[key]) { reject(@"E_BUSY", @"Shortcut id already exists", nil); return; }
       if (!self.handler) { EventTypeSpec spec = { kEventClassKeyboard, kEventHotKeyPressed }; EventHandlerRef handler;
         if (InstallEventHandler(GetEventDispatcherTarget(), Hotkey, 1, &spec, (__bridge void *)self, &handler) != noErr) { reject(@"E_SHORTCUT", @"Could not install hotkey handler", nil); return; } self.handler = handler; }
       EventHotKeyID identity = { 'LGDS', ++self.sequence }; EventHotKeyRef reference;
-      if (RegisterEventHotKey((UInt32)code, modifiers, identity, GetEventDispatcherTarget(), 0, &reference) != noErr) { reject(@"E_SHORTCUT_CONFLICT", @"Shortcut is unavailable or reserved by another app", nil); return; }
+      if (RegisterEventHotKey((UInt32)code, modifiers, identity, GetEventDispatcherTarget(), 0, &reference) != noErr) { reject(@"E_BUSY", @"Shortcut is unavailable or reserved by another app", nil); return; }
       self.registrations[key] = @{ @"code": @(code), @"modifiers": @(modifiers), @"number": @(identity.id), @"reference": [NSValue valueWithPointer:reference] };
     } else if ([method isEqual:@"remove"]) {
-      NSDictionary *value = self.registrations[key]; if (value) UnregisterEventHotKey((EventHotKeyRef)[value[@"reference"] pointerValue]); [self.registrations removeObjectForKey:key];
+      NSDictionary *value = self.registrations[key];
+      if (value && UnregisterEventHotKey((EventHotKeyRef)[value[@"reference"] pointerValue]) != noErr) { reject(@"E_NATIVE", @"Could not unregister global shortcut", nil); return; }
+      [self.registrations removeObjectForKey:key];
     } else { SparkInvalid(reject, @"Unknown global shortcut operation"); return; }
     resolve(@"null");
   });

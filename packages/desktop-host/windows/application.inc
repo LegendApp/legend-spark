@@ -397,9 +397,13 @@ static LRESULT CALLBACK Keyboard(int code, WPARAM remove, LPARAM param) {
       if (GetKeyState(VK_MENU) < 0) modifiers |= 1 << 19;
       if (GetKeyState(VK_SHIFT) < 0) modifiers |= 1 << 17;
       if (GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0) modifiers |= 1 << 20;
+      Shortcut const *match = nullptr;
       for (auto const &[key, shortcut] : shortcuts) if (!id.empty() && (shortcut.windowId.empty() || shortcut.windowId == id) && shortcut.key == message->wParam && shortcut.modifiers == modifiers) {
-        if (shortcut.repeat || !(message->lParam & (1LL << 30))) context.EmitJSEvent(L"RCTDeviceEventEmitter", L"shortcut", RNW::JSValueObject{{"id", key}});
-        message->message = WM_NULL; break;
+        if (!match || !shortcut.windowId.empty()) match = &shortcut;
+      }
+      if (match) {
+        if (match->repeat || !(message->lParam & (1LL << 30))) context.EmitJSEvent(L"RCTDeviceEventEmitter", L"shortcut", RNW::JSValueObject{{"id", match->id}});
+        message->message = WM_NULL;
       }
     }
   }
@@ -615,7 +619,12 @@ struct SparkDesktopShortcuts {
         else if (method == "register") {
           auto text = args.GetNamedString(L"key"); if (text.size() != 1) throw winrt::hresult_invalid_argument(L"Invalid shortcut");
           wchar_t key = text[0]; UINT code = key >= 0xf704 && key <= 0xf717 ? VK_F1 + key - 0xf704 : key == 0xf700 ? VK_UP : key == 0xf701 ? VK_DOWN : key == 0xf702 ? VK_LEFT : key == 0xf703 ? VK_RIGHT : key == 0xf728 ? VK_DELETE : key == 0x7f ? VK_BACK : static_cast<UINT>(towupper(key));
-          shortcuts[id] = {id, to_string(args.GetNamedString(L"windowId", L"")), code, static_cast<int>(args.GetNamedNumber(L"modifiers")), args.GetNamedBoolean(L"repeat", false)};
+          auto windowId = to_string(args.GetNamedString(L"windowId", L""));
+          auto modifiers = static_cast<int>(args.GetNamedNumber(L"modifiers"));
+          for (auto const &[existingId, existing] : shortcuts) if (existing.key == code && existing.modifiers == modifiers && existing.windowId == windowId) {
+            promise.Reject(RNW::ReactError{"E_BUSY", "Shortcut already registered in this scope"}); return;
+          }
+          shortcuts[id] = {id, windowId, code, modifiers, args.GetNamedBoolean(L"repeat", false)};
         } else throw winrt::hresult_invalid_argument(L"Unknown shortcut operation"); promise.Resolve("null");
       } catch (winrt::hresult_error const &error) { promise.Reject(RNW::ReactError{"E_SHORTCUT", to_string(error.message())}); }
     });

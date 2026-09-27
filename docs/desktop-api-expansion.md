@@ -76,7 +76,7 @@ await shortcut.remove();
 ```
 
 Independent registrations use the system hotkey facility; conflicts reject with
-`E_SHORTCUT_CONFLICT`. Keys resolve using the keyboard layout at registration.
+`E_BUSY`. Keys resolve using the keyboard layout at registration.
 Re-register after changing layouts if the shortcut should follow its character.
 Focused-app shortcuts remain under `shortcuts`.
 

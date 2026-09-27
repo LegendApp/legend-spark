@@ -34,3 +34,12 @@ test("notifications import without installed modules", async () => {
   await expect(notifications.getNotificationPermission()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
   await expect(notifications.onNotificationResponse(() => {})).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
+
+import * as shortcuts from "../packages/desktop-shortcuts/src/api";
+import * as globalShortcuts from "../packages/global-shortcuts/src/index";
+test("shortcut availability is queryable without installed modules", async () => {
+  expect(shortcuts.getShortcutAvailability()).toEqual({ available: false, reason: "missing-module" });
+  expect(globalShortcuts.getGlobalShortcutAvailability()).toEqual({ available: false, reason: "missing-module" });
+  await expect(shortcuts.registerShortcut("Cmd+K", () => {})).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+  await expect(globalShortcuts.registerGlobalShortcut("Cmd+K", () => {})).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+});

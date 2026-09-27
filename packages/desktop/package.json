@@ -61,7 +61,6 @@
     "./app/exit": "./app-exit.ts",
     "./processes/commands": "./processes-commands.ts",
     "./drag-drop/views": "./drag-drop-views.ts",
-    "./global-shortcuts/hotkeys": "./global-shortcuts-hotkeys.ts",
     "./contracts": "./contracts.ts"
   },
   "files": [

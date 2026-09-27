@@ -16,7 +16,7 @@ RCT_EXPORT_MODULE(NativeDesktopShortcuts)
       for (NSDictionary *existing in self.shortcuts.allValues) {
         if ([existing[@"key"] isEqual:args[@"key"]] && [existing[@"modifiers"] isEqual:args[@"modifiers"]] &&
           ((!existing[@"windowId"] && !args[@"windowId"]) || [existing[@"windowId"] isEqual:args[@"windowId"]])) {
-          reject(@"E_SHORTCUT_CONFLICT", @"Shortcut is already registered in this scope", nil); return;
+          reject(@"E_BUSY", @"Shortcut is already registered in this scope", nil); return;
         }
       }
       self.shortcuts[args[@"id"]] = args;

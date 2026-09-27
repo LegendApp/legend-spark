@@ -151,7 +151,7 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
     });
     await check("shortcuts: register, conflict, removal and re-register", async () => {
       const first = await registerShortcut("Command+Shift+9", () => {});
-      try { await rejects(() => registerShortcut("Command+Shift+9", () => {}), "E_SHORTCUT_CONFLICT"); }
+      try { await rejects(() => registerShortcut("Command+Shift+9", () => {}), "E_BUSY"); }
       finally { await first.remove(); }
       await (await registerShortcut("Command+Shift+9", () => {})).remove();
     });

@@ -77,7 +77,7 @@ export default function DesktopInteractionChecks({ check, onError, onBusy }: {
     const accelerator = "Control+Alt+Shift+F11";
     const registration = await registerGlobalShortcut(accelerator, pressed);
     try {
-      await requireError(() => registerGlobalShortcut(accelerator, () => {}), "E_SHORTCUT_CONFLICT");
+      await requireError(() => registerGlobalShortcut(accelerator, () => {}), "E_BUSY");
       await within(action, 45000);
       assertContract(!(await getWindow()).focused, "Shortcut must be tested while another application has focus");
     } finally { await registration.remove(); await registration.remove(); }

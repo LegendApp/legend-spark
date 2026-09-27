@@ -58,9 +58,9 @@ struct SparkGlobalShortcuts {
         auto args = Json::JsonObject::Parse(to_hstring(encoded)); auto id = to_string(args.GetNamedString(L"id"));
         current->EnsureWindow();
         if (method == "remove") {
-          for (auto item = current->keys.begin(); item != current->keys.end(); ++item) if (item->second == id) { UnregisterHotKey(current->hwnd, item->first); current->keys.erase(item); break; }
+          for (auto item = current->keys.begin(); item != current->keys.end(); ++item) if (item->second == id) { if (!UnregisterHotKey(current->hwnd, item->first)) winrt::throw_last_error(); current->keys.erase(item); break; }
         } else if (method == "register") {
-          for (auto const &[key, existing] : current->keys) if (existing == id) { promise.Reject(React::ReactError{"E_SHORTCUT_CONFLICT", "Shortcut id already exists"}); return; }
+          for (auto const &[key, existing] : current->keys) if (existing == id) { promise.Reject(React::ReactError{"E_BUSY", "Shortcut id already exists"}); return; }
           auto flags = static_cast<int>(args.GetNamedNumber(L"modifiers"));
           UINT modifiers = MOD_NOREPEAT;
           if (flags & (1 << 17)) modifiers |= MOD_SHIFT; if (flags & (1 << 18)) modifiers |= MOD_CONTROL;
@@ -69,7 +69,7 @@ struct SparkGlobalShortcuts {
           // Window-local registration IDs must remain within the documented range.
           int identifier = 0;
           for (int i = 0; i < 0xbfff; ++i) { int candidate = current->sequence = current->sequence % 0xbfff + 1; if (!current->keys.count(candidate)) { identifier = candidate; break; } }
-          if (!identifier || !RegisterHotKey(current->hwnd, identifier, modifiers, key)) { promise.Reject(React::ReactError{"E_SHORTCUT_CONFLICT", "Shortcut is unavailable or reserved by another app"}); return; }
+          if (!identifier || !RegisterHotKey(current->hwnd, identifier, modifiers, key)) { promise.Reject(React::ReactError{"E_BUSY", "Shortcut is unavailable or reserved by another app"}); return; }
           current->keys.emplace(identifier, id);
         } else throw hresult_invalid_argument(L"Unknown global shortcut operation");
         promise.Resolve("null");

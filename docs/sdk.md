@@ -151,7 +151,7 @@ Use application menus for discoverable commands and their normal keyboard
 accelerators. Use `registerShortcut` for focused-app handling, optionally scoped
 to a `windowId`. These are not global system hotkeys and need no Accessibility
 permission. A window-specific binding takes precedence over an app-wide binding.
-Duplicate registrations in the same scope reject with `E_SHORTCUT_CONFLICT`.
+Duplicate registrations in the same scope reject with `E_BUSY`.
 Dispose registrations when the owning component unmounts.
 
 ```ts
@@ -249,3 +249,13 @@ the Save panel whose filename is `accepted.txt` and press Save. The runner still
 requires the real native callback and successful guarded termination. This mode
 is not an unattended test by itself, and does not validate the XCTest harness.
 A locked Mac cannot complete either UI path.
+
+Local and global shortcuts use the same accelerator parser. `CmdOrCtrl` selects
+Command on macOS and Control on Windows. Local registrations accept
+`{ windowId, repeat }`; omission is app-wide and repeat defaults to false. A
+window-scoped binding takes precedence over an app-wide binding. Both APIs return
+async registrations: removal stops JS callbacks immediately, concurrent removals
+join, and native cleanup failure can be retried. The unused singleton numeric
+`/global-shortcuts/hotkeys` API is removed; keyboard events remain the explicit
+low-level physical-key API. Global registration resolves the layout at registration;
+Windows suppresses repeat and macOS follows Carbon hotkey delivery.

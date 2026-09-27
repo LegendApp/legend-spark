@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseAccelerator } from "../packages/desktop-shortcuts/src/accelerator.ts";
+import { parseAccelerator } from "../packages/desktop-app/src/contracts/accelerator.ts";
 test("macOS modifier aliases normalize to native flags", () => {
   expect(parseAccelerator("CommandOrControl+Shift+K")).toEqual({ key: "k", modifiers: (1 << 20) | (1 << 17) });
   expect(parseAccelerator("ctrl+option+X")).toEqual({ key: "x", modifiers: (1 << 18) | (1 << 19) });
@@ -16,7 +16,7 @@ test("unknown, duplicate and unsafe bare-character accelerators fail", () => {
 
 
 test("global shortcuts map CommandOrControl to Control on Windows", async () => {
-  const { parseAccelerator: parse } = await import("../packages/global-shortcuts/src/accelerator.ts");
+  const { parseAccelerator: parse } = await import("../packages/desktop-app/src/contracts/accelerator.ts");
   expect(parse("CommandOrControl+Shift+K", "windows")).toEqual({ key: "k", modifiers: (1 << 18) | (1 << 17) });
   expect(parse("Meta+K", "windows").modifiers).toBe(1 << 20);
   expect(parse("CommandOrControl+K", "macos").modifiers).toBe(1 << 20);
