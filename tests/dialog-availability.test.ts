@@ -49,3 +49,9 @@ test("context menus import without installed native modules", async () => {
   expect(contextMenu.getContextMenuAvailability()).toEqual({ available: false, reason: "missing-module" });
   await expect(contextMenu.showContextMenu({ windowId: "main", items: [], position: { x: 0, y: 0 } })).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
+
+import * as tray from "../packages/tray/src/index";
+test("tray imports without installed native modules", async () => {
+  expect(tray.getTrayAvailability()).toEqual({ available: false, reason: "missing-module" });
+  await expect(tray.createTray({ id: "test", title: "Test" })).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+});

@@ -89,12 +89,12 @@ struct TrayState : std::enable_shared_from_this<TrayState> {
     hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, cls.lpszClassName, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, cls.hInstance, nullptr);
     if (!hwnd) throw_last_error(); SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
   }
-  void Remove(UINT key) noexcept {
+  void Remove(UINT key, bool strict = true) {
     auto found = items.find(key); if (found == items.end()) return;
-    NOTIFYICONDATAW data{}; data.cbSize = sizeof(data); data.hWnd = hwnd; data.uID = key; Shell_NotifyIconW(NIM_DELETE, &data);
+    NOTIFYICONDATAW data{}; data.cbSize = sizeof(data); data.hWnd = hwnd; data.uID = key; if (!Shell_NotifyIconW(NIM_DELETE, &data) && strict) throw hresult_error(E_FAIL, L"Windows could not remove the tray icon");
     DestroyIcon(found->second.icon); items.erase(found);
   }
-  void Close() noexcept { while (!items.empty()) Remove(items.begin()->first); if (hwnd) { DestroyWindow(hwnd); hwnd = nullptr; } }
+  void Close() noexcept { while (!items.empty()) Remove(items.begin()->first, false); if (hwnd) { DestroyWindow(hwnd); hwnd = nullptr; } }
 };
 REACT_MODULE(SparkTray, L"NativeDesktopTray")
 struct SparkTray {
@@ -110,7 +110,7 @@ struct SparkTray {
         UINT key = 0; for (auto const &[number, item] : current->items) if (item.id == id) { key = number; break; }
         if (method == "remove") current->Remove(key);
         else if (method == "create" || method == "update") {
-          if (method == "create" && key) { promise.Reject(React::ReactError{"E_TRAY_EXISTS", "Tray id already exists"}); return; }
+          if (method == "create" && key) { promise.Reject(React::ReactError{"E_ALREADY_EXISTS", "Tray id already exists"}); return; }
           if (method == "update" && !key) { promise.Reject(React::ReactError{"E_NOT_FOUND", "Tray was removed"}); return; }
           Json::JsonObject options = key ? Json::JsonObject::Parse(current->items.at(key).options.Stringify()) : Json::JsonObject();
           for (auto const &entry : args) options.SetNamedValue(entry.Key(), entry.Value());

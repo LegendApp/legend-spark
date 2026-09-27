@@ -1,7 +1,7 @@
 import { ActionButton } from "./ActionButton";
 import { EventResults, useEventResults } from "./EventResults";
 import React, { useEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 import * as notifications from "@legendapp/spark/notifications";
 import { createTray } from "@legendapp/spark/tray";
 import * as updates from "@legendapp/spark/updates";
@@ -35,9 +35,9 @@ export function Integrations({ report }: { report: (value: unknown) => void }) {
     try {
       if (tray.current) { await tray.current.remove(); tray.current = undefined; if (mounted.current) setTrayActive(false); }
       else {
-        const item = await createTray({ id: "kitchen", symbol: "cup.and.saucer", tooltip: "Desktop Kitchen Sink", menu: [
-          { id: "open", title: "Show kitchen sink" }, { separator: true }, { id: "checked", title: "Checked item", checked: true }, { id: "disabled", title: "Disabled item", enabled: false },
-        ] }, event => { reportTray(event); if (event.itemId === "open") void showWindow().catch(reportTray); });
+        const item = await createTray({ id: "kitchen", title: "Kitchen Sink", ...(Platform.OS === "macos" ? { macos: { symbol: "cup.and.saucer" } } : {}), tooltip: "Desktop Kitchen Sink", menu: [
+          { type: "action", id: "open", label: "Show kitchen sink" }, { type: "separator" }, { type: "checkbox", id: "checked", label: "Checked item", checked: true }, { type: "action", id: "disabled", label: "Disabled item", disabled: true },
+        ], onAction: event => { reportTray(event); if (event.type === "action" && event.itemId === "open") void showWindow().catch(reportTray); } });
         if (!mounted.current) await item.remove(); else { tray.current = item; setTrayActive(true); }
       }
     } finally { if (mounted.current) setBusy(false); }

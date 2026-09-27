@@ -70,26 +70,34 @@ import { showWindow } from "@legendapp/spark/windows";
 
 const tray = await createTray({
   id: "main",
-  symbol: "tray",
+  title: "My app",
   tooltip: "My app",
   menu: [
-    { id: "open", title: "Show app" },
-    { separator: true },
-    { id: "sync", title: "Sync enabled", checked: true },
+    { type: "action", id: "open", label: "Show app" },
+    { type: "separator" },
+    { type: "checkbox", id: "sync", label: "Sync enabled", checked: true },
   ],
-}, event => {
-  if (event.itemId === "open") void showWindow();
+  onAction(event) {
+    if (event.type === "action" && event.itemId === "open") void showWindow();
+  },
 });
 await tray.update({ title: "3" });
 await tray.remove();
 ```
 
-Use a text title, an SF Symbol, or both. Menus support separators, enabled/disabled
-and checked items, and nested `items` up to five levels. IDs must be unique within
-a menu. A tray without a menu emits `trayClick`; selecting a menu item emits
-`trayAction`. Handles serialize updates and dispose their listeners; native bridge
-reload also removes its status items. Duplicate tray IDs reject with
-`E_TRAY_EXISTS`. An invalid symbol rejects before changing an existing item.
+On macOS, title is visible status-bar text; optional `macos: { symbol: "tray" }`
+adds an SF Symbol. Pass `macos: { symbol: null }` to clear it. On Windows the
+application icon identifies the item and title supplies the tooltip fallback;
+macOS-only options reject. Menus use the [shared item model](menus.md), supporting
+actions, checkboxes, separators and submenus up to five levels. An empty menu emits
+`{ type: "click" }`; choosing an item emits `{ type: "action", itemId }`.
+
+Updates snapshot inputs, serialize, and merge with the last successful state.
+Arrays replace in full. Removal immediately stops callbacks, waits for accepted
+updates, and can retry a native failure. IDs are immutable; duplicate creation
+rejects with `E_ALREADY_EXISTS` without removing the existing item. Invalid symbols
+reject before changing native state. `getTrayAvailability()` is safe without the
+native module installed. Native bridge reload removes its status items.
 
 For an app that starts in the menu bar with no Dock icon or visible main window:
 

@@ -60,12 +60,12 @@ export default function DesktopInteractionChecks({ check, onError, onBusy }: {
     setInstruction("Open the app icon in the tray/menu bar and choose Checks → Continue. On Windows it may be in the hidden-icons overflow.");
     let selected!: () => void;
     const action = new Promise<void>(resolve => { selected = resolve; });
-    const item = await createTray({ id: "contract-tray", title: "Check", tooltip: "spark tray acceptance" }, event => { if (event.type === "trayAction" && event.itemId === "continue") selected(); });
+    const item = await createTray({ id: "contract-tray", title: "Check", tooltip: "spark tray acceptance", onAction: event => { if (event.type === "action" && event.itemId === "continue") selected(); } });
     try {
-      await requireError(() => createTray({ id: "contract-tray", title: "Duplicate" }), "E_TRAY_EXISTS");
-      await item.update({ menu: [{ id: "checks", title: "Checks", items: [
-        { id: "marked", title: "Checked", checked: true }, { id: "disabled", title: "Disabled", enabled: false },
-        { separator: true }, { id: "continue", title: "Continue" },
+      await requireError(() => createTray({ id: "contract-tray", title: "Duplicate" }), "E_ALREADY_EXISTS");
+      await item.update({ menu: [{ type: "submenu", id: "checks", label: "Checks", items: [
+        { type: "checkbox", id: "marked", label: "Checked", checked: true }, { type: "action", id: "disabled", label: "Disabled", disabled: true },
+        { type: "separator" }, { type: "action", id: "continue", label: "Continue" },
       ] }] });
       await within(action, 45000);
     } finally { await item.remove(); await item.remove(); }

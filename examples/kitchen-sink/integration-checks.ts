@@ -31,12 +31,12 @@ export async function runIntegrationChecks(check: (name: string, action: () => P
       await notifications.cancelNotification(token);
     });
     await check("tray: create, duplicate conflict, update, remove and recreate", async () => {
-      const tray = await createTray({ id: token, title: "SDK test", menu: [{ id: "checked", title: "Checked", checked: true }, { id: "disabled", title: "Disabled", enabled: false }] });
+      const tray = await createTray({ id: token, title: "SDK test", menu: [{ type: "checkbox", id: "checked", label: "Checked", checked: true }, { type: "action", id: "disabled", label: "Disabled", disabled: true }] });
       try {
-        await rejects(() => createTray({ id: token, title: "Duplicate" }), "E_TRAY_EXISTS");
-        await tray.update({ title: "Updated", symbol: "star", menu: [] });
+        await rejects(() => createTray({ id: token, title: "Duplicate" }), "E_ALREADY_EXISTS");
+        await tray.update({ title: "Updated", menu: [] });
       } finally { await tray.remove(); }
-      await (await createTray({ id: token, symbol: "star" })).remove();
+      await (await createTray({ id: token, title: "Recreated" })).remove();
     });
     await check("updates: Prebuilt/development runtimes refuse self-update without starting Sparkle", async () => {
       const status = await updates.getUpdateStatus();

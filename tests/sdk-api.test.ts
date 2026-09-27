@@ -213,13 +213,13 @@ test("failed notification subscriptions remove their native listener", async () 
   expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0);
 });
 test("tray validates duplicate menu ids and cleans failed registrations", async () => {
-  await expect(tray.createTray({ id: "x", title: "X", menu: [{ id: "a", title: "A" }, { id: "a", title: "B" }] })).rejects.toThrow("unique");
-  handlers.set("NativeDesktopTray.create", () => { throw nativeError("E_TRAY_EXISTS"); });
-  await expect(tray.createTray({ id: "x", title: "X" })).rejects.toThrow("E_TRAY_EXISTS");
+  await expect(tray.createTray({ id: "x", title: "X", menu: [{ type: "action", id: "a", label: "A" }, { type: "action", id: "a", label: "B" }] })).rejects.toThrow("unique");
+  handlers.set("NativeDesktopTray.create", () => { throw nativeError("E_ALREADY_EXISTS"); });
+  await expect(tray.createTray({ id: "x", title: "X" })).rejects.toThrow("E_ALREADY_EXISTS");
   expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0);
 });
 test("tray scopes actions, serializes updates and waits before removing", async () => {
-  const actions: unknown[] = []; const item = await tray.createTray({ id: "test", symbol: "star" }, event => actions.push(event));
+  const actions: unknown[] = []; const item = await tray.createTray({ id: "test", macos: { symbol: "star" }, menu: [{ type: "action", id: "open", label: "Open" }], onAction: event => actions.push(event) });
   emit("NativeDesktopApp", "desktop", { type: "trayClick", trayId: "other" });
   emit("NativeDesktopApp", "desktop", { type: "trayAction", trayId: "test", itemId: "open" }); expect(actions).toHaveLength(1);
   await Promise.all([item.update({ title: "One" }), item.update({ title: "Two" }), item.remove()]);
@@ -655,4 +655,38 @@ test("context menus reject invalid native selection and unsupported surface item
   expect(calls).toHaveLength(0);
   handlers.set("NativeContextMenu.showMenu", () => { throw nativeError("E_NOT_FOUND"); });
   await expect(context.showContextMenu(options)).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+});
+
+test("tray removal joins, stops callbacks immediately and retries native failure", async () => {
+  const actions: unknown[] = [];
+  const item = await tray.createTray({ id: "test", title: "Test", onAction: event => actions.push(event) });
+  handlers.set("NativeDesktopTray.remove", () => { throw nativeError("E_NATIVE"); });
+  const first = item.remove(); expect(item.remove()).toBe(first);
+  emit("NativeDesktopApp", "desktop", { type: "trayClick", trayId: "test" });
+  await expect(first).rejects.toMatchObject({ code: "E_NATIVE" }); expect(actions).toEqual([]);
+  handlers.delete("NativeDesktopTray.remove"); await item.remove(); await item.remove();
+  expect(calls.filter(call => call.method === "remove")).toHaveLength(2);
+});
+test("tray snapshots accepted updates, filters actions and keeps last successful state", async () => {
+  const actions: unknown[] = [];
+  const options = { id: "test", title: "Initial", menu: [{ type: "action" as const, id: "open", label: "Open" }], onAction: (event: unknown) => actions.push(event) };
+  const item = await tray.createTray(options); options.id = "changed";
+  const changes = { menu: [{ type: "action" as const, id: "next", label: "Next" }] };
+  const updating = item.update(changes); changes.menu[0].id = "mutated"; await updating;
+  expect(calls.at(-1)!.args).toMatchObject({ id: "test", menu: [{ id: "next" }] });
+  handlers.set("NativeDesktopTray.update", () => { throw nativeError("E_NATIVE"); });
+  await expect(item.update({ title: "Failed" })).rejects.toThrow(); handlers.delete("NativeDesktopTray.update");
+  await item.update({ tooltip: "Tooltip" }); expect(calls.at(-1)!.args.title).toBe("Initial");
+  for (const itemId of ["open", "mutated", "next"]) emit("NativeDesktopApp", "desktop", { type: "trayAction", trayId: "test", itemId });
+  expect(actions).toEqual([{ type: "action", itemId: "next" }]);
+  await expect(item.update({ id: "other" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await item.remove();
+});
+test("Windows tray rejects macOS presentation and duplicate creation never removes its owner", async () => {
+  platform.OS = "windows";
+  await expect(tray.createTray({ id: "test", title: "Test", macos: { symbol: "star" } })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toEqual([]);
+  handlers.set("NativeDesktopTray.create", () => { throw nativeError("E_ALREADY_EXISTS"); });
+  await expect(tray.createTray({ id: "test", title: "Test" })).rejects.toMatchObject({ code: "E_ALREADY_EXISTS" });
+  expect(calls.map(call => call.method)).toEqual(["create"]);
 });

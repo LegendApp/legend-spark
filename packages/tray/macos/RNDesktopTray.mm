@@ -38,7 +38,7 @@ RCT_EXPORT_MODULE(NativeDesktopTray)
     SparkTrayItem *owner = self.items[key];
     if ([method isEqual:@"remove"]) { if (owner) [NSStatusBar.systemStatusBar removeStatusItem:owner.item]; [self.items removeObjectForKey:key]; resolve(@"null"); return; }
     if (![method isEqual:@"create"] && ![method isEqual:@"update"]) { SparkInvalid(reject, @"Unknown tray operation"); return; }
-    if ([method isEqual:@"create"] && owner) { reject(@"E_TRAY_EXISTS", @"Tray id already exists", nil); return; }
+    if ([method isEqual:@"create"] && owner) { reject(@"E_ALREADY_EXISTS", @"Tray id already exists", nil); return; }
     if ([method isEqual:@"update"] && !owner) { reject(@"E_NOT_FOUND", @"Tray was removed", nil); return; }
     NSMutableDictionary *options = [owner.options mutableCopy] ?: [NSMutableDictionary new]; [options addEntriesFromDictionary:args];
     NSImage *image = nil;
