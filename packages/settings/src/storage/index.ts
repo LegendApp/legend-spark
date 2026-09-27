@@ -1,482 +1,142 @@
-import { applyChanges, internal, isArray, observable, type Change, type Observable } from "@legendapp/state";
-import { useValue } from "@legendapp/state/react";
-import {
-  synced,
-  type ObservablePersistPlugin,
-  type ObservablePersistPluginOptions,
-  type PersistMetadata,
-  type PersistOptions,
-  type SyncTransform,
-} from "@legendapp/state/sync";
-import NativeStorage from "./NativeStorage";
+import { internal, observable, type Observable } from "@legendapp/state";
+import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
+import { absolutePath } from "@legendapp/spark-desktop-app/src/contracts/path";
+import type { SettingsStorage } from "../store";
+import { fileStorage } from "../fileStorage";
 
-const metadataSuffix = "__m";
-const { safeParse, safeStringify } = internal;
-
-export type StorageRoot = "applicationSupport" | "cache" | "document";
-export type StorageFormat = "json" | "m3u" | "text";
-
-export type StorageOptions = {
-  root?: StorageRoot;
-  subfolder?: string;
-};
-
-export type StorageListOptions = {
-  extension?: string;
-};
-
-export type StoragePath = {
-  isDirectory: boolean;
-  name: string;
-  uri: string;
-};
-
-export type StorageDirectory = StoragePath & { isDirectory: true };
-export type StorageFile = StoragePath & { isDirectory: false };
-
-export type StorageReadOptions<Format extends StorageFormat = StorageFormat> = {
-  format: Format;
-};
-
-export type StorageWriteOptions<Format extends StorageFormat = StorageFormat> = {
-  format: Format;
-};
-
-export type Storage = {
-  root: StorageDirectory;
-  delete(relativePath: string): void;
-  directory(relativePath?: string): StorageDirectory;
-  ensureDirectory(relativePath?: string): StorageDirectory;
-  file(relativePath: string): StorageFile;
-  list(relativePath?: string, options?: StorageListOptions): StoragePath[];
-  read<T = unknown>(relativePath: string, options: StorageReadOptions<"json">): T | undefined;
-  read(relativePath: string, options: StorageReadOptions<"m3u" | "text">): string | undefined;
-  write(relativePath: string, value: unknown, options: StorageWriteOptions<"json">): void;
-  write(relativePath: string, value: string, options: StorageWriteOptions<"m3u" | "text">): void;
-};
-
-type ManagedPersistPlugin = ObservablePersistPlugin & {
-  flush: () => Promise<void>;
-};
-
-export type StoragePersistPluginOptions = {
-  extension?: string;
-  format?: "json" | "m3u" | "text";
-  preload?: string[];
-  saveTimeout?: number;
-  storage: Storage;
-};
-
-export type CreateObservableFileOptions<T> = {
-  filename: string;
-  format?: "json";
+export interface ObservableFileOptions<T> {
+  /** Absolute native path, including the extension. Parent directory must exist. */
+  path: string;
   initialValue: T;
-  preload?: boolean | string[];
-  root?: StorageRoot;
-  saveDefaultToFile?: boolean;
-  saveTimeout?: number;
-  storage?: Storage;
-  subfolder?: string;
-  transform?: SyncTransform<any, any>;
-};
+  /** Validate/convert persisted data. Missing files use initialValue. */
+  decode(value: unknown): T | Promise<T>;
+  /** Convert a snapshot for persistence. Omit to use Legend State serialization. */
+  encode?(value: T): unknown | Promise<unknown>;
+  storage?: SettingsStorage;
+  debounceMs?: number;
+  saveDefault?: boolean;
+}
+export interface ObservableFile<T> {
+  /** Legend State owns this observable API. Mutations after close are not persisted. */
+  value$: Observable<T>;
+  /** Most recent persistence failure; cleared after a successful save. */
+  error$: Observable<Error | undefined>;
+  /** Save a snapshot of all changes made before this call, including inside batches. */
+  flush(): Promise<void>;
+  /** Stop automatic saves immediately and flush a final snapshot. Failed closes retry. */
+  close(): Promise<void>;
+}
+function stringify(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  // Legend's helper returns falsy input unchanged. File storage always needs text.
+  const text = value ? internal.safeStringify(value) : JSON.stringify(value);
+  if (typeof text !== "string") throw new SparkError("E_INVALID_DATA", "Value cannot be serialized");
+  return text;
+}
+function parse(text: string | undefined): unknown {
+  if (text === undefined) return undefined;
+  if (typeof text !== "string" || text.length === 0) throw new SparkError("E_INVALID_DATA", "Expected serialized settings");
+  return internal.safeParse(text);
+}
 
-export type ObservableSettingsField<TValue> = {
-  defaultValue: TValue;
-  normalize?: (value: unknown) => TValue;
-};
+/** Await readiness before editing. Load/decode failures preserve existing bytes.
+ * Writes are serialized within this handle, not across handles or processes.
+ * Root undefined removes the file; null is persisted. Date/Map/Set use Legend encoding.
+ */
+export async function createObservableFile<T>(options: ObservableFileOptions<T>): Promise<ObservableFile<T>> {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected observable file options");
+  for (const key of Object.keys(options)) if (!["path", "initialValue", "decode", "encode", "storage", "debounceMs", "saveDefault"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported observable file option: ${key}`);
+  const path = absolutePath(options.path, typeof options.path === "string" && options.path.startsWith("/") ? "macos" : "windows");
+  const { decode, encode, storage = fileStorage, debounceMs = 300, saveDefault = false } = options;
+  if (typeof decode !== "function" || (encode !== undefined && typeof encode !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Expected a decoder and optional encoder");
+  if (!Number.isFinite(debounceMs) || debounceMs < 0 || debounceMs > 2147483647 || typeof saveDefault !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Invalid persistence timing options");
+  if (!storage || [storage.read, storage.write, storage.remove].some(method => typeof method !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Expected read/write/remove storage methods");
+  const text = await storage.read(path);
+  let initial: T;
+  try { initial = text === undefined ? parse(stringify(options.initialValue)) as T : await decode(parse(text)); }
+  catch (cause) { throw new SparkError("E_INVALID_DATA", "Could not decode observable file", { cause }); }
+  const value$ = observable(initial) as Observable<T>;
+  const error$ = observable<Error | undefined>();
+  const recordError = (error: unknown) => error$.set(error instanceof Error ? error : new SparkError("E_NATIVE", "Persistence failed", { cause: error }));
+  let persisted = stringify(initial);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let queue: Promise<void> = Promise.resolve();
+  let closing = false, closed = false;
+  let closingSnapshot: string | undefined;
+  let capturedClose = false;
+  let closePromise: Promise<void> | undefined;
+  const clearTimer = () => { if (timer !== undefined) clearTimeout(timer); timer = undefined; };
+  function snapshot(): string | undefined { return stringify(value$.peek()); }
+  function save(snapshotText: string | undefined, force = false): Promise<void> {
+    const next = queue.catch(() => {}).then(async () => {
+      if (force || persisted !== snapshotText) {
+        const value = parse(snapshotText) as T;
+        const output = stringify(encode ? await encode(value) : value);
+        if (output === undefined) await storage.remove(path);
+        else await storage.write(path, output);
+        persisted = snapshotText;
+      }
+      error$.set(undefined);
+    }).catch(error => { recordError(error); throw error; });
+    queue = next;
+    // Automatic writes report through error$; explicit callers still receive rejection.
+    void next.catch(() => {});
+    return next;
+  }
+  const unsubscribe = value$.onChange(() => {
+    if (closing) return;
+    clearTimer();
+    timer = setTimeout(() => {
+      timer = undefined;
+      try { void save(snapshot()); } catch (error) { recordError(error); }
+    }, debounceMs);
+  }, { immediate: true });
+  const handle: ObservableFile<T> = {
+    value$, error$,
+    async flush() {
+      if (closing) throw new SparkError("E_CLOSED", "Observable file is closing or closed");
+      clearTimer();
+      try { await save(snapshot()); } catch (error) { recordError(error); throw error; }
+    },
+    close() {
+      if (closed) return Promise.resolve();
+      if (closePromise) return closePromise;
+      closing = true; clearTimer(); unsubscribe();
+      // Capture synchronously, before consumers can mutate after calling close.
+      try { if (!capturedClose) { closingSnapshot = snapshot(); capturedClose = true; } }
+      catch (error) { recordError(error); return Promise.reject(error); }
+      closePromise = save(closingSnapshot).then(() => { closed = true; }).finally(() => { closePromise = undefined; });
+      return closePromise;
+    },
+  };
+  if (saveDefault && text === undefined) {
+    try { await save(persisted, true); }
+    catch (error) { unsubscribe(); throw error; }
+  }
+  return handle;
+}
 
+export interface ObservableSettingsField<T> {
+  defaultValue: T;
+  decode(value: unknown): T;
+}
 export type ObservableSettingsFields = Record<string, ObservableSettingsField<any>>;
-
-export type ObservableSettingsValues<TFields extends ObservableSettingsFields> = {
-  [K in keyof TFields]: TFields[K] extends ObservableSettingsField<infer TValue> ? TValue : never;
-};
-
-const observablePersistPlugins = new WeakMap<Observable<unknown>, ManagedPersistPlugin>();
-const pendingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
-const pendingCallbacks = new Map<string, () => void>();
-
-function timeoutOnce(name: string, callback: () => void, delayMs: number) {
-  const existingTimeout = pendingTimeouts.get(name);
-  if (existingTimeout) {
-    clearTimeout(existingTimeout);
-  }
-
-  pendingCallbacks.set(name, callback);
-  pendingTimeouts.set(
-    name,
-    setTimeout(() => {
-      pendingTimeouts.delete(name);
-      const pendingCallback = pendingCallbacks.get(name);
-      pendingCallbacks.delete(name);
-      pendingCallback?.();
-    }, delayMs),
-  );
-}
-
-function flushTimeoutsWhere(predicate: (name: string) => boolean) {
-  for (const [name, timeout] of [...pendingTimeouts.entries()]) {
-    if (predicate(name)) {
-      clearTimeout(timeout);
-      pendingTimeouts.delete(name);
-      const callback = pendingCallbacks.get(name);
-      pendingCallbacks.delete(name);
-      callback?.();
-    }
-  }
-}
-
-function normalizeExtension(extension: string) {
-  return extension.startsWith(".") ? extension : `.${extension}`;
-}
-
-function extensionForFormat(format: StorageFormat) {
-  return format === "m3u" ? "m3u" : format === "text" ? "txt" : "json";
-}
-
-function normalizeRelativePath(relativePath = "") {
-  if (relativePath.startsWith("/") || /^[a-z][a-z\d+.-]*:/i.test(relativePath)) {
-    throw new Error(`Storage paths must be relative: ${relativePath}`);
-  }
-
-  const segments = relativePath.split("/");
-  if (segments.some((segment) => segment === "." || segment === "..")) {
-    throw new Error(`Storage paths cannot traverse outside their root: ${relativePath}`);
-  }
-  return segments.filter(Boolean).join("/");
-}
-
-function joinRelativePaths(...paths: (string | undefined)[]) {
-  return normalizeRelativePath(paths.filter(Boolean).join("/"));
-}
-
-function storagePathName(relativePath: string, root: StorageRoot) {
-  const segments = relativePath.split("/");
-  return segments.at(-1) || root;
-}
-
-function createStoragePath(root: StorageRoot, relativePath: string, isDirectory: boolean): StoragePath {
-  const uri = NativeStorage.getStoragePathUri(root, relativePath);
-  if (!uri) {
-    throw new Error(`Could not resolve ${root} storage path: ${relativePath}`);
-  }
-  return {
-    isDirectory,
-    name: storagePathName(relativePath, root),
-    uri,
-  };
-}
-
-function fileNameForTable(table: string, extension: string) {
-  return `${table}.${extension.replace(/^\./, "")}`;
-}
-
-function parseFileValue(content: string, format: StorageFormat) {
-  if (format === "json") {
-    // safeParse preserves an empty string, but an empty JSON file is corrupt.
-    if (content.length === 0) throw new SyntaxError("Unexpected end of JSON input");
-    return safeParse(content);
-  }
-
-  return content;
-}
-
-export function getApplicationSupportDirectory() {
-  return createStoragePath("applicationSupport", "", true) as StorageDirectory;
-}
-
-export function readTextFile(pathOrUri: string) {
-  return NativeStorage.readTextFile(pathOrUri) ?? undefined;
-}
-
-export function pathExists(pathOrUri: string, isDirectory = false) {
-  return NativeStorage.pathExists(pathOrUri, isDirectory);
-}
-
-export function writeStorageBytes(root: StorageRoot, relativePath: string, value: Uint8Array) {
-  return NativeStorage.writeStorageBytes(root, normalizeRelativePath(relativePath), Array.from(value));
-}
-
-export function createStorage({ root = "applicationSupport", subfolder }: StorageOptions = {}): Storage {
-  const rootPath = normalizeRelativePath(subfolder);
-  const resolvePath = (relativePath = "") => joinRelativePaths(rootPath, relativePath);
-  const directory = (relativePath = "") => createStoragePath(root, resolvePath(relativePath), true) as StorageDirectory;
-  const file = (relativePath: string) => createStoragePath(root, resolvePath(relativePath), false) as StorageFile;
-
-  const ensureDirectory = (relativePath = "") => {
-    const path = resolvePath(relativePath);
-    if (!NativeStorage.ensureStorageDirectory(root, path)) {
-      throw new Error(`Could not create ${root} storage directory: ${path}`);
-    }
-    return createStoragePath(root, path, true) as StorageDirectory;
-  };
-
-  return {
-    root: directory(),
-    delete(relativePath) {
-      NativeStorage.deleteStoragePath(root, resolvePath(relativePath));
+export type ObservableSettingsValues<F extends ObservableSettingsFields> = { [K in keyof F]: F[K] extends ObservableSettingsField<infer T> ? T : never };
+export interface ObservableSettingsOptions<F extends ObservableSettingsFields> extends Omit<ObservableFileOptions<ObservableSettingsValues<F>>, "initialValue" | "decode" | "encode"> { fields: F }
+/** Field defaults apply only to absent fields; stored null is passed to the decoder.
+ * Unknown fields are omitted. Use value$.field directly with Legend State's useValue.
+ */
+export async function createObservableSettings<const F extends ObservableSettingsFields>(options: ObservableSettingsOptions<F>): Promise<ObservableFile<ObservableSettingsValues<F>>> {
+  if (!options || !options.fields || typeof options.fields !== "object" || Array.isArray(options.fields)) throw new SparkError("E_INVALID_ARGUMENT", "Expected settings fields");
+  const { fields, ...rest } = options;
+  const entries = Object.entries(fields);
+  if (entries.some(([, field]) => !field || typeof field.decode !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Each field requires a decoder");
+  return createObservableFile({
+    ...rest,
+    initialValue: Object.fromEntries(entries.map(([key, field]) => [key, field.defaultValue])) as ObservableSettingsValues<F>,
+    decode(value) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new SparkError("E_INVALID_DATA", "Expected a settings object");
+      return Object.fromEntries(entries.map(([key, field]) => [key, Object.hasOwn(value, key) ? field.decode((value as Record<string, unknown>)[key]) : field.defaultValue])) as ObservableSettingsValues<F>;
     },
-    directory,
-    ensureDirectory,
-    file,
-    list(relativePath = "", options = {}) {
-      const path = resolvePath(relativePath);
-      const entries = JSON.parse(NativeStorage.listStorageDirectoryJson(root, path)) as Array<{
-        isDirectory: boolean;
-        name: string;
-      }>;
-      const extension = options.extension ? normalizeExtension(options.extension).toLowerCase() : undefined;
-      return entries
-        .filter((entry) => !extension || (!entry.isDirectory && entry.name.toLowerCase().endsWith(extension)))
-        .map((entry) => createStoragePath(root, joinRelativePaths(path, entry.name), entry.isDirectory));
-    },
-    read(relativePath: string, options: StorageReadOptions) {
-      const path = resolvePath(relativePath);
-      const content = NativeStorage.readStorageText(root, path);
-      if (content === null) {
-        return undefined;
-      }
-      // Recovery belongs to the caller; reads must preserve corrupt files.
-      return parseFileValue(content, options.format);
-    },
-    write(relativePath: string, value: unknown, options: StorageWriteOptions) {
-      const path = resolvePath(relativePath);
-      const output = options.format === "json"
-        ? safeStringify(value)
-        : typeof value === "string" ? value : String(value);
-      if (!NativeStorage.writeStorageText(root, path, output)) {
-        throw new Error(`Could not write ${root} storage file: ${path}`);
-      }
-    },
-  };
-}
-
-function readStorageValue(storage: Storage, relativePath: string, format: StorageFormat) {
-  return (storage.read as (path: string, options: StorageReadOptions) => unknown)(relativePath, { format });
-}
-
-function writeStorageValue(storage: Storage, relativePath: string, value: unknown, format: StorageFormat) {
-  (storage.write as (path: string, nextValue: unknown, options: StorageWriteOptions) => void)(
-    relativePath,
-    value,
-    { format },
-  );
-}
-
-class ObservablePersistStorage implements ManagedPersistPlugin {
-  private data: Record<string, unknown> = {};
-  private extension: string;
-  private format: StorageFormat;
-  private isFlushing = false;
-  private preload?: string[];
-  private saveTimeout: number;
-  private storage: Storage;
-  private tablesLoaded: Record<string, boolean> = {};
-  private readonly timeoutPrefix: string;
-
-  constructor({ extension, format = "json", preload, saveTimeout = 100, storage }: StoragePersistPluginOptions) {
-    this.extension = extension ?? extensionForFormat(format);
-    this.format = format;
-    this.preload = preload;
-    this.saveTimeout = saveTimeout;
-    this.storage = storage;
-    this.timeoutPrefix = `save_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  }
-
-  initialize(_configOptions: ObservablePersistPluginOptions) {
-    if (isArray(this.preload)) {
-      const metadataTables = this.preload
-        .map((table) => table.endsWith(metadataSuffix) ? undefined : `${table}${metadataSuffix}`)
-        .filter((table): table is string => Boolean(table));
-      for (const table of [...this.preload, ...metadataTables]) {
-        this.loadTable(table);
-      }
-    }
-  }
-
-  loadTable(table: string) {
-    if (!this.tablesLoaded[table]) {
-      this.tablesLoaded[table] = true;
-      const value = readStorageValue(this.storage, fileNameForTable(table, this.extension), this.format);
-      if (value !== undefined) {
-        this.data[table] = value;
-      }
-
-      const metadataValue = readStorageValue(
-        this.storage,
-        fileNameForTable(`${table}${metadataSuffix}`, this.extension),
-        this.format,
-      );
-      if (metadataValue !== undefined) {
-        this.data[`${table}${metadataSuffix}`] = metadataValue;
-      }
-    }
-  }
-
-  getTable<T = unknown>(table: string, init: object): T {
-    return (this.data[table] ?? init ?? {}) as T;
-  }
-
-  getMetadata(table: string): PersistMetadata {
-    return this.getTable<PersistMetadata>(`${table}${metadataSuffix}`, {});
-  }
-
-  set(table: string, changes: Change[]): Promise<void> {
-    const current = this.data[table];
-    this.data[table] = applyChanges(typeof current === "object" && current !== null ? current : {}, changes);
-    return this.save(table);
-  }
-
-  setMetadata(table: string, metadata: PersistMetadata) {
-    return this.setValue(`${table}${metadataSuffix}`, metadata);
-  }
-
-  deleteTable(table: string) {
-    this.storage.delete(fileNameForTable(table, this.extension));
-    delete this.data[table];
-  }
-
-  deleteMetadata(table: string) {
-    return this.deleteTable(`${table}${metadataSuffix}`);
-  }
-
-  private async setValue(table: string, value: unknown) {
-    this.data[table] = value;
-    await this.save(table);
-  }
-
-  private async save(table: string) {
-    if (this.isFlushing) {
-      this.saveDebounced(table);
-    } else {
-      timeoutOnce(this.getTimeoutName(table), () => this.saveDebounced(table), this.saveTimeout);
-    }
-  }
-
-  private getTimeoutName(table: string) {
-    return `${this.timeoutPrefix}_${table}`;
-  }
-
-  async flush(): Promise<void> {
-    this.isFlushing = true;
-    flushTimeoutsWhere((name) => name.startsWith(this.timeoutPrefix));
-  }
-
-  private saveDebounced(table: string) {
-    const value = this.data[table];
-    const relativePath = fileNameForTable(table, this.extension);
-
-    if (value !== undefined && value !== null) {
-      writeStorageValue(this.storage, relativePath, value, this.format);
-    } else {
-      this.storage.delete(relativePath);
-    }
-  }
-}
-
-export function observablePersistStorage(options: StoragePersistPluginOptions) {
-  return new ObservablePersistStorage(options);
-}
-
-export function createObservableFile<T>({
-  filename,
-  format = "json",
-  initialValue,
-  preload = [filename],
-  root = "applicationSupport",
-  saveDefaultToFile,
-  saveTimeout = 300,
-  storage,
-  subfolder,
-  transform,
-}: CreateObservableFileOptions<T>): Observable<T> {
-  const targetStorage = storage ?? createStorage({ root, subfolder });
-  const plugin = observablePersistStorage({
-    format,
-    preload: preload === false ? undefined : Array.isArray(preload) ? preload : [filename],
-    saveTimeout,
-    storage: targetStorage,
   });
-
-  const data$ = observable(
-    synced({
-      initial: initialValue,
-      persist: {
-        name: filename,
-        plugin,
-        transform,
-      },
-    }),
-  );
-
-  if (saveDefaultToFile) {
-    const defaultPath = `${filename}.json`;
-    if (targetStorage.read(defaultPath, { format: "text" }) === undefined) {
-      targetStorage.write(`${filename}.json`, initialValue, { format: "json" });
-    }
-  }
-
-  observablePersistPlugins.set(data$ as unknown as Observable<unknown>, plugin);
-  return data$ as Observable<T>;
-}
-
-function getObservableSettingsInitialValue<TFields extends ObservableSettingsFields>(
-  fields: TFields,
-): ObservableSettingsValues<TFields> {
-  return Object.fromEntries(
-    Object.entries(fields).map(([key, field]) => [key, field.defaultValue]),
-  ) as ObservableSettingsValues<TFields>;
-}
-
-function normalizeObservableSettingsValue<TValue>(
-  field: ObservableSettingsField<TValue>,
-  value: unknown,
-): TValue {
-  if (field.normalize) {
-    return field.normalize(value);
-  }
-
-  return value === undefined || value === null ? field.defaultValue : value as TValue;
-}
-
-export function createObservableSettings<const TFields extends ObservableSettingsFields>({
-  fields,
-  ...options
-}: Omit<CreateObservableFileOptions<ObservableSettingsValues<TFields>>, "initialValue"> & {
-  fields: TFields;
-}) {
-  const settings$ = createObservableFile<ObservableSettingsValues<TFields>>({
-    ...options,
-    initialValue: getObservableSettingsInitialValue(fields),
-  });
-
-  function field<TKey extends keyof TFields & string>(key: TKey): {
-    get: () => ObservableSettingsValues<TFields>[TKey];
-    set: (value: ObservableSettingsValues<TFields>[TKey]) => void;
-    use: () => ObservableSettingsValues<TFields>[TKey];
-  } {
-    type TValue = ObservableSettingsValues<TFields>[TKey];
-    const settingField = fields[key] as ObservableSettingsField<TValue>;
-    let setting$: any;
-    const getSetting = () => {
-      setting$ ??= (settings$ as any)[key];
-      return setting$;
-    };
-
-    return {
-      get: () => normalizeObservableSettingsValue(settingField, getSetting().get()),
-      set: (value: TValue) => {
-        getSetting().set(normalizeObservableSettingsValue(settingField, value));
-      },
-      use: () => normalizeObservableSettingsValue(settingField, useValue(getSetting())),
-    };
-  }
-
-  return {
-    field,
-    settings$,
-  };
-}
-
-export function getPersistPlugin<T>(obs$: Observable<T>): ManagedPersistPlugin | undefined {
-  return observablePersistPlugins.get(obs$ as unknown as Observable<unknown>);
 }

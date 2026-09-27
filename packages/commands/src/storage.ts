@@ -1,4 +1,4 @@
-import { createObservableFile, type StorageRoot } from "@legendapp/spark-settings/src/storage";
+import { createObservableFile } from "@legendapp/spark-settings/src/storage";
 
 import {
   normalizeHotkeyFile,
@@ -10,27 +10,18 @@ import {
 
 export function createHotkeyStore<HotkeyId extends string>({
   definitions,
-  filename = "hotkeys",
+  path,
   maxBindingsPerCommand,
-  root = "applicationSupport",
-  subfolder,
 }: {
   definitions: readonly HotkeyDefinition<HotkeyId>[];
-  filename?: string;
-} & HotkeyBindingLimitOptions & {
-  root?: StorageRoot;
-  subfolder?: string;
-}) {
+  path: string;
+} & HotkeyBindingLimitOptions) {
   const bindingLimitOptions = { maxBindingsPerCommand };
   const initialValue = normalizeHotkeyFile(undefined, definitions, bindingLimitOptions);
   return createObservableFile<HotkeyFile<HotkeyId>>({
-    filename,
+    path,
     initialValue,
-    root,
-    subfolder,
-    transform: {
-      load: (value) => normalizeHotkeyFile(value, definitions, bindingLimitOptions),
-      save: (value) => serializeHotkeyFilePatch(value, definitions, bindingLimitOptions),
-    },
+    decode: (value) => normalizeHotkeyFile(value, definitions, bindingLimitOptions),
+    encode: (value) => serializeHotkeyFilePatch(value, definitions, bindingLimitOptions),
   });
 }

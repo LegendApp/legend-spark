@@ -211,9 +211,9 @@ createSettingsStore(options: { storage: SettingsStorage }): SettingsStore;
 // Missing => undefined; stored JSON null remains null.
 
 // /settings/observable — explicitly integrates Legend State.
-createObservableSettings(options): ObservableSettings;
-createObservableFile(options): ObservableFile;
-flushSettings(target): Promise<void>;
+createObservableSettings(options): Promise<ObservableFile<SettingsValues>>;
+createObservableFile(options): Promise<ObservableFile<Value>>;
+// Handle: value$, error$, flush(), close(). Await the factory before editing.
 
 // /secure-storage — chosen Expo subset.
 getItemAsync(key: string, options?: SecureStoreOptions): Promise<string | null>;
@@ -231,7 +231,7 @@ Secure storage follows the selected Expo missing/null and options behavior where
 | Boundary | Proposed contract |
 |---|---|
 | `/clipboard` | Keep `getStringAsync(options?)`, `setStringAsync(text, options?)`, `hasStringAsync()`. Remove redundant text aliases. Rich `readClipboard`/`writeClipboard` use owned payload types with exclusive file-list vs text/image alternatives; no hidden encoding ambiguity. |
-| `/links` | Keep `openURL`, `canOpenURL`, `getInitialURL`, `addEventListener('url', listener)` semantics for the selected Expo subset. Keep `openPath(path)` and `revealInFileManager(path)` as explicit OS-opening extensions. Recent documents move to documents. |
+| `/links` | Keep `openURL`, `canOpenURL`, `getInitialURL`, `addEventListener('url', listener)` semantics for the selected Expo subset. Keep `openPath(path)` as an explicit OS-opening extension; file reveal belongs in `/files`. Recent documents move to documents. |
 | `/notifications` | `getNotificationPermission()`, `requestNotificationPermission(options?)`, `showNotification({ id, content })`, `scheduleNotification({ id, content, trigger })`, cancel/list operations, and typed response subscription. Immediate vs scheduled is explicit; cancellation of pending vs removal of delivered notifications is explicit. |
 | `/updates` | One `getUpdateStatus`, `startUpdates`, `checkForUpdates(options?)`, `configureUpdates(options)`, typed event contract. Remove overlapping `AutoUpdater` facade. Checking returns when initiated; progress/completion arrives through events. Native app updater only. |
 | `/system` | Keep information/events. Group login startup and power operations by named types, without forcing a new subpath for every function. `requestAttention({ kind })` and `preventSleep({ reason, kind })` return owned registrations. Dock operations are explicit macOS facilities and reuse menu types. |
