@@ -75,3 +75,13 @@ Search, sidebar, split view, glass and SF Symbols keep capability-specific subpa
 `SFSymbol` under `/ui/symbol` retains its Apple-specific name and size/scale/offset options, accepts normal RN style arrays and accessibility props, and reports a missing OS symbol as `E_NOT_FOUND`. Its layout remains intact if no image is available. The redundant placeholder component is removed; applications can use an ordinary View for their own placeholders. `/ui/classnames` remains an explicitly library-specific `clsx`/`tailwind-merge` convenience.
 
 Specialized validation includes mounted React event/layout tests, actual AppKit search clearing/defaults and symbol error tests, and a glass implementation syntax check. Those checks substitute RN declarations and do not establish interactive Fabric, accessibility, glass tint rendering, or sidebar context-menu placement acceptance.
+
+## Settings windows
+
+`@legendapp/spark/settings/window` exports `SettingsWindow`, `VirtualizedSettingsWindow`, their named props, the shared `SettingsWindowPage` (`id`, `title`, `render`), and `createSettingsWindowOptions`. The options-only subpath is removed. This composition requires `@legendapp/list` as a peer and uses the macOS split-view capability.
+
+Selection has one owner: use `selectedPageId` with `onSelectionChange`, or initialize internal selection with `defaultPageId`. Defaults apply once per mount. Pages need unique nonempty IDs and at least one page; controlled selection must identify an existing page. Removing an internally selected page selects the first remaining page. Both variants update the native title. The scrolling variant restores the selected page when a controlled parent declines a selection change.
+
+Pass the explicit `windowId`; remount to change its owner or selection mode. The composition shows a hidden window after its split layout and initial scroll are ready, and stops late completions after unmount. `onError` receives native/scroll failures; without it errors are logged. `SettingsRow.muted` controls visual emphasis only; disable the actual control through its own API.
+
+The settings options helper currently uses the existing managed-window option type; it will move with the canonical window contract in the window implementation unit.

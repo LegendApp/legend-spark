@@ -52,7 +52,6 @@
     "./ui/symbol": "./ui-symbol.ts",
     "./ui/search": "./ui-search.ts",
     "./settings/window": "./settings-window.ts",
-    "./settings/window/options": "./settings-window-options.ts",
     "./settings/observable": "./settings-observable.ts",
     "./ui/classnames": "./ui-classnames.ts",
     "./contracts": "./contracts.ts"

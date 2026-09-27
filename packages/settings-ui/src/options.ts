@@ -1,6 +1,6 @@
-import {
+import type {
   WindowStyleMask,
-  type WindowOptions,
+  WindowOptions,
 } from "@legendapp/spark-desktop-windows/src/window-manager";
 
 const SETTINGS_WINDOW_DEFAULT_HEIGHT = 640;
@@ -12,22 +12,22 @@ export type CreateSettingsWindowOptionsInput = Omit<
   WindowOptions,
   "deferOrderFront" | "windowStyle" | "transparentBackground"
 > & {
-  initialPage?: string;
+  defaultPageId?: string;
   windowStyle?: WindowOptions["windowStyle"];
   transparentBackground?: boolean;
 };
 
 export function createSettingsWindowOptions({
-  initialPage,
+  defaultPageId,
   title = "Settings",
   transparentBackground = true,
   windowStyle,
   ...options
 }: CreateSettingsWindowOptionsInput = {}): WindowOptions {
-  const initialProperties = initialPage || options.initialProperties
+  const initialProperties = defaultPageId || options.initialProperties
     ? {
         ...(options.initialProperties ?? {}),
-        ...(initialPage ? { initialPage } : {}),
+        ...(defaultPageId ? { defaultPageId } : {}),
       }
     : undefined;
 
@@ -41,11 +41,11 @@ export function createSettingsWindowOptions({
       hasToolbar: true,
       height: SETTINGS_WINDOW_DEFAULT_HEIGHT,
       mask: [
-        WindowStyleMask.Titled,
-        WindowStyleMask.Closable,
-        WindowStyleMask.Resizable,
-        WindowStyleMask.FullSizeContentView,
-        WindowStyleMask.UnifiedTitleAndToolbar,
+        "Titled" as WindowStyleMask,
+        "Closable" as WindowStyleMask,
+        "Resizable" as WindowStyleMask,
+        "FullSizeContentView" as WindowStyleMask,
+        "UnifiedTitleAndToolbar" as WindowStyleMask,
       ],
       minHeight: SETTINGS_WINDOW_MIN_HEIGHT,
       minWidth: SETTINGS_WINDOW_MIN_WIDTH,

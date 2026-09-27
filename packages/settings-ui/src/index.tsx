@@ -1,268 +1,153 @@
-import {
-  LegendList,
-  type LegendListRef,
-  type LegendListRenderItemProps,
-} from "@legendapp/list/react-native";
+import { LegendList, type LegendListRef, type LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { cn } from "@legendapp/spark-ui/src/classnames";
-import {
-  SidebarSplitView,
-  type SidebarSplitViewAppearance,
-  type SidebarSplitViewPaneMetrics,
-  type SidebarSplitViewResizeEvent,
-} from "@legendapp/spark-ui/src/appkit-split-view";
-import {
-  showWindow,
-  setWindowOptions,
-  setWindowTitle,
-} from "@legendapp/spark-desktop-windows/src/window-manager";
+import { SidebarSplitView, type SidebarSplitViewAppearance, type SidebarSplitViewResizeEvent } from "@legendapp/spark-ui/src/appkit-split-view";
+import { SparkError, nativeError } from "@legendapp/spark-desktop-app/src/contracts";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Pressable,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 
 const SETTINGS_SIDEBAR_TOP_INSET = 40;
 const SETTINGS_TITLEBAR_CONTENT_INSET = 56;
-const settingsContentInset = {
-  bottom: 0,
-  left: 0,
-  right: 0,
-  top: SETTINGS_TITLEBAR_CONTENT_INSET,
-};
-const settingsSidebarPressablePlatformProps = Platform.OS === "macos"
-  ? { enableFocusRing: false }
-  : {};
-const settingsPaneMetricsByWindowIdentifier = new Map<string, SidebarSplitViewPaneMetrics>();
+const settingsContentInset = { bottom: 0, left: 0, right: 0, top: SETTINGS_TITLEBAR_CONTENT_INSET };
+const settingsSidebarPressablePlatformProps = Platform.OS === "macos" ? { enableFocusRing: false } : {};
 const SettingsRowGroupContext = createContext(false);
-
 export * from "./options";
 
-export type SettingsWindowPage<PageId extends string = string> = {
+export interface SettingsWindowPage<PageId extends string = string> {
   id: PageId;
   title: string;
   render: () => ReactNode;
-};
-
-export type VirtualizedSettingsWindowPage<PageId extends string = string> = {
-  id: PageId;
-  title: string;
-  renderContent: () => ReactNode;
-};
-
-type SettingsWindowProps<PageId extends string = string> = {
-  appearance?: SidebarSplitViewAppearance;
-  backgroundClassName?: string;
-  contentBackgroundClassName?: string;
-  contentMinWidth?: number;
-  defaultPageId?: PageId;
-  initialPage?: PageId;
+}
+export interface SettingsWindowBaseProps<PageId extends string = string> {
+  /** Immutable for this mount. Remount to change the owning window. */
+  windowId: string;
   pages: readonly SettingsWindowPage<PageId>[];
-  sidebarMinWidth?: number;
-  windowIdentifier: string;
-};
-
-type VirtualizedSettingsWindowProps<PageId extends string = string> = {
   appearance?: SidebarSplitViewAppearance;
   backgroundClassName?: string;
   contentBackgroundClassName?: string;
   contentMinWidth?: number;
-  defaultPageId?: PageId;
-  estimatedItemSize?: number;
-  initialPage?: string;
-  pages: readonly VirtualizedSettingsWindowPage<PageId>[];
   sidebarMinWidth?: number;
-  windowIdentifier: string;
-};
-
-function reportSettingsWindowError(error: unknown) {
-  console.error("Failed to update settings window", error);
+  onError?: (error: SparkError) => void;
 }
+export type SettingsWindowSelectionProps<PageId extends string = string> =
+  | { selectedPageId: PageId; defaultPageId?: never; onSelectionChange: (pageId: PageId) => void }
+  | { selectedPageId?: never; defaultPageId?: PageId; onSelectionChange?: (pageId: PageId) => void };
+export type SettingsWindowProps<PageId extends string = string> = SettingsWindowBaseProps<PageId> & SettingsWindowSelectionProps<PageId>;
+export type VirtualizedSettingsWindowProps<PageId extends string = string> = SettingsWindowProps<PageId> & { estimatedItemSize?: number };
 
-function useSettingsSplitView(windowIdentifier: string, contentReadyInitially = true) {
-  const contentReadyRef = useRef(contentReadyInitially);
-  const [initialPaneMetrics] = useState(() => settingsPaneMetricsByWindowIdentifier.get(windowIdentifier));
-  const splitReadyRef = useRef(false);
-  const windowShownRef = useRef(false);
-  const showWindowIfReady = useCallback(() => {
-    if (contentReadyRef.current && splitReadyRef.current && !windowShownRef.current) {
-      windowShownRef.current = true;
-      showWindow(windowIdentifier).catch((error: unknown) => {
-        windowShownRef.current = false;
-        reportSettingsWindowError(error);
-      });
-    }
-  }, [windowIdentifier]);
-  const handleSplitViewResize = useCallback((event: SidebarSplitViewResizeEvent) => {
-    const nextMetrics = {
-      contentHeight: Math.round(event.contentHeight),
-      contentWidth: Math.round(event.contentWidth),
-      sidebarHeight: Math.round(event.sidebarHeight),
-      sidebarWidth: Math.round(event.sidebarWidth),
-    };
-    const layoutReady = event.phase === "ready" &&
-      nextMetrics.contentHeight > 0 &&
-      nextMetrics.contentWidth > 0 &&
-      nextMetrics.sidebarHeight > 0 &&
-      nextMetrics.sidebarWidth > 0;
-
-    if (layoutReady) {
-      settingsPaneMetricsByWindowIdentifier.set(windowIdentifier, nextMetrics);
-      splitReadyRef.current = true;
-      showWindowIfReady();
-    }
-  }, [showWindowIfReady, windowIdentifier]);
-  const markContentReady = useCallback(() => {
-    contentReadyRef.current = true;
-    showWindowIfReady();
-  }, [showWindowIfReady]);
-
-  return {
-    handleSplitViewResize,
-    initialPaneMetrics,
-    markContentReady,
-  };
-}
-
-export function SettingsWindow<PageId extends string = string>({
-  appearance = "system",
-  backgroundClassName = "bg-background",
-  contentBackgroundClassName = backgroundClassName,
-  contentMinWidth = 340,
-  defaultPageId,
-  initialPage,
-  pages,
-  sidebarMinWidth = 180,
-  windowIdentifier,
-}: SettingsWindowProps<PageId>) {
-  const initialSelectedPage = useMemo(() => {
-    const fallback = defaultPageId ?? pages[0]?.id;
-    return pages.some((page) => page.id === initialPage) ? initialPage : fallback;
-  }, [defaultPageId, initialPage, pages]);
-  const [selectedPage, setSelectedPage] = useState<PageId | undefined>(initialSelectedPage);
-  const selectedPageConfig = pages.find((page) => page.id === selectedPage) ?? pages[0];
-  const { handleSplitViewResize, initialPaneMetrics } = useSettingsSplitView(windowIdentifier);
-
-  useEffect(() => {
-    if (selectedPageConfig) {
-      setWindowTitle(windowIdentifier, selectedPageConfig.title).catch(reportSettingsWindowError);
-    }
-  }, [selectedPageConfig, windowIdentifier]);
-
-  useEffect(() => {
-    setWindowOptions(windowIdentifier, {
-      windowStyle: {
-        appearance,
-      },
-    }).catch(reportSettingsWindowError);
-  }, [appearance, windowIdentifier]);
-
-  if (!selectedPageConfig || !selectedPage) {
-    return null;
+function useSettingsSelection<PageId extends string>(props: SettingsWindowProps<PageId>) {
+  const { pages, windowId, selectedPageId, defaultPageId, onSelectionChange } = props;
+  const controlled = selectedPageId !== undefined;
+  const identity = useRef({ windowId, controlled });
+  if (!windowId || windowId.includes("\0") || identity.current.windowId !== windowId) throw new SparkError("E_INVALID_ARGUMENT", "Settings windowId must be nonempty and immutable; remount to change it");
+  if (identity.current.controlled !== controlled || (controlled && defaultPageId !== undefined) || (controlled && typeof onSelectionChange !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Settings selection must have one stable owner");
+  const ids = new Set<string>();
+  for (const page of pages) {
+    if (!page.id || page.id.includes("\0") || ids.has(page.id) || !page.title || typeof page.render !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Settings pages require unique nonempty IDs, titles and render callbacks");
+    ids.add(page.id);
   }
-
-  return (
-    <SidebarSplitView
-      appearance={appearance}
-      className={cn("flex-1", backgroundClassName)}
-      contentMinWidth={contentMinWidth}
-      initialPaneMetrics={initialPaneMetrics}
-      onResize={handleSplitViewResize}
-      sidebarMinWidth={sidebarMinWidth}
-      style={styles.root}
-      sidebar={<View className="min-w-0 flex-1 overflow-hidden" style={styles.pane}>
-        <SettingsSidebar
-          onSelectionChange={setSelectedPage}
-          pages={pages}
-          selectedPage={selectedPage}
-        />
-        <SettingsToolbarBackground variant="sidebar" />
-      </View>}
-      content={<View
-        className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)}
-        style={styles.pane}
-      >
-        {selectedPageConfig.render()}
-        <SettingsToolbarBackground variant="content" />
-      </View>}
-    />
-  );
+  if (!pages.length || (controlled && !ids.has(selectedPageId))) throw new SparkError("E_INVALID_ARGUMENT", "Settings selection must identify an existing page");
+  const [local, setLocal] = useState(() => {
+    if (defaultPageId !== undefined && !ids.has(defaultPageId)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown default settings page");
+    return defaultPageId ?? pages[0].id;
+  });
+  const selected = controlled ? selectedPageId : ids.has(local) ? local : pages[0].id;
+  useEffect(() => { if (!controlled && local !== selected) setLocal(selected); }, [controlled, local, selected]);
+  const [revision, setRevision] = useState(0);
+  const requestSelection = useCallback((id: PageId) => {
+    if (!pages.some(page => page.id === id)) return;
+    if (!controlled) setLocal(id);
+    // A controlled parent may keep its value; the scrolling variant must restore it.
+    setRevision(value => value + 1);
+    if (selected !== id) onSelectionChange?.(id);
+  }, [controlled, onSelectionChange, pages, selected]);
+  return { selected, requestSelection, revision };
 }
 
-export function VirtualizedSettingsWindow<PageId extends string = string>({
-  appearance = "system",
-  backgroundClassName = "bg-background",
-  contentBackgroundClassName = backgroundClassName,
-  contentMinWidth = 340,
-  defaultPageId,
-  estimatedItemSize = 520,
-  initialPage,
-  pages,
-  sidebarMinWidth = 180,
-  windowIdentifier,
-}: VirtualizedSettingsWindowProps<PageId>) {
+function useSettingsWindow(windowId: string, title: string, appearance: SidebarSplitViewAppearance, onError: SettingsWindowBaseProps["onError"], contentReadyInitially: boolean) {
+  const errorRef = useRef(onError); errorRef.current = onError;
+  const active = useRef(false);
+  const contentReady = useRef(contentReadyInitially);
+  const splitReady = useRef(false);
+  const shown = useRef(false);
+  const report = useCallback((cause: unknown) => {
+    if (active.current) {
+      const error = nativeError(cause);
+      if (errorRef.current) errorRef.current(error); else console.error(error);
+    }
+  }, []);
+  const showIfReady = useCallback(() => {
+    if (!active.current || !contentReady.current || !splitReady.current || shown.current) return;
+    shown.current = true;
+    void import("@legendapp/spark-desktop-windows/src/window-manager").then(async windows => {
+      if (!active.current) { shown.current = false; return; }
+      await windows.showWindow(windowId);
+    }).catch(cause => { shown.current = false; report(cause); });
+  }, [report, windowId]);
+  useEffect(() => { active.current = true; showIfReady(); return () => { active.current = false; }; }, [showIfReady]);
+  useEffect(() => {
+    let current = true;
+    void import("@legendapp/spark-desktop-windows/src/window-manager").then(async windows => {
+      if (current) await windows.setWindowOptions(windowId, { title, windowStyle: { appearance } });
+    }).catch(cause => { if (current) report(cause); });
+    return () => { current = false; };
+  }, [appearance, report, title, windowId]);
+  const onResize = useCallback((event: SidebarSplitViewResizeEvent) => {
+    if (event.phase === "ready" && event.contentHeight > 0 && event.contentWidth > 0 && event.sidebarHeight > 0 && event.sidebarWidth > 0) {
+      splitReady.current = true; showIfReady();
+    }
+  }, [showIfReady]);
+  const markContentReady = useCallback(() => { contentReady.current = true; showIfReady(); }, [showIfReady]);
+  return { onResize, markContentReady, report };
+}
+
+export function SettingsWindow<PageId extends string = string>(props: SettingsWindowProps<PageId>) {
+  const { appearance = "system", backgroundClassName = "bg-background", contentBackgroundClassName = backgroundClassName, contentMinWidth = 340, pages, sidebarMinWidth = 180, windowId, onError } = props;
+  const { selected, requestSelection } = useSettingsSelection(props);
+  const page = pages.find(page => page.id === selected)!;
+  const { onResize, report } = useSettingsWindow(windowId, page.title, appearance, onError, true);
+  return <SidebarSplitView appearance={appearance} className={cn("flex-1", backgroundClassName)} contentMinWidth={contentMinWidth} onResize={onResize} onError={report} sidebarMinWidth={sidebarMinWidth} style={styles.root}
+    sidebar={<View className="min-w-0 flex-1 overflow-hidden" style={styles.pane}>
+      <SettingsSidebar onSelectionChange={requestSelection} pages={pages} selectedPageId={selected} />
+      <SettingsToolbarBackground variant="sidebar" />
+    </View>}
+    content={<View className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)} style={styles.pane}>
+      {page.render()}<SettingsToolbarBackground variant="content" />
+    </View>}
+  />;
+}
+
+export function VirtualizedSettingsWindow<PageId extends string = string>(props: VirtualizedSettingsWindowProps<PageId>) {
+  const { appearance = "system", backgroundClassName = "bg-background", contentBackgroundClassName = backgroundClassName, contentMinWidth = 340, estimatedItemSize = 520, pages, sidebarMinWidth = 180, windowId, onError } = props;
+  if (!Number.isFinite(estimatedItemSize) || estimatedItemSize <= 0) throw new SparkError("E_INVALID_ARGUMENT", "estimatedItemSize must be positive");
+  const { selected, requestSelection, revision } = useSettingsSelection(props);
   const listRef = useRef<LegendListRef | null>(null);
-  const initialSelectedPage = useMemo(() => {
-    const fallback = defaultPageId ?? pages[0]?.id;
-    return pages.find((page) => page.id === initialPage)?.id ?? fallback;
-  }, [defaultPageId, initialPage, pages]);
-  const [selectedPage, setSelectedPage] = useState<PageId | undefined>(initialSelectedPage);
+  const page = pages.find(page => page.id === selected)!;
+  const { onResize, markContentReady, report } = useSettingsWindow(windowId, page.title, appearance, onError, false);
+  const programmatic = useRef(0);
+  const visiblePage = useRef<PageId | undefined>(undefined);
+  const initialized = useRef(false);
   const pageIndexById = useMemo(() => new Map(pages.map((page, index) => [page.id, index])), [pages]);
-  const initialIndex = initialSelectedPage ? pageIndexById.get(initialSelectedPage) : undefined;
-  const needsInitialScroll = initialIndex !== undefined && initialIndex > 0;
-  const { handleSplitViewResize, initialPaneMetrics, markContentReady } = useSettingsSplitView(
-    windowIdentifier,
-    !needsInitialScroll,
-  );
-
   useEffect(() => {
-    setWindowOptions(windowIdentifier, {
-      windowStyle: {
-        appearance,
-      },
-    }).catch(reportSettingsWindowError);
-  }, [appearance, windowIdentifier]);
-
-  useEffect(() => {
-    if (needsInitialScroll) {
-      const animationFrame = requestAnimationFrame(() => {
-        const scrollPromise = listRef.current?.scrollToIndex({
-          animated: false,
-          index: initialIndex,
-          viewOffset: SETTINGS_TITLEBAR_CONTENT_INSET,
-          viewPosition: 0,
-        });
-        if (scrollPromise) {
-          scrollPromise
-            .catch(reportSettingsWindowError)
-            .finally(markContentReady);
-        } else {
+    let current = true;
+    const generation = ++programmatic.current;
+    const frame = requestAnimationFrame(() => {
+      if (visiblePage.current === selected && initialized.current) { programmatic.current = 0; return; }
+      const list = listRef.current;
+      if (!list) { report(new SparkError("E_UNAVAILABLE", "Settings list is not mounted")); return; }
+      void list.scrollToIndex({ animated: initialized.current, index: pageIndexById.get(selected)!, viewOffset: SETTINGS_TITLEBAR_CONTENT_INSET, viewPosition: 0 })
+        .then(() => { if (current) visiblePage.current = selected; })
+        .catch(cause => { if (current) report(cause); })
+        .finally(() => {
+          if (!current) return;
+          initialized.current = true;
+          if (programmatic.current === generation) programmatic.current = 0;
           markContentReady();
-        }
-      });
-      return () => {
-        cancelAnimationFrame(animationFrame);
-      };
-    }
-  }, [initialIndex, markContentReady, needsInitialScroll]);
-
-  const scrollToPage = useCallback((pageId: PageId) => {
-    const index = pageIndexById.get(pageId);
-    if (index !== undefined) {
-      setSelectedPage(pageId);
-      listRef.current?.scrollToIndex({
-        animated: true,
-        index,
-        viewOffset: SETTINGS_TITLEBAR_CONTENT_INSET,
-        viewPosition: 0,
-      }).catch(reportSettingsWindowError);
-    }
-  }, [pageIndexById]);
-
-  const handleFirstVisibleItemChanged = useCallback((info: { index: number }) => {
+        });
+    });
+    return () => { current = false; cancelAnimationFrame(frame); };
+  }, [markContentReady, pageIndexById, report, revision, selected]);
+  const onFirstVisibleItemChanged = useCallback((info: { index: number }) => {
+    if (programmatic.current) return;
     const state = listRef.current?.getState();
     let index = info.index;
     if (state) {
@@ -270,82 +155,32 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
       while (index < pages.length - 1 && state.positionAtIndex(index) + state.sizeAtIndex(index) <= visibleTop) index++;
     }
     const page = pages[index];
-    if (page) {
-      setSelectedPage(page.id);
+    if (page && visiblePage.current !== page.id) {
+      visiblePage.current = page.id;
+      requestSelection(page.id);
     }
-  }, [pages]);
-
-  const handleSettingsScroll = useCallback(() => {
+  }, [pages, requestSelection]);
+  const onScroll = useCallback(() => {
     const state = listRef.current?.getState();
-    if (state) handleFirstVisibleItemChanged({ index: state.start });
-  }, [handleFirstVisibleItemChanged]);
-
-  const renderSettingsPage = useCallback((props: LegendListRenderItemProps<VirtualizedSettingsWindowPage<PageId>>) => (
-    <VirtualizedSettingsListPageRow {...props} />
-  ), []);
-
-  if (!selectedPage) {
-    return null;
-  }
-
-  return (
-    <SidebarSplitView
-      appearance={appearance}
-      className={cn("flex-1", backgroundClassName)}
-      contentMinWidth={contentMinWidth}
-      initialPaneMetrics={initialPaneMetrics}
-      onResize={handleSplitViewResize}
-      sidebarMinWidth={sidebarMinWidth}
-      style={styles.root}
-      sidebar={<View className="min-w-0 flex-1 overflow-hidden" style={styles.pane}>
-        <SettingsSidebar
-          onSelectionChange={scrollToPage}
-          pages={pages}
-          selectedPage={selectedPage}
-        />
-        <SettingsToolbarBackground variant="sidebar" />
-      </View>}
-      content={<View className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)} style={styles.pane}>
-        <LegendList
-          contentInset={settingsContentInset}
-          contentContainerStyle={styles.virtualizedSettingsListContent}
-          data={pages}
-          estimatedItemSize={estimatedItemSize}
-          keyExtractor={virtualizedSettingsPageKeyExtractor}
-          onFirstVisibleItemChanged={handleFirstVisibleItemChanged}
-          onScroll={handleSettingsScroll}
-          scrollEventThrottle={16}
-          ref={listRef}
-          renderItem={renderSettingsPage}
-          recycleItems
-          style={styles.virtualizedSettingsList}
-        />
-        <SettingsToolbarBackground variant="content" />
-      </View>}
-    />
-  );
-}
-
-const virtualizedSettingsPageKeyExtractor = (page: VirtualizedSettingsWindowPage) => page.id;
-
-function VirtualizedSettingsListPageRow<PageId extends string>({
-  index,
-  item,
-}: LegendListRenderItemProps<VirtualizedSettingsWindowPage<PageId>>) {
-  return (
-    <View
-      className="flex-col gap-5"
-      style={[styles.virtualizedSettingsListPage, index > 0 && styles.virtualizedSettingsListPageAfterFirst]}
-    >
-      <View className="flex-col gap-2">
-        <Text className="text-xl font-semibold text-text-primary leading-tight">{item.title}</Text>
-      </View>
-      <View className="flex-col">
-        {item.renderContent()}
-      </View>
+    if (state) onFirstVisibleItemChanged({ index: state.start });
+  }, [onFirstVisibleItemChanged]);
+  const renderItem = useCallback(({ index, item }: LegendListRenderItemProps<SettingsWindowPage<PageId>>) => (
+    <View className="flex-col gap-5" style={[styles.virtualizedSettingsListPage, index > 0 && styles.virtualizedSettingsListPageAfterFirst]}>
+      <View className="flex-col gap-2"><Text className="text-xl font-semibold text-text-primary leading-tight">{item.title}</Text></View>
+      <View className="flex-col">{item.render()}</View>
     </View>
-  );
+  ), []);
+  return <SidebarSplitView appearance={appearance} className={cn("flex-1", backgroundClassName)} contentMinWidth={contentMinWidth} onResize={onResize} onError={report} sidebarMinWidth={sidebarMinWidth} style={styles.root}
+    sidebar={<View className="min-w-0 flex-1 overflow-hidden" style={styles.pane}>
+      <SettingsSidebar onSelectionChange={requestSelection} pages={pages} selectedPageId={selected} /><SettingsToolbarBackground variant="sidebar" />
+    </View>}
+    content={<View className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)} style={styles.pane}>
+      <LegendList contentInset={settingsContentInset} contentContainerStyle={styles.virtualizedSettingsListContent} data={pages} estimatedItemSize={estimatedItemSize} keyExtractor={settingsPageKey} onFirstVisibleItemChanged={onFirstVisibleItemChanged} onScroll={onScroll} scrollEventThrottle={16} ref={listRef} renderItem={renderItem} recycleItems style={styles.virtualizedSettingsList} />
+      <SettingsToolbarBackground variant="content" />
+    </View>}
+  />;
 }
+const settingsPageKey = (page: SettingsWindowPage) => page.id;
 
 function SettingsToolbarBackground({ variant }: { variant: "content" | "sidebar" }) {
   return (
@@ -357,16 +192,16 @@ function SettingsToolbarBackground({ variant }: { variant: "content" | "sidebar"
   );
 }
 
-type SettingsSidebarProps<PageId extends string = string> = {
+export type SettingsSidebarProps<PageId extends string = string> = {
   onSelectionChange: (pageId: PageId) => void;
   pages: readonly Pick<SettingsWindowPage<PageId>, "id" | "title">[];
-  selectedPage: PageId;
+  selectedPageId: PageId;
 };
 
 export function SettingsSidebar<PageId extends string = string>({
   onSelectionChange,
   pages,
-  selectedPage,
+  selectedPageId,
 }: SettingsSidebarProps<PageId>) {
   return (
     <View className="flex-1 min-h-0">
@@ -376,7 +211,7 @@ export function SettingsSidebar<PageId extends string = string>({
         showsVerticalScrollIndicator={false}
       >
         {pages.map((page) => {
-          const isSelected = selectedPage === page.id;
+          const isSelected = selectedPageId === page.id;
 
           return (
             <Pressable
@@ -406,7 +241,7 @@ export function SettingsSidebar<PageId extends string = string>({
   );
 }
 
-interface SettingsPageProps {
+export interface SettingsPageProps {
   actions?: ReactNode;
   children: ReactNode;
   contentClassName?: string;
@@ -428,7 +263,7 @@ export function SettingsPage({ actions, children, contentClassName }: SettingsPa
   );
 }
 
-interface SettingsSectionProps {
+export interface SettingsSectionProps {
   card?: boolean;
   children?: ReactNode;
   className?: string;
@@ -451,7 +286,7 @@ export function SettingsSection({
 }: SettingsSectionProps) {
   const containerClassName = cn("flex flex-col gap-3", !first && "mt-7", className);
   const hasHeader = Boolean(title || description || headerRight);
-  const contentNode = children
+  const contentNode = children !== undefined && children !== null
     ? card
       ? <SettingsRowGroup className={contentClassName}>{children}</SettingsRowGroup>
       : <View className={cn("flex flex-col gap-4", contentClassName)}>{children}</View>
@@ -477,7 +312,7 @@ export function SettingsSection({
   );
 }
 
-interface SettingsCardProps {
+export interface SettingsCardProps {
   children: ReactNode;
   className?: string;
 }
@@ -490,7 +325,7 @@ export function SettingsCard({ children, className }: SettingsCardProps) {
   );
 }
 
-interface SettingsRowGroupProps {
+export interface SettingsRowGroupProps {
   children: ReactNode;
   className?: string;
 }
@@ -498,21 +333,20 @@ interface SettingsRowGroupProps {
 export function SettingsRowGroup({ children, className }: SettingsRowGroupProps) {
   return (
     <SettingsRowGroupContext.Provider value>
-      <View className={cn("overflow-hidden rounded-xl border border-border-primary bg-background-secondary/20", className)}>
-        {children}
-      </View>
+      <SettingsCard className={className}>{children}</SettingsCard>
     </SettingsRowGroupContext.Provider>
   );
 }
 
-interface SettingsRowProps {
+export interface SettingsRowProps {
   align?: "start" | "center";
   className?: string;
   contentClassName?: string;
   control: ReactNode;
   controlWrapperClassName?: string;
   description?: string;
-  disabled?: boolean;
+  /** Visual emphasis only. Disable the control itself when needed. */
+  muted?: boolean;
   title: string;
 }
 
@@ -523,7 +357,7 @@ export function SettingsRow({
   control,
   controlWrapperClassName,
   description,
-  disabled = false,
+  muted = false,
   title,
 }: SettingsRowProps) {
   const grouped = useContext(SettingsRowGroupContext);
@@ -534,7 +368,7 @@ export function SettingsRow({
         "flex-row justify-between gap-5 px-4 py-4",
         align === "center" ? "items-center" : "items-start",
         grouped ? "border-border-primary" : "",
-        disabled ? "opacity-60" : "",
+        muted ? "opacity-60" : "",
         className,
       )}
       style={grouped ? styles.groupedRow : undefined}
