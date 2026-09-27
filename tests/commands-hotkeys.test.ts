@@ -1,63 +1,24 @@
-import { describe, it, expect, vi } from "vitest";
-vi.mock("react-native", () => ({
-  NativeEventEmitter: class { addListener() { return { remove() {} }; } },
-  Platform: { OS: "macos" }, Pressable: "Pressable", ScrollView: "ScrollView", Text: "Text", View: "View",
-  StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
-  TurboModuleRegistry: { getEnforcing: () => ({ startMonitoringKeyboard: async () => true, stopMonitoringKeyboard: async () => true, respondToKeyEvent() {} }) },
-}));
-vi.mock("@legendapp/spark-ui/src/sf-symbol", () => ({ SFSymbol: "SFSymbol" }));
-import { KeyCodes, matchesHotkey, parseHotkey } from "../packages/commands/src/index";
-
-function keyboardEvent(keyCode: number, modifiers = 0) {
-  return {
-    keyCode,
-    modifiers,
-  };
-}
-
-describe("matchesHotkey", () => {
-  it("does not confuse low numeric virtual key codes with digit labels", () => {
-    expect(parseHotkey(KeyCodes.KEY_A)).toEqual([KeyCodes.KEY_A]);
-    expect(parseHotkey(KeyCodes.KEY_S)).toEqual([KeyCodes.KEY_S]);
-    expect(parseHotkey(KeyCodes.KEY_1)).toEqual([KeyCodes.KEY_1]);
-  });
-
-  it("ignores the implicit function modifier on navigation keys", () => {
-    const implicitArrowModifiers = KeyCodes.MODIFIER_FUNCTION | 0x100;
-
-    expect(matchesHotkey(keyboardEvent(KeyCodes.KEY_UP, implicitArrowModifiers), KeyCodes.KEY_UP)).toBe(true);
-    expect(matchesHotkey(keyboardEvent(KeyCodes.KEY_DOWN, implicitArrowModifiers), KeyCodes.KEY_DOWN)).toBe(true);
-  });
-
-  it("preserves explicit modifier matching for navigation keys", () => {
-    const implicitArrowModifiers = KeyCodes.MODIFIER_FUNCTION | 0x100;
-
-    expect(
-      matchesHotkey(
-        keyboardEvent(KeyCodes.KEY_UP, implicitArrowModifiers | KeyCodes.MODIFIER_SHIFT),
-        `${KeyCodes.MODIFIER_SHIFT}+${KeyCodes.KEY_UP}`,
-      ),
-    ).toBe(true);
-    expect(
-      matchesHotkey(
-        keyboardEvent(KeyCodes.KEY_UP, implicitArrowModifiers),
-        `${KeyCodes.MODIFIER_SHIFT}+${KeyCodes.KEY_UP}`,
-      ),
-    ).toBe(false);
-  });
-
-  it("still requires explicit function when a hotkey is configured with function", () => {
-    expect(
-      matchesHotkey(
-        keyboardEvent(KeyCodes.KEY_UP, KeyCodes.MODIFIER_FUNCTION),
-        `${KeyCodes.MODIFIER_FUNCTION}+${KeyCodes.KEY_UP}`,
-      ),
-    ).toBe(true);
-    expect(
-      matchesHotkey(
-        keyboardEvent(KeyCodes.KEY_UP),
-        `${KeyCodes.MODIFIER_FUNCTION}+${KeyCodes.KEY_UP}`,
-      ),
-    ).toBe(false);
-  });
+import { expect, test, vi } from "vitest";
+vi.mock("react-native", () => ({ Platform: { OS: "macos" } }));
+import { matchesHotkey, normalizeBinding, bindingFromEvent, formatHotkey } from "../packages/commands/src/bindings";
+const event = (key: string, modifiers = 0, keyCode = 0) => ({ key, keyCode, modifiers, eventId: "test", windowId: "main" });
+test("commands use the shared named syntax and character labels rather than numeric virtual codes", () => {
+  expect(matchesHotkey(event("a"), "A")).toBe(true);
+  expect(matchesHotkey(event("1", 0, 18), "1")).toBe(true);
+  expect(matchesHotkey(event("s", 1 << 20, 1), "Command+S")).toBe(true);
+  expect(normalizeBinding("commandorcontrol+shift+k")).toBe("CmdOrCtrl+Shift+K");
+  for (const value of [0, "1048576+0", "Command+KeyO", "Cmd+Cmd+S"]) expect(() => normalizeBinding(value as never)).toThrow();
+});
+test("navigation ignores implicit Fn but explicit modifiers still match exactly", () => {
+  expect(matchesHotkey(event("\uf700", (1 << 23) | 0x100), "Up")).toBe(true);
+  expect(matchesHotkey(event("\uf700", (1 << 23) | (1 << 17)), "Shift+Up")).toBe(true);
+  expect(matchesHotkey(event("\uf700", 1 << 23), "Shift+Up")).toBe(false);
+  expect(matchesHotkey(event("\uf700"), "Fn+Up")).toBe(false);
+  expect(matchesHotkey(event("\uf700", 1 << 23), "Fn+Up")).toBe(true);
+});
+test("binding capture preserves media/navigation names and ignores incidental caps lock", () => {
+  expect(bindingFromEvent(event("MediaPlayPause"))).toBe("MediaPlayPause");
+  expect(bindingFromEvent(event("\uf729", 1 << 23))).toBe("Home");
+  expect(bindingFromEvent(event("s", (1 << 20) | (1 << 16)))).toBe("Cmd+S");
+  expect(formatHotkey("Cmd+Shift+S")).toBe("⌘ + ⇧ + S");
 });

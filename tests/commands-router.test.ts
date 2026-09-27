@@ -6,81 +6,34 @@ vi.mock("react-native", () => ({
   TurboModuleRegistry: { getEnforcing: () => ({ startMonitoringKeyboard: async () => true, stopMonitoringKeyboard: async () => true, respondToKeyEvent() {} }) },
 }));
 vi.mock("@legendapp/spark-ui/src/sf-symbol", () => ({ SFSymbol: "SFSymbol" }));
-const { mockKeyDownListeners, mockKeyUpListeners } = vi.hoisted(() => ({ mockKeyDownListeners: new Set<(event: { keyCode: number; modifiers: number }) => boolean | void>(), mockKeyUpListeners: new Set<(event: { keyCode: number; modifiers: number }) => boolean | void>() }));
-vi.mock("@legendapp/spark-desktop-shortcuts/src/keyboard-manager", () => {
-  const KeyCodes = {
-    KEY_A: 0,
-    KEY_S: 1,
-    KEY_RETURN: 36,
-    KEY_TAB: 48,
-    KEY_SPACE: 49,
-    KEY_DELETE: 51,
-    KEY_BACKSPACE: 51,
-    KEY_ESCAPE: 53,
-    KEY_HOME: 115,
-    KEY_PAGE_UP: 116,
-    KEY_FORWARD_DELETE: 117,
-    KEY_END: 119,
-    KEY_PAGE_DOWN: 121,
-    KEY_LEFT: 123,
-    KEY_RIGHT: 124,
-    KEY_DOWN: 125,
-    KEY_UP: 126,
-    KEY_MINUS: 27,
-    KEY_EQUALS: 24,
-    KEY_COMMA: 43,
-    KEY_PERIOD: 47,
-    KEY_SLASH: 44,
-    KEY_MEDIA_PLAY_PAUSE: 10001,
-    KEY_MEDIA_NEXT: 10002,
-    KEY_MEDIA_PREVIOUS: 10003,
-    MODIFIER_CAPS_LOCK: 1 << 16,
-    MODIFIER_SHIFT: 1 << 17,
-    MODIFIER_CONTROL: 1 << 18,
-    MODIFIER_OPTION: 1 << 19,
-    MODIFIER_COMMAND: 1 << 20,
-    MODIFIER_FUNCTION: 1 << 23,
-  };
-  return {
-    addKeyDownListener: (listener: (event: { keyCode: number; modifiers: number }) => boolean | void) => {
-      mockKeyDownListeners.add(listener);
-      return () => mockKeyDownListeners.delete(listener);
-    },
-    addKeyUpListener: (listener: (event: { keyCode: number; modifiers: number }) => boolean | void) => {
-      mockKeyUpListeners.add(listener);
-      return () => mockKeyUpListeners.delete(listener);
-    },
-    createModifierMask: (...modifiers: number[]) => modifiers.reduce((mask, modifier) => mask | modifier, 0),
-    hasModifier: (event: { modifiers: number }, modifier: number) => (event.modifiers & modifier) === modifier,
-    KeyCodes,
-  };
-});
-
-import {
-  KeyCodes,
-  createHotkeyRouter,
-  type HotkeyDefinition,
-} from "../packages/commands/src/index";
-
+const { mockKeyDownListeners, mockKeyUpListeners } = vi.hoisted(() => ({ mockKeyDownListeners: new Set<(event: any) => boolean | void>(), mockKeyUpListeners: new Set<(event: any) => boolean | void>() }));
+vi.mock("@legendapp/spark-desktop-shortcuts/src/keyboard-manager", () => ({
+  addKeyboardListener: async (type: string, listener: (event: any) => boolean | void) => {
+    const listeners = type === "down" ? mockKeyDownListeners : mockKeyUpListeners;
+    listeners.add(listener); return { async remove() { listeners.delete(listener); } };
+  },
+}));
+import { createHotkeyRouter, type HotkeyDefinition } from "../packages/commands/src/index";
+import { KeyCodes } from "../packages/desktop-shortcuts/src/keyboard-manager/codes";
 function keyDown(keyCode: number, modifiers = 0) {
   for (const listener of mockKeyDownListeners) {
-    listener({ keyCode, modifiers });
+    listener({ keyCode, key: ({ 0: "a", 1: "s", 49: " ", 126: "\uf700" })[keyCode] ?? "", modifiers, windowId: null, eventId: "test" });
   }
 }
 
 function keyUp(keyCode: number, modifiers = 0) {
   for (const listener of mockKeyUpListeners) {
-    listener({ keyCode, modifiers });
+    listener({ keyCode, key: ({ 0: "a", 1: "s", 49: " ", 126: "\uf700" })[keyCode] ?? "", modifiers, windowId: null, eventId: "test" });
   }
 }
 
 function definition(
   id: string,
-  defaultValue: number,
+  defaultBinding: string,
   options: Partial<HotkeyDefinition<string>> = {},
 ): HotkeyDefinition<string> {
   return {
-    defaultValue,
+    defaultBindings: [defaultBinding],
     id,
     title: id,
     ...options,
@@ -88,14 +41,14 @@ function definition(
 }
 
 describe("createHotkeyRouter", () => {
-  it("routes every configured binding for a command", () => {
+  it("routes every configured binding for a command", async () => {
     const router = createHotkeyRouter();
     const handler = vi.fn();
-    const remove = router.register({
+    const remove = await router.register({
       bindings: {
-        open: [KeyCodes.KEY_A, KeyCodes.KEY_S],
+        open: ["A", "S"],
       },
-      definitions: [definition("open", KeyCodes.KEY_A)],
+      definitions: [definition("open", "A")],
       handlers: { open: handler },
     });
 
@@ -105,20 +58,20 @@ describe("createHotkeyRouter", () => {
     keyUp(KeyCodes.KEY_S);
 
     expect(handler).toHaveBeenCalledTimes(2);
-    remove();
+    await remove.remove();
   });
 
-  it("routes only the active window and honors window suspension", () => {
+  it("routes only the active window and honors window suspension", async () => {
     const router = createHotkeyRouter();
     const windowHandler = vi.fn();
     const applicationHandler = vi.fn();
-    const definitions = [definition("open", KeyCodes.KEY_A)];
-    const removeApplication = router.register({
+    const definitions = [definition("open", "A")];
+    const removeApplication = await router.register({
       definitions,
       handlers: { open: applicationHandler },
       scope: { kind: "application" },
     });
-    const removeWindow = router.register({
+    const removeWindow = await router.register({
       definitions,
       handlers: { open: windowHandler },
       scope: { kind: "window", windowId: "viewer-a" },
@@ -137,21 +90,21 @@ describe("createHotkeyRouter", () => {
     expect(windowHandler).not.toHaveBeenCalled();
     expect(applicationHandler).toHaveBeenCalledTimes(1);
 
-    resume();
+    resume.remove();
     keyDown(KeyCodes.KEY_A);
     keyUp(KeyCodes.KEY_A);
     expect(windowHandler).toHaveBeenCalledTimes(1);
     expect(applicationHandler).toHaveBeenCalledTimes(1);
 
-    removeWindow();
-    removeApplication();
+    await removeWindow.remove();
+    await removeApplication.remove();
   });
 
-  it("uses priority and handler consumption for overlapping bindings", () => {
+  it("uses priority and handler consumption for overlapping bindings", async () => {
     const router = createHotkeyRouter();
     const calls: string[] = [];
-    const definitions = [definition("space", KeyCodes.KEY_SPACE)];
-    const removeFallback = router.register({
+    const definitions = [definition("space", "Space")];
+    const removeFallback = await router.register({
       definitions,
       handlers: {
         space: () => {
@@ -160,7 +113,7 @@ describe("createHotkeyRouter", () => {
       },
       priority: 100,
     });
-    const removeControl = router.register({
+    const removeControl = await router.register({
       definitions,
       handlers: {
         space: () => {
@@ -175,8 +128,8 @@ describe("createHotkeyRouter", () => {
     keyUp(KeyCodes.KEY_SPACE);
     expect(calls).toEqual(["control", "fallback"]);
 
-    removeControl();
-    const removeConsumingControl = router.register({
+    await removeControl.remove();
+    const removeConsumingControl = await router.register({
       definitions,
       handlers: {
         space: () => {
@@ -189,21 +142,21 @@ describe("createHotkeyRouter", () => {
     keyUp(KeyCodes.KEY_SPACE);
     expect(calls).toEqual(["control", "fallback", "consumed"]);
 
-    removeConsumingControl();
-    removeFallback();
+    await removeConsumingControl.remove();
+    await removeFallback.remove();
   });
 
-  it("dispatches repeated keydown events only for repeatable commands", () => {
+  it("dispatches repeated keydown events only for repeatable commands", async () => {
     const router = createHotkeyRouter();
     const normalHandler = vi.fn();
     const repeatHandler = vi.fn();
-    const removeNormal = router.register({
-      definitions: [definition("normal", KeyCodes.KEY_A)],
+    const removeNormal = await router.register({
+      definitions: [definition("normal", "A")],
       handlers: { normal: normalHandler },
       priority: 200,
     });
-    const removeRepeat = router.register({
-      definitions: [definition("repeat", KeyCodes.KEY_A, { repeat: true })],
+    const removeRepeat = await router.register({
+      definitions: [definition("repeat", "A", { repeat: true })],
       handlers: {
         repeat: (context) => {
           repeatHandler(context.repeated);
@@ -220,21 +173,21 @@ describe("createHotkeyRouter", () => {
     expect(repeatHandler).toHaveBeenNthCalledWith(1, false);
     expect(repeatHandler).toHaveBeenNthCalledWith(2, true);
     expect(normalHandler).toHaveBeenCalledTimes(1);
-    removeRepeat();
-    removeNormal();
+    await removeRepeat.remove();
+    await removeNormal.remove();
   });
 
-  it("provides pressed modifier state without accepting extra modifiers by default", () => {
+  it("provides pressed modifier state without accepting extra modifiers by default", async () => {
     const router = createHotkeyRouter();
     const exactHandler = vi.fn();
     const selectionHandler = vi.fn();
-    const removeExact = router.register({
-      definitions: [definition("exact", KeyCodes.KEY_UP)],
+    const removeExact = await router.register({
+      definitions: [definition("exact", "Up")],
       handlers: { exact: exactHandler },
       priority: 100,
     });
-    const removeSelection = router.register({
-      definitions: [definition("selection", KeyCodes.KEY_UP, { allowExtraModifiers: true })],
+    const removeSelection = await router.register({
+      definitions: [definition("selection", "Up", { allowExtraModifiers: true })],
       handlers: {
         selection: (context) => {
           selectionHandler(context.pressedKeys.has(KeyCodes.MODIFIER_SHIFT));
@@ -249,7 +202,7 @@ describe("createHotkeyRouter", () => {
     expect(selectionHandler).toHaveBeenCalledWith(true);
     expect(exactHandler).not.toHaveBeenCalled();
     expect(router.getPressedKeys().has(KeyCodes.KEY_UP)).toBe(false);
-    removeSelection();
-    removeExact();
+    await removeSelection.remove();
+    await removeExact.remove();
   });
 });

@@ -47,7 +47,6 @@
     "./ui/sidebar": "./ui-sidebar.ts",
     "./app/documents": "./app-documents.ts",
     "./shortcuts/commands": "./shortcuts-commands.ts",
-    "./shortcuts/commands/storage": "./shortcuts-commands-storage.ts",
     "./shortcuts/keyboard": "./shortcuts-keyboard.ts",
     "./ui/glass": "./ui-glass.ts",
     "./ui/symbol": "./ui-symbol.ts",

@@ -61,3 +61,5 @@ Run `npm test`, `npm run typecheck`, and
 Native consumer builds and app-specific runtime checks are also required after
 changing native sources or package ownership; a Metro reload cannot load new
 TurboModules or native view providers.
+
+See [commands and keyboard input](commands.md) for named bindings, routing, capture and persistence.

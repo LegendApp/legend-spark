@@ -1,125 +1,36 @@
-import { describe, it, expect, vi } from "vitest";
-vi.mock("react-native", () => ({
-  NativeEventEmitter: class { addListener() { return { remove() {} }; } },
-  Platform: { OS: "macos" }, Pressable: "Pressable", ScrollView: "ScrollView", Text: "Text", View: "View",
-  StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
-  TurboModuleRegistry: { getEnforcing: () => ({ startMonitoringKeyboard: async () => true, stopMonitoringKeyboard: async () => true, respondToKeyEvent() {} }) },
-}));
-vi.mock("@legendapp/spark-ui/src/sf-symbol", () => ({ SFSymbol: "SFSymbol" }));
-import {
-  KeyCodes,
-  getHotkeyBindingConflicts,
-  hotkeyFileVersion,
-  normalizeHotkeyFile,
-  serializeHotkeyFile,
-  serializeHotkeyFilePatch,
-  type HotkeyDefinition,
-} from "../packages/commands/src/index";
+import { expect, test, vi } from "vitest";
+vi.mock("react-native", () => ({ Platform: { OS: "macos" }, TurboModuleRegistry: { get: () => null } }));
+import { getHotkeyBindingConflicts, normalizeHotkeyFile, serializeHotkeyFile, type HotkeyDefinition } from "../packages/commands/src/bindings";
+const definitions = [ { id: "open", title: "Open", defaultBindings: ["CmdOrCtrl+O"] }, { id: "save", title: "Save", defaultBindings: ["CmdOrCtrl+S"] } ] as const satisfies readonly HotkeyDefinition<string>[];
+test("persistence has one strict versioned format, without legacy migration", () => {
+  for (const value of [null, {}, { open: "⌥+S" }, { version: 2, bindings: {} }, { version: 1, bindings: { open: 0 } }, { version: 1, bindings: { open: ["Command+KeyO"] } }]) expect(() => normalizeHotkeyFile(value, definitions)).toThrow();
+});
+test("named bindings round-trip while retaining CommandOrControl portability", () => {
+  const normalized = normalizeHotkeyFile({ version: 1, bindings: { open: ["CommandOrControl+O", "cmdorctrl+o"], save: ["Alt+S", "F19"] } }, definitions);
+  expect(serializeHotkeyFile(normalized, definitions)).toEqual({ version: 1, bindings: { open: ["CmdOrCtrl+O"], save: ["Alt+S", "F19"] } });
+});
+test("missing commands use defaults and empty arrays explicitly disable", () => {
+  expect(normalizeHotkeyFile({ version: 1, bindings: { open: [] } }, definitions)).toEqual({ version: 1, bindings: { open: [], save: ["CmdOrCtrl+S"] } });
+  expect(normalizeHotkeyFile(undefined, definitions).bindings.open).toEqual(["CmdOrCtrl+O"]);
+});
+test("limits keep the first bindings and reject invalid limits", () => {
+  expect(normalizeHotkeyFile({ version: 1, bindings: { open: ["A", "B"] } }, definitions, { maxBindingsPerCommand: 1 }).bindings.open).toEqual(["A"]);
+  expect(() => normalizeHotkeyFile(undefined, definitions, { maxBindingsPerCommand: -1 })).toThrow();
+});
+test("conflict detection compares equivalent accelerator aliases on the active platform", () => {
+  expect(getHotkeyBindingConflicts(definitions, { open: ["CommandOrControl+O"], save: ["Meta+O"] }).get("Cmd+O")).toEqual(["open", "save"]);
+});
 
-const definitions = [
-  {
-    defaultBindings: [KeyCodes.KEY_A],
-    defaultValue: KeyCodes.KEY_A,
-    id: "open",
-    title: "Open",
-  },
-  {
-    defaultBindings: [KeyCodes.KEY_S],
-    defaultValue: KeyCodes.KEY_S,
-    id: "save",
-    title: "Save",
-  },
-] as const satisfies readonly HotkeyDefinition<string>[];
-
-describe("hotkey persistence", () => {
-  it("migrates legacy scalar and display-formatted values into binding arrays", () => {
-    const normalized = normalizeHotkeyFile({
-      open: `${KeyCodes.MODIFIER_COMMAND}+${KeyCodes.KEY_O}`,
-      save: "⌥+S",
-    }, definitions);
-
-    expect(normalized).toEqual({
-      bindings: {
-        open: [`${KeyCodes.MODIFIER_COMMAND}+${KeyCodes.KEY_O}`],
-        save: [`${KeyCodes.MODIFIER_OPTION}+${KeyCodes.KEY_S}`],
-      },
-      version: hotkeyFileVersion,
-    });
-  });
-
-  it("serializes stable symbolic names and reads them back", () => {
-    const normalized = normalizeHotkeyFile({
-      bindings: {
-        open: ["Command+KeyO", "Command+KeyO"],
-        save: ["Option+KeyS", "Code999"],
-      },
-      version: 1,
-    }, definitions);
-    const serialized = serializeHotkeyFile(normalized, definitions);
-
-    expect(serialized).toEqual({
-      bindings: {
-        open: ["Command+KeyO"],
-        save: ["Option+KeyS", "Code999"],
-      },
-      version: 1,
-    });
-    expect(normalizeHotkeyFile(serialized, definitions)).toEqual(normalized);
-  });
-
-  it("fills missing commands from defaults while preserving explicitly empty bindings", () => {
-    expect(normalizeHotkeyFile({ bindings: { open: [] }, version: 1 }, definitions)).toEqual({
-      bindings: {
-        open: [],
-        save: [KeyCodes.KEY_S],
-      },
-      version: 1,
-    });
-  });
-
-  it("limits loaded and default bindings when a command supports one shortcut", () => {
-    expect(normalizeHotkeyFile({
-      bindings: {
-        open: ["KeyA", "KeyB"],
-      },
-      version: 1,
-    }, definitions, { maxBindingsPerCommand: 1 })).toEqual({
-      bindings: {
-        open: [`${KeyCodes.KEY_A}`],
-        save: [KeyCodes.KEY_S],
-      },
-      version: 1,
-    });
-  });
-
-  it("preserves the path of a partial binding update", () => {
-    expect(serializeHotkeyFilePatch({
-      bindings: {
-        save: [KeyCodes.KEY_A, KeyCodes.KEY_S],
-      },
-    }, definitions, { maxBindingsPerCommand: 1 })).toEqual({
-      bindings: {
-        save: ["KeyA"],
-      },
-    });
-
-    expect(serializeHotkeyFilePatch({
-      bindings: {
-        save: [],
-      },
-    }, definitions, { maxBindingsPerCommand: 1 })).toEqual({
-      bindings: {
-        save: [],
-      },
-    });
-  });
-
-  it("reports conflicts across commands", () => {
-    const conflicts = getHotkeyBindingConflicts(definitions, {
-      open: [KeyCodes.KEY_A],
-      save: [KeyCodes.KEY_A],
-    });
-
-    expect(conflicts.get(`${KeyCodes.KEY_A}`)).toEqual(["open", "save"]);
-  });
+import { createHotkeyStore } from "../packages/commands/src/storage";
+test("the consolidated store awaits decoding and saves canonical complete snapshots", async () => {
+  let bytes: string | undefined = JSON.stringify({ version: 1, bindings: { open: ["CommandOrControl+P"] } });
+  const storage = { read: async () => bytes, write: async (_: string, value: string) => { bytes = value; }, remove: async () => { bytes = undefined; } };
+  const store = await createHotkeyStore({ definitions, path: "/hotkeys.json", storage, debounceMs: 0 });
+  expect(store.value$.bindings.open.peek()).toEqual(["CmdOrCtrl+P"]);
+  store.value$.bindings.save.set([]); await store.flush();
+  expect(JSON.parse(bytes!)).toEqual({ version: 1, bindings: { open: ["CmdOrCtrl+P"], save: [] } });
+  await store.close();
+  bytes = JSON.stringify({ open: 0 });
+  await expect(createHotkeyStore({ definitions, path: "/hotkeys.json", storage })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  expect(bytes).toBe(JSON.stringify({ open: 0 }));
 });

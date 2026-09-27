@@ -81,10 +81,10 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
 #if TARGET_OS_OSX
   dispatch_async(dispatch_get_main_queue(), ^{
     [self startMonitoringInternal];
-    resolve(@YES);
+    if (self->_localEventMonitor) resolve(@YES); else reject(@"E_UNAVAILABLE", @"Keyboard event monitor could not start", nil);
   });
 #else
-  resolve(@NO);
+  reject(@"E_UNSUPPORTED_PLATFORM", @"Keyboard monitoring requires macOS", nil);
 #endif
 }
 
@@ -107,7 +107,7 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
     return;
   }
   dispatch_barrier_async(_eventResponseQueue, ^{
-    self->_eventResponses[eventId] = @(handled);
+    if (self->_eventResponses[eventId]) self->_eventResponses[eventId] = @(handled);
   });
 #endif
 }
@@ -155,7 +155,7 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
   }
 
   NSString *eventName = event.type == NSEventTypeKeyDown ? @"onKeyDown" : @"onKeyUp";
-  BOOL handled = [self emitKeyboardEvent:eventName keyCode:event.keyCode modifiers:event.modifierFlags window:event.window];
+  BOOL handled = [self emitKeyboardEvent:eventName keyCode:event.keyCode key:[event charactersByApplyingModifiers:0].lowercaseString ?: @"" modifiers:event.modifierFlags window:event.window];
   return handled ? nil : event;
 }
 
@@ -173,7 +173,7 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
     return event;
   }
   NSString *eventName = keyState == NX_KEYDOWN ? @"onKeyDown" : @"onKeyUp";
-  BOOL handled = [self emitKeyboardEvent:eventName keyCode:mappedKeyCode.integerValue modifiers:0 window:event.window];
+  BOOL handled = [self emitKeyboardEvent:eventName keyCode:mappedKeyCode.integerValue key:@{@10001: @"MediaPlayPause", @10002: @"MediaNext", @10003: @"MediaPrevious"}[mappedKeyCode] modifiers:0 window:event.window];
   return handled ? nil : event;
 }
 
@@ -193,14 +193,16 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
   }
 }
 
-- (BOOL)emitKeyboardEvent:(NSString *)eventName keyCode:(NSInteger)keyCode modifiers:(NSUInteger)modifiers window:(NSWindow *)window
+- (BOOL)emitKeyboardEvent:(NSString *)eventName keyCode:(NSInteger)keyCode key:(NSString *)key modifiers:(NSUInteger)modifiers window:(NSWindow *)window
 {
   NSString *eventId = NSUUID.UUID.UUIDString;
+  dispatch_barrier_sync(_eventResponseQueue, ^{ self->_eventResponses[eventId] = @NO; });
   [self sendEventWithName:eventName body:@{
     @"keyCode": @(keyCode),
+    @"key": key,
     @"modifiers": @(modifiers),
     @"eventId": eventId,
-    @"windowIdentifier": window.identifier ?: @"",
+    @"windowId": [window.identifier hasPrefix:@"spark."] ? [window.identifier substringFromIndex:6] : window.identifier ?: (id)NSNull.null,
   }];
 
   [NSThread sleepForTimeInterval:0.01];
