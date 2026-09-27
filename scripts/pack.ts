@@ -1,3 +1,4 @@
+import { packAudio } from "./prepare-audio.ts";
 import { packArchive } from "../packages/cli/src/pack-archive.ts";
 import { packSpark } from "./pack-spark.ts";
 import { packWindowsLibraries } from "./prepare-windows-libraries.ts";
@@ -17,7 +18,7 @@ const packages = [
   "fixtures/sdk-test-driver",
 ];
 const manifest: Record<string, string> = await packRuntimes(root, output);
-Object.assign(manifest, await packWindowsLibraries(output));
+Object.assign(manifest, await packWindowsLibraries(output), await packAudio(root, output));
 manifest["@legendapp/spark"] = await packSpark(root, output);
 for (const dir of packages) {
   const pkg = readJson(path.join(root, dir, "package.json"));

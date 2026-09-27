@@ -1,3 +1,4 @@
+import { packAudio } from "./prepare-audio.ts";
 import { spawnProcess } from "../packages/cli/src/process.ts";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -12,7 +13,7 @@ import { readJson, writeJson } from "../packages/cli/src/project.ts";
 const root = path.resolve(import.meta.dirname, "..");
 const cache = path.join(root, ".spark/workspace-patches");
 mkdirSync(cache, { recursive: true });
-const archives: Record<string, string> = { ...await packRuntimes(root, cache), ...await packWindowsLibraries(cache) };
+const archives: Record<string, string> = { ...await packRuntimes(root, cache), ...await packWindowsLibraries(cache), ...await packAudio(root, cache) };
 const pins = readJson(path.join(root, "patches/workspace/upstream.json"));
 const patches: Record<string, string> = {};
 for (const [name, pin] of Object.entries(pins) as [string, { version: string; url: string; integrity: string }][]) {

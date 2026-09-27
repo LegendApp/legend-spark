@@ -18,5 +18,10 @@
     "version": "0.1.0-alpha.2",
     "url": "https://registry.npmjs.org/@react-native-runtimes/core/-/core-0.1.0-alpha.2.tgz",
     "integrity": "sha512-of6A8BXTnIziF/+CaDQmIY0saC+5TpegJhs4CCkRXIhspWluSt3AcI/hYBwgHimJxH8BIsXpQ6JJT0EFZfq25g=="
+  },
+  "expo-audio": {
+    "version": "1.1.1",
+    "url": "https://registry.npmjs.org/expo-audio/-/expo-audio-1.1.1.tgz",
+    "integrity": "sha512-CPCpJ+0AEHdzWROc0f00Zh6e+irLSl2ALos/LPvxEeIcJw1APfBa4DuHPkL4CQCWsVe7EnUjFpdwpqsEUWcP0g=="
   }
 }

@@ -125,7 +125,8 @@
     "react-native-nitro-modules@0.35.7": "patches/workspace/react-native-nitro-modules@0.35.7.patch",
     "@op-engineering/op-sqlite@18.2.1": "patches/workspace/op-engineering-op-sqlite@18.2.1.patch",
     "react-native-webview@16.0.0": "patches/workspace/react-native-webview@16.0.0.patch",
-    "@react-native-runtimes/core@0.1.0-alpha.2": "patches/workspace/react-native-runtimes-core@0.1.0-alpha.2.patch"
+    "@react-native-runtimes/core@0.1.0-alpha.2": "patches/workspace/react-native-runtimes-core@0.1.0-alpha.2.patch",
+    "expo-audio@1.1.1": "patches/workspace/expo-audio@1.1.1.patch"
   },
   "engines": {
     "node": ">=24.19.0"
