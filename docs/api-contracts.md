@@ -380,3 +380,5 @@ Inspected the current export map, existing ownership policy, Expo adapters, and 
 This document covers every API family and every existing umbrella export. It is not a finished declaration specification for every method: menu toolbar extensions, SQL integer/result behavior, complete WebView behavior/defaults, precise permission types and some platform-specific window options require explicit final definitions and tests. Those are bounded implementation/design decisions, not reasons to leave API families out of scope.
 
 Implementation progress and verification are tracked in [API cleanup](api-cleanup.md).
+
+The [API design rules](api-design.md) govern imperative cores and optional React bindings for all capability families.

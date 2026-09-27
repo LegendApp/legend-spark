@@ -26,6 +26,9 @@ web, and native desktop backends. See AsyncStorage in the examples for a library
 that keeps its own import and implementation. No framework wrapper is necessary
 merely to rename an external package.
 
+Before designing a public capability, follow the [API design rules](api-design.md)
+for imperative cores, optional hooks, ownership, and required contract tests.
+
 ## Write a native module
 
 Use the existing `fixtures/native-greeting` package as the minimal TurboModule
