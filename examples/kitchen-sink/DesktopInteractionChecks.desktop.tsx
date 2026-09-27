@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 import { Button } from "@legendapp/spark/ui";
 import { showMessage } from "@legendapp/spark/dialogs";
 import { showContextMenu, type MenuItem } from "@legendapp/spark/context-menu";
@@ -134,20 +134,21 @@ export default function DesktopInteractionChecks({ check, onError, onBusy }: {
   async function systemChecks() {
     const info = await system.getSystemInfo();
     assertContract(!!info.osVersion && !!info.locale && info.idleSeconds >= 0 && (info.batteryLevel === null || (info.batteryLevel >= 0 && info.batteryLevel <= 1)), "Invalid system information");
-    const sleep = await system.preventSleep("Platform acceptance", "display");
+    const sleep = await system.preventSleep({ reason: "Platform acceptance", kind: "display" });
     await sleep.remove(); await sleep.remove();
-    const subscription = await system.onSystemEvent(() => {}); subscription.remove();
+    const subscription = await system.onSystemEvent(() => {}); await subscription.remove();
     const attention = await system.requestAttention(); await attention.remove();
     setInstruction("Verify badge ‘1’ on the Dock/taskbar. Open the Dock/taskbar menu and choose Continue. Windows hides disabled task entries.");
     let selected!: () => void;
     const action = new Promise<void>(resolve => { selected = resolve; });
-    await system.setDockBadge("1");
-    let menu: Awaited<ReturnType<typeof system.setDockMenu>> | undefined;
+    await system.setAppBadge("1");
+    const createMenu = Platform.OS === "windows" ? system.createTaskbarMenu : system.createDockMenu;
+    let menu: Awaited<ReturnType<typeof createMenu>> | undefined;
     try {
-      menu = await system.setDockMenu([{ id: "checked", title: "Checked", checked: true }, { id: "disabled", title: "Disabled", enabled: false }, { id: "continue", title: "Continue" }], id => { if (id === "continue") selected(); });
-      await requireError(() => system.setDockMenu([{ id: "duplicate", title: "Duplicate" }], () => {}), "E_DOCK_MENU_EXISTS");
+      menu = await createMenu({ items: [{ type: "checkbox", id: "checked", label: "Checked", checked: true }, { type: "action", id: "disabled", label: "Disabled", disabled: true }, { type: "action", id: "continue", label: "Continue" }], onAction: event => { if (event.itemId === "continue") selected(); } });
+      await requireError(() => createMenu({ items: [{ type: "action", id: "duplicate", label: "Duplicate" }], onAction: () => {} }), "E_ALREADY_EXISTS");
       await within(action, 45000);
-    } finally { await menu?.remove(); await system.setDockBadge(""); }
+    } finally { await menu?.remove(); await system.setAppBadge(""); }
     setInstruction("System API lifecycle and Dock/taskbar action passed. Sleep/wake, session lock and OS theme-change events still need explicit native checks.");
   }
   return <View style={{ gap: 8 }}>

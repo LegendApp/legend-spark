@@ -64,7 +64,7 @@ export async function runExpansionChecks(check: (name: string, action: () => Pro
   await check("system state, startup availability and sleep assertion disposal", async () => {
     const state = await system.getSystemInfo(); assert(Number.isFinite(state.idleSeconds) && typeof state.dark === "boolean", "Invalid system state");
     assert((await system.getLoginItemStatus()) === "unavailable", "Development runtime could change login startup");
-    const events = await system.onSystemEvent(() => {}); const blocker = await system.preventSleep("Automated integration test"); await blocker.remove(); await blocker.remove(); events.remove();
+    const events = await system.onSystemEvent(() => {}); const blocker = await system.preventSleep({ reason: "Automated integration test" }); await blocker.remove(); await blocker.remove(); await events.remove();
   });
   await check("SQLite persistence, parameters and transaction rollback", async () => {
     let db = await openDatabase("expansion-test.sqlite");

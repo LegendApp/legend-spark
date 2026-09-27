@@ -25,6 +25,8 @@ Coordinates are logical units from the top-left of the explicit owner's content 
 
 Context menus currently support actions, checkboxes and separators, plus hidden/disabled flags. Submenus, roles, sliders, icons and shortcuts reject as unsupported on this surface. macOS and Windows retain native keyboard navigation and OS dismissal behavior. `getContextMenuAvailability()` is safe without an installed native module and is separate from opening a menu.
 
-Application menu, Dock and toolbar adapters are being converted to this shared model; this document does not claim those conversions are complete.
+Application menu and toolbar adapters are being converted to this shared model; this document does not claim those conversions are complete.
 
 Tray menus use this model for actions, checkboxes, separators and submenus. Tray menu icons, shortcuts, roles and sliders reject until that surface implements them. See [tray ownership and updates](desktop-integrations.md#tray--menu-bar-items).
+
+Dock and taskbar menus now use shared items with explicit OS entry points. See [system integration](system.md) for supported items and ownership.

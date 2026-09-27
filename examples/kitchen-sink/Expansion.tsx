@@ -5,7 +5,7 @@ import { ActionButton } from "./ActionButton";
 import { EventResults, useEventResults } from "./EventResults";
 import { toByteArray } from "base64-js";
 import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { useUniwind, withUniwind } from "uniwind";
 import { DragDropView as NativeDragDropView } from "@legendapp/spark/drag-drop";
 import { registerGlobalShortcut } from "@legendapp/spark/global-shortcuts";
@@ -19,7 +19,7 @@ import { WebView } from "@legendapp/spark/webview";
 const DragDropView = withUniwind(NativeDragDropView);
 const webHTML = `<html><body style="font:16px system-ui;padding:16px"><h3>Embedded WebView</h3><input aria-label="WebView keyboard test" placeholder="Type here to test keyboard handling"><button onclick="window.ReactNativeWebView.postMessage('Hello from WebView')">Send a message to React Native</button></body></html>`;
 const dragSource = { text: "Hello from the desktop kitchen sink" };
-const dockItems = [{ id: "show", title: "Show kitchen sink" }, { id: "checked", title: "Checked item", checked: true }];
+const dockItems: system.MenuItem[] = [{ type: "action", id: "show", label: "Show kitchen sink" }, { type: "checkbox", id: "checked", label: "Checked item", checked: true }];
 type Removable = { remove(): unknown };
 export function Expansion({ report }: { report: (value: unknown) => void }) {
   const { theme } = useUniwind();
@@ -43,8 +43,8 @@ export function Expansion({ report }: { report: (value: unknown) => void }) {
   useEffect(() => {
     mounted.current = true; let disposed = false;
     void system.getLoginItemStatus().then(value => { if (!disposed) setLogin(value); }).catch(reportSystem);
-    void system.onSystemEvent(reportSystem).then(value => { if (disposed) value.remove(); else resources.current.push(value); }).catch(reportSystem);
-    return () => { disposed = true; mounted.current = false; for (const resource of resources.current) void resource.remove(); resources.current = []; void shortcut.current?.remove(); void child.current?.terminate(); };
+    void system.onSystemEvent(reportSystem).then(value => { if (disposed) void value.remove().catch(reportSystem); else resources.current.push(value); }).catch(reportSystem);
+    return () => { disposed = true; mounted.current = false; for (const resource of resources.current) void Promise.resolve(resource.remove()).catch(reportSystem); resources.current = []; void shortcut.current?.remove(); void child.current?.terminate(); };
   }, [reportSystem]);
   async function toggleShortcut() {
     setBusy(true);
@@ -120,10 +120,10 @@ export function Expansion({ report }: { report: (value: unknown) => void }) {
     <Text className="text-muted">Launch at login: {login}</Text>
     <View style={styles.row}>
       <ActionButton onPress={() => act(system.getSystemInfo)}>System state</ActionButton>
-      <ActionButton onPress={() => act(() => system.setDockBadge("3"))}>Dock badge</ActionButton>
-      <ActionButton onPress={() => act(() => system.setDockBadge(""))}>Clear badge</ActionButton>
-      <ActionButton onPress={() => act(async () => { await dock.current?.remove(); const value = await system.setDockMenu(dockItems, id => { reportSystem(`Dock menu selected: ${id}`); void windows.showWindow().catch(reportSystem); }); dock.current = value; resources.current.push(value); })}>Dock menu</ActionButton>
-      <ActionButton onPress={() => act(async () => { const value = await system.preventSleep("Kitchen sink demonstration"); resources.current.push(value); setTimeout(() => void value.remove(), 5000); })}>Prevent sleep for 5 seconds</ActionButton>
+      <ActionButton onPress={() => act(() => system.setAppBadge("3"))}>Dock badge</ActionButton>
+      <ActionButton onPress={() => act(() => system.setAppBadge(""))}>Clear badge</ActionButton>
+      <ActionButton onPress={() => act(async () => { await dock.current?.remove(); const value = await (Platform.OS === "windows" ? system.createTaskbarMenu : system.createDockMenu)({ items: dockItems, onAction: event => { reportSystem(`Menu selected: ${event.itemId}`); void windows.showWindow().catch(reportSystem); } }); dock.current = value; resources.current.push(value); })}>Dock menu</ActionButton>
+      <ActionButton onPress={() => act(async () => { const value = await system.preventSleep({ reason: "Kitchen sink demonstration" }); resources.current.push(value); setTimeout(() => void value.remove().catch(reportSystem), 5000); })}>Prevent sleep for 5 seconds</ActionButton>
       <ActionButton disabled={login === "unavailable" || login === "Loading…"} onPress={() => act(async () => { await system.setLaunchAtLogin(login !== "enabled"); setLogin(await system.getLoginItemStatus()); })}>{login === "enabled" ? "Disable launch at login" : "Enable launch at login"}</ActionButton>
     </View>
     <EventResults entries={systemEvents} empty="Dock menu selections and system changes appear here." testID="system-events" />

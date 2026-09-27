@@ -2,6 +2,7 @@
 #include "NativeModules.h"
 #include <algorithm>
 #include <map>
+#include <set>
 #include <memory>
 #include <filesystem>
 #include <powrprof.h>
@@ -38,6 +39,7 @@ inline std::wstring AppId() {
 struct SystemState {
   React::ReactContext context;
   HWND hwnd = nullptr; bool observing = false;
+  std::set<std::string> subscriptions;
   uint64_t sequence = 0;
   std::map<uint64_t, std::pair<handle, POWER_REQUEST_TYPE>> requests;
   std::map<uint64_t, bool> attention;
@@ -110,7 +112,7 @@ struct SystemState {
     Json::JsonObject result; auto version = std::stoull(std::wstring(Windows::System::Profile::AnalyticsInfo::VersionInfo().DeviceFamilyVersion()));
     auto number = [&](wchar_t const *key, double value) { result.SetNamedValue(key, Json::JsonValue::CreateNumberValue(value)); };
     result.SetNamedValue(L"osVersion", Json::JsonValue::CreateStringValue(std::to_wstring(version >> 48) + L"." + std::to_wstring((version >> 32) & 0xffff) + L"." + std::to_wstring((version >> 16) & 0xffff)));
-    SYSTEM_INFO info{}; GetNativeSystemInfo(&info); result.SetNamedValue(L"architecture", Json::JsonValue::CreateStringValue(info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64 ? L"arm64" : info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ? L"x64" : L"x86"));
+    SYSTEM_INFO info{}; ::GetSystemInfo(&info); result.SetNamedValue(L"architecture", Json::JsonValue::CreateStringValue(info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64 ? L"arm64" : info.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ? L"x64" : L"x86"));
     wchar_t locale[LOCALE_NAME_MAX_LENGTH]{}; GetUserDefaultLocaleName(locale, LOCALE_NAME_MAX_LENGTH); result.SetNamedValue(L"locale", Json::JsonValue::CreateStringValue(locale));
     Windows::UI::ViewManagement::UISettings settings; auto color = settings.GetColorValue(Windows::UI::ViewManagement::UIColorType::Background); result.SetNamedValue(L"dark", Json::JsonValue::CreateBooleanValue(color.R + color.G + color.B < 384));
     LASTINPUTINFO input{sizeof(LASTINPUTINFO)}; if (!GetLastInputInfo(&input)) throw_last_error(); number(L"idleSeconds", static_cast<DWORD>(GetTickCount() - input.dwTime) / 1000.0);
@@ -130,7 +132,8 @@ struct SparkSystem {
       try {
         auto args = Json::JsonObject::Parse(to_hstring(encoded));
         if (method == "info") { promise.Resolve(to_string(SystemState::Info().Stringify())); return; }
-        if (method == "observe") { current->EnsureWindow(); current->observing = true; }
+        if (method == "observe") { current->EnsureWindow(); current->subscriptions.insert(to_string(args.GetNamedString(L"id"))); current->observing = true; }
+        else if (method == "unobserve") { current->subscriptions.erase(to_string(args.GetNamedString(L"id"))); current->observing = !current->subscriptions.empty(); if (!current->observing && current->hwnd) { WTSUnRegisterSessionNotification(current->hwnd); DestroyWindow(current->hwnd); current->hwnd = nullptr; } }
         else if (method == "loginStatus") { promise.Resolve("\"unavailable\""); return; }
         else if (method == "login") { promise.Reject(React::ReactError{"E_UNAVAILABLE", "Login startup requires a standalone distribution app"}); return; }
         else if (method == "badge") { auto label = args.GetNamedString(L"label"); HICON icon = label.empty() ? nullptr : SystemState::Badge(std::wstring(label)); auto result = SystemState::Taskbar()->SetOverlayIcon(MainWindow(), icon, label.c_str()); if (icon) DestroyIcon(icon); check_hresult(result); current->badge = !label.empty(); }
@@ -141,8 +144,9 @@ struct SparkSystem {
           handle request{PowerCreateRequest(&description)}; if (!request || request.get() == INVALID_HANDLE_VALUE) { request.detach(); throw_last_error(); } auto kind = args.GetNamedString(L"kind") == L"system" ? PowerRequestSystemRequired : PowerRequestDisplayRequired;
           if (!PowerSetRequest(request.get(), kind)) throw_last_error(); if (kind == PowerRequestDisplayRequired && !PowerSetRequest(request.get(), PowerRequestSystemRequired)) throw_last_error();
           auto id = ++current->sequence; current->requests.emplace(id, std::make_pair(std::move(request), kind)); promise.Resolve(std::to_string(id)); return;
-        } else if (method == "allowSleep") { auto found = current->requests.find(static_cast<uint64_t>(args.GetNamedNumber(L"id"))); if (found != current->requests.end()) { if (!PowerClearRequest(found->second.first.get(), found->second.second)) throw_last_error(); if (found->second.second == PowerRequestDisplayRequired) PowerClearRequest(found->second.first.get(), PowerRequestSystemRequired); current->requests.erase(found); } }
-        else if (method == "dockMenu") { if (!current->dockOwner.empty()) { promise.Reject(React::ReactError{"E_DOCK_MENU_EXISTS", "Remove the existing taskbar menu before replacing it"}); return; } current->DockMenu(args); }
+        } // Closing the dedicated handle releases every request held by this registration.
+        else if (method == "allowSleep") { current->requests.erase(static_cast<uint64_t>(args.GetNamedNumber(L"id"))); }
+        else if (method == "dockMenu") { if (!current->dockOwner.empty()) { promise.Reject(React::ReactError{"E_ALREADY_EXISTS", "Remove the existing taskbar menu before replacing it"}); return; } current->DockMenu(args); }
         else if (method == "clearDockMenu") { if (current->dockOwner == std::wstring(args.GetNamedString(L"owner"))) current->ClearDock(); }
         else throw hresult_invalid_argument(L"Unknown system operation");
         promise.Resolve("null");

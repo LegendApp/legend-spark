@@ -150,10 +150,10 @@ for arbitrary proprietary pasteboard types.
 ## System integration
 
 `system` exports getSystemInfo, onSystemEvent, getLoginItemStatus,
-setLaunchAtLogin, setDockBadge, setDockMenu, requestAttention and preventSleep.
+setLaunchAtLogin, setAppBadge, createDockMenu, createTaskbarMenu, requestAttention and preventSleep.
 
 ```ts
-const blocker = await preventSleep("Exporting video", "display");
+const blocker = await preventSleep({ reason: "Exporting video", kind: "display" });
 try { await exportVideo(); } finally { await blocker.remove(); }
 ```
 

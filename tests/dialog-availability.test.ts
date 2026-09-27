@@ -55,3 +55,9 @@ test("tray imports without installed native modules", async () => {
   expect(tray.getTrayAvailability()).toEqual({ available: false, reason: "missing-module" });
   await expect(tray.createTray({ id: "test", title: "Test" })).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
+
+import * as system from "../packages/system/src/index";
+test("system imports without installed native modules", async () => {
+  expect(system.getSystemAvailability()).toEqual({ available: false, reason: "missing-module" });
+  await expect(system.getSystemInfo()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+});

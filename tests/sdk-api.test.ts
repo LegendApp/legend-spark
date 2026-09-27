@@ -286,10 +286,10 @@ test("rich clipboard validates file paths before replacing clipboard contents", 
 });
 test("sleep assertions release once and system events filter unrelated traffic", async () => {
   handlers.set("NativeDesktopSystem.preventSleep", () => 123);
-  const assertion = await system.preventSleep("Exporting"); await assertion.remove(); await assertion.remove();
+  const assertion = await system.preventSleep({ reason: "Exporting" }); await assertion.remove(); await assertion.remove();
   expect(calls.filter(call => call.method === "allowSleep")).toHaveLength(1);
   const events: string[] = []; const subscription = await system.onSystemEvent(event => events.push(event.type));
-  emit("NativeDesktopApp", "desktop", { type: "wake" }); emit("NativeDesktopApp", "desktop", { type: "activate" }); expect(events).toEqual(["wake"]); subscription.remove();
+  emit("NativeDesktopApp", "desktop", { type: "wake" }); emit("NativeDesktopApp", "desktop", { type: "activate" }); expect(events).toEqual(["wake"]); await subscription.remove();
 });
 test("window styling uses the same constraints as startup config", async () => {
   expect(() => windows.setWindowOptions("main", { minWidth: 1000, maxWidth: 400 })).toThrow();
@@ -299,7 +299,7 @@ test("window styling uses the same constraints as startup config", async () => {
 });
 test("Dock menus identify their owner and remove only once", async () => {
   const selected: string[] = [];
-  const menu = await system.setDockMenu([{ id: "open", title: "Open" }], id => selected.push(id));
+  const menu = await system.createDockMenu({ items: [{ type: "action", id: "open", label: "Open" }], onAction: event => selected.push(event.itemId) });
   const owner = calls.at(-1)?.args.owner;
   emit("NativeDesktopApp", "desktop", { type: "dockAction", owner: "other", id: "open" });
   emit("NativeDesktopApp", "desktop", { type: "dockAction", owner, id: "open" }); expect(selected).toEqual(["open"]);
@@ -689,4 +689,50 @@ test("Windows tray rejects macOS presentation and duplicate creation never remov
   handlers.set("NativeDesktopTray.create", () => { throw nativeError("E_ALREADY_EXISTS"); });
   await expect(tray.createTray({ id: "test", title: "Test" })).rejects.toMatchObject({ code: "E_ALREADY_EXISTS" });
   expect(calls.map(call => call.method)).toEqual(["create"]);
+});
+
+test("system rejects malformed info and invalid options before changing native state", async () => {
+  await expect(system.preventSleep({ reason: " ", kind: "system" })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(system.requestAttention({ kind: "urgent" } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(system.setLaunchAtLogin("yes" as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  expect(calls).toHaveLength(0);
+  handlers.set("NativeDesktopSystem.info", () => ({ osVersion: "15", architecture: "arm64", locale: "en", dark: false, idleSeconds: 0, onBattery: false, batteryLevel: 2 }));
+  await expect(system.getSystemInfo()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+});
+test("system subscriptions own independent native registrations and retry cleanup", async () => {
+  const events: unknown[] = [];
+  const first = await system.onSystemEvent(event => events.push(event));
+  const firstId = calls.at(-1)!.args.id;
+  const second = await system.onSystemEvent(event => events.push(event));
+  const secondId = calls.at(-1)!.args.id; expect(firstId).not.toBe(secondId);
+  handlers.set("NativeDesktopSystem.unobserve", () => { throw nativeError("E_NATIVE"); });
+  const removing = first.remove(); expect(first.remove()).toBe(removing);
+  emit("NativeDesktopApp", "desktop", { type: "wake", nativePrivate: true }); expect(events).toEqual([{ type: "wake" }]);
+  await expect(removing).rejects.toMatchObject({ code: "E_NATIVE" });
+  handlers.delete("NativeDesktopSystem.unobserve"); await first.remove(); await second.remove();
+  expect(calls.filter(call => call.method === "unobserve").map(call => call.args.id)).toEqual([firstId, firstId, secondId]);
+});
+test("power and attention registrations join cleanup and retry failure", async () => {
+  handlers.set("NativeDesktopSystem.preventSleep", () => 1);
+  handlers.set("NativeDesktopSystem.attention", () => -1);
+  const blocker = await system.preventSleep({ reason: "Export", kind: "system" });
+  const attention = await system.requestAttention({ kind: "critical" });
+  handlers.set("NativeDesktopSystem.allowSleep", () => { throw nativeError("E_NATIVE"); });
+  const removing = blocker.remove(); expect(blocker.remove()).toBe(removing);
+  await expect(removing).rejects.toThrow(); handlers.delete("NativeDesktopSystem.allowSleep");
+  await blocker.remove(); await attention.remove(); await attention.remove();
+  expect(calls.filter(call => call.method === "allowSleep")).toHaveLength(2);
+  expect(calls.filter(call => call.method === "cancelAttention")).toHaveLength(1);
+});
+test("launcher menus stop callbacks on failed removal and enforce surface support", async () => {
+  let selected = 0;
+  const menu = await system.createDockMenu({ items: [{ type: "action", id: "open", label: "Open" }], onAction: () => selected++ });
+  const owner = calls.at(-1)!.args.owner;
+  handlers.set("NativeDesktopSystem.clearDockMenu", () => { throw nativeError("E_NATIVE"); });
+  const removing = menu.remove(); emit("NativeDesktopApp", "desktop", { type: "dockAction", owner, id: "open" }); expect(selected).toBe(0);
+  await expect(removing).rejects.toThrow(); handlers.delete("NativeDesktopSystem.clearDockMenu"); await menu.remove();
+  await expect(system.createTaskbarMenu({ items: [], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  platform.OS = "windows";
+  await expect(system.createDockMenu({ items: [], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  await expect(system.createTaskbarMenu({ items: [{ type: "submenu", id: "sub", label: "Sub", items: [] }], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
 });
