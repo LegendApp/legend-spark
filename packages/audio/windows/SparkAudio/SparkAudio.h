@@ -90,6 +90,7 @@ struct SparkAudio {
           players->session = session; players->sessionID = id;
           UpdateSession(session, args);
         } else {
+          if ((!players->session || players->sessionID != id) && method == "sessionRemove") { promise.Resolve("null"); co_return; }
           if (!players->session || players->sessionID != id) throw hresult_invalid_argument(L"Media session has been replaced");
           if (method == "sessionUpdate") UpdateSession(players->session, args);
           else if (method == "sessionRemove") { players->session.reset(); players->sessionID.clear(); }

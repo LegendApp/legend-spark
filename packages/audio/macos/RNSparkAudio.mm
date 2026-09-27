@@ -94,7 +94,8 @@ RCT_EXPORT_MODULE(NativeSparkAudio)
       if ([method isEqual:@"sessionCreate"]) {
         self.sessionID = identifier; self.session = [@{@"commands": @[@"play", @"pause"]} mutableCopy]; [self.commands removeAllObjects];
         [self publishMetadata:args[@"metadata"] ?: @{}];
-      } else if (![self.sessionID isEqual:identifier]) { reject(@"E_SESSION_REPLACED", @"Media session has been replaced", nil); return; }
+      } else if (![self.sessionID isEqual:identifier] && [method isEqual:@"sessionRemove"]) { resolve(@"null"); return; }
+      else if (![self.sessionID isEqual:identifier]) { reject(@"E_CLOSED", @"Media session has been replaced", nil); return; }
       if ([method isEqual:@"sessionCreate"] || [method isEqual:@"sessionUpdate"]) {
         [self.session addEntriesFromDictionary:args];
         if (args[@"metadata"]) [self publishMetadata:args[@"metadata"]];

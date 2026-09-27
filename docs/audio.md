@@ -71,8 +71,10 @@ const session = await createMediaSession({
   metadata: { title: 'Episode', artist: 'Host' },
   playbackState: 'playing', position: 12, duration: 120,
   commands: ['play', 'pause', 'nextTrack', 'previousTrack', 'seekTo'],
-}, command => {
-  // Route to your engine; seekTo includes position in seconds.
+  onCommand(command) {
+    // Route to your engine; seekTo always includes position in seconds.
+  },
+  onError(error) { console.error(error); },
 });
 await session.update({ playbackState: 'paused', position: 30 });
 await session.remove();
@@ -82,7 +84,8 @@ One explicit session owns the system controls. Creating another replaces it;
 updates to the old session reject, and disposing it cannot clear the new session.
 Explicit sessions take precedence over built-in players. Removing one clears its
 controls; it does not silently restore a previous player. Updates patch session
-fields; `metadata` replaces the metadata object. The application supplies progress
+fields; `metadata` replaces the metadata object and null clears it. Omitted or
+undefined fields stay unchanged; command arrays replace. The application supplies progress
 and owns queue/next/previous behavior. Commands never mutate an external player.
 Desktop command delivery drains a bounded native queue every 100 ms while the
 session is active. Treat callbacks as commands, not confirmations of playback.
@@ -90,7 +93,7 @@ Web support depends on browser Media Session action support. Windows owns a
 MediaPlayer-backed SMTC session with its automatic command manager disabled.
 
 On iOS/Android, player volume and metadata delegate to Expo Audio. Standalone
-sessions for external engines explicitly reject with `E_UNAVAILABLE`: Expo Audio
+sessions for external engines explicitly reject with `E_UNSUPPORTED_PLATFORM`: Expo Audio
 binds its lock-screen controls to its own player. This module does not invent a
 mobile media service or claim arbitrary-engine parity. Recording, queue management,
 provider SDKs and media indexing remain outside this contract.
@@ -124,3 +127,11 @@ is removed. Cleanup failures go to `onCleanupError(error, player)` when supplied
 (the player supports retry); otherwise they are logged. For application-wide queue
 ownership, use the factory and await removal yourself. This asynchronous state
 contract intentionally differs from Expo's immediately returned player hook.
+
+Independent sessions take `onCommand` and optional `onError` in creation options.
+`seekTo` commands always include a finite nonnegative `position`; other command
+variants do not. Malformed native command batches stop polling and report an
+error. Remove the failed session to release its controls. Session updates are
+ordered with creation, replacement and removal; stale handles cannot clear a
+new owner's controls. Cleanup failure remains retryable. Native commands are
+polled, so this is a bounded command queue rather than a lossless event log.

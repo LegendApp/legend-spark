@@ -27,8 +27,8 @@ export function AudioChecks({ report, source }: { report: string; source: string
         let failed = false; try { await player.play(); } catch { failed = true; } assert(failed, "Removed player accepted playback");
       });
       await check("external media session metadata, command configuration and replacement", async () => {
-        const first = await createMediaSession({ metadata: { title: "First" } }, () => {});
-        const second = await createMediaSession({ metadata: { title: "External", artist: "Someone" }, commands: ["play", "pause", "nextTrack", "seekTo"], playbackState: "playing", position: 12, duration: 60 }, () => {});
+        const first = await createMediaSession({ metadata: { title: "First" }, onCommand: () => {} });
+        const second = await createMediaSession({ metadata: { title: "External", artist: "Someone" }, commands: ["play", "pause", "nextTrack", "seekTo"], playbackState: "playing", position: 12, duration: 60, onCommand: () => {} });
         try {
           await first.remove();
           await second.update({ position: 18, metadata: { title: "Replacement" } });

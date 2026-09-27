@@ -14,14 +14,15 @@ test("browser media session replacement preserves owner and command routing", as
   Object.defineProperty(globalThis, "navigator", { configurable: true, value: { mediaSession: media } });
   Object.defineProperty(globalThis, "MediaMetadata", { configurable: true, value: class { constructor(public value: unknown) {} } });
   try {
-    const first = await createMediaSession({ metadata: { title: "First" }, commands: ["nextTrack"] }, () => { throw new Error("Stale session called"); });
+    const first = await createMediaSession({ metadata: { title: "First" }, commands: ["nextTrack"], onCommand: () => { throw new Error("Stale session called"); } });
     const stale = handlers.get("nexttrack")!;
     const commands: unknown[] = [];
-    const second = await createMediaSession({ metadata: { title: "Second" }, commands: ["seekTo"] }, command => commands.push(command));
+    const second = await createMediaSession({ metadata: { title: "Second" }, commands: ["seekTo"], onCommand: command => commands.push(command) });
     stale({}); handlers.get("seekto")!({ seekTime: 12 });
     expect(commands).toEqual([{ command: "seekTo", position: 12 }]);
     await first.remove(); expect(media.metadata.value.title).toBe("Second");
     await expect(first.update({ position: 1 })).rejects.toThrow("replaced");
+    await second.update({ metadata: null }); expect(media.metadata.value.title).toBeUndefined();
     await second.remove(); expect(media.metadata).toBeNull(); expect(handlers.get("seekto")).toBeNull();
   } finally {
     if (oldNavigator) Object.defineProperty(globalThis, "navigator", oldNavigator); else delete (globalThis as any).navigator;

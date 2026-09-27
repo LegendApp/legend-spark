@@ -1,18 +1,20 @@
-import { validateSession, type MediaCommand, type MediaCommandName, type MediaSession, type MediaSessionOptions } from "./media-types";
+import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
+import { sessionOptions, sessionSnapshot, type MediaCommandName, type MediaSession, type MediaSessionOptions, type MediaSessionUpdate } from "./media-types";
 let owner: object | undefined, explicit = false;
 export const hasExplicitMediaSession = () => explicit;
 export const claimPlayerMediaSession = (player: object) => { owner = player; };
 export const ownsPlayerMediaSession = (player: object) => owner === player;
 export const releasePlayerMediaSession = (player: object) => { if (owner === player) owner = undefined; };
 const actions: Record<MediaCommandName, MediaSessionAction> = { play: "play", pause: "pause", nextTrack: "nexttrack", previousTrack: "previoustrack", seekTo: "seekto" };
-export async function createMediaSession(options: MediaSessionOptions, onCommand: (command: MediaCommand) => void): Promise<MediaSession> {
-  validateSession(options);
+export async function createMediaSession(options: MediaSessionOptions): Promise<MediaSession> {
+  const initial = sessionOptions(options);
+  const { onCommand, onError = console.error } = options;
   const available = typeof navigator === "undefined" ? undefined : navigator.mediaSession;
-  if (!available) throw Object.assign(new Error("Browser media sessions are unavailable"), { code: "E_UNAVAILABLE" });
+  if (!available) throw new SparkError("E_UNSUPPORTED_PLATFORM", "Browser media sessions are unavailable");
   const media = available;
-  const id = {}; let removed = false, state: MediaSessionOptions = { commands: ["play", "pause"] };
+  const id = {}; let removed = false, state: MediaSessionUpdate = { commands: ["play", "pause"] };
   const clearActions = () => { for (const action of Object.values(actions)) { try { media.setActionHandler(action, null); } catch {} } };
-  function apply(patch: MediaSessionOptions) {
+  function apply(patch: MediaSessionUpdate) {
     state = { ...state, ...patch };
     const metadata = state.metadata ?? {};
     media.metadata = new MediaMetadata({ title: metadata.title, artist: metadata.artist, album: metadata.albumTitle, artwork: metadata.artworkUrl ? [{ src: metadata.artworkUrl }] : [] });
@@ -23,13 +25,19 @@ export async function createMediaSession(options: MediaSessionOptions, onCommand
     }
     clearActions();
     for (const command of state.commands ?? []) media.setActionHandler(actions[command], details => {
-      if (owner === id && !removed) onCommand({ command, ...(details.seekTime === undefined ? {} : { position: details.seekTime }) });
+      if (owner !== id || removed) return;
+      try {
+        if (command === "seekTo") {
+          if (typeof details.seekTime !== "number" || !Number.isFinite(details.seekTime) || details.seekTime < 0) throw new SparkError("E_INVALID_DATA", "Invalid seek command");
+          onCommand({ command, position: details.seekTime });
+        } else onCommand({ command });
+      } catch (error) { onError(error); }
     });
   }
   owner = id; explicit = true;
-  try { apply(options); } catch (error) { clearActions(); media.metadata = null; media.playbackState = "none"; owner = undefined; explicit = false; throw error; }
+  try { apply(initial); } catch (error) { clearActions(); media.metadata = null; media.playbackState = "none"; owner = undefined; explicit = false; throw error; }
   return {
-    async update(patch) { if (removed || owner !== id) throw new Error("Media session has been removed or replaced"); validateSession(patch); apply(patch); },
-    async remove() { if (removed) return; removed = true; if (owner !== id) return; clearActions(); media.metadata = null; media.playbackState = "none"; media.setPositionState?.(); owner = undefined; explicit = false; },
+    async update(patch) { if (removed || owner !== id) throw new SparkError("E_CLOSED", "Media session has been removed or replaced"); apply(sessionSnapshot(patch)); },
+    async remove() { if (owner !== id) { removed = true; return; } removed = true; clearActions(); media.metadata = null; media.playbackState = "none"; media.setPositionState?.(); owner = undefined; explicit = false; },
   };
 }

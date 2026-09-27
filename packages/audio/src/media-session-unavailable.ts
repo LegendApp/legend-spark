@@ -1,5 +1,7 @@
-import type { MediaCommand, MediaSession, MediaSessionOptions } from "./media-types";
-/** Expo Audio owns mobile transport controls; it cannot attach an external engine. */
-export async function createMediaSession(_options: MediaSessionOptions, _onCommand: (command: MediaCommand) => void): Promise<MediaSession> {
-  throw Object.assign(new Error("Standalone media sessions support desktop and web. On mobile use the audio player's Expo-backed controls."), { code: "E_UNAVAILABLE" });
+import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
+import { sessionOptions, type MediaSession, type MediaSessionOptions } from "./media-types";
+/** Expo Audio cannot attach an external playback engine to its transport controls. */
+export async function createMediaSession(options: MediaSessionOptions): Promise<MediaSession> {
+  sessionOptions(options);
+  throw new SparkError("E_UNSUPPORTED_PLATFORM", "Standalone media sessions require desktop or web; mobile uses the player's controls");
 }
