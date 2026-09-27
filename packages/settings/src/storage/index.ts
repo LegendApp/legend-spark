@@ -172,11 +172,9 @@ function fileNameForTable(table: string, extension: string) {
 
 function parseFileValue(content: string, format: StorageFormat) {
   if (format === "json") {
-    try {
-      return safeParse(content);
-    } catch {
-      return undefined;
-    }
+    // safeParse preserves an empty string, but an empty JSON file is corrupt.
+    if (content.length === 0) throw new SyntaxError("Unexpected end of JSON input");
+    return safeParse(content);
   }
 
   return content;
@@ -237,11 +235,8 @@ export function createStorage({ root = "applicationSupport", subfolder }: Storag
       if (content === null) {
         return undefined;
       }
-      const value = parseFileValue(content, options.format);
-      if (options.format === "json" && value === undefined) {
-        NativeStorage.deleteStoragePath(root, path);
-      }
-      return value;
+      // Recovery belongs to the caller; reads must preserve corrupt files.
+      return parseFileValue(content, options.format);
     },
     write(relativePath: string, value: unknown, options: StorageWriteOptions) {
       const path = resolvePath(relativePath);

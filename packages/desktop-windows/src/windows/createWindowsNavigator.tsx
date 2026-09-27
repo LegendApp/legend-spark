@@ -9,7 +9,7 @@ import {
 import type { WindowConfigEntry, WindowsConfig } from "./types";
 import { withWindowProvider } from "./WindowProvider";
 
-type WindowOpenOverrides = Omit<WindowOptions, "moduleName"> & {
+type WindowOpenOverrides = Omit<WindowOptions, "moduleName" | "identifier"> & {
   loadComponentBeforeNativeOpen?: boolean;
 };
 
@@ -69,7 +69,7 @@ const mergeWindowOptions = (baseOptions: WindowOptions, overrides?: WindowOpenOv
   return {
     ...baseOptions,
     ...overrides,
-    identifier: overrides.identifier ?? baseOptions.identifier,
+    identifier: baseOptions.identifier,
     moduleName: baseOptions.moduleName,
     windowStyle: hasWindowStyle ? mergedWindowStyle : undefined,
     initialProperties: mergedInitialProps,
@@ -185,6 +185,9 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
 
   const open = async (windowKey: keyof TConfig, overrides?: WindowOpenOverrides) => {
     const registration = ensureRegistration(windowKey);
+    if (overrides && "identifier" in overrides) {
+      throw new TypeError("Set the window identifier in navigator configuration, not open overrides");
+    }
     const {
       loadComponentBeforeNativeOpen = false,
       ...windowOverrides
