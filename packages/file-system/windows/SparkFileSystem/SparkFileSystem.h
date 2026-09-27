@@ -235,6 +235,11 @@ struct FileQueue {
       if (!text.empty() && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0)) throw_last_error();
       return Json::JsonValue::CreateStringValue(to_hstring(text));
     } else if (method == "readBytes") return Json::JsonValue::CreateStringValue(Crypto::EncodeToBase64String(Crypto::CreateFromByteArray(Read(path))));
+    else if (method == "writeTextIfUnchanged") {
+      if (Call("readText", args).GetString() != args.GetNamedString(L"expected")) return Json::JsonValue::CreateBooleanValue(false);
+      auto text = to_string(args.GetNamedString(L"text")); Write(path, std::vector<uint8_t>(text.begin(), text.end()));
+      return Json::JsonValue::CreateBooleanValue(true);
+    }
     else if (method == "writeText") { auto text = to_string(args.GetNamedString(L"text")); Write(path, std::vector<uint8_t>(text.begin(), text.end())); }
     else if (method == "writeBytes") {
       auto base64 = args.GetNamedString(L"base64"); Windows::Storage::Streams::IBuffer buffer{nullptr};
@@ -281,9 +286,22 @@ struct FileQueue {
 };
 REACT_MODULE(SparkFileSystem, L"NativeDesktopFileSystem")
 struct SparkFileSystem {
+  React::ReactContext context;
   std::unique_ptr<FileQueue> queue;
-  REACT_INIT(Initialize) void Initialize(React::ReactContext const &context) noexcept { queue = std::make_unique<FileQueue>(context); }
+  REACT_INIT(Initialize) void Initialize(React::ReactContext const &value) noexcept { context = value; queue = std::make_unique<FileQueue>(context); }
   REACT_METHOD(call) void call(std::string method, std::string args, React::ReactPromise<std::string> promise) noexcept {
+    if (method == "reveal") {
+      context.UIDispatcher().Post([args, promise] {
+        PIDLIST_ABSOLUTE item = nullptr;
+        try {
+          auto path = FilePath(Json::JsonObject::Parse(to_hstring(args)).GetNamedString(L"path"));
+          check_hresult(SHParseDisplayName(path.c_str(), nullptr, &item, 0, nullptr));
+          auto result = SHOpenFolderAndSelectItems(item, 0, nullptr, 0);
+          CoTaskMemFree(item); item = nullptr; check_hresult(result); promise.Resolve("null");
+        } catch (...) { if (item) CoTaskMemFree(item); Reject(promise); }
+      });
+      return;
+    }
     queue->Post([state = queue.get(), method, args, promise] {
       try { promise.Resolve(to_string(state->Call(method, Json::JsonObject::Parse(to_hstring(args))).Stringify())); }
       catch (...) { Reject(promise); }

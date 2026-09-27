@@ -119,12 +119,17 @@ test("new close requests supersede expired handlers without losing request ident
 test("filesystem errors preserve permission failures instead of pretending files are absent", async () => {
   handlers.set("NativeDesktopFileSystem.stat", () => { throw nativeError("E_NOT_FOUND"); }); expect(await files.exists("/missing")).toBe(false);
   handlers.set("NativeDesktopFileSystem.stat", () => { throw nativeError("E_PERMISSION"); }); await expect(files.exists("/protected")).rejects.toThrow("E_PERMISSION");
-  expect(() => files.readText("relative")).toThrow("absolute"); expect(() => files.writeText("/a\0b", "text")).toThrow();
+  await expect(files.readText("relative")).rejects.toThrow("absolute"); await expect(files.writeText("/a\0b", "text")).rejects.toThrow();
 });
 test("filesystem binary and mutation APIs preserve paths and opt-in recursive deletion", async () => {
-  await files.getDirectory("data"); await files.readText("file:///tmp/a%20b"); await files.writeText("/a", "text"); await files.readBase64("/a"); await files.writeBase64("/b", "AA==");
+  handlers.set("NativeDesktopFileSystem.directory", () => "/data");
+  handlers.set("NativeDesktopFileSystem.readText", () => "text");
+  handlers.set("NativeDesktopFileSystem.readBytes", () => "AA==");
+  handlers.set("NativeDesktopFileSystem.list", () => ["a"]);
+  handlers.set("NativeDesktopFileSystem.remove", () => true);
+  await files.getDirectory("data"); await files.readText("file:///tmp/a%20b"); await files.writeText("/a", "text"); await files.readBytes("/a"); await files.writeBytes("/b", new Uint8Array([0]));
   await files.mkdir("/dir"); await files.list("/dir"); await files.copy("/a", "/b"); await files.move("/b", "/c"); await files.remove("/dir"); await files.remove("/dir", { recursive: true });
-  expect(calls[1]?.args.path).toBe("file:///tmp/a%20b"); expect(calls.filter(call => call.method === "remove").map(call => call.args.recursive)).toEqual([false, true]);
+  expect(calls[1]?.args.path).toBe("/tmp/a b"); expect(calls.filter(call => call.method === "remove").map(call => call.args.recursive)).toEqual([false, true]);
 });
 test("watches filter by registration id and remove idempotently", async () => {
   const observed: string[] = []; const first = await files.watch("/first", path => observed.push(path)); const second = await files.watch("/second", path => observed.push(path));
@@ -172,9 +177,9 @@ test("dialogs parse selected paths and native cancellation, preserving save conf
   handlers.set("NativeFileDialog.open", () => '["/tmp/example.txt"]'); expect(await dialogs.openFileDialog()).toEqual({ canceled: false, paths: ["/tmp/example.txt"] });
   handlers.set("NativeFileDialog.open", () => "null"); expect(await dialogs.openFileDialog()).toEqual({ canceled: true });
   handlers.set("NativeFileDialog.save", () => '"/tmp/save.txt"'); expect(await dialogs.saveFileDialog()).toEqual({ canceled: false, path: "/tmp/save.txt" });
-  handlers.set("NativeFileDialog.writeTextFileIfUnchanged", () => false); expect(await files.writeTextIfUnchanged("/a", "old", "new")).toEqual({ written: false });
+  handlers.set("NativeDesktopFileSystem.writeTextIfUnchanged", () => false); expect(await files.writeTextIfUnchanged("/a", "old", "new")).toEqual({ written: false });
   handlers.set("NativeDesktopFileSystem.readText", () => "text"); expect(await files.readText("/a")).toBe("text"); await files.writeText("/a", "new");
-  handlers.set("NativeFileDialog.revealInFinder", () => true); await files.revealInFileManager("/a");
+  await files.revealInFileManager("/a");
 });
 test("menu owner ids and patch payloads survive native transport", async () => {
   const configuration = [{ id: "file", title: "File", items: [{ id: "save", title: "Save", checked: true }] }];
@@ -485,4 +490,28 @@ test("dialogs distinguish cancellation, malformed output and unavailable targets
   expect(dialogs.getFileDialogAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
   await expect(dialogs.openFileDialog()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
   await expect(messages.showMessage({ title: "Unsupported" })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+});
+
+test("file results validate shape and byte transport instead of trusting JSON casts", async () => {
+  handlers.set("NativeDesktopFileSystem.stat", () => ({ type: "file", size: -1, modifiedAt: 0 }));
+  await expect(files.stat("/file")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  handlers.set("NativeDesktopFileSystem.list", () => ["../escape"]);
+  await expect(files.list("/directory")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  handlers.set("NativeDesktopFileSystem.list", () => ["z.txt", "a.txt"]);
+  expect(await files.list("file:///tmp/space%20name")).toEqual([{ name: "a.txt", path: "/tmp/space name/a.txt" }, { name: "z.txt", path: "/tmp/space name/z.txt" }]);
+  handlers.set("NativeDesktopFileSystem.readBytes", () => "!invalid!");
+  await expect(files.readBytes("/file")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  await expect(files.writeBytes("/file", "base64" as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  handlers.set("NativeDesktopFileSystem.remove", () => false);
+  expect(await files.remove("/absent")).toBeUndefined();
+});
+test("watch cleanup stops callbacks immediately and can retry a failed native unregister", async () => {
+  const listener = vi.fn(); const watch = await files.watch("/file", listener);
+  const id = calls.at(-1)!.args.id;
+  handlers.set("NativeDesktopFileSystem.unwatch", () => { throw nativeError("E_IO"); });
+  const first = watch.remove(); expect(watch.remove()).toBe(first);
+  await expect(first).rejects.toMatchObject({ code: "E_NATIVE" });
+  emit("NativeDesktopFileSystem", "change", { id, path: "/file" }); expect(listener).not.toHaveBeenCalled();
+  handlers.delete("NativeDesktopFileSystem.unwatch"); await watch.remove(); await watch.remove();
+  expect(calls.filter(call => call.method === "unwatch")).toHaveLength(2);
 });

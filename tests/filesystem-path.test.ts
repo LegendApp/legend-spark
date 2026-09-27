@@ -19,3 +19,10 @@ test("Windows settings names escape device names without collisions or changing 
   expect(windowsFilename("counter")).toBe("counter.json");
   expect(macFilename("CON")).toBe("CON.json");
 });
+
+import { nativePath } from "../packages/desktop-app/src/contracts/path";
+test("local file URLs decode once and cannot hide foreign hosts or invalid paths", () => {
+  expect(nativePath("file:///tmp/space%20name%2520", "macos")).toBe("/tmp/space name%20");
+  expect(nativePath("file:///C:/space%20name/file", "windows")).toBe("C:\\space name\\file");
+  for (const input of ["file://server/share", "file:///tmp/x?query", "file:///tmp/x#fragment", "file:///tmp/%00", "file:///tmp/%ZZ"]) expect(() => nativePath(input, "macos")).toThrow();
+});

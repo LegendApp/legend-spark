@@ -47,3 +47,27 @@ test('invalid ranges never cross the native boundary', async () => {
   await expect(file.write(new Uint8Array([1]), -1)).rejects.toThrow();
   expect(native.reads).toBe(0); expect(native.writes).toBe(0); await file.close();
 });
+
+test('close joins pending cleanup, blocks new IO and retries failure', async () => {
+  const native = backend(); let attempts = 0;
+  const call: FileCall = (method, args) => {
+    if (method === 'closeFile' && ++attempts === 1) return Promise.reject(new Error('temporary failure'));
+    return native.call(method, args);
+  };
+  const file = await createFileHandle(call, '/file');
+  const closing = file.close(); expect(file.close()).toBe(closing);
+  await expect(closing).rejects.toThrow('temporary failure');
+  await expect(file.read(1, 0)).rejects.toMatchObject({ code: 'E_CLOSED' });
+  await file.close(); await file.close(); expect(attempts).toBe(2);
+});
+test('short writes and malformed reads reject instead of losing data silently', async () => {
+  const native = backend();
+  const short: FileCall = async <T>(method: string, args: object): Promise<T> => method === 'writeChunk' ? 1 as T : native.call(method, args);
+  const file = await createFileHandle(short, '/file', 'readWrite');
+  await expect(file.write(new Uint8Array([1, 2]), 0)).rejects.toMatchObject({ code: 'E_NATIVE' });
+  await file.close();
+  const bad: FileCall = async <T>(method: string, args: object): Promise<T> => method === 'readChunk' ? 'not base64' as T : native.call(method, args);
+  const broken = await createFileHandle(bad, '/file');
+  await expect(broken.read(3, 0)).rejects.toMatchObject({ code: 'E_INVALID_DATA' });
+  await broken.close();
+});

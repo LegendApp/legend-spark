@@ -41,3 +41,8 @@ test("test-only modules cannot leak into Go or distribution binaries", () => {
   expect(() => validateBuildModules("release", packages)).toThrow("Test-only");
   expect(() => validateBuildModules("dev", packages)).not.toThrow();
 });
+
+test("filesystem consumers retain file helpers without linking native dialog UI", () => {
+  const result = selection(nativePackages(root), new Set(["@legendapp/spark-file-system"]));
+  expect(result.included.map(pkg => pkg.name)).not.toContain("@legendapp/spark-file-dialog");
+});

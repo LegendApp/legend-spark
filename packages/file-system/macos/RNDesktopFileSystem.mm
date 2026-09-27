@@ -1,4 +1,6 @@
 #import "RNDesktopFileSystem.h"
+#import <AppKit/AppKit.h>
+#import "SparkFileMutations.h"
 #import <RNDesktopApp/SparkDesktop.h>
 #import <fcntl.h>
 #import <unistd.h>
@@ -125,6 +127,17 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
         NSData *data = [NSData dataWithContentsOfURL:url options:0 error:&error];
         result = [data base64EncodedStringWithOptions:0];
       }
+      else if ([method isEqual:@"reveal"]) {
+        if (![fm attributesOfItemAtPath:url.path error:&error]) { SparkReject(reject, error); return; }
+        dispatch_async(dispatch_get_main_queue(), ^{
+          [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:@[url]];
+          resolve(@"null");
+        });
+        return;
+      }
+      else if ([method isEqual:@"writeTextIfUnchanged"]) {
+        result = @(SparkWriteTextIfUnchanged(url, args[@"expected"], args[@"text"], &error));
+      }
       else if ([method isEqual:@"writeText"]) [args[@"text"] writeToURL:url atomically:YES encoding:NSUTF8StringEncoding error:&error];
       else if ([method isEqual:@"writeBytes"]) {
         NSData *data = [[NSData alloc] initWithBase64EncodedString:args[@"base64"] options:0];
@@ -133,12 +146,10 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
       }
       else if ([method isEqual:@"mkdir"]) [fm createDirectoryAtURL:url withIntermediateDirectories:[args[@"recursive"] boolValue] attributes:nil error:&error];
       else if ([method isEqual:@"remove"]) {
-        BOOL directory = NO;
-        if (![fm fileExistsAtPath:url.path isDirectory:&directory]) { resolve(@"false"); return; }
-        if (directory && ![args[@"recursive"] boolValue] && [fm contentsOfDirectoryAtPath:url.path error:&error].count) {
-          reject(@"E_NOT_EMPTY", @"Directory is not empty; pass recursive: true", nil); return;
+        result = @(SparkRemoveFile(url, [args[@"recursive"] boolValue], &error));
+        if ([error.domain isEqual:NSPOSIXErrorDomain] && error.code == ENOTEMPTY) {
+          reject(@"E_NOT_EMPTY", @"Directory is not empty; pass recursive: true", error); return;
         }
-        if (!error) result = @([fm removeItemAtURL:url error:&error]);
       }
       else if ([method isEqual:@"copy"] || [method isEqual:@"move"]) {
         NSURL *to = FileURL(args[@"to"]);

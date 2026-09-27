@@ -52,16 +52,16 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
       await files.writeText(`${root}/text.txt`, "Hello 🌍\n");
       assert(await files.readText(`${root}/text.txt`) === "Hello 🌍\n", "UTF-8 roundtrip");
       assert((await files.stat(`${root}/text.txt`)).type === "file", "File stat");
-      await files.writeBase64(`${root}/binary`, "AAEC/w==");
-      assert(await files.readBase64(`${root}/binary`) === "AAEC/w==", "Binary roundtrip");
+      await files.writeBytes(`${root}/binary`, new Uint8Array([0, 1, 2, 255]));
+      assert(String(await files.readBytes(`${root}/binary`)) === "0,1,2,255", "Binary roundtrip");
       await files.copy(`${root}/text.txt`, `${root}/copy`);
       await rejects(() => files.copy(`${root}/text.txt`, `${root}/copy`), "E_EXISTS");
       await files.move(`${root}/copy`, `${root}/moved`);
       assert(!await files.exists(`${root}/copy`) && await files.exists(`${root}/moved`), "Move did not move");
-      assert((await files.list(root)).includes("moved"), "Directory listing");
+      assert((await files.list(root)).some(entry => entry.name === "moved"), "Directory listing");
       await rejects(() => files.remove(root), "E_NOT_EMPTY");
-      assert(await files.remove(`${root}/moved`), "Removal failed");
-      assert(!await files.remove(`${root}/moved`), "Repeated removal must be false");
+      await files.remove(`${root}/moved`); assert(!await files.exists(`${root}/moved`), "Removal failed");
+      await files.remove(`${root}/moved`);
       await rejects(() => files.readText(`${root}/missing`), "E_NOT_FOUND");
     });
     await check("files: watcher survives two atomic replacements and unsubscribes", async () => {

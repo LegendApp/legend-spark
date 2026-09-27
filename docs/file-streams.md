@@ -56,7 +56,7 @@ each chunk independently.
 Streaming writes are not atomic. For publication, write a distinct temporary path
 and then move it using the destination/conflict policy your app needs. Never stream
 a file into itself; `write` truncates the destination before reading the input.
-The existing whole-file `writeText`/`writeBase64` operations retain atomic replacement.
+The existing whole-file `writeText`/`writeBytes` operations retain atomic replacement.
 
 ## Trash / Recycle Bin
 
