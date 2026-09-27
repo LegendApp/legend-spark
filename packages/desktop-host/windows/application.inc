@@ -50,7 +50,9 @@ static void QueueNotificationResponse(std::string const &);
 static std::string NotificationResponses();
 static void EmitNotificationEvents();
 static void SetNotificationWindow(HWND);
-static bool quitGuard = false, quitPending = false;
+static bool quitPending = false, quitAccepted = false;
+static std::set<std::string> quitGuards, pendingQuitGuards;
+static std::vector<RNW::ReactPromise<std::string>> quitWaiters;
 static uint64_t generation = 0, quitRequest = 0;
 static Json::JsonArray pendingURLs{nullptr};
 static std::string initialURL;
@@ -240,7 +242,10 @@ static void QueueLaunch(std::wstring const &commandLine, bool initial) {
   int count = 0; auto argv = CommandLineToArgvW(commandLine.c_str(), &count);
   if (!argv) return;
   if (initial) for (int i = 0; i < count; ++i) launchArguments.Append(Json::JsonValue::CreateStringValue(argv[i]));
-  else Emit({{"type", "secondInstance"}});
+  else {
+    RNW::JSValueArray arguments; for (int i = 0; i < count; ++i) arguments.push_back(to_string(argv[i]));
+    Emit({{"type", "secondInstance"}, {"arguments", std::move(arguments)}});
+  }
   for (int i = 1; i < count; ++i) {
     std::wstring candidate(argv[i]);
     if (candidate.rfind(L"--spark-dock-action=", 0) == 0) {
@@ -299,12 +304,25 @@ static void SaveFrame(std::string const &id, HWND hwnd) {
   auto text = to_string(Info(id).GetNamedObject(L"frame").Stringify()); std::ofstream stream(temporary, std::ios::binary | std::ios::trunc); stream << text; stream.close();
   if (stream) MoveFileExW(temporary.c_str(), file.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
 }
+static void FinishQuit(bool allow) {
+  if (!quitPending) return;
+  quitPending = false; pendingQuitGuards.clear();
+  if (windows.count("main")) KillTimer(Hwnd(windows.at("main")), 0x4C48);
+  auto waiters = std::move(quitWaiters); quitWaiters.clear();
+  const auto result = allow ? "{\"quitRequested\":true}" : "{\"quitRequested\":false,\"reason\":\"vetoed\"}";
+  for (auto const &waiter : waiters) waiter.Resolve(result);
+  if (allow) {
+    quitAccepted = true; Emit({{"type", "willQuit"}});
+    windows.at("main").allow = true; windows.at("main").app.Destroy();
+  }
+}
 static void RequestQuit() {
   if (quitPending) return;
-  if (!quitGuard) { windows.at("main").allow = true; windows.at("main").app.Destroy(); return; }
   quitPending = true; auto request = quitRequest = ++generation;
-  Emit({{"type", "beforeQuit"}, {"requestId", static_cast<int64_t>(request)}});
-  SetTimer(Hwnd(windows.at("main")), 0x4C47, 30000, nullptr);
+  if (quitGuards.empty()) { FinishQuit(true); return; }
+  pendingQuitGuards = quitGuards;
+  for (auto const &guard : pendingQuitGuards) Emit({{"type", "beforeQuit"}, {"guardId", guard}, {"requestId", static_cast<int64_t>(request)}});
+  if (!SetTimer(Hwnd(windows.at("main")), 0x4C48, 30000, nullptr)) FinishQuit(false);
 }
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR) {
   auto id = Id(hwnd);
@@ -319,7 +337,9 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
         auto text = static_cast<wchar_t const *>(notification->lpData); if (text[notification->cbData / sizeof(wchar_t) - 1]) return FALSE;
         try { QueueNotificationResponse(to_string(text)); return TRUE; } catch (...) { return FALSE; }
       }
- auto data = reinterpret_cast<COPYDATASTRUCT *>(lParam); if (data && data->dwData == 0x4C47 && data->cbData >= sizeof(wchar_t) && data->cbData <= 65536 && data->cbData % sizeof(wchar_t) == 0) { auto text = static_cast<wchar_t *>(data->lpData); if (text && text[data->cbData / sizeof(wchar_t) - 1] == 0) { QueueLaunch(text, false); Emit({{"type", "reopen"}}); ActivateApplication(); return TRUE; } } return FALSE; }
+ auto data = reinterpret_cast<COPYDATASTRUCT *>(lParam); if (data && data->dwData == 0x4C47 && data->cbData >= sizeof(wchar_t) && data->cbData <= 65536 && data->cbData % sizeof(wchar_t) == 0) { auto text = static_cast<wchar_t *>(data->lpData); if (text && text[data->cbData / sizeof(wchar_t) - 1] == 0) { QueueLaunch(text, false);
+        bool visible = false; for (auto const &[key, window] : windows) if (IsWindowVisible(Hwnd(window)) && !window.overlay) visible = true;
+        Emit({{"type", "reopen"}, {"hasVisibleWindows", visible}, {"mainWindowWasVisible", !!IsWindowVisible(Hwnd(windows.at("main")))}}); ActivateApplication(); return TRUE; } } return FALSE; }
     if (message == WM_GETMINMAXINFO) {
       auto limits = reinterpret_cast<MINMAXINFO *>(lParam); auto const &window = windows.at(id);
       limits->ptMinTrackSize = {window.minWidth, window.minHeight}; limits->ptMaxTrackSize = {window.maxWidth, window.maxHeight}; return 0;
@@ -346,7 +366,8 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
     if (message == WM_COMMAND && (HIWORD(wParam) == 0 || HIWORD(wParam) == 1)) {
       auto found = menuActions.find(LOWORD(wParam)); if (found != menuActions.end() && context) { context.EmitJSEvent(L"RCTDeviceEventEmitter", L"NativeMenuAction", found->second.Copy()); return 0; }
     }
-    if (message == WM_TIMER && wParam == 0x4C47) { if (id == "main") quitPending = false; windows.at(id).pending = false; KillTimer(hwnd, 0x4C47); return 0; }
+    if (message == WM_TIMER && wParam == 0x4C48) { FinishQuit(false); return 0; }
+    if (message == WM_TIMER && wParam == 0x4C47) { windows.at(id).pending = false; KillTimer(hwnd, 0x4C47); return 0; }
   }
   return DefSubclassProc(hwnd, message, wParam, lParam);
 }
@@ -367,9 +388,10 @@ static void Attach(std::string id, RNW::ReactNativeWindow view) {
       window.pending = true; window.request = ++generation;
       SetTimer(Hwnd(window), 0x4C47, 30000, nullptr);
       Emit({{"type", "beforeClose"}, {"windowId", id}, {"requestId", static_cast<int64_t>(window.request)}});
-    } else if (id == "main" && quitGuard) { args.Cancel(true); RequestQuit(); }
+    } else if (id == "main" && !quitGuards.empty()) { args.Cancel(true); RequestQuit(); }
   });
   app.Destroying([id](auto const &, auto const &) {
+    if (id == "main" && !quitAccepted) { quitAccepted = true; Emit({{"type", "willQuit"}}); }
     Emit({{"type", "closed"}, {"windowId", id}});
     if (id != "main") {
       // A menu attached to a destroyed HWND is otherwise destroyed by Windows.
@@ -514,7 +536,7 @@ static void Initialize(RNW::ReactNativeWin32App const &app) {
 REACT_MODULE(SparkDesktopApp, L"NativeDesktopApp")
 struct SparkDesktopApp {
   REACT_INIT(Initialize)
-  void Initialize(winrt::Microsoft::ReactNative::ReactContext const &context) noexcept { if (context.Properties().Get(winrt::Microsoft::ReactNative::ReactPropertyId<bool>{L"Spark", L"SecondaryRuntime"}).value_or(false)) return; SparkWin::context = context; SparkWin::quitGuard = false; SparkWin::quitPending = false; SparkWin::shortcuts.clear(); for (auto &[id, window] : SparkWin::windows) { window.guard = false; window.pending = false; } }
+  void Initialize(winrt::Microsoft::ReactNative::ReactContext const &context) noexcept { if (context.Properties().Get(winrt::Microsoft::ReactNative::ReactPropertyId<bool>{L"Spark", L"SecondaryRuntime"}).value_or(false)) return; SparkWin::context = context; SparkWin::quitGuards.clear(); SparkWin::pendingQuitGuards.clear(); SparkWin::quitWaiters.clear(); SparkWin::quitPending = false; SparkWin::quitAccepted = false; SparkWin::shortcuts.clear(); for (auto &[id, window] : SparkWin::windows) { window.guard = false; window.pending = false; } }
   REACT_METHOD(addListener) void addListener(std::string) noexcept {}
   REACT_METHOD(removeListeners) void removeListeners(double) noexcept {}
   REACT_METHOD(call)
@@ -524,10 +546,18 @@ struct SparkDesktopApp {
       try {
         auto args = Json::JsonObject::Parse(to_hstring(encoded));
         if (method == "notificationResponses") { promise.Resolve(NotificationResponses()); return; }
-        if (method == "quitGuard") quitGuard = args.GetNamedBoolean(L"enabled");
-        else if (method == "quit") RequestQuit();
+        if (method == "quitGuard") {
+          const auto id = to_string(args.GetNamedString(L"id"));
+          if (id.empty()) throw winrt::hresult_invalid_argument(L"Expected quit guard ID");
+          if (args.GetNamedBoolean(L"enabled")) quitGuards.insert(id); else quitGuards.erase(id);
+          FinishQuit(false);
+        } else if (method == "quit") { quitWaiters.push_back(promise); RequestQuit(); return; }
         else if (method == "replyQuit") {
-          if (quitPending && args.GetNamedNumber(L"requestId") == quitRequest) { quitPending = false; KillTimer(Hwnd(windows.at("main")), 0x4C47); if (args.GetNamedBoolean(L"allow")) { windows.at("main").allow = true; windows.at("main").app.Destroy(); } }
+          auto id = to_string(args.GetNamedString(L"id"));
+          if (quitPending && args.GetNamedNumber(L"requestId") == quitRequest && pendingQuitGuards.erase(id)) {
+            if (!args.GetNamedBoolean(L"allow")) FinishQuit(false);
+            else if (pendingQuitGuards.empty()) FinishQuit(true);
+          }
         } else if (method == "hide") HideApplication();
         else if (method == "activate") ActivateApplication();
         else if (method == "context") {

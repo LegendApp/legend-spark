@@ -53,31 +53,35 @@ const tick = () => sleep(1);
 function nativeError(code: string) { return Object.assign(new Error(code), { code }); }
 
 test("app context, activation, hide and quit call the native host", async () => {
-  handlers.set("NativeDesktopApp.context", () => ({ projectId: "a" }));
+  handlers.set("NativeDesktopApp.context", () => ({ projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: {} } }));
+  handlers.set("NativeDesktopApp.quit", () => ({ quitRequested: true }));
   expect((await app.getAppContext()).projectId).toBe("a");
   await app.activate(); await app.hide(); await app.quit();
   expect(calls.map(call => call.method)).toEqual(["context", "activate", "hide", "quit"]);
 });
-test("quit guards aggregate async result, reject duplicate registration and dispose once", async () => {
+test("quit guards have independent IDs and dispose once", async () => {
   const guard = await app.beforeQuit(async () => true);
-  await expect(app.beforeQuit(() => true)).rejects.toThrow("already registered");
-  emit("NativeDesktopApp", "desktop", { type: "beforeQuit" }); await tick();
+  const id = calls.at(-1)!.args.id;
+  const second = await app.beforeQuit(() => false);
+  expect(calls.at(-1)!.args.id).not.toBe(id);
+  emit("NativeDesktopApp", "desktop", { type: "beforeQuit", guardId: id, requestId: 1 }); await tick();
   expect(calls.find(call => call.method === "replyQuit")?.args.allow).toBe(true);
   await guard.remove(); await guard.remove();
   expect(calls.filter(call => call.method === "quitGuard" && !call.args.enabled)).toHaveLength(1);
+  await second.remove();
 });
 test("throwing or disposed quit guards cancel instead of discarding edits", async () => {
-  let guard = await app.beforeQuit(() => { throw new Error("save failed"); });
-  emit("NativeDesktopApp", "desktop", { type: "beforeQuit" }); await tick();
+  let guard = await app.beforeQuit(() => { throw new Error("save failed"); }, { onError: () => {} });
+  emit("NativeDesktopApp", "desktop", { type: "beforeQuit", guardId: calls.filter(call => call.method === "quitGuard").at(-1)!.args.id, requestId: 1 }); await tick();
   expect(calls.find(call => call.method === "replyQuit")?.args.allow).toBe(false); await guard.remove();
   let finish!: (allow: boolean) => void;
   guard = await app.beforeQuit(() => new Promise<boolean>(resolve => { finish = resolve; }));
-  emit("NativeDesktopApp", "desktop", { type: "beforeQuit" }); await tick(); await guard.remove(); finish(true); await tick();
+  emit("NativeDesktopApp", "desktop", { type: "beforeQuit", guardId: calls.filter(call => call.method === "quitGuard").at(-1)!.args.id, requestId: 1 }); await tick(); await guard.remove(); finish(true); await tick();
   expect(calls.filter(call => call.method === "replyQuit").at(-1)?.args.allow).toBe(false);
 });
 test("failed guard registration cleans listeners and permits retry", async () => {
   handlers.set("NativeDesktopApp.quitGuard", () => { throw new Error("bridge"); });
-  await expect(app.beforeQuit(() => true)).rejects.toThrow("bridge");
+  await expect(app.beforeQuit(() => true)).rejects.toMatchObject({ code: "E_NATIVE" });
   expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0);
   handlers.delete("NativeDesktopApp.quitGuard"); await (await app.beforeQuit(() => true)).remove();
 });

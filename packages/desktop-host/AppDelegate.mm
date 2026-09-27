@@ -69,8 +69,13 @@
 }
 #if __has_include(<NativeComposeThreadedRuntime/ThreadedRuntime.h>)
 - (void)sparkResetRuntimes:(NSNotification *)notification { [ThreadedRuntime destroyAllRuntimes]; }
-- (void)applicationWillTerminate:(NSNotification *)notification { [ThreadedRuntime destroyAllRuntimes]; }
 #endif
+- (void)applicationWillTerminate:(NSNotification *)notification {
+  SparkEmit(@{ @"type": @"willQuit" });
+#if __has_include(<NativeComposeThreadedRuntime/ThreadedRuntime.h>)
+  [ThreadedRuntime destroyAllRuntimes];
+#endif
+}
 - (void)sparkPrepareMainWindow {
   if (self.window) return;
   NSDictionary *policy = SparkLifecycleConfiguration()[@"mainWindow"] ?: @{};

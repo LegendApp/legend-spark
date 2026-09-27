@@ -88,3 +88,11 @@ test("process execution imports safely without installed modules", async () => {
   expect(processes.getProcessAvailability()).toEqual({ available: false, reason: "missing-module" });
   await expect(processes.spawn({ target: { type: "executable", path: "/bin/cat" } })).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
+
+import * as app from "../packages/desktop-app/src/index";
+test("application imports safely and reports missing native host support", async () => {
+  expect(app.getAppAvailability()).toEqual({ available: false, reason: "missing-module" });
+  await expect(app.getAppContext()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+  await expect(app.beforeQuit(() => true)).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+  await expect(app.quit()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+});

@@ -5,7 +5,7 @@
 #import <fcntl.h>
 #import <unistd.h>
 NSString * const SparkDesktopEvent = @"SparkDesktopEvent";
-static SparkQuitReply jsQuitReply;
+static NSMutableDictionary<NSString *, NSDictionary *> *jsQuitReplies;
 static NSUInteger quitGeneration = 0;
 static NSMutableArray *pendingURLs;
 static NSString *initialURL;
@@ -36,7 +36,8 @@ NSDictionary *SparkContext(void) {
     NSBundle *bundle = NSBundle.mainBundle;
     NSString *runtimePath = [bundle pathForResource:@"spark-runtime" ofType:@"json"];
     NSData *data = runtimePath ? [NSData dataWithContentsOfFile:runtimePath] : nil;
-    NSDictionary *runtime = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : @{};
+    id rawRuntime = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    NSDictionary *runtime = [rawRuntime isKindOfClass:NSDictionary.class] ? rawRuntime : @{};
     NSString *project = [bundle objectForInfoDictionaryKey:@"SparkProjectIdentifier"] ?: bundle.bundleIdentifier;
     NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.0.0";
     NSString *name = [bundle objectForInfoDictionaryKey:@"CFBundleDisplayName"] ?: [bundle objectForInfoDictionaryKey:@"CFBundleName"];
@@ -97,17 +98,22 @@ static SparkQuitCoordinator *SparkQuitCoordinatorInstance(void) {
 }
 void SparkRegisterQuitHandler(NSString *identifier, SparkQuitHandler handler) { [SparkQuitCoordinatorInstance() registerHandler:identifier handler:handler]; }
 void SparkRemoveQuitHandler(NSString *identifier) { [SparkQuitCoordinatorInstance() removeHandler:identifier]; }
-void SparkSetQuitGuard(BOOL value) {
-  if (value) SparkRegisterQuitHandler(@"spark.javascript", ^(SparkQuitReply reply) {
-    jsQuitReply = [reply copy];
-    SparkEmit(@{ @"type": @"beforeQuit", @"requestId": @(++quitGeneration) });
+void SparkSetQuitGuard(NSString *identifier, BOOL value) {
+  if (!jsQuitReplies) jsQuitReplies = [NSMutableDictionary new];
+  NSString *key = [@"spark.javascript." stringByAppendingString:identifier];
+  if (value) SparkRegisterQuitHandler(key, ^(SparkQuitReply reply) {
+    NSUInteger generation = ++quitGeneration;
+    jsQuitReplies[identifier] = @{ @"generation": @(generation), @"reply": [reply copy] };
+    SparkEmit(@{ @"type": @"beforeQuit", @"guardId": identifier, @"requestId": @(generation) });
   });
-  else { jsQuitReply = nil; SparkRemoveQuitHandler(@"spark.javascript"); }
+  else { [jsQuitReplies removeObjectForKey:identifier]; SparkRemoveQuitHandler(key); }
 }
-void SparkReplyQuit(BOOL allow, NSUInteger generation) {
-  if (!jsQuitReply || generation != quitGeneration) return;
-  SparkQuitReply reply = jsQuitReply; jsQuitReply = nil; reply(allow);
+void SparkReplyQuit(NSString *identifier, BOOL allow, NSUInteger generation) {
+  NSDictionary *pending = jsQuitReplies[identifier];
+  if (!pending || [pending[@"generation"] unsignedIntegerValue] != generation) return;
+  SparkQuitReply reply = pending[@"reply"]; [jsQuitReplies removeObjectForKey:identifier]; reply(allow);
 }
+void SparkObserveQuitDecision(SparkQuitReply observer) { [SparkQuitCoordinatorInstance() observeDecision:observer]; }
 NSApplicationTerminateReply SparkShouldQuit(void) { return [SparkQuitCoordinatorInstance() requestQuit]; }
 
 BOOL SparkAcquireInstance(void) {

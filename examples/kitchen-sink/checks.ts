@@ -206,7 +206,7 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
         assert(!result.canceled && result.path === `${root}/accepted.txt`, "Save panel returned an invalid path");
       });
       await check("app: second instance forwards arguments and exits", async () => {
-        let received = false; const sub = app.onAppEvent(event => { if (event.type === "secondInstance") received = true; });
+        let received = false; const sub = app.addAppListener("secondInstance", () => { received = true; });
         try { assert(await driverCall("secondInstance") === 0, "Second instance did not exit cleanly"); await until(() => received, "No second-instance event"); }
         finally { sub.remove(); }
       });
@@ -228,7 +228,7 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
       await check("app: quit interception cancels termination", async () => {
         let requested = false;
         const sub = await app.beforeQuit(() => { requested = true; return false; });
-        try { await app.quit(); await until(() => requested, "Quit handler did not run"); await delay(100); assert((await app.getAppContext()).projectId, "App no longer responds"); }
+        try { assert(!(await app.quit()).quitRequested, "Quit should be vetoed"); assert(requested, "Quit handler did not run"); await delay(100); assert((await app.getAppContext()).projectId, "App no longer responds"); }
         finally { await sub.remove(); }
       });
     }

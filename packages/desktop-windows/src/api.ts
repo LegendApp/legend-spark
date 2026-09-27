@@ -3,7 +3,7 @@ export type { WindowStyle } from "@legendapp/spark-window-options";
 import Native from "./NativeDesktopWindowManager";
 import { Platform } from "react-native";
 import { validateWindowsWindowOptions } from "./windows-options";
-import { onDesktopEvent } from "@legendapp/spark-desktop-app";
+import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 export type Frame = { x: number; y: number; width: number; height: number };
 export type WindowInfo = { id: string; kind: "window" | "overlay"; title: string; visible: boolean; focused: boolean; resizable: boolean; alwaysOnTop: boolean; minWidth: number; maxWidth: number; minimized: boolean; fullscreen: boolean; frame: Frame };
 export type Display = { id: string; name: string; frame: Frame; workArea: Frame; scale: number };

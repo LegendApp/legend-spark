@@ -33,7 +33,7 @@ import { testDriver } from "./test-driver";
 const applicationMenuItems: MenuItem[] = [{ type: "submenu", id: "document", label: "Document", items: [{ type: "action", id: "open", label: "Open…", shortcut: "CmdOrCtrl+O" }, { type: "action", id: "save", label: "Save…", shortcut: "CmdOrCtrl+S" }] }];
 
 type Props = Partial<app.AppContext> & { windowId?: string; windowProps?: { overlay?: boolean; message?: string; readyFile?: string } };
-function argument(args: string[], name: string) { const at = args.indexOf(name); return at < 0 ? undefined : args[at + 1]; }
+function argument(args: readonly string[], name: string) { const at = args.indexOf(name); return at < 0 ? undefined : args[at + 1]; }
 export default function App(props: Props) {
   const args = props.launchArguments ?? [];
   const report = argument(args, "--spark-test-report");
@@ -72,7 +72,7 @@ function SecondaryWindow(props: Props) {
     <Button onPress={() => void windows.closeWindow(props.windowId).catch(console.error)}>Close this window</Button>
   </View>;
 }
-function AutomatedChecks({ report, args }: { report: string; args: string[] }) {
+function AutomatedChecks({ report, args }: { report: string; args: readonly string[] }) {
   const [checks, setChecks] = useState<Check[]>([]);
   useEffect(() => {
     let started = false;
@@ -122,7 +122,7 @@ function KitchenSink({ runtime, projectId }: Props) {
   useEffect(() => {
     const removers: Array<() => unknown> = []; let disposed = false;
     function retain(sub: { remove(): unknown }) { if (disposed) void sub.remove(); else removers.push(() => sub.remove()); }
-    retain(app.onAppEvent(reportWindow)); retain(windows.onWindowEvent(reportWindow));
+    for (const type of ["activate", "deactivate", "reopen", "secondInstance", "willQuit"] as const) retain(app.addAppListener(type, reportWindow)); retain(windows.onWindowEvent(reportWindow));
     void registerShortcut("Command+Shift+K", () => reportMenu("Shortcut fired: Command+Shift+K")).then(retain).catch(reportMenu);
     void documents.subscribeToOpenRequests(event => { if (event.type === "file") reportLink(event); }).then(retain).catch(reportLink);
     retain(links.addEventListener("url", event => reportLink({ url: event.url })));

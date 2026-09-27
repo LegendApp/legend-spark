@@ -2,17 +2,26 @@
 @implementation SparkQuitCoordinator {
   NSMutableDictionary<NSString *, SparkQuitHandler> *_handlers;
   NSMutableSet<NSString *> *_pending;
+  NSMutableArray<SparkQuitReply> *_observers;
   SparkQuitReply _reply;
   NSTimeInterval _timeout;
   NSUInteger _generation;
 }
 - (instancetype)initWithReply:(SparkQuitReply)reply timeout:(NSTimeInterval)timeout {
-  if ((self = [super init])) { _handlers = [NSMutableDictionary new]; _reply = [reply copy]; _timeout = timeout; }
+  if ((self = [super init])) { _handlers = [NSMutableDictionary new]; _observers = [NSMutableArray new]; _reply = [reply copy]; _timeout = timeout; }
   return self;
+}
+- (void)observeDecision:(SparkQuitReply)observer {
+  NSAssert(NSThread.isMainThread, @"Quit observers are main-thread confined");
+  [_observers addObject:[observer copy]];
+}
+- (void)notifyObservers:(BOOL)allow {
+  NSArray<SparkQuitReply> *observers = [_observers copy]; [_observers removeAllObjects];
+  for (SparkQuitReply observer in observers) observer(allow);
 }
 - (void)finish:(BOOL)allow generation:(NSUInteger)generation {
   if (!_pending || _generation != generation) return;
-  _pending = nil; _reply(allow);
+  _pending = nil; [self notifyObservers:allow]; _reply(allow);
 }
 - (void)registerHandler:(NSString *)identifier handler:(SparkQuitHandler)handler {
   NSAssert(NSThread.isMainThread, @"Quit handlers are main-thread confined");
@@ -32,7 +41,7 @@
 - (NSApplicationTerminateReply)requestQuit {
   NSAssert(NSThread.isMainThread, @"Quit requests are main-thread confined");
   if (_pending) return NSTerminateLater;
-  if (!_handlers.count) return NSTerminateNow;
+  if (!_handlers.count) { [self notifyObservers:YES]; return NSTerminateNow; }
   NSDictionary<NSString *, SparkQuitHandler> *handlers = [_handlers copy];
   _pending = [NSMutableSet setWithArray:handlers.allKeys];
   NSUInteger generation = ++_generation;
