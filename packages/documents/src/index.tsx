@@ -2,8 +2,9 @@ import { openFileDialog } from "@legendapp/spark-file-dialog";
 import { watch } from "@legendapp/spark-file-system";
 import type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { useMenu, type MenuAction, type MenuItem } from "@legendapp/spark-native-menu";
-import { addRecentDocumentOpenListener } from "@legendapp/spark-desktop-app/src/recent-documents";
-import { usePrimaryWindowLifecycle } from "@legendapp/spark-desktop-windows/src/windows";
+import { subscribeToOpenRequests } from "./requests";
+export * from "./requests";
+import { usePrimaryWindowLifecycle } from "@legendapp/spark-desktop-windows/src/windows/usePrimaryWindowLifecycle";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 export { createDocumentTransitionGuard } from "./documentTransition";
 
@@ -18,7 +19,7 @@ export type UseDocumentAppControllerOptions = {
   launchArguments?: string[];
   menus: readonly MenuItem[];
   onInitialOpen: (launchArguments: string[] | undefined, controller: DocumentAppController) => Promise<void> | void;
-  onRecentDocumentOpen?: (path: string, controller: DocumentAppController) => Promise<void> | void;
+  onOpenDocument?: (path: string, controller: DocumentAppController) => Promise<void> | void;
   onReopenRequested?: (controller: DocumentAppController) => Promise<void> | void;
   ownerId: string;
   reportError: (error: unknown) => void;
@@ -138,7 +139,7 @@ export function useDocumentAppController({
   launchArguments,
   menus,
   onInitialOpen,
-  onRecentDocumentOpen,
+  onOpenDocument,
   onReopenRequested,
   ownerId,
   reportError,
@@ -154,19 +155,24 @@ export function useDocumentAppController({
 
   useMenu({ id: ownerId, items: menus, onAction: action => menuHandlers[action.itemId]?.(action), onError: reportError });
 
+  const documentCallbacks = useRef({ onOpenDocument, controller, reportError });
+  useLayoutEffect(() => { documentCallbacks.current = { onOpenDocument, controller, reportError }; });
+  const handledRequests = useRef(new Set<string>());
+  const handlesDocuments = !!onOpenDocument;
   useEffect(() => {
-    if (onRecentDocumentOpen) {
-      const subscription = addRecentDocumentOpenListener(({ path }) => {
-        Promise.resolve(onRecentDocumentOpen(path, controller)).catch(reportError);
-      });
-
-      return () => {
-        subscription.remove();
-      };
-    }
-
-    return undefined;
-  }, [controller, onRecentDocumentOpen, reportError]);
+    if (!handlesDocuments) return;
+    let disposed = false;
+    let subscription: { remove(): void } | undefined;
+    void subscribeToOpenRequests(event => {
+      if (disposed || event.type !== "file" || handledRequests.current.has(event.id)) return;
+      handledRequests.current.add(event.id);
+      if (handledRequests.current.size > 200) handledRequests.current.delete(handledRequests.current.values().next().value!);
+      Promise.resolve().then(() => {
+        if (!disposed) { const { onOpenDocument, controller } = documentCallbacks.current; return onOpenDocument?.(event.path, controller); }
+      }).catch(error => documentCallbacks.current.reportError(error));
+    }).then(value => { if (disposed) value.remove(); else subscription = value; }).catch(error => { if (!disposed) documentCallbacks.current.reportError(error); });
+    return () => { disposed = true; subscription?.remove(); };
+  }, [handlesDocuments]);
 
   usePrimaryWindowLifecycle({
     onInitialOpen: () => onInitialOpen(launchArguments, controller),

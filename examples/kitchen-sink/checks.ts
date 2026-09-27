@@ -1,3 +1,4 @@
+import * as documents from "@legendapp/spark/app/documents";
 import { toByteArray } from "base64-js";
 import { fileConflict } from "./contract-cases";
 import { runAPIChecks } from "./api-checks";
@@ -142,12 +143,12 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
     await check("links: URL resolution and recent-document listing", async () => {
       assert(await links.canOpenURL("https://example.com"), "No HTTPS handler");
       assert(!await links.canOpenURL("spark-sdk-unknown-scheme://test"), "Unexpected scheme handler");
-      await links.clearRecentDocuments();
+      await documents.clearRecentDocuments();
       try {
-        const url = `file://${root}/text.txt`;
-        await links.noteRecentDocument(url); await links.noteRecentDocument(url);
-        assert((await links.getRecentDocuments()).filter(item => item === url).length === 1, "Recent documents must deduplicate");
-      } finally { await links.clearRecentDocuments(); }
+        const path = `${root}/text.txt`;
+        await documents.noteRecentDocument(path); await documents.noteRecentDocument(path);
+        assert((await documents.getRecentDocuments()).filter(item => item.path === path).length === 1, "Recent documents must deduplicate");
+      } finally { await documents.clearRecentDocuments(); }
     });
     await check("shortcuts: register, conflict, removal and re-register", async () => {
       const first = await registerShortcut("Command+Shift+9", () => {});
@@ -214,14 +215,14 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
         await driverCall("escape"); assert((await selected).canceled, "Popup cancellation result");
       });
       await check("links: cold and warm delivery through AppDelegate", async () => {
-        const seen: links.OpenEvent[] = [];
+        const seen: documents.OpenRequest[] = [];
         await driverCall("openURLs", { urls: [`spark-test://${token}/cold`] });
-        const sub = await links.onOpen(event => { seen.push(event); });
+        const sub = await documents.subscribeToOpenRequests(event => { seen.push(event); });
         try {
-          await until(() => seen.some(event => event.url.endsWith("/cold")), "Queued launch was lost");
+          await until(() => seen.some(event => event.type === "url" && event.url.endsWith("/cold")), "Queued launch was lost");
           await driverCall("openURLs", { urls: [`spark-test://${token}/warm`, `file://${root}/text.txt`] });
-          await until(() => seen.some(event => event.type === "openFile") && seen.some(event => event.url.endsWith("/warm")), "Warm events missing");
-          assert(seen.filter(event => event.url.endsWith("/cold")).length === 1, "Queued launch duplicated");
+          await until(() => seen.some(event => event.type === "file") && seen.some(event => event.type === "url" && event.url.endsWith("/warm")), "Warm events missing");
+          assert(seen.filter(event => event.type === "url" && event.url.endsWith("/cold")).length === 1, "Queued launch duplicated");
         } finally { sub.remove(); }
       });
       await check("app: quit interception cancels termination", async () => {

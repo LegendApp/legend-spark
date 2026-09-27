@@ -46,7 +46,6 @@
     "./ui/split-view": "./ui-split-view.ts",
     "./ui/sidebar": "./ui-sidebar.ts",
     "./app/documents": "./app-documents.ts",
-    "./app/recent-documents": "./app-recent-documents.ts",
     "./shortcuts/commands": "./shortcuts-commands.ts",
     "./shortcuts/commands/storage": "./shortcuts-commands-storage.ts",
     "./shortcuts/keyboard": "./shortcuts-keyboard.ts",

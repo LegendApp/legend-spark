@@ -1,3 +1,4 @@
+import * as documents from "@legendapp/spark/app/documents";
 import { Button } from "./Controls";
 import { ActionButton } from "./ActionButton";
 import { EventResults, useEventResults } from "./EventResults";
@@ -107,7 +108,7 @@ function KitchenSink({ runtime, projectId }: Props) {
     const selected = await openFileDialog({ title: "Open a text document", filters: [{ extensions: ["txt", "md", "json"] }], multiple: false });
     if (selected.canceled) return "Open cancelled.";
     const path = selected.paths[0]; const text = await files.readText(path);
-    setDocument({ path, text, saved: text }); await links.noteRecentDocument(path.startsWith("file://") ? path : `file://${encodeURI(path)}`); reportFile(`Opened ${path}`);
+    setDocument({ path, text, saved: text }); await documents.noteRecentDocument(path); reportFile(`Opened ${path}`);
   }, [reportFile]);
   const save = useCallback(async () => {
     const current = documentRef.current;
@@ -123,7 +124,7 @@ function KitchenSink({ runtime, projectId }: Props) {
     function retain(sub: { remove(): unknown }) { if (disposed) void sub.remove(); else removers.push(() => sub.remove()); }
     retain(app.onAppEvent(reportWindow)); retain(windows.onWindowEvent(reportWindow));
     void registerShortcut("Command+Shift+K", () => reportMenu("Shortcut fired: Command+Shift+K")).then(retain).catch(reportMenu);
-    void links.onOpen(event => { if (event.type === "openFile") reportLink(event); }).then(retain).catch(reportLink);
+    void documents.subscribeToOpenRequests(event => { if (event.type === "file") reportLink(event); }).then(retain).catch(reportLink);
     retain(links.addEventListener("url", event => reportLink({ url: event.url })));
     void links.getInitialURL().then(url => { if (!disposed && url) reportLink({ initialURL: url }); }).catch(reportLink);
     const confirmClose = () => documentRef.current.text === documentRef.current.saved || new Promise<boolean>(resolve => Alert.alert("Unsaved document", "Discard your changes?", [{ text: "Keep editing", style: "cancel", onPress: () => resolve(false) }, { text: "Discard", style: "destructive", onPress: () => resolve(true) }]));
@@ -168,7 +169,7 @@ function KitchenSink({ runtime, projectId }: Props) {
         })}>Show context menu</ActionButton></View>
         <ActionButton onPress={() => action(() => clipboard.setStringAsync("Hello desktop"))}>Copy greeting</ActionButton><ActionButton onPress={() => action(() => clipboard.getStringAsync())}>Read clipboard</ActionButton><ActionButton onPress={() => action(clipboard.hasStringAsync)}>Has clipboard text</ActionButton><ActionButton onPress={() => action(() => clipboard.setStringAsync("<b>Hello desktop</b>", { inputFormat: clipboard.StringFormat.HTML }))}>Copy HTML</ActionButton>
       </View><EventResults entries={menuEvents} empty="Press ⌘⇧K or use the Document menu to see the action here." testID="menu-events" /></Card>
-      <Card title="Links and documents"><View style={styles.row}><ActionButton onPress={() => action(() => links.openURL("https://example.com"))}>Open example.com</ActionButton><ActionButton testID="initial-url" onPress={() => action(async () => await links.getInitialURL() ?? "No URL was used to launch this app.")}>Initial URL</ActionButton><ActionButton testID="can-open-https" onPress={() => action(async () => await links.canOpenURL("https://example.com") ? "HTTPS URLs can be opened." : "HTTPS URLs cannot be opened.")}>Can open HTTPS</ActionButton><ActionButton onPress={() => action(links.getRecentDocuments)}>Recent documents</ActionButton></View><Text className="text-muted">OS associations require a custom build.</Text><EventResults entries={linkEvents} empty="Waiting for an incoming URL or file." testID="link-events" /></Card>
+      <Card title="Links and documents"><View style={styles.row}><ActionButton onPress={() => action(() => links.openURL("https://example.com"))}>Open example.com</ActionButton><ActionButton testID="initial-url" onPress={() => action(async () => await links.getInitialURL() ?? "No URL was used to launch this app.")}>Initial URL</ActionButton><ActionButton testID="can-open-https" onPress={() => action(async () => await links.canOpenURL("https://example.com") ? "HTTPS URLs can be opened." : "HTTPS URLs cannot be opened.")}>Can open HTTPS</ActionButton><ActionButton onPress={() => action(documents.getRecentDocuments)}>Recent documents</ActionButton></View><Text className="text-muted">OS associations require a custom build.</Text><EventResults entries={linkEvents} empty="Waiting for an incoming URL or file." testID="link-events" /></Card>
       <Card title="Secure storage"><TextInput accessibilityLabel="Demo secret" secureTextEntry style={styles.input} className="border-border bg-surface text-foreground" placeholderTextColorClassName="accent-muted" value={secret} onChangeText={setSecret} placeholder="Demo secret (stored in Keychain)" /><View style={styles.row}>
         <ActionButton onPress={() => action(async () => { await secureStore.setItemAsync("kitchen-demo", secret); return "Stored demo secret"; })}>Store demo secret</ActionButton><ActionButton onPress={() => action(async () => { setSecret(await secureStore.getItemAsync("kitchen-demo") ?? ""); return "Loaded demo secret"; })}>Load demo secret</ActionButton><ActionButton onPress={() => action(async () => { await secureStore.deleteItemAsync("kitchen-demo"); setSecret(""); return "Deleted demo secret"; })}>Delete demo secret</ActionButton></View></Card>
       <Card title="Native UI"><NativeControls /></Card>

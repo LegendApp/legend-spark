@@ -164,12 +164,12 @@ Supported modifiers include Command/Cmd/Meta, Control/Ctrl, Option/Alt, Shift,
 and CommandOrControl/CmdOrCtrl (Command on macOS). Named keys include Escape,
 Enter, Tab, Space, Backspace, Delete, arrows, F1–F20, and Plus.
 Context-menu locations use content-view coordinates with a top-left origin.
-Open/save panels return `null` on cancellation; another concurrent file panel
+Open/save panels return `{ canceled: true }` on cancellation; another concurrent file panel
 rejects with `E_BUSY`. Menu and dialog APIs stay asynchronous to JS.
 
 ## Incoming URLs and documents
 
-Subscribe with `await onOpen(listener)`. Subscription installation happens before
+Import `subscribeToOpenRequests` from `@legendapp/spark/app/documents` and await its registration. Subscription installation happens before
 reading queued launch events, and IDs deduplicate live/queued overlap. The last
 100 launch events are retained for a late subscriber. The return value has a
 `remove()` method. The Spark Runner can test handling through the test fixture, but registering
@@ -195,8 +195,7 @@ Declare existing UTIs and URL schemes in `app.json`:
 
 CNG creates `CFBundleURLTypes` and `CFBundleDocumentTypes`. `role` may be `Editor`
 or `Viewer`. Custom UTIs can be declared through `macos.infoPlist` or a config
-plugin; both correctly require a custom build. Incoming file events provide file
-URLs. `noteRecentDocument` also takes a file URL. The Spark Runner keeps its recent-document
+plugin; both correctly require a custom build. Incoming file requests provide native absolute paths (`{ type: "file", id, path }`); URL requests provide `{ type: "url", id, url }`. `noteRecentDocument` accepts an absolute path or local file URL and `getRecentDocuments` returns `{ path, name }` entries. These functions live under `/app/documents`. The Spark Runner keeps its recent-document
 list scoped to the project; standalone apps additionally notify the native
 `NSDocumentController`.
 

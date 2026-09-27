@@ -47,6 +47,7 @@ import { Button, TextInput, Select } from '@legendapp/spark/ui';
 import * as Clipboard from '@legendapp/spark/clipboard';
 import * as SecureStore from '@legendapp/spark/secure-storage';
 import * as Linking from '@legendapp/spark/links';
+import { subscribeToOpenRequests } from '@legendapp/spark/app/documents';
 import * as Files from '@legendapp/spark/files';
 import * as FileSystem from '@legendapp/spark/files';
 import { settings } from '@legendapp/spark/settings';
@@ -63,7 +64,7 @@ export default function App({windowId='main'}: {windowId?: string}) {
 function Main() {
  const [launchURLs,setLaunchURLs]=useState<string[]>([]);
  useEffect(()=>{let removed=false;let subscription: {remove():void}|undefined;
-  void Linking.onOpen(event=>setLaunchURLs(current=>current.includes(event.url)?current:[...current,event.url])).then(value=>{if(removed)value.remove();else subscription=value;});
+  void subscribeToOpenRequests(event=>{const value=event.type==='url'?event.url:event.path;setLaunchURLs(current=>current.includes(value)?current:[...current,value]);}).then(value=>{if(removed)value.remove();else subscription=value;});
   return ()=>{removed=true;subscription?.remove();};
  },[]);
  const [api,setAPI]=useState(false), [pressed,setPressed]=useState(false), [text,setText]=useState(''), [value,setValue]=useState('first');

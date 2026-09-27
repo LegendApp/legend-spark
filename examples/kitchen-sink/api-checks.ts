@@ -1,3 +1,4 @@
+import * as documents from "@legendapp/spark/app/documents";
 import * as clipboard from "@legendapp/spark/clipboard";
 import * as secureStore from "@legendapp/spark/secure-storage";
 import * as links from "@legendapp/spark/links";
@@ -68,7 +69,7 @@ export async function runAPIChecks(check: Check, driver?: TestDriver, expectedIn
   if (driver) await check("Expo Linking: live URL events, file separation, removal and stable initial URL", async () => {
     const initial = await links.getInitialURL();
     const received: string[] = [], openedFiles: string[] = [];
-    const openRequests = await links.onOpen(event => { if (event.type === "openFile") openedFiles.push(event.url); });
+    const openRequests = await documents.subscribeToOpenRequests(event => { if (event.type === "file") openedFiles.push(event.path); });
     const sub = links.addEventListener("url", event => received.push(event.url));
     const warm = `spark-api-test://${token}/warm`;
     try {
@@ -79,7 +80,7 @@ export async function runAPIChecks(check: Check, driver?: TestDriver, expectedIn
         received.length = 0;
       }
       await native("openURLs", { urls: [warm, "file:///tmp/spark-api-fixture.txt"] });
-      await until(() => received.includes(warm) && openedFiles.includes("file:///tmp/spark-api-fixture.txt"));
+      await until(() => received.includes(warm) && openedFiles.includes("/tmp/spark-api-fixture.txt"));
       assert(received.length === 1, "URL listener received file/duplicate event");
       assert(await links.getInitialURL() === initial, "Warm URL replaced launch URL");
       sub.remove(); sub.remove();

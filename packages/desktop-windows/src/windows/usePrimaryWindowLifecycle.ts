@@ -1,7 +1,3 @@
-import {
-  addApplicationReopenRequestedListener,
-  addWindowClosedListener,
-} from "@legendapp/spark-desktop-windows/src/window-manager";
 import { useEffect, useRef } from "react";
 
 export type UsePrimaryWindowLifecycleOptions = {
@@ -33,24 +29,19 @@ export function usePrimaryWindowLifecycle({
   }, [onInitialOpen, reportError]);
 
   useEffect(() => {
-    const subscription = onReopenRequested
-      ? addApplicationReopenRequestedListener(({ hasVisibleWindows }) => {
-          if (!hasVisibleWindows) {
-            runLifecycleAction(onReopenRequested, reportError);
-          }
-        })
-      : undefined;
-    return () => subscription?.remove();
-  }, [onReopenRequested, reportError]);
-
-  useEffect(() => {
-    const subscription = onWindowClosed && windowIdentifier
-      ? addWindowClosedListener(({ identifier }) => {
-          if (identifier === windowIdentifier) {
-            onWindowClosed();
-          }
-        })
-      : undefined;
-    return () => subscription?.remove();
-  }, [onWindowClosed, windowIdentifier]);
+    if (!onReopenRequested && !(onWindowClosed && windowIdentifier)) return;
+    let disposed = false;
+    const subscriptions: { remove(): void }[] = [];
+    // Loading document request/history APIs must not load the managed-window module.
+    void import("@legendapp/spark-desktop-windows/src/window-manager").then(native => {
+      if (disposed) return;
+      if (onReopenRequested) subscriptions.push(native.addApplicationReopenRequestedListener(({ hasVisibleWindows }) => {
+        if (!hasVisibleWindows) runLifecycleAction(onReopenRequested, reportError);
+      }));
+      if (onWindowClosed && windowIdentifier) subscriptions.push(native.addWindowClosedListener(({ identifier }) => {
+        if (identifier === windowIdentifier) onWindowClosed();
+      }));
+    }).catch(error => { for (const subscription of subscriptions) subscription.remove(); if (!disposed) reportError(error); });
+    return () => { disposed = true; for (const subscription of subscriptions) subscription.remove(); };
+  }, [onReopenRequested, onWindowClosed, windowIdentifier, reportError]);
 }

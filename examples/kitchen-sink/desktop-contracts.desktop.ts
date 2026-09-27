@@ -6,7 +6,7 @@ import { Platform } from "react-native";
 import { testConfig } from "./platform-test-config";
 import * as files from "@legendapp/spark/files";
 import * as clipboard from "@legendapp/spark/clipboard";
-import * as links from "@legendapp/spark/links";
+import * as documents from "@legendapp/spark/app/documents";
 import { settings } from "@legendapp/spark/settings";
 import { filesystemLifecycle, settingsLifecycle, recentDocumentsLifecycle, richClipboardLifecycle, processLifecycle } from "./desktop-contract-cases";
 export async function runDesktopContracts(check: (id: string, action: () => Promise<void>) => Promise<void>, token: string) {
@@ -57,6 +57,6 @@ export async function runDesktopContracts(check: (id: string, action: () => Prom
   await check("desktop.rich-clipboard", () => richClipboardLifecycle(files, clipboard, token));
   if (testConfig.processExecutable) await check("desktop.processes", () => processLifecycle(files, processes, testConfig.processExecutable!, Platform.OS === "windows", token));
   await check("desktop.filesystem", () => filesystemLifecycle(files, token));
-  await check("desktop.recent-documents", () => recentDocumentsLifecycle(files, links, token));
+  await check("desktop.recent-documents", () => recentDocumentsLifecycle(files, documents, token));
   await check("desktop.settings", () => settingsLifecycle(settings, token));
 }

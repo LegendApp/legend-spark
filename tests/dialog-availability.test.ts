@@ -67,3 +67,12 @@ test("application menus import without installed native modules", async () => {
   expect(menus.getMenuAvailability()).toEqual({ available: false, reason: "missing-module" });
   await expect(menus.createMenu({ id: "test", items: [] })).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
+
+import * as links from "../packages/desktop-links/src/api";
+import * as documents from "../packages/documents/src/index";
+test("linking and document transports report missing modules only when called", async () => {
+  await expect(links.openURL("demo://test")).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+  await expect(links.getInitialURL()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+  await expect(documents.getRecentDocuments()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+  await expect(documents.subscribeToOpenRequests(() => {})).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+});

@@ -42,6 +42,7 @@ const windows = await import("../packages/desktop-windows/src/index.ts");
 const files = await import("../packages/file-system/src/index.ts");
 const clipboard = await import("../packages/clipboard/src/index.ts");
 const links = await import("../packages/desktop-links/src/index.ts");
+const documents = await import("../packages/documents/src/requests.ts");
 const secureStore = await import("../packages/secure-storage/src/index.ts");
 const shortcuts = await import("../packages/desktop-shortcuts/src/index.ts");
 const menus = await import("../packages/native-menu/src/index.ts");
@@ -151,14 +152,14 @@ test("clipboard and Keychain preserve empty strings and missing values", async (
 test("links deduplicate queued/live overlap and stop delivery on removal", async () => {
   const cold = { type: "openURL" as const, id: "cold", url: "demo://cold" };
   handlers.set("NativeDesktopApp.pendingURLs", () => { emit("NativeDesktopApp", "desktop", cold); return [cold]; });
-  const received: import("../packages/desktop-links/src/index").OpenEvent[] = []; const sub = await links.onOpen(event => received.push(event)); expect(received).toEqual([cold]);
+  const received: import("../packages/documents/src/requests").OpenRequest[] = []; const sub = await documents.subscribeToOpenRequests(event => received.push(event)); expect(received).toEqual([{ ...cold, type: "url" }]);
   emit("NativeDesktopApp", "desktop", { type: "focus" }); expect(received).toHaveLength(1);
   sub.remove(); emit("NativeDesktopApp", "desktop", { ...cold, id: "warm" }); expect(received).toHaveLength(1);
 });
 test("links registration failures clean up listeners and URL validation is early", async () => {
   handlers.set("NativeDesktopApp.pendingURLs", () => { throw new Error("bridge"); });
-  await expect(links.onOpen(() => {})).rejects.toThrow("bridge"); expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0);
-  await expect(links.openURL("example.com")).rejects.toThrow("scheme"); expect(await links.openURL("https://example.com")).toBe(true); await links.canOpenURL("demo://test"); await links.noteRecentDocument("file:///tmp/a"); await links.getRecentDocuments(); await links.clearRecentDocuments();
+  await expect(documents.subscribeToOpenRequests(() => {})).rejects.toThrow("bridge"); expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0);
+  await expect(links.openURL("example.com")).rejects.toThrow("scheme"); expect(await links.openURL("https://example.com")).toBe(true); handlers.set("NativeDesktopLinks.canOpen", () => true); handlers.set("NativeDesktopLinks.recent", () => []); await links.canOpenURL("demo://test"); await documents.noteRecentDocument("file:///tmp/a"); await documents.getRecentDocuments(); await documents.clearRecentDocuments();
 });
 test("shortcuts dispatch only their registration and clean up on failure/removal", async () => {
   let count = 0; const sub = await shortcuts.registerShortcut("Cmd+K", () => { count++; }); const id = calls[0]?.args.id;
@@ -774,4 +775,33 @@ test("failed native menu updates do not commit proposed owner state", async () =
   const other = await menus.createMenu({ id: "other", items: [{ type: "submenu", id: "edit", label: "Edit", items: [] }] });
   expect(JSON.parse(calls.at(-1)!.args[0]).map((item: any) => item.id)).toEqual(["file", "edit"]);
   await other.remove(); await menu.remove();
+});
+
+test("document requests decode paths once and reject malformed replay without leaking listeners", async () => {
+  handlers.set("NativeDesktopApp.pendingURLs", () => [{ type: "openFile", id: "f", url: "file:///tmp/a%2520%23.txt" }]);
+  const events: unknown[] = [];
+  const sub = await documents.subscribeToOpenRequests(event => events.push(event));
+  expect(events).toEqual([{ type: "file", id: "f", path: "/tmp/a%20#.txt" }]);
+  emit("NativeDesktopApp", "desktop", { type: "openFile", id: "bad", url: "file:///tmp/a?query=bad" }); expect(events).toHaveLength(1); sub.remove();
+  handlers.set("NativeDesktopApp.pendingURLs", () => [{ type: "openURL", id: "bad", url: 123 }]);
+  await expect(documents.subscribeToOpenRequests(() => {})).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0);
+});
+test("document request replay deduplicates even a busy live stream while the snapshot is pending", async () => {
+  handlers.set("NativeDesktopApp.pendingURLs", () => {
+    for (let i = 0; i < 250; i++) emit("NativeDesktopApp", "desktop", { type: "openURL", id: `event-${i}`, url: `demo://${i}` });
+    return [{ type: "openURL", id: "event-0", url: "demo://0" }];
+  });
+  let events = 0; const sub = await documents.subscribeToOpenRequests(() => events++);
+  expect(events).toBe(250); sub.remove();
+});
+test("recent documents and openPath accept native paths without URL interpolation", async () => {
+  await documents.noteRecentDocument("/tmp/a #%.txt"); expect(calls.at(-1)!.args).toEqual({ path: "/tmp/a #%.txt" });
+  await links.openPath("file:///tmp/a%20%23%25.txt"); expect(calls.at(-1)!).toMatchObject({ method: "openPath", args: { path: "/tmp/a #%.txt" } });
+  handlers.set("NativeDesktopLinks.recent", () => ["/tmp/a\\b.txt"]);
+  expect(await documents.getRecentDocuments()).toEqual([{ path: "/tmp/a\\b.txt", name: "a\\b.txt" }]);
+  handlers.set("NativeDesktopLinks.recent", () => ["relative"]);
+  await expect(documents.getRecentDocuments()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  handlers.set("NativeDesktopLinks.canOpen", () => "yes");
+  await expect(links.canOpenURL("demo://test")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
 });

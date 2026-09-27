@@ -42,17 +42,19 @@ RCT_EXPORT_MODULE(NativeDesktopLinks)
     }
     if ([method isEqual:@"recent"]) {
       NSArray *result = [NSUserDefaults.standardUserDefaults arrayForKey:[SparkNamespace() stringByAppendingString:@".recentDocuments"]] ?: @[];
-      resolve(SparkJSON(result)); return;
+      NSMutableArray *paths = [NSMutableArray new];
+      for (NSString *value in result) { NSURL *url = [NSURL URLWithString:value]; if (!url.isFileURL || !url.path.length) { reject(@"E_INVALID_DATA", @"Invalid recent document URL", nil); return; } [paths addObject:url.path]; }
+      resolve(SparkJSON(paths)); return;
     }
     if ([method isEqual:@"clearRecent"]) {
       [NSUserDefaults.standardUserDefaults removeObjectForKey:[SparkNamespace() stringByAppendingString:@".recentDocuments"]];
       if (![SparkContext()[@"runtime"][@"mode"] isEqual:@"go"]) [NSDocumentController.sharedDocumentController clearRecentDocuments:nil];
       resolve(@"null"); return;
     }
-    NSURL *url = [NSURL URLWithString:args[@"url"] ?: @""];
+    NSURL *url = ([method isEqual:@"noteRecent"] || [method isEqual:@"openPath"]) ? [NSURL fileURLWithPath:args[@"path"]] : [NSURL URLWithString:args[@"url"] ?: @""];
     if (!url.scheme.length) { SparkInvalid(reject, @"URL must have a scheme"); return; }
     if ([method isEqual:@"canOpen"]) resolve(SparkJSON(@([NSWorkspace.sharedWorkspace URLForApplicationToOpenURL:url] != nil)));
-    else if ([method isEqual:@"open"]) {
+    else if ([method isEqual:@"open"] || [method isEqual:@"openPath"]) {
       // Opening a URL can deliver an Apple event back to this app. Keep its
       // main run loop free while LaunchServices resolves and opens the target.
       [NSWorkspace.sharedWorkspace openURL:url configuration:NSWorkspaceOpenConfiguration.configuration

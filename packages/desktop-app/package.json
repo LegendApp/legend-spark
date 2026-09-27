@@ -21,7 +21,6 @@
     "ios": {
       "modulesProvider": {
         "NativeDesktopApp": "RNDesktopApp",
-        "NativeRecentDocuments": "RNRecentDocuments",
         "NativeAppExit": "RNAppExit"
       },
       "componentProvider": {}
@@ -31,7 +30,6 @@
     "sdk": false,
     "nativeModules": [
       "NativeDesktopApp",
-      "NativeRecentDocuments",
       "NativeAppExit"
     ],
     "pod": "RNDesktopApp",

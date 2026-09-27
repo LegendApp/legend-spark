@@ -91,22 +91,20 @@ export async function settingsLifecycle(store: typeof settings, token: string) {
   } finally { await store.remove(key); await store.remove(reserved); await store.remove(escaped); }
 }
 
-export async function recentDocumentsLifecycle(files: typeof FileSystem, links: typeof import("@legendapp/spark/links"), token: string) {
-  // The platform runner uses a disposable project identity. Kitchen Sink runs explicitly.
-  const original = await links.getRecentDocuments();
+export async function recentDocumentsLifecycle(files: typeof FileSystem, documents: typeof import("@legendapp/spark/app/documents"), token: string) {
+  const original = await documents.getRecentDocuments();
   const file = `${await files.getDirectory("temp")}/spark-recent-${token}.txt`;
-  const normalized = file.replaceAll("\\", "/");
-  const url = `file://${normalized.startsWith("/") ? "" : "/"}${normalized.split("/").map((part, i) => i === 0 && /^[a-z]:$/i.test(part) ? part : encodeURIComponent(part)).join("/")}`;
   try {
     await files.writeText(file, "recent contract");
-    await links.noteRecentDocument(url); await links.noteRecentDocument(url);
-    const recent = await links.getRecentDocuments();
-    assertContract(recent[0] === url && recent.filter(value => value === url).length === 1, "Recent document order/deduplication failed");
-    await links.clearRecentDocuments();
-    assertContract((await links.getRecentDocuments()).length === 0, "Recent document clear failed");
+    await documents.noteRecentDocument(file); await documents.noteRecentDocument(file);
+    const recent = await documents.getRecentDocuments();
+    const same = (path: string) => path.replaceAll("\\", "/") === file.replaceAll("\\", "/");
+    assertContract(same(recent[0].path) && recent.filter(value => same(value.path)).length === 1, "Recent document order/deduplication failed");
+    await documents.clearRecentDocuments();
+    assertContract((await documents.getRecentDocuments()).length === 0, "Recent document clear failed");
   } finally {
-    await links.clearRecentDocuments();
-    for (const value of original.reverse()) await links.noteRecentDocument(value);
+    await documents.clearRecentDocuments();
+    for (const value of original.reverse()) await documents.noteRecentDocument(value.path);
     await files.remove(file);
   }
 }

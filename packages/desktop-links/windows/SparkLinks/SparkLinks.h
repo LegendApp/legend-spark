@@ -41,13 +41,17 @@ struct RecentDocuments {
   }
   void Write(Json::JsonArray const &list) { auto value = list.Stringify(); check_win32(RegSetValueExW(key, L"URLs", 0, REG_SZ, reinterpret_cast<BYTE const *>(value.c_str()), static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)))); }
   bool ShellEnabled() { wchar_t mode[16]{}; GetEnvironmentVariableW(L"SPARK_RUNTIME_MODE", mode, 16); return std::wstring(mode) == L"dev"; }
-  void Add(hstring const &url) {
+  static std::wstring Path(hstring const &url) {
+    DWORD size = 32768; std::wstring path(size, L'\0'); check_hresult(PathCreateFromUrlW(url.c_str(), path.data(), &size, 0)); path.resize(wcslen(path.c_str())); return path;
+  }
+  Json::JsonArray Paths() { Json::JsonArray paths; for (auto const &entry : Read()) paths.Append(Json::JsonValue::CreateStringValue(Path(entry.GetString()))); return paths; }
+  void Add(hstring const &path) {
+    DWORD size = 32768; std::wstring url(size, L'\0'); check_hresult(UrlCreateFromPathW(path.c_str(), url.data(), &size, 0)); url.resize(wcslen(url.c_str()));
     Windows::Foundation::Uri uri(url);
     if (uri.SchemeName() != L"file") throw hresult_invalid_argument(L"Recent documents require file URLs");
     Json::JsonArray next; next.Append(Json::JsonValue::CreateStringValue(uri.AbsoluteUri()));
     for (auto const &entry : Read()) if (entry.GetString() != uri.AbsoluteUri() && next.Size() < 20) next.Append(entry);
     if (ShellEnabled()) {
-      DWORD size = 32768; std::wstring path(size, L'\0'); check_hresult(PathCreateFromUrlW(uri.AbsoluteUri().c_str(), path.data(), &size, 0));
       com_ptr<IShellItem> item; check_hresult(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(item.put())));
       SHARDAPPIDINFO info{item.get(), appId.c_str()}; SHAddToRecentDocs(SHARD_APPIDINFO, &info);
     }
@@ -95,23 +99,18 @@ struct SparkLinks {
         } else throw hresult_invalid_argument(L"Unknown auth operation");
       } else if (method == "recent" || method == "noteRecent" || method == "clearRecent") {
         RecentDocuments recent;
-        if (method == "recent") promise.Resolve(to_string(recent.Read().Stringify()));
-        else { if (method == "noteRecent") recent.Add(args.GetNamedString(L"url")); else recent.Clear(); promise.Resolve("null"); }
-      } else if (method == "initialURL") {
-        int count = 0; auto arguments = CommandLineToArgvW(GetCommandLineW(), &count); hstring initial;
-        if (arguments) {
-          for (int i = 1; i < count; ++i) {
-            std::wstring candidate(arguments[i]); const auto colon = candidate.find(L':');
-            if (colon != std::wstring::npos && colon > 1 && candidate[0] != L'-') { initial = candidate; break; }
-          }
-          LocalFree(arguments);
-        }
-        promise.Resolve(initial.empty() ? "null" : to_string(Json::JsonValue::CreateStringValue(initial).Stringify()));
+        if (method == "recent") promise.Resolve(to_string(recent.Paths().Stringify()));
+        else { if (method == "noteRecent") recent.Add(args.GetNamedString(L"path")); else recent.Clear(); promise.Resolve("null"); }
+      } else if (method == "openPath") {
+        auto path = args.GetNamedString(L"path");
+        auto result = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+        if (result <= 32) { promise.Reject(React::ReactError{result == SE_ERR_FNF || result == SE_ERR_PNF ? "E_NOT_FOUND" : result == SE_ERR_ACCESSDENIED ? "E_PERMISSION_DENIED" : "E_NATIVE", "No application opened this path"}); co_return; }
+        promise.Resolve("null");
       } else {
         Windows::Foundation::Uri uri(args.GetNamedString(L"url"));
         if (method == "open") {
           if (!co_await Windows::System::Launcher::LaunchUriAsync(uri)) { promise.Reject(React::ReactError{"E_OPEN_URL", "No application opened this URL"}); co_return; }
-          promise.Resolve("true");
+          promise.Resolve("null");
         } else if (method == "canOpen") {
           auto status = co_await Windows::System::Launcher::QueryUriSupportAsync(uri, Windows::System::LaunchQuerySupportType::Uri);
           promise.Resolve(status == Windows::System::LaunchQuerySupportStatus::Available ? "true" : "false");

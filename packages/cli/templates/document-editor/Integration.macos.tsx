@@ -5,7 +5,7 @@ import { beforeWindowClose, openWindow, setWindowTitle, onWindowEvent } from "@l
 import { beforeQuit } from "@legendapp/spark/app";
 import { useMenu, type MenuItem } from "@legendapp/spark/menus";
 import { registerShortcut } from "@legendapp/spark/shortcuts";
-import { onOpen } from "@legendapp/spark/links";
+import { subscribeToOpenRequests } from "@legendapp/spark/app/documents";
 import { readText } from "@legendapp/spark/files";
 import { sessions } from "./sessions";
 import type { DocumentSession } from "./document";
@@ -41,11 +41,9 @@ export function Integration({ session, windowId, documentId, onReady }: { sessio
       }
       if (windowId === "main") {
         await retain(beforeQuit(async () => { for (const document of sessions.values()) if (!await document.canClose()) return false; return true; }));
-        await retain(onOpen(event => {
-          if (event.type !== "openFile") return;
-          const match = /^file:\/\/(?:localhost)?(\/.*)$/.exec(event.url);
-          if (!match) { setError("Unsupported file URL"); return; }
-          const location = decodeURIComponent(match[1]!);
+        await retain(subscribeToOpenRequests(event => {
+          if (event.type !== "file") return;
+          const location = event.path;
           void readText(location).then(text => session.load({ location, name: location.split("/").pop()! }, text)).catch(e => setError(String(e)));
         }));
       }

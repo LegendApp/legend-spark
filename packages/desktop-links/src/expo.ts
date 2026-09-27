@@ -1,5 +1,4 @@
+import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 export { openURL, canOpenURL, getInitialURL, addEventListener } from "expo-linking";
-export type { OpenEvent, URLListener } from "./index";
-/** Legacy desktop facilities have no shared equivalent. */
-const unavailable = async (..._args: unknown[]): Promise<never> => { throw Object.assign(new Error("Desktop document events/history are unavailable on this platform; use URL events instead"), { code: "E_UNAVAILABLE" }); };
-export const onOpen = unavailable, noteRecentDocument = unavailable, clearRecentDocuments = unavailable, getRecentDocuments = unavailable;
+export type { URLListener } from "./api";
+export async function openPath(_path: string): Promise<void> { throw new SparkError("E_UNSUPPORTED_PLATFORM", "Opening a native desktop path requires a desktop host"); }

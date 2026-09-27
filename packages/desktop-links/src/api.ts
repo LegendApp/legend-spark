@@ -1,37 +1,30 @@
-import Native from "./NativeDesktopLinks";
-import { callApp, onDesktopEvent, type DesktopEvent } from "@legendapp/spark-desktop-app";
-export type OpenEvent = { type: "openFile" | "openURL"; id: string; url: string };
-function url(value: string) { if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) throw new Error("URL must include a scheme"); return value; }
-async function call<T = void>(method: string, args: object = {}): Promise<T> { return JSON.parse(await Native.call(method, JSON.stringify(args))) as T; }
-export async function openURL(value: string): Promise<true> {
-  await call("open", { url: url(value) }); return true;
-}
-export async function canOpenURL(value: string): Promise<boolean> { return call("canOpen", { url: url(value) }); }
-export const noteRecentDocument = (value: string) => call("noteRecent", { url: url(value) });
-export const clearRecentDocuments = () => call("clearRecent");
-export const getRecentDocuments = () => call<string[]>("recent");
-/** Subscribe before fetching queued launches; event ids deduplicate the overlap. */
-export async function onOpen(listener: (event: OpenEvent) => void) {
-  const seen = new Set<string>(); let removed = false;
-  function deliver(event: DesktopEvent) {
-    if (removed || (event.type !== "openFile" && event.type !== "openURL") || !event.id || seen.has(event.id)) return;
-    seen.add(event.id);
-    if (seen.size > 200) seen.delete(seen.values().next().value!);
-    listener(event as OpenEvent);
-  }
-  const subscription = onDesktopEvent(deliver);
-  try { for (const event of await callApp<DesktopEvent[]>("pendingURLs")) deliver(event); }
-  catch (error) { subscription.remove(); throw error; }
-  return { remove() { removed = true; subscription.remove(); } };
-}
-
+import { Platform } from "react-native";
+import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
+import { callAppNative } from "@legendapp/spark-desktop-app/src/transport";
+import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
+import { SparkError, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
+import { callLinks, linksCommand } from "./native";
 export type URLListener = (event: { url: string }) => void;
-/** URL that launched this native process, or null; stable across later opens and JS reloads. */
-export const getInitialURL = (): Promise<string | null> => callApp("initialURL");
-/** Live URL events only. Use onOpen for queued desktop URLs and file-open events. */
-export function addEventListener(type: "url", listener: URLListener): { remove(): void } {
-  if (type !== "url" || typeof listener !== "function") throw new TypeError("Expected a url event listener");
+function url(value: string) {
+  if (typeof value !== "string" || !/^[a-z][a-z0-9+.-]*:/i.test(value) || value.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "URL must include a scheme and contain no NUL");
+  return value;
+}
+/** Selected Expo Linking contract: resolves true after native launch acceptance. */
+export async function openURL(value: string): Promise<true> { await linksCommand("open", { url: url(value) }); return true; }
+export function canOpenURL(value: string): Promise<boolean> {
+  return Promise.resolve().then(() => callLinks("canOpen", { url: url(value) }, (value): value is boolean => typeof value === "boolean"));
+}
+/** Spark extension: open a local file or directory in its associated application. */
+export async function openPath(path: string): Promise<void> { await linksCommand("openPath", { path: nativePath(path, Platform.OS) }); }
+/** Stable native-process launch URL; later opens and JS reloads do not replace it. */
+export function getInitialURL(): Promise<string | null> {
+  return callAppNative("initialURL", (value): value is string | null => value === null || (typeof value === "string" && /^[a-z][a-z0-9+.-]*:/i.test(value) && !value.includes("\0")));
+}
+/** Live URL events only. Queued file/URL requests belong to app/documents. */
+export function addEventListener(type: "url", listener: URLListener): Subscription {
+  if (type !== "url" || typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a url event listener");
+  if (Platform.OS !== "macos" && Platform.OS !== "windows") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Desktop URL events require a desktop host");
   return onDesktopEvent(event => {
-    if (event.type === "openURL" && event.initial !== true && typeof event.url === "string") listener({ url: event.url });
+    if (event.type === "openURL" && event.initial !== true && typeof event.url === "string" && /^[a-z][a-z0-9+.-]*:/i.test(event.url) && !event.url.includes("\0")) listener({ url: event.url });
   });
 }
