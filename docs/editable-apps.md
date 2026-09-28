@@ -68,6 +68,30 @@ The old workspaces remain available if migration fails. This implementation migr
 
 Checksums and native fingerprints guard against corruption and incompatible bundles. Custom code executes with the app's existing permissions; this is not an untrusted-code sandbox. AI tools cannot change dependencies, native configuration or files outside the candidate workspace.
 
+## Local interactive editing test
+
+From the Spark repository on Apple Silicon macOS:
+
+```sh
+npm run test:editable:app
+```
+
+This builds a small release app, verifies and seeds its source/toolkit archives into the normal download cache, and launches it with a local fake AI provider. No GitHub release, AI account, API key, or paid request is needed. The first run needs the normal native build prerequisites and may download native dependencies. Later runs reuse the build. The fake provider's certificate is trusted only by the launched process and its workers; nothing is installed in your system trust store.
+
+Open **Customize app…** or press **Command–Shift–E**. The endpoint and model are set automatically. Generate “Make the greeting blue”, then “Make the greeting larger”. Review should include both changes. Preview, Apply, quit, and rerun the command to verify persistence. Unsupported prompts produce no edits; this is a deterministic fixture, not a language model. Approve the normal source-sharing dialog when it appears; requests stay on this machine.
+
+To test a major update, quit the demo and run:
+
+```sh
+npm run test:editable:app -- --version 2
+```
+
+Choose **Migrate edits**, Review, and Apply. The greeting customizations should survive alongside version 2's new footer. **Original** returns to the shipped demo. Quit the app or press Ctrl+C to stop the test server.
+
+Source and native build artifacts remain under `.spark/editable-demo/v1` and `v2`. The test app uses `test.spark.editable-demo`, separate from your apps. Its edits persist in that identifier's Application Support directory so restarts and migrations can be tested. Builds and the shared toolkit cache can use several GB; the command does not delete them or reset previous edits.
+
+Use `--prepare-only` to generate source without building, `--no-open` to build and stage without launching, or `--real-ai` to use your own configured provider instead. No publication occurs in any mode.
+
 ## Verification
 
 ```sh
@@ -77,4 +101,4 @@ npm test
 npm run test:editable
 ```
 
-The opt-in integration test creates real release archives, relocates the toolkit away from the publisher, compiles production Hermes bundles using both Node and Bun, and exercises a deterministic AI editing response. It does not call a paid AI service. The macOS native test compiles the actual host implementation and checks loading, corruption, interrupted activation and original-bundle recovery.
+The opt-in integration test creates real release archives, relocates the toolkit away from the publisher, compiles production Hermes bundles using both Node and Bun, and exercises deterministic AI edits, including the local HTTPS fixture with both runtimes. It does not call a paid AI service. The macOS native test compiles the actual host implementation and checks loading, corruption, interrupted activation and original-bundle recovery.
