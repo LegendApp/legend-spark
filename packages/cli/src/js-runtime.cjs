@@ -23,15 +23,17 @@ function candidates(command, env) {
 
 function selectRuntime(env = process.env, current = process.execPath) {
   const requested = env.SPARK_JS_RUNTIME;
-  const choices = requested ? candidates(requested, env) : [current, ...candidates('node', env), ...candidates('bun', env)];
+  const choices = requested ? candidates(requested, env) : [...candidates('bun', env), current, ...candidates('node', env)];
   for (const executable of [...new Set(choices)]) {
     if (!existsSync(executable)) continue;
-    const result = spawnSync(executable, ['-p', 'JSON.stringify({node:process.versions.node,bun:process.versions.bun})'], { encoding: 'utf8', timeout: 5000, env });
     try {
-      const versions = JSON.parse(result.stdout);
+      const resolved = realpathSync(executable);
+      const result = resolved === realpathSync(process.execPath) ? undefined : spawnSync(executable, ['-p', 'JSON.stringify({node:process.versions.node,bun:process.versions.bun})'], { encoding: 'utf8', timeout: 5000, env });
+      if (result && result.status !== 0) continue;
+      const versions = result ? JSON.parse(result.stdout) : process.versions;
       const name = versions.bun ? 'bun' : 'node';
       if ((requested === 'node' || requested === 'bun') && requested !== name) continue;
-      if (result.status === 0 && supported(versions)) return { executable: realpathSync(executable), name, version: versions.bun ?? versions.node };
+      if (supported(versions)) return { executable: resolved, name, version: versions.bun ?? versions.node };
     } catch {}
   }
   throw new Error(`${requested ? `Requested JavaScript runtime ${requested} is unavailable or unsupported.` : 'No compatible JavaScript runtime found.'} Spark needs Node 24.19.0+ or Bun 1.3.14+. Use the SDK bootstrap to download one.`);
@@ -57,13 +59,20 @@ function runtimeEnvironment(runtime, env = process.env) {
     }
     directories.unshift(bin);
   }
-  return { ...env, SPARK_JS_RUNTIME: runtime.executable, NODE_BINARY: runtime.executable, PATH: [...directories, env.PATH ?? ''].join(path.delimiter) };
+  const rest = (env.PATH ?? '').split(path.delimiter).filter(directory => !directories.includes(directory));
+  const inherited = { ...env };
+  if (process.platform === 'win32') for (const key of Object.keys(inherited)) {
+    if (['PATH', 'SPARK_JS_RUNTIME', 'NODE_BINARY'].includes(key.toUpperCase())) delete inherited[key];
+  }
+  return { ...inherited, SPARK_JS_RUNTIME: runtime.executable, NODE_BINARY: runtime.executable, PATH: [...directories, ...rest].join(path.delimiter) };
 }
 
 async function initializeRuntime() {
   const runtime = selectRuntime();
   const env = runtimeEnvironment(runtime);
-  if (runtime.executable !== realpathSync(process.execPath)) {
+  // Bun 1.3.14 resolves spawnSync commands without an explicit env using its
+  // startup PATH. Relaunch once so upstream scripts see the node alias too.
+  if (runtime.executable !== realpathSync(process.execPath) || (runtime.name === 'bun' && env.PATH !== process.env.PATH)) {
     const child = spawn(runtime.executable, process.argv.slice(1), { env, stdio: 'inherit' });
     process.on('SIGINT', () => child.kill('SIGINT'));
     process.on('SIGTERM', () => child.kill('SIGTERM'));

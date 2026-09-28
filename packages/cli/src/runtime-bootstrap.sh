@@ -41,7 +41,7 @@ cached() {
 
 requested=${SPARK_JS_RUNTIME:-}
 case "$requested" in
-  '') choices='node bun' ;;
+  '') choices='bun node' ;;
   node|bun) choices=$requested ;;
   *) compatible "$requested" || { echo "Unsupported or missing runtime: $requested" >&2; exit 1; }
      launch "$requested" "$@" ;;
@@ -49,11 +49,9 @@ esac
 for kind in $choices; do
   candidate=$(command -v "$kind" || true)
   if [ -n "$candidate" ] && compatible "$candidate" "$requested"; then launch "$candidate" "$@"; fi
-done
-for kind in $choices; do
   if asset "$kind" && cached; then launch "$runtime_path" "$@"; fi
 done
-download=${requested:-${SPARK_RUNTIME_DOWNLOAD:-node}}
+download=${requested:-${SPARK_RUNTIME_DOWNLOAD:-bun}}
 case "$download" in node|bun) ;; *) echo 'SPARK_RUNTIME_DOWNLOAD must be node or bun.' >&2; exit 2 ;; esac
 asset "$download" || { echo "No pinned $download download for $platform/$arch. Install a compatible runtime manually." >&2; exit 1; }
 mkdir -p "$cache"

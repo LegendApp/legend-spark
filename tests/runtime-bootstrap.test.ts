@@ -1,44 +1,45 @@
 import { expect, test } from "vitest";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import os from "node:os";
 import path from "node:path";
-import { spawnProcess, which } from "../packages/cli/src/process.ts";
+import { spawnProcess } from "../packages/cli/src/process.ts";
+import { linkCommand, runtimeFixture, runtimes, type RuntimeName } from "./helpers/js-runtimes.ts";
 
 const source = path.resolve(import.meta.dirname, "../packages/cli/src");
 const shell = test.skipIf(process.platform === "win32");
-function fixture() {
-  const root = mkdtempSync(path.join(os.tmpdir(), "spark bootstrap "));
-  const bin = path.join(root, "bin"); mkdirSync(bin);
-  for (const name of ["runtime-bootstrap.sh", "js-runtime.cjs"]) cpSync(path.join(source, name), path.join(root, name));
+function fixture(names: RuntimeName[] = []) {
+  const f = runtimeFixture(names);
+  const { root, bin, env } = f;
+  for (const name of ["runtime-bootstrap.sh", "runtime-downloads.tsv", "js-runtime.cjs"]) cpSync(path.join(source, name), path.join(root, name));
   const entry = path.join(root, "entry.cjs");
   writeFileSync(entry, "console.log(JSON.stringify({runtime:process.versions.bun?'bun':'node',args:process.argv.slice(2)}))");
-  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`, SPARK_JS_RUNTIME: "", SPARK_RUNTIME_DOWNLOAD: "", SPARK_HOME: path.join(root, "home") };
   const args = [path.join(root, "runtime-bootstrap.sh"), entry, "two words", "$(never-execute)"];
   const run = (overrides = {}) => spawnSync("/bin/sh", args, { env: { ...env, ...overrides }, encoding: "utf8" });
-  return { root, bin, args, env, run, dispose: () => rmSync(root, { recursive: true, force: true }) };
+  return { ...f, args, run };
 }
-function downloadFixture() {
+function downloadFixture(name: RuntimeName = runtimes[0]!.name) {
   const f = fixture();
+  const runtime = runtimes.find(runtime => runtime.name === name)!;
+  f.env.SPARK_RUNTIME_DOWNLOAD = name === "bun" ? "" : "node";
   const unpacked = path.join(f.root, "archive"); mkdirSync(unpacked);
   // A tiny executable archive keeps downloader tests offline; real runtime
   // compatibility is exercised separately against each installed engine.
-  writeFileSync(path.join(unpacked, "node"), `#!/bin/sh\nexec '${process.execPath.replaceAll("'", "'\\''")}' "$@"\n`, { mode: 0o755 });
-  const archive = path.join(f.root, "runtime.tar.gz");
-  expect(spawnSync("tar", ["-czf", archive, "-C", unpacked, "node"]).status).toBe(0);
+  writeFileSync(path.join(unpacked, name), `#!/bin/sh\nexec '${runtime.executable.replaceAll("'", "'\\''")}' "$@"\n`, { mode: 0o755 });
+  const archive = path.join(f.root, name === "bun" ? "runtime.zip" : "runtime.tar.gz");
+  expect(name === "bun" ? spawnSync("zip", ["-j", "-q", archive, path.join(unpacked, name)]).status : spawnSync("tar", ["-czf", archive, "-C", unpacked, name]).status).toBe(0);
   const checksum = createHash("sha256").update(readFileSync(archive)).digest("hex");
-  writeFileSync(path.join(f.root, "runtime-downloads.tsv"), `runtime\tversion\tplatform\tarch\turl\tsha256\texecutable\nnode\t24.19.0\t${process.platform}\t${process.arch}\thttps://example.invalid/runtime.tar.gz\t${checksum}\tnode\n`);
+  writeFileSync(path.join(f.root, "runtime-downloads.tsv"), `runtime\tversion\tplatform\tarch\turl\tsha256\texecutable\n${name}\t${runtime.version}\t${process.platform}\t${process.arch}\thttps://example.invalid/${path.basename(archive)}\t${checksum}\t${name}\n`);
+  rmSync(path.join(f.bin, "curl"));
   writeFileSync(path.join(f.bin, "curl"), `#!/bin/sh\nset -eu\necho download >> "$SPARK_HOME/downloads"\nwhile [ "$1" != --output ]; do shift; done\ncp "$SPARK_TEST_ARCHIVE" "$2"\n`, { mode: 0o755 });
   Object.assign(f.env, { SPARK_TEST_ARCHIVE: archive });
-  const destination = path.join(f.env.SPARK_HOME, "tooling/runtimes", `node-24.19.0-${process.platform}-${process.arch}-${checksum}`);
+  const destination = path.join(f.env.SPARK_HOME, "tooling/runtimes", `${name}-${runtime.version}-${process.platform}-${process.arch}-${checksum}`);
   return { ...f, archive, destination };
 }
 
-shell.each(["node", "bun"].filter(name => which(name)))("bootstrap reuses installed %s without downloading", name => {
-  const f = fixture();
+shell.each(runtimes)("bootstrap reuses installed $name without downloading", ({ name }) => {
+  const f = fixture([name]);
   try {
-    symlinkSync(which(name)!, path.join(f.bin, name));
     const result = f.run();
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ runtime: name, args: ["two words", "$(never-execute)"] });
@@ -46,21 +47,36 @@ shell.each(["node", "bun"].filter(name => which(name)))("bootstrap reuses instal
   } finally { f.dispose(); }
 });
 
-shell("bootstrap downloads once, reuses its cache, and repairs an altered executable", () => {
-  const f = downloadFixture();
+shell.each(runtimes)("bootstrap downloads $name once, reuses its cache, and repairs an altered executable", ({ name }) => {
+  const f = downloadFixture(name);
   try {
     for (let i = 0; i < 2; i++) {
       const result = f.run();
       expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout).runtime).toBe(name);
       expect(JSON.parse(result.stdout).args).toEqual(["two words", "$(never-execute)"]);
     }
     expect(readFileSync(path.join(f.env.SPARK_HOME, "downloads"), "utf8")).toBe("download\n");
-    writeFileSync(path.join(f.destination, "node"), "#!/bin/sh\nexit 90\n");
+    writeFileSync(path.join(f.destination, name), "#!/bin/sh\nexit 90\n");
     const repaired = f.run();
     expect(repaired.status, repaired.stderr).toBe(0);
     expect(readFileSync(path.join(f.env.SPARK_HOME, "downloads"), "utf8")).toBe("download\ndownload\n");
     expect(readdirSync(path.dirname(f.destination))).toEqual([path.basename(f.destination)]);
   } finally { f.dispose(); }
+});
+
+test.skipIf(process.platform === "win32" || runtimes.length !== 2)("bootstrap prefers installed and cached Bun, while honoring an explicit Node override", () => {
+  const f = fixture(["node", "bun"]);
+  const cached = downloadFixture("bun");
+  try {
+    expect(JSON.parse(f.run().stdout).runtime).toBe("bun");
+    expect(JSON.parse(f.run({ SPARK_JS_RUNTIME: "node" }).stdout).runtime).toBe("node");
+    const downloaded = cached.run();
+    expect(downloaded.status, downloaded.stderr).toBe(0);
+    linkCommand(runtimes.find(runtime => runtime.name === "node")!.executable, cached.bin, "node");
+    expect(JSON.parse(cached.run().stdout).runtime).toBe("bun");
+    expect(readFileSync(path.join(cached.env.SPARK_HOME, "downloads"), "utf8")).toBe("download\n");
+  } finally { f.dispose(); cached.dispose(); }
 });
 
 shell("bootstrap rejects a corrupt download before extracting or executing it", () => {

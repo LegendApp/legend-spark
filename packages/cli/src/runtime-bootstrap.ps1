@@ -42,16 +42,14 @@ if ($requested -and $requested -notin @('node', 'bun')) {
   if (-not (Test-Compatible $requested)) { throw "Unsupported or missing runtime: $requested" }
   Start-Runtime $requested
 }
-$choices = if ($requested) { @($requested) } else { @('node', 'bun') }
+$choices = if ($requested) { @($requested) } else { @('bun', 'node') }
 foreach ($kind in $choices) {
   $command = Get-Command "$kind.exe" -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($command -and (Test-Compatible $command.Source $requested)) { Start-Runtime $command.Source }
-}
-foreach ($kind in $choices) {
   $asset = Get-Asset $kind
   if ($asset -and (Test-Cached $asset)) { Start-Runtime (Join-Path (Get-Destination $asset) $asset.executable) }
 }
-$download = if ($requested) { $requested } elseif ($env:SPARK_RUNTIME_DOWNLOAD) { $env:SPARK_RUNTIME_DOWNLOAD } else { 'node' }
+$download = if ($requested) { $requested } elseif ($env:SPARK_RUNTIME_DOWNLOAD) { $env:SPARK_RUNTIME_DOWNLOAD } else { 'bun' }
 if ($download -notin @('node', 'bun')) { throw 'SPARK_RUNTIME_DOWNLOAD must be node or bun.' }
 $asset = Get-Asset $download
 if (-not $asset) { throw "No pinned $download download for $platform/$arch. Install a compatible runtime manually." }
