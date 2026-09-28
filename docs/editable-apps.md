@@ -34,7 +34,7 @@ spark package
 spark editable publish
 ```
 
-A release build writes `.spark/…/editable/` artifacts and embeds `spark-editable.json` in the app before signing. The manifest pins the native fingerprint, source snapshot, toolkit, SHA-256 checksums, compressed sizes and exact GitHub URLs. The source snapshot and toolkit are separate archives. The toolkit preserves installed dependency versions, including nested duplicates and patched packages; users do not run a package installation.
+A release build writes `.spark/…/editable/` artifacts and embeds `spark-editable.json` in the app before signing. The manifest pins the native fingerprint, source snapshot, toolkit, SHA-256 checksums, compressed sizes and exact GitHub URLs. The source snapshot and toolkit are separate archives. The toolkit preserves installed dependency versions, including nested duplicates and patched packages; users do not run a package installation. Dependency files follow npm publication rules (`files`, `.npmignore`, and `.gitignore` fallback), without running package scripts. Selected credential-like files such as `.env`, private keys and signing certificates reject the build. Linked packages follow these same rules; review their publication configuration before building.
 
 `editable publish` uploads to existing public GitHub releases using the publisher's authenticated `gh`. It verifies existing assets instead of overwriting them. It can be called from release automation after building and creating the releases. Users downloading public assets need neither GitHub accounts nor `gh`.
 
@@ -48,7 +48,7 @@ Open **Customize app…** in the Dock menu, or press **Command–Shift–E**. Th
 2. The API key is stored in macOS Keychain, not source files, patches or manifests. Approve source sharing on the first request to each configured endpoint; subsequent prompts use that choice. Provider usage may incur charges.
 3. Spark downloads and verifies the toolkit and source. It prefers compatible Bun, falls back to Node, or downloads pinned Bun using Spark's runtime bootstrap.
 4. AI edits a separate candidate. The worker runs production Metro transforms and the matching Hermes compiler. On a failed build, it sends the diagnostics back for up to two repair attempts within the request’s 30-step limit. The native shell, dependency versions and app configuration remain fixed.
-5. **Review** shows the prompt, summary and patch. **Preview** runs the candidate for the current session; restarting returns to the previously active bundle. **Apply** accepts the candidate and reloads the app. Tools exit after the operation; customized launches use local Hermes bytecode without Metro or an AI connection.
+5. **Review** shows all contributing prompts, the summary and the complete candidate diff against accepted source, including earlier unapplied edits and merged migration changes. **Preview** runs the candidate for the current session; restarting returns to the previously active bundle. **Apply** accepts the candidate and reloads the app. Tools exit after the operation; customized launches use local Hermes bytecode without Metro or an AI connection.
 
 Compilation validates syntax, bundling and native compatibility, not behavior. Preview reloads the current app; it does not launch a second process or clone app data. Changes can affect persistent data. Restoring code does not undo data changes.
 

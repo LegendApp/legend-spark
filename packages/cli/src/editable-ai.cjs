@@ -82,7 +82,6 @@ async function prompt(directory, request, dependencies = {}) {
     }
     if (!validated) throw new Error('AI editing reached its step limit without a valid build');
     event.patch = patch(before, snapshot(candidate)); event.summary = summary;
-    fs.writeFileSync(path.join(directory, 'review.txt'), request.prompt + '\n\n' + summary + '\n\n' + reviewPatch(event.patch));
     event.status = 'needs-review';
     if (migration) state.migration = { ...state.migration, candidate: id, status: 'needs-review', conflicts: [] };
     return { candidate: id, summary, changedFiles: event.patch.map(item => item.path), status: event.status };
@@ -91,7 +90,10 @@ async function prompt(directory, request, dependencies = {}) {
     throw error;
   } finally {
     write(stateFile, state);
-    fs.writeFileSync(path.join(directory, 'review.txt'), event.prompt + '\n\nStatus: ' + event.status + '\n' + (event.summary ?? event.error ?? '') + '\n\n' + reviewPatch(event.patch));
+    // History records each attempt; approval must expose everything this candidate will activate.
+    const prompts = [...(migration ? state.inheritedPrompts ?? [] : []), ...state.history.filter(item => item.id === event.id || event.ancestors.includes(item.id))];
+    const completePatch = patch(snapshot(path.join(directory, 'work')), snapshot(candidate));
+    fs.writeFileSync(path.join(directory, 'review.txt'), 'Contributing prompts\n\n' + prompts.map(item => item.prompt).join('\n\n') + '\n\nStatus: ' + event.status + '\n' + (event.summary ?? event.error ?? '') + '\n\nChanges from accepted source\n\n' + reviewPatch(completePatch));
   }
 }
 module.exports = { prompt, operate };

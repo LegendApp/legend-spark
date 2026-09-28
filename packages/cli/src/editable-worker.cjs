@@ -155,7 +155,7 @@ function migrate(from, to) {
     prompts: [...state.inheritedPrompts, ...history.filter(item => item.status !== 'accepted')].map(item => ({ prompt: item.prompt, status: item.status, patch: item.patch })), patch: patch(base, ours),
     upstream: patch(base, theirs), conflicts: result.conflicts };
   write(path.join(to, 'migration.json'), request);
-  fs.writeFileSync(path.join(to, 'review.txt'), 'Migration from ' + previous.version + ' to ' + current.version + '\n\nConflicts: ' + (result.conflicts.join(', ') || 'none') + '\n\n' + reviewPatch(patch(theirs, result.files)));
+  fs.writeFileSync(path.join(to, 'review.txt'), 'Migration from ' + previous.version + ' to ' + current.version + '\n\nConflicts: ' + (result.conflicts.join(', ') || 'none') + '\n\nContributing prompts\n\n' + state.inheritedPrompts.map(item => item.prompt).join('\n\n') + '\n\nChanges from accepted source\n\n' + reviewPatch(patch(snapshot(path.join(to, 'work')), result.files)));
   state.migration = { from: previous.release, candidate: id, conflicts: result.conflicts, status: 'needs-review' };
   write(path.join(to, 'state.json'), state);
   return state.migration;

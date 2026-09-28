@@ -35,7 +35,11 @@ export function copySource(root: string, destination: string, files: string[]) {
   for (const file of files) copy(file);
 }
 /** Preserve each resolved dependency edge (including duplicate versions), without installing on users' machines. */
-export function copyDependencies(root: string, destination: string, extra: Record<string, string> = {}) {
+export async function copyDependencies(root: string, destination: string, extra: Record<string, string> = {}) {
+  // Use the publication rules from Spark's pinned npm, without running package scripts.
+  const npmRequire = createRequire(require.resolve('npm/package.json'));
+  const packlist = npmRequire('npm-packlist');
+  const { Node } = npmRequire('@npmcli/arborist');
   const visited = new Map<string, string>();
   const ignored = new Set(['node_modules', '.git', '.cache', 'Pods', '.spark']);
   function resolve(from: string, name: string) {
@@ -54,29 +58,38 @@ export function copyDependencies(root: string, destination: string, extra: Recor
       }
     }
   }
-  function link(from: string, name: string, source: string) {
+  async function link(from: string, name: string, source: string) {
     if (!/^(?:@[\w.-]+\/)?[\w.-]+$/.test(name)) throw new Error(`Invalid package name ${name}`);
-    const target = visit(source);
+    const target = await visit(source);
     const location = path.join(from, 'node_modules', name);
     mkdirSync(path.dirname(location), { recursive: true });
     if (!existsSync(location)) symlinkSync(path.relative(path.dirname(location), target), location);
   }
-  function visit(source: string): string {
+  async function visit(source: string): Promise<string> {
     source = realpathSync(source);
     if (visited.has(source)) return visited.get(source)!;
     const target = path.join(destination, 'packages', String(visited.size));
     visited.set(source, target);
-    cpSync(source, target, { recursive: true, dereference: true, preserveTimestamps: true, filter: file => !path.relative(source, file).split(path.sep).some(part => ignored.has(part)) });
     const pkg = readJson(path.join(source, 'package.json'));
+    // Resolve dependency edges ourselves so duplicate versions and bundled modules stay intact.
+    const files: string[] = await packlist(new Node({ path: source, pkg }));
+    for (const relative of files.sort()) {
+      if (relative.split(path.sep).some(part => ignored.has(part))) continue;
+      if (/(?:^|\/)(?:\.env(?:\..*)?|\.npmrc|\.netrc|.*\.(?:p12|p8|pem|key|mobileprovision))$/i.test(relative)) throw new Error(`Do not publish credentials in editable dependency ${pkg.name}: ${relative}`);
+      const file = path.join(source, relative);
+      if (!lstatSync(file).isFile() || !realpathSync(file).startsWith(source + path.sep)) throw new Error(`Editable dependency file must be contained in ${pkg.name}: ${relative}`);
+      mkdirSync(path.dirname(path.join(target, relative)), { recursive: true });
+      cpSync(file, path.join(target, relative), { preserveTimestamps: true });
+    }
     // Packages without an exports map still resolve their own package name through node_modules.
-    link(target, pkg.name, source);
+    await link(target, pkg.name, source);
     const anchor = path.join(source, pkg.spark?.bundledModuleRoot ?? '.');
     const targetAnchor = path.join(target, pkg.spark?.bundledModuleRoot ?? '.');
     const bundled = pkg.spark?.bundledModules ?? pkg.bundledDependencies ?? pkg.bundleDependencies ?? [];
     const edges = new Set([...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.optionalDependencies ?? {}), ...Object.keys(pkg.peerDependencies ?? {}), ...(Array.isArray(bundled) ? bundled : [])]);
     for (const name of [...edges].sort()) {
       const dependency = resolve(anchor, name);
-      if (dependency) link(targetAnchor, name, dependency);
+      if (dependency) await link(targetAnchor, name, dependency);
       else if (pkg.dependencies?.[name] && !pkg.optionalDependencies?.[name]) throw new Error(`Missing dependency ${pkg.name} -> ${name}`);
     }
     return target;
@@ -85,14 +98,14 @@ export function copyDependencies(root: string, destination: string, extra: Recor
   for (const name of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies, ...extra }).sort()) {
     const dependency = extra[name] ?? resolve(root, name);
     if (!dependency) throw new Error(`Missing editable dependency ${name}`);
-    link(destination, name, dependency);
+    await link(destination, name, dependency);
   }
   // Metro/Expo resolve plugins from the app root, including hoisted transitive dependencies.
   // Reproduce only aliases that resolve to this exact package in the publisher's installation.
   for (const source of [...visited.keys()]) {
     const name = readJson(path.join(source, 'package.json')).name;
     const resolved = resolve(root, name);
-    if (resolved && realpathSync(resolved) === source) link(destination, name, source);
+    if (resolved && realpathSync(resolved) === source) await link(destination, name, source);
   }
   return visited.size;
 }
@@ -115,7 +128,7 @@ export async function prepareEditableArtifacts(root: string, runtime: Runtime, a
     const entry = entryFile(root);
     if (entry.startsWith('..') || path.isAbsolute(entry) || !existsSync(path.join(source, entry))) throw new Error('Editable entry must be inside the published source snapshot');
     const appRequire = createRequire(path.join(root, 'package.json'));
-    copyDependencies(root, toolkit, { diff: path.dirname(require.resolve('diff/package.json')), 'react-native-macos': path.dirname(appRequire.resolve('react-native-macos/package.json')) });
+    await copyDependencies(root, toolkit, { diff: path.dirname(require.resolve('diff/package.json')), 'react-native-macos': path.dirname(appRequire.resolve('react-native-macos/package.json')) });
     for (const file of ['editable-worker.cjs', 'editable-ai.cjs', 'js-runtime.cjs', 'runtime-bootstrap.sh', 'runtime-downloads.tsv']) cpSync(path.join(import.meta.dirname, file), path.join(toolkit, file));
     const rn = path.dirname(appRequire.resolve('react-native/package.json'));
     const hermesc = [path.join(root, 'macos/Pods/hermes-engine/destroot/bin/hermesc'), path.join(rn, 'sdks/hermesc/osx-bin/hermesc')].find(existsSync);

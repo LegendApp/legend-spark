@@ -32,7 +32,7 @@ describe('editable release inputs', () => {
     symlinkSync(path.join(root, 'src'), path.join(root, 'linked'));
     expect(() => copySource(root, path.join(root, 'out'), ['linked'])).toThrow('symlink');
   });
-  it('preserves nested conflicting dependency versions after relocation', () => {
+  it('preserves nested conflicting dependency versions after relocation', async () => {
     file('project/package.json', JSON.stringify({ dependencies: { a: '1', x: '1' } }));
     file('project/node_modules/a/package.json', JSON.stringify({ name: 'a', version: '1', dependencies: { x: '2' } }));
     file('project/node_modules/a/index.js', "module.exports = require('x');");
@@ -41,7 +41,7 @@ describe('editable release inputs', () => {
     file('project/node_modules/x/package.json', JSON.stringify({ name: 'x', version: '1' }));
     file('project/node_modules/x/index.js', "module.exports = 1;");
     const target = path.join(root, 'relocated');
-    copyDependencies(path.join(root, 'project'), target);
+    await copyDependencies(path.join(root, 'project'), target);
     rmSync(path.join(root, 'project'), { recursive: true });
     const req = createRequire(path.join(target, 'package.json'));
     expect(req('a')).toBe(2); expect(req('x')).toBe(1);
@@ -205,4 +205,79 @@ it('continues an unapplied candidate and saves all contributing prompts on accep
   const history = worker.read(path.join(dir, 'state.json')).history;
   expect(history.map((item: any) => item.status)).toEqual(['accepted', 'accepted']);
   expect(history[1].ancestors).toEqual([history[0].id]);
+});
+
+describe('dependency publication boundaries', () => {
+  it('honors files and nested npmignore rules for linked packages without running scripts', async () => {
+    file('project/package.json', JSON.stringify({ dependencies: { local: '1' } }));
+    file('local/package.json', JSON.stringify({ name: 'local', version: '1', files: ['dist'], scripts: { prepack: 'exit 1' } }));
+    file('local/dist/index.js', 'module.exports = 42;');
+    file('local/dist/.npmignore', 'private.txt\n');
+    file('local/dist/private.txt', 'private');
+    file('local/notes.txt', 'unpublished'); file('local/.env', 'SYNTHETIC_FIXTURE=1');
+    mkdirSync(path.join(root, 'project/node_modules'), { recursive: true });
+    symlinkSync(path.join(root, 'local'), path.join(root, 'project/node_modules/local'));
+    const target = path.join(root, 'toolkit');
+    await copyDependencies(path.join(root, 'project'), target);
+    const published = worker.snapshot(path.join(target, 'packages/0'));
+    expect(Object.keys(published).sort()).toEqual(['dist/index.js', 'package.json']);
+    expect(readFileSync(path.join(target, 'node_modules/local/dist/index.js'), 'utf8')).toBe('module.exports = 42;');
+  });
+  it.each(['.env', 'config/.env.production', 'certs/signing.P12', 'certs/private.pem', 'certs/private.key', 'profile.mobileprovision'])('rejects selected credential file %s', async name => {
+    file('project/package.json', JSON.stringify({ dependencies: { local: '1' } }));
+    file('project/node_modules/local/package.json', JSON.stringify({ name: 'local', version: '1' }));
+    file('project/node_modules/local/' + name, 'SYNTHETIC_FIXTURE');
+    await expect(copyDependencies(path.join(root, 'project'), path.join(root, 'toolkit'))).rejects.toThrow('Do not publish credentials');
+  });
+  it('honors gitignore fallback and excludes links to private files', async () => {
+    file('project/package.json', JSON.stringify({ dependencies: { local: '1' } }));
+    file('project/node_modules/local/package.json', JSON.stringify({ name: 'local', version: '1' }));
+    file('project/node_modules/local/.gitignore', 'private.txt\n');
+    file('project/node_modules/local/private.txt', 'private');
+    file('outside.txt', 'private');
+    symlinkSync(path.join(root, 'outside.txt'), path.join(root, 'project/node_modules/local/linked.txt'));
+    await copyDependencies(path.join(root, 'project'), path.join(root, 'toolkit'));
+    expect(Object.keys(worker.snapshot(path.join(root, 'toolkit/packages/0')))).toEqual(['package.json']);
+  });
+});
+
+describe('complete candidate review', () => {
+  const request = { endpoint: 'https://example.test/chat', model: 'fixture', allowSourceSharing: true };
+  async function edit(dir: string, prompt: string, name?: string, content?: string, fail = false) {
+    let calls = 0;
+    return ai.prompt(dir, { ...request, prompt }, {
+      fetch: async () => ({ ok: true, json: async () => ({ choices: [{ message: ++calls === 1 && name ? { tool_calls: [{ id: '1', function: { name: 'write_file', arguments: JSON.stringify({ path: name, content }) } }] } : { content: 'Done' } }] }) }),
+      build: async () => { if (fail) throw new Error('Compile failed'); },
+    });
+  }
+  it('shows earlier unapplied changes and all contributing prompts even after a no-op follow-up', async () => {
+    const dir = workspace();
+    await edit(dir, 'Change first file', 'index.js', 'changed\n');
+    await edit(dir, 'Add second file', 'second.js', 'second\n');
+    await edit(dir, 'Keep those edits');
+    const review = readFileSync(path.join(dir, 'review.txt'), 'utf8');
+    for (const value of ['index.js', 'second.js', '-original', '+changed', 'Change first file', 'Add second file', 'Keep those edits']) expect(review).toContain(value);
+    const history = worker.read(path.join(dir, 'state.json')).history;
+    expect(history[1].patch.map((item: any) => item.path)).toEqual(['second.js']);
+    expect(history[2].patch).toEqual([]);
+  });
+  it('compares against accepted source and retains the full review on build failure', async () => {
+    const dir = workspace(); writeFileSync(path.join(dir, 'work/index.js'), 'accepted\n');
+    await edit(dir, 'Change accepted greeting', 'index.js', 'candidate\n');
+    await expect(edit(dir, 'Add a broken file', 'broken.js', 'broken\n', true)).rejects.toThrow('Compile failed');
+    const review = readFileSync(path.join(dir, 'review.txt'), 'utf8');
+    expect(review).toContain('-accepted'); expect(review).not.toContain('-original');
+    expect(review).toContain('+candidate'); expect(review).toContain('broken.js'); expect(review).toContain('Status: failed');
+  });
+  it('includes merged migration changes and inherited intent when AI makes no additional edits', async () => {
+    const old = workspace('a', 'a\nb\n'), next = workspace('b', 'a\nb\nc\n');
+    writeFileSync(path.join(old, 'work/index.js'), 'A\nb\n');
+    const state = worker.read(path.join(old, 'state.json'));
+    state.history.push({ prompt: 'Capitalize the first line', status: 'accepted', patch: [] }); worker.write(path.join(old, 'state.json'), state);
+    worker.migrate(old, next);
+    expect(readFileSync(path.join(next, 'review.txt'), 'utf8')).toContain('Capitalize the first line');
+    await edit(next, 'Preserve my edits');
+    const review = readFileSync(path.join(next, 'review.txt'), 'utf8');
+    for (const value of ['Capitalize the first line', 'Preserve my edits', 'index.js', '-a', '+A']) expect(review).toContain(value);
+  });
 });
