@@ -170,7 +170,7 @@ export function nativePackages(root: string, { applyExcludes = true } = {}): Nat
   // Host/CNG code can change the native ABI without adding a TurboModule.
   // Fold it into the mandatory app module's compatibility signature for Go.
   const adapters = installed.filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
-    .map(pkg => hashFiles(pkg.root, ["package.json", "AppDelegate.mm", ...readdirSync(pkg.root).filter(name => name.endsWith(".cjs"))])).join(":");
+    .map(pkg => hashFiles(pkg.root, ["package.json", "AppDelegate.mm", "SparkEditable.mm", ...readdirSync(pkg.root).filter(name => name.endsWith(".cjs"))])).join(":");
   return installed.filter(pkg => !applyExcludes || !excluded.includes(pkg.name))
     .filter(
       (pkg) =>
@@ -270,7 +270,7 @@ export function selection(
 export function hostSourceSignature(root: string) {
   return digest(JSON.stringify(installedPackages(root)
     .filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
-    .map(pkg => [pkg.name, hashFiles(pkg.root, ["package.json", "AppDelegate.mm", "windows", ...readdirSync(pkg.root).filter(file => file.endsWith(".cjs"))])])));
+    .map(pkg => [pkg.name, hashFiles(pkg.root, ["package.json", "AppDelegate.mm", "SparkEditable.mm", "windows", ...readdirSync(pkg.root).filter(file => file.endsWith(".cjs"))])])));
 }
 export function nativePreparationInputs(root: string, packages: NativePackage[]) {
   return {
@@ -346,6 +346,10 @@ export function runtimeFor(
         modules,
         pins,
         config: readAppConfig(root),
+        editable: readAppConfig(root).expo?.extra?.spark?.editable ? {
+          source: hashFiles(root, readAppConfig(root).expo.extra.spark.editable.files),
+          tooling: hashFiles(import.meta.dirname, ["editable-artifacts.ts", "editable-artifacts.js", "editable-worker.cjs", "editable-ai.cjs"]),
+        } : undefined,
         helpers: resolveHelpers(root, readAppConfig(root).expo?.extra?.spark?.helpers, platform).map(helper => ({ name: helper.name, contents: hashFiles(root, helper.files), modes: helper.modes, directories: helper.directories })),
         adapter: hostSourceSignature(root),
       }),
@@ -375,6 +379,7 @@ export function goConfigurationIssues(config: any): string[] {
   if (expo.scheme || expo.extra?.spark?.documentTypes?.length)
     issues.push("URL schemes and document associations require a custom runtime");
   if (expo.extra?.spark?.menuBarOnly) issues.push("Menu-bar-only activation requires a custom runtime");
+  if (expo.extra?.spark?.editable) issues.push("Editable apps require a custom release runtime");
   if (expo.extra?.spark?.updates) issues.push("Update feed configuration requires a custom runtime");
   if (Object.keys(expo.extra?.spark?.helpers ?? {}).length) issues.push("Bundled helpers require a custom runtime");
   if (expo.extra?.spark?.customRuntime)

@@ -1,3 +1,4 @@
+import { publishEditable } from "./editable-artifacts.ts";
 import type { PackageManager } from "./package-manager.ts";
 import { nodeCommand, spawnProcess } from "./process.ts";
 import { examples, type Example } from "./examples.ts";
@@ -78,6 +79,7 @@ async function main() {
   spark package       Sign and notarize a distribution archive
   spark doctor        Check app dependency pins and native tooling (exits 1 on issues)
   spark upgrade       Update Spark on its current release channel (--dry-run previews changes)
+  spark editable publish  Upload prepared editing artifacts to existing GitHub releases
 
 Inside an app: npm run dev, npm run build, npm run package (or pnpm, yarn, bun)
 
@@ -182,6 +184,11 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
     }
     case "upgrade": {
       await upgrade(project(), !!values["dry-run"]);
+      break;
+    }
+    case "editable": {
+      if (positionals[1] !== "publish") throw new Error("Usage: spark editable publish (after an editable release build)");
+      await publishEditable(project());
       break;
     }
     case "updates": {

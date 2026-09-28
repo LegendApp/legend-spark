@@ -26,7 +26,7 @@ function snapshot(root) {
   const result = {};
   function visit(relative) {
     for (const entry of fs.readdirSync(path.join(root, relative), { withFileTypes: true }).sort((a,b) => a.name.localeCompare(b.name))) {
-      if (['node_modules', '.spark', '.threaded-runtime', '.git'].includes(entry.name)) continue;
+      if (['node_modules', '.spark', '.expo', '.threaded-runtime', '.git'].includes(entry.name)) continue;
       const name = path.posix.join(relative, entry.name), file = path.join(root, name);
       if (entry.isSymbolicLink()) throw new Error(`Source symlink: ${name}`);
       if (entry.isDirectory()) visit(name);
@@ -49,6 +49,13 @@ function text(bytes) {
   if (value.includes(0)) return undefined;
   const decoded = value.toString('utf8');
   return Buffer.from(decoded).equals(value) ? decoded : undefined;
+}
+function reviewPatch(changes) {
+  const { createTwoFilesPatch } = require('diff');
+  return changes.map(change => {
+    const before = change.before === null ? '' : text(change.before), after = change.after === null ? '' : text(change.after);
+    return before === undefined || after === undefined ? `${change.path}: binary file changed\n` : createTwoFilesPatch(change.path, change.path, before, after);
+  }).join('\n');
 }
 function mergeText(base, ours, theirs) {
   const { diffArrays } = require('diff');
@@ -110,7 +117,18 @@ function validateManifest(manifest) {
 function prepare(manifest, source, toolkit, support) {
   validateManifest(manifest);
   const directory = path.join(support, 'releases', manifest.release);
-  if (fs.existsSync(path.join(directory, 'state.json'))) return directory;
+  if (fs.existsSync(path.join(directory, 'state.json'))) {
+    const accepting = path.join(directory, 'accepting.json');
+    if (fs.existsSync(accepting)) {
+      const pending = read(accepting);
+      for (const file of [pending.backup, pending.staged]) if (path.dirname(file) !== directory) throw new Error('Invalid acceptance recovery path');
+      if (!fs.existsSync(path.join(directory, 'work')) && fs.existsSync(pending.backup)) fs.renameSync(pending.backup, path.join(directory, 'work'));
+      fs.rmSync(accepting, { force: true });
+    }
+    const state = read(path.join(directory, 'state.json'));
+    if (state.toolkit !== toolkit) { state.toolkit = toolkit; write(path.join(directory, 'state.json'), state); }
+    return directory;
+  }
   const stage = `${directory}.pending-${process.pid}`;
   fs.mkdirSync(stage, { recursive: true });
   try {
@@ -132,17 +150,21 @@ function migrate(from, to) {
   const id = crypto.randomUUID(), candidate = path.join(to, 'candidates', id);
   restore(candidate, result.files);
   const history = read(path.join(from, 'state.json')).history;
+  state.inheritedPrompts = [...(read(path.join(from, 'state.json')).inheritedPrompts ?? []), ...history.filter(item => item.status === 'accepted').map(item => ({ prompt: item.prompt, baseRelease: item.baseRelease, patch: item.patch }))];
   const request = { schema: 1, kind: 'migration', from: previous.release, to: current.release,
-    prompts: history.map(item => ({ prompt: item.prompt, status: item.status, patch: item.patch })), patch: patch(base, ours),
+    prompts: [...state.inheritedPrompts, ...history.filter(item => item.status !== 'accepted')].map(item => ({ prompt: item.prompt, status: item.status, patch: item.patch })), patch: patch(base, ours),
     upstream: patch(base, theirs), conflicts: result.conflicts };
   write(path.join(to, 'migration.json'), request);
+  fs.writeFileSync(path.join(to, 'review.txt'), 'Migration from ' + previous.version + ' to ' + current.version + '\n\nConflicts: ' + (result.conflicts.join(', ') || 'none') + '\n\n' + reviewPatch(patch(theirs, result.files)));
   state.migration = { from: previous.release, candidate: id, conflicts: result.conflicts, status: 'needs-review' };
   write(path.join(to, 'state.json'), state);
   return state.migration;
 }
+const children = new Set();
 async function execute(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options });
+    children.add(child); child.once('close', () => children.delete(child));
     let output = '';
     for (const stream of [child.stdout, child.stderr]) stream.on('data', value => { output = (output + value).slice(-20000); });
     child.on('error', reject);
@@ -154,6 +176,7 @@ function attachDependencies(workspace, toolkit) {
   if (!fs.existsSync(modules)) fs.symlinkSync(path.join(toolkit, 'node_modules'), modules);
 }
 async function build(directory, candidate = 'work') {
+  fs.rmSync(path.join(directory, 'ready.json'), { force: true });
   const state = read(path.join(directory, 'state.json')), manifest = validateManifest(read(path.join(directory, 'manifest.json')));
   const workspace = candidate === 'work' ? path.join(directory, 'work') : safe(path.join(directory, 'candidates'), candidate);
   const toolkit = state.toolkit, metadata = read(path.join(toolkit, 'toolkit.json'));
@@ -171,7 +194,8 @@ async function build(directory, candidate = 'work') {
   fs.mkdirSync(output, { recursive: true });
   const env = { ...process.env, CI: '1', NODE_ENV: 'production', SPARK_PLATFORM: 'macos', EXPO_NO_TELEMETRY: '1' };
   // Discover worker roots using the same two-pass pipeline as Spark's release build.
-  const args = ['export:embed', '--platform', 'macos', '--entry-file', manifest.entry, '--bundle-output', path.join(output, 'app.js'), '--sourcemap-output', path.join(output, 'app.map'), '--assets-dest', output, '--dev', 'false', '--minify', 'true', '--max-workers', '2'];
+  // One worker avoids Bun's jest-worker fork/IPC incompatibility and keeps memory bounded.
+  const args = ['export:embed', '--platform', 'macos', '--entry-file', manifest.entry, '--bundle-output', path.join(output, 'app.js'), '--sourcemap-output', path.join(output, 'app.map'), '--assets-dest', output, '--dev', 'false', '--minify', 'true', '--max-workers', '1'];
   await execute(process.execPath, [bin, ...args], { cwd: workspace, env: { ...env, SPARK_RUNTIME_DISCOVERY: '1' } });
   const sources = read(path.join(output, 'app.map')).sources;
   const roots = sources.map(source => fs.existsSync(path.resolve(workspace, source)) ? path.resolve(workspace, source) : path.resolve(workspace, source.replace(/^\//, ''))).filter(file => fs.existsSync(file) && /\.[jt]sx?$/.test(file) && !file.endsWith('.d.ts'));
@@ -199,18 +223,28 @@ async function build(directory, candidate = 'work') {
   write(path.join(directory, 'ready.json'), record);
   return record;
 }
-function accept(directory) {
+function verify(directory) {
   const ready = read(path.join(directory, 'ready.json'));
   const manifest = validateManifest(read(path.join(directory, 'manifest.json')));
   const workspace = ready.candidate === 'work' ? path.join(directory, 'work') : safe(path.join(directory, 'candidates'), ready.candidate);
   if (ready.release !== manifest.release || ready.sourceHash !== hash(JSON.stringify(snapshot(workspace)))) throw new Error('Source changed after validation; rebuild before accepting');
+  if (ready.fingerprint !== manifest.runtime.fingerprint || !/^[a-f0-9-]{36}$/.test(ready.build) || hash(fs.readFileSync(path.join(directory, 'builds', ready.build, 'main.jsbundle'))) !== ready.bundleHash) throw new Error('Compiled candidate is incompatible or corrupted');
+  return ready;
+}
+function accept(directory) {
+  const ready = verify(directory);
+  const workspace = ready.candidate === 'work' ? path.join(directory, 'work') : safe(path.join(directory, 'candidates'), ready.candidate);
   const state = read(path.join(directory, 'state.json'));
   if (ready.candidate !== 'work') {
+    const staged = path.join(directory, 'accept-' + crypto.randomUUID());
+    fs.cpSync(workspace, staged, { recursive: true, verbatimSymlinks: true });
     const backup = path.join(directory, 'work-before-' + crypto.randomUUID());
+    write(path.join(directory, 'accepting.json'), { backup, staged });
     fs.renameSync(path.join(directory, 'work'), backup);
-    try { fs.cpSync(workspace, path.join(directory, 'work'), { recursive: true, verbatimSymlinks: true }); }
+    try { fs.renameSync(staged, path.join(directory, 'work')); fs.rmSync(path.join(directory, 'accepting.json'), { force: true }); }
     catch (error) { fs.rmSync(path.join(directory, 'work'), { recursive: true, force: true }); fs.renameSync(backup, path.join(directory, 'work')); throw error; }
-    for (const item of state.history) if (item.candidate === ready.candidate) item.status = 'accepted';
+    const event = state.history.find(item => item.candidate === ready.candidate);
+    for (const item of state.history) if (item.candidate === ready.candidate || event?.ancestors?.includes(item.id)) item.status = 'accepted';
     if (state.migration?.candidate === ready.candidate) state.migration.status = 'accepted';
   }
   state.status = 'customized';
@@ -219,18 +253,21 @@ function accept(directory) {
   // Native host owns activation/recovery. Never modify a signed application from the worker.
   return ready;
 }
-module.exports = { safe, snapshot, restore, patch, merge, mergeText, validateManifest, prepare, migrate, execute, build, accept, read, write, hash };
+module.exports = { reviewPatch, safe, snapshot, restore, patch, merge, mergeText, validateManifest, prepare, migrate, execute, build, verify, accept, read, write, hash };
 if (require.main === module) {
-  require('./js-runtime.cjs').initializeRuntime();
+  const initialize = require('./js-runtime.cjs').initializeRuntime;
   (async () => {
+    await initialize();
+    for (const signal of ['SIGTERM','SIGINT']) process.once(signal, () => { for (const child of children) child.kill(signal); setTimeout(() => process.exit(signal === 'SIGINT' ? 130 : 143), 300).unref(); });
     const [command, ...args] = process.argv.slice(2);
     let result;
     if (command === 'prepare') result = prepare(read(args[0]), args[1], args[2], args[3]);
     else if (command === 'migrate') result = migrate(args[0], args[1]);
     else if (command === 'build') result = await build(args[0], args[1]);
+    else if (command === 'verify') result = verify(args[0]);
     else if (command === 'accept') result = accept(args[0]);
     else if (command === 'prompt') result = await require('./editable-ai.cjs').prompt(args[0], read(args[1]));
-    else throw new Error('Expected prepare, migrate, prompt, build, or accept');
+    else throw new Error('Expected prepare, migrate, prompt, build, verify, or accept');
     console.log(JSON.stringify(result));
   })().catch(error => { console.error(error.message); process.exitCode = 1; });
 }

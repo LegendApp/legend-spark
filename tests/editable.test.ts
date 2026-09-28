@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { copySource, copyDependencies, githubAsset } from '../packages/cli/src/editable-artifacts.ts';
+import { copySource, copyDependencies, githubAsset, fileHash, publishEditable } from '../packages/cli/src/editable-artifacts.ts';
 const require = createRequire(import.meta.url);
 const { validateEditable } = require('../packages/config-plugin/editable.cjs');
 const worker = require('../packages/cli/src/editable-worker.cjs');
@@ -94,4 +94,115 @@ describe('prompt editing', () => {
     const dir = workspace();
     for (const file of ['../secret', '/tmp/secret', 'node_modules/a.js', 'package.json', '.env']) expect(() => ai.operate(path.join(dir, 'work'), 'write_file', { path: file, content: 'bad' })).toThrow();
   });
+});
+
+describe('editing recovery and migration provenance', () => {
+  it('carries accepted prompts across successive major upgrades', () => {
+    const first = workspace('a', 'a\nb\n'), second = workspace('b', 'a\nb\nc\n'), third = workspace('c', 'a\nb\nc\nd\n');
+    writeFileSync(path.join(first, 'work/index.js'), 'A\nb\n');
+    const state = worker.read(path.join(first, 'state.json')); state.history = [{ prompt: 'Capitalize first line', status: 'accepted', baseRelease: 'a'.repeat(64), patch: [] }]; worker.write(path.join(first, 'state.json'), state);
+    const migration = worker.migrate(first, second);
+    worker.restore(path.join(second, 'work'), worker.snapshot(path.join(second, 'candidates', migration.candidate)));
+    worker.migrate(second, third);
+    expect(worker.read(path.join(third, 'migration.json')).prompts.map((p: any) => p.prompt)).toContain('Capitalize first line');
+  });
+  it('recovers a working copy interrupted during acceptance', () => {
+    const dir = workspace();
+    const backup = path.join(dir, 'work-before-test');
+    require('node:fs').renameSync(path.join(dir, 'work'), backup);
+    worker.write(path.join(dir, 'accepting.json'), { backup, staged: path.join(dir, 'accept-test') });
+    worker.prepare(manifest(), path.join(root, 'source-a'), path.join(root, 'toolkit'), path.join(root, 'support'));
+    expect(readFileSync(path.join(dir, 'work/index.js'), 'utf8')).toBe('original\n');
+  });
+  it('rejects acceptance if source changed after compilation', () => {
+    const dir = workspace();
+    worker.write(path.join(dir, 'ready.json'), { release: 'a'.repeat(64), candidate: 'work', sourceHash: 'old' });
+    expect(() => worker.accept(dir)).toThrow('Source changed');
+  });
+  it('invalidates stale candidates and retains intent after validation failure', async () => {
+    const dir = workspace(); worker.write(path.join(dir, 'ready.json'), { old: true });
+    await expect(ai.prompt(dir, { prompt: 'Make it blue', endpoint: 'https://example.test/chat', model: 'fixture', allowSourceSharing: true, apiKey: 'test-secret' }, {
+      fetch: async (_url: string, options: any) => {
+        expect(options.headers.Authorization).toBe('Bearer test-secret');
+        return { ok: true, json: async () => ({ choices: [{ message: { content: 'Done' } }] }) };
+      }, build: async () => { throw new Error('Compile failed'); },
+    })).rejects.toThrow('Compile failed');
+    expect(require('node:fs').existsSync(path.join(dir, 'ready.json'))).toBe(false);
+    const state = readFileSync(path.join(dir, 'state.json'), 'utf8'); expect(state).not.toContain('test-secret'); expect(JSON.parse(state).history[0].prompt).toBe('Make it blue');
+  });
+  it('recovers an interrupted AI request before starting a new candidate', async () => {
+    const dir = workspace(), file = path.join(dir, 'state.json'), state = worker.read(file);
+    state.history.push({ prompt: 'Old request', status: 'running', pid: 2147483647 }); worker.write(file, state);
+    await ai.prompt(dir, { prompt: 'New request', endpoint: 'https://example.test/chat', model: 'fixture', allowSourceSharing: true }, { fetch: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'Done' } }] }) }), build: async () => {} });
+    expect(worker.read(file).history[0].status).toBe('interrupted');
+  });
+});
+
+describe('native opt-in configuration', () => {
+  const plugin = require('../packages/config-plugin/app.plugin.cjs');
+  const base = { name: 'Test', slug: 'test', platforms: ['macos'], macos: { bundleIdentifier: 'test.spark.example' } };
+  it('adds native editing only to opted-in hosts', async () => {
+    for (const enabled of [false, true]) {
+      const config = plugin({ ...base, extra: { spark: { editable: enabled ? { repository: 'owner/app', files: ['index.ts'] } : false } } });
+      const result = await config.mods.macos.appDelegate({ ...config, modResults: { contents: '' }, modRequest: { projectRoot: root, platform: 'macos', modName: 'appDelegate', introspect: false } });
+      expect(result.modResults.contents.includes('@interface SparkEditableController')).toBe(enabled);
+      expect(result.modResults.contents.includes('return SparkEditableBundleURL();')).toBe(enabled);
+      expect(!!config.mods.macos.xcodeproj).toBe(enabled);
+    }
+  });
+  it('rejects sandboxed editable app distribution', () => {
+    expect(() => plugin({ ...base, macos: { ...base.macos, entitlements: { 'com.apple.security.app-sandbox': true } }, extra: { spark: { editable: { repository: 'owner/app', files: ['index.ts'] } } } })).toThrow('Sandbox');
+  });
+});
+it('automatically returns compile errors to AI for a bounded repair attempt', async () => {
+  const dir = workspace(); let builds = 0, calls = 0;
+  await ai.prompt(dir, { prompt: 'Change greeting', endpoint: 'https://example.test/chat', model: 'fixture', allowSourceSharing: true }, {
+    fetch: async (_url: string, options: any) => {
+      if (++calls === 2) expect(JSON.parse(options.body).messages.at(-1).content).toContain('Missing greeting');
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'Done' } }] }) };
+    }, build: async () => { if (++builds === 1) throw new Error('Missing greeting'); },
+  });
+  expect(builds).toBe(2); expect(worker.read(path.join(dir, 'state.json')).history[0].status).toBe('needs-review');
+});
+
+it('publishes only verified artifacts and never overwrites a conflicting release asset', async () => {
+  const source = file('.spark/editable/source.tgz', 'source');
+  const toolkit = file('.spark/editable/toolkit.tgz', 'toolkit');
+  const sourceAsset = { url: githubAsset('owner/app', 'v1', 'source.tgz'), sha256: fileHash(source), size: 6 };
+  const toolkitAsset = { url: githubAsset('owner/tools', 'v1', 'toolkit.tgz'), sha256: fileHash(toolkit), size: 7 };
+  file('.spark/editable/manifest.json', JSON.stringify({ source: sourceAsset, toolkit: toolkitAsset }));
+  file('.spark/editable/publish.json', JSON.stringify({ manifest: 'manifest.json', assets: [sourceAsset, toolkitAsset] }));
+  const commands: string[][] = [];
+  const execute = async (_root: string, args: string[]) => {
+    commands.push(args);
+    if (args[1] === 'repo') return JSON.stringify({ visibility: 'PUBLIC' });
+    if (args[1] === 'api') return JSON.stringify({ assets: [] });
+    return '';
+  };
+  await publishEditable(root, execute);
+  expect(commands.filter(args => args[1] === 'release').length).toBe(3);
+  await expect(publishEditable(root, async (_root, args) => args[1] === 'repo' ? JSON.stringify({ visibility: 'PUBLIC' }) : JSON.stringify({ assets: [{ name: 'source.tgz', digest: 'sha256:wrong' }] }))).rejects.toThrow('differs');
+  await expect(publishEditable(root, async () => JSON.stringify({ visibility: 'PRIVATE' }))).rejects.toThrow('public');
+  writeFileSync(source, 'tampered');
+  await expect(publishEditable(root, execute)).rejects.toThrow('changed');
+});
+
+it('continues an unapplied candidate and saves all contributing prompts on acceptance', async () => {
+  const dir = workspace();
+  const request = { endpoint: 'https://example.test/chat', model: 'fixture', allowSourceSharing: true };
+  let firstCall = 0;
+  await ai.prompt(dir, { ...request, prompt: 'Make greeting blue' }, { fetch: async () => ({ ok: true, json: async () => ({ choices: [{ message: ++firstCall === 1 ? { tool_calls: [{ id: '1', function: { name: 'write_file', arguments: JSON.stringify({ path: 'index.js', content: 'blue\n' }) } }] } : { content: 'Blue greeting' } }] }) }), build: async () => {} });
+  await ai.prompt(dir, { ...request, prompt: 'Now make it bigger' }, { fetch: async (_url: string, options: any) => {
+    expect(JSON.parse(options.body).messages[1].content).toContain('Make greeting blue');
+    return { ok: true, json: async () => ({ choices: [{ message: { content: 'Done' } }] }) };
+  }, build: async (_dir: string, candidate: string) => {
+    expect(readFileSync(path.join(dir, 'candidates', candidate, 'index.js'), 'utf8')).toBe('blue\n');
+    const build = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', bundle = path.join(dir, 'builds', build, 'main.jsbundle');
+    mkdirSync(path.dirname(bundle), { recursive: true }); writeFileSync(bundle, 'bytecode');
+    worker.write(path.join(dir, 'ready.json'), { release: 'a'.repeat(64), fingerprint: 'f', candidate, build, bundleHash: worker.hash(Buffer.from('bytecode')), sourceHash: worker.hash(JSON.stringify(worker.snapshot(path.join(dir, 'candidates', candidate)))) });
+  } });
+  worker.accept(dir);
+  const history = worker.read(path.join(dir, 'state.json')).history;
+  expect(history.map((item: any) => item.status)).toEqual(['accepted', 'accepted']);
+  expect(history[1].ancestors).toEqual([history[0].id]);
 });

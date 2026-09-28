@@ -1,6 +1,7 @@
 import { restoreNativeMetadata } from "./native-metadata.ts";
 import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 import { missingNativeFrameworks, preparationChanges, preserveMacOSPods, type NativePreparation } from "./native-preparation.ts";
+import { prepareEditableArtifacts } from "./editable-artifacts.ts";
 import { macOSReleaseSettings } from "./macos-release.ts";
 import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
@@ -410,6 +411,7 @@ async function buildUnlocked(
     path.join(destination, "Contents/Resources/spark-runtime.json"),
     result.runtime,
   );
+  if (mode === "release") await prepareEditableArtifacts(root, result.runtime, destination);
   copyHelpers(root, destination, readAppConfig(root).expo?.extra?.spark?.helpers);
   if (mode === "release") {
     // Hermes is prebuilt, so Xcode's app/Pod compiler settings cannot strip it.

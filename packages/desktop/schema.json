@@ -452,6 +452,43 @@
     "extends": {
       "const": "expo",
       "description": "Compose desktop options onto the existing Expo configuration."
+    },
+    "editable": {
+      "oneOf": [
+        {
+          "const": false
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repository",
+            "files"
+          ],
+          "properties": {
+            "repository": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+            },
+            "files": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "tag": {
+              "type": "string"
+            },
+            "toolkitRepository": {
+              "type": "string"
+            },
+            "toolkitTag": {
+              "type": "string"
+            }
+          }
+        }
+      ]
     }
   },
   "allOf": [
