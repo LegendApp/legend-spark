@@ -213,7 +213,7 @@ A typical generated configuration looks like this; retain the `projectId` assign
   "name": "MySparkApp",
   "projectId": "f478dff4-f9a1-4ff2-8096-64df89e1c470",
   "version": "0.0.1",
-  "window": { "width": 1000, "height": 700, "restoreFrame": true },
+  "window": { "size": { "width": 1000, "height": 700 }, "restoreBounds": true },
   "macos": { "bundleIdentifier": "com.example.mysparkapp" }
 }
 ```

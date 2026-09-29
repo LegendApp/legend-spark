@@ -11,47 +11,94 @@
       "type": "string"
     },
     "name": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "projectId": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "version": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "window": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "width": {
-          "type": "number",
-          "minimum": 100,
-          "maximum": 20000
+        "size": {
+          "type": "object",
+          "required": [
+            "width",
+            "height"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "width": {
+              "type": "number",
+              "minimum": 100,
+              "maximum": 20000
+            },
+            "height": {
+              "type": "number",
+              "minimum": 100,
+              "maximum": 20000
+            }
+          }
         },
-        "height": {
-          "type": "number",
-          "minimum": 100,
-          "maximum": 20000
+        "minSize": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": [
+                "width",
+                "height"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "width": {
+                  "type": "number",
+                  "minimum": 100,
+                  "maximum": 20000
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 100,
+                  "maximum": 20000
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
-        "minWidth": {
-          "type": "number",
-          "minimum": 100,
-          "maximum": 20000
-        },
-        "minHeight": {
-          "type": "number",
-          "minimum": 100,
-          "maximum": 20000
-        },
-        "maxWidth": {
-          "type": "number",
-          "minimum": 100,
-          "maximum": 20000
-        },
-        "maxHeight": {
-          "type": "number",
-          "minimum": 100,
-          "maximum": 20000
+        "maxSize": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": [
+                "width",
+                "height"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "width": {
+                  "type": "number",
+                  "minimum": 100,
+                  "maximum": 20000
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 100,
+                  "maximum": 20000
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "resizable": {
           "type": "boolean"
@@ -71,10 +118,7 @@
         "hasShadow": {
           "type": "boolean"
         },
-        "trafficLights": {
-          "type": "boolean"
-        },
-        "restoreFrame": {
+        "restoreBounds": {
           "type": "boolean"
         },
         "titleBarStyle": {
@@ -92,21 +136,36 @@
             "dark"
           ]
         },
-        "material": {
-          "enum": [
-            "none",
-            "sidebar",
-            "windowBackground",
-            "hudWindow",
-            "popover"
-          ]
-        },
         "title": {
           "type": "string"
         },
         "backgroundColor": {
           "type": "string",
           "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+        },
+        "macos": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "backgroundMaterial": {
+              "enum": [
+                "none",
+                "sidebar",
+                "windowBackground",
+                "hudWindow",
+                "popover"
+              ]
+            },
+            "titleBar": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "trafficLights": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -117,7 +176,8 @@
       ],
       "properties": {
         "bundleIdentifier": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+$"
         },
         "buildNumber": {
           "type": "string"
@@ -211,7 +271,8 @@
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     "scheme": {
       "oneOf": [
@@ -227,7 +288,35 @@
       ]
     },
     "documentTypes": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "contentTypes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "contentTypes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "\\."
+            }
+          },
+          "role": {
+            "enum": [
+              "Editor",
+              "Viewer"
+            ]
+          }
+        }
+      }
     },
     "menuBarOnly": {
       "type": "boolean"
@@ -243,9 +332,11 @@
           "type": "string"
         },
         "publicKey": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{43}=$"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "include": {
       "type": "array",
@@ -295,7 +386,30 @@
       }
     },
     "signing": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "macos": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "string",
+              "minLength": 1
+            },
+            "teamId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "entitlementsByPath": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
     },
     "expo": {
       "type": "object"
@@ -343,19 +457,29 @@
   "allOf": [
     {
       "if": {
-        "properties": {
-          "platforms": {
-            "const": [
-              "windows"
+        "anyOf": [
+          {
+            "not": {
+              "required": [
+                "platforms"
+              ]
+            }
+          },
+          {
+            "properties": {
+              "platforms": {
+                "contains": {
+                  "const": "macos"
+                }
+              }
+            },
+            "required": [
+              "platforms"
             ]
           }
-        },
-        "required": [
-          "platforms"
         ]
       },
-      "then": {},
-      "else": {
+      "then": {
         "required": [
           "macos"
         ]

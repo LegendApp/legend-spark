@@ -35,7 +35,7 @@ test("helper bundles reject escaping paths, parent symlinks and asset symlinks",
 }));
 test("configuration accepts target bundles and catches invalid declarations early", () => {
   const base = { name: "Helpers", projectId: "helpers", version: "1", macos: { bundleIdentifier: "com.test.helpers" } };
-  expect(toExpo({ ...base, helpers }).expo.extra.spark.helpers).toEqual(helpers);
+  expect(toExpo({ ...base, helpers }).expo.extra?.spark?.helpers).toEqual(helpers);
   for (const value of [{ backend: "mac/bin/backend", BACKEND: "mac/bin/backend" }, { backend: {} }, { backend: { windows: { directory: "win", executable: "backend" } } }, { backend: { "windows-x64": { directory: "win", executable: "backend", typo: true } } }]) expect(() => toExpo({ ...base, helpers: value })).toThrow();
 });
 

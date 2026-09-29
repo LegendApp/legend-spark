@@ -15,17 +15,17 @@ const shared = {
 test("macOS materializes all URL associations before backend base mods", () => {
   const input = { ...shared, scheme: ["demo", "demo-auth", "demo"] };
   const mac = toExpo(input, "macos").expo;
-  expect(mac.macos.infoPlist.CFBundleURLTypes).toEqual([
+  expect(mac.macos?.infoPlist?.CFBundleURLTypes).toEqual([
     { CFBundleURLName: "universal-settings", CFBundleURLSchemes: ["demo", "demo-auth"] },
   ]);
   expect(mac.scheme).toEqual(input.scheme);
-  expect(toExpo(input, "ios").expo.macos.infoPlist.CFBundleURLTypes).toBeUndefined();
+  expect(toExpo(input, "ios").expo.macos?.infoPlist?.CFBundleURLTypes).toBeUndefined();
 });
 test("target configuration composes overrides without mutating shared input", () => {
   const before = JSON.stringify(shared);
   const ios = toExpo(shared, "ios").expo, mac = toExpo(shared, "macos").expo;
-  expect(ios.ios.infoPlist).toEqual({ Existing: true, IOSOnly: true });
-  expect(mac.ios.infoPlist).toEqual({ Existing: true });
+  expect(ios.ios?.infoPlist).toEqual({ Existing: true, IOSOnly: true });
+  expect(mac.ios?.infoPlist).toEqual({ Existing: true });
   expect(ios.plugins).not.toContain("@legendapp/spark/config-plugin");
   expect(mac.plugins).toContain("@legendapp/spark/config-plugin");
   expect(ios.extra.application).toBe("preserved");
@@ -43,7 +43,7 @@ test("switching targets preserves source, config, generated native projects, and
     for (const target of [...shared.platforms, "macos", "ios"]) {
       process.env.SPARK_PLATFORM = target;
       expect(prepareConfig(root).expo.platforms).toEqual([target]);
-      expect(readConfig(root).expo.extra.spark.projectId).toBe(shared.projectId);
+      expect(readConfig(root).expo.extra?.spark?.projectId).toBe(shared.projectId);
       const file = statePath(root, "dev-build.json");
       expect(file).toBe(path.join(root, ".spark/platforms", target, "dev-build.json"));
       mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, target);
@@ -92,7 +92,7 @@ test("one development config exposes all platforms without desktop native exclus
     expect(config.platforms).toEqual(shared.platforms);
     expect(config.autolinking?.exclude ?? []).not.toContain("@expo/ui");
     expect(config.extra.application).toBe("preserved");
-    expect(config.ios.infoPlist).toEqual({ Existing: true });
+    expect(config.ios?.infoPlist).toEqual({ Existing: true });
   }
   expect(JSON.stringify(shared)).toBe(before);
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-session-config-"));
@@ -107,10 +107,10 @@ test("one development config exposes all platforms without desktop native exclus
     expect(expoConfig(root).autolinking).toBeUndefined();
     // The supervisor's native compatibility reader keeps its target semantics.
     expect(readConfig(root).expo.platforms).toEqual(["macos"]);
-    expect(readConfig(root).expo.autolinking.exclude).toContain("@expo/ui");
+    expect(readConfig(root).expo.autolinking?.exclude).toContain("@expo/ui");
     delete process.env.SPARK_DEV_SESSION;
     expect(expoConfig(root).platforms).toEqual(["macos"]);
-    expect(expoConfig(root).autolinking.exclude).toEqual(["@expo/ui", "mobile-only-module"]);
+    expect(expoConfig(root).autolinking?.exclude).toEqual(["@expo/ui", "mobile-only-module"]);
   } finally {
     for (const [key, value] of [["SPARK_PLATFORM", previous.target], ["SPARK_DEV_SESSION", previous.session]]) {
       if (value === undefined) delete process.env[key!]; else process.env[key!] = value;

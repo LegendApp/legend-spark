@@ -45,6 +45,6 @@ export const architecture = (platform: DesktopPlatform) => platform === "windows
 export function projectPlatform(root: string): DesktopPlatform {
   if (!["app.json", "desktop.config.json"].some(name => existsSync(path.join(root, name)))) return "macos";
   const platforms = readConfig(root).expo?.platforms ?? ["macos"];
-  if (platforms.length !== 1 || !["macos", "windows"].includes(platforms[0])) throw new Error("Select a desktop target with --platform macos or --platform windows.");
+  if (platforms.length !== 1 || (platforms[0] !== "macos" && platforms[0] !== "windows")) throw new Error("Select a desktop target with --platform macos or --platform windows.");
   return platforms[0];
 }

@@ -61,6 +61,7 @@ async function packageUnlocked(root: string, options: { force?: boolean; submiss
   const config = readAppConfig(root).expo;
   if (config.extra?.spark?.updates && !result.runtime.modules["@legendapp/spark-updates"]) throw new Error("Updates are configured but the module was pruned. Import @legendapp/spark/updates from the app entry.");
   const entitlements = distributionEntitlements(appEntitlements(root, result.runtime.modules));
+  if (!config.macos?.bundleIdentifier || !config.version) throw new Error("Packaging requires macos.bundleIdentifier and version");
   const byPath = config.extra?.spark?.signing?.macos?.entitlementsByPath ?? {};
   const info = JSON.parse(await execute(root, ["plutil", "-convert", "json", "-o", "-", path.join(result.app, "Contents/Info.plist")], { capture: true }));
   const expected = { arch: result.runtime.arch, runner: options.runner, bundleId: config.macos.bundleIdentifier, version: config.version, buildVersion: info.CFBundleVersion, entitlements, byPath };

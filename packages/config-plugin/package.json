@@ -13,7 +13,8 @@
     "expo-desktop-config-plugins": "1.2.0-beta.1",
     "@legendapp/spark-desktop-host": "0.0.1-next.2",
     "@legendapp/spark-window-options": "0.0.1-next.2",
-    "@expo/config-plugins": "54.0.5"
+    "@expo/config-plugins": "54.0.5",
+    "@expo/config-types": "54.0.10"
   },
   "private": true
 }

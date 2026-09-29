@@ -1,3 +1,4 @@
+const { nativeWindowOptions } = require("@legendapp/spark-window-options");
 const { statePath } = require("./config.cjs");
 const fs = require('node:fs');
 const path = require('node:path');
@@ -34,7 +35,7 @@ module.exports = config => {
     const { expo } = require('./config.cjs').readConfig(root);
     const defaults = metadata.mode === 'dev' ? {
       SPARK_PROJECT_ID: expo.extra.spark.projectId, SPARK_PROJECT_NAME: expo.name,
-      SPARK_PROJECT_VERSION: expo.version, SPARK_WINDOW_CONFIG: JSON.stringify(expo.extra.spark.window ?? {}),
+      SPARK_PROJECT_VERSION: expo.version, SPARK_WINDOW_CONFIG: JSON.stringify(nativeWindowOptions(expo.extra.spark.window ?? {})),
       SPARK_SESSION_FILE: statePath(root, 'windows-connection.json', 'windows'),
     } : {};
     mod.modResults.contents = patchHost(mod.modResults.contents, fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/runtime.inc'), 'utf8') + '\n' + fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/application.inc'), 'utf8') + '\n' + fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/notifications.inc'), 'utf8') + (Object.hasOwn(metadata.modules ?? {}, '@react-native-runtimes/core') ? '\n' + fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/runtimes.inc'), 'utf8') : ''), metadata, defaults);

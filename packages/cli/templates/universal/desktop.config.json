@@ -3,9 +3,11 @@
   "name": "HelloWorld",
   "version": "0.0.1",
   "window": {
-    "width": 1000,
-    "height": 700,
-    "restoreFrame": true
+    "size": {
+      "width": 1000,
+      "height": 700
+    },
+    "restoreBounds": true
   },
   "macos": {
     "bundleIdentifier": "so.legend.spark.prototype.helloworld"

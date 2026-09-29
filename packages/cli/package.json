@@ -16,7 +16,8 @@
     "expo-desktop": "1.0.0-beta.6",
     "npm": "11.11.0",
     "typescript": "5.9.3",
-    "cross-spawn": "7.0.6"
+    "cross-spawn": "7.0.6",
+    "@legendapp/spark-window-options": "0.0.1-next.2"
   },
   "private": true
 }

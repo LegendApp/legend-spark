@@ -1,3 +1,4 @@
+import { nativeWindowOptions } from "@legendapp/spark-window-options";
 import { macOSReleaseSettings } from "./macos-release.ts";
 import { projectPlatform, architecture, type DesktopPlatform } from "./platform.ts";
 import { resolveHelpers } from "./helpers.ts";
@@ -387,7 +388,7 @@ export function projectEnvironment(root: string): Record<string, string> {
   if (typeof projectId !== "string" || !projectId.length || projectId.length > 200)
     throw new Error("Set extra.spark.projectId to a stable project identifier before launching the Spark Runner.");
   return {
-    SPARK_WINDOW_CONFIG: JSON.stringify(config.extra?.spark?.window ?? {}),
+    SPARK_WINDOW_CONFIG: JSON.stringify(nativeWindowOptions(config.extra?.spark?.window ?? {})),
     SPARK_PROJECT_ID: projectId,
     SPARK_PROJECT_NAME: typeof config.name === "string" ? config.name : path.basename(root),
     SPARK_PROJECT_VERSION: typeof config.version === "string" ? config.version : "0.0.0",

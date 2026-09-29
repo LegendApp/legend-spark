@@ -14,12 +14,10 @@ New projects use `desktop.config.json`:
   "projectId": "keep-the-id-assigned-by-create",
   "version": "1.0.0",
   "window": {
-    "width": 1100,
-    "height": 750,
-    "minWidth": 600,
-    "minHeight": 400,
+    "size": { "width": 1100, "height": 750 },
+    "minSize": { "width": 600, "height": 400 },
     "titleBarStyle": "overlay",
-    "restoreFrame": true
+    "restoreBounds": true
   },
   "macos": { "bundleIdentifier": "com.example.myapp" }
 }
@@ -44,20 +42,17 @@ activation, update feeds and bundled helpers still need custom builds.
 
 ## Windows
 
-`openWindow` and `setWindowOptions` accept the same style fields as config:
-
-- `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `maxHeight` (content points)
-- `titleBarStyle`: `default`, `overlay`, `hidden` (full content with hidden controls), `borderless`
-- `resizable`, `closable`, `minimizable`, `alwaysOnTop`, `hasShadow`, `trafficLights`
-- `appearance`: `system`, `light`, `dark`
-- `transparent`, `backgroundColor` (#RRGGBB or #RRGGBBAA)
-- `material`: `none`, `sidebar`, `windowBackground`, `hudWindow`, `popover`
-- `title`, `restoreFrame` (restoration is configured when creating a window)
+Runtime windows and initial configuration share `size`, `minSize`, `maxSize`,
+`restoreBounds`, appearance, and common behavior flags. Dimensions describe outer
+frames in logical units. Native host transport is private. Initial configuration
+adds `macos.backgroundMaterial` for the content background and
+`macos.titleBar.trafficLights`; runtime AppKit chrome has its own typed options.
+See [the window contract](api-window-contract.md) for the complete runtime model.
 
 ```ts
 import { openWindow, setWindowOptions } from "@legendapp/spark/windows";
-await openWindow({ id: "settings", parentId: "main", modal: true,
-  title: "Settings", width: 600, height: 450 });
+await openWindow({ id: "settings", component: "Settings", kind: "window",
+  parentId: "main", modal: true, title: "Settings", size: { width: 600, height: 450 } });
 await setWindowOptions("main", { titleBarStyle: "overlay" });
 ```
 

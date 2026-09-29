@@ -1,4 +1,3 @@
-import { validateWindowsWindowOptions } from "../packages/desktop-windows/src/windows-options.ts";
 import { test, expect } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import os from "node:os";
@@ -114,14 +113,6 @@ test("Windows canonical config does not require a macOS bundle identity", () => 
   expect(() => toExpo({ name: "Mac", version: "1.0.0", projectId: "test-mac" })).toThrow("bundleIdentifier");
 });
 
-
-test("Windows accepts implemented window options and rejects unsupported presentation", () => {
-  expect(() => validateWindowsWindowOptions({ title: "Editor", minWidth: 300, maxHeight: 900, resizable: false, minimizable: true, alwaysOnTop: true })).not.toThrow();
-  for (const options of [{ material: "sidebar" }, { parentId: "main", modal: true }, { titleBarStyle: "overlay" }]) {
-    try { validateWindowsWindowOptions(options); throw new Error("Expected unsupported options to fail"); }
-    catch (error) { expect((error as { code?: string }).code).toBe("E_UNAVAILABLE"); }
-  }
-});
 
 
 test("Windows architecture follows the native CPU, including emulated CLI processes", () => {

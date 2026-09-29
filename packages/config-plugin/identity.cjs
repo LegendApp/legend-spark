@@ -1,4 +1,4 @@
-const { validateWindow } = require("@legendapp/spark-window-options");
+const { nativeWindowOptions } = require("@legendapp/spark-window-options");
 const { updatePlist } = require("./updates.cjs");
 function identity(config) {
   const projectId = config.extra?.spark?.projectId ?? config.macos?.bundleIdentifier;
@@ -17,7 +17,7 @@ function identity(config) {
     SparkMenuBarOnly: config.extra?.spark?.menuBarOnly === true,
     SparkProjectIdentifier: projectId,
     SparkLifecycleConfiguration: require("./lifecycle.cjs").validateLifecycle(config.macos?.lifecycle),
-    SparkWindowConfiguration: validateWindow(config.extra?.spark?.window ?? {}),
+    SparkWindowConfiguration: nativeWindowOptions(config.extra?.spark?.window ?? {}),
     ...updatePlist(config),
     // The app may need JS to save edits before accepting a quit request.
     NSSupportsAutomaticTermination: false,

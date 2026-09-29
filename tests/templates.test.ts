@@ -26,7 +26,7 @@ for (const folder of ["blank-typescript", "windows", "universal"]) {
       expect(initialized.projectId).toBe("upstream-generated-guid");
       expect(initialized.platforms).toEqual(config.platforms);
       if (config.macos) expect(initialized.macos.bundleIdentifier).toBe("org.example.upstream");
-      expect(readConfig(root).expo.windows.packageGuid).toBe("upstream-package-guid");
+      expect(readConfig(root).expo.windows?.packageGuid).toBe("upstream-package-guid");
       initialized.name = "User renamed app";
       writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify(initialized));
       const before = readFileSync(path.join(root, "desktop.config.json"), "utf8");

@@ -1,7 +1,0 @@
-import { expect, test } from "vitest";
-import { validateWindowsWindowOptions } from "../packages/desktop-windows/src/windows-options.ts";
-test("Windows accepts portable window options without pretending to support AppKit chrome", () => {
-  expect(() => validateWindowsWindowOptions({ closable: false, appearance: "dark", backgroundColor: "#123456", restoreFrame: true, titleBarStyle: "borderless", transparent: true, hasShadow: false })).not.toThrow();
-  for (const options of [{ trafficLights: false }, { material: "sidebar" }, { titleBarStyle: "overlay" }])
-    expect(() => validateWindowsWindowOptions(options)).toThrow("does not yet support");
-});

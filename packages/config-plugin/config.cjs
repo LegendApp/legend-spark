@@ -1,3 +1,4 @@
+const { validateOwned, validatePlatforms } = require("./validation.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createHash } = require("node:crypto");
@@ -20,6 +21,7 @@ function statePath(root, name, target = process.env.SPARK_PLATFORM) {
   return path.join(root, ".spark", "platforms", target, name);
 }
 function selectTarget(platforms, target) {
+  validatePlatforms(platforms);
   const selected = target ?? (platforms.includes(process.platform === "win32" ? "windows" : "macos") ? (process.platform === "win32" ? "windows" : "macos") : platforms[0]);
   if (!platforms.includes(selected)) throw new Error(`Platform ${selected} is not supported by this project`);
   return selected;
@@ -46,7 +48,11 @@ function readConfig(root, target = process.env.SPARK_PLATFORM) {
       if (previous === undefined) delete process.env.SPARK_PLATFORM; else process.env.SPARK_PLATFORM = previous;
     }
   }
-  if (!fs.existsSync(file)) return JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8"));
+  if (!fs.existsSync(file)) {
+    const value = JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8"));
+    if (!value?.expo || typeof value.expo !== "object" || Array.isArray(value.expo)) throw new Error("app.json needs an expo configuration object");
+    return { ...value, expo: { ...value.expo, platforms: validatePlatforms(value.expo.platforms ?? ["macos"]) } };
+  }
   const result = toExpo(JSON.parse(fs.readFileSync(file, "utf8")), target);
   return result;
 }
@@ -85,7 +91,8 @@ function toExpo(value, target) {
   for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new Error(`Unknown desktop configuration field: ${key}`);
   for (const key of ["name", "projectId", "version"]) if (typeof value[key] !== "string" || !value[key].trim()) throw new Error(`Desktop config needs ${key}`);
   const platforms = value.platforms ?? ["macos"];
-  if (!Array.isArray(platforms) || !platforms.length || new Set(platforms).size !== platforms.length || platforms.some(p => !["macos", "windows", "ios", "android", "web"].includes(p))) throw new Error("platforms must list unique supported targets: macos, windows, ios, android, web");
+  validatePlatforms(platforms);
+  validateOwned(value);
   const selected = selectTarget(platforms, target);
   if (platforms.includes("macos") && (!value.macos || typeof value.macos.bundleIdentifier !== "string" || !/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(value.macos.bundleIdentifier))) throw new Error("macos.bundleIdentifier must be a reverse-DNS identifier");
   validateWindow(value.window ?? {});
@@ -151,6 +158,7 @@ function prepareConfig(root) {
   return result;
 }
 function writeUpdates(root, updates) {
+  require("./updates.cjs").updateConfiguration({ extra: { spark: { updates } } });
   const file = path.join(root, filename);
   if (fs.existsSync(file)) {
     const value = JSON.parse(fs.readFileSync(file, "utf8")); value.updates = updates;

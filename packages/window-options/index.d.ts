@@ -1,12 +1,25 @@
-export type WindowStyle = {
+export interface WindowSize { width: number; height: number }
+/** Initial outer frame dimensions in logical units, matching the runtime window API. */
+export interface WindowConfiguration {
   title?: string;
-  width?: number; height?: number;
-  minWidth?: number; minHeight?: number; maxWidth?: number; maxHeight?: number;
-  resizable?: boolean; closable?: boolean; minimizable?: boolean;
-  alwaysOnTop?: boolean; transparent?: boolean; hasShadow?: boolean; trafficLights?: boolean; restoreFrame?: boolean;
+  size?: WindowSize;
+  minSize?: WindowSize | null;
+  maxSize?: WindowSize | null;
+  resizable?: boolean;
+  closable?: boolean;
+  minimizable?: boolean;
+  alwaysOnTop?: boolean;
+  transparent?: boolean;
+  hasShadow?: boolean;
+  restoreBounds?: boolean;
   titleBarStyle?: "default" | "overlay" | "hidden" | "borderless";
   appearance?: "system" | "light" | "dark";
-  material?: "none" | "sidebar" | "windowBackground" | "hudWindow" | "popover";
   backgroundColor?: string;
-};
-export function validateWindow(options: unknown): WindowStyle;
+  macos?: {
+    backgroundMaterial?: "none" | "sidebar" | "windowBackground" | "hudWindow" | "popover";
+    titleBar?: { trafficLights?: boolean };
+  };
+}
+export function validateWindow(options: unknown): WindowConfiguration;
+export function nativeWindowOptions(options: unknown): Record<string, string | number | boolean>;
+export const schema: Record<string, unknown>;

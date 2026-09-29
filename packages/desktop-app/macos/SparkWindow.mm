@@ -59,14 +59,17 @@ void SparkApplyWindowOptions(NSWindow *window, NSDictionary *patch) {
     view.wantsLayer = YES;
     view.layer.backgroundColor = material ? NSColor.clearColor.CGColor : background.CGColor;
   }
-  window.contentMinSize = NSMakeSize(options[@"minWidth"] ? [options[@"minWidth"] doubleValue] : 100, options[@"minHeight"] ? [options[@"minHeight"] doubleValue] : 100);
-  window.contentMaxSize = NSMakeSize(options[@"maxWidth"] ? [options[@"maxWidth"] doubleValue] : 20000, options[@"maxHeight"] ? [options[@"maxHeight"] doubleValue] : 20000);
-  NSSize size = [window contentRectForFrameRect:window.frame].size;
+  window.minSize = NSMakeSize(options[@"minWidth"] ? [options[@"minWidth"] doubleValue] : 100, options[@"minHeight"] ? [options[@"minHeight"] doubleValue] : 100);
+  window.maxSize = NSMakeSize(options[@"maxWidth"] ? [options[@"maxWidth"] doubleValue] : 20000, options[@"maxHeight"] ? [options[@"maxHeight"] doubleValue] : 20000);
+  NSSize size = window.frame.size;
   if (patch[@"width"]) size.width = [patch[@"width"] doubleValue];
   if (patch[@"height"]) size.height = [patch[@"height"] doubleValue];
-  size.width = MIN(MAX(size.width, window.contentMinSize.width), window.contentMaxSize.width);
-  size.height = MIN(MAX(size.height, window.contentMinSize.height), window.contentMaxSize.height);
-  [window setContentSize:size];
+  size.width = MIN(MAX(size.width, window.minSize.width), window.maxSize.width);
+  size.height = MIN(MAX(size.height, window.minSize.height), window.maxSize.height);
+  NSRect frame = window.frame;
+  frame.origin.y += frame.size.height - size.height;
+  frame.size = size;
+  [window setFrame:frame display:NO];
   if (options[@"title"]) window.title = options[@"title"];
 }
 void SparkRestoreWindow(NSWindow *window, NSString *key, NSDictionary *options) {

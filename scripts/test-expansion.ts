@@ -20,8 +20,8 @@ writeJson(path.join(root, ".spark/session.json"), { compatible: true, target: "t
 let metro: ReturnType<typeof spawnProcess> | undefined;
 let app: ReturnType<typeof spawnProcess> | undefined;
 try {
-  writeJson(canonical, { name: previous.name, version: previous.version, projectId: previous.extra?.spark?.projectId ?? previous.macos.bundleIdentifier,
-    macos: previous.macos, window: { title: "Configured main", width: 930, height: 620, minWidth: 400, maxWidth: 1400, resizable: false, titleBarStyle: "overlay", restoreFrame: false } });
+  writeJson(canonical, { name: previous.name, version: previous.version, projectId: previous.extra?.spark?.projectId ?? previous.macos?.bundleIdentifier,
+    macos: previous.macos, window: { title: "Configured main", size: { width: 930, height: 620 }, minSize: { width: 400, height: 100 }, maxSize: { width: 1400, height: 20000 }, resizable: false, titleBarStyle: "overlay", restoreBounds: false } });
   prepareConfig(root);
   const log = processLog(path.join(directory, "metro.log"));
   metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, CI: "1" }, stdout: log, stderr: log });
