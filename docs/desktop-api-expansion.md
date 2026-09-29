@@ -58,8 +58,8 @@ await setWindowOptions("main", { titleBarStyle: "overlay" });
 
 A parent may have only one attached modal sheet. Closing a secondary window stops
 its React surface. `maximizeWindow`, `unmaximizeWindow` and `centerWindow` are also
-available. Window events include move, resize, focus, blur, screenChanged and
-fullscreen transitions. Display-list changes are system events. React content
+available. Window events are `boundsChanged`, `focusChanged`, `visibilityChanged`,
+`fullscreenChanged`, and `closed`. Display-list changes are system events. React content
 must use transparent backgrounds where native material should show through.
 
 ## Global shortcuts

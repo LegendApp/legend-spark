@@ -1,6 +1,6 @@
 # Spark API cleanup proposal
 
-Status: approved; implementation in progress. September 27, 2026. Source baseline: `5e17417`. Covers the complete 63-entry public API surface audited before implementation. The [window detail](./api-window-contract.md) is one supporting appendix, not the scope of this proposal.
+Status: approved design; implementation complete, native acceptance remains partial. See [the final review](api-final-review.md). September 27, 2026. Source baseline: `5e17417`. Covers the complete 63-entry public API surface audited before implementation. The [window detail](./api-window-contract.md) is one supporting appendix, not the scope of this proposal.
 
 ## Product constraints and recommendation
 

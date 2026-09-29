@@ -42,14 +42,15 @@ test("an adopted Expo app preserves its dynamic config in a shared development s
   const previous = { platform: process.env.SPARK_PLATFORM, session: process.env.SPARK_DEV_SESSION };
   const platforms = ["ios", "android", "web", "macos", "windows"];
   try {
-    writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify({ extends: "expo", projectId: "existing-app", platforms, macos: { bundleIdentifier: "org.example.existing" }, expoByPlatform: { macos: { autolinking: { exclude: ["@expo/ui"] } } } }));
+    writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify({ extends: "expo", projectId: "existing-app", platforms, expoByPlatform: { macos: { autolinking: { exclude: ["@expo/ui"] } } } }));
     process.env.SPARK_PLATFORM = "macos";
     process.env.SPARK_DEV_SESSION = "1";
-    const base = { name: "Existing", version: "2.0.0", platforms: ["ios", "android", "web"], extra: { environment: "local" }, plugins: ["./custom-plugin"] };
+    const base = { name: "Existing", version: "2.0.0", macos: { bundleIdentifier: "org.example.existing" }, platforms: ["ios", "android", "web"], extra: { environment: "local" }, plugins: ["./custom-plugin"] };
     const config = withSparkExpo(() => base, root)({});
     expect(config.platforms).toEqual(platforms);
     expect(config.extra.environment).toBe("local");
     expect(config.extra.spark.projectId).toBe("existing-app");
+    expect(config.macos.bundleIdentifier).toBe("org.example.existing");
     expect(config.plugins).toContain("./custom-plugin");
     expect(config.autolinking?.exclude ?? []).not.toContain("@expo/ui");
     expect(base.platforms).toEqual(["ios", "android", "web"]);

@@ -112,7 +112,10 @@ export async function spawn(options: ProcessOptions): Promise<ProcessHandle> {
   } catch (error) {
     subscription.remove(); signal?.removeEventListener("abort", abort);
     // A malformed acknowledgement can follow successful allocation.
-    if (error instanceof SparkError && error.code === "E_INVALID_DATA") await command("terminate", { id }).catch(() => {});
+    if (error instanceof SparkError && error.code === "E_INVALID_DATA") {
+      try { await command("terminate", { id }); }
+      catch (cleanup) { throw new SparkError("E_NATIVE", "Process launch and termination failed", { cause: new AggregateError([error, cleanup]) }); }
+    }
     throw error;
   }
   return {
@@ -134,5 +137,9 @@ export async function spawn(options: ProcessOptions): Promise<ProcessHandle> {
 export async function runCommand(options: RunCommandOptions): Promise<ProcessResult> {
   const child = await spawn(options);
   try { await child.closeInput(); return await child.exited; }
-  catch (error) { await child.terminate(); throw error; }
+  catch (error) {
+    try { await child.terminate(); }
+    catch (cleanup) { throw new SparkError("E_NATIVE", "Command and termination failed", { cause: new AggregateError([error, cleanup]) }); }
+    throw error;
+  }
 }

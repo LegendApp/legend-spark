@@ -26,7 +26,7 @@ Malformed replay rejects registration and removes the listener. Malformed live m
 `createDocumentAppController(options)` is usable in an application service, outside
 React. It installs the document request listener, owns an application menu, and
 coordinates initial opening, reopen requests, and closure of the selected logical
-window. `createMenuHandlers(controller)` supplies action handlers; read the
+window. `onMenuAction(action, controller)` handles menu selections; read the
 controller's current state with `isDocumentWindowOpen()` and change it with
 `setDocumentWindowOpen(boolean)`. `subscribe(listener)` observes that state and
 returns a removable subscription. `updateMenus(items)` replaces the menu contribution.
@@ -34,7 +34,9 @@ returns a removable subscription. `updateMenus(items)` replaces the menu contrib
 ```ts
 const controller = createDocumentAppController({
   ownerId: 'editor', windowId: 'main', menus,
-  createMenuHandlers: controller => ({ open: () => openDocument(controller) }),
+  onMenuAction: (action, controller) => {
+    if (action.itemId === "open") return openDocument(controller);
+  },
   onInitialOpen: (args, controller) => restoreDocument(args, controller),
   onOpenDocument: (path, controller) => loadDocument(path, controller),
   reportError,
@@ -72,3 +74,7 @@ For window-only coordination, `/windows` exports
 It returns a synchronous removable subscription and schedules initial opening once
 per registration. Removing immediately cancels queued callbacks. The corresponding
 `usePrimaryWindowLifecycle` owns the same registration in an effect.
+
+Menu actions can return promises; failures go to `reportError`. The owning hook retries
+a failed previous removal before acquiring a replacement. If removal still fails,
+replacement reports an error and retains the old handle for cleanup retry.

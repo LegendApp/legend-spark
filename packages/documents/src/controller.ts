@@ -13,7 +13,7 @@ export interface DocumentAppController extends AsyncRegistration {
   updateMenus(menus: readonly MenuItem[]): Promise<void>;
 }
 export interface DocumentAppControllerOptions {
-  createMenuHandlers: (controller: DocumentAppController) => Record<string, (action: MenuAction) => void>;
+  onMenuAction?: (action: MenuAction, controller: DocumentAppController) => void | Promise<void>;
   launchArguments?: string[];
   menus: readonly MenuItem[];
   onInitialOpen: (launchArguments: string[] | undefined, controller: DocumentAppController) => Promise<void> | void;
@@ -26,7 +26,7 @@ export interface DocumentAppControllerOptions {
 
 /** An application-owned controller. Await ready; remove also works during setup or after setup fails. */
 export function createDocumentAppController(options: DocumentAppControllerOptions): DocumentAppController {
-  const { ownerId, windowId, menus, createMenuHandlers, onInitialOpen, onOpenDocument, onReopenRequested, reportError } = options;
+  const { ownerId, windowId, menus, onMenuAction, onInitialOpen, onOpenDocument, onReopenRequested, reportError } = options;
   if (![ownerId, windowId].every(id => typeof id === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(id))) {
     throw new SparkError("E_INVALID_ARGUMENT", "Expected document owner and window IDs");
   }
@@ -53,7 +53,7 @@ export function createDocumentAppController(options: DocumentAppControllerOption
         if (!active) { requests?.remove(); return; }
         menu = await createMenu({ id: ownerId, items: menus, onAction: action => {
           if (active) {
-            try { createMenuHandlers(controller)[action.itemId]?.(action); }
+            try { void Promise.resolve(onMenuAction?.(action, controller)).catch(reportError); }
             catch (error) { reportError(error); }
           }
         } });

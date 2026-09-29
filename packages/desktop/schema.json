@@ -457,24 +457,35 @@
   "allOf": [
     {
       "if": {
-        "anyOf": [
+        "allOf": [
           {
             "not": {
               "required": [
-                "platforms"
+                "extends"
               ]
             }
           },
           {
-            "properties": {
-              "platforms": {
-                "contains": {
-                  "const": "macos"
+            "anyOf": [
+              {
+                "not": {
+                  "required": [
+                    "platforms"
+                  ]
                 }
+              },
+              {
+                "properties": {
+                  "platforms": {
+                    "contains": {
+                      "const": "macos"
+                    }
+                  }
+                },
+                "required": [
+                  "platforms"
+                ]
               }
-            },
-            "required": [
-              "platforms"
             ]
           }
         ]

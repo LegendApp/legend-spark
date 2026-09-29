@@ -73,3 +73,21 @@ Examples to follow:
 Run the hook policy check and the affected imperative/hook tests, followed by the
 workspace TypeScript check. Native validation remains necessary when changing native
 behavior; mocked transport tests do not establish platform acceptance.
+
+## Public boundaries and deliberate differences
+
+Use named options/results/events and a clear required subject with a final options
+object where appropriate. Add actual supported options, not empty extension bags.
+Spark owns capability contracts; upstream integrations retain upstream types explicitly.
+Selected Expo methods preserve their selected semantics rather than mechanically
+renaming every Spark operation. The family decisions are in `api-contracts.md`.
+
+Keep `remove` for registrations, `close` for IO/storage completion, and meaningful
+feature verbs such as process `terminate`. Document asynchronous cleanup and accepted
+in-flight work. Preserve original and cleanup failures when both occur. An owning
+hook must not acquire a replacement until the previous owner has released ownership;
+a rejected cleanup promise must not permanently poison future replacement attempts.
+
+Update `docs/api-export-inventory.json` and run `tests/api-export-inventory.test.ts`
+when changing public paths. The baseline dispositions are historical accountability,
+not compatibility aliases. Keep consumer examples on current public entry points.

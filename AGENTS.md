@@ -6,3 +6,6 @@ The approved capability contracts are in [docs/api-contracts.md](docs/api-contra
 Public hook changes must pass `tests/api-hook-policy.test.ts`, the affected imperative
 and React lifecycle tests, and `npm run typecheck`. The export inventory in that test
 requires an imperative counterpart or a justified React-only exception for every hook.
+
+Public path changes must update `docs/api-export-inventory.json` and pass
+`tests/api-export-inventory.test.ts`.

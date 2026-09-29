@@ -43,7 +43,7 @@ export function useDocumentAppController(options: UseDocumentAppControllerOption
   useLayoutEffect(() => { latest.current = options; });
   const [state, setState] = useState<DocumentAppControllerState>({ status: "loading" });
   const current = useRef<{ controller?: DocumentAppController; items: DocumentAppControllerOptions["menus"]; active: boolean; ready: boolean } | undefined>(undefined);
-  const cleanup = useRef(Promise.resolve());
+  const cleanup = useRef<{ promise: Promise<void>; controller?: DocumentAppController }>({ promise: Promise.resolve() });
   const handlesDocuments = !!options.onOpenDocument;
   useEffect(() => {
     const owner: NonNullable<typeof current.current> = { items: options.menus, active: true, ready: false };
@@ -51,13 +51,14 @@ export function useDocumentAppController(options: UseDocumentAppControllerOption
     let subscription: Subscription | undefined;
     setState({ status: "loading" });
     const report = (error: unknown) => { if (owner.active) setState({ status: "error", error }); latest.current.reportError(error); };
-    const setup = cleanup.current.then(async () => {
+    const previous = cleanup.current;
+    const setup = previous.promise.catch(() => previous.controller?.remove()).then(async () => {
       if (!owner.active) return;
       const initialItems = owner.items;
       const controller = createDocumentAppController({
         ownerId: options.ownerId, windowId: options.windowId, menus: initialItems,
         launchArguments: options.launchArguments,
-        createMenuHandlers: value => owner.active ? latest.current.createMenuHandlers(value) : {},
+        onMenuAction: (action, value) => { if (owner.active) return latest.current.onMenuAction?.(action, value); },
         onInitialOpen: (args, value) => { if (owner.active) return latest.current.onInitialOpen(args, value); },
         onOpenDocument: handlesDocuments ? (path, value) => { if (owner.active) return latest.current.onOpenDocument?.(path, value); } : undefined,
         onReopenRequested: value => {
@@ -79,15 +80,15 @@ export function useDocumentAppController(options: UseDocumentAppControllerOption
     return () => {
       owner.active = false; subscription?.remove();
       // Stop callbacks immediately, even if setup is waiting on a native registration.
-      const removal = owner.controller?.remove();
-      cleanup.current = (async () => {
-        await setup.catch(() => {});
-        await removal;
-      })();
-      void cleanup.current.catch(error => {
-        if (owner.controller && latest.current.onCleanupError) latest.current.onCleanupError(error, owner.controller);
-        else latest.current.reportError(error);
-      });
+      if (owner.controller) {
+        const controller = owner.controller;
+        const promise = controller.remove();
+        cleanup.current = { promise, controller };
+        void promise.catch(error => {
+          if (latest.current.onCleanupError) latest.current.onCleanupError(error, controller);
+          else latest.current.reportError(error);
+        });
+      }
     };
   }, [options.ownerId, options.windowId, handlesDocuments]);
   useEffect(() => {

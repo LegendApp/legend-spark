@@ -6,15 +6,15 @@ Base: `5e17417` on `jmeistrich/fix-api-defects`. Local stack starts at `jmeistri
 
 ## Completion criteria
 
-- [ ] Shared errors, native-response validation and lifecycle contracts used by feature APIs.
-- [ ] App/documents/windows consolidated, with explicit identities, typed events and preserved desktop capabilities.
-- [ ] Menus, shortcuts, context/tray/Dock share contracts.
-- [ ] Files/dialogs/settings and remaining system APIs normalized; duplicate public exports removed with their callers.
-- [ ] SQLite, WebView and audio expose owned contracts, with adapter/lifecycle coverage.
-- [ ] UI, drag/drop and configuration/tooling contracts aligned.
-- [ ] Public export inventory reconciled, TypeScript and relevant tests pass; native checks recorded with actual target coverage.
+- [x] Shared errors, native-response validation and lifecycle contracts used by feature APIs.
+- [x] App/documents/windows consolidated, with explicit identities, typed events and preserved desktop capabilities.
+- [x] Menus, shortcuts, context/tray/Dock share contracts.
+- [x] Files/dialogs/settings and remaining system APIs normalized; duplicate public exports removed with their callers.
+- [x] SQLite, WebView and audio expose owned contracts, with adapter/lifecycle coverage.
+- [x] UI, drag/drop and configuration/tooling contracts aligned.
+- [x] Public export inventory reconciled, TypeScript and relevant tests pass; native checks recorded with actual target coverage.
 
-This is an implementation checklist, not a claim that the whole approved design has landed. Unit checks with mocked native boundaries do not establish native platform parity.
+The implementation checklist is complete. Native platform acceptance is not: mocked boundaries and lightweight native fixtures do not establish full host parity. See the [final API review](api-final-review.md) for the complete export disposition, intentional differences and remaining verification limits.
 
 ## Verified units
 
@@ -81,3 +81,7 @@ This is an implementation checklist, not a claim that the whole approved design 
 - Imperative cores and optional hooks: extracted `createDocumentAppController`, `watchDocumentReload`, and `createPrimaryWindowLifecycle` from React-only coordination. Existing hooks now adapt those public APIs; document controller readiness/state observation and setup-time removal are explicit. Reloads debounce and serialize without overlapping, and cleanup remains retryable. The public hook inventory accounts for nine hooks, requires an exported imperative counterpart or a React-only rationale, and keeps React imports out of core implementation modules. Contributor instructions point to the durable [API design rules](api-design.md). Root TypeScript and 136 focused tests across 12 files pass, including imperative use without a React mount, Strict Mode, fresh callbacks, late setup, setup/update failures, and cleanup retries. This unit changes JavaScript coordination only; native host acceptance remains as recorded above.
 
 - Configuration completion: named Spark/Expo configuration types replace `any` reader results; Expo fields retain upstream types. Initial windows use runtime-compatible grouped sizes/restoration and explicit AppKit options, while native transport stays private. macOS startup now constrains outer frames. Owned nested config validation and schema/type field checks cover both shipped schemas; obsolete flat Windows validation is removed. Root TypeScript and 64 focused tests pass, including the actual macOS startup sizing implementation with a window test double. Full native host acceptance remains separate.
+
+- Final tooling: consolidated typed Metro/native imports, removed superseded exports and CLI aliases, and validated options per command before side effects. Spark-owned and Expo-owned recipes are documented. Root TypeScript, 29 focused tooling tests and the isolated packed-consumer test passed.
+
+- Final consumer and consistency review: document actions use direct async callbacks; failed hook cleanup remains retryable before replacement. Process failures retain original and termination errors. The 63-entry baseline is reconciled to 49 current entries in a checked inventory; nine hooks remain classified by imperative ownership or React-only context. Expo overlays can inherit base macOS configuration. Root TypeScript and all 523 tests across 105 files passed, including compiled macOS fixtures. Windows has no available machine; full updated macOS host/Fabric and interactive OS acceptance remain unverified. See [the final report](api-final-review.md).

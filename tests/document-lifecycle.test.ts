@@ -17,7 +17,7 @@ const event = (type: string, payload: object) => mocks.app.get(type)?.forEach(li
 const tick = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
 function options(): DocumentAppControllerOptions {
-  return { ownerId: "editor", windowId: "main", menus: [], createMenuHandlers: () => ({}), onInitialOpen: vi.fn(), onOpenDocument: vi.fn(), reportError: vi.fn() };
+  return { ownerId: "editor", windowId: "main", menus: [], onInitialOpen: vi.fn(), onOpenDocument: vi.fn(), reportError: vi.fn() };
 }
 beforeEach(() => {
   mocks.app.clear(); mocks.watch.mockReset().mockResolvedValue({ remove: vi.fn(async () => {}) });
@@ -70,7 +70,7 @@ test("reload failures are reported and cleanup retries without restarting callba
 test("document controller works without React and routes menus, open requests, window state and reopen", async () => {
   const opts = options(), action = vi.fn(), changed = vi.fn();
   opts.launchArguments = ["draft.txt"];
-  opts.createMenuHandlers = controller => ({ open: () => action(controller.isDocumentWindowOpen()) });
+  opts.onMenuAction = (event, controller) => { if (event.itemId === "open") action(controller.isDocumentWindowOpen()); };
   const controller = createDocumentAppController(opts);
   const listener = controller.subscribe(changed);
   await controller.ready; await tick();
@@ -125,4 +125,14 @@ test("controller cancels pending document subscription setup and never creates a
   const controller = createDocumentAppController(options()); await tick();
   const removal = controller.remove(); subscription.resolve({ remove }); await removal;
   expect(remove).toHaveBeenCalled(); expect(mocks.createMenu).not.toHaveBeenCalled();
+});
+
+
+test("async document menu failures reach the controller error handler", async () => {
+  const opts = options(), error = Error("open failed");
+  opts.onMenuAction = async () => { throw error; };
+  const controller = createDocumentAppController(opts); await controller.ready;
+  mocks.createMenu.mock.calls[0][0].onAction({ itemId: "open" }); await tick();
+  expect(opts.reportError).toHaveBeenCalledExactlyOnceWith(error);
+  await controller.remove();
 });

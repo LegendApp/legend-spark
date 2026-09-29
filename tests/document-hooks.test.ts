@@ -27,7 +27,7 @@ test("document hook owns a controller under Strict Mode, keeps callbacks fresh a
   let state!: DocumentAppControllerState;
   const root = (handler: () => void) => React.createElement(StrictMode, null, React.createElement(Root, { handler }));
   function Root({ handler }: { handler: () => void }) {
-    state = useDocumentAppController({ ownerId: "editor", windowId: "main", menus, createMenuHandlers: () => ({ open: handler }), onInitialOpen: initial, reportError });
+    state = useDocumentAppController({ ownerId: "editor", windowId: "main", menus, onMenuAction: action => { if (action.itemId === "open") handler(); }, onInitialOpen: initial, reportError });
     return React.createElement("State", { open: state.status === "ready" && state.controller.isDocumentWindowOpen() });
   }
   await act(async () => { rendered = create(root(first)); });
@@ -45,7 +45,7 @@ test("unmount during controller setup releases a late menu without initializing 
   let resolve!: (menu: any) => void;
   const remove = vi.fn(async () => {}), onInitialOpen = vi.fn();
   mocks.createMenu.mockReturnValue(new Promise(r => { resolve = r; }));
-  const options: UseDocumentAppControllerOptions = { ownerId: "editor", windowId: "main", menus: [], createMenuHandlers: () => ({}), onInitialOpen, reportError: vi.fn() };
+  const options: UseDocumentAppControllerOptions = { ownerId: "editor", windowId: "main", menus: [], onInitialOpen, reportError: vi.fn() };
   function Root() { useDocumentAppController(options); return null; }
   await act(async () => { rendered = create(React.createElement(Root)); });
   await act(async () => rendered.unmount()); await act(async () => resolve({ remove, update: vi.fn() }));
@@ -72,7 +72,7 @@ test("menu edits retain controller ownership and a failed cleanup reports the re
   const onCleanupError = vi.fn(), reportError = vi.fn(), initial = vi.fn();
   let state!: DocumentAppControllerState;
   function Root({ menus }: { menus: UseDocumentAppControllerOptions["menus"] }) {
-    state = useDocumentAppController({ ownerId: "editor", windowId: "main", menus, createMenuHandlers: () => ({}), onInitialOpen: initial, reportError, onCleanupError }); return null;
+    state = useDocumentAppController({ ownerId: "editor", windowId: "main", menus, onInitialOpen: initial, reportError, onCleanupError }); return null;
   }
   await act(async () => { rendered = create(React.createElement(Root, { menus: [] })); });
   const menus = [{ type: "submenu" as const, id: "file", label: "File", items: [] }];
@@ -87,7 +87,7 @@ test("menu edits retain controller ownership and a failed cleanup reports the re
 test("controller setup errors are exposed as hook state and reported", async () => {
   mocks.createMenu.mockRejectedValue(Error("menu failed")); const reportError = vi.fn();
   let state!: DocumentAppControllerState;
-  function Root() { state = useDocumentAppController({ ownerId: "editor", windowId: "main", menus: [], createMenuHandlers: () => ({}), onInitialOpen: vi.fn(), reportError }); return null; }
+  function Root() { state = useDocumentAppController({ ownerId: "editor", windowId: "main", menus: [], onInitialOpen: vi.fn(), reportError }); return null; }
   await act(async () => { rendered = create(React.createElement(Root)); });
   expect(state).toMatchObject({ status: "error", error: expect.objectContaining({ message: "menu failed" }) });
   expect(reportError).toHaveBeenCalledTimes(1);
@@ -97,7 +97,25 @@ test("failed menu updates report once without triggering an error render loop", 
   const update = vi.fn().mockRejectedValue(Error("invalid menu")), reportError = vi.fn();
   mocks.createMenu.mockResolvedValue({ update, remove: vi.fn(async () => {}) });
   let state!: DocumentAppControllerState;
-  function Root() { state = useDocumentAppController({ ownerId: "editor", windowId: "main", menus: [], createMenuHandlers: () => ({}), onInitialOpen: vi.fn(), reportError }); return null; }
+  function Root() { state = useDocumentAppController({ ownerId: "editor", windowId: "main", menus: [], onInitialOpen: vi.fn(), reportError }); return null; }
   await act(async () => { rendered = create(React.createElement(Root)); });
   expect(state.status).toBe("ready"); expect(update).toHaveBeenCalledTimes(1); expect(reportError).toHaveBeenCalledTimes(1);
+});
+
+
+test("replacement retries failed cleanup before acquiring the next owner", async () => {
+  const remove = vi.fn().mockRejectedValueOnce(Error("busy")).mockResolvedValue(undefined);
+  mocks.createMenu.mockResolvedValue({ remove, update: vi.fn(async () => {}) });
+  const onCleanupError = vi.fn(), reportError = vi.fn();
+  let state!: DocumentAppControllerState;
+  function Root({ ownerId }: { ownerId: string }) {
+    state = useDocumentAppController({ ownerId, windowId: "main", menus: [], onInitialOpen: vi.fn(), reportError, onCleanupError }); return null;
+  }
+  await act(async () => { rendered = create(React.createElement(Root, { ownerId: "first" })); });
+  await act(async () => rendered.update(React.createElement(Root, { ownerId: "second" })));
+  expect(onCleanupError).toHaveBeenCalledTimes(1);
+  expect(remove).toHaveBeenCalledTimes(2);
+  expect(mocks.createMenu).toHaveBeenCalledTimes(2);
+  expect(state.status).toBe("ready");
+  expect(reportError).not.toHaveBeenCalled();
 });

@@ -84,3 +84,27 @@ test("invalid options and unsupported capabilities reject before side effects", 
   expect(mocks.call).not.toHaveBeenCalled(); expect(mocks.listeners.size).toBe(0);
   mocks.platform.OS = "ios"; await expect(spawn(options)).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
 });
+
+
+test("command failure retains both the original error and failed termination", async () => {
+  mocks.call.mockImplementation(async method => {
+    if (method === "closeInput") throw Error("input failed");
+    if (method === "terminate") throw Error("termination failed");
+    return "null";
+  });
+  await expect(runCommand(options)).rejects.toMatchObject({ code: "E_NATIVE", cause: {
+    errors: [expect.objectContaining({ message: "input failed" }), expect.objectContaining({ message: "termination failed" })],
+  } });
+});
+
+test("malformed launch acknowledgement retains a rollback failure", async () => {
+  mocks.call.mockImplementation(async method => {
+    if (method === "spawn") return "{}";
+    if (method === "terminate") throw Error("termination failed");
+    return "null";
+  });
+  await expect(spawn(options)).rejects.toMatchObject({ code: "E_NATIVE", cause: {
+    errors: [expect.objectContaining({ code: "E_INVALID_DATA" }), expect.objectContaining({ message: "termination failed" })],
+  } });
+  expect(mocks.listeners.size).toBe(0);
+});
