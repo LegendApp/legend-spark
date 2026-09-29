@@ -87,9 +87,15 @@ Normal app development needs no flags. These remain available for automation and
 - `build --preview`: build the production native selection in Debug.
 - `build --force`: force native regeneration and compilation for the selected mode.
 
-For SDK maintainers, `sdk build-runner` builds and registers the shared runtime; `build --runner` builds one from the current generic SDK project. The old `sdk build-prebuilt` / `sdk build-go`, `build --prebuilt` / `build --go`, and `dev --prebuilt-binary` / `dev --go-binary` spellings remain compatibility aliases. Persisted runtime metadata continues to use `go`, and existing registered binaries remain discoverable. Expo's `dev --go` still means Expo Go.
+For SDK maintainers, `sdk build-runner` builds and registers the shared runtime;
+`build --runner` builds one from the current generic SDK project. `dev --runner-binary`
+selects its binary. These are the only Spark spellings. Internal runtime metadata
+uses `go`; Expo's `dev --go` still means Expo Go.
 
-The persisted runtime mode (`"go"`), registry entries, saved settings, and existing `SparkRunner`/`products/go` paths remain unchanged so registered binaries keep working. This terminology change itself does not require a native rebuild. Older validation reports retain the original name. Bare `build` still means a standalone release; `--preview` is unchanged.
+Spark validates flags and positional arguments per command before reading project
+state. For example, `package --example notes-lite` and `build --no-open` reject rather
+than ignoring options. Device/port build options belong to mobile builds; desktop
+launch options belong to `dev`. Expo's own development options pass through to Expo.
 
 ## Add native code
 

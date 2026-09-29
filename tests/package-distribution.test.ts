@@ -72,7 +72,7 @@ test("single Spark archive resolves public exports and preserves private native 
     const selectionFile = stateFile(app, "native-selection.json");
     mkdirSync(path.dirname(selectionFile), { recursive: true });
     writeFileSync(selectionFile, JSON.stringify({ included: windows.map(pkg => ({ name: pkg.name, root: pkg.root })), excluded: [] }));
-    const config = req("@legendapp/spark/universal").nativeConfig(app);
+    const config = req("@legendapp/spark/native").nativeConfig(app);
     expect(config.dependencies[menus.name].root).toBe(menus.root);
     for (const template of ["blank-typescript", "windows", "universal"]) {
       const pkg = JSON.parse(readFileSync(path.join(destination, "vendor/node_modules/@legendapp/spark-cli/templates", template, "package.json"), "utf8"));

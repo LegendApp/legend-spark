@@ -5,7 +5,7 @@ import { prepareGoProfile } from "./go-profile.ts";
 import { exportSDK, importSDK } from "./sdk-transfer.ts";
 import { hostPlatform, type AppPlatform } from "./platform.ts";
 import path from "node:path";
-import { parseArgs } from "node:util";
+import { cliArguments } from "./cli-arguments.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { prepareConfig, readConfig, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
 import { nodeCommand, prepareWindows } from "./windows.ts";
@@ -25,52 +25,27 @@ import { devCommand } from "./dev-command.ts";
 async function main() {
   const argv = process.argv.slice(2);
   if (argv[0] === "dev") return devCommand(argv.slice(1));
-  const { positionals, values } = parseArgs({
-    args: argv,
-    allowPositionals: true,
-    options: {
-      example: { type: "string" },
-      "package-manager": { type: "string" },
-      runtime: { type: "string", multiple: true },
-      universal: { type: "boolean" },
-      device: { type: "string" },
-      project: { type: "string" },
-      platform: { type: "string" },
-      packages: { type: "string" },
-      port: { type: "string" },
-      runner: { type: "boolean" },
-      prebuilt: { type: "boolean" },
-      go: { type: "boolean" }, // Legacy desktop build alias; dev --go belongs to Expo.
-      dev: { type: "boolean" },
-      release: { type: "boolean" },
-      preview: { type: "boolean" },
-      force: { type: "boolean" },
-      "no-open": { type: "boolean" },
-      "submission-id": { type: "string" },
-      help: { type: "boolean", short: "h" },
-    },
-  });
-  if (values.platform && !["macos", "windows", "ios", "android", "web"].includes(values.platform)) throw new Error("Platform must be macos, windows, ios, android, or web.");
+  const { positionals, values } = cliArguments(argv);
   if (values.platform) process.env.SPARK_PLATFORM = values.platform;
   const platform = (values.platform ?? hostPlatform()) as AppPlatform;
   const projectOption = values.project as string | undefined;
   const start = path.resolve(projectOption ?? process.cwd());
   const project = () => findProject(start);
   const port = values.port === undefined ? undefined : Number(values.port);
-  if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535)) throw new Error("Port must be an integer between 1 and 65535.");
   const command = positionals[0];
   if (!values.help && !values.platform && !(command === "open" && positionals[1]) && ["build", "prebuild", "analyze", "package", "open", "updates", "credentials"].includes(command ?? "") && isExpoProject(project())) {
     process.env.SPARK_PLATFORM = readConfig(project()).expo.platforms[0];
   }
   if (values.example && (command !== "create" || !examples.includes(values.example as Example))) throw new Error(`Use create --example ${examples.join(" | ")}`);
-  if (values.universal && command !== "create") throw new Error("--universal is a create option.");
   if (!values.help && ["build", "prebuild"].includes(command ?? "")) {
     const root = project();
     const selected = readConfig(root).expo.platforms[0];
+    if (!["ios", "android", "web"].includes(selected) && (values.device || values.port)) throw new Error("--device and --port are mobile build options; use spark dev for desktop launch options.");
     if (["ios", "android", "web"].includes(selected)) {
+      if (values.force) throw new Error("--force is a desktop build option.");
       if (command === "build" && selected === "web") throw new Error("Use expo export --platform web for web production output.");
       if (command === "prebuild" && selected === "web") throw new Error("Web has no native project to prebuild.");
-      if (values.runner || values.prebuilt || values.go || values.release || values.preview || (command === "build" && !values.dev)) throw new Error("Mobile builds use --dev in this slice; Expo owns mobile distribution workflows.");
+      if (values.runner || values.release || values.preview || (command === "build" && !values.dev)) throw new Error("Mobile builds use --dev in this slice; Expo owns mobile distribution workflows.");
       prepareConfig(root);
       const args = command === "prebuild" ? ["prebuild", "--platform", selected, "--no-install"] : [`run:${selected}`, ...(values.device ? ["--device", values.device] : []), ...(port ? ["--port", String(port)] : [])];
       const manifest = readFileSync(path.join(root, "package.json"), "utf8");
@@ -113,7 +88,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
     }
     case "create": {
       if (!positionals[1]) throw new Error("Usage: spark create MyApp");
-      if (!values.universal && !["macos", "windows"].includes(platform)) throw new Error("Use create --universal for mobile/web targets");
+      if (!(values.universal || values.example) && !["macos", "windows"].includes(platform)) throw new Error("Use create --universal for mobile/web targets");
       await create(path.resolve(positionals[1]), creationManifest(values.packages as string | undefined), platform, !!values.universal || !!values.example, values.example as Example | undefined, values["package-manager"] as PackageManager | undefined);
       break;
     }
@@ -149,8 +124,6 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
           if (result.pending) process.exitCode = 2;
           break;
         }
-        case "build-go": // Legacy alias; persisted runtime metadata still uses "go".
-        case "build-prebuilt": // Legacy command alias.
         case "build-runner": {
           let root: string;
           if (projectOption) root = project();

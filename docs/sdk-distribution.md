@@ -46,13 +46,12 @@ A freshly exported SDK was moved to a different directory, installed under a sep
 
 ## Public package layout
 
-Frame ships as one public npm package, `@legendapp/spark`. Applications import
+Spark ships as one public npm package, `@legendapp/spark`. Applications import
 subpaths such as `@legendapp/spark/ui`, `@legendapp/spark/clipboard`, and
 `@legendapp/spark/files`. Configuration helpers are exported at
 `@legendapp/spark/config`, `@legendapp/spark/config-plugin`,
 `@legendapp/spark/expo-config`, `@legendapp/spark/metro`,
-`@legendapp/spark/expo-metro`, `@legendapp/spark/native`, and
-`@legendapp/spark/universal`. The package owns the `frame` executable.
+`@legendapp/spark/metro` and `@legendapp/spark/native`. The package owns the `spark` executable.
 
 `npm run pack:local` builds the publishable `legendapp-spark-*.tgz` archive in
 `artifacts/packages`; its filename is recorded under `@legendapp/spark` in

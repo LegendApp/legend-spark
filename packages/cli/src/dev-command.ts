@@ -20,7 +20,9 @@ export function devArguments(args: string[]) {
       const value = inline.length ? inline.join("=") : args[++i];
       if (value === undefined) throw new Error("--app-arg needs a value");
       (spark.appArgs ??= []).push(value);
-    } else if (["--project", "--platform", "--runner-binary", "--prebuilt-binary", "--go-binary"].includes(key!)) {
+    } else if (["--prebuilt-binary", "--go-binary"].includes(key!)) {
+      throw new Error(`Unknown Spark option: ${key}; use --runner-binary`);
+    } else if (["--project", "--platform", "--runner-binary"].includes(key!)) {
       const value = inline.length ? inline.join("=") : args[++i];
       if (!value || value.startsWith("-")) throw new Error(`${key} needs a value`);
       if (key === "--project") spark.project = value;

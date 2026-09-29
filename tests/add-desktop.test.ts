@@ -18,7 +18,7 @@ test("compose config expressions without moving imports or changing application 
 test("Metro composition preserves custom settings and is idempotent", () => {
   const source = 'const { getDefaultConfig } = require("expo/metro-config");\nconst config = getDefaultConfig(__dirname);\nconfig.resolver.sourceExts.push("custom");\nmodule.exports = config;';
   const composed = composeMetro(source, "metro.config.js");
-  expect(composed).toContain('require("@legendapp/spark/expo-metro")');
+  expect(composed).toContain('require("@legendapp/spark/metro")');
   expect(composed).toContain('config.resolver.sourceExts.push("custom")');
   expect(composeMetro(composed, "metro.config.js")).toBe(composed);
   expect(() => composeMetro("module.exports = {};", "metro.config.js")).toThrow("getDefaultConfig");

@@ -13,12 +13,7 @@ test("build defaults to standalone release and rejects conflicting modes", () =>
   expect(buildMode({ dev: true })).toBe("dev");
   expect(buildMode({ preview: true })).toBe("preview");
   expect(buildMode({ runner: true })).toBe("go");
-  expect(buildMode({ runner: true, prebuilt: true, go: true })).toBe("go");
   expect(() => buildMode({ runner: true, dev: true })).toThrow("only one");
-  expect(buildMode({ prebuilt: true })).toBe("go");
-  expect(buildMode({ go: true })).toBe("go"); // Existing metadata and legacy build flag.
-  expect(buildMode({ prebuilt: true, go: true })).toBe("go");
-  expect(() => buildMode({ prebuilt: true, dev: true })).toThrow("only one");
   expect(buildMode({ release: true })).toBe("release");
   expect(() => buildMode({ dev: true, release: true })).toThrow("only one");
 });

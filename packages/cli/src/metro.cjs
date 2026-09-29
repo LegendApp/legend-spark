@@ -16,6 +16,11 @@ function runtimePlan(root, env = process.env) {
     .map(e => e.name).concat(["src"]) };
 }
 function withDesktop(config, options = {}) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("Expected desktop Metro options");
+  for (const [key, value] of Object.entries(options)) {
+    if (!["runtimes", "watch"].includes(key)) throw new Error(`Unknown desktop Metro option: ${key}`);
+    if (value !== undefined && typeof value !== "boolean") throw new Error(`${key} must be boolean`);
+  }
   // Expo 54 sets the react-native export condition only for iOS/Android.
   // Desktop must also select native package exports (e.g. Uniwind's runtime).
   const conditions = { ...config.resolver?.unstable_conditionsByPlatform };
@@ -56,7 +61,7 @@ function withDesktop(config, options = {}) {
   const plan = runtimePlan(root);
   const generatedEntry = path.join(root, ".threaded-runtime/entry.js");
   if (plan.enabled) {
-    config = withThreadedRuntime(config, { ...options, roots: plan.roots, watch: plan.production ? false : options.watch });
+    config = withThreadedRuntime(config, { roots: plan.roots, watch: plan.production ? false : options.watch });
     // Production roots come from Metro's resolved graph, including worker files
     // shipped by dependencies. Do not register unrelated index.<name>.ts files.
     if (plan.production) generateThreadedRuntimeEntry({ projectRoot: root, generatedEntry, roots: plan.roots, runtimeEntries: [] });

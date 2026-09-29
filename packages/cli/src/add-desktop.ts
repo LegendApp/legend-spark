@@ -39,8 +39,8 @@ export function composeMetro(source: string, file: string) {
   }
   visit(parsed);
   if (!replacements.length) throw new Error(`Cannot safely compose ${file}: use Expo's getDefaultConfig before adding desktop support. No files were changed.`);
-  for (const { start, end } of replacements.sort((a, b) => b.start - a.start)) source = source.slice(0, start) + '"@legendapp/spark/expo-metro"' + source.slice(end);
-  return composeExport(source, file, "@legendapp/spark/expo-metro", "withSparkMetro", false);
+  for (const { start, end } of replacements.sort((a, b) => b.start - a.start)) source = source.slice(0, start) + '"@legendapp/spark/metro"' + source.slice(end);
+  return composeExport(source, file, "@legendapp/spark/metro", "withSparkMetro", false);
 }
 
 export async function addDesktop(root: string, manifestFile: string | undefined) {

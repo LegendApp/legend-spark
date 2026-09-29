@@ -13,7 +13,7 @@ npm install uniwind@1.6.3 tailwindcss@4.2.4
 ```js
 // metro.config.js
 const { withUniwindConfig } = require('uniwind/metro');
-const { metroConfig } = require('@legendapp/spark/universal');
+const { metroConfig } = require('@legendapp/spark/metro');
 
 module.exports = withUniwindConfig(metroConfig(__dirname), {
   cssEntryFile: './global.css',

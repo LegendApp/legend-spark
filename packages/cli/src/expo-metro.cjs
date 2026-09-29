@@ -19,7 +19,7 @@ exports.withSparkMetro = config => {
   if (config && typeof config.then === 'function') return config.then(exports.withSparkMetro);
   if (!config || typeof config !== 'object') throw new Error('Spark needs an object or promise from metro.config');
   const upstream = defaults.get(path.resolve(config.projectRoot || process.cwd()));
-  if (!upstream) throw new Error('Compose Metro with getDefaultConfig from @legendapp/spark-cli/src/expo-metro.cjs');
+  if (!upstream) throw new Error('Compose Metro with getDefaultConfig from @legendapp/spark/metro');
   const customResolve = config.resolver?.resolveRequest;
   if (customResolve && customResolve !== upstream.resolveRequest) {
     const desktopResolve = upstream.resolveRequest;

@@ -53,7 +53,7 @@ PowerShell uses `$env:SPARK_PLATFORM="windows"`. Keep desktop-specific exclusion
 
 ## Metro and native configuration
 
-The existing Metro config gets its defaults through `@legendapp/spark/expo-metro`. That helper delegates to Expo for standalone mobile/web commands and Expo Desktop for desktop or shared spark dev sessions. Application customizations continue to run after those defaults. Custom resolver fallbacks retain upstream desktop module resolution, and spark adds its development compatibility gate.
+The existing Metro config gets its defaults through `@legendapp/spark/metro`. That helper delegates to Expo for standalone mobile/web commands and Expo Desktop for desktop or shared spark dev sessions. Application customizations continue to run after those defaults. Custom resolver fallbacks retain upstream desktop module resolution, and spark adds its development compatibility gate.
 
 Desktop hosts request `index.bundle` or `index.windows.bundle`. The composed Metro config routes those requests through Expo's virtual entry resolver, which reads the original `package.json` main. There is no generated replacement application entry. Apps must register the normal Expo `main` component through their existing entry.
 

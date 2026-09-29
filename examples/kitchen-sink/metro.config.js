@@ -1,5 +1,5 @@
 const { withUniwindConfig } = require("uniwind/metro");
-const { metroConfig } = require("@legendapp/spark/universal");
+const { metroConfig } = require("@legendapp/spark/metro");
 
 const path = require("node:path");
 const fs = require("node:fs");

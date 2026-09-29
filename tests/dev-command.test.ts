@@ -27,13 +27,7 @@ test("initial mobile launch keeps host desktop actions available", () => {
 });
 
 
-test("legacy binary override aliases prebuilt without consuming Expo Go", () => {
-  expect(devArguments(["--go-binary", "/tmp/Legacy.app", "--go"])).toEqual({ prebuiltBinary: "/tmp/Legacy.app", expo: ["--go"] });
+test("Runner override has one spelling and leaves Expo Go to Expo", () => {
   expect(devArguments(["--runner-binary=/tmp/Runtime.app", "--go"])).toEqual({ prebuiltBinary: "/tmp/Runtime.app", expo: ["--go"] });
-});
-
-test("Runner binary option retains prebuilt and Go aliases", () => {
-  for (const flag of ["--runner-binary", "--prebuilt-binary", "--go-binary"]) {
-    expect(devArguments([flag, "/tmp/SparkRunner.app"]).prebuiltBinary).toBe("/tmp/SparkRunner.app");
-  }
+  for (const flag of ["--prebuilt-binary", "--go-binary"]) expect(() => devArguments([flag, "/tmp/Runtime.app"])).toThrow("use --runner-binary");
 });

@@ -30,3 +30,8 @@ test("standalone apps keep their existing host entry URLs", () => {
   expect(config.server.unstable_serverRoot).toBe(project);
   expect(config.server.rewriteRequestUrl("/index.bundle?platform=macos")).toBe("/index.bundle?platform=macos");
 });
+
+test("desktop Metro options do not silently forward typos to the runtime library", () => {
+  expect(() => withDesktop({ projectRoot: project }, { runtiems: false })).toThrow("Unknown desktop Metro option");
+  expect(() => withDesktop({ projectRoot: project }, { watch: "yes" })).toThrow("watch must be boolean");
+});

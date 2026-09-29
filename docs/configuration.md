@@ -52,3 +52,38 @@ The JSON schema in `/schema.json` checks editor-visible structure. Runtime valid
 also checks relationships such as size constraints, selected targets, helper paths
 and update feed/key requirements. Tests reconcile schema keys with public types and
 verify the native window transport independently.
+
+## Metro and native discovery
+
+All Metro helpers live under `/metro`; native discovery helpers live under `/native`.
+Their inputs retain Expo/Metro and React Native CLI types. Removed `/expo-metro` and
+`/universal` paths have no forwarding aliases.
+
+For a **Spark-owned project**, `metroConfig` supplies defaults and integration:
+
+```js
+// metro.config.js — apply styling or other Metro wrappers to this result.
+const { metroConfig } = require('@legendapp/spark/metro');
+module.exports = metroConfig(__dirname);
+// react-native.config.js
+module.exports = require('@legendapp/spark/native').nativeConfig(__dirname);
+```
+
+For an **existing Expo project**, preserve its composition:
+
+```js
+// metro.config.js
+const { getDefaultConfig, withSparkMetro } = require('@legendapp/spark/metro');
+const config = getDefaultConfig(__dirname);
+// Existing application customizations go here.
+module.exports = withSparkMetro(config);
+// react-native.config.js
+const { withSparkNative } = require('@legendapp/spark/native');
+module.exports = withSparkNative({ assets: ['./fonts'] }, __dirname);
+```
+
+`getDefaultConfig` follows Expo's options. `withSparkMetro` also accepts a promise
+from an asynchronous config wrapper. `withDesktop(config, { runtimes?, watch? })`
+is the lower-level composition helper for an already configured desktop Metro
+instance. It is not needed in either ordinary recipe above. Other backend-specific
+configuration belongs to the upstream tool; unknown Spark options reject.
