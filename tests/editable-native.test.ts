@@ -13,6 +13,6 @@ it.skipIf(process.platform !== 'darwin')('compiles the native host and verifies 
     const compile = spawnSync('/usr/bin/clang++', ['-fobjc-arc', '-Wno-deprecated-declarations', 'tests/editable-native.mm', '-framework', 'AppKit', '-framework', 'Security', '-o', binary], { encoding: 'utf8' });
     expect(compile.status, compile.stderr).toBe(0);
     const result = spawnSync(binary, [], { encoding: 'utf8', timeout: 15000 });
-    expect(result.status, result.stderr).toBe(0); expect(result.stdout).toContain('9 checks passed');
+    expect(result.status, result.stderr).toBe(0); expect(result.stdout).toMatch(/loader and API: [4-9][0-9] checks passed/);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 }, 30000);

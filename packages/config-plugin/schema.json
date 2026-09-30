@@ -485,6 +485,64 @@
             },
             "toolkitTag": {
               "type": "string"
+            },
+            "ui": {
+              "enum": [
+                "default",
+                "custom"
+              ],
+              "default": "default"
+            },
+            "provider": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "endpoint",
+                    "model"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "local",
+                        "remote"
+                      ]
+                    },
+                    "endpoint": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "tool"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "cli"
+                    },
+                    "tool": {
+                      "enum": [
+                        "codex",
+                        "claude"
+                      ]
+                    },
+                    "model": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              ]
             }
           }
         }

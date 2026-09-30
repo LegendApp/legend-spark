@@ -348,7 +348,7 @@ export function runtimeFor(
         config: readAppConfig(root),
         editable: readAppConfig(root).expo?.extra?.spark?.editable ? {
           source: hashFiles(root, readAppConfig(root).expo.extra.spark.editable.files),
-          tooling: hashFiles(import.meta.dirname, ["editable-artifacts.ts", "editable-artifacts.js", "editable-worker.cjs", "editable-ai.cjs"]),
+          tooling: hashFiles(import.meta.dirname, ["editable-artifacts.ts", "editable-artifacts.js", "editable-worker.cjs", "editable-ai.cjs", "editable-cli.cjs", "editable-provider.cjs", "js-runtime.cjs", "runtime-bootstrap.sh", "runtime-downloads.tsv"]),
         } : undefined,
         helpers: resolveHelpers(root, readAppConfig(root).expo?.extra?.spark?.helpers, platform).map(helper => ({ name: helper.name, contents: hashFiles(root, helper.files), modes: helper.modes, directories: helper.directories })),
         adapter: hostSourceSignature(root),

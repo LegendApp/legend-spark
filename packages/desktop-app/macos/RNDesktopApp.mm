@@ -13,7 +13,20 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
 - (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   dispatch_async(dispatch_get_main_queue(), ^{
     NSDictionary *args = SparkArgs(json);
-    if ([method isEqual:@"context"]) resolve(SparkJSON(SparkContext()));
+    if ([method hasPrefix:@"editable."]) {
+      // Only opted-in hosts register this handler; keep the desktop module small.
+      __block BOOL handled = NO;
+      void (^claim)(void) = ^{ handled = YES; };
+      void (^reply)(NSString *, NSString *, NSString *) = ^(NSString *value, NSString *code, NSString *message) {
+        if (code) reject(code, message, nil); else resolve(value ?: @"null");
+      };
+      [NSNotificationCenter.defaultCenter postNotificationName:@"SparkEditableCall" object:nil userInfo:@{@"method":[method substringFromIndex:9], @"args":args, @"claim":claim, @"reply":reply}];
+      if (!handled) {
+        if ([method isEqual:@"editable.state"]) resolve(SparkJSON(@{@"enabled":@NO,@"busy":@NO,@"phase":@"idle",@"message":@"Editing is not enabled in this app",@"ready":@NO,@"customized":@NO,@"previewing":@NO,@"migrationAvailable":@NO}));
+        else reject(@"E_UNAVAILABLE", @"Editing is not enabled in this app", nil);
+      }
+    }
+    else if ([method isEqual:@"context"]) resolve(SparkJSON(SparkContext()));
     else if ([method isEqual:@"initialURL"]) resolve(SparkJSON(SparkInitialURL()));
     else if ([method isEqual:@"pendingURLs"]) resolve(SparkJSON(SparkPendingURLs()));
     else if ([method isEqual:@"quit"]) {

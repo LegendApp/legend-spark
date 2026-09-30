@@ -10,6 +10,7 @@ export type EditableAsset = { url: string; sha256: string; size: number };
 export type EditableManifest = {
   schema: 1; project: string; version: string; release: string; runtime: Runtime;
   entry: string; source: EditableAsset; toolkit: EditableAsset;
+  editing?: { ui: 'default' | 'custom'; provider?: { kind: 'cli'; tool: 'codex' | 'claude'; model?: string } | { kind: 'local' | 'remote'; endpoint: string; model: string } };
 };
 export function fileHash(file: string) { return createHash('sha256').update(readFileSync(file)).digest('hex'); }
 const jsonHash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -129,7 +130,8 @@ export async function prepareEditableArtifacts(root: string, runtime: Runtime, a
     if (entry.startsWith('..') || path.isAbsolute(entry) || !existsSync(path.join(source, entry))) throw new Error('Editable entry must be inside the published source snapshot');
     const appRequire = createRequire(path.join(root, 'package.json'));
     await copyDependencies(root, toolkit, { diff: path.dirname(require.resolve('diff/package.json')), 'react-native-macos': path.dirname(appRequire.resolve('react-native-macos/package.json')) });
-    for (const file of ['editable-worker.cjs', 'editable-ai.cjs', 'js-runtime.cjs', 'runtime-bootstrap.sh', 'runtime-downloads.tsv']) cpSync(path.join(import.meta.dirname, file), path.join(toolkit, file));
+    for (const file of ['editable-worker.cjs', 'editable-ai.cjs', 'editable-cli.cjs', 'js-runtime.cjs', 'runtime-bootstrap.sh', 'runtime-downloads.tsv']) cpSync(path.join(import.meta.dirname, file), path.join(toolkit, file));
+    cpSync(require.resolve('@legendapp/spark-desktop-config/editable-provider.cjs'), path.join(toolkit, 'editable-provider.cjs'));
     const rn = path.dirname(appRequire.resolve('react-native/package.json'));
     const hermesc = [path.join(root, 'macos/Pods/hermes-engine/destroot/bin/hermesc'), path.join(rn, 'sdks/hermesc/osx-bin/hermesc')].find(existsSync);
     if (!hermesc) throw new Error('Matching macOS Hermes compiler is missing');
@@ -155,7 +157,8 @@ export async function prepareEditableArtifacts(root: string, runtime: Runtime, a
     const sourceAsset = await archive('source', options.repository, options.tag ?? `v${config.version}`);
     const toolkitAsset = await archive('toolkit', options.toolkitRepository ?? 'LegendApp/legend-spark', options.toolkitTag ?? `editable-v${VERSION}`);
     const manifest: EditableManifest = { schema: 1, project: config.macos.bundleIdentifier, version: config.version,
-      release: jsonHash({ runtime, source: sourceAsset.sha256, toolkit: toolkitAsset.sha256 }), runtime, entry, source: sourceAsset, toolkit: toolkitAsset };
+      release: jsonHash({ runtime, source: sourceAsset.sha256, toolkit: toolkitAsset.sha256 }), runtime, entry, source: sourceAsset, toolkit: toolkitAsset,
+      editing: { ui: options.ui ?? 'default', ...(options.provider ? { provider: require('@legendapp/spark-desktop-config/editable-provider.cjs').validateProvider(options.provider) } : {}) } };
     const filename = `spark-editable-${manifest.release}.json`;
     writeJson(path.join(output, filename), manifest);
     writeJson(path.join(app, 'Contents/Resources/spark-editable.json'), manifest);

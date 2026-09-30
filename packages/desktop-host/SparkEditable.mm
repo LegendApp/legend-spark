@@ -30,15 +30,48 @@ static BOOL SEIdentifier(NSString *value, NSString *pattern) {
   return [value isKindOfClass:NSString.class] && [value rangeOfString:pattern options:NSRegularExpressionSearch].location != NSNotFound;
 }
 static NSMutableSet<NSTask *> *SETasks;
+static BOOL SECancelRequested;
+static NSDictionary *SEResult(NSString *output) {
+  for (NSString *line in [[output componentsSeparatedByString:@"\n"] reverseObjectEnumerator]) {
+    NSData *data=[line dataUsingEncoding:NSUTF8StringEncoding];
+    id value=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    if([value isKindOfClass:NSDictionary.class])return value;
+  }
+  @throw [NSException exceptionWithName:@"E_INVALID_DATA" reason:@"Editing worker returned invalid data" userInfo:nil];
+}
+static NSString *SEPath(void) {
+  NSString *current=NSProcessInfo.processInfo.environment[@"PATH"] ?: @"/usr/bin:/bin:/usr/sbin:/sbin";
+  return [NSString stringWithFormat:@"%@/.local/bin:%@/.bun/bin:%@/.claude/local:/opt/homebrew/bin:/usr/local/bin:%@",NSHomeDirectory(),NSHomeDirectory(),NSHomeDirectory(),current];
+}
+static NSDictionary *SEProvider(NSDictionary *value) {
+  if(![value isKindOfClass:NSDictionary.class])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Invalid editing provider" userInfo:nil];
+  NSString *kind=value[@"kind"],*model=value[@"model"];
+  if([kind isEqual:@"cli"]) {
+    if(![@[@"codex",@"claude"] containsObject:value[@"tool"]] || (model && (![model isKindOfClass:NSString.class] || !model.length)))@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"CLI provider requires codex or claude" userInfo:nil];
+    for(NSString *key in value)if(![@[@"kind",@"tool",@"model"] containsObject:key])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Unknown CLI provider option" userInfo:nil];
+    NSMutableDictionary *result=[@{@"kind":kind,@"tool":value[@"tool"]} mutableCopy];if(model)result[@"model"]=model;return result;
+  }
+  for(NSString *key in value)if(![@[@"kind",@"endpoint",@"model",@"apiKey"] containsObject:key])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Unknown editing provider option" userInfo:nil];
+  if(![model isKindOfClass:NSString.class] || !model.length || ![value[@"endpoint"] isKindOfClass:NSString.class])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Enter an endpoint and provider model" userInfo:nil];
+  NSURLComponents *url=[NSURLComponents componentsWithString:value[@"endpoint"]];
+  BOOL local=[kind isEqual:@"local"],remote=[kind isEqual:@"remote"];
+  BOOL loopback=[@[@"localhost",@"127.0.0.1",@"::1",@"[::1]"] containsObject:url.host.lowercaseString];
+  if((!local && !remote) || !url.host.length || url.user || url.password || url.query || url.fragment || (local ? !loopback || ![@[@"http",@"https"] containsObject:url.scheme.lowercaseString] : ![url.scheme.lowercaseString isEqual:@"https"]))@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Remote providers require HTTPS; local providers require a loopback HTTP(S) endpoint" userInfo:nil];
+  if(local && [url.host.lowercaseString isEqual:@"localhost"])url.host=@"127.0.0.1";
+  if(value[@"apiKey"] && (!remote || ![value[@"apiKey"] isKindOfClass:NSString.class]))@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"API keys are only supported for remote providers" userInfo:nil];
+  return @{@"kind":kind,@"endpoint":url.string,@"model":model};
+}
 static NSString *SERun(NSString *executable, NSArray *arguments, NSDictionary *environment) {
+  if(SECancelRequested)@throw [NSException exceptionWithName:@"E_ABORTED" reason:@"Editing canceled; partial changes are retained" userInfo:nil];
   NSTask *task = [NSTask new]; task.executableURL = [NSURL fileURLWithPath:executable]; task.arguments = arguments;
   if (environment) task.environment = environment;
   NSPipe *pipe = [NSPipe pipe]; task.standardOutput = pipe; task.standardError = pipe;
   NSError *error; if (![task launchAndReturnError:&error]) @throw [NSException exceptionWithName:@"SparkEditable" reason:error.localizedDescription userInfo:nil];
-  @synchronized(NSTask.class) { if(!SETasks)SETasks=[NSMutableSet new]; [SETasks addObject:task]; }
+  @synchronized(NSTask.class) { if(!SETasks)SETasks=[NSMutableSet new]; [SETasks addObject:task]; if(SECancelRequested && task.running)[task terminate]; }
   NSData *data = [pipe.fileHandleForReading readDataToEndOfFile]; [task waitUntilExit];
   @synchronized(NSTask.class) { [SETasks removeObject:task]; }
   NSString *output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"";
+  if(SECancelRequested)@throw [NSException exceptionWithName:@"E_ABORTED" reason:@"Editing canceled; partial changes are retained" userInfo:nil];
   if (task.terminationStatus) @throw [NSException exceptionWithName:@"SparkEditable" reason:[NSString stringWithFormat:@"%@ failed (%d). %@", executable.lastPathComponent, task.terminationStatus, output] userInfo:nil];
   return output;
 }
@@ -53,6 +86,9 @@ static NSString *SERun(NSString *executable, NSArray *arguments, NSDictionary *e
 @property NSTextField *status;
 @property NSTextField *endpoint;
 @property NSTextField *model;
+@property NSPopUpButton *providerChoice;
+@property NSString *phase;
+@property NSString *message;
 @property NSSecureTextField *key;
 @property NSMutableArray<NSButton *> *buttons;
 @property BOOL busy;
@@ -68,11 +104,13 @@ static SparkEditableController *SEController;
     NSString *base = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
     _support = [[base stringByAppendingPathComponent:NSBundle.mainBundle.bundleIdentifier] stringByAppendingPathComponent:@"SparkEditable"];
     _directory = [[_support stringByAppendingPathComponent:@"releases"] stringByAppendingPathComponent:_manifest[@"release"] ?: @"disabled"];
+    _phase=@"idle"; _message=@"Ready to customize";
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(handleCall:) name:@"SparkEditableCall" object:nil];
     _forceOriginal = [NSProcessInfo.processInfo.arguments containsObject:@"--spark-original"] || ([NSEvent modifierFlags] & NSEventModifierFlagOption);
     [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationWillTerminateNotification object:nil queue:nil usingBlock:^(NSNotification *note) { @synchronized(NSTask.class) { for(NSTask *task in SETasks) if(task.running)[task terminate]; } }];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(healthy:) name:@"RCTContentDidAppearNotification" object:nil];
     [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *event) {
-      if ((event.modifierFlags & (NSEventModifierFlagCommand|NSEventModifierFlagShift)) == (NSEventModifierFlagCommand|NSEventModifierFlagShift) && [event.charactersIgnoringModifiers.lowercaseString isEqual:@"e"]) { [self show:nil]; return nil; }
+      if ((event.modifierFlags & (NSEventModifierFlagCommand|NSEventModifierFlagShift)) == (NSEventModifierFlagCommand|NSEventModifierFlagShift) && ![self.manifest[@"editing"][@"ui"] isEqual:@"custom"] && [event.charactersIgnoringModifiers.lowercaseString isEqual:@"e"]) { [self show:nil]; return nil; }
       return event;
     }];
   } return self;
@@ -102,18 +140,23 @@ static SparkEditableController *SEController;
     NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(20,335,640,155)]; scroll.hasVerticalScroller = YES; scroll.borderType = NSBezelBorder;
     self.prompt = [[NSTextView alloc] initWithFrame:scroll.bounds]; self.prompt.richText = NO; self.prompt.font = [NSFont systemFontOfSize:14]; self.prompt.autoresizingMask = NSViewWidthSizable; self.prompt.textContainer.widthTracksTextView = YES;
     scroll.documentView = self.prompt; [view addSubview:scroll];
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSArray *labels = @[@"API endpoint", @"Model", @"API key"];
-    self.endpoint = [[NSTextField alloc] initWithFrame:NSMakeRect(130,292,530,26)]; self.endpoint.stringValue = [defaults stringForKey:@"SparkEditableEndpoint"] ?: @"https://api.openai.com/v1/chat/completions";
-    self.model = [[NSTextField alloc] initWithFrame:NSMakeRect(130,256,530,26)]; self.model.stringValue = [defaults stringForKey:@"SparkEditableModel"] ?: @""; self.model.placeholderString = @"Model identifier from your provider";
-    self.key = [[NSSecureTextField alloc] initWithFrame:NSMakeRect(130,220,530,26)]; self.key.placeholderString = @"Stored securely in Keychain"; self.key.stringValue = [self credential:nil];
+    self.providerChoice=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(130,296,530,26)];
+    [self.providerChoice addItemsWithTitles:@[@"Codex CLI (existing login)",@"Claude CLI (existing login)",@"Local model server",@"Remote API"]];self.providerChoice.target=self;self.providerChoice.action=@selector(providerChanged:);
+    NSDictionary *provider=[self provider];
+    [self.providerChoice selectItemAtIndex:[provider[@"kind"] isEqual:@"cli"] ? ([provider[@"tool"] isEqual:@"claude"] ? 1 : 0) : ([provider[@"kind"] isEqual:@"local"] ? 2 : 3)];
+    NSArray *labels = @[@"Endpoint", @"Model", @"API key"];
+    self.endpoint = [[NSTextField alloc] initWithFrame:NSMakeRect(130,260,530,26)]; self.endpoint.stringValue = provider[@"endpoint"] ?: @"";
+    self.model = [[NSTextField alloc] initWithFrame:NSMakeRect(130,224,530,26)]; self.model.stringValue = provider[@"model"] ?: @""; self.model.placeholderString = @"CLI default, or model identifier";
+    self.key = [[NSSecureTextField alloc] initWithFrame:NSMakeRect(130,188,530,26)]; self.key.placeholderString = @"Remote API only; stored in Keychain"; self.key.stringValue = [provider[@"kind"] isEqual:@"remote"] ? [self credential:nil] : @"";
+    NSTextField *providerLabel=[NSTextField labelWithString:@"Provider"];providerLabel.frame=NSMakeRect(20,300,105,20);[view addSubview:providerLabel];[view addSubview:self.providerChoice];
     NSArray *fields = @[self.endpoint,self.model,self.key];
-    for (NSUInteger i=0;i<3;i++) { NSTextField *label=[NSTextField labelWithString:labels[i]]; label.frame=NSMakeRect(20,296-36*i,105,20); [view addSubview:label]; [view addSubview:fields[i]]; }
+    for (NSUInteger i=0;i<3;i++) { NSTextField *label=[NSTextField labelWithString:labels[i]]; label.frame=NSMakeRect(20,264-36*i,105,20); [view addSubview:label]; [view addSubview:fields[i]]; }
+    [self syncProviderFields];
     self.buttons = [NSMutableArray new];
     NSArray *titles = @[@"Generate",@"Migrate edits",@"Review",@"Preview",@"Apply",@"Original"];
     NSArray *selectors = @[@"generate:",@"migrate:",@"review:",@"preview:",@"apply:",@"original:"];
     for (NSUInteger i=0;i<titles.count;i++) {
-      NSButton *button = [NSButton buttonWithTitle:titles[i] target:self action:NSSelectorFromString(selectors[i])]; button.frame=NSMakeRect(20+(i%3)*215,165-(i/3)*40,205,32); [view addSubview:button]; [self.buttons addObject:button];
+      NSButton *button = [NSButton buttonWithTitle:titles[i] target:self action:NSSelectorFromString(selectors[i])]; button.frame=NSMakeRect(20+(i%3)*215,145-(i/3)*40,205,32); [view addSubview:button]; [self.buttons addObject:button];
     }
     self.status = [NSTextField wrappingLabelWithString:@"Tools download on first use. AI requests send relevant source to your chosen provider and may incur charges. Hold Option at launch to use the original app."];
     long long bytes=[self.manifest[@"source"][@"size"] longLongValue]+[self.manifest[@"toolkit"][@"size"] longLongValue];
@@ -121,16 +164,74 @@ static SparkEditableController *SEController;
     self.status.frame=NSMakeRect(20,20,640,85); [view addSubview:self.status]; [self.panel center];
   }
   [self.panel makeKeyAndOrderFront:nil]; [NSApp activateIgnoringOtherApps:YES];
+  if(self.busy){for(NSButton *button in self.buttons)button.enabled=NO;self.buttons.firstObject.title=@"Cancel";self.buttons.firstObject.enabled=YES;self.providerChoice.enabled=NO;self.endpoint.enabled=NO;self.model.enabled=NO;self.key.enabled=NO;}
+}
+- (NSDictionary *)provider {
+  NSUserDefaults *defaults=NSUserDefaults.standardUserDefaults;
+  NSDictionary *launch=[defaults volatileDomainForName:NSArgumentDomain];
+  if(launch[@"SparkEditableEndpoint"])return @{@"kind":@"remote",@"endpoint":launch[@"SparkEditableEndpoint"],@"model":launch[@"SparkEditableModel"] ?: @""};
+  return [defaults dictionaryForKey:@"SparkEditableProvider"] ?: self.manifest[@"editing"][@"provider"] ?: @{@"kind":@"remote",@"endpoint":[defaults stringForKey:@"SparkEditableEndpoint"] ?: @"https://api.openai.com/v1/chat/completions",@"model":[defaults stringForKey:@"SparkEditableModel"] ?: @""};
+}
+- (void)syncProviderFields {
+  self.endpoint.enabled=self.providerChoice.indexOfSelectedItem>=2;self.key.enabled=self.providerChoice.indexOfSelectedItem==3;
+}
+- (void)providerChanged:(id)sender {
+  [self syncProviderFields];self.model.stringValue=@"";
+  self.endpoint.stringValue=self.providerChoice.indexOfSelectedItem==2 ? @"http://127.0.0.1:11434/v1/chat/completions" : @"https://api.openai.com/v1/chat/completions";
+  self.message=self.providerChoice.indexOfSelectedItem<2 ? @"Uses the installed CLI and its existing login. No API key needed." : @"Choose a model supported by this endpoint.";self.status.stringValue=self.message;
+}
+- (NSDictionary *)panelProvider {
+  NSInteger index=self.providerChoice.indexOfSelectedItem;
+  NSMutableDictionary *provider=[NSMutableDictionary new];
+  if(index<2){provider[@"kind"]=@"cli";provider[@"tool"]=index==0 ? @"codex" : @"claude";if(self.model.stringValue.length)provider[@"model"]=self.model.stringValue;}
+  else{provider[@"kind"]=index==2 ? @"local" : @"remote";provider[@"endpoint"]=self.endpoint.stringValue;provider[@"model"]=self.model.stringValue;if(index==3)provider[@"apiKey"]=self.key.stringValue;}
+  return provider;
+}
+- (void)configure:(NSDictionary *)value {
+  NSDictionary *provider=SEProvider(value);
+  if(value[@"apiKey"])[self credential:value[@"apiKey"]];
+  [NSUserDefaults.standardUserDefaults setObject:provider forKey:@"SparkEditableProvider"];
+  if(self.panel){[self.providerChoice selectItemAtIndex:[provider[@"kind"] isEqual:@"cli"] ? ([provider[@"tool"] isEqual:@"claude"] ? 1 : 0) : ([provider[@"kind"] isEqual:@"local"] ? 2 : 3)];self.endpoint.stringValue=provider[@"endpoint"] ?: @"";self.model.stringValue=provider[@"model"] ?: @"";self.key.stringValue=[provider[@"kind"] isEqual:@"remote"] ? [self credential:nil] : @"";[self syncProviderFields];}
+}
+- (NSString *)previousRelease {
+  NSString *previous=nil;NSDate *newest=NSDate.distantPast;
+  for(NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:[self.support stringByAppendingPathComponent:@"releases"] error:nil]) {
+    if([name isEqual:self.manifest[@"release"]])continue;
+    NSString *folder=[[self.support stringByAppendingPathComponent:@"releases"] stringByAppendingPathComponent:name];
+    if(![SERead([folder stringByAppendingPathComponent:@"state.json"])[@"status"] isEqual:@"customized"])continue;
+    NSDate *date=[[NSFileManager.defaultManager attributesOfItemAtPath:[folder stringByAppendingPathComponent:@"state.json"] error:nil] fileModificationDate];
+    if(date && [date compare:newest]==NSOrderedDescending){newest=date;previous=folder;}
+  }return previous;
+}
+- (NSDictionary *)state {
+  return @{@"enabled":@(self.manifest.count>0),@"busy":@(self.busy),@"phase":self.phase ?: @"idle",@"message":self.message ?: @"",@"ready":@(SERead([self path:@"ready.json"]).count>0),@"customized":@(!self.forceOriginal && SERead([self path:@"active.json"]).count>0),@"previewing":@(self.previewRecord!=nil),@"migrationAvailable":@([self previousRelease]!=nil),@"provider":[self provider]};
+}
+- (void)emitState {
+  self.status.stringValue=self.message;
+  [NSNotificationCenter.defaultCenter postNotificationName:@"SparkDesktopEvent" object:nil userInfo:@{@"type":@"editingState",@"state":[self state]}];
+}
+- (void)perform:(NSString *)phase message:(NSString *)message block:(id (^)(void))block completion:(void (^)(id,NSException *))completion {
+  if(self.busy){if(completion)completion(nil,[NSException exceptionWithName:@"E_BUSY" reason:@"An editing operation is already running" userInfo:nil]);return;}
+  self.busy=YES;SECancelRequested=NO;self.phase=phase;self.message=message;[self emitState];
+  for(NSButton *button in self.buttons)button.enabled=NO;self.buttons.firstObject.title=@"Cancel";self.buttons.firstObject.enabled=YES;
+  self.providerChoice.enabled=NO;self.endpoint.enabled=NO;self.model.enabled=NO;self.key.enabled=NO;
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0), ^{
+    id result;NSException *failure;
+    @try { result=block(); } @catch(NSException *exception){failure=exception;}
+    dispatch_async(dispatch_get_main_queue(), ^{
+      self.busy=NO;self.phase=failure ? @"error" : @"idle";self.message=failure ? failure.reason : ([result isKindOfClass:NSString.class] ? result : @"Done. Review the candidate before applying it.");
+      self.buttons.firstObject.title=@"Generate";for(NSButton *button in self.buttons)button.enabled=YES;self.providerChoice.enabled=YES;self.model.enabled=YES;[self syncProviderFields];[self emitState];
+      if(completion)completion(result,failure);
+    });
+  });
 }
 - (void)operation:(NSString *)message block:(NSString *(^)(void))block {
-  if (self.busy) return; self.busy=YES; self.status.stringValue=message;
-  for (NSButton *button in self.buttons) button.enabled=NO;
-  self.buttons.firstObject.title=@"Cancel";self.buttons.firstObject.enabled=YES;
-  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0), ^{
-    NSString *result;
-    @try { result=block(); } @catch (NSException *exception) { result=exception.reason; }
-    dispatch_async(dispatch_get_main_queue(), ^{ self.busy=NO; self.buttons.firstObject.title=@"Generate"; for (NSButton *button in self.buttons) button.enabled=YES; self.status.stringValue=result ?: @"Done"; });
-  });
+  [self perform:@"preparing" message:message block:block completion:nil];
+}
+- (void)cancel {
+  if(!self.busy)return;
+  @synchronized(NSTask.class){SECancelRequested=YES;for(NSTask *task in SETasks)if(task.running)[task terminate];}
+  self.message=@"Canceling; any generated candidate and prompt will be retained.";[self emitState];
 }
 - (NSString *)download:(NSDictionary *)asset kind:(NSString *)kind {
   if (!SEIdentifier(asset[@"sha256"], @"^[a-f0-9]{64}$") || !SEIdentifier(asset[@"url"], @"^https://github[.]com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases/download/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$") || [asset[@"size"] longLongValue]<=0) @throw [NSException exceptionWithName:@"SparkEditable" reason:@"Invalid pinned download." userInfo:nil];
@@ -157,7 +258,8 @@ static SparkEditableController *SEController;
 }
 - (NSString *)worker:(NSArray *)arguments key:(NSString *)key {
   NSMutableDictionary *env=[NSProcessInfo.processInfo.environment mutableCopy];
-  env[@"PATH"]=[NSString stringWithFormat:@"%@/.bun/bin:/opt/homebrew/bin:/usr/local/bin:%@",NSHomeDirectory(),env[@"PATH"] ?: @"/usr/bin:/bin:/usr/sbin:/sbin"];
+  env[@"PATH"]=SEPath();
+  [env removeObjectForKey:@"SPARK_EDITABLE_AI_KEY"];
   env[@"SPARK_HOME"]=[[self.support stringByDeletingLastPathComponent].stringByDeletingLastPathComponent stringByAppendingPathComponent:@"Legend Spark"];
   if(key.length)env[@"SPARK_EDITABLE_AI_KEY"]=key;
   NSArray *args=[@[[self.toolkit stringByAppendingPathComponent:@"runtime-bootstrap.sh"],[self.toolkit stringByAppendingPathComponent:@"editable-worker.cjs"]] arrayByAddingObjectsFromArray:arguments];
@@ -170,54 +272,64 @@ static SparkEditableController *SEController;
     [self worker:@[@"prepare",[NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"spark-editable.json"],source,self.toolkit,self.support] key:nil];
   }
 }
-- (BOOL)confirmAI {
-  if([[NSUserDefaults.standardUserDefaults stringForKey:@"SparkEditableConsentEndpoint"] isEqual:self.endpoint.stringValue])return YES;
-  NSAlert *alert=[NSAlert new]; alert.messageText=@"Send this request to your AI provider?";
-  alert.informativeText=@"The prompt, relevant app source, build diagnostics and, for migrations, previous prompts and patches will be sent to the configured endpoint. Your provider may charge for usage. Changes remain separate until you apply them.";
+- (BOOL)confirmAI:(NSDictionary *)provider {
+  if([provider[@"kind"] isEqual:@"local"])return YES;
+  NSString *identity=[provider[@"kind"] isEqual:@"cli"] ? [@"cli:" stringByAppendingString:provider[@"tool"]] : provider[@"endpoint"];
+  if([[NSUserDefaults.standardUserDefaults stringForKey:@"SparkEditableConsentEndpoint"] isEqual:identity])return YES;
+  NSAlert *alert=[NSAlert new];alert.messageText=@"Send this request to your AI provider?";
+  alert.informativeText=@"The prompt, relevant app source, build diagnostics and, for migrations, previous prompts and patches are passed to the selected provider. Installed CLI tools use their existing login and may send this context to their cloud service. Changes remain separate until you apply them.";
   [alert addButtonWithTitle:@"Send request"];[alert addButtonWithTitle:@"Cancel"];
   if([alert runModal]!=NSAlertFirstButtonReturn)return NO;
-  [NSUserDefaults.standardUserDefaults setObject:self.endpoint.stringValue forKey:@"SparkEditableConsentEndpoint"];
-  return YES;
+  [NSUserDefaults.standardUserDefaults setObject:identity forKey:@"SparkEditableConsentEndpoint"];return YES;
 }
-- (void)generate:(id)sender {
-  if(self.busy){@synchronized(NSTask.class){for(NSTask *task in SETasks)if(task.running)[task terminate];}self.status.stringValue=@"Canceling; any generated candidate and prompt will be retained.";return;}
-  [self generateMigration:NO];
+- (NSDictionary *)generateRequest:(NSDictionary *)args {
+  NSString *prompt=args[@"prompt"];
+  if(![prompt isKindOfClass:NSString.class] || ![prompt stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length || prompt.length>32000)@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Enter a prompt of at most 32000 characters" userInfo:nil];
+  NSDictionary *raw=args[@"provider"] ?: [self provider],*provider=SEProvider(raw);
+  if(![provider[@"kind"] isEqual:@"local"] && ![args[@"allowSourceSharing"] isEqual:@YES])@throw [NSException exceptionWithName:@"E_PERMISSION" reason:@"Explain source sharing and obtain consent before generating edits" userInfo:nil];
+  if([args[@"migration"] boolValue] && !SERead([self path:@"state.json"])[@"migration"])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Prepare an edit migration first" userInfo:nil];
+  [self configure:raw];
+  NSMutableDictionary *request=[provider mutableCopy];request[@"provider"]=request[@"kind"];[request removeObjectForKey:@"kind"];request[@"prompt"]=prompt;request[@"allowSourceSharing"]=@YES;request[@"migration"]=@([args[@"migration"] boolValue]);return request;
 }
+- (NSDictionary *)runPrompt:(NSDictionary *)request key:(NSString *)key {
+  [self prepare];NSString *file=[self path:@"request.json"];SEWrite(file,request);
+  @try { return SEResult([self worker:@[@"prompt",self.directory,file] key:key]); }
+  @finally { [NSFileManager.defaultManager removeItemAtPath:file error:nil]; }
+}
+- (void)generate:(id)sender { if(self.busy){[self cancel];return;}[self generateMigration:NO]; }
 - (void)generateMigration:(BOOL)migration {
-  if(!self.prompt.string.length || !self.model.stringValue.length) { self.status.stringValue=@"Enter a prompt and provider model.";return; }
-  if(![self confirmAI]){self.status.stringValue=@"Request canceled. No source was sent and no changes were applied.";return;}
-  NSString *key=self.key.stringValue;
-  @try { [self credential:key]; } @catch(NSException *e) {self.status.stringValue=e.reason;return;}
-  [NSUserDefaults.standardUserDefaults setObject:self.endpoint.stringValue forKey:@"SparkEditableEndpoint"];
-  [NSUserDefaults.standardUserDefaults setObject:self.model.stringValue forKey:@"SparkEditableModel"];
-  NSDictionary *request=@{@"prompt":self.prompt.string,@"model":self.model.stringValue,@"endpoint":self.endpoint.stringValue,@"allowSourceSharing":@YES,@"migration":@(migration)};
-  [self operation:@"Preparing tools and generating a separate candidate…" block:^NSString *{
-    [self prepare];NSString *file=[self path:@"request.json"]; SEWrite(file,request);
-    @try { [self worker:@[@"prompt",self.directory,file] key:key]; } @finally { [NSFileManager.defaultManager removeItemAtPath:file error:nil]; }
-    return @"Candidate compiled successfully. Use Review to inspect its prompt and changes, then Apply when ready.";
-  }];
+  @try {
+    NSDictionary *provider=[self panelProvider];if(![self confirmAI:provider])return;
+    NSDictionary *request=[self generateRequest:@{@"prompt":self.prompt.string,@"provider":provider,@"allowSourceSharing":@YES,@"migration":@(migration)}];
+    NSString *key=[provider[@"kind"] isEqual:@"remote"] ? [self credential:nil] : nil;
+    [self perform:@"generating" message:@"Preparing tools and generating a separate candidate…" block:^id{[self runPrompt:request key:key];return @"Candidate compiled successfully. Review its prompt and changes before applying.";} completion:nil];
+  } @catch(NSException *e){self.message=e.reason;[self emitState];}
+}
+- (NSDictionary *)prepareMigration {
+  [self prepare];NSDictionary *migration=SERead([self path:@"state.json"])[@"migration"];
+  if(!migration){NSString *previous=[self previousRelease];if(!previous)return @{@"status":@"none",@"conflicts":@[]};[self worker:@[@"migrate",previous,self.directory] key:nil];migration=SERead([self path:@"state.json"])[@"migration"];}
+  if(![migration[@"conflicts"] count])[self worker:@[@"build",self.directory,migration[@"candidate"]] key:nil];return migration;
 }
 - (void)migrate:(id)sender {
   if(SERead([self path:@"state.json"])[@"migration"]) {
     if(!self.prompt.string.length)self.prompt.string=@"Preserve my previous customizations on this updated app. Use the saved prompts to understand their intent and resolve incompatibilities.";
-    [self generateMigration:YES]; return;
+    [self generateMigration:YES];return;
   }
-  [self operation:@"Preparing migration from the previous customized release…" block:^NSString *{
-    [self prepare]; NSString *releases=[self.support stringByAppendingPathComponent:@"releases"],*previous=nil; NSDate *newest=NSDate.distantPast;
-    for(NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:releases error:nil]) {
-      if([name isEqual:self.manifest[@"release"]])continue;
-      NSString *folder=[releases stringByAppendingPathComponent:name];NSDictionary *state=SERead([folder stringByAppendingPathComponent:@"state.json"]);
-      if(![state[@"status"] isEqual:@"customized"])continue;
-      NSDate *date=[[NSFileManager.defaultManager attributesOfItemAtPath:[folder stringByAppendingPathComponent:@"state.json"] error:nil] fileModificationDate];
-      if([date compare:newest]==NSOrderedDescending){newest=date;previous=folder;}
-    }
-    if(!previous) return @"No previous customized release was found. Your current source is unchanged.";
-    [self worker:@[@"migrate",previous,self.directory] key:nil];
-    NSDictionary *migration=SERead([self path:@"state.json"])[@"migration"];
-    if([migration[@"conflicts"] count])return @"Migration has conflicts. Enter a migration prompt and choose Migrate edits again to ask AI to resolve them.";
-    [self worker:@[@"build",self.directory,migration[@"candidate"]] key:nil];
-    return @"Migration compiled. Review it and Apply, or enter a prompt and choose Migrate edits again for AI assistance.";
-  }];
+  [self perform:@"migrating" message:@"Preparing migration from the previous customized release…" block:^id{
+    NSDictionary *migration=[self prepareMigration];
+    if([migration[@"status"] isEqual:@"none"])return @"No previous customized release was found.";
+    if([migration[@"conflicts"] count])return @"Migration has conflicts. Enter a prompt and choose Migrate edits again to resolve them.";
+    return @"Migration compiled. Review it and Apply, or enter a migration prompt for AI assistance.";
+  } completion:nil];
+}
+- (NSDictionary *)editReview {
+  NSString *text=[NSString stringWithContentsOfFile:[self path:@"review.txt"] encoding:NSUTF8StringEncoding error:nil] ?: @"";
+  NSDictionary *state=SERead([self path:@"state.json"]);NSMutableArray *history=[NSMutableArray arrayWithArray:state[@"inheritedPrompts"] ?: @[]];[history addObjectsFromArray:state[@"history"] ?: @[]];
+  // The full diff is already in text; avoid sending stored file contents twice over the bridge.
+  NSMutableArray *prompts=[NSMutableArray new];
+  for(NSDictionary *item in history){NSMutableDictionary *metadata=[NSMutableDictionary new];for(NSString *key in @[@"id",@"prompt",@"baseRelease",@"created",@"model",@"provider",@"providerKind",@"status",@"summary",@"error"])if(item[key])metadata[key]=item[key];[prompts addObject:metadata];}
+  NSMutableDictionary *review=[@{@"text":text,@"prompts":prompts} mutableCopy];
+  NSString *candidate=SERead([self path:@"ready.json"])[@"candidate"];if(candidate)review[@"candidate"]=candidate;return review;
 }
 - (void)review:(id)sender {
   NSString *content=[NSString stringWithContentsOfFile:[self path:@"review.txt"] encoding:NSUTF8StringEncoding error:nil];
@@ -230,31 +342,49 @@ static SparkEditableController *SEController;
   NSTextView *text=[[NSTextView alloc] initWithFrame:scroll.bounds];text.editable=NO;text.font=[NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];text.string=content;text.autoresizingMask=NSViewWidthSizable;text.textContainer.widthTracksTextView=YES;scroll.documentView=text;
   self.reviewWindow.contentView=scroll;[self.reviewWindow makeKeyAndOrderFront:nil];
 }
-- (void)preview:(id)sender {
-  if(!SERead([self path:@"ready.json"]).count){self.status.stringValue=@"Generate or migrate a candidate first.";return;}
-  NSAlert *alert=[NSAlert new];alert.messageText=@"Preview this customization?";alert.informativeText=@"The app will reload with the candidate for this session. Save your work first. Preview uses your current app data; it can change that data. Restart or choose Original to leave preview.";[alert addButtonWithTitle:@"Preview"];[alert addButtonWithTitle:@"Cancel"];
-  if([alert runModal]!=NSAlertFirstButtonReturn)return;
-  [self operation:@"Preparing preview…" block:^NSString *{
-    [self prepare];[self worker:@[@"verify",self.directory] key:nil];NSDictionary *ready=SERead([self path:@"ready.json"]);
-    SEWrite([self path:@"pending.json"],@{@"previous":SERead([self path:@"active.json"]),@"launched":@NO,@"activation":NSUUID.UUID.UUIDString});
-    dispatch_async(dispatch_get_main_queue(),^{self.previewRecord=ready;self.forceOriginal=NO;self.started=NO;[[NSNotificationCenter defaultCenter] postNotificationName:@"SparkEditableReload" object:nil];});
-    return @"Previewing this candidate for this session. Apply to keep it, or Original to return to the shipped app.";
-  }];
+- (void)activateCandidate:(BOOL)preview {
+  [self prepare];[self worker:@[preview ? @"verify" : @"accept",self.directory] key:nil];NSDictionary *ready=SERead([self path:@"ready.json"]);
+  SEWrite([self path:@"pending.json"],@{@"previous":SERead([self path:@"active.json"]),@"launched":@NO,@"activation":NSUUID.UUID.UUIDString});
+  if(!preview)SEWrite([self path:@"active.json"],ready);
+  dispatch_async(dispatch_get_main_queue(),^{self.previewRecord=preview ? ready : nil;self.forceOriginal=NO;self.started=NO;[self emitState];});
 }
-- (void)apply:(id)sender {
-  if(!SERead([self path:@"ready.json"]).count){self.status.stringValue=@"Generate or migrate a candidate first.";return;}
-  NSAlert *alert=[NSAlert new];alert.messageText=@"Apply the reviewed customization?";alert.informativeText=@"The app will reload. Save your work first. Code changes can affect app data; reverting code does not undo data changes.";[alert addButtonWithTitle:@"Apply and reload"];[alert addButtonWithTitle:@"Cancel"];
-  if([alert runModal]!=NSAlertFirstButtonReturn)return;
-  [self operation:@"Activating reviewed customization…" block:^NSString *{
-    [self prepare];[self worker:@[@"accept",self.directory] key:nil];NSDictionary *ready=SERead([self path:@"ready.json"]),*previous=SERead([self path:@"active.json"]);
-    SEWrite([self path:@"pending.json"],@{@"previous":previous,@"launched":@NO,@"activation":NSUUID.UUID.UUIDString});SEWrite([self path:@"active.json"],ready);
-    dispatch_async(dispatch_get_main_queue(),^{self.previewRecord=nil;self.forceOriginal=NO;self.started=NO; [[NSNotificationCenter defaultCenter] postNotificationName:@"SparkEditableReload" object:nil];});
-    return @"Customization activated. The original remains available.";
-  }];
+- (void)reload {
+  // Let the bridge deliver completion before replacing the JS runtime.
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW,100*NSEC_PER_MSEC),dispatch_get_main_queue(),^{[[NSNotificationCenter defaultCenter] postNotificationName:@"SparkEditableReload" object:nil];});
 }
+- (void)activate:(BOOL)preview {
+  NSAlert *alert=[NSAlert new];alert.messageText=preview ? @"Preview this customization?" : @"Apply the reviewed customization?";alert.informativeText=@"The app will reload using your current data. Save your work first. Code changes can affect app data; reverting code does not undo data changes.";[alert addButtonWithTitle:preview ? @"Preview" : @"Apply and reload"];[alert addButtonWithTitle:@"Cancel"];
+  if([alert runModal]!=NSAlertFirstButtonReturn)return;
+  [self perform:preview ? @"previewing" : @"applying" message:@"Activating customization…" block:^id{[self activateCandidate:preview];return preview ? @"Previewing for this session. Apply to keep it, or choose Original." : @"Customization activated. The original remains available.";} completion:^(id result,NSException *error){if(!error)[self reload];}];
+}
+- (void)preview:(id)sender { [self activate:YES]; }
+- (void)apply:(id)sender { [self activate:NO]; }
 - (void)original:(id)sender {
   self.previewRecord=nil;self.forceOriginal=YES;[NSFileManager.defaultManager removeItemAtPath:[self path:@"active.json"] error:nil];[NSFileManager.defaultManager removeItemAtPath:[self path:@"pending.json"] error:nil];
-  [[NSNotificationCenter defaultCenter] postNotificationName:@"SparkEditableReload" object:nil];self.status.stringValue=@"Using the original app. Your source, prompts and patches are preserved.";
+  self.phase=@"idle";self.message=@"Using the original app. Your source, prompts and patches are preserved.";[self emitState];[self reload];
+}
+- (void)handleCall:(NSNotification *)note {
+  if(!self.manifest.count)return;
+  void (^claim)(void)=note.userInfo[@"claim"];claim();
+  void (^reply)(NSString *,NSString *,NSString *)=note.userInfo[@"reply"];
+  void (^done)(id,NSException *)=^(id result,NSException *error){
+    if(error){reply(nil,[error.name hasPrefix:@"E_"] ? error.name : @"E_NATIVE",error.reason);return;}
+    NSData *data=[NSJSONSerialization dataWithJSONObject:result ?: NSNull.null options:NSJSONWritingFragmentsAllowed error:nil];reply([[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding],nil,nil);
+  };
+  NSString *method=note.userInfo[@"method"];NSDictionary *args=note.userInfo[@"args"];
+  @try {
+    if([method isEqual:@"state"]){done([self state],nil);return;}
+    if([method isEqual:@"cancel"]){[self cancel];done(nil,nil);return;}
+    if([method isEqual:@"show"]){[self show:nil];done(nil,nil);return;}
+    if(self.busy)@throw [NSException exceptionWithName:@"E_BUSY" reason:@"An editing operation is already running" userInfo:nil];
+    if([method isEqual:@"configure"]){[self configure:args[@"provider"]];[self emitState];done(nil,nil);}
+    else if([method isEqual:@"review"])done([self editReview],nil);
+    else if([method isEqual:@"prompt"]){NSDictionary *request=[self generateRequest:args];NSString *key=[request[@"provider"] isEqual:@"remote"] ? [self credential:nil] : nil;[self perform:@"generating" message:@"Generating customization…" block:^id{return [self runPrompt:request key:key];} completion:done];}
+    else if([method isEqual:@"migrate"])[self perform:@"migrating" message:@"Preparing migration…" block:^id{return [self prepareMigration];} completion:done];
+    else if([method isEqual:@"preview"] || [method isEqual:@"apply"]){BOOL preview=[method isEqual:@"preview"];[self perform:preview ? @"previewing" : @"applying" message:@"Activating customization…" block:^id{[self activateCandidate:preview];return nil;} completion:^(id result,NSException *error){done(result,error);if(!error)[self reload];}];}
+    else if([method isEqual:@"original"]){[self original:nil];done(nil,nil);}
+    else @throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Unknown editing operation" userInfo:nil];
+  } @catch(NSException *error){done(nil,error);}
 }
 - (void)recoverActivation:(NSString *)activation {
   if([SERead([self path:@"pending.json"])[@"activation"] isEqual:activation]) { [self show:nil];[self original:nil];self.status.stringValue=@"The customization did not render within 30 seconds. Restored the original; your changes are preserved."; }
@@ -287,7 +417,7 @@ static void SparkEditableStart(void) {
   if(SEController)return;SEController=[SparkEditableController new];
   if(!SEController.manifest.count)return;
   NSString *notice=[@"SparkEditableSeen-" stringByAppendingString:SEController.manifest[@"release"]];
-  if(![NSUserDefaults.standardUserDefaults boolForKey:notice] && !SERead([SEController path:@"state.json"]).count) {
+  if(![SEController.manifest[@"editing"][@"ui"] isEqual:@"custom"] && ![NSUserDefaults.standardUserDefaults boolForKey:notice] && !SERead([SEController path:@"state.json"]).count) {
     for(NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:[SEController.support stringByAppendingPathComponent:@"releases"] error:nil]) {
       NSDictionary *state=SERead([[[SEController.support stringByAppendingPathComponent:@"releases"] stringByAppendingPathComponent:name] stringByAppendingPathComponent:@"state.json"]);
       if([state[@"status"] isEqual:@"customized"]) {
@@ -300,6 +430,7 @@ static void SparkEditableStart(void) {
 static NSURL *SparkEditableBundleURL(void) { @try { SparkEditableStart();return [SEController bundleURL]; } @catch(NSException *exception) { return [NSBundle.mainBundle URLForResource:@"main" withExtension:@"jsbundle"]; } }
 static NSMenu *SparkEditableDockMenu(NSMenu *existing) {
   SparkEditableStart(); NSMenu *menu=existing ? [existing copy] : [NSMenu new];
+  if([SEController.manifest[@"editing"][@"ui"] isEqual:@"custom"])return menu;
   NSMenuItem *item=[[NSMenuItem alloc] initWithTitle:@"Customize app…" action:@selector(show:) keyEquivalent:@""];
   item.target=SEController;[menu addItem:item];return menu;
 }

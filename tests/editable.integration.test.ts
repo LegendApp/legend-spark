@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, symlinkSync, renameSync, readdirSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, symlinkSync, renameSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import os from 'node:os';
@@ -56,6 +56,19 @@ it.skipIf(process.env.SPARK_TEST_EDITABLE !== '1' || process.platform !== 'darwi
       worker.accept(dir);
       expect(readFileSync(path.join(dir, 'work/index.js'), 'utf8')).toContain("color: '#2563eb', fontSize: 48");
     } finally { await provider.close(); }
+    // Exercise actual CLI subprocesses and production compilation after relocation.
+    const bin = path.join(temporary, 'cli-bin'); mkdirSync(bin);
+    for (const engine of runtimes) {
+      const tool = engine.name === 'node' ? 'codex' : 'claude', executable = path.join(bin, tool);
+      writeFileSync(executable, `#!${engine.executable}\nconst fs=require('node:fs');let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const body=JSON.parse(input.slice(input.indexOf('\\n')+1));const replies=body.messages.filter(item=>item.role==='tool');const call=(name,args)=>({content:'',tool_calls:[{id:String(replies.length),function:{name,arguments:JSON.stringify(args)}}]});const message=replies.length===0?call('read_file',{path:'index.js'}):replies.length===1?call('write_file',{path:'index.js',content:JSON.parse(replies[0].content).replace(/(?:Custom greeting|CLI greeting node)/g,'CLI greeting ${engine.name}')}):{content:'Changed greeting via CLI',tool_calls:[]};const out=process.argv.indexOf('--output-last-message');if(out>=0)fs.writeFileSync(process.argv[out+1],JSON.stringify(message));else console.log(JSON.stringify({structured_output:message}));});\n`); chmodSync(executable, 0o755);
+      const request = path.join(temporary, 'cli-request.json');
+      writeJson(request, { prompt: `Change greeting using ${tool}`, provider: 'cli', tool, allowSourceSharing: true });
+      await run(dir, [engine.executable, path.join(toolkit, 'editable-worker.cjs'), 'prompt', dir, request], { capture: true, env: { SPARK_JS_RUNTIME: engine.executable, PATH: bin + path.delimiter + process.env.PATH } });
+      const ready = readJson(path.join(dir, 'ready.json')); expect(readFileSync(path.join(dir, 'builds', ready.build, 'main.jsbundle')).subarray(0,8).toString('hex')).toBe('c61fbc03c103191f');
+      worker.accept(dir);
+      expect(readFileSync(path.join(dir, 'work/index.js'), 'utf8')).toContain(`CLI greeting ${engine.name}`);
+      expect(readJson(path.join(dir, 'state.json')).history.at(-1).provider).toBe(`cli:${tool}`);
+    }
     console.log(`Editable toolkit: ${manifest.toolkit.size} bytes compressed; source: ${manifest.source.size} bytes`);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 }, 600000);
