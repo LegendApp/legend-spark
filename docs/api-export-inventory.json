@@ -68,6 +68,8 @@
   "additions": [
     "./contracts",
     "./windows/macos",
-    "./diagnostics"
+    "./diagnostics",
+    "./ai",
+    "./ai/codex"
   ]
 }

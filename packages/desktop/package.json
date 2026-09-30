@@ -51,7 +51,9 @@
     "./ui/classnames": "./ui-classnames.ts",
     "./contracts": "./contracts.ts",
     "./windows/macos": "./windows-macos.ts",
-    "./diagnostics": "./diagnostics.ts"
+    "./diagnostics": "./diagnostics.ts",
+    "./ai": "./ai.ts",
+    "./ai/codex": "./ai-codex.ts"
   },
   "files": [
     "*.ts",
@@ -98,7 +100,9 @@
     "@legendapp/spark-documents": "0.0.1-next.2",
     "@legendapp/spark-commands": "0.0.1-next.2",
     "@legendapp/spark-settings-ui": "0.0.1-next.2",
-    "@react-native-community/cli-types": "20.1.3"
+    "@react-native-community/cli-types": "20.1.3",
+    "@legendapp/spark-ai": "0.0.1-next.2",
+    "@legendapp/spark-codex": "0.0.1-next.2"
   },
   "description": "Legend Spark \u2014 native applications with React Native and Expo",
   "bin": {
