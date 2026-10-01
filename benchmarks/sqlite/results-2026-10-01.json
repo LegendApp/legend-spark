@@ -1,0 +1,4998 @@
+{
+  "sourceHead": "98b4f368889d68f09697875dd68b2afc10578f7b",
+  "machine": "Apple M4",
+  "rounds": [
+    {
+      "provider": "nitro",
+      "round": 0,
+      "peakRssBytes": 269975552,
+      "records": [
+        {
+          "metadata": {
+            "provider": "nitro",
+            "sqlite": {
+              "version": "3.49.0"
+            },
+            "compileOptions": [
+              {
+                "compile_options": "ATOMIC_INTRINSICS=1"
+              },
+              {
+                "compile_options": "COMPILER=clang-21.0.0"
+              },
+              {
+                "compile_options": "DEFAULT_AUTOVACUUM"
+              },
+              {
+                "compile_options": "DEFAULT_CACHE_SIZE=-2000"
+              },
+              {
+                "compile_options": "DEFAULT_FILE_FORMAT=4"
+              },
+              {
+                "compile_options": "DEFAULT_JOURNAL_SIZE_LIMIT=-1"
+              },
+              {
+                "compile_options": "DEFAULT_MEMSTATUS=0"
+              },
+              {
+                "compile_options": "DEFAULT_MMAP_SIZE=0"
+              },
+              {
+                "compile_options": "DEFAULT_PAGE_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_PCACHE_INITSZ=20"
+              },
+              {
+                "compile_options": "DEFAULT_RECURSIVE_TRIGGERS"
+              },
+              {
+                "compile_options": "DEFAULT_SECTOR_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_SYNCHRONOUS=2"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_AUTOCHECKPOINT=1000"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_SYNCHRONOUS=1"
+              },
+              {
+                "compile_options": "DEFAULT_WORKER_THREADS=0"
+              },
+              {
+                "compile_options": "DIRECT_OVERFLOW_READ"
+              },
+              {
+                "compile_options": "DQS=0"
+              },
+              {
+                "compile_options": "LIKE_DOESNT_MATCH_BLOBS"
+              },
+              {
+                "compile_options": "MALLOC_SOFT_LIMIT=1024"
+              },
+              {
+                "compile_options": "MAX_ATTACHED=10"
+              },
+              {
+                "compile_options": "MAX_COLUMN=2000"
+              },
+              {
+                "compile_options": "MAX_COMPOUND_SELECT=500"
+              },
+              {
+                "compile_options": "MAX_DEFAULT_PAGE_SIZE=8192"
+              },
+              {
+                "compile_options": "MAX_EXPR_DEPTH=0"
+              },
+              {
+                "compile_options": "MAX_FUNCTION_ARG=1000"
+              },
+              {
+                "compile_options": "MAX_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_LIKE_PATTERN_LENGTH=50000"
+              },
+              {
+                "compile_options": "MAX_MMAP_SIZE=0x7fff0000"
+              },
+              {
+                "compile_options": "MAX_PAGE_COUNT=0xfffffffe"
+              },
+              {
+                "compile_options": "MAX_PAGE_SIZE=65536"
+              },
+              {
+                "compile_options": "MAX_SQL_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_TRIGGER_DEPTH=1000"
+              },
+              {
+                "compile_options": "MAX_VARIABLE_NUMBER=32766"
+              },
+              {
+                "compile_options": "MAX_VDBE_OP=250000000"
+              },
+              {
+                "compile_options": "MAX_WORKER_THREADS=8"
+              },
+              {
+                "compile_options": "MUTEX_PTHREADS"
+              },
+              {
+                "compile_options": "OMIT_DEPRECATED"
+              },
+              {
+                "compile_options": "OMIT_PROGRESS_CALLBACK"
+              },
+              {
+                "compile_options": "OMIT_SHARED_CACHE"
+              },
+              {
+                "compile_options": "SYSTEM_MALLOC"
+              },
+              {
+                "compile_options": "TEMP_STORE=1"
+              },
+              {
+                "compile_options": "THREADSAFE=1"
+              },
+              {
+                "compile_options": "USE_ALLOCA"
+              }
+            ],
+            "initialJournal": {
+              "journal_mode": "wal"
+            },
+            "journal": {
+              "journal_mode": "wal"
+            },
+            "synchronous": {
+              "synchronous": 2
+            },
+            "rows": 20000,
+            "points": 1000
+          },
+          "correctness": "passed"
+        },
+        {
+          "provider": "nitro",
+          "samples": [
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 37.368374999999986
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 31.404416999999995
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 38.52004199999999
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 28.974208000000004
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 51.72216700000001
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 43.09974999999997
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 33.68816700000002
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 0,
+              "ms": 9.456833999999958
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 1,
+              "ms": 7.272625000000005
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 2,
+              "ms": 11.40995799999996
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 3,
+              "ms": 7.336666999999977
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 4,
+              "ms": 7.6889170000000036
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 5,
+              "ms": 7.295000000000016
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 6,
+              "ms": 9.367458
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 0,
+              "ms": 58.610457999999994
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 1,
+              "ms": 56.62758299999996
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 2,
+              "ms": 66.08212500000002
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 3,
+              "ms": 60.24191599999995
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 4,
+              "ms": 56.97020799999996
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 5,
+              "ms": 58.16933300000005
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 6,
+              "ms": 57.44841699999995
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 0,
+              "ms": 135.95512500000018
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 1,
+              "ms": 149.61804200000006
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 2,
+              "ms": 140.5863330000002
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 3,
+              "ms": 189.599375
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 4,
+              "ms": 152.14812499999994
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 5,
+              "ms": 140.0458749999998
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 6,
+              "ms": 147.45850000000019
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 0,
+              "ms": 26.187291000000187
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 1,
+              "ms": 27.330417000000125
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 2,
+              "ms": 29.4518750000002
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 3,
+              "ms": 26.268416000000343
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 4,
+              "ms": 26.540500000000065
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 5,
+              "ms": 27.940999999999804
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 6,
+              "ms": 28.45729100000017
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 0,
+              "ms": 5.266500000000178
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 1,
+              "ms": 5.0433750000001965
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 2,
+              "ms": 7.120417000000089
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 3,
+              "ms": 6.289999999999964
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 4,
+              "ms": 5.186166999999841
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 5,
+              "ms": 5.39916600000015
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 6,
+              "ms": 5.121000000000095
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 18.4375
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 17.628165999999965
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 18.387041999999838
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 21.60774999999967
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 17.73641600000019
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 18.698624999999993
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 18.237167000000227
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 0,
+              "ms": 14.843041999999969
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 1,
+              "ms": 15.390625
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 2,
+              "ms": 15.96362500000032
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 3,
+              "ms": 15.280833000000257
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 4,
+              "ms": 15.720374999999876
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 5,
+              "ms": 16.784708000000137
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 6,
+              "ms": 18.763334000000214
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 4.663500000000113
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 4.2491250000002765
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 4.601792000000387
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 4.276708999999755
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 4.564875000000029
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 4.452209000000039
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 4.997583000000304
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 3.385541000000103
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 2.990374999999858
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 3.4455840000000535
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 2.9932080000003225
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 3.1213749999997162
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 2.6871249999999236
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 3.043167000000267
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 18.636167000000114
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 12.00262500000008
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 19.267957999999908
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 20.134500000000116
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 18.160957999999937
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 17.64520799999991
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 17.17812499999991
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 0,
+              "ms": 17.48541699999987
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 1,
+              "ms": 17.780583000000206
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 2,
+              "ms": 17.41924999999992
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 3,
+              "ms": 17.511499999999614
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 4,
+              "ms": 17.390041999999994
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 5,
+              "ms": 17.569500000000062
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 6,
+              "ms": 19.738000000000284
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 0,
+              "ms": 21.605165999999826
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 1,
+              "ms": 23.693499999999858
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 2,
+              "ms": 21.629750000000058
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 3,
+              "ms": 24.124041999999918
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 4,
+              "ms": 21.529999999999745
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 5,
+              "ms": 23.94204200000013
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 6,
+              "ms": 21.739042000000154
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 0,
+              "ms": 115.34216700000025
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 0,
+              "ms": 128.3790839999997
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 1,
+              "ms": 111.23416599999973
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 1,
+              "ms": 124.28324999999995
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 2,
+              "ms": 116.34799999999996
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 2,
+              "ms": 130.87795799999958
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 3,
+              "ms": 118.155667
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 3,
+              "ms": 131.1747919999998
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 4,
+              "ms": 113.26370799999995
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 4,
+              "ms": 127.80270799999971
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 5,
+              "ms": 144.01537499999995
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 5,
+              "ms": 157.0875000000001
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 6,
+              "ms": 130.03891699999986
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 6,
+              "ms": 150.22970900000018
+            }
+          ],
+          "correctness": "passed",
+          "completed": true
+        }
+      ]
+    },
+    {
+      "provider": "op",
+      "round": 0,
+      "peakRssBytes": 208830464,
+      "records": [
+        {
+          "metadata": {
+            "provider": "op",
+            "sqlite": {
+              "version": "3.51.3"
+            },
+            "compileOptions": [
+              {
+                "compile_options": "ATOMIC_INTRINSICS=1"
+              },
+              {
+                "compile_options": "COMPILER=clang-21.0.0"
+              },
+              {
+                "compile_options": "DEFAULT_AUTOVACUUM"
+              },
+              {
+                "compile_options": "DEFAULT_CACHE_SIZE=-2000"
+              },
+              {
+                "compile_options": "DEFAULT_FILE_FORMAT=4"
+              },
+              {
+                "compile_options": "DEFAULT_JOURNAL_SIZE_LIMIT=-1"
+              },
+              {
+                "compile_options": "DEFAULT_MMAP_SIZE=0"
+              },
+              {
+                "compile_options": "DEFAULT_PAGE_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_PCACHE_INITSZ=20"
+              },
+              {
+                "compile_options": "DEFAULT_RECURSIVE_TRIGGERS"
+              },
+              {
+                "compile_options": "DEFAULT_SECTOR_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_SYNCHRONOUS=2"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_AUTOCHECKPOINT=1000"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_SYNCHRONOUS=2"
+              },
+              {
+                "compile_options": "DEFAULT_WORKER_THREADS=0"
+              },
+              {
+                "compile_options": "DIRECT_OVERFLOW_READ"
+              },
+              {
+                "compile_options": "ENABLE_LOCKING_STYLE=0"
+              },
+              {
+                "compile_options": "MALLOC_SOFT_LIMIT=1024"
+              },
+              {
+                "compile_options": "MAX_ATTACHED=10"
+              },
+              {
+                "compile_options": "MAX_COLUMN=2000"
+              },
+              {
+                "compile_options": "MAX_COMPOUND_SELECT=500"
+              },
+              {
+                "compile_options": "MAX_DEFAULT_PAGE_SIZE=8192"
+              },
+              {
+                "compile_options": "MAX_EXPR_DEPTH=1000"
+              },
+              {
+                "compile_options": "MAX_FUNCTION_ARG=1000"
+              },
+              {
+                "compile_options": "MAX_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_LIKE_PATTERN_LENGTH=50000"
+              },
+              {
+                "compile_options": "MAX_MMAP_SIZE=0x7fff0000"
+              },
+              {
+                "compile_options": "MAX_PAGE_COUNT=0xfffffffe"
+              },
+              {
+                "compile_options": "MAX_PAGE_SIZE=65536"
+              },
+              {
+                "compile_options": "MAX_SQL_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_TRIGGER_DEPTH=1000"
+              },
+              {
+                "compile_options": "MAX_VARIABLE_NUMBER=32766"
+              },
+              {
+                "compile_options": "MAX_VDBE_OP=250000000"
+              },
+              {
+                "compile_options": "MAX_WORKER_THREADS=8"
+              },
+              {
+                "compile_options": "MUTEX_PTHREADS"
+              },
+              {
+                "compile_options": "SYSTEM_MALLOC"
+              },
+              {
+                "compile_options": "TEMP_STORE=1"
+              },
+              {
+                "compile_options": "THREADSAFE=1"
+              }
+            ],
+            "initialJournal": {
+              "journal_mode": "wal"
+            },
+            "journal": {
+              "journal_mode": "wal"
+            },
+            "synchronous": {
+              "synchronous": 2
+            },
+            "rows": 20000,
+            "points": 1000
+          },
+          "correctness": "passed"
+        },
+        {
+          "provider": "op",
+          "samples": [
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 26.255832999999996
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 26.226666000000023
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 26.254666999999984
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 26.171375000000012
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 26.244958999999994
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 24.229874999999993
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 25.467124999999953
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 0,
+              "ms": 6.034167000000025
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 1,
+              "ms": 5.919457999999963
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 2,
+              "ms": 5.870291000000009
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 3,
+              "ms": 5.920584000000019
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 4,
+              "ms": 5.879624999999976
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 5,
+              "ms": 5.9028749999999945
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 6,
+              "ms": 5.9306250000000205
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 0,
+              "ms": 43.96304199999997
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 1,
+              "ms": 43.855249999999955
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 2,
+              "ms": 44.17862500000001
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 3,
+              "ms": 43.96883300000002
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 4,
+              "ms": 44.55116600000008
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 5,
+              "ms": 44.151707999999985
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 6,
+              "ms": 44.36725000000001
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 0,
+              "ms": 107.03212500000006
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 1,
+              "ms": 109.25758299999995
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 2,
+              "ms": 107.37754100000006
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 3,
+              "ms": 108.95849999999996
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 4,
+              "ms": 110.08412499999986
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 5,
+              "ms": 108.03933400000005
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 6,
+              "ms": 106.95349999999985
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 0,
+              "ms": 20.41608300000007
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 1,
+              "ms": 16.19054099999994
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 2,
+              "ms": 19.889167000000043
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 3,
+              "ms": 20.346915999999965
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 4,
+              "ms": 20.300417000000152
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 5,
+              "ms": 20.251582999999982
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 6,
+              "ms": 20.31987499999991
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 0,
+              "ms": 4.173999999999978
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 1,
+              "ms": 4.423792000000049
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 2,
+              "ms": 5.03104200000007
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 3,
+              "ms": 3.9267919999999776
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 4,
+              "ms": 3.9113750000001346
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 5,
+              "ms": 4.020375000000058
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 6,
+              "ms": 4.082000000000107
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 10.022458000000142
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 11.74716699999999
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 11.781334000000015
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 11.673041000000012
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 11.555083999999852
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 11.508041999999932
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 11.725750000000062
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 0,
+              "ms": 5.996667000000116
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 1,
+              "ms": 4.951625000000149
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 2,
+              "ms": 5.421041999999943
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 3,
+              "ms": 5.726582999999891
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 4,
+              "ms": 5.885582999999997
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 5,
+              "ms": 5.405999999999949
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 6,
+              "ms": 5.069208000000117
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 2.6351669999999103
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 2.5122499999999945
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 2.566583000000037
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 2.5671669999999267
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 2.5874160000000757
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 2.6360839999999826
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 2.59766599999989
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 3.190499999999929
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 2.7712079999998878
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 2.9125420000000304
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 2.93100000000004
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 2.8762499999998
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 4.065083000000186
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 2.8072500000000673
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 21.068667000000005
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 20.81720899999982
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 20.807749999999942
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 20.12183300000015
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 20.411625000000186
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 20.582499999999982
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 20.712999999999738
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 0,
+              "ms": 9.77758300000005
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 1,
+              "ms": 10.576624999999694
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 2,
+              "ms": 9.641250000000127
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 3,
+              "ms": 9.72379200000023
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 4,
+              "ms": 10.54445799999985
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 5,
+              "ms": 9.646249999999782
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 6,
+              "ms": 10.3315419999999
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 0,
+              "ms": 22.631041000000096
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 1,
+              "ms": 24.35900000000038
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 2,
+              "ms": 21.99829200000022
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 3,
+              "ms": 24.455999999999676
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 4,
+              "ms": 22.06254200000012
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 5,
+              "ms": 24.603541999999834
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 6,
+              "ms": 21.976292000000285
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 0,
+              "ms": 99.2877910000002
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 0,
+              "ms": 107.76954099999966
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 1,
+              "ms": 97.89649999999983
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 1,
+              "ms": 106.23633400000017
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 2,
+              "ms": 97.78812500000004
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 2,
+              "ms": 106.30395799999997
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 3,
+              "ms": 100.60674999999992
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 3,
+              "ms": 109.11991699999999
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 4,
+              "ms": 96.76883300000009
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 4,
+              "ms": 105.0650840000003
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 5,
+              "ms": 96.98245799999995
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 5,
+              "ms": 105.36287500000026
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 6,
+              "ms": 98.23104199999989
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 6,
+              "ms": 106.56616600000007
+            }
+          ],
+          "correctness": "passed",
+          "completed": true
+        }
+      ]
+    },
+    {
+      "provider": "op",
+      "round": 1,
+      "peakRssBytes": 207732736,
+      "records": [
+        {
+          "metadata": {
+            "provider": "op",
+            "sqlite": {
+              "version": "3.51.3"
+            },
+            "compileOptions": [
+              {
+                "compile_options": "ATOMIC_INTRINSICS=1"
+              },
+              {
+                "compile_options": "COMPILER=clang-21.0.0"
+              },
+              {
+                "compile_options": "DEFAULT_AUTOVACUUM"
+              },
+              {
+                "compile_options": "DEFAULT_CACHE_SIZE=-2000"
+              },
+              {
+                "compile_options": "DEFAULT_FILE_FORMAT=4"
+              },
+              {
+                "compile_options": "DEFAULT_JOURNAL_SIZE_LIMIT=-1"
+              },
+              {
+                "compile_options": "DEFAULT_MMAP_SIZE=0"
+              },
+              {
+                "compile_options": "DEFAULT_PAGE_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_PCACHE_INITSZ=20"
+              },
+              {
+                "compile_options": "DEFAULT_RECURSIVE_TRIGGERS"
+              },
+              {
+                "compile_options": "DEFAULT_SECTOR_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_SYNCHRONOUS=2"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_AUTOCHECKPOINT=1000"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_SYNCHRONOUS=2"
+              },
+              {
+                "compile_options": "DEFAULT_WORKER_THREADS=0"
+              },
+              {
+                "compile_options": "DIRECT_OVERFLOW_READ"
+              },
+              {
+                "compile_options": "ENABLE_LOCKING_STYLE=0"
+              },
+              {
+                "compile_options": "MALLOC_SOFT_LIMIT=1024"
+              },
+              {
+                "compile_options": "MAX_ATTACHED=10"
+              },
+              {
+                "compile_options": "MAX_COLUMN=2000"
+              },
+              {
+                "compile_options": "MAX_COMPOUND_SELECT=500"
+              },
+              {
+                "compile_options": "MAX_DEFAULT_PAGE_SIZE=8192"
+              },
+              {
+                "compile_options": "MAX_EXPR_DEPTH=1000"
+              },
+              {
+                "compile_options": "MAX_FUNCTION_ARG=1000"
+              },
+              {
+                "compile_options": "MAX_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_LIKE_PATTERN_LENGTH=50000"
+              },
+              {
+                "compile_options": "MAX_MMAP_SIZE=0x7fff0000"
+              },
+              {
+                "compile_options": "MAX_PAGE_COUNT=0xfffffffe"
+              },
+              {
+                "compile_options": "MAX_PAGE_SIZE=65536"
+              },
+              {
+                "compile_options": "MAX_SQL_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_TRIGGER_DEPTH=1000"
+              },
+              {
+                "compile_options": "MAX_VARIABLE_NUMBER=32766"
+              },
+              {
+                "compile_options": "MAX_VDBE_OP=250000000"
+              },
+              {
+                "compile_options": "MAX_WORKER_THREADS=8"
+              },
+              {
+                "compile_options": "MUTEX_PTHREADS"
+              },
+              {
+                "compile_options": "SYSTEM_MALLOC"
+              },
+              {
+                "compile_options": "TEMP_STORE=1"
+              },
+              {
+                "compile_options": "THREADSAFE=1"
+              }
+            ],
+            "initialJournal": {
+              "journal_mode": "wal"
+            },
+            "journal": {
+              "journal_mode": "wal"
+            },
+            "synchronous": {
+              "synchronous": 2
+            },
+            "rows": 20000,
+            "points": 1000
+          },
+          "correctness": "passed"
+        },
+        {
+          "provider": "op",
+          "samples": [
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 26.34937500000001
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 26.11945800000001
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 26.248290999999995
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 26.291458000000006
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 25.326791000000014
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 24.451291999999967
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 25.06687500000004
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 0,
+              "ms": 5.886541999999963
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 1,
+              "ms": 5.931332999999995
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 2,
+              "ms": 5.815041000000008
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 3,
+              "ms": 5.9680419999999685
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 4,
+              "ms": 5.939166999999998
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 5,
+              "ms": 5.939875000000029
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 6,
+              "ms": 5.958708999999999
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 0,
+              "ms": 44.23358400000001
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 1,
+              "ms": 44.342209000000025
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 2,
+              "ms": 44.46041700000001
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 3,
+              "ms": 44.27970899999991
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 4,
+              "ms": 43.58837500000004
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 5,
+              "ms": 44.030541000000085
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 6,
+              "ms": 43.82091700000001
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 0,
+              "ms": 105.83441699999992
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 1,
+              "ms": 106.23133399999995
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 2,
+              "ms": 104.82150000000001
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 3,
+              "ms": 106.37258300000008
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 4,
+              "ms": 105.49908300000016
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 5,
+              "ms": 140.883333
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 6,
+              "ms": 107.0479170000001
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 0,
+              "ms": 20.773541000000023
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 1,
+              "ms": 20.427625000000035
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 2,
+              "ms": 20.792124999999942
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 3,
+              "ms": 20.716499999999996
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 4,
+              "ms": 20.452125000000024
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 5,
+              "ms": 20.301541000000043
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 6,
+              "ms": 20.181125000000065
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 0,
+              "ms": 4.116207999999915
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 1,
+              "ms": 4.014833999999837
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 2,
+              "ms": 5.051875000000109
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 3,
+              "ms": 4.13841699999989
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 4,
+              "ms": 4.416124999999965
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 5,
+              "ms": 4.084707999999864
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 6,
+              "ms": 3.9279169999999795
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 10.080707999999959
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 11.985708999999815
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 11.782875000000104
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 11.792832999999973
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 11.81579099999999
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 12.064957999999933
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 11.62604199999987
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 0,
+              "ms": 5.901374999999916
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 1,
+              "ms": 5.169540999999981
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 2,
+              "ms": 5.490083999999797
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 3,
+              "ms": 5.498916999999892
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 4,
+              "ms": 5.911292000000003
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 5,
+              "ms": 5.636250000000018
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 6,
+              "ms": 4.953040999999985
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 2.6707920000001195
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 2.605624999999918
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 2.665207999999893
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 2.468791999999894
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 2.4300000000000637
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 2.527958000000126
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 2.530083999999988
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 3.064999999999827
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 2.7729170000000067
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 2.791917000000012
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 2.8049579999999423
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 2.8293750000000273
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 4.008375000000115
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 2.800583000000188
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 20.99350000000004
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 20.995374999999967
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 20.777875000000222
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 20.869709000000057
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 20.721665999999914
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 20.87408400000004
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 20.809666000000107
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 0,
+              "ms": 9.942125000000033
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 1,
+              "ms": 10.627459000000272
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 2,
+              "ms": 9.724166999999852
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 3,
+              "ms": 9.750375000000076
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 4,
+              "ms": 10.213959000000159
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 5,
+              "ms": 9.691874999999982
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 6,
+              "ms": 10.261999999999716
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 0,
+              "ms": 22.121208999999908
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 1,
+              "ms": 24.97020799999973
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 2,
+              "ms": 22.589958000000024
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 3,
+              "ms": 25.03537499999993
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 4,
+              "ms": 22.60962500000005
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 5,
+              "ms": 24.306624999999713
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 6,
+              "ms": 22.540207999999893
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 0,
+              "ms": 101.37362499999972
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 0,
+              "ms": 109.863292
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 1,
+              "ms": 100.0585000000001
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 1,
+              "ms": 108.60691700000007
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 2,
+              "ms": 99.66075000000001
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 2,
+              "ms": 108.16287499999999
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 3,
+              "ms": 104.561917
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 3,
+              "ms": 112.85137499999973
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 4,
+              "ms": 98.70604099999991
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 4,
+              "ms": 107.23970899999995
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 5,
+              "ms": 98.38954100000001
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 5,
+              "ms": 106.87625000000025
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 6,
+              "ms": 99.88083299999971
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 6,
+              "ms": 108.29241700000011
+            }
+          ],
+          "correctness": "passed",
+          "completed": true
+        }
+      ]
+    },
+    {
+      "provider": "nitro",
+      "round": 1,
+      "peakRssBytes": 264880128,
+      "records": [
+        {
+          "metadata": {
+            "provider": "nitro",
+            "sqlite": {
+              "version": "3.49.0"
+            },
+            "compileOptions": [
+              {
+                "compile_options": "ATOMIC_INTRINSICS=1"
+              },
+              {
+                "compile_options": "COMPILER=clang-21.0.0"
+              },
+              {
+                "compile_options": "DEFAULT_AUTOVACUUM"
+              },
+              {
+                "compile_options": "DEFAULT_CACHE_SIZE=-2000"
+              },
+              {
+                "compile_options": "DEFAULT_FILE_FORMAT=4"
+              },
+              {
+                "compile_options": "DEFAULT_JOURNAL_SIZE_LIMIT=-1"
+              },
+              {
+                "compile_options": "DEFAULT_MEMSTATUS=0"
+              },
+              {
+                "compile_options": "DEFAULT_MMAP_SIZE=0"
+              },
+              {
+                "compile_options": "DEFAULT_PAGE_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_PCACHE_INITSZ=20"
+              },
+              {
+                "compile_options": "DEFAULT_RECURSIVE_TRIGGERS"
+              },
+              {
+                "compile_options": "DEFAULT_SECTOR_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_SYNCHRONOUS=2"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_AUTOCHECKPOINT=1000"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_SYNCHRONOUS=1"
+              },
+              {
+                "compile_options": "DEFAULT_WORKER_THREADS=0"
+              },
+              {
+                "compile_options": "DIRECT_OVERFLOW_READ"
+              },
+              {
+                "compile_options": "DQS=0"
+              },
+              {
+                "compile_options": "LIKE_DOESNT_MATCH_BLOBS"
+              },
+              {
+                "compile_options": "MALLOC_SOFT_LIMIT=1024"
+              },
+              {
+                "compile_options": "MAX_ATTACHED=10"
+              },
+              {
+                "compile_options": "MAX_COLUMN=2000"
+              },
+              {
+                "compile_options": "MAX_COMPOUND_SELECT=500"
+              },
+              {
+                "compile_options": "MAX_DEFAULT_PAGE_SIZE=8192"
+              },
+              {
+                "compile_options": "MAX_EXPR_DEPTH=0"
+              },
+              {
+                "compile_options": "MAX_FUNCTION_ARG=1000"
+              },
+              {
+                "compile_options": "MAX_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_LIKE_PATTERN_LENGTH=50000"
+              },
+              {
+                "compile_options": "MAX_MMAP_SIZE=0x7fff0000"
+              },
+              {
+                "compile_options": "MAX_PAGE_COUNT=0xfffffffe"
+              },
+              {
+                "compile_options": "MAX_PAGE_SIZE=65536"
+              },
+              {
+                "compile_options": "MAX_SQL_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_TRIGGER_DEPTH=1000"
+              },
+              {
+                "compile_options": "MAX_VARIABLE_NUMBER=32766"
+              },
+              {
+                "compile_options": "MAX_VDBE_OP=250000000"
+              },
+              {
+                "compile_options": "MAX_WORKER_THREADS=8"
+              },
+              {
+                "compile_options": "MUTEX_PTHREADS"
+              },
+              {
+                "compile_options": "OMIT_DEPRECATED"
+              },
+              {
+                "compile_options": "OMIT_PROGRESS_CALLBACK"
+              },
+              {
+                "compile_options": "OMIT_SHARED_CACHE"
+              },
+              {
+                "compile_options": "SYSTEM_MALLOC"
+              },
+              {
+                "compile_options": "TEMP_STORE=1"
+              },
+              {
+                "compile_options": "THREADSAFE=1"
+              },
+              {
+                "compile_options": "USE_ALLOCA"
+              }
+            ],
+            "initialJournal": {
+              "journal_mode": "wal"
+            },
+            "journal": {
+              "journal_mode": "wal"
+            },
+            "synchronous": {
+              "synchronous": 2
+            },
+            "rows": 20000,
+            "points": 1000
+          },
+          "correctness": "passed"
+        },
+        {
+          "provider": "nitro",
+          "samples": [
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 32.278625000000005
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 32.975583
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 32.01079099999998
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 30.511583
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 30.790208000000007
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 30.638874999999985
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 30.92837499999996
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 0,
+              "ms": 7.77212499999996
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 1,
+              "ms": 6.98479100000003
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 2,
+              "ms": 6.97829200000001
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 3,
+              "ms": 6.920917000000031
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 4,
+              "ms": 7.071750000000009
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 5,
+              "ms": 6.85470799999996
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 6,
+              "ms": 6.799334000000044
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 0,
+              "ms": 51.61091699999997
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 1,
+              "ms": 50.48029199999996
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 2,
+              "ms": 54.74816699999997
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 3,
+              "ms": 53.462582999999995
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 4,
+              "ms": 52.62283400000001
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 5,
+              "ms": 53.25649999999996
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 6,
+              "ms": 53.049041999999986
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 0,
+              "ms": 124.874417
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 1,
+              "ms": 133.26470799999993
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 2,
+              "ms": 128.4603750000001
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 3,
+              "ms": 130.68337500000007
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 4,
+              "ms": 129.34129199999984
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 5,
+              "ms": 134.28700000000003
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 6,
+              "ms": 127.41216699999995
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 0,
+              "ms": 29.191125000000056
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 1,
+              "ms": 28.211000000000013
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 2,
+              "ms": 27.861167000000023
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 3,
+              "ms": 28.18249999999989
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 4,
+              "ms": 28.801999999999907
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 5,
+              "ms": 28.5123329999999
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 6,
+              "ms": 29.765665999999783
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 0,
+              "ms": 4.549375000000055
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 1,
+              "ms": 4.514834000000064
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 2,
+              "ms": 5.5883749999998145
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 3,
+              "ms": 4.851500000000215
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 4,
+              "ms": 4.565749999999753
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 5,
+              "ms": 4.487165999999888
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 6,
+              "ms": 4.825583000000279
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 23.004707999999937
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 20.63366700000006
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 19.64379199999985
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 19.52866700000004
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 19.451583000000028
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 19.523459000000003
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 19.6579999999999
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 0,
+              "ms": 15.365749999999935
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 1,
+              "ms": 15.698624999999993
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 2,
+              "ms": 15.769332999999733
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 3,
+              "ms": 15.916583000000173
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 4,
+              "ms": 19.07312499999989
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 5,
+              "ms": 15.903999999999996
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 6,
+              "ms": 18.591083999999682
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 4.416999999999916
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 4.090709000000061
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 4.382292000000234
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 4.20595800000001
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 4.308958999999959
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 4.12762500000008
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 4.461457999999766
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 3.0946670000002996
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 4.481792000000041
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 3.343416000000161
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 2.956416999999874
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 3.6952500000002146
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 2.9548749999999018
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 3.3044169999998303
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 33.81683299999986
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 29.65866700000015
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 33.37545799999998
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 20.214332999999897
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 20.026292000000012
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 19.943250000000262
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 17.820999999999913
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 0,
+              "ms": 17.14612500000021
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 1,
+              "ms": 17.506041000000096
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 2,
+              "ms": 17.465541999999914
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 3,
+              "ms": 17.488332999999784
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 4,
+              "ms": 17.285290999999688
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 5,
+              "ms": 17.257958000000144
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 6,
+              "ms": 19.69425000000001
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 0,
+              "ms": 22.226000000000113
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 1,
+              "ms": 24.867416999999932
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 2,
+              "ms": 21.841915999999856
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 3,
+              "ms": 24.28362500000003
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 4,
+              "ms": 21.88479099999995
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 5,
+              "ms": 24.443500000000313
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 6,
+              "ms": 21.9770410000001
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 0,
+              "ms": 115.7976249999997
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 0,
+              "ms": 128.801375
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 1,
+              "ms": 112.81237499999997
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 1,
+              "ms": 125.84841700000015
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 2,
+              "ms": 117.91008300000021
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 2,
+              "ms": 132.44516599999997
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 3,
+              "ms": 117.05091700000003
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 3,
+              "ms": 131.19229099999984
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 4,
+              "ms": 120.89754200000016
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 4,
+              "ms": 135.44233299999996
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 5,
+              "ms": 118.90475000000015
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 5,
+              "ms": 133.0062499999999
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 6,
+              "ms": 118.69254199999978
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 6,
+              "ms": 133.23637499999995
+            }
+          ],
+          "correctness": "passed",
+          "completed": true
+        }
+      ]
+    },
+    {
+      "provider": "nitro",
+      "round": 2,
+      "peakRssBytes": 265502720,
+      "records": [
+        {
+          "metadata": {
+            "provider": "nitro",
+            "sqlite": {
+              "version": "3.49.0"
+            },
+            "compileOptions": [
+              {
+                "compile_options": "ATOMIC_INTRINSICS=1"
+              },
+              {
+                "compile_options": "COMPILER=clang-21.0.0"
+              },
+              {
+                "compile_options": "DEFAULT_AUTOVACUUM"
+              },
+              {
+                "compile_options": "DEFAULT_CACHE_SIZE=-2000"
+              },
+              {
+                "compile_options": "DEFAULT_FILE_FORMAT=4"
+              },
+              {
+                "compile_options": "DEFAULT_JOURNAL_SIZE_LIMIT=-1"
+              },
+              {
+                "compile_options": "DEFAULT_MEMSTATUS=0"
+              },
+              {
+                "compile_options": "DEFAULT_MMAP_SIZE=0"
+              },
+              {
+                "compile_options": "DEFAULT_PAGE_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_PCACHE_INITSZ=20"
+              },
+              {
+                "compile_options": "DEFAULT_RECURSIVE_TRIGGERS"
+              },
+              {
+                "compile_options": "DEFAULT_SECTOR_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_SYNCHRONOUS=2"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_AUTOCHECKPOINT=1000"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_SYNCHRONOUS=1"
+              },
+              {
+                "compile_options": "DEFAULT_WORKER_THREADS=0"
+              },
+              {
+                "compile_options": "DIRECT_OVERFLOW_READ"
+              },
+              {
+                "compile_options": "DQS=0"
+              },
+              {
+                "compile_options": "LIKE_DOESNT_MATCH_BLOBS"
+              },
+              {
+                "compile_options": "MALLOC_SOFT_LIMIT=1024"
+              },
+              {
+                "compile_options": "MAX_ATTACHED=10"
+              },
+              {
+                "compile_options": "MAX_COLUMN=2000"
+              },
+              {
+                "compile_options": "MAX_COMPOUND_SELECT=500"
+              },
+              {
+                "compile_options": "MAX_DEFAULT_PAGE_SIZE=8192"
+              },
+              {
+                "compile_options": "MAX_EXPR_DEPTH=0"
+              },
+              {
+                "compile_options": "MAX_FUNCTION_ARG=1000"
+              },
+              {
+                "compile_options": "MAX_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_LIKE_PATTERN_LENGTH=50000"
+              },
+              {
+                "compile_options": "MAX_MMAP_SIZE=0x7fff0000"
+              },
+              {
+                "compile_options": "MAX_PAGE_COUNT=0xfffffffe"
+              },
+              {
+                "compile_options": "MAX_PAGE_SIZE=65536"
+              },
+              {
+                "compile_options": "MAX_SQL_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_TRIGGER_DEPTH=1000"
+              },
+              {
+                "compile_options": "MAX_VARIABLE_NUMBER=32766"
+              },
+              {
+                "compile_options": "MAX_VDBE_OP=250000000"
+              },
+              {
+                "compile_options": "MAX_WORKER_THREADS=8"
+              },
+              {
+                "compile_options": "MUTEX_PTHREADS"
+              },
+              {
+                "compile_options": "OMIT_DEPRECATED"
+              },
+              {
+                "compile_options": "OMIT_PROGRESS_CALLBACK"
+              },
+              {
+                "compile_options": "OMIT_SHARED_CACHE"
+              },
+              {
+                "compile_options": "SYSTEM_MALLOC"
+              },
+              {
+                "compile_options": "TEMP_STORE=1"
+              },
+              {
+                "compile_options": "THREADSAFE=1"
+              },
+              {
+                "compile_options": "USE_ALLOCA"
+              }
+            ],
+            "initialJournal": {
+              "journal_mode": "wal"
+            },
+            "journal": {
+              "journal_mode": "wal"
+            },
+            "synchronous": {
+              "synchronous": 2
+            },
+            "rows": 20000,
+            "points": 1000
+          },
+          "correctness": "passed"
+        },
+        {
+          "provider": "nitro",
+          "samples": [
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 36.52758299999999
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 36.37895800000001
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 35.47816700000001
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 36.43866700000001
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 35.010500000000036
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 32.76270899999997
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 32.980999999999995
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 0,
+              "ms": 7.389917000000025
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 1,
+              "ms": 7.040209000000004
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 2,
+              "ms": 6.989084000000048
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 3,
+              "ms": 7.050000000000011
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 4,
+              "ms": 7.013833999999974
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 5,
+              "ms": 6.9707500000000095
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 6,
+              "ms": 6.943500000000029
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 0,
+              "ms": 52.364457999999956
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 1,
+              "ms": 50.99920800000007
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 2,
+              "ms": 53.42316699999992
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 3,
+              "ms": 52.164999999999964
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 4,
+              "ms": 52.54174999999998
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 5,
+              "ms": 52.23695900000007
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 6,
+              "ms": 52.3242919999999
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 0,
+              "ms": 124.34620899999993
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 1,
+              "ms": 132.315292
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 2,
+              "ms": 130.29874999999993
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 3,
+              "ms": 132.46524999999997
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 4,
+              "ms": 129.35029199999985
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 5,
+              "ms": 135.1897919999999
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 6,
+              "ms": 127.50237500000003
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 0,
+              "ms": 28.68012500000009
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 1,
+              "ms": 28.386416999999938
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 2,
+              "ms": 28.76537499999995
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 3,
+              "ms": 28.933125000000018
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 4,
+              "ms": 27.045624999999745
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 5,
+              "ms": 27.99187499999971
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 6,
+              "ms": 30.39341599999989
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 0,
+              "ms": 4.987375000000156
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 1,
+              "ms": 4.865124999999807
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 2,
+              "ms": 5.5678750000001855
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 3,
+              "ms": 4.996374999999716
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 4,
+              "ms": 4.835916999999881
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 5,
+              "ms": 5.193875000000389
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 6,
+              "ms": 4.884542000000238
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 22.73983300000009
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 21.64166699999987
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 19.41204199999993
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 19.282709000000068
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 19.403709000000163
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 19.333500000000186
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 19.30729199999996
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 0,
+              "ms": 15.86120800000026
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 1,
+              "ms": 15.788583000000017
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 2,
+              "ms": 15.970624999999927
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 3,
+              "ms": 15.706167000000278
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 4,
+              "ms": 18.942833000000064
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 5,
+              "ms": 15.143625000000156
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 6,
+              "ms": 18.38695800000005
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 4.437249999999949
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 4.150750000000244
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 4.349500000000262
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 4.061083000000053
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 4.385541999999987
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 3.9539169999998194
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 4.280834000000141
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 3.052875000000313
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 2.703125
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 3.0358329999999114
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 2.682083000000148
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 3.02212499999996
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 2.7125419999997575
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 3.0192080000001624
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 20.10145799999964
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 19.62708399999974
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 17.287916999999652
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 17.134459000000334
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 17.333416999999827
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 17.200792000000092
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 17.29579100000001
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 0,
+              "ms": 17.314957999999933
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 1,
+              "ms": 17.26995799999986
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 2,
+              "ms": 17.376083000000108
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 3,
+              "ms": 17.266583000000082
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 4,
+              "ms": 17.32833299999993
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 5,
+              "ms": 17.22933299999977
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 6,
+              "ms": 19.3471669999999
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 0,
+              "ms": 22.293291999999838
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 1,
+              "ms": 24.604542000000038
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 2,
+              "ms": 22.566625000000386
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 3,
+              "ms": 24.724625000000287
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 4,
+              "ms": 21.95970800000032
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 5,
+              "ms": 24.379333999999744
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 6,
+              "ms": 22.166833999999653
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 0,
+              "ms": 114.51833299999998
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 0,
+              "ms": 127.54424999999992
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 1,
+              "ms": 112.80825000000004
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 1,
+              "ms": 125.85520799999995
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 2,
+              "ms": 119.56687499999998
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 2,
+              "ms": 134.09895899999992
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 3,
+              "ms": 117.70016699999996
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 3,
+              "ms": 131.75075000000015
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 4,
+              "ms": 119.47108299999991
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 4,
+              "ms": 134.02054199999975
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 5,
+              "ms": 117.80962499999987
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 5,
+              "ms": 132.27241700000013
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 6,
+              "ms": 119.07541700000002
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 6,
+              "ms": 133.62037500000042
+            }
+          ],
+          "correctness": "passed",
+          "completed": true
+        }
+      ]
+    },
+    {
+      "provider": "op",
+      "round": 2,
+      "peakRssBytes": 209944576,
+      "records": [
+        {
+          "metadata": {
+            "provider": "op",
+            "sqlite": {
+              "version": "3.51.3"
+            },
+            "compileOptions": [
+              {
+                "compile_options": "ATOMIC_INTRINSICS=1"
+              },
+              {
+                "compile_options": "COMPILER=clang-21.0.0"
+              },
+              {
+                "compile_options": "DEFAULT_AUTOVACUUM"
+              },
+              {
+                "compile_options": "DEFAULT_CACHE_SIZE=-2000"
+              },
+              {
+                "compile_options": "DEFAULT_FILE_FORMAT=4"
+              },
+              {
+                "compile_options": "DEFAULT_JOURNAL_SIZE_LIMIT=-1"
+              },
+              {
+                "compile_options": "DEFAULT_MMAP_SIZE=0"
+              },
+              {
+                "compile_options": "DEFAULT_PAGE_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_PCACHE_INITSZ=20"
+              },
+              {
+                "compile_options": "DEFAULT_RECURSIVE_TRIGGERS"
+              },
+              {
+                "compile_options": "DEFAULT_SECTOR_SIZE=4096"
+              },
+              {
+                "compile_options": "DEFAULT_SYNCHRONOUS=2"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_AUTOCHECKPOINT=1000"
+              },
+              {
+                "compile_options": "DEFAULT_WAL_SYNCHRONOUS=2"
+              },
+              {
+                "compile_options": "DEFAULT_WORKER_THREADS=0"
+              },
+              {
+                "compile_options": "DIRECT_OVERFLOW_READ"
+              },
+              {
+                "compile_options": "ENABLE_LOCKING_STYLE=0"
+              },
+              {
+                "compile_options": "MALLOC_SOFT_LIMIT=1024"
+              },
+              {
+                "compile_options": "MAX_ATTACHED=10"
+              },
+              {
+                "compile_options": "MAX_COLUMN=2000"
+              },
+              {
+                "compile_options": "MAX_COMPOUND_SELECT=500"
+              },
+              {
+                "compile_options": "MAX_DEFAULT_PAGE_SIZE=8192"
+              },
+              {
+                "compile_options": "MAX_EXPR_DEPTH=1000"
+              },
+              {
+                "compile_options": "MAX_FUNCTION_ARG=1000"
+              },
+              {
+                "compile_options": "MAX_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_LIKE_PATTERN_LENGTH=50000"
+              },
+              {
+                "compile_options": "MAX_MMAP_SIZE=0x7fff0000"
+              },
+              {
+                "compile_options": "MAX_PAGE_COUNT=0xfffffffe"
+              },
+              {
+                "compile_options": "MAX_PAGE_SIZE=65536"
+              },
+              {
+                "compile_options": "MAX_SQL_LENGTH=1000000000"
+              },
+              {
+                "compile_options": "MAX_TRIGGER_DEPTH=1000"
+              },
+              {
+                "compile_options": "MAX_VARIABLE_NUMBER=32766"
+              },
+              {
+                "compile_options": "MAX_VDBE_OP=250000000"
+              },
+              {
+                "compile_options": "MAX_WORKER_THREADS=8"
+              },
+              {
+                "compile_options": "MUTEX_PTHREADS"
+              },
+              {
+                "compile_options": "SYSTEM_MALLOC"
+              },
+              {
+                "compile_options": "TEMP_STORE=1"
+              },
+              {
+                "compile_options": "THREADSAFE=1"
+              }
+            ],
+            "initialJournal": {
+              "journal_mode": "wal"
+            },
+            "journal": {
+              "journal_mode": "wal"
+            },
+            "synchronous": {
+              "synchronous": 2
+            },
+            "rows": 20000,
+            "points": 1000
+          },
+          "correctness": "passed"
+        },
+        {
+          "provider": "op",
+          "samples": [
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 26.393
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 26.203000000000003
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 26.052958999999987
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 26.032040999999992
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 26.347167000000013
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 24.185834
+            },
+            {
+              "name": "spark.point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 25.541209000000038
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 0,
+              "ms": 5.866791999999975
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 1,
+              "ms": 5.985791000000006
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 2,
+              "ms": 5.914499999999975
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 3,
+              "ms": 5.899583000000007
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 4,
+              "ms": 5.951333999999974
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 5,
+              "ms": 5.892084000000011
+            },
+            {
+              "name": "spark.filtered-pages",
+              "units": 100,
+              "trial": 6,
+              "ms": 5.943624999999997
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 0,
+              "ms": 44.47258400000004
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 1,
+              "ms": 44.15899999999999
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 2,
+              "ms": 44.19829199999998
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 3,
+              "ms": 44.68883299999993
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 4,
+              "ms": 43.95333299999993
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 5,
+              "ms": 45.391250000000014
+            },
+            {
+              "name": "spark.bulk-narrow",
+              "units": 20000,
+              "trial": 6,
+              "ms": 44.5211250000001
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 0,
+              "ms": 110.98483299999998
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 1,
+              "ms": 110.09012500000006
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 2,
+              "ms": 109.8470420000001
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 3,
+              "ms": 109.87512500000003
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 4,
+              "ms": 108.90995800000019
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 5,
+              "ms": 110.27883399999996
+            },
+            {
+              "name": "spark.bulk-wide",
+              "units": 20000,
+              "trial": 6,
+              "ms": 134.55141600000002
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 0,
+              "ms": 21.34408399999984
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 1,
+              "ms": 20.821916999999985
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 2,
+              "ms": 20.74520799999982
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 3,
+              "ms": 21.060249999999996
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 4,
+              "ms": 19.03391600000009
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 5,
+              "ms": 16.335124999999834
+            },
+            {
+              "name": "spark.transaction-insert",
+              "units": 1000,
+              "trial": 6,
+              "ms": 20.263417000000118
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 0,
+              "ms": 4.052209000000175
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 1,
+              "ms": 4.060500000000047
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 2,
+              "ms": 4.630750000000035
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 3,
+              "ms": 4.422584000000143
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 4,
+              "ms": 4.192374999999856
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 5,
+              "ms": 4.404667000000018
+            },
+            {
+              "name": "spark.autocommit-full",
+              "units": 100,
+              "trial": 6,
+              "ms": 4.357500000000073
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 10.239542000000029
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 12.046749999999975
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 12.459834
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 11.868875000000116
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 11.890667000000121
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 11.690832999999884
+            },
+            {
+              "name": "raw.async-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 11.92795799999999
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 0,
+              "ms": 5.8382910000000265
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 1,
+              "ms": 5.076000000000022
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 2,
+              "ms": 5.3308750000001055
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 3,
+              "ms": 5.705249999999978
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 4,
+              "ms": 6.303834000000052
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 5,
+              "ms": 5.7725410000000466
+            },
+            {
+              "name": "raw.async-fanout",
+              "units": 1000,
+              "trial": 6,
+              "ms": 5.128625000000056
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 0,
+              "ms": 2.6110000000001037
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 1,
+              "ms": 2.5720420000000104
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 2,
+              "ms": 2.535917000000154
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 3,
+              "ms": 2.6200000000001182
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 4,
+              "ms": 2.6207500000000437
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 5,
+              "ms": 2.630583000000115
+            },
+            {
+              "name": "raw.sync-point-read",
+              "units": 1000,
+              "trial": 6,
+              "ms": 2.6649170000000595
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 3.1859579999998004
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 2.832125000000133
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 2.8769170000000486
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 2.898624999999811
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 2.9151670000001104
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 4.038583000000017
+            },
+            {
+              "name": "raw.prepared-sync-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 2.8283340000000408
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 0,
+              "ms": 21.176249999999982
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 1,
+              "ms": 21.598665999999866
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 2,
+              "ms": 20.882458999999926
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 3,
+              "ms": 21.171749999999975
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 4,
+              "ms": 20.193041999999878
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 5,
+              "ms": 20.178707999999915
+            },
+            {
+              "name": "raw.prepared-async-point",
+              "units": 1000,
+              "trial": 6,
+              "ms": 20.708290999999917
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 0,
+              "ms": 9.754041000000143
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 1,
+              "ms": 10.48745800000006
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 2,
+              "ms": 9.564124999999876
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 3,
+              "ms": 9.753666000000067
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 4,
+              "ms": 10.272459000000254
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 5,
+              "ms": 9.522165999999743
+            },
+            {
+              "name": "raw.prepared-async-sync-bind",
+              "units": 1000,
+              "trial": 6,
+              "ms": 10.38562499999989
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 0,
+              "ms": 22.396999999999935
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 1,
+              "ms": 24.956208999999944
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 2,
+              "ms": 22.542207999999846
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 3,
+              "ms": 24.934916000000158
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 4,
+              "ms": 22.217541999999867
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 5,
+              "ms": 24.813832999999704
+            },
+            {
+              "name": "raw.batch-insert",
+              "units": 10000,
+              "trial": 6,
+              "ms": 22.385917000000063
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 0,
+              "ms": 99.95387500000015
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 0,
+              "ms": 108.2465830000001
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 1,
+              "ms": 98.11533299999974
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 1,
+              "ms": 106.64412500000026
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 2,
+              "ms": 98.47029199999997
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 2,
+              "ms": 106.98874999999998
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 3,
+              "ms": 101.23295800000005
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 3,
+              "ms": 109.75508300000001
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 4,
+              "ms": 97.54550000000017
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 4,
+              "ms": 106.0611670000003
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 5,
+              "ms": 98.85104199999978
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 5,
+              "ms": 107.36675000000014
+            },
+            {
+              "name": "spark.bulk-wide-timer-delay",
+              "units": 20000,
+              "trial": 6,
+              "ms": 100.63358300000027
+            },
+            {
+              "name": "spark.bulk-wide-js-pause",
+              "units": 20000,
+              "trial": 6,
+              "ms": 109.14916600000015
+            }
+          ],
+          "correctness": "passed",
+          "completed": true
+        }
+      ]
+    }
+  ],
+  "system": {
+    "macOS": "26.6.1",
+    "memoryBytes": 17179869184,
+    "date": "2026-10-01",
+    "nitroModules": "0.35.7",
+    "opSQLite": "18.2.1",
+    "nitroSQLite": "10.0.0",
+    "hermes": {
+      "OSS Release Version": "for RN 0.81.6",
+      "Bytecode Version": 96,
+      "Build": "Release",
+      "GC": "hades (concurrent)",
+      "Debugger Enabled": true
+    }
+  },
+  "method": {
+    "host": "Headless native macOS Hermes; actual C++ bindings and public query wrappers; shared Spark createDatabase adapter",
+    "compiler": "clang -O3 -DNDEBUG; C++20; macOS 14 deployment target",
+    "sqliteConfiguration": "Library default compile flags; runtime WAL, synchronous FULL, busy_timeout 5000",
+    "samplesPerCase": 21,
+    "warmupsPerProcessCase": 1,
+    "processOrder": [
+      "nitro",
+      "op",
+      "op",
+      "nitro",
+      "nitro",
+      "op"
+    ],
+    "preparation": "Batch input shapes and prepared statement creation outside measured regions"
+  },
+  "summary": {
+    "spark.point-read": {
+      "op": {
+        "n": 21,
+        "medianMs": 26.171375000000012,
+        "p10Ms": 24.451291999999967,
+        "p90Ms": 26.347167000000013
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 32.980999999999995,
+        "p10Ms": 30.638874999999985,
+        "p90Ms": 38.52004199999999
+      },
+      "nitroToOpRatio": 1.26019362757975
+    },
+    "spark.filtered-pages": {
+      "op": {
+        "n": 21,
+        "medianMs": 5.920584000000019,
+        "p10Ms": 5.870291000000009,
+        "p90Ms": 5.9680419999999685
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 7.050000000000011,
+        "p10Ms": 6.920917000000031,
+        "p90Ms": 9.367458
+      },
+      "nitroToOpRatio": 1.1907609114236009
+    },
+    "spark.bulk-narrow": {
+      "op": {
+        "n": 21,
+        "medianMs": 44.19829199999998,
+        "p10Ms": 43.855249999999955,
+        "p90Ms": 44.55116600000008
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 53.25649999999996,
+        "p10Ms": 51.61091699999997,
+        "p90Ms": 58.610457999999994
+      },
+      "nitroToOpRatio": 1.2049447521637258
+    },
+    "spark.bulk-wide": {
+      "op": {
+        "n": 21,
+        "medianMs": 108.90995800000019,
+        "p10Ms": 105.83441699999992,
+        "p90Ms": 110.98483299999998
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 132.46524999999997,
+        "p10Ms": 127.41216699999995,
+        "p90Ms": 149.61804200000006
+      },
+      "nitroToOpRatio": 1.2162822613520772
+    },
+    "spark.transaction-insert": {
+      "op": {
+        "n": 21,
+        "medianMs": 20.346915999999965,
+        "p10Ms": 19.03391600000009,
+        "p90Ms": 20.821916999999985
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 28.386416999999938,
+        "p10Ms": 26.540500000000065,
+        "p90Ms": 29.4518750000002
+      },
+      "nitroToOpRatio": 1.395121354017483
+    },
+    "spark.autocommit-full": {
+      "op": {
+        "n": 21,
+        "medianMs": 4.13841699999989,
+        "p10Ms": 3.9279169999999795,
+        "p90Ms": 4.630750000000035
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 4.996374999999716,
+        "p10Ms": 4.549375000000055,
+        "p90Ms": 5.5883749999998145
+      },
+      "nitroToOpRatio": 1.2073155025218214
+    },
+    "raw.async-point-read": {
+      "op": {
+        "n": 21,
+        "medianMs": 11.781334000000015,
+        "p10Ms": 10.239542000000029,
+        "p90Ms": 12.046749999999975
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 19.41204199999993,
+        "p10Ms": 18.237167000000227,
+        "p90Ms": 21.64166699999987
+      },
+      "nitroToOpRatio": 1.6476947347388593
+    },
+    "raw.async-fanout": {
+      "op": {
+        "n": 21,
+        "medianMs": 5.498916999999892,
+        "p10Ms": 5.069208000000117,
+        "p90Ms": 5.911292000000003
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 15.86120800000026,
+        "p10Ms": 15.280833000000257,
+        "p90Ms": 18.763334000000214
+      },
+      "nitroToOpRatio": 2.8844239693016958
+    },
+    "raw.sync-point-read": {
+      "op": {
+        "n": 21,
+        "medianMs": 2.59766599999989,
+        "p10Ms": 2.5122499999999945,
+        "p90Ms": 2.6649170000000595
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 4.349500000000262,
+        "p10Ms": 4.090709000000061,
+        "p90Ms": 4.601792000000387
+      },
+      "nitroToOpRatio": 1.67438770034348
+    },
+    "raw.prepared-sync-point": {
+      "op": {
+        "n": 21,
+        "medianMs": 2.8769170000000486,
+        "p10Ms": 2.791917000000012,
+        "p90Ms": 4.008375000000115
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 3.0358329999999114,
+        "p10Ms": 2.703125,
+        "p90Ms": 3.4455840000000535
+      },
+      "nitroToOpRatio": 1.0552382984979616
+    },
+    "raw.prepared-async-point": {
+      "op": {
+        "n": 21,
+        "medianMs": 20.809666000000107,
+        "p10Ms": 20.193041999999878,
+        "p90Ms": 21.171749999999975
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 18.636167000000114,
+        "p10Ms": 17.17812499999991,
+        "p90Ms": 29.65866700000015
+      },
+      "nitroToOpRatio": 0.8955533933125125
+    },
+    "raw.prepared-async-sync-bind": {
+      "op": {
+        "n": 21,
+        "medianMs": 9.77758300000005,
+        "p10Ms": 9.641250000000127,
+        "p90Ms": 10.54445799999985
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 17.41924999999992,
+        "p10Ms": 17.257958000000144,
+        "p90Ms": 19.3471669999999
+      },
+      "nitroToOpRatio": 1.7815496938251336
+    },
+    "raw.batch-insert": {
+      "op": {
+        "n": 21,
+        "medianMs": 22.60962500000005,
+        "p10Ms": 22.06254200000012,
+        "p90Ms": 24.956208999999944
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 22.293291999999838,
+        "p10Ms": 21.629750000000058,
+        "p90Ms": 24.604542000000038
+      },
+      "nitroToOpRatio": 0.9860089231908883
+    },
+    "spark.bulk-wide-timer-delay": {
+      "op": {
+        "n": 21,
+        "medianMs": 98.85104199999978,
+        "p10Ms": 97.54550000000017,
+        "p90Ms": 101.23295800000005
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 117.80962499999987,
+        "p10Ms": 112.81237499999997,
+        "p90Ms": 120.89754200000016
+      },
+      "nitroToOpRatio": 1.1917894097666681
+    },
+    "spark.bulk-wide-js-pause": {
+      "op": {
+        "n": 21,
+        "medianMs": 107.36675000000014,
+        "p10Ms": 106.0611670000003,
+        "p90Ms": 109.75508300000001
+      },
+      "nitro": {
+        "n": 21,
+        "medianMs": 131.75075000000015,
+        "p10Ms": 125.85520799999995,
+        "p90Ms": 135.44233299999996
+      },
+      "nitroToOpRatio": 1.2271094170215637
+    }
+  }
+}
