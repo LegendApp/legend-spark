@@ -32,6 +32,15 @@ test("search clears controlled text, acknowledges edits, and owns a bounded ref"
   native.onChangeText({ nativeEvent: { text: 12, eventCount: 2 } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
   await act(async () => { rendered.unmount(); rendered = undefined; }); expect(() => handle.focus()).toThrow(expect.objectContaining({ code: "E_CLOSED" }));
 });
+test("uncontrolled search edits preserve native ownership without a React render", async () => {
+  const onChangeText = vi.fn(); await mount(React.createElement(TextInputSearch, { defaultValue: "query", onChangeText }));
+  const before = rendered.root.findByType("TextInputSearch").props;
+  await act(async () => {
+    for (const [text, eventCount] of [["edit", 1], ["newer", 2], ["stale", 1]] as const) before.onChangeText({ nativeEvent: { text, eventCount } });
+  });
+  expect(rendered.root.findByType("TextInputSearch").props).toBe(before);
+  expect(onChangeText.mock.calls).toEqual([["edit"], ["newer"]]);
+});
 test("split views preserve zero metrics and expose explicit readiness without native envelopes", async () => {
   const onResize = vi.fn(), onError = vi.fn();
   await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", onResize, onError, titleBar: { content: { height: 50, overlay: { color: "#ffffff" } } } }));
@@ -50,6 +59,19 @@ test("sidebar data selection can be cleared and unknown/disabled choices reject"
   await act(async () => native.onSidebarSelectionChange({ nativeEvent: { id: "" } }));
   expect(onSelectionChange).toHaveBeenCalledWith({ id: null }); native = rendered.root.findByType("Sidebar").props; expect(native.selectedId).toBe("a"); expect(native.selectionRevision).toBe(1);
   native.onSidebarSelectionChange({ nativeEvent: { id: "b" } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onSelectionChange).toHaveBeenCalledTimes(1);
+});
+test("sidebar selection acknowledgments reuse the serialized rows and refreshed items replace the cache", async () => {
+  const stringify = vi.spyOn(JSON, "stringify"), onSelectionChange = vi.fn();
+  const items = [{ id: "a", label: "A" }];
+  await mount(React.createElement(Sidebar, { items, selectedId: "a", onSelectionChange }));
+  const serialized = stringify.mock.calls.length;
+  const before = rendered.root.findByType("Sidebar").props;
+  await act(async () => before.onSidebarSelectionChange({ nativeEvent: { id: "" } }));
+  expect(stringify.mock.calls.length).toBe(serialized);
+  const after = rendered.root.findByType("Sidebar").props;
+  expect(after.itemsJson).toBe(before.itemsJson); expect(after.selectionRevision).toBe(1);
+  await act(async () => rendered.update(React.createElement(Sidebar, { items: [{ id: "b", label: "B" }], selectedId: "b", onSelectionChange })));
+  expect(JSON.parse(rendered.root.findByType("Sidebar").props.itemsJson)).toEqual([{ id: "b", title: "B", selectable: true }]);
 });
 test("custom sidebar rows expose owned context-menu coordinates", async () => {
   const onContextMenu = vi.fn();

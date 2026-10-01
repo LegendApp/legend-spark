@@ -8,7 +8,7 @@ export interface MenuUpdate { items: readonly MenuItem[] }
 export interface MenuOptions extends MenuUpdate { id: string; onAction?: (action: MenuAction) => void }
 export interface Menu extends AsyncRegistration { readonly id: string; update(options: MenuUpdate): Promise<void> }
 interface Owner { id: string; token: string; items: MenuWireItem[] }
-const owners = new Map<string, Owner>();
+let owners = new Map<string, Owner>();
 let sequence = 0, queue: Promise<unknown> = Promise.resolve();
 function serial<T>(operation: () => Promise<T>): Promise<T> { const result = queue.then(operation); queue = result.catch(() => {}); return result; }
 export function getMenuAvailability(): Availability {
@@ -28,11 +28,12 @@ function snapshot(value: MenuUpdate, token: string, creating = false): MenuWireI
   annotate(items); return items;
 }
 async function publish(next: Map<string, Owner>): Promise<void> {
-  const values = new Map([...next].map(([id, owner]) => [id, owner.items]));
-  const menus = Platform.OS === "windows" ? composeWindowsMenus(values) : [...values.values()].flat();
+  const menus = Platform.OS === "windows"
+    ? composeWindowsMenus(new Map([...next].map(([id, owner]) => [id, owner.items])))
+    : [...next.values()].flatMap(owner => owner.items);
   const result = await invokeNative(() => NativeMenu!.publish(JSON.stringify(menus)));
   if (result !== undefined && result !== null) throw new SparkError("E_INVALID_DATA", "Native menu publication returned an unexpected result");
-  owners.clear(); for (const [id, owner] of next) owners.set(id, owner);
+  owners = next;
 }
 export async function createMenu(options: MenuOptions): Promise<Menu> {
   available();

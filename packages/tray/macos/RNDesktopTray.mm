@@ -43,13 +43,15 @@ RCT_EXPORT_MODULE(NativeDesktopTray)
     if ([method isEqual:@"create"] && owner) { reject(@"E_ALREADY_EXISTS", @"Tray id already exists", nil); return; }
     if ([method isEqual:@"update"] && !owner) { reject(@"E_NOT_FOUND", @"Tray was removed", nil); return; }
     NSMutableDictionary *options = [owner.options mutableCopy] ?: [NSMutableDictionary new]; [options addEntriesFromDictionary:args];
-    NSImage *image = nil;
-    if ([options[@"symbol"] length]) {
+    BOOL imageChanged = !owner || args[@"symbol"] != nil || args[@"imagePath"] != nil;
+    BOOL menuChanged = !owner || args[@"menu"] != nil;
+    NSImage *image = imageChanged ? nil : owner.item.button.image;
+    if (imageChanged && [options[@"symbol"] length]) {
       image = [NSImage imageWithSystemSymbolName:options[@"symbol"] accessibilityDescription:options[@"tooltip"] ?: options[@"title"]];
       if (!image) { SparkInvalid(reject, @"Unknown SF Symbol name"); return; }
       [image setTemplate:YES];
     }
-    if ([options[@"imagePath"] length]) {
+    if (imageChanged && [options[@"imagePath"] length]) {
       image = [[NSImage alloc] initWithContentsOfFile:options[@"imagePath"]];
       if (!image) { reject(@"E_INVALID_DATA", @"Tray image could not be decoded", nil); return; }
       NSSize size = image.size; CGFloat height = MAX(1, NSStatusBar.systemStatusBar.thickness - 4);
@@ -57,12 +59,14 @@ RCT_EXPORT_MODULE(NativeDesktopTray)
     }
     if (![options[@"title"] length] && !image) { SparkInvalid(reject, @"Tray needs a title or symbol"); return; }
     if (!owner) { owner = [SparkTrayItem new]; owner.identifier = key; owner.instanceId = args[@"instanceId"]; owner.item = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength]; self.items[key] = owner; }
+    NSMenu *menu = menuChanged && [options[@"menu"] count] ? Menu(options[@"menu"], owner) : nil;
     owner.options = options;
-    owner.item.button.title = options[@"title"] ?: @""; owner.item.button.image = image;
+    owner.item.button.title = options[@"title"] ?: @"";
+    if (imageChanged) owner.item.button.image = image;
     owner.item.button.imagePosition = NSImageLeft; owner.item.button.toolTip = options[@"tooltip"];
     owner.item.button.target = owner; owner.item.button.action = @selector(clicked:);
     owner.item.button.accessibilityIdentifier = [@"spark.tray." stringByAppendingString:key];
-    owner.item.menu = [options[@"menu"] count] ? Menu(options[@"menu"], owner) : nil;
+    if (menuChanged) owner.item.menu = menu;
     resolve(@"null");
   });
 }

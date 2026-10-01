@@ -139,17 +139,20 @@ struct SparkTray {
         else if (method == "create" || method == "update") {
           if (method == "create" && key) { promise.Reject(React::ReactError{"E_ALREADY_EXISTS", "Tray id already exists"}); return; }
           if (method == "update" && !key) { promise.Reject(React::ReactError{"E_NOT_FOUND", "Tray was removed"}); return; }
-          Json::JsonObject options = key ? Json::JsonObject::Parse(current->items.at(key).options.Stringify()) : Json::JsonObject();
+          const bool creating = key == 0;
+          Json::JsonObject options;
+          if (!creating) for (auto const &entry : current->items.at(key).options) options.SetNamedValue(entry.Key(), entry.Value());
           for (auto const &entry : args) options.SetNamedValue(entry.Key(), entry.Value());
           if (options.GetNamedString(L"title", L"").empty() && options.GetNamedString(L"symbol", L"").empty() && options.GetNamedString(L"imagePath", L"").empty()) throw hresult_invalid_argument(L"Tray needs a title or symbol");
           // Validate menus before replacing a live icon.
-          std::map<UINT, std::string> actions; UINT command = 0; auto menu = TrayState::Menu(options.GetNamedArray(L"menu", Json::JsonArray()), actions, command); DestroyMenu(menu);
-          auto icon = TrayState::Icon(options); const bool creating = key == 0;
+          if (creating || args.HasKey(L"menu")) { std::map<UINT, std::string> actions; UINT command = 0; auto menu = TrayState::Menu(options.GetNamedArray(L"menu", Json::JsonArray()), actions, command); DestroyMenu(menu); }
+          const bool iconChanged = creating || args.HasKey(L"imagePath");
+          auto icon = iconChanged ? TrayState::Icon(options) : current->items.at(key).icon;
           if (creating) { for (UINT i = 0; i < 65535; ++i) { auto candidate = current->sequence = current->sequence % 65535 + 1; if (!current->items.count(candidate)) { key = candidate; break; } } }
           if (!key) { DestroyIcon(icon); throw hresult_error(E_FAIL, L"Too many tray items"); }
           TrayState::Item item{id, instanceId, options, icon};
-          try { current->Publish(key, item, creating ? NIM_ADD : NIM_MODIFY); } catch (...) { DestroyIcon(icon); throw; }
-          if (!creating) DestroyIcon(current->items.at(key).icon);
+          try { current->Publish(key, item, creating ? NIM_ADD : NIM_MODIFY); } catch (...) { if (iconChanged) DestroyIcon(icon); throw; }
+          if (!creating && iconChanged) DestroyIcon(current->items.at(key).icon);
           current->items.insert_or_assign(key, std::move(item));
         } else throw hresult_invalid_argument(L"Unknown tray operation");
         promise.Resolve("null");

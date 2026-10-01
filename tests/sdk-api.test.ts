@@ -619,7 +619,8 @@ test("tray snapshots accepted updates, filters actions and keeps last successful
   expect(calls.at(-1)!.args).toMatchObject({ id: "test", menu: [{ id: "next" }] });
   handlers.set("NativeDesktopTray.update", () => { throw nativeError("E_NATIVE"); });
   await expect(item.update({ title: "Failed" })).rejects.toThrow(); handlers.delete("NativeDesktopTray.update");
-  await item.update({ tooltip: "Tooltip" }); expect(calls.at(-1)!.args.title).toBe("Initial");
+  await item.update({ tooltip: "Tooltip" });
+  expect(calls.at(-1)!.args).toEqual({ id: "test", instanceId: calls[0].args.instanceId, tooltip: "Tooltip" });
   for (const itemId of ["open", "mutated", "next"]) emit("NativeDesktopApp", "desktop", { type: "trayAction", trayId: "test", instanceId: calls[0].args.instanceId, itemId });
   expect(actions).toEqual([{ type: "action", itemId: "next" }]);
   await expect(item.update({ id: "other" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });

@@ -6,6 +6,7 @@ const { platform, registered } = vi.hoisted(() => ({ platform: { OS: "macos" }, 
 vi.mock("react-native", () => ({ Platform: platform, UIManager: { hasViewManagerConfig: registered }, View: "View" }));
 vi.mock("../packages/drag-drop/src/DesktopDragViewNativeComponent", () => ({ default: "DesktopDragView" }));
 import { DragDropView, getDragDropAvailability, type DragDropViewProps } from "../packages/drag-drop/src/index";
+import * as contracts from "../packages/drag-drop/src/contracts";
 let rendered: any;
 const event = (value: unknown) => ({ nativeEvent: { json: JSON.stringify(value) } });
 async function mount(props: DragDropViewProps) { await act(async () => { rendered = create(React.createElement(StrictMode, null, React.createElement(DragDropView, props, "Child"))); }); }
@@ -25,6 +26,12 @@ test("component normalizes sources and emits owned payloads using current callba
   native = rendered.root.findByType("DesktopDragView"); native.props.onDrop(drop); expect(second).toHaveBeenCalledTimes(1);
   native.props.onDrop({ nativeEvent: { json: "invalid" } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
   const late = native.props.onDrop; await act(async () => { rendered.unmount(); rendered = undefined; }); late(drop); expect(second).toHaveBeenCalledTimes(1);
+});
+test("each drag view render normalizes its source once", async () => {
+  const normalize = vi.spyOn(contracts, "dragSource");
+  await act(async () => { rendered = create(React.createElement(DragDropView, { source: { files: ["file:///tmp/a%20b"] } })); });
+  expect(normalize).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(rendered.root.findByType("DesktopDragView").props.sourceJson).files).toEqual(["/tmp/a b"]);
 });
 test.each(["unsupported-platform", "missing-module"])("unavailable %s preserves children and reports once in Strict Mode", async reason => {
   if (reason === "unsupported-platform") platform.OS = "ios"; else registered.mockReturnValue(false);

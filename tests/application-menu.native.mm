@@ -35,6 +35,9 @@ int main() { @autoreleasepool {
   NSMenuItem *tools = Find(main, @{ @"id": @"tools" }, NO);
   Check(tools.submenu.numberOfItems == 1, @"Overlay duplicated item");
   Check([tools.submenu.itemArray.firstObject.title isEqual:@"Run other"], @"Last owner did not win");
+  NSMenuItem *run = tools.submenu.itemArray.firstObject;
+  Check(!Publish(module, @[base, override]), @"Unchanged publication failed");
+  Check(Find(main, @{ @"id": @"tools" }, NO) == tools && tools.submenu.itemArray.firstObject == run, @"Unchanged publication rebuilt native items");
   Check(!Publish(module, @[base]), @"Overlay removal failed");
   tools = Find(main, @{ @"id": @"tools" }, NO);
   Check([tools.submenu.itemArray.firstObject.title isEqual:@"Run"], @"Overlay removal did not restore base");

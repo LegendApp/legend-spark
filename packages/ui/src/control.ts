@@ -38,5 +38,5 @@ export function useTextValue(props: TextInputProps) {
   if (initialMode.current !== controlled) throw new SparkError("E_INVALID_ARGUMENT", "TextInput cannot switch controlled mode; remount it instead");
   if ((controlled && (typeof props.value !== "string" || props.defaultValue !== undefined)) || (props.defaultValue !== undefined && typeof props.defaultValue !== "string") || (props.onChangeText !== undefined && typeof props.onChangeText !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "TextInput requires a string value or defaultValue, not both");
   const [eventCount, setEventCount] = useState(0);
-  return { controlled, text: props.value ?? "", defaultText: initialText.current, eventCount, acknowledge(count: number) { if (count <= latestCount.current) return false; latestCount.current = count; setEventCount(count); return true; } };
+  return { controlled, text: props.value ?? "", defaultText: initialText.current, eventCount, acknowledge(count: number) { if (count <= latestCount.current) return false; latestCount.current = count; if (controlled) setEventCount(count); return true; } };
 }

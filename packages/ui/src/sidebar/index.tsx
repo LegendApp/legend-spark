@@ -1,4 +1,4 @@
-import { Children, Fragment, createContext, isValidElement, useContext, useState, type ReactElement, type ReactNode } from "react";
+import { Children, Fragment, createContext, isValidElement, useContext, useMemo, useState, type ReactElement, type ReactNode } from "react";
 import { Text, View, type NativeSyntheticEvent } from "react-native";
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { useControl } from "../control";
@@ -49,23 +49,27 @@ export function Sidebar({ items, children, selectedId, contentInsetTop = 0, defa
   finite(contentInsetTop, "content inset"); finite(defaultRowHeight, "row height", 1);
   callback(onContentLayout, "content layout"); callback(onSelectionChange, "selection");
   if (items !== undefined && (children !== undefined || !Array.isArray(items))) throw new SparkError("E_INVALID_ARGUMENT", "Use either items or SidebarItem children");
-  const rows = items === undefined ? childRows(children) : [];
-  const entries = items === undefined ? rows.map(row => ({ id: row.props.id, selectable: row.props.selectable })) : items;
-  const ids = new Set<string>();
-  for (const item of entries) {
-    if (!item || typeof item !== "object") throw new SparkError("E_INVALID_ARGUMENT", "Invalid sidebar item");
-    identifier(item.id, "sidebar ID");
-    if (ids.has(item.id)) throw new SparkError("E_INVALID_ARGUMENT", "Sidebar IDs must be unique"); ids.add(item.id);
-    if (item.selectable !== undefined && typeof item.selectable !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected selectable boolean");
-    if (items !== undefined) identifier((item as SidebarItemData).label, "sidebar label");
-  }
-  if (selectedId !== null && !entries.some(item => item.id === selectedId && item.selectable !== false)) throw new SparkError("E_INVALID_ARGUMENT", "Selected sidebar ID must identify a selectable row");
+  const { selectableIds, itemsJson } = useMemo(() => {
+    const rows = items === undefined ? childRows(children) : [];
+    const entries = items === undefined ? rows.map(row => ({ id: row.props.id, selectable: row.props.selectable })) : items;
+    const ids = new Set<string>(), selectableIds = new Set<string>();
+    for (const item of entries) {
+      if (!item || typeof item !== "object") throw new SparkError("E_INVALID_ARGUMENT", "Invalid sidebar item");
+      identifier(item.id, "sidebar ID");
+      if (ids.has(item.id)) throw new SparkError("E_INVALID_ARGUMENT", "Sidebar IDs must be unique"); ids.add(item.id);
+      if (item.selectable !== undefined && typeof item.selectable !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected selectable boolean");
+      if (items !== undefined) identifier((item as SidebarItemData).label, "sidebar label");
+      if (item.selectable !== false) selectableIds.add(item.id);
+    }
+    return { selectableIds, itemsJson: items === undefined ? "" : JSON.stringify(items.map(({ id, label, selectable = true }) => ({ id, title: label, selectable }))) };
+  }, [items, children]);
+  if (selectedId !== null && !selectableIds.has(selectedId)) throw new SparkError("E_INVALID_ARGUMENT", "Selected sidebar ID must identify a selectable row");
   const control = useControl({ ref, onError }, getSidebarAvailability());
   const [selectionRevision, revise] = useState(0);
   function selection(event: NativeSyntheticEvent<{ id: string }>) {
     if (!control.active()) return;
     const id = event?.nativeEvent?.id;
-    if (typeof id !== "string" || (id !== "" && !entries.some(item => item.id === id && item.selectable !== false))) { control.error(new SparkError("E_INVALID_DATA", "Invalid sidebar selection")); return; }
+    if (typeof id !== "string" || (id !== "" && !selectableIds.has(id))) { control.error(new SparkError("E_INVALID_DATA", "Invalid sidebar selection")); return; }
     revise(value => value + 1); onSelectionChange?.({ id: id || null });
   }
   function layout(event: NativeSyntheticEvent<{ width: number; height: number }>) {
@@ -75,7 +79,7 @@ export function Sidebar({ items, children, selectedId, contentInsetTop = 0, defa
     onContentLayout?.({ width: event.nativeEvent.width, height: event.nativeEvent.height });
   }
   if (control.failed) return <View {...props} ref={control.ref}><SidebarContext.Provider value>{items?.map(item => <Text key={item.id}>{item.label}</Text>) ?? children}</SidebarContext.Provider></View>;
-  return <NativeSidebar {...props} ref={control.ref} itemsJson={items === undefined ? "" : JSON.stringify(items.map(({ id, label, selectable = true }) => ({ id, title: label, selectable })))} selectedId={selectedId ?? ""} selectionRevision={selectionRevision} contentInsetTop={contentInsetTop} defaultRowHeight={defaultRowHeight} onSidebarLayout={layout} onSidebarSelectionChange={selection}>
+  return <NativeSidebar {...props} ref={control.ref} itemsJson={itemsJson} selectedId={selectedId ?? ""} selectionRevision={selectionRevision} contentInsetTop={contentInsetTop} defaultRowHeight={defaultRowHeight} onSidebarLayout={layout} onSidebarSelectionChange={selection}>
     <SidebarContext.Provider value>{children}</SidebarContext.Provider>
   </NativeSidebar>;
 }

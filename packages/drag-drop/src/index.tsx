@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Platform, UIManager, View, type NativeSyntheticEvent, type ViewProps } from "react-native";
 import NativeView from "./DesktopDragViewNativeComponent";
 import { SparkError, parseNativeResult, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
-import { dragConfiguration, dragSource, dragDrop, dragEnd, dragPosition, type DragPayload, type DragOptions, type DragOverEvent, type DropEvent, type DragEndEvent } from "./contracts";
+import { dragOptions, dragSource, dragDrop, dragEnd, dragPosition, type DragPayload, type DragOptions, type DragOverEvent, type DropEvent, type DragEndEvent } from "./contracts";
 export type { DragPayload, DragOptions, DragOperation, DragOverEvent, DropEvent, DragEndEvent } from "./contracts";
 export interface DragDropViewProps extends ViewProps, DragOptions {
   disabled?: boolean;
@@ -20,7 +20,7 @@ export function getDragDropAvailability(): Availability {
 }
 type Event = NativeSyntheticEvent<{ json: string }>;
 export function DragDropView({ source, sourceOperations, acceptedOperations, acceptedTypes, disabled = false, onDrop, onDragEnter, onDragOver, onDragLeave, onDragEnd, onError = console.error, ...props }: DragDropViewProps) {
-  const optionsJson = dragConfiguration(source, { sourceOperations, acceptedOperations, acceptedTypes }, Platform.OS);
+  const optionsJson = dragOptions({ sourceOperations, acceptedOperations, acceptedTypes });
   const sourceJson = source === undefined ? "" : JSON.stringify(dragSource(source, Platform.OS));
   if (typeof disabled !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected disabled to be a boolean");
   for (const handler of [onDrop, onDragEnter, onDragOver, onDragLeave, onDragEnd, onError]) if (handler !== undefined && typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a drag event callback");

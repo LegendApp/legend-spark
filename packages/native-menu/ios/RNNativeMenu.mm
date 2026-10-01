@@ -141,6 +141,7 @@ RCT_EXPORT_MODULE(NativeMenu)
     NSError *error = nil; id value = [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:&error];
     if (![value isKindOfClass:NSArray.class]) { reject(@"E_INVALID_ARGUMENT", @"Expected menu array", error); return; }
     if (!NSApp.mainMenu) { reject(@"E_UNAVAILABLE", @"Native application menu is unavailable", nil); return; }
+    if ([value isEqual:self.published]) { resolve(nil); return; }
     [self identifyNativeMenus];
     NSArray *previous = self.published;
     [self restore];

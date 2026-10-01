@@ -48,6 +48,9 @@ export function dragSource(source: DragPayload | undefined, platform: string, in
 }
 export function dragConfiguration(source: DragPayload | undefined, options: DragOptions, platform: string): string {
   dragSource(source, platform);
+  return dragOptions(options);
+}
+export function dragOptions(options: DragOptions): string {
   if (!record(options)) invalid("Expected drag options");
   for (const key of Object.keys(options)) if (!["sourceOperations", "acceptedOperations", "acceptedTypes"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown drag option: ${key}`);
   for (const values of [options.sourceOperations, options.acceptedOperations]) {

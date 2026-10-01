@@ -40,6 +40,13 @@ test("uncontrolled input retains its original default and disabled controls do n
   expect(native.defaultText).toBe("one"); expect(native.controlled).toBe(false); expect(native.disabled).toBe(true);
   native.onTextChange(event("edit", 1)); expect(onChangeText).not.toHaveBeenCalled();
 });
+test("uncontrolled desktop edits do not render or send text acknowledgments back to native", async () => {
+  const onChangeText = vi.fn(); await mount(React.createElement(TextInput, { defaultValue: "one", onChangeText }));
+  const before = rendered.root.findByType("SparkTextInput").props;
+  await act(async () => { before.onTextChange(event("edit", 1)); before.onTextChange(event("newer", 2)); before.onTextChange(event("stale", 1)); });
+  expect(rendered.root.findByType("SparkTextInput").props).toBe(before);
+  expect(onChangeText.mock.calls).toEqual([["edit"], ["newer"]]);
+});
 test.each(["macos", "windows"])("%s Select uses one controlled value and validates native choices", async platformName => {
   platform.OS = platformName; const onValueChange = vi.fn(), onError = vi.fn();
   await mount(React.createElement(Select, { options, value: "one", onValueChange, onError, accessibilityLabel: "Theme" }));

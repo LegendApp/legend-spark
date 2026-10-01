@@ -87,8 +87,9 @@ export async function createTray(options: TrayOptions): Promise<Tray> {
       const next = queue.then(async () => {
         const options = { ...current, ...snapshot };
         presentation(options);
-        await call("update", options);
-        current = options; selected = selectableMenuIds(options.menu);
+        await call("update", { id, instanceId, ...snapshot });
+        current = options;
+        if (snapshot.menu !== undefined) selected = selectableMenuIds(options.menu);
       });
       queue = next.catch(() => {});
       await next;
