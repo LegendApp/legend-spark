@@ -73,5 +73,5 @@ export function onUpdateEvent(listener: (event: UpdateEvent) => void): Subscript
   native();
   return onDesktopEvent(event => {
     if (event.type === "update" && typeof event.state === "string" && ["checking", "available", "notAvailable", "downloading", "downloaded", "installing", "error"].includes(event.state) && (event.version === undefined || typeof event.version === "string") && (event.message === undefined || typeof event.message === "string")) listener(event as unknown as UpdateEvent);
-  });
+  }, { types: ["update"] });
 }

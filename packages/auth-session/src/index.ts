@@ -2,6 +2,7 @@ import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { callLinks, linksCommand } from "@legendapp/spark-desktop-links/src/native";
 import { openURL } from "@legendapp/spark-desktop-links";
 import { subscribeToOpenRequests } from "@legendapp/spark-desktop-app/src/open-requests";
+import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { toByteArray, fromByteArray } from "base64-js";
 import { authSessions } from "./core";
 import { validateCount, validateDigest, type CompleteAuthSessionResult } from "./types";
@@ -26,7 +27,9 @@ export const createAuthSession = authSessions({
       return url.protocol === "http:" && url.hostname === "127.0.0.1" && Number(url.port) > 0 && (!port || Number(url.port) === port) && url.pathname === path && !url.username && !url.password && !url.search && !url.hash;
     } catch { return false; }
   }),
-  poll: id => callLinks("authPoll", { id }, (value): value is string[] => Array.isArray(value) && value.every(url => typeof url === "string")),
+  subscribeLoopback: async (id, listener) => onDesktopEvent(event => {
+    if (typeof event.url === "string") listener(event.url);
+  }, { types: ["authRedirect"], target: { field: "id", value: id } }),
   close: id => linksCommand("authClose", { id }),
   subscribe: listener => subscribeToOpenRequests(event => { if (event.type === "url") listener(event.url); }),
   open: openURL,

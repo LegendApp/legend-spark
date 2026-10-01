@@ -29,14 +29,13 @@ RCT_EXPORT_MODULE(NativeDesktopLinks)
         } else if ([method isEqual:@"authPrepare"]) {
           if (key.empty() || _authSessions.count(key) || _authSessions.size() >= 4) throw std::invalid_argument("Invalid or busy auth session");
           NSInteger port = [args[@"port"] integerValue]; if (port < 0 || port > 65535) throw std::invalid_argument("Invalid callback port");
-          auto receiver = std::make_unique<spark::AuthLoopback>((unsigned short)port, std::string([args[@"path"] UTF8String]));
+          auto receiver = std::make_unique<spark::AuthLoopback>((unsigned short)port, std::string([args[@"path"] UTF8String]), [identifier](std::string value) {
+            NSString *url = [NSString stringWithUTF8String:value.c_str()];
+            dispatch_async(dispatch_get_main_queue(), ^{ SparkEmit(@{ @"type": @"authRedirect", @"id": identifier, @"url": url }); });
+          });
           NSString *uri = [NSString stringWithUTF8String:receiver->RedirectURI().c_str()]; _authSessions.emplace(key, std::move(receiver)); resolve(SparkJSON(uri));
         } else if ([method isEqual:@"authClose"]) { _authSessions.erase(key); resolve(@"null"); }
-        else if ([method isEqual:@"authPoll"]) {
-          auto found = _authSessions.find(key); if (found == _authSessions.end()) throw std::invalid_argument("Auth session is closed");
-          NSMutableArray *urls = [NSMutableArray new]; for (auto const &value : found->second->Drain()) [urls addObject:[NSString stringWithUTF8String:value.c_str()]];
-          resolve(SparkJSON(urls));
-        } else throw std::invalid_argument("Unknown auth operation");
+        else throw std::invalid_argument("Unknown auth operation");
       } catch (std::exception const &error) { reject(@"E_AUTH", [NSString stringWithUTF8String:error.what()], nil); }
       return;
     }

@@ -39,8 +39,7 @@ try {
   ]) if (!(await request(raw)).startsWith("HTTP/1.1 400")) throw new Error("Malformed callback accepted");
   const accepted = `${uri}?state=valid&code=example`;
   if (!(await request(`GET /auth/callback?state=valid&code=example HTTP/1.1\r\nHost: ${url.host}\r\n\r\n`)).startsWith("HTTP/1.1 200")) throw new Error("Valid callback rejected");
-  (child.stdin as any).write("drain\n");
-  if (await line() !== accepted || await line() !== "END") throw new Error("Callback queue mismatch");
+  if (await line() !== accepted) throw new Error("Callback event mismatch");
   (child.stdin as any).write("quit\n");
   if (await child.exited) throw new Error("Native receiver failed");
   let reachable = false; try { await fetch(uri); reachable = true; } catch {} if (reachable) throw new Error("Disposed callback listener survived");

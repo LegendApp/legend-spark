@@ -26,5 +26,5 @@ export function addEventListener(type: "url", listener: URLListener): Subscripti
   if (Platform.OS !== "macos" && Platform.OS !== "windows") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Desktop URL events require a desktop host");
   return onDesktopEvent(event => {
     if (event.type === "openURL" && event.initial !== true && typeof event.url === "string" && /^[a-z][a-z0-9+.-]*:/i.test(event.url) && !event.url.includes("\0")) listener({ url: event.url });
-  });
+  }, { types: ["openURL"] });
 }

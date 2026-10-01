@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { asyncRegistration, parseNativeResult, SparkError } from "../packages/desktop-app/src/contracts";
+import { asyncRegistration, invokeNative, parseNativeResult, SparkError } from "../packages/desktop-app/src/contracts";
 
 test("async registration joins removal, stops callbacks once and retries failed cleanup", async () => {
   const stop = vi.fn();
@@ -21,4 +21,17 @@ test("native parsing rejects malformed JSON and wrong shapes with stable codes",
     try { parseNativeResult(json, strings); expect.unreachable(); }
     catch (error) { expect(error).toBeInstanceOf(SparkError); expect(error).toMatchObject({ code: "E_INVALID_DATA" }); }
   }
+});
+
+
+test("native invocation starts immediately and normalizes synchronous and asynchronous failures", async () => {
+  const operation = vi.fn(() => 7);
+  const result = invokeNative(operation);
+  expect(operation).toHaveBeenCalledOnce();
+  await expect(result).resolves.toBe(7);
+  const original = Object.assign(new Error("denied"), { code: "E_PERMISSION" });
+  await expect(invokeNative(() => { throw original; })).rejects.toMatchObject({ code: "E_PERMISSION_DENIED", cause: original });
+  await expect(invokeNative(() => Promise.reject(original))).rejects.toMatchObject({ code: "E_PERMISSION_DENIED", cause: original });
+  const sparkError = new SparkError("E_BUSY", "busy");
+  await expect(invokeNative(() => Promise.reject(sparkError))).rejects.toBe(sparkError);
 });

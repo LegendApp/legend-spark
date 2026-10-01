@@ -1,12 +1,12 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { authSessions, type AuthTransport } from "../packages/auth-session/src/core.ts";
 import { authorize, callbackMatches } from "../packages/auth-session/src/types.ts";
 function fixture(overrides: Partial<AuthTransport> = {}) {
   const closed: string[] = [], opened: string[] = [], callbacks: string[] = [];
   let receive: (url: string) => void = () => {};
   const create = authSessions({ randomState: async () => "unpredictable-state", prepare: async () => "http://127.0.0.1:12345/auth/callback",
-    poll: async () => callbacks.splice(0), close: async id => { closed.push(id); },
+    subscribeLoopback: async (_id, listener) => { receive = listener; return { remove() { receive = () => {}; } }; }, close: async id => { closed.push(id); },
     subscribe: async listener => { receive = listener; return { remove() { receive = () => {}; } }; },
     open: async url => { opened.push(url); }, ...overrides });
   return { create, closed, opened, callbacks, receive: (url: string) => receive(url) };
@@ -23,7 +23,7 @@ test("loopback auth ignores invalid callbacks and cleans up after success", asyn
   const f = fixture(), session = await f.create();
   await expect(f.create()).rejects.toThrow("already active");
   const result = session.open(authURL(session.state));
-  f.callbacks.push(`${session.redirectUri}?state=bad`, `${session.redirectUri}?code=code&state=${session.state}`);
+  f.receive(`${session.redirectUri}?state=bad`); f.receive(`${session.redirectUri}?code=code&state=${session.state}`);
   expect(await result).toEqual({ type: "success", url: `${session.redirectUri}?code=code&state=${session.state}` });
   expect(f.closed).toHaveLength(1); await session.dismiss(); expect(f.closed).toHaveLength(1);
   await expect(session.open(authURL(session.state))).rejects.toThrow("once");
@@ -45,10 +45,22 @@ test("prepared auth expires, launch failure cleans up, schemes use matching URL 
   expect((await result).type).toBe("success"); expect(f.closed).toHaveLength(1);
 });
 test("auth transport errors reject instead of impersonating user cancellation", async () => {
-  const f = fixture({ poll: async () => { throw new Error("Native runtime needs a rebuild"); } });
-  const session = await f.create();
-  await expect(session.open(authURL(session.state))).rejects.toThrow("needs a rebuild");
-  expect(f.closed).toHaveLength(1);
+  const f = fixture({ subscribeLoopback: async () => { throw new Error("Native runtime needs a rebuild"); } });
+  await expect(f.create()).rejects.toThrow("needs a rebuild");
+  expect(f.closed).toHaveLength(0);
+});
+
+test("an open loopback session has only its deadline timer and receives callbacks immediately", async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture(), session = await f.create();
+    const result = session.open(authURL(session.state));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(vi.getTimerCount()).toBe(1);
+    f.receive(`${session.redirectUri}?state=${session.state}`);
+    expect(await result).toEqual({ type: "success", url: `${session.redirectUri}?state=${session.state}` });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { vi.useRealTimers(); }
 });
 
 test("failed disposal retains ownership, joins callers, and can retry", async () => {

@@ -54,12 +54,12 @@ function count(value: number): number {
 }
 /** Process-wide: cancels every accepted run in this application's Codex supervisor. */
 export async function cancelActiveCodexRuns(): Promise<number> {
-  return codex ? count(await invokeNative(async () => codex!.cancelActiveRuns())) : 0;
+  return codex ? count(await invokeNative(() => codex!.cancelActiveRuns())) : 0;
 }
 /** Process-wide: cancels active runs and stops the supervisor; later runs restart it. */
 export async function shutdownCodex(): Promise<number> {
   if (!codex) return 0;
-  const result = count(await invokeNative(async () => codex!.shutdown()));
+  const result = count(await invokeNative(() => codex!.shutdown()));
   codex = undefined;
   return result;
 }

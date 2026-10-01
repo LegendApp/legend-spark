@@ -50,6 +50,7 @@ export function nativeError(cause: unknown): SparkError {
   const code = aliases[original] ?? (known.includes(original) ? original as SparkErrorCode : "E_NATIVE");
   return new SparkError(code, cause instanceof Error ? cause.message : "Native operation failed", { cause });
 }
-export async function invokeNative<T>(operation: () => Promise<T>): Promise<T> {
-  try { return await operation(); } catch (cause) { throw nativeError(cause); }
+export function invokeNative<T>(operation: () => T | Promise<T>): Promise<T> {
+  try { return Promise.resolve(operation()).catch(cause => { throw nativeError(cause); }); }
+  catch (cause) { return Promise.reject(nativeError(cause)); }
 }

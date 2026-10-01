@@ -102,7 +102,7 @@ export async function onNotificationResponse(listener: (event: NotificationRespo
     if (seen.size > 256) seen.delete(seen.values().next().value!);
     listener(event);
   }
-  const sub = onDesktopEvent(event => { if (response(event)) receive(event); });
+  const sub = onDesktopEvent(event => { if (response(event)) receive(event); }, { types: ["notificationResponse"] });
   try {
     const responses = Platform.OS === "windows"
       ? parseNativeResult(await invokeNative(() => {

@@ -3,7 +3,7 @@ import { authorize, callbackMatches, timeout, validateRedirect, type AuthSession
 export type AuthTransport = {
   randomState(): Promise<string>;
   prepare(id: string, port: number, path: string): Promise<string>;
-  poll(id: string): Promise<string[]>;
+  subscribeLoopback(id: string, listener: (url: string) => void): Promise<{ remove(): void }>;
   close(id: string): Promise<void>;
   subscribe(listener: (url: string) => void): Promise<{ remove(): void }>;
   open(url: string): Promise<unknown>;
@@ -30,13 +30,13 @@ export function authSessions(transport: AuthTransport) {
     busy = true;
     const started = Date.now(), id = `auth-${started}-${++sequence}`;
     let allocated = false, closed = false, opened = false, subscription: { remove(): void } | undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined, polling: ReturnType<typeof setTimeout> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     type Outcome = { value: AuthSessionResult; error?: unknown };
     let resolve!: (outcome: Outcome) => void;
     const result = new Promise<Outcome>(done => { resolve = done; });
     const readResult = async () => { const outcome = await result; if (outcome.error) throw outcome.error; return outcome.value; };
     const cleanup = asyncRegistration(() => {
-      closed = true; clearTimeout(timer); clearTimeout(polling); options.signal?.removeEventListener("abort", cancel);
+      closed = true; clearTimeout(timer); options.signal?.removeEventListener("abort", cancel);
     }, async () => {
       try {
         subscription?.remove(); subscription = undefined;
@@ -53,14 +53,11 @@ export function authSessions(transport: AuthTransport) {
     try {
       const state = await transport.randomState();
       let redirect = requestedRedirect!;
-      if (loopback) { allocated = true; redirect = await transport.prepare(id, port, path); }
       const received = (url: string) => { if (opened && !closed && callbackMatches(url, redirect, state)) void finish({ type: "success", url }); };
-      if (!loopback) subscription = await transport.subscribe(received);
-      async function poll() {
-        try { for (const url of await transport.poll(id)) received(url); }
-        catch (error) { if (!closed) await finish({ type: "dismiss" }, error); }
-        finally { if (!closed) polling = setTimeout(poll, 100); }
-      }
+      if (loopback) {
+        subscription = await transport.subscribeLoopback(id, received);
+        allocated = true; redirect = await transport.prepare(id, port, path);
+      } else subscription = await transport.subscribe(received);
       options.signal?.addEventListener("abort", cancel, { once: true });
       const remaining = duration - (Date.now() - started);
       if (options.signal?.aborted) cancel();
@@ -73,7 +70,6 @@ export function authSessions(transport: AuthTransport) {
           if (closed) return readResult();
           try {
             authorize(url, state, redirect); opened = true;
-            if (loopback) void poll();
             // A slow browser launch must not suppress cancellation or callback delivery.
             const launch = transport.open(url).catch(async error => { await finish({ type: "dismiss" }, error); });
             await Promise.race([result, launch.then(() => result)]);

@@ -22,7 +22,7 @@ export async function registerGlobalShortcut(accelerator: string, handler: () =>
   const parsed = parseAccelerator(accelerator, Platform.OS === "windows" ? "windows" : "macos"), id = `global-${Date.now()}-${++sequence}`;
   native();
   let removed = false;
-  const subscription = onDesktopEvent(event => { if (!removed && event.type === "globalShortcut" && event.id === id) handler(); });
+  const subscription = onDesktopEvent(event => { if (!removed && event.type === "globalShortcut" && event.id === id) handler(); }, { types: ["globalShortcut"], target: { field: "id", value: id } });
   try { await call("register", { id, ...parsed }); }
   catch (cause) {
     removed = true; subscription.remove();

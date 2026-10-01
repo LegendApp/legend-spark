@@ -72,7 +72,7 @@ struct SparkLinks {
   React::ReactContext context;
   REACT_INIT(Initialize)
   void Initialize(React::ReactContext const &value) noexcept { context = value; }
-  static fire_and_forget Invoke(std::shared_ptr<Receivers> receivers, std::string method, std::string encoded, React::ReactPromise<std::string> promise) {
+  static fire_and_forget Invoke(React::ReactContext context, std::shared_ptr<Receivers> receivers, std::string method, std::string encoded, React::ReactPromise<std::string> promise) {
     try {
       auto args = Json::JsonObject::Parse(to_hstring(encoded));
       if (method == "cryptoRandom") {
@@ -90,13 +90,14 @@ struct SparkLinks {
         if (method == "authPrepare") {
           if (id.empty() || receivers->count(id) || receivers->size() >= 4) throw hresult_invalid_argument(L"Invalid or busy auth session");
           auto port = args.GetNamedNumber(L"port"); if (port < 0 || port > 65535 || port != std::floor(port)) throw hresult_invalid_argument(L"Invalid callback port");
-          auto receiver = std::make_unique<spark::AuthLoopback>(static_cast<unsigned short>(port), to_string(args.GetNamedString(L"path")));
+          auto receiver = std::make_unique<spark::AuthLoopback>(static_cast<unsigned short>(port), to_string(args.GetNamedString(L"path")), [context, id](std::string url) {
+            context.UIDispatcher().Post([context, id, url = std::move(url)] {
+              context.EmitJSEvent(L"RCTDeviceEventEmitter", L"desktop", React::JSValueObject{{"type", "authRedirect"}, {"id", id}, {"url", url}});
+            });
+          });
           auto uri = receiver->RedirectURI(); receivers->emplace(id, std::move(receiver)); promise.Resolve(to_string(Json::JsonValue::CreateStringValue(to_hstring(uri)).Stringify()));
         } else if (method == "authClose") { receivers->erase(id); promise.Resolve("null"); }
-        else if (method == "authPoll") {
-          auto found = receivers->find(id); if (found == receivers->end()) throw hresult_invalid_argument(L"Auth session is closed");
-          Json::JsonArray urls; for (auto const &uri : found->second->Drain()) urls.Append(Json::JsonValue::CreateStringValue(to_hstring(uri))); promise.Resolve(to_string(urls.Stringify()));
-        } else throw hresult_invalid_argument(L"Unknown auth operation");
+        else throw hresult_invalid_argument(L"Unknown auth operation");
       } else if (method == "recent" || method == "noteRecent" || method == "clearRecent") {
         RecentDocuments recent;
         if (method == "recent") promise.Resolve(to_string(recent.Paths().Stringify()));
@@ -121,7 +122,7 @@ struct SparkLinks {
   }
   REACT_METHOD(call)
   void call(std::string method, std::string args, React::ReactPromise<std::string> promise) noexcept {
-    context.UIDispatcher().Post([receivers = receivers, method = std::move(method), args = std::move(args), promise]() { Invoke(receivers, method, args, promise); });
+    context.UIDispatcher().Post([context = context, receivers = receivers, method = std::move(method), args = std::move(args), promise]() { Invoke(context, receivers, method, args, promise); });
   }
 };
 }

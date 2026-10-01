@@ -66,7 +66,7 @@ async function createLauncherMenu(value: LauncherMenuOptions, platform: "macos" 
   let stopped = false, ready = false;
   const subscription = onDesktopEvent(event => {
     if (ready && !stopped && event.type === "dockAction" && event.owner === owner && typeof event.id === "string" && ids.has(event.id)) onAction({ type: "action", itemId: event.id });
-  });
+  }, { types: ["dockAction"], target: { field: "owner", value: owner } });
   try { await command("dockMenu", { items, owner }); ready = true; } catch (error) { subscription.remove(); throw error; }
   return asyncRegistration(() => { stopped = true; subscription.remove(); }, () => command("clearDockMenu", { owner }));
 }
@@ -76,7 +76,7 @@ export async function onSystemEvent(handler: (event: SystemEvent) => void): Prom
   if (typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected system event handler");
   const types: readonly SystemEvent["type"][] = ["sleep", "wake", "lock", "unlock", "powerChanged", "appearanceChanged", "displaysChanged"];
   const id = token(); let stopped = false;
-  const subscription = onDesktopEvent(event => { if (!stopped && types.includes(event.type as SystemEvent["type"])) handler({ type: event.type as SystemEvent["type"] }); });
+  const subscription = onDesktopEvent(event => { if (!stopped && types.includes(event.type as SystemEvent["type"])) handler({ type: event.type as SystemEvent["type"] }); }, { types });
   try { await command("observe", { id }); } catch (error) { subscription.remove(); throw error; }
   return asyncRegistration(() => { stopped = true; subscription.remove(); }, () => command("unobserve", { id }));
 }

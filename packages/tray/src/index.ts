@@ -76,7 +76,7 @@ export async function createTray(options: TrayOptions): Promise<Tray> {
     if (!ready || stopped || event.trayId !== id || event.instanceId !== instanceId) return;
     if (event.type === "trayClick") onAction?.({ type: "click" });
     else if (event.type === "trayAction" && typeof event.itemId === "string" && selected.has(event.itemId)) onAction?.({ type: "action", itemId: event.itemId });
-  });
+  }, { types: ["trayClick", "trayAction"], target: { field: "trayId", value: id } });
   try { await call("create", current); ready = true; } catch (error) { sub.remove(); throw error; }
   const registration = asyncRegistration(() => { stopped = true; sub.remove(); }, async () => { await queue; await call("remove", { id, instanceId }); });
   return {

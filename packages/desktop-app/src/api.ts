@@ -55,7 +55,7 @@ export function addAppListener<K extends keyof AppEventMap>(type: K, listener: (
   if (!["activate", "deactivate", "reopen", "secondInstance", "willQuit", "windowOpened", "windowClosed"].includes(type) || typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected an application event and listener");
   const availability = getAppAvailability();
   if (!availability.available) throw new SparkError(availability.reason === "missing-module" ? "E_MODULE_UNAVAILABLE" : "E_UNSUPPORTED_PLATFORM", "Application events are unavailable");
-  return onDesktopEvent(value => { const event = appEvent(value); if (event?.type === type) listener(event as AppEventMap[K]); });
+  return onDesktopEvent(value => { const event = appEvent(value); if (event?.type === type) listener(event as AppEventMap[K]); }, { types: [type === "windowOpened" ? "opened" : type === "windowClosed" ? "closed" : type] });
 }
 let nextGuard = 0;
 /** All registered guards must approve. Rejection, removal or the native 30s deadline vetoes. */
@@ -76,7 +76,7 @@ export async function beforeQuit(handler: () => boolean | Promise<boolean>, opti
     void Promise.resolve().then(() => removed ? false : handler()).catch(error => { reportError(error); return false; }).then(
       allow => command("replyQuit", { id, allow: !removed && latestRequest === requestId && allow === true, requestId }),
     ).catch(error => { reportError(error); });
-  });
+  }, { types: ["beforeQuit"], target: { field: "guardId", value: id } });
   const registration = asyncRegistration(() => { removed = true; subscription.remove(); }, () => command("quitGuard", { id, enabled: false }));
   try { await command("quitGuard", { id, enabled: true }); }
   catch (cause) {

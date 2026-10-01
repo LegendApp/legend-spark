@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ call: vi.fn() }));
 vi.mock("react-native", () => ({ Platform: { OS: "macos" }, TurboModuleRegistry: { get: () => ({ call: mocks.call }) } }));
+vi.mock("@legendapp/spark-desktop-app/src/events", () => ({ onDesktopEvent: () => ({ remove() {} }) }));
 import { createAuthSession, getRandomBytesAsync, digestStringAsync, maybeCompleteAuthSession } from "../packages/auth-session/src/index";
 test("desktop crypto rejects malformed, noncanonical and wrong-size native results", async () => {
   for (const value of [null, "AA==", "not base64!!", "AB=="]) {

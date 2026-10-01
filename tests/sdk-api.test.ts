@@ -47,7 +47,11 @@ const shortcuts = await import("../packages/desktop-shortcuts/src/index.ts");
 const menus = await import("../packages/native-menu/src/index.ts");
 const context = await import("../packages/context-menu/src/index.ts");
 const dialogs = await import("../packages/file-dialog/src/index.ts");
-beforeEach(() => { platform.OS = "macos"; calls.length = 0; handlers.clear(); subscriptions.clear(); });
+beforeEach(() => {
+  platform.OS = "macos"; calls.length = 0; handlers.clear(); subscriptions.clear();
+  // Clearing native subscriptions models a new event host, including its identity.
+  moduleObjects.delete("NativeDesktopApp");
+});
 const tick = () => sleep(1);
 function nativeError(code: string) { return Object.assign(new Error(code), { code }); }
 

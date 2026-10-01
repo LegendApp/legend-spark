@@ -93,7 +93,7 @@ export async function closeWindow(id: string): Promise<CloseResult> {
 export interface WindowListenerOptions { onError?: (error: SparkError) => void }
 function report(options: WindowListenerOptions, cause: unknown) { try { (options.onError ?? console.error)(nativeError(cause)); } catch (error) { console.error(error); } }
 /** Internal lifetime binding shared by ordinary and AppKit events. */
-export async function subscribeToWindowInstance(id: string, listener: (event: DesktopEvent) => void): Promise<AsyncRegistration> {
+export async function subscribeToWindowInstance(id: string, listener: (event: DesktopEvent) => void, types: readonly string[] = ["focusChanged", "boundsChanged", "visibilityChanged", "fullscreenChanged"]): Promise<AsyncRegistration> {
   windowId(id);
   let instance: string | undefined, stopped = false;
   const buffered: DesktopEvent[] = [];
@@ -103,7 +103,7 @@ export async function subscribeToWindowInstance(id: string, listener: (event: De
     if (event.instanceId !== instance) return;
     try { listener(event); } finally { if (event.type === "closed") { stopped = true; subscription.remove(); } }
   };
-  const subscription = onDesktopEvent(consume);
+  const subscription = onDesktopEvent(consume, { types: [...types, "closed"], target: { field: "windowId", value: id } });
   try { instance = (await windowCall("observe", { id }, isInfo)).instanceId; buffered.splice(0).forEach(consume); }
   catch (cause) { stopped = true; subscription.remove(); throw cause; }
   return asyncRegistration(() => { stopped = true; subscription.remove(); }, async () => {});
@@ -118,7 +118,7 @@ export async function addWindowListener<K extends keyof WindowEventMap>(id: stri
     if (!valid) { report(options, new SparkError("E_INVALID_DATA", "Malformed window event")); return; }
     const payload = { windowId: id, ...(type === "boundsChanged" ? { bounds: event.bounds } : type === "focusChanged" ? { focused: event.focused } : type === "visibilityChanged" ? { visible: event.visible } : type === "fullscreenChanged" ? { fullscreen: event.fullscreen } : {}) };
     try { listener(payload as WindowEventMap[K]); } catch (cause) { report(options, cause); }
-  });
+  }, [type]);
 }
 const guards = new Map<string, AsyncRegistration>();
 const creatingGuards = new Set<string>();
@@ -144,7 +144,7 @@ export async function beforeWindowClose(id: string, handler: () => boolean | Pro
       if (stopped || request !== current) return;
       await windowCommand("replyClose", { id, instanceId: instance, guardId, requestId: current, allow: allow === true });
     }).catch(cause => report(options, cause)).finally(() => { if (request === current) request = undefined; });
-  }); } catch (cause) { creatingGuards.delete(id); throw cause; }
+  }, { types: ["closed", "beforeClose", "closeGuardTimeout"], target: { field: "windowId", value: id } }); } catch (cause) { creatingGuards.delete(id); throw cause; }
   const registration = asyncRegistration(() => { stopped = true; subscription.remove(); }, async () => {
     try { if (instance) await windowCommand("closeGuard", { id, instanceId: instance, guardId, enabled: false }); }
     catch (cause) { if (nativeError(cause).code !== "E_NOT_FOUND") throw cause; }

@@ -12,9 +12,8 @@
 #endif
 #include <atomic>
 #include <chrono>
-#include <mutex>
+#include <functional>
 #include <string>
-#include <vector>
 #include <thread>
 #include <stdexcept>
 #include <algorithm>
@@ -33,8 +32,7 @@ class AuthLoopback {
   AuthSocket listener = InvalidSocket;
   std::atomic<bool> stopped{false};
   std::thread worker;
-  std::mutex mutex;
-  std::vector<std::string> results;
+  std::function<void(std::string)> received;
   std::string route, origin;
   bool initialized = false;
   void Receive() {
@@ -71,15 +69,16 @@ class AuthLoopback {
             (request.substr(end, first - end) == " HTTP/1.1" || request.substr(end, first - end) == " HTTP/1.0");
         }
       }
-      if (valid) { std::lock_guard lock(mutex); if (results.size() < 16) results.push_back(origin + target); }
       const std::string body = valid ? "Callback received. You may return to the application." : "Invalid callback request.";
       const std::string response = std::string("HTTP/1.1 ") + (valid ? "200 OK" : "400 Bad Request") + "\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\nConnection: close\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
       send(client, response.data(), static_cast<int>(response.size()), 0); CloseSocket(client);
+      if (valid && !stopped) received(origin + target);
     }
     CloseSocket(listener); listener = InvalidSocket;
   }
  public:
-  AuthLoopback(unsigned short port, std::string path) : route(std::move(path)) {
+  AuthLoopback(unsigned short port, std::string path, std::function<void(std::string)> callback) : received(std::move(callback)), route(std::move(path)) {
+    if (!received) throw std::invalid_argument("Expected a callback listener");
     if (route.empty() || route[0] != '/' || route.find_first_not_of("/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != std::string::npos) throw std::invalid_argument("Invalid callback path");
 #ifdef _WIN32
     WSADATA data{}; if (WSAStartup(MAKEWORD(2, 2), &data)) throw std::runtime_error("Could not initialize loopback socket"); initialized = true;
@@ -115,7 +114,6 @@ class AuthLoopback {
 #endif
   }
   std::string RedirectURI() const { return origin + route; }
-  std::vector<std::string> Drain() { std::lock_guard lock(mutex); auto values = std::move(results); results.clear(); return values; }
   AuthLoopback(AuthLoopback const &) = delete;
 };
 }

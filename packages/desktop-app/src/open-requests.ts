@@ -30,7 +30,7 @@ export async function subscribeToOpenRequests(listener: (event: OpenRequest) => 
     let value: OpenRequest;
     try { value = request(event); } catch { return; }
     deliver(value);
-  });
+  }, { types: ["openURL", "openFile"] });
   try {
     const values = await callAppNative("pendingURLs", (value): value is unknown[] => Array.isArray(value));
     const requests = values.map(request);

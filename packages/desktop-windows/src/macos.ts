@@ -49,5 +49,5 @@ export async function addMacOSWindowListener(id: string, listener: (event: MacOS
       }
     }
     try { listener(payload as MacOSWindowEvent); } catch (cause) { report(cause); }
-  });
+  }, ["titleBarAction", "toolbarAction", "toolbarSelectionChanged", "toolbarSearchChanged", "toolbarSearchSubmitted", "toolbarMenuAction"]);
 }
