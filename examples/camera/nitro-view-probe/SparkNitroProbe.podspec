@@ -5,7 +5,7 @@ Pod::Spec.new do |s|
   s.homepage = 'https://github.com/LegendApp'
   s.license = 'MIT'
   s.author = 'Spark'
-  s.source = { :git => 'https://github.com/LegendApp/legend-framework.git' }
+  s.source = { :git => 'https://github.com/LegendApp/legend-spark.git' }
   s.platforms = { :osx => '14.0' }
   s.source_files = 'macos/**/*.swift'
   load 'nitrogen/generated/ios/SparkNitroProbe+autolinking.rb'
