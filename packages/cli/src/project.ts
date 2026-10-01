@@ -63,13 +63,13 @@ export function entryFile(root: string) {
 }
 export function installedPackages(root: string): Package[] {
   const found = new Map<string, Package>();
-  const queue = [
-    { root, json: readJson(path.join(root, "package.json")), app: true },
-  ];
+  const manifest = readJson(path.join(root, "package.json"));
+  const appRequire = createRequire(path.join(root, "package.json"));
+  const queue = [{ root, json: manifest, app: true }];
   const visited = new Set<string>();
   while (queue.length) {
     const current = queue.shift()!;
-    const req = createRequire(path.join(current.root, current.json.spark?.bundledModuleRoot ?? ".", "package.json"));
+    const contextualRequire = createRequire(path.join(current.root, current.json.spark?.bundledModuleRoot ?? ".", "package.json"));
     const bundled = current.json.spark?.bundledModules ?? current.json.bundledDependencies ?? current.json.bundleDependencies;
     const names = Object.keys({
       ...Object.fromEntries((Array.isArray(bundled) ? bundled : []).map(name => [name, true])),
@@ -82,6 +82,9 @@ export function installedPackages(root: string): Package[] {
         .filter(([name]) => !current.json.peerDependenciesMeta?.[name]?.optional)),
     }).sort();
     for (const name of names) {
+      // Linked workspace packages resolve peers from their original checkout.
+      // Explicit app overrides must select the app's installed native copy.
+      const req = Object.hasOwn(manifest.overrides ?? {}, name) ? appRequire : contextualRequire;
       let file: string;
       try {
         file = req.resolve(`${name}/package.json`);

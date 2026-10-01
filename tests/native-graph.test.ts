@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -225,5 +225,25 @@ test("dependency discovery accepts packages exposing only subpath entries", () =
     writeFileSync(path.join(module, "native.js"), "module.exports = {};");
     writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "probe", dependencies: { "@example/list": "1.0.0" } }));
     expect(installedPackages(root).map(pkg => pkg.name)).toEqual(["@example/list"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("app overrides retain patched native packages reached through linked workspaces", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-native-override-"));
+  try {
+    const app = path.join(root, "app");
+    const library = path.join(root, "library");
+    for (const dir of [app, library]) mkdirSync(path.join(dir, "node_modules/native-fixture"), { recursive: true });
+    const appManifest = { dependencies: { "linked-library": "file:../library" }, overrides: { "native-fixture": "file:patched.tgz" } };
+    writeFileSync(path.join(app, "package.json"), JSON.stringify(appManifest));
+    writeFileSync(path.join(library, "package.json"), JSON.stringify({ name: "linked-library", version: "1", dependencies: { "native-fixture": "1" } }));
+    symlinkSync(library, path.join(app, "node_modules/linked-library"));
+    for (const dir of [app, library]) {
+      writeFileSync(path.join(dir, "node_modules/native-fixture/package.json"), JSON.stringify({ name: "native-fixture", version: "1", spark: { nativeModules: ["Fixture"] } }));
+    }
+    const patched = path.join(app, "node_modules/native-fixture");
+    expect(installedPackages(app).find(pkg => pkg.name === "native-fixture")?.root).toBe(realpathSync(patched));
+    writeFileSync(path.join(app, "package.json"), JSON.stringify({ dependencies: appManifest.dependencies }));
+    expect(installedPackages(app).find(pkg => pkg.name === "native-fixture")?.root).toBe(realpathSync(path.join(library, "node_modules/native-fixture")));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
