@@ -13,6 +13,10 @@ static NSString *Role(NSMenuItem *item) {
   NSString *role = objc_getAssociatedObject(item, &RoleKey);
   if (role) return role;
   if (item.submenu && item.submenu == NSApp.servicesMenu) return @"services";
+  // React Native's macOS storyboard reserves Command-comma for Preferences,
+  // but leaves its action unset until an application supplies a handler.
+  if (!item.action && !item.submenu && [item.keyEquivalent isEqual:@","] &&
+      item.keyEquivalentModifierMask == NSEventModifierFlagCommand) return @"settings";
   NSString *action = item.action ? NSStringFromSelector(item.action) : @"";
   if ([action isEqual:@"showSettingsWindow:"] || [action isEqual:@"showPreferences:"]) return @"settings";
   for (NSString *key in RoleSelectors()) if ([RoleSelectors()[key] isEqual:action]) return key;
