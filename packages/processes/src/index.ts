@@ -1,8 +1,8 @@
 import { Platform } from "react-native";
-import { fromByteArray, toByteArray } from "base64-js";
+import { callBinary, nativeBytes } from "@legendapp/spark-desktop-app/src/contracts/native-buffer";
 import Native from "./NativeDesktopProcesses";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
-import { SparkError, invokeNative, nativeError, parseNativeResult, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+import { SparkError, invokeNative, nativeError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import type { ProcessOptions, RunCommandOptions, ProcessInput, ProcessResult, ProcessHandle } from "./types";
 export type * from "./types";
@@ -13,7 +13,10 @@ export function getProcessAvailability(): Availability {
 async function call<T>(method: string, args: object, validate: (value: unknown) => value is T): Promise<T> {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Processes require a desktop host");
   if (!Native) throw new SparkError("E_MODULE_UNAVAILABLE", "Process module is unavailable");
-  return parseNativeResult(await invokeNative(() => Native!.call(method, JSON.stringify(args))), validate);
+  const { bytes, ...metadata } = args as { bytes?: Uint8Array };
+  const value = await invokeNative(() => callBinary(Native!, "__sparkProcessesBinary", method, metadata, bytes));
+  if (!validate(value)) throw new SparkError("E_INVALID_DATA", "Invalid native process response");
+  return value;
 }
 const command = (method: string, args: object) => call(method, args, (value): value is null => value === null).then(() => {});
 function invalid(message: string): never { throw new SparkError("E_INVALID_ARGUMENT", message); }
@@ -30,22 +33,16 @@ export async function resolveCommand(name: string): Promise<string | null> {
   if (value === null) return null;
   try { return nativePath(value, Platform.OS); } catch (cause) { throw new SparkError("E_INVALID_DATA", "Resolved command path is invalid", { cause }); }
 }
-function encode(input: ProcessInput): string {
-  if (typeof input === "string") return fromByteArray(new TextEncoder().encode(input));
+function inputBytes(input: ProcessInput): Uint8Array {
+  if (typeof input === "string") return new TextEncoder().encode(input);
   if (!(input instanceof Uint8Array)) invalid("Process input must be UTF-8 text or Uint8Array");
-  return fromByteArray(input);
-}
-function decode(value: unknown, maximum = 8 * 1024 * 1024): Uint8Array {
-  if (typeof value !== "string" || value.length > Math.ceil(maximum / 3) * 4 || value.length % 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw new SparkError("E_INVALID_DATA", "Invalid process output bytes");
-  const bytes = toByteArray(value);
-  if (bytes.length > maximum || fromByteArray(bytes) !== value) throw new SparkError("E_INVALID_DATA", "Invalid process output encoding");
-  return bytes;
+  return input;
 }
 function result(value: unknown, aborted: boolean, limit: number): ProcessResult {
   if (!value || typeof value !== "object") throw new SparkError("E_INVALID_DATA", "Invalid process exit result");
   const data = value as Record<string, unknown>;
   if (!Number.isInteger(data.exitCode) || (data.exitCode as number) < 0 || (data.exitCode as number) > 0xffffffff || typeof data.terminated !== "boolean" || !(data.terminationSignal === null || (Number.isInteger(data.terminationSignal) && (data.terminationSignal as number) > 0)) || (!data.terminated && data.terminationSignal !== null) || typeof data.timedOut !== "boolean" || typeof data.outputTruncated !== "boolean") throw new SparkError("E_INVALID_DATA", "Invalid process exit status");
-  return { exit: data.terminated ? { type: "terminated", signal: data.terminationSignal as number | null } : { type: "exited", code: data.exitCode as number }, stdout: decode(data.stdoutBase64, limit), stderr: decode(data.stderrBase64, limit), timedOut: data.timedOut, outputTruncated: data.outputTruncated, aborted };
+  return { exit: data.terminated ? { type: "terminated", signal: data.terminationSignal as number | null } : { type: "exited", code: data.exitCode as number }, stdout: nativeBytes(data.stdout, limit), stderr: nativeBytes(data.stderr, limit), timedOut: data.timedOut, outputTruncated: data.outputTruncated, aborted };
 }
 let sequence = 0;
 export async function spawn(options: ProcessOptions): Promise<ProcessHandle> {
@@ -67,20 +64,14 @@ export async function spawn(options: ProcessOptions): Promise<ProcessHandle> {
   if (!Number.isInteger(captureLimitBytes) || captureLimitBytes < 0 || captureLimitBytes > 8 * 1024 * 1024) invalid("captureLimitBytes must be an integer from 0 to 8388608");
   if (onOutput !== undefined && typeof onOutput !== "function") invalid("onOutput must be a function");
   if (signal !== undefined && (!signal || typeof signal.aborted !== "boolean" || typeof signal.addEventListener !== "function" || typeof signal.removeEventListener !== "function")) invalid("Expected an AbortSignal");
-  const wire = { executable, args: options.args ? [...options.args] : [], cwd, env: options.env ? { ...options.env } : {}, inputBase64: options.input === undefined ? undefined : encode(options.input), timeoutMs: options.timeoutMs, captureLimitBytes, streamOutput: !!onOutput };
-  if (signal?.aborted) throw new SparkError("E_ABORTED", "Process launch was aborted");
-  if (target.type === "command") {
-    const resolved = await resolveCommand(executable);
-    if (!resolved) throw new SparkError("E_NOT_FOUND", `Command not found: ${executable}`);
-    wire.executable = resolved;
-  }
+  const wire = { executable, command: target.type === "command", args: options.args ?? [], cwd, env: options.env ?? {}, bytes: options.input === undefined ? undefined : inputBytes(options.input), timeoutMs: options.timeoutMs, captureLimitBytes, streamOutput: !!onOutput };
   if (signal?.aborted) throw new SparkError("E_ABORTED", "Process launch was aborted");
   const availability = getProcessAvailability();
   if (!availability.available) throw new SparkError(availability.reason === "missing-module" ? "E_MODULE_UNAVAILABLE" : "E_UNSUPPORTED_PLATFORM", "Process execution is unavailable");
   const id = `process-${Date.now()}-${++sequence}`;
   let finish!: (value: ProcessResult) => void, fail!: (error: unknown) => void;
   let ended = false, aborted = false, started = false, inputClosing = false, outputStopped = false;
-  let writes = Promise.resolve(), closingInput: Promise<void> | undefined, terminating: Promise<void> | undefined;
+  let closingInput: Promise<void> | undefined, terminating: Promise<void> | undefined;
   let settleExit!: () => void;
   const exitObserved = new Promise<void>(resolve => { settleExit = resolve; });
   const exited = new Promise<ProcessResult>((resolve, reject) => { finish = resolve; fail = reject; });
@@ -99,11 +90,11 @@ export async function spawn(options: ProcessOptions): Promise<ProcessHandle> {
     } else if (event.type === "processOutput" && !outputStopped) {
       try {
         if (event.stream !== "stdout" && event.stream !== "stderr") throw new SparkError("E_INVALID_DATA", "Invalid process output stream");
-        const bytes = decode(event.base64, 16384);
+        const bytes = nativeBytes(event.bytes, 16384);
         onOutput?.({ stream: event.stream, bytes });
       } catch (error) { outputStopped = true; fail(nativeError(error)); void terminate().catch(fail); }
     }
-  });
+  }, { types: ["processOutput", "processExit"], target: { field: "processId", value: id } });
   signal?.addEventListener("abort", abort, { once: true });
   try {
     await command("spawn", { id, ...wire }); started = true;
@@ -121,15 +112,14 @@ export async function spawn(options: ProcessOptions): Promise<ProcessHandle> {
   return {
     id, exited,
     async write(input) {
-      const base64 = encode(input);
+      const bytes = inputBytes(input);
       if (ended || inputClosing) throw new SparkError("E_CLOSED", "Process input is closed");
-      const operation = writes.then(() => command("write", { id, base64 }));
-      writes = operation.catch(() => {}); return operation;
+      return command("write", { id, bytes });
     },
     closeInput() {
       inputClosing = true;
       if (ended) return Promise.resolve();
-      return closingInput ??= writes.then(() => command("closeInput", { id })).catch(error => { closingInput = undefined; throw error; });
+      return closingInput ??= command("closeInput", { id }).catch(error => { closingInput = undefined; throw error; });
     },
     terminate,
   };

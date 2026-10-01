@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeModules.h"
+#include <SparkBinaryWindows.hpp>
 #include <winrt/Windows.ApplicationModel.DataTransfer.h>
 #include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Data.Html.h>
@@ -35,11 +36,18 @@ inline hstring HTML(hstring const &text) {
   for (auto c : text) { switch(c) { case L'&': value += L"&amp;"; break; case L'<': value += L"&lt;"; break; case L'>': value += L"&gt;"; break; case L'\n': value += L"<br>"; break; default: value += c; } }
   return hstring(value + L"</div>");
 }
+class ClipboardBytes final : public spark::binary::jsi::MutableBuffer {
+  com_array<uint8_t> bytes;
+public:
+  explicit ClipboardBytes(com_array<uint8_t> value) : bytes(std::move(value)) {}
+  size_t size() const override { return bytes.size(); }
+  uint8_t *data() override { return bytes.data(); }
+};
 REACT_MODULE(SparkClipboard, L"NativeDesktopClipboard")
 struct SparkClipboard {
   React::ReactContext context;
   REACT_INIT(Initialize) void Initialize(React::ReactContext const &value) noexcept { context = value; }
-  static fire_and_forget Invoke(std::string method, std::string encoded, React::ReactPromise<std::string> promise) {
+  static fire_and_forget Invoke(std::string method, std::string encoded, spark::binary::NativePromise promise, std::optional<std::vector<uint8_t>> input = {}, bool binary = false) {
     try {
       auto args = Json::JsonObject::Parse(to_hstring(encoded));
       if (method == "write" || method == "setString") {
@@ -62,8 +70,8 @@ struct SparkClipboard {
           }
           data.SetStorageItems(items); data.RequestedOperation(Transfer::DataPackageOperation::Copy);
         }
-        if (args.HasKey(L"imagePNG")) {
-          auto bytes = CryptographicBuffer::DecodeFromBase64String(args.GetNamedString(L"imagePNG"));
+        if (input) {
+          auto bytes = CryptographicBuffer::CreateFromByteArray(*input);
           Streams::InMemoryRandomAccessStream stream; co_await stream.WriteAsync(bytes); stream.Seek(0);
           auto decoder = co_await Imaging::BitmapDecoder::CreateAsync(stream);
           if (decoder.DecoderInformation().CodecId() != Imaging::BitmapDecoder::PngDecoderId()) throw hresult_invalid_argument(L"Clipboard image must be PNG");
@@ -89,7 +97,7 @@ struct SparkClipboard {
           }
           promise.Resolve(to_string(Json::JsonValue::CreateStringValue(value).Stringify()));
         } else if (method == "read") {
-          Json::JsonObject result;
+          Json::JsonObject result; std::shared_ptr<ClipboardBytes> image;
           if (text) result.SetNamedValue(L"text", Json::JsonValue::CreateStringValue(co_await data.GetTextAsync()));
           if (html) result.SetNamedValue(L"html", Json::JsonValue::CreateStringValue(Transfer::HtmlFormatHelper::GetStaticFragment(co_await data.GetHtmlFormatAsync())));
           if (rtf) result.SetNamedValue(L"rtf", Json::JsonValue::CreateStringValue(co_await data.GetRtfAsync()));
@@ -105,13 +113,24 @@ struct SparkClipboard {
             encoder.SetSoftwareBitmap(bitmap); co_await encoder.FlushAsync(); output.Seek(0);
             if (output.Size() > UINT32_MAX) throw hresult_invalid_argument(L"Clipboard image is too large");
             Streams::Buffer bytes(static_cast<uint32_t>(output.Size())); auto read = co_await output.ReadAsync(bytes, bytes.Capacity(), Streams::InputStreamOptions::None);
-            result.SetNamedValue(L"imagePNG", Json::JsonValue::CreateStringValue(CryptographicBuffer::EncodeToBase64String(read)));
+            com_array<uint8_t> owned; CryptographicBuffer::CopyToByteArray(read, owned); image = std::make_shared<ClipboardBytes>(std::move(owned));
           }
-          promise.Resolve(to_string(result.Stringify()));
+          spark::binary::Response response{to_string(result.Stringify()), {}, {}}; if (image) response.fields["imagePNG"] = image; promise.Resolve(std::move(response));
         } else throw hresult_invalid_argument(L"Unsupported Windows clipboard operation");
       }
     } catch (hresult_error const &error) { promise.Reject(React::ReactError{"E_CLIPBOARD", to_string(error.message())}); }
   }
+  REACT_SYNC_METHOD(installBinary) std::optional<std::string> installBinary() noexcept {
+    try {
+    spark::binary::Install(context, "__sparkClipboardBinary", [context = context](std::string method, std::string encoded, std::optional<std::vector<uint8_t>> bytes, spark::binary::Completion finish) {
+      context.UIDispatcher().Post([method = std::move(method), encoded = std::move(encoded), bytes = std::move(bytes), promise = spark::binary::NativePromise(finish)]() mutable { Invoke(std::move(method), std::move(encoded), promise, std::move(bytes), true); });
+    });
+      return std::nullopt;
+    } catch (std::exception const &error) { return error.what(); }
+    catch (hresult_error const &error) { return to_string(error.message()); }
+    catch (...) { return "Could not install native binary transport"; }
+  }
+
   REACT_METHOD(call) void call(std::string method, std::string args, React::ReactPromise<std::string> promise) noexcept {
     context.UIDispatcher().Post([method = std::move(method), args = std::move(args), promise]() { Invoke(method, args, promise); });
   }

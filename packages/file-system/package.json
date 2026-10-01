@@ -43,8 +43,7 @@
     ]
   },
   "dependencies": {
-    "@legendapp/spark-desktop-app": "0.0.1-next.2",
-    "base64-js": "1.5.1"
+    "@legendapp/spark-desktop-app": "0.0.1-next.2"
   },
   "private": true
 }

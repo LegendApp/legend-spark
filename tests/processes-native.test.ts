@@ -8,7 +8,7 @@ test.skipIf(process.platform !== "darwin")("actual macOS process implementation 
   try {
     const root = path.resolve(import.meta.dirname, "..");
     let source = readFileSync(path.join(root, "packages/processes/macos/RNDesktopProcesses.mm"), "utf8");
-    source = source.replace('#import "RNDesktopProcesses.h"', '').replace('#import <RNDesktopApp/SparkDesktop.h>', '').replace(/- \(std::shared_ptr<facebook::react::TurboModule>\)getTurboModule:.*\n/, '');
+    source = source.replace('#import "RNDesktopProcesses.h"', '').replace('#import <RNDesktopApp/SparkDesktop.h>', '').replace('#import <RNDesktopApp/SparkBinaryJSI.h>', '').replace(/- \(std::shared_ptr<facebook::react::TurboModule>\)getTurboModule:.*\n/, '');
     const fixture = readFileSync(path.join(root, "tests/processes.native.mm"), "utf8");
     const [bridge, checks] = fixture.split("// IMPLEMENTATION HERE");
     writeFileSync(path.join(directory, "main.mm"), bridge + source + checks);

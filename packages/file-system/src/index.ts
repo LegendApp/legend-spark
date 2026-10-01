@@ -1,9 +1,8 @@
 import { NativeEventEmitter, Platform } from "react-native";
-import { fromByteArray } from "base64-js";
-import { SparkError, invokeNative, parseNativeResult, asyncRegistration, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+import { callBinary, nativeBytes } from "@legendapp/spark-desktop-app/src/contracts/native-buffer";
+import { SparkError, invokeNative, asyncRegistration, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import Native from "./NativeDesktopFileSystem";
-import { decodeBytes } from "./bytes";
 import { createFileHandle, iterateFile, writeFileChunks, type FileMode, type ReadChunksOptions } from "./handles";
 export type { FileHandle, FileMode, ReadChunksOptions } from "./handles";
 export interface FileInfo { type: "file" | "directory" | "symlink"; size: number; modifiedAt: number }
@@ -26,7 +25,8 @@ const absolute = (path: string) => nativePath(path, Platform.OS);
 const isString = (value: unknown): value is string => typeof value === "string";
 function validResponse(method: string, value: unknown): boolean {
   if (["directory", "openFile"].includes(method)) return isString(value) && value.length > 0;
-  if (["readText", "readBytes", "readChunk"].includes(method)) return isString(value);
+  if (["readText"].includes(method)) return isString(value);
+  if (method === "readBytes" || method === "readChunk") return value instanceof ArrayBuffer;
   if (method === "list") return Array.isArray(value) && value.every(name => isString(name) && name.length > 0 && ![".", ".."].includes(name) && !name.includes("/") && !name.includes("\0") && (Platform.OS !== "windows" || !name.includes("\\")));
   if (method === "stat") {
     if (!value || typeof value !== "object") return false;
@@ -38,8 +38,10 @@ function validResponse(method: string, value: unknown): boolean {
   return value === null;
 }
 async function call<T = void>(method: string, args: object): Promise<T> {
-  const value = parseNativeResult(await invokeNative(() => native().call(method, JSON.stringify(args))), (value): value is T => validResponse(method, value));
-  return value;
+  const { bytes, ...metadata } = args as { bytes?: Uint8Array };
+  const value = await invokeNative(() => callBinary(native(), "__sparkFileSystemBinary", method, metadata, bytes));
+  if (!validResponse(method, value)) throw new SparkError("E_INVALID_DATA", "Invalid native file response");
+  return value as T;
 }
 function recursiveOption(options: { recursive?: boolean }, fallback: boolean): boolean {
   if (!options || typeof options !== "object" || Object.keys(options).some(key => key !== "recursive")) throw new SparkError("E_UNSUPPORTED_OPTION", "Expected recursive options");
@@ -57,10 +59,10 @@ export async function writeText(path: string, text: string): Promise<void> {
   if (typeof text !== "string") throw new SparkError("E_INVALID_ARGUMENT", "Expected a text string");
   await call("writeText", { path: absolute(path), text });
 }
-export async function readBytes(path: string): Promise<Uint8Array> { return decodeBytes(await call<string>("readBytes", { path: absolute(path) })); }
+export async function readBytes(path: string): Promise<Uint8Array> { return nativeBytes(await call<ArrayBuffer>("readBytes", { path: absolute(path) })); }
 export async function writeBytes(path: string, bytes: Uint8Array): Promise<void> {
   if (!(bytes instanceof Uint8Array)) throw new SparkError("E_INVALID_ARGUMENT", "Expected Uint8Array");
-  await call("writeBytes", { path: absolute(path), base64: fromByteArray(bytes) });
+  await call("writeBytes", { path: absolute(path), bytes });
 }
 /** Describes the link itself, without following it. modifiedAt is Unix milliseconds. */
 export async function stat(path: string): Promise<FileInfo> { return call("stat", { path: absolute(path) }); }

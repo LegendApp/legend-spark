@@ -1,11 +1,11 @@
 #pragma once
 #include "NativeModules.h"
+#include <SparkBinaryWindows.hpp>
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <filesystem>
-#include <future>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -13,9 +13,7 @@
 #include <optional>
 #include <thread>
 #include <vector>
-#include <wincrypt.h>
 #include <winrt/Windows.Data.Json.h>
-#pragma comment(lib, "Crypt32.lib")
 namespace winrt::SparkProcesses {
 namespace React = Microsoft::ReactNative;
 namespace Json = Windows::Data::Json;
@@ -26,19 +24,6 @@ inline std::wstring Quote(std::wstring const &argument) {
     result.append(c == L'"' ? slashes * 2 + 1 : slashes, L'\\'); slashes = 0; result += c;
   }
   result.append(slashes * 2, L'\\'); result += L'"'; return result;
-}
-inline std::string Base64(std::string const &bytes) {
-  if (bytes.empty()) return "";
-  DWORD length = 0; if (!CryptBinaryToStringA(reinterpret_cast<BYTE const *>(bytes.data()), static_cast<DWORD>(bytes.size()), CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, nullptr, &length)) throw_last_error();
-  std::string result(length, '\0'); if (!CryptBinaryToStringA(reinterpret_cast<BYTE const *>(bytes.data()), static_cast<DWORD>(bytes.size()), CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, result.data(), &length)) throw_last_error(); result.resize(length); return result;
-}
-inline std::string DecodeBase64(std::string const &encoded) {
-  if (encoded.empty()) return {};
-  DWORD length = 0;
-  if (!CryptStringToBinaryA(encoded.data(), static_cast<DWORD>(encoded.size()), CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT, nullptr, &length, nullptr, nullptr)) throw hresult_invalid_argument(L"Invalid process input");
-  std::string bytes(length, '\0');
-  if (!CryptStringToBinaryA(encoded.data(), static_cast<DWORD>(encoded.size()), CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT, reinterpret_cast<BYTE *>(bytes.data()), &length, nullptr, nullptr)) throw hresult_invalid_argument(L"Invalid process input");
-  bytes.resize(length); return bytes;
 }
 inline std::wstring ResolveCommand(std::wstring const &name) {
   if (name.empty() || name.find_first_of(L"/\\:") != std::wstring::npos) throw hresult_invalid_argument(L"Expected a command name");
@@ -64,8 +49,15 @@ inline std::wstring ResolveCommand(std::wstring const &name) {
   if (_wcsicmp(extension.c_str(), L".exe") && _wcsicmp(extension.c_str(), L".com")) return {};
   return result;
 }
+class CapturedBytes final : public spark::binary::jsi::MutableBuffer {
+  std::string bytes;
+public:
+  explicit CapturedBytes(std::string value) : bytes(std::move(value)) {}
+  size_t size() const override { return bytes.size(); }
+  uint8_t *data() override { return reinterpret_cast<uint8_t *>(bytes.data()); }
+};
 struct Process : std::enable_shared_from_this<Process> {
-  struct Input { std::string text; bool close; std::optional<React::ReactPromise<std::string>> promise; };
+  struct Input { std::vector<uint8_t> text; bool close; std::optional<spark::binary::NativePromise> promise; };
   handle process, job, input, output, error;
   std::mutex mutex; std::condition_variable condition; std::deque<Input> queue;
   std::atomic<bool> done{false}, terminated{false}, timedOut{false}, truncated{false};
@@ -89,18 +81,19 @@ struct Process : std::enable_shared_from_this<Process> {
     input.close();
   }
   void Read(HANDLE pipe, std::string &buffer, std::string stream, bool streaming, std::shared_ptr<std::atomic<bool>> active) {
+    struct Credits { std::mutex mutex; std::condition_variable ready; size_t pending = 0; };
+    auto credits = std::make_shared<Credits>();
     char bytes[16384]; DWORD count;
     while (ReadFile(pipe, bytes, sizeof(bytes), &count, nullptr) && count) {
       const auto keep = std::min<size_t>(count, captureLimit - buffer.size()); buffer.append(bytes, keep); if (keep < count) truncated = true;
       if (streaming && *active) {
-        auto flushed = std::make_shared<std::promise<void>>(); auto wait = flushed->get_future();
-        auto data = Base64(std::string(bytes, count)); auto key = id;
-        context.UIDispatcher().Post([context = context, active, key, stream, data, flushed]() {
-          if (*active) context.EmitJSEvent(L"RCTDeviceEventEmitter", L"desktop", React::JSValueObject{{"type", "processOutput"}, {"processId", key}, {"stream", stream}, {"base64", data}});
-          flushed->set_value();
+        { std::unique_lock lock(credits->mutex); while (*active && credits->pending >= 64) credits->ready.wait_for(lock, std::chrono::milliseconds(100)); if (!*active) break; ++credits->pending; }
+        auto data = std::make_shared<spark::binary::Bytes>(std::vector<uint8_t>(bytes, bytes + count)); auto key = id;
+        auto delivered = [credits] { { std::lock_guard lock(credits->mutex); --credits->pending; } credits->ready.notify_one(); };
+        context.UIDispatcher().Post([context = context, active, key, stream, data, delivered]() {
+          if (*active) { Json::JsonObject event; event.SetNamedValue(L"type", Json::JsonValue::CreateStringValue(L"processOutput")); event.SetNamedValue(L"processId", Json::JsonValue::CreateStringValue(to_hstring(key))); event.SetNamedValue(L"stream", Json::JsonValue::CreateStringValue(to_hstring(stream))); spark::binary::Response response{to_string(event.Stringify()), {}, {{"bytes", data}}}; spark::binary::Emit(context.CallInvoker(), response.Build(), delivered); } else delivered();
         });
-        // Backpressure bounds the JS queue. Runtime shutdown releases this wait.
-        while (*active && wait.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready) {}
+        // At most 1 MiB per stream awaits JS delivery; no per-chunk round trip.
       }
     }
   }
@@ -109,12 +102,12 @@ struct Process : std::enable_shared_from_this<Process> {
     if (!CreatePipe(read.put(), write.put(), &security, 0)) throw_last_error();
     if (!SetHandleInformation(parentReads ? read.get() : write.get(), HANDLE_FLAG_INHERIT, 0)) throw_last_error();
   }
-  void Start(Json::JsonObject const &args) {
+  void Start(Json::JsonObject const &args, std::optional<std::vector<uint8_t>> inputBytes) {
     const auto limit = args.GetNamedNumber(L"captureLimitBytes", 8 * 1024 * 1024);
     if (limit < 0 || limit > 8 * 1024 * 1024) throw hresult_invalid_argument(L"Invalid capture limit");
     captureLimit = static_cast<size_t>(limit);
-    const auto initialInput = args.HasKey(L"inputBase64") ? DecodeBase64(to_string(args.GetNamedString(L"inputBase64"))) : std::string{};
     auto executable = std::wstring(args.GetNamedString(L"executable"));
+    if (args.GetNamedBoolean(L"command", false)) { executable = ResolveCommand(executable); if (executable.empty()) throw hresult_error(HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND), L"Command not found"); }
     if (executable.rfind(L"helper:", 0) == 0) {
       const auto name = executable.substr(7); if (name.empty() || name.find_first_not_of(L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != std::wstring::npos) throw hresult_invalid_argument(L"Invalid helper name");
       wchar_t module[32768]{}; GetModuleFileNameW(nullptr, module, 32768);
@@ -154,7 +147,7 @@ struct Process : std::enable_shared_from_this<Process> {
     process.attach(info.hProcess); handle thread{info.hThread};
     if (!AssignProcessToJobObject(job.get(), process.get())) { auto error = GetLastError(); TerminateProcess(process.get(), 1); throw hresult_error(HRESULT_FROM_WIN32(error)); }
     if (ResumeThread(thread.get()) == static_cast<DWORD>(-1)) { Stop(); throw_last_error(); }
-    if (args.HasKey(L"inputBase64")) Write({initialInput, false, std::nullopt});
+    if (inputBytes) Write({std::move(*inputBytes), false, std::nullopt});
   }
 };
 REACT_MODULE(SparkProcesses, L"NativeDesktopProcesses")
@@ -163,9 +156,18 @@ struct SparkProcesses {
   std::shared_ptr<State> state = std::make_shared<State>();
   REACT_INIT(Initialize) void Initialize(React::ReactContext const &context) noexcept { state->context = context; }
   ~SparkProcesses() { auto current = state; *current->active = false; if (current->context) current->context.UIDispatcher().Post([current]() { for (auto const &[id, process] : current->processes) process->Stop(); }); }
-  REACT_METHOD(call) void call(std::string method, std::string encoded, React::ReactPromise<std::string> promise) noexcept {
-    auto current = state;
-    current->context.UIDispatcher().Post([current, method, encoded, promise]() {
+  REACT_SYNC_METHOD(installBinary) std::optional<std::string> installBinary() noexcept {
+    try {
+    spark::binary::Install(state->context, "__sparkProcessesBinary", [current = state](std::string method, std::string encoded, std::optional<std::vector<uint8_t>> bytes, spark::binary::Completion finish) { Call(current, std::move(method), std::move(encoded), spark::binary::NativePromise(finish), std::move(bytes)); });
+      return std::nullopt;
+    } catch (std::exception const &error) { return error.what(); }
+    catch (hresult_error const &error) { return to_string(error.message()); }
+    catch (...) { return "Could not install native binary transport"; }
+  }
+
+  REACT_METHOD(call) void call(std::string method, std::string encoded, React::ReactPromise<std::string> promise) noexcept { Call(state, std::move(method), std::move(encoded), promise); }
+  static void Call(std::shared_ptr<State> current, std::string method, std::string encoded, spark::binary::NativePromise promise, std::optional<std::vector<uint8_t>> bytes = {}) {
+    current->context.UIDispatcher().Post([current, method = std::move(method), encoded = std::move(encoded), promise, bytes = std::move(bytes)]() mutable {
       try {
         if (!*current->active) { promise.Reject(React::ReactError{"E_CLOSED", "Process module is closed"}); return; }
         auto args = Json::JsonObject::Parse(to_hstring(encoded));
@@ -177,7 +179,7 @@ struct SparkProcesses {
         auto found = current->processes.find(id);
         if (method == "spawn") {
           if (found != current->processes.end()) { promise.Reject(React::ReactError{"E_EXISTS", "Process id already exists"}); return; }
-          auto child = std::make_shared<Process>(); child->context = current->context; child->id = id; child->Start(args);
+          auto child = std::make_shared<Process>(); child->context = current->context; child->id = id; child->Start(args, std::move(bytes));
           const auto timeout = args.HasKey(L"timeoutMs") ? static_cast<DWORD>(std::clamp(args.GetNamedNumber(L"timeoutMs"), 1.0, static_cast<double>(INFINITE - 1))) : INFINITE;
           const bool stream = args.GetNamedBoolean(L"streamOutput", false);
           std::thread([current, child, timeout, stream]() {
@@ -193,16 +195,19 @@ struct SparkProcesses {
             TerminateJobObject(child->job.get(), 1); child->done = true; child->condition.notify_all();
             if (input.joinable()) input.join(); if (output.joinable()) output.join(); if (error.joinable()) error.join();
             current->context.UIDispatcher().Post([current, child, exit]() {
-              if (*current->active) current->context.EmitJSEvent(L"RCTDeviceEventEmitter", L"desktop", React::JSValueObject{{"type", "processExit"}, {"processId", child->id}, {"result", React::JSValueObject{
-                {"exitCode", static_cast<int64_t>(exit)}, {"terminated", child->terminated.load()}, {"terminationSignal", nullptr}, {"timedOut", child->timedOut.load()}, {"outputTruncated", child->truncated.load()},
-                {"stdoutBase64", Base64(child->stdoutBytes)}, {"stderrBase64", Base64(child->stderrBytes)}}});
+              if (*current->active) {
+                Json::JsonObject result; result.SetNamedValue(L"exitCode", Json::JsonValue::CreateNumberValue(exit)); result.SetNamedValue(L"terminated", Json::JsonValue::CreateBooleanValue(child->terminated)); result.SetNamedValue(L"terminationSignal", Json::JsonValue::CreateNullValue()); result.SetNamedValue(L"timedOut", Json::JsonValue::CreateBooleanValue(child->timedOut)); result.SetNamedValue(L"outputTruncated", Json::JsonValue::CreateBooleanValue(child->truncated));
+                Json::JsonObject event; event.SetNamedValue(L"type", Json::JsonValue::CreateStringValue(L"processExit")); event.SetNamedValue(L"processId", Json::JsonValue::CreateStringValue(to_hstring(child->id))); event.SetNamedValue(L"result", result);
+                auto stdoutBytes = std::make_shared<CapturedBytes>(std::move(child->stdoutBytes)); auto stderrBytes = std::make_shared<CapturedBytes>(std::move(child->stderrBytes));
+                auto metadata = to_string(event.Stringify()); spark::binary::Emit(current->context.CallInvoker(), [metadata = std::move(metadata), stdoutBytes, stderrBytes](spark::binary::jsi::Runtime &rt) { auto value = spark::binary::JSON(metadata)(rt).asObject(rt); auto result = value.getPropertyAsObject(rt, "result"); result.setProperty(rt, "stdout", spark::binary::Buffer(rt, stdoutBytes)); result.setProperty(rt, "stderr", spark::binary::Buffer(rt, stderrBytes)); return spark::binary::jsi::Value(std::move(value)); });
+              }
               current->processes.erase(child->id);
             });
           }).detach();
           current->processes.emplace(id, child);
         } else if (found == current->processes.end() || found->second->done) { if (method == "terminate" || method == "closeInput") promise.Resolve("null"); else promise.Reject(React::ReactError{"E_CLOSED", "Process has exited"}); return; }
         else if (method == "terminate") found->second->StopChecked();
-        else if (method == "write" || method == "closeInput") { found->second->Write({method == "write" ? DecodeBase64(to_string(args.GetNamedString(L"base64"))) : "", method == "closeInput", promise}); return; }
+        else if (method == "write" || method == "closeInput") { found->second->Write({method == "write" && bytes ? std::move(*bytes) : std::vector<uint8_t>{}, method == "closeInput", promise}); return; }
         else throw hresult_invalid_argument(L"Unknown process operation");
         promise.Resolve("null");
       } catch (hresult_error const &error) { const auto code = error.code();

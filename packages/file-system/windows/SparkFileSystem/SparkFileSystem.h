@@ -1,9 +1,9 @@
 #pragma once
 #include "NativeModules.h"
+#include <SparkBinaryWindows.hpp>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <winrt/Windows.Data.Json.h>
-#include <winrt/Windows.Security.Cryptography.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <filesystem>
 #include <algorithm>
@@ -26,7 +26,6 @@ namespace winrt::SparkFileSystem {
 namespace React = Microsoft::ReactNative;
 namespace Json = Windows::Data::Json;
 namespace fs = std::filesystem;
-using Crypto = Windows::Security::Cryptography::CryptographicBuffer;
 
 inline fs::path FilePath(hstring const &input) {
   std::wstring value(input);
@@ -58,7 +57,7 @@ inline std::string ErrorCode(DWORD error) {
     default: return "E_IO";
   }
 }
-inline void Reject(React::ReactPromise<std::string> const &promise) noexcept {
+template <class Promise> inline void Reject(Promise const &promise) noexcept {
   try { throw; }
   catch (fs::filesystem_error const &e) {
     auto code = e.code(); std::string kind = "E_IO";
@@ -182,7 +181,7 @@ struct FileQueue {
   }) {}
   ~FileQueue() { { std::lock_guard lock(mutex); stopping = true; } ready.notify_one(); worker.join(); }
   void Post(std::function<void()> action) { { std::lock_guard lock(mutex); pending.push_back(std::move(action)); } ready.notify_one(); }
-  Json::IJsonValue Call(std::string const &method, Json::JsonObject const &args) {
+  Json::IJsonValue Call(std::string const &method, Json::JsonObject const &args, std::optional<std::vector<uint8_t>> const &input = {}, std::vector<uint8_t> *output = nullptr) {
     if (method == "directory") return Json::JsonValue::CreateStringValue(Directory(args.GetNamedString(L"kind")).wstring());
     if (method == "unwatch") { watches.erase(to_string(args.GetNamedString(L"id"))); return Json::JsonValue::Parse(L"null"); }
     if (method == "closeFile") { files.erase(to_string(args.GetNamedString(L"id"))); return Json::JsonValue::Parse(L"null"); }
@@ -200,13 +199,10 @@ struct FileQueue {
         if (!std::isfinite(length) || length < 1 || length > 1048576 || std::floor(length) != length || offset + length > 9007199254740991.0) throw hresult_invalid_argument(L"Invalid chunk length");
         std::vector<uint8_t> data(static_cast<size_t>(length)); DWORD count = 0;
         if (!ReadFile(file, data.data(), static_cast<DWORD>(data.size()), &count, nullptr)) throw_last_error();
-        data.resize(count); return Json::JsonValue::CreateStringValue(Crypto::EncodeToBase64String(Crypto::CreateFromByteArray(data)));
+        data.resize(count); if (!output) throw hresult_invalid_argument(L"Expected binary transport"); *output = std::move(data); return Json::JsonValue::CreateNullValue();
       }
-      auto base64 = args.GetNamedString(L"base64");
-      if (base64.size() > 1398104) throw hresult_invalid_argument(L"Chunk exceeds 1 MiB");
-      auto buffer = Crypto::DecodeFromBase64String(base64);
-      if (Crypto::EncodeToBase64String(buffer) != base64 || buffer.Length() > 1048576 || offset + buffer.Length() > 9007199254740991.0) throw hresult_invalid_argument(L"Invalid chunk");
-      com_array<uint8_t> data; Crypto::CopyToByteArray(buffer, data);
+      if (!input || input->size() > 1048576 || offset + input->size() > 9007199254740991.0) throw hresult_invalid_argument(L"Invalid chunk");
+      auto const &data = *input;
       size_t written = 0;
       while (written < data.size()) { DWORD count = 0; if (!WriteFile(file, data.data() + written, static_cast<DWORD>(data.size() - written), &count, nullptr)) throw_last_error(); if (!count) throw hresult_error(E_FAIL, L"File write made no progress"); written += count; }
       return Json::JsonValue::CreateNumberValue(static_cast<double>(written));
@@ -234,7 +230,7 @@ struct FileQueue {
       if (text.size() > INT_MAX) throw hresult_error(E_FAIL, L"Text exceeds the UTF-8 conversion limit");
       if (!text.empty() && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0)) throw_last_error();
       return Json::JsonValue::CreateStringValue(to_hstring(text));
-    } else if (method == "readBytes") return Json::JsonValue::CreateStringValue(Crypto::EncodeToBase64String(Crypto::CreateFromByteArray(Read(path))));
+    } else if (method == "readBytes") { if (!output) throw hresult_invalid_argument(L"Expected binary transport"); *output = Read(path); return Json::JsonValue::CreateNullValue(); }
     else if (method == "writeTextIfUnchanged") {
       if (Call("readText", args).GetString() != args.GetNamedString(L"expected")) return Json::JsonValue::CreateBooleanValue(false);
       auto text = to_string(args.GetNamedString(L"text")); Write(path, std::vector<uint8_t>(text.begin(), text.end()));
@@ -242,10 +238,7 @@ struct FileQueue {
     }
     else if (method == "writeText") { auto text = to_string(args.GetNamedString(L"text")); Write(path, std::vector<uint8_t>(text.begin(), text.end())); }
     else if (method == "writeBytes") {
-      auto base64 = args.GetNamedString(L"base64"); Windows::Storage::Streams::IBuffer buffer{nullptr};
-      try { buffer = base64.empty() ? Crypto::CreateFromByteArray(array_view<uint8_t const>{}) : Crypto::DecodeFromBase64String(base64); } catch (hresult_error const &) { throw hresult_invalid_argument(L"Invalid base64 data"); }
-      if (Crypto::EncodeToBase64String(buffer) != base64) throw hresult_invalid_argument(L"Invalid base64 data");
-      com_array<uint8_t> data; Crypto::CopyToByteArray(buffer, data); Write(path, std::vector<uint8_t>(data.begin(), data.end()));
+      if (!input) throw hresult_invalid_argument(L"Expected binary file data"); Write(path, *input);
     } else if (method == "mkdir") {
       if (args.GetNamedBoolean(L"recursive", true)) fs::create_directories(path);
       else if (!fs::create_directory(path)) throw hresult_error(HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS));
@@ -287,8 +280,29 @@ struct FileQueue {
 REACT_MODULE(SparkFileSystem, L"NativeDesktopFileSystem")
 struct SparkFileSystem {
   React::ReactContext context;
-  std::unique_ptr<FileQueue> queue;
-  REACT_INIT(Initialize) void Initialize(React::ReactContext const &value) noexcept { context = value; queue = std::make_unique<FileQueue>(context); }
+  std::shared_ptr<FileQueue> queue;
+  REACT_INIT(Initialize) void Initialize(React::ReactContext const &value) noexcept { context = value; queue = std::make_shared<FileQueue>(context); }
+  REACT_SYNC_METHOD(installBinary) std::optional<std::string> installBinary() noexcept {
+    try {
+    spark::binary::Install(context, "__sparkFileSystemBinary", [queue = queue](std::string method, std::string encoded, std::optional<std::vector<uint8_t>> bytes, spark::binary::Completion finish) {
+      if (method == "reveal") {
+        queue->context.UIDispatcher().Post([encoded, promise = spark::binary::NativePromise(finish)] {
+          PIDLIST_ABSOLUTE item = nullptr;
+          try { auto path = FilePath(Json::JsonObject::Parse(to_hstring(encoded)).GetNamedString(L"path")); check_hresult(SHParseDisplayName(path.c_str(), nullptr, &item, 0, nullptr)); auto result = SHOpenFolderAndSelectItems(item, 0, nullptr, 0); CoTaskMemFree(item); item = nullptr; check_hresult(result); promise.Resolve("null"); }
+          catch (...) { if (item) CoTaskMemFree(item); Reject(promise); }
+        }); return;
+      }
+      queue->Post([queue, method = std::move(method), encoded = std::move(encoded), bytes = std::move(bytes), promise = spark::binary::NativePromise(finish)] {
+        try { std::vector<uint8_t> output; auto result = queue->Call(method, Json::JsonObject::Parse(to_hstring(encoded)), bytes, &output); spark::binary::Response response{to_string(result.Stringify()), {}, {}}; if (method == "readBytes" || method == "readChunk") response.bytes = std::make_shared<spark::binary::Bytes>(std::move(output)); promise.Resolve(std::move(response)); }
+        catch (...) { Reject(promise); }
+      });
+    });
+      return std::nullopt;
+    } catch (std::exception const &error) { return error.what(); }
+    catch (hresult_error const &error) { return to_string(error.message()); }
+    catch (...) { return "Could not install native binary transport"; }
+  }
+
   REACT_METHOD(call) void call(std::string method, std::string args, React::ReactPromise<std::string> promise) noexcept {
     if (method == "reveal") {
       context.UIDispatcher().Post([args, promise] {

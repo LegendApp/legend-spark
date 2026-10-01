@@ -1,13 +1,12 @@
 import { expect, test } from "vitest";
 import { createFileHandle, iterateFile, writeFileChunks, MAX_CHUNK_SIZE, type FileCall } from "../packages/file-system/src/handles.ts";
-import { fromByteArray, toByteArray } from "base64-js";
 function backend() {
   let data = new Uint8Array([0, 1, 2, 255]), closed = 0, reads = 0, writes = 0;
   const call: FileCall = async <T>(method: string, args: any): Promise<T> => {
     let result: unknown;
     if (method === 'openFile') result = 'owned-handle';
-    if (method === 'readChunk') { reads++; result = fromByteArray(data.slice(args.offset, args.offset + args.length)); }
-    if (method === 'writeChunk') { writes++; const bytes = toByteArray(args.base64); const next = new Uint8Array(Math.max(data.length, args.offset + bytes.length)); next.set(data); next.set(bytes, args.offset); data = next; result = bytes.length; }
+    if (method === 'readChunk') { reads++; result = data.slice(args.offset, args.offset + args.length).buffer; }
+    if (method === 'writeChunk') { writes++; const bytes = args.bytes as Uint8Array; const next = new Uint8Array(Math.max(data.length, args.offset + bytes.length)); next.set(data); next.set(bytes, args.offset); data = next; result = bytes.length; }
     if (method === 'closeFile') closed++;
     return result as T;
   };
@@ -66,7 +65,7 @@ test('short writes and malformed reads reject instead of losing data silently', 
   const file = await createFileHandle(short, '/file', 'readWrite');
   await expect(file.write(new Uint8Array([1, 2]), 0)).rejects.toMatchObject({ code: 'E_NATIVE' });
   await file.close();
-  const bad: FileCall = async <T>(method: string, args: object): Promise<T> => method === 'readChunk' ? 'not base64' as T : native.call(method, args);
+  const bad: FileCall = async <T>(method: string, args: object): Promise<T> => method === 'readChunk' ? 'not a native buffer' as T : native.call(method, args);
   const broken = await createFileHandle(bad, '/file');
   await expect(broken.read(3, 0)).rejects.toMatchObject({ code: 'E_INVALID_DATA' });
   await broken.close();

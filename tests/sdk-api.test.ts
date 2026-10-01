@@ -8,11 +8,12 @@ function module(name: string) {
   if (!moduleObjects.has(name)) moduleObjects.set(name, new Proxy({ name }, { get(target, key) {
     if (key === "name") return target.name;
     return async (...args: any[]) => {
-      const method = key === "call" ? args[0] : String(key);
-      const value = key === "call" ? JSON.parse(args[1]) : args;
+      const method = (key === "call" || key === "binaryCall") ? args[0] : String(key);
+      const value = (key === "call" || key === "binaryCall") ? JSON.parse(args[1]) : args;
+      if (key === "binaryCall" && args[2] !== undefined) value.bytes = new Uint8Array(args[2], args[3], args[4]).slice();
       calls.push({ native: name, method, args: value });
       const result = await handlers.get(`${name}.${method}`)?.(value);
-      return key === "call" ? JSON.stringify(result ?? null) : result;
+      return key === "call" ? JSON.stringify(result ?? null) : key === "binaryCall" ? result ?? null : result;
     };
   } }));
   return moduleObjects.get(name);
@@ -96,7 +97,7 @@ test("filesystem errors preserve permission failures instead of pretending files
 test("filesystem binary and mutation APIs preserve paths and opt-in recursive deletion", async () => {
   handlers.set("NativeDesktopFileSystem.directory", () => "/data");
   handlers.set("NativeDesktopFileSystem.readText", () => "text");
-  handlers.set("NativeDesktopFileSystem.readBytes", () => "AA==");
+  handlers.set("NativeDesktopFileSystem.readBytes", () => new Uint8Array([0]).buffer);
   handlers.set("NativeDesktopFileSystem.list", () => ["a"]);
   handlers.set("NativeDesktopFileSystem.remove", () => true);
   await files.getDirectory("data"); await files.readText("file:///tmp/a%20b"); await files.writeText("/a", "text"); await files.readBytes("/a"); await files.writeBytes("/b", new Uint8Array([0]));
@@ -233,8 +234,8 @@ test("global hotkey conflicts clean subscriptions and distinct registrations dis
 });
 test("process subscriptions exist before launch and survive immediate exit", async () => {
   handlers.set("NativeDesktopProcesses.spawn", args => {
-    emit("NativeDesktopApp", "desktop", { type: "processOutput", processId: args.id, stream: "stdout", base64: "aGk=" });
-    emit("NativeDesktopApp", "desktop", { type: "processExit", processId: args.id, result: { exitCode: 0, terminated: false, terminationSignal: null, timedOut: false, outputTruncated: false, stdoutBase64: "aGk=", stderrBase64: "" } });
+    emit("NativeDesktopApp", "desktop", { type: "processOutput", processId: args.id, stream: "stdout", bytes: new TextEncoder().encode("hi").buffer });
+    emit("NativeDesktopApp", "desktop", { type: "processExit", processId: args.id, result: { exitCode: 0, terminated: false, terminationSignal: null, timedOut: false, outputTruncated: false, stdout: new TextEncoder().encode("hi").buffer, stderr: new ArrayBuffer(0) } });
   });
   const chunks: string[] = [];
   const child = await processes.spawn({ target: { type: "executable", path: "/bin/echo" }, args: ["hi"], onOutput: chunk => chunks.push(new TextDecoder().decode(chunk.bytes)) });
@@ -466,10 +467,10 @@ test("watch cleanup stops callbacks immediately and can retry a failed native un
 });
 
 test("rich clipboard keeps binary transport private and preserves coexisting OS representations", async () => {
-  handlers.set("NativeDesktopClipboard.read", () => ({ files: ["/tmp/file"], text: "file representation", imagePNG: "AAH/" }));
+  handlers.set("NativeDesktopClipboard.read", () => ({ files: ["/tmp/file"], text: "file representation", imagePNG: new Uint8Array([0, 1, 255]).buffer }));
   expect(await clipboard.readClipboard()).toEqual({ files: ["/tmp/file"], text: "file representation", image: { format: "png", bytes: new Uint8Array([0, 1, 255]) } });
   await clipboard.writeClipboard({ image: { format: "png", bytes: new Uint8Array([0, 1, 255]) } });
-  expect(calls.at(-1)?.args).toEqual({ imagePNG: "AAH/" });
+  expect(calls.at(-1)?.args).toEqual({ bytes: new Uint8Array([0, 1, 255]) });
   handlers.set("NativeDesktopClipboard.read", () => ({ imagePNG: "!invalid!" }));
   await expect(clipboard.readClipboard()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   handlers.set("NativeDesktopSecureStorage.get", () => ({ unexpected: "value" }));

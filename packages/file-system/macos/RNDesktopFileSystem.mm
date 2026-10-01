@@ -1,4 +1,5 @@
 #import "RNDesktopFileSystem.h"
+#import <RNDesktopApp/SparkBinaryJSI.h>
 #import <AppKit/AppKit.h>
 #import "SparkFileMutations.h"
 #import <RNDesktopApp/SparkDesktop.h>
@@ -53,13 +54,15 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
 + (BOOL)requiresMainQueueSetup { return NO; }
 - (instancetype)init { if (self = [super init]) { _ioQueue = dispatch_queue_create("spark.files", DISPATCH_QUEUE_SERIAL); _files = [NSMutableDictionary new]; _watches = [NSMutableDictionary new]; _recursiveWatches = [NSMutableDictionary new]; } return self; }
 - (NSArray<NSString *> *)supportedEvents { return @[@"change"]; }
-- (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+- (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject { [self perform:method args:SparkArgs(json) binary:NO resolve:resolve reject:reject]; }
+- (void)binaryCall:(NSString *)method args:(NSString *)json bytes:(NSData *)bytes resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject { NSMutableDictionary *args = [SparkArgs(json) mutableCopy]; if (bytes) args[@"bytes"] = bytes; [self perform:method args:args binary:YES resolve:resolve reject:reject]; }
+- (void)perform:(NSString *)method args:(NSDictionary *)args binary:(BOOL)binary resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   dispatch_async(self.ioQueue, ^{
-    NSDictionary *args = SparkArgs(json); NSFileManager *fm = NSFileManager.defaultManager;
+    NSFileManager *fm = NSFileManager.defaultManager;
     NSError *error = nil; id result = NSNull.null;
     if ([@[@"readChunk", @"writeChunk", @"flushFile", @"closeFile"] containsObject:method]) {
       NSString *identifier = args[@"id"]; SparkOpenFile *file = self.files[identifier];
-      if ([method isEqual:@"closeFile"]) { [self.files removeObjectForKey:identifier]; resolve(@"null"); return; }
+      if ([method isEqual:@"closeFile"]) { [self.files removeObjectForKey:identifier]; resolve(binary ? NSNull.null : @"null"); return; }
       if (!file) { reject(@"E_CLOSED", @"Unknown or closed file handle", nil); return; }
       if ([method isEqual:@"flushFile"]) { if (fsync(file.descriptor)) error = [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]; }
       else {
@@ -71,11 +74,9 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
           NSMutableData *data = [NSMutableData dataWithLength:(NSUInteger)size]; ssize_t count;
           do { count = pread(file.descriptor, data.mutableBytes, data.length, (off_t)position); } while (count < 0 && errno == EINTR);
           if (count < 0) error = [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil];
-          else { data.length = count; result = [data base64EncodedStringWithOptions:0]; }
+          else { data.length = count; result = data; }
         } else {
-          NSString *base64 = args[@"base64"];
-          if (![base64 isKindOfClass:NSString.class] || base64.length > 1398104) { SparkInvalid(reject, @"Chunk exceeds 1 MiB"); return; }
-          NSData *data = [[NSData alloc] initWithBase64EncodedString:base64 options:0];
+          NSData *data = args[@"bytes"];
           if (!data || data.length > 1048576 || position + data.length > 9007199254740991.0) { SparkInvalid(reject, @"Invalid chunk"); return; }
           NSUInteger written = 0;
           while (written < data.length) {
@@ -124,14 +125,14 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
       } else if ([method isEqual:@"trash"]) { [fm trashItemAtURL:url resultingItemURL:nil error:&error]; }
       else if ([method isEqual:@"readText"]) result = [NSString stringWithContentsOfURL:url encoding:NSUTF8StringEncoding error:&error];
       else if ([method isEqual:@"readBytes"]) {
-        NSData *data = [NSData dataWithContentsOfURL:url options:0 error:&error];
-        result = [data base64EncodedStringWithOptions:0];
+        NSMutableData *data = [NSMutableData dataWithContentsOfURL:url options:0 error:&error];
+        result = data;
       }
       else if ([method isEqual:@"reveal"]) {
         if (![fm attributesOfItemAtPath:url.path error:&error]) { SparkReject(reject, error); return; }
         dispatch_async(dispatch_get_main_queue(), ^{
           [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:@[url]];
-          resolve(@"null");
+          resolve(binary ? NSNull.null : @"null");
         });
         return;
       }
@@ -140,8 +141,8 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
       }
       else if ([method isEqual:@"writeText"]) [args[@"text"] writeToURL:url atomically:YES encoding:NSUTF8StringEncoding error:&error];
       else if ([method isEqual:@"writeBytes"]) {
-        NSData *data = [[NSData alloc] initWithBase64EncodedString:args[@"base64"] options:0];
-        if (!data) { SparkInvalid(reject, @"Invalid base64 data"); return; }
+        NSData *data = args[@"bytes"];
+        if (!data) { SparkInvalid(reject, @"Expected binary file data"); return; }
         [data writeToURL:url options:NSDataWritingAtomic error:&error];
       }
       else if ([method isEqual:@"mkdir"]) [fm createDirectoryAtURL:url withIntermediateDirectories:[args[@"recursive"] boolValue] attributes:nil error:&error];
@@ -188,7 +189,7 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
           if (!watch.stream) { reject(@"E_WATCH", @"Could not create directory watcher", nil); return; }
           FSEventStreamSetDispatchQueue(watch.stream, self.ioQueue);
           if (!FSEventStreamStart(watch.stream)) { [watch stop]; reject(@"E_WATCH", @"Could not start directory watcher", nil); return; }
-          self.recursiveWatches[watchID] = watch; resolve(@"null"); return;
+          self.recursiveWatches[watchID] = watch; resolve(binary ? NSNull.null : @"null"); return;
         }
         // Observe the parent so replacing a file atomically does not lose its watch.
         BOOL isDirectory = NO;
@@ -209,7 +210,7 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
       }
       else { SparkInvalid(reject, @"Unknown filesystem operation"); return; }
     }
-    if (error) SparkReject(reject, error); else resolve(SparkJSON(result));
+    if (error) SparkReject(reject, error); else resolve(binary ? result : SparkJSON(result));
   });
 }
 - (void)invalidate {
@@ -217,6 +218,6 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
   [super invalidate];
 }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params {
-  return std::make_shared<facebook::react::NativeDesktopFileSystemSpecJSI>(params);
+  return std::make_shared<spark::binary::Module<facebook::react::NativeDesktopFileSystemSpecJSI>>(params);
 }
 @end

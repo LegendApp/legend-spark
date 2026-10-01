@@ -8,7 +8,8 @@
     "src",
     "macos",
     "*.podspec",
-    "react-native.config.js"
+    "react-native.config.js",
+    "cpp"
   ],
   "peerDependencies": {
     "react": "19.1.4",

@@ -1,4 +1,5 @@
 #import "RNDesktopProcesses.h"
+#import <RNDesktopApp/SparkBinaryJSI.h>
 #import <RNDesktopApp/SparkDesktop.h>
 #import <signal.h>
 #import <AppKit/AppKit.h>
@@ -58,6 +59,7 @@ static NSString *ResolveCommandPath(NSString *command)
 @interface RNDesktopProcesses ()
 @property NSMutableDictionary<NSString *, SparkProcess *> *processes;
 @property BOOL invalidated;
+@property (copy) void (^binaryEvent)(NSDictionary *event, dispatch_block_t delivered);
 @end
 @implementation RNDesktopProcesses
 RCT_EXPORT_MODULE(NativeDesktopProcesses)
@@ -82,19 +84,22 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
   return YES;
 }
 
-- (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+- (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject { [self perform:method args:SparkArgs(json) binary:NO resolve:resolve reject:reject]; }
+- (void)binaryCall:(NSString *)method args:(NSString *)json bytes:(NSData *)bytes resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject { NSMutableDictionary *args = [SparkArgs(json) mutableCopy]; if (bytes) args[@"bytes"] = bytes; [self perform:method args:args binary:YES resolve:resolve reject:reject]; }
+- (void)perform:(NSString *)method args:(NSDictionary *)args binary:(BOOL)binary resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   dispatch_async(dispatch_get_main_queue(), ^{
-    NSDictionary *args = SparkArgs(json); NSString *key = args[@"id"];
+    NSString *key = args[@"id"];
     if (self.invalidated) { reject(@"E_CLOSED", @"Process module is closed", nil); return; }
     if ([method isEqual:@"resolveCommand"]) {
       NSString *command = args[@"command"];
       if (![command isKindOfClass:NSString.class] || !command.length) { SparkInvalid(reject, @"Expected a command name"); return; }
-      resolve(SparkJSON(ResolveCommandPath(command) ?: (id)NSNull.null)); return;
+      resolve(binary ? (ResolveCommandPath(command) ?: (id)NSNull.null) : SparkJSON(ResolveCommandPath(command) ?: (id)NSNull.null)); return;
     }
     SparkProcess *process = key ? self.processes[key] : nil;
     if ([method isEqual:@"spawn"]) {
       if (process) { reject(@"E_EXISTS", @"Process id already exists", nil); return; }
       NSString *executable = args[@"executable"];
+      if ([args[@"command"] boolValue]) { executable = ResolveCommandPath(executable); if (!executable) { reject(@"E_NOT_FOUND", @"Command not found", nil); return; } }
       if ([executable hasPrefix:@"helper:"]) {
         NSString *name = [executable substringFromIndex:7];
         if (!name.length || [name rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"] invertedSet]].location != NSNotFound) { SparkInvalid(reject, @"Invalid helper name"); return; }
@@ -110,8 +115,8 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
       if (![executable hasPrefix:@"/"]) { SparkInvalid(reject, @"Executable path must be absolute"); return; }
       NSUInteger captureLimit = [args[@"captureLimitBytes"] unsignedIntegerValue];
       if (captureLimit > 8 * 1024 * 1024) { SparkInvalid(reject, @"Invalid capture limit"); return; }
-      NSData *initialInput = args[@"inputBase64"] ? [[NSData alloc] initWithBase64EncodedString:args[@"inputBase64"] options:0] : nil;
-      if (args[@"inputBase64"] && !initialInput) { SparkInvalid(reject, @"Invalid process input"); return; }
+      NSData *initialInput = args[@"bytes"];
+      if (args[@"bytes"] && ![initialInput isKindOfClass:NSData.class]) { SparkInvalid(reject, @"Invalid process input"); return; }
       process = [SparkProcess new];
       process.inputQueue = dispatch_queue_create("desktop.process.input", DISPATCH_QUEUE_SERIAL);
       NSMutableDictionary *environment = [NSProcessInfo.processInfo.environment mutableCopy]; [environment addEntriesFromDictionary:args[@"env"] ?: @{}];
@@ -151,6 +156,9 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
         NSFileHandle *handle = streams[index]; NSMutableData *buffer = index ? stderrData : stdoutData;
         NSString *stream = index ? @"stderr" : @"stdout";
         dispatch_group_async(group, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+          // Keep up to 1 MiB in flight per stream; ordinary delivery never waits
+          // for a per-chunk JS acknowledgement. A stalled consumer backpressures the pipe.
+          dispatch_semaphore_t slots = dispatch_semaphore_create(64);
           @try {
             while (YES) {
               // readDataOfLength can wait for the requested length. A service's
@@ -158,9 +166,13 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
               char bytes[16384]; ssize_t count;
               do { count = read(handle.fileDescriptor, bytes, sizeof(bytes)); } while (count < 0 && errno == EINTR);
               if (count <= 0) break;
-              NSData *data = [NSData dataWithBytes:bytes length:(NSUInteger)count];
+              NSMutableData *data = [NSMutableData dataWithBytes:bytes length:(NSUInteger)count];
               @synchronized(process) { NSUInteger remaining = captureLimit - buffer.length; if (data.length > remaining) process.truncated = YES; [buffer appendData:[data subdataWithRange:NSMakeRange(0, MIN(remaining, data.length))]]; }
-              if ([args[@"streamOutput"] boolValue]) dispatch_sync(dispatch_get_main_queue(), ^{ if (!self.invalidated) SparkEmit(@{ @"type": @"processOutput", @"processId": key, @"stream": stream, @"base64": [data base64EncodedStringWithOptions:0] }); });
+              if ([args[@"streamOutput"] boolValue]) {
+                while (!self.invalidated && dispatch_semaphore_wait(slots, dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC))) {}
+                if (self.invalidated) break;
+                dispatch_sync(dispatch_get_main_queue(), ^{ if (!self.invalidated) self.binaryEvent(@{ @"type": @"processOutput", @"processId": key, @"stream": stream, @"bytes": data }, ^{ dispatch_semaphore_signal(slots); }); else dispatch_semaphore_signal(slots); });
+              }
             }
           } @catch (NSException *exception) { /* Closing the runtime interrupts pipe reads. */ }
           [handle closeFile];
@@ -176,10 +188,10 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
           int terminationStatus = status;
           process.ended = YES;
           dispatch_async(process.inputQueue, ^{ @try { [process.input closeFile]; } @catch (NSException *exception) {} });
-          if (!self.invalidated) SparkEmit(@{ @"type": @"processExit", @"processId": key, @"result": @{
+          if (!self.invalidated) self.binaryEvent(@{ @"type": @"processExit", @"processId": key, @"result": @{
             @"exitCode": @(WIFEXITED(terminationStatus) ? WEXITSTATUS(terminationStatus) : WTERMSIG(terminationStatus)), @"terminated": @(WIFSIGNALED(terminationStatus)), @"terminationSignal": WIFSIGNALED(terminationStatus) ? @(WTERMSIG(terminationStatus)) : (id)NSNull.null,
-            @"stdoutBase64": [stdoutData base64EncodedStringWithOptions:0], @"stderrBase64": [stderrData base64EncodedStringWithOptions:0],
-            @"timedOut": @(process.timedOut), @"outputTruncated": @(process.truncated) } });
+            @"stdout": stdoutData, @"stderr": stderrData,
+            @"timedOut": @(process.timedOut), @"outputTruncated": @(process.truncated) } }, nil);
           [self.processes removeObjectForKey:key];
         });
       });
@@ -188,12 +200,12 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
         if (process.running) { process.timedOut = YES; [self terminate:process]; }
       });
     } else {
-      if (!process || process.ended) { if ([method isEqual:@"terminate"] || [method isEqual:@"closeInput"]) { resolve(@"null"); return; } reject(@"E_CLOSED", @"Process has exited", nil); return; }
+      if (!process || process.ended) { if ([method isEqual:@"terminate"] || [method isEqual:@"closeInput"]) { resolve(binary ? NSNull.null : @"null"); return; } reject(@"E_CLOSED", @"Process has exited", nil); return; }
       if ([method isEqual:@"terminate"]) {
         if (![self terminate:process]) { SparkReject(reject, [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]); return; }
       }
       else if ([method isEqual:@"write"] || [method isEqual:@"closeInput"]) {
-        NSData *data = [method isEqual:@"write"] ? [[NSData alloc] initWithBase64EncodedString:args[@"base64"] options:0] : nil;
+        NSData *data = [method isEqual:@"write"] ? args[@"bytes"] : nil;
         if ([method isEqual:@"write"] && !data) { SparkInvalid(reject, @"Invalid process input"); return; }
         dispatch_async(process.inputQueue, ^{
           @try {
@@ -201,14 +213,14 @@ RCT_EXPORT_MODULE(NativeDesktopProcesses)
               if (process.inputClosed) { reject(@"E_CLOSED", @"Process input is closed", nil); return; }
               [process.input writeData:data];
             } else if (!process.inputClosed) { [process.input closeFile]; process.inputClosed = YES; }
-            resolve(@"null");
+            resolve(binary ? NSNull.null : @"null");
           } @catch (NSException *exception) { reject(@"E_CLOSED", @"Process input is closed", nil); }
         }); return;
       } else { SparkInvalid(reject, @"Unknown process operation"); return; }
     }
-    resolve(@"null");
+    resolve(binary ? NSNull.null : @"null");
   });
 }
 - (void)invalidate { dispatch_async(dispatch_get_main_queue(), ^{ self.invalidated = YES; [self stopAll]; }); }
-- (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeDesktopProcessesSpecJSI>(params); }
+- (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { auto invoker = params.jsInvoker; self.binaryEvent = ^(NSDictionary *event, dispatch_block_t delivered) { spark::binary::Emit(invoker, [event](spark::binary::jsi::Runtime &rt) { return spark::binary::Value(rt, event); }, [delivered] { if (delivered) delivered(); }); }; return std::make_shared<spark::binary::Module<facebook::react::NativeDesktopProcessesSpecJSI>>(params); }
 @end

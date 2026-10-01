@@ -1,6 +1,5 @@
 import { SparkError, asyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
-import { decodeBytes } from "./bytes";
-import { fromByteArray } from "base64-js";
+import { nativeBytes } from "@legendapp/spark-desktop-app/src/contracts/native-buffer";
 export const MAX_CHUNK_SIZE = 1024 * 1024;
 export type FileMode = "read" | "readWrite" | "write" | "createNew";
 export type FileHandle = {
@@ -22,8 +21,8 @@ export async function createFileHandle(call: FileCall, path: string, mode: FileM
   const cleanup = asyncRegistration(() => { closed = true; }, () => call<void>("closeFile", { id }));
   const active = () => { if (closed) throw new SparkError("E_CLOSED", "File handle is closed"); };
   return {
-    async read(size, position) { active(); length(size); offset(position); if (!Number.isSafeInteger(position + size)) throw new SparkError("E_INVALID_ARGUMENT", "Read range exceeds safe integer bounds"); const bytes = decodeBytes(await call<string>("readChunk", { id, length: size, offset: position })); if (bytes.length > size) throw new SparkError("E_INVALID_DATA", "Read exceeded requested length"); return bytes; },
-    async write(bytes, position) { active(); if (!(bytes instanceof Uint8Array)) throw new SparkError("E_INVALID_ARGUMENT", "Expected Uint8Array"); offset(position); if (!Number.isSafeInteger(position + bytes.byteLength)) throw new SparkError("E_INVALID_ARGUMENT", "Write range exceeds safe integer bounds"); if (!bytes.length) return 0; length(bytes.length); const written = await call<number>("writeChunk", { id, base64: fromByteArray(bytes), offset: position }); if (written !== bytes.length) throw new SparkError("E_NATIVE", "Native write did not write the complete chunk"); return written; },
+    async read(size, position) { active(); length(size); offset(position); if (!Number.isSafeInteger(position + size)) throw new SparkError("E_INVALID_ARGUMENT", "Read range exceeds safe integer bounds"); const bytes = nativeBytes(await call<ArrayBuffer>("readChunk", { id, length: size, offset: position })); if (bytes.length > size) throw new SparkError("E_INVALID_DATA", "Read exceeded requested length"); return bytes; },
+    async write(bytes, position) { active(); if (!(bytes instanceof Uint8Array)) throw new SparkError("E_INVALID_ARGUMENT", "Expected Uint8Array"); offset(position); if (!Number.isSafeInteger(position + bytes.byteLength)) throw new SparkError("E_INVALID_ARGUMENT", "Write range exceeds safe integer bounds"); if (!bytes.length) return 0; length(bytes.length); const written = await call<number>("writeChunk", { id, bytes, offset: position }); if (written !== bytes.length) throw new SparkError("E_NATIVE", "Native write did not write the complete chunk"); return written; },
     async flush() { active(); await call("flushFile", { id }); },
     close() { return cleanup.remove(); },
   };
