@@ -159,6 +159,8 @@ registerGlobalShortcut(accelerator, handler, options?): Promise<AsyncRegistratio
 
 Use portable accelerator strings and one parser. Numeric physical key codes remain an explicitly low-level keyboard API. Preserve local/global distinction, conflict failures, owner/window scope and repeat behavior. Command routing adds named actions and persisted bindings on top of the same shortcut concepts; it is not a second key syntax. Put callbacks into creation options when a resource has multiple callbacks. Use semantic role/ID targeting instead of translated menu-title matching.
 
+Local command registrations publish native matching rules and explicit boolean enablement. Await `setEnabled` and suspension updates for native acknowledgment. Low-level keyboard callbacks observe events; their return values do not control native propagation. Never block the native event loop waiting for JavaScript handlers.
+
 Finalize the shared menu schema with current toolbar needs, including typed sliders and icon inputs, before implementing consolidation. It must not discard existing functionality. No colon-encoded slider values. Tray image inputs distinguish portable assets from macOS symbols.
 
 ### Dialogs and files

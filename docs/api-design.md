@@ -58,6 +58,9 @@ Use native or backend events for completion, readiness, commands, and status. A
 timeout bounds an operation; it must not become a polling interval. Install native
 status observation only while somebody observes it, and stop it with the last listener.
 Route shared desktop events by type and resource before invoking feature listeners.
+Native input propagation must be decided from explicit native configuration. Never
+block the native event loop waiting for an asynchronous JavaScript callback; expose
+native update acknowledgment and keep observer callbacks independent of consumption.
 
 Pass binary data as buffers, not JSON or base64. Snapshot mutable input once at the
 native ownership boundary, before returning control to the caller; transfer freshly

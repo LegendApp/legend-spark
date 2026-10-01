@@ -4,7 +4,7 @@ import { TurboModuleRegistry } from "react-native";
 export interface Spec extends TurboModule {
   startMonitoringKeyboard(): Promise<boolean>;
   stopMonitoringKeyboard(): Promise<boolean>;
-  respondToKeyEvent(eventId: string, handled: boolean): void;
+  setConsumption(ownerId: string, rulesJson: string, capture: boolean): Promise<boolean>;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 }

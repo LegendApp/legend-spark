@@ -22,7 +22,11 @@ const registration = await router.register({
   scope: { kind: 'window', windowId: 'editor' },
   handlers: { save: () => { saveDocument(); } },
 });
-// Stops dispatch immediately; resolves after native observer cleanup.
+await registration.setEnabled(false); // Resolves when native matching is disabled.
+await registration.setEnabled(true);
+const suspended = await router.suspend({ kind: 'window', windowId: 'editor' });
+await suspended.remove(); // Resolves when native matching resumes.
+// Stops dispatch immediately; resolves after native rules and observers are removed.
 await registration.remove();
 ```
 
@@ -30,27 +34,36 @@ await registration.remove();
 omitted overrides use the definition defaults. Each registration snapshots its
 configuration. Higher priority runs first; the defaults are 100 for window scope
 and 0 for application scope. Equal priorities use the newest registration first.
-A handler returning `false` lets dispatch continue; other synchronous results
-consume the event. Handlers must make that decision synchronously; launch async
-work explicitly and handle its errors. Only definitions with `repeat: true` run
+A handler returning `false` lets dispatch continue to the next Spark handler; other
+synchronous results stop that routing. Native consumption is decided from the
+registered, enabled bindings before JavaScript runs. Returning `false` cannot send
+the key back to AppKit. Launch async work explicitly and handle its errors. Only definitions with `repeat: true` run
 on repeated keydowns. `allowExtraModifiers` opts into subset modifier matching.
 
-Routing uses the native event's window ID when present, then the configured
-active-window reader or `setActiveWindowId`. Changing windows resets pressed-key
-state. `router.suspend(scope?)` returns a synchronous subscription; remove it to
-resume. Suspension of the active window also blocks application handlers there.
-The router shares a pair of native listeners and stops them after its last
-registration. Registration readiness and cleanup failures reject with Spark
-errors; failed cleanup can be retried on the same handle.
+Routing and native matching use the native event's window ID (the event window or
+AppKit's key window). Changing windows resets pressed-key state; `setActiveWindowId`
+can also reset that state when the app receives focus changes. It does not override
+native event ownership. `enabled` is a boolean, and the registration's
+`setEnabled(boolean)` resolves after native matching acknowledges the update.
+JavaScript predicates are not an event-time native consumption mechanism.
+
+`await router.suspend(scope?)` returns an asynchronous registration; await its
+`remove()` to resume. Window suspension also blocks application handlers there.
+The router shares native observers and one owner for its compiled consumption rules.
+The final registration releases both. Setup, updates and cleanup reject on failure;
+cleanup can be retried on the same handle. Disable/removal stops JS callbacks
+immediately, and native changes take effect by acknowledgment. Already consumed
+keydown events retain a paired consumed keyup even if their owner is removed.
 
 `useRoutedHotkeys({ router, definitions, bindings, handlers, ... })` returns
 `loading`, `ready` (with the registration), or `error`. It reads current handlers
 and enabled state without replacing the registration for callback identity
 changes, and disposes late registrations after unmount. `onError` reports setup
-failure; `onCleanupError(error, registration)` exposes failed cleanup for retry.
-`useHotkeySuspension` provides effect-owned suspension.
+or update failure; `onCleanupError(error, registration)` exposes failed cleanup for retry.
+`useHotkeySuspension` provides effect-owned suspension and accepts `onError` and
+`onCleanupError` for asynchronous setup and cleanup failures.
 
-`HotkeyCapture` owns listeners only while recording, commits one accelerator on
+`HotkeyCapture` owns observers and a native capture registration only while recording, commits one accelerator on
 key release and cancels on Escape. Its `onChange` receives a named string.
 `HotkeyBindingsSettingsContent` and `HotkeyBindingsSettingsPage` use the same
 array contract and support one or several shortcuts per command. The parallel
@@ -82,9 +95,9 @@ one command with another.
 ## Low-level keyboard events
 
 `addKeyboardListener('down' | 'up', listener, { windowIds? })` under
-`/shortcuts/keyboard` resolves to an `AsyncRegistration`. Events contain `eventId`,
-`windowId` (or null), a layout-derived unmodified `key`, physical `keyCode`, and
-modifier flags. Window filtering applies equally to keydown and keyup. The last
+`/shortcuts/keyboard` resolves to an `AsyncRegistration`. Events contain `windowId` (or null), a layout-derived unmodified `key`, physical
+`keyCode`, modifier flags, and booleans `repeated`, `consumed`, and `captured`.
+These report the native event decision; callback return values never change it. Window filtering applies equally to keydown and keyup. The last
 registration removal stops the native monitor and removes bridge observers.
 Failed removal can be retried. The raw native module, singleton keyboard manager
 and global stop function are no longer public.
@@ -95,8 +108,10 @@ hosts or without its native module. Registered local/global shortcuts have their
 own separate platform support. Importing command helpers does not require the
 keyboard or symbol native modules to be installed.
 
-Keyboard consumption still uses the existing native response deadline. Late JS
-responses are ignored and released, and cannot consume a key after the deadline.
+Native keyboard matching never waits for JavaScript. Low-level listeners observe
+events without blocking AppKit. Use registered shortcuts or explicitly enabled
+commands for native consumption; capture controls temporarily consume all monitored
+keys with their own native ownership.
 Mounted React lifecycle/capture tests, persistence/routing tests and native syntax
 checks cover this cleanup. Actual key dispatch, keyboard layouts, media keys and
 focus transitions still need native host acceptance.

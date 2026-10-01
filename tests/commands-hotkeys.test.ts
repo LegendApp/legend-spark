@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "macos" } }));
 import { matchesHotkey, normalizeBinding, bindingFromEvent, formatHotkey } from "../packages/commands/src/bindings";
-const event = (key: string, modifiers = 0, keyCode = 0) => ({ key, keyCode, modifiers, eventId: "test", windowId: "main" });
+const event = (key: string, modifiers = 0, keyCode = 0) => ({ key, keyCode, modifiers, repeated: false, consumed: false, captured: false, windowId: "main" });
 test("commands use the shared named syntax and character labels rather than numeric virtual codes", () => {
   expect(matchesHotkey(event("a"), "A")).toBe(true);
   expect(matchesHotkey(event("1", 0, 18), "1")).toBe(true);

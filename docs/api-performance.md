@@ -55,18 +55,24 @@ are not end-to-end throughput comparisons with the previous base64 path.
 
 ## Verification and limits
 
-All 577 tests across 115 Vitest files and workspace TypeScript checks pass. Native fixtures
+All 586 tests across 116 Vitest files and workspace TypeScript checks pass. Native fixtures
 compile and exercise changed macOS process, audio, tray, menu, sidebar, and buffer
 paths. The real loopback socket fixture verifies malformed requests, callback
 arrival, and closure. Fixtures use stub React hosts where appropriate; they do not
 establish full React Native application acceptance. Windows implementations are
 updated but cannot be compiled or accepted on this Mac without a Windows toolchain.
 
-## Remaining keyboard decision
+## Native keyboard consumption
 
-The macOS low-level keyboard monitor still sleeps for 10 ms waiting for an
-asynchronous JavaScript consumption response. That wait is both expensive and an
-unreliable way to decide native event propagation. The proposed replacement is
-native shortcut matching with explicit enabled state, and nonblocking low-level
-observation. This changes consumption semantics and remains pending the requested
-contract decision. The shortcut matching cache above does not remove that wait.
+The macOS keyboard monitor no longer waits 10 ms for a JavaScript response. It
+matches compiled, enabled native rules before publishing observation events. Command
+handler fall-through is internal to Spark; it cannot change AppKit propagation.
+Native capture owns temporary consumption, and paired keyups remain consumed after
+owner removal. Enablement and suspension changes acknowledge native installation.
+
+The actual native matcher and stub emitter processed 20,000 fixture events in a
+median 8.145 ms across three fresh processes. This excludes React Native and JS
+callback delivery, and is not an end-to-end input latency benchmark. The fixture
+checks scopes, modifier normalization, repeat behavior, capture owners, atomic
+updates and cleanup. Actual source compilation against generated TurboModule headers
+also passes. Full interactive application keyboard acceptance remains unverified.

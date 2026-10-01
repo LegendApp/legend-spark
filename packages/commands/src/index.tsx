@@ -1,4 +1,4 @@
-import { addKeyboardListener, type KeyboardEvent } from "@legendapp/spark-desktop-shortcuts/src/keyboard-manager";
+import { addKeyboardListener, createKeyboardConsumption, type KeyboardEvent } from "@legendapp/spark-desktop-shortcuts/src/keyboard-manager";
 import { SparkError, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { cn } from "@legendapp/spark-ui/src/classnames";
 import { observable } from "@legendapp/state";
@@ -6,37 +6,81 @@ import { useValue } from "@legendapp/state/react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { bindingFromEvent, bindingKey, formatHotkey, getDefaultHotkeyBindings, getHotkeyBindingConflicts, hotkeyBindingListsEqual, limitHotkeyBindings, normalizeHotkeyBindings, type HotkeyValue, type HotkeyDefinition, type HotkeyBindingState } from "./bindings";
-import { setCapturing, type HotkeyRegistrationOptions, type HotkeyRouter, type HotkeyScope } from "./router";
+import { setCapturing, type HotkeyRegistration, type HotkeyRegistrationOptions, type HotkeyRouter, type HotkeyScope } from "./router";
 export { createHotkeyRouter } from "./router";
-export type { HotkeyRouter, HotkeyRouterOptions, HotkeyScope, HotkeyRegistrationOptions, HotkeyHandlerContext, RoutedHotkeyHandlers } from "./router";
+export type { HotkeyRouter, HotkeyRegistration, HotkeyScope, HotkeyRegistrationOptions, HotkeyHandlerContext, RoutedHotkeyHandlers } from "./router";
 export { hotkeyFileVersion, normalizeHotkeyFile, serializeHotkeyFile, normalizeHotkeyBindings, formatHotkey, matchesHotkey, getDefaultHotkeyBindings, getHotkeyBindingConflicts, hotkeyBindingListsEqual } from "./bindings";
 export type { HotkeyValue, HotkeyDefinition, HotkeyBindingState, HotkeyFile, HotkeyBindingLimitOptions, HotkeyMatchOptions } from "./bindings";
 export { createHotkeyStore, type HotkeyStoreOptions } from "./storage";
 
-export type HotkeyRegistrationState = { status: "loading" } | { status: "ready"; registration: AsyncRegistration } | { status: "error"; error: Error };
+export type HotkeyRegistrationState = { status: "loading" } | { status: "ready"; registration: HotkeyRegistration } | { status: "error"; error: Error; registration?: HotkeyRegistration };
 export type UseRoutedHotkeysOptions<Id extends string> = HotkeyRegistrationOptions<Id> & { router: HotkeyRouter; onError?: (error: Error) => void; onCleanupError?: (error: unknown, registration: AsyncRegistration) => void };
 export function useRoutedHotkeys<Id extends string>(options: UseRoutedHotkeysOptions<Id>): HotkeyRegistrationState {
   const current = useRef(options); useLayoutEffect(() => { current.current = options; });
   const [state, setState] = useState<HotkeyRegistrationState>({ status: "loading" });
-  const { router, definitions, bindings, priority, scope } = options;
+  const owner = useRef<HotkeyRegistration | undefined>(undefined), transition = useRef<Promise<unknown>>(Promise.resolve()), retry = useRef<HotkeyRegistration | undefined>(undefined);
+  const { router, definitions, bindings, priority, scope, enabled = true } = options;
+  const handlerIds = JSON.stringify(definitions.filter(definition => Object.hasOwn(options.handlers, definition.id)).map(definition => definition.id));
   useEffect(() => {
-    let active = true, registration: AsyncRegistration | undefined;
-    const dispose = (handle: AsyncRegistration) => { void handle.remove().catch(error => { if (current.current.onCleanupError) current.current.onCleanupError(error, handle); else console.error(error); }); };
+    let active = true, registration: HotkeyRegistration | undefined;
+    const report = (cause: unknown) => {
+      if (!active) return;
+      const error = cause instanceof Error ? cause : new SparkError("E_NATIVE", "Command registration failed", { cause });
+      setState({ status: "error", error, registration }); current.current.onError?.(error);
+    };
+    const dispose = async (handle: HotkeyRegistration) => {
+      try { await handle.remove(); if (retry.current === handle) retry.current = undefined; }
+      catch (error) { retry.current = handle; if (current.current.onCleanupError) current.current.onCleanupError(error, handle); else console.error(error); throw error; }
+    };
     setState({ status: "loading" });
-    const handlers = Object.fromEntries(definitions.map(definition => [definition.id, (context: Parameters<NonNullable<typeof options.handlers[Id]>>[0]) => {
+    const handlers = Object.fromEntries(definitions.filter(definition => Object.hasOwn(options.handlers, definition.id)).map(definition => [definition.id, (context: Parameters<NonNullable<typeof options.handlers[Id]>>[0]) => {
       if (!active) return false;
       const handler = Object.hasOwn(current.current.handlers, definition.id) ? current.current.handlers[definition.id] : undefined; return handler ? handler(context) : false;
     }])) as typeof options.handlers;
-    void router.register({ definitions, bindings, priority, scope, handlers, enabled: () => active && (typeof current.current.enabled === "function" ? current.current.enabled() : current.current.enabled ?? true) }).then(handle => {
-      registration = handle; if (active) setState({ status: "ready", registration: handle }); else dispose(handle);
-    }, cause => { if (active) { const error = cause instanceof Error ? cause : new SparkError("E_NATIVE", "Command registration failed", { cause }); setState({ status: "error", error }); current.current.onError?.(error); } });
-    return () => { active = false; if (registration) dispose(registration); };
-  }, [router, definitions, bindings, priority, scope?.kind, scope?.kind === "window" ? scope.windowId : undefined]);
+    const setup = transition.current.catch(() => {}).then(async () => {
+      if (retry.current) await dispose(retry.current);
+      if (!active) return;
+      const handle = await router.register({ definitions, bindings, priority, scope, handlers, enabled });
+      registration = handle;
+      if (!active) { await dispose(handle); return; }
+      owner.current = handle;
+      if ((current.current.enabled ?? true) !== enabled) await handle.setEnabled(current.current.enabled ?? true);
+      if (active) setState({ status: "ready", registration: handle });
+    }).catch(report);
+    transition.current = setup;
+    return () => {
+      active = false; if (owner.current === registration) owner.current = undefined;
+      if (registration) transition.current = setup.then(() => dispose(registration!)).catch(() => {});
+    };
+  }, [router, definitions, bindings, priority, handlerIds, scope?.kind, scope?.kind === "window" ? scope.windowId : undefined]);
+  useEffect(() => {
+    const handle = owner.current;
+    if (handle) void handle.setEnabled(enabled).then(() => {
+      if (owner.current === handle) setState(previous => previous.status === "ready" && previous.registration === handle ? previous : { status: "ready", registration: handle });
+    }, cause => {
+      if (owner.current !== handle) return;
+      const error = cause instanceof Error ? cause : new SparkError("E_NATIVE", "Command enablement failed", { cause });
+      setState({ status: "error", error, registration: handle }); current.current.onError?.(error);
+    });
+  }, [enabled]);
   return state;
 }
-export interface HotkeySuspensionOptions { active: boolean; router: HotkeyRouter; scope?: HotkeyScope }
-export function useHotkeySuspension({ active, router, scope }: HotkeySuspensionOptions): void {
-  useEffect(() => { if (active) { const suspension = router.suspend(scope); return () => suspension.remove(); } }, [active, router, scope?.kind, scope?.kind === "window" ? scope.windowId : undefined]);
+export interface HotkeySuspensionOptions {
+  active: boolean; router: HotkeyRouter; scope?: HotkeyScope;
+  onError?: (error: unknown) => void; onCleanupError?: (error: unknown, registration: AsyncRegistration) => void;
+}
+export function useHotkeySuspension(options: HotkeySuspensionOptions): void {
+  const current = useRef(options); useLayoutEffect(() => { current.current = options; });
+  const { active, router, scope } = options;
+  useEffect(() => {
+    if (!active) return;
+    let mounted = true, registration: AsyncRegistration | undefined;
+    const dispose = (handle: AsyncRegistration) => { void handle.remove().catch(error => { if (current.current.onCleanupError) current.current.onCleanupError(error, handle); else console.error(error); }); };
+    void router.suspend(scope).then(handle => { registration = handle; if (!mounted) dispose(handle); }, error => {
+      if (mounted) { if (current.current.onError) current.current.onError(error); else console.error(error); }
+    });
+    return () => { mounted = false; if (registration) dispose(registration); };
+  }, [active, router, scope?.kind, scope?.kind === "window" ? scope.windowId : undefined]);
 }
 export interface HotkeyCaptureProps {
   className?: string;
@@ -66,15 +110,17 @@ export function HotkeyCapture(props: HotkeyCaptureProps) {
     const handles: AsyncRegistration[] = [];
     const dispose = (handle: AsyncRegistration) => { void handle.remove().catch(error => { if (current.current.onCleanupError) current.current.onCleanupError(error, handle); else console.error(error); }); };
     const listener = (type: "down" | "up") => (event: KeyboardEvent) => {
-      if (!active || activeCapture$.peek() !== id) return false;
-      if (event.key === "\u001b") { cancel(); return true; }
+      if (!active || activeCapture$.peek() !== id || !event.captured) return;
+      if (event.key === "\u001b") { cancel(); return; }
       if (type === "down") {
         const binding = bindingFromEvent(event);
         if (binding) { captured.current = { code: event.keyCode, value: binding }; setDisplay(formatHotkey(binding)); }
       } else if (captured.current?.code === event.keyCode) { try { current.current.onChange(captured.current.value); } finally { cancel(); } }
-      return true;
     };
-    for (const type of ["down", "up"] as const) void addKeyboardListener(type, listener(type)).then(handle => { if (active) handles.push(handle); else dispose(handle); }, error => { if (active) { setError(error instanceof Error ? error.message : "Keyboard capture unavailable"); current.current.onError?.(error); cancel(); } });
+    const accepted = (handle: AsyncRegistration) => { if (active) handles.push(handle); else dispose(handle); };
+    const failed = (error: unknown) => { if (active) { setError(error instanceof Error ? error.message : "Keyboard capture unavailable"); current.current.onError?.(error); cancel(); } };
+    for (const type of ["down", "up"] as const) void addKeyboardListener(type, listener(type)).then(accepted, failed);
+    void createKeyboardConsumption([], true).then(accepted, failed);
     return () => { active = false; for (const handle of handles) dispose(handle); };
   }, [isCapturing, id]);
   useEffect(() => { if (disabled) cancel(); }, [disabled]);
