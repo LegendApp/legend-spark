@@ -25,7 +25,7 @@ import {
   entryFile,
   digest,
   hashFiles,
-  hostSourceSignature,
+  nativePreparationFingerprint,
   localSigningIdentity,
   nativePackages,
   readJson,
@@ -182,16 +182,6 @@ async function buildUnlocked(
   if (productionHash)
     runtime.fingerprint = digest(runtime.fingerprint + productionHash);
   const resultFile = stateFile(root, `${mode}-build.json`);
-  if (!force && existsSync(resultFile)) {
-    const existing = readJson(resultFile);
-    if (
-      existing.runtime.fingerprint === runtime.fingerprint &&
-      existsSync(existing.app)
-    ) {
-      console.log(`Reusing ${existing.app}`);
-      return existing;
-    }
-  }
   const excludedNames = [...new Set<string>([
     ...(readAppConfig(root).expo.autolinking?.exclude ?? []),
     ...chosen.excluded.map((p) => p.name),
@@ -221,26 +211,23 @@ async function buildUnlocked(
     pkg.expo.autolinking.exclude = excludedNames;
     writeJson(path.join(root, "package.json"), pkg);
   }
-  const preparation = digest(
-    JSON.stringify({
-      config: readAppConfig(root),
-      packages: chosen.included.map((p) => [
-        p.name,
-        hashFiles(p.root, [
-          "package.json",
-          p.json.codegenConfig?.jsSrcsDir ?? "src",
-          ...readdirSync(p.root).filter((name) => name.endsWith(".podspec")),
-        ]),
-      ]),
-      plugin: hostSourceSignature(root),
-    }),
-  );
+  const preparation = nativePreparationFingerprint(root, chosen.included);
   const preparedFile = stateFile(root, "native-preparation.json");
   const needsPreparation =
     force ||
     !existsSync(preparedFile) ||
     readJson(preparedFile).fingerprint !== preparation ||
     !existsSync(path.join(root, "macos/Pods/Manifest.lock"));
+  if (!needsPreparation && existsSync(resultFile)) {
+    const existing = readJson(resultFile);
+    if (
+      existing.runtime.fingerprint === runtime.fingerprint &&
+      existsSync(existing.app)
+    ) {
+      console.log(`Reusing ${existing.app}`);
+      return existing;
+    }
+  }
   const nativeConfig = readAppConfig(root).expo;
   if (needsPreparation) {
     const manifest = readFileSync(path.join(root, "package.json"), "utf8");

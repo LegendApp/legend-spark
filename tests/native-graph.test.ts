@@ -7,6 +7,7 @@ import {
   goConfigurationIssues,
   hashFiles,
   nativePackages,
+  nativePreparationFingerprint,
   installedPackages,
   localSigningIdentity,
   projectEnvironment,
@@ -15,6 +16,23 @@ import {
   type NativePackage,
   type Runtime,
 } from "../packages/cli/src/project.ts";
+
+test("CocoaPods preparation changes when identical native packages move", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-native-preparation-"));
+  try {
+    writeFileSync(path.join(root, "package.json"), "{}");
+    writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: { name: "Fixture" } }));
+    const packages = ["before", "after"].map(directory => {
+      const location = path.join(root, directory);
+      mkdirSync(location);
+      writeFileSync(path.join(location, "package.json"), JSON.stringify({ name: "fixture", version: "1.0.0" }));
+      return { name: "fixture", root: location, json: {}, sdk: false, requires: [], signature: "same" } as NativePackage;
+    });
+    const original = nativePreparationFingerprint(root, [packages[0]]);
+    expect(nativePreparationFingerprint(root, [packages[0]])).toBe(original);
+    expect(nativePreparationFingerprint(root, [packages[1]])).not.toBe(original);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test("local development signing is opt-in and cannot affect distribution builds", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-dev-signing-"));

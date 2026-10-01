@@ -267,6 +267,25 @@ export function hostSourceSignature(root: string) {
     .filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
     .map(pkg => [pkg.name, hashFiles(pkg.root, ["package.json", "AppDelegate.mm", "windows", ...readdirSync(pkg.root).filter(file => file.endsWith(".cjs"))])])));
 }
+export function nativePreparationFingerprint(root: string, packages: NativePackage[]): string {
+  return digest(
+    JSON.stringify({
+      config: readAppConfig(root),
+      packages: packages.map((p) => [
+        p.name,
+        // CocoaPods stores source paths. An immutable SDK reinstall can move
+        // unchanged packages, so refresh those paths along with their contents.
+        p.root,
+        hashFiles(p.root, [
+          "package.json",
+          p.json.codegenConfig?.jsSrcsDir ?? "src",
+          ...readdirSync(p.root).filter((name) => name.endsWith(".podspec")),
+        ]),
+      ]),
+      plugin: hostSourceSignature(root),
+    }),
+  );
+}
 export function localSigningIdentity(root: string, mode: string): string {
   if (mode !== "dev") return "-";
   const file = stateFile(root, "settings.json");
