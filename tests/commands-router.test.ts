@@ -15,6 +15,7 @@ vi.mock("@legendapp/spark-desktop-shortcuts/src/keyboard-manager", () => ({
 }));
 import { createHotkeyRouter, type HotkeyDefinition } from "../packages/commands/src/index";
 import { KeyCodes } from "../packages/desktop-shortcuts/src/keyboard-manager/codes";
+import * as accelerator from "../packages/desktop-app/src/contracts/accelerator";
 function keyDown(keyCode: number, modifiers = 0) {
   for (const listener of mockKeyDownListeners) {
     listener({ keyCode, key: ({ 0: "a", 1: "s", 49: " ", 126: "\uf700" })[keyCode] ?? "", modifiers, windowId: null, eventId: "test" });
@@ -41,6 +42,24 @@ function definition(
 }
 
 describe("createHotkeyRouter", () => {
+  it("evaluates registration enablement once when matching handlers fall through", async () => {
+    const router = createHotkeyRouter(), enabled = vi.fn(() => true), handler = vi.fn(() => false);
+    const registration = await router.register({ definitions: [definition("first", "A"), definition("second", "A")], handlers: { first: handler, second: handler }, enabled });
+    keyDown(KeyCodes.KEY_A); keyUp(KeyCodes.KEY_A);
+    expect(enabled).toHaveBeenCalledOnce(); expect(handler).toHaveBeenCalledTimes(2);
+    await registration.remove();
+  });
+  it("compiles bindings once and dispatches without sorting or parsing accelerators", async () => {
+    const router = createHotkeyRouter(), handler = vi.fn();
+    const registration = await router.register({ definitions: [definition("constructor", "A")], handlers: { constructor: handler } });
+    const parse = vi.spyOn(accelerator, "parseAccelerator"), sort = vi.spyOn(Array.prototype, "sort");
+    try {
+      keyDown(KeyCodes.KEY_A); keyUp(KeyCodes.KEY_A);
+      keyDown(KeyCodes.KEY_A); keyUp(KeyCodes.KEY_A);
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(parse).not.toHaveBeenCalled(); expect(sort).not.toHaveBeenCalled();
+    } finally { parse.mockRestore(); sort.mockRestore(); await registration.remove(); }
+  });
   it("routes every configured binding for a command", async () => {
     const router = createHotkeyRouter();
     const handler = vi.fn();

@@ -67,7 +67,10 @@ export function getHotkeyBindingConflicts<Id extends string>(definitions: readon
 const modifierMask = (1 << 20) | (1 << 18) | (1 << 19) | (1 << 17) | (1 << 23) | (1 << 16);
 export interface HotkeyMatchOptions { allowExtraModifiers?: boolean }
 export function matchesHotkey(event: KeyboardEvent, value: string, { allowExtraModifiers = false }: HotkeyMatchOptions = {}): boolean {
-  const binding = parseBinding(value);
+  return matchesParsedHotkey(event, parseBinding(value), allowExtraModifiers);
+}
+/** Registration-time parsing keeps accelerator parsing out of keyboard dispatch. */
+export function matchesParsedHotkey(event: KeyboardEvent, binding: ReturnType<typeof parseBinding>, allowExtraModifiers = false): boolean {
   let active = event.modifiers & modifierMask;
   // AppKit adds Fn for navigation/function keys; Caps Lock does not change a command.
   if (!(binding.modifiers & (1 << 23)) && /^[\uf700-\uf747]$/.test(event.key)) active &= ~(1 << 23);
