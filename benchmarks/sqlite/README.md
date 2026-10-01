@@ -1,6 +1,6 @@
 # SQLite provider benchmark
 
-Compare the actual OP-SQLite 18.2.1 and NitroSQLite 10.0.0 native implementations through Hermes and Spark's database adapter. See [the measured report](../../docs/sqlite-benchmark-2026-10-01.md) and [raw results](results-2026-10-01.json).
+Compare the actual OP-SQLite 18.2.1 and NitroSQLite 10.0.0 native implementations through Hermes and Spark's database adapter. See [the measured report](../../docs/sqlite-benchmark-2026-10-01.md), [initial raw results](results-2026-10-01.json), and [direct-adapter results](results-direct-adapter-2026-10-01.json).
 
 Run from the Spark root on macOS with Xcode command-line tools, Python 3, Bun, and the existing workspace dependencies:
 

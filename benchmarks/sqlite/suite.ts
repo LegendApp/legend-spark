@@ -11,7 +11,12 @@ export async function run(open:any) {
  const syncExecute=(sql:string,params:any[]=[])=>__provider==="op"?native.executeSync(sql,params):native.execute(sql,params);
  const batchCommands=(commands:any[])=>__provider==="op"?commands:commands.map(([query,params])=>({query,params}));
  const batch=(commands:any[])=>__provider==="op"?native.executeBatch(commands):native.executeBatchAsync(commands);
- const backend={async execute(sql:string,params:any[]){const result=await asyncExecute(sql,params);return {rows:rowArray(result),rowsAffected:result.rowsAffected,insertId:result.insertId};},close:()=>native.close()};
+ // OP is exactly Spark's production adapter. Nitro needs only representation translation.
+ const backend={execute(sql:string,params:readonly any[]){
+   if(__provider==="op")return native.execute(sql,params);
+   const bound=params.some(value=>value instanceof Uint8Array)?params.map(value=>value instanceof Uint8Array?value.buffer.slice(value.byteOffset,value.byteOffset+value.byteLength):value):params;
+   return native.executeAsync(sql,bound).then((result:any)=>({rows:result.rows._array,rowsAffected:result.rowsAffected,insertId:result.insertId}));
+ },close:()=>native.close()};
  const db=createDatabase(backend);
  const initial=await db.getFirst("PRAGMA journal_mode");
  await db.run("PRAGMA journal_mode=WAL"); await db.run("PRAGMA synchronous=FULL"); await db.run("PRAGMA busy_timeout=5000");
@@ -34,6 +39,14 @@ export async function run(open:any) {
  let rejected=false;await db.transaction(async()=>{try{await db.getFirst("SELECT 1");}catch(error){rejected=(error as any).code==="E_BUSY";}});assert(rejected,"transaction ownership");
  let failed=false;try{await db.run("invalid SQL");}catch(error){failed=(error as any).code==="E_NATIVE";}assert(failed,"error translation");
  assert((await db.getFirst("SELECT count(*) AS n FROM items"))?.n===COUNT,"seed cardinality");
+ const inputBytes=new Uint8Array([9,128,255,9]).subarray(1,3);
+ const inputBindings=[inputBytes,0];
+ const pendingWrite=db.run("UPDATE items SET content=? WHERE id=?",inputBindings);
+ inputBytes.fill(8);inputBindings[1]=1;
+ await pendingWrite;
+ const boundBytes=await db.getFirst("SELECT content FROM items WHERE id=?",[0]);
+ assert((boundBytes!.content as Uint8Array)[0]===128&&(boundBytes!.content as Uint8Array)[1]===255,"offset blob binding");
+ await db.run("UPDATE items SET content=? WHERE id=?",[new Uint8Array(blob),0]);
  const reader=open({name:"benchmark.sqlite",readOnly:true,...(__provider==="nitro"?{connection:"independent"}:{})});
  await db.transaction(async tx=>{await tx.run("INSERT INTO writes(value) VALUES('uncommitted')");const query="SELECT count(*) AS n FROM writes";const result=__provider==="op"?await reader.execute(query):await reader.executeAsync(query);assert(rowArray(result)[0].n===2,"independent reader must not see uncommitted writes");});reader.close();
  __print(JSON.stringify({metadata,correctness:"passed"}));

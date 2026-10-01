@@ -11,5 +11,5 @@ export async function openDatabase(name: string, options: DatabaseOptions = {}):
   }
   const [{ open }, { getDirectory }] = await Promise.all([import("@op-engineering/op-sqlite"), import("@legendapp/spark-file-system")]);
   const native = open({ name, location: await getDirectory("data"), readOnly: options.readOnly });
-  return createDatabase({ execute: (sql, params) => native.execute(sql, params), close: () => native.close() });
+  return createDatabase({ execute: (sql, params) => native.execute(sql, params as import("@op-engineering/op-sqlite").Scalar[]), close: () => native.close() });
 }

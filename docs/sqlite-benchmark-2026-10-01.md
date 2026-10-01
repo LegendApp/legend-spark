@@ -1,8 +1,31 @@
 # NitroSQLite 10 versus Spark's OP-SQLite backend
 
-October 1, 2026. **Keep OP-SQLite 18.2.1 for Spark.** NitroSQLite 10.0.0 works in the native macOS benchmark, but it is 19–40% slower through Spark's existing database contract on the measured query/write workloads. It provides no substantial performance win that justifies replacing the backend. Native batching is essentially tied; prepared synchronous queries are close.
+October 1, 2026. **Keep OP-SQLite 18.2.1 for Spark and remove redundant adapter work.** NitroSQLite 10.0.0 works in the native macOS benchmark, but it provides no substantial performance win that justifies replacing the backend. The initial evaluation exposed substantial overhead in Spark's wrapper. The follow-up below removes it without changing the public database API.
 
-This evaluation does not change Spark's backend or public API. The reproducible harness is in [benchmarks/sqlite](../benchmarks/sqlite/README.md), with [raw measurements and configuration](../benchmarks/sqlite/results-2026-10-01.json).
+The reproducible harness is in [benchmarks/sqlite](../benchmarks/sqlite/README.md), with [initial raw measurements](../benchmarks/sqlite/results-2026-10-01.json) and [direct-adapter measurements](../benchmarks/sqlite/results-direct-adapter-2026-10-01.json). The remaining sections retain the original evaluation; this follow-up describes the current implementation.
+
+## Follow-up: direct Spark adapter
+
+Spark was duplicating the driver's native statement queue, copying bindings already snapshotted by the driver, rebuilding every returned row and BLOB, and layering async pass-through functions over every query. `getFirst` also converted every returned row before selecting the first. These costs were implementation choices, not requirements of a stable public API.
+
+Ordinary queries now enter the native queue immediately. The adapter validates the contract and converts only the requested results in the driver's fresh objects, using byte views instead of copying buffers. JavaScript coordination remains for multi-statement transaction ownership, transaction failure semantics and draining accepted work on close. Bindings are copied only when Spark actually delays submission behind a transaction. OP's native code snapshots supplied parameters before enqueueing them; the native benchmark verifies byte-view offsets and mutation immediately after submission.
+
+The rerun uses the same host, fixture, durability and 21-sample method. OP's benchmark backend now exactly matches Spark's production call. The initial benchmark included an extra async normalization shim for OP as well as Nitro; that contributed roughly 0.8 ms per 1,000 reads in a separate diagnostic run. Before/after measurements below therefore include removing that shim. They are successive runs, rather than paired samples, and machine scheduling affects the async timings.
+
+| Workload | Original Spark + OP ms | Direct adapter + OP ms | Direct adapter + Nitro ms |
+|---|---:|---:|---:|
+| 1,000 point reads | 26.17 | 13.94 | 22.89 |
+| 100 filtered pages | 5.92 | 3.01 | 3.99 |
+| 20,000 narrow rows | 44.20 | 14.94 | 22.81 |
+| 20,000 wide rows | 108.91 | 44.54 | 71.36 |
+| Transaction: 1,000 inserts | 20.35 | 15.14 | 23.74 |
+| 100 FULL-durability autocommits | 4.14 | 4.48 | 4.48 |
+
+In this rerun direct OP async point reads take **13.10 ms**, compared with Spark's **13.94 ms**. The residual cost is about **0.84 microseconds per read** on this workload; it is not zero, and is not a universal per-call cost. A separate same-host diagnostic run comparing the old production wrapper, new wrapper and direct backend measured 25.31, 13.90 and 12.30 ms respectively over nine samples each. Removing the benchmark shim alone cannot account for the improvement.
+
+Median process peak RSS fell from 208.8 to **183.0 MB for OP**, and from 265.5 to **233.4 MB for Nitro**. Wide-row timer delay fell from 98.85 to **40.57 ms for OP**. These remain whole-host measurements, not isolated adapter allocations or UI frame measurements. Both providers pass the native correctness checks. Nitro remains slower on the read and transaction workloads; autocommit is effectively tied in this rerun.
+
+Regression tests enforce immediate ordinary submission, result/buffer ownership, parameter snapshots, transaction ordering and close draining. [The API design rules](api-design.md#direct-adapters-and-execution-cost) now require adapters to use implementation guarantees where they satisfy Spark's contract and justify any additional coordination or copying.
 
 ## Method
 

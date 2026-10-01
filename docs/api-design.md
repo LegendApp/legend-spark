@@ -32,6 +32,22 @@ need no hook. Context access such as `useWindowId` and actual UI components are
 inherently React-specific and need no invented imperative equivalent. Keep those
 exceptions explicit.
 
+## Direct adapters and execution cost
+
+An adapter translates the public contract and calls the implementation directly.
+Use the implementation's native queue, binding snapshots, resource ownership and
+error behavior where they satisfy that contract. Do not duplicate them in JavaScript.
+Avoid async pass-through functions, success-path Promise chains, rebuilt row/event
+objects and copied buffers unless a documented semantic difference requires them.
+Normalize only the values the caller requests, in the implementation's fresh result.
+
+Extra coordination belongs to the operation that needs it: for example, a
+multi-statement transaction callback may reserve a connection; an ordinary query
+should enter the native queue immediately. Define the required guarantees before
+adding coordination. Preserve those guarantees with boundary tests, and compare
+adapter throughput and allocations against the direct implementation for frequently
+called APIs. A stable Spark API does not justify a second execution framework.
+
 ## Lifetimes and readiness
 
 Give owners explicit cleanup (`remove`, `close`, or the feature's documented disposal
