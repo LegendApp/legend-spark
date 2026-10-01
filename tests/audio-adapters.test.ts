@@ -1,7 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
 const { expo, mode } = vi.hoisted(() => ({ expo: { isLoaded: true, currentStatus: { playbackState: "readyToPlay", playing: false, currentTime: 0, duration: 10 }, volume: 1,
-  addListener: vi.fn(() => ({ remove: vi.fn() })), setActiveForLockScreen: vi.fn(), updateLockScreenMetadata: vi.fn(), play: vi.fn(), pause: vi.fn(), seekTo: vi.fn(async () => {}), clearLockScreenControls: vi.fn(), remove: vi.fn() }, mode: vi.fn(async () => {}) }));
+  addListener: vi.fn((_event: string, _listener: (status: any) => void) => ({ remove: vi.fn() })), setActiveForLockScreen: vi.fn(), updateLockScreenMetadata: vi.fn(), play: vi.fn(), pause: vi.fn(), seekTo: vi.fn(async () => {}), clearLockScreenControls: vi.fn(), remove: vi.fn() }, mode: vi.fn(async () => {}) }));
 vi.mock("expo-audio", () => ({ createAudioPlayer: () => expo, setAudioModeAsync: mode }));
+vi.mock("react-native", () => ({ NativeEventEmitter: class {} }));
 vi.mock("../packages/audio/src/NativeSparkAudio", () => ({ default: null }));
 import { createAudioPlayer as createMobile } from "../packages/audio/src/mobile";
 import { createAudioPlayer as createWeb } from "../packages/audio/src/index.web";
@@ -21,14 +22,49 @@ test("mobile load failures release both listener and player", async () => {
   expect(expo.addListener.mock.results[0]?.value.remove).toHaveBeenCalled(); expect(expo.remove).toHaveBeenCalledTimes(1);
 });
 
+test("mobile forwards existing Expo playback events without status reads or timers", async () => {
+  vi.useFakeTimers();
+  try {
+    const player = await createMobile({ uri: "https://example.com/audio.wav" });
+    const listener = vi.fn(); const registration = player.addListener("playbackStatusUpdate", listener);
+    expect(expo.addListener).toHaveBeenCalledTimes(1);
+    listener.mockClear();
+    const notify = expo.addListener.mock.calls[0][1] as (status: unknown) => void;
+    notify({ playing: true, currentTime: 12, duration: 30, didJustFinish: true, playbackState: "readyToPlay" });
+    expect(listener).toHaveBeenCalledWith({ playing: true, currentTime: 12, duration: 30, volume: 1, didJustFinish: true, error: null });
+    await vi.advanceTimersByTimeAsync(2000); expect(listener).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
+    registration.remove(); notify({ ...expo.currentStatus, didJustFinish: false }); expect(listener).toHaveBeenCalledTimes(1);
+    await player.remove();
+  } finally { vi.useRealTimers(); }
+});
+
+test("mobile load readiness uses its existing Expo subscription", async () => {
+  vi.useFakeTimers(); expo.isLoaded = false;
+  try {
+    const pending = createMobile({ uri: "https://example.com/audio.wav" });
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+    expect(expo.addListener).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1000); expect(vi.getTimerCount()).toBe(1);
+    expo.isLoaded = true; expo.addListener.mock.calls[0][1](expo.currentStatus);
+    const player = await pending; expect(vi.getTimerCount()).toBe(0); await player.remove();
+  } finally { expo.isLoaded = true; vi.useRealTimers(); }
+});
+
 test("browser creation waits for metadata and releases on load failure", async () => {
-  const audio = { readyState: 0, error: null as null | {message: string}, preload: "", paused: true, currentTime: 0, duration: 10, ended: false, volume: 1, pause: vi.fn(), play: vi.fn(async () => {}), load: vi.fn(), removeAttribute: vi.fn() };
+  const events = new EventTarget();
+  const audio = { readyState: 0, error: null as null | {message: string}, preload: "", paused: true, currentTime: 0, duration: 10, ended: false, volume: 1, pause: vi.fn(), play: vi.fn(async () => {}), load: vi.fn(), removeAttribute: vi.fn(), addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events) };
   vi.stubGlobal("Audio", class { constructor() { return audio; } });
   vi.stubGlobal("navigator", {});
   let ready = false;
   const pending = createWeb({ uri: "https://example.com/audio.wav" }).then(player => { ready = true; return player; });
-  await Promise.resolve(); expect(ready).toBe(false); audio.readyState = 1;
-  const player = await pending; await player.remove(); expect(audio.removeAttribute).toHaveBeenCalledWith("src");
+  await Promise.resolve(); expect(ready).toBe(false); audio.readyState = 1; events.dispatchEvent(new Event("loadedmetadata"));
+  const player = await pending;
+  const status = vi.fn(), registration = player.addListener("playbackStatusUpdate", status);
+  audio.currentTime = 3; events.dispatchEvent(new Event("timeupdate"));
+  expect(status).toHaveBeenLastCalledWith(expect.objectContaining({ currentTime: 3 }));
+  const count = status.mock.calls.length; registration.remove();
+  events.dispatchEvent(new Event("timeupdate")); expect(status).toHaveBeenCalledTimes(count);
+  await player.remove(); expect(audio.removeAttribute).toHaveBeenCalledWith("src");
   audio.readyState = 0; audio.error = { message: "decode error" };
   await expect(createWeb({ uri: "https://example.com/bad.wav" })).rejects.toMatchObject({ code: "E_NATIVE" });
   expect(audio.removeAttribute).toHaveBeenCalledTimes(2);

@@ -1,4 +1,5 @@
 import Native from "./NativeSparkAudio";
+import { onAudioEvent } from "./events";
 import { SparkError, invokeNative, parseNativeResult } from "@legendapp/spark-desktop-app/src/contracts";
 import { sessionOptions, sessionSnapshot, validMediaCommand, type MediaCommand, type MediaSession, type MediaSessionOptions } from "./media-types";
 let owner: (() => void) | undefined, sequence = 0;
@@ -12,29 +13,28 @@ export async function createMediaSession(options: MediaSessionOptions): Promise<
   const { onCommand, onError = console.error } = options;
   if (!Native) throw new SparkError("E_MODULE_UNAVAILABLE", "Media sessions require @legendapp/spark-audio");
   const native = Native, id = `media-${Date.now()}-${++sequence}`;
-  let stopped = false, removed = false, removal: Promise<void> | undefined, timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false, removed = false, ready = false, removal: Promise<void> | undefined;
+  const buffered: MediaCommand[] = [];
   const call = async <T>(method: string, args: object, validate: (value: unknown) => value is T) => parseNativeResult(await invokeNative(() => native.call(method, JSON.stringify({ id, ...args }))), validate);
   const command = async (method: string, args = {}) => { await call(method, args, (value): value is null => value === null); };
-  const stop = () => { stopped = true; clearTimeout(timer); };
-  await enqueue(async () => {
+  const stop = () => { stopped = true; buffered.length = 0; subscription.remove(); };
+  const deliver = (value: unknown) => {
+    if (stopped) return;
+    if (!validMediaCommand(value)) { stop(); onError(new SparkError("E_INVALID_DATA", "Invalid media command")); return; }
+    if (!ready) { if (buffered.length < 128) buffered.push(value); return; }
+    if (owner !== stop) return;
+    try { onCommand(value); } catch (error) { onError(error); }
+  };
+  const subscription = onAudioEvent("sparkMediaCommand", id, deliver);
+  try { await enqueue(async () => {
     try { await command("sessionCreate", state); }
     catch (cause) {
       try { await command("sessionRemove"); } catch (cleanup) { throw new SparkError("E_NATIVE", "Media creation and cleanup failed", { cause: new AggregateError([cause, cleanup]) }); }
       throw cause;
     }
-    owner?.(); owner = stop;
-  });
-  async function poll() {
-    try {
-      const commands = await enqueue(async () => owner !== stop || stopped ? [] : call("sessionCommands", {}, (value): value is MediaCommand[] => Array.isArray(value) && value.every(validMediaCommand)));
-      for (const event of commands) {
-        if (stopped || owner !== stop) break;
-        try { onCommand(event); } catch (error) { onError(error); }
-      }
-    } catch (error) { if (!stopped) { stop(); onError(error); } }
-    finally { if (!stopped && owner === stop) timer = setTimeout(() => { void poll().catch(console.error); }, 100); }
-  }
-  void poll().catch(console.error);
+    owner?.(); owner = stop; ready = true;
+    for (const value of buffered.splice(0)) deliver(value);
+  }); } catch (error) { stop(); throw error; }
   return {
     async update(patch) {
       if (stopped || owner !== stop) throw new SparkError("E_CLOSED", "Media session has been removed or replaced");

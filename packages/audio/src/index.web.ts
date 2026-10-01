@@ -3,7 +3,7 @@ import { playerHandle, validatePlayerOptions, waitForAudio } from "./player";
 import { hasExplicitMediaSession, claimPlayerMediaSession, ownsPlayerMediaSession, releasePlayerMediaSession } from "./media-session.web";
 export { createMediaSession } from "./media-session.web";
 export type * from "./media-types";
-import { validateSource, type AudioPlayer, type AudioSource, type AudioPlayerOptions } from "./types";
+import { validateSource, type AudioPlayer, type AudioSource, type AudioPlayerOptions, type AudioStatus } from "./types";
 export type { AudioPlayer, AudioSource, AudioStatus, AudioPlayerOptions } from "./types";
 export { useAudioPlayer } from "./hooks";
 export type { AudioPlayerState, AudioPlayerHookOptions } from "./hooks";
@@ -16,6 +16,7 @@ export async function createAudioPlayer(source: AudioSource, options: AudioPlaye
   const audio = new Audio(source.uri);
   audio.preload = "auto";
   const media = typeof navigator === "undefined" ? undefined : navigator.mediaSession;
+  const statusValue = (): AudioStatus => ({ playing: !audio.paused, currentTime: audio.currentTime, duration: Number.isFinite(audio.duration) ? audio.duration : 0, didJustFinish: audio.ended, error: audio.error?.message ?? null, volume: audio.volume });
   async function dispose() {
     audio.pause(); audio.removeAttribute("src"); audio.load();
     if (media && ownsPlayerMediaSession(audio)) {
@@ -24,7 +25,10 @@ export async function createAudioPlayer(source: AudioSource, options: AudioPlaye
     }
   }
   try {
-    await waitForAudio(async () => { if (audio.error) throw new SparkError("E_NATIVE", audio.error.message || "Could not load audio"); return audio.readyState >= 1; }, options);
+    await waitForAudio(async () => { if (audio.error) throw new SparkError("E_NATIVE", audio.error.message || "Could not load audio"); return audio.readyState >= 1; }, options, notify => {
+      audio.addEventListener("loadedmetadata", notify); audio.addEventListener("error", notify);
+      return { remove() { audio.removeEventListener("loadedmetadata", notify); audio.removeEventListener("error", notify); } };
+    });
     if (media && !hasExplicitMediaSession()) {
       claimPlayerMediaSession(audio);
       media.metadata = new MediaMetadata({ title: source.title ?? "Music" });
@@ -44,7 +48,14 @@ export async function createAudioPlayer(source: AudioSource, options: AudioPlaye
     },
     async play() { await audio.play(); }, async pause() { audio.pause(); },
     async seekTo(seconds) { audio.currentTime = seconds; },
-    async getStatus() { return { playing: !audio.paused, currentTime: audio.currentTime, duration: Number.isFinite(audio.duration) ? audio.duration : 0, didJustFinish: audio.ended, error: audio.error?.message ?? null, volume: audio.volume }; },
+    async getStatus() { return statusValue(); },
+    addStatusListener(listener) {
+      const events = ["playing", "pause", "timeupdate", "ended", "durationchange", "volumechange", "error", "seeked"];
+      const notify = () => listener(statusValue());
+      for (const event of events) audio.addEventListener(event, notify);
+      notify();
+      return { remove() { for (const event of events) audio.removeEventListener(event, notify); } };
+    },
     remove: dispose,
   });
 }

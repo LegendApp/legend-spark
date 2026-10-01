@@ -3,6 +3,7 @@ import { playerHandle, validatePlayerOptions, waitForAudio } from "./player";
 export { createMediaSession } from "./media-session";
 export type * from "./media-types";
 import Native from "./NativeSparkAudio";
+import { onAudioEvent } from "./events";
 import { validateSource, type AudioPlayer, type AudioSource, type AudioPlayerOptions, type AudioStatus } from "./types";
 export type { AudioPlayer, AudioSource, AudioStatus, AudioPlayerOptions } from "./types";
 let sequence = 0;
@@ -16,7 +17,8 @@ export async function createAudioPlayer(source: AudioSource, options: AudioPlaye
   const command = async (method: string, args = {}) => { if (await call(method, args) !== null) throw new SparkError("E_INVALID_DATA", "Invalid audio command result"); };
   try {
     await command("create", source);
-    await waitForAudio(async () => { const ready = await call("ready"); if (typeof ready !== "boolean") throw new SparkError("E_INVALID_DATA", "Invalid audio readiness"); return ready; }, options);
+    // The native promise settles on AVPlayer/MediaPlayer readiness; no JS polling.
+    await waitForAudio(async () => { const ready = await call("awaitReady"); if (ready !== true) throw new SparkError("E_INVALID_DATA", "Invalid audio readiness"); return true; }, options);
   } catch (cause) {
     try { await command("remove"); } catch (cleanup) { throw new SparkError("E_NATIVE", "Audio loading and cleanup failed", { cause: new AggregateError([cause, cleanup]) }); }
     throw cause;
@@ -27,6 +29,12 @@ export async function createAudioPlayer(source: AudioSource, options: AudioPlaye
     play: () => command("play"), pause: () => command("pause"),
     seekTo: seconds => command("seek", { seconds }),
     getStatus: async () => await call("status") as AudioStatus,
+    addStatusListener(listener) {
+      let active = true;
+      const subscription = onAudioEvent("sparkAudioStatus", id, value => { if (active) listener(value as AudioStatus); });
+      void command("statusUpdates", { enabled: true }).catch(error => { if (active) console.error(error); });
+      return { remove() { active = false; subscription.remove(); void command("statusUpdates", { enabled: false }).catch(console.error); } };
+    },
     remove: () => command("remove"),
   });
 }

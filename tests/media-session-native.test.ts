@@ -1,17 +1,60 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-const { call } = vi.hoisted(() => ({ call: vi.fn() }));
+const { call, listeners } = vi.hoisted(() => ({ call: vi.fn(), listeners: new Set<(value: unknown) => void>() }));
+vi.mock("react-native", () => ({ NativeEventEmitter: class { addListener(_name: string, listener: (value: unknown) => void) { listeners.add(listener); return { remove() { listeners.delete(listener); } }; } } }));
 vi.mock("../packages/audio/src/NativeSparkAudio", () => ({ default: { call } }));
 import { createMediaSession } from "../packages/audio/src/media-session";
-beforeEach(() => { call.mockReset(); call.mockImplementation(async (method: string) => method === "sessionCommands" ? "[]" : "null"); });
+beforeEach(() => { listeners.clear(); call.mockReset(); call.mockResolvedValue("null"); });
 afterEach(() => vi.useRealTimers());
 
 test("session callbacks belong in creation options and seek commands require a position", async () => {
   const onCommand = vi.fn(), onError = vi.fn();
-  call.mockImplementation(async (method: string) => method === "sessionCommands" ? '[{"command":"seekTo"}]' : "null");
   const session = await createMediaSession({ onCommand, onError });
-  await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+  const id = JSON.parse(call.mock.calls[0][1]).id;
+  for (const listener of listeners) listener({ id, value: { command: "seekTo" } });
+  expect(onError).toHaveBeenCalled();
   expect(onError.mock.calls[0][0]).toMatchObject({ code: "E_INVALID_DATA" }); expect(onCommand).not.toHaveBeenCalled();
   await session.remove();
+});
+
+test("native command events are delivered immediately without idle polling and stop on replacement", async () => {
+  vi.useFakeTimers();
+  const firstCommand = vi.fn(), secondCommand = vi.fn();
+  const first = await createMediaSession({ onCommand: firstCommand });
+  const firstID = JSON.parse(call.mock.calls[0][1]).id;
+  const idleCalls = call.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(call).toHaveBeenCalledTimes(idleCalls); expect(vi.getTimerCount()).toBe(0);
+  for (const listener of listeners) listener({ id: firstID, value: { command: "play" } });
+  expect(firstCommand).toHaveBeenCalledWith({ command: "play" });
+  const second = await createMediaSession({ onCommand: secondCommand });
+  const secondID = JSON.parse(call.mock.calls.at(-1)![1]).id;
+  for (const listener of listeners) listener({ id: firstID, value: { command: "pause" } });
+  for (const listener of listeners) listener({ id: secondID, value: { command: "seekTo", position: 12 } });
+  expect(firstCommand).toHaveBeenCalledTimes(1); expect(secondCommand).toHaveBeenCalledWith({ command: "seekTo", position: 12 });
+  const removal = second.remove();
+  expect(listeners.size).toBe(0);
+  await removal; await first.remove();
+});
+
+test("commands received during native allocation are buffered until the new owner is ready", async () => {
+  let release!: () => void, id = "";
+  call.mockImplementation((method: string, json: string) => {
+    if (method !== "sessionCreate") return Promise.resolve("null");
+    id = JSON.parse(json).id;
+    return new Promise(resolve => { release = () => resolve("null"); });
+  });
+  const onCommand = vi.fn(); const pending = createMediaSession({ onCommand });
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  for (const listener of listeners) listener({ id, value: { command: "nextTrack" } });
+  expect(onCommand).not.toHaveBeenCalled(); release();
+  const session = await pending;
+  expect(onCommand).toHaveBeenCalledWith({ command: "nextTrack" }); await session.remove();
+});
+
+test("failed native allocation releases its command subscription", async () => {
+  call.mockRejectedValueOnce(new Error("allocation"));
+  await expect(createMediaSession({ onCommand() {} })).rejects.toMatchObject({ code: "E_NATIVE" });
+  expect(listeners.size).toBe(0);
 });
 
 test("replacement invalidates old updates and old cleanup cannot remove the new owner", async () => {

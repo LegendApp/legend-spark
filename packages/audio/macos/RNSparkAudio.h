@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
 #import <RNSparkAudioSpec/RNSparkAudioSpec.h>
-@interface RNSparkAudio : NSObject <NativeSparkAudioSpec>
+#import <React/RCTEventEmitter.h>
+@interface RNSparkAudio : RCTEventEmitter <NativeSparkAudioSpec>
 @end
