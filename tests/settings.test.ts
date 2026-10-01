@@ -65,4 +65,6 @@ test("invalid storage results reject without overwriting them", async () => {
   await expect(store.get("key")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   storage.read = async () => "1e999";
   await expect(store.get("key")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  storage.read = async () => '{"nested":[1e999]}';
+  await expect(store.get("key")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
 });

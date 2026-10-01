@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { batch } from "@legendapp/state";
+import { batch, internal } from "@legendapp/state";
 import { createObservableFile, createObservableSettings } from "../packages/settings/src/storage";
 import type { SettingsStorage } from "../packages/settings/src/store";
 const path = "/data/settings.json";
@@ -60,6 +60,21 @@ test("writes serialize across async transforms and capture values before waiting
   release(); await Promise.all([first, second]);
   expect(vi.mocked(storage.write).mock.calls.map(call => call[1])).toEqual(['{"count":1}', '{"count":2}']);
   expect(values.get(path)).toBe('{"count":2}'); await file.close();
+});
+
+test("without an encoder, flush writes its isolated serialized snapshot without reparsing", async () => {
+  const { storage, values } = fixture();
+  const file = await createObservableFile({ path, storage, initialValue: { count: 0 }, decode: value => value as { count: number } });
+  const parse = vi.spyOn(internal, "safeParse");
+  try {
+    file.value$.count.set(1);
+    const flushed = file.flush();
+    file.value$.count.set(2);
+    await flushed;
+    expect(values.get(path)).toBe('{"count":1}');
+    expect(parse).not.toHaveBeenCalled();
+    await file.close();
+  } finally { parse.mockRestore(); }
 });
 
 test("automatic failures are observable and an explicit flush retries them", async () => {

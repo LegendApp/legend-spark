@@ -70,8 +70,8 @@ export async function createObservableFile<T>(options: ObservableFileOptions<T>)
   function save(snapshotText: string | undefined, force = false): Promise<void> {
     const next = queue.catch(() => {}).then(async () => {
       if (force || persisted !== snapshotText) {
-        const value = parse(snapshotText) as T;
-        const output = stringify(encode ? await encode(value) : value);
+        // The serialized snapshot is already isolated from later observable mutations.
+        const output = encode ? stringify(await encode(parse(snapshotText) as T)) : snapshotText;
         if (output === undefined) await storage.remove(path);
         else await storage.write(path, output);
         persisted = snapshotText;

@@ -14,18 +14,24 @@ export interface SettingsStore {
   remove(key: string): Promise<void>;
   update<T extends Json>(key: string, updater: (value: Json | undefined) => T | Promise<T>): Promise<T>;
 }
-function jsonSnapshot(value: unknown, ancestors = new Set<object>()): Json {
-  if (value === null || typeof value === "boolean" || typeof value === "string") return value;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
+function validateJson(value: unknown, ancestors = new Set<object>()): void {
+  if (value === null || typeof value === "boolean" || typeof value === "string") return;
+  if (typeof value === "number" && Number.isFinite(value)) return;
   if (typeof value !== "object" || !value || ancestors.has(value) || (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) throw new SparkError("E_INVALID_ARGUMENT", "Settings must contain finite JSON values without cycles");
   ancestors.add(value);
   try {
-    if (Array.isArray(value)) return Array.from(value, item => jsonSnapshot(item, ancestors));
+    if (Array.isArray(value)) { for (const item of value) validateJson(item, ancestors); return; }
     if (Object.getOwnPropertySymbols(value).length) throw new SparkError("E_INVALID_ARGUMENT", "Settings cannot have symbol keys");
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, jsonSnapshot(item, ancestors)]));
+    for (const key of Object.keys(value)) validateJson((value as Record<string, unknown>)[key], ancestors);
   } finally { ancestors.delete(value); }
 }
-const serialize = (value: Json) => JSON.stringify(jsonSnapshot(value));
+// Serialization itself snapshots before the operation can wait in the per-key queue.
+const serialize = (value: Json) => { validateJson(value); return JSON.stringify(value); };
+function validateParsedNumbers(value: Json): void {
+  if (typeof value === "number" && !Number.isFinite(value)) throw new SparkError("E_INVALID_DATA", "Stored settings contain non-finite numbers");
+  if (Array.isArray(value)) { for (const item of value) validateParsedNumbers(item); }
+  else if (value && typeof value === "object") for (const key of Object.keys(value)) validateParsedNumbers(value[key]);
+}
 /** This store serializes operations per key. It does not lock other stores/processes.
  * Updaters must not await another operation on the same key in this store. */
 export function createSettingsStore(options: SettingsStoreOptions): SettingsStore {
@@ -34,18 +40,22 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
   const { storage } = options;
   if (!storage || [storage.read, storage.write, storage.remove].some(method => typeof method !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Expected read/write/remove storage methods");
   const pending = new Map<string, Promise<unknown>>();
-  async function enqueue<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  function enqueue<T>(key: string, operation: () => Promise<T>): Promise<T> {
     if (typeof key !== "string" || !key.length || key.length > 200 || key.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "Setting keys must contain 1–200 characters without NUL");
-    const next = (pending.get(key) ?? Promise.resolve()).catch(() => {}).then(operation);
+    const previous = pending.get(key);
+    let next: Promise<T>;
+    try { next = previous ? previous.then(operation, operation) : operation(); }
+    catch (error) { next = Promise.reject(error); }
     pending.set(key, next);
-    void next.finally(() => { if (pending.get(key) === next) pending.delete(key); }).catch(() => {});
+    const settled = () => { if (pending.get(key) === next) pending.delete(key); };
+    void next.then(settled, settled);
     return next;
   }
   async function read(key: string): Promise<Json | undefined> {
     const value = await storage.read(key);
     if (value === undefined) return undefined;
     if (typeof value !== "string") throw new SparkError("E_INVALID_DATA", "Storage reads must return text or undefined");
-    try { return jsonSnapshot(JSON.parse(value)); }
+    try { const parsed = JSON.parse(value) as Json; validateParsedNumbers(parsed); return parsed; }
     catch (cause) { throw new SparkError("E_INVALID_DATA", "Stored settings are not valid JSON", { cause }); }
   }
   async function get(key: string): Promise<Json | undefined>;
