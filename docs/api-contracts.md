@@ -200,7 +200,7 @@ scanFiles(paths, options?): Promise<FileScanResult>;
 
 Open/save share directory/filter/owner vocabulary. Prefer stable button IDs in message results. File filters must have defined extension/MIME handling per target. Mixed file/directory selection remains a typed platform extension if required; never silently remove the existing capability.
 
-Preserve conditional write semantics. Define overwrite/symlink behavior, absent-file errors, and missing removal (recommend idempotent absence); distinguish permission errors from nonexistence. Keep efficient chunk IO and positional handles. Move base64 transport behind bytes APIs unless a specific consumer needs base64 conversion. Watch means invalidation, not a perfect change log. Scanner options carry operation-scoped progress/batch callbacks and a signal; no uncorrelated global scan events. Keep specialized event watching only if its stronger semantics can be specified and tested.
+Preserve conditional write semantics. Define overwrite/symlink behavior, absent-file errors, and missing removal (recommend idempotent absence); distinguish permission errors from nonexistence. Keep efficient chunk IO and positional handles. Use direct native buffers for binary transport; do not encode ordinary byte IO as base64 or JSON. Snapshot mutable input once at submission and return views over freshly owned native output. Watch means invalidation, not a perfect change log. Scanner options carry operation-scoped progress/batch callbacks and a signal; no uncorrelated global scan events. Keep specialized event watching only if its stronger semantics can be specified and tested.
 
 ### Settings, persistence, and secure storage
 

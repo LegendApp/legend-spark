@@ -34,6 +34,12 @@ exceptions explicit.
 
 ## Direct adapters and execution cost
 
+Performance is a primary design requirement. Measure Spark against the direct
+implementation at the same boundary, with the same ownership and ordering guarantees.
+Distinguish adapter time from OS I/O and report the runtime, payload, and measurement
+scope. A faster mocked backend is not evidence of native throughput.
+
+
 An adapter translates the public contract and calls the implementation directly.
 Use the implementation's native queue, binding snapshots, resource ownership and
 error behavior where they satisfy that contract. Do not duplicate them in JavaScript.
@@ -47,6 +53,24 @@ should enter the native queue immediately. Define the required guarantees before
 adding coordination. Preserve those guarantees with boundary tests, and compare
 adapter throughput and allocations against the direct implementation for frequently
 called APIs. A stable Spark API does not justify a second execution framework.
+
+Use native or backend events for completion, readiness, commands, and status. A
+timeout bounds an operation; it must not become a polling interval. Install native
+status observation only while somebody observes it, and stop it with the last listener.
+Route shared desktop events by type and resource before invoking feature listeners.
+
+Pass binary data as buffers, not JSON or base64. Snapshot mutable input once at the
+native ownership boundary, before returning control to the caller; transfer freshly
+owned output without another copy. Preserve byte offsets and lengths of views.
+Serialization already creates a snapshot: do not clone before stringifying or clone
+freshly parsed results. Keep validation proportional to the data actually requested.
+
+Publish changed fields and reuse unchanged native resources. Selection, tooltip, or
+text acknowledgment updates must not rebuild items, menus, images, or component state.
+Compile stable shortcut bindings when registrations change, not on every keystroke.
+Retained coordination must name the guarantee it provides: audio seek commands wait
+for asynchronous seek completion, and composed menu publications preserve overlay and
+rollback semantics. Native submission order alone does not establish completion order.
 
 ## Lifetimes and readiness
 
