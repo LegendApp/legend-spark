@@ -6,6 +6,22 @@ import path from "node:path";
 const require = createRequire(import.meta.url);
 const { patchAutolinkingSource, installAutolinkingPatch } = require("../packages/config-plugin/autolinking.cjs");
 const source = readFileSync(require.resolve("expo-modules-autolinking/build/utils.js"), "utf8");
+test("Codex joins Expo Desktop's Apple autolinker while staying disabled on iOS", () => {
+  const config = require.resolve("../packages/codex/react-native.config.js");
+  const previous = process.env.SPARK_DESKTOP_AUTOLINK;
+  try {
+    delete process.env.SPARK_DESKTOP_AUTOLINK;
+    delete require.cache[config];
+    expect(require(config).dependency.platforms.ios).toBeNull();
+    process.env.SPARK_DESKTOP_AUTOLINK = "macos";
+    delete require.cache[config];
+    expect(require(config).dependency.platforms.ios).toEqual({});
+  } finally {
+    if (previous === undefined) delete process.env.SPARK_DESKTOP_AUTOLINK;
+    else process.env.SPARK_DESKTOP_AUTOLINK = previous;
+    delete require.cache[config];
+  }
+});
 test("autolinking resolves symlinked podspec files without modifying the package cache", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-autolinking-"));
   try {
