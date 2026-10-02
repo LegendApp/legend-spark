@@ -94,6 +94,40 @@ int main() { @autoreleasepool {
   assert([manager handleKeyboardEvent:keyDown] == nil); assert([events.lastObject[@"body"][@"key"] isEqual:@"a"]);
   assert([manager handleKeyboardEvent:repeatDown] == repeatDown); assert([events.lastObject[@"body"][@"repeated"] boolValue]);
   Key(manager, NO, @"a", 0);
+  // Navigation keys must reach JavaScript as AppKit's private-use codes, which accelerators
+  // parse, and not as the C0 control characters modifier-stripping produces.
+  Configure(manager, @"two", @[Rule(@"\uf703", 0)], NO);
+  CGEventRef rightDown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)124, true);
+  NSEvent *right = [NSEvent eventWithCGEvent:rightDown]; CFRelease(rightDown);
+  assert([manager handleKeyboardEvent:right] == nil);
+  assert([events.lastObject[@"body"][@"key"] isEqualToString:@"\uf703"]);
+  assert([events.lastObject[@"body"][@"consumed"] boolValue]);
+  CGEventRef rightUp = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)124, false);
+  NSEvent *rightUpEvent = [NSEvent eventWithCGEvent:rightUp]; CFRelease(rightUp);
+  assert([manager handleKeyboardEvent:rightUpEvent] == nil);
+  // Tab is C0 but identifies no navigation key, so its accelerator keeps matching.
+  Configure(manager, @"two", @[Rule(@"\t", 0)], NO);
+  CGEventRef tabDown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)48, true);
+  NSEvent *tab = [NSEvent eventWithCGEvent:tabDown]; CFRelease(tabDown);
+  assert([manager handleKeyboardEvent:tab] == nil);
+  assert([events.lastObject[@"body"][@"key"] isEqualToString:@"\t"]);
+  Key(manager, NO, @"\t", 48);
+  // Backspace arrives as U+0008 but its accelerator spells U+007F.
+  Configure(manager, @"two", @[Rule(@"\u007f", 0)], NO);
+  CGEventRef backDown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)51, true);
+  NSEvent *backspace = [NSEvent eventWithCGEvent:backDown]; CFRelease(backDown);
+  assert([manager handleKeyboardEvent:backspace] == nil);
+  assert([events.lastObject[@"body"][@"key"] isEqualToString:@"\u007f"]);
+  Key(manager, NO, @"\u007f", 51);
+  // A control chord on a letter must keep reporting that letter to Cmd/Ctrl accelerators.
+  Configure(manager, @"two", @[Rule(@"i", NSEventModifierFlagControl)], NO);
+  CGEventRef controlDown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)34, true);
+  CGEventSetFlags(controlDown, NX_CONTROLMASK);
+  NSEvent *controlI = [NSEvent eventWithCGEvent:controlDown]; CFRelease(controlDown);
+  assert([manager handleKeyboardEvent:controlI] == nil);
+  assert([events.lastObject[@"body"][@"key"] isEqualToString:@"i"]);
+  Key(manager, NO, @"i", 34);
+  Configure(manager, @"two", @[Rule(@"a", 0)], NO);
   assert(Key(manager, YES, @"a", 0));
   [manager stopMonitoringInternal]; assert(!Key(manager, NO, @"a", 0)); assert(Key(manager, YES, @"a", 0)); Key(manager, NO, @"a", 0);
   // Native matching still applies if no observer is listening; emission does not.

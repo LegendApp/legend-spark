@@ -28,6 +28,22 @@ static NSUInteger const RNKeyboardModifierMask = NSEventModifierFlagCommand | NS
 @implementation SparkKeyboardRule @end
 
 static BOOL SparkKeyboardBoolean(id value) { return [value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID(); }
+
+// Stripping modifiers renders navigation and function keys as C0 control characters (Right is
+// U+001D, Backspace U+0008), which no accelerator can name; accelerators parse AppKit's
+// private-use code and U+007F instead. Tab and Return are also C0 but already spell their
+// accelerators, so only keys whose unmodified character identifies them are substituted.
+static NSString *SparkKeyboardKeyString(NSEvent *event) {
+  NSString *key = [event charactersByApplyingModifiers:0] ?: @"";
+  if (key.length == 1 && [key characterAtIndex:0] < 0x20) {
+    NSString *unmodified = event.charactersIgnoringModifiers;
+    if (unmodified.length == 1) {
+      unichar code = [unmodified characterAtIndex:0];
+      if ((code >= 0xF700 && code <= 0xF747) || code == 0x7F) return unmodified.lowercaseString;
+    }
+  }
+  return key.lowercaseString;
+}
 static NSSet<NSString *> *SparkKeyboardWindows(id value, BOOL *valid) {
   if (!value) return nil;
   if (![value isKindOfClass:NSArray.class]) { *valid = NO; return nil; }
@@ -222,7 +238,7 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
   }
 
   NSString *eventName = event.type == NSEventTypeKeyDown ? @"onKeyDown" : @"onKeyUp";
-  BOOL handled = [self emitKeyboardEvent:eventName keyCode:event.keyCode key:[event charactersByApplyingModifiers:0].lowercaseString ?: @"" modifiers:event.modifierFlags window:event.window repeated:event.isARepeat];
+  BOOL handled = [self emitKeyboardEvent:eventName keyCode:event.keyCode key:SparkKeyboardKeyString(event) modifiers:event.modifierFlags window:event.window repeated:event.isARepeat];
   return handled ? nil : event;
 }
 
