@@ -34,7 +34,8 @@ export function composeWindowsMenus(owners: ReadonlyMap<string, readonly MenuWir
           siblings.splice(old, 1); siblings.splice(position - (old < position ? 1 : 0), 0, target);
         }
       } else {
-        const item = { ...input, ...(target ? { _sparkIdentity: target._sparkIdentity ?? target.id } : {}), ...(input.items ? { items: [] as MenuWireItem[] } : {}) };
+        // Overlays keep the owner identity and the role AppKit would retain, so later placements still resolve semantic anchors.
+        const item = { ...input, ...(target ? { _sparkIdentity: target._sparkIdentity ?? target.id } : {}), ...(target?.role && !input.role ? { role: target.role } : {}), ...(input.items ? { items: [] as MenuWireItem[] } : {}) };
         if (input.items) merge(item.items!, input.items, false);
         const index = target ? siblings.indexOf(target) : -1;
         const position = input.placement ? insertion(siblings, input.placement) : index < 0 ? siblings.length : index;
