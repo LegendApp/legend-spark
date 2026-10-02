@@ -20,6 +20,9 @@ export function useRoutedHotkeys<Id extends string>(options: UseRoutedHotkeysOpt
   const [state, setState] = useState<HotkeyRegistrationState>({ status: "loading" });
   const owner = useRef<HotkeyRegistration | undefined>(undefined), transition = useRef<Promise<unknown>>(Promise.resolve()), retry = useRef<HotkeyRegistration | undefined>(undefined);
   const { router, definitions, bindings, priority, scope, enabled = true } = options;
+  // Inline definition/binding literals must not rebuild native keyboard consumption every render.
+  const definitionKey = JSON.stringify(definitions);
+  const bindingKey = bindings === undefined ? "" : JSON.stringify(bindings);
   const handlerIds = JSON.stringify(definitions.filter(definition => Object.hasOwn(options.handlers, definition.id)).map(definition => definition.id));
   useEffect(() => {
     let active = true, registration: HotkeyRegistration | undefined;
@@ -52,7 +55,7 @@ export function useRoutedHotkeys<Id extends string>(options: UseRoutedHotkeysOpt
       active = false; if (owner.current === registration) owner.current = undefined;
       if (registration) transition.current = setup.then(() => dispose(registration!)).catch(() => {});
     };
-  }, [router, definitions, bindings, priority, handlerIds, scope?.kind, scope?.kind === "window" ? scope.windowId : undefined]);
+  }, [router, definitionKey, bindingKey, priority, handlerIds, scope?.kind, scope?.kind === "window" ? scope.windowId : undefined]);
   useEffect(() => {
     const handle = owner.current;
     if (handle) void handle.setEnabled(enabled).then(() => {

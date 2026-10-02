@@ -49,3 +49,11 @@ test("structural changes update the same handle and cleanup failures expose it f
   expect(onCleanupError).toHaveBeenCalledTimes(1); expect(listeners.size).toBe(0);
   await onCleanupError.mock.calls[0][1].remove();
 });
+test("inline items across re-renders do not republish once ready", async () => {
+  await act(async () => { rendered = create(React.createElement(Component, { id: "churn", items: [{ type: "submenu", id: "file", label: "File", items: [] }], onAction: () => {} })); });
+  expect(latest.status).toBe("ready");
+  const afterReady = publish.mock.calls.length;
+  // The caller recreates the items/options literal on every render, exactly as `useMenu({ items: [...] })` does inline.
+  for (let i = 0; i < 5; i++) await act(async () => { rendered!.update(React.createElement(Component, { id: "churn", items: [{ type: "submenu", id: "file", label: "File", items: [] }], onAction: () => {} })); });
+  expect(publish.mock.calls.length).toBe(afterReady);
+});

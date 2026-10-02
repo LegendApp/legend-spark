@@ -40,7 +40,10 @@ export function useMenu(options: UseMenuOptions): MenuState {
     const owner = current.current;
     if (!owner || owner.disposed || owner.items === options.items) return;
     owner.items = options.items;
-    if (owner.menu) void owner.menu.update({ items: options.items }).then(() => { if (!owner.disposed) setState({ status: "ready", menu: owner.menu! }); }).catch(error => {
+    if (owner.menu) void owner.menu.update({ items: options.items }).then(() => {
+      // Reusing the previous state keeps an identical-content update from cascading renders.
+      if (!owner.disposed) setState(state => state.status === "ready" && state.menu === owner.menu ? state : { status: "ready", menu: owner.menu! });
+    }).catch(error => {
       if (!owner.disposed) setState({ status: "error", error });
       if (callbacks.current.onError) callbacks.current.onError(error); else console.error("Menu update failed", error);
     });

@@ -65,7 +65,7 @@ test("replacement waits for the previous native owner to finish removal", async 
   const remove = vi.fn(() => new Promise<void>(done => { release = done; }));
   mocks.register.mockResolvedValueOnce({ remove, setEnabled: vi.fn(async () => {}) }).mockResolvedValueOnce({ remove: vi.fn(async () => {}), setEnabled: vi.fn(async () => {}) });
   await act(async () => { rendered = create(React.createElement(Component, { router, definitions, handlers: { open() {} } })); });
-  await act(async () => { rendered.update(React.createElement(Component, { router, definitions: [...definitions], handlers: { open() {} } })); });
+  await act(async () => { rendered.update(React.createElement(Component, { router, definitions: [{ ...definitions[0], title: "Open File" }], handlers: { open() {} } })); });
   expect(remove).toHaveBeenCalledOnce(); expect(mocks.register).toHaveBeenCalledOnce();
   await act(async () => { release(); }); expect(mocks.register).toHaveBeenCalledTimes(2);
 });
@@ -80,4 +80,12 @@ test("suspension removes late native registrations and reports setup failure", a
   const error = vi.fn(); mocks.suspend.mockRejectedValueOnce(Error("cannot suspend"));
   await act(async () => { rendered = create(React.createElement(Suspension, { active: true, onError: error })); });
   expect(error).toHaveBeenCalledOnce();
+});
+test("inline definitions of equal content do not re-register", async () => {
+  const remove = vi.fn(async () => {}); mocks.register.mockResolvedValue({ remove, setEnabled: vi.fn(async () => {}) });
+  await act(async () => { rendered = create(React.createElement(Component, { router, definitions: [{ id: "open", title: "Open", defaultBindings: ["Cmd+O"] }], handlers: { open: () => {} } })); });
+  expect(mocks.register).toHaveBeenCalledTimes(1);
+  await act(async () => { rendered.update(React.createElement(Component, { router, definitions: [{ id: "open", title: "Open", defaultBindings: ["Cmd+O"] }], handlers: { open: () => {} } })); });
+  expect(mocks.register, "equal definitions must not rebuild native keyboard consumption").toHaveBeenCalledTimes(1);
+  expect(remove).not.toHaveBeenCalled();
 });

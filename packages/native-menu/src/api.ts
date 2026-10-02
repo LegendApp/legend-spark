@@ -60,6 +60,10 @@ export async function createMenu(options: MenuOptions): Promise<Menu> {
       if (stopped) throw new SparkError("E_CLOSED", "Menu was removed");
       const items = snapshot(options, token);
       await serial(async () => {
+        // Callers commonly rebuild identical item literals each render; republishing the whole
+        // bar would rebuild native menus for no visible change. Compare the wire trees first.
+        const existing = owners.get(id);
+        if (existing?.token === token && JSON.stringify(existing.items) === JSON.stringify(items)) return;
         const next = new Map(owners); next.delete(id); next.set(id, { id, token, items });
         await publish(next); ids = selectableMenuIds(items);
       });
