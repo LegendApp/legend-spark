@@ -68,6 +68,16 @@ test("macOS precreates hidden registered roots and closes a failed opening", asy
   await expect(windows.openWindow({ id: "editor", component: "Editor" })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
   expect(call.mock.calls.at(-1)?.[0]).toBe("discard");
 });
+test("a transient macOS read-back failure after chrome is applied keeps the opened window", async () => {
+  platform.OS = "macos";
+  call.mockImplementation(async (method: string) => {
+    if (method === "info") throw Object.assign(new Error("display removed"), { code: "E_NOT_FOUND" });
+    return JSON.stringify(["completeOpen"].includes(method) ? info : null);
+  });
+  const opened = await windows.openWindow({ id: "editor", component: "Editor", macos: { restoreOnLaunch: true } });
+  expect(opened).toEqual(expect.objectContaining({ id: "editor", title: "Editor" }));
+  expect(call.mock.calls.map(([method]) => method)).not.toContain("discard");
+});
 test("completed and timed-out requests cannot run the guard again", async () => {
   const handler = vi.fn(() => true), onError = vi.fn();
   const guard = await windows.beforeWindowClose("editor", handler, { onError });

@@ -28,8 +28,11 @@ export async function openWindow(options: WindowOpenOptions): Promise<WindowInfo
     try {
       const info = await windowCall("completeOpen", snapshot, isInfo);
       // Common chrome is applied first; explicit AppKit groups own their corresponding fields.
-      if (snapshot.macos) await updateMacOSWindow(snapshot.id, snapshot.macos);
-      return snapshot.macos ? getWindow(snapshot.id) : publicInfo(info);
+      if (!snapshot.macos) return publicInfo(info);
+      await updateMacOSWindow(snapshot.id, snapshot.macos);
+      // The window now exists: reflect the applied chrome, but a transient read-back
+      // failure must not discard a window that opened successfully, so fall back to info.
+      try { return await getWindow(snapshot.id); } catch { return publicInfo(info); }
     } catch (cause) {
       try { await windowCommand("discard", { id: snapshot.id }); }
       catch (cleanup) { throw new SparkError("E_NATIVE", "Window opening and cleanup both failed", { cause: new AggregateError([cause, cleanup]) }); }
