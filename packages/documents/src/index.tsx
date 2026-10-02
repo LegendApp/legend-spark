@@ -15,31 +15,12 @@ export interface GetLaunchDocumentPathOptions {
   launchArguments?: string[];
 }
 
-export function getPathExtension(path: string) {
-  return path.split(".").pop()?.toLowerCase();
-}
-
-export function pathMatchesExtensions(path: string, extensions: readonly string[]) {
-  const extension = getPathExtension(path);
-  return extension !== undefined && extensions.includes(extension);
-}
-
 export function getLaunchDocumentPath({
   isDocumentPath,
   launchArguments,
 }: GetLaunchDocumentPathOptions) {
   const argv = typeof process !== "undefined" && Array.isArray(process.argv) ? process.argv : [];
   return launchArguments?.find(isDocumentPath) ?? argv.find(isDocumentPath) ?? null;
-}
-
-export function getDirectory(path: string) {
-  const separatorIndex = path.lastIndexOf("/");
-  return separatorIndex > 0 ? path.slice(0, separatorIndex) : undefined;
-}
-
-export function getFilename(path: string) {
-  const separatorIndex = path.lastIndexOf("/");
-  return separatorIndex >= 0 ? path.slice(separatorIndex + 1) : path;
 }
 
 export async function openSelectedDocumentPath({
