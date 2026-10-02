@@ -142,10 +142,6 @@ export interface HotkeyBindingsSettingsPageProps<Id extends string> {
   showTitle?: boolean;
   values: HotkeyBindingState<Id>;
 }
-function SFSymbol(props: { name: string; size: number }) {
-  const Component = (require("@legendapp/spark-ui/src/sf-symbol") as typeof import("@legendapp/spark-ui/src/sf-symbol")).SFSymbol;
-  return <Component {...props} />;
-}
 export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
   definitions,
   maxBindingsPerCommand,
@@ -252,19 +248,19 @@ export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
                           <Pressable
                             accessibilityLabel={`Clear ${definition.title} shortcut ${formatHotkey(binding)}`}
                             accessibilityRole="button"
-                            className="h-8 w-8 items-center justify-center rounded-md hover:bg-background-primary"
+                            className="rounded-md px-2 py-1.5 hover:bg-background-primary"
                             onPress={() => onChange(definition.id, [])}
                           >
-                            <SFSymbol name="xmark" size={12} />
+                            <Text className="text-sm text-text-secondary">Remove</Text>
                           </Pressable>
                         ) : isCustom ? (
                           <Pressable
                             accessibilityLabel={`Restore ${definition.title} default shortcut`}
                             accessibilityRole="button"
-                            className="h-8 w-8 items-center justify-center rounded-md hover:bg-background-primary"
+                            className="rounded-md px-2 py-1.5 hover:bg-background-primary"
                             onPress={() => onChange(definition.id, defaultBindings)}
                           >
-                            <SFSymbol name="arrow.counterclockwise" size={13} />
+                            <Text className="text-sm text-text-secondary">Reset</Text>
                           </Pressable>
                         ) : null}
                       </View>
