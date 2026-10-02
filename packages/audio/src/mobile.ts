@@ -19,7 +19,7 @@ export async function createAudioPlayer(source: AudioSource, options: AudioPlaye
   const subscription = player.addListener("playbackStatusUpdate", status => {
     if (status.didJustFinish) ended = true; failed = status.playbackState === "error";
     notifyReady?.();
-    if (listeners.size) { const value = statusValue(status); for (const listener of listeners) listener(value); }
+    if (listeners.size) { const value = statusValue(status); for (const listener of [...listeners]) { try { listener(value); } catch (error) { console.error(error); } } }
   });
   try {
     await waitForAudio(async () => { if (failed || player.currentStatus.playbackState === "error") throw new SparkError("E_NATIVE", "Audio could not be loaded"); return player.isLoaded; }, options,

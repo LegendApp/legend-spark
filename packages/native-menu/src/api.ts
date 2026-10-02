@@ -44,7 +44,11 @@ export async function createMenu(options: MenuOptions): Promise<Menu> {
   const id = options.id, onAction = options.onAction;
   let stopped = false, ready = false, ids = selectableMenuIds(items);
   const subscription = new NativeEventEmitter(NativeMenu as never).addListener("NativeMenuAction", event => {
-    if (ready && !stopped && event && event.ownerId === token && typeof event.itemId === "string" && ids.has(event.itemId)) onAction?.({ type: "action", itemId: event.itemId });
+    if (ready && !stopped && event && event.ownerId === token && typeof event.itemId === "string" && ids.has(event.itemId)) {
+      // All owners share this emitter; one owner's throw must not swallow the other owners' actions.
+      try { onAction?.({ type: "action", itemId: event.itemId }); }
+      catch (cause) { console.error(new SparkError("E_NATIVE", "Menu action handler failed", { cause })); }
+    }
   });
   try { await serial(async () => {
     if (owners.has(id)) throw new SparkError("E_ALREADY_EXISTS", `Menu owner ${id} already exists`);

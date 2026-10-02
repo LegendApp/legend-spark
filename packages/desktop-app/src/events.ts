@@ -10,7 +10,12 @@ type Hub = { count: number; buckets: Map<string, Bucket>; subscription: Subscrip
 const hubs = new WeakMap<Spec, Hub>();
 function deliver(listeners: readonly Entry[], event: DesktopEvent) {
   // Arrays are replaced on registration, so dispatch needs no per-event snapshot.
-  for (const entry of listeners) if (entry.active) entry.listener(event);
+  // One throwing subscriber must not starve the rest of the bucket or escape into the native emitter.
+  for (const entry of listeners) {
+    if (!entry.active) continue;
+    try { entry.listener(event); }
+    catch (cause) { console.error(new SparkError("E_NATIVE", "Desktop event listener failed", { cause })); }
+  }
 }
 function route(bucket: Bucket | undefined, event: DesktopEvent) {
   if (!bucket) return;

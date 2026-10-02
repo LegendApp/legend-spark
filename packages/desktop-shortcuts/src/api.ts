@@ -27,7 +27,10 @@ export async function registerShortcut(accelerator: string, handler: () => void,
   let removed = false;
   const module = native();
   const subscription = new NativeEventEmitter(module).addListener("shortcut", (event: unknown) => {
-    if (!removed && event && typeof event === "object" && (event as { id?: unknown }).id === id) handler();
+    if (!removed && event && typeof event === "object" && (event as { id?: unknown }).id === id) {
+      try { handler(); }
+      catch (cause) { console.error(new SparkError("E_NATIVE", "Shortcut handler failed", { cause })); }
+    }
   });
   try { await call("register", { id, ...parsed, ...options }); }
   catch (cause) {

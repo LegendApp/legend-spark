@@ -22,7 +22,10 @@ function notify(type: Entry["type"], value: unknown) {
   if (!value || typeof value !== "object") return;
   const event = value as KeyboardEvent;
   if (typeof event.key !== "string" || !Number.isInteger(event.keyCode) || !Number.isInteger(event.modifiers) || typeof event.repeated !== "boolean" || typeof event.consumed !== "boolean" || typeof event.captured !== "boolean" || !(event.windowId === null || typeof event.windowId === "string")) return;
-  for (const entry of entries) if (entry.type === type && (!entry.windowIds || (event.windowId !== null && entry.windowIds.includes(event.windowId)))) entry.listener(event);
+  for (const entry of entries) {
+    if (entry.type !== type || (entry.windowIds && !(event.windowId !== null && entry.windowIds.includes(event.windowId)))) continue;
+    try { entry.listener(event); } catch (cause) { console.error(new SparkError("E_NATIVE", "Keyboard listener failed", { cause })); }
+  }
 }
 function synchronize(): Promise<void> {
   const pending = transitions.then(async () => {

@@ -23,7 +23,9 @@ export async function subscribeToOpenRequests(listener: (event: OpenRequest) => 
   function prune() { while (seen.size > 200) seen.delete(seen.values().next().value!); }
   function deliver(event: OpenRequest) {
     if (removed || seen.has(event.id)) return;
-    seen.add(event.id); if (!replaying) prune(); listener(event);
+    seen.add(event.id); if (!replaying) prune();
+    // A listener that throws must not abort the launch-queue replay for the rest of the batch.
+    try { listener(event); } catch (cause) { console.error(new SparkError("E_NATIVE", "Open request listener failed", { cause })); }
   }
   const subscription = onDesktopEvent(event => {
     if (event.type !== "openURL" && event.type !== "openFile") return;

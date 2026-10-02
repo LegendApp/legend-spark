@@ -31,3 +31,17 @@ test("removal and new subscriptions during delivery preserve the original recipi
     mocks.receive?.({ type: "update" }); expect(late).toHaveBeenCalledTimes(1);
   } finally { a.remove(); b.remove(); added?.remove(); }
 });
+test("a throwing listener does not starve the rest of the bucket", () => {
+  const failing = vi.fn(() => { throw Error("listener bug"); });
+  const survivor = vi.fn();
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const a = onDesktopEvent(failing, { types: ["activate"] });
+  const b = onDesktopEvent(survivor, { types: ["activate"] });
+  try {
+    expect(() => mocks.receive?.({ type: "activate" })).not.toThrow();
+    expect(failing).toHaveBeenCalledOnce();
+    expect(survivor, "one bad subscriber must not block later listeners").toHaveBeenCalledOnce();
+    expect(errors).toHaveBeenCalledOnce();
+    expect(errors.mock.calls[0][0]).toMatchObject({ code: "E_NATIVE" });
+  } finally { a.remove(); b.remove(); errors.mockRestore(); }
+});
