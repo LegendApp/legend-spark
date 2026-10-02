@@ -224,3 +224,43 @@ test("synchronous transaction query failures poison later statements and roll ba
   expect(vi.mocked(backend.execute).mock.calls.map(([sql]) => sql)).toEqual(["BEGIN", "FAIL", "ROLLBACK"]);
   await db.close();
 });
+
+function outOfRangeBackend(insertId?: number | string | bigint): SqlBackend {
+  return { execute: vi.fn(async () => ({ rows: [{ big: 9007199254740993 }], rowsAffected: 1, insertId })), close: vi.fn() };
+}
+test("number mode rejects an out-of-range integer, text mode reads it as a string", async () => {
+  await expect(createDatabase(outOfRangeBackend()).getFirst("SELECT big")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  const text = createDatabase(outOfRangeBackend(), "text");
+  expect(text.integers).toBe("text");
+  // The backend delivers integers as doubles, so the text is the double's exact digits.
+  expect(await text.getFirst("SELECT big")).toEqual({ big: String(9007199254740993) });
+  expect(await text.getAll("SELECT big")).toEqual([{ big: String(9007199254740993) }]);
+  await text.close();
+});
+test("text mode keeps safe integers numeric and stringifies unsafe insert IDs", async () => {
+  const safe = createDatabase({ execute: vi.fn(async () => ({ rows: [{ n: 5 }], rowsAffected: 0, insertId: 7 })), close: vi.fn() }, "text");
+  expect(await safe.getFirst("SELECT n")).toEqual({ n: 5 });
+  expect(await safe.run("INSERT x")).toEqual({ changes: 0, lastInsertRowId: 7 });
+  await safe.close();
+  const unsafe = createDatabase(outOfRangeBackend(Number.MAX_SAFE_INTEGER + 2), "text");
+  expect(await unsafe.run("INSERT INTO t VALUES (?)", ["x"])).toEqual({ changes: 1, lastInsertRowId: String(Number.MAX_SAFE_INTEGER + 2) });
+  await unsafe.close();
+  const numberMode = createDatabase(outOfRangeBackend(Number.MAX_SAFE_INTEGER + 2));
+  await expect(numberMode.run("INSERT INTO t VALUES (?)", ["x"])).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  await numberMode.close();
+});
+test("text mode stringifies backend bigint insert IDs; number mode bounds-checks them", async () => {
+  const bigint = createDatabase(outOfRangeBackend(9007199254740993n), "text");
+  expect(await bigint.run("INSERT")).toMatchObject({ lastInsertRowId: "9007199254740993" });
+  await bigint.close();
+  const numberMode = createDatabase(outOfRangeBackend(9007199254740993n));
+  await expect(numberMode.run("INSERT")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  await numberMode.close();
+});
+test("unsafe integers bound as parameters still reject in both modes", async () => {
+  for (const integers of ["number", "text"] as const) {
+    const db = createDatabase(outOfRangeBackend(), integers);
+    await expect(db.run("INSERT", [Number.MAX_SAFE_INTEGER + 2])).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+    await db.close();
+  }
+});

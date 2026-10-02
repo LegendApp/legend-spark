@@ -169,24 +169,31 @@ No framework native methods are exposed to web pages automatically. Define an
 explicit navigation policy and expose only intended operations in any message
 handler. It uses WebKit on macOS, not Chromium.
 
-SQLite uses @op-engineering/op-sqlite 18.2.1 with plain SQLite. openDatabase requires
-a simple .sqlite filename and places it in the current project's data directory:
+SQLite uses @op-engineering/op-sqlite 18.2.1 with plain SQLite behind a Spark-owned
+query/transaction contract. openDatabase requires a simple .sqlite filename and
+places it in the current project's data directory:
 
 ```ts
 import { openDatabase } from "@legendapp/spark/sqlite";
 const db = await openDatabase("notes.sqlite");
 try {
-  await db.execute("CREATE TABLE IF NOT EXISTS notes (body TEXT)");
-  await db.execute("INSERT INTO notes VALUES (?)", ["Hello"]);
-  const result = await db.execute("SELECT body FROM notes");
-} finally { db.close(); }
+  await db.run("CREATE TABLE IF NOT EXISTS notes (body TEXT)");
+  await db.run("INSERT INTO notes VALUES (?)", ["Hello"]);
+  const rows = await db.getAll("SELECT body FROM notes");
+  await db.transaction(async tx => { await tx.run("DELETE FROM notes"); });
+} finally { await db.close(); }
 ```
 
-The returned database is the upstream API (transactions, queries, etc.). This
-wrapper does not enable SQLCipher, remote sync or optional SQLite extensions.
-Both libraries are included in the development SDK. Production import analysis
-can prune their native packages independently. Direct third-party imports use
-the upstream behavior; database isolation applies through openDatabase.
+Backends deliver SQLite INTEGER values as JavaScript numbers, so a value outside
+2^53−1 cannot be represented exactly no matter what the wrapper does. The default
+`integers: "number"` mode rejects such a read instead of returning a silently wrong
+number. `openDatabase(name, { integers: "text" })` returns out-of-range integers as
+decimal strings so a stored large row stays readable; use `CAST(column AS TEXT)` when
+you need every digit. Binding an out-of-range number as a parameter always rejects.
+
+The wrapper does not enable SQLCipher, remote sync or optional SQLite extensions.
+Direct third-party imports use the upstream behavior; database isolation applies
+through openDatabase.
 
 ## Exercising the APIs
 

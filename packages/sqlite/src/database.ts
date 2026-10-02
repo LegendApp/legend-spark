@@ -1,15 +1,24 @@
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
-import type { Database, RunResult, SqlExecutor, SqlRow, SqlValue } from "./types";
+import type { Database, IntegerMode, RunResult, SqlExecutor, SqlRow, SqlValue } from "./types";
 
 /** Internal protocol: submit statements in FIFO order, snapshot bindings on submission,
  * and return fresh, mutable rows/buffers owned by the caller. Native drivers own this work. */
 export interface SqlBackend {
-  execute(sql: string, params: readonly SqlValue[]): Promise<{ rows: unknown; rowsAffected: number; insertId?: number }>;
+  execute(sql: string, params: readonly SqlValue[]): Promise<{ rows: unknown; rowsAffected: number; insertId?: number | string | bigint }>;
   close(): void | Promise<void>;
 }
 function validNumber(value: number, code: "E_INVALID_ARGUMENT" | "E_INVALID_DATA") {
   if (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value))) {
-    throw new SparkError(code, "SQLite numbers must be finite and integers must be safely representable; select large integers as text");
+    throw new SparkError(code, "SQLite numbers must be finite and integers must be safely representable; use integers: \"text\" for 64-bit values");
+  }
+  return value;
+}
+/** Text-mode reads turn unsafe integer values into strings so large stored rows remain readable. */
+function textifyNumbers(value: Record<string, unknown>) {
+  for (const key of Object.keys(value)) {
+    const item = value[key];
+    if (typeof item === "number" && Number.isInteger(item) && !Number.isSafeInteger(item)) value[key] = String(item);
+    else if (typeof item === "bigint") value[key] = item.toString();
   }
   return value;
 }
@@ -30,11 +39,12 @@ function nativeError(cause: unknown): never {
   if (cause instanceof SparkError) throw cause;
   throw new SparkError("E_NATIVE", cause instanceof Error ? cause.message : "SQLite execution failed", { cause });
 }
-function row(value: unknown): SqlRow {
+function row(value: unknown, integers: IntegerMode): SqlRow {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new SparkError("E_INVALID_DATA", "Expected a SQLite row object");
   }
   const result = value as Record<string, unknown>;
+  if (integers === "text") textifyNumbers(result);
   for (const key of Object.keys(result)) {
     const item = result[key];
     if (item === null || typeof item === "string") continue;
@@ -51,29 +61,37 @@ function resultRows(result: NativeResult): unknown[] {
   if (!Array.isArray(result.rows)) throw new SparkError("E_INVALID_DATA", "Expected SQLite rows");
   return result.rows;
 }
-function all(result: NativeResult): SqlRow[] {
+function all(result: NativeResult, integers: IntegerMode): SqlRow[] {
   const values = resultRows(result);
-  for (const value of values) row(value);
+  for (const value of values) row(value, integers);
   return values as SqlRow[];
 }
-function first(result: NativeResult): SqlRow | null {
+function first(result: NativeResult, integers: IntegerMode): SqlRow | null {
   const values = resultRows(result);
-  return values.length ? row(values[0]) : null;
+  return values.length ? row(values[0], integers) : null;
 }
-function mutation(result: NativeResult): RunResult {
+function mutation(result: NativeResult, integers: IntegerMode): RunResult {
   const changes = validNumber(result.rowsAffected, "E_INVALID_DATA");
   if (!Number.isSafeInteger(changes) || changes < 0) throw new SparkError("E_INVALID_DATA", "Invalid SQLite change count");
-  return { changes, lastInsertRowId: result.insertId == null ? null : validNumber(result.insertId, "E_INVALID_DATA") };
+  const insertId = result.insertId;
+  if (insertId == null) return { changes, lastInsertRowId: null };
+  if (typeof insertId === "bigint") return { changes, lastInsertRowId: integers === "text" ? insertId.toString() : validNumber(Number(insertId), "E_INVALID_DATA") };
+  if (typeof insertId === "string") {
+    if (integers !== "text" || !/^[+-]?\d+$/.test(insertId)) throw new SparkError("E_INVALID_DATA", "Invalid SQLite insert ID");
+    return { changes, lastInsertRowId: insertId };
+  }
+  if (integers === "text" && !Number.isSafeInteger(insertId)) return { changes, lastInsertRowId: insertId.toString() };
+  return { changes, lastInsertRowId: validNumber(insertId, "E_INVALID_DATA") };
 }
 type Submit = <T>(sql: string, params: readonly SqlValue[], convert: (result: NativeResult) => T) => Promise<T>;
-function executor(submit: Submit): SqlExecutor {
+function executor(submit: Submit, integers: IntegerMode): SqlExecutor {
   return {
-    run: (sql, params = []) => submit(sql, params, mutation),
-    getAll: (sql, params = []) => submit(sql, params, all),
-    getFirst: (sql, params = []) => submit(sql, params, first),
+    run: (sql, params = []) => submit(sql, params, result => mutation(result, integers)),
+    getAll: (sql, params = []) => submit(sql, params, result => all(result, integers)),
+    getFirst: (sql, params = []) => submit(sql, params, result => first(result, integers)),
   };
 }
-export function createDatabase(backend: SqlBackend): Database {
+export function createDatabase(backend: SqlBackend, integers: IntegerMode = "number"): Database {
   let pending = 0;
   let idle: (() => void) | undefined;
   let closing: Promise<void> | undefined;
@@ -100,7 +118,8 @@ export function createDatabase(backend: SqlBackend): Database {
     return blocked ? blocked.then(submit) : submit();
   }
   return {
-    ...executor(execute),
+    integers,
+    ...executor(execute, integers),
     transaction<T>(operation: (tx: SqlExecutor) => Promise<T>): Promise<T> {
       if (typeof operation !== "function") return Promise.reject(new SparkError("E_INVALID_ARGUMENT", "Expected a transaction callback"));
       if (closing) return Promise.reject(closed());
@@ -125,7 +144,7 @@ export function createDatabase(backend: SqlBackend): Database {
           });
           statements = next.catch(error => { failed = true; failure = error; });
           return next;
-        });
+        }, integers);
         try {
           try { await backend.execute("BEGIN", []); } catch (cause) { nativeError(cause); }
           inTransaction = true;
