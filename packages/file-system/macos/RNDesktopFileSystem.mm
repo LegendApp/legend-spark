@@ -155,8 +155,7 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
       else if ([method isEqual:@"copy"] || [method isEqual:@"move"]) {
         NSURL *to = FileURL(args[@"to"]);
         if (!to || !to.isFileURL || (to.host.length && ![to.host isEqual:@"localhost"])) { SparkInvalid(reject, @"Expected an absolute destination"); return; }
-        if ([method isEqual:@"copy"]) [fm copyItemAtURL:url toURL:to error:&error];
-        else [fm moveItemAtURL:url toURL:to error:&error];
+        SparkTransferPath(url, to, [method isEqual:@"copy"] ? SparkTransferCopy : SparkTransferMove, [args[@"overwrite"] boolValue], &error);
       }
       else if ([method isEqual:@"stat"]) {
         NSDictionary *attrs = [fm attributesOfItemAtPath:url.path error:&error];

@@ -9,6 +9,7 @@ export interface FileInfo { type: "file" | "directory" | "symlink"; size: number
 export interface DirectoryEntry { name: string; path: string }
 export interface CreateDirectoryOptions { recursive?: boolean }
 export interface RemoveOptions { recursive?: boolean }
+export interface CopyMoveOptions { overwrite?: boolean }
 export interface WatchOptions { recursive?: boolean }
 export interface OpenFileOptions { mode?: FileMode }
 export interface WriteChunksOptions { mode?: "write" | "createNew"; signal?: AbortSignal }
@@ -54,6 +55,11 @@ function recursiveOption(options: { recursive?: boolean }, fallback: boolean): b
   if (value.recursive !== undefined && typeof value.recursive !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "recursive must be a boolean");
   return value.recursive ?? fallback;
 }
+function overwriteOption(options: CopyMoveOptions): boolean {
+  const value = checkedOptions(options, ["overwrite"], "copy/move");
+  if (value.overwrite !== undefined && typeof value.overwrite !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "overwrite must be a boolean");
+  return value.overwrite ?? false;
+}
 export async function getDirectory(kind: "data" | "cache" | "temp"): Promise<string> {
   if (!["data", "cache", "temp"].includes(kind)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid directory kind");
   const path = await call<string>("directory", { kind });
@@ -88,10 +94,14 @@ export async function list(path: string): Promise<DirectoryEntry[]> {
 export async function mkdir(path: string, options: CreateDirectoryOptions = {}): Promise<void> { await call("mkdir", { path: absolute(path), recursive: recursiveOption(options, true) }); }
 /** Absence is success; deleting a nonempty directory requires recursive: true. */
 export async function remove(path: string, options: RemoveOptions = {}): Promise<void> { await call("remove", { path: absolute(path), recursive: recursiveOption(options, false) }); }
-/** Copies directories recursively and preserves symlinks. An existing destination rejects. */
-export async function copy(path: string, to: string): Promise<void> { await call("copy", { path: absolute(path), to: absolute(to) }); }
-/** An existing destination rejects. Cross-volume directory moves may copy then delete. */
-export async function move(path: string, to: string): Promise<void> { await call("move", { path: absolute(path), to: absolute(to) }); }
+/** Copies directories recursively and preserves symlinks. An existing destination rejects unless overwrite: true. */
+export async function copy(source: string, destination: string, options: CopyMoveOptions = {}): Promise<void> {
+  await call("copy", { path: absolute(source), to: absolute(destination), overwrite: overwriteOption(options) });
+}
+/** An existing destination rejects unless overwrite: true. Cross-volume directory moves may copy then delete. */
+export async function move(source: string, destination: string, options: CopyMoveOptions = {}): Promise<void> {
+  await call("move", { path: absolute(source), to: absolute(destination), overwrite: overwriteOption(options) });
+}
 let nextWatch = 0;
 /** Invalidation, not an exact change log. Recursive watches require a directory. */
 export async function watch(path: string, listener: (path: string) => void, options: WatchOptions = {}): Promise<AsyncRegistration> {

@@ -37,6 +37,12 @@ export async function filesystemLifecycle(files: typeof FileSystem, token: strin
     await rejectsCode(() => files.copy(file, `${root}/moved`), "E_ALREADY_EXISTS");
     await rejectsCode(() => files.move(file, `${root}/moved`), "E_ALREADY_EXISTS");
     assertContract(await files.exists(file), "Failed move removed source");
+    await files.copy(file, `${root}/moved`, { overwrite: true });
+    assertContract(await files.readText(`${root}/moved`) === await files.readText(file), "Overwrite copy failed");
+    await files.writeText(`${root}/copy-source`, "source");
+    await files.move(`${root}/copy-source`, `${root}/moved`, { overwrite: true });
+    assertContract(await files.readText(`${root}/moved`) === "source" && !await files.exists(`${root}/copy-source`), "Overwrite move failed");
+    await rejectsCode(() => files.copy(file, `${root}/moved`, { overwrote: true } as any), "E_UNSUPPORTED_OPTION");
     await files.writeText(`${root}/nested/child/value`, "recursive");
     await files.copy(`${root}/nested`, `${root}/tree-copy`);
     assertContract(await files.readText(`${root}/tree-copy/child/value`) === "recursive", "Directory copy failed");

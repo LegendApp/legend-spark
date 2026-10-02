@@ -104,7 +104,7 @@ settings/Keychain keys return `null`; an empty stored string remains `""`.
 
 Files accept absolute local paths or `file://` URLs. Binary IO uses base64 without
 requiring `Buffer`. Writes replace a file atomically. Copy/move do not overwrite an
-existing destination. Removing a nonempty directory requires `{ recursive: true }`.
+existing destination unless `{ overwrite: true }`. Removing a nonempty directory requires `{ recursive: true }`.
 Errors include `E_NOT_FOUND`, `E_PERMISSION`, `E_EXISTS`, `E_NOT_EMPTY`, and `E_IO`.
 Watches are nonrecursive invalidation signals and may include sibling changes;
 re-read the target and call `await subscription.remove()` when done. Watching a

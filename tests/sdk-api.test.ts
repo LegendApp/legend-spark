@@ -100,9 +100,14 @@ test("filesystem binary and mutation APIs preserve paths and opt-in recursive de
   handlers.set("NativeDesktopFileSystem.readBytes", () => new Uint8Array([0]).buffer);
   handlers.set("NativeDesktopFileSystem.list", () => ["a"]);
   handlers.set("NativeDesktopFileSystem.remove", () => true);
+  handlers.set("NativeDesktopFileSystem.copy", () => null);
+  handlers.set("NativeDesktopFileSystem.move", () => null);
   await files.getDirectory("data"); await files.readText("file:///tmp/a%20b"); await files.writeText("/a", "text"); await files.readBytes("/a"); await files.writeBytes("/b", new Uint8Array([0]));
   await files.mkdir("/dir"); await files.list("/dir"); await files.copy("/a", "/b"); await files.move("/b", "/c"); await files.remove("/dir"); await files.remove("/dir", { recursive: true });
   expect(calls[1]?.args.path).toBe("/tmp/a b"); expect(calls.filter(call => call.method === "remove").map(call => call.args.recursive)).toEqual([false, true]);
+  await files.copy("/a", "/b", { overwrite: true }); await files.move("/b", "/c", { overwrite: true });
+  expect(calls.filter(call => ["copy", "move"].includes(call.method)).map(call => call.args.overwrite)).toEqual([false, false, true, true]);
+  await expect(files.copy("/a", "/b", { overwrote: true } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
 });
 test("misspelled file options reject before any native dispatch", async () => {
   const previous = calls.length;

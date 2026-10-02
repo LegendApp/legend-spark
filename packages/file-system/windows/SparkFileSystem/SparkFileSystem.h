@@ -248,7 +248,13 @@ struct FileQueue {
     } else if (method == "copy" || method == "move") {
       auto to = FilePath(args.GetNamedString(L"to"));
       auto destination = fs::symlink_status(to);
-      if (destination.type() != fs::file_type::not_found) throw hresult_error(HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS));
+      if (destination.type() != fs::file_type::not_found) {
+        if (!args.GetNamedBoolean(L"overwrite", false)) throw hresult_error(HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS));
+        // Replace wholesale, like the macOS host: remove the destination first.
+        std::error_code ignored;
+        if (fs::remove_all(to, ignored) == static_cast<uintmax_t>(-1) || ignored) throw_last_error();
+        if (fs::symlink_status(to).type() != fs::file_type::not_found) throw hresult_error(HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS));
+      }
       if (method == "copy") fs::copy(path, to, fs::copy_options::recursive | fs::copy_options::copy_symlinks);
       else if (!MoveFileExW(path.c_str(), to.c_str(), MOVEFILE_COPY_ALLOWED | MOVEFILE_WRITE_THROUGH)) {
         if (GetLastError() != ERROR_NOT_SAME_DEVICE || !fs::is_directory(path)) throw_last_error();

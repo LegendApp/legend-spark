@@ -171,6 +171,7 @@
     "getDragDropAvailability"
   ],
   "./files": [
+    "CopyMoveOptions",
     "CreateDirectoryOptions",
     "DirectoryEntry",
     "FileHandle",

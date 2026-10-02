@@ -17,7 +17,7 @@ await revealInFileManager(path);
 await remove(destination); // void; absence is success
 ```
 
-`list` returns immediate entries sorted by name, without issuing a metadata request for every child. `stat` describes symlinks themselves. `copy` recursively copies directories and preserves links, and `move` may copy then delete across volumes; both reject existing destinations. Neither promises a transaction across multiple files. `mkdir` defaults to recursive creation; `remove` defaults to nonrecursive removal and rejects nonempty directories.
+`list` returns immediate entries sorted by name, without issuing a metadata request for every child. `stat` describes symlinks themselves. `copy` recursively copies directories and preserves links, and `move` may copy then delete across volumes; both reject an existing destination with `E_ALREADY_EXISTS` unless `{ overwrite: true }` replaces it. Neither promises a transaction across multiple files. `mkdir` defaults to recursive creation; `remove` defaults to nonrecursive removal and rejects nonempty directories.
 
 Whole-file writes replace atomically on supported desktop backends. Conditional writes compare observed UTF-8 text before replacing; another process can still write between those steps. A conflict returns `{ written: false }`; missing files and IO failures reject. Invalid UTF-8 rejects. Use the [streaming APIs](file-streams.md) for bounded memory on large files.
 
