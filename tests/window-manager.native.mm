@@ -84,5 +84,23 @@ int main() { @autoreleasepool {
   __block NSString *error = nil;
   [manager setWindowOptions:@"missing" optionsJson:@"{}" resolve:^(id) { assert(false); } reject:^(NSString *code, NSString *, NSError *) { error = code; }];
   assert([error isEqual:@"E_NOT_FOUND"]); assert(!manager.windowOptions[@"missing"]);
+  // A symbol is the control's content: the fallback label must never print the item ID there.
+  NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"LegendToolbarTest"];
+  manager.toolbarItemConfigs[toolbar.identifier] = @[
+    @{ @"id": @"icon-only", @"type": @"menuButton", @"systemImageName": @"square.and.pencil", @"menuItems": @[] },
+    @{ @"id": @"labelled", @"type": @"menuButton", @"label": @"Elapsed", @"systemImageName": @"sun.max", @"menuItems": @[] },
+    @{ @"id": @"text-only", @"type": @"menuButton", @"label": @"Start", @"menuItems": @[] },
+  ];
+  NSToolbarItem *iconOnly = [manager toolbar:toolbar itemForItemIdentifier:@"legend.toolbar.icon-only" willBeInsertedIntoToolbar:YES];
+  assert([iconOnly.view isKindOfClass:NSButton.class]);
+  assert([(NSButton *)iconOnly.view title].length == 0);
+  assert([(NSButton *)iconOnly.view image] != nil);
+  assert([(NSButton *)iconOnly.view imagePosition] == NSImageOnly);
+  assert([iconOnly.label isEqual:@"icon-only"]);
+  NSToolbarItem *labelled = [manager toolbar:toolbar itemForItemIdentifier:@"legend.toolbar.labelled" willBeInsertedIntoToolbar:YES];
+  assert([(NSButton *)labelled.view title].length > 0);
+  assert([(NSButton *)labelled.view imagePosition] == NSImageLeft);
+  NSToolbarItem *textOnly = [manager toolbar:toolbar itemForItemIdentifier:@"legend.toolbar.text-only" willBeInsertedIntoToolbar:YES];
+  assert([[[(NSButton *)textOnly.view title] copy] isEqual:@"Start"]);
   puts("Window manager controls passed");
 } }

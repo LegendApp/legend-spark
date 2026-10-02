@@ -1407,7 +1407,10 @@ willBeInsertedIntoToolbar:(BOOL)flag
       @"instanceId": config[@"instanceId"] ?: @"",
     };
     if (isMenuButton) {
-      NSButton *button = [NSButton buttonWithTitle:label target:self action:@selector(toolbarButtonItemPressed:)];
+      // An icon-only control has a symbol and no title to show, so never substitute the
+      // fallback label: it would print the item ID where the icon belongs.
+      NSString *title = image ? ([config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : @"") : label;
+      NSButton *button = [NSButton buttonWithTitle:title target:self action:@selector(toolbarButtonItemPressed:)];
       button.bezelStyle = NSBezelStyleRounded;
       button.controlSize = NSControlSizeRegular;
       button.enabled = toolbarItem.enabled;
@@ -1417,10 +1420,10 @@ willBeInsertedIntoToolbar:(BOOL)flag
       }
       if (image) {
         button.image = image;
-        button.imagePosition = NSImageLeft;
+        button.imagePosition = title.length > 0 ? NSImageLeft : NSImageOnly;
       }
       NSFont *font = button.font ?: [NSFont systemFontOfSize:NSFont.systemFontSize];
-      CGFloat buttonWidth = widthNumber ? widthNumber.doubleValue : MAX(148, [label sizeWithAttributes:@{NSFontAttributeName: font}].width + (image ? 64 : 52));
+      CGFloat buttonWidth = widthNumber ? widthNumber.doubleValue : MAX(148, [title sizeWithAttributes:@{NSFontAttributeName: font}].width + (image ? 64 : 52));
       button.frame = NSMakeRect(0, 0, buttonWidth, MAX(28, button.fittingSize.height));
       objc_setAssociatedObject(button, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
       toolbarItem.view = button;
