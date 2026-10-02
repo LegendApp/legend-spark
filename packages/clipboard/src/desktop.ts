@@ -20,14 +20,14 @@ async function call<T>(method: string, args: object, validate: (value: unknown) 
   return parseNativeResult(await invokeNative(() => native().call(method, JSON.stringify(args))), validate);
 }
 const isVoid = (value: unknown): value is null => value === null;
+const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
 /** Expo-compatible text/HTML subset. */
 export async function getStringAsync(options: GetStringOptions = {}): Promise<string> {
   return call("getString", { format: stringOptions(options, "preferredFormat") }, (value): value is string => typeof value === "string");
 }
 export async function setStringAsync(text: string, options: SetStringOptions = {}): Promise<boolean> {
   if (typeof text !== "string") throw new SparkError("E_INVALID_ARGUMENT", "Clipboard text must be a string");
-  await call("setString", { text, format: stringOptions(options, "inputFormat") }, isVoid);
-  return true;
+  return call("setString", { text, format: stringOptions(options, "inputFormat") }, isBoolean);
 }
 export async function hasStringAsync(): Promise<boolean> { return call("hasString", {}, (value): value is boolean => typeof value === "boolean"); }
 export async function readClipboard(): Promise<ClipboardContent> {

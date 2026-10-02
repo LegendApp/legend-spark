@@ -117,7 +117,8 @@ test("failed watchers remove their listener", async () => {
 });
 test("clipboard and Keychain preserve empty strings and missing values", async () => {
   handlers.set("NativeDesktopClipboard.getString", () => ""); handlers.set("NativeDesktopClipboard.hasString", () => false);
-  expect(await clipboard.getStringAsync()).toBe(""); expect(await clipboard.hasStringAsync()).toBe(false); await clipboard.setStringAsync("hello");
+  handlers.set("NativeDesktopClipboard.setString", () => true);
+  expect(await clipboard.getStringAsync()).toBe(""); expect(await clipboard.hasStringAsync()).toBe(false); expect(await clipboard.setStringAsync("hello")).toBe(true);
   expect(await secureStore.getItemAsync("key")).toBeNull(); await secureStore.setItemAsync("key", ""); expect(calls.at(-1)?.args.value).toBe(""); await secureStore.deleteItemAsync("key");
   await expect(secureStore.getItemAsync("")).rejects.toThrow(); await expect(secureStore.getItemAsync("x".repeat(201))).rejects.toThrow();
 });
@@ -281,11 +282,14 @@ test("Dock menus identify their owner and remove only once", async () => {
 test("Expo clipboard subset handles formats, boolean results, and native failures", async () => {
   handlers.set("NativeDesktopClipboard.getString", args => args.format === "html" ? "<b>Hello</b>" : "Hello");
   handlers.set("NativeDesktopClipboard.hasString", () => true);
+  handlers.set("NativeDesktopClipboard.setString", () => true);
   expect(await clipboard.getStringAsync()).toBe("Hello");
   expect(await clipboard.getStringAsync({ preferredFormat: clipboard.StringFormat.HTML })).toBe("<b>Hello</b>");
   expect(await clipboard.setStringAsync("<b>Hello</b>", { inputFormat: clipboard.StringFormat.HTML })).toBe(true);
   expect(calls.at(-1)?.args).toEqual({ text: "<b>Hello</b>", format: "html" });
   expect(await clipboard.hasStringAsync()).toBe(true);
+  handlers.set("NativeDesktopClipboard.setString", () => false);
+  expect(await clipboard.setStringAsync("denied")).toBe(false);
   await expect(clipboard.setStringAsync(123 as any)).rejects.toThrow("string");
   await expect(clipboard.getStringAsync({ preferredFormat: "bad" as any })).rejects.toThrow("format");
   handlers.set("NativeDesktopClipboard.setString", () => { throw nativeError("E_CLIPBOARD"); });

@@ -26,8 +26,7 @@ RCT_EXPORT_MODULE(NativeDesktopClipboard)
           if (rich) [item setString:rich.string forType:NSPasteboardTypeString];
         }
         [board clearContents];
-        if (![board writeObjects:@[item]]) { reject(@"E_CLIPBOARD", @"Could not write clipboard", nil); return; }
-        resolve(@"null"); return;
+        resolve(SparkJSON(@([board writeObjects:@[item]]))); return;
       }
       NSString *text = [board stringForType:html ? NSPasteboardTypeHTML : NSPasteboardTypeString];
       if (!text) {

@@ -77,9 +77,11 @@ struct SparkClipboard {
           if (decoder.DecoderInformation().CodecId() != Imaging::BitmapDecoder::PngDecoderId()) throw hresult_invalid_argument(L"Clipboard image must be PNG");
           data.SetBitmap(Streams::RandomAccessStreamReference::CreateFromStream(stream));
         }
+        bool written = true;
         if (args.Size() == 0) Transfer::Clipboard::Clear();
-        else { Transfer::Clipboard::SetContent(data); Transfer::Clipboard::Flush(); }
-        promise.Resolve("null");
+        else { Transfer::Clipboard::SetContent(data); written = Transfer::Clipboard::Flush(); }
+        // setString mirrors Expo's boolean result; write keeps reporting failure by exception only.
+        promise.Resolve(method == "setString" ? (written ? "true" : "false") : "null");
       } else if (method == "clear") { Transfer::Clipboard::Clear(); promise.Resolve("null"); }
       else {
         auto data = Transfer::Clipboard::GetContent();
