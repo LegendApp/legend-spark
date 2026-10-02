@@ -43,10 +43,16 @@ async function call<T = void>(method: string, args: object): Promise<T> {
   if (!validResponse(method, value)) throw new SparkError("E_INVALID_DATA", "Invalid native file response");
   return value as T;
 }
+/** Rejects unknown or extra option keys so a misspelled option can never silently no-op. */
+function checkedOptions<T extends object>(options: T, allowed: readonly string[], label: string): T {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", `Expected ${label} options`);
+  for (const key of Object.keys(options)) if (!allowed.includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown ${label} option: ${key}`);
+  return options;
+}
 function recursiveOption(options: { recursive?: boolean }, fallback: boolean): boolean {
-  if (!options || typeof options !== "object" || Object.keys(options).some(key => key !== "recursive")) throw new SparkError("E_UNSUPPORTED_OPTION", "Expected recursive options");
-  if (options.recursive !== undefined && typeof options.recursive !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "recursive must be a boolean");
-  return options.recursive ?? fallback;
+  const value = checkedOptions(options, ["recursive"], "recursive");
+  if (value.recursive !== undefined && typeof value.recursive !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "recursive must be a boolean");
+  return value.recursive ?? fallback;
 }
 export async function getDirectory(kind: "data" | "cache" | "temp"): Promise<string> {
   if (!["data", "cache", "temp"].includes(kind)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid directory kind");
@@ -102,11 +108,18 @@ export async function watch(path: string, listener: (path: string) => void, opti
   return asyncRegistration(() => { removed = true; subscription.remove(); }, async () => { await call("unwatch", { id }); });
 }
 /** read/readWrite require an existing regular file. write truncates; createNew rejects if it exists. */
-export async function openFile(path: string, options: OpenFileOptions = {}) { return createFileHandle(call, absolute(path), options.mode); }
+export async function openFile(path: string, options: OpenFileOptions = {}) {
+  checkedOptions(options, ["mode"], "openFile");
+  return createFileHandle(call, absolute(path), options.mode);
+}
 /** Pull-based binary stream; closes on EOF, error, abort, or early loop exit. */
-export const readChunks = (path: string, options: ReadChunksOptions = {}) => iterateFile(() => openFile(path), options);
+export function readChunks(path: string, options: ReadChunksOptions = {}): AsyncGenerator<Uint8Array> {
+  checkedOptions(options, ["offset", "chunkSize", "signal"], "readChunks");
+  return iterateFile(() => openFile(path), options);
+}
 /** Failure leaves a partial file; use a temporary file + move for publication. */
 export async function writeChunks(path: string, chunks: AsyncIterable<Uint8Array> | Iterable<Uint8Array>, options: WriteChunksOptions = {}): Promise<number> {
+  checkedOptions(options, ["mode", "signal"], "writeChunks");
   if (options.mode !== undefined && options.mode !== "write" && options.mode !== "createNew") throw new SparkError("E_INVALID_ARGUMENT", "Streaming writes require write or createNew mode");
   return writeFileChunks(() => openFile(path, { mode: options.mode ?? "write" }), chunks, options.signal);
 }

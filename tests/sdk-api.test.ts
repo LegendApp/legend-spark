@@ -104,6 +104,16 @@ test("filesystem binary and mutation APIs preserve paths and opt-in recursive de
   await files.mkdir("/dir"); await files.list("/dir"); await files.copy("/a", "/b"); await files.move("/b", "/c"); await files.remove("/dir"); await files.remove("/dir", { recursive: true });
   expect(calls[1]?.args.path).toBe("/tmp/a b"); expect(calls.filter(call => call.method === "remove").map(call => call.args.recursive)).toEqual([false, true]);
 });
+test("misspelled file options reject before any native dispatch", async () => {
+  const previous = calls.length;
+  await expect(files.openFile("/a", { modee: "write" } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(files.writeChunks("/a", [], { modee: "write" } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(() => files.readChunks("/a", { chunksize: 1024 } as any)).toThrow(/readChunks/);
+  await expect(files.mkdir("/a", { recursize: true } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(files.remove("/a", { force: true } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(files.watch("/a", () => {}, { recursize: true } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(previous);
+});
 test("watches filter by registration id and remove idempotently", async () => {
   const observed: string[] = []; const first = await files.watch("/first", path => observed.push(path)); const second = await files.watch("/second", path => observed.push(path));
   const firstID = calls[0]?.args.id; const secondID = calls[1]?.args.id;
