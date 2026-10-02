@@ -483,6 +483,7 @@ static char LegendToolbarSearchButtonKey;
 static char LegendToolbarSearchContainerKey;
 static char LegendToolbarSearchWidthConstraintKey;
 static const CGFloat LegendToolbarSearchCollapsedSize = 34;
+static const CGFloat LegendToolbarIconControlWidth = 36;
 
 // AppKit synchronizes all toolbars with the same identifier as a family.
 // Our windows own independent item state, including across React reloads.
@@ -1407,9 +1408,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
       @"instanceId": config[@"instanceId"] ?: @"",
     };
     if (isMenuButton) {
-      // An icon-only control has a symbol and no title to show, so never substitute the
-      // fallback label: it would print the item ID where the icon belongs.
-      NSString *title = image ? ([config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : @"") : label;
+      // The fallback name identifies the item; it is never what the control displays, so an
+      // item without a label stays a bare icon instead of printing that identifier.
+      NSString *title = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : @"";
       NSButton *button = [NSButton buttonWithTitle:title target:self action:@selector(toolbarButtonItemPressed:)];
       button.bezelStyle = NSBezelStyleRounded;
       button.controlSize = NSControlSizeRegular;
@@ -1423,7 +1424,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
         button.imagePosition = title.length > 0 ? NSImageLeft : NSImageOnly;
       }
       NSFont *font = button.font ?: [NSFont systemFontOfSize:NSFont.systemFontSize];
-      CGFloat buttonWidth = widthNumber ? widthNumber.doubleValue : MAX(148, [title sizeWithAttributes:@{NSFontAttributeName: font}].width + (image ? 64 : 52));
+      CGFloat textWidth = [title sizeWithAttributes:@{NSFontAttributeName: font}].width + (title.length > 0 ? (image ? 64 : 52) : 0);
+      CGFloat buttonWidth = widthNumber ? widthNumber.doubleValue
+        : MAX(title.length > 0 ? 148 : LegendToolbarIconControlWidth, textWidth);
       button.frame = NSMakeRect(0, 0, buttonWidth, MAX(28, button.fittingSize.height));
       objc_setAssociatedObject(button, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
       toolbarItem.view = button;
