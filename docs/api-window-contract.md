@@ -80,7 +80,7 @@ interface WindowInfo {
 
 type CloseResult = { closed: true } | { closed: false; reason: 'vetoed' };
 
-getWindowAvailability(): Promise<Availability>;
+getWindowAvailability(): Availability;
 openWindow(options: WindowOpenOptions): Promise<WindowInfo>;
 getWindow(id: WindowId): Promise<WindowInfo>;
 listWindows(): Promise<WindowInfo[]>;

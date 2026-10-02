@@ -8,7 +8,7 @@ import { getNativeDisplays, isBounds, isInfo, record, subscribeToWindowInstance,
 import type { CenterWindowOptions, CloseResult, DisplayInfo, ShowWindowOptions, WindowBounds, WindowEventMap, WindowInfo, WindowOpenOptions, WindowUpdateOptions } from "./types";
 export type * from "./types";
 
-export async function getWindowAvailability(): Promise<Availability> {
+export function getWindowAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
   if (!Native) return { available: false, reason: "missing-module" };
   if (Platform.OS === "macos") try { macosNative(); } catch { return { available: false, reason: "missing-module" }; }

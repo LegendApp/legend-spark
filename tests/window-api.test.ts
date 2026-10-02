@@ -10,6 +10,12 @@ const emit = (event: object) => listeners.forEach(listener => listener({ windowI
 const tick = async () => { for (let n=0;n<10;n++) await Promise.resolve(); };
 beforeEach(() => { platform.OS = "windows"; call.mockReset().mockImplementation(async (method: string) => JSON.stringify(["open", "info", "observe", "completeOpen"].includes(method) ? info : method === "close" ? { closed: true } : null)); managed.openWindow.mockClear(); managed.setWindowOptions.mockClear(); listeners.clear(); });
 afterEach(() => vi.restoreAllMocks());
+test("availability is answered synchronously without a native call", async () => {
+  expect(windows.getWindowAvailability()).toEqual({ available: true });
+  platform.OS = "ios";
+  expect(windows.getWindowAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
+  expect(call).not.toHaveBeenCalled();
+});
 test("invalid arguments reject asynchronously before native calls", async () => {
   for (const id of ["", "main", "../editor"]) await expect(windows.openWindow({ id, component: "Editor" })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   await expect(windows.setWindowBounds("editor", { ...info.bounds, x: NaN })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
