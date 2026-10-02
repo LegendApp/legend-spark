@@ -163,8 +163,9 @@ must be disposed; native module invalidation also releases resources on reload.
 ## WebView and SQLite
 
 WebView uses exactly react-native-webview 16.0.0 (the upstream `next` release with
-macOS Fabric recycling fixes). The framework preserves its upstream component
-and prop APIs, including onMessage, injectedJavaScript and navigation callbacks.
+macOS Fabric recycling fixes). The component takes React Native's view props plus
+Spark's own source, message, script-injection and navigation callbacks; upstream's
+platform-specific props stay private and an unsupported one rejects.
 No framework native methods are exposed to web pages automatically. Define an
 explicit navigation policy and expose only intended operations in any message
 handler. It uses WebKit on macOS, not Chromium.

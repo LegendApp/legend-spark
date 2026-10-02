@@ -1,4 +1,4 @@
-import type { StyleProp, ViewStyle } from "react-native";
+import type { ViewProps } from "react-native";
 export type WebViewSource =
   | { uri: string; headers?: Record<string, string>; html?: never; baseUri?: never }
   | { html: string; baseUri?: string; uri?: never; headers?: never };
@@ -8,11 +8,9 @@ export type WebViewNavigationRequest = { uri: string; mainFrame: boolean | null 
 export type WebViewErrorEvent =
   | { type: "load"; uri: string; code: number; message: string }
   | { type: "http"; uri: string; status: number; message: string };
-export interface WebViewProps {
+/** React Native's view props are accepted; WebView-specific behavior is owned here. Children are not: the rendered content is the source document. */
+export interface WebViewProps extends Omit<ViewProps, "children"> {
   source: WebViewSource;
-  style?: StyleProp<ViewStyle>;
-  testID?: string;
-  accessibilityLabel?: string;
   javaScriptEnabled?: boolean;
   /** Script executed after page load. Applies to trusted document content. */
   injectedJavaScript?: string;

@@ -1,19 +1,28 @@
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import type { WebViewProps as BackendProps } from "react-native-webview";
+import { viewPropKeys } from "./view-props";
+import type { ViewPropKey } from "./view-props";
 import type { WebViewProps, WebViewRef } from "./types";
 
-const allowedProps = new Set(["source", "style", "testID", "accessibilityLabel", "javaScriptEnabled", "injectedJavaScript", "allowedOrigins", "onMessage", "onLoad", "onError", "onNavigationChange", "onNavigationRequest"]);
+const ownedProps = new Set(["source", "javaScriptEnabled", "injectedJavaScript", "allowedOrigins", "onMessage", "onLoad", "onError", "onNavigationChange", "onNavigationRequest"]);
+/** React Native view props pass through; upstream WebView's specialized surface stays private. */
+const forwardedProps = new Set<string>(viewPropKeys);
 export function backendProps(props: WebViewProps): BackendProps {
   for (const key of Object.keys(props)) {
-    if (!allowedProps.has(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported WebView prop: ${key}`);
+    if (!ownedProps.has(key) && !forwardedProps.has(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported WebView prop: ${key}`);
   }
   const { source } = props;
   if (!source || (typeof source.uri === "string") === (typeof source.html === "string")) {
     throw new SparkError("E_INVALID_ARGUMENT", "WebView source must specify either uri or html");
   }
+  const view: Record<string, unknown> = {};
+  for (const key of viewPropKeys) {
+    const value = props[key as ViewPropKey];
+    if (value !== undefined) view[key] = value;
+  }
   return {
+    ...view,
     source: typeof source.html === "string" ? { html: source.html, baseUrl: source.baseUri } : { uri: source.uri!, headers: source.headers },
-    style: props.style, testID: props.testID, accessibilityLabel: props.accessibilityLabel,
     javaScriptEnabled: props.javaScriptEnabled ?? true,
     injectedJavaScript: props.injectedJavaScript,
     originWhitelist: props.allowedOrigins ? [...props.allowedOrigins] : typeof source.html === "string" ? ["*"] : ["http://*", "https://*"],
