@@ -60,6 +60,10 @@ test("sidebar data selection can be cleared and unknown/disabled choices reject"
   expect(onSelectionChange).toHaveBeenCalledWith({ id: null }); native = rendered.root.findByType("Sidebar").props; expect(native.selectedId).toBe("a"); expect(native.selectionRevision).toBe(1);
   native.onSidebarSelectionChange({ nativeEvent: { id: "b" } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onSelectionChange).toHaveBeenCalledTimes(1);
 });
+test("sidebar selection has no silent write path", async () => {
+  await expect(mount(React.createElement(Sidebar, { items: [{ id: "a", label: "A" }], selectedId: null } as never))).rejects.toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  await expect(mount(React.createElement(Sidebar, { items: [{ id: "a", label: "A" }], selectedId: null, onSelectionChange: "nope" } as never))).rejects.toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+});
 test("sidebar selection acknowledgments reuse the serialized rows and refreshed items replace the cache", async () => {
   const stringify = vi.spyOn(JSON, "stringify"), onSelectionChange = vi.fn();
   const items = [{ id: "a", label: "A" }];
@@ -75,7 +79,7 @@ test("sidebar selection acknowledgments reuse the serialized rows and refreshed 
 });
 test("custom sidebar rows expose owned context-menu coordinates", async () => {
   const onContextMenu = vi.fn();
-  await mount(React.createElement(Sidebar, { selectedId: null, children: React.createElement(SidebarItem, { id: "row", rowHeight: "auto", onContextMenu }, "Content") }));
+  await mount(React.createElement(Sidebar, { selectedId: null, onSelectionChange: vi.fn(), children: React.createElement(SidebarItem, { id: "row", rowHeight: "auto", onContextMenu }, "Content") }));
   const native = rendered.root.findByType("SidebarItem").props; expect(native.autoHeight).toBe(true); expect(native.itemId).toBe("row");
   native.onRightClick({ nativeEvent: { x: 1, y: 2, pageX: 10, pageY: 20, altKey: false, ctrlKey: true, metaKey: false, shiftKey: false, button: 2 } });
   expect(onContextMenu).toHaveBeenCalledWith({ id: "row", position: { x: 1, y: 2 }, windowPosition: { x: 10, y: 20 }, modifiers: { alt: false, control: true, meta: false, shift: false } });

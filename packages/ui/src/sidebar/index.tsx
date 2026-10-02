@@ -21,7 +21,7 @@ export interface SidebarBaseProps extends Omit<SpecializedViewProps, "children">
   defaultRowHeight?: number;
   selectedId: string | null;
   onContentLayout?: (event: SidebarContentLayoutEvent) => void;
-  onSelectionChange?: (event: SidebarSelectionEvent) => void;
+  onSelectionChange: (event: SidebarSelectionEvent) => void;
 }
 export type SidebarProps = SidebarBaseProps & ({ items: readonly SidebarItemData[]; children?: never } | { items?: never; children: ReactNode });
 export interface SidebarItemProps extends SpecializedViewProps {
@@ -47,7 +47,8 @@ function childRows(children: ReactNode): ReactElement<SidebarItemProps>[] {
 }
 export function Sidebar({ items, children, selectedId, contentInsetTop = 0, defaultRowHeight = 28, onContentLayout, onSelectionChange, ref, onError, ...props }: SidebarProps) {
   finite(contentInsetTop, "content inset"); finite(defaultRowHeight, "row height", 1);
-  callback(onContentLayout, "content layout"); callback(onSelectionChange, "selection");
+  callback(onContentLayout, "content layout");
+  if (typeof onSelectionChange !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Sidebar selection is controlled and requires onSelectionChange");
   if (items !== undefined && (children !== undefined || !Array.isArray(items))) throw new SparkError("E_INVALID_ARGUMENT", "Use either items or SidebarItem children");
   const { selectableIds, itemsJson } = useMemo(() => {
     const rows = items === undefined ? childRows(children) : [];
