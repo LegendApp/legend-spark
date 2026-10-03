@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, ftruncateSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { open } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -10,7 +11,113 @@ import { VERSION } from "./project.ts";
 import { installedRelease, type RunnerAsset } from "./release.ts";
 
 type Dependencies = { fetch: typeof fetch; run: typeof run };
+type RunnerLockRelease = (() => Promise<void>) & { assertAlive(): void };
 const defaults: Dependencies = { fetch: globalThis.fetch, run };
+function readLegacyPid(lock: string): number | undefined {
+  try {
+    const content = readFileSync(lock, "utf8").trim();
+    if (/^\d+$/.test(content)) return Number(content);
+  } catch (error: any) { if (error.code !== "ENOENT") throw error; }
+  return undefined;
+}
+/** The kernel releases this advisory lock if the installer exits, including on a crash. */
+export async function acquireRunnerLock(lock: string, waitMs = 600_000): Promise<RunnerLockRelease> {
+  const deadline = Date.now() + waitMs;
+  let child: ReturnType<typeof spawn>;
+  let exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
+  while (true) {
+    if (Date.now() >= deadline) throw new Error("Another process is installing Runner. Retry desktop launch when it finishes.");
+    const existingPid = readLegacyPid(lock);
+    if (existingPid) {
+      try {
+        process.kill(existingPid, 0);
+        if (Date.now() >= deadline) throw new Error("Another process is installing Runner. Retry desktop launch when it finishes.");
+        await sleep(Math.min(1000, deadline - Date.now()));
+        continue;
+      } catch (error: any) {
+        if (error.code !== "ESRCH") throw error;
+      }
+    }
+    const existed = existsSync(lock);
+    const observed = existed ? lstatSync(lock) : undefined;
+    const remaining = Math.max(1, deadline - Date.now());
+    child = spawn("/usr/bin/lockf", ["-k", "-t", String(Math.max(1, Math.ceil(remaining / 1000))), lock, process.execPath, "-e", "process.stdout.write('locked\\n'); process.stdin.resume()"], { detached: true, stdio: ["pipe", "pipe", "pipe"] });
+    let stderr = "";
+    child.stderr!.setEncoding("utf8").on("data", chunk => { stderr += chunk; });
+    exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => child.once("close", (code, signal) => resolve({ code, signal })));
+    try {
+      await new Promise<void>((resolve, reject) => {
+        let output = "";
+        child.stdout!.setEncoding("utf8").on("data", chunk => {
+          output += chunk;
+          if (output.includes("locked\n")) resolve();
+        });
+        child.once("error", reject);
+        void exited.then(({ code }) => reject(new Error(`Could not acquire Runner install lock${stderr ? `: ${stderr.trim()}` : ` (lockf exited ${code})`}`)));
+      });
+    } catch (error) {
+      try { process.kill(-child.pid!, "SIGTERM"); } catch {}
+      await exited;
+      throw error;
+    }
+    const stopKeeper = async () => { child.stdin!.end(); await exited; };
+    let fd: number | undefined;
+    try {
+      const acquired = lstatSync(lock);
+      if (observed && (acquired.dev !== observed.dev || acquired.ino !== observed.ino)) {
+        await stopKeeper();
+        continue;
+      }
+      const content = readFileSync(lock, "utf8").trim();
+      const legacyPid = readLegacyPid(lock);
+      if (legacyPid) {
+        let legacyLive = false;
+        try { process.kill(legacyPid, 0); legacyLive = true; }
+        catch (error: any) { if (error.code !== "ESRCH") throw error; }
+        if (legacyLive) {
+          await stopKeeper();
+          if (Date.now() >= deadline) throw new Error("Another process is installing Runner. Retry desktop launch when it finishes.");
+          await sleep(Math.min(1000, deadline - Date.now()));
+          continue;
+        }
+      } else if (!content && existed) {
+        const age = Date.now() - statSync(lock).mtimeMs;
+        if (age < 30_000) {
+          await stopKeeper();
+          if (Date.now() >= deadline) throw new Error("Another process is installing Runner. Retry desktop launch when it finishes.");
+          await sleep(Math.min(1000, deadline - Date.now()));
+          continue;
+        }
+      }
+      fd = openSync(lock, "r+");
+      ftruncateSync(fd, 0);
+      writeFileSync(fd, `v2:${process.pid}`);
+      closeSync(fd); fd = undefined;
+      break;
+    } catch (error) {
+      if (fd !== undefined) {
+        try { closeSync(fd); } catch {}
+      }
+      await stopKeeper();
+      throw error;
+    }
+  }
+  let released = false;
+  let releasePromise: Promise<void> | undefined;
+  let unexpectedExit: { code: number | null; signal: NodeJS.Signals | null } | undefined;
+  void exited.then(result => { if (!released) unexpectedExit = result; });
+  const release = () => releasePromise ??= (async () => {
+    released = true;
+    child.stdin!.end();
+    const result = await exited;
+    if (result.code !== 0) throw new Error(`Runner install lock process exited unexpectedly (${result.signal ?? result.code}).`);
+  })();
+  return Object.assign(release, {
+    assertAlive() {
+      if (unexpectedExit) throw new Error(`Runner install lock process exited unexpectedly (${unexpectedExit.signal ?? unexpectedExit.code}).`);
+    },
+  });
+}
 export async function downloadAsset(asset: { url: string; size: number; sha256: string }, file: string, request: typeof fetch = globalThis.fetch) {
   for (let attempt = 0; attempt < 3; attempt++) {
     let handle: Awaited<ReturnType<typeof open>> | undefined;
@@ -55,20 +162,7 @@ export async function installRunner(asset: RunnerAsset, cache = sparkHome(), dep
   const app = path.join(destination, asset.app);
   mkdirSync(parent, { recursive: true });
   const lock = `${destination}.lock`;
-  let owned = false;
-  for (let attempt = 0; !owned && attempt < 600; attempt++) {
-    try { const fd = openSync(lock, "wx"); writeFileSync(fd, String(process.pid)); closeSync(fd); owned = true; }
-    catch (error: any) {
-      if (error.code !== "EEXIST") throw error;
-      const pid = Number(readFileSync(lock, "utf8"));
-      if (Number.isInteger(pid) && pid > 0) {
-        try { process.kill(pid, 0); }
-        catch (probe: any) { if (probe.code === "ESRCH") rmSync(lock, { force: true }); }
-      }
-      await sleep(1000);
-    }
-  }
-  if (!owned) throw new Error("Another process is installing Runner. Retry desktop launch when it finishes.");
+  const releaseLock = await acquireRunnerLock(lock);
   let staging: string | undefined;
   try {
     if (existsSync(app)) {
@@ -84,14 +178,16 @@ export async function installRunner(asset: RunnerAsset, cache = sparkHome(), dep
       // Only publisher-pinned bytes reach the platform extractor.
       await deps.run(staging, ["ditto", "-x", "-k", archive, unpacked], { capture: true });
       await verify(path.join(unpacked, asset.app), asset, deps);
+      releaseLock.assertAlive();
       renameSync(unpacked, destination);
     }
+    releaseLock.assertAlive();
     registerRuntime(app);
     console.log("Spark Runner installed and verified.");
     return app;
   } finally {
     if (staging) rmSync(staging, { recursive: true, force: true });
-    rmSync(lock, { force: true });
+    await releaseLock();
   }
 }
 export async function acquireRunner(platform: DesktopPlatform) {
