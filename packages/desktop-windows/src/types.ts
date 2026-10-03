@@ -1,3 +1,5 @@
+import type { MenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
+export type { MenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
 export type WindowId = string;
 export type DisplayId = string;
 export interface Size { width: number; height: number }
@@ -132,7 +134,7 @@ export type MacOSWindowEvent =
   | { type: "toolbarAction"; windowId: string; itemId: string }
   | { type: "toolbarSelectionChanged"; windowId: string; itemId: string; value: string }
   | { type: "toolbarSearchChanged" | "toolbarSearchSubmitted"; windowId: string; itemId: string; value: string; shiftKey: boolean }
-  | { type: "toolbarMenuAction"; windowId: string; itemId: string; action: import("@legendapp/spark-desktop-app/src/contracts/menu").MenuAction };
+  | { type: "toolbarMenuAction"; windowId: string; itemId: string; action: MenuAction };
 export interface MacOSWindowBoundsOptions { durationMs?: number }
 export interface SetWindowBoundsOptions { macos?: MacOSWindowBoundsOptions }
 export interface MacOSWindowBlurOptions { radius: number; durationMs?: number }

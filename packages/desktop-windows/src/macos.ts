@@ -5,7 +5,7 @@ import { subscribeToWindowInstance } from "./transport";
 import { type WindowListenerOptions } from "./api";
 import { keys, number, object, text, windowId } from "./validation";
 import type { MacOSWindowBlurOptions, MacOSWindowEvent } from "./types";
-export type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSToolbarItem, MacOSToolbarOptions } from "./types";
+export type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSToolbarItem, MacOSToolbarOptions, MenuAction } from "./types";
 /** Animated frame changes go through `setWindowBounds` from `/windows` with a `macos.durationMs` group, which rejects on Windows. */
 export async function setWindowBlur(id: string, options: MacOSWindowBlurOptions): Promise<void> {
   const native = macosNative(); windowId(id); object(options, "blur options"); keys(options, ["radius", "durationMs"]);

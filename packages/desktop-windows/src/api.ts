@@ -111,6 +111,7 @@ const guards = new Map<string, AsyncRegistration>();
 const creatingGuards = new Set<string>();
 const orphanGuards = new Map<string, AsyncRegistration>();
 let guardSequence = 0;
+/** Each window accepts one close guard; a second registration rejects E_BUSY until the first is removed. Removal is idempotent. */
 export async function beforeWindowClose(id: string, handler: () => boolean | Promise<boolean>, options: WindowListenerOptions = {}): Promise<AsyncRegistration> {
   windowId(id); object(options, "guard options"); keys(options, ["onError"]);
   if (typeof handler !== "function" || (options.onError !== undefined && typeof options.onError !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Expected window close callbacks");
