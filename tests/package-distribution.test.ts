@@ -82,6 +82,13 @@ test("single Spark archive resolves public exports and preserves private native 
     writeFileSync(path.join(app, "desktop.config.json"), JSON.stringify({ name: "Packed", version: "1.0.0", projectId: "packed-test", macos: { bundleIdentifier: "org.example.packed" }, platforms: ["macos"] }));
     const req = createRequire(path.join(app, "package.json"));
     const manifest = req("@legendapp/spark/package.json");
+    expect(manifest.spark.nativePatchRequirements.schema).toBe(1);
+    expect(manifest.spark.nativePatchRequirements.frameworkVersion).toBe(VERSION);
+    expect(Object.keys(manifest.spark.nativePatchRequirements.packages).sort()).toEqual([
+      "@op-engineering/op-sqlite", "@react-native-runtimes/core", "expo-audio", "react-native-nitro-modules", "react-native-webview",
+    ]);
+    for (const requirement of Object.values(manifest.spark.nativePatchRequirements.packages) as any[])
+      expect(requirement.patchHash).toMatch(/^[a-f0-9]{64}$/);
     expect(manifest.repository).toEqual({ type: "git", url: "https://github.com/LegendApp/legend-spark.git", directory: "packages/desktop" });
     expect(manifest.homepage).toBe("https://github.com/LegendApp/legend-spark#readme");
     expect(manifest.bugs.url).toBe("https://github.com/LegendApp/legend-spark/issues");

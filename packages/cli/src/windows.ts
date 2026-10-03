@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import type { WindowsArchitecture } from "./platform.ts";
 import { run } from "./commands.ts";
 import { prepareConfig, nativePackages, runtimeFor, stateFile, readJson, writeJson, validateBuildModules, goConfigurationIssues, readAppConfig, type Runtime } from "./project.ts";
+import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 
 // Windows .cmd shims are shell programs; run the package's actual JS entry.
 export function nodeCommand(root: string, name: string, bin: string, args: string[] = []) {
@@ -50,6 +51,7 @@ export async function preserveWindowsBuildOutputs(root: string, prepare: () => P
   }
 }
 export async function prepareWindows(root: string, mode: "go" | "dev") {
+  assertNativePatchPreflight(root);
   await checkExpoDesktopNode(root);
   prepareConfig(root);
   prepareWindowsGeometry(root);
@@ -75,6 +77,7 @@ export async function prepareWindows(root: string, mode: "go" | "dev") {
 }
 export async function buildWindows(root: string, mode: string, force: boolean): Promise<{ app: string; runtime: Runtime }> {
   if (mode !== "go" && mode !== "dev") throw new Error("Windows currently supports Spark Runner runtimes and development builds. Use spark build --dev; production builds and packaging are not implemented.");
+  assertNativePatchPreflight(root);
   if (process.platform !== "win32") throw new Error("Windows native builds require Windows x64 or ARM64. Project generation and Metro bundle checks can run on macOS.");
   for (const tool of ["node", "pwsh.exe", "dotnet.exe"]) if (!which(tool)) throw new Error(`Missing ${tool}. See docs/windows-slice.md for the Windows native prerequisites.`);
   const expected = runtimeFor(root, nativePackages(root), mode);

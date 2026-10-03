@@ -1,4 +1,5 @@
 import { restoreNativeMetadata } from "./native-metadata.ts";
+import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 import { macOSReleaseSettings } from "./macos-release.ts";
 import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
@@ -40,6 +41,7 @@ import {
 } from "./project.ts";
 
 export async function analyze(root: string, packages = nativePackages(root)) {
+  assertNativePatchPreflight(root);
   if (projectPlatform(root) === "windows") throw new Error("Windows production analysis is not implemented; use spark build --dev.");
   prepareConfig(root);
   const dir = stateFile(root, "analysis");
@@ -120,6 +122,7 @@ export async function build(
   mode: "go" | "dev" | "preview" | "release",
   force = false,
 ): Promise<{ app: string; runtime: Runtime }> {
+  assertNativePatchPreflight(root);
   const lock = stateFile(root, "build.lock");
   mkdirSync(path.dirname(lock), { recursive: true });
   try {

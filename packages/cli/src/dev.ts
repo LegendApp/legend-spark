@@ -13,6 +13,7 @@ import { createRequire } from "node:module";
 const { preparePatch } = createRequire(import.meta.url)("./expo-dev-patch.cjs");
 import { findGo, readRuntime, registerRuntime } from "./local.ts";
 import { sessionStatus } from "./session-status.ts";
+import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 import {
   prepareConfig,
   dependencyStamp,
@@ -30,6 +31,7 @@ import {
 type BundleOptions = { dev?: boolean; minify?: boolean; https?: boolean; args?: string[] };
 
 export async function launch(root: string, app: string, port?: number, options: BundleOptions = {}) {
+  assertNativePatchPreflight(root);
   if (readRuntime(app)?.platform === "windows") {
     if (process.platform !== "win32") throw new Error("Launch the Windows runtime on Windows.");
     const nativePort = await windowsMetroPort(root, port ?? 8081, options);
@@ -77,6 +79,7 @@ export async function dev(
   noOpen = false,
   appArgs: string[] = [],
 ) {
+  assertNativePatchPreflight(root);
   const platform = projectPlatform(root);
   preparePatch(root);
   let port: number | undefined;

@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import os from "node:os";
+import { nativePatchRequirements } from "./native-patch-requirements.ts";
 
 /** One published archive; native modules retain private identities for codegen and pruning. */
 export async function packSpark(root: string, output: string, release?: ReleaseManifest) {
@@ -39,6 +40,7 @@ export async function packSpark(root: string, output: string, release?: ReleaseM
     const publicPackage = packages.find(pkg => pkg.json.name === "@legendapp/spark")!;
     await unpack(await pack(path.join(root, "packages", publicPackage.directory)), stage);
     const manifest = JSON.parse(readFileSync(path.join(stage, "package.json"), "utf8"));
+    manifest.spark = { ...manifest.spark, nativePatchRequirements: nativePatchRequirements(root, manifest.version) };
     const bundled = packages.filter(pkg => pkg !== publicPackage);
     if (bundled.some(pkg => pkg.json.private !== true)) throw new Error("Implementation packages must be private");
     const names = new Set(packages.map(pkg => pkg.json.name));
