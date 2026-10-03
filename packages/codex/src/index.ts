@@ -39,7 +39,7 @@ export async function runCodexPrompt(prompt: string, options: CodexRunOptions = 
   for (const key of Object.keys(options)) if (!["cwd", "developerInstructions", "outputSchema", "reasoningEffort", "timeoutMs"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown Codex option: ${key}`);
   for (const key of ["cwd", "developerInstructions"] as const) if (options[key] !== undefined && (typeof options[key] !== "string" || options[key].includes("\0"))) throw new SparkError("E_INVALID_ARGUMENT", `Invalid ${key}`);
   if (options.reasoningEffort !== undefined && !["minimal", "low", "medium", "high", "xhigh"].includes(options.reasoningEffort)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown reasoning effort");
-  if (options.timeoutMs !== undefined && (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0)) throw new SparkError("E_INVALID_ARGUMENT", "timeoutMs must be positive and finite");
+  if (options.timeoutMs !== undefined && (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1_000 || options.timeoutMs > 86_400_000)) throw new SparkError("E_INVALID_ARGUMENT", "timeoutMs must be a whole number from 1000 to 86400000 milliseconds");
   if (options.outputSchema !== undefined && (!options.outputSchema || typeof options.outputSchema !== "object" || Array.isArray(options.outputSchema))) throw new SparkError("E_INVALID_ARGUMENT", "Expected a JSON schema object");
   let schema = "";
   try { if (options.outputSchema) schema = JSON.stringify(options.outputSchema); }

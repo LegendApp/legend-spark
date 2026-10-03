@@ -1,4 +1,6 @@
+#if !defined(SPARK_CODEX_TESTING)
 #include "HybridCodexAppServer.hpp"
+#endif
 
 #import <Foundation/Foundation.h>
 
@@ -10,11 +12,14 @@
 #include <condition_variable>
 #include <csignal>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <fcntl.h>
 #include <map>
 #include <mutex>
 #include <optional>
+#include <poll.h>
 #include <set>
 #include <spawn.h>
 #include <stdexcept>
@@ -29,11 +34,26 @@ extern char** environ;
 
 namespace margelo::nitro::legendapps::codex {
 
+#if defined(SPARK_CODEX_TESTING)
+struct CodexAvailability {
+  bool available; std::string codexPath; std::string message; std::string userAgent;
+  CodexAvailability(bool available, std::string codexPath, std::string message, std::string userAgent)
+      : available(available), codexPath(std::move(codexPath)), message(std::move(message)), userAgent(std::move(userAgent)) {}
+};
+struct CodexRunResult {
+  std::string model; std::string output; std::string threadId; std::string turnId; std::string userAgent;
+  CodexRunResult(std::string model, std::string output, std::string threadId, std::string turnId, std::string userAgent)
+      : model(std::move(model)), output(std::move(output)), threadId(std::move(threadId)), turnId(std::move(turnId)), userAgent(std::move(userAgent)) {}
+};
+#endif
+
 namespace {
 
 constexpr size_t kMaximumMessageBytes = 16 * 1024 * 1024;
 constexpr size_t kMaximumStderrBytes = 16 * 1024;
 constexpr double kInitializeTimeoutMs = 15'000;
+constexpr double kMaximumRunTimeoutMs = 86'400'000;
+constexpr size_t kMaximumPreAckBytes = kMaximumMessageBytes;
 
 using Clock = std::chrono::steady_clock;
 
@@ -265,6 +285,10 @@ struct TurnState {
   std::string output;
   std::string threadId;
   bool done = false;
+  bool acknowledged = false;
+  uint64_t sequence = 0;
+  size_t preAckBytes = 0;
+  bool preAckLimitExceeded = false;
 };
 
 class CodexProcessSupervisor {
@@ -315,9 +339,24 @@ public:
       if (prompt.empty()) {
         throw std::runtime_error("Enter a prompt before running Codex.");
       }
-      if (!std::isfinite(timeoutMs) || timeoutMs < 1'000) {
-        throw std::runtime_error("Codex timeout must be at least one second.");
+      if (!std::isfinite(timeoutMs) || std::floor(timeoutMs) != timeoutMs || timeoutMs < 1'000 || timeoutMs > kMaximumRunTimeoutMs) {
+        throw std::runtime_error("Codex timeout must be a whole number from 1000 to 86400000 milliseconds.");
       }
+
+      uint64_t acceptedCancellationGeneration = 0;
+      {
+        std::lock_guard lock(mutex_);
+        acceptedCancellationGeneration = cancelGeneration_;
+        ++activeRuns_;
+      }
+      struct RunGuard {
+        CodexProcessSupervisor* owner;
+        ~RunGuard() { std::lock_guard lock(owner->mutex_); --owner->activeRuns_; owner->condition_.notify_all(); }
+      } runGuard{this};
+      auto throwIfCancelled = [&]() {
+        std::lock_guard lock(mutex_);
+        if (cancelGeneration_ != acceptedCancellationGeneration) throw std::runtime_error("Codex request was cancelled.");
+      };
 
       const auto deadline = Clock::now() + std::chrono::milliseconds(static_cast<int64_t>(timeoutMs));
       NSString* requestedCwd = cwd.empty() ? defaultWorkingDirectory() : toNSString(cwd);
@@ -332,16 +371,22 @@ public:
         useExecFallback = useExecFallback_;
       }
       if (useExecFallback) {
+        throwIfCancelled();
         return runExecFallback(
             prompt,
             requestedCwd,
             reasoningEffort,
             outputSchemaJson,
             developerInstructions,
+            acceptedCancellationGeneration,
             std::min(deadline, Clock::now() + std::chrono::seconds(20)));
       }
 
-      ensureInitialized();
+      try { ensureInitialized(acceptedCancellationGeneration, deadline); } catch (...) { throwIfCancelled(); throw; }
+      throwIfCancelled();
+      uint64_t runProcessGeneration = 0;
+      { std::lock_guard lock(mutex_); runProcessGeneration = processGeneration_; }
+      if (runProcessGeneration == 0) throw std::runtime_error("Codex app-server is not running.");
 
       NSMutableDictionary* threadParams = [@{
         @"approvalPolicy": @"never",
@@ -372,24 +417,28 @@ public:
       NSDictionary* threadResponse = nil;
       try {
         const auto threadDeadline = std::min(deadline, Clock::now() + std::chrono::seconds(5));
-        threadResponse = request(@"thread/start", threadParams, threadDeadline);
+        threadResponse = request(@"thread/start", threadParams, threadDeadline, acceptedCancellationGeneration, runProcessGeneration);
       } catch (const std::exception& error) {
+        throwIfCancelled();
         if (!containsInsensitive(error.what(), "did not respond in time")) {
           throw;
         }
         {
           std::lock_guard lock(mutex_);
+          if (processGeneration_ != runProcessGeneration) throw std::runtime_error("Codex app-server restarted during thread startup.");
           useExecFallback_ = true;
         }
-        terminateCurrentProcess();
+        terminateProcessGeneration(runProcessGeneration, "Codex app-server did not respond during thread startup.");
         return runExecFallback(
             prompt,
             requestedCwd,
             reasoningEffort,
             outputSchemaJson,
             developerInstructions,
+            acceptedCancellationGeneration,
             std::min(deadline, Clock::now() + std::chrono::seconds(20)));
       }
+      throwIfCancelled();
       throwForResponseError(threadResponse, "Codex could not start a thread");
       NSDictionary* threadResult = dictionaryValue(threadResponse[@"result"]);
       NSDictionary* thread = dictionaryValue(threadResult[@"thread"]);
@@ -414,22 +463,50 @@ public:
         turnParams[@"outputSchema"] = schema;
       }
 
-      NSDictionary* turnResponse = request(@"turn/start", turnParams, deadline);
-      throwForResponseError(turnResponse, "Codex could not start a turn");
-      NSDictionary* turnResult = dictionaryValue(turnResponse[@"result"]);
-      NSDictionary* turn = dictionaryValue(turnResult[@"turn"]);
-      std::string turnId = toString(stringValue(turn[@"id"]));
-      if (turnId.empty()) {
-        throw std::runtime_error(
-            "Codex app-server returned an invalid turn response. Update Codex, then reopen the app.");
-      }
-
-      uint64_t cancelGeneration = 0;
       {
         std::lock_guard lock(mutex_);
+        if (processGeneration_ != runProcessGeneration) throw std::runtime_error("Codex app-server restarted before turn startup.");
+        ++pendingTurnStarts_;
+      }
+      bool pendingTurnStart = true;
+      auto finishPendingTurnStart = [&]() {
+        if (!pendingTurnStart) return;
+        std::lock_guard lock(mutex_);
+        if (processGeneration_ == runProcessGeneration && pendingTurnStarts_ > 0) --pendingTurnStarts_;
+        pendingTurnStart = false;
+      };
+      std::string turnId;
+      uint64_t cancelGeneration = acceptedCancellationGeneration;
+      try {
+        NSDictionary* turnResponse = request(@"turn/start", turnParams, deadline, acceptedCancellationGeneration, runProcessGeneration);
+#if defined(SPARK_CODEX_TESTING)
+        if (const char* delay = std::getenv("CODEX_TEST_DELAY_AFTER_TURN_RESPONSE_MS")) {
+          const int milliseconds = std::max(0, std::min(1000, std::atoi(delay)));
+          std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+        }
+#endif
+        throwIfCancelled();
+        throwForResponseError(turnResponse, "Codex could not start a turn");
+        NSDictionary* turnResult = dictionaryValue(turnResponse[@"result"]);
+        NSDictionary* turn = dictionaryValue(turnResult[@"turn"]);
+        turnId = toString(stringValue(turn[@"id"]));
+        if (turnId.empty()) {
+          throw std::runtime_error(
+              "Codex app-server returned an invalid turn response. Update Codex, then reopen the app.");
+        }
+        std::lock_guard lock(mutex_);
+        if (processGeneration_ != runProcessGeneration) throw std::runtime_error("Codex app-server restarted before the turn was accepted.");
         TurnState& state = turns_[turnId];
         state.threadId = threadId;
-        cancelGeneration = cancelGeneration_;
+        preAckBytes_ -= state.preAckBytes;
+        state.preAckBytes = 0;
+        state.acknowledged = true;
+        --pendingTurnStarts_;
+        pendingTurnStart = false;
+      } catch (...) {
+        finishPendingTurnStart();
+        throwIfCancelled();
+        throw;
       }
 
       TurnState completed;
@@ -437,24 +514,24 @@ public:
         std::unique_lock lock(mutex_);
         const bool finished = condition_.wait_until(lock, deadline, [&]() {
           const auto state = turns_.find(turnId);
-          return processGeneration_ == 0 || cancelGeneration_ != cancelGeneration ||
+          return processGeneration_ != runProcessGeneration || cancelGeneration_ != cancelGeneration ||
               (state != turns_.end() && state->second.done);
         });
         auto state = turns_.find(turnId);
-        if (finished && state != turns_.end() && state->second.done) {
+        if (cancelGeneration_ != cancelGeneration) {
+          throw std::runtime_error("Codex request was cancelled.");
+        } else if (processGeneration_ != runProcessGeneration) {
+          const std::string detail = processError_.empty() ? "Codex app-server restarted while the request was running." : processError_;
+          throw std::runtime_error(actionableError(detail));
+        } else if (finished && state != turns_.end() && state->second.done) {
           completed = state->second;
           turns_.erase(state);
-        } else if (cancelGeneration_ != cancelGeneration) {
-          turns_.erase(turnId);
-          throw std::runtime_error("Codex request was cancelled.");
-        } else if (processGeneration_ == 0) {
-          const std::string detail = processError_.empty() ? "Codex app-server exited unexpectedly." : processError_;
-          turns_.erase(turnId);
-          throw std::runtime_error(actionableError(detail));
+          retireTurnLocked(turnId);
         } else {
           turns_.erase(turnId);
+          retireTurnLocked(turnId);
           lock.unlock();
-          interruptTurn(threadId, turnId);
+          interruptTurn(threadId, turnId, runProcessGeneration);
           const int seconds = static_cast<int>(timeoutMs / 1000.0);
           throw std::runtime_error(
               "Codex did not finish within " + std::to_string(seconds) +
@@ -464,6 +541,9 @@ public:
 
       if (!completed.error.empty()) {
         throw std::runtime_error(actionableError(completed.error));
+      }
+      if (completed.preAckLimitExceeded) {
+        throw std::runtime_error("Codex app-server response exceeded the 16 MiB pre-ack notification limit.");
       }
       if (completed.output.empty()) {
         throw std::runtime_error(
@@ -476,26 +556,25 @@ public:
   }
 
   double cancelActiveRuns() {
-    std::vector<std::pair<std::string, std::string>> activeTurns;
+    pid_t serverPid = -1;
+    uint64_t serverGeneration = 0;
+    size_t acceptedRuns = 0;
     std::vector<pid_t> fallbackPids;
     {
       std::lock_guard lock(mutex_);
       ++cancelGeneration_;
-      for (const auto& [turnId, state] : turns_) {
-        if (!state.done && !state.threadId.empty()) {
-          activeTurns.emplace_back(state.threadId, turnId);
-        }
-      }
+      acceptedRuns = activeRuns_;
+      serverPid = activeRuns_ > 0 ? pid_ : -1;
+      serverGeneration = activeRuns_ > 0 ? processGeneration_ : 0;
       fallbackPids.assign(fallbackPids_.begin(), fallbackPids_.end());
       condition_.notify_all();
     }
-    for (const auto& [threadId, turnId] : activeTurns) {
-      interruptTurn(threadId, turnId);
-    }
+    if (serverGeneration > 0) terminateProcessGeneration(serverGeneration, "Codex request was cancelled.");
+    else if (serverPid > 0) kill(-serverPid, SIGTERM);
     for (pid_t pid : fallbackPids) {
       kill(pid, SIGTERM);
     }
-    return static_cast<double>(activeTurns.size() + fallbackPids.size());
+    return static_cast<double>(acceptedRuns);
   }
 
   double shutdown() {
@@ -536,14 +615,73 @@ public:
     return static_cast<double>((pid > 0 ? 1 : 0) + fallbackPids.size());
   }
 
+#if defined(SPARK_CODEX_TESTING)
+  size_t retainedTurnCountForTesting() {
+    std::lock_guard lock(mutex_);
+    return turns_.size();
+  }
+  size_t blockedWriteCountForTesting() {
+    std::lock_guard lock(mutex_);
+    return blockedWriteCount_;
+  }
+#endif
+
 private:
+  void retireTurnLocked(const std::string& turnId) {
+    if (turnId.empty() || !retiredTurnIds_.insert(turnId).second) return;
+    retiredTurnOrder_.push_back(turnId);
+    while (retiredTurnOrder_.size() > 512) {
+      retiredTurnIds_.erase(retiredTurnOrder_.front());
+      retiredTurnOrder_.pop_front();
+    }
+  }
+
+  TurnState* pendingOrActiveTurnLocked(const std::string& turnId) {
+    if (turnId.empty() || retiredTurnIds_.contains(turnId)) return nullptr;
+    auto found = turns_.find(turnId);
+    if (found != turns_.end()) return &found->second;
+    if (pendingTurnStarts_ == 0) return nullptr;
+    while (turns_.size() >= 128) {
+      auto oldest = turns_.end();
+      for (auto it = turns_.begin(); it != turns_.end(); ++it) {
+        if (!it->second.acknowledged && (oldest == turns_.end() || it->second.sequence < oldest->second.sequence)) oldest = it;
+      }
+      if (oldest == turns_.end()) return nullptr;
+      preAckBytes_ -= oldest->second.preAckBytes;
+      turns_.erase(oldest);
+    }
+    TurnState state;
+    state.sequence = ++nextTurnSequence_;
+    return &turns_.emplace(turnId, std::move(state)).first->second;
+  }
+
+  void setPreAckTextLocked(TurnState& state, std::string TurnState::*field, const std::string& value) {
+    std::string& current = state.*field;
+    if (state.acknowledged) { current = value; return; }
+    if (state.preAckLimitExceeded) return;
+    const size_t nextTotal = preAckBytes_ - current.size() + value.size();
+    if (nextTotal > kMaximumPreAckBytes) {
+      preAckBytes_ -= state.preAckBytes;
+      state.preAckBytes = 0;
+      state.output.clear();
+      state.error.clear();
+      state.preAckLimitExceeded = true;
+      return;
+    }
+    preAckBytes_ = nextTotal;
+    state.preAckBytes = state.preAckBytes - current.size() + value.size();
+    current = value;
+  }
+
   CodexRunResult runExecFallback(
       const std::string& prompt,
       NSString* requestedCwd,
       const std::string& reasoningEffort,
       const std::string& outputSchemaJson,
       const std::string& developerInstructions,
+      uint64_t acceptedCancellationGeneration,
       Clock::time_point deadline) {
+    { std::lock_guard lock(mutex_); if (cancelGeneration_ != acceptedCancellationGeneration) throw std::runtime_error("Codex request was cancelled."); }
     const std::string codexPath = resolveCodexPath();
     if (codexPath.empty()) {
       throw std::runtime_error(
@@ -664,13 +802,13 @@ private:
     }
 
     const pid_t pid = task.processIdentifier;
-    uint64_t cancelGeneration = 0;
     {
       std::lock_guard lock(mutex_);
       fallbackPids_.insert(pid);
-      cancelGeneration = cancelGeneration_;
+      if (cancelGeneration_ != acceptedCancellationGeneration) kill(pid, SIGTERM);
     }
     while (task.isRunning && Clock::now() < deadline) {
+      { std::lock_guard lock(mutex_); if (cancelGeneration_ != acceptedCancellationGeneration) break; }
       usleep(10'000);
     }
     if (task.isRunning) {
@@ -701,7 +839,7 @@ private:
 
     {
       std::lock_guard lock(mutex_);
-      if (cancelGeneration_ != cancelGeneration) {
+      if (cancelGeneration_ != acceptedCancellationGeneration) {
         throw std::runtime_error("Codex request was cancelled.");
       }
     }
@@ -729,8 +867,14 @@ private:
     return CodexRunResult("", result, "", "", userAgent_);
   }
 
-  void ensureInitialized() {
-    std::lock_guard lifecycleLock(lifecycleMutex_);
+  void ensureInitialized(uint64_t cancellationGeneration = UINT64_MAX, Clock::time_point runDeadline = Clock::time_point::max()) {
+    const auto initializeDeadline = std::min(runDeadline, Clock::now() + std::chrono::milliseconds(static_cast<int64_t>(kInitializeTimeoutMs)));
+    std::unique_lock lifecycleLock(lifecycleMutex_, std::defer_lock);
+    while (!lifecycleLock.try_lock_for(std::chrono::milliseconds(10))) {
+      std::lock_guard lock(mutex_);
+      if (cancellationGeneration != UINT64_MAX && cancelGeneration_ != cancellationGeneration) throw std::runtime_error("Codex request was cancelled.");
+      if (Clock::now() >= initializeDeadline) throw std::runtime_error("Codex app-server did not respond in time.");
+    }
     {
       std::lock_guard lock(mutex_);
       if (initialized_ && pid_ > 0) {
@@ -739,7 +883,7 @@ private:
     }
     startProcess();
     try {
-      const auto deadline = Clock::now() + std::chrono::milliseconds(static_cast<int64_t>(kInitializeTimeoutMs));
+      const auto deadline = initializeDeadline;
       NSDictionary* response = request(@"initialize", @{
         @"capabilities": @{
           @"experimentalApi": @NO,
@@ -760,7 +904,7 @@ private:
           @"title": @"Legend Apps",
           @"version": @"0.0.1",
         },
-      }, deadline);
+      }, deadline, cancellationGeneration);
       throwForResponseError(response, "Codex app-server could not initialize");
       NSDictionary* result = dictionaryValue(response[@"result"]);
       std::string userAgent = toString(stringValue(result[@"userAgent"]));
@@ -768,7 +912,7 @@ private:
         throw std::runtime_error(
             "Codex app-server returned an invalid initialize response. Update Codex, then reopen the app.");
       }
-      sendNotification(@"initialized");
+      sendNotification(@"initialized", cancellationGeneration, deadline);
       {
         std::lock_guard lock(mutex_);
         userAgent_ = userAgent;
@@ -861,6 +1005,8 @@ private:
 #if defined(F_SETNOSIGPIPE)
     fcntl(inputPipe[1], F_SETNOSIGPIPE, 1);
 #endif
+    const int inputFlags = fcntl(inputPipe[1], F_GETFL, 0);
+    if (inputFlags >= 0) fcntl(inputPipe[1], F_SETFL, inputFlags | O_NONBLOCK);
     uint64_t generation = 0;
     {
       std::lock_guard lock(mutex_);
@@ -875,6 +1021,11 @@ private:
       stderrTail_.clear();
       responses_.clear();
       ignoredResponseIds_.clear();
+      turns_.clear();
+      preAckBytes_ = 0;
+      pendingTurnStarts_ = 0;
+      retiredTurnIds_.clear();
+      retiredTurnOrder_.clear();
     }
 
     std::thread([this, fd = outputPipe[0], generation]() { readStdout(fd, generation); }).detach();
@@ -909,6 +1060,9 @@ private:
       processGeneration_ = 0;
       responses_.clear();
       ignoredResponseIds_.clear();
+      turns_.clear();
+      preAckBytes_ = 0;
+      pendingTurnStarts_ = 0;
       condition_.notify_all();
     }
     if (stdinFd >= 0) {
@@ -919,13 +1073,36 @@ private:
     }
   }
 
-  NSDictionary* request(NSString* method, NSDictionary* params, Clock::time_point deadline) {
+  void terminateProcessGeneration(uint64_t generation, const std::string& reason) {
+    pid_t pid = -1;
+    int stdinFd = -1;
+    {
+      std::lock_guard lock(mutex_);
+      if (processGeneration_ != generation) return;
+      pid = pid_;
+      stdinFd = stdinFd_;
+      pid_ = -1;
+      stdinFd_ = -1;
+      initialized_ = false;
+      processGeneration_ = 0;
+      processError_ = reason;
+      turns_.clear();
+      preAckBytes_ = 0;
+      pendingTurnStarts_ = 0;
+      condition_.notify_all();
+    }
+    if (stdinFd >= 0) close(stdinFd);
+    if (pid > 0) kill(-pid, SIGTERM);
+  }
+
+  NSDictionary* request(NSString* method, NSDictionary* params, Clock::time_point deadline, uint64_t cancellationGeneration = UINT64_MAX, uint64_t expectedGeneration = 0) {
     int64_t requestId = 0;
     uint64_t generation = 0;
     {
       std::lock_guard lock(mutex_);
       requestId = nextRequestId_++;
       generation = processGeneration_;
+      if (expectedGeneration != 0 && generation != expectedGeneration) throw std::runtime_error("Codex app-server restarted during the request.");
       if (generation == 0 || stdinFd_ < 0) {
         throw std::runtime_error(processError_.empty() ? "Codex app-server is not running." : processError_);
       }
@@ -935,17 +1112,21 @@ private:
       @"id": @(requestId),
       @"method": method,
       @"params": params,
-    }, generation);
+    }, generation, cancellationGeneration, deadline);
 
     std::string responseLine;
     {
       std::unique_lock lock(mutex_);
       const bool received = condition_.wait_until(lock, deadline, [&]() {
-        return responses_.contains(requestId) || processGeneration_ != generation;
+        return responses_.contains(requestId) || processGeneration_ != generation ||
+            (cancellationGeneration != UINT64_MAX && cancelGeneration_ != cancellationGeneration);
       });
       if (!received) {
         ignoredResponseIds_.insert(requestId);
         throw std::runtime_error("Codex app-server did not respond in time.");
+      }
+      if (cancellationGeneration != UINT64_MAX && cancelGeneration_ != cancellationGeneration) {
+        throw std::runtime_error("Codex request was cancelled.");
       }
       if (processGeneration_ != generation && !responses_.contains(requestId)) {
         throw std::runtime_error(processError_.empty() ? "Codex app-server exited unexpectedly." : processError_);
@@ -956,22 +1137,22 @@ private:
     return parseJsonObject(responseLine, "Codex app-server returned invalid JSON");
   }
 
-  void sendNotification(NSString* method) {
+  void sendNotification(NSString* method, uint64_t cancellationGeneration = UINT64_MAX, Clock::time_point deadline = Clock::time_point::max()) {
     uint64_t generation = 0;
     {
       std::lock_guard lock(mutex_);
       generation = processGeneration_;
     }
-    sendJson(@{@"method": method}, generation);
+    sendJson(@{@"method": method}, generation, cancellationGeneration, deadline);
   }
 
-  void interruptTurn(const std::string& threadId, const std::string& turnId) {
+  void interruptTurn(const std::string& threadId, const std::string& turnId, uint64_t expectedGeneration) {
     int64_t requestId = 0;
     uint64_t generation = 0;
     {
       std::lock_guard lock(mutex_);
       generation = processGeneration_;
-      if (generation == 0 || stdinFd_ < 0) {
+      if (generation == 0 || generation != expectedGeneration || stdinFd_ < 0) {
         return;
       }
       requestId = nextRequestId_++;
@@ -986,35 +1167,68 @@ private:
             @"threadId": toNSString(threadId),
             @"turnId": toNSString(turnId),
           },
-        }, generation);
+        }, generation, UINT64_MAX, Clock::now() + std::chrono::milliseconds(100));
       } catch (...) {
       }
     }
   }
 
-  void sendJson(NSDictionary* value, uint64_t generation) {
+  void sendJson(NSDictionary* value, uint64_t generation, uint64_t expectedCancellationGeneration = UINT64_MAX, Clock::time_point deadline = Clock::time_point::max()) {
     std::string json = serializeJson(value);
     json.push_back('\n');
-    std::lock_guard writeLock(writeMutex_);
+    uint64_t cancellationGeneration = 0;
+    { std::lock_guard lock(mutex_); cancellationGeneration = expectedCancellationGeneration == UINT64_MAX ? cancelGeneration_ : expectedCancellationGeneration; }
+    std::unique_lock writeLock(writeMutex_, std::defer_lock);
+    const auto writeDeadline = std::min(deadline, Clock::now() + std::chrono::seconds(1));
+    while (!writeLock.try_lock_for(std::chrono::milliseconds(10))) {
+      { std::lock_guard lock(mutex_); if (generation != processGeneration_ || (cancellationGeneration != UINT64_MAX && cancelGeneration_ != cancellationGeneration)) throw std::runtime_error("Codex request was cancelled."); }
+      if (Clock::now() >= writeDeadline) throw std::runtime_error("Timed out waiting to write to Codex app-server.");
+    }
     int fd = -1;
     {
       std::lock_guard lock(mutex_);
       if (generation == 0 || generation != processGeneration_ || stdinFd_ < 0) {
         throw std::runtime_error(processError_.empty() ? "Codex app-server is not running." : processError_);
       }
-      fd = stdinFd_;
+      fd = fcntl(stdinFd_, F_DUPFD_CLOEXEC, 0);
+      if (fd < 0) throw std::runtime_error("Could not duplicate Codex app-server input: " + std::string(strerror(errno)));
     }
     size_t offset = 0;
-    while (offset < json.size()) {
-      const ssize_t written = write(fd, json.data() + offset, json.size() - offset);
-      if (written > 0) {
-        offset += static_cast<size_t>(written);
-      } else if (written < 0 && errno == EINTR) {
-        continue;
-      } else {
-        throw std::runtime_error("Could not write to Codex app-server: " + std::string(strerror(errno)));
+    bool reportedBlocked = false;
+    try {
+      while (offset < json.size()) {
+        {
+          std::lock_guard lock(mutex_);
+          if (generation != processGeneration_ || (cancellationGeneration != UINT64_MAX && cancelGeneration_ != cancellationGeneration)) {
+            throw std::runtime_error("Codex request was cancelled.");
+          }
+        }
+        if (Clock::now() >= writeDeadline) throw std::runtime_error("Timed out writing to Codex app-server.");
+        const ssize_t written = write(fd, json.data() + offset, json.size() - offset);
+        if (written > 0) {
+          offset += static_cast<size_t>(written);
+        } else if (written < 0 && errno == EINTR) {
+          continue;
+        } else if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+          if (!reportedBlocked) {
+            std::lock_guard lock(mutex_);
+            ++blockedWriteCount_;
+            reportedBlocked = true;
+          }
+          pollfd descriptor{fd, POLLOUT, 0};
+          poll(&descriptor, 1, 25);
+        } else {
+          throw std::runtime_error("Could not write to Codex app-server: " + std::string(strerror(errno)));
+        }
       }
+    } catch (...) {
+      close(fd);
+      if (reportedBlocked) { std::lock_guard lock(mutex_); --blockedWriteCount_; }
+      if (offset > 0) terminateProcessGeneration(generation, "Codex app-server request write did not complete.");
+      throw;
     }
+    if (reportedBlocked) { std::lock_guard lock(mutex_); --blockedWriteCount_; }
+    close(fd);
   }
 
   void readStdout(int fd, uint64_t generation) {
@@ -1108,7 +1322,7 @@ private:
           const std::string text = toString(stringValue(item[@"text"]));
           std::lock_guard lock(mutex_);
           if (processGeneration_ == generation && !turnId.empty()) {
-            turns_[turnId].output = text;
+            if (TurnState* state = pendingOrActiveTurnLocked(turnId)) setPreAckTextLocked(*state, &TurnState::output, text);
           }
         }
       } else if ([method isEqualToString:@"error"]) {
@@ -1118,8 +1332,7 @@ private:
         const bool willRetry = boolValue(params[@"willRetry"]);
         std::lock_guard lock(mutex_);
         if (processGeneration_ == generation && !turnId.empty() && !willRetry) {
-          TurnState& state = turns_[turnId];
-          state.error = errorMessage;
+          if (TurnState* state = pendingOrActiveTurnLocked(turnId)) setPreAckTextLocked(*state, &TurnState::error, errorMessage);
         }
       } else if ([method isEqualToString:@"turn/completed"]) {
         NSDictionary* turn = dictionaryValue(params[@"turn"]);
@@ -1139,11 +1352,12 @@ private:
         }
         std::lock_guard lock(mutex_);
         if (processGeneration_ == generation && !turnId.empty()) {
-          TurnState& state = turns_[turnId];
+          TurnState* existing = pendingOrActiveTurnLocked(turnId); if (existing == nullptr) return;
+          TurnState& state = *existing;
           if (!output.empty()) {
-            state.output = output;
+            setPreAckTextLocked(state, &TurnState::output, output);
           }
-          state.error = errorMessage;
+          setPreAckTextLocked(state, &TurnState::error, errorMessage);
           state.done = true;
           condition_.notify_all();
         }
@@ -1203,10 +1417,9 @@ private:
       detail += " " + stderrTail_;
     }
     processError_ = actionableError(detail);
-    for (auto& [turnId, state] : turns_) {
-      state.error = processError_;
-      state.done = true;
-    }
+    turns_.clear();
+    preAckBytes_ = 0;
+    pendingTurnStarts_ = 0;
     condition_.notify_all();
   }
 
@@ -1226,9 +1439,15 @@ private:
   std::set<int64_t> ignoredResponseIds_;
   std::set<pid_t> fallbackPids_;
   std::map<std::string, TurnState> turns_;
-  std::mutex lifecycleMutex_;
+  std::set<std::string> retiredTurnIds_;
+  std::deque<std::string> retiredTurnOrder_;
+  std::timed_mutex lifecycleMutex_;
   std::mutex mutex_;
-  std::mutex writeMutex_;
+  std::timed_mutex writeMutex_;
+  size_t activeRuns_ = 0;
+  size_t blockedWriteCount_ = 0;
+  size_t preAckBytes_ = 0;
+  size_t pendingTurnStarts_ = 0;
   std::string codexPath_;
   std::string processError_;
   std::string stderrTail_;
@@ -1238,12 +1457,33 @@ private:
   pid_t pid_ = -1;
   uint64_t cancelGeneration_ = 0;
   uint64_t nextProcessGeneration_ = 0;
+  uint64_t nextTurnSequence_ = 0;
   uint64_t processGeneration_ = 0;
   bool initialized_ = false;
   bool useExecFallback_ = false;
 };
 
 } // namespace
+
+#if defined(SPARK_CODEX_TESTING)
+extern "C" int SparkCodexTestRunPrompt(const char* prompt, double timeoutMs, char* output, size_t outputCapacity, char* error, size_t errorCapacity) {
+  auto copy = [](char* target, size_t capacity, const std::string& value) {
+    if (capacity == 0) return;
+    const size_t length = std::min(capacity - 1, value.size());
+    std::memcpy(target, value.data(), length); target[length] = '\0';
+  };
+  try {
+    const auto result = CodexProcessSupervisor::shared().runPrompt(prompt ?: "", "", "low", timeoutMs, "", "");
+    copy(output, outputCapacity, result.output);
+    return 0;
+  } catch (const std::exception& exception) { copy(error, errorCapacity, exception.what()); return 1; }
+  catch (...) { copy(error, errorCapacity, "unknown native failure"); return 1; }
+}
+extern "C" double SparkCodexTestCancel() { return CodexProcessSupervisor::shared().cancelActiveRuns(); }
+extern "C" double SparkCodexTestShutdown() { return CodexProcessSupervisor::shared().shutdown(); }
+extern "C" size_t SparkCodexTestRetainedTurns() { return CodexProcessSupervisor::shared().retainedTurnCountForTesting(); }
+extern "C" size_t SparkCodexTestBlockedWrites() { return CodexProcessSupervisor::shared().blockedWriteCountForTesting(); }
+#else
 
 HybridCodexAppServer::HybridCodexAppServer() : HybridObject(TAG) {}
 
@@ -1284,5 +1524,6 @@ double HybridCodexAppServer::cancelActiveRuns() {
 double HybridCodexAppServer::shutdown() {
   return CodexProcessSupervisor::shared().shutdown();
 }
+#endif
 
 } // namespace margelo::nitro::legendapps::codex

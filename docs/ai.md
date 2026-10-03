@@ -56,13 +56,18 @@ const result = await runCodexPrompt(prompt, {
 await shutdownCodex();
 ```
 
-The supervisor is process-wide. `cancelActiveCodexRuns()` cancels all accepted Codex
-runs in this application, and returns their count. `shutdownCodex()` cancels active
-runs and stops the server; later execution restarts it. Do not treat these as cleanup
+The supervisor is process-wide. `timeoutMs` must be a whole number from 1,000 to
+86,400,000 milliseconds. `cancelActiveCodexRuns()` cancels all accepted Codex runs
+in this application, including runs still starting up, and returns their count. It
+stops the managed app-server process so a subsequent run starts a clean one.
+`shutdownCodex()` cancels active runs and stops the server; later execution restarts
+it. Do not treat these as cleanup
 for one mounted component or one request. No per-request AbortSignal is promised for
 this backend. Concurrent runs and timeout behavior remain managed by the native
 supervisor. Its isolated Codex home uses the user's existing authentication; the
 library does not log in or acquire credentials.
+The supervisor buffers at most 16 MiB of pre-ack turn notifications; an oversized
+buffer fails with an explicit protocol-limit error.
 
 The extraction preserves the existing macOS native supervisor. Transport tests and
 native compilation fixtures do not establish real authenticated inference or full

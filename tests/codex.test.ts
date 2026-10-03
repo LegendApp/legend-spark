@@ -18,14 +18,17 @@ test("Codex import/availability is safe without the optional module or supported
   await expect(runCodexPrompt("test")).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
 });
 test("Codex snapshots options, validates results and owns process-wide shutdown/restart", async () => {
-  const schema = { type: "object" }; await runCodexPrompt("test", { outputSchema: schema, timeoutMs: 500, developerInstructions: "instructions" });
-  expect(mocks.run).toHaveBeenCalledExactlyOnceWith("test", "", "low", 500, '{"type":"object"}', "instructions");
+  const schema = { type: "object" }; await runCodexPrompt("test", { outputSchema: schema, timeoutMs: 1000, developerInstructions: "instructions" });
+  expect(mocks.run).toHaveBeenCalledExactlyOnceWith("test", "", "low", 1000, '{"type":"object"}', "instructions");
   await expect(cancelActiveCodexRuns()).resolves.toBe(2); await expect(shutdownCodex()).resolves.toBe(1);
   await expect(shutdownCodex()).resolves.toBe(0); await runCodexPrompt("again"); expect(mocks.load).toHaveBeenCalledTimes(2);
   mocks.run.mockResolvedValue({ output: "bad" }); await expect(runCodexPrompt("test")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
 });
 test("Codex invalid options cause no native allocation and shutdown errors allow retry", async () => {
   await expect(runCodexPrompt("test", { timeoutMs: NaN })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(runCodexPrompt("test", { timeoutMs: 999 })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(runCodexPrompt("test", { timeoutMs: 86_400_001 })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(runCodexPrompt("test", { timeoutMs: 1000.5 })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   await expect(runCodexPrompt("test", { backend: {} } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
   expect(mocks.load).not.toHaveBeenCalled(); await runCodexPrompt("test");
   mocks.shutdown.mockImplementationOnce(() => { throw Error("busy"); }); await expect(shutdownCodex()).rejects.toMatchObject({ code: "E_NATIVE" });
