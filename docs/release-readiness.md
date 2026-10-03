@@ -95,6 +95,9 @@ Run `node tests/packed-consumer.integration.ts` against the final source before
 staging. Its report must state that install lifecycle and native compilation
 were skipped; separate native gates remain mandatory.
 
+The focused dependency-audit baseline, package call paths, and unresolved
+upstream gates are recorded in the [dependency triage note](release-evidence/dependency-triage.md).
+
 ## Promotion criteria
 
 Before a production release, attach a completed dossier for the exact candidate
