@@ -182,8 +182,11 @@ createTray(options: TrayOptions): Promise<Tray>; // menu?: readonly TrayMenuItem
 // The macos presentation group is ignored on Windows.
 
 // /shortcuts; /global-shortcuts
-registerShortcut(accelerator, handler, options?): Promise<AsyncRegistration>;
-registerGlobalShortcut(accelerator, handler, options?): Promise<AsyncRegistration>;
+registerShortcut(accelerator, handler, options?: { windowId?: string; repeat?: boolean }): Promise<AsyncRegistration>;
+registerGlobalShortcut(accelerator, handler, options?: { repeat?: boolean }): Promise<AsyncRegistration>;
+// Global repeat registers without MOD_NOREPEAT on Windows; macOS hotkey APIs never deliver
+// repeats, so repeat: true rejects E_UNSUPPORTED_OPTION there. Handler throws are isolated
+// (console.error) on both surfaces; they never break delivery to other registrations.
 ```
 
 Use portable accelerator strings and one parser. Numeric physical key codes remain an explicitly low-level keyboard API. Preserve local/global distinction, conflict failures, owner/window scope and repeat behavior. Command routing adds named actions and persisted bindings on top of the same shortcut concepts; it is not a second key syntax. Put callbacks into creation options when a resource has multiple callbacks. Use semantic role/ID targeting instead of translated menu-title matching.

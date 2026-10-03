@@ -62,7 +62,8 @@ struct SparkGlobalShortcuts {
         } else if (method == "register") {
           for (auto const &[key, existing] : current->keys) if (existing == id) { promise.Reject(React::ReactError{"E_BUSY", "Shortcut id already exists"}); return; }
           auto flags = static_cast<int>(args.GetNamedNumber(L"modifiers"));
-          UINT modifiers = MOD_NOREPEAT;
+          // MOD_NOREPEAT suppresses OS auto-repeat; repeat:true registers with repeats.
+          UINT modifiers = args.GetNamedBoolean(L"repeat", false) ? 0 : MOD_NOREPEAT;
           if (flags & (1 << 17)) modifiers |= MOD_SHIFT; if (flags & (1 << 18)) modifiers |= MOD_CONTROL;
           if (flags & (1 << 19)) modifiers |= MOD_ALT; if (flags & (1 << 20)) modifiers |= MOD_WIN;
           const auto key = Hotkeys::Key(args.GetNamedString(L"key"), modifiers);

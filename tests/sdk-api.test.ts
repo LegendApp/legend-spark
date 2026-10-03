@@ -613,6 +613,9 @@ test("shortcut cleanup stops callbacks before native completion and retries fail
 test("shortcut options are validated before registration and native results are checked", async () => {
   for (const options of [{ windowId: "" }, { repeat: "yes" }, { unknown: true }]) await expect(shortcuts.registerShortcut("Cmd+K", () => {}, options as never)).rejects.toThrow();
   await expect(globalShortcuts.registerGlobalShortcut("Cmd+K", null as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  for (const options of [{ repeat: "yes" }, { unknown: true }]) await expect(globalShortcuts.registerGlobalShortcut("Cmd+K", () => {}, options as never)).rejects.toThrow();
+  // macOS Carbon hotkeys never deliver repeats; asking for them is an unsupported option, not a silent no.
+  await expect(globalShortcuts.registerGlobalShortcut("Cmd+K", () => {}, { repeat: true })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
   expect(calls).toHaveLength(0);
   handlers.set("NativeDesktopShortcuts.register", () => true);
   await expect(shortcuts.registerShortcut("Cmd+K", () => {})).rejects.toMatchObject({ code: "E_INVALID_DATA" });
