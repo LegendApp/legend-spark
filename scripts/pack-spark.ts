@@ -60,6 +60,13 @@ export async function packSpark(root: string, output: string, release?: ReleaseM
         }
       }
     }
+    for (const name of ["expo", "react", "react-native", "react-dom"]) {
+      if (!peers[name]) throw new Error(`Spark package is missing the ${name} peer dependency`);
+      if (external[name]) throw new Error(`Singleton package ${name} cannot be both a dependency and a peer dependency`);
+    }
+    for (const name of ["@react-native-runtimes/core", "react-native-nitro-modules"]) {
+      if (!external[name]) throw new Error(`Spark package is missing required native dependency ${name}`);
+    }
     for (const pkg of bundled) {
       const destination = path.join(stage, "node_modules", pkg.json.name);
       await unpack(await pack(path.join(root, "packages", pkg.directory)), destination);
