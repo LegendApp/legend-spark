@@ -4,23 +4,28 @@ import path from "node:path";
 import { create, refreshLocalPackages } from "../packages/cli/src/create.ts";
 import { readJson, writeJson } from "../packages/cli/src/project.ts";
 import { run } from "../packages/cli/src/commands.ts";
+import { verifyLocalPackageManifest } from "./verify-local-package-manifest.ts";
 const framework = path.resolve(import.meta.dirname, "..");
 const source = path.join(framework, "examples/kitchen-sink");
 
 // Integration runners deliberately use a fresh, copied consumer they can modify.
-export async function prepareKitchenSink(root: string) {
+export async function prepareKitchenSink(root: string, packageManifest?: string) {
   const marker = path.join(root, ".spark/kitchen-sink.json");
   if (existsSync(marker) && readJson(marker).mode === "live")
     throw new Error("Use a separate directory for packaged validation; this app links to the live kitchen sink source.");
-  return prepareKitchenSinkConsumer(root);
+  return prepareKitchenSinkConsumer(root, packageManifest);
 }
 
-async function prepareKitchenSinkConsumer(root: string) {
+async function prepareKitchenSinkConsumer(root: string, packageManifest?: string) {
   const marker = path.join(root, ".spark/kitchen-sink.json");
   if (existsSync(path.join(root, "package.json")) && !existsSync(marker))
     throw new Error(`Refusing to overwrite an existing app. Choose a new kitchen-sink directory: ${root}`);
-  await run(framework, [process.execPath, "scripts/pack.ts"]);
-  const manifest = path.join(framework, "artifacts/packages/manifest.json");
+  const manifest = packageManifest ? path.resolve(packageManifest) : path.join(framework, "artifacts/packages/manifest.json");
+  if (packageManifest) {
+    const verified = await verifyLocalPackageManifest(framework, manifest);
+    console.log(`Using verified local SDK archive ${verified.sdkFile} (sha256 ${verified.sdkSha256}).`);
+  }
+  else await run(framework, [process.execPath, "scripts/pack.ts"]);
   if (!existsSync(path.join(root, "package.json"))) await create(root, manifest);
   else await refreshLocalPackages(root, manifest);
   const pkg = readJson(path.join(root, "package.json"));

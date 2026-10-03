@@ -8,12 +8,15 @@ import { build } from "../packages/cli/src/build.ts";
 import { binary, run } from "../packages/cli/src/commands.ts";
 import { availablePort, findGo } from "../packages/cli/src/local.ts";
 import { readJson, writeJson, prepareConfig, projectEnvironment, nativePackages, incompatible } from "../packages/cli/src/project.ts";
+import { runtimeTestArgs } from "./runtime-test-args.ts";
 
 const framework = path.resolve(import.meta.dirname, "..");
-const root = path.resolve(process.argv[2] ?? ".spark/runtimes-probe/SparkRuntimesProbe");
+const args = runtimeTestArgs(process.argv.slice(2), ".spark/runtimes-probe/SparkRuntimesProbe");
+const root = path.resolve(args.root);
+const packageManifest = args.packageManifest && path.resolve(args.packageManifest);
 const mode = process.argv.includes("--release") ? "release" : "dev";
 const prepareOnly = process.argv.includes("--prepare-only");
-await prepareKitchenSink(root);
+await prepareKitchenSink(root, packageManifest);
 cpSync(path.join(root, "App.tsx"), path.join(root, "KitchenSink.tsx"));
 cpSync(path.join(framework, "examples/runtimes"), root, { recursive: true });
 const directory = path.join(root, ".spark/runtimes-proof"); mkdirSync(directory, { recursive: true });
