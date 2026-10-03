@@ -42,7 +42,7 @@ async function verifyConsumerSingletons(consumer: string) {
   for (const name of pkg.spark.bundledModules as string[]) {
     const internal = path.join(vendor, name, "package.json");
     if (!existsSync(internal)) throw new Error(`Packed internal package is missing: ${path.relative(consumer, internal)}`);
-    const internalRequire = createRequire(internal);
+    const internalRequire = createRequire(realpathSync(internal));
     const internalManifest = JSON.parse(readFileSync(internal, "utf8"));
     for (const peer of expected.keys()) {
       if (!internalManifest.peerDependencies?.[peer] && !internalManifest.dependencies?.[peer]) continue;
@@ -53,6 +53,24 @@ async function verifyConsumerSingletons(consumer: string) {
     }
   }
   return Object.fromEntries(expected);
+}
+function verifyCliToolchain(consumer: string) {
+  const require = createRequire(path.join(consumer, "package.json"));
+  const sdk = require("@legendapp/spark/package.json");
+  const cliManifestPath = path.join(consumer, "node_modules/@legendapp/spark/vendor/node_modules/@legendapp/spark-cli/package.json");
+  const cli = JSON.parse(readFileSync(cliManifestPath, "utf8"));
+  if (cli.dependencies.npm !== "11.21.0" || cli.dependencies.ws !== "8.21.0") throw new Error("Packed CLI dependency pins do not include the verified npm and WebSocket fixes");
+  const cliRequire = createRequire(realpathSync(cliManifestPath));
+  const npmPath = cliRequire.resolve("npm/package.json");
+  const npm = JSON.parse(readFileSync(npmPath, "utf8"));
+  const tarPath = path.join(path.dirname(npmPath), "node_modules/tar/package.json");
+  const tar = JSON.parse(readFileSync(tarPath, "utf8"));
+  const wsPath = cliRequire.resolve("ws/package.json");
+  const ws = JSON.parse(readFileSync(wsPath, "utf8"));
+  if (npm.version !== "11.21.0" || npm.dependencies.tar !== "^7.5.22" || tar.version !== "7.5.22") throw new Error(`Packed CLI resolved npm ${npm.version} with bundled tar ${tar.version}; expected npm 11.21.0 with tar 7.5.22`);
+  if (ws.version !== "8.21.0") throw new Error(`Packed CLI resolved ws ${ws.version}; expected 8.21.0`);
+  if (sdk.dependencies.npm !== "11.21.0" || sdk.dependencies.ws !== "8.21.0") throw new Error("Packed SDK public dependency manifest does not expose the verified CLI tool versions");
+  return { npm: npm.version, tar: tar.version, ws: ws.version };
 }
 function manifest(archive: string, react: string) {
   return {
@@ -83,6 +101,7 @@ try {
   const pkg = require("@legendapp/spark/package.json");
   if (pkg.version !== VERSION || pkg.peerDependencies.react !== "19.1.4" || pkg.peerDependencies["react-native"] !== "0.81.6") throw new Error("Installed packed Spark peer baseline differs from the release manifest");
   if (pkg.peerDependencies["react-dom"] !== "19.1.4" || pkg.peerDependenciesMeta?.["react-dom"]?.optional !== true) throw new Error("React DOM must remain an optional public peer");
+  const cliToolchain = verifyCliToolchain(consumer);
   const singletonPaths = await verifyConsumerSingletons(consumer);
   const publicReact = singletonPaths.react!;
   const graph = await runNpm(consumer, ["ls", "react", "react-native", "expo", "--all", "--json"]);
@@ -144,6 +163,7 @@ try {
       const managerInstall = await runManager(manager, directory, managerInstallArgs(manager));
       if (managerInstall.status !== 0) throw new Error(`${manager}@${version.output.trim()} failed to install the packed SDK graph:\n${managerInstall.output}`);
       const resolved = await verifyConsumerSingletons(directory);
+      verifyCliToolchain(directory);
       const managerRequire = createRequire(path.join(directory, "package.json"));
       if (managerRequire("@legendapp/spark/config").readConfig === undefined || managerRequire("@legendapp/spark/metro").withDesktop === undefined) throw new Error(`${manager} packed config/Metro exports did not resolve`);
       if (new Set(Object.values(resolved)).size !== 3) throw new Error(`${manager} did not resolve one consumer path each for React, React Native, and Expo`);
@@ -154,7 +174,7 @@ try {
     }
   }
 
-  console.log(`PASS: full ${VERSION} Spark archive ${archiveName} (sha256 ${archiveHash}) installed with ${managerResults.map(result => `${result.manager}@${result.version}${result.singletonVerified ? " (single React/RN/Expo paths)" : " (not tested)"}`).join(", ")}; React DOM remained optional; complete public declarations typechecked with npm; npm rejected React 18.2.0 peer conflict; installed CLI rejected an unpatched native graph before project writes. Lifecycle scripts and native compilation were intentionally skipped.`);
+  console.log(`PASS: full ${VERSION} Spark archive ${archiveName} (sha256 ${archiveHash}) installed with ${managerResults.map(result => `${result.manager}@${result.version}${result.singletonVerified ? " (single React/RN/Expo paths)" : " (not tested)"}`).join(", ")}; packed CLI resolved npm ${cliToolchain.npm} with tar ${cliToolchain.tar} and ws ${cliToolchain.ws}; React DOM remained optional; complete public declarations typechecked with npm; npm rejected React 18.2.0 peer conflict; installed CLI rejected an unpatched native graph before project writes. Lifecycle scripts and native compilation were intentionally skipped.`);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }
