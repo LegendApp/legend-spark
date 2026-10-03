@@ -2,6 +2,7 @@ import { NativeEventEmitter, Platform } from "react-native";
 import Native from "./NativeDesktopShortcuts";
 import { parseAccelerator } from "@legendapp/spark-desktop-app/src/contracts/accelerator";
 import { SparkError, invokeNative, parseNativeResult, asyncRegistration, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 export { parseAccelerator, type Accelerator } from "@legendapp/spark-desktop-app/src/contracts/accelerator";
 export interface ShortcutOptions { windowId?: string; repeat?: boolean }
 export function getShortcutAvailability(): Availability {

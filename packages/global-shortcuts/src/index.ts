@@ -3,6 +3,7 @@ import Native from "./NativeDesktopGlobalShortcuts";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { parseAccelerator } from "@legendapp/spark-desktop-app/src/contracts/accelerator";
 import { SparkError, invokeNative, parseNativeResult, asyncRegistration, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 let sequence = 0;
 export function getGlobalShortcutAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };

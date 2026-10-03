@@ -45,6 +45,7 @@
     "quit"
   ],
   "./app/documents": [
+    "AsyncRegistration",
     "DocumentAppController",
     "DocumentAppControllerOptions",
     "DocumentAppControllerState",
@@ -53,6 +54,7 @@
     "OpenRequest",
     "OpenSelectedDocumentPathOptions",
     "RecentDocument",
+    "Subscription",
     "UseDocumentAppControllerOptions",
     "UseWatchedDocumentReloadOptions",
     "clearRecentDocuments",
@@ -80,6 +82,7 @@
     "MediaSession",
     "MediaSessionOptions",
     "MediaSessionUpdate",
+    "Subscription",
     "createAudioPlayer",
     "createMediaSession",
     "sessionOptions",
@@ -215,10 +218,12 @@
     "writeTextIfUnchanged"
   ],
   "./global-shortcuts": [
+    "AsyncRegistration",
     "getGlobalShortcutAvailability",
     "registerGlobalShortcut"
   ],
   "./links": [
+    "Subscription",
     "URLListener",
     "addEventListener",
     "canOpenURL",
@@ -252,6 +257,7 @@
     "NotificationTrigger",
     "ScheduleNotificationOptions",
     "ShowNotificationOptions",
+    "Subscription",
     "cancelAllNotifications",
     "cancelNotification",
     "dismissAllNotifications",
@@ -330,6 +336,7 @@
   ],
   "./shortcuts": [
     "Accelerator",
+    "AsyncRegistration",
     "ShortcutOptions",
     "getShortcutAvailability",
     "parseAccelerator",
@@ -372,6 +379,7 @@
     "useRoutedHotkeys"
   ],
   "./shortcuts/keyboard": [
+    "AsyncRegistration",
     "KeyCodes",
     "KeyText",
     "KeyboardEvent",
@@ -393,14 +401,16 @@
     "openDatabase"
   ],
   "./system": [
+    "AsyncRegistration",
     "AttentionOptions",
-    "LauncherMenuOptions",
+    "DockMenuItem",
+    "DockMenuOptions",
     "LoginItemStatus",
-    "MenuAction",
-    "MenuItem",
     "PreventSleepOptions",
     "SystemEvent",
     "SystemInfo",
+    "TaskbarMenuItem",
+    "TaskbarMenuOptions",
     "createDockMenu",
     "createTaskbarMenu",
     "getLoginItemStatus",
@@ -495,6 +505,7 @@
   ],
   "./updates": [
     "CheckForUpdatesOptions",
+    "Subscription",
     "UpdateConfiguration",
     "UpdateEvent",
     "UpdateStatus",

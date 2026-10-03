@@ -33,6 +33,8 @@ await dismissNotification("export-finished");
 subscription.remove();
 ```
 
+Response setup is asynchronous while Spark subscribes and replays retained cold-launch responses. Once returned, `remove()` is synchronous; it prevents further callbacks and does not perform asynchronous native cleanup.
+
 `getNotificationPermission()` reads permission without prompting. The result has
 `status`, `granted`, and `canAskAgain`; macOS also reports its authorization state,
 including provisional access. Unknown ability to prompt is `null`. Windows has no
@@ -152,6 +154,7 @@ events.remove();
 `getUpdateStatus()` does not start Sparkle. Spark Runner runtimes and Debug/custom-development builds
 report why updating is unavailable; attempts to start/check reject with
 `E_UNAVAILABLE`. A configured Release app starts the updater idempotently.
+Status remains an async query; its unavailable reason distinguishes `go`, development, and missing release configuration. `configureUpdates({})` starts the configured updater even with no preference fields, while leaving current preferences intact.
 Checks initially default off. Explicitly enabling automatic checks preserves the
 user's preference on subsequent launches. Installation remains an explicit user
 choice. `checkForUpdates()` resolves when the check starts; events describe

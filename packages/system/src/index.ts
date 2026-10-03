@@ -3,13 +3,23 @@ import Native from "./NativeDesktopSystem";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { SparkError, asyncRegistration, invokeNative, parseNativeResult, type Availability, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { menuItems, selectableMenuIds, type MenuItem } from "@legendapp/spark-desktop-app/src/contracts/menu";
-export type { MenuItem, MenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
+export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
+type SupportedDockLeaf = Exclude<MenuItem, { type: "submenu" | "role" | "slider" }> extends infer Item
+  ? Item extends unknown ? Omit<Item, "target" | "placement" | "icon" | "shortcut" | "hidden"> : never
+  : never;
+export type DockMenuItem = SupportedDockLeaf | (Omit<Extract<MenuItem, { type: "submenu" }>, "items" | "target" | "placement" | "icon" | "shortcut" | "hidden"> & { items: readonly DockMenuItem[] });
+type SupportedTaskbarLeaf = Extract<MenuItem, { type: "action" | "checkbox" }> extends infer Item
+  ? Item extends unknown ? Omit<Item, "target" | "placement" | "icon" | "shortcut" | "hidden" | "disabled"> & { disabled?: false } : never
+  : never;
+export type TaskbarMenuItem = SupportedTaskbarLeaf;
+type LauncherMenuOptions = { items: readonly MenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void };
+export interface DockMenuOptions { items: readonly DockMenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void }
+export interface TaskbarMenuOptions { items: readonly TaskbarMenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void }
 export interface SystemInfo { osVersion: string; architecture: string; locale: string; dark: boolean; idleSeconds: number; onBattery: boolean; batteryLevel: number | null }
 export type SystemEvent = { type: "sleep" | "wake" | "lock" | "unlock" | "powerChanged" | "appearanceChanged" | "displaysChanged" };
 export type LoginItemStatus = "enabled" | "disabled" | "requiresApproval" | "notFound" | "unavailable";
 export interface AttentionOptions { kind?: "informational" | "critical" }
 export interface PreventSleepOptions { reason: string; kind?: "display" | "system" }
-export interface LauncherMenuOptions { items: readonly MenuItem[]; onAction: (event: { type: "action"; itemId: string }) => void }
 let sequence = 0;
 const token = () => `system-${Date.now()}-${++sequence}`;
 export function getSystemAvailability(): Availability {
@@ -70,8 +80,8 @@ async function createLauncherMenu(value: LauncherMenuOptions, platform: "macos" 
   try { await command("dockMenu", { items, owner }); ready = true; } catch (error) { subscription.remove(); throw error; }
   return asyncRegistration(() => { stopped = true; subscription.remove(); }, () => command("clearDockMenu", { owner }));
 }
-export function createDockMenu(options: LauncherMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "macos"); }
-export function createTaskbarMenu(options: LauncherMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "windows"); }
+export function createDockMenu(options: DockMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "macos"); }
+export function createTaskbarMenu(options: TaskbarMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "windows"); }
 export async function onSystemEvent(handler: (event: SystemEvent) => void): Promise<AsyncRegistration> {
   if (typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected system event handler");
   const types: readonly SystemEvent["type"][] = ["sleep", "wake", "lock", "unlock", "powerChanged", "appearanceChanged", "displaysChanged"];

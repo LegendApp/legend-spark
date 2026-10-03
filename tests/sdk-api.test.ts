@@ -713,7 +713,7 @@ test("launcher menus stop callbacks on failed removal and enforce surface suppor
   await expect(system.createTaskbarMenu({ items: [], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
   platform.OS = "windows";
   await expect(system.createDockMenu({ items: [], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
-  await expect(system.createTaskbarMenu({ items: [{ type: "submenu", id: "sub", label: "Sub", items: [] }], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(system.createTaskbarMenu({ items: [{ type: "submenu", id: "sub", label: "Sub", items: [] }], onAction: () => {} } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
 });
 
 test("application menu updates snapshot inputs, serialize and retain last successful owners", async () => {

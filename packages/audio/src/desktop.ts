@@ -5,7 +5,7 @@ export type * from "./media-types";
 import Native from "./NativeSparkAudio";
 import { onAudioEvent } from "./events";
 import { validateSource, type AudioPlayer, type AudioSource, type AudioPlayerOptions, type AudioStatus } from "./types";
-export type { AudioPlayer, AudioSource, AudioStatus, AudioPlayerOptions } from "./types";
+export type { AudioPlayer, AudioSource, AudioStatus, AudioPlayerOptions, Subscription } from "./types";
 let sequence = 0;
 export async function createAudioPlayer(source: AudioSource, options: AudioPlayerOptions = {}): Promise<AudioPlayer> {
   validateSource(source); validatePlayerOptions(options);

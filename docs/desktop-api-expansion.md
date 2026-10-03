@@ -127,10 +127,13 @@ require Node; native Rust, Swift, C/C++ or other standalone executables work.
 ```ts
 import { showMessage, confirm } from "@legendapp/spark/dialogs";
 const result = await showMessage({ title: "Save changes?", windowId: "main",
-  buttons: ["Cancel", "Save"], defaultButton: 1, cancelButton: 0,
+  buttons: [{ id: "cancel", label: "Cancel" }, { id: "save", label: "Save" }],
+  defaultButtonId: "save", cancelButtonId: "cancel",
   checkbox: { label: "Remember my choice" } });
-// result: { button: zeroBasedIndex, checked: boolean }; aborted dialog: button -1
+// result: { buttonId: "cancel" | "save" | null, checked: boolean }
 ```
+
+The native result uses the selected button ID; a host dismissal returns `buttonId: null`. `checked` is always a boolean, including dialogs without a checkbox.
 
 Omit windowId for an application-modal dialog. Kinds are info/warning/error.
 Concurrent message dialogs reject E_BUSY. Existing open/save file panels remain.
@@ -141,6 +144,7 @@ clearClipboard. Rich content supports text, html, rtf, image ({ format: "png", b
 list is written separately. Invalid image data is rejected before clearing the
 clipboard. Reading returns supported formats; this is not a lossless backup API
 for arbitrary proprietary pasteboard types.
+`getClipboardFormats()` returns raw format identifiers supplied by macOS or Windows, not Spark-normalized names. Text helpers retain Expo's `plainText` and `html` format values.
 
 ## System integration
 
@@ -154,11 +158,13 @@ try { await exportVideo(); } finally { await blocker.remove(); }
 
 Sleep blockers support display/system idle sleep, not forced sleep. Events include
 sleep/wake, lock/unlock, powerChanged, appearanceChanged and displaysChanged.
+Treat these events as invalidations: call `getSystemInfo()` to read current values after a relevant event.
 Login changes require a standalone distribution runtime. macOS may require user
 approval; getLoginItemStatus reports requiresApproval. Nothing enables startup
 or requests permissions automatically. Dock menus have one owner; remove the
 returned handle before replacing a menu. Event subscriptions and native resources
 must be disposed; native module invalidation also releases resources on reload.
+Dock menus allow nested actions, checkboxes and separators. Taskbar menus are flat and allow actions and checkboxes; disabled task entries are omitted by Windows. Both reject unsupported shortcut, icon, target, placement, hidden, role and slider fields. Platform availability is still checked when creating a menu.
 
 ## WebView and SQLite
 

@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import Native from "./NativeDesktopUpdates";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { SparkError, invokeNative, parseNativeResult, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
+export type { Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 
 export type UpdateUnavailableReason = "unsupported-platform" | "missing-module" | "go" | "development" | "unconfigured";
 export type UpdateStatus = {

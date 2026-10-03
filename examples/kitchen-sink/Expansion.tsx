@@ -18,7 +18,7 @@ import { WebView } from "@legendapp/spark/webview";
 const DragDropView = withUniwind(NativeDragDropView);
 const webHTML = `<html><body style="font:16px system-ui;padding:16px"><h3>Embedded WebView</h3><input aria-label="WebView keyboard test" placeholder="Type here to test keyboard handling"><button onclick="window.ReactNativeWebView.postMessage('Hello from WebView')">Send a message to React Native</button></body></html>`;
 const dragSource = { text: "Hello from the desktop kitchen sink" };
-const dockItems: system.MenuItem[] = [{ type: "action", id: "show", label: "Show kitchen sink" }, { type: "checkbox", id: "checked", label: "Checked item", checked: true }];
+const dockItems: system.TaskbarMenuItem[] = [{ type: "action", id: "show", label: "Show kitchen sink" }, { type: "checkbox", id: "checked", label: "Checked item", checked: true }];
 type Removable = { remove(): unknown };
 export function Expansion({ report }: { report: (value: unknown) => void }) {
   const { theme } = useUniwind();

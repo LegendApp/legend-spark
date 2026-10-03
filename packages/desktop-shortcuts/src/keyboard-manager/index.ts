@@ -1,6 +1,7 @@
 import { NativeEventEmitter, Platform } from "react-native";
 import Native from "./NativeKeyboardManager";
 import { SparkError, asyncRegistration, invokeNative, type AsyncRegistration, type Availability, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
+export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 export { KeyCodes, KeyText } from "./codes";
 export type KeyboardEvent = Readonly<{ repeated: boolean; consumed: boolean; captured: boolean; windowId: string | null; key: string; keyCode: number; modifiers: number }>;
 export type KeyboardEventListener = (event: KeyboardEvent) => void;

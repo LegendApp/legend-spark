@@ -4,7 +4,7 @@ export type * from "./media-types";
 export { createMediaSession } from "./media-session-unavailable";
 import { createAudioPlayer as createExpoPlayer, setAudioModeAsync } from "expo-audio";
 import { validateSource, type AudioPlayer, type AudioSource, type AudioPlayerOptions, type AudioStatus } from "./types";
-export type { AudioPlayer, AudioSource, AudioStatus, AudioPlayerOptions } from "./types";
+export type { AudioPlayer, AudioSource, AudioStatus, AudioPlayerOptions, Subscription } from "./types";
 export async function createAudioPlayer(source: AudioSource, options: AudioPlayerOptions = {}): Promise<AudioPlayer> {
   validateSource(source); validatePlayerOptions(options);
   options = { ...options };

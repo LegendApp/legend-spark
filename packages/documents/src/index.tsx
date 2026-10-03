@@ -1,4 +1,5 @@
 import { openFileDialog } from "@legendapp/spark-file-dialog";
+export type { AsyncRegistration, Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 export * from "./requests";
 export { createDocumentTransitionGuard } from "./documentTransition";
 export * from "./controller";

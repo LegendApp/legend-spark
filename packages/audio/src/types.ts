@@ -1,4 +1,5 @@
 import { SparkError, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
+export type { Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 import type { AudioMetadata } from "./media-types";
 export * from "./media-types";
 /** Seconds throughout. Commands reject when the backend cannot complete them. */

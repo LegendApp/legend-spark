@@ -146,7 +146,10 @@ export default function DesktopInteractionChecks({ check, onError, onBusy }: {
     const createMenu = Platform.OS === "windows" ? system.createTaskbarMenu : system.createDockMenu;
     let menu: Awaited<ReturnType<typeof createMenu>> | undefined;
     try {
-      menu = await createMenu({ items: [{ type: "checkbox", id: "checked", label: "Checked", checked: true }, { type: "action", id: "disabled", label: "Disabled", disabled: true }, { type: "action", id: "continue", label: "Continue" }], onAction: event => { if (event.itemId === "continue") selected(); } });
+      const onAction = (event: { type: "action"; itemId: string }) => { if (event.itemId === "continue") selected(); };
+      menu = Platform.OS === "windows"
+        ? await system.createTaskbarMenu({ items: [{ type: "checkbox", id: "checked", label: "Checked", checked: true }, { type: "action", id: "continue", label: "Continue" }], onAction })
+        : await system.createDockMenu({ items: [{ type: "checkbox", id: "checked", label: "Checked", checked: true }, { type: "action", id: "disabled", label: "Disabled", disabled: true }, { type: "action", id: "continue", label: "Continue" }], onAction });
       await requireError(() => createMenu({ items: [{ type: "action", id: "duplicate", label: "Duplicate" }], onAction: () => {} }), "E_ALREADY_EXISTS");
       await within(action, 45000);
     } finally { await menu?.remove(); await system.setAppBadge(""); }

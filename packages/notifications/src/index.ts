@@ -3,6 +3,7 @@ import { Platform, TurboModuleRegistry } from "react-native";
 import type { Spec as AppSpec } from "@legendapp/spark-desktop-app/src/NativeDesktopApp";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { SparkError, invokeNative, parseNativeResult, type Availability, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
+export type { Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 
 export interface NotificationPermission {
   status: "undetermined" | "denied" | "granted" | "unknown";

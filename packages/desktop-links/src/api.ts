@@ -3,6 +3,7 @@ import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { callAppNative } from "@legendapp/spark-desktop-app/src/transport";
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import { SparkError, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
+export type { Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 import { callLinks, linksCommand } from "./native";
 export type URLListener = (event: { url: string }) => void;
 function url(value: string) {
