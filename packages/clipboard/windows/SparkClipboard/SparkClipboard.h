@@ -78,7 +78,9 @@ struct SparkClipboard {
           data.SetBitmap(Streams::RandomAccessStreamReference::CreateFromStream(stream));
         }
         bool written = true;
-        if (args.Size() == 0) Transfer::Clipboard::Clear();
+        // The image is carried separately from the JSON metadata. An image-only
+        // write therefore has an empty object but is still non-empty content.
+        if (args.Size() == 0 && !input) Transfer::Clipboard::Clear();
         else { Transfer::Clipboard::SetContent(data); written = Transfer::Clipboard::Flush(); }
         // setString mirrors Expo's boolean result; write keeps reporting failure by exception only.
         promise.Resolve(method == "setString" ? (written ? "true" : "false") : "null");

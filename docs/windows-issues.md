@@ -10,17 +10,30 @@ gaps beneath the feature checklist: app/window lifecycle, launch arguments,
 file-dialog options, portable window options, and nested menu targeting. These
 need implementation or explicit contract decisions as well as native testing.
 
-## Confirmed Nitro integration blocker (2026-09-16)
+## Confirmed Nitro integration blocker and proposed boundary (2026-10-03)
 
-The current Nitro adapter calls `ReactContext.JSRuntime()` in
-`patches/windows/nitro/windows/SparkNitro/SparkNitro.h`. The pinned RNW
-`IReactContext.cpp` explicitly fail-fasts for that call in Debug Fabric builds.
-This is a source-confirmed incompatibility, not merely missing runtime evidence.
-Replace the installation entry point before expecting Nitro acceptance to pass.
-The draft [upstream Windows PR](https://github.com/margelo/nitro/pull/1483) uses a
-JSI initializer and makes different linkage choices; review it with maintainers
-before continuing the separate DLL adapter. Native buffers and cross-module
-runtime identity also need focused checks. This parity batch does not repair Nitro.
+The current adapter calls `ReactContext.JSRuntime()` in
+`patches/windows/nitro/windows/SparkNitro/SparkNitro.h`. Pinned RNW 0.81.35's
+`Microsoft.ReactNative/IReactContext.cpp` fail-fasts for that call under
+`DEBUG && USE_FABRIC`; its `IReactContext.idl` also marks the runtime property
+experimental and deprecated for the new architecture.
+
+The narrow supported path in the pinned source is RNW's JSI initializer form:
+keep `REACT_INIT(Initialize)`, but declare the method with both
+`ReactContext const&` and `facebook::jsi::Runtime&`, then install Nitro directly
+from that runtime argument. `Microsoft.ReactNative.Cxx/NativeModules.h` recognizes
+two-argument init methods as JSI initializers and registers them with
+`AddJsiInitializer`; the runtime is supplied by the initializer boundary. Do not
+fetch `context.JSRuntime()` or `context.Handle().JSRuntime()` inside that method.
+The latter is the same deprecated `IReactContext.JSRuntime` property and is not a
+safe workaround. Keep the existing context call-invoker dispatcher for later
+Nitro callbacks.
+
+This is a source-grounded proposal, not a compiled fix. Validate Debug Fabric
+startup on Windows x64 and ARM64, verify Nitro HybridObject creation and calls,
+exercise callback dispatch/reload, and confirm native buffer ownership before
+closing the blocker. No Windows compiler or runtime acceptance was available
+for this investigation.
 
 ## What remains
 
@@ -94,6 +107,9 @@ owner. The platform runner's prepare-only mode is available on macOS, including
   callbacks. Operational failures reject; invalid input remains an error.
 - Credential Manager limits a credential blob to 2560 bytes. Rich clipboard data
   is separate from the common text-only restoration performed by the test runner.
+  Image-only clipboard writes must preserve the binary PNG payload even when the
+  accompanying JSON metadata is empty. Native clipboard round-trip verification
+  remains a Windows acceptance requirement.
 - OS dialogs, title bars, tray and Jump Lists use Windows styling. AppKit materials,
   titlebar effects, SF Symbols and window-specific macOS styles are not portable;
   unsupported window options still reject. Windows tray items use the executable
@@ -110,7 +126,10 @@ owner. The platform runner's prepare-only mode is available on macOS, including
   not launch a closed app on dismissal: dismiss events are available for immediate
   notifications while their module remains alive. Clicks preserve notification ID
   and data through a bounded, deduplicated host response queue. Cold development
-  activation needs Metro and the project's saved connection settings.
+  activation needs Metro and the project's saved connection settings. Live toast
+  dismissal and timeout retire their native event subscription; a late dismissal
+  from a replaced toast cannot retire or report against its replacement. Verify
+  dismissal, timeout, and same-ID replacement on Windows before release.
 - The SDK packages integrity-checked Nitro 0.35.7, OP-SQLite 18.2.1 and WebView
   16.0.0 with their Windows glue. Consumers do not manually patch node_modules.
   SQLite uses its bundled engine; optional SQLCipher/libSQL/Turso/vector builds are

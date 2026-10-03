@@ -99,6 +99,58 @@ inline void Write(fs::path const &path, std::vector<uint8_t> const &data) {
     if (!MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) throw_last_error();
   } catch (...) { std::error_code ignored; fs::remove(temporary, ignored); throw; }
 }
+inline bool PathContains(fs::path const &parent, fs::path const &child) {
+  auto p = parent.begin(), c = child.begin();
+  for (; p != parent.end() && c != child.end() && CompareStringOrdinal(p->c_str(), -1, c->c_str(), -1, TRUE) == CSTR_EQUAL; ++p, ++c) {}
+  return p == parent.end();
+}
+inline void Transfer(fs::path const &from, fs::path const &to, bool move, bool overwrite) {
+  auto source = fs::weakly_canonical(from), destination = fs::weakly_canonical(to);
+  std::error_code identityError;
+  bool sameFile = fs::equivalent(from, to, identityError);
+  if (identityError && identityError != std::errc::no_such_file_or_directory) throw fs::filesystem_error("Could not compare transfer paths", from, to, identityError);
+  if (sameFile || PathContains(source, destination) || PathContains(destination, source))
+    throw hresult_invalid_argument(L"Source and destination identify or contain one another");
+  bool destinationExists = fs::symlink_status(to).type() != fs::file_type::not_found;
+  if (destinationExists && !overwrite) throw fs::filesystem_error("Destination already exists", to, std::make_error_code(std::errc::file_exists));
+  GUID guid{}; check_hresult(CoCreateGuid(&guid)); wchar_t identifier[40]{}; StringFromGUID2(guid, identifier, 40);
+  auto stage = to.parent_path() / (std::wstring(L".spark-stage-") + identifier);
+  auto backup = to.parent_path() / (std::wstring(L".spark-backup-") + identifier);
+  bool stagedByRename = false;
+  try {
+    wchar_t sourceVolume[32768]{}, destinationVolume[32768]{};
+    bool sameVolumeMove = move && GetVolumePathNameW(from.parent_path().c_str(), sourceVolume, ARRAYSIZE(sourceVolume)) &&
+      GetVolumePathNameW(to.parent_path().c_str(), destinationVolume, ARRAYSIZE(destinationVolume)) &&
+      _wcsicmp(sourceVolume, destinationVolume) == 0;
+    if (sameVolumeMove) { fs::rename(from, stage); stagedByRename = true; }
+    else fs::copy(from, stage, fs::copy_options::recursive | fs::copy_options::copy_symlinks);
+    if (destinationExists && !MoveFileExW(to.c_str(), backup.c_str(), MOVEFILE_WRITE_THROUGH)) {
+      auto failure = GetLastError();
+      bool restoredSource = !stagedByRename || MoveFileExW(stage.c_str(), from.c_str(), MOVEFILE_WRITE_THROUGH);
+      if (!restoredSource) throw hresult_error(HRESULT_FROM_WIN32(ERROR_WRITE_FAULT), L"Destination staging failed and source rollback failed; recoverable source: " + stage.wstring());
+      throw hresult_error(HRESULT_FROM_WIN32(failure));
+    }
+    if (!MoveFileExW(stage.c_str(), to.c_str(), MOVEFILE_WRITE_THROUGH)) {
+      auto failure = GetLastError();
+      bool restoredDestination = !destinationExists || MoveFileExW(backup.c_str(), to.c_str(), MOVEFILE_WRITE_THROUGH);
+      bool restoredSource = !stagedByRename || MoveFileExW(stage.c_str(), from.c_str(), MOVEFILE_WRITE_THROUGH);
+      if (!restoredDestination || !restoredSource)
+        throw hresult_error(HRESULT_FROM_WIN32(ERROR_WRITE_FAULT), L"Publication and rollback failed; recoverable paths: " + stage.wstring() + L"; " + backup.wstring());
+      throw hresult_error(HRESULT_FROM_WIN32(failure));
+    }
+    if (move && !stagedByRename) {
+      std::error_code sourceError; fs::remove_all(from, sourceError);
+      if (sourceError) throw fs::filesystem_error("Source cleanup failed after publishing " + PathString(to) + "; source may be partially removed; previous destination is retained at " + PathString(backup), from, sourceError);
+    }
+    if (destinationExists) {
+      std::error_code cleanupError; fs::remove_all(backup, cleanupError);
+      if (cleanupError) throw fs::filesystem_error("Transfer committed at " + PathString(to) + "; previous destination cleanup failed; recoverable backup: " + PathString(backup), backup, cleanupError);
+    }
+  } catch (...) {
+    if (!stagedByRename) { std::error_code ignored; fs::remove_all(stage, ignored); }
+    throw;
+  }
+}
 inline fs::path Directory(hstring const &kind) {
   wchar_t identity[201]{}; auto count = GetEnvironmentVariableW(L"SPARK_PROJECT_ID", identity, 201);
   if (!count || count >= 201) throw hresult_invalid_argument(L"Launch through Spark to establish project storage identity");
@@ -247,21 +299,7 @@ struct FileQueue {
       return Json::JsonValue::CreateBooleanValue(fs::remove(path));
     } else if (method == "copy" || method == "move") {
       auto to = FilePath(args.GetNamedString(L"to"));
-      auto destination = fs::symlink_status(to);
-      if (destination.type() != fs::file_type::not_found) {
-        if (!args.GetNamedBoolean(L"overwrite", false)) throw hresult_error(HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS));
-        // Replace wholesale, like the macOS host: remove the destination first.
-        std::error_code ignored;
-        if (fs::remove_all(to, ignored) == static_cast<uintmax_t>(-1) || ignored) throw_last_error();
-        if (fs::symlink_status(to).type() != fs::file_type::not_found) throw hresult_error(HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS));
-      }
-      if (method == "copy") fs::copy(path, to, fs::copy_options::recursive | fs::copy_options::copy_symlinks);
-      else if (!MoveFileExW(path.c_str(), to.c_str(), MOVEFILE_COPY_ALLOWED | MOVEFILE_WRITE_THROUGH)) {
-        if (GetLastError() != ERROR_NOT_SAME_DEVICE || !fs::is_directory(path)) throw_last_error();
-        try { fs::copy(path, to, fs::copy_options::recursive | fs::copy_options::copy_symlinks); }
-        catch (...) { std::error_code ignored; fs::remove_all(to, ignored); throw; }
-        fs::remove_all(path);
-      }
+      Transfer(path, to, method == "move", args.GetNamedBoolean(L"overwrite", false));
     } else if (method == "stat") {
       // OPEN_REPARSE_POINT describes a link itself, including dangling links.
       auto file = Open(path, FILE_READ_ATTRIBUTES, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);

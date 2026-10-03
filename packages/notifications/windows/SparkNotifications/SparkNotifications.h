@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <cstdint>
 #include <cmath>
 #include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Data.Xml.Dom.h>
@@ -38,8 +39,9 @@ struct NotificationsState : std::enable_shared_from_this<NotificationsState> {
   React::ReactContext context;
   std::wstring project, appId;
   Toast::ToastNotifier notifier{nullptr};
-  struct Live { Toast::ToastNotification toast{nullptr}; event_token dismissed; };
+  struct Live { Toast::ToastNotification toast{nullptr}; event_token dismissed; uint64_t generation; };
   std::map<std::wstring, Live> live;
+  uint64_t nextGeneration = 0;
   static constexpr wchar_t const *group = L"Spark";
   void Ensure() {
     if (notifier) return;
@@ -75,6 +77,12 @@ struct NotificationsState : std::enable_shared_from_this<NotificationsState> {
     notifier = candidate;
   }
   void Forget(std::wstring const &tag) { auto entry = live.find(tag); if (entry != live.end()) { entry->second.toast.Dismissed(entry->second.dismissed); live.erase(entry); } }
+  void Retire(std::wstring const &tag, uint64_t generation, bool userDismissed, std::wstring const &encoded) {
+    auto entry = live.find(tag);
+    if (entry == live.end() || entry->second.generation != generation) return;
+    Forget(tag);
+    if (userDismissed) Dismiss(hstring(encoded));
+  }
   void Close() noexcept { for (auto &[tag, item] : live) try { item.toast.Dismissed(item.dismissed); } catch (...) {} live.clear(); }
   void RemovePending(std::wstring const &tag) { for (auto const &item : notifier.GetScheduledToastNotifications()) if (item.Group() == group && (tag.empty() || item.Tag() == tag)) notifier.RemoveFromSchedule(item); }
   static hstring Id(Xml::XmlDocument const &xml) { return Json::JsonObject::Parse(xml.DocumentElement().GetAttribute(L"launch")).GetNamedString(L"notificationId"); }
@@ -99,8 +107,12 @@ struct NotificationsState : std::enable_shared_from_this<NotificationsState> {
     } else {
       Toast::ToastNotification toast(xml); toast.Tag(tag); toast.Group(group);
       response.SetNamedValue(L"action", Json::JsonValue::CreateStringValue(L"dismiss")); auto encoded = response.Stringify(); auto weak = weak_from_this(); auto dispatcher = context.UIDispatcher();
-      auto token = toast.Dismissed([weak, dispatcher, encoded](auto const &, Toast::ToastDismissedEventArgs const &event) { if (event.Reason() == Toast::ToastDismissalReason::UserCanceled) dispatcher.Post([weak, encoded]() { if (auto state = weak.lock()) state->Dismiss(encoded); }); });
-      try { notifier.Show(toast); live.emplace(tag, Live{toast, token}); } catch (...) { toast.Dismissed(token); throw; }
+      const auto generation = ++nextGeneration;
+      auto token = toast.Dismissed([weak, dispatcher, tag, generation, encoded](auto const &, Toast::ToastDismissedEventArgs const &event) {
+        const bool userDismissed = event.Reason() == Toast::ToastDismissalReason::UserCanceled;
+        dispatcher.Post([weak, tag, generation, userDismissed, encoded]() { if (auto state = weak.lock()) state->Retire(tag, generation, userDismissed, encoded); });
+      });
+      try { notifier.Show(toast); live.emplace(tag, Live{toast, token, generation}); } catch (...) { toast.Dismissed(token); throw; }
     }
   }
 };
