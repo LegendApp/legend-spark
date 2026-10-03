@@ -1,4 +1,4 @@
-import { createMenu, type Menu, type MenuAction, type MenuItem } from "@legendapp/spark-native-menu";
+import { createMenu, type Menu, type MenuAction, type MenuRootItem } from "@legendapp/spark-native-menu";
 import { createPrimaryWindowLifecycle } from "@legendapp/spark-desktop-windows/src/windows/primaryWindowLifecycle";
 import { SparkError, asyncRegistration, type AsyncRegistration, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 import { subscribeToOpenRequests } from "./requests";
@@ -10,12 +10,12 @@ export interface DocumentAppController extends AsyncRegistration {
   setDocumentWindowOpen(isOpen: boolean): void;
   reportError(error: unknown): void;
   subscribe(listener: () => void): Subscription;
-  updateMenus(menus: readonly MenuItem[]): Promise<void>;
+  updateMenus(menus: readonly MenuRootItem[]): Promise<void>;
 }
 export interface DocumentAppControllerOptions {
   onMenuAction?: (action: MenuAction, controller: DocumentAppController) => void | Promise<void>;
   launchArguments?: string[];
-  menus: readonly MenuItem[];
+  menus: readonly MenuRootItem[];
   onInitialOpen: (launchArguments: string[] | undefined, controller: DocumentAppController) => Promise<void> | void;
   onOpenDocument?: (path: string, controller: DocumentAppController) => Promise<void> | void;
   onReopenRequested?: (controller: DocumentAppController) => Promise<void> | void;

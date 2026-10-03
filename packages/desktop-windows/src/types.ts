@@ -1,5 +1,3 @@
-import type { MenuItem } from "@legendapp/spark-desktop-app/src/contracts/menu";
-
 export type WindowId = string;
 export type DisplayId = string;
 export interface Size { width: number; height: number }
@@ -88,9 +86,15 @@ export interface MacOSTitleBarOptions {
 }
 export interface MacOSToolbarSegment { value: string; label: string; symbol?: string }
 interface ToolbarEntry { id: string; label?: string; placement?: "leading" | "trailing" }
+type ToolbarMenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean; icon?: { type: "symbol"; name: string } };
+type ToolbarMenuItem =
+  | { type: "separator" }
+  | (ToolbarMenuEntry & { type: "action" })
+  | (ToolbarMenuEntry & { type: "checkbox"; checked: boolean })
+  | (ToolbarMenuEntry & { type: "slider"; min: number; max: number; value: number; suffix?: string });
 export type MacOSToolbarItem =
   | (ToolbarEntry & { type: "button"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string; monospacedDigits?: boolean; width?: number })
-  | (ToolbarEntry & { type: "menu"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string; width?: number; items: readonly MenuItem[] })
+  | (ToolbarEntry & { type: "menu"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string; width?: number; items: readonly ToolbarMenuItem[] })
   | (ToolbarEntry & { type: "label"; text: string; width?: number })
   | (ToolbarEntry & { type: "search"; disabled?: boolean; collapses?: boolean; placeholder?: string; value?: string; width?: number })
   | (ToolbarEntry & { type: "segmented"; segments: readonly MacOSToolbarSegment[]; value: string | null });

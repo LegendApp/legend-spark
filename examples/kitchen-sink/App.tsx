@@ -13,7 +13,7 @@ import * as links from "@legendapp/spark/links";
 import * as secureStore from "@legendapp/spark/secure-storage";
 import { registerShortcut } from "@legendapp/spark/shortcuts";
 import { showContextMenu } from "@legendapp/spark/context-menu";
-import { useMenu, type MenuItem } from "@legendapp/spark/menus";
+import { useMenu, type MenuRootItem } from "@legendapp/spark/menus";
 import { openFileDialog, saveFileDialog } from "@legendapp/spark/dialogs";
 import { revealInFileManager } from "@legendapp/spark/files";
 import { AuthChecks } from "./AuthChecks";
@@ -30,7 +30,7 @@ import { Integrations } from "./Integrations";
 import { ThemeToggle } from "./ThemeToggle";
 import { testDriver } from "./test-driver";
 
-const applicationMenuItems: MenuItem[] = [{ type: "submenu", id: "document", label: "Document", items: [{ type: "action", id: "open", label: "Open…", shortcut: "CmdOrCtrl+O" }, { type: "action", id: "save", label: "Save…", shortcut: "CmdOrCtrl+S" }] }];
+const applicationMenuItems: MenuRootItem[] = [{ type: "submenu", id: "document", label: "Document", items: [{ type: "action", id: "open", label: "Open…", shortcut: "CmdOrCtrl+O" }, { type: "action", id: "save", label: "Save…", shortcut: "CmdOrCtrl+S" }] }];
 
 type Props = Partial<app.AppContext> & { windowId?: string; windowProps?: { overlay?: boolean; message?: string; readyFile?: string } };
 function argument(args: readonly string[], name: string) { const at = args.indexOf(name); return at < 0 ? undefined : args[at + 1]; }

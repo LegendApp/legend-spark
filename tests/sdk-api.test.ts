@@ -171,7 +171,7 @@ test("dialogs parse selected paths and native cancellation, preserving save conf
   await files.revealInFileManager("/a");
 });
 test("application menus publish owned snapshots and filter action identity", async () => {
-  const configuration: import("../packages/native-menu/src/api").MenuItem[] = [{ type: "submenu", id: "file", label: "File", items: [{ type: "checkbox", id: "save", label: "Save", checked: true }] }];
+  const configuration: import("../packages/native-menu/src/api").MenuRootItem[] = [{ type: "submenu", id: "file", label: "File", items: [{ type: "checkbox", id: "save", label: "Save", checked: true }] }];
   const received: unknown[] = [];
   const menu = await menus.createMenu({ id: "owner", items: configuration, onAction: event => received.push(event) });
   const native = JSON.parse(calls.at(-1)!.args[0]);
@@ -425,6 +425,7 @@ test("invalid Windows menu contributions leave the last good owner set intact", 
   platform.OS = "windows";
   const base = await menus.createMenu({ id: "base", items: [{ type: "submenu", id: "file", label: "File", items: [{ type: "action", id: "open", label: "Open" }] }] });
   try {
+    await expect(menus.createMenu({ id: "invalid-slider", items: [{ type: "submenu", id: "file", label: "File", items: [{ type: "slider", id: "volume", label: "Volume", min: 0, max: 1, value: 0.5 }] as unknown as import("../packages/native-menu/src/api").MenuItem[] }] })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
     await expect(menus.createMenu({ id: "invalid", items: [{ type: "submenu", id: "bound", label: "File", target: { id: "missing" }, items: [] }] })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
     const other = await menus.createMenu({ id: "other", items: [{ type: "submenu", id: "edit", label: "Edit", items: [] }] });
     const published = JSON.parse(calls.filter(call => call.method === "publish").at(-1)!.args[0]);
@@ -614,7 +615,7 @@ test("context menus reject invalid native selection and unsupported surface item
     await expect(context.showContextMenu(options)).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   }
   calls.length = 0;
-  await expect(context.showContextMenu({ ...options, items: [{ type: "submenu", id: "group", label: "Group", items: [] }] })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(context.showContextMenu({ ...options, items: [{ type: "submenu", id: "group", label: "Group", items: [] } as unknown as import("../packages/context-menu/src/index").MenuItem] })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
   expect(calls).toHaveLength(0);
   handlers.set("NativeContextMenu.showMenu", () => { throw nativeError("E_NOT_FOUND"); });
   await expect(context.showContextMenu(options)).rejects.toMatchObject({ code: "E_NOT_FOUND" });
@@ -706,7 +707,7 @@ test("application menu updates snapshot inputs, serialize and retain last succes
   const item = await menus.createMenu({ id: "queued", items: [], onAction: event => received.push(event) });
   let finish!: () => void;
   handlers.set("NativeMenu.publish", () => new Promise<void>(resolve => { finish = resolve; }));
-  const items: import("../packages/native-menu/src/api").MenuItem[] = [{ type: "submenu", id: "file", label: "Before", items: [{ type: "action", id: "open", label: "Open" }] }];
+  const items: import("../packages/native-menu/src/api").MenuRootItem[] = [{ type: "submenu", id: "file", label: "Before", items: [{ type: "action", id: "open", label: "Open" }] }];
   const update = item.update({ items }); if (items[0].type === "submenu") items[0].label = "After";
   await tick(); expect(JSON.parse(calls.at(-1)!.args[0])[0].title).toBe("Before");
   const token = JSON.parse(calls.at(-1)!.args[0])[0]._sparkOwner;

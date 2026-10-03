@@ -37,6 +37,6 @@ test("macOS groups reject unknown fields and conflicting level ownership", () =>
 test("toolbar menus use shared menu IDs and numeric slider values", () => {
   const options = { macos: { toolbar: { items: [{ type: "menu", id: "view", items: [{ type: "slider", id: "zoom", label: "Zoom", min: 1, max: 10, value: 5 }] }] } } } as const;
   expect(() => validateOptions(options, "macos", false)).not.toThrow();
-  expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "menu", id: "view", items: [{ type: "action", id: "a", label: "A", shortcut: "Cmd+A" }] }] } } }, "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+  expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "menu", id: "view", items: [{ type: "action", id: "a", label: "A", shortcut: "Cmd+A" }] }] } } } as unknown as Parameters<typeof validateOptions>[0], "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
   expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "segmented", id: "view", value: "", segments: [{ value: "", label: "Empty" }, { value: "", label: "Duplicate" }] }] } } }, "macos", false)).toThrow();
 });

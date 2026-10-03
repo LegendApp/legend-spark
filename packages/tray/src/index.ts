@@ -3,8 +3,13 @@ import { Platform } from "react-native";
 import Native from "./NativeDesktopTray";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { SparkError, asyncRegistration, invokeNative, parseNativeResult, type Availability, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
-import { menuItems, selectableMenuIds, type MenuItem, type MenuWireItem } from "@legendapp/spark-desktop-app/src/contracts/menu";
-export type { MenuItem, MenuIcon, MenuRole, MenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
+import { menuItems, selectableMenuIds, type MenuItem as SharedMenuItem, type MenuWireItem } from "@legendapp/spark-desktop-app/src/contracts/menu";
+type TrayEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean };
+type TrayLeaf = { type: "separator" } | (TrayEntry & { type: "action" }) | (TrayEntry & { type: "checkbox"; checked: boolean });
+export type MenuItem = TrayLeaf | (TrayEntry & { type: "submenu"; items: readonly MenuItem[] });
+export type MenuAction = Extract<import("@legendapp/spark-desktop-app/src/contracts/menu").MenuAction, { type: "action" }>;
+export type { MenuIcon } from "@legendapp/spark-desktop-app/src/contracts/menu";
+export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 export type TrayAction = { type: "click" } | { type: "action"; itemId: string };
 export interface TrayUpdate {
   /** Visible text on macOS; accessible tooltip fallback on Windows. */

@@ -1,8 +1,11 @@
 import { Platform } from "react-native";
 import NativeContextMenu from "./NativeContextMenu";
 import { SparkError, invokeNative, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
-import { menuItems, selectableMenuIds, type MenuItem } from "@legendapp/spark-desktop-app/src/contracts/menu";
-export type { MenuItem, MenuIcon, MenuRole, MenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
+import { menuItems, selectableMenuIds, type MenuItem as SharedMenuItem, type MenuAction as SharedMenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
+type ContextMenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean };
+export type MenuItem = { type: "separator" } | (ContextMenuEntry & { type: "action" }) | (ContextMenuEntry & { type: "checkbox"; checked: boolean });
+export type MenuAction = Extract<SharedMenuAction, { type: "action" }>;
+export type { MenuIcon } from "@legendapp/spark-desktop-app/src/contracts/menu";
 export interface ContextMenuOptions { items: readonly MenuItem[]; windowId: string; position: { x: number; y: number } }
 export type ContextMenuResult = { canceled: true } | { canceled: false; itemId: string };
 export function getContextMenuAvailability(): Availability {

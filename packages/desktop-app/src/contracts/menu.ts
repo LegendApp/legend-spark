@@ -15,6 +15,8 @@ export type MenuItem =
   | (Omit<MenuEntry, "label"> & { type: "role"; role: MenuRole; label?: string; shortcut?: string })
   | (MenuEntry & { type: "slider"; min: number; max: number; value: number; suffix?: string });
 export type MenuAction = { type: "action"; itemId: string } | { type: "valueChanged"; itemId: string; value: number };
+/** Internal recursive subset helper for feature surfaces that support fewer menu item arms. */
+export type MenuItemTree<Leaf extends Exclude<MenuItem, { type: "submenu" }>> = Leaf | (Omit<Extract<MenuItem, { type: "submenu" }>, "items"> & { items: readonly MenuItemTree<Leaf>[] });
 /** Internal transport shape; never reexported from feature entry points. */
 export interface MenuWireItem {
   id?: string; title?: string; target?: MenuTarget; placement?: MenuPlacement; _sparkOwner?: string; _sparkIdentity?: string; enabled?: boolean; hidden?: boolean; checked?: boolean; separator?: boolean;

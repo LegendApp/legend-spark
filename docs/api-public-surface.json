@@ -31,8 +31,10 @@
     "AppEvent",
     "AppEventMap",
     "AppRuntime",
+    "AsyncRegistration",
     "BeforeQuitOptions",
     "QuitResult",
+    "Subscription",
     "activate",
     "addAppListener",
     "beforeQuit",
@@ -126,7 +128,6 @@
     "MenuAction",
     "MenuIcon",
     "MenuItem",
-    "MenuRole",
     "getContextMenuAvailability",
     "showContextMenu"
   ],
@@ -171,6 +172,7 @@
     "getDragDropAvailability"
   ],
   "./files": [
+    "AsyncRegistration",
     "CopyMoveOptions",
     "CreateDirectoryOptions",
     "DirectoryEntry",
@@ -225,6 +227,7 @@
     "openURL"
   ],
   "./menus": [
+    "AsyncRegistration",
     "Menu",
     "MenuAction",
     "MenuIcon",
@@ -233,6 +236,7 @@
     "MenuOptions",
     "MenuPlacement",
     "MenuRole",
+    "MenuRootItem",
     "MenuState",
     "MenuTarget",
     "MenuUpdate",
@@ -409,10 +413,10 @@
     "setLaunchAtLogin"
   ],
   "./tray": [
+    "AsyncRegistration",
     "MenuAction",
     "MenuIcon",
     "MenuItem",
-    "MenuRole",
     "Tray",
     "TrayAction",
     "TrayOptions",
@@ -512,6 +516,7 @@
     "WebViewSource"
   ],
   "./windows": [
+    "AsyncRegistration",
     "CenterWindowOptions",
     "CloseResult",
     "DisplayId",
@@ -575,8 +580,11 @@
     "withWindowProvider"
   ],
   "./windows/macos": [
+    "AsyncRegistration",
     "FocusToolbarSearchOptions",
     "MacOSSetWindowBoundsOptions",
+    "MacOSToolbarItem",
+    "MacOSToolbarOptions",
     "MacOSWindowBlurOptions",
     "MacOSWindowEvent",
     "addMacOSWindowListener",

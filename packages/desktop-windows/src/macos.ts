@@ -1,10 +1,11 @@
 import { SparkError, nativeError, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
+export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { macosCommand, macosNative } from "./macos-adapter";
 import { subscribeToWindowInstance, windowCommand } from "./transport";
 import { type WindowListenerOptions } from "./api";
 import { bounds, keys, number, object, text, windowId } from "./validation";
 import type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSSetWindowBoundsOptions, WindowBounds } from "./types";
-export type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSSetWindowBoundsOptions } from "./types";
+export type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSSetWindowBoundsOptions, MacOSToolbarItem, MacOSToolbarOptions } from "./types";
 export async function setWindowBounds(id: string, value: WindowBounds, options: MacOSSetWindowBoundsOptions = {}): Promise<void> {
   macosNative(); windowId(id); bounds(value); object(options, "animation options"); keys(options, ["durationMs"]);
   if (options.durationMs !== undefined) number(options.durationMs, "durationMs", 0, 60000);

@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { SparkError, asyncRegistration, nativeError, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import Native from "./NativeDesktopWindowManager";
 import { createMacOSWindow, macosNative, updateMacOSWindow } from "./macos-adapter";

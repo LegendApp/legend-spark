@@ -8,7 +8,7 @@ import * as notifications from "@legendapp/spark/notifications";
 import * as system from "@legendapp/spark/system";
 import { createTray } from "@legendapp/spark/tray";
 import { registerGlobalShortcut } from "@legendapp/spark/global-shortcuts";
-import { createMenu, type MenuAction } from "@legendapp/spark/menus";
+import { createMenu, type MenuAction, type MenuRootItem } from "@legendapp/spark/menus";
 import { getWindow, openWindow, closeWindow, addWindowListener } from "@legendapp/spark/windows";
 import { assertContract } from "./contract-cases";
 
@@ -106,7 +106,7 @@ export default function DesktopInteractionChecks({ check, onError, onBusy }: {
     const base = await createMenu({ id: "contract-base", items: [{ type: "submenu", id: "parity", label: "Parity", items: [{ type: "action", id: "base", label: "Original" }, { type: "action", id: "after", label: "After" }] }] });
     let binding: Awaited<ReturnType<typeof createMenu>> | undefined;
     try {
-      const items: MenuItem[] = [{ type: "submenu", id: "bound", target: { id: "parity" }, label: "Parity", items: [{ type: "checkbox", id: "continue", target: { id: "base" }, label: "Continue", placement: { after: { id: "after" } }, shortcut: "CmdOrCtrl+Shift+Y", checked: false }] }];
+      const items: MenuRootItem[] = [{ type: "submenu", id: "bound", target: { id: "parity" }, label: "Parity", items: [{ type: "checkbox", id: "continue", target: { id: "base" }, label: "Continue", placement: { after: { id: "after" } }, shortcut: "CmdOrCtrl+Shift+Y", checked: false }] }];
       binding = await createMenu({ id: "contract-binding", items, onAction: selected });
       if (items[0].type === "submenu" && items[0].items[0].type === "checkbox") items[0].items[0].checked = true;
       await binding.update({ items });

@@ -136,21 +136,48 @@ type MenuItem =
   | { type: 'action'; id: string; label: string; disabled?: boolean; shortcut?: string }
   | { type: 'checkbox'; id: string; label: string; checked: boolean; disabled?: boolean }
   | { type: 'submenu'; id: string; label: string; items: readonly MenuItem[] }
-  | { type: 'role'; role: MenuRole; label?: string };
+  | { type: 'role'; role: MenuRole; label?: string }
+  | { type: 'slider'; id: string; label: string; min: number; max: number; value: number; suffix?: string };
+
+// Feature entrypoints expose only the item shapes their native surface accepts.
+type MenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean; icon?: MenuIcon; target?: MenuTarget; placement?: MenuPlacement };
+type AppMenuItem =
+  | { type: 'separator' }
+  | (MenuEntry & { type: 'action'; shortcut?: string })
+  | (MenuEntry & { type: 'checkbox'; checked: boolean; shortcut?: string })
+  | (MenuEntry & { type: 'submenu'; items: readonly AppMenuItem[] })
+  | (Omit<MenuEntry, 'label'> & { type: 'role'; role: MenuRole; label?: string; shortcut?: string });
+type MenuRootItem = Extract<AppMenuItem, { type: 'submenu' }>;
+type ContextMenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean };
+type ContextMenuItem = { type: 'separator' } | (ContextMenuEntry & { type: 'action' }) | (ContextMenuEntry & { type: 'checkbox'; checked: boolean });
+type TrayEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean };
+type TrayLeaf = { type: 'separator' } | (TrayEntry & { type: 'action' }) | (TrayEntry & { type: 'checkbox'; checked: boolean });
+type TrayMenuItem = TrayLeaf | (TrayEntry & { type: 'submenu'; items: readonly TrayMenuItem[] });
+type ToolbarEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean; icon?: { type: 'symbol'; name: string } };
+type ToolbarMenuItem =
+  | { type: 'separator' }
+  | (ToolbarEntry & { type: 'action' })
+  | (ToolbarEntry & { type: 'checkbox'; checked: boolean })
+  | (ToolbarEntry & { type: 'slider'; min: number; max: number; value: number; suffix?: string });
 
 // /menus: imperative ownership plus useMenu in the same module.
-createMenu(options: { id: string; items: readonly MenuItem[]; onAction: MenuActionHandler }): Promise<Menu>;
+createMenu(options: { id: string; items: readonly MenuRootItem[]; onAction: MenuActionHandler }): Promise<Menu>;
 // Menu: update(options), remove(). Semantic roles target native responders.
+// Application menus accept recursive action, checkbox, separator, submenu, and role items; sliders are toolbar-only.
 
 // /context-menu
 showContextMenu(options: {
-  items: readonly MenuItem[];
+  items: readonly ContextMenuItem[];
   windowId: string;
   position: { x: number; y: number }; // Logical units in owner content coordinates.
 }): Promise<{ canceled: true } | { canceled: false; itemId: string }>;
+// Context menus are flat and omit shortcuts, icons, targets, and placements.
 
 // /tray
-createTray(options: TrayOptions): Promise<Tray>; // update + remove; shared menu model.
+createTray(options: TrayOptions): Promise<Tray>; // menu?: readonly TrayMenuItem[]; update + remove.
+// Tray menus recurse through submenus and omit shortcuts, icons, targets, and placements.
+// macOS toolbar popup menus use ToolbarMenuItem: sliders are supported, but roles, submenus,
+// shortcuts, targets, and placements are not.
 
 // /shortcuts; /global-shortcuts
 registerShortcut(accelerator, handler, options?): Promise<AsyncRegistration>;

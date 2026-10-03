@@ -1,6 +1,7 @@
 import { NativeEventEmitter, Platform } from "react-native";
 import { callBinary, nativeBytes } from "@legendapp/spark-desktop-app/src/contracts/native-buffer";
 import { SparkError, invokeNative, asyncRegistration, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import Native from "./NativeDesktopFileSystem";
 import { createFileHandle, iterateFile, writeFileChunks, type FileMode, type ReadChunksOptions } from "./handles";

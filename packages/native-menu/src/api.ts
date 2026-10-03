@@ -1,10 +1,15 @@
 import { NativeEventEmitter, Platform } from "react-native";
 import NativeMenu from "./NativeMenu";
 import { SparkError, asyncRegistration, invokeNative, type Availability, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
-import { menuItems, selectableMenuIds, type MenuItem, type MenuWireItem, type MenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
+import { menuItems, selectableMenuIds, type MenuItem as SharedMenuItem, type MenuItemTree, type MenuWireItem, type MenuAction as SharedMenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
 import { composeWindowsMenus } from "./windows-menus";
-export type { MenuItem, MenuIcon, MenuRole, MenuAction, MenuTarget, MenuPlacement, MenuLocation } from "@legendapp/spark-desktop-app/src/contracts/menu";
-export interface MenuUpdate { items: readonly MenuItem[] }
+type NativeMenuLeaf = Extract<SharedMenuItem, { type: "action" | "checkbox" | "separator" | "role" }>;
+export type MenuItem = MenuItemTree<NativeMenuLeaf>;
+export type MenuAction = Extract<SharedMenuAction, { type: "action" }>;
+export type { MenuIcon, MenuRole, MenuTarget, MenuPlacement, MenuLocation } from "@legendapp/spark-desktop-app/src/contracts/menu";
+export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
+export type MenuRootItem = Extract<MenuItem, { type: "submenu" }>;
+export interface MenuUpdate { items: readonly MenuRootItem[] }
 export interface MenuOptions extends MenuUpdate { id: string; onAction?: (action: MenuAction) => void }
 export interface Menu extends AsyncRegistration { readonly id: string; update(options: MenuUpdate): Promise<void> }
 interface Owner { id: string; token: string; items: MenuWireItem[] }

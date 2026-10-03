@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { packSpark } from "../scripts/pack-spark.ts";
 import { installedPackages, nativePackages, selection, stateFile } from "../packages/cli/src/project.ts";
+import ts from "typescript";
 
 const framework = path.resolve(import.meta.dirname, "..");
 test("single Spark archive resolves public exports and preserves private native discovery and pruning", async () => {
@@ -27,6 +28,56 @@ test("single Spark archive resolves public exports and preserves private native 
     mkdirSync(destination, { recursive: true });
     const child = spawnProcess(["tar", "-xzf", path.join(root, file), "--strip-components=1", "-C", destination], { stdout: "pipe", stderr: "pipe" });
     expect(await child.exited).toBe(0);
+    // Compile against the extracted public package, with only a minimal React Native peer stub.
+    // This catches import rewrites that accidentally resolve through this producer workspace.
+    const peerStub = path.join(app, "node_modules/react-native");
+    mkdirSync(peerStub, { recursive: true });
+    writeFileSync(path.join(peerStub, "package.json"), JSON.stringify({ name: "react-native", types: "index.d.ts" }));
+    writeFileSync(path.join(peerStub, "index.d.ts"), `export interface TurboModule {} export const Platform: any; export class NativeEventEmitter { constructor(...args: any[]); addListener<T = any>(event: string, listener: (event: T) => void): { remove(): void }; } export const TurboModuleRegistry: { get<T>(name: string): T | null; getEnforcing<T>(name: string): T }; export const Linking: any; export const Appearance: any; export const AppState: any; export const DeviceEventEmitter: any; export const NativeModules: any; export const View: any; export const Text: any; export const Pressable: any; export const Image: any; export const StyleSheet: any; export type ViewProps = any; export type TextProps = any; export type ColorValue = any; export const AppRegistry: any;`);
+    const reactStub = path.join(app, "node_modules/react");
+    mkdirSync(reactStub, { recursive: true });
+    writeFileSync(path.join(reactStub, "package.json"), JSON.stringify({ name: "react", types: "index.d.ts" }));
+    writeFileSync(path.join(reactStub, "index.d.ts"), `export type ReactNode = any; export type ComponentType<P = any> = (props: P) => any; export type PropsWithChildren<P = unknown> = P & { children?: ReactNode }; export function useEffect(effect: () => void | (() => void), deps?: readonly unknown[]): void; export function useLayoutEffect(effect: () => void | (() => void), deps?: readonly unknown[]): void; export function useRef<T>(value: T): { current: T }; export function useState<T>(value: T | (() => T)): [T, (value: T | ((previous: T) => T)) => void]; export interface Context<T> { Provider: any; __value?: T } export function createContext<T>(value: T): Context<T>; export function useContext<T>(context: Context<T>): T;`);
+    mkdirSync(path.join(reactStub, "jsx-runtime"), { recursive: true });
+    writeFileSync(path.join(reactStub, "jsx-runtime/index.d.ts"), `export const Fragment: any; export function jsx(...args: any[]): any; export function jsxs(...args: any[]): any;`);
+    const consumerSource = path.join(app, "public-types.ts");
+    writeFileSync(consumerSource, `
+      import type { MenuItem, MenuRootItem, AsyncRegistration } from "@legendapp/spark/menus";
+      import type { MenuItem as ContextMenuItem } from "@legendapp/spark/context-menu";
+      import type { MenuItem as TrayMenuItem, AsyncRegistration as TrayRegistration } from "@legendapp/spark/tray";
+      import type { AsyncRegistration as AppRegistration, Subscription } from "@legendapp/spark/app";
+      import type { AsyncRegistration as FileRegistration } from "@legendapp/spark/files";
+      import type { MacOSToolbarItem } from "@legendapp/spark/windows/macos";
+      import type { AsyncRegistration as WindowRegistration } from "@legendapp/spark/windows";
+      const root: MenuRootItem = { type: "submenu", id: "root", label: "Root", items: [{ type: "role", id: "quit", role: "quit" }] };
+      const tray: TrayMenuItem = { type: "submenu", id: "root", label: "Root", items: [{ type: "action", id: "open", label: "Open" }] };
+      const context: ContextMenuItem = { type: "action", id: "open", label: "Open" };
+      const toolbar: MacOSToolbarItem = { type: "menu", id: "volume", items: [{ type: "slider", id: "slider", label: "Volume", min: 0, max: 1, value: 0.5 }] };
+      declare const registration: AsyncRegistration | TrayRegistration | AppRegistration | FileRegistration | WindowRegistration;
+      declare const subscription: Subscription;
+      void [root, tray, context, toolbar, registration, subscription];
+      // @ts-expect-error Application menu roots must be submenus.
+      const invalidRoot: MenuRootItem = { type: "action", id: "open", label: "Open" };
+      // @ts-expect-error Context menus reject submenu items.
+      const invalidContext: ContextMenuItem = { type: "submenu", id: "root", label: "Root", items: [] };
+      // @ts-expect-error Context menus reject semantic targeting.
+      const invalidContextTarget: ContextMenuItem = { type: "action", id: "open", label: "Open", target: { menu: "file" } };
+      // @ts-expect-error Tray menus reject shortcuts and icons.
+      const invalidTray: TrayMenuItem = { type: "action", id: "open", label: "Open", shortcut: "Cmd+O", icon: { type: "symbol", name: "folder" } };
+      // @ts-expect-error Tray menu restrictions apply recursively.
+      const invalidNestedTray: TrayMenuItem = { type: "submenu", id: "root", label: "Root", items: [{ type: "slider", id: "volume", label: "Volume", min: 0, max: 1, value: 0.5 }] };
+      // @ts-expect-error Toolbar menus reject semantic role commands.
+      const invalidToolbarRole: MacOSToolbarItem = { type: "menu", id: "file", items: [{ type: "role", id: "quit", role: "quit" }] };
+      // @ts-expect-error App menu callbacks do not produce slider changes.
+      const invalidAction: import("@legendapp/spark/menus").MenuAction = { type: "valueChanged", itemId: "slider", value: 0.5 };
+    `);
+    const consumerProgram = ts.createProgram([consumerSource], {
+      strictNullChecks: true, noImplicitAny: false, noEmit: true, skipLibCheck: true, target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler,
+      types: [], jsx: ts.JsxEmit.ReactJSX,
+    });
+    const consumerDiagnostics = ts.getPreEmitDiagnostics(consumerProgram);
+    expect(consumerDiagnostics.map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"))).toEqual([]);
     writeFileSync(path.join(app, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": VERSION } }));
     writeFileSync(path.join(app, "desktop.config.json"), JSON.stringify({ name: "Packed", version: "1.0.0", projectId: "packed-test", macos: { bundleIdentifier: "org.example.packed" }, platforms: ["macos"] }));
     const req = createRequire(path.join(app, "package.json"));

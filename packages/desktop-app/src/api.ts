@@ -2,6 +2,7 @@ import { Platform, TurboModuleRegistry } from "react-native";
 import { onDesktopEvent, type DesktopEvent } from "./events";
 import { callAppNative } from "./transport";
 import { SparkError, asyncRegistration, nativeError, type Availability, type AsyncRegistration, type Subscription } from "./contracts";
+export type { AsyncRegistration, Subscription } from "./contracts";
 export interface AppRuntime { mode: "go" | "dev" | "preview" | "release"; modules: Readonly<Record<string, string>> }
 export interface AppContext { projectId: string; name: string; version: string; runtime: AppRuntime; launchArguments: readonly string[] }
 export type QuitResult = { quitRequested: true } | { quitRequested: false; reason: "vetoed" };
