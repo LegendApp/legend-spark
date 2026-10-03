@@ -6,6 +6,8 @@ import { installWorkspaceAdapters } from "../scripts/install-workspace-adapters.
 function fixture() {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-workspace-adapter-"));
   const pkg = path.join(root, "node_modules/probe"); mkdirSync(pkg, { recursive: true });
+  mkdirSync(path.join(root, "patches/workspace"), { recursive: true });
+  writeFileSync(path.join(root, "patches/workspace/upstream.json"), JSON.stringify({ probe: { version: "1.0.0", integrity: "sha512-probe" } }));
   writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { probe: "1.0.0" }, sparkWorkspacePatches: { "probe@1.0.0": "probe.patch" } }));
   writeFileSync(path.join(pkg, "package.json"), JSON.stringify({ name: "probe", version: "1.0.0" }));
   writeFileSync(path.join(root, "cache.js"), "old\n"); linkSync(path.join(root, "cache.js"), path.join(pkg, "index.js"));
@@ -19,6 +21,7 @@ test("workspace adapters add nested native files, preserve cache hardlinks, and 
     expect(readFileSync(path.join(f.pkg, "index.js"), "utf8")).toBe("new\n");
     expect(readFileSync(path.join(f.root, "cache.js"), "utf8")).toBe("old\n");
     expect(readFileSync(path.join(f.pkg, "windows/nested/module.cpp"), "utf8")).toBe("native\n");
+    expect(JSON.parse(readFileSync(path.join(f.pkg, "package.json"), "utf8")).spark.workspacePatch).toMatchObject({ schema: 1, version: "1.0.0", upstreamIntegrity: "sha512-probe" });
   } finally { f.close(); }
 });
 test("workspace adapters reject an unexpected upstream version or changed source", () => {

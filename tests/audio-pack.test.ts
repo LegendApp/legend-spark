@@ -31,7 +31,7 @@ test("distributed audio archives apply the exact workspace delta and verify upst
     expect(metadata.spark).toMatchObject({ sdk: true, upstreamIntegrity: `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}`, patchHash: expect.stringMatching(/^[a-f0-9]{64}$/) });
     for (const [relative, value] of expected) {
       const actual = execFileSync("tar", ["-xOf", packed, `package/${relative}`], { encoding: "utf8" });
-      if (relative === "package.json") { const actualPackage = JSON.parse(actual), expectedPackage = JSON.parse(value); delete actualPackage.spark; expect(actualPackage).toEqual(expectedPackage); }
+      if (relative === "package.json") { const actualPackage = JSON.parse(actual), expectedPackage = JSON.parse(value); delete actualPackage.spark; delete expectedPackage.spark; expect(actualPackage).toEqual(expectedPackage); }
       else expect(actual).toBe(value);
     }
     writeFileSync(archive, "invalid"); await expect(packAudio(root, output)).rejects.toThrow("Integrity mismatch");
