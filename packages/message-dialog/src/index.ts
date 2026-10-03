@@ -15,7 +15,8 @@ export interface MessageDialogOptions {
 export interface MessageDialogResult {
   /** null means the host dismissed the dialog without selecting a button. */
   buttonId: string | null;
-  checked: boolean;
+  /** The checkbox's final state; present only when options.checkbox was supplied. */
+  checked?: boolean;
 }
 export interface ConfirmOptions { title?: string; windowId?: string }
 export function getMessageDialogAvailability(): Availability {
@@ -39,7 +40,7 @@ export async function showMessage(options: MessageDialogOptions): Promise<Messag
   if (!availability.available) throw new SparkError(availability.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : "E_MODULE_UNAVAILABLE", "Message dialogs require a desktop host with NativeDesktopMessageDialog installed");
   const { defaultButtonId, cancelButtonId, ...rest } = options;
   const result = parseNativeResult(await invokeNative(() => Native!.call("show", JSON.stringify({ ...rest, buttons: buttons.map(button => button.label), defaultButton: defaultButtonId === undefined ? 0 : ids.indexOf(defaultButtonId), cancelButton: cancelButtonId === undefined ? undefined : ids.indexOf(cancelButtonId) }))), (value): value is { button: number; checked: boolean } => !!value && typeof value === "object" && "button" in value && Number.isInteger(value.button) && (value.button as number) >= -1 && (value.button as number) < buttons.length && "checked" in value && typeof value.checked === "boolean");
-  return { buttonId: result.button === -1 ? null : ids[result.button], checked: result.checked };
+  return { buttonId: result.button === -1 ? null : ids[result.button], ...(options.checkbox ? { checked: result.checked } : {}) };
 }
 export async function confirm(message: string, options: ConfirmOptions = {}): Promise<boolean> {
   if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected confirmation options");

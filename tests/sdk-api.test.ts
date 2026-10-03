@@ -466,7 +466,9 @@ test("dialogs distinguish cancellation, malformed output and unavailable targets
     await expect(dialogs.saveFileDialog()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   }
   handlers.set("NativeDesktopMessageDialog.show", () => ({ button: -1, checked: true }));
-  expect(await messages.showMessage({ title: "Closed" })).toEqual({ buttonId: null, checked: true });
+  expect(await messages.showMessage({ title: "Closed" })).toEqual({ buttonId: null });
+  handlers.set("NativeDesktopMessageDialog.show", () => ({ button: -1, checked: true }));
+  expect(await messages.showMessage({ title: "Closed", checkbox: { label: "Remember" } })).toEqual({ buttonId: null, checked: true });
   handlers.set("NativeDesktopMessageDialog.show", () => ({ button: 9, checked: false }));
   await expect(messages.showMessage({ title: "Invalid" })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   platform.OS = "ios";
