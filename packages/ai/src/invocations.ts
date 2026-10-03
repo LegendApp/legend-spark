@@ -17,7 +17,7 @@ export function buildAIInvocation(tool: AIToolId, prompt: string, options: AIInv
   if (tool === "codex") {
     const model = options.codex?.model;
     const reasoningEffort = options.codex?.reasoningEffort ?? defaultCodexReasoningEffort;
-    const args = ["exec", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check"];
+    const args: string[] = ["exec", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check"];
     if (model) {
       args.push("--model", model);
     }

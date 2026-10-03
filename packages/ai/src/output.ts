@@ -33,7 +33,7 @@ export function extractJsonCandidate(text: string): string | null {
   return trimmed.slice(firstBrace, lastBrace + 1);
 }
 
-export function parseAIJson(text: string): unknown | null {
+export function parseAIJson(text: string): unknown {
   const candidate = extractJsonCandidate(text);
   if (!candidate) {
     return null;
