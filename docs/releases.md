@@ -1,103 +1,115 @@
-# Frame preview releases
+# Preview release process
 
-The npm package and Runner are artifacts of one SDK version. The public package
-contains `release.json` inside its private CLI, pinning the patched dependency
-URLs and the Runner archive's checksum, size, publisher team and native
-fingerprint. Published projects use the SDK's exact registry version and HTTPS
-archives. Explicit `create --packages <manifest>` retains local SDK development.
+Legend Spark currently identifies itself as `0.0.1-next.2` and publishes through
+the `next` preview channel. That identity remains experimental until the
+[release readiness matrix](release-readiness.md) and a completed
+[release evidence dossier](release-test-dossier.md) support a deliberate
+promotion decision.
 
-Runner release manifests support macOS arm64 and x64; availability depends on the assets published for that release. Windows requires a custom build
-and remains experimental pending native acceptance. Users need Node 24.19+ and
-a package manager, but do not need Xcode to download and open the hosted Runner.
-Native builds and notarization require the maintainer's Apple toolchain.
+The npm package and Runner are artifacts of one SDK version. Release assembly
+validates source/recipe provenance, the five required patched native packages,
+archive hashes, size and version metadata. Patched dependency archives are staged
+under project-relative `spark-packages/` paths so generated projects and ordinary
+clones retain the exact verified inputs. Installation verifies those bytes before
+invoking the selected package manager. See the packer and release tests for the
+current implementation; do not substitute an unverified cache or producer
+workspace path.
 
-## Prerequisites
+## Before staging
 
-- Select the preview version and update the workspace/private package versions,
-  template Frame dependency pins and `VERSION` in the CLI together. Refresh the
-  npm lockfile and run typecheck and tests before committing.
-- Use a public distribution repository. The currently configured repository is
-  `LegendApp/legend-spark`; its visibility must be made public explicitly before
-  public downloads can work. Never change visibility implicitly in automation.
-- Authenticate GitHub and npm with accounts allowed to release/publish.
-- Install a Developer ID Application certificate and private key. Set
-  `SPARK_DEVELOPER_ID_APPLICATION` and `SPARK_NOTARY_KEYCHAIN_PROFILE` to the
-  chosen identity/profile references (or configure them with `spark credentials`).
-  Keep secrets in Keychain; never commit signing credentials.
+- Start from the exact reviewed source revision and retain the preview version
+  and intended `next` channel unless a separately approved release decision says
+  otherwise.
+- Run `npm ci`, `npm run typecheck`, and the portable test command in
+  [release readiness](release-readiness.md).
+- Run `node tests/packed-consumer.integration.ts` for the actual packed SDK
+  consumer graph. This validates package installation and declarations, not
+  native builds or runtime behavior.
+- Complete the dossier for the exact source and archive. Resolve platform gates
+  for every platform advertised by the candidate.
+- Verify the configured GitHub repository visibility and npm identity before
+  publishing; do not change either as an implicit release step.
+- For signed production Runner distribution, configure the authorized Developer
+  ID identity and notarization profile in Keychain. Never put secret values in
+  the repository or dossier.
 
 ## Build and stage
 
-From the clean, committed release revision on a Mac:
+From a clean, committed release revision on a supported Mac, run:
 
 ```sh
 npm ci
 npm run release:runner
 ```
 
-This packs the SDK and patched third-party archives, creates/refreshes the managed
-Runner project, forces its native build and records the source revision, then
-signs and notarizes a staging copy. It preserves the development runtime mode
-and full native module set; it does not build a pruned standalone application.
-The signed app passes nested signature, entitlement, architecture, notarization,
-Gatekeeper and extracted-archive checks before release assembly.
+This command packs the SDK and patched third-party archives, refreshes the
+managed Runner project, forces a native Go/Debug Runner build from the committed
+revision, and asks the packaging flow to sign and notarize a staging copy. The
+Runner retains its development runtime mode and full native module set; this is
+not a pruned standalone application build. The machine must have the Apple
+toolchain and configured identities. Local Sparkle fixture tests or an ad-hoc
+signature do not establish Developer ID or notarization acceptance.
 
-If Apple is still processing, the command exits 2. Resume unchanged inputs with:
+If Apple is still processing, the command exits with status 2. Resume unchanged
+inputs by running:
 
 ```sh
 npm run release:runner -- --resume
 ```
 
-Unknown submission outcomes require explicit recovery with
-`spark sdk package-runner --submission-id <Apple submission UUID>`; do not retry
-an uncertain submission by discarding its state. Existing signing/notarization
-state remains in the managed project's `.spark/packaging` directory.
+If submission outcome is unknown, recover it explicitly with
+`spark sdk package-runner --submission-id <Apple submission UUID>`; do not
+discard state and resubmit. The managed project's `.spark/packaging` directory
+holds the signed archive, submission identity, and recovery state. Preserve it
+until the submission is resolved.
 
-Successful assembly writes `artifacts/releases/<version>` containing the public
-npm tarball, patched dependency tarballs, Runner ZIP, `runner-manifest.json`,
-`checksums.txt` and a source-revision/artifact manifest. It refuses to overwrite
-an existing release directory. The standalone `release:assemble` command accepts
-an already signed ZIP produced from the same committed source revision.
+To assemble an existing signed Runner archive without rebuilding, provide its
+`.zip` path to the assembly script:
 
-## Publish preview
+```sh
+node scripts/prepare-release.ts /path/to/signed-SparkRunner.zip
+```
 
-Push the reviewed release source and its matching `v<version>` tag to the public
-repository first. The publisher requires that remote tag to point at the exact
-staged revision. Then:
+Assembly requires the archive to match the current committed source revision
+and requires `artifacts/packages/manifest.json` plus `provenance.json` from the
+matching package staging run. It checks the native signature, notarization,
+runtime architecture, source revision, package inventory, and package bytes.
+It refuses to overwrite `artifacts/releases/<version>`; preserve staged bytes
+and use a new version when inputs change.
+
+Successful assembly writes `artifacts/releases/<version>` with the public npm
+tarball, patched dependency tarballs, Runner ZIP, `runner-manifest.json`,
+`checksums.txt`, and source/artifact provenance. Do not replace existing release
+bytes to recover from a checksum mismatch; investigate and stage a new candidate
+when inputs change.
+
+## Publish a reviewed preview
+
+Publishing is a separate explicit operation. First push the reviewed source and
+its matching `v<version>` tag to the configured public repository. The publisher
+requires the remote tag to resolve to the staged revision. Then run:
 
 ```sh
 npm run release:publish
 ```
 
-The publisher checks local checksums and public repository visibility, creates a
-draft prerelease, uploads artifacts, checks GitHub's asset digests, publishes the
-GitHub release, then publishes the exact assembled npm tarball with public access
-under `next`. It never overwrites existing assets or moves tags. Resuming uploads
-missing draft assets without replacing existing files. A checksum mismatch stops
-for explicit repair; rerunning cannot replace released bytes.
+The publisher verifies staged checksums and repository visibility, creates a
+draft prerelease, uploads and verifies assets, publishes the GitHub release,
+and publishes the exact assembled npm archive under `next`. It does not replace
+existing assets or move tags. Run interactively if npm needs browser
+authentication. Inspect registry tags after publication: npm may assign `latest`
+to an initial release, and `--tag next` does not by itself prove that no
+`latest` tag exists.
 
-Run the publisher in an interactive terminal so npm can open its browser
-authentication prompt. The package also defaults to `next` through `publishConfig`.
-Check registry tags after publication: npm may assign `latest` to a first release
-and refuses to remove it. Changing that tag is an explicit release decision;
-`--tag next` does not guarantee that a new package has no `latest` tag.
+No release should be described as generally production-ready until the dossier
+records clean-recipient, platform-specific, and signed-distribution evidence for
+the claimed support scope. See [Intel macOS targets](macos-intel.md) and
+[Windows issues](windows-issues.md) for known platform-specific gates.
 
-## Packaging compatibility
+## Clean recipient acceptance
 
-The archive contains private implementation modules, but its registry dependency
-list contains only third-party packages. Frame records native discovery in
-`frame.bundledModules` and stores implementations under `vendor/node_modules`,
-with public wrappers and native discovery resolving from that anchor. Yarn 4
-replaces top-level `node_modules` during linking. Do not retain npm bundle
-metadata in the final archive.
-npm normalizes that metadata into private registry dependencies, which breaks
-Yarn Classic installs. Patched dependencies use the same npm archive writer as other
-packages, including a single `package/` prefix required by Yarn 4 extraction.
-Validate normalized registry metadata as well as tarball installation.
-
-## Acceptance before promotion
-
-On another Mac matching the Runner architecture without the checkout, registered SDK, cached Runner,
-Bun or Xcode:
+Run from a recipient account that has no checkout, registered SDK, cached Runner,
+Bun, or Xcode. The exact manager and host version belong in the dossier:
 
 ```sh
 npx @legendapp/spark@next create MyApp
@@ -105,15 +117,26 @@ cd MyApp
 npm run dev
 ```
 
-Press `d`. Verify download progress, automatic launch, Gatekeeper acceptance,
-native controls, Fast Refresh, close/reopen and offline reuse of the cached app.
-Clone the generated project into another directory and reinstall dependencies to
-prove that no producer/cache paths are required. Repeat creation/install using
-pnpm and Yarn. Test interrupted downloads and an incompatible native dependency;
-the latter must request a custom development build rather than run incompatible
-JavaScript. Record native UI acceptance separately from bundling/test results.
+Press `d` and verify download progress, app launch, native controls, Fast Refresh,
+close/reopen, and offline reuse of the cached Runner. Interrupt a download and
+verify retry/recovery. Clone the generated project to another directory and
+reinstall from its preserved lockfile and project-relative package archives.
+Repeat create, clone, and reinstall for each manager advertised in the release
+notes (npm, pnpm, Yarn, or Bun); list unavailable managers as `not-tested`. A
+successful package fixture or bundle is not a substitute for this recipient
+exercise. Record native UI acceptance separately from source, archive, and
+declaration checks.
 
-Only after acceptance, promote the exact tested version to npm's `latest` tag
-and publish release notes. No automatic promotion is performed by these scripts.
+## Archive compatibility notes
 
-See [Intel macOS targets](macos-intel.md) for architecture selection and dual-architecture Runner releases.
+The public archive contains private implementation modules under
+`vendor/node_modules`, while its ordinary dependency list contains only external
+packages. Spark's wrappers and native discovery resolve the bundled modules
+from that vendor anchor because Yarn 4 can replace top-level `node_modules`
+during linking. The packer temporarily uses npm bundle metadata to collect
+implementation modules, then removes that metadata from the final manifest:
+npm normalizes it into registry dependencies, which makes Yarn Classic attempt
+to fetch private modules. Validate both normalized manifest metadata and actual
+archive installation when changing the package format. Patched packages use the
+same archive writer as other packages and a single `package/` prefix for Yarn 4
+extraction.

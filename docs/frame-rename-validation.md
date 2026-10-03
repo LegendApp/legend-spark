@@ -52,7 +52,7 @@ checks occupy several additional GiB (some package data is shared by hardlinks).
 The verification copy, native build products and generated consumers are retained
 for inspection and are disposable. They were not added to Git. Existing prototype
 runtime binaries are incompatible and must be rebuilt; see the
-[migration guide](legend-frame-migration.md).
+[migration guide](legend-spark-migration.md).
 
 Windows native compilation/execution, published npm installation, hosted runtime
 downloads and standalone release acceptance are **not** established by this run.

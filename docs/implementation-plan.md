@@ -47,7 +47,7 @@ The probe established successful creation, CNG plugin application, repeatable se
 
 Begin with this tested matrix and pin the complete dependency graph. Verify availability and any relevant upstream fixes before implementation; do not silently substitute a newer beta. Helper packages use independent versions, so pinning only expo-desktop is insufficient.
 
-Evidence: [expo-desktop assessment](../../legend-apps/artifacts/expo-desktop-beta-assessment-2026-09-10/assessment.md). Source tag commit: `a48ce605e2751682baf261590e80bdf0cd377e42`.
+Evidence: [Expo Desktop integration record](expo-desktop-integration.md). The original cross-checkout assessment artifact is not present in this checkout. Source tag commit: `a48ce605e2751682baf261590e80bdf0cd377e42`.
 
 Known integration points to recheck:
 

@@ -1,0 +1,3614 @@
+{
+  "schema": 1,
+  "package": "@legendapp/spark",
+  "version": "0.0.1-next.2",
+  "source": "packages/desktop/package.json exports",
+  "statusMeaning": {
+    "not-tested": "No target-specific acceptance evidence is recorded for the current candidate. Unit or source checks do not change this status.",
+    "passed": "The scoped acceptance claim is supported by the referenced evidence for this exact source/artifact state; it does not imply broader surface coverage.",
+    "failed": "The referenced acceptance check ran and failed for the stated scope.",
+    "blocked": "The referenced acceptance check could not run for the stated scope; the evidence records the blocker.",
+    "missing": "A required implementation is absent for this advertised target; evidence must identify the missing capability.",
+    "not-applicable": "The capability is outside the target contract or is not a runtime capability; the cell must explain why."
+  },
+  "targets": [
+    "macos-arm64",
+    "macos-x64",
+    "windows-x64",
+    "windows-arm64",
+    "ios",
+    "android",
+    "web"
+  ],
+  "entries": [
+    {
+      "path": "./dialogs",
+      "sourceTarget": "./dialogs.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-file-dialog, @legendapp/spark-message-dialog",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.message-dialog"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/dialog-availability.test.ts",
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/file-dialog/package.json",
+        "packages/message-dialog/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/file-dialog/macos/",
+          "packages/message-dialog/macos/"
+        ],
+        "windows": [
+          "packages/file-dialog/windows/",
+          "packages/message-dialog/windows/"
+        ],
+        "ios": [
+          "packages/file-dialog/ios/"
+        ],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./menus",
+      "sourceTarget": "./menus.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-native-menu",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.advanced-menus"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/menu-hooks.test.ts",
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/native-menu/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/native-menu/macos/"
+        ],
+        "windows": [
+          "packages/native-menu/src/index.windows.ts"
+        ],
+        "ios": [
+          "packages/native-menu/ios/"
+        ],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./package.json",
+      "sourceTarget": "./package.json",
+      "kind": "metadata",
+      "scope": "package-metadata",
+      "provider": "package metadata",
+      "intendedTargets": [],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "npm run typecheck && npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "macos-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./app",
+      "sourceTarget": "./app.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-desktop-app",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "runtime.launch",
+        "lifecycle.forwarding",
+        "lifecycle.recovery",
+        "lifecycle.refresh",
+        "lifecycle.persistence",
+        "lifecycle.custom-module"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/lifecycle.test.ts",
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop-app/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/desktop-app/macos/"
+        ],
+        "windows": [
+          "packages/desktop-app/src/index.windows.ts"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./windows",
+      "sourceTarget": "./windows.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-desktop-windows",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "windows.overlay",
+        "windows.geometry",
+        "desktop.modal-windows"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/window-api.test.ts",
+          "tests/window-hooks.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop-windows/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/desktop-windows/macos/"
+        ],
+        "windows": [
+          "packages/desktop-windows/src/index.windows.ts"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./files",
+      "sourceTarget": "./files.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-file-system",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "files.conflict",
+        "files.streaming",
+        "files.trash",
+        "files.recursive-watch",
+        "desktop.filesystem"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/file-handles.test.ts",
+          "tests/filesystem-path.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/file-system/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/file-system/macos/"
+        ],
+        "windows": [
+          "packages/file-system/windows/"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./settings",
+      "sourceTarget": "./settings.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-settings",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "appearance.override",
+        "desktop.settings"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/settings.test.ts",
+          "tests/observable-settings.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/settings/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./clipboard",
+      "sourceTarget": "./clipboard.ts",
+      "kind": "runtime-api",
+      "scope": "cross-platform-adapter",
+      "provider": "@legendapp/spark-clipboard",
+      "intendedTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "relatedCatalogCases": [
+        "clipboard.read",
+        "clipboard.roundtrip",
+        "desktop.rich-clipboard"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "providerSources": [
+        "packages/clipboard/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/clipboard/macos/"
+        ],
+        "windows": [
+          "packages/clipboard/windows/",
+          "packages/clipboard/src/index.windows.ts"
+        ],
+        "ios": [
+          "packages/clipboard/src/index.ios.ts"
+        ],
+        "android": [
+          "packages/clipboard/src/index.android.ts"
+        ],
+        "web": [
+          "packages/clipboard/src/index.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./context-menu",
+      "sourceTarget": "./context-menu.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-context-menu",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.context-menu"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/context-menu/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/context-menu/macos/"
+        ],
+        "windows": [
+          "packages/context-menu/windows/"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./shortcuts",
+      "sourceTarget": "./shortcuts.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-desktop-shortcuts",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.global-shortcuts"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/keyboard-events.test.ts",
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop-shortcuts/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/desktop-shortcuts/macos/"
+        ],
+        "windows": [
+          "packages/desktop-shortcuts/src/index.windows.ts"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./links",
+      "sourceTarget": "./links.ts",
+      "kind": "runtime-api",
+      "scope": "cross-platform-adapter",
+      "provider": "@legendapp/spark-desktop-links",
+      "intendedTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "relatedCatalogCases": [
+        "links.resolution"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop-links/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/desktop-links/macos/"
+        ],
+        "windows": [
+          "packages/desktop-links/windows/",
+          "packages/desktop-links/src/index.windows.ts"
+        ],
+        "ios": [
+          "packages/desktop-links/src/index.ios.ts"
+        ],
+        "android": [
+          "packages/desktop-links/src/index.android.ts"
+        ],
+        "web": [
+          "packages/desktop-links/src/index.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./secure-storage",
+      "sourceTarget": "./secure-storage.ts",
+      "kind": "runtime-api",
+      "scope": "cross-platform-adapter",
+      "provider": "@legendapp/spark-secure-storage",
+      "intendedTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android"
+      ],
+      "relatedCatalogCases": [
+        "storage.lifecycle",
+        "storage.unavailable"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "The web provider is an explicit unavailable adapter: isAvailable is false and operations reject with E_UNSUPPORTED_PLATFORM."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/secure-storage/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/secure-storage/macos/"
+        ],
+        "windows": [
+          "packages/secure-storage/windows/",
+          "packages/secure-storage/src/index.windows.ts"
+        ],
+        "ios": [
+          "packages/secure-storage/src/index.ios.ts"
+        ],
+        "android": [
+          "packages/secure-storage/src/index.android.ts"
+        ],
+        "web": [
+          "packages/secure-storage/src/index.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./notifications",
+      "sourceTarget": "./notifications.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-notifications",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.notifications"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts",
+          "tests/windows.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/notifications/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/notifications/macos/"
+        ],
+        "windows": [
+          "packages/notifications/windows/"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./tray",
+      "sourceTarget": "./tray.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-tray",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.tray"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/tray-native.test.ts",
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/tray/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/tray/macos/"
+        ],
+        "windows": [
+          "packages/tray/windows/"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./updates",
+      "sourceTarget": "./updates.ts",
+      "kind": "runtime-api",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-updates",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [
+        "distribution.updates"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/updates.test.ts",
+          "tests/sparkle.integration.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/updates/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/updates/macos/"
+        ],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./processes",
+      "sourceTarget": "./processes.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-processes",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.processes"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/processes.test.ts",
+          "tests/processes-native.test.ts",
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/processes/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/processes/macos/"
+        ],
+        "windows": [
+          "packages/processes/windows/"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./system",
+      "sourceTarget": "./system.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-system",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.system"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/system/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/system/macos/"
+        ],
+        "windows": [
+          "packages/system/windows/"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./global-shortcuts",
+      "sourceTarget": "./global-shortcuts.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-global-shortcuts",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.global-shortcuts"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/global-shortcuts/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/global-shortcuts/macos/"
+        ],
+        "windows": [
+          "packages/global-shortcuts/windows/"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./drag-drop",
+      "sourceTarget": "./drag-drop.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-drag-drop",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.drag-drop"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/drag-drop-component.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/drag-drop/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/drag-drop/macos/"
+        ],
+        "windows": [
+          "packages/drag-drop/windows/"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./webview",
+      "sourceTarget": "./webview.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-webview",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.webview"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/webview-contract.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/webview/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./sqlite",
+      "sourceTarget": "./sqlite.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-sqlite",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.sqlite"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/sqlite-contract.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/sqlite/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./ui",
+      "sourceTarget": "./ui.ts",
+      "kind": "ui",
+      "scope": "cross-platform-adapter",
+      "provider": "@legendapp/spark-ui",
+      "intendedTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "relatedCatalogCases": [
+        "ui.button",
+        "ui.input",
+        "ui.select",
+        "ui.focus-theme"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/ui-controls-native.test.ts",
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "providerSources": [
+        "packages/ui/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/ui/macos/"
+        ],
+        "windows": [
+          "packages/ui/windows/",
+          "packages/ui/src/index.windows.tsx"
+        ],
+        "ios": [
+          "packages/ui/src/index.ios.tsx"
+        ],
+        "android": [
+          "packages/ui/src/index.android.tsx"
+        ],
+        "web": [
+          "packages/ui/src/index.web.tsx",
+          "packages/ui/uniwind.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./ui/uniwind",
+      "sourceTarget": "./ui-uniwind.ts",
+      "kind": "ui",
+      "scope": "cross-platform-adapter",
+      "provider": "@legendapp/spark-ui",
+      "intendedTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "providerSources": [
+        "packages/ui/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/ui/macos/"
+        ],
+        "windows": [
+          "packages/ui/windows/",
+          "packages/ui/src/index.windows.tsx"
+        ],
+        "ios": [
+          "packages/ui/src/index.ios.tsx"
+        ],
+        "android": [
+          "packages/ui/src/index.android.tsx"
+        ],
+        "web": [
+          "packages/ui/src/index.web.tsx",
+          "packages/ui/uniwind.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./audio",
+      "sourceTarget": "./audio.ts",
+      "kind": "runtime-api",
+      "scope": "cross-platform-adapter",
+      "provider": "@legendapp/spark-audio",
+      "intendedTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "relatedCatalogCases": [
+        "audio.playback"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/audio-adapters.test.ts",
+          "tests/audio-native.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "providerSources": [
+        "packages/audio/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/audio/macos/"
+        ],
+        "windows": [
+          "packages/audio/windows/",
+          "packages/audio/src/index.windows.ts"
+        ],
+        "ios": [
+          "packages/audio/src/index.ios.ts"
+        ],
+        "android": [
+          "packages/audio/src/index.android.ts"
+        ],
+        "web": [
+          "packages/audio/src/index.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./auth-session",
+      "sourceTarget": "./auth-session.ts",
+      "kind": "runtime-api",
+      "scope": "cross-platform-adapter",
+      "provider": "@legendapp/spark-auth-session",
+      "intendedTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/auth-desktop.test.ts",
+          "tests/auth-mobile.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "providerSources": [
+        "packages/auth-session/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [
+          "packages/auth-session/src/index.ios.ts"
+        ],
+        "android": [
+          "packages/auth-session/src/index.android.ts"
+        ],
+        "web": [
+          "packages/auth-session/src/index.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./config",
+      "sourceTarget": "./config.cjs",
+      "kind": "tooling",
+      "scope": "build-and-configuration",
+      "provider": "@legendapp/spark-desktop-config",
+      "intendedTargets": [],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "npm run typecheck && npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "macos-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          }
+        },
+        "workflowAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "workflowTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "providerSources": [
+        "packages/desktop/config.cjs"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./config-plugin",
+      "sourceTarget": "./config-plugin.cjs",
+      "kind": "tooling",
+      "scope": "build-and-configuration",
+      "provider": "@legendapp/spark-desktop-config",
+      "intendedTargets": [],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "npm run typecheck && npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "macos-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          }
+        },
+        "workflowAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "workflowTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "providerSources": [
+        "packages/desktop/config-plugin.cjs"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./expo-config",
+      "sourceTarget": "./expo-config.cjs",
+      "kind": "tooling",
+      "scope": "build-and-configuration",
+      "provider": "@legendapp/spark-desktop-config",
+      "intendedTargets": [],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "npm run typecheck && npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "macos-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          }
+        },
+        "workflowAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "workflowTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "providerSources": [
+        "packages/desktop/expo-config.cjs"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./metro",
+      "sourceTarget": "./metro.cjs",
+      "kind": "tooling",
+      "scope": "build-and-configuration",
+      "provider": "@legendapp/spark-cli",
+      "intendedTargets": [],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "npm run typecheck && npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "macos-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          }
+        },
+        "workflowAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "workflowTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "providerSources": [
+        "packages/cli/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./runtime-entry",
+      "sourceTarget": "./runtime-entry.cjs",
+      "kind": "tooling",
+      "scope": "build-and-configuration",
+      "provider": "@legendapp/spark-cli",
+      "intendedTargets": [],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "npm run typecheck && npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "macos-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          }
+        },
+        "workflowAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "workflowTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "providerSources": [
+        "packages/cli/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./metro-gate",
+      "sourceTarget": "./metro-gate.cjs",
+      "kind": "tooling",
+      "scope": "build-and-configuration",
+      "provider": "@legendapp/spark-cli",
+      "intendedTargets": [],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "npm run typecheck && npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "macos-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          }
+        },
+        "workflowAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "workflowTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "providerSources": [
+        "packages/cli/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./init-template",
+      "sourceTarget": "./init-template.cjs",
+      "kind": "tooling",
+      "scope": "build-and-configuration",
+      "provider": "@legendapp/spark-cli",
+      "intendedTargets": [],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "npm run typecheck && npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "macos-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          }
+        },
+        "workflowAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "workflowTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "providerSources": [
+        "packages/cli/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./native",
+      "sourceTarget": "./native.cjs",
+      "kind": "tooling",
+      "scope": "build-and-configuration",
+      "provider": "@legendapp/spark-cli",
+      "intendedTargets": [],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "npm run typecheck && npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "macos-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          }
+        },
+        "workflowAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "workflowTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "providerSources": [
+        "packages/cli/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./cli",
+      "sourceTarget": "./bin/spark.cjs",
+      "kind": "tooling",
+      "scope": "build-and-configuration",
+      "provider": "@legendapp/spark-cli",
+      "intendedTargets": [],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "npm run typecheck && npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "macos-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          }
+        },
+        "workflowAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "workflowTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "providerSources": [
+        "packages/cli/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./schema.json",
+      "sourceTarget": "./schema.json",
+      "kind": "metadata",
+      "scope": "package-metadata",
+      "provider": "package metadata",
+      "intendedTargets": [],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "npm run typecheck && npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "macos-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "This export describes packaging metadata or build tooling, not a runtime capability."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop/schema.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./ui/split-view",
+      "sourceTarget": "./ui-split-view.ts",
+      "kind": "ui",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-ui",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/ui/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/ui/macos/"
+        ],
+        "windows": [
+          "packages/ui/windows/",
+          "packages/ui/src/index.windows.tsx"
+        ],
+        "ios": [
+          "packages/ui/src/index.ios.tsx"
+        ],
+        "android": [
+          "packages/ui/src/index.android.tsx"
+        ],
+        "web": [
+          "packages/ui/src/index.web.tsx",
+          "packages/ui/uniwind.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./ui/sidebar",
+      "sourceTarget": "./ui-sidebar.ts",
+      "kind": "ui",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-ui",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/ui/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/ui/macos/"
+        ],
+        "windows": [
+          "packages/ui/windows/",
+          "packages/ui/src/index.windows.tsx"
+        ],
+        "ios": [
+          "packages/ui/src/index.ios.tsx"
+        ],
+        "android": [
+          "packages/ui/src/index.android.tsx"
+        ],
+        "web": [
+          "packages/ui/src/index.web.tsx",
+          "packages/ui/uniwind.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./app/documents",
+      "sourceTarget": "./app-documents.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-documents",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.recent-documents"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/document-hooks.test.ts",
+          "tests/document-lifecycle.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/documents/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./shortcuts/commands",
+      "sourceTarget": "./shortcuts-commands.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-commands",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/commands/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./shortcuts/keyboard",
+      "sourceTarget": "./shortcuts-keyboard.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-desktop-shortcuts",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.global-shortcuts"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop-shortcuts/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/desktop-shortcuts/macos/"
+        ],
+        "windows": [
+          "packages/desktop-shortcuts/src/index.windows.ts"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./ui/glass",
+      "sourceTarget": "./ui-glass.ts",
+      "kind": "ui",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-ui",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/ui/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/ui/macos/"
+        ],
+        "windows": [
+          "packages/ui/windows/",
+          "packages/ui/src/index.windows.tsx"
+        ],
+        "ios": [
+          "packages/ui/src/index.ios.tsx"
+        ],
+        "android": [
+          "packages/ui/src/index.android.tsx"
+        ],
+        "web": [
+          "packages/ui/src/index.web.tsx",
+          "packages/ui/uniwind.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./ui/symbol",
+      "sourceTarget": "./ui-symbol.ts",
+      "kind": "ui",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-ui",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/ui/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/ui/macos/"
+        ],
+        "windows": [
+          "packages/ui/windows/",
+          "packages/ui/src/index.windows.tsx"
+        ],
+        "ios": [
+          "packages/ui/src/index.ios.tsx"
+        ],
+        "android": [
+          "packages/ui/src/index.android.tsx"
+        ],
+        "web": [
+          "packages/ui/src/index.web.tsx",
+          "packages/ui/uniwind.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./ui/search",
+      "sourceTarget": "./ui-search.ts",
+      "kind": "ui",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-ui",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/ui/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/ui/macos/"
+        ],
+        "windows": [
+          "packages/ui/windows/",
+          "packages/ui/src/index.windows.tsx"
+        ],
+        "ios": [
+          "packages/ui/src/index.ios.tsx"
+        ],
+        "android": [
+          "packages/ui/src/index.android.tsx"
+        ],
+        "web": [
+          "packages/ui/src/index.web.tsx",
+          "packages/ui/uniwind.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./settings/window",
+      "sourceTarget": "./settings-window.ts",
+      "kind": "ui",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-settings-ui",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/settings-window.test.ts",
+          "tests/settings-window.types.ts",
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/settings-ui/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./settings/observable",
+      "sourceTarget": "./settings-observable.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-settings",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [
+        "desktop.settings"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/settings/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./ui/classnames",
+      "sourceTarget": "./ui-classnames.ts",
+      "kind": "ui",
+      "scope": "cross-platform-adapter",
+      "provider": "@legendapp/spark-ui",
+      "intendedTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "providerSources": [
+        "packages/ui/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/ui/macos/"
+        ],
+        "windows": [
+          "packages/ui/windows/",
+          "packages/ui/src/index.windows.tsx"
+        ],
+        "ios": [
+          "packages/ui/src/index.ios.tsx"
+        ],
+        "android": [
+          "packages/ui/src/index.android.tsx"
+        ],
+        "web": [
+          "packages/ui/src/index.web.tsx",
+          "packages/ui/uniwind.web.ts"
+        ]
+      }
+    },
+    {
+      "path": "./contracts",
+      "sourceTarget": "./contracts.ts",
+      "kind": "runtime-api",
+      "scope": "cross-platform-adapter",
+      "provider": "@legendapp/spark-desktop-app",
+      "intendedTargets": [
+        "macos",
+        "windows",
+        "ios",
+        "android",
+        "web"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform ios --device <simulator-UDID>"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform android --device <adb-serial>"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform web --no-open"
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop-app/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/desktop-app/macos/"
+        ],
+        "windows": [
+          "packages/desktop-app/src/index.windows.ts"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./windows/macos",
+      "sourceTarget": "./windows-macos.ts",
+      "kind": "runtime-api",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-desktop-windows",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [
+        "windows.overlay",
+        "windows.geometry"
+      ],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop-windows/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/desktop-windows/macos/"
+        ],
+        "windows": [
+          "packages/desktop-windows/src/index.windows.ts"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./diagnostics",
+      "sourceTarget": "./diagnostics.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-desktop-windows",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/sdk-api.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop-windows/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/desktop-windows/macos/"
+        ],
+        "windows": [
+          "packages/desktop-windows/src/index.windows.ts"
+        ],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./ai",
+      "sourceTarget": "./ai.ts",
+      "kind": "runtime-api",
+      "scope": "desktop-only",
+      "provider": "@legendapp/spark-ai",
+      "intendedTargets": [
+        "macos",
+        "windows"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/ai.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on x64 Windows; docs/windows-issues.md"
+          },
+          "windows-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform windows on ARM64 Windows; docs/windows-issues.md"
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "Desktop-only capability; shared contract marks it not applicable on mobile and web."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/ai/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./ai/codex",
+      "sourceTarget": "./ai-codex.ts",
+      "kind": "runtime-api",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-codex",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/codex.test.ts",
+          "tests/codex-native.test.ts"
+        ],
+        "portableCommand": "npm test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "npm run test:platform -- --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/codex/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    }
+  ]
+}
