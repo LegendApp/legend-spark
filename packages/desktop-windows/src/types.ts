@@ -130,5 +130,6 @@ export type MacOSWindowEvent =
   | { type: "toolbarSelectionChanged"; windowId: string; itemId: string; value: string }
   | { type: "toolbarSearchChanged" | "toolbarSearchSubmitted"; windowId: string; itemId: string; value: string; shiftKey: boolean }
   | { type: "toolbarMenuAction"; windowId: string; itemId: string; action: import("@legendapp/spark-desktop-app/src/contracts/menu").MenuAction };
-export interface MacOSSetWindowBoundsOptions { durationMs?: number }
+export interface MacOSWindowBoundsOptions { durationMs?: number }
+export interface SetWindowBoundsOptions { macos?: MacOSWindowBoundsOptions }
 export interface MacOSWindowBlurOptions { radius: number; durationMs?: number }

@@ -19,8 +19,16 @@ test("availability is answered synchronously without a native call", async () =>
 test("invalid arguments reject asynchronously before native calls", async () => {
   for (const id of ["", "main", "../editor"]) await expect(windows.openWindow({ id, component: "Editor" })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   await expect(windows.setWindowBounds("editor", { ...info.bounds, x: NaN })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(windows.setWindowBounds("editor", { ...info.bounds }, { durationMs: 200 } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
   await expect(windows.showWindow(undefined as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   expect(call).not.toHaveBeenCalled();
+});
+test("bounds animation options are macOS-only and reach the native command", async () => {
+  platform.OS = "macos";
+  await windows.setWindowBounds("editor", info.bounds, { macos: { durationMs: 250 } });
+  expect(JSON.parse(call.mock.calls.at(-1)![1])).toMatchObject({ durationMs: 250 });
+  await windows.setWindowBounds("editor", info.bounds);
+  expect(JSON.parse(call.mock.calls.at(-1)![1])).not.toHaveProperty("durationMs");
 });
 test("opening snapshots props and exposes only the public info shape", async () => {
   const props = { doc: { id: "notes" } };

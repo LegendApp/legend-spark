@@ -85,7 +85,7 @@ openWindow(options: WindowOpenOptions): Promise<WindowInfo>;
 getWindow(id: WindowId): Promise<WindowInfo>;
 listWindows(): Promise<WindowInfo[]>;
 setWindowOptions(id: WindowId, options: WindowUpdateOptions): Promise<void>;
-setWindowBounds(id: WindowId, bounds: WindowBounds): Promise<void>;
+setWindowBounds(id: WindowId, bounds: WindowBounds, options?: { macos?: { durationMs?: number } }): Promise<void>;
 showWindow(id: WindowId, options?: { focus?: boolean }): Promise<void>;
 hideWindow(id: WindowId): Promise<void>;
 closeWindow(id: WindowId): Promise<CloseResult>;
@@ -165,7 +165,7 @@ Use `macos` option groups, with named public types, for features that are genuin
 | Toolbar style, items, titlebar controls | Typed `macos.toolbar` and `macos.titleBar.controls`. |
 | Startup split-view shell | `macos.startupSplitView`, nullable for clearing; preserve pre-React rendering. |
 | Shell restoration across launches | `macos.restoreOnLaunch`, separate from common saved bounds restoration. |
-| Frame animation | Options on a macOS bounds operation, with explicit duration units; do not silently ignore on Windows. |
+| Frame animation | `macos.durationMs` group on the single `setWindowBounds` operation, with explicit duration units; the group rejects `E_UNSUPPORTED_OPTION` on Windows rather than being silently ignored. There is no second macOS bounds export. |
 | Blur and toolbar focus/text commands | Explicit targeted macOS operations under `/windows/macos`. |
 | Finish window restoration | Application restoration coordinator operation, not an ordinary window setter. |
 | Startup timing | Diagnostics entry point, not window options. |
@@ -175,7 +175,7 @@ Use `macos` option groups, with named public types, for features that are genuin
 
 Use `/app` events `windowOpened` and `windowClosed` for application-wide registry changes across reused IDs. `usePrimaryWindowLifecycle` uses those events and initializes once per owning ID under React Strict Mode. Instance-specific listeners belong to `/windows`.
 
-`/windows/macos` exposes animated `setWindowBounds`, `setWindowBlur`, `focusToolbarSearch` and `setToolbarItemText`. `/app` owns `finishWindowRestoration`; `/diagnostics` owns startup timing. The old window-manager, window-controls and React-only import paths are removed without aliases.
+`/windows/macos` exposes `setWindowBlur`, `focusToolbarSearch`, `setToolbarItemText` and `addMacOSWindowListener`; animated bounds are an option group on the portable `/windows` `setWindowBounds`, not a second export. `/app` owns `finishWindowRestoration`; `/diagnostics` owns startup timing. The old window-manager, window-controls and React-only import paths are removed without aliases.
 
 ### React registration and navigation
 

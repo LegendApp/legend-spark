@@ -4,9 +4,9 @@ export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contrac
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import Native from "./NativeDesktopWindowManager";
 import { createMacOSWindow, macosNative, updateMacOSWindow } from "./macos-adapter";
-import { bounds, keys, object, text, validateOptions, windowId } from "./validation";
+import { bounds, keys, number, object, text, validateOptions, windowId } from "./validation";
 import { getNativeDisplays, isBounds, isInfo, record, subscribeToWindowInstance, windowCall, windowCommand, type NativeWindowInfo } from "./transport";
-import type { CenterWindowOptions, CloseResult, DisplayInfo, ShowWindowOptions, WindowBounds, WindowEventMap, WindowInfo, WindowOpenOptions, WindowUpdateOptions } from "./types";
+import type { CenterWindowOptions, CloseResult, DisplayInfo, SetWindowBoundsOptions, ShowWindowOptions, WindowBounds, WindowEventMap, WindowInfo, WindowOpenOptions, WindowUpdateOptions } from "./types";
 export type * from "./types";
 
 export function getWindowAvailability(): Availability {
@@ -51,7 +51,18 @@ export async function setWindowOptions(id: string, options: WindowUpdateOptions)
   await windowCommand("options", { id, options: snapshot });
   if (snapshot.macos) await updateMacOSWindow(id, snapshot.macos);
 }
-export async function setWindowBounds(id: string, value: WindowBounds): Promise<void> { windowId(id); bounds(value); await windowCommand("bounds", { id, bounds: value }); }
+/** Portable frame change. Animated moves are macOS-only: pass `macos.durationMs` and the call rejects on Windows rather than ignoring the request. */
+export async function setWindowBounds(id: string, value: WindowBounds, options: SetWindowBoundsOptions = {}): Promise<void> {
+  windowId(id); bounds(value); object(options, "bounds options"); keys(options, ["macos"]);
+  if (options.macos !== undefined) {
+    if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_OPTION", "macos bounds options require macOS");
+    const macos = options.macos; object(macos, "macos"); keys(macos, ["durationMs"]);
+    if (macos.durationMs !== undefined) number(macos.durationMs, "durationMs", 0, 60000);
+    await windowCommand("bounds", { id, bounds: value, durationMs: macos.durationMs ?? 0 });
+    return;
+  }
+  await windowCommand("bounds", { id, bounds: value });
+}
 export async function showWindow(id: string, options: ShowWindowOptions = {}): Promise<void> {
   windowId(id); object(options, "show options"); keys(options, ["focus"]);
   if (options.focus !== undefined && typeof options.focus !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "focus must be boolean");

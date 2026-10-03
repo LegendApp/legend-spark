@@ -252,9 +252,11 @@
     "useMenu"
   ],
   "./notifications": [
+    "NotificationAction",
     "NotificationContent",
     "NotificationPermission",
     "NotificationResponse",
+    "NotificationTone",
     "NotificationTrigger",
     "ScheduleNotificationOptions",
     "ShowNotificationOptions",

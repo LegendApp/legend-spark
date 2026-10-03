@@ -1,16 +1,12 @@
 import { SparkError, nativeError, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { macosCommand, macosNative } from "./macos-adapter";
-import { subscribeToWindowInstance, windowCommand } from "./transport";
+import { subscribeToWindowInstance } from "./transport";
 import { type WindowListenerOptions } from "./api";
-import { bounds, keys, number, object, text, windowId } from "./validation";
-import type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSSetWindowBoundsOptions, WindowBounds } from "./types";
-export type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSSetWindowBoundsOptions, MacOSToolbarItem, MacOSToolbarOptions } from "./types";
-export async function setWindowBounds(id: string, value: WindowBounds, options: MacOSSetWindowBoundsOptions = {}): Promise<void> {
-  macosNative(); windowId(id); bounds(value); object(options, "animation options"); keys(options, ["durationMs"]);
-  if (options.durationMs !== undefined) number(options.durationMs, "durationMs", 0, 60000);
-  await windowCommand("bounds", { id, bounds: value, durationMs: options.durationMs ?? 0 });
-}
+import { keys, number, object, text, windowId } from "./validation";
+import type { MacOSWindowBlurOptions, MacOSWindowEvent } from "./types";
+export type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSToolbarItem, MacOSToolbarOptions } from "./types";
+/** Animated frame changes go through `setWindowBounds` from `/windows` with a `macos.durationMs` group, which rejects on Windows. */
 export async function setWindowBlur(id: string, options: MacOSWindowBlurOptions): Promise<void> {
   const native = macosNative(); windowId(id); object(options, "blur options"); keys(options, ["radius", "durationMs"]);
   number(options.radius, "radius", 0, 1000); if (options.durationMs !== undefined) number(options.durationMs, "durationMs", 0, 60000);
