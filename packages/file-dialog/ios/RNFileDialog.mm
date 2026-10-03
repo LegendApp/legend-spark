@@ -122,19 +122,28 @@ RCT_EXPORT_MODULE(NativeFileDialog)
     panel.canCreateDirectories = YES;
     panel.showsTagField = NO;
 
-    NSString *defaultName = [options[@"defaultName"] isKindOfClass:[NSString class]] ? options[@"defaultName"] : nil;
-    if (defaultName.length > 0) {
-      panel.nameFieldStringValue = defaultName;
-    }
+    NSString *defaultName = [options[@"defaultName"] isKindOfClass:[NSString class]] && [(NSString *)options[@"defaultName"] length] > 0 ? options[@"defaultName"] : nil;
 
     NSArray *allowedFileTypes = [options[@"allowedFileTypes"] isKindOfClass:[NSArray class]] ? options[@"allowedFileTypes"] : nil;
     if (allowedFileTypes.count > 0) {
       panel.allowedFileTypes = allowedFileTypes;
     }
 
+    // defaultPath may name a file: a live directory starts the panel, otherwise the
+    // last component suggests the name (an explicit defaultName wins) and the parent starts it.
     NSString *directory = [options[@"directory"] isKindOfClass:[NSString class]] ? options[@"directory"] : nil;
     if (directory.length > 0) {
-      panel.directoryURL = [NSURL fileURLWithPath:directory isDirectory:YES];
+      BOOL isDirectory = NO;
+      if ([[NSFileManager defaultManager] fileExistsAtPath:directory isDirectory:&isDirectory] && isDirectory) {
+        panel.directoryURL = [NSURL fileURLWithPath:directory isDirectory:YES];
+      } else {
+        NSString *parent = [directory stringByDeletingLastPathComponent];
+        if (defaultName.length == 0) defaultName = [directory lastPathComponent];
+        if (parent.length > 0) panel.directoryURL = [NSURL fileURLWithPath:parent isDirectory:YES];
+      }
+    }
+    if (defaultName.length > 0) {
+      panel.nameFieldStringValue = defaultName;
     }
 
     void (^complete)(NSModalResponse) = ^(NSModalResponse result) {

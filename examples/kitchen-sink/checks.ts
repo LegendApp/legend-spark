@@ -201,7 +201,7 @@ export async function runChecks(onResult: (result: Check) => void | Promise<void
         await driverCall("cancelPanel"); assert((await saved).canceled, "Save cancellation result");
       });
       await check("dialogs: native save acceptance serializes a selected path", async () => {
-        const saved = saveFileDialog({ defaultName: "accepted.txt", directory: root });
+        const saved = saveFileDialog({ defaultName: "accepted.txt", defaultPath: root });
         // The XCTest driver presses Save in the system-owned remote panel.
         const result = await saved;
         assert(!result.canceled && result.path === `${root}/accepted.txt`, "Save panel returned an invalid path");

@@ -199,8 +199,8 @@ Finalize the shared menu schema with current toolbar needs, including typed slid
 openFileDialog(options?: {
   selection?: 'files' | 'directories';
   multiple?: boolean;
-  directory?: string;
-  filters?: readonly FileFilter[];
+  defaultPath?: string; // Electron-style: a directory starts the panel; for save it may name a file, suggesting defaultName.
+  filters?: readonly FileFilter[]; // { name?: string; extensions } — Windows labels each group; macOS flattens.
   windowId?: string;
   title?: string;
 }): Promise<{ canceled: true } | { canceled: false; paths: string[] }>;

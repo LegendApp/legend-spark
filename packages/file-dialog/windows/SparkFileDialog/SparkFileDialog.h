@@ -55,20 +55,42 @@ struct SparkFileDialog {
         const auto message = args.GetNamedString(L"message", L"");
         if (!message.empty()) { auto custom = dialog.as<IFileDialogCustomize>(); check_hresult(custom->AddText(100, message.c_str())); }
         auto directory = args.GetNamedString(save ? L"directory" : L"directoryURL", L"");
+        std::wstring suggestedName = args.GetNamedString(L"defaultName", L"");
         if (!directory.empty()) {
           std::wstring value(directory);
           if (value.rfind(L"file:", 0) == 0) { wchar_t buffer[32768]; DWORD length = 32768; check_hresult(PathCreateFromUrlW(value.c_str(), buffer, &length, 0)); value = buffer; }
+          // defaultPath may name a file for save dialogs: a live directory starts the
+          // panel; otherwise the last component suggests defaultName and the parent starts it.
+          if (save && GetFileAttributesW(value.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            auto parsed = std::filesystem::path(value);
+            auto parent = parsed.parent_path();
+            if (suggestedName.empty()) suggestedName = parsed.filename().wstring();
+            if (!parent.empty()) value = parent.wstring();
+          }
           auto folder = FilePath(to_string(value)); com_ptr<IShellItem> item;
           check_hresult(SHCreateItemFromParsingName(folder.c_str(), nullptr, IID_PPV_ARGS(item.put())));
           check_hresult(dialog->SetFolder(item.get()));
         }
-        const auto name = args.GetNamedString(L"defaultName", L"Untitled.txt"); if (save) check_hresult(dialog->SetFileName(name.c_str()));
-        std::vector<std::wstring> patterns;
-        if (args.HasKey(L"allowedFileTypes")) for (auto const &item : args.GetNamedArray(L"allowedFileTypes")) patterns.push_back(L"*." + std::wstring(item.GetString()));
-        std::wstring pattern;
-        for (auto const &item : patterns) { if (!pattern.empty()) pattern += L";"; pattern += item; }
-        COMDLG_FILTERSPEC filter{L"Supported files", pattern.c_str()};
-        if (!pattern.empty()) check_hresult(dialog->SetFileTypes(1, &filter));
+        if (save) check_hresult(dialog->SetFileName(suggestedName.empty() ? L"Untitled.txt" : suggestedName.c_str()));
+        // Windows presents one labeled filter group per filter, like Electron;
+        // hosts without per-filter labels read the flattened allowedFileTypes.
+        std::vector<std::wstring> labels, patterns;
+        if (args.HasKey(L"filters")) for (auto const &item : args.GetNamedArray(L"filters")) {
+          auto filter = item.GetObject();
+          std::wstring pattern;
+          for (auto const &extension : filter.GetNamedArray(L"extensions")) { if (!pattern.empty()) pattern += L";"; pattern += L"*." + std::wstring(extension.GetString()); }
+          if (pattern.empty()) continue;
+          labels.push_back(filter.HasKey(L"name") ? std::wstring(filter.GetNamedString(L"name")) : std::wstring(L"Supported files"));
+          patterns.push_back(pattern);
+        }
+        else if (args.HasKey(L"allowedFileTypes")) {
+          std::wstring pattern;
+          for (auto const &item : args.GetNamedArray(L"allowedFileTypes")) { if (!pattern.empty()) pattern += L";"; pattern += L"*." + std::wstring(item.GetString()); }
+          if (!pattern.empty()) { labels.push_back(L"Supported files"); patterns.push_back(pattern); }
+        }
+        std::vector<COMDLG_FILTERSPEC> filterSpecs;
+        for (size_t index = 0; index < patterns.size(); ++index) filterSpecs.push_back(COMDLG_FILTERSPEC{labels[index].c_str(), patterns[index].c_str()});
+        if (!filterSpecs.empty()) check_hresult(dialog->SetFileTypes(static_cast<UINT>(filterSpecs.size()), filterSpecs.data()));
         auto status = dialog->Show(parent);
         if (status == HRESULT_FROM_WIN32(ERROR_CANCELLED)) { promise.Resolve("null"); return; }
         check_hresult(status);
