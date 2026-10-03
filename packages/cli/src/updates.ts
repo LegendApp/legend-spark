@@ -49,16 +49,47 @@ export function verifyUpdateSignature(archive: string, signature: string, public
   if (!/^[A-Za-z0-9+/]{86}==$/.test(signature) || !verify(null, readFileSync(archive), key, Buffer.from(signature, "base64"))) throw new Error("Update signature does not match the app's public key or archive");
 }
 type UpdateDependencies = { run: Runner; tools: typeof sparkleTools; keyFile?: string };
+const buildNumberPattern = /^[0-9]+(?:\.[0-9]+){0,2}$/;
+function buildNumberParts(version: string) { return version.split(".").map(part => part.replace(/^0+(?=\d)/, "")); }
+function canonicalBuildNumber(version: string) { return buildNumberParts(version).concat(["0", "0"]).slice(0, 3).join("."); }
+function compareBuildNumbers(left: string, right: string) {
+  const a = buildNumberParts(left), b = buildNumberParts(right);
+  for (let index = 0; index < 3; index++) {
+    const x = a[index] ?? "0", y = b[index] ?? "0";
+    if (x.length !== y.length) return x.length < y.length ? -1 : 1;
+    if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+export function validateUpdateBuildVersion(buildVersion: string, records: Record<string, { sha256: string }>, archiveHash: string) {
+  if (!buildNumberPattern.test(buildVersion)) throw new Error("Updates require a numeric macOS buildNumber, increasing for every release");
+  const seen = new Map<string, string>();
+  for (const version of Object.keys(records)) {
+    if (!buildNumberPattern.test(version)) throw new Error(`Invalid build number in Spark update history: ${version}`);
+    const canonical = canonicalBuildNumber(version);
+    const equivalent = seen.get(canonical);
+    if (equivalent && equivalent !== version) throw new Error(`Spark update history reuses the numeric build number as both ${equivalent} and ${version}.`);
+    seen.set(canonical, version);
+    if (compareBuildNumbers(version, buildVersion) === 0 && version !== buildVersion) throw new Error(`Build ${buildVersion} aliases the recorded build number ${version}; use a new increasing macos.buildNumber spelling.`);
+  }
+  const existing = records[buildVersion];
+  if (existing) {
+    if (existing.sha256 !== archiveHash) throw new Error(`Build ${buildVersion} was already packaged with different bytes. Increase macos.buildNumber before publishing another update.`);
+    return;
+  }
+  for (const version of Object.keys(records)) {
+    if (compareBuildNumbers(buildVersion, version) <= 0) throw new Error(`Build ${buildVersion} must be greater than every published build number. Increase macos.buildNumber before publishing another update.`);
+  }
+}
 export async function prepareUpdate(root: string, archive: string, buildVersion: string, dependencies: UpdateDependencies = { run, tools: sparkleTools }) {
   const expo = readAppConfig(root).expo;
   const updates = updateConfiguration(expo);
   if (!updates) return undefined;
-  if (!/^[0-9]+(?:\.[0-9]+){0,2}$/.test(buildVersion)) throw new Error("Updates require a numeric macOS buildNumber, increasing for every release");
   const directory = path.join(root, "dist/updates");
   const recordsFile = path.join(directory, "releases.json");
   const records = existsSync(recordsFile) ? readJson(recordsFile) : {};
   const hash = createHash("sha256").update(readFileSync(archive)).digest("hex");
-  if (records[buildVersion] && records[buildVersion].sha256 !== hash) throw new Error(`Build ${buildVersion} was already packaged with different bytes. Increase macos.buildNumber before publishing another update.`);
+  validateUpdateBuildVersion(buildVersion, records, hash);
   const bin = await dependencies.tools(root, dependencies.run);
   const keyArgs = dependencies.keyFile ? ["--ed-key-file", dependencies.keyFile] : ["--account", account(expo)];
   const signature = (await dependencies.run(root, [path.join(bin, "sign_update"), ...keyArgs, "-p", archive], { capture: true })).trim();

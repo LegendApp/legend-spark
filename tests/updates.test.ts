@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { verifyUpdateSignature, prepareUpdate, SPARKLE_VERSION } from "../packages/cli/src/updates.ts";
+import { verifyUpdateSignature, prepareUpdate, SPARKLE_VERSION, validateUpdateBuildVersion } from "../packages/cli/src/updates.ts";
 import { goConfigurationIssues } from "../packages/cli/src/project.ts";
 const { updateConfiguration, updatePlist } = createRequire(import.meta.url)("../packages/config-plugin/updates.cjs");
 const valid = { feedURL: "https://example.com/updates/appcast.xml", publicKey: Buffer.alloc(32).toString("base64") };
@@ -39,4 +39,23 @@ test("ordinary packaging does not download tools or touch update credentials", a
     writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: {} }));
     expect(await prepareUpdate(root, "unused.zip", "1", { run: async () => { throw new Error("unexpected subprocess"); }, tools: async () => { throw new Error("unexpected download"); } })).toBeUndefined();
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+test("Spark update build numbers increase numerically and allow only exact-byte retries", () => {
+  const records = { "2.9": { sha256: "a" }, "10": { sha256: "b" } };
+  expect(() => validateUpdateBuildVersion("9", records, "c")).toThrow("must be greater");
+  expect(() => validateUpdateBuildVersion("2.10", { "2.9": { sha256: "a" } }, "b")).not.toThrow();
+  expect(() => validateUpdateBuildVersion("2.9", { "2.10": { sha256: "a" } }, "b")).toThrow("must be greater");
+  expect(() => validateUpdateBuildVersion("2.9.1", { "2.9": { sha256: "a" } }, "b")).not.toThrow();
+  expect(() => validateUpdateBuildVersion("1", { "1.0": { sha256: "a" } }, "a")).toThrow("aliases");
+  expect(() => validateUpdateBuildVersion("1.0.0", { "01.0": { sha256: "a" } }, "a")).toThrow("aliases");
+  expect(() => validateUpdateBuildVersion("1", { "1": { sha256: "a" } }, "a")).not.toThrow();
+  expect(() => validateUpdateBuildVersion("1", { "1": { sha256: "a" } }, "b")).toThrow("different bytes");
+  expect(() => validateUpdateBuildVersion("0", {}, "a")).not.toThrow();
+  expect(() => validateUpdateBuildVersion("1.10", { "1.9": { sha256: "a" } }, "b")).not.toThrow();
+  expect(() => validateUpdateBuildVersion("1.9", { "1.10": { sha256: "a" } }, "b")).toThrow("must be greater");
+  const huge = "9".repeat(200);
+  const next = `1${"0".repeat(200)}`;
+  expect(() => validateUpdateBuildVersion(next, { [huge]: { sha256: "a" } }, "b")).not.toThrow();
+  expect(() => validateUpdateBuildVersion(huge, { [next]: { sha256: "a" } }, "b")).toThrow("must be greater");
+  expect(() => validateUpdateBuildVersion("1.2.3.4", {}, "a")).toThrow("numeric macOS buildNumber");
 });

@@ -177,9 +177,12 @@ signature against the app's public key, and generates/verifies a signed appcast
 under `dist/updates/`. Upload the generated ZIP first, then `appcast.xml`, to the
 configured HTTPS directory. The framework does not publish files automatically.
 
-The release ledger rejects different archive bytes under an existing build
-number. Completed packaging retries reuse the exact verified ZIP, including when
-feed signing needs to be retried. Keep `dist/updates/` between releases so the feed
+The release ledger requires each new numeric dotted build number to increase
+over every recorded release. Comparisons are numeric (`2.10` follows `2.9`),
+and alternate spellings of the same number (such as `1` and `1.0`) cannot reuse
+one release identity. An exact retry with the same spelling and archive bytes is
+allowed, including when feed signing needs to be retried; different bytes under
+that number are rejected. Keep `dist/updates/` between releases so the feed
 retains existing versions. Initial support uses full ZIP updates, without delta
 archives, custom channels, or Mac App Store distribution.
 
