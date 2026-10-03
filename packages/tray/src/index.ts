@@ -49,8 +49,7 @@ function validate(options: TrayUpdate, creating = false): Partial<Wire> {
       result.imagePath = nativePath(options.image.path, Platform.OS);
     }
   }
-  if (options.macos !== undefined) {
-    if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_OPTION", "macos tray options require macOS");
+  if (options.macos !== undefined && Platform.OS === "macos") {
     if (!options.macos || typeof options.macos !== "object" || Array.isArray(options.macos) || Object.keys(options.macos).some(key => key !== "symbol")) throw new SparkError("E_INVALID_ARGUMENT", "Expected macos tray options");
     const symbol = options.macos.symbol;
     if (symbol != null && (typeof symbol !== "string" || !symbol.trim() || symbol.includes("\0"))) throw new SparkError("E_INVALID_ARGUMENT", "Expected an SF Symbol name or null");

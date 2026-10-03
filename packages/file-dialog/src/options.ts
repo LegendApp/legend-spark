@@ -6,8 +6,8 @@ export function dialogOptions(options: OpenFileDialogOptions | SaveFileDialogOpt
   if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected dialog options");
   const allowed = new Set(["windowId", "directory", "filters", ...(kind === "open" ? ["selection", "multiple", "title", "message", "prompt", "macos"] : ["defaultName"])]);
   for (const [key, value] of Object.entries(options)) {
-    if (value === undefined) continue;
     if (!allowed.has(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported dialog option: ${key}`);
+    if (value === undefined) continue;
     if (["directory", "title", "message", "prompt", "defaultName"].includes(key) && (typeof value !== "string" || value.includes("\0"))) throw new SparkError("E_INVALID_ARGUMENT", `${key} must be a string without NUL characters`);
   }
   if (options.windowId !== undefined && (typeof options.windowId !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(options.windowId))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid dialog owner window ID");

@@ -78,6 +78,28 @@ test("invalid parameters and unsafe returned integers are rejected", async () =>
   await db.close();
 });
 
+test("SQLite validates options before loading a backend and preserves native codes and causes", async () => {
+  const open = vi.fn();
+  const getDirectory = vi.fn();
+  vi.doMock("@op-engineering/op-sqlite", () => ({ open }));
+  vi.doMock("@legendapp/spark-file-system", () => ({ getDirectory }));
+  const { openDatabase } = await import("../packages/sqlite/src/index");
+  await expect(openDatabase("options.sqlite", { unsupported: undefined } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION", message: expect.stringContaining("unsupported") });
+  for (const options of [null, [], "invalid", 42]) {
+    await expect(openDatabase("options.sqlite", options as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  }
+  expect(open).not.toHaveBeenCalled();
+  expect(getDirectory).not.toHaveBeenCalled();
+
+  const cause = Object.assign(new Error("database busy"), { code: "E_BUSY" });
+  const db = createDatabase({ execute: vi.fn(() => Promise.reject(cause)), close() {} });
+  let error!: Error & { code?: string; cause?: unknown };
+  await db.getAll("SELECT 1").catch(value => { error = value as Error & { code?: string; cause?: unknown }; });
+  expect(error).toMatchObject({ code: "E_BUSY", message: "database busy" });
+  expect(error.cause).toBe(cause);
+  await db.close();
+});
+
 // These boundaries also guard adapter cost: ordinary calls submit immediately,
 // retain fresh driver results, and leave eager binding snapshots to the driver.
 test("ordinary queries submit immediately and close waits for every accepted result", async () => {

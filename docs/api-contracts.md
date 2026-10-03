@@ -87,6 +87,7 @@ Do not expose `native`, `backend`, arbitrary `backendOptions`, upstream `Pick`/`
 
 - **Imports:** one public feature boundary; hooks and imperative operations together. Subpaths are justified by a separate capability or explicit optional integration, not implementation layers. Avoid eager imports of every optional native/UI backend when consolidating exports.
 - **Arguments:** clear required subjects plus final options: `copy(source, destination, options?)`. Related configuration belongs in one object: `openWindow(options)`. Keep `quit()` simple. No placeholder option bags or new unsupported behavior merely for theoretical extensibility.
+- **Options:** reject unknown keys with `E_UNSUPPORTED_OPTION`, even when the unknown key's value is `undefined`. Known optional keys may still use `undefined` as omission.
 - **Types:** named public Options/Result/Event/Handle types; discriminated unions for alternatives; runtime validation at untrusted native/JSON boundaries. Generic result type parameters are assertions unless validated by a supplied decoder.
 - **Results:** Spark commands resolve `void`; useful data has explicit types. Cancellation/close veto/nonzero child exit are expected results. Operational failures reject. No fabricated empty files, successful no-ops, or malformed-response-as-cancellation. Explicit Expo subsets keep their selected result contracts.
 - **Errors:** start with codes for invalid arguments/data, unsupported platform/option, missing module, permission denied, not found, already exists, busy, closed, aborted, timeout, and native failure. Preserve `cause`. Promise APIs reject validation errors consistently; synchronous utilities throw. Codes—not parsed messages—drive application logic.
@@ -178,6 +179,7 @@ createTray(options: TrayOptions): Promise<Tray>; // menu?: readonly TrayMenuItem
 // Tray menus recurse through submenus and omit shortcuts, icons, targets, and placements.
 // macOS toolbar popup menus use ToolbarMenuItem: sliders are supported, but roles, submenus,
 // shortcuts, targets, and placements are not.
+// The macos presentation group is ignored on Windows.
 
 // /shortcuts; /global-shortcuts
 registerShortcut(accelerator, handler, options?): Promise<AsyncRegistration>;
@@ -230,6 +232,8 @@ scanFiles(paths, options?): Promise<FileScanResult>;
 Open/save share directory/filter/owner vocabulary. Prefer stable button IDs in message results. File filters must have defined extension/MIME handling per target. Mixed file/directory selection remains a typed platform extension if required; never silently remove the existing capability.
 
 Preserve conditional write semantics. Define overwrite/symlink behavior, absent-file errors, and missing removal (recommend idempotent absence); distinguish permission errors from nonexistence. Keep efficient chunk IO and positional handles. Use direct native buffers for binary transport; do not encode ordinary byte IO as base64 or JSON. Snapshot mutable input once at submission and return views over freshly owned native output. Watch means invalidation, not a perfect change log. Scanner options carry operation-scoped progress/batch callbacks and a signal; no uncorrelated global scan events. Keep specialized event watching only if its stronger semantics can be specified and tested.
+
+`readChunks` returns its async iterator synchronously: unknown option keys reject during iterator construction, while chunk-range and path validation happen when iteration first starts, before native open. `writeChunks` always returns a promise; option and path validation failures reject that promise before native file dispatch, and native IO failures reject it as well. Preserve this boundary rather than changing the iterator factory into an async function.
 
 ### Settings, persistence, and secure storage
 
@@ -324,6 +328,8 @@ openDatabase(name: string, options?: DatabaseOptions): Promise<Database>;
 ```
 
 `name` identifies a project-scoped file by default. Start with actual app requirements: parameter binding, row results, mutation metadata, transactions and close. Do not implement an ORM or SQL parser. `RunResult` needs explicit affected-row/insert-ID semantics. Define integer handling before promising fidelity: JS numbers must not silently represent unsafe SQLite integers; decide on a tested bigint or explicit string mode. SQL NULL maps to null, blobs to bytes, named/positional binding rules are deliberate.
+
+Unknown database option keys, including keys whose value is `undefined`, reject with `E_UNSUPPORTED_OPTION`. When a backend fails with a recognized Spark error code, preserve that code and retain the backend error as `cause`; unknown backend errors become `E_NATIVE` with their cause preserved.
 
 Transaction callbacks must use their supplied `tx`; operations on that connection are serialized, callback success commits, throw/rejection rolls back, nested transactions reject until deliberately supported. Define closure behavior for outstanding queries and invalid use of `tx` after callback completion. Cancellation is omitted initially unless the backend can safely interrupt it. Prepared statements, change subscriptions, encryption, vector search and remote replication are separate extensions when needed.
 

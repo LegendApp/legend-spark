@@ -1,4 +1,4 @@
-import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
+import { SparkError, nativeError as normalizeNativeError } from "@legendapp/spark-desktop-app/src/contracts";
 import type { Database, IntegerMode, RunResult, SqlExecutor, SqlRow, SqlValue } from "./types";
 
 /** Internal protocol: submit statements in FIFO order, snapshot bindings on submission,
@@ -36,8 +36,7 @@ function parameters(sql: string, params: readonly SqlValue[], deferred: boolean)
   return deferred ? params.map(value => value instanceof Uint8Array ? value.slice() : value) : params;
 }
 function nativeError(cause: unknown): never {
-  if (cause instanceof SparkError) throw cause;
-  throw new SparkError("E_NATIVE", cause instanceof Error ? cause.message : "SQLite execution failed", { cause });
+  throw normalizeNativeError(cause);
 }
 function row(value: unknown, integers: IntegerMode): SqlRow {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {

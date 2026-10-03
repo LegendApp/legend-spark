@@ -124,12 +124,12 @@ export async function openFile(path: string, options: OpenFileOptions = {}) {
   checkedOptions(options, ["mode"], "openFile");
   return createFileHandle(call, absolute(path), options.mode);
 }
-/** Pull-based binary stream; closes on EOF, error, abort, or early loop exit. */
+/** Returns an iterator synchronously; option names validate now, while path/range validation occurs on first iteration. Closes on EOF, error, abort, or early loop exit. */
 export function readChunks(path: string, options: ReadChunksOptions = {}): AsyncGenerator<Uint8Array> {
   checkedOptions(options, ["offset", "chunkSize", "signal"], "readChunks");
   return iterateFile(() => openFile(path), options);
 }
-/** Failure leaves a partial file; use a temporary file + move for publication. */
+/** Promise-based validation and IO; failure leaves a partial file, so use a temporary file + move for publication. */
 export async function writeChunks(path: string, chunks: AsyncIterable<Uint8Array> | Iterable<Uint8Array>, options: WriteChunksOptions = {}): Promise<number> {
   checkedOptions(options, ["mode", "signal"], "writeChunks");
   if (options.mode !== undefined && options.mode !== "write" && options.mode !== "createNew") throw new SparkError("E_INVALID_ARGUMENT", "Streaming writes require write or createNew mode");

@@ -119,6 +119,14 @@ test("misspelled file options reject before any native dispatch", async () => {
   await expect(files.watch("/a", () => {}, { recursize: true } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
   expect(calls).toHaveLength(previous);
 });
+test("chunk iterators validate at their documented construction and consumption boundaries", async () => {
+  const previous = calls.length;
+  const iterator = files.readChunks("relative");
+  expect(iterator).toBeDefined();
+  await expect(iterator.next()).rejects.toThrow("absolute");
+  await expect(files.writeChunks("relative", [])).rejects.toThrow("absolute");
+  expect(calls).toHaveLength(previous);
+});
 test("watches filter by registration id and remove idempotently", async () => {
   const observed: string[] = []; const first = await files.watch("/first", path => observed.push(path)); const second = await files.watch("/second", path => observed.push(path));
   const firstID = calls[0]?.args.id; const secondID = calls[1]?.args.id;
@@ -265,6 +273,11 @@ test("process validation and failed launches do not leak listeners", async () =>
   await expect(processes.spawn({ target: { type: "executable", path: "/missing" } })).rejects.toThrow("E_NOT_FOUND"); expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(0);
 });
 test("dialog cancellation, default buttons and input validation", async () => {
+  const previous = calls.length;
+  await expect(dialogs.openFileDialog({ title: undefined, typo: undefined } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(dialogs.saveFileDialog({ defaultName: undefined, typo: undefined } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(messages.showMessage({ title: "Bad", typo: undefined } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(previous);
   handlers.set("NativeDesktopMessageDialog.show", () => ({ button: 0, checked: false }));
   expect(await messages.confirm("Continue?", { windowId: "main" })).toBe(false);
   expect(calls.at(-1)?.args).toMatchObject({ windowId: "main", defaultButton: 1, cancelButton: 0 });
@@ -647,10 +660,11 @@ test("tray snapshots accepted updates, filters actions and keeps last successful
   await expect(item.update({ id: "other" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
   await item.remove();
 });
-test("Windows tray rejects macOS presentation and duplicate creation never removes its owner", async () => {
+test("Windows tray ignores inactive macOS presentation and duplicate creation never removes its owner", async () => {
   platform.OS = "windows";
-  await expect(tray.createTray({ id: "test", title: "Test", macos: { symbol: "star" } })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
-  expect(calls).toEqual([]);
+  const original = await tray.createTray({ id: "original", title: "Test", macos: { symbol: "star", unexpected: true } } as any);
+  expect(calls[0]).toMatchObject({ native: "NativeDesktopTray", method: "create", args: { id: "original", title: "Test", symbol: "" } });
+  await original.remove(); calls.length = 0;
   handlers.set("NativeDesktopTray.create", () => { throw nativeError("E_ALREADY_EXISTS"); });
   await expect(tray.createTray({ id: "test", title: "Test" })).rejects.toMatchObject({ code: "E_ALREADY_EXISTS" });
   expect(calls.map(call => call.method)).toEqual(["create"]);
