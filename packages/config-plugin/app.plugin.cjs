@@ -9,6 +9,7 @@ const {
 } = require("expo-desktop-config-plugins");
 const { identity } = require("./identity.cjs");
 const { resolveEntitlements } = require("./entitlements.cjs");
+const { version: sparkVersion } = require("@legendapp/spark/package.json");
 
 module.exports = function withSparkDesktop(config) {
   if (config.platforms?.length === 1 && config.platforms[0] === "windows") return require("./windows.plugin.cjs")(config);
@@ -35,7 +36,7 @@ module.exports = function withSparkDesktop(config) {
     for (const key of ["SUFeedURL", "SUPublicEDKey", "SUEnableAutomaticChecks", "SUAutomaticallyUpdate", "SUAllowsAutomaticUpdates", "SUEnableSystemProfiling", "SURequireSignedFeed", "SUVerifyUpdateBeforeExtraction"])
       if (!(key in generated)) delete mod.modResults[key];
     Object.assign(mod.modResults, generated);
-    mod.modResults.SparkFrameworkVersion = "0.1.0-prototype.0";
+    mod.modResults.SparkFrameworkVersion = sparkVersion;
     mod.modResults.NSAppTransportSecurity = { NSAllowsLocalNetworking: true };
     return mod;
   });

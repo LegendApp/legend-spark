@@ -2,6 +2,23 @@
   "name": "@legendapp/spark",
   "version": "0.0.1-next.2",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LegendApp/legend-spark.git",
+    "directory": "packages/desktop"
+  },
+  "homepage": "https://github.com/LegendApp/legend-spark#readme",
+  "bugs": {
+    "url": "https://github.com/LegendApp/legend-spark/issues"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "desktop",
+    "macos",
+    "windows",
+    "native"
+  ],
   "exports": {
     "./dialogs": "./dialogs.ts",
     "./menus": "./menus.ts",
