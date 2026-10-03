@@ -8,24 +8,60 @@ export interface UseWatchedDocumentReloadOptions extends Omit<DocumentReloadOpti
   enabled?: boolean;
   onCleanupError?: (error: unknown, registration: AsyncRegistration) => void;
 }
+type ReloadOwner = { registration: AsyncRegistration; removing?: Promise<void> };
+type ReloadLifecycle = { tail: Promise<void>; owner?: ReloadOwner };
 export function useWatchedDocumentReload(options: UseWatchedDocumentReloadOptions): void {
   const latest = useRef(options);
+  const lifecycleRef = useRef<ReloadLifecycle | null>(null);
+  if (!lifecycleRef.current) lifecycleRef.current = { tail: Promise.resolve() };
+  const lifecycle = lifecycleRef.current;
   useLayoutEffect(() => { latest.current = options; });
   const { path, enabled = true, delayMs } = options;
   useEffect(() => {
     if (!enabled || !path) return;
-    let active = true, registration: AsyncRegistration | undefined;
-    const remove = (value: AsyncRegistration) => { void value.remove().catch(error => {
-      if (latest.current.onCleanupError) latest.current.onCleanupError(error, value);
-      else latest.current.onError(error);
-    }); };
-    void watchDocumentReload({
-      path, delayMs,
-      onReload: () => { if (active) return latest.current.onReload(); },
-      shouldReload: () => active && (latest.current.shouldReload?.() ?? true),
-      onError: error => latest.current.onError(error),
-    }).then(value => { if (active) registration = value; else remove(value); }, error => { if (active) latest.current.onError(error); });
-    return () => { active = false; if (registration) remove(registration); };
+    let active = true, owned: ReloadOwner | undefined;
+    const report = (error: unknown) => {
+      try { latest.current.onError(error); }
+      catch (callbackError) { console.error(callbackError); }
+    };
+    const remove = (owner: ReloadOwner) => {
+      if (!owner.removing) owner.removing = owner.registration.remove().then(() => {
+        if (lifecycle.owner === owner) lifecycle.owner = undefined;
+      }).catch(error => {
+        try {
+          if (latest.current.onCleanupError) latest.current.onCleanupError(error, owner.registration);
+          else {
+            console.error("Document reload watch cleanup failed; registration remains retryable", error, owner.registration);
+            report(error);
+          }
+        } catch (callbackError) { console.error(callbackError); }
+        throw error;
+      }).finally(() => { owner.removing = undefined; });
+      return owner.removing;
+    };
+    const creation = lifecycle.tail.then(async () => {
+      if (!active) return;
+      try {
+        if (lifecycle.owner) await remove(lifecycle.owner);
+      } catch { return; }
+      if (!active) return;
+      try {
+        const registration = await watchDocumentReload({
+          path, delayMs,
+          onReload: () => { if (active) return latest.current.onReload(); },
+          shouldReload: () => active && (latest.current.shouldReload?.() ?? true),
+          onError: error => { if (active) report(error); },
+        });
+        owned = { registration };
+        lifecycle.owner = owned;
+      } catch (error) { if (active) report(error); }
+    });
+    lifecycle.tail = creation;
+    return () => {
+      active = false;
+      const cleanup = creation.then(async () => { if (owned) await remove(owned).catch(() => {}); });
+      lifecycle.tail = cleanup;
+    };
   }, [path, enabled, delayMs]);
 }
 

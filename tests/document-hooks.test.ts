@@ -13,6 +13,11 @@ vi.mock("@legendapp/spark-desktop-app", () => ({ addAppListener: (type: string, 
 import { useDocumentAppController, useWatchedDocumentReload, type DocumentAppControllerState, type UseDocumentAppControllerOptions } from "../packages/documents/src/hooks";
 let rendered: any;
 const tick = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   mocks.app.clear(); mocks.watch.mockReset().mockResolvedValue({ remove: vi.fn(async () => {}) });
@@ -64,6 +69,76 @@ test("reload hook disposes late watches and uses current callbacks without recre
   await act(async () => rendered.update(React.createElement(Root, { callback: second })));
   mocks.watch.mock.calls[1][1](); await vi.advanceTimersByTimeAsync(100); await tick();
   expect(second).toHaveBeenCalledTimes(1); expect(mocks.watch).toHaveBeenCalledTimes(2); expect(onError).not.toHaveBeenCalled();
+});
+
+test("reload ownership waits for accepted work and skips disabled intermediate identities", async () => {
+  vi.useFakeTimers();
+  const started = deferred<void>(), finishReload = deferred<void>();
+  const onReload = vi.fn(() => { started.resolve(); return finishReload.promise; });
+  function Root({ path, enabled = true }: { path: string; enabled?: boolean }) {
+    useWatchedDocumentReload({ path, enabled, delayMs: 0, onReload, onError: vi.fn() }); return null;
+  }
+  await act(async () => { rendered = create(React.createElement(Root, { path: "/first" })); await tick(); });
+  const invalidate = mocks.watch.mock.calls[0][1] as () => void;
+  invalidate();
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); await tick(); });
+  await started.promise;
+
+  await act(async () => { rendered.update(React.createElement(Root, { path: "/disabled", enabled: false })); await tick(); });
+  await act(async () => { rendered.update(React.createElement(Root, { path: "/latest" })); await tick(); });
+  invalidate();
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); await tick(); });
+  expect(onReload).toHaveBeenCalledOnce();
+  expect(mocks.watch).toHaveBeenCalledTimes(1);
+
+  await act(async () => { finishReload.resolve(); await tick(); });
+  expect(mocks.watch).toHaveBeenCalledTimes(2);
+  expect(mocks.watch.mock.calls[1][0]).toBe("/latest");
+});
+
+test("reload hook retries failed removal before a later identity can acquire a watch", async () => {
+  const firstRemove = vi.fn().mockRejectedValueOnce(Error("cleanup one")).mockRejectedValueOnce(Error("cleanup two")).mockResolvedValue(undefined);
+  mocks.watch.mockImplementationOnce(async () => ({ remove: firstRemove }));
+  const cleanupError = vi.fn(), onError = vi.fn(), onReload = vi.fn();
+  function Root({ path }: { path: string }) {
+    useWatchedDocumentReload({ path, onReload, onError, onCleanupError: cleanupError }); return null;
+  }
+  await act(async () => { rendered = create(React.createElement(Root, { path: "/first" })); await tick(); });
+  await act(async () => { rendered.update(React.createElement(Root, { path: "/blocked" })); await tick(); });
+  expect(firstRemove).toHaveBeenCalledTimes(2);
+  expect(mocks.watch).toHaveBeenCalledTimes(1);
+  expect(cleanupError).toHaveBeenCalledTimes(2);
+  expect(cleanupError.mock.calls[0][1]).toEqual(expect.objectContaining({ remove: expect.any(Function) }));
+
+  await act(async () => { rendered.update(React.createElement(Root, { path: "/recovered" })); await tick(); });
+  expect(firstRemove).toHaveBeenCalledTimes(3);
+  expect(mocks.watch).toHaveBeenCalledTimes(2);
+  expect(mocks.watch.mock.calls[1][0]).toBe("/recovered");
+  expect(onError).not.toHaveBeenCalled();
+});
+
+test("throwing setup error callbacks do not poison a later watch replacement", async () => {
+  mocks.watch.mockRejectedValueOnce(Error("watch setup failed")).mockResolvedValueOnce({ remove: vi.fn(async () => {}) });
+  const onError = vi.fn(() => { throw Error("error handler failed"); });
+  function Root({ path }: { path: string }) {
+    useWatchedDocumentReload({ path, onReload: vi.fn(), onError }); return null;
+  }
+  await act(async () => { rendered = create(React.createElement(Root, { path: "/broken" })); await tick(); });
+  expect(onError).toHaveBeenCalledOnce();
+  expect(console.error).toHaveBeenCalledWith(expect.objectContaining({ message: "error handler failed" }));
+  await act(async () => { rendered.update(React.createElement(Root, { path: "/recovered" })); await tick(); });
+  expect(mocks.watch).toHaveBeenCalledTimes(2);
+  expect(mocks.watch.mock.calls[1][0]).toBe("/recovered");
+});
+
+test("reload hook Strict Mode setup owns only one watch", async () => {
+  const remove = vi.fn(async () => {});
+  mocks.watch.mockResolvedValue({ remove });
+  function Root() { useWatchedDocumentReload({ path: "/strict", onReload: vi.fn(), onError: vi.fn() }); return null; }
+  await act(async () => { rendered = create(React.createElement(StrictMode, null, React.createElement(Root))); await tick(); });
+  expect(mocks.watch).toHaveBeenCalledOnce();
+  await act(async () => { rendered.unmount(); rendered = undefined; await tick(); });
+  expect(remove).toHaveBeenCalledOnce();
 });
 
 test("menu edits retain controller ownership and a failed cleanup reports the retryable handle", async () => {
