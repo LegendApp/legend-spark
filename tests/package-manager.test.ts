@@ -35,6 +35,17 @@ test("override conversion keeps pins and writes each manager's supported field",
     expect(pkg.dependencies["@legendapp/spark"]).toBe("file:/tmp/frame.tgz");
   }
 });
+test("all package manager overrides preserve portable release archive references", () => {
+  const source = "file:./spark-packages/react-native-webview-" + "a".repeat(64) + ".tgz";
+  for (const manager of ["npm", "pnpm", "yarn", "bun"] as const) {
+    const pkg: any = { dependencies: { "react-native-webview": source } };
+    applyOverrides(pkg, { "react-native-webview": source }, manager);
+    const field = manager === "pnpm" ? pkg.pnpm.overrides : manager === "yarn" ? pkg.resolutions : pkg.overrides;
+    expect(pkg.dependencies["react-native-webview"]).toBe(source);
+    expect(field["react-native-webview"]).toBe(source);
+    expect(source).toMatch(/^file:\.\//);
+  }
+});
 test("manager invocations reuse the invoking JavaScript executable", () => {
   expect(managerCommand("pnpm", ["install"], { npm_config_user_agent: "pnpm/10", npm_execpath: "/space here/pnpm.cjs" })).toEqual([process.execPath, "/space here/pnpm.cjs", "install"]);
   expect(managerCommand("npm", ["install"], { npm_config_user_agent: "pnpm/10", npm_execpath: "/pnpm.cjs" })).toEqual(["npm", "install"]);

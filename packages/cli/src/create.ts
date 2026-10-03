@@ -1,4 +1,4 @@
-import { packageSources } from "./release.ts";
+import { installedRelease, materializeReleasePackages, packageSources, verifyMaterializedReleasePackages } from "./release.ts";
 import { packageManager, managerCommand, applyOverrides, localArchive, type PackageManager } from "./package-manager.ts";
 import { packArchive } from "./pack-archive.ts";
 import { spawnProcess } from "./process.ts";
@@ -44,8 +44,10 @@ export async function create(root: string, archiveManifest: string | undefined, 
   try {
     cpSync(source, temporary, { recursive: true });
     const pkg = readJson(path.join(temporary, "package.json"));
-    const archives = packageSources(archiveManifest);
+    const release = archiveManifest ? undefined : installedRelease();
+    const archives = packageSources(archiveManifest, release);
     if (pkg.dependencies["@react-native-runtimes/core"] && !archives["@react-native-runtimes/core"]) throw new Error("This SDK lacks the patched Runtimes archive. Repack or install the complete SDK.");
+    if (release) await materializeReleasePackages(release, temporary);
     const overrides: Record<string, string> = {};
     for (const [name, file] of Object.entries(archives)) {
       overrides[name] = file;
@@ -57,6 +59,7 @@ export async function create(root: string, archiveManifest: string | undefined, 
     if (manager === "yarn") writeFileSync(path.join(temporary, ".yarnrc.yml"), "nodeLinker: node-modules\n");
     if (manager === "pnpm") writeFileSync(path.join(temporary, ".npmrc"), "node-linker=hoisted\n");
     await packArchive(temporary, templateFile);
+    if (release) verifyMaterializedReleasePackages(release, temporary);
     // The upstream CLI owns validation, extraction, app IDs, install, and Git setup.
     // The templates' postinstall initializes spark configuration once.
     const name = path.basename(root);
@@ -70,9 +73,19 @@ export async function create(root: string, archiveManifest: string | undefined, 
     ]), { cwd: process.cwd(), env: { ...process.env, PATH: `${npmBin}${path.delimiter}${process.env.PATH ?? ""}`, npm_config_user_agent: `${manager}/spark`, CI: "1", ...(manager === "yarn" ? { YARN_ENABLE_IMMUTABLE_INSTALLS: "false" } : {}) }, stdout: "inherit", stderr: "inherit" });
     if (await child.exited) throw new Error("Expo Desktop could not create the app. See its output above.");
   } finally { rmSync(temporary, { recursive: true, force: true }); }
+  if (!archiveManifest) {
+    const release = installedRelease();
+    if (release) verifyMaterializedReleasePackages(release, root);
+    const ignoreFile = path.join(root, ".gitignore");
+    const ignore = existsSync(ignoreFile) ? readFileSync(ignoreFile, "utf8") : "";
+    if (!ignore.includes("!/spark-packages/**")) writeFileSync(ignoreFile, `${ignore}${ignore.endsWith("\n") || !ignore ? "" : "\n"}\n# Spark verified release package inputs\n!/spark-packages/\n!/spark-packages/**\n`);
+  }
   // Upstream can report success after an install failure. Require a usable CLI.
   if (!existsSync(path.join(root, "node_modules/@legendapp/spark/package.json"))) throw new Error(`Dependency installation failed. Run ${manager} install in ${root} and retry.`);
-  if (example) await configureExample(root, example);
+  if (example) {
+    if (!archiveManifest) { const release = installedRelease(); if (release) verifyMaterializedReleasePackages(release, root); }
+    await configureExample(root, example);
+  }
   console.log(`Created ${root}.\n\n  cd ${JSON.stringify(root)}\n  ${manager} run ${platform}`);
 }
 

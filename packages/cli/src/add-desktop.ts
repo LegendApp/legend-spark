@@ -1,11 +1,11 @@
-import { packageSources } from "./release.ts";
+import { installedRelease, materializeReleasePackages, packageSources, verifyMaterializedReleasePackages } from "./release.ts";
 import { packageManager, managerCommand, localArchive } from "./package-manager.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import ts from "typescript";
 import { run } from "./commands.ts";
-import { readJson } from "./project.ts";
+import { readJson, writeJson } from "./project.ts";
 
 export const integrationMarker = "// spark: existing Expo project";
 
@@ -49,6 +49,7 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
   const pkg = readJson(pkgFile);
   if (pkg.type === "module") throw new Error("ES module package configurations need explicit composition; automatic add desktop currently supports Expo's CommonJS project layout. No files were changed.");
   const manager = packageManager(root);
+  const release = manifestFile ? undefined : installedRelease();
   const req = createRequire(pkgFile);
   const installed = (name: string) => readJson(req.resolve(`${name}/package.json`)).version;
   // Never upgrade the mobile baseline as a side effect of adding desktop.
@@ -60,6 +61,32 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
   const desktopFile = path.join(root, "desktop.config.json");
   if (existsSync(desktopFile)) {
     if (readJson(desktopFile).extends !== "expo") throw new Error("This app already uses spark-owned configuration; add desktop is for existing Expo projects.");
+    if (release) {
+      const sources = packageSources(undefined, release);
+      const replacement = new Map(Object.entries(release.packages).map(([name, asset]) => [asset.url, sources[name]!]));
+      const portableSources = new Set(replacement.values());
+      let changed = false, needsVerify = false;
+      function secureDependencies(value: unknown): unknown {
+        if (typeof value === "string") {
+          const portable = replacement.get(value);
+          if (portable) { changed = true; needsVerify = true; return portable; }
+          if (portableSources.has(value)) needsVerify = true;
+          return value;
+        }
+        if (Array.isArray(value)) return value.map(secureDependencies);
+        if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, secureDependencies(item)]));
+        return value;
+      }
+      for (const field of ["dependencies", "devDependencies", "optionalDependencies", "overrides", "resolutions", "pnpm"]) if (pkg[field]) pkg[field] = secureDependencies(pkg[field]);
+      if (needsVerify) {
+        await materializeReleasePackages(release, root);
+        verifyMaterializedReleasePackages(release, root);
+        if (changed) writeJson(pkgFile, pkg);
+        const ignoreFile = path.join(root, ".gitignore");
+        const ignore = existsSync(ignoreFile) ? readFileSync(ignoreFile, "utf8") : "";
+        if (!ignore.includes("!/spark-packages/**")) writeFileSync(ignoreFile, `${ignore}${ignore.endsWith("\n") || !ignore ? "" : "\n"}\n# Spark verified release package inputs\n!/spark-packages/\n!/spark-packages/**\n`);
+      }
+    }
     await run(root, managerCommand(manager, ["install"]));
     console.log("Desktop integration already exists; dependencies installed. Existing configuration preserved.");
     return;
@@ -85,7 +112,7 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
 
   const template = path.resolve(import.meta.dirname, "../templates/universal");
   const defaults = readJson(path.join(template, "package.json"));
-  const archives = packageSources(manifestFile);
+  const archives = packageSources(manifestFile, release);
   const local = ["@legendapp/spark"];
   const dependencies: Record<string, string> = {};
   for (const name of local) {
@@ -131,10 +158,12 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
   files.set("desktop.config.json", JSON.stringify(desktop, null, 2) + "\n");
   const ignoreFile = path.join(root, ".gitignore");
   const ignore = existsSync(ignoreFile) ? readFileSync(ignoreFile, "utf8") : "";
-  files.set(".gitignore", `${ignore}${ignore.endsWith("\n") || !ignore ? "" : "\n"}\n# spark generated desktop state\n/.spark/\n/macos/\n/windows/\n`);
+  files.set(".gitignore", `${ignore}${ignore.endsWith("\n") || !ignore ? "" : "\n"}\n# spark generated desktop state\n/.spark/\n/macos/\n/windows/\n${release ? "\n# Spark verified release package inputs\n!/spark-packages/\n!/spark-packages/**\n" : ""}`);
   // All conflicts are checked before the first write. The integration is kept
   // reviewable/retryable if the package manager fails; never regenerate mobile.
+  if (release) await materializeReleasePackages(release, root);
   for (const [file, content] of files) writeFileSync(path.join(root, file), content);
+  if (release) verifyMaterializedReleasePackages(release, root);
   await run(root, managerCommand(manager, ["install"]));
   console.log(`Added desktop support to ${root}. Existing entry point and mobile/web scripts are unchanged.\nRun spark build --dev --platform macos, then spark dev --platform macos. Windows native builds run on Windows.`);
 }
