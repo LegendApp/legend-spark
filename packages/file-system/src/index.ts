@@ -94,11 +94,11 @@ export async function list(path: string): Promise<DirectoryEntry[]> {
 export async function mkdir(path: string, options: CreateDirectoryOptions = {}): Promise<void> { await call("mkdir", { path: absolute(path), recursive: recursiveOption(options, true) }); }
 /** Absence is success; deleting a nonempty directory requires recursive: true. */
 export async function remove(path: string, options: RemoveOptions = {}): Promise<void> { await call("remove", { path: absolute(path), recursive: recursiveOption(options, false) }); }
-/** Copies directories recursively and preserves symlinks. An existing destination rejects unless overwrite: true. */
+/** Copies directories recursively and preserves symlinks. An existing destination rejects unless overwrite: true. Self-transfers and overlapping source/destination paths reject. Overwrite stages beside the destination and restores the previous destination if publication fails. If backup cleanup fails after commit, the native error reports the published destination and recoverable backup path. */
 export async function copy(source: string, destination: string, options: CopyMoveOptions = {}): Promise<void> {
   await call("copy", { path: absolute(source), to: absolute(destination), overwrite: overwriteOption(options) });
 }
-/** An existing destination rejects unless overwrite: true. Cross-volume directory moves may copy then delete. */
+/** An existing destination rejects unless overwrite: true. Self-transfers and overlapping source/destination paths reject. Cross-volume moves copy beside the destination before deleting the source. If source cleanup fails, the destination has been published, the source may be partially removed, and the previous destination is retained at a recovery path reported by the native error. Backup cleanup failures also report the committed destination and retained backup. */
 export async function move(source: string, destination: string, options: CopyMoveOptions = {}): Promise<void> {
   await call("move", { path: absolute(source), to: absolute(destination), overwrite: overwriteOption(options) });
 }

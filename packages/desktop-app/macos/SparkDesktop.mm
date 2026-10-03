@@ -1,4 +1,5 @@
 #import "SparkDesktop.h"
+#import "SparkDesktopError.h"
 #import "SparkQuitCoordinator.h"
 #import <CommonCrypto/CommonDigest.h>
 #import <sys/file.h>
@@ -21,13 +22,7 @@ NSDictionary *SparkArgs(NSString *json) {
 }
 void SparkInvalid(RCTPromiseRejectBlock reject, NSString *message) { reject(@"E_INVALID_ARGUMENT", message, nil); }
 void SparkReject(RCTPromiseRejectBlock reject, NSError *error) {
-  NSString *code = @"E_IO";
-  if ([error.domain isEqualToString:NSCocoaErrorDomain]) {
-    if (error.code == NSFileReadNoSuchFileError || error.code == NSFileNoSuchFileError) code = @"E_NOT_FOUND";
-    if (error.code == NSFileReadNoPermissionError || error.code == NSFileWriteNoPermissionError) code = @"E_PERMISSION";
-    if (error.code == NSFileWriteFileExistsError) code = @"E_EXISTS";
-  }
-  reject(code, error.localizedDescription ?: @"Native operation failed", error);
+  reject(SparkDesktopErrorCode(error), error.localizedDescription ?: @"Native operation failed", error);
 }
 NSDictionary *SparkContext(void) {
   static NSDictionary *context;

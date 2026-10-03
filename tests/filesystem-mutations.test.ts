@@ -9,8 +9,11 @@ test.skipIf(process.platform !== "darwin" || process.getuid?.() === 0)("native c
   try {
     const root = path.resolve(import.meta.dirname, "..");
     const native = path.join(root, "packages/file-system/macos");
+    const desktopNative = path.join(root, "packages/desktop-app/macos");
     const output = path.join(directory, "test");
-    execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-framework", "Foundation", "-I", native,
+    execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-I", native,
+      "-c", path.join(native, "SparkFileMutations.mm"), "-o", path.join(directory, "production.o")]);
+    execFileSync("clang++", ["-DSPARK_FILE_MUTATIONS_TESTING", "-fobjc-arc", "-fblocks", "-framework", "Foundation", "-I", native, "-I", desktopNative,
       path.join(native, "SparkFileMutations.mm"), path.join(root, "tests/filesystem-mutations.native.mm"), "-o", output]);
     expect(execFileSync(output, [directory], { encoding: "utf8" })).toContain("Filesystem mutation tests passed");
   } finally { rmSync(directory, { recursive: true, force: true }); }
