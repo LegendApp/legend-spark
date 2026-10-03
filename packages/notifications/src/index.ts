@@ -12,18 +12,24 @@ export interface NotificationPermission {
   canAskAgain: boolean | null;
   macos?: { authorization: "notDetermined" | "denied" | "authorized" | "provisional" | "unknown" };
 }
+export interface NotificationAction { id: string; label: string }
+/** Portable tone names; each target maps them to its own system sounds (documented in the native bridges). */
+export type NotificationTone = "message" | "mail" | "reminder" | "call" | "error";
 export interface NotificationContent {
   title: string;
   body?: string;
   subtitle?: string;
-  /** Defaults to false on every supported target. */
-  sound?: boolean;
+  /** false/omitted is silent; true or "default" plays the platform default; a tone selects a system sound. */
+  sound?: boolean | "default" | NotificationTone;
+  /** Custom buttons: 1–4 entries (the portable intersection of macOS categories and Windows toasts). macOS banners show the first two; the rest appear in Notification Center. Tapping the body reports "open", dismissing reports "dismiss". */
+  actions?: readonly NotificationAction[];
   data?: Record<string, string>;
 }
 export interface ShowNotificationOptions { id: string; content: NotificationContent }
 export type NotificationTrigger = { type: "delay"; delaySeconds: number };
 export interface ScheduleNotificationOptions extends ShowNotificationOptions { trigger: NotificationTrigger }
-export interface NotificationResponse { type: "notificationResponse"; id: string; notificationId: string; action: "open" | "dismiss"; data: Record<string, string> }
+/** action is "open", "dismiss", or the id of a tapped notification action. */
+export interface NotificationResponse { type: "notificationResponse"; id: string; notificationId: string; action: "open" | "dismiss" | (string & {}); data: Record<string, string> }
 export function getNotificationAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
   return Native ? { available: true } : { available: false, reason: "missing-module" };
@@ -49,13 +55,30 @@ function options(value: unknown, keys: string[]) {
 function stringRecord(value: unknown): value is Record<string, string> {
   return !!value && typeof value === "object" && !Array.isArray(value) && Object.values(value).every(item => typeof item === "string");
 }
+const tones = ["message", "mail", "reminder", "call", "error"] as const;
+function sound(value: unknown): "none" | "default" | NotificationTone {
+  if (value === undefined || value === false) return "none";
+  if (value === true || value === "default") return "default";
+  if (typeof value === "string" && (tones as readonly string[]).includes(value)) return value as NotificationTone;
+  throw new SparkError("E_INVALID_ARGUMENT", "Notification sound must be false, true, \"default\", or a tone name");
+}
+function actions(value: unknown): NotificationAction[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || !value.length || value.length > 4) throw new SparkError("E_INVALID_ARGUMENT", "Notification actions must contain 1–4 entries");
+  return value.map(action => {
+    if (!action || typeof action !== "object" || Array.isArray(action) || Object.keys(action).some(key => key !== "id" && key !== "label") || !validId((action as NotificationAction).id) || ["open", "dismiss"].includes((action as NotificationAction).id) || typeof (action as NotificationAction).label !== "string" || !(action as NotificationAction).label.trim() || (action as NotificationAction).label.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "Notification actions need an id outside open/dismiss and a label");
+    return { id: action.id, label: action.label };
+  });
+}
 function notification(value: ShowNotificationOptions, scheduled: boolean) {
   options(value, scheduled ? ["id", "content", "trigger"] : ["id", "content"]);
-  id(value.id); options(value.content, ["title", "body", "subtitle", "sound", "data"]);
+  id(value.id); options(value.content, ["title", "body", "subtitle", "sound", "actions", "data"]);
   const content = value.content;
   if (typeof content.title !== "string" || !content.title.trim()) throw new SparkError("E_INVALID_ARGUMENT", "Notification title is required");
-  if ([content.body, content.subtitle].some(text => text !== undefined && typeof text !== "string") || (content.sound !== undefined && typeof content.sound !== "boolean") || (content.data !== undefined && !stringRecord(content.data))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid notification content");
-  return { id: value.id, ...content, sound: content.sound ?? false };
+  if ([content.body, content.subtitle].some(text => text !== undefined && typeof text !== "string") || (content.data !== undefined && !stringRecord(content.data))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid notification content");
+  const result = { id: value.id, title: content.title, body: content.body, subtitle: content.subtitle, data: content.data, sound: sound(content.sound) };
+  const actionList = actions(content.actions);
+  return actionList === undefined ? result : { ...result, actions: actionList };
 }
 async function permission(method: string): Promise<NotificationPermission> {
   const value = await call(method, {}, (value): value is NonNullable<NotificationPermission["macos"]>["authorization"] => typeof value === "string" && ["notDetermined", "denied", "authorized", "provisional", "unknown"].includes(value));
@@ -87,7 +110,7 @@ export async function getDeliveredNotifications(): Promise<string[]> { return ca
 function response(value: unknown): value is NotificationResponse {
   if (!value || typeof value !== "object") return false;
   const event = value as NotificationResponse;
-  return event.type === "notificationResponse" && typeof event.id === "string" && event.id.length > 0 && validId(event.notificationId) && ["open", "dismiss"].includes(event.action) && stringRecord(event.data);
+  return event.type === "notificationResponse" && typeof event.id === "string" && event.id.length > 0 && validId(event.notificationId) && validId(event.action) && stringRecord(event.data);
 }
 /** Subscribe before reading retained cold-launch responses; deduplicate queued/live overlap.
  * Each new subscription replays retained responses (up to 100). Cleanup is synchronous.

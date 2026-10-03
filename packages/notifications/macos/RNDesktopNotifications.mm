@@ -16,6 +16,7 @@ static NSString *Identifier(NSString *value) { return [NSString stringWithFormat
 static BOOL Owns(UNNotificationRequest *request) { return [request.content.userInfo[NamespaceKey] isEqual:SparkNamespace()]; }
 @interface SparkNotificationCenter : NSObject <UNUserNotificationCenterDelegate>
 @property NSMutableArray *responses;
+@property NSMutableSet<UNNotificationCategory *> *categories;
 @property (weak) id<UNUserNotificationCenterDelegate> previous;
 + (instancetype)shared;
 @end
@@ -24,13 +25,13 @@ static BOOL Owns(UNNotificationRequest *request) { return [request.content.userI
   static SparkNotificationCenter *instance;
   static dispatch_once_t once;
   dispatch_once(&once, ^{
-    instance = [SparkNotificationCenter new]; instance.responses = [NSMutableArray new];
+    instance = [SparkNotificationCenter new]; instance.responses = [NSMutableArray new]; instance.categories = [NSMutableSet new];
     UNUserNotificationCenter *center = UNUserNotificationCenter.currentNotificationCenter;
     instance.previous = center.delegate; center.delegate = instance;
     [center getNotificationCategoriesWithCompletionHandler:^(NSSet<UNNotificationCategory *> *categories) {
-      NSMutableSet *combined = [categories mutableCopy];
-      [combined addObject:[UNNotificationCategory categoryWithIdentifier:@"spark.desktop.default" actions:@[] intentIdentifiers:@[] options:UNNotificationCategoryOptionCustomDismissAction]];
-      [center setNotificationCategories:combined];
+      [instance.categories addObjectsFromArray:categories.allObjects];
+      [instance.categories addObject:[UNNotificationCategory categoryWithIdentifier:@"spark.desktop.default" actions:@[] intentIdentifiers:@[] options:UNNotificationCategoryOptionCustomDismissAction]];
+      [center setNotificationCategories:instance.categories];
     }];
   });
   return instance;
@@ -51,9 +52,12 @@ static BOOL Owns(UNNotificationRequest *request) { return [request.content.userI
     return;
   }
   NSDictionary *info = response.notification.request.content.userInfo;
+  NSString *action = @"open";
+  if ([response.actionIdentifier isEqual:UNNotificationDismissActionIdentifier]) action = @"dismiss";
+  else if ([response.actionIdentifier hasPrefix:@"spark.action."]) action = [response.actionIdentifier substringFromIndex:@"spark.action.".length];
   NSDictionary *event = @{ @"type": @"notificationResponse", @"id": NSUUID.UUID.UUIDString,
     @"notificationId": info[@"sparkId"] ?: @"", @"data": info[@"sparkData"] ?: @{},
-    @"action": [response.actionIdentifier isEqual:UNNotificationDismissActionIdentifier] ? @"dismiss" : @"open" };
+    @"action": action };
   dispatch_async(dispatch_get_main_queue(), ^{
     [self.responses addObject:event]; if (self.responses.count > 100) [self.responses removeObjectAtIndex:0];
     SparkEmit(event); completion();
@@ -76,9 +80,31 @@ RCT_EXPORT_MODULE(NativeDesktopNotifications)
     } else if ([method isEqual:@"show"]) {
       if (![args[@"id"] isKindOfClass:NSString.class] || ![args[@"title"] isKindOfClass:NSString.class]) { SparkInvalid(reject, @"Notification needs an id and title"); return; }
       UNMutableNotificationContent *content = [UNMutableNotificationContent new];
-      content.categoryIdentifier = @"spark.desktop.default";
+      NSArray *actions = [args[@"actions"] isKindOfClass:NSArray.class] ? args[@"actions"] : nil;
       content.title = args[@"title"]; content.body = args[@"body"] ?: @""; content.subtitle = args[@"subtitle"] ?: @"";
-      if ([args[@"sound"] boolValue]) content.sound = UNNotificationSound.defaultSound;
+      // JS normalizes sound to "none", "default", or a tone name. macOS user
+      // notification sounds must ship in the app bundle or Library/Sounds, so
+      // tones present the platform default here; Windows maps tones to system sounds.
+      NSString *sound = [args[@"sound"] isKindOfClass:NSString.class] ? args[@"sound"] : nil;
+      if (sound.length > 0 && ![sound isEqual:@"none"]) content.sound = UNNotificationSound.defaultSound;
+      content.categoryIdentifier = @"spark.desktop.default";
+      if (actions.count > 0) {
+        // Categories are app-global; namespace identifiers so Spark registrations
+        // never collide with a host app's own UNNotificationCategory set.
+        NSMutableArray<UNNotificationAction *> *categoryActions = [NSMutableArray new];
+        NSMutableString *signature = [NSMutableString stringWithString:@"spark.actions."];
+        for (NSDictionary *action in actions) {
+          if (![action[@"id"] isKindOfClass:NSString.class] || ![action[@"label"] isKindOfClass:NSString.class]) { SparkInvalid(reject, @"Notification actions need an id and label"); return; }
+          [categoryActions addObject:[UNNotificationAction actionWithIdentifier:[@"spark.action." stringByAppendingString:action[@"id"]] title:action[@"label"] options:UNNotificationActionOptionNone]];
+          [signature appendFormat:@"%@:%@|", action[@"id"], action[@"label"]];
+        }
+        content.categoryIdentifier = signature;
+        UNNotificationCategory *category = [UNNotificationCategory categoryWithIdentifier:signature actions:categoryActions intentIdentifiers:@[] options:UNNotificationCategoryOptionCustomDismissAction];
+        if (![delegate.categories containsObject:category]) {
+          [delegate.categories addObject:category];
+          [center setNotificationCategories:delegate.categories];
+        }
+      }
       content.userInfo = @{ NamespaceKey: SparkNamespace(), @"sparkId": args[@"id"], @"sparkData": args[@"data"] ?: @{} };
       UNNotificationTrigger *trigger = args[@"delay"] ? [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:[args[@"delay"] doubleValue] repeats:NO] : nil;
       UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:Identifier(args[@"id"]) content:content trigger:trigger];

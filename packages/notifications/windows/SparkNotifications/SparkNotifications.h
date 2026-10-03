@@ -100,7 +100,31 @@ struct NotificationsState : std::enable_shared_from_this<NotificationsState> {
     Xml::XmlDocument xml; xml.LoadXml(L"<toast><visual><binding template='ToastGeneric'/></visual></toast>"); xml.DocumentElement().SetAttribute(L"launch", response.Stringify());
     auto binding = xml.SelectSingleNode(L"/toast/visual/binding");
     for (auto field : {L"title", L"subtitle", L"body"}) { auto text = args.GetNamedString(field, L""); if (!text.empty()) { auto node = xml.CreateElement(L"text"); node.AppendChild(xml.CreateTextNode(text)); binding.AppendChild(node); } }
-    if (!args.GetNamedBoolean(L"sound", true)) { auto audio = xml.CreateElement(L"audio"); audio.SetAttribute(L"silent", L"true"); xml.DocumentElement().AppendChild(audio); }
+    // JS normalizes sound to "none", "default", or a tone name mapped onto the
+    // system Notification.* catalog; tones without a Windows counterpart use Default.
+    auto sound = args.GetNamedString(L"sound", L"none");
+    if (sound == L"none") { auto audio = xml.CreateElement(L"audio"); audio.SetAttribute(L"silent", L"true"); xml.DocumentElement().AppendChild(audio); }
+    else {
+      auto audio = xml.CreateElement(L"audio");
+      auto tone = std::wstring(L"ms-winsoundevent:Notification.");
+      if (sound == L"mail") tone += L"Mail"; else if (sound == L"message") tone += L"IM"; else if (sound == L"reminder") tone += L"Reminder";
+      else if (sound == L"call") { tone += L"Looping.Call"; audio.SetAttribute(L"duration", L"long"); }
+      else tone += L"Default";
+      audio.SetAttribute(L"src", tone.c_str()); xml.DocumentElement().AppendChild(audio);
+    }
+    // Action buttons activate through the same CustomActivator as the toast body,
+    // carrying their own action id in the activation arguments.
+    for (auto const &entry : args.GetNamedArray(L"actions", Json::JsonArray())) {
+      auto action = entry.GetObject();
+      auto button = xml.CreateElement(L"action");
+      // JsonObject is a reference type; parse a copy so each action carries its
+      // own action id without mutating the body/dismiss payload.
+      auto arguments = Json::JsonObject::Parse(response.Stringify());
+      arguments.SetNamedValue(L"action", Json::JsonValue::CreateStringValue(action.GetNamedString(L"id")));
+      button.SetAttribute(L"content", action.GetNamedString(L"label").c_str());
+      button.SetAttribute(L"arguments", arguments.Stringify().c_str());
+      xml.DocumentElement().AppendChild(button);
+    }
     auto tag = Hash(id); RemovePending(tag); Forget(tag);
     if (delay > 0) {
       Toast::ScheduledToastNotification toast(xml, clock::now() + std::chrono::milliseconds(static_cast<int64_t>(delay * 1000))); toast.Tag(tag); toast.Group(group); notifier.AddToSchedule(toast);

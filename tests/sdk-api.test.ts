@@ -198,7 +198,7 @@ test("notifications validate before transport and distinguish permission reads f
   handlers.set("NativeDesktopNotifications.requestPermission", () => "authorized");
   expect(await notifications.getNotificationPermission()).toMatchObject({ status: "granted", granted: true }); await notifications.requestNotificationPermission();
   await notifications.scheduleNotification({ id: "test", content: { title: "Hello", data: { route: "inbox" } }, trigger: { type: "delay", delaySeconds: 2 } });
-  expect(calls.at(-1)?.args).toEqual({ id: "test", title: "Hello", data: { route: "inbox" }, sound: false, delay: 2 });
+  expect(calls.at(-1)?.args).toEqual({ id: "test", title: "Hello", data: { route: "inbox" }, sound: "none", delay: 2 });
   await notifications.cancelNotification("test"); await notifications.dismissNotification("test");
   await notifications.cancelAllNotifications(); await notifications.dismissAllNotifications();
   expect(calls.map(call => call.method)).toEqual(["permission", "requestPermission", "show", "cancel", "dismiss", "cancelAll", "dismissAll"]);
@@ -559,11 +559,15 @@ test("notification permission distinguishes platform prompting and provisional a
 
 test("notification scheduling validates trigger and content without partially submitting", async () => {
   for (const delaySeconds of [0, -1, NaN, Infinity, 315360001]) await expect(notifications.scheduleNotification({ id: "one", content: { title: "Title" }, trigger: { type: "delay", delaySeconds } })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
-  for (const content of [{ title: "Title", data: { count: 1 } }, { title: "Title", sound: "yes" }, { title: "Title", subtitle: null }, { title: "Title", extra: true }]) await expect(notifications.showNotification({ id: "one", content } as never)).rejects.toThrow();
+  for (const content of [{ title: "Title", data: { count: 1 } }, { title: "Title", sound: "yes" }, { title: "Title", sound: "bogus-tone" }, { title: "Title", subtitle: null }, { title: "Title", extra: true },
+    { title: "Title", actions: [] }, { title: "Title", actions: [{ id: "a", label: "x" }, { id: "b", label: "y" }, { id: "c", label: "z" }, { id: "d", label: "w" }, { id: "e", label: "v" }] },
+    { title: "Title", actions: [{ id: "open", label: "Reserved" }] }, { title: "Title", actions: [{ id: "a" }] }]) await expect(notifications.showNotification({ id: "one", content } as never)).rejects.toThrow();
   await expect(notifications.cancelNotification(null as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   expect(calls).toHaveLength(0);
   await notifications.showNotification({ id: "one", content: { title: "Title" } });
-  expect(calls.at(-1)?.args).toEqual({ id: "one", title: "Title", sound: false });
+  expect(calls.at(-1)?.args).toEqual({ id: "one", title: "Title", sound: "none" });
+  await notifications.showNotification({ id: "one", content: { title: "Title", sound: "mail", actions: [{ id: "archive", label: "Archive" }, { id: "delete", label: "Delete" }] } });
+  expect(calls.at(-1)?.args).toEqual({ id: "one", title: "Title", sound: "mail", actions: [{ id: "archive", label: "Archive" }, { id: "delete", label: "Delete" }] });
 });
 
 test("notifications reject invalid native output and preserve permission errors", async () => {

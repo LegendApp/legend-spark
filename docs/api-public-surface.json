@@ -219,6 +219,7 @@
   ],
   "./global-shortcuts": [
     "AsyncRegistration",
+    "GlobalShortcutOptions",
     "getGlobalShortcutAvailability",
     "registerGlobalShortcut"
   ],
@@ -532,7 +533,6 @@
     "CloseResult",
     "DisplayId",
     "DisplayInfo",
-    "MacOSSetWindowBoundsOptions",
     "MacOSStartupSplitViewOptions",
     "MacOSTitleBarControl",
     "MacOSTitleBarOptions",
@@ -540,12 +540,14 @@
     "MacOSToolbarOptions",
     "MacOSToolbarSegment",
     "MacOSWindowBlurOptions",
+    "MacOSWindowBoundsOptions",
     "MacOSWindowEvent",
     "MacOSWindowOptions",
     "MacOSWindowUpdateOptions",
     "NavigatorOpenOptions",
     "NavigatorWindowOptions",
     "PrimaryWindowLifecycleOptions",
+    "SetWindowBoundsOptions",
     "ShowWindowOptions",
     "Size",
     "UsePrimaryWindowLifecycleOptions",
@@ -593,7 +595,6 @@
   "./windows/macos": [
     "AsyncRegistration",
     "FocusToolbarSearchOptions",
-    "MacOSSetWindowBoundsOptions",
     "MacOSToolbarItem",
     "MacOSToolbarOptions",
     "MacOSWindowBlurOptions",
@@ -601,7 +602,6 @@
     "addMacOSWindowListener",
     "focusToolbarSearch",
     "setToolbarItemText",
-    "setWindowBlur",
-    "setWindowBounds"
+    "setWindowBlur"
   ]
 }
