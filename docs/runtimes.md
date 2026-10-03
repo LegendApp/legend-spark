@@ -119,3 +119,7 @@ Windows workers own their native module instances. `useMainNativeModules: true`
 (and `prewarmBusinessRuntime`, which requests it) rejects explicitly. The Windows
 backend supports named secondary runtimes; it does not route worker calls back to
 the main heap. These optional upstream modes need separate integration work.
+Desktop application events and quit guards are main-runtime APIs on Windows:
+the host emits those events through the main React context, and worker-local
+listeners cannot receive them. Keep window and OS UI listeners on the main runtime;
+do not treat native module availability in a worker as proof of event support.
