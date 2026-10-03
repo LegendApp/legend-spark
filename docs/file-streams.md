@@ -53,6 +53,15 @@ cannot interrupt a source iterator that never yields. Input decoding is app-owne
 UTF-8 characters can span chunks, so use an incremental decoder rather than decoding
 each chunk independently.
 
+If a stream operation and native handle cleanup both fail, the stream rejects with
+`FileCleanupError`. Its `operationError` and `cleanupError` properties preserve both
+thrown values, including `null` or `undefined`; `operationFailed` distinguishes a
+missing operation error from an operation that threw `undefined`. Catch this error
+and await `retryCleanup()` to retry the internally owned handle close. Cleanup starts
+as soon as the stream exits, and no further handle I/O is accepted after that point.
+If the operation succeeds but close fails, the same error exposes the cleanup failure
+and a retry handle.
+
 Streaming writes are not atomic. For publication, write a distinct temporary path
 and then move it using the destination/conflict policy your app needs. Never stream
 a file into itself; `write` truncates the destination before reading the input.

@@ -4,6 +4,7 @@ import { SparkError, invokeNative, asyncRegistration, type AsyncRegistration, ty
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import Native from "./NativeDesktopFileSystem";
 import { createFileHandle, iterateFile, writeFileChunks, type FileMode, type ReadChunksOptions } from "./handles";
+export { FileCleanupError } from "./handles";
 export type { FileHandle, FileMode, ReadChunksOptions } from "./handles";
 export interface FileInfo { type: "file" | "directory" | "symlink"; size: number; modifiedAt: number }
 export interface DirectoryEntry { name: string; path: string }

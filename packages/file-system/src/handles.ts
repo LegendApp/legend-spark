@@ -8,6 +8,24 @@ export type FileHandle = {
   flush(): Promise<void>;
   close(): Promise<void>;
 };
+export class FileCleanupError extends SparkError {
+  readonly operationFailed: boolean;
+  readonly operationError: unknown;
+  readonly cleanupError: unknown;
+  readonly retryCleanup: () => Promise<void>;
+
+  constructor(operationFailed: boolean, operationError: unknown, cleanupError: unknown, retryCleanup: () => Promise<void>) {
+    const cause = operationFailed
+      ? new AggregateError([operationError, cleanupError], "File operation and handle cleanup both failed")
+      : cleanupError;
+    super("E_NATIVE", operationFailed ? "File operation and handle cleanup both failed" : "File handle cleanup failed", { cause });
+    this.name = "FileCleanupError";
+    this.operationFailed = operationFailed;
+    this.operationError = operationError;
+    this.cleanupError = cleanupError;
+    this.retryCleanup = retryCleanup;
+  }
+}
 export type FileCall = <T>(method: string, args: object) => Promise<T>;
 function offset(value: number) { if (!Number.isSafeInteger(value) || value < 0) throw new SparkError("E_INVALID_ARGUMENT", "Offset must be a nonnegative safe integer"); }
 function length(value: number) { if (!Number.isInteger(value) || value < 1 || value > MAX_CHUNK_SIZE) throw new SparkError("E_INVALID_ARGUMENT", "Chunk size must be between 1 byte and 1 MiB"); }
@@ -31,18 +49,31 @@ export type ReadChunksOptions = { offset?: number; chunkSize?: number; signal?: 
 export async function* iterateFile(open: () => Promise<FileHandle>, options: ReadChunksOptions = {}) {
   let position = options.offset ?? 0; offset(position); const size = options.chunkSize ?? 64 * 1024; length(size); aborted(options.signal);
   const file = await open();
+  let operationFailed = false, operationError: unknown;
   try {
     for (;;) { aborted(options.signal); const bytes = await file.read(size, position); aborted(options.signal); if (!bytes.length) break; position += bytes.length; yield bytes; }
-  } finally { await file.close(); }
+  } catch (error) { operationFailed = true; operationError = error; }
+  finally {
+    try { await file.close(); }
+    catch (cleanupError) { throw new FileCleanupError(operationFailed, operationError, cleanupError, () => file.close()); }
+  }
+  if (operationFailed) throw operationError;
 }
 export async function writeFileChunks(open: () => Promise<FileHandle>, chunks: AsyncIterable<Uint8Array> | Iterable<Uint8Array>, signal?: AbortSignal) {
   aborted(signal); const file = await open(); let position = 0;
+  let operationFailed = false, operationError: unknown;
   try {
     for await (const bytes of chunks) {
       aborted(signal);
       if (!(bytes instanceof Uint8Array)) throw new SparkError("E_INVALID_ARGUMENT", "Expected Uint8Array chunks");
       for (let start = 0; start < bytes.length; start += MAX_CHUNK_SIZE) { aborted(signal); const part = bytes.subarray(start, start + MAX_CHUNK_SIZE); position += await file.write(part, position); }
     }
-    aborted(signal); await file.flush(); return position;
-  } finally { await file.close(); }
+    aborted(signal); await file.flush();
+  } catch (error) { operationFailed = true; operationError = error; }
+  finally {
+    try { await file.close(); }
+    catch (cleanupError) { throw new FileCleanupError(operationFailed, operationError, cleanupError, () => file.close()); }
+  }
+  if (operationFailed) throw operationError;
+  return position;
 }
