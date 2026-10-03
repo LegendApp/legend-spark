@@ -22,12 +22,10 @@ export type UpdateStatus = {
 };
 export interface UpdateConfiguration { automaticallyChecks?: boolean; checkIntervalSeconds?: number }
 export interface CheckForUpdatesOptions { mode?: "interactive" | "background" }
-export interface UpdateEvent {
-  type: "update";
-  state: "checking" | "available" | "notAvailable" | "downloading" | "downloaded" | "installing" | "error";
-  version?: string;
-  message?: string;
-}
+export type UpdateEvent =
+  | { type: "update"; state: "checking" | "notAvailable" }
+  | { type: "update"; state: "available" | "downloading" | "downloaded" | "installing"; version: string }
+  | { type: "update"; state: "error"; message: string };
 function native() {
   if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Native app updates require macOS");
   if (!Native) throw new SparkError("E_MODULE_UNAVAILABLE", "Native app updater is not installed");
@@ -73,6 +71,9 @@ export function onUpdateEvent(listener: (event: UpdateEvent) => void): Subscript
   if (typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected an update listener");
   native();
   return onDesktopEvent(event => {
-    if (event.type === "update" && typeof event.state === "string" && ["checking", "available", "notAvailable", "downloading", "downloaded", "installing", "error"].includes(event.state) && (event.version === undefined || typeof event.version === "string") && (event.message === undefined || typeof event.message === "string")) listener(event as unknown as UpdateEvent);
+    if (event.type !== "update" || typeof event.state !== "string") return;
+    const version = typeof event.version === "string", message = typeof event.message === "string";
+    const valid = ["checking", "notAvailable"].includes(event.state) || (["available", "downloading", "downloaded", "installing"].includes(event.state) && version) || (event.state === "error" && message);
+    if (valid) listener(event as unknown as UpdateEvent);
   }, { types: ["update"] });
 }
