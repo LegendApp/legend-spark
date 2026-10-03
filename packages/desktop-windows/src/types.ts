@@ -53,6 +53,7 @@ export interface WindowInfo {
   visible: boolean;
   focused: boolean;
   minimized: boolean;
+  maximized: boolean;
   fullscreen: boolean;
   bounds: WindowBounds;
 }

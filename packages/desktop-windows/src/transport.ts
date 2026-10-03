@@ -11,7 +11,7 @@ export const finite = (value: unknown): value is number => typeof value === "num
 export const isSize = (value: unknown) => record(value) && finite(value.width) && value.width > 0 && finite(value.height) && value.height > 0;
 export const isBounds = (value: unknown): value is WindowBounds => record(value) && isSize(value) && finite(value.x) && finite(value.y) && typeof value.displayId === "string" && !!value.displayId;
 export interface NativeWindowInfo extends WindowInfo { instanceId: string }
-export const isInfo = (value: unknown): value is NativeWindowInfo => record(value) && typeof value.id === "string" && typeof value.instanceId === "string" && !!value.instanceId && ["window", "overlay"].includes(value.kind) && typeof value.title === "string" && (value.parentId === null || typeof value.parentId === "string") && [value.modal, value.visible, value.focused, value.minimized, value.fullscreen].every(flag => typeof flag === "boolean") && isBounds(value.bounds);
+export const isInfo = (value: unknown): value is NativeWindowInfo => record(value) && typeof value.id === "string" && typeof value.instanceId === "string" && !!value.instanceId && ["window", "overlay"].includes(value.kind) && typeof value.title === "string" && (value.parentId === null || typeof value.parentId === "string") && [value.modal, value.visible, value.focused, value.minimized, value.maximized, value.fullscreen].every(flag => typeof flag === "boolean") && isBounds(value.bounds);
 
 export async function windowCall<T>(method: string, args: object, validate: (value: unknown) => value is T): Promise<T> {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Windows require a desktop host");

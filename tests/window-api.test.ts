@@ -5,7 +5,7 @@ vi.mock("../packages/desktop-windows/src/NativeDesktopWindowManager", () => ({ d
 vi.mock("../packages/desktop-windows/src/window-manager/NativeWindowManager", () => ({ default: managed }));
 vi.mock("@legendapp/spark-desktop-app/src/events", () => ({ onDesktopEvent: (fn: (event: any) => void) => { listeners.add(fn); return { remove: () => listeners.delete(fn) }; } }));
 import * as windows from "../packages/desktop-windows/src/api";
-const info = { id: "editor", instanceId: "instance-1", kind: "window", title: "Editor", parentId: null, modal: false, visible: true, focused: true, minimized: false, fullscreen: false, bounds: { displayId: "display", x: 10, y: 20, width: 640, height: 480 } };
+const info = { id: "editor", instanceId: "instance-1", kind: "window", title: "Editor", parentId: null, modal: false, visible: true, focused: true, minimized: false, maximized: false, fullscreen: false, bounds: { displayId: "display", x: 10, y: 20, width: 640, height: 480 } };
 const emit = (event: object) => listeners.forEach(listener => listener({ windowId: "editor", instanceId: "instance-1", ...event }));
 const tick = async () => { for (let n=0;n<10;n++) await Promise.resolve(); };
 beforeEach(() => { platform.OS = "windows"; call.mockReset().mockImplementation(async (method: string) => JSON.stringify(["open", "info", "observe", "completeOpen"].includes(method) ? info : method === "close" ? { closed: true } : null)); managed.openWindow.mockClear(); managed.setWindowOptions.mockClear(); listeners.clear(); });
@@ -21,6 +21,13 @@ test("cursor point resolves display-relative coordinates and validates the reply
   expect(await windows.getCursorPoint()).toEqual({ displayId: "display", x: 12, y: 34 });
   call.mockImplementation(async (method: string) => JSON.stringify(method === "cursorPoint" ? { displayId: "display", x: "12", y: 34 } : null));
   await expect(windows.getCursorPoint()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+});
+test("window info exposes and validates maximized state", async () => {
+  expect(await windows.getWindow("editor")).toMatchObject({ maximized: false });
+  call.mockImplementation(async () => JSON.stringify({ ...info, maximized: true }));
+  expect((await windows.getWindow("editor")).maximized).toBe(true);
+  call.mockImplementation(async () => JSON.stringify({ ...info, maximized: "yes" }));
+  await expect(windows.getWindow("editor")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
 });
 test("invalid arguments reject asynchronously before native calls", async () => {
   for (const id of ["", "main", "../editor"]) await expect(windows.openWindow({ id, component: "Editor" })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });

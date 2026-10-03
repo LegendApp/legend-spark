@@ -155,7 +155,7 @@ static NSDictionary *Info(NSString *key, NSWindow *window) {
   for (NSString *candidate in windows) if (windows[candidate] == parent) { parentId = candidate; break; }
   return @{ @"id": key, @"instanceId": delegates[key].instanceId, @"kind": opening[@"kind"] ?: @"window",
     @"title": window.title, @"parentId": parentId ?: NSNull.null, @"modal": @([opening[@"modal"] boolValue]), @"visible": @(window.visible && !NSApp.hidden), @"focused": @(window.keyWindow),
-    @"minimized": @(window.miniaturized), @"fullscreen": @((window.styleMask & NSWindowStyleMaskFullScreen) != 0), @"bounds": SparkBoundsForWindow(window) };
+    @"minimized": @(window.miniaturized), @"maximized": @(window.zoomed), @"fullscreen": @((window.styleMask & NSWindowStyleMaskFullScreen) != 0), @"bounds": SparkBoundsForWindow(window) };
 }
 static BOOL ApplyCommon(NSWindow *window, NSDictionary *options, RCTPromiseRejectBlock reject) {
   NSSize minimum = options[@"minSize"] ? (options[@"minSize"] == NSNull.null ? NSMakeSize(100, 100) : NSMakeSize([options[@"minSize"][@"width"] doubleValue], [options[@"minSize"][@"height"] doubleValue])) : window.minSize;

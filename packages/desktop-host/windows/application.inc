@@ -184,6 +184,7 @@ static Json::JsonObject Info(std::string const &id) {
   result.SetNamedValue(L"parentId", window.parentId.empty() ? Json::JsonValue::CreateNullValue() : Json::JsonValue::CreateStringValue(to_hstring(window.parentId)));
   result.SetNamedValue(L"modal", Json::JsonValue::CreateBooleanValue(window.modal)); result.SetNamedValue(L"visible", Json::JsonValue::CreateBooleanValue(IsWindowVisible(hwnd)));
   result.SetNamedValue(L"focused", Json::JsonValue::CreateBooleanValue(GetForegroundWindow() == hwnd)); result.SetNamedValue(L"minimized", Json::JsonValue::CreateBooleanValue(IsIconic(hwnd)));
+  result.SetNamedValue(L"maximized", Json::JsonValue::CreateBooleanValue(IsZoomed(hwnd) != FALSE));
   result.SetNamedValue(L"fullscreen", Json::JsonValue::CreateBooleanValue(window.app.Presenter().Kind() == UI::AppWindowPresenterKind::FullScreen)); result.SetNamedValue(L"bounds", bounds);
   return result;
 }

@@ -16,8 +16,8 @@ export function getWindowAvailability(): Availability {
   return { available: true };
 }
 function publicInfo(value: NativeWindowInfo): WindowInfo {
-  const { id, kind, title, parentId, modal, visible, focused, minimized, fullscreen, bounds: { displayId, x, y, width, height } } = value;
-  return { id, kind, title, parentId, modal, visible, focused, minimized, fullscreen, bounds: { displayId, x, y, width, height } };
+  const { id, kind, title, parentId, modal, visible, focused, minimized, maximized, fullscreen, bounds: { displayId, x, y, width, height } } = value;
+  return { id, kind, title, parentId, modal, visible, focused, minimized, maximized, fullscreen, bounds: { displayId, x, y, width, height } };
 }
 export async function openWindow(options: WindowOpenOptions): Promise<WindowInfo> {
   validateOptions(options, Platform.OS, true);

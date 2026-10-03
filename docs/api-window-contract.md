@@ -74,6 +74,7 @@ interface WindowInfo {
   visible: boolean;
   focused: boolean;
   minimized: boolean;
+  maximized: boolean; // macOS zoomed / Windows IsZoomed. State changes arrive through boundsChanged.
   fullscreen: boolean;
   bounds: WindowBounds;
 }
