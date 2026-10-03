@@ -226,6 +226,10 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
     NSWindow *main = Window(@"main");
     if (main) InstallDelegate(main, @"main");
     if ([method isEqual:@"displays"]) { resolve(SparkJSON(SparkDisplayInfo())); return; }
+    if ([method isEqual:@"cursorPoint"]) {
+      resolve(SparkJSON(SparkCursorPoint()));
+      return;
+    }
     if ([method isEqual:@"list"]) {
       NSMutableArray *result = [NSMutableArray new];
       for (NSString *windowID in windows) [result addObject:Info(windowID, windows[windowID])];

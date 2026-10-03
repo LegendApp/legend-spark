@@ -1,6 +1,8 @@
 export type WindowId = string;
 export type DisplayId = string;
 export interface Size { width: number; height: number }
+/** Pointer position in logical units relative to the containing display's top-left corner. */
+export interface CursorPoint { displayId: DisplayId; x: number; y: number }
 /** Outer frame in logical units from the identified display's top-left corner. */
 export interface WindowBounds extends Size { displayId: DisplayId; x: number; y: number }
 export interface DisplayInfo {

@@ -698,6 +698,16 @@ struct SparkDesktopWindows {
           promise.Resolve(to_string(Info(id).Stringify())); return;
         }
         if (method == "displays") { promise.Resolve(to_string(Displays().Stringify())); return; }
+        if (method == "cursorPoint") {
+          POINT cursor{}; if (!GetCursorPos(&cursor)) winrt::throw_last_error();
+          RECT probe{cursor.x, cursor.y, cursor.x + 1, cursor.y + 1};
+          auto display = OwningDisplay(probe);
+          auto point = Json::JsonObject();
+          point.SetNamedValue(L"displayId", Json::JsonValue::CreateStringValue(display.id));
+          point.SetNamedValue(L"x", Json::JsonValue::CreateNumberValue((cursor.x - display.frame.left) / display.scale));
+          point.SetNamedValue(L"y", Json::JsonValue::CreateNumberValue((cursor.y - display.frame.top) / display.scale));
+          promise.Resolve(to_string(point.Stringify())); return;
+        }
         if (method == "list") { Json::JsonArray result; for (auto const &[name, window] : windows) result.Append(Info(name)); promise.Resolve(to_string(result.Stringify())); return; }
         auto found = windows.find(id); if (found == windows.end()) { promise.Reject(RNW::ReactError{"E_NOT_FOUND", "Window not found"}); return; }
         auto &window = found->second; auto hwnd = Hwnd(window);

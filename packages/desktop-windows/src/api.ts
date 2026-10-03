@@ -6,7 +6,7 @@ import Native from "./NativeDesktopWindowManager";
 import { createMacOSWindow, macosNative, updateMacOSWindow } from "./macos-adapter";
 import { bounds, keys, number, object, text, validateOptions, windowId } from "./validation";
 import { getNativeDisplays, isBounds, isInfo, record, subscribeToWindowInstance, windowCall, windowCommand, type NativeWindowInfo } from "./transport";
-import type { CenterWindowOptions, CloseResult, DisplayInfo, SetWindowBoundsOptions, ShowWindowOptions, WindowBounds, WindowEventMap, WindowInfo, WindowOpenOptions, WindowUpdateOptions } from "./types";
+import type { CenterWindowOptions, CloseResult, CursorPoint, DisplayInfo, SetWindowBoundsOptions, ShowWindowOptions, WindowBounds, WindowEventMap, WindowInfo, WindowOpenOptions, WindowUpdateOptions } from "./types";
 export type * from "./types";
 
 export function getWindowAvailability(): Availability {
@@ -45,6 +45,8 @@ export async function openWindow(options: WindowOpenOptions): Promise<WindowInfo
 export async function getWindow(id: string): Promise<WindowInfo> { windowId(id); return publicInfo(await windowCall("info", { id }, isInfo)); }
 export async function listWindows(): Promise<WindowInfo[]> { return (await windowCall("list", {}, (value): value is NativeWindowInfo[] => Array.isArray(value) && value.every(isInfo))).map(publicInfo); }
 export async function getDisplays(): Promise<DisplayInfo[]> { return getNativeDisplays(); }
+/** Pointer position in Spark's coordinate vocabulary: logical units relative to the containing display's top-left corner. */
+export async function getCursorPoint(): Promise<CursorPoint> { return windowCall("cursorPoint", {}, (value): value is CursorPoint => record(value) && typeof value.displayId === "string" && Number.isFinite(value.x) && Number.isFinite(value.y)); }
 export async function setWindowOptions(id: string, options: WindowUpdateOptions): Promise<void> {
   windowId(id); validateOptions(options, Platform.OS, false);
   const snapshot = JSON.parse(JSON.stringify(options)) as WindowUpdateOptions;

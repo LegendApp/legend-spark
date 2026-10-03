@@ -16,6 +16,12 @@ test("availability is answered synchronously without a native call", async () =>
   expect(windows.getWindowAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
   expect(call).not.toHaveBeenCalled();
 });
+test("cursor point resolves display-relative coordinates and validates the reply", async () => {
+  call.mockImplementation(async (method: string) => JSON.stringify(method === "cursorPoint" ? { displayId: "display", x: 12, y: 34 } : null));
+  expect(await windows.getCursorPoint()).toEqual({ displayId: "display", x: 12, y: 34 });
+  call.mockImplementation(async (method: string) => JSON.stringify(method === "cursorPoint" ? { displayId: "display", x: "12", y: 34 } : null));
+  await expect(windows.getCursorPoint()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+});
 test("invalid arguments reject asynchronously before native calls", async () => {
   for (const id of ["", "main", "../editor"]) await expect(windows.openWindow({ id, component: "Editor" })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   await expect(windows.setWindowBounds("editor", { ...info.bounds, x: NaN })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });

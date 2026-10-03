@@ -117,6 +117,8 @@ interface DisplayInfo {
   scaleFactor: number; // Physical pixels per logical unit on this display.
 }
 getDisplays(): Promise<DisplayInfo[]>;
+// Pointer position in the same display-relative logical units as bounds.
+getCursorPoint(): Promise<CursorPoint>; // { displayId; x; y }
 ```
 
 For a spanning window, the display containing the largest frame area is its owning display; use the primary display to break a tie. Negative local coordinates are allowed. Native adapters convert using the selected display's scale and orientation. Explicit commands targeting a disconnected display reject; restoration may fall back to the primary display and fit the window into its work area. Persisted bounds should record their coordinate format. Development data using the old format can be explicitly reset; no legacy coordinate conversion API is needed.
