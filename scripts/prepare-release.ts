@@ -6,6 +6,10 @@ import { readRuntime } from "../packages/cli/src/local.ts";
 import { readJson, VERSION, writeJson } from "../packages/cli/src/project.ts";
 import { releaseBase, validateRelease, type ReleaseAsset, type ReleaseManifest } from "../packages/cli/src/release.ts";
 import { packSpark } from "./pack-spark.ts";
+import { patchedPackageNames, validatePatchedArchive, type PackageProvenance } from "./patch-inventory.ts";
+import { runtimesPatchHash, runtimesRevision } from "./prepare-runtimes.ts";
+import { windowsPatchHash } from "./prepare-windows-libraries.ts";
+import { audioPatchHash } from "./prepare-audio.ts";
 
 // Stage an immutable release only from a signed/notarized Runner and clean source.
 const root = path.resolve(import.meta.dirname, "..");
@@ -18,6 +22,7 @@ if (existsSync(output)) throw new Error(`Release staging already exists: ${outpu
 const manifest: ReleaseManifest = { schema: 1, version: VERSION, revision, packages: {}, runners: {} };
 const packages = path.join(root, "artifacts/packages");
 const local = readJson(path.join(packages, "manifest.json"));
+const provenance = readJson(path.join(packages, "provenance.json")) as Record<string, PackageProvenance>;
 const stage = `${output}.staging-${process.pid}`;
 mkdirSync(stage, { recursive: true });
 function asset(file: string, name = path.basename(file)): ReleaseAsset {
@@ -46,9 +51,27 @@ try {
     manifest.runners[target] = { ...asset(runner, `spark-runner-${target}.zip`), app: apps[0]!, teamId, fingerprint: runtime.fingerprint };
     rmSync(unpacked, { recursive: true });
   }
-  for (const name of ["@react-native-runtimes/core", "react-native-nitro-modules", "@op-engineering/op-sqlite", "react-native-webview"]) {
-    if (!local[name] || path.basename(local[name]) !== local[name]) throw new Error(`Missing patched release archive: ${name}`);
-    manifest.packages[name] = asset(path.join(packages, local[name]));
+  const workspacePins = readJson(path.join(root, "patches/workspace/upstream.json"));
+  const windowsPins = readJson(path.join(root, "patches/windows/upstream.json"));
+  const expectedPatchHashes: Record<string, string> = {
+    "@react-native-runtimes/core": runtimesPatchHash(root),
+    "react-native-nitro-modules": windowsPatchHash("react-native-nitro-modules", windowsPins["react-native-nitro-modules"]),
+    "@op-engineering/op-sqlite": windowsPatchHash("@op-engineering/op-sqlite", windowsPins["@op-engineering/op-sqlite"]),
+    "react-native-webview": windowsPatchHash("react-native-webview", windowsPins["react-native-webview"]),
+    "expo-audio": audioPatchHash(root),
+  };
+  if (JSON.stringify(Object.keys(local).filter(name => patchedPackageNames.includes(name as typeof patchedPackageNames[number])).sort()) !== JSON.stringify([...patchedPackageNames].sort())) throw new Error("Local package manifest does not match patched release inventory");
+  if (JSON.stringify(Object.keys(provenance).sort()) !== JSON.stringify([...patchedPackageNames].sort())) throw new Error("Missing or unexpected patched archive provenance records");
+  for (const name of patchedPackageNames) {
+    const filename = local[name];
+    if (typeof filename !== "string" || path.basename(filename) !== filename) throw new Error(`Missing patched release archive: ${name}`);
+    const archive = path.join(packages, filename);
+    const bytes = readFileSync(archive);
+    const metadata = JSON.parse(await run(root, ["tar", "-xOzf", archive, "package/package.json"], { capture: true }));
+    const expectedVersion = name === "@react-native-runtimes/core" || name === "expo-audio" ? workspacePins[name].version : windowsPins[name].version;
+    const expectedSource = name === "@react-native-runtimes/core" ? { upstreamRevision: runtimesRevision } : { upstreamIntegrity: name === "expo-audio" ? workspacePins[name].integrity : windowsPins[name].integrity };
+    validatePatchedArchive(name, filename, bytes, provenance[name], metadata, expectedPatchHashes[name]!, expectedVersion, expectedSource);
+    manifest.packages[name] = asset(archive);
   }
   validateRelease(manifest);
   const npm = await packSpark(root, stage, manifest);

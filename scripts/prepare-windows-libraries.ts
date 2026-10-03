@@ -5,8 +5,19 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import path from "node:path";
 import { run } from "../packages/cli/src/commands.ts";
 import { readJson, writeJson } from "../packages/cli/src/project.ts";
+import { hashFiles, listFiles } from "./patch-inventory.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
+export function windowsPatchHash(name: string, pin: { version: string; integrity: string }, sourceRoot = root) {
+  const adapter = name === "react-native-nitro-modules" ? "nitro" : name === "@op-engineering/op-sqlite" ? "sqlite" : undefined;
+  const workspacePin = readJson(path.join(sourceRoot, "patches/workspace/upstream.json"))[name];
+  const workspacePatch = `patches/workspace/${name.replace(/^@/, "").replaceAll("/", "-")}@${workspacePin.version}.patch`;
+  const files = [workspacePatch];
+  if (adapter) files.push(...listFiles(path.join(sourceRoot, `patches/windows/${adapter}`)).map(file => path.relative(sourceRoot, file)));
+  if (name === "react-native-webview") files.push("patches/windows/webview.patch");
+  const recipe = readFileSync(import.meta.filename, "utf8") + readFileSync(new URL("./patch-inventory.ts", import.meta.url), "utf8");
+  return hashFiles(sourceRoot, files, `${name}@${pin.version}:${pin.integrity}\0${recipe}`);
+}
 /** Keep upstream JS/C++ intact except for the explicit Windows portability edits. */
 export async function packWindowsLibraries(output: string) {
   const pins = readJson(path.join(root, "patches/windows/upstream.json")) as Record<string, { version: string; url: string; integrity: string }>;
@@ -89,7 +100,7 @@ export async function packWindowsLibraries(output: string) {
     // Registry archives already contain built JS/types. Producer lifecycle hooks
     // must not invoke Bun or Yarn when a consumer installs our patched archive.
     for (const script of ["prepare", "prepack", "prepublish", "prepublishOnly"]) if (pkg.scripts) delete pkg.scripts[script];
-    pkg.spark = { ...pkg.spark, sdk: true, windowsAdapter: true, upstreamIntegrity: pin.integrity }; writeJson(path.join(stage, "package.json"), pkg);
+    pkg.spark = { ...pkg.spark, sdk: true, windowsAdapter: true, upstreamIntegrity: pin.integrity, patchHash: windowsPatchHash(name, pin) }; writeJson(path.join(stage, "package.json"), pkg);
     const temporary = path.join(output, "windows-library.tgz");
     await packArchive(stage, temporary);
     const hash = createHash("sha256").update(readFileSync(temporary)).digest("hex").slice(0, 12);

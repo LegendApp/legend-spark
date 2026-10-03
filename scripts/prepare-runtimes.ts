@@ -6,6 +6,11 @@ import { run } from "../packages/cli/src/commands.ts";
 import { digest, readJson, writeJson } from "../packages/cli/src/project.ts";
 
 export const runtimesRevision = "58710c25c6e505dcc1292ee54d855408a6f7a42d";
+export function runtimesPatchHash(root: string) {
+  const patches = ["react-native-runtimes-macos.patch", "react-native-runtimes-integration.patch"];
+  const surface = path.join(root, "patches/windows/runtimes/NativeThreadedRuntimeSurface.windows.tsx");
+  return digest(readFileSync(surface, "utf8") + readFileSync(import.meta.filename, "utf8") + runtimesRevision + patches.map(file => readFileSync(path.join(root, "patches", file), "utf8")).join(""));
+}
 // Distribute the patched, pinned source in the SDK archive manifest. Consumers
 // install an ordinary tarball; they need neither git nor a patch-package hook.
 export async function packRuntimes(root: string, output: string) {
@@ -15,7 +20,7 @@ export async function packRuntimes(root: string, output: string) {
   if (!existsSync(source)) await run(root, ["git", "clone", "https://github.com/margelo/react-native-runtimes.git", source], { capture: true });
   const patches = ["react-native-runtimes-macos.patch", "react-native-runtimes-integration.patch"];
   const surface = path.join(root, "patches/windows/runtimes/NativeThreadedRuntimeSurface.windows.tsx");
-  const hash = digest(readFileSync(surface, "utf8") + readFileSync(import.meta.filename, "utf8") + runtimesRevision + patches.map(file => readFileSync(path.join(root, "patches", file), "utf8")).join(""));
+  const hash = runtimesPatchHash(root);
   const stage = path.join(cache, "stage");
   rmSync(stage, { recursive: true, force: true }); mkdirSync(stage);
   const archive = path.join(cache, "source.tar");

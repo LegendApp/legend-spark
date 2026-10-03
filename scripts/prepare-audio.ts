@@ -6,6 +6,11 @@ import { packArchive } from "../packages/cli/src/pack-archive.ts";
 import { readJson } from "../packages/cli/src/project.ts";
 import { run } from "../packages/cli/src/commands.ts";
 
+export function audioPatchHash(root: string) {
+  const pin = readJson(path.join(root, "patches/workspace/upstream.json"))["expo-audio"];
+  return createHash("sha256").update(JSON.stringify(pin)).update(readFileSync(import.meta.filename)).update(readFileSync(path.join(root, `patches/workspace/expo-audio@${pin.version}.patch`))).digest("hex");
+}
+
 /** The workspace and distributed SDK consume the same pinned Expo Audio delta. */
 export async function packAudio(root: string, output: string) {
   const pin = readJson(path.join(root, "patches/workspace/upstream.json"))["expo-audio"];
@@ -26,6 +31,9 @@ export async function packAudio(root: string, output: string) {
     if (next === false) throw new Error(`Could not apply Expo Audio patch to ${target}`);
     writeFileSync(target, next);
   }
+  const pkg = readJson(path.join(stage, "package.json"));
+  pkg.spark = { ...pkg.spark, sdk: true, upstreamIntegrity: pin.integrity, patchHash: audioPatchHash(root) };
+  writeFileSync(path.join(stage, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
   const temporary = path.join(output, "expo-audio.tgz"); await packArchive(stage, temporary);
   const hash = createHash("sha256").update(readFileSync(temporary)).digest("hex").slice(0, 12);
   const file = `expo-audio-${pin.version}-${hash}.tgz`; renameSync(temporary, path.join(output, file));

@@ -7,6 +7,7 @@ import { packRuntimes } from "./prepare-runtimes.ts";
 import { packWindowsLibraries } from "./prepare-windows-libraries.ts";
 import { run } from "../packages/cli/src/commands.ts";
 import { readJson, writeJson } from "../packages/cli/src/project.ts";
+import { patchedPackageNames } from "./patch-inventory.ts";
 
 // Maintainer command, never an install/start hook. Generate workspace install-time
 // patches from the same source recipes used for the distributable SDK archives.
@@ -14,6 +15,7 @@ const root = path.resolve(import.meta.dirname, "..");
 const cache = path.join(root, ".spark/workspace-patches");
 mkdirSync(cache, { recursive: true });
 const archives: Record<string, string> = { ...await packRuntimes(root, cache), ...await packWindowsLibraries(cache), ...await packAudio(root, cache) };
+if (JSON.stringify(Object.keys(archives).sort()) !== JSON.stringify([...patchedPackageNames].sort())) throw new Error("Workspace patch source set does not match the patched package inventory");
 const pins = readJson(path.join(root, "patches/workspace/upstream.json"));
 const patches: Record<string, string> = {};
 for (const [name, pin] of Object.entries(pins) as [string, { version: string; url: string; integrity: string }][]) {

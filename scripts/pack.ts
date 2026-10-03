@@ -9,6 +9,8 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { registerPackages } from "../packages/cli/src/local.ts";
 import { writeJson, readJson } from "../packages/cli/src/project.ts";
+import { run } from "../packages/cli/src/commands.ts";
+import { patchedPackageNames } from "./patch-inventory.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const output = path.join(root, "artifacts/packages");
@@ -33,6 +35,16 @@ for (const dir of packages) {
   manifest[pkg.name] = immutable;
 }
 writeJson(path.join(output, "manifest.json"), manifest);
+const names = Object.keys(manifest).filter(name => patchedPackageNames.includes(name as typeof patchedPackageNames[number])).sort();
+if (JSON.stringify(names) !== JSON.stringify([...patchedPackageNames].sort())) throw new Error("Local package set does not match the patched release inventory");
+const provenance: Record<string, { file: string; sha256: string; patchHash: string; version: string }> = {};
+for (const name of patchedPackageNames) {
+  const file = manifest[name]!;
+  const metadata = JSON.parse(await run(root, ["tar", "-xOzf", path.join(output, file), "package/package.json"], { capture: true }));
+  if (metadata.name !== name || typeof metadata.spark?.patchHash !== "string") throw new Error(`Packed archive is missing patch provenance: ${name}`);
+  provenance[name] = { file, sha256: createHash("sha256").update(readFileSync(path.join(output, file))).digest("hex"), patchHash: metadata.spark.patchHash, version: metadata.version };
+}
+writeJson(path.join(output, "provenance.json"), provenance);
 await packTemplates(root, output, manifest);
 registerPackages(path.join(output, "manifest.json"));
 console.log("Local SDK packages registered. Create an app with spark create MyApp.");
