@@ -40,6 +40,14 @@ npm run build
 
 It produces a standalone `.app` and prints its location. `spark open` opens the last standalone product without requiring its path.
 
+macOS builds print cache-miss reasons, stream generation/Pods/Xcode output, and
+report each phase's log path and elapsed time. Each mode's build receipt records
+the native contents, configuration, and package locations used to build its app.
+An unchanged cached dev app can be reused after a release build, even when that
+build changed the shared generated project. Older receipts rebuild once to record
+this provenance. When compilation is needed, missing CocoaPods XCFramework inputs
+trigger a pod reinstall and must be restored before Xcode starts.
+
 macOS releases target ARM64 and enable dead-code stripping, ThinLTO, and `-Oz`
 for the app and source-built Pods. Release postprocessing strips distribution
 symbols; prebuilt Hermes symbols are stripped separately before ad-hoc signing.

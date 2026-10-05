@@ -27,6 +27,7 @@ export async function run(
     cwd?: string;
     env?: Record<string, string>;
     capture?: boolean;
+    label?: string;
     sensitiveValues?: string[];
   } = {},
 ) {
@@ -53,6 +54,8 @@ export async function run(
     root,
     `logs/${Date.now()}-${crypto.randomUUID()}-${path.basename(argv[0]!)}.log`,
   );
+  const started = Date.now();
+  if (options.label) console.log(`${options.label}…\nLog: ${log}`);
   async function consume(
     stream: ReadableStream<Uint8Array>,
     target: NodeJS.WriteStream,
@@ -87,6 +90,7 @@ export async function run(
     throw new Error(
       `${argv.map(redact).join(" ")} exited ${code}. See ${log}\n${redact(output).slice(-1800)}`,
     );
+  if (options.label) console.log(`${options.label} finished (${((Date.now() - started) / 1000).toFixed(1)}s).`);
   return output;
 }
 export function binary(root: string, name: string) {

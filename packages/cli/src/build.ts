@@ -1,5 +1,6 @@
 import { restoreNativeMetadata } from "./native-metadata.ts";
 import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
+import { missingNativeFrameworks, preparationChanges, type NativePreparation } from "./native-preparation.ts";
 import { macOSReleaseSettings } from "./macos-release.ts";
 import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
@@ -26,7 +27,7 @@ import {
   entryFile,
   digest,
   hashFiles,
-  nativePreparationFingerprint,
+  nativePreparationInputs,
   localSigningIdentity,
   nativePackages,
   readJson,
@@ -68,7 +69,7 @@ export async function analyze(root: string, packages = nativePackages(root)) {
       "--max-workers",
       "2",
     ],
-    { env: { CI: "1", ...env }, capture: true },
+    { env: { CI: "1", ...env }, label: "Analyzing production JavaScript" },
   );
   await exportBundle({ SPARK_RUNTIME_DISCOVERY: "1" });
   const discovery = readJson(path.join(dir, "app.map"));
@@ -214,25 +215,34 @@ async function buildUnlocked(
     pkg.expo.autolinking.exclude = excludedNames;
     writeJson(path.join(root, "package.json"), pkg);
   }
-  const preparation = nativePreparationFingerprint(root, chosen.included);
+  const inputs = nativePreparationInputs(root, chosen.included);
+  const preparation = { fingerprint: digest(JSON.stringify(inputs)), inputs };
   const preparedFile = stateFile(root, "native-preparation.json");
+  const prepared: NativePreparation | undefined = existsSync(preparedFile) ? readJson(preparedFile) : undefined;
   const needsPreparation =
     force ||
-    !existsSync(preparedFile) ||
-    readJson(preparedFile).fingerprint !== preparation ||
+    prepared?.fingerprint !== preparation.fingerprint ||
     !existsSync(path.join(root, "macos/Pods/Manifest.lock"));
-  if (!needsPreparation && existsSync(resultFile)) {
-    const existing = readJson(resultFile);
+  const existing = existsSync(resultFile) ? readJson(resultFile) : undefined;
+  if (!force && existing) {
     if (
       existing.runtime.fingerprint === runtime.fingerprint &&
+      existing.preparation?.fingerprint === preparation.fingerprint &&
       existsSync(existing.app)
     ) {
       console.log(`Reusing ${existing.app}`);
       return existing;
     }
   }
+  const reasons = force ? ["forced build"] : !existing ? ["no cached app"] : [
+    ...preparationChanges(existing.preparation, preparation),
+    ...(existing.runtime.fingerprint !== runtime.fingerprint ? ["runtime inputs changed"] : []),
+    ...(!existsSync(existing.app) ? ["cached app missing"] : []),
+  ];
+  console.log(`Building ${mode} runtime: ${reasons.join("; ")}.`);
   const nativeConfig = readAppConfig(root).expo;
   if (needsPreparation) {
+    console.log(`Preparing native project: ${force ? "forced build" : prepared?.fingerprint !== preparation.fingerprint ? preparationChanges(prepared, preparation).join("; ") : "CocoaPods state missing"}.`);
     const manifest = readFileSync(path.join(root, "package.json"), "utf8");
     const appJson = path.join(root, "app.json");
     const originalAppJson = existsSync(appJson) ? readFileSync(appJson, "utf8") : undefined;
@@ -252,7 +262,7 @@ async function buildUnlocked(
           // are generated output; recreate them whenever preparation changes.
           "--clean",
         ],
-        { env: { CI: "1" }, capture: true },
+        { env: { CI: "1" }, label: "Generating native project" },
       );
       // beta.5 copies all-platform template dependencies even for macOS. Preserve this
       // platform's installed manifest instead of silently adding uninstalled Windows packages.
@@ -266,12 +276,18 @@ async function buildUnlocked(
       recursive: true,
       force: true,
     });
+  }
+  const missing = missingNativeFrameworks(root);
+  if (needsPreparation || missing.length) {
+    if (missing.length && !needsPreparation) console.log(`Restoring missing native frameworks:\n${missing.join("\n")}`);
     await run(root, ["pod", "install"], {
       cwd: path.join(root, "macos"),
       env: { RCT_NEW_ARCH_ENABLED: "1" },
-      capture: true,
+      label: "Installing CocoaPods dependencies",
     });
-    writeJson(preparedFile, { fingerprint: preparation });
+    const remaining = missingNativeFrameworks(root);
+    if (remaining.length) throw new Error(`Native frameworks are missing after pod install. Restore the package's native artifacts and retry:\n${remaining.join("\n")}`);
+    writeJson(preparedFile, preparation);
   }
   await restoreNativeMetadata(root, nativeConfig);
   const nativeRoot = path.join(root, "macos");
@@ -284,8 +300,6 @@ async function buildUnlocked(
   const configuration = mode === "release" ? "Release" : "Debug";
   const xcodeArch = macOSXcodeArchitecture(runtime.arch);
   const derived = stateFile(root, `DerivedData/macos-${runtime.arch}`);
-  console.log(`Building ${mode === "go" ? "Spark Runner" : mode} runtime (${configuration}, ${runtime.arch})…`);
-  // Export once for analysis; native build performs the normal production bundle step.
   await run(
     root,
     [
@@ -310,7 +324,7 @@ async function buildUnlocked(
     ],
     {
       env: { RCT_NEW_ARCH_ENABLED: "1", ENTRY_FILE: entryFile(root), ...(productionGraph ? { SPARK_RUNTIME_SOURCES: stateFile(root, "analysis/runtime-sources.json") } : {}) },
-      capture: true,
+      label: `Building ${mode === "go" ? "Spark Runner" : mode} runtime (${configuration}, ${runtime.arch})`,
     },
   );
   const products = path.join(derived, "Build", "Products", configuration);
@@ -328,6 +342,7 @@ async function buildUnlocked(
   const result = {
     app: destination,
     runtime: runtimeFor(root, chosen.included, mode),
+    preparation,
   };
   if (mode === "go" && process.env.SPARK_RELEASE_REVISION) {
     if (!/^[a-f0-9]{40}$/.test(process.env.SPARK_RELEASE_REVISION)) throw new Error("Invalid release source revision");
