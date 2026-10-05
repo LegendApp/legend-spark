@@ -41,8 +41,7 @@ static inline NSString *SparkPersistentScreenId(NSScreen *screen) {
 // The pointer in Spark's coordinate vocabulary: the display containing the
 // point, with display-relative logical units (top-left origin, Y downward).
 static inline NSDictionary *SparkCursorPoint(void) {
-  CGPoint global = CGEventGetLocation(CGEventCreate(NULL));
-  NSPoint point = NSMakePoint(global.x, NSMaxY(SparkPrimaryScreen().frame) - global.y);
+  NSPoint point = NSEvent.mouseLocation;
   for (NSScreen *screen in NSScreen.screens) {
     NSRect frame = screen.frame;
     if (point.x >= NSMinX(frame) && point.x < NSMaxX(frame) && point.y >= NSMinY(frame) && point.y < NSMaxY(frame))
@@ -51,7 +50,8 @@ static inline NSDictionary *SparkCursorPoint(void) {
   NSScreen *primary = SparkPrimaryScreen();
   return @{ @"displayId": SparkScreenId(primary) ?: @"", @"x": @(point.x - NSMinX(primary.frame)), @"y": @(NSMaxY(primary.frame) - point.y) };
 }
-static inline NSArray<NSDictionary *> *SparkDisplayInfo(void) {  NSMutableArray *result = [NSMutableArray new];
+static inline NSArray<NSDictionary *> *SparkDisplayInfo(void) {
+  NSMutableArray *result = [NSMutableArray new];
   for (NSScreen *screen in NSScreen.screens) {
     NSMutableDictionary *workArea = [SparkLogicalBounds(screen.visibleFrame, screen.frame, SparkScreenId(screen)) mutableCopy];
     [workArea removeObjectForKey:@"displayId"];
