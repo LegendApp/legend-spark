@@ -15,7 +15,56 @@ invoking the selected package manager. See the packer and release tests for the
 current implementation; do not substitute an unverified cache or producer
 workspace path.
 
-## Before staging
+## Automated release
+
+From a clean `main` checkout on the signing Apple Silicon Mac, use Node 24.19.0
+or newer, install dependencies once with `npm ci`, and run:
+
+```sh
+npm run release -- --latest
+```
+
+The command selects the next `-next.N` version above the checkout and npm
+registry versions, updates workspace manifests, lockfile, templates, CLI version,
+and current release documentation, and generates changelog notes from committed
+changes since the previous release tag. It checks GitHub/npm authentication,
+repository identity, Developer ID signing, and notarization credentials before
+changing versions. Signing secrets remain in Keychain; `.env` may select an
+identity and Keychain profile using the existing `SPARK_*` configuration.
+
+It runs `npm ci`, typechecking, and portable tests before committing the version
+change. It then builds/signs/notarizes the Runner, assembles immutable artifacts,
+and runs the packed-consumer integration against the **exact staged npm archive**.
+After successful checks it atomically pushes `main` and the matching release tag,
+publishes the GitHub prerelease and npm `next`, and assigns npm `latest` when
+`--latest` was supplied. Omit `--latest` to publish only through `next`.
+
+If notarization is pending or a later step fails, run:
+
+```sh
+npm run release -- --resume
+```
+
+Resume retains the original version and channel choice, reuses a matching Runner
+build and staged artifacts, and verifies an already published npm version has the
+same archive integrity before finishing tag promotion. It refuses changed source,
+changed archives, conflicting tags, and unrelated working-tree edits. A failed
+check can leave the script's version edits uncommitted; preserve them for resume.
+The ignored `.spark/release-workflow.json` records the selected inputs, and a PID
+lock prevents two local release runs. Do not remove the checkpoint to restart an
+unresolved notarization submission.
+
+The workflow checks disk space before commands and every 30 seconds while they
+run, preserves a 50 GB reserve, and requires an additional 10 GB of headroom before
+dependency installation, native builds, and packed-consumer installs. If it stops
+for space, review cleanup and rerun with `--resume`.
+
+This workflow publishes an experimental **macOS Apple Silicon** preview. Its
+automated checks do not perform native UI or clean-recipient Runner acceptance.
+Record those separately in the dossier; Windows and Intel native acceptance
+remain pending. Promoting npm `latest` does not change that support scope.
+
+## Manual release prerequisites
 
 - Start from the exact reviewed source revision and retain the preview version
   and intended `next` channel unless a separately approved release decision says

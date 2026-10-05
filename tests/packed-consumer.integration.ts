@@ -25,7 +25,7 @@ function managerInstallArgs(manager: string): string[] {
   switch (manager) {
     case "npm": return ["install", "--ignore-scripts", "--no-audit", "--no-fund"];
     case "pnpm": return ["install", "--ignore-scripts", "--no-frozen-lockfile", "--reporter=append-only"];
-    case "yarn": return ["install", "--ignore-scripts", "--non-interactive", "--no-progress"];
+    case "yarn": return ["install", "--ignore-scripts", "--non-interactive", "--no-progress", "--no-default-rc", "--registry", "https://registry.npmjs.org"];
     case "bun": return ["install", "--ignore-scripts"];
     default: throw new Error(`Unsupported consumer package manager: ${manager}`);
   }
@@ -89,8 +89,10 @@ function manifest(archive: string, react: string) {
 try {
   const artifacts = path.join(root, "artifacts"); mkdirSync(artifacts);
   const release = { schema: 1 as const, version: VERSION, revision: "a".repeat(40), packages: {}, runners: {} };
-  const archiveName = await packSpark(framework, artifacts, release);
-  const archive = path.join(artifacts, archiveName);
+  const args = process.argv.slice(2);
+  if (args.length && (args.length !== 2 || args[0] !== "--archive")) throw new Error("Usage: node tests/packed-consumer.integration.ts [--archive /path/to/release.tgz]");
+  const archive = args.length ? path.resolve(args[1]!) : path.join(artifacts, await packSpark(framework, artifacts, release));
+  const archiveName = path.basename(archive);
   const archiveHash = createHash("sha256").update(readFileSync(archive)).digest("hex");
   const consumer = path.join(root, "consumer"); mkdirSync(consumer);
   writeFileSync(path.join(consumer, "package.json"), JSON.stringify(manifest(archive, "19.1.4"), null, 2) + "\n");

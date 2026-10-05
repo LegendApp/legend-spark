@@ -44,6 +44,7 @@
     "postinstall": "node scripts/install-workspace-adapters.ts && node scripts/build-node.mjs",
     "build:cli": "node scripts/build-node.mjs",
     "pretest": "node scripts/build-node.mjs",
+    "release": "node scripts/release.ts",
     "release:runner": "node scripts/release-runner.ts",
     "release:assemble": "node scripts/prepare-release.ts",
     "release:publish": "node scripts/publish-release.ts"

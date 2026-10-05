@@ -62,7 +62,7 @@ test.each(installedManagers)("verified release archives install and reinstall af
     await packArchive(consumer, templateArchive);
     expect(execFileSync("tar", ["-tzf", templateArchive], { encoding: "utf8" })).toContain("package/spark-packages/");
     const cache = path.join(root, `${manager}-cache`);
-    const args = manager === "npm" ? ["install", "--offline", "--no-audit", "--no-fund", "--foreground-scripts"] : manager === "pnpm" ? ["install", "--offline", "--store-dir", cache, "--config.strictDepBuilds=false"] : manager === "yarn" ? ["install", "--offline", "--non-interactive", "--cache-folder", cache] : ["install", `--cache-dir=${cache}`];
+    const args = manager === "npm" ? ["install", "--offline", "--no-audit", "--no-fund", "--foreground-scripts"] : manager === "pnpm" ? ["install", "--offline", "--store-dir", cache, "--config.strictDepBuilds=false"] : manager === "yarn" ? ["install", "--offline", "--non-interactive", "--no-default-rc", "--cache-folder", cache] : ["install", `--cache-dir=${cache}`];
     let managerInvocations = 0;
     async function install(at: string) {
       verifyMaterializedReleasePackages(releaseManifest, at);

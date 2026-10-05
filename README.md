@@ -394,4 +394,8 @@ See [desktop foundations](docs/desktop-foundations.md) for nonactivating overlay
 
 Optional [audio/media sessions](docs/audio.md) and [browser authentication](docs/auth-session.md) provide system media controls and external-browser callback transport. Provider SDKs, queues, and OAuth token exchange remain application/library responsibilities.
 
-Release maintainers: see the [preview release workflow](docs/releases.md) for Runner signing, artifact staging, publishing order, and clean-machine acceptance.
+Release maintainers: run `npm run release -- --latest` from a clean `main`
+checkout on the signing Apple Silicon Mac to version, verify, sign/notarize,
+and publish the next preview under both npm tags. Use `npm run release -- --resume`
+to continue the same release. See the [preview release workflow](docs/releases.md)
+for prerequisites, retry behavior, and separate clean-machine acceptance.
