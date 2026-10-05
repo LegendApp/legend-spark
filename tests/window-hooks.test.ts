@@ -59,3 +59,43 @@ test("registration rejects identity overrides before registering any roots", () 
   expect(() => createWindowsNavigator({ editor: { id: "invalid-options", component: () => null, options: { id: "sneaky" } as never } })).toThrow(/identity/);
   expect(mocks.roots.size).toBe(size);
 });
+test("a restarted native surface waits for its lazy component before the app opens it", async () => {
+  let finish!: (value: React.ComponentType<any>) => void;
+  const load = vi.fn(() => new Promise<React.ComponentType<any>>(resolve => { finish = resolve; }));
+  const navigator = createWindowsNavigator({ presenter: { id: "restarted-presenter", loadComponent: load } });
+  const Root = mocks.roots.get("spark.window.restarted-presenter")!();
+  await mount(React.createElement(StrictMode, null, React.createElement(Root, { deckPath: "/missing.mdx" })));
+  expect(rendered.toJSON()).toBeNull();
+  expect(load).toHaveBeenCalledTimes(1);
+  expect(mocks.openWindow).not.toHaveBeenCalled();
+  const opened = navigator.open("presenter", { props: { deckPath: "/missing.mdx" } });
+  function Presenter({ deckPath }: { deckPath: string }) {
+    return React.createElement("Presenter", { deckPath, owner: useWindowId() });
+  }
+  await act(async () => { finish(Presenter); await opened; });
+  expect(load).toHaveBeenCalledTimes(1);
+  expect(rendered.root.findByType("Presenter").props).toEqual({ deckPath: "/missing.mdx", owner: "restarted-presenter" });
+  expect(mocks.openWindow).toHaveBeenCalledTimes(1);
+});
+test("restarted surfaces report loader failures and explicit opens can retry", async () => {
+  const failure = Error("presenter import failed");
+  const Editor = () => React.createElement("Editor", { owner: useWindowId() });
+  const load = vi.fn(async () => Editor).mockRejectedValueOnce(failure);
+  const navigator = createWindowsNavigator({ editor: { id: "failed-restart-editor", loadComponent: load } });
+  const caught = vi.fn();
+  class Boundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
+    state = { failed: false };
+    static getDerivedStateFromError() { return { failed: true }; }
+    componentDidCatch(error: Error) { caught(error); }
+    render() { return this.state.failed ? null : this.props.children; }
+  }
+  vi.mocked(console.error).mockImplementation(() => {});
+  const factory = mocks.roots.get("spark.window.failed-restart-editor")!;
+  await mount(React.createElement(Boundary, null, React.createElement(factory())));
+  expect(caught).toHaveBeenCalledWith(failure);
+  expect(mocks.openWindow).not.toHaveBeenCalled();
+  await navigator.open("editor");
+  expect(load).toHaveBeenCalledTimes(2);
+  await act(async () => rendered.update(React.createElement(factory())));
+  expect(rendered.root.findByType("Editor").props.owner).toBe("failed-restart-editor");
+});

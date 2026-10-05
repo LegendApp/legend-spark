@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { lazy, Suspense } from "react";
 import { AppRegistry } from "react-native";
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { openWindow, closeWindow, showWindow } from "../api";
@@ -48,10 +49,10 @@ export function createWindowsNavigator<T extends WindowsConfig>(config: T): Wind
       }).catch(cause => { pending = undefined; throw cause; });
       await pending;
     };
-    AppRegistry.registerComponent(moduleName, () => {
-      if (!resolved) throw new SparkError("E_BUSY", "Window component has not finished loading");
-      return resolved;
-    });
+    // Native surfaces restart on reload before the app can call open or prefetch.
+    const LoadedWindow = lazy(async () => { await load(); return { default: resolved! }; });
+    const RestartedWindow = (props: any) => <Suspense fallback={null}><LoadedWindow {...props} /></Suspense>;
+    AppRegistry.registerComponent(moduleName, () => resolved ?? RestartedWindow);
     registrations.add(id);
     registry.set(name, { id, moduleName, options: JSON.parse(JSON.stringify(entry.options ?? {})), load });
   }
