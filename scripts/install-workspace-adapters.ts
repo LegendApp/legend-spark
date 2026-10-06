@@ -27,7 +27,16 @@ export function installWorkspaceAdapters(root: string) {
       const relative = patch.newFileName.replace(/^b\//, "");
       const target = path.resolve(directory, relative);
       if (!target.startsWith(directory + path.sep) || patch.newFileName === "/dev/null") throw new Error(`Invalid workspace patch target: ${relative}`);
-      const current = existsSync(target) ? readFileSync(target, "utf8") : "";
+      let current = existsSync(target) ? readFileSync(target, "utf8") : "";
+      if (relative === "package.json" && current) {
+        const manifest = JSON.parse(current);
+        if (manifest.spark && Object.hasOwn(manifest.spark, "workspacePatch")) {
+          // The receipt is added after patching; exclude it from hunk matching.
+          delete manifest.spark.workspacePatch;
+          if (!Object.keys(manifest.spark).length) delete manifest.spark;
+          current = JSON.stringify(manifest, null, 2) + "\n";
+        }
+      }
       // Re-running install is harmless. Changed patch inputs must still match
       // either the upstream file or the exact patch's already-applied context.
       if (applyPatch(current, reversePatch(patch)) !== false) continue;

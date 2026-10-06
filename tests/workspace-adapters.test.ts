@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, linkSync, rmSync }
 import path from "node:path";
 import os from "node:os";
 import { installWorkspaceAdapters } from "../scripts/install-workspace-adapters.ts";
+import { createPatch } from "diff";
 function fixture() {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-workspace-adapter-"));
   const pkg = path.join(root, "node_modules/probe"); mkdirSync(pkg, { recursive: true });
@@ -31,5 +32,41 @@ test("workspace adapters reject an unexpected upstream version or changed source
     expect(() => installWorkspaceAdapters(f.root)).toThrow("Cannot apply");
     writeFileSync(path.join(f.pkg, "package.json"), JSON.stringify({ name: "probe", version: "2.0.0" }));
     expect(() => installWorkspaceAdapters(f.root)).toThrow("needs probe@1.0.0");
+  } finally { f.close(); }
+});
+
+test("manifest patches survive receipt stamping, interruption, and repeated installs", () => {
+  const f = fixture();
+  try {
+    const original = { name: "probe", version: "1.0.0", files: ["index.js"] };
+    const adapted = { ...original, files: ["index.js", "windows"], spark: { sdk: true, windowsAdapter: true } };
+    const manifestFile = path.join(f.pkg, "package.json");
+    const upstream = JSON.stringify(original, null, 2) + "\n";
+    writeFileSync(manifestFile, upstream);
+    linkSync(manifestFile, path.join(f.root, "cached-package.json"));
+    const sourcePatch = readFileSync(path.join(f.root, "probe.patch"), "utf8");
+    const manifestPatch = createPatch("package.json", upstream, JSON.stringify(adapted, null, 2) + "\n");
+    writeFileSync(path.join(f.root, "probe.patch"), manifestPatch + sourcePatch);
+    installWorkspaceAdapters(f.root);
+    const firstInstall = readFileSync(manifestFile, "utf8");
+    expect(JSON.parse(firstInstall).spark.workspacePatch.schema).toBe(1);
+    installWorkspaceAdapters(f.root);
+    expect(readFileSync(manifestFile, "utf8")).toBe(firstInstall);
+    expect(readFileSync(path.join(f.root, "cached-package.json"), "utf8")).toBe(upstream);
+
+    writeFileSync(path.join(f.pkg, "index.js"), "unrecognized\n");
+    expect(() => installWorkspaceAdapters(f.root)).toThrow("Cannot apply");
+    expect(readFileSync(manifestFile, "utf8")).toBe(firstInstall);
+
+    // Reinstall can restore one upstream file while retaining the patched manifest.
+    writeFileSync(path.join(f.pkg, "index.js"), "old\n");
+    installWorkspaceAdapters(f.root);
+    expect(readFileSync(path.join(f.pkg, "index.js"), "utf8")).toBe("new\n");
+    expect(readFileSync(manifestFile, "utf8")).toBe(firstInstall);
+
+    const changed = JSON.parse(firstInstall); changed.spark.windowsAdapter = false;
+    writeFileSync(manifestFile, JSON.stringify(changed, null, 2) + "\n");
+    expect(() => installWorkspaceAdapters(f.root)).toThrow("Cannot apply");
+    expect(JSON.parse(readFileSync(manifestFile, "utf8")).spark.windowsAdapter).toBe(false);
   } finally { f.close(); }
 });
