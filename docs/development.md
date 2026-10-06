@@ -47,6 +47,10 @@ An unchanged cached dev app can be reused after a release build, even when that
 build changed the shared generated project. Older receipts rebuild once to record
 this provenance. When compilation is needed, missing CocoaPods XCFramework inputs
 trigger a pod reinstall and must be restored before Xcode starts.
+Codegen and podspec edits refresh Pods without regenerating the native project.
+Configuration, host, package metadata, and package location changes regenerate
+the project while preserving installed Pods, the lockfile, and Hermes downloads.
+Xcode's separate DerivedData cache is retained in both cases.
 
 macOS releases target ARM64 and enable dead-code stripping, ThinLTO, and `-Oz`
 for the app and source-built Pods. Release postprocessing strips distribution

@@ -289,6 +289,13 @@ export function nativePreparationInputs(root: string, packages: NativePackage[])
 export function nativePreparationFingerprint(root: string, packages: NativePackage[]): string {
   return digest(JSON.stringify(nativePreparationInputs(root, packages)));
 }
+export function nativeProjectFingerprint(inputs: ReturnType<typeof nativePreparationInputs>, packages: NativePackage[]): string {
+  return digest(JSON.stringify({
+    config: inputs.config,
+    plugin: inputs.plugin,
+    packages: packages.map(p => [p.name, p.root, hashFiles(p.root, ["package.json"])]),
+  }));
+}
 export function localSigningIdentity(root: string, mode: string): string {
   if (mode !== "dev") return "-";
   const file = stateFile(root, "settings.json");

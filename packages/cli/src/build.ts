@@ -1,6 +1,6 @@
 import { restoreNativeMetadata } from "./native-metadata.ts";
 import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
-import { missingNativeFrameworks, preparationChanges, type NativePreparation } from "./native-preparation.ts";
+import { missingNativeFrameworks, preparationChanges, preserveMacOSPods, type NativePreparation } from "./native-preparation.ts";
 import { macOSReleaseSettings } from "./macos-release.ts";
 import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
@@ -28,6 +28,7 @@ import {
   digest,
   hashFiles,
   nativePreparationInputs,
+  nativeProjectFingerprint,
   localSigningIdentity,
   nativePackages,
   readJson,
@@ -216,11 +217,15 @@ async function buildUnlocked(
     writeJson(path.join(root, "package.json"), pkg);
   }
   const inputs = nativePreparationInputs(root, chosen.included);
-  const preparation = { fingerprint: digest(JSON.stringify(inputs)), inputs };
+  const preparation = { fingerprint: digest(JSON.stringify(inputs)), inputs, projectFingerprint: nativeProjectFingerprint(inputs, chosen.included) };
   const preparedFile = stateFile(root, "native-preparation.json");
   const prepared: NativePreparation | undefined = existsSync(preparedFile) ? readJson(preparedFile) : undefined;
+  const nativeRoot = path.join(root, "macos");
+  const hasNativeProject = existsSync(nativeRoot) && readdirSync(nativeRoot).some(name =>
+    name.endsWith(".xcodeproj") && existsSync(path.join(nativeRoot, name, "project.pbxproj")));
+  const needsProject = force || !hasNativeProject || prepared?.projectFingerprint !== preparation.projectFingerprint;
   const needsPreparation =
-    force ||
+    needsProject ||
     prepared?.fingerprint !== preparation.fingerprint ||
     !existsSync(path.join(root, "macos/Pods/Manifest.lock"));
   const existing = existsSync(resultFile) ? readJson(resultFile) : undefined;
@@ -241,13 +246,14 @@ async function buildUnlocked(
   ];
   console.log(`Building ${mode} runtime: ${reasons.join("; ")}.`);
   const nativeConfig = readAppConfig(root).expo;
-  if (needsPreparation) {
-    console.log(`Preparing native project: ${force ? "forced build" : prepared?.fingerprint !== preparation.fingerprint ? preparationChanges(prepared, preparation).join("; ") : "CocoaPods state missing"}.`);
+  if (needsPreparation) rmSync(preparedFile, { force: true });
+  if (needsProject) {
+    console.log(`Preparing native project (preserving CocoaPods cache): ${force ? "forced build" : !hasNativeProject ? "native project missing" : preparationChanges(prepared, preparation).join("; ") || "native project provenance missing"}.`);
     const manifest = readFileSync(path.join(root, "package.json"), "utf8");
     const appJson = path.join(root, "app.json");
     const originalAppJson = existsSync(appJson) ? readFileSync(appJson, "utf8") : undefined;
     try {
-      await run(
+      await preserveMacOSPods(root, () => run(
         root,
         [
           binary(root, "expo-desktop"),
@@ -259,11 +265,11 @@ async function buildUnlocked(
           "--no-install",
           // Template renaming is not idempotent (HelloWorld becomes
           // LegendHelloWorld, then LegendLegendHelloWorld). Native projects
-          // are generated output; recreate them whenever preparation changes.
+          // are generated output; recreate them only when project inputs change.
           "--clean",
         ],
         { env: { CI: "1" }, label: "Generating native project" },
-      );
+      ));
       // beta.5 copies all-platform template dependencies even for macOS. Preserve this
       // platform's installed manifest instead of silently adding uninstalled Windows packages.
     } finally {
@@ -271,6 +277,8 @@ async function buildUnlocked(
       // Upstream template replacement also rewrites app.json substrings.
       if (originalAppJson !== undefined) writeFileSync(appJson, originalAppJson);
     }
+  }
+  if (needsPreparation) {
     // ReactCodegen's source glob must not pick up bindings from a previously larger graph.
     rmSync(path.join(root, "macos/build/generated"), {
       recursive: true,
@@ -279,6 +287,7 @@ async function buildUnlocked(
   }
   const missing = missingNativeFrameworks(root);
   if (needsPreparation || missing.length) {
+    if (needsPreparation && !needsProject) console.log(`Updating CocoaPods dependencies: ${prepared?.fingerprint !== preparation.fingerprint ? preparationChanges(prepared, preparation).join("; ") : "CocoaPods state missing"}.`);
     if (missing.length && !needsPreparation) console.log(`Restoring missing native frameworks:\n${missing.join("\n")}`);
     await run(root, ["pod", "install"], {
       cwd: path.join(root, "macos"),
@@ -290,7 +299,6 @@ async function buildUnlocked(
     writeJson(preparedFile, preparation);
   }
   await restoreNativeMetadata(root, nativeConfig);
-  const nativeRoot = path.join(root, "macos");
   const workspace = readdirSync(nativeRoot).find((name) =>
     name.endsWith(".xcworkspace"),
   );

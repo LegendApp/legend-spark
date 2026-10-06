@@ -1,11 +1,43 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { nativePreparationInputs } from "./project.ts";
+import { stateFile } from "./project.ts";
 
 export type NativePreparation = {
   fingerprint: string;
   inputs?: ReturnType<typeof nativePreparationInputs>;
+  projectFingerprint?: string;
 };
+
+export async function preserveMacOSPods(root: string, prepare: () => Promise<unknown>) {
+  const native = path.join(root, "macos");
+  const cache = stateFile(root, "prebuild-cache/macos");
+  const entries = ["Pods", "Podfile.lock"];
+  function restore() {
+    for (const entry of entries) {
+      const saved = path.join(cache, entry);
+      const destination = path.join(native, entry);
+      if (!existsSync(saved)) continue;
+      if (existsSync(destination)) throw new Error(`Cannot restore CocoaPods cache: both ${saved} and ${destination} exist.`);
+      mkdirSync(native, { recursive: true });
+      renameSync(saved, destination);
+    }
+    rmSync(cache, { recursive: true, force: true });
+  }
+  // A terminated prebuild may leave the only copy of Pods in the cache.
+  restore();
+  try {
+    for (const entry of entries) {
+      const source = path.join(native, entry);
+      if (!existsSync(source)) continue;
+      mkdirSync(cache, { recursive: true });
+      renameSync(source, path.join(cache, entry));
+    }
+    await prepare();
+  } finally {
+    restore();
+  }
+}
 
 export function preparationChanges(previous: NativePreparation | undefined, current: NativePreparation): string[] {
   if (!previous?.inputs) return ["native preparation provenance missing"];

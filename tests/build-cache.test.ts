@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { build } from "../packages/cli/src/build.ts";
 import { readJson, writeJson } from "../packages/cli/src/project.ts";
+import { preserveMacOSPods } from "../packages/cli/src/native-preparation.ts";
 
 const commands = vi.hoisted(() => ({ run: vi.fn(), restore: true }));
 vi.mock("../packages/cli/src/commands.ts", () => ({ doctor: vi.fn(), binary: (_root: string, name: string) => name, run: commands.run }));
@@ -34,6 +35,7 @@ beforeEach(() => {
     if (argv.includes("prebuild")) {
       rmSync(path.join(root, "macos"), { recursive: true, force: true });
       mkdirSync(path.join(root, "macos/Fixture.xcworkspace"), { recursive: true });
+      write(path.join(root, "macos/Fixture.xcodeproj/project.pbxproj"), "fixture project");
       write(path.join(root, "macos/Fixture/Info.plist"), JSON.stringify({ SparkProjectIdentifier: "test.fixture" }));
     } else if (argv[0] === "pod") {
       write(path.join(root, "macos/Pods/Manifest.lock"), "fixture");
@@ -100,6 +102,128 @@ test("native edits compile incrementally, while configuration and package moves 
   await build(root, "dev");
   expect(commandCount("prebuild")).toBe(3);
   expect(console.log).toHaveBeenCalledWith(expect.stringContaining("fixture location changed"));
+});
+
+test("codegen and podspec edits update Pods without regenerating the native project", async () => {
+  await build(root, "dev");
+  const archive = path.join(root, "macos/Pods/hermes-engine-artifacts/hermes-version-debug.tar.gz");
+  write(archive, "cached Hermes download");
+  const inode = statSync(archive).ino;
+  for (const file of ["src/NativeFixture.ts", "Fixture.podspec"]) {
+    write(path.join(root, "macos/build/generated/obsolete.cpp"), "old codegen");
+    write(path.join(moduleRoot, file), "changed preparation source");
+    await build(root, "dev");
+    expect(commandCount("prebuild")).toBe(1);
+    expect(statSync(archive).ino).toBe(inode);
+    expect(existsSync(path.join(root, "macos/build/generated/obsolete.cpp"))).toBe(false);
+    await build(root, "dev");
+  }
+  expect(commandCount("pod")).toBe(3);
+  expect(commandCount("xcodebuild")).toBe(3);
+  expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Updating CocoaPods dependencies:"));
+});
+
+test("configuration changes retain the Pods sandbox, lockfile and Hermes downloads", async () => {
+  await build(root, "dev");
+  const archive = path.join(root, "macos/Pods/hermes-engine-artifacts/hermes-version-debug.tar.gz");
+  const lock = path.join(root, "macos/Podfile.lock");
+  write(archive, "cached Hermes download");
+  write(lock, "locked Hermes version");
+  symlinkSync("hermes-engine-artifacts", path.join(root, "macos/Pods/archive-link"));
+  const inode = statSync(archive).ino;
+  configure(true);
+  await build(root, "dev");
+  expect(commandCount("prebuild")).toBe(2);
+  expect(statSync(archive).ino).toBe(inode);
+  expect(readFileSync(path.join(root, "macos/Pods/archive-link/hermes-version-debug.tar.gz"), "utf8")).toBe("cached Hermes download");
+  expect(readFileSync(lock, "utf8")).toBe("locked Hermes version");
+  await build(root, "dev", true);
+  expect(statSync(archive).ino).toBe(inode);
+  expect(commandCount("prebuild")).toBe(3);
+});
+
+test("missing CocoaPods state restores Pods without regenerating a valid native project", async () => {
+  await build(root, "dev");
+  rmSync(path.join(root, "macos/Pods/Manifest.lock"));
+  write(path.join(moduleRoot, "macos/Fixture.mm"), "changed native source");
+  await build(root, "dev");
+  expect(commandCount("prebuild")).toBe(1);
+  expect(commandCount("pod")).toBe(2);
+});
+
+test("host and entitlement metadata edits regenerate the project while retaining Hermes", async () => {
+  const host = path.join(root, "node_modules/@legendapp/spark-desktop-host");
+  writeJson(path.join(host, "package.json"), { name: "@legendapp/spark-desktop-host", version: "1.0.0" });
+  writeJson(path.join(root, "package.json"), { main: "index.ts", dependencies: { fixture: "1.0.0", "@legendapp/spark-desktop-host": "1.0.0" } });
+  write(path.join(host, "AppDelegate.mm"), "host source");
+  await build(root, "dev");
+  const archive = path.join(root, "macos/Pods/hermes-engine-artifacts/hermes-version-debug.tar.gz");
+  write(archive, "cached Hermes download");
+  const inode = statSync(archive).ino;
+  write(path.join(host, "AppDelegate.mm"), "changed host source");
+  await build(root, "dev");
+  expect(commandCount("prebuild")).toBe(2);
+  const metadata = readJson(path.join(moduleRoot, "package.json"));
+  metadata.spark.entitlements = { macos: { "com.apple.security.device.camera": true } };
+  writeJson(path.join(moduleRoot, "package.json"), metadata);
+  await build(root, "dev");
+  await build(root, "dev");
+  expect(commandCount("prebuild")).toBe(3);
+  expect(commandCount("xcodebuild")).toBe(3);
+  expect(statSync(archive).ino).toBe(inode);
+});
+
+test("failed prebuild restores cached Pods and a retry regenerates before recording success", async () => {
+  await build(root, "dev");
+  const archive = path.join(root, "macos/Pods/hermes-engine-artifacts/hermes-version-debug.tar.gz");
+  write(archive, "cached Hermes download");
+  const inode = statSync(archive).ino;
+  const receipt = readFileSync(path.join(root, ".spark/dev-build.json"), "utf8");
+  const run = commands.run.getMockImplementation()!;
+  commands.run.mockImplementation(async (...args) => {
+    const result = await run(...args);
+    if (args[1].includes("prebuild")) throw new Error("prebuild failed");
+    return result;
+  });
+  configure(true);
+  await expect(build(root, "dev")).rejects.toThrow("prebuild failed");
+  expect(statSync(archive).ino).toBe(inode);
+  expect(existsSync(path.join(root, ".spark/native-preparation.json"))).toBe(false);
+  expect(readFileSync(path.join(root, ".spark/dev-build.json"), "utf8")).toBe(receipt);
+  expect(commandCount("xcodebuild")).toBe(1);
+  commands.run.mockImplementation(run);
+  await build(root, "dev");
+  await build(root, "dev");
+  expect(statSync(archive).ino).toBe(inode);
+  expect(commandCount("prebuild")).toBe(3);
+  expect(commandCount("xcodebuild")).toBe(2);
+});
+
+test("retry recovers Pods stranded by a terminated prebuild without copying archives", async () => {
+  const cache = path.join(root, ".spark/prebuild-cache/macos");
+  const archive = path.join(cache, "Pods/hermes-engine-artifacts/hermes-version-debug.tar.gz");
+  write(archive, "cached Hermes download");
+  write(path.join(cache, "Podfile.lock"), "locked Hermes version");
+  const inode = statSync(archive).ino;
+  await preserveMacOSPods(root, async () => {
+    expect(existsSync(path.join(root, "macos/Pods"))).toBe(false);
+    rmSync(path.join(root, "macos"), { recursive: true, force: true });
+  });
+  expect(statSync(path.join(root, "macos/Pods/hermes-engine-artifacts/hermes-version-debug.tar.gz")).ino).toBe(inode);
+  expect(readFileSync(path.join(root, "macos/Podfile.lock"), "utf8")).toBe("locked Hermes version");
+  expect(existsSync(cache)).toBe(false);
+});
+
+test("conflicting interrupted caches stop without overwriting either Pods copy", async () => {
+  const source = path.join(root, ".spark/prebuild-cache/macos/Pods/archive");
+  const destination = path.join(root, "macos/Pods/archive");
+  write(source, "saved archive");
+  write(destination, "existing archive");
+  const prepare = vi.fn();
+  await expect(preserveMacOSPods(root, prepare)).rejects.toThrow("Cannot restore CocoaPods cache");
+  expect(prepare).not.toHaveBeenCalled();
+  expect(readFileSync(source, "utf8")).toBe("saved archive");
+  expect(readFileSync(destination, "utf8")).toBe("existing archive");
 });
 
 test("legacy receipts rebuild once, missing apps rebuild, and force bypasses reuse", async () => {
