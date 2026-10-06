@@ -44,4 +44,4 @@ for (const [name, pin] of Object.entries(pins) as [string, { version: string; ur
 const pkg = readJson(path.join(root, "package.json"));
 pkg.sparkWorkspacePatches = patches;
 writeJson(path.join(root, "package.json"), pkg);
-console.log("Updated workspace install patches. Run npm run postinstall to apply them.");
+console.log("Updated workspace install patches. Run bun run postinstall to apply them.");

@@ -82,4 +82,4 @@ Package: `@legendapp/spark@0.0.1-next.2`. This matrix is generated from `package
 
 ## Run instructions
 
-Run source and API test gates with `npm run typecheck` and `npm test`. For a target acceptance run, use the command in that export's target cell in [the JSON matrix](release-support-matrix.json). The platform runner requires an actual device/host and interactive checks where listed. It records explicit `not-tested`, `failed`, or `not-applicable` outcomes; preparation or bundling alone is not a runtime pass.
+Run source and API test gates with `bun run typecheck` and `bun run test`. For a target acceptance run, use the command in that export's target cell in [the JSON matrix](release-support-matrix.json). The platform runner requires an actual device/host and interactive checks where listed. It records explicit `not-tested`, `failed`, or `not-applicable` outcomes; preparation or bundling alone is not a runtime pass.

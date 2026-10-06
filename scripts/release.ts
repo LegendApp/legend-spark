@@ -1,3 +1,4 @@
+import { loadReleaseEnv } from "./release-env.ts";
 import { existsSync, mkdirSync, openSync, closeSync, readFileSync, rmSync, statfsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { credentials } from "../packages/cli/src/credentials.ts";
@@ -7,14 +8,13 @@ import { releaseWorkflow, signingProject, type Execute } from "./release-workflo
 
 const args = process.argv.slice(2);
 if (args.includes("--help")) {
-  console.log("Usage: npm run release -- [--latest] [--resume]\n\nSelect the next preview version, verify, commit, build/sign/notarize, push and publish.\n--latest also assigns npm latest; --resume retains the original version and channels.\nRequires a clean main checkout on Apple Silicon, Node 24.19+, Apple tools, gh/npm login\nand Developer ID / notarization credentials. Native recipient QA remains separate.");
+  console.log("Usage: bun run release [--latest] [--resume]\n\nSelect the next preview version, verify, commit, build/sign/notarize, push and publish.\n--latest also assigns npm latest; --resume retains the original version and channels.\nRequires a clean main checkout on Apple Silicon, Bun 1.3.14+, Node 24.19+, Apple tools, gh/npm login\nand Developer ID / notarization credentials. Native recipient QA remains separate.");
 } else {
-  if (args.some(arg => !["--latest", "--resume"].includes(arg))) throw new Error("Unknown option. Run npm run release -- --help");
-  const [major, minor] = process.versions.node.split(".").map(Number);
-  if (major! < 24 || (major === 24 && minor! < 19)) throw new Error("Release requires Node 24.19.0 or newer; use the version in .nvmrc");
+  if (args.some(arg => !["--latest", "--resume"].includes(arg))) throw new Error("Unknown option. Run bun run release --help");
+  if (!process.versions.bun) throw new Error("Run the release with Bun: bun run release");
   if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("This automated preview release targets macOS Apple Silicon");
   const root = path.resolve(import.meta.dirname, "..");
-  if (existsSync(path.join(root, ".env"))) process.loadEnvFile(path.join(root, ".env"));
+  loadReleaseEnv(root);
   function checkSpace(headroom = 0) {
     const destinations = ["/System/Volumes/Data", root, process.env.TMPDIR ?? "/tmp", path.dirname(sparkHome())];
     for (const destination of destinations) {
@@ -34,7 +34,7 @@ if (args.includes("--help")) {
   }
   const fd = openSync(lock, "wx"); writeFileSync(fd, String(process.pid)); closeSync(fd);
   const execute: Execute = async (argv, capture = false) => {
-    const heavy = argv[0] === "npm" && (argv[1] === "ci" || argv[1] === "test" || argv.includes("release:runner")) || argv.includes("tests/packed-consumer.integration.ts");
+    const heavy = argv[0] === "bun" && (argv[1] === "install" || argv.includes("test") || argv.includes("release:runner")) || argv.includes("tests/packed-consumer.integration.ts");
     checkSpace(heavy ? 10_000_000_000 : 0);
     const child = spawnProcess(argv, { cwd: root, stdin: "inherit", stdout: capture ? "pipe" : "inherit", stderr: capture ? "pipe" : "inherit", detached: true });
     const stop = () => { if (child.pid) { try { process.kill(-child.pid, "SIGTERM"); } catch (error: any) { if (error.code !== "ESRCH") throw error; } } };

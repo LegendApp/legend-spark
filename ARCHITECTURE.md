@@ -105,7 +105,7 @@ App/window close guards, incoming launch events, and single-instance forwarding 
 
 ## Development session and compatibility
 
-`spark dev` supervises the installed Expo CLI and the native application it launches. Expo inherits the terminal and owns its keyboard handling, command table, prompts, Metro, reload, debugger, and mobile/web actions. A version- and source-checked process-local patch adds `d` (open desktop), `g` (switch desktop runtime), and `b` (build when required). JSON IPC carries desktop actions/results and runtime status between Expo under Node and the spark supervisor under Node; there is no second stdin handler. Metro workers skip the inherited preload. Closing Expo closes the owned app. Ordinary Expo commands outside this launcher are unpatched. Expo chooses its host and port (LAN and 8081 by default); IPC reports the actual Metro port for desktop launches. spark consumes only `--project`, `--platform`, `--runner-binary`, and `--no-open`, forwarding Expo options unchanged. Expo’s boolean `--go` keeps its mobile meaning. It can discover registered prebuilt binaries or reuse a recorded custom build; the selected target is remembered per project.
+`spark dev` supervises the installed Expo CLI and the native application it launches. Expo inherits the terminal and owns its keyboard handling, command table, prompts, Metro, reload, debugger, and mobile/web actions. A version- and source-checked process-local patch adds `d` (open desktop), `g` (switch desktop runtime), and `b` (build when required). JSON IPC carries desktop actions/results and runtime status between Expo under Node and the spark supervisor under Node or Bun; there is no second stdin handler. Metro workers skip the inherited preload. Closing Expo closes the owned app. Ordinary Expo commands outside this launcher are unpatched. Expo chooses its host and port (LAN and 8081 by default); IPC reports the actual Metro port for desktop launches. spark consumes only `--project`, `--platform`, `--runner-binary`, and `--no-open`, forwarding Expo options unchanged. Expo’s boolean `--go` keeps its mobile meaning. It can discover registered prebuilt binaries or reuse a recorded custom build; the selected target is remembered per project.
 
 The shared client is **Spark Runner**. Its commands are `sdk build-runner`, `build --runner`, and `dev --runner-binary`. Internal runtime metadata uses the `"go"` mode identifier; Expo owns the separate `dev --go` option.
 
@@ -273,7 +273,7 @@ Useful starting points:
 | Windows development | `platform.ts`, `windows.ts`, Windows config/host hooks, native-greeting fixture | `test:windows:prepare` locally; `test:windows` on Windows x64/ARM64 |
 | Production on a new platform | Remaining platform work above and upstream template | Native production build, clean-machine launch, reduced standalone artifact |
 
-Begin with `npm run typecheck` and `npm test` where appropriate. Native tests need the platform toolchain and sometimes an interactive desktop. `npm run test:all` includes costly native builds; inspect its current definition before running it. A locked GUI or unavailable UI driver is a validation limitation, not a passing interactive test.
+Begin with `bun run typecheck` and `bun run test` where appropriate. Native tests need the platform toolchain and sometimes an interactive desktop. `bun run test:all` includes costly native builds; inspect its current definition before running it. A locked GUI or unavailable UI driver is a validation limitation, not a passing interactive test.
 
 Keep these invariants intact:
 
@@ -332,14 +332,14 @@ packages; Metro watches workspace source through Expo's ordinary monorepo suppor
 The desktop adapter keeps the bundle server root at the app so prebuilt hosts can
 continue requesting `/index.bundle` and `/.threaded-runtime/entry.bundle`.
 
-`npm install` applies checked-in external-library deltas through
+`bun install` applies checked-in external-library deltas through
 `scripts/install-workspace-adapters.ts`. The hook performs local file operations
 only, validates versions and patch contexts, supports repeat installs, and replaces
 files atomically to preserve package-cache hardlinks across package managers. `scripts/sync-workspace-patches.ts` is a maintainer
 command deriving those patches from the same pinned recipes as SDK packing.
 Neither command generates an application or compiles native code during install.
 
-`npm run macos` and `npm run windows` invoke the existing spark/Expo development
+`bun run macos` and `bun run windows` invoke the existing spark/Expo development
 session and prebuilt registry. Native dependencies come from the compatible binary;
 Metro supplies live JavaScript and CSS. No hosted download service exists yet.
 The explicit `rebuild:macos` / `rebuild:windows` commands build and register a

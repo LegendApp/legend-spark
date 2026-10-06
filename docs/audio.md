@@ -98,7 +98,7 @@ binds its lock-screen controls to its own player. This module does not invent a
 mobile media service or claim arbitrary-engine parity. Recording, queue management,
 provider SDKs and media indexing remain outside this contract.
 
-`node scripts/test-audio.ts` builds and runs the macOS probe for real local decoding,
+`bun scripts/test-audio.ts` builds and runs the macOS probe for real local decoding,
 volume, seek, status cleanup, metadata, command configuration and session replacement.
 It does not synthesize OS media-key input. Check real system controls and artwork
 visually on both platforms. Windows native compilation/runtime acceptance remains

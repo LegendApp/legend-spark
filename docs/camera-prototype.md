@@ -44,16 +44,16 @@ Requires the framework's normal macOS build prerequisites: Xcode, CocoaPods, and
 
 ```sh
 # Reproduce just the RN/Fabric/Nitro compatibility gate.
-npm run test:camera -- /tmp/SparkNitroProbe --probe-only
+bun run test:camera /tmp/SparkNitroProbe --probe-only
 
 # Prepare, build, launch, and run the complete camera-free proof.
-npm run test:camera -- /tmp/SparkCameraKitchenSink
+bun run test:camera /tmp/SparkCameraKitchenSink
 
 # Build a standalone Release app and run the same proof without Metro.
-npm run test:camera -- /tmp/SparkCameraKitchenSink --release
+bun run test:camera /tmp/SparkCameraKitchenSink --release
 
 # Open an already-built app for manual testing.
-npm run test:camera -- /tmp/SparkCameraKitchenSink --run-only --interactive
+bun run test:camera /tmp/SparkCameraKitchenSink --run-only --interactive
 ```
 
 Use `--release --run-only --interactive` for the existing Release app. `--prepare-only` generates the consumer without building. Generated consumers have the usual kitchen-sink managed-directory marker; the script refuses to overwrite an unrelated app. Reports are written under the consumer's `.spark/camera-proof/`. The exact built app path is printed after a successful run. A successful full Release run also creates the test-kit ZIP and its SHA-256 checksum in `artifacts/camera/`.

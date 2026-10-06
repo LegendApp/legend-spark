@@ -16,11 +16,11 @@ desktop kitchen sink.
 From the framework checkout, with the normal macOS build prerequisites:
 
 ```sh
-npm run test:runtimes -- /tmp/SparkRuntimesProbe
+bun run test:runtimes /tmp/SparkRuntimesProbe
 # Also prove worker startup from an embedded bundle, with no Metro:
-npm run test:runtimes -- /tmp/SparkRuntimesProbe --release
+bun run test:runtimes /tmp/SparkRuntimesProbe --release
 # Run the checks and leave the example visible for interaction:
-npm run test:runtimes -- /tmp/SparkRuntimesProbe --interactive
+bun run test:runtimes /tmp/SparkRuntimesProbe --interactive
 ```
 
 The runner creates a managed kitchen-sink consumer, checks out the pinned upstream

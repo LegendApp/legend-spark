@@ -36,14 +36,14 @@ Build and sign both targets from the same clean release revision, delaying
 assembly until both archives are ready:
 
 ```sh
-SPARK_MACOS_ARCH=arm64 npm run release:runner -- --no-assemble
-SPARK_MACOS_ARCH=x64 npm run release:runner -- --no-assemble
-node scripts/prepare-release.ts /path/to/arm64.zip /path/to/x64.zip
+SPARK_MACOS_ARCH=arm64 bun run release:runner --no-assemble
+SPARK_MACOS_ARCH=x64 bun run release:runner --no-assemble
+bun scripts/prepare-release.ts /path/to/arm64.zip /path/to/x64.zip
 ```
 
 Assembly rejects duplicate targets and mismatched revisions. It creates one
 immutable release containing both Runner assets. Single-architecture releases
-can continue to use `npm run release:runner` without `--no-assemble`.
+can continue to use `bun run release:runner` without `--no-assemble`.
 
 ## Validation status
 

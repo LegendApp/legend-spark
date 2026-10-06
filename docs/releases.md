@@ -17,22 +17,22 @@ workspace path.
 
 ## Automated release
 
-From a clean `main` checkout on the signing Apple Silicon Mac, use Node 24.19.0
-or newer, install dependencies once with `npm ci`, and run:
+From a clean `main` checkout on the signing Apple Silicon Mac, use Bun 1.3.14
+and Node 24.19.0 or newer, install dependencies once with `bun install --frozen-lockfile`, and run:
 
 ```sh
-npm run release -- --latest
+bun run release --latest
 ```
 
 The command selects the next `-next.N` version above the checkout and npm
-registry versions, updates workspace manifests, lockfile, templates, CLI version,
+registry versions, updates workspace manifests, `bun.lock`, templates, CLI version,
 and current release documentation, and generates changelog notes from committed
 changes since the previous release tag. It checks GitHub/npm authentication,
 repository identity, Developer ID signing, and notarization credentials before
 changing versions. Signing secrets remain in Keychain; `.env` may select an
 identity and Keychain profile using the existing `SPARK_*` configuration.
 
-It runs `npm ci`, typechecking, and portable tests before committing the version
+It runs `bun install --frozen-lockfile`, typechecking, and portable tests before committing the version
 change. It then builds/signs/notarizes the Runner, assembles immutable artifacts,
 and runs the packed-consumer integration against the **exact staged npm archive**.
 After successful checks it atomically pushes `main` and the matching release tag,
@@ -42,7 +42,7 @@ publishes the GitHub prerelease and npm `next`, and assigns npm `latest` when
 If notarization is pending or a later step fails, run:
 
 ```sh
-npm run release -- --resume
+bun run release --resume
 ```
 
 Resume retains the original version and channel choice, reuses a matching Runner
@@ -69,9 +69,9 @@ remain pending. Promoting npm `latest` does not change that support scope.
 - Start from the exact reviewed source revision and retain the preview version
   and intended `next` channel unless a separately approved release decision says
   otherwise.
-- Run `npm ci`, `npm run typecheck`, and the portable test command in
+- Run `bun install --frozen-lockfile`, `bun run typecheck`, and the portable test command in
   [release readiness](release-readiness.md).
-- Run `node tests/packed-consumer.integration.ts` for the actual packed SDK
+- Run `bun tests/packed-consumer.integration.ts` for the actual packed SDK
   consumer graph. This validates package installation and declarations, not
   native builds or runtime behavior.
 - Complete the dossier for the exact source and archive. Resolve platform gates
@@ -87,8 +87,8 @@ remain pending. Promoting npm `latest` does not change that support scope.
 From a clean, committed release revision on a supported Mac, run:
 
 ```sh
-npm ci
-npm run release:runner
+bun install --frozen-lockfile
+bun run release:runner
 ```
 
 This command packs the SDK and patched third-party archives, refreshes the
@@ -103,7 +103,7 @@ If Apple is still processing, the command exits with status 2. Resume unchanged
 inputs by running:
 
 ```sh
-npm run release:runner -- --resume
+bun run release:runner --resume
 ```
 
 If submission outcome is unknown, recover it explicitly with
@@ -116,7 +116,7 @@ To assemble an existing signed Runner archive without rebuilding, provide its
 `.zip` path to the assembly script:
 
 ```sh
-node scripts/prepare-release.ts /path/to/signed-SparkRunner.zip
+bun scripts/prepare-release.ts /path/to/signed-SparkRunner.zip
 ```
 
 Assembly requires the archive to match the current committed source revision
@@ -139,7 +139,7 @@ its matching `v<version>` tag to the configured public repository. The publisher
 requires the remote tag to resolve to the staged revision. Then run:
 
 ```sh
-npm run release:publish
+bun run release:publish
 ```
 
 The publisher verifies staged checksums and repository visibility, creates a

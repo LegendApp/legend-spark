@@ -56,7 +56,7 @@ unless the app intentionally migrates its stored credentials.
 
 ## Validation
 
-Run `npm test`, `npm run typecheck`, and
+Run `bun run test`, `bun run typecheck`, and
 `bash packages/desktop-windows/tests/registry-lifetime.test.sh`.
 Native consumer builds and app-specific runtime checks are also required after
 changing native sources or package ownership; a Metro reload cannot load new

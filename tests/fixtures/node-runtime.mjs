@@ -35,7 +35,7 @@ assert.equal(which("bun"), undefined, "Test PATH must not contain Bun");
 const output = spawnProcess([process.execPath, "-e", 'process.stdout.write("x".repeat(200000));process.stderr.write("y".repeat(200000))']);
 const [stdout, stderr, code] = await Promise.all([new Response(output.stdout).text(), new Response(output.stderr).text(), output.exited]);
 assert.equal(stdout.length, 200000); assert.equal(stderr.length, 200000); assert.equal(code, 0);
-await assert.rejects(spawnProcess(["spark-command-that-does-not-exist"]).exited, /ENOENT/);
+await assert.rejects(spawnProcess(["spark-command-that-does-not-exist"]).exited, { code: "ENOENT" });
 let ready;
 const started = new Promise(resolve => { ready = resolve; });
 const ipc = spawnProcess([process.execPath, "-e", 'process.on("message", m => process.send({echo:m}));process.send({ready:true})'], {
@@ -75,4 +75,4 @@ try {
 } finally {
   proxy.stop(); for (const client of ws.clients) client.terminate(); ws.close(); upstream.closeAllConnections(); await new Promise(resolve => upstream.close(resolve));
 }
-console.log("Node process, IPC, signals, HTTP compression, and WebSocket checks passed without Bun");
+console.log("Process, IPC, signals, HTTP compression, and WebSocket checks passed without Bun on PATH");

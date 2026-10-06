@@ -1,7 +1,7 @@
 import { spawnProcess, processLog } from "../packages/cli/src/process.ts";
 import { setTimeout as sleep } from "node:timers/promises";
 // Exercise the actual React Native process module in a disposable packaged app.
-// Build Kitchen Sink first with: npm run spark -- build --dev --project examples/kitchen-sink
+// Build Kitchen Sink first with: bun run spark build --dev --project examples/kitchen-sink
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { copyHelpers } from "../packages/cli/src/helpers.ts";

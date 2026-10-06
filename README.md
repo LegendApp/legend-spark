@@ -24,7 +24,7 @@ The checkout currently targets Expo SDK 54 / React Native 0.81 and pins **Expo D
 
 - **Build an app:** follow the [quick start](#quick-start) and [development guide](docs/development.md).
 - **Add desktop to an existing Expo app:** use [the integration guide](docs/add-desktop.md) to preserve its entry point and mobile/web setup.
-- **Test Windows development:** use the [integrated Windows workflow](docs/windows-slice.md) and `npm run test:windows`.
+- **Test Windows development:** use the [integrated Windows workflow](docs/windows-slice.md) and `bun run test:windows`.
 - **Use desktop APIs:** see the [SDK guide](docs/sdk.md) and [expanded API reference](docs/desktop-api-expansion.md).
 - **Try an application:** explore [Kitchen Sink](#explore-the-kitchen-sink), [Notes/Music/Diff Lite](#small-application-examples), or the [native helper example](#native-helper-example).
 - **Understand or change the framework:** read [ARCHITECTURE.md](ARCHITECTURE.md), including its source map and implementation invariants.
@@ -65,14 +65,14 @@ This is a **local SDK workflow**. Run the following from a clone of this reposit
 
 ### 1. Prepare the SDK
 
-You need Node 24.19.0 or newer and npm, pnpm, Yarn, or Bun as your package manager. Bun is optional; the CLI and SDK installer run on Node. The repository tests and integration scripts also run on Node. Building native binaries also requires a Mac, full Xcode with first-launch setup completed, and CocoaPods. The SDK pack step uses Git and tar, and fetches pinned upstream Runtimes source and library archives on its first run. Patches are applied in JavaScript.
+This repository uses Bun 1.3.14 (pinned in `packageManager`) for installs, scripts, tests, and releases. Keep Node 24.19.0 or newer installed for upstream tools and Node compatibility checks. Published Spark consumers can still choose npm, pnpm, Yarn, or Bun and run the CLI on Node or Bun; they do not need Bun. Building native binaries also requires a Mac, full Xcode with first-launch setup completed, and CocoaPods. The SDK pack step uses Git and tar, and fetches pinned upstream Runtimes source and library archives on its first run. Patches are applied in JavaScript.
 
 ```sh
-npm install
-npm run typecheck
-npm test
-npm run spark -- sdk pack
-npm run spark -- sdk build-runner
+bun install
+bun run typecheck
+bun run test
+bun run spark sdk pack
+bun run spark sdk build-runner
 ```
 
 Use Node 24.19.0 (`nvm install && nvm use` in this checkout). Older Node 24 releases can fail on Expo Desktop beta's CommonJS imports; see [native prerequisites](docs/development.md#native-prerequisites).
@@ -82,7 +82,7 @@ Use Node 24.19.0 (`nvm install && nvm use` in this checkout). Older Node 24 rele
 If you already have a compatible runtime, register it instead of building it:
 
 ```sh
-npm run spark -- sdk register /absolute/path/to/SparkRunner.app
+bun run spark sdk register /absolute/path/to/SparkRunner.app
 ```
 
 Registration records the path; keep the binary at that location. A compatible Spark Runner can be launched without invoking Xcode, CocoaPods, or codegen. Native build tools are needed when creating or rebuilding a binary.
@@ -92,7 +92,7 @@ Registration records the path; keep the binary at that location. A compatible Sp
 After preparing the SDK, run from the framework checkout:
 
 ```sh
-npm run spark -- create /tmp/MySparkApp
+bun run spark create /tmp/MySparkApp
 cd /tmp/MySparkApp
 npm run macos
 ```
@@ -130,10 +130,10 @@ Windows uses the same CLI, starter, prebuilt registry, native compatibility chec
 On Windows 11 x64 or ARM64 (including Parallels), install the prerequisites in the [Windows guide](docs/windows-slice.md), including Visual Studio 2026 / MSVC v145 for the pinned RNW 0.81.35 template. Then run from the framework checkout:
 
 ```powershell
-npm install
-npm run spark -- sdk pack --platform windows
-npm run spark -- sdk build-runner --platform windows
-npm run spark -- create C:\dev\MySparkApp --platform windows
+bun install
+bun run spark sdk pack --platform windows
+bun run spark sdk build-runner --platform windows
+bun run spark create C:\dev\MySparkApp --platform windows
 cd C:\dev\MySparkApp
 npm run windows
 ```
@@ -143,14 +143,14 @@ Creation defaults to Windows on a Windows machine. `npm run windows`, `npm run d
 For the automated prebuilt → Fast Refresh → added native module → custom-build check, run from the framework checkout with a fresh destination:
 
 ```powershell
-npm run test:windows -- --project C:\dev\SparkWindowsVerification
+bun run test:windows --project C:\dev\SparkWindowsVerification
 ```
 
-The verifier uses the real CLI and existing native-greeting fixture, and saves `.spark/windows-verification.json` plus `.spark/logs`. On macOS, `npm run test:windows:prepare -- --project /tmp/SparkWindowsCheck` checks generation and both development bundles without executing a native binary.
+The verifier uses the real CLI and existing native-greeting fixture, and saves `.spark/windows-verification.json` plus `.spark/logs`. On macOS, `bun run test:windows:prepare --project /tmp/SparkWindowsCheck` checks generation and both development bundles without executing a native binary.
 
-Windows host source now includes display enumeration, window frame/centering/fullscreen operations, size constraints and basic presentation options, menu following between React windows, and an atomic single-instance guard. The native UI package implements React Native Appearance overrides for WinUI controls. Run `npm run test:windows:features` on Windows to compile and exercise these additions, including simultaneous launches and owner-termination recovery.
+Windows host source now includes display enumeration, window frame/centering/fullscreen operations, size constraints and basic presentation options, menu following between React windows, and an atomic single-instance guard. The native UI package implements React Native Appearance overrides for WinUI controls. Run `bun run test:windows:features` on Windows to compile and exercise these additions, including simultaneous launches and owner-termination recovery.
 
-**Native Windows verification is still pending.** Local generation/bundle checks do not prove compilation, autolinking, Hermes startup, or Fast Refresh on Windows. Windows production builds, preview builds, signing/MSIX, and clean-machine runtime distribution are outside this development scope. Desktop modules, Nitro, SQLite, WebView2, and secondary Hermes runtimes now have Windows integrations; run `npm run test:platform -- --platform windows` to exercise their shared contracts. See the [Windows guide](docs/windows-slice.md) for the full setup, test, and diagnostic workflow.
+**Native Windows verification is still pending.** Local generation/bundle checks do not prove compilation, autolinking, Hermes startup, or Fast Refresh on Windows. Windows production builds, preview builds, signing/MSIX, and clean-machine runtime distribution are outside this development scope. Desktop modules, Nitro, SQLite, WebView2, and secondary Hermes runtimes now have Windows integrations; run `bun run test:platform --platform windows` to exercise their shared contracts. See the [Windows guide](docs/windows-slice.md) for the full setup, test, and diagnostic workflow.
 
 ## What the SDK provides
 
@@ -195,7 +195,7 @@ For external libraries, prefer their upstream imports and documentation. spark s
 
 ## One app for mobile, web, and desktop
 
-`npm run settings /tmp/MySettings` packs the shared Settings template and creates it through Expo Desktop beta. It uses the existing capability adapters, ordinary React Native layout, and native `Button`, `TextInput`, and `Select` controls from `@legendapp/spark/ui`. Mobile controls use the pinned Expo UI backend; desktop and web select their own implementations. The starter uses [Uniwind](docs/styling.md) for responsive layout and light/dark/system themes, with optional native control bindings at `@legendapp/spark/ui/uniwind`. Ordinary `style` props remain supported.
+`bun run settings /tmp/MySettings` packs the shared Settings template and creates it through Expo Desktop beta. It uses the existing capability adapters, ordinary React Native layout, and native `Button`, `TextInput`, and `Select` controls from `@legendapp/spark/ui`. Mobile controls use the pinned Expo UI backend; desktop and web select their own implementations. The starter uses [Uniwind](docs/styling.md) for responsive layout and light/dark/system themes, with optional native control bindings at `@legendapp/spark/ui/uniwind`. Ordinary `style` props remain supported.
 
 Run `npm run web`, `npm run ios`, `npm run android`, or `npm run macos` inside the generated app. Native targets first need their development build. Windows uses WinUI controls with visible, noninteractive fallbacks if native initialization fails; native Windows acceptance is still pending. Track remaining work in [known Windows issues](docs/windows-issues.md). See [the shared Settings guide](docs/universal-settings.md) for build commands, platform status, and verification.
 
@@ -228,26 +228,26 @@ Kitchen Sink is a checked-in app. From the checkout:
 
 ```sh
 cd examples/kitchen-sink
-npm install
-npm run macos
+bun install
+bun run macos
 # Or on Windows:
-npm run windows
+bun run windows
 ```
 
 The app uses workspace packages and the repository lockfile. Installation applies
 checked-in desktop library adapters; startup delegates to the normal spark/Expo
 CLI. It does not create a second app, pack SDK archives, or compile native code.
-Edit the screens and CSS directly for Fast Refresh. `npm run kitchen-sink` from the
+Edit the screens and CSS directly for Fast Refresh. `bun run kitchen-sink` from the
 repository root is a shortcut for this app's `dev` command.
 
 A matching native Spark Runner must be registered. There is no hosted download
-service yet. If you do not have one, explicitly run `npm run rebuild:macos` or
-`npm run rebuild:windows` from the app directory with the native toolchain installed.
+service yet. If you do not have one, explicitly run `bun run rebuild:macos` or
+`bun run rebuild:windows` from the app directory with the native toolchain installed.
 That builds and registers its reusable runtime; repeat only after native changes.
 See the [Kitchen Sink guide](examples/kitchen-sink/README.md) for registration and
 startup options.
 
-`npm run kitchen-sink:prepare` remains a separate packed-SDK consumer test. It does
+`bun run kitchen-sink:prepare` remains a separate packed-SDK consumer test. It does
 not modify the checked-in app's manifest, configuration, or native projects.
 
 The example exercises desktop APIs with windows, an editor, menus, persistence, and an event log. **Test streaming files and Trash** runs binary file checks and recycles one clearly named disposable test file; it does not touch user-selected files. Its actions use native buttons and show progress, results, and errors beneath the button; each demo also shows its recent callback events, and the event log retains detailed output. The header theme button cycles System → Light → Dark → System, starting with the system appearance; Uniwind tokens theme the screen and React Native Appearance updates native controls.
@@ -258,13 +258,13 @@ Run framework commands from this repository; run app commands from a generated a
 
 | Location | Command | Purpose |
 | --- | --- | --- |
-| Framework | `npm run spark -- sdk pack` | Pack and register local SDK archives |
-| Framework | `npm run spark -- sdk build-runner` | Build/register the generic runtime |
-| Framework | `npm run spark -- create <directory>` | Create a consumer from the packaged starter |
+| Framework | `bun run spark sdk pack` | Pack and register local SDK archives |
+| Framework | `bun run spark sdk build-runner` | Build/register the generic runtime |
+| Framework | `bun run spark create <directory>` | Create a consumer from the packaged starter |
 | App | `npm run macos` / `npm run windows` / `npm run dev` / `npm start` | Managed development session for the project target |
 | App | `npx --no-install spark build --dev` | Build an app-specific development runtime |
-| Framework | `npm run test:windows` | Verify the integrated Windows native development path |
-| Framework | `npm run test:windows:prepare` | Check Windows generation and development bundles without native execution |
+| Framework | `bun run test:windows` | Verify the integrated Windows native development path |
+| Framework | `bun run test:windows:prepare` | Check Windows generation and development bundles without native execution |
 | App | `npx --no-install spark analyze` | Explain macOS production native module selection |
 | App | `npm run build` | Build a standalone macOS Release app |
 | App | `npm run package` | Prepare a signed, notarized macOS distribution archive |
@@ -273,22 +273,22 @@ Run framework commands from this repository; run app commands from a generated a
 For framework changes, begin with the checks relevant to the change:
 
 ```sh
-npm run typecheck
-npm test
+bun run typecheck
+bun run test
 ```
 
 Native integration checks are separate and require Xcode, CocoaPods, and an unlocked/logged-in macOS desktop where UI interaction is involved:
 
 ```sh
-npm run test:native
-npm run test:expansion
-npm run test:runtimes:all
+bun run test:native
+bun run test:expansion
+bun run test:runtimes:all
 # Streaming/Trash checks; builds a Kitchen Sink development runtime:
-node scripts/test-file-streams.ts
+bun scripts/test-file-streams.ts
 # Helper checks; reuses that development runtime:
-node scripts/test-sidecars.ts
+bun scripts/test-sidecars.ts
 # Complete configured suite, including native builds:
-npm run test:all
+bun run test:all
 ```
 
 `test:all` does not include every standalone probe above; run the file and helper probes separately when changing those APIs. `test:all` is substantial: it includes packaging/update tests, desktop integration tests, native application builds, and the Runtimes matrix. See [SDK tests](docs/sdk.md#tests), [Runtimes tests](docs/runtimes.md), and the root [package.json](package.json) for the current commands and prerequisites. Use an external packed consumer to verify distribution behavior; workspace symlinks alone cannot prove the CLI archive is complete.
@@ -370,8 +370,8 @@ requests, timeouts, crash handling, explicit restart, and shutdown cleanup.
 From the framework checkout, with the native toolchain installed:
 
 ```sh
-npm run pack:local
-node scripts/prepare-sidecar.ts /absolute/path/to/HelperDemo
+bun run pack:local
+bun scripts/prepare-sidecar.ts /absolute/path/to/HelperDemo
 cd /absolute/path/to/HelperDemo
 npm run macos
 # On Windows, use a fresh Windows path and run npm run windows instead.
@@ -386,7 +386,7 @@ a persistent background service. See [sidecar lifecycle limits](docs/sidecars.md
 
 ## Cross-platform acceptance
 
-Run `npm run test:platform -- --platform macos` (or `windows`, `ios`, `android`, `web`) for a fresh shared test app. `--prepare-only` checks generation/bundling; `--api-only` runs API assertions without claiming UI acceptance. Collect JSON reports from each machine and run `npm run test:report -- --output .spark/platform-coverage.md` to see passed, failed, missing, inapplicable, and untested cases. See [platform testing](docs/platform-testing.md) for devices, commands, cleanup, and current coverage.
+Run `bun run test:platform --platform macos` (or `windows`, `ios`, `android`, `web`) for a fresh shared test app. `--prepare-only` checks generation/bundling; `--api-only` runs API assertions without claiming UI acceptance. Collect JSON reports from each machine and run `bun run test:report --output .spark/platform-coverage.md` to see passed, failed, missing, inapplicable, and untested cases. See [platform testing](docs/platform-testing.md) for devices, commands, cleanup, and current coverage.
 
 App-supplied backend executables can be packaged as target-specific helper bundles. See the [sidecar guide](docs/sidecars.md) for configuration, lifecycle, distribution limits, and a runnable C example. No Node runtime is included.
 
@@ -394,8 +394,8 @@ See [desktop foundations](docs/desktop-foundations.md) for nonactivating overlay
 
 Optional [audio/media sessions](docs/audio.md) and [browser authentication](docs/auth-session.md) provide system media controls and external-browser callback transport. Provider SDKs, queues, and OAuth token exchange remain application/library responsibilities.
 
-Release maintainers: run `npm run release -- --latest` from a clean `main`
+Release maintainers: run `bun run release --latest` from a clean `main`
 checkout on the signing Apple Silicon Mac to version, verify, sign/notarize,
-and publish the next preview under both npm tags. Use `npm run release -- --resume`
+and publish the next preview under both npm tags. Use `bun run release --resume`
 to continue the same release. See the [preview release workflow](docs/releases.md)
 for prerequisites, retry behavior, and separate clean-machine acceptance.

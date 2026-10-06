@@ -1,15 +1,16 @@
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
 import { expect, test, vi } from "vitest";
 import { createDatabase, type SqlBackend } from "../packages/sqlite/src/database";
 import type { SqlExecutor } from "../packages/sqlite/src/types";
+const { Database } = createRequire(import.meta.url)("bun:sqlite");
 function fixture() {
-  const native = new DatabaseSync(":memory:");
+  const native = new Database(":memory:");
   const close = vi.fn(() => native.close());
   const backend: SqlBackend = {
     async execute(sql, params) {
       const statement = native.prepare(sql);
       const bound = params.map(value => value instanceof ArrayBuffer ? new Uint8Array(value) : value);
-      if (statement.columns().length) return { rows: statement.all(...bound), rowsAffected: 0 };
+      if (statement.columnNames.length) return { rows: statement.all(...bound), rowsAffected: 0 };
       const result = statement.run(...bound);
       return { rows: [], rowsAffected: Number(result.changes), insertId: Number(result.lastInsertRowid) };
     }, close,

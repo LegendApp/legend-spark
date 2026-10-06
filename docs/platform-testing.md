@@ -11,11 +11,11 @@ fixes, WebView keyboard checks and OS interactions, follow the
 From the framework checkout:
 
 ```sh
-npm run test:platform -- --platform macos
-npm run test:platform -- --platform windows
-npm run test:platform -- --platform ios --device <simulator-UDID>
-npm run test:platform -- --platform android --device <adb-serial>
-npm run test:platform -- --platform web
+bun run test:platform --platform macos
+bun run test:platform --platform windows
+bun run test:platform --platform ios --device <simulator-UDID>
+bun run test:platform --platform android --device <adb-serial>
+bun run test:platform --platform web
 ```
 
 Each run creates a fresh, disposable universal consumer from packed SDK archives. It uses the same `PlatformChecks` screen and assertions on all five platforms. Expo Desktop stays on the pinned beta template. spark owns desktop compilation; Expo owns mobile compilation/install/launch and the Metro/web server. Windows automatically selects x64 or ARM64, with the existing `SPARK_WINDOWS_ARCH` override.
@@ -40,8 +40,8 @@ Clipboard round-trip tests temporarily replace clipboard contents and restore **
 These runners now use the shared contract assertions and also emit the common report format:
 
 ```sh
-npm run test:api-adapters
-npm run test:windows:features -- --project C:\dev\SparkWindowsFeatures
+bun run test:api-adapters
+bun run test:windows:features --project C:\dev\SparkWindowsFeatures
 ```
 
 The macOS runner retains its stronger HTML/legacy API and cold/warm URL checks. Its shared case results are mapped explicitly; the remaining assertions stay in its original detailed report. The Windows feature runner retains its real UI Automation, window geometry, Appearance, simultaneous-launch, and owner-recovery checks. It emits shared API results as they arrive, preserving failures during later phases.
@@ -49,7 +49,7 @@ The macOS runner retains its stronger HTML/legacy API and cold/warm URL checks. 
 On macOS, Windows source generation and bundling can be checked with:
 
 ```sh
-SPARK_WINDOWS_ARCH=arm64 npm run test:windows:features -- --prepare-only
+SPARK_WINDOWS_ARCH=arm64 bun run test:windows:features --prepare-only
 ```
 
 Other existing suites (`test:ui`, `test:native`, `test:integrations`, `test:runtimes`, packaging tests, and the full Windows development-session verifier) remain available. Their results are **not** automatically represented as feature passes in the common report until they are mapped to exact cases. Migrating those suites and filling uncovered assertions is remaining work.
@@ -66,9 +66,9 @@ The shared runner writes `.spark/test-results/<run-id>.json` before setup and ch
 Build logs and older runner-specific reports remain in the generated project's `.spark` directory. Copy those alongside the common JSON report when investigating a failure; local evidence paths alone are not portable attachments.
 
 ```sh
-npm run test:report -- --output .spark/platform-coverage.md
-npm run test:report -- ./reports-from-mac ./reports-from-windows --output coverage.md
-npm run test:report -- ./reports --strict --output coverage.md
+bun run test:report --output .spark/platform-coverage.md
+bun run test:report ./reports-from-mac ./reports-from-windows --output coverage.md
+bun run test:report ./reports --strict --output coverage.md
 ```
 
 The report tool keeps different source fingerprints in separate sections and shows each run separately. It never selects the best result across retries or architectures to imply parity. Repeated observations inside one run cannot erase a failure. An unfinished, blocked, or failed run makes the report command exit nonzero. `--strict` also fails for missing implementations or untested applicable cases. Default execution can finish successfully with incomplete coverage; the summary always says so.
@@ -111,7 +111,7 @@ runtime teardown while UI is open also need visual/manual acceptance.
 
 ### Remaining Windows feature acceptance
 
-`npm run test:platform -- --platform windows --timeout 600` now packages all desktop
+`bun run test:platform --platform windows --timeout 600` now packages all desktop
 ports, Nitro, OP-SQLite, WebView, and the patched Margelo Runtimes library. API
 checks include SQLite rollback/blob persistence, native Nitro identity/buffers,
 and independent Hermes heaps with timers, exceptions and destruction/recreation.

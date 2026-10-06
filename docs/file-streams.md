@@ -85,9 +85,9 @@ operation and item result before reporting success. See Microsoft's
 
 ## Acceptance
 
-- `npm test -- tests/file-handles.test.ts`: positional bytes, input limits, pull-based
+- `bun run test -- tests/file-handles.test.ts`: positional bytes, input limits, pull-based
   iteration, early exit, abort/error cleanup, and bounded writes.
-- `node scripts/test-file-streams.ts`: builds a macOS Kitchen Sink runtime and runs
+- `bun scripts/test-file-streams.ts`: builds a macOS Kitchen Sink runtime and runs
   actual native checks. Passed on 2026-09-17, including a 2.5 MiB binary round trip,
   random-access modification, EOF, exclusive creation, truncation, and OS Trash.
 - Kitchen Sink exposes **Test streaming files and Trash** on desktop. It recycles

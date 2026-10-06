@@ -14,8 +14,8 @@ Use this repository normally. From its root in PowerShell:
 
 ```powershell
 npm install
-npm run spark -- sdk pack --platform windows
-npm run spark -- create C:\dev\SparkWindowsApp --platform windows
+bun run spark sdk pack --platform windows
+bun run spark create C:\dev\SparkWindowsApp --platform windows
 cd C:\dev\SparkWindowsApp
 ```
 
@@ -39,7 +39,7 @@ To explicitly select a target in PowerShell (for example, to test x64 under Wind
 
 ```powershell
 $env:SPARK_WINDOWS_ARCH = "x64" # or "arm64"
-npm run spark -- sdk build-runner --platform windows
+bun run spark sdk build-runner --platform windows
 ```
 
 Keep that environment variable set for subsequent build and dev commands. `Remove-Item Env:SPARK_WINDOWS_ARCH` restores automatic selection. On macOS, Windows project generation defaults to x64; set `SPARK_WINDOWS_ARCH=arm64` to check ARM64 metadata and generation. Native compilation still requires Windows and the matching compiler tools.
@@ -77,7 +77,7 @@ Windows `spark build` without `--dev`, preview builds, and distribution packagin
 For a reusable generic SDK Spark Runner, run from the framework checkout:
 
 ```powershell
-npm run spark -- sdk build-runner --platform windows
+bun run spark sdk build-runner --platform windows
 ```
 
 This uses the platform-specific SDK build directory and the same runtime registry. Apps created against the matching packed SDK discover it automatically.
@@ -87,7 +87,7 @@ This uses the platform-specific SDK build directory and the same runtime registr
 From the framework checkout, after packing the SDK and installing native prerequisites:
 
 ```powershell
-npm run test:windows -- --project C:\dev\SparkWindowsVerification
+bun run test:windows --project C:\dev\SparkWindowsVerification
 ```
 
 Choose a fresh destination. The verifier calls the real starter, builds the Spark Runner through `spark sdk build-runner`, and launches the installed CLI's `spark dev` session. It checks the compiled native host identity and Hermes, edits a file to test Fast Refresh, installs the existing `native-greeting` fixture, waits for the shared session to reject the Spark Runner, then sends the normal `b` command and checks the custom native greeting. It also checks that building custom did not change the saved prebuilt executable.
@@ -105,8 +105,8 @@ If the GUI exits without console output, also include any error dialog or Window
 Generation and both Windows development bundles can be checked on macOS through the same framework code:
 
 ```sh
-npm run spark -- sdk pack --platform windows
-npm run test:windows:prepare -- --project /tmp/SparkWindowsCheck
+bun run spark sdk pack --platform windows
+bun run test:windows:prepare --project /tmp/SparkWindowsCheck
 ```
 
 This mode explicitly reports that native execution was not verified. RNW platform discovery may log that Windows PowerShell is unavailable on macOS; the project's platform declaration still lets Metro select the Windows sources.
@@ -121,7 +121,7 @@ The CLI's Windows build adapter uses the shared build lock, runtime schema, nati
 
 The development solution excludes the packaging project. The app uses `WindowsPackageType=None` and `WindowsAppSDKSelfContained=true`, following Microsoft's [unpackaged Windows App SDK guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/self-contained-deploy/deploy-self-contained-apps). The entire native output directory is retained so its DLLs accompany the executable. These are Debug builds for a configured developer machine; compiler-free distribution to clean machines remains unverified.
 
-The framework detects supported Windows native packages and rejects directly installed native dependencies without a Windows implementation. This does not establish support for every third-party dependency graph or arbitrary native project customization. The SDK prebuilt profile includes the Windows modules. `npm run test:platform -- --platform windows` creates a fresh consumer and exercises their shared acceptance cases.
+The framework detects supported Windows native packages and rejects directly installed native dependencies without a Windows implementation. This does not establish support for every third-party dependency graph or arbitrary native project customization. The SDK prebuilt profile includes the Windows modules. `bun run test:platform --platform windows` creates a fresh consumer and exercises their shared acceptance cases.
 
 No upstream Expo Desktop change is needed to attempt this. Jamie can help if the native verification exposes a Windows bootstrap/prebuild problem, and later with the shared `expo-desktop run windows --binary` contract. The Windows report provides a concrete reproducer for that work.
 

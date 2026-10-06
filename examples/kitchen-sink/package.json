@@ -4,13 +4,13 @@
   "private": true,
   "main": "index.ts",
   "scripts": {
-    "start": "spark dev",
-    "dev": "spark dev",
-    "macos": "spark dev --platform macos",
-    "windows": "spark dev --platform windows",
-    "rebuild:macos": "spark sdk build-runner --project . --platform macos",
-    "rebuild:windows": "spark sdk build-runner --project . --platform windows",
-    "doctor": "spark doctor"
+    "start": "bun ../../scripts/spark.mjs dev",
+    "dev": "bun ../../scripts/spark.mjs dev",
+    "macos": "bun ../../scripts/spark.mjs dev --platform macos",
+    "windows": "bun ../../scripts/spark.mjs dev --platform windows",
+    "rebuild:macos": "bun ../../scripts/spark.mjs sdk build-runner --project . --platform macos",
+    "rebuild:windows": "bun ../../scripts/spark.mjs sdk build-runner --project . --platform windows",
+    "doctor": "bun ../../scripts/spark.mjs doctor"
   },
   "dependencies": {
     "expo": "54.0.37",

@@ -96,25 +96,26 @@ test("single Spark archive resolves public exports and preserves private native 
     expect(manifest.license).toBe("MIT");
     expect(readFileSync(path.join(destination, "LICENSE"), "utf8")).toBe(readFileSync(path.join(framework, "LICENSE"), "utf8"));
     expect(readFileSync(path.join(framework, "LICENSE"), "utf8")).toContain("Copyright (c) 2026 LegendApp");
-    const Module = createRequire(import.meta.url)("node:module") as any;
-    const originalLoad = Module._load;
-    let generatedInfo: Record<string, unknown> | undefined;
-    Module._load = function (request: string, parent: unknown, isMain: boolean) {
-      if (request === "expo-desktop-config-plugins") return {
-        withEntitlementsPlist: (config: unknown) => config,
-        withAppDelegate: (config: unknown) => config,
-        withInfoPlist: (config: unknown, action: (mod: { modRequest: { projectRoot: string }; modResults: Record<string, unknown> }) => { modResults: Record<string, unknown> }) => {
-          generatedInfo = action({ modRequest: { projectRoot: app }, modResults: {} }).modResults;
-          return config;
-        },
-        withPodfile: (config: unknown) => config,
+    const pluginStub = path.join(app, "node_modules/expo-desktop-config-plugins");
+    mkdirSync(pluginStub);
+    writeFileSync(path.join(pluginStub, "package.json"), JSON.stringify({ name: "expo-desktop-config-plugins", main: "index.cjs" }));
+    writeFileSync(path.join(pluginStub, "index.cjs"), `
+      exports.withEntitlementsPlist = exports.withAppDelegate = exports.withPodfile = config => config;
+      exports.generatedInfo = {};
+      exports.withInfoPlist = (config, action) => {
+        Object.assign(exports.generatedInfo, action({ modRequest: { projectRoot: ${JSON.stringify(app)} }, modResults: {} }).modResults);
+        return config;
       };
-      return originalLoad.call(this, request, parent, isMain);
-    };
-    try {
+    `);
+    const plugin = spawnProcess([process.execPath, "-e", `
+      const { createRequire } = require("node:module");
+      const req = createRequire(${JSON.stringify(path.join(app, "package.json"))});
       req("@legendapp/spark/config-plugin")({ macos: { bundleIdentifier: "org.example.packed" }, extra: { spark: { projectId: "packed-test" } } });
-    } finally { Module._load = originalLoad; }
-    expect(generatedInfo?.SparkFrameworkVersion).toBe(manifest.version);
+      console.log(JSON.stringify(req("expo-desktop-config-plugins").generatedInfo));
+    `], { cwd: app, stdout: "pipe", stderr: "pipe" });
+    const [pluginStatus, pluginOut, pluginErr] = await Promise.all([plugin.exited, new Response(plugin.stdout!).text(), new Response(plugin.stderr!).text()]);
+    expect(pluginStatus, pluginErr).toBe(0);
+    expect(JSON.parse(pluginOut).SparkFrameworkVersion).toBe(manifest.version);
     const singletonPeers = ["expo", "react", "react-native", "react-dom"];
     for (const name of singletonPeers) expect(manifest.dependencies).not.toHaveProperty(name);
     expect(manifest.peerDependencies).toMatchObject({ expo: "54.0.37", react: "19.1.4", "react-native": "0.81.6", "react-dom": "19.1.4" });

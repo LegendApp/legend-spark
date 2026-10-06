@@ -15,7 +15,7 @@ if (!['arm64', 'x64'].includes(arch) || (process.platform === 'darwin' && arch !
 if (process.platform === 'win32' && process.env.VSCMD_ARG_TGT_ARCH !== arch) throw Error(`Use a Visual Studio developer shell targeting ${arch}.`);
 const platform = process.platform === "darwin" ? "macos" : "windows", target = `${platform}-${arch}`;
 const manifest = path.join(framework, "artifacts/packages/manifest.json");
-if (!existsSync(manifest)) throw Error("Run npm run pack:local first.");
+if (!existsSync(manifest)) throw Error("Run bun run pack:local first.");
 await create(root, manifest, platform);
 for (const file of ["App.tsx", "client.ts", "service.ts"]) cpSync(path.join(framework, "examples/sidecar", file), path.join(root, file));
 const directory = path.join(root, "helpers/worker/binaries", target); mkdirSync(directory, { recursive: true });

@@ -9,9 +9,9 @@ This integration uses Expo Desktop **1.0.0-beta.5**, native template **54.81.1-b
 Packages are still distributed as local SDK archives. From the framework checkout:
 
 ```sh
-npm install
-npm run spark -- sdk pack
-npm run spark -- add desktop --project /absolute/path/to/ExistingExpoApp
+bun install
+bun run spark sdk pack
+bun run spark add desktop --project /absolute/path/to/ExistingExpoApp
 ```
 
 The command uses the app's declared package manager, or its existing lockfile, for installation. Without either it follows the invoking package manager, then prefers npm. Conflicting lockfiles require an explicit `packageManager` field. The integration fixture runs on Node with npm; installation and override formats follow the selected package manager.
@@ -70,7 +70,7 @@ The existing React Native config export is composed with `withSparkNative`. Mobi
 
 ## Verification
 
-`npm run test:add-desktop` creates an independent Expo app with a custom TypeScript configuration, config plugin, Metro alias, React Native config, and `src/bootstrap.ts` entry. It verifies the app's original mobile bundle, generates its iOS project before integration, and then checks:
+`bun run test:add-desktop` creates an independent Expo app with a custom TypeScript configuration, config plugin, Metro alias, React Native config, and `src/bootstrap.ts` entry. It verifies the app's original mobile bundle, generates its iOS project before integration, and then checks:
 
 - Rejection of an unsupported Metro configuration before any integration files are written.
 - Unchanged mobile/web config and plugin behavior, app source, entry point, existing scripts, and repeated-integration identity.

@@ -1,3 +1,4 @@
+import { loadReleaseEnv } from "./release-env.ts";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { run } from "../packages/cli/src/commands.ts";
@@ -6,7 +7,7 @@ import { VERSION, readJson } from "../packages/cli/src/project.ts";
 import { packageApp } from "../packages/cli/src/package.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
-if (existsSync(path.join(root, ".env"))) process.loadEnvFile(path.join(root, ".env"));
+loadReleaseEnv(root);
 if (process.platform !== "darwin") throw new Error("Build the release Runner on macOS.");
 if ((await run(root, ["git", "status", "--porcelain"], { capture: true })).trim()) throw new Error("Commit the release version and source before building Runner.");
 const revision = (await run(root, ["git", "rev-parse", "HEAD"], { capture: true })).trim();

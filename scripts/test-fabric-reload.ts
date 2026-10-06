@@ -12,7 +12,7 @@ const root=path.join(framework,'examples/kitchen-sink');
 const entry=root+'/FabricReloadAcceptance.tsx';
 const report=path.join(framework,'.spark/fabric-reload-report.json');
 const executable=root+'/.spark/platforms/macos/products/dev/KitchenSink.app/Contents/MacOS/KitchenSink';
-if(!existsSync(executable))throw Error('Build Kitchen Sink first: npm run spark -- build --dev --project examples/kitchen-sink');
+if(!existsSync(executable))throw Error('Build Kitchen Sink first: bun run spark build --dev --project examples/kitchen-sink');
 if(existsSync(entry))throw Error('Temporary entry already exists');
 rmSync(report,{force:true});rmSync(report+'.count',{force:true});
 writeFileSync(entry,`import {registerRootComponent} from 'expo'; import {useEffect} from 'react'; import {Text,DevSettings} from 'react-native'; import * as files from '@legendapp/spark/files'; import * as windows from '@legendapp/spark/windows';

@@ -12,10 +12,10 @@ Use Node 24.19.0 or newer. Bun is optional; generated projects support npm, pnpm
 Yarn, and Bun.
 
 ```sh
-npm install --force
-npm run spark -- sdk pack
-npm run spark -- sdk build-runner
-npm run spark -- create /path/to/MyApp
+bun install
+bun run spark sdk pack
+bun run spark sdk build-runner
+bun run spark create /path/to/MyApp
 ```
 
 Once Spark is published, the entry point will be `npx @legendapp/spark@next create

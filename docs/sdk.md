@@ -35,28 +35,27 @@ See [desktop integrations](desktop-integrations.md) for notification, tray, and 
 
 ## Run the kitchen sink
 
-From this checkout, with Node 24.19.0+ and a compatible registered Spark Runner:
+From this checkout, with Bun 1.3.14, Node 24.19.0+ and a compatible registered Spark Runner:
 
 ```sh
-npm install
-npm run kitchen-sink
+bun install
+bun run kitchen-sink
 ```
 
-The first run packs and registers the local SDK and installs a managed consumer.
-Later runs reuse that setup until SDK inputs or installed dependency configuration
-change. Expo CLI/Metro launches automatically and reads `examples/kitchen-sink`
-directly, including Uniwind CSS, for Fast Refresh. `--refresh` forces setup;
-`--prepare-only` stops before Metro. Dev options such as `--port 8082` pass through.
+The command runs the checked-in workspace app in `examples/kitchen-sink`.
+It opens Expo CLI/Metro and reads the example screens and Uniwind CSS directly
+for Fast Refresh. It does not pack the SDK or create a second consumer.
+Dev options such as `--no-open` and `--port 8082` pass through.
 
-If no compatible runtime is available, prepare the app with
-`npm run kitchen-sink -- --prepare-only`, then run `npm run spark -- sdk build-runner` with the native build
-prerequisites installed. This builds the reusable runtime. Ordinary app edits need
-no native rebuild. `g` switches the desktop runtime; `b` explicitly builds a custom
-runtime. Native source and checked host configuration changes require a rebuilt
-binary, and the CLI checks compatibility before serving desktop JS.
+If no compatible runtime is available, run `bun run rebuild:macos` (or
+`bun run rebuild:windows` on Windows) from `examples/kitchen-sink` with the
+native toolchain installed. This builds and registers the reusable runtime.
+Ordinary app edits need no native rebuild. Native source and checked host
+configuration changes require a rebuilt binary, and the CLI checks compatibility
+before serving desktop JavaScript.
 
 For a copied consumer that validation scripts can modify independently, run
-`npm run kitchen-sink:prepare`. It always packs/installs and exits without Metro;
+`bun run kitchen-sink:prepare`. It always packs/installs and exits without Metro;
 its directory is `.spark/examples/KitchenSinkPackaged`. Integration runners retain
 that isolated preparation behavior through `prepareKitchenSink`.
 
@@ -202,11 +201,11 @@ list scoped to the project; standalone apps additionally notify the native
 ## Tests
 
 ```sh
-npm run typecheck
-npm test
-npm run test:native
+bun run typecheck
+bun run test
+bun run test:native
 # All of the above:
-npm run test:all
+bun run test:all
 ```
 
 The native suite needs an Apple Silicon Mac, Xcode, CocoaPods, and a logged-in
@@ -218,7 +217,7 @@ and per-check progress live in that app's `.spark/test-results` directory.
 A path argument selects a separate scratch directory, for example:
 
 ```sh
-npm run test:native /tmp/DesktopSDKTests
+bun run test:native /tmp/DesktopSDKTests
 ```
 
 The runner tests three prebuilt launches (A, B, A), proving file/settings/Keychain

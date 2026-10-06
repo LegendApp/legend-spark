@@ -70,7 +70,7 @@ read them before marking any native row complete.
 
 `.github/workflows/portable.yml` runs source typecheck and the full Vitest suite
 on Linux and macOS with the Node version in `.nvmrc`.
-Both jobs run the complete Vitest suite; on macOS it includes the Foundation and
+Both jobs install from the frozen Bun lockfile and run the complete Vitest suite under Bun; on macOS it includes the Foundation and
 Codex compiler-backed fixtures guarded for Darwin. This catches source, manifest,
 archive, peer, patch-inventory, update-policy, and package-manager regressions.
 These focused native fixtures do not claim a complete app build, UI acceptance,
@@ -81,8 +81,8 @@ entry.
 For a local equivalent after dependencies are installed:
 
 ```sh
-npm run typecheck
-npm test
+bun run typecheck
+bun run test
 ```
 
 Latest in-progress checkout evidence is recorded in
@@ -91,7 +91,7 @@ explicitly tied to a dirty working tree and is not release-candidate evidence.
 
 The full real consumer check is intentionally an explicit release evidence
 step, not a routine CI job that resolves and installs the entire native graph.
-Run `node tests/packed-consumer.integration.ts` against the final source before
+Run `bun tests/packed-consumer.integration.ts` against the final source before
 staging. Its report must state that install lifecycle and native compilation
 were skipped; separate native gates remain mandatory.
 

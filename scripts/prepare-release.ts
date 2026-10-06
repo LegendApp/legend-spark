@@ -14,7 +14,7 @@ import { audioPatchHash } from "./prepare-audio.ts";
 // Stage an immutable release only from a signed/notarized Runner and clean source.
 const root = path.resolve(import.meta.dirname, "..");
 const runners = process.argv.slice(2).map(file => path.resolve(file));
-if (!runners.length || runners.some(file => !file.endsWith(".zip") || !existsSync(file))) throw new Error("Usage: node scripts/prepare-release.ts <signed Runner.zip> [additional Runner.zip]");
+if (!runners.length || runners.some(file => !file.endsWith(".zip") || !existsSync(file))) throw new Error("Usage: bun scripts/prepare-release.ts <signed Runner.zip> [additional Runner.zip]");
 if ((await run(root, ["git", "status", "--porcelain"], { capture: true })).trim()) throw new Error("Commit the release source before assembling its artifacts.");
 const revision = (await run(root, ["git", "rev-parse", "HEAD"], { capture: true })).trim();
 const output = path.join(root, "artifacts/releases", VERSION);
@@ -39,7 +39,7 @@ try {
     const app = path.join(unpacked, apps[0]!);
     const runtime = readRuntime(app);
     if (!runtime || runtime.mode !== "go" || runtime.platform !== "macos") throw new Error("Runner version or architecture does not match this release");
-    if (runtime.sourceRevision !== revision) throw new Error("Runner was not built from this release revision. Use npm run release:runner.");
+    if (runtime.sourceRevision !== revision) throw new Error("Runner was not built from this release revision. Use bun run release:runner.");
     await run(root, ["codesign", "--verify", "--deep", "--strict", app], { capture: true });
     const signature = await run(root, ["codesign", "-dvvv", app], { capture: true });
     const teamId = /^TeamIdentifier=([A-Z0-9]{10})$/m.exec(signature)?.[1];

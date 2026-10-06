@@ -1,5 +1,5 @@
 import { VERSION } from "../packages/cli/src/project.ts";
-import { spawnProcess } from "../packages/cli/src/process.ts";
+import { spawnProcess, which } from "../packages/cli/src/process.ts";
 import { packSpark } from "../scripts/pack-spark.ts";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
@@ -18,7 +18,7 @@ async function runManager(manager: string, consumer: string, args: string[]) {
   return { status, output: `${stdout}\n${stderr}` };
 }
 async function managerVersion(manager: string) {
-  try { return await runManager(manager, framework, ["--version"]); }
+  try { return await runManager(manager, root, ["--version"]); }
   catch (error) { return { status: 127, output: String(error) }; }
 }
 function managerInstallArgs(manager: string): string[] {
@@ -72,6 +72,16 @@ function verifyCliToolchain(consumer: string) {
   if (sdk.dependencies.npm !== "11.21.0" || sdk.dependencies.ws !== "8.21.0") throw new Error("Packed SDK public dependency manifest does not expose the verified CLI tool versions");
   return { npm: npm.version, tar: tar.version, ws: ws.version };
 }
+async function verifyCliRuntimes(consumer: string) {
+  const cli = path.join(consumer, "node_modules/@legendapp/spark/bin/spark.cjs");
+  for (const runtime of ["node", "bun"]) {
+    const executable = which(runtime);
+    if (!executable) throw new Error(`Install ${runtime} to verify the packed CLI runtime matrix`);
+    const child = spawnProcess([executable, cli, "--help"], { cwd: consumer, stdout: "pipe", stderr: "pipe" });
+    const [status, out, err] = await Promise.all([child.exited, new Response(child.stdout!).text(), new Response(child.stderr!).text()]);
+    if (status !== 0 || !out.includes("--package-manager npm|pnpm|yarn|bun")) throw new Error(`Packed CLI failed on ${runtime}:\n${out}\n${err}`);
+  }
+}
 function manifest(archive: string, react: string) {
   return {
     name: "spark-packed-consumer",
@@ -90,7 +100,7 @@ try {
   const artifacts = path.join(root, "artifacts"); mkdirSync(artifacts);
   const release = { schema: 1 as const, version: VERSION, revision: "a".repeat(40), packages: {}, runners: {} };
   const args = process.argv.slice(2);
-  if (args.length && (args.length !== 2 || args[0] !== "--archive")) throw new Error("Usage: node tests/packed-consumer.integration.ts [--archive /path/to/release.tgz]");
+  if (args.length && (args.length !== 2 || args[0] !== "--archive")) throw new Error("Usage: bun tests/packed-consumer.integration.ts [--archive /path/to/release.tgz]");
   const archive = args.length ? path.resolve(args[1]!) : path.join(artifacts, await packSpark(framework, artifacts, release));
   const archiveName = path.basename(archive);
   const archiveHash = createHash("sha256").update(readFileSync(archive)).digest("hex");
@@ -103,6 +113,8 @@ try {
   const pkg = require("@legendapp/spark/package.json");
   if (pkg.version !== VERSION || pkg.peerDependencies.react !== "19.1.4" || pkg.peerDependencies["react-native"] !== "0.81.6") throw new Error("Installed packed Spark peer baseline differs from the release manifest");
   if (pkg.peerDependencies["react-dom"] !== "19.1.4" || pkg.peerDependenciesMeta?.["react-dom"]?.optional !== true) throw new Error("React DOM must remain an optional public peer");
+  if (pkg.packageManager) throw new Error("The published SDK must not impose the repository package manager on consumers");
+  await verifyCliRuntimes(consumer);
   const cliToolchain = verifyCliToolchain(consumer);
   const singletonPaths = await verifyConsumerSingletons(consumer);
   const publicReact = singletonPaths.react!;
@@ -166,6 +178,7 @@ try {
       if (managerInstall.status !== 0) throw new Error(`${manager}@${version.output.trim()} failed to install the packed SDK graph:\n${managerInstall.output}`);
       const resolved = await verifyConsumerSingletons(directory);
       verifyCliToolchain(directory);
+      await verifyCliRuntimes(directory);
       const managerRequire = createRequire(path.join(directory, "package.json"));
       if (managerRequire("@legendapp/spark/config").readConfig === undefined || managerRequire("@legendapp/spark/metro").withDesktop === undefined) throw new Error(`${manager} packed config/Metro exports did not resolve`);
       if (new Set(Object.values(resolved)).size !== 3) throw new Error(`${manager} did not resolve one consumer path each for React, React Native, and Expo`);
@@ -176,7 +189,7 @@ try {
     }
   }
 
-  console.log(`PASS: full ${VERSION} Spark archive ${archiveName} (sha256 ${archiveHash}) installed with ${managerResults.map(result => `${result.manager}@${result.version}${result.singletonVerified ? " (single React/RN/Expo paths)" : " (not tested)"}`).join(", ")}; packed CLI resolved npm ${cliToolchain.npm} with tar ${cliToolchain.tar} and ws ${cliToolchain.ws}; React DOM remained optional; complete public declarations typechecked with npm; npm rejected React 18.2.0 peer conflict; installed CLI rejected an unpatched native graph before project writes. Lifecycle scripts and native compilation were intentionally skipped.`);
+  console.log(`PASS: full ${VERSION} Spark archive ${archiveName} (sha256 ${archiveHash}) installed with ${managerResults.map(result => `${result.manager}@${result.version}${result.singletonVerified ? " (single React/RN/Expo paths)" : " (not tested)"}`).join(", ")}; packed CLI ran on Node and Bun for all installed managers and resolved npm ${cliToolchain.npm} with tar ${cliToolchain.tar} and ws ${cliToolchain.ws}; React DOM remained optional; complete public declarations typechecked with npm; npm rejected React 18.2.0 peer conflict; installed CLI rejected an unpatched native graph before project writes. Lifecycle scripts and native compilation were intentionally skipped.`);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

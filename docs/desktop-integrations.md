@@ -192,12 +192,12 @@ archives, custom channels, or Mac App Store distribution.
 ## Automated checks
 
 ```sh
-npm run typecheck
-npm test
-npm run test:sparkle --       # Real tools, ephemeral test keys; no Keychain mutation
-npm run test:integrations --  # prebuilt and custom native APIs; no permission prompt
-npm run test:updates --       # Standalone Release startup and menu-bar-only CNG
-npm run test:all --           # Also includes the complete SDK/XCTest acceptance suite
+bun run typecheck
+bun run test
+bun run test:sparkle       # Real tools, ephemeral test keys; no Keychain mutation
+bun run test:integrations  # prebuilt and custom native APIs; no permission prompt
+bun run test:updates       # Standalone Release startup and menu-bar-only CNG
+bun run test:all           # Also includes the complete SDK/XCTest acceptance suite
 ```
 
 `test:sparkle` verifies real Ed25519 archive signing, signed-feed generation and

@@ -101,10 +101,10 @@ PKCE verifier/challenge encoding and protocol details.
 ## Validation
 
 ```sh
-npm run typecheck
-npm test
-node scripts/test-auth-loopback.ts
-node scripts/test-auth.ts
+bun run typecheck
+bun run test
+bun scripts/test-auth-loopback.ts
+bun scripts/test-auth.ts
 ```
 
 The standalone C++ protocol test verifies malformed methods/routes/hosts, bounded

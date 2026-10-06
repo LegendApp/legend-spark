@@ -8,14 +8,14 @@ receive template edits automatically.
 
 ## Automated checks
 
-Run `npm test -- tests/example-models.test.ts`. It covers snapshot recovery, failed
+Run `bun run test -- tests/example-models.test.ts`. It covers snapshot recovery, failed
 save/retry, concurrent close/quit during edits, old notebook compatibility, shared
 view notifications, persisted theme/session, disconnected-display spark fitting,
 idempotent restoration, filtering deleted notes, and retaining the open-window
 set during quit. Window orchestration uses an injected host; these tests do not
 claim OS-native acceptance.
 
-`npm run test:examples` creates packed consumers and typechecks/bundles the examples
+`bun run test:examples` creates packed consumers and typechecks/bundles the examples
 for web, iOS, Android, macOS, and Windows. This checks platform separation, not
 native interactions.
 

@@ -54,9 +54,9 @@ export function copyKitchenSinkScreens(source: string, root: string) {
 
 if (import.meta.main) {
   const args = process.argv.slice(2).filter(arg => arg !== "--packaged");
-  if (args.includes("--help")) console.log("npm run kitchen-sink:prepare [fresh-directory]\nPack the SDK and prepare a separate copied consumer for integration tests.");
+  if (args.includes("--help")) console.log("bun run kitchen-sink:prepare [fresh-directory]\nPack the SDK and prepare a separate copied consumer for integration tests.");
   else {
-    if (args.length > 1 || args[0]?.startsWith("--")) throw new Error("Use npm run kitchen-sink:prepare [fresh-directory]. Everyday development runs directly from examples/kitchen-sink.");
+    if (args.length > 1 || args[0]?.startsWith("--")) throw new Error("Use bun run kitchen-sink:prepare [fresh-directory]. Everyday development runs directly from examples/kitchen-sink.");
     const root = path.resolve(args[0] ?? ".spark/examples/KitchenSinkPackaged");
     await prepareKitchenSink(root);
     console.log(`Packaged kitchen sink ready at ${root}`);

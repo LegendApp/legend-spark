@@ -5,7 +5,7 @@
 With the local SDK packed and a Spark Runner registered, run from the framework checkout:
 
 ```sh
-npm run spark -- create /tmp/MySparkApp
+bun run spark create /tmp/MySparkApp
 cd /tmp/MySparkApp
 npm run macos
 ```
@@ -66,9 +66,9 @@ To prepare a signed, notarized distribution archive, run `npm run package` in a 
 This setup is done once per local SDK, rather than for every app:
 
 ```sh
-npm install
-npm run spark -- sdk pack
-npm run spark -- sdk build-runner
+bun install
+bun run spark sdk pack
+bun run spark sdk build-runner
 ```
 
 `pack` produces local package archives and registers their manifest. `build-runner` creates a managed SDK starter, installs the packed SDK, builds the Spark Runner, and registers the result automatically. Repeating it refreshes local packages before checking whether the binary needs rebuilding. To build from an existing SDK starter, pass `--project /path/to/starter`.
@@ -76,7 +76,7 @@ npm run spark -- sdk build-runner
 An existing prebuilt binary can be registered without rebuilding:
 
 ```sh
-npm run spark -- sdk register /path/to/SparkRunner.app
+bun run spark sdk register /path/to/SparkRunner.app
 ```
 
 Packing also discovers the saved prototype binary at `artifacts/runtimes/SparkRunner.app`, if present. Registration stores local paths under `~/.spark/`; it does not duplicate the binaries. Keep the registered binaries in place. Set `SPARK_HOME` to isolate local registry state for testing.
@@ -146,7 +146,7 @@ The CLI diagnoses missing tooling; it does not silently install Xcode or accept 
 
 ## Local package iteration
 
-Repack after source changes. The archive manifest maps package names to local tarballs; starters use overrides so transitive framework packages also resolve locally. The archive manifest uses content-hashed filenames to avoid stale package-manager caches. Run `node scripts/refresh-consumer.ts /path/to/app` from the framework repository to update an existing test consumer. Public package versions will be immutable.
+Repack after source changes. The archive manifest maps package names to local tarballs; starters use overrides so transitive framework packages also resolve locally. The archive manifest uses content-hashed filenames to avoid stale package-manager caches. Run `bun scripts/refresh-consumer.ts /path/to/app` from the framework repository to update an existing test consumer. Public package versions will be immutable.
 
 Do not use workspace symlinks as the sole distribution test. The prebuilt builder and consumer should install real tarballs outside both source repositories.
 
@@ -167,6 +167,6 @@ Edit the complete templates under `packages/cli/templates/`: `blank-typescript` 
 
 `spark create` invokes `expo-desktop@1.0.0-beta.5 create-app --template <archive>`. Expo Desktop validates the directory/name, extracts files, assigns app/native identity, installs dependencies, and initializes Git. A template postinstall initializes spark's configuration once. It does not overwrite an existing project ID or user edits. Project basenames must be alphanumeric, following upstream validation; spaces in parent directories are supported.
 
-Direct Expo Desktop template creation is also checked by `npm run test:templates`, including a consumer outside the checkout. These local archives reference local SDK tarballs; they are not a published package distribution. The [integration handoff](expo-desktop-integration.md) documents the npm compatibility pin and remaining build/launch limitations.
+Direct Expo Desktop template creation is also checked by `bun run test:templates`, including a consumer outside the checkout. These local archives reference local SDK tarballs; they are not a published package distribution. The [integration handoff](expo-desktop-integration.md) documents the npm compatibility pin and remaining build/launch limitations.
 
 See [Intel macOS targets](macos-intel.md) for architecture selection and dual-architecture Runner releases.

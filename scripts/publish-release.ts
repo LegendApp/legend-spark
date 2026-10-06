@@ -1,6 +1,7 @@
+import { loadReleaseEnv } from "./release-env.ts";
 import { spawnProcess } from "../packages/cli/src/process.ts";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { run } from "../packages/cli/src/commands.ts";
 import { readJson, VERSION } from "../packages/cli/src/project.ts";
@@ -8,8 +9,8 @@ import { alreadyPublished, releaseNotes } from "./npm-release.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const args = process.argv.slice(2);
-if (args.some(arg => arg !== "--latest")) throw new Error("Usage: npm run release:publish -- [--latest]");
-if (existsSync(path.join(root, ".env"))) process.loadEnvFile(path.join(root, ".env"));
+if (args.some(arg => arg !== "--latest")) throw new Error("Usage: bun run release:publish [--latest]");
+loadReleaseEnv(root);
 const folder = path.join(root, "artifacts/releases", VERSION);
 const release = readJson(path.join(folder, "release.json"));
 const revision = (await run(root, ["git", "rev-parse", "HEAD"], { capture: true })).trim();

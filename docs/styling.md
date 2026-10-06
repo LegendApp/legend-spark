@@ -38,7 +38,7 @@ Keep the generated `uniwind-types.d.ts` in the application's TypeScript includes
 
 ## Kitchen sink
 
-`npm run kitchen-sink` also configures Uniwind while preserving the desktop runtime Metro integration. The header native button cycles System → Light → Dark → System. Every launch begins in System; the selection is shared by React windows in the current JavaScript runtime and is not persisted. Cards, text, editors, status colors, drag targets, and the embedded WebView demo follow the theme. All application action buttons use `@legendapp/spark/ui/uniwind`; the embedded HTML demo retains its browser button. API actions add example-local pending, result, and error feedback below the native button, so responses remain visible without scrolling to the event log. Repeat presses are disabled while an action is pending; the framework Button contract is unchanged. Each event-driven demo also keeps its six most recent events beside the controls: window/file/link activity, menu and shortcut actions, notification responses, tray/Dock choices, update progress, drag/drop, process output, and WebView messages. Process stdout/stderr is decoded as streaming UTF-8; the full event log retains the shared history. The native-controls demo shows its remount count.
+`bun run kitchen-sink` also configures Uniwind while preserving the desktop runtime Metro integration. The header native button cycles System → Light → Dark → System. Every launch begins in System; the selection is shared by React windows in the current JavaScript runtime and is not persisted. Cards, text, editors, status colors, drag targets, and the embedded WebView demo follow the theme. All application action buttons use `@legendapp/spark/ui/uniwind`; the embedded HTML demo retains its browser button. API actions add example-local pending, result, and error feedback below the native button, so responses remain visible without scrolling to the event log. Repeat presses are disabled while an action is pending; the framework Button contract is unchanged. Each event-driven demo also keeps its six most recent events beside the controls: window/file/link activity, menu and shortcut actions, notification responses, tray/Dock choices, update progress, drag/drop, process output, and WebView messages. Process stdout/stderr is decoded as streaming UTF-8; the full event log retains the shared history. The native-controls demo shows its remount count.
 
 ## Components
 
@@ -67,7 +67,7 @@ Use standard spacing, size, and responsive utilities for static layout. The Sett
 
 ## Verification
 
-`npm run test:universal -- [fresh-directory]` packs the SDK, generates the native projects, and bundles this starter for all five targets. It checks platform UI adapters, Uniwind's web/native runtime selection, and preservation of CSS/configuration and earlier generated projects when switching platforms. Native execution is a separate check; see the [Settings guide](universal-settings.md) and [known Windows issues](windows-issues.md).
+`bun run test:universal [fresh-directory]` packs the SDK, generates the native projects, and bundles this starter for all five targets. It checks platform UI adapters, Uniwind's web/native runtime selection, and preservation of CSS/configuration and earlier generated projects when switching platforms. Native execution is a separate check; see the [Settings guide](universal-settings.md) and [known Windows issues](windows-issues.md).
 
 ## Recorded validation — 2026-09-14
 

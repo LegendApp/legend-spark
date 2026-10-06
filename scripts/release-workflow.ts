@@ -28,7 +28,7 @@ export function versionEdits(root: string, files: string[], current: string, ver
   for (const file of files) {
     const before = readFileSync(path.join(root, file), "utf8");
     let after = before;
-    if (file.endsWith("package.json") || file === "package-lock.json") after = before.replaceAll(JSON.stringify(current), JSON.stringify(version));
+    if (file.endsWith("package.json") || file === "bun.lock") after = before.replaceAll(JSON.stringify(current), JSON.stringify(version));
     else if (file === "packages/cli/src/project.ts") {
       const declaration = `export const VERSION = ${JSON.stringify(current)};`;
       if (!before.includes(declaration)) throw new Error("CLI version does not match the workspace version");
@@ -75,7 +75,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
   const revision = await git("rev-parse", "HEAD");
   const previous: State | undefined = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, "utf8")) : undefined;
   if (previous && previous.schema !== 1) throw new Error("Unsupported release workflow state");
-  if (!options.resume && previous && !previous.complete) throw new Error(`Release ${previous.version} is unfinished. Run npm run release -- --resume.`);
+  if (!options.resume && previous && !previous.complete) throw new Error(`Release ${previous.version} is unfinished. Run bun run release --resume.`);
   if (options.resume && !previous) throw new Error("No release to resume");
   if (await git("branch", "--show-current") !== "main") throw new Error("Run the release from main");
   if (!options.resume) await clean();
@@ -99,7 +99,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     if (hasTag.code) throw new Error(`Missing previous release tag ${tag}; cannot generate release notes`);
     const notes = await git("log", "--format=- %s", `${tag}..HEAD`);
     if (!notes) throw new Error("No new committed changes since the previous release");
-    const files = (await git("ls-files", "-z")).split("\0").filter(file => file.endsWith("package.json") || ["package-lock.json", "packages/cli/src/project.ts", "CHANGELOG.md", "docs/releases.md"].includes(file));
+    const files = (await git("ls-files", "-z")).split("\0").filter(file => file.endsWith("package.json") || ["bun.lock", "packages/cli/src/project.ts", "CHANGELOG.md", "docs/releases.md"].includes(file));
     state = { schema: 1, version, baseRevision: revision, latest: options.latest, edits: versionEdits(root, files, current, version, notes) };
     writeJson(stateFile, state);
   }
@@ -126,9 +126,9 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
   }
   if (JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version !== state.version) throw new Error("Workspace version changed during release");
   if (!state.complete) {
-    await run(["npm", "ci"]);
-    await run(["npm", "run", "typecheck"]);
-    await run(["npm", "test"]);
+    await run(["bun", "install", "--frozen-lockfile"]);
+    await run(["bun", "run", "typecheck"]);
+    await run(["bun", "run", "test"]);
     if (!state.revision) {
       const changed = (await git("diff", "--name-only", "HEAD")).split("\n").sort();
       if (JSON.stringify(changed) !== JSON.stringify(state.edits.map(edit => edit.file).sort()) || await git("ls-files", "--others", "--exclude-standard")) throw new Error("Verification changed release source unexpectedly");
@@ -143,8 +143,8 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     if (!existsSync(staged)) {
       const built = path.join(runnerProject(state.version), ".spark/go-build.json");
       const resume = existsSync(built) && JSON.parse(readFileSync(built, "utf8")).runtime?.sourceRevision === state.revision;
-      const runner = await execute(["npm", "run", "release:runner", ...(resume ? ["--", "--resume"] : [])]);
-      if (runner.code === 2) { console.log("Apple is still processing. Run npm run release -- --resume to continue the same release."); return 2; }
+      const runner = await execute(["bun", "run", "release:runner", ...(resume ? ["--resume"] : [])]);
+      if (runner.code === 2) { console.log("Apple is still processing. Run bun run release --resume to continue the same release."); return 2; }
       if (runner.code) throw new Error(`Runner build/signing exited ${runner.code}`);
     }
     const archive = verifyReleaseArchive(root, state.version, state.revision!);
@@ -157,7 +157,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     if (!existingTag.code && existingTag.output.trim() !== state.revision) throw new Error(`${tag} already points at another source revision`);
     if (existingTag.code) await git("tag", tag, state.revision!);
     await git("push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`);
-    await run(["npm", "run", "release:publish", ...(state.latest ? ["--", "--latest"] : [])]);
+    await run(["bun", "run", "release:publish", ...(state.latest ? ["--latest"] : [])]);
   }
   const tags = JSON.parse(await run(["npm", "view", "@legendapp/spark", "dist-tags", "--json"], true));
   if (tags.next !== state.version || (state.latest && tags.latest !== state.version)) throw new Error("Published npm tags do not match the selected release");

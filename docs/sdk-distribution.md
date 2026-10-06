@@ -5,9 +5,9 @@ A developer can install this SDK without the framework checkout. The distributio
 ## Produce a bundle
 
 ```sh
-npm run pack:local
-npm run spark -- sdk build-runner
-npm run spark -- sdk export /path/to/SparkSDK \
+bun run pack:local
+bun run spark sdk build-runner
+bun run spark sdk export /path/to/SparkSDK \
   --runtime /path/to/SparkRunner.app
 ```
 
@@ -53,7 +53,7 @@ subpaths such as `@legendapp/spark/ui`, `@legendapp/spark/clipboard`, and
 `@legendapp/spark/expo-config`, `@legendapp/spark/metro`,
 `@legendapp/spark/metro` and `@legendapp/spark/native`. The package owns the `spark` executable.
 
-`npm run pack:local` builds the publishable `legendapp-spark-*.tgz` archive in
+`bun run pack:local` builds the publishable `legendapp-spark-*.tgz` archive in
 `artifacts/packages`; its filename is recorded under `@legendapp/spark` in
 `manifest.json`. Release automation must publish that archive, rather than
 running npm publish directly in a source package directory. This command builds

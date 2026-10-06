@@ -59,9 +59,9 @@ version/source fails with a review instruction. Review/remove this patch when RN
 macOS incorporates an equivalent fix. The plugin ships it in SDK archives and its
 source affects runtime compatibility; existing runtimes need a rebuild.
 
-Regression: `node scripts/test-sidecars.ts` performs 50 immediate window open/close
+Regression: `bun scripts/test-sidecars.ts` performs 50 immediate window open/close
 cycles per run and checks that the app-owned helper survives. After building the
-Kitchen Sink development runtime, `node scripts/test-fabric-reload.ts` verifies
+Kitchen Sink development runtime, `bun scripts/test-fabric-reload.ts` verifies
 three full React Native reloads with ten immediate window-close cycles per JS
 session. See the
 [dated macOS report](macos-readiness-2026-09-18.md#fix-and-regression-evidence).
@@ -78,7 +78,7 @@ its dispatcher exist, preserving propagation and native key filters.
 unexpected versions/source, and replaces installed files atomically to preserve
 package cache hardlinks. It ships with desktop-config and participates in runtime
 compatibility. Existing runtimes need a native rebuild. Review/remove this patch
-when upgrading RN macOS. `node scripts/test-keyboard-events.ts` builds and exercises
+when upgrading RN macOS. `bun scripts/test-keyboard-events.ts` builds and exercises
 the native regression; see [macOS evidence](macos-readiness-2026-09-18.md#webview-keyboard-follow-up).
 
 ## Expo development terminal patch
@@ -97,7 +97,7 @@ The shared development config advertises all declared platforms and omits native
 
 `expo-dev-preload.cjs` changes module loading only inside this Expo process and restores the loader after the three modules load. Installed files are never rewritten. Forked Metro workers inherit Node's preload arguments but skip the extension. Templates pin the CLI version; an unexpected version or modified source produces an explicit startup error rather than silently losing desktop controls. Projects declaring no desktop platforms and direct `expo start` do not load the patch. Selecting `dev --platform ios`, Android, or web in a desktop-capable project keeps the patch and host desktop keys.
 
-On upgrade, review upstream changes, update the three source hashes and insertion points, and run `npm test -- tests/expo-dev.test.ts` plus a real packed-consumer session. Verify opening/switching, build failures, reload/debugger, Fast Refresh, compatibility invalidation, restart and Ctrl+C. Windows native actions additionally need a Windows host.
+On upgrade, review upstream changes, update the three source hashes and insertion points, and run `bun run test -- tests/expo-dev.test.ts` plus a real packed-consumer session. Verify opening/switching, build failures, reload/debugger, Fast Refresh, compatibility invalidation, restart and Ctrl+C. Windows native actions additionally need a Windows host.
 
 Noninteractive sessions still start Expo and can auto-open a compatible runtime, but they do not accept keyboard commands over a pipe. Automation should use explicit build commands and restart the session; `scripts/test-windows.ts` follows that path.
 
@@ -113,9 +113,9 @@ spark should retain runtime selection and compatibility policy while handing sta
 
 ## Verification
 
-`npm run test:templates` packs the SDK, creates macOS and Windows consumers through `spark create`, and creates a universal consumer directly through Expo Desktop. It checks identity, ignore-file extraction, configuration preservation, absence of native generation during creation, and consumer TypeScript. The consumers use a parent directory containing spaces.
+`bun run test:templates` packs the SDK, creates macOS and Windows consumers through `spark create`, and creates a universal consumer directly through Expo Desktop. It checks identity, ignore-file extraction, configuration preservation, absence of native generation during creation, and consumer TypeScript. The consumers use a parent directory containing spaces.
 
-`npm run test:universal` checks real mobile/Windows generation, all five shared-screen bundles, and preservation across target switching. `npm run test:windows:prepare` checks the Windows starter, native fixture addition, and runtime compatibility metadata without claiming Windows native execution.
+`bun run test:universal` checks real mobile/Windows generation, all five shared-screen bundles, and preservation across target switching. `bun run test:windows:prepare` checks the Windows starter, native fixture addition, and runtime compatibility metadata without claiming Windows native execution.
 
 Validated on macOS on 2026-09-13: 131 unit tests (564 assertions), workspace TypeScript, all three template consumers including direct upstream creation, iOS/Android/Windows native generation, and all five universal Settings bundles. The Windows preparation check also passed for both the starter and the added native-greeting module, including prebuilt incompatibility detection. Windows native compilation and execution still require a Windows machine.
 

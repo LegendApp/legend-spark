@@ -60,7 +60,7 @@ test("release support matrix covers each public export with explicit target stat
       const cell = entry.verification.platformAcceptance[target]!;
       if (intended.has(platform)) {
         expect(["not-tested", "passed", "failed", "blocked", "missing"], `${entry.path} ${target}`).toContain(cell.status);
-        expect(cell.acceptanceCommand, `${entry.path} ${target}`).toContain("npm run test:platform");
+        expect(cell.acceptanceCommand, `${entry.path} ${target}`).toContain("bun run test:platform");
         if (cell.status !== "not-tested") {
           expect(cell.evidenceRef, `${entry.path} ${target} evidence reference`).toBeTruthy();
           expect(cell.evidenceClaim, `${entry.path} ${target} evidence scope`).toBeTruthy();
@@ -73,7 +73,7 @@ test("release support matrix covers each public export with explicit target stat
       if (entry.kind === "tooling") {
         const workflowCell = entry.verification.workflowAcceptance?.[target];
         expect(["not-tested", "passed", "failed", "blocked", "missing"], `${entry.path} workflow ${target}`).toContain(workflowCell?.status);
-        expect(workflowCell?.acceptanceCommand, `${entry.path} workflow ${target}`).toContain("npm run test:platform");
+        expect(workflowCell?.acceptanceCommand, `${entry.path} workflow ${target}`).toContain("bun run test:platform");
         if (workflowCell?.status !== "not-tested") {
           expect(workflowCell?.evidenceRef, `${entry.path} workflow ${target} evidence reference`).toBeTruthy();
           expect(workflowCell?.evidenceClaim, `${entry.path} workflow ${target} evidence scope`).toBeTruthy();

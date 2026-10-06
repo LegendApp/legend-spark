@@ -26,6 +26,18 @@ test("package manager selection respects explicit choice, project declaration, l
     expect(() => packageManager(f.root, "pnpm", { PATH: "" })).toThrow("not installed");
   } finally { f.close(); }
 });
+test.each(["bun.lock", "bun.lockb"])("%s selects Bun without overriding an explicit consumer manager", lock => {
+  const f = fixture();
+  try {
+    writeFileSync(path.join(f.root, lock), "");
+    expect(packageManager(f.root, undefined, { ...f.env, npm_config_user_agent: "npm/12" })).toBe("bun");
+    writeFileSync(path.join(f.root, "package-lock.json"), "{}");
+    expect(() => packageManager(f.root, undefined, f.env)).toThrow("existing lockfiles");
+    writeFileSync(path.join(f.root, "package.json"), JSON.stringify({ packageManager: "bun@1.3.14" }));
+    expect(packageManager(f.root, undefined, f.env)).toBe("bun");
+    expect(packageManager(f.root, "npm", f.env)).toBe("npm");
+  } finally { f.close(); }
+});
 test("override conversion keeps pins and writes each manager's supported field", () => {
   for (const manager of ["npm", "pnpm", "yarn", "bun"] as const) {
     const pkg: any = { overrides: { react: "19.1.4" }, dependencies: { "@legendapp/spark": "file:/tmp/frame.tgz" } };

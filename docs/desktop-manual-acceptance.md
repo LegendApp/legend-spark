@@ -18,9 +18,9 @@ packages on each machine; do not copy `node_modules` from another OS.
 From the repository root:
 
 ```sh
-npm install
-npm run typecheck
-npm test
+bun install
+bun run typecheck
+bun run test
 cd examples/kitchen-sink
 ```
 
@@ -66,7 +66,7 @@ In Kitchen Sink's desktop expansion section:
 The macOS native regression can also be rerun from the repository root:
 
 ```sh
-node scripts/test-keyboard-events.ts
+bun scripts/test-keyboard-events.ts
 ```
 
 It builds a custom test runtime and checks nine native assertions, including
@@ -80,11 +80,11 @@ Stop the Kitchen Sink session with Ctrl+C. From the repository root, run the
 appropriate command (allow time for a fresh consumer and native compilation):
 
 ```sh
-npm run test:platform -- --platform macos --timeout 1800
+bun run test:platform --platform macos --timeout 1800
 ```
 
 ```powershell
-npm run test:platform -- --platform windows --timeout 1800
+bun run test:platform --platform windows --timeout 1800
 ```
 
 Use the interactive run, without `--api-only`. Follow each onscreen instruction
@@ -124,14 +124,14 @@ Use Kitchen Sink and [Notes Lite](example-apps.md) for these checks on each OS:
 macOS supplemental regressions, from the root:
 
 ```sh
-node scripts/test-sidecars.ts
-node scripts/test-fabric-reload.ts
+bun scripts/test-sidecars.ts
+bun scripts/test-fabric-reload.ts
 ```
 
 On Windows also run the native feature/lifecycle suite with a fresh short path:
 
 ```powershell
-npm run test:windows:features -- --project C:\dev\SparkAcceptance
+bun run test:windows:features --project C:\dev\SparkAcceptance
 ```
 
 The [Windows issue matrix](windows-issues.md) records platform-specific pending
@@ -145,13 +145,13 @@ notes. For a crash include macOS `~/Library/Logs/DiagnosticReports` or the Windo
 crash/Event Viewer details and the exact focus/key/action sequence.
 
 ```sh
-npm run test:report -- --output .spark/platform-coverage.md
+bun run test:report --output .spark/platform-coverage.md
 ```
 
 Copy portable JSON reports into one directory to compare machines:
 
 ```sh
-npm run test:report -- ./reports --strict --output coverage.md
+bun run test:report ./reports --strict --output coverage.md
 ```
 
 `--strict` deliberately fails for untested applicable cases. Keep partial failures

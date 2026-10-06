@@ -4,13 +4,26 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { applyVersionEdits, nextVersion, releaseWorkflow, signingProject, verifyReleaseArchive, type Execute } from "../scripts/release-workflow.ts";
+import { applyVersionEdits, nextVersion, releaseWorkflow, signingProject, verifyReleaseArchive, versionEdits, type Execute } from "../scripts/release-workflow.ts";
 import { alreadyPublished, releaseNotes } from "../scripts/npm-release.ts";
 import { credentials } from "../packages/cli/src/credentials.ts";
+import { loadReleaseEnv } from "../scripts/release-env.ts";
 
 test("next preview version exceeds local and registry versions without using another series", () => {
   expect(nextVersion("0.0.1-next.2", ["0.0.1-next.4", "0.0.2-next.30", "0.0.1-next.bad"])).toBe("0.0.1-next.5");
   expect(() => nextVersion("0.0.1", [])).toThrow("Expected a next preview");
+});
+
+test("release environment loading works without process.loadEnvFile and preserves shell values", () => {
+  const f = fixture();
+  try {
+    vi.stubEnv("SPARK_TEST_FROM_FILE", undefined);
+    vi.stubEnv("SPARK_TEST_EXISTING", "shell");
+    f.write(".env", 'SPARK_TEST_FROM_FILE="signing profile"\nSPARK_TEST_EXISTING=file\n');
+    loadReleaseEnv(f.root);
+    expect(process.env.SPARK_TEST_FROM_FILE).toBe("signing profile");
+    expect(process.env.SPARK_TEST_EXISTING).toBe("shell");
+  } finally { vi.unstubAllEnvs(); f.cleanup(); }
 });
 
 function fixture() {
@@ -24,7 +37,7 @@ function fixture() {
   git("init", "-b", "main"); git("config", "user.name", "Release test"); git("config", "user.email", "release@example.test");
   write(".gitignore", ".spark/\nartifacts/\n");
   write("package.json", '{"version":"0.0.1-next.2","dependencies":{"@legendapp/spark":"0.0.1-next.2"}}\n');
-  write("package-lock.json", '{"version":"0.0.1-next.2"}\n');
+  write("bun.lock", '{"lockfileVersion":1,"workspaces":{"":{"name":"spark-workspace","devDependencies":{"@legendapp/spark":"0.0.1-next.2"}}},}\n');
   write("packages/desktop/package.json", '{"version":"0.0.1-next.2"}\n');
   write("packages/cli/templates/blank-typescript/package.json", '{"dependencies":{"@legendapp/spark":"0.0.1-next.2"}}\n');
   write("packages/cli/src/project.ts", 'export const VERSION = "0.0.1-next.2";\n');
@@ -53,7 +66,7 @@ function fixture() {
     if (argv[0] === "gh") return { code: 0, output: argv.includes("visibility") ? '{"visibility":"PUBLIC"}' : "" };
     if (argv.includes("versions")) return { code: 0, output: '["0.0.1-next.2"]' };
     if (argv.includes("dist-tags")) return { code: 0, output: JSON.stringify(tags) };
-    if (argv[1] === "test" && failTest) { failTest = false; return { code: 1, output: "Test failure" }; }
+    if (argv[0] === "bun" && argv[2] === "test" && failTest) { failTest = false; return { code: 1, output: "Test failure" }; }
     if (argv.includes("release:runner")) {
       write(".spark/runner/.spark/go-build.json", JSON.stringify({ runtime: { sourceRevision: git("rev-parse", "HEAD") } }));
       if (pendingRunner) { pendingRunner = false; return { code: 2, output: "" }; }
@@ -77,6 +90,10 @@ test("failed checks, pending notarization and interrupted promotion resume one v
     await expect(f.release(false, true)).rejects.toThrow("Test failure");
     expect(f.git("log", "-1", "--format=%s")).toBe("Fix a native lifecycle");
     expect(JSON.parse(readFileSync(path.join(f.root, "package.json"), "utf8")).version).toBe("0.0.1-next.3");
+    expect(readFileSync(path.join(f.root, "bun.lock"), "utf8")).toContain("0.0.1-next.3");
+    expect(f.commands).toContainEqual(["bun", "install", "--frozen-lockfile"]);
+    expect(f.commands).toContainEqual(["bun", "run", "typecheck"]);
+    expect(f.commands).toContainEqual(["bun", "run", "test"]);
     await expect(f.release()).rejects.toThrow("unfinished");
     expect(await f.release(true)).toBe(2);
     const releaseRevision = f.git("rev-parse", "HEAD");
@@ -85,16 +102,36 @@ test("failed checks, pending notarization and interrupted promotion resume one v
     expect(readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8")).toContain("- Fix a native lifecycle");
     expect(readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8")).toContain("## 0.0.1-next.2");
     await expect(f.release(true)).rejects.toThrow("Promotion interrupted");
-    expect(f.commands.filter(args => args.includes("release:runner"))[1]).toEqual(["npm", "run", "release:runner", "--", "--resume"]);
+    expect(f.commands.filter(args => args.includes("release:runner"))[1]).toEqual(["bun", "run", "release:runner", "--resume"]);
     expect(await f.release(true)).toBe(0);
     expect(f.git("rev-parse", "HEAD")).toBe(releaseRevision);
     expect(f.git("rev-parse", "v0.0.1-next.3")).toBe(releaseRevision);
+    expect(f.commands).toContainEqual(["bun", "run", "release:publish", "--latest"]);
     expect(f.tags).toEqual({ next: "0.0.1-next.3", latest: "0.0.1-next.3" });
     expect(f.commands.filter(args => args.includes("release:runner"))).toHaveLength(2);
     expect(f.commands.filter(args => args[0] === "git" && args[1] === "commit")).toHaveLength(1);
     expect(f.commands.find(args => args.includes("tests/packed-consumer.integration.ts"))).toEqual([process.execPath, "tests/packed-consumer.integration.ts", "--archive", path.join(f.root, "artifacts/releases/0.0.1-next.3/spark.tgz")]);
     expect(await f.release(true)).toBe(0);
     expect(f.commands.filter(args => args.includes("release:publish"))).toHaveLength(2);
+  } finally { f.cleanup(); }
+});
+
+test("release version edits preserve a real frozen Bun workspace lockfile", () => {
+  const f = fixture();
+  try {
+    f.write("package.json", JSON.stringify({ name: "spark-workspace", private: true, version: "0.0.1-next.2", workspaces: ["packages/*"], devDependencies: { "@legendapp/spark": "0.0.1-next.2" } }));
+    f.write("packages/desktop/package.json", JSON.stringify({ name: "@legendapp/spark", version: "0.0.1-next.2" }));
+    rmSync(path.join(f.root, "bun.lock"));
+    const install = (...extra: string[]) => {
+      const result = spawnSync("bun", ["install", "--lockfile-only", "--ignore-scripts", ...extra], { cwd: f.root, encoding: "utf8" });
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+    };
+    install();
+    applyVersionEdits(f.root, versionEdits(f.root, ["package.json", "packages/desktop/package.json", "bun.lock", "packages/cli/src/project.ts"], "0.0.1-next.2", "0.0.1-next.3", ""));
+    const lock = readFileSync(path.join(f.root, "bun.lock"), "utf8");
+    expect(lock).toContain('"@legendapp/spark": "0.0.1-next.3"');
+    install("--frozen-lockfile");
+    expect(readFileSync(path.join(f.root, "bun.lock"), "utf8")).toBe(lock);
   } finally { f.cleanup(); }
 });
 

@@ -7,11 +7,11 @@ The universal starter keeps one `App.tsx` and one dependency/configuration sourc
 From the framework checkout:
 
 ```sh
-npm install
-npm run settings -- /tmp/MySettings
+bun install
+bun run settings /tmp/MySettings
 ```
 
-This packs the local SDK and passes its universal template to `expo-desktop@1.0.0-beta.5 create-app`. Expo Desktop extracts it, assigns app/native identity, installs dependencies, and initializes Git. A postinstall initializes spark configuration once. Equivalently, after `npm run pack:local`, use `npm run spark -- create /tmp/MySettings --universal`. Existing desktop-only creation remains available through separate templates. App directory names must be alphanumeric; parent directories can contain spaces.
+This packs the local SDK and passes its universal template to `expo-desktop@1.0.0-beta.5 create-app`. Expo Desktop extracts it, assigns app/native identity, installs dependencies, and initializes Git. A postinstall initializes spark configuration once. Equivalently, after `bun run pack:local`, use `bun run spark create /tmp/MySettings --universal`. Existing desktop-only creation remains available through separate templates. App directory names must be alphanumeric; parent directories can contain spaces.
 
 Inside that consumer:
 
@@ -75,8 +75,8 @@ For direct Expo commands, set the target explicitly, for example `SPARK_PLATFORM
 
 ## Verification
 
-`npm run test:universal:dev` creates a packed Settings consumer and checks all five graphs in one live Expo process, per-platform runtime gating, iOS/web HMR from the same edit, Expo option forwarding, restart while desktop is incompatible, and shutdown cleanup. It does not launch native applications.
+`bun run test:universal:dev` creates a packed Settings consumer and checks all five graphs in one live Expo process, per-platform runtime gating, iOS/web HMR from the same edit, Expo option forwarding, restart while desktop is incompatible, and shutdown cleanup. It does not launch native applications.
 
-`npm run test:universal -- [fresh-directory]` creates a packed starter, generates real iOS/Android/Windows projects, and bundles the same screen for all five platforms. It compares shared files and previously generated native project contents and checks that mobile/web/Windows bundles exclude AppKit bindings. Reports live in the consumer's `.spark/universal-checks/`.
+`bun run test:universal [fresh-directory]` creates a packed starter, generates real iOS/Android/Windows projects, and bundles the same screen for all five platforms. It compares shared files and previously generated native project contents and checks that mobile/web/Windows bundles exclude AppKit bindings. Reports live in the consumer's `.spark/universal-checks/`.
 
-`npm run test:ui` exercises mounted AppKit controls and their React callbacks in the kitchen sink. See [UI contracts and current validation](ui.md). Native Android and Windows execution still require their respective machines/devices; successful generation or bundling is not proof of native execution.
+`bun run test:ui` exercises mounted AppKit controls and their React callbacks in the kitchen sink. See [UI contracts and current validation](ui.md). Native Android and Windows execution still require their respective machines/devices; successful generation or bundling is not proof of native execution.

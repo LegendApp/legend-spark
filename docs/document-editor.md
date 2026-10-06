@@ -7,7 +7,7 @@ npm run web
 # Or: npm run ios -- / android / macos / windows
 ```
 
-From the framework checkout, `npm run document-editor -- /tmp/MyEditor` first packs the SDK and creates the same example. Expo Desktop beta still owns application creation and desktop prebuild. The example adds application code and platform-specific dependency exclusions to the universal template.
+From the framework checkout, `bun run document-editor /tmp/MyEditor` first packs the SDK and creates the same example. Expo Desktop beta still owns application creation and desktop prebuild. The example adds application code and platform-specific dependency exclusions to the universal template.
 
 ## Shared behavior
 
@@ -30,4 +30,4 @@ Mobile Save commits the app-owned copy even if the user dismisses the share shee
 
 ## Validation
 
-`npm test -- tests/document-editor.test.ts` covers canceled/failed saves, concurrent edits during saving and opening, close decisions, and overlapping commands. The packed example has been bundled for all five targets and exercised in Chromium for editing and download. A native macOS build mounted the editor in Hermes and passed guard registration, disk saves, external-conflict preservation, and secondary-window creation. The Windows native dependency graph includes the new UI, API, and file-dialog source projects; Windows project generation and bundling passed. Native Windows acceptance requires the machine checks in [windows-issues.md](windows-issues.md).
+`bun run test -- tests/document-editor.test.ts` covers canceled/failed saves, concurrent edits during saving and opening, close decisions, and overlapping commands. The packed example has been bundled for all five targets and exercised in Chromium for editing and download. A native macOS build mounted the editor in Hermes and passed guard registration, disk saves, external-conflict preservation, and secondary-window creation. The Windows native dependency graph includes the new UI, API, and file-dialog source projects; Windows project generation and bundling passed. Native Windows acceptance requires the machine checks in [windows-issues.md](windows-issues.md).

@@ -94,9 +94,9 @@ Use dedicated drag handles when child controls need their own pointer gestures.
 ## Validation
 
 ```sh
-npm run typecheck
-npm test
-node scripts/test-desktop-foundations.ts
+bun run typecheck
+bun run test
+bun scripts/test-desktop-foundations.ts
 ```
 
 The final command builds a disposable macOS development runtime with the native
@@ -106,7 +106,7 @@ Fabric views. Its report is `.spark/desktop-foundation-tests/report.json`.
 It invokes native destination callbacks; it does not replace an OS-driven
 external drag acceptance test.
 
-The shared `npm run test:platform -- --platform windows` runner includes the
+The shared `bun run test:platform --platform windows` runner includes the
 recursive-watch and overlay-focus cases. On Windows, use the Kitchen Sink demonstrations after rebuilding its Windows
 runtime. Check background transparency over another app, pointer actions without
 focus changes, hide/show, multiple monitors/DPI, nested writes and root replacement,

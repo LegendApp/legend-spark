@@ -21,7 +21,7 @@ const { values } = parseArgs({ args: process.argv.slice(2), options: {
   timeout: { type: "string", default: "180" }, "report-dir": { type: "string" }, help: { type: "boolean" },
 } });
 if (values.help) {
-  console.log(`npm run test:platform -- --platform macos|windows|ios|android|web [options]
+  console.log(`bun run test:platform --platform macos|windows|ios|android|web [options]
   --prepare-only    Create/generate/bundle; never claims native execution
   --api-only        Finish after API assertions; UI remains not tested
   --device ID       Simulator UDID / adb serial (required for mobile runtime)

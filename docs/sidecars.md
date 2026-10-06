@@ -138,8 +138,8 @@ feature does not claim to implement that pipeline.
 See [the standalone C example](../examples/sidecar/README.md). On macOS:
 
 ```sh
-npm run spark -- build --dev --project examples/kitchen-sink
-node scripts/test-sidecars.ts
+bun run spark build --dev --project examples/kitchen-sink
+bun scripts/test-sidecars.ts
 ```
 
 The probe copies the built app, installs the compiled example bundle, ad-hoc signs

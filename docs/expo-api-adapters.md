@@ -56,8 +56,8 @@ A rebuilt desktop runtime is required: clipboard native operations and initial-U
 The kitchen sink now uses the canonical methods in its copy/read, HTML copy, secret storage, and linking controls. Its **Expo-aligned APIs** card runs checks in the mounted app. Clipboard mutation and injected URL tests require the dedicated test driver so the original clipboard can be fully restored.
 
 ```sh
-npm run test:api-adapters
-npm run test:api-platforms
+bun run test:api-adapters
+bun run test:api-platforms
 ```
 
 `test:api-adapters` prepares a packed kitchen-sink consumer and builds a custom macOS runtime with the test-only driver. It temporarily stages the test app under `~/Applications` because LaunchServices excludes `/tmp` apps from URL-handler lookup, and unregisters/removes that copy afterward. It executes six checks on a normal launch and again on a real LaunchServices URL launch. Coverage includes text/HTML/empty clipboard values, temporary Keychain values and cleanup, unsupported options, initial URLs, URL opening, live events, file separation, and listener removal. Test reports live in the consumer's `.spark/api-results` directory. The driver remains excluded from prebuilt and production builds by the existing validation rules.
@@ -76,4 +76,4 @@ On this host, Bun execution in Documents can stall; the saved project environmen
 
 Execution used `/tmp/spark-api-clean`, synchronized from this checkout. Evidence JSON is a local generated artifact under the ignored `docs/evidence` directory. Mobile device execution and Windows native backends are not covered by these results.
 
-Windows backends await native acceptance via `npm run test:windows:features`. Live URL events, association registration, recent documents, and rich clipboard parity are tracked in [Windows issues](windows-issues.md).
+Windows backends await native acceptance via `bun run test:windows:features`. Live URL events, association registration, recent documents, and rich clipboard parity are tracked in [Windows issues](windows-issues.md).
