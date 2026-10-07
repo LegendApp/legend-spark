@@ -77,7 +77,7 @@
       ],
       "platformSourceEvidence": {
         "macos": [
-          "packages/file-dialog/macos/",
+          "packages/file-dialog/ios/",
           "packages/message-dialog/macos/"
         ],
         "windows": [
@@ -146,7 +146,7 @@
       ],
       "platformSourceEvidence": {
         "macos": [
-          "packages/native-menu/macos/"
+          "packages/native-menu/ios/"
         ],
         "windows": [
           "packages/native-menu/src/index.windows.ts"

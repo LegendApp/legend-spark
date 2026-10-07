@@ -43,6 +43,8 @@ function fixture() {
   write("packages/cli/src/project.ts", 'export const VERSION = "0.0.1-next.2";\n');
   write("CHANGELOG.md", "# Changelog\n\n## 0.0.1-next.2 — preview\n\nHistorical notes.\n");
   write("docs/releases.md", "Legend Spark currently identifies itself as `0.0.1-next.2`.\n");
+  write("docs/release-support-matrix.json", JSON.stringify({ version: "0.0.1-next.2", entries: [] }, null, 2) + "\n");
+  write("docs/release-support-matrix.md", "Package: `@legendapp/spark@0.0.1-next.2`.\n");
   git("add", "."); git("commit", "-m", "Previous release"); git("tag", "v0.0.1-next.2");
   write("feature.ts", "export const feature = true;\n"); git("add", "."); git("commit", "-m", "Fix a native lifecycle");
   git("remote", "add", "origin", "https://github.com/LegendApp/legend-spark.git"); git("update-ref", "refs/remotes/origin/main", "HEAD");
@@ -91,6 +93,8 @@ test("failed checks, pending notarization and interrupted promotion resume one v
     expect(f.git("log", "-1", "--format=%s")).toBe("Fix a native lifecycle");
     expect(JSON.parse(readFileSync(path.join(f.root, "package.json"), "utf8")).version).toBe("0.0.1-next.3");
     expect(readFileSync(path.join(f.root, "bun.lock"), "utf8")).toContain("0.0.1-next.3");
+    expect(JSON.parse(readFileSync(path.join(f.root, "docs/release-support-matrix.json"), "utf8")).version).toBe("0.0.1-next.3");
+    expect(readFileSync(path.join(f.root, "docs/release-support-matrix.md"), "utf8")).toContain("Package: `@legendapp/spark@0.0.1-next.3`");
     expect(f.commands).toContainEqual(["bun", "install", "--frozen-lockfile"]);
     expect(f.commands).toContainEqual(["bun", "run", "typecheck"]);
     expect(f.commands).toContainEqual(["bun", "run", "test"]);

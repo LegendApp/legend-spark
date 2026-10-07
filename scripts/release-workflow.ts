@@ -33,6 +33,15 @@ export function versionEdits(root: string, files: string[], current: string, ver
       const declaration = `export const VERSION = ${JSON.stringify(current)};`;
       if (!before.includes(declaration)) throw new Error("CLI version does not match the workspace version");
       after = before.replace(declaration, `export const VERSION = ${JSON.stringify(version)};`);
+    } else if (file === "docs/release-support-matrix.json") {
+      const matrix = JSON.parse(before);
+      if (matrix.version !== current) throw new Error("Release support matrix version does not match the workspace version");
+      matrix.version = version;
+      after = JSON.stringify(matrix, null, 2) + "\n";
+    } else if (file === "docs/release-support-matrix.md") {
+      const declaration = `Package: \`@legendapp/spark@${current}\``;
+      if (!before.includes(declaration)) throw new Error("Release support matrix documentation does not match the workspace version");
+      after = before.replace(declaration, `Package: \`@legendapp/spark@${version}\``);
     } else if (file === "docs/releases.md") after = before.replace(`identifies itself as \`${current}\``, `identifies itself as \`${version}\``);
     else if (file === "CHANGELOG.md") {
       if (!before.startsWith("# Changelog\n")) throw new Error("Unrecognized changelog format");
@@ -99,7 +108,7 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     if (hasTag.code) throw new Error(`Missing previous release tag ${tag}; cannot generate release notes`);
     const notes = await git("log", "--format=- %s", `${tag}..HEAD`);
     if (!notes) throw new Error("No new committed changes since the previous release");
-    const files = (await git("ls-files", "-z")).split("\0").filter(file => file.endsWith("package.json") || ["bun.lock", "packages/cli/src/project.ts", "CHANGELOG.md", "docs/releases.md"].includes(file));
+    const files = (await git("ls-files", "-z")).split("\0").filter(file => file.endsWith("package.json") || ["bun.lock", "packages/cli/src/project.ts", "CHANGELOG.md", "docs/releases.md", "docs/release-support-matrix.json", "docs/release-support-matrix.md"].includes(file));
     state = { schema: 1, version, baseRevision: revision, latest: options.latest, edits: versionEdits(root, files, current, version, notes) };
     writeJson(stateFile, state);
   }
