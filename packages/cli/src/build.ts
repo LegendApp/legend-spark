@@ -261,7 +261,7 @@ async function buildUnlocked(
           "--platform",
           "macos",
           "--template",
-          "expo-desktop-template-bare-minimum@54.81.1-beta.6",
+          "expo-desktop-template-bare-minimum@54.81.1",
           "--no-install",
           // Template renaming is not idempotent (HelloWorld becomes
           // LegendHelloWorld, then LegendLegendHelloWorld). Native projects
@@ -270,7 +270,7 @@ async function buildUnlocked(
         ],
         { env: { CI: "1" }, label: "Generating native project" },
       ));
-      // beta.5 copies all-platform template dependencies even for macOS. Preserve this
+      // Expo Desktop copies all-platform template dependencies even for macOS. Preserve this
       // platform's installed manifest instead of silently adding uninstalled Windows packages.
     } finally {
       writeFileSync(path.join(root, "package.json"), manifest);

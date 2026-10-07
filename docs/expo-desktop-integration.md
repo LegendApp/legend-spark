@@ -1,6 +1,6 @@
 # Expo Desktop integration
 
-spark delegates project creation and native generation to the tested Expo Desktop beta. The pinned CLI is `expo-desktop@1.0.0-beta.6`; desktop native generation uses `expo-desktop-template-bare-minimum@54.81.1-beta.6`. Config plugins are pinned to `expo-desktop-config-plugins@1.2.0-beta.1`. Expo 54 / React Native 0.81 remain unchanged.
+spark delegates project creation and native generation to the tested Expo Desktop release. The pinned CLI is `expo-desktop@1.0.0`; desktop native generation uses `expo-desktop-template-bare-minimum@54.81.1`. Config plugins are pinned to `expo-desktop-config-plugins@1.2.0`. Metro config is `54.81.0`; modules-core and stubs are `54.0.14`. Expo 54 / React Native 0.81 remain unchanged. Spark pins RN macOS `0.81.7` and RN Windows `0.81.35` in overrides as well as direct dependencies, preventing the upstream native template from installing conflicting desktop versions.
 
 ## Ownership
 
@@ -30,15 +30,15 @@ Each template has an initial `app.json` for upstream naming and native identifie
 
 The same tarball works with `expo-desktop create-app --template` without going through `spark create`. Local archives contain absolute SDK tarball references, so keep those archives available and repack on another machine. Publishing templates/packages is outside this change.
 
-## Narrow beta compatibility handling
+## Compatibility handling
 
-**npm 12 local template metadata.** In beta.5, `npmPackAsync` accepts an array, or a record keyed by the requested package spec. npm 12 returns a record keyed by the package's name when inspecting a local tarball, so lookup by absolute tarball path fails. The CLI includes npm `11.21.0` and puts its small launcher first on PATH only for the creator subprocess. This npm release bundles `tar` `7.5.22`, which includes the fix for [GHSA-23hp-3jrh-7fpw](https://github.com/advisories/GHSA-23hp-3jrh-7fpw). Expo Desktop performs extraction normally and delegates installation to the selected package manager. Global npm and upstream source remain unchanged.
+**npm 12 local template metadata.** In 1.0.0, `npmPackAsync` accepts an array, or a record keyed by the requested package spec. npm 12 returns a record keyed by the package's name when inspecting a local tarball, so lookup by absolute tarball path fails. The CLI includes npm `11.21.0` and puts its small launcher first on PATH only for the creator subprocess. This npm release bundles `tar` `7.5.22`, which includes the fix for [GHSA-23hp-3jrh-7fpw](https://github.com/advisories/GHSA-23hp-3jrh-7fpw). Expo Desktop performs extraction normally and delegates installation to the selected package manager. Global npm and upstream source remain unchanged.
 
-For direct template creation, use npm 11 on PATH. The installed CLI's `src/npm-bin` directory supplies the same scoped compatibility launcher; `test:templates` exercises this path. Remove this adapter once the beta accepts npm 12 local-tarball metadata and the direct-creation checks pass.
+For direct template creation, use npm 11 on PATH. The installed CLI's `src/npm-bin` directory supplies the same scoped compatibility launcher; `test:templates` exercises this path. Remove this adapter once upstream accepts npm 12 local-tarball metadata and the direct-creation checks pass.
 
-**Prebuild dependency preservation.** The pinned beta accepts `skipDependencyUpdate`, but its dependency update implementation does not use it. Its bare-minimum template can add dependencies for other platforms even with `--no-install`. spark therefore retains manifest restoration around native generation. On macOS it runs CocoaPods after restoring the intended graph and clearing stale generated bindings. Native generation/build commands against one checkout must remain sequential.
+**Prebuild dependency preservation.** The pinned release accepts `skipDependencyUpdate`, but its dependency update implementation does not use it. Its bare-minimum template can add dependencies for other platforms even with `--no-install`. spark therefore retains manifest restoration around native generation. On macOS it runs CocoaPods after restoring the intended graph and clearing stale generated bindings. Native generation/build commands against one checkout must remain sequential.
 
-**Desktop run/launch.** Beta.6 adds `run macos --binary` and a WIP `run windows`. This is the right upstream direction, but the macOS binary path still ensures a native project and resolves Xcode metadata before launching. A JavaScript-only binary probe enters prebuild and fails on a missing Windows-config assertion. With existing Xcode metadata it reaches launch, but starts Metro despite `--no-bundler`. The launcher uses `open` without our app arguments, connection settings, or an owned app process. There is also no macOS build-only switch to let spark finalize/register the artifact before launching it.
+**Desktop run/launch.** The stable CLI includes `run macos --binary` and `run windows`. The macOS binary path still ensures a native project and resolves Xcode metadata before launching. With 1.0.0, the JavaScript-only probe enters prebuild and fails on the missing Windows-config assertion. The existing-project probe fails because port 8081 belongs to another Metro session, despite `--no-bundler` and a free port supplied through `RCT_METRO_PORT`. The OS launcher is intercepted in this probe; it does not establish native launch correctness. Upstream's launcher still does not provide Spark's app arguments, connection settings, or owned app process, and there is no macOS build-only switch to finalize/register an artifact before launch.
 
 spark therefore retains desktop compilation and process ownership, module selection, build records, and prebuilt compatibility checks. App scripts continue to use spark's development command, which delegates the terminal and Metro to Expo. Changing them directly to `expo-desktop run macos` would bypass this integration. Mobile/web already delegate to Expo's supported commands. See the [beta.6 handoff](expo-desktop-beta6-handoff.md) for reproductions and the proposed delegation boundary.
 
@@ -127,3 +127,30 @@ Validated shared development sessions on macOS on 2026-09-14: TypeScript and 168
 Configuration bridge code participates in spark's conservative native signatures. Rebuild/re-register prebuilt against the repacked SDK when updating existing consumers to this change; the compatibility gate will reject an older host signature.
 
 Validated beta.6 on macOS on 2026-09-16: workspace TypeScript, 226 unit tests (1,017 assertions), and Kitchen Sink native generation/build passed. All four desktop-foundation native probes passed (recursive watching, overlay focus, panel transparency/level, and custom drag negotiation). The upstream binary orchestration probe reproduced the blockers documented above; OS launch was intercepted, so it does not establish upstream native launch correctness. Windows native acceptance remains pending.
+
+Validated stable 1.0.0 on macOS arm64 on 2026-10-07: workspace TypeScript and
+131 test files / 707 tests; frozen Bun installation;
+fresh macOS, Windows, and direct universal template creation and consumer TypeScript;
+iOS/Android/Windows generation and all five universal bundles; a shared Expo Metro
+session with HMR, restart, compatibility rejection, and clean shutdown; and adoption
+of an existing Expo app with custom config, plugins, entry, Metro resolver, and iOS
+native project preserved through Windows prebuild. Packed SDK installation and CLI
+exports passed with npm, pnpm, Yarn, and Bun, with Node and Bun CLI execution.
+
+The upgrade checks also corrected the macOS starter's menu-root annotation, desktop
+RN overrides for creation/adoption, and cached Runner refresh so it updates the
+Expo Desktop toolchain rather than retaining the old beta graph. A native foundation
+probe caught a stale window identifier and the loss of the documented status-level
+overlay default; the default is restored while explicit levels/always-on-top options
+remain honored. All four native foundation probes and nine RN keyboard checks pass.
+The keyboard launcher now resolves its entry relative to Metro's actual server root,
+including workspaces.
+
+Kitchen Sink and the cached Spark Runner both rebuilt against the stable toolchain.
+A fresh packed consumer discovered the registered Runner and passed the secondary
+Hermes runtime proof, including isolated heaps, native filesystem calls, destruction,
+recreation, and cleanup across a main-app reload. Existing prebuilt runtimes need a
+rebuild against this SDK. These checks establish macOS development/runtime behavior;
+Windows native compilation/execution, live iOS/Android execution, and signed/notarized
+release artifacts were not verified on this Mac. The pre-existing Windows/menu drafts
+remain separate from this upgrade.

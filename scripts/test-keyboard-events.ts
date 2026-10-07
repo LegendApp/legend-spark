@@ -2,6 +2,7 @@ import { spawnProcess, processLog } from "../packages/cli/src/process.ts";
 import { setTimeout as sleep } from "node:timers/promises";
 // Native RN macOS regression. The test driver is included only in this custom runtime.
 import path from "node:path";
+import { createRequire } from "node:module";
 import { existsSync, readFileSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { build } from "../packages/cli/src/build.ts";
 import { availablePort } from "../packages/cli/src/local.ts";
@@ -30,6 +31,9 @@ import driver from '@legendapp/spark-sdk-test-driver'; import {writeText} from '
 function App(){useEffect(()=>{void driver.call('keyboardRegression','{}').then(async raw=>{
 const checks=JSON.parse(raw); await writeText(${JSON.stringify(report)},JSON.stringify({passed:Object.keys(checks).length===9&&Object.values(checks).every(v=>v===true),checks}));
 });},[]);return <Text>Native keyboard regression</Text>;}registerRootComponent(App);`);
+const metroConfig = createRequire(path.join(root, "package.json"))(path.join(root, "metro.config.js"));
+const metroRoot = metroConfig.server?.unstable_serverRoot ?? metroConfig.projectRoot;
+const bundlePath = path.relative(metroRoot, entry).replaceAll(path.sep, "/").replace(/\.tsx$/, ".bundle");
 const port = await availablePort();
 const metroLog = processLog(path.join(directory, "metro.log"));
 const metro = spawnProcess(nodeCommand(root, "expo", "expo", ["start", "--localhost", "--port", String(port), "--max-workers", "2"]), {
@@ -44,7 +48,7 @@ try {
   }
   const log = processLog(path.join(directory, "app.log"));
   app = spawnProcess([executable, "-RCT_jsLocation", `127.0.0.1:${port}`], {
-    cwd: root, env: { ...process.env, ...projectEnvironment(root), SPARK_BUNDLE_URL: `http://127.0.0.1:${port}/KeyboardNativeRegression.bundle?platform=macos&dev=true&minify=false` }, stdout: log, stderr: log,
+    cwd: root, env: { ...process.env, ...projectEnvironment(root), SPARK_BUNDLE_URL: `http://127.0.0.1:${port}/${bundlePath}?platform=macos&dev=true&minify=false` }, stdout: log, stderr: log,
   });
   const deadlineReport = Date.now() + 90000;
   while (!existsSync(report)) {

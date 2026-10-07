@@ -25,7 +25,7 @@ export function FoundationChecks({ report }: { report: string }) {
           await check("AppKit overlay is transparent, borderless, nonactivating and status-level", async () => {
             try {
               await openWindow({ id: "foundation-overlay", kind: "overlay", component: "main", size: { width: 340, height: 140 }, props: { windowId: "foundation-overlay", windowProps: {} } });
-              const info = JSON.parse(await driver.call("overlayInfo", JSON.stringify({ identifier: "spark.foundation-overlay" })));
+              const info = JSON.parse(await driver.call("overlayInfo", JSON.stringify({ identifier: "foundation-overlay" })));
               if (!info.panel || info.canBecomeKey || !info.borderless || !info.transparent || !info.statusLevel) throw new Error(JSON.stringify(info));
             } finally { await closeWindow("foundation-overlay"); }
           });

@@ -11,7 +11,7 @@ bun install
 bun run settings /tmp/MySettings
 ```
 
-This packs the local SDK and passes its universal template to `expo-desktop@1.0.0-beta.5 create-app`. Expo Desktop extracts it, assigns app/native identity, installs dependencies, and initializes Git. A postinstall initializes spark configuration once. Equivalently, after `bun run pack:local`, use `bun run spark create /tmp/MySettings --universal`. Existing desktop-only creation remains available through separate templates. App directory names must be alphanumeric; parent directories can contain spaces.
+This packs the local SDK and passes its universal template to `expo-desktop@1.0.0 create-app`. Expo Desktop extracts it, assigns app/native identity, installs dependencies, and initializes Git. A postinstall initializes spark configuration once. Equivalently, after `bun run pack:local`, use `bun run spark create /tmp/MySettings --universal`. Existing desktop-only creation remains available through separate templates. App directory names must be alphanumeric; parent directories can contain spaces.
 
 Inside that consumer:
 

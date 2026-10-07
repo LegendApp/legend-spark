@@ -66,7 +66,7 @@ export default function App() {
   const currentPackage = readFileSync(path.join(root, "package.json"), "utf8");
   writeFileSync(configFile, originalConfig); prepareConfig(root);
   try {
-    await run(root, [binary(root, "expo-desktop"), "prebuild", "--platform", "macos", "--template", "expo-desktop-template-bare-minimum@54.81.1-beta.6", "--no-install"], { env: { CI: "1" }, capture: true });
+    await run(root, [binary(root, "expo-desktop"), "prebuild", "--platform", "macos", "--template", "expo-desktop-template-bare-minimum@54.81.1", "--no-install"], { env: { CI: "1" }, capture: true });
     const regenerated = JSON.parse(await run(root, ["plutil", "-convert", "json", "-o", "-", path.join(root, "macos", `${info.CFBundleExecutable}-macOS`, "Info.plist")], { capture: true }));
     if (regenerated.SUFeedURL || regenerated.SUPublicEDKey || regenerated.SURequireSignedFeed || regenerated.LSUIElement || regenerated.SparkMenuBarOnly) throw new Error("Removed update/menu-bar configuration survived CNG");
     console.log("PASS: prebuild removes stale update feed/key and resets menu-bar-only activation");

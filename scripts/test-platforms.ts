@@ -126,7 +126,7 @@ try {
     report.versions = installedVersions(root);
     if (platform === "macos") {
       const manifest = readFileSync(path.join(root, "package.json"), "utf8");
-      try { await run(root, nodeCommand(root, "expo-desktop", "expo-desktop", ["prebuild", "--platform", "macos", "--template", "expo-desktop-template-bare-minimum@54.81.1-beta.6", "--no-install"]), { env: { CI: "1" }, capture: true }); }
+      try { await run(root, nodeCommand(root, "expo-desktop", "expo-desktop", ["prebuild", "--platform", "macos", "--template", "expo-desktop-template-bare-minimum@54.81.1", "--no-install"]), { env: { CI: "1" }, capture: true }); }
       finally { writeFileSync(path.join(root, "package.json"), manifest); }
     } else if (platform !== "web") await run(root, [process.execPath, "node_modules/@legendapp/spark/bin/spark.cjs", "prebuild", "--platform", platform], { capture: true });
     record(report, { id: "build.project", status: "passed" }); stage = "build.bundle"; checkpoint();

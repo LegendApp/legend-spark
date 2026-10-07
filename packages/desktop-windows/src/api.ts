@@ -25,6 +25,10 @@ export async function openWindow(options: WindowOpenOptions): Promise<WindowInfo
   const snapshot = JSON.parse(JSON.stringify(options)) as WindowOpenOptions;
   if (snapshot.kind === "overlay") Object.assign(snapshot, { titleBarStyle: "borderless", transparent: true, hasShadow: false, alwaysOnTop: true, resizable: false, minimizable: false, ...snapshot });
   if (Platform.OS === "macos") {
+    if (snapshot.kind === "overlay" && options.alwaysOnTop === undefined && options.macos?.level === undefined) {
+      snapshot.macos = { ...snapshot.macos, level: "status" };
+      delete snapshot.alwaysOnTop;
+    }
     await createMacOSWindow(snapshot);
     try {
       const info = await windowCall("completeOpen", snapshot, isInfo);

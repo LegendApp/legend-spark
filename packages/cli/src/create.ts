@@ -18,7 +18,12 @@ const template = path.resolve(import.meta.dirname, "../templates/blank-typescrip
 export async function refreshLocalPackages(root: string, manifest: string, selectedManager?: PackageManager) {
   const pkg = readJson(path.join(root, "package.json"));
   // The template owns the tested compatibility matrix, not module inclusion.
-  const pins = readJson(path.join(template, "package.json")).overrides;
+  const defaults = readJson(path.join(template, "package.json"));
+  const pins = { ...defaults.overrides, ...Object.fromEntries(Object.entries(defaults.dependencies)
+    .filter(([name]) => name.startsWith("expo-desktop"))) };
+  for (const [name, version] of Object.entries(pins)) {
+    if (pkg.dependencies?.[name]) pkg.dependencies[name] = version;
+  }
   const manager = packageManager(root, selectedManager);
   const overrides = { ...pins };
   for (const [name, file] of Object.entries(readJson(manifest))) {
@@ -63,7 +68,7 @@ export async function create(root: string, archiveManifest: string | undefined, 
     // The upstream CLI owns validation, extraction, app IDs, install, and Git setup.
     // The templates' postinstall initializes spark configuration once.
     const name = path.basename(root);
-    // beta.5 misreads npm 12's record-shaped pack metadata for a local tarball.
+    // Expo Desktop misreads npm 12's record-shaped pack metadata for a local tarball.
     // Use the compatible npm executable for upstream extraction; the chosen manager installs.
     const npmBin = path.join(import.meta.dirname, "npm-bin");
     // Expo needs file: to distinguish Windows drive paths from npm package names.

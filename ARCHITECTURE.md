@@ -66,11 +66,11 @@ The current distribution mechanism is local tarballs. `scripts/pack.ts` writes c
 
 `~/.spark` is the default global registry; `SPARK_HOME` overrides it. SDK records are versioned. Runtime registration records a path rather than copying an application. The managed prebuilt build project is created under the spark home unless a project is supplied explicitly. App-local `.spark` data and the global spark home are different scopes.
 
-The template manifests and `scripts/prepare-runtimes.ts` are the authoritative pins. We remain on Expo Desktop `1.0.0-beta.5` and native template `54.81.1-beta.5`, with Expo 54.0.37, React Native 0.81.6, React Native macOS 0.81.7, and React Native Windows 0.81.35. Creation uses a subprocess-scoped npm 11 executable because beta.5 misreads npm 12's local-tarball metadata. The selected package manager installs dependencies. This compatibility adapter does not patch upstream or change the host npm installation.
+The template manifests and `scripts/prepare-runtimes.ts` are the authoritative pins. We remain on Expo Desktop `1.0.0` and native template `54.81.1`, with Expo 54.0.37, React Native 0.81.6, React Native macOS 0.81.7, and React Native Windows 0.81.35. Creation uses a subprocess-scoped npm 11 executable because Expo Desktop misreads npm 12's local-tarball metadata. The selected package manager installs dependencies. This compatibility adapter does not patch upstream or change the host npm installation.
 
 Windows uses its own complete application template, with no runtime removal/replacement of macOS source files. SDK packing prepares the pinned Runtimes archive and Windows Nitro, OP-SQLite, and WebView adapters on either host OS. Patch application uses JavaScript; consumers receive ordinary dependency archives.
 
-Direct `expo-desktop create-app --template` consumption is validated against local archives. Public runtime acquisition remains separate. See the [integration handoff](docs/expo-desktop-integration.md) for delegated responsibilities, beta limitations, and checks.
+Direct `expo-desktop create-app --template` consumption is validated against local archives. Public runtime acquisition remains separate. See the [integration handoff](docs/expo-desktop-integration.md) for delegated responsibilities, launch limitations, and checks.
 
 ## Configuration and identity
 
@@ -254,7 +254,7 @@ Remaining work includes:
 
 Production analysis must use `platform=windows`; macOS reachability cannot justify Windows pruning. Application adapters define Windows semantics for menus, shortcuts, window coordinates, last-window closure, and unsupported macOS-only options; these require native acceptance.
 
-The current adapter uses Expo Desktop prebuild and RNW tools without an upstream change. Coordinate the future generic prebuilt-binary launch contract through the [integration handoff](docs/expo-desktop-integration.md); `expo-desktop run ... --binary` is not assumed to exist in the pinned CLI. Windows App SDK deployment decisions should follow [Microsoft’s RNW architecture guidance](https://github.com/microsoft/react-native-windows-samples/blob/main/docs/new-architecture.md) and [deployment documentation](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/deployment-architecture) for the selected versions.
+The current adapter uses Expo Desktop prebuild and RNW tools without an upstream change. Coordinate the future generic prebuilt-binary launch contract through the [integration handoff](docs/expo-desktop-integration.md); `expo-desktop run ... --binary` still requires native project metadata and does not provide Spark's session contract. Windows App SDK deployment decisions should follow [Microsoft’s RNW architecture guidance](https://github.com/microsoft/react-native-windows-samples/blob/main/docs/new-architecture.md) and [deployment documentation](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/deployment-architecture) for the selected versions.
 
 ## Working on this repository
 

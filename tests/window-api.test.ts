@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
-const { call, platform, listeners, managed } = vi.hoisted(() => ({ call: vi.fn(), platform: { OS: "windows" }, listeners: new Set<(event: any) => void>(), managed: { openWindow: vi.fn(async (_options: string) => '{"success":true}'), setWindowOptions: vi.fn(async () => '{"success":true}') } }));
+const { call, platform, listeners, managed } = vi.hoisted(() => ({ call: vi.fn(), platform: { OS: "windows" }, listeners: new Set<(event: any) => void>(), managed: { getConstantsJson: () => JSON.stringify({ WINDOW_LEVEL_STATUS: 25, WINDOW_LEVEL_FLOATING: 3 }), openWindow: vi.fn(async (_options: string) => '{"success":true}'), setWindowOptions: vi.fn(async (_id: string, _options: string) => '{"success":true}') } }));
 vi.mock("react-native", () => ({ Platform: platform }));
 vi.mock("../packages/desktop-windows/src/NativeDesktopWindowManager", () => ({ default: { call } }));
 vi.mock("../packages/desktop-windows/src/window-manager/NativeWindowManager", () => ({ default: managed }));
@@ -54,6 +54,18 @@ test("overlay defaults are explicit and unsupported macOS options reject", async
   await windows.openWindow({ id: "overlay", component: "Overlay", kind: "overlay" });
   expect(JSON.parse(call.mock.calls[0][1])).toMatchObject({ kind: "overlay", transparent: true, titleBarStyle: "borderless", resizable: false });
   await expect(windows.setWindowOptions("editor", { macos: { level: "floating" } })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+});
+test("macOS overlays use status level unless a level or always-on-top choice is supplied", async () => {
+  platform.OS = "macos";
+  await windows.openWindow({ id: "overlay", component: "Overlay", kind: "overlay" });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1])).toMatchObject({ level: 25 });
+  expect(JSON.parse(call.mock.calls.find(([method]) => method === "completeOpen")![1])).not.toHaveProperty("alwaysOnTop");
+  await windows.openWindow({ id: "custom", component: "Overlay", kind: "overlay", macos: { level: "floating" } });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1])).toMatchObject({ level: 3 });
+  managed.setWindowOptions.mockClear();
+  await windows.openWindow({ id: "normal", component: "Overlay", kind: "overlay", alwaysOnTop: false });
+  expect(managed.setWindowOptions).not.toHaveBeenCalled();
+  expect(JSON.parse(call.mock.calls.at(-1)![1])).toMatchObject({ alwaysOnTop: false });
 });
 test("close calls join and wait for the actual veto or closed response", async () => {
   let finish!: (value: string) => void; call.mockImplementationOnce(() => new Promise<string>(resolve => { finish = resolve; }));

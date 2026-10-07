@@ -130,7 +130,8 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
   }
   // Resolve local transitive SDK packages without replacing any mobile pins.
   const vendor = ["@react-native-runtimes/core", "react-native-nitro-modules", "@op-engineering/op-sqlite", "react-native-webview"];
-  const overrides: Record<string, string> = { ...Object.fromEntries(local.map(name => [name, dependencies[name]!])), "@expo/cli": "54.0.27" };
+  const overrides: Record<string, string> = { ...Object.fromEntries(local.map(name => [name, dependencies[name]!])), "@expo/cli": "54.0.27",
+    "react-native-macos": defaults.overrides["react-native-macos"], "react-native-windows": defaults.overrides["react-native-windows"] };
   for (const name of vendor) {
     if (archives[name]) {
       overrides[name] = archives[name]!;

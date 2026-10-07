@@ -38,14 +38,21 @@ for (const folder of ["blank-typescript", "windows", "universal"]) {
     }
   });
 }
-test("all templates retain the tested beta matrix", () => {
+test("all templates retain the tested desktop matrix", () => {
   for (const folder of ["blank-typescript", "windows", "universal"]) {
     const pkg = JSON.parse(readFileSync(path.join(templates, folder, "package.json"), "utf8"));
-    expect(pkg.dependencies["expo-desktop"]).toBe("1.0.0-beta.6");
-    expect(pkg.dependencies["expo-desktop-template-bare-minimum"]).toBe("54.81.1-beta.6");
+    expect(pkg.dependencies["expo-desktop"]).toBe("1.0.0");
+    expect(pkg.dependencies["expo-desktop-template-bare-minimum"]).toBe("54.81.1");
+    expect(pkg.dependencies["expo-desktop-prebuild-config"]).toBe("1.1.0");
+    expect(pkg.dependencies["expo-desktop-config-plugins"]).toBe("1.2.0");
+    expect(pkg.dependencies["expo-desktop-metro-config"]).toBe("54.81.0");
+    expect(pkg.overrides["expo-desktop-modules-core"]).toBe("54.0.14");
+    expect(pkg.overrides["expo-desktop-stubs"]).toBe("54.0.14");
     expect(pkg.dependencies.expo).toBe("54.0.37");
     expect(pkg.overrides["@expo/cli"]).toBe("54.0.27");
     expect(pkg.dependencies["react-native"]).toBe("0.81.6");
+    expect(pkg.overrides["react-native-macos"]).toBe("0.81.7");
+    expect(pkg.overrides["react-native-windows"]).toBe("0.81.35");
     expect(pkg.scripts.postinstall).toBe("node node_modules/@legendapp/spark/init-template.cjs");
   }
 });

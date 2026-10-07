@@ -12,7 +12,7 @@ npm run macos
 
 `npm run macos`, `npm start`, and `npm run dev` run Expo CLI's development terminal with spark desktop actions. Existing apps can use `"macos": "spark dev"` and `"start": "spark dev"`; the small spark supervisor starts the installed `expo start` with inherited terminal input/output. Expo owns Metro, prompts, reload, debugging, logs, and its mobile/web keys.
 
-`create` delegates template extraction, identity assignment, and installation to Expo Desktop beta. `dev` discovers a compatible registered Spark Runner, uses Expo's host and port selection, and opens the app after Expo is ready. Running a compatible Spark Runner invokes no native build tools. Use `--no-open` to wait for a desktop launch key instead.
+`create` delegates template extraction, identity assignment, and installation to Expo Desktop. `dev` discovers a compatible registered Spark Runner, uses Expo's host and port selection, and opens the app after Expo is ready. Running a compatible Spark Runner invokes no native build tools. Use `--no-open` to wait for a desktop launch key instead.
 
 Expo's command table adds:
 
@@ -138,7 +138,7 @@ The prototype supports static `app.json` configuration. Programmatic app configu
 
 ## Native prerequisites
 
-Use Node **24.19.0**, pinned in the checkout's `.nvmrc` (`nvm install && nvm use`). Node 24.12.0 fails to import `AndroidConfig` / `IOSConfig` from Expo's generated CommonJS modules when running Expo Desktop beta. Create/prebuild and the native doctor check the installed Expo Desktop config exports with the actual Node executable on PATH, so incompatible runtimes fail before native generation. This check does not patch Expo or change the Expo Desktop beta pin.
+Use Node **24.19.0**, pinned in the checkout's `.nvmrc` (`nvm install && nvm use`). Node 24.12.0 fails to import `AndroidConfig` / `IOSConfig` from Expo's generated CommonJS modules when running Expo Desktop. Create/prebuild and the native doctor check the installed Expo Desktop config exports with the actual Node executable on PATH, so incompatible runtimes fail before native generation. This check does not patch Expo or change the Expo Desktop pin.
 
 `spark doctor` checks macOS, Node, CocoaPods, Xcode, and the macOS SDK. Install full Xcode, complete its first-launch/license setup, and select it with the normal Xcode command-line tools settings. Command Line Tools alone cannot build the generated macOS application. Install CocoaPods in a supported Ruby environment and ensure `pod` is on PATH.
 
@@ -165,7 +165,7 @@ Keep generated files out of version control. Commit application source/configura
 
 Edit the complete templates under `packages/cli/templates/`: `blank-typescript` (macOS), `windows`, or `universal`. Their manifests own dependency pins and scripts. `spark sdk pack` resolves local SDK archives into template dependencies and emits npm tarballs plus `artifacts/packages/templates.json`. Repack after changing a template or SDK package.
 
-`spark create` invokes `expo-desktop@1.0.0-beta.5 create-app --template <archive>`. Expo Desktop validates the directory/name, extracts files, assigns app/native identity, installs dependencies, and initializes Git. A template postinstall initializes spark's configuration once. It does not overwrite an existing project ID or user edits. Project basenames must be alphanumeric, following upstream validation; spaces in parent directories are supported.
+`spark create` invokes `expo-desktop@1.0.0 create-app --template <archive>`. Expo Desktop validates the directory/name, extracts files, assigns app/native identity, installs dependencies, and initializes Git. A template postinstall initializes spark's configuration once. It does not overwrite an existing project ID or user edits. Project basenames must be alphanumeric, following upstream validation; spaces in parent directories are supported.
 
 Direct Expo Desktop template creation is also checked by `bun run test:templates`, including a consumer outside the checkout. These local archives reference local SDK tarballs; they are not a published package distribution. The [integration handoff](expo-desktop-integration.md) documents the npm compatibility pin and remaining build/launch limitations.
 

@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { Button, StyleSheet, Text, View } from "react-native";
 import { openFileDialog } from "@legendapp/spark/dialogs";
-import { useMenu, type MenuItem } from "@legendapp/spark/menus";
+import { useMenu, type MenuRootItem } from "@legendapp/spark/menus";
 
-const menus: MenuItem[] = [{ type: "submenu", id: "hello", label: "Hello", items: [{ type: "action", id: "greet", label: "Say Hello" }] }];
+const menus: MenuRootItem[] = [{ type: "submenu", id: "hello", label: "Hello", items: [{ type: "action", id: "greet", label: "Say Hello" }] }];
 export default function App({ runtime }: { runtime?: { mode: string } }) {
   const [message, setMessage] = useState("Ready");
   useMenu({ id: "hello-world", items: menus, onAction: action => { if (action.itemId === "greet") setMessage("Hello from the native menu"); }, onError: error => setMessage(String(error)) });

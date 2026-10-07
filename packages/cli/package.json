@@ -13,7 +13,7 @@
   "dependencies": {
     "@legendapp/spark-desktop-config": "0.0.1-next.2",
     "ws": "8.21.0",
-    "expo-desktop": "1.0.0-beta.6",
+    "expo-desktop": "1.0.0",
     "npm": "11.21.0",
     "typescript": "5.9.3",
     "cross-spawn": "7.0.6",

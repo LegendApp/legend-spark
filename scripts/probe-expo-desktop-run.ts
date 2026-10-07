@@ -5,6 +5,7 @@ import { cpSync, readdirSync, existsSync, mkdirSync, mkdtempSync, readFileSync, 
 import path from "node:path";
 import os from "node:os";
 import { nodeCommand } from "../packages/cli/src/windows.ts";
+import { availablePort } from "../packages/cli/src/local.ts";
 const framework = path.resolve(import.meta.dirname, "..");
 const binary = path.resolve(process.argv[2] ?? "examples/kitchen-sink/.spark/platforms/macos/products/dev/KitchenSink.app");
 if (process.platform !== "darwin" || !existsSync(binary)) throw new Error("Run on macOS with an existing Kitchen Sink .app (or pass its path).");
@@ -31,15 +32,16 @@ for (const phase of ["javascript-only", "existing-project"] as const) {
   const logPath = path.join(output, `${phase}.log`);
   rmSync(logPath, { force: true });
   const log = processLog(logPath);
+  const port = await availablePort();
   const args = nodeCommand(root, "expo-desktop", "expo-desktop", ["run", "macos", root, "--binary", binary, "--no-install", "--no-bundler", "--no-single-instance"]);
-  const child = spawnProcess(args, { cwd: root, detached: true, env: { ...process.env, CI: "1", EXPO_NO_GIT_STATUS: "1", SPARK_PROBE_RECORD: record,
+  const child = spawnProcess(args, { cwd: root, detached: true, env: { ...process.env, CI: "1", RCT_METRO_PORT: String(port), EXPO_NO_GIT_STATUS: "1", SPARK_PROBE_RECORD: record,
     PATH: [shims, path.join(framework, "packages/cli/src/npm-bin"), process.env.PATH].join(path.delimiter) }, stdout: log, stderr: log });
   const stop = () => { try { if (child.pid) process.kill(-child.pid, "SIGTERM"); } catch {} };
   const timer = setTimeout(stop, 60_000);
   const launched = setInterval(() => { if (existsSync(record)) stop(); }, 100);
   try {
     const exitCode = await child.exited;
-    results.push({ phase, exitCode, nativeProjectCreated: existsSync(path.join(root, "macos")),
+    results.push({ phase, exitCode, requestedMetroPort: port, nativeProjectCreated: existsSync(path.join(root, "macos")),
       launch: existsSync(record) ? JSON.parse(readFileSync(record, "utf8")) : null });
   } finally { clearTimeout(timer); clearInterval(launched); stop(); }
 }
