@@ -45,6 +45,14 @@ static NSDictionary *Rule(NSString *key, NSUInteger modifiers, BOOL extra = NO, 
 static BOOL Key(RNKeyboardManager *manager, BOOL down, NSString *key, NSInteger code, NSUInteger modifiers = 0, NSWindow *window = nil, BOOL repeated = NO) {
   return [manager emitKeyboardEvent:down ? @"onKeyDown" : @"onKeyUp" keyCode:code key:key modifiers:modifiers window:window repeated:repeated];
 }
+static NSEvent *KeyboardEvent(CGKeyCode code, bool down, CGEventFlags flags = 0) {
+  CGEventRef event = CGEventCreateKeyboardEvent(NULL, code, down);
+  // A null source inherits the live keyboard state, including held modifiers.
+  CGEventSetFlags(event, flags);
+  NSEvent *result = [NSEvent eventWithCGEvent:event];
+  CFRelease(event);
+  return result;
+}
 int main() { @autoreleasepool {
   events = [NSMutableArray new]; RNKeyboardManager *manager = [RNKeyboardManager new]; [manager startObserving];
   FixtureWindow *main = [FixtureWindow new]; main.identifier = @"spark.main";
@@ -97,33 +105,31 @@ int main() { @autoreleasepool {
   // Navigation keys must reach JavaScript as AppKit's private-use codes, which accelerators
   // parse, and not as the C0 control characters modifier-stripping produces.
   Configure(manager, @"two", @[Rule(@"\uf703", 0)], NO);
-  CGEventRef rightDown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)124, true);
-  NSEvent *right = [NSEvent eventWithCGEvent:rightDown]; CFRelease(rightDown);
+  NSEvent *right = KeyboardEvent(124, true);
   assert([manager handleKeyboardEvent:right] == nil);
   assert([events.lastObject[@"body"][@"key"] isEqualToString:@"\uf703"]);
   assert([events.lastObject[@"body"][@"consumed"] boolValue]);
-  CGEventRef rightUp = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)124, false);
-  NSEvent *rightUpEvent = [NSEvent eventWithCGEvent:rightUp]; CFRelease(rightUp);
+  NSEvent *rightUpEvent = KeyboardEvent(124, false);
   assert([manager handleKeyboardEvent:rightUpEvent] == nil);
+  NSEvent *shiftRight = KeyboardEvent(124, true, NX_SHIFTMASK);
+  assert([manager handleKeyboardEvent:shiftRight] == shiftRight);
+  assert([events.lastObject[@"body"][@"key"] isEqualToString:@"\uf703"]);
+  assert(![events.lastObject[@"body"][@"consumed"] boolValue]);
   // Tab is C0 but identifies no navigation key, so its accelerator keeps matching.
   Configure(manager, @"two", @[Rule(@"\t", 0)], NO);
-  CGEventRef tabDown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)48, true);
-  NSEvent *tab = [NSEvent eventWithCGEvent:tabDown]; CFRelease(tabDown);
+  NSEvent *tab = KeyboardEvent(48, true);
   assert([manager handleKeyboardEvent:tab] == nil);
   assert([events.lastObject[@"body"][@"key"] isEqualToString:@"\t"]);
   Key(manager, NO, @"\t", 48);
   // Backspace arrives as U+0008 but its accelerator spells U+007F.
   Configure(manager, @"two", @[Rule(@"\u007f", 0)], NO);
-  CGEventRef backDown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)51, true);
-  NSEvent *backspace = [NSEvent eventWithCGEvent:backDown]; CFRelease(backDown);
+  NSEvent *backspace = KeyboardEvent(51, true);
   assert([manager handleKeyboardEvent:backspace] == nil);
   assert([events.lastObject[@"body"][@"key"] isEqualToString:@"\u007f"]);
   Key(manager, NO, @"\u007f", 51);
   // A control chord on a letter must keep reporting that letter to Cmd/Ctrl accelerators.
   Configure(manager, @"two", @[Rule(@"i", NSEventModifierFlagControl)], NO);
-  CGEventRef controlDown = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)34, true);
-  CGEventSetFlags(controlDown, NX_CONTROLMASK);
-  NSEvent *controlI = [NSEvent eventWithCGEvent:controlDown]; CFRelease(controlDown);
+  NSEvent *controlI = KeyboardEvent(34, true, NX_CONTROLMASK);
   assert([manager handleKeyboardEvent:controlI] == nil);
   assert([events.lastObject[@"body"][@"key"] isEqualToString:@"i"]);
   Key(manager, NO, @"i", 34);

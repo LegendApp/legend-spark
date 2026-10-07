@@ -3,6 +3,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 vi.mock("../packages/cli/src/commands.ts", () => ({ run: vi.fn(async () => "") }));
+vi.mock("../packages/cli/src/executable.ts", () => ({ which: vi.fn((command: string) => command) }));
+import { run } from "../packages/cli/src/commands.ts";
 import { refreshLocalPackages } from "../packages/cli/src/create.ts";
 
 for (const manager of ["npm", "pnpm", "yarn", "bun"] as const) {
@@ -17,6 +19,7 @@ for (const manager of ["npm", "pnpm", "yarn", "bun"] as const) {
       }));
       for (const file of ["metro.config.js", "index.ts", "desktop.config.json"]) writeFileSync(path.join(root, file), custom);
       await refreshLocalPackages(root, manifest, manager);
+      expect(run).toHaveBeenLastCalledWith(root, [manager, "install"]);
       const first = readFileSync(path.join(root, "package.json"), "utf8");
       const pkg = JSON.parse(first);
       const pins = manager === "yarn" ? pkg.resolutions : manager === "pnpm" ? pkg.pnpm.overrides : pkg.overrides;
