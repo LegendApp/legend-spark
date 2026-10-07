@@ -32,6 +32,13 @@ repository identity, Developer ID signing, and notarization credentials before
 changing versions. Signing secrets remain in Keychain; `.env` may select an
 identity and Keychain profile using the existing `SPARK_*` configuration.
 
+Interactive signing setup lists the available matching Developer ID certificates
+first, followed by saved notarization Keychain profiles. Notarization setup offers
+explicit choices to select a saved profile, enter another name, or create one;
+creation is never selected automatically. A profile such
+as `Moo.do` must have been stored by `notarytool`, independently of the certificate
+name. A missing profile returns to the setup choices before any build begins.
+
 It runs `bun install --frozen-lockfile`, typechecking, and portable tests before committing the version
 change. It then builds/signs/notarizes the Runner, assembles immutable artifacts,
 and runs the packed-consumer integration against the **exact staged npm archive**.

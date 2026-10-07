@@ -20,7 +20,18 @@ npx --no-install spark package
 
 Install a Developer ID Application certificate and its private key through Xcode or Keychain Access. Packaging requires macOS, the native build prerequisites, and access to Apple's notarization service. Mac App Store signing is a separate, unsupported distribution target.
 
-On first use, spark discovers available Developer ID identities. It uses the only matching identity automatically or presents a numbered choice. It then asks for an existing notarization Keychain profile or offers to create one using Apple's interactive `notarytool store-credentials` command. That tool handles secret input directly; spark does not capture it. Credentials are validated before a native build begins.
+Interactive setup first lists available matching Developer ID signing certificates for selection, even when only one matches. It then lists saved notarization Keychain profiles, with separate options to enter an existing profile name or create one using Apple's interactive `notarytool store-credentials` command. Creation requires explicitly selecting the create option; pressing Enter never selects it. A signing certificate name is not automatically a notarization profile. If a profile is missing, spark returns to those options. Apple's tool handles secret input directly; spark does not capture it. Credentials are validated before a native build begins. Noninteractive runs still select the only matching certificate automatically and require an existing notarization profile.
+
+Interactive selection keeps the remembered certificate as the default while
+showing other available certificates. Explicit identity and team selectors still
+filter the list.
+
+Profile discovery uses Apple's Security framework to read
+[profile name attributes](https://developer.apple.com/documentation/security/item-return-result-keys),
+without requesting password data. It searches local Keychains and synchronized
+profiles, or only `SPARK_SIGNING_KEYCHAIN` when specified. A discovery error stops
+setup so an inaccessible Keychain is not presented as an empty list. Xcode's Swift
+tool is used for this metadata query; no extra package is installed.
 
 Repeat or change the setup with:
 
