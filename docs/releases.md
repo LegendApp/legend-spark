@@ -1,6 +1,6 @@
 # Preview release process
 
-Legend Spark currently identifies itself as `0.0.1-next.2` and publishes through
+Legend Spark currently identifies itself as `0.0.1-next.3` and publishes through
 the `next` preview channel. That identity remains experimental until the
 [release readiness matrix](release-readiness.md) and a completed
 [release evidence dossier](release-test-dossier.md) support a deliberate

@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-desktop-config",
-  "version": "0.0.1-next.2",
+  "version": "0.0.1-next.3",
   "license": "MIT",
   "main": "app.plugin.cjs",
   "files": [
@@ -11,8 +11,8 @@
   ],
   "dependencies": {
     "expo-desktop-config-plugins": "1.2.0",
-    "@legendapp/spark-desktop-host": "0.0.1-next.2",
-    "@legendapp/spark-window-options": "0.0.1-next.2",
+    "@legendapp/spark-desktop-host": "0.0.1-next.3",
+    "@legendapp/spark-window-options": "0.0.1-next.3",
     "@expo/config-plugins": "54.0.5",
     "@expo/config-types": "54.0.10"
   },

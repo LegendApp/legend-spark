@@ -27,7 +27,7 @@
     "react-native-windows": "0.81.35",
     "expo-desktop-modules-core": "54.0.14",
     "expo-desktop-stubs": "54.0.14",
-    "@legendapp/spark": "0.0.1-next.2"
+    "@legendapp/spark": "0.0.1-next.3"
   },
   "overrides": {
     "@expo/cli": "54.0.27",

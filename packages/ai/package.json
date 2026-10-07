@@ -1,12 +1,12 @@
 {
   "name": "@legendapp/spark-ai",
-  "version": "0.0.1-next.2",
+  "version": "0.0.1-next.3",
   "private": true,
   "main": "src/index.ts",
   "react-native": "src/index.ts",
   "dependencies": {
-    "@legendapp/spark-desktop-app": "0.0.1-next.2",
-    "@legendapp/spark-processes": "0.0.1-next.2"
+    "@legendapp/spark-desktop-app": "0.0.1-next.3",
+    "@legendapp/spark-processes": "0.0.1-next.3"
   },
   "peerDependencies": {
     "react": "19.1.4",

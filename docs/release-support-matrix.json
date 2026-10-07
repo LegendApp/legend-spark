@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "package": "@legendapp/spark",
-  "version": "0.0.1-next.2",
+  "version": "0.0.1-next.3",
   "source": "packages/desktop/package.json exports",
   "statusMeaning": {
     "not-tested": "No target-specific acceptance evidence is recorded for the current candidate. Unit or source checks do not change this status.",

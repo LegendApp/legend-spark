@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-commands",
-  "version": "0.0.1-next.2",
+  "version": "0.0.1-next.3",
   "private": true,
   "license": "MIT",
   "main": "src/index.tsx",
@@ -8,11 +8,11 @@
     "src"
   ],
   "dependencies": {
-    "@legendapp/spark-ui": "0.0.1-next.2",
-    "@legendapp/spark-desktop-shortcuts": "0.0.1-next.2",
-    "@legendapp/spark-settings": "0.0.1-next.2",
+    "@legendapp/spark-ui": "0.0.1-next.3",
+    "@legendapp/spark-desktop-shortcuts": "0.0.1-next.3",
+    "@legendapp/spark-settings": "0.0.1-next.3",
     "@legendapp/state": "^3.0.0-beta.42",
-    "@legendapp/spark-desktop-app": "0.0.1-next.2"
+    "@legendapp/spark-desktop-app": "0.0.1-next.3"
   },
   "peerDependencies": {
     "react": "19.1.4",

@@ -17,7 +17,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-export const VERSION = "0.0.1-next.2";
+export const VERSION = "0.0.1-next.3";
 export type Package = { name: string; root: string; json: any };
 export type NativePackage = Package & {
   signature: string;

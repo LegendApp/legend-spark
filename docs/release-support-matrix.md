@@ -1,6 +1,6 @@
 # Per-export release support matrix
 
-Package: `@legendapp/spark@0.0.1-next.2`. This matrix is generated from `packages/desktop/package.json`'s public export map; its machine-readable source is [release-support-matrix.json](release-support-matrix.json). The current status is acceptance evidence, not inferred from source code or export presence.
+Package: `@legendapp/spark@0.0.1-next.3`. This matrix is generated from `packages/desktop/package.json`'s public export map; its machine-readable source is [release-support-matrix.json](release-support-matrix.json). The current status is acceptance evidence, not inferred from source code or export presence.
 
 `not-tested` means a target-specific acceptance run is still required. `not-applicable` means that target is outside the documented API contract or the entry is not a runtime API. Exact platform commands and reasons are in the JSON cells. Tooling rows show untested workflow coverage separately from runtime APIs. The source mappings identify the public wrapper, provider package, and present platform file/folder candidates; those paths alone do not count as acceptance.
 

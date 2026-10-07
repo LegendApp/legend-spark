@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-webview",
-  "version": "0.0.1-next.2",
+  "version": "0.0.1-next.3",
   "license": "MIT",
   "main": "src/index.ts",
   "react-native": "src/index.ts",
@@ -9,7 +9,7 @@
   ],
   "dependencies": {
     "react-native-webview": "16.0.0",
-    "@legendapp/spark-desktop-app": "0.0.1-next.2"
+    "@legendapp/spark-desktop-app": "0.0.1-next.3"
   },
   "private": true
 }

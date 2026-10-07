@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-codex",
-  "version": "0.0.1-next.2",
+  "version": "0.0.1-next.3",
   "private": true,
   "main": "src/index.ts",
   "react-native": "src/index.ts",
@@ -10,7 +10,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@legendapp/spark-desktop-app": "0.0.1-next.2",
+    "@legendapp/spark-desktop-app": "0.0.1-next.3",
     "react-native-nitro-modules": "0.35.7"
   },
   "files": [

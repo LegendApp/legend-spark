@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-file-dialog",
-  "version": "0.0.1-next.2",
+  "version": "0.0.1-next.3",
   "main": "src/index",
   "react-native": "src/index",
   "codegenConfig": {
@@ -45,6 +45,6 @@
   },
   "private": true,
   "dependencies": {
-    "@legendapp/spark-desktop-app": "0.0.1-next.2"
+    "@legendapp/spark-desktop-app": "0.0.1-next.3"
   }
 }

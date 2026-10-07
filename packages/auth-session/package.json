@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-auth-session",
-  "version": "0.0.1-next.2",
+  "version": "0.0.1-next.3",
   "license": "MIT",
   "main": "src/index",
   "react-native": "src/index",
@@ -8,9 +8,9 @@
     "src"
   ],
   "dependencies": {
-    "@legendapp/spark-desktop-links": "0.0.1-next.2",
+    "@legendapp/spark-desktop-links": "0.0.1-next.3",
     "base64-js": "1.5.1",
-    "@legendapp/spark-desktop-app": "0.0.1-next.2"
+    "@legendapp/spark-desktop-app": "0.0.1-next.3"
   },
   "peerDependencies": {
     "react-native": "0.81.6",

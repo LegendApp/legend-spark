@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-ui",
-  "version": "0.0.1-next.2",
+  "version": "0.0.1-next.3",
   "license": "MIT",
   "main": "src/index",
   "react-native": "src/index",
@@ -68,6 +68,6 @@
   "dependencies": {
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.4.0",
-    "@legendapp/spark-desktop-app": "0.0.1-next.2"
+    "@legendapp/spark-desktop-app": "0.0.1-next.3"
   }
 }

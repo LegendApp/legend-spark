@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-native-greeting",
-  "version": "0.0.1-next.2",
+  "version": "0.0.1-next.3",
   "license": "MIT",
   "main": "src/index.ts",
   "react-native": "src/index.ts",
