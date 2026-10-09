@@ -146,7 +146,8 @@ test("Runner download retries interrupted streams and rejects mismatched bytes",
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test.each(["arm64", "x64"])("Runner %s installs atomically and verifies cached apps and publisher signatures", async (arch) => {
+// Runner install is macOS-only (acquireRunner rejects other hosts) and holds its lock via BSD /usr/bin/lockf.
+test.skipIf(process.platform !== "darwin").each(["arm64", "x64"])("Runner %s installs atomically and verifies cached apps and publisher signatures", async (arch) => {
   const previousArch = process.env.SPARK_MACOS_ARCH; process.env.SPARK_MACOS_ARCH = arch;
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-runner-install-"));
   const previous = process.env.SPARK_HOME; process.env.SPARK_HOME = root;
