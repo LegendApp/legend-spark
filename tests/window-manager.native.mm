@@ -106,5 +106,44 @@ int main() { @autoreleasepool {
   NSToolbarItem *emptyLabel = [manager toolbar:toolbar itemForItemIdentifier:@"legend.toolbar.empty-label" willBeInsertedIntoToolbar:YES];
   assert([(NSButton *)emptyLabel.view title].length == 0);
   assert([(NSButton *)emptyLabel.view frame].size.width <= LegendToolbarIconControlWidth);
+  [NSApplication sharedApplication];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1280, 820)
+    styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
+  window.releasedWhenClosed = NO;
+  manager.windows[@"brightness-probe"] = window;
+  NSDictionary *(^options)(double, NSString *) = ^NSDictionary *(double value, NSString *elapsed) {
+    return @{ @"windowStyle": @{ @"toolbarItems": @[
+      @{ @"id": @"appearance", @"type": @"menuButton", @"width": @36,
+         @"menuItems": @[@{ @"id": @"brightness", @"title": @"Brightness", @"slider": @{ @"min": @0, @"max": @100, @"value": @(value) } }] },
+      @{ @"id": @"start", @"type": @"button", @"label": @"Start" },
+      @{ @"id": @"elapsed", @"type": @"menuButton", @"label": elapsed, @"width": @76, @"menuItems": @[] }
+    ] } };
+  };
+  [manager applyToolbarItemsFromOptions:options(17, @"0:00") toWindow:window identifier:@"brightness-probe"];
+  NSArray *originalItems = [window.toolbar.items copy];
+  NSToolbarItem *appearance = nil;
+  for (NSToolbarItem *item in originalItems) if ([item.itemIdentifier isEqual:@"legend.toolbar.appearance"]) appearance = item;
+  assert(appearance != nil);
+  NSView *anchor = appearance.view;
+  NSRect originalFrame = window.frame;
+  for (NSNumber *value in @[@80, @40, @0, @100, @17]) {
+    NSString *elapsed = [NSString stringWithFormat:@"0:%02ld", value.longValue];
+    [manager setWindowToolbarItemText:@"brightness-probe" itemId:@"elapsed" text:elapsed resolve:^(id result) { assert([result containsString:@"true"]); } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+    [manager applyToolbarItemsFromOptions:options(value.doubleValue, elapsed) toWindow:window identifier:@"brightness-probe"];
+    assert([window.toolbar.items isEqualToArray:originalItems]);
+    assert(appearance.view == anchor);
+    assert(NSEqualRects(window.frame, originalFrame));
+    NSDictionary *metadata = objc_getAssociatedObject(anchor, &LegendToolbarControlMetadataKey);
+    assert([metadata[@"menuItems"][0][@"slider"][@"value"] doubleValue] == value.doubleValue);
+  }
+  NSMutableDictionary *changed = [options(17, @"0:17") mutableCopy];
+  NSMutableDictionary *style = [changed[@"windowStyle"] mutableCopy];
+  NSMutableArray *changedItems = [style[@"toolbarItems"] mutableCopy];
+  NSMutableDictionary *start = [changedItems[1] mutableCopy];
+  start[@"label"] = @"Stop"; changedItems[1] = start;
+  style[@"toolbarItems"] = changedItems; changed[@"windowStyle"] = style;
+  [manager applyToolbarItemsFromOptions:changed toWindow:window identifier:@"brightness-probe"];
+  assert(![window.toolbar.items isEqualToArray:originalItems]);
+  [window close];
   puts("Window manager controls passed");
 } }
