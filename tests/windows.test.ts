@@ -1,4 +1,4 @@
-import { test, expect } from "vitest";
+import { test, expect, onTestFinished, vi } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -65,6 +65,7 @@ test("runtime surface hooks are conditional, repeatable, and removable", () => {
   expect(() => patchHost(source.replace("AddAttributedModules(packageBuilder, true);", ""), core + worker, metadata)).toThrow("cannot register runtime surfaces");
 });
 test("the shared Go registry keeps Windows and macOS runtimes separate", () => {
+  vi.stubEnv("SPARK_MACOS_ARCH", "arm64"); onTestFinished(() => { vi.unstubAllEnvs(); });
   const f = fixture(), previous = process.env.SPARK_HOME;
   process.env.SPARK_HOME = path.join(f.root, "registry");
   try {

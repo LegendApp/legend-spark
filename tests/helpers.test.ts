@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +14,9 @@ const helpers: Helpers = { backend: {
   "macos-arm64": { directory: "mac", executable: "bin/backend" },
   "windows-x64": { directory: "win", executable: "bin/backend" },
 } };
+// Fixtures ship a macos-arm64 bundle; pin the target so the host CPU (e.g. x64 Linux CI) is irrelevant.
+beforeEach(() => { vi.stubEnv("SPARK_MACOS_ARCH", "arm64"); });
+afterEach(() => { vi.unstubAllEnvs(); });
 test("helper selection uses target architecture and fingerprints all assets", () => fixture(root => {
   expect(resolveHelpers(root, helpers, "windows", "x64")[0]?.files).toEqual(["win/bin/backend", "win/data.json"]);
   expect(() => resolveHelpers(root, helpers, "windows", "arm64")).toThrow("windows-arm64");

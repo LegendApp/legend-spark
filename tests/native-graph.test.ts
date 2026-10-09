@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -94,6 +94,7 @@ test("explicit native-only inclusions survive pruning and missing metadata fails
   ).toThrow("requires missing");
 });
 test("a runtime superset is compatible but missing or modified native code is not", () => {
+  vi.stubEnv("SPARK_MACOS_ARCH", "arm64"); onTestFinished(() => { vi.unstubAllEnvs(); });
   const runtime: Runtime = {
     schema: 1,
     framework: VERSION,

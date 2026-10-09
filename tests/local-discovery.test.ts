@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import os from "node:os";
@@ -21,6 +21,7 @@ test("build defaults to standalone release and rejects conflicting modes", () =>
 const module: NativePackage = { name: "dialogs", root: "/dialogs", json: {}, sdk: true, requires: [], signature: "current" };
 
 test("runtime discovery uses native compatibility, survives deleted binaries, and ignores other SDKs", () => {
+  vi.stubEnv("SPARK_MACOS_ARCH", "arm64"); onTestFinished(() => { vi.unstubAllEnvs(); });
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-discovery-"));
   const previous = process.env.SPARK_HOME;
   process.env.SPARK_HOME = path.join(root, "cache");
