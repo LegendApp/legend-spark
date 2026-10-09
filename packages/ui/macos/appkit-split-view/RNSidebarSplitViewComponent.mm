@@ -207,9 +207,31 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
 // which is invisible in light mode and a bright stripe in dark mode. Paint it opaquely with semantic colors
 // that resolve against the drawing appearance.
 @interface RNSidebarSplitViewNativeSplitView : NSSplitView
+/// YES while the user drags a divider.
+@property (nonatomic, readonly) BOOL trackingDivider;
 @end
 
 @implementation RNSidebarSplitViewNativeSplitView
+
+// NSSplitView only receives mouseDown: on a divider, and tracks the whole drag inside it.
+- (void)mouseDown:(NSEvent *)event
+{
+  _trackingDivider = YES;
+  [super mouseDown:event];
+  _trackingDivider = NO;
+}
+
+// While a divider drags, panes resize under a still cursor and pane edges pass beneath it. React views take
+// hover from a window hit test, so claiming the hit here keeps rows from flickering hover states (and starting
+// their hover animations) every frame of the drag.
+- (NSView *)hitTest:(NSPoint)point
+{
+  if (_trackingDivider) {
+    return NSPointInRect([self convertPoint:point fromView:self.superview], self.bounds) ? self : nil;
+  }
+  return [super hitTest:point];
+}
+
 - (NSColor *)dividerColor
 {
   return NSColor.separatorColor;
@@ -412,6 +434,12 @@ static char RNSidebarSplitViewStartupKey;
   RCTUIView<RCTComponentViewProtocol> *_contentReactView;
   RCTUIView<RCTComponentViewProtocol> *_listReactView;
   id _resizeObserver;
+  id _contentFrameObserver;
+  id _contentBoundsObserver;
+  // React lays a pane out one commit after a native resize. Until then the content pane's React content is
+  // pinned to whichever edge held still: the window edge while a divider drags, the divider while the window resizes.
+  NSRect _lastContentFrame;
+  BOOL _contentAnchorsRight;
   LayoutMetrics _currentLayoutMetrics;
   LayoutMetrics _sidebarReactLayoutMetrics;
   LayoutMetrics _contentReactLayoutMetrics;
@@ -536,6 +564,31 @@ static char RNSidebarSplitViewStartupKey;
               usingBlock:^(__unused NSNotification *notification) {
                 if (!self->_layingOutSplitView) {
                   [self publishSplitViewLayoutAllowEstimatedReady:NO];
+                }
+              }];
+    // React applying a new frame sets the frame, then resets the bounds offset the anchor uses, so re-pin after
+    // either changes on the content root (and after its children's frames change in a commit).
+    __weak RNSidebarSplitViewComponent *weakSelf = self;
+    _contentFrameObserver = [[NSNotificationCenter defaultCenter]
+      addObserverForName:NSViewFrameDidChangeNotification
+                  object:nil
+                   queue:nil
+              usingBlock:^(NSNotification *notification) {
+                RNSidebarSplitViewComponent *strongSelf = weakSelf;
+                NSView *view = notification.object;
+                if (strongSelf && strongSelf->_contentReactView &&
+                    (view == strongSelf->_contentReactView || view.superview == strongSelf->_contentReactView)) {
+                  [strongSelf anchorContentReactView];
+                }
+              }];
+    _contentBoundsObserver = [[NSNotificationCenter defaultCenter]
+      addObserverForName:NSViewBoundsDidChangeNotification
+                  object:nil
+                   queue:nil
+              usingBlock:^(NSNotification *notification) {
+                RNSidebarSplitViewComponent *strongSelf = weakSelf;
+                if (strongSelf && notification.object == strongSelf->_contentReactView) {
+                  [strongSelf anchorContentReactView];
                 }
               }];
 
@@ -765,6 +818,38 @@ static char RNSidebarSplitViewStartupKey;
   [self syncReactSubview:_listReactView
              nativeBounds:_hasList ? _listContainer.bounds : CGRectZero
     previousLayoutMetrics:&_listReactLayoutMetrics];
+  [self anchorContentReactView];
+}
+
+/// Offsets the content pane's React root so its laid-out content meets the anchored edge. The offset is the gap
+/// between React's last layout width and the pane's native width, so it returns to zero once React catches up.
+- (void)anchorContentReactView
+{
+  NSView *root = _contentReactView;
+  if (!root) {
+    return;
+  }
+  // AppKit wraps each split item's view, so measure in our own coordinates rather than the wrapper's.
+  NSRect contentFrame = [_contentContainer convertRect:_contentContainer.bounds toView:self];
+  if (!NSEqualRects(contentFrame, _lastContentFrame)) {
+    // A divider drag holds the window edge still; any other resize (the window's) holds the pane's left edge.
+    // AppKit applies a drag's origin and width in separate steps, so the drag itself decides, not each step.
+    BOOL dragging = ((RNSidebarSplitViewNativeSplitView *)_splitViewController.splitView).trackingDivider;
+    if (dragging) {
+      _contentAnchorsRight = YES;
+    } else if (fabs(NSMinX(contentFrame) - NSMinX(_lastContentFrame)) < 0.5) {
+      _contentAnchorsRight = NO;
+    }
+    _lastContentFrame = contentFrame;
+  }
+  CGFloat laidOut = 0;
+  for (NSView *child in root.subviews) {
+    laidOut = MAX(laidOut, NSMaxX(child.frame));
+  }
+  CGFloat offset = _contentAnchorsRight && laidOut > 0 ? laidOut - NSWidth(root.bounds) : 0;
+  if (fabs(root.bounds.origin.x - offset) >= 0.25) {
+    [root setBoundsOrigin:NSMakePoint(offset, root.bounds.origin.y)];
+  }
 }
 
 - (void)syncReactSubview:(nullable RCTUIView<RCTComponentViewProtocol> *)subview
@@ -1326,6 +1411,12 @@ static char RNSidebarSplitViewStartupKey;
 #if TARGET_OS_OSX
   if (_resizeObserver) {
     [[NSNotificationCenter defaultCenter] removeObserver:_resizeObserver];
+  }
+  if (_contentFrameObserver) {
+    [[NSNotificationCenter defaultCenter] removeObserver:_contentFrameObserver];
+  }
+  if (_contentBoundsObserver) {
+    [[NSNotificationCenter defaultCenter] removeObserver:_contentBoundsObserver];
   }
 #endif
 }
