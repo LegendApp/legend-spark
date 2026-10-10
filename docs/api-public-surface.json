@@ -494,6 +494,12 @@
     "SplitViewTitleBarOverlay",
     "getSplitViewAvailability"
   ],
+  "./ui/swipe": [
+    "SwipeAction",
+    "SwipeActions",
+    "SwipeActionsProps",
+    "getSwipeActionsAvailability"
+  ],
   "./ui/symbol": [
     "SFSymbol",
     "SFSymbolProps",
