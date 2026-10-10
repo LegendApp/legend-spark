@@ -129,3 +129,17 @@ test("macOS toolbar events carry finite numeric slider values and strip native f
   emit({ type: "toolbarMenuAction", itemId: "menu", action: { type: "valueChanged", itemId: "volume", value: "0.5" } });
   expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); await registration.remove();
 });
+
+test("macOS toolbar-only updates bypass portable window geometry", async () => {
+  platform.OS = "macos";
+  await windows.setWindowOptions("editor", { macos: { toolbar: { items: [{ type: "menu", id: "appearance", items: [{ type: "slider", id: "brightness", label: "Brightness", min: 0, max: 100, value: 80 }] }] } } });
+  expect(call).not.toHaveBeenCalled();
+  expect(managed.setWindowOptions).toHaveBeenCalledOnce();
+  const item = JSON.parse(managed.setWindowOptions.mock.calls[0][1]).windowStyle.toolbarItems[0];
+  expect(item.menuItems[0].slider.value).toBe(80);
+  expect(item).not.toHaveProperty("items");
+  await windows.setWindowOptions("editor", { title: "Renamed", macos: { toolbar: { visible: true } } });
+  expect(call).toHaveBeenCalledWith("options", expect.any(String));
+  await windows.setWindowOptions("editor", {});
+  expect(call).toHaveBeenCalledTimes(2);
+});

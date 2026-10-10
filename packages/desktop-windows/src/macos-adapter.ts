@@ -38,7 +38,7 @@ export function macosOptions(options: MacOSWindowOptions | undefined): Record<st
     if (options.toolbar.items) style.toolbarItems = options.toolbar.items.map(item => {
       const { type, ...common } = item;
       if (type === "segmented") { const value = item as Extract<typeof item, { type: "segmented" }>; return { ...common, type, selectedValue: value.value, segments: value.segments.map(({ symbol, ...segment }) => ({ ...segment, systemImageName: symbol })) }; }
-      if (type === "menu") { const value = item as Extract<typeof item, { type: "menu" }>; return { ...common, type: "menuButton", enabled: !value.disabled, systemImageName: value.symbol, menuItems: menuItems(value.items, { types: ["action", "checkbox", "separator", "slider"], icons: ["symbol"] }, "macos") }; }
+      if (type === "menu") { const { items, ...value } = item as Extract<typeof item, { type: "menu" }>; return { ...value, type: "menuButton", enabled: !value.disabled, systemImageName: value.symbol, menuItems: menuItems(items, { types: ["action", "checkbox", "separator", "slider"], icons: ["symbol"] }, "macos") }; }
       return { ...common, type, ...("disabled" in item ? { enabled: !item.disabled } : {}), ...("symbol" in item ? { systemImageName: item.symbol } : {}) };
     });
   }

@@ -1,9 +1,13 @@
 #import "SparkQuitCoordinator.h"
 static void pump(double seconds = 0.02) { [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:seconds]]; }
+// Pump until a condition holds, with a generous deadline so slow CI hosts cannot flake.
+static void pumpUntil(BOOL (^done)(void), double limit = 5) { NSDate *end = [NSDate dateWithTimeIntervalSinceNow:limit]; while (!done() && end.timeIntervalSinceNow > 0) pump(0.01); }
 static void check(BOOL value, const char *message) { if (!value) { fprintf(stderr, "%s\n", message); exit(1); } }
 int main() { @autoreleasepool {
   __block NSMutableArray<NSNumber *> *replies = [NSMutableArray new];
-  SparkQuitCoordinator *quit = [[SparkQuitCoordinator alloc] initWithReply:^(BOOL allow) { [replies addObject:@(allow)]; } timeout:0.1];
+  SparkQuitCoordinator *quit = [[SparkQuitCoordinator alloc] initWithReply:^(BOOL allow) { [replies addObject:@(allow)]; } timeout:60];
+  // Guard semantics use a long timeout: a stalled run loop on a slow host must not let the
+  // timeout cancel the attempt mid-test. Timeout behavior is covered by its own coordinator below.
   __block NSMutableArray<NSNumber *> *decisions = [NSMutableArray new];
   [quit observeDecision:^(BOOL allow) { [decisions addObject:@(allow)]; }];
   check([quit requestQuit] == NSTerminateNow, "No handlers must quit immediately");
@@ -27,9 +31,16 @@ int main() { @autoreleasepool {
   second(YES); check([replies.lastObject isEqual:@YES], "All approvals should quit");
   [quit requestQuit]; pump(); [quit removeHandler:@"second"];
   check([replies.lastObject isEqual:@NO], "Removing a guard during quit must cancel");
-  [quit observeDecision:^(BOOL allow) { [decisions addObject:@(allow)]; }];
-  [quit requestQuit]; pump(0.15); check([replies.lastObject isEqual:@NO], "Timeout must cancel");
-  check(decisions.count == 3 && [decisions.lastObject isEqual:@NO], "Timeout must settle observers");
+  check(decisions.count == 2, "Removing a guard must not settle unrelated observers");
+  __block NSMutableArray<NSNumber *> *timedReplies = [NSMutableArray new], *timedDecisions = [NSMutableArray new];
+  SparkQuitCoordinator *timed = [[SparkQuitCoordinator alloc] initWithReply:^(BOOL allow) { [timedReplies addObject:@(allow)]; } timeout:0.1];
+  [timed registerHandler:@"silent" handler:^(SparkQuitReply reply) {}];
+  [timed observeDecision:^(BOOL allow) { [timedDecisions addObject:@(allow)]; }];
+  check([timed requestQuit] == NSTerminateLater, "Timed guard must defer");
+  pumpUntil(^{ return (BOOL)(timedReplies.count > 0); });
+  check(timedReplies.count == 1 && [timedReplies.lastObject isEqual:@NO], "Timeout must cancel");
+  check(timedDecisions.count == 1 && [timedDecisions.lastObject isEqual:@NO], "Timeout must settle observers");
+  [timed removeHandler:@"silent"];
   [quit removeHandler:@"first"]; check([quit requestQuit] == NSTerminateNow, "Removed guards cannot block quit");
   puts("Quit lifecycle tests passed");
 } }
