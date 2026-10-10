@@ -472,7 +472,12 @@ static char RNSidebarSplitViewStartupKey;
   CGFloat _listMinWidth;
   CGFloat _listWidth;
   BOOL _hasList;
+  // Effective collapsed state, which React knows. Follows the prop when the prop changes and the sidebar item when
+  // AppKit collapses it (toggleSidebar:, the toolbar button, ...); the latter is reported via onSidebarCollapsedChange.
   BOOL _sidebarCollapsed;
+  // The last sidebarCollapsed prop. Only a change of the prop overrides the effective state, so a stale prop never
+  // undoes a native toggle.
+  BOOL _sidebarCollapsedProp;
   // Preferred widths seed the dividers once; afterwards the user's drag owns them.
   BOOL _needsPreferredDividerPositions;
   // Our own layout pass resizes subviews several times; only its final state is published.
@@ -517,6 +522,7 @@ static char RNSidebarSplitViewStartupKey;
     _listWidth = 0;
     _hasList = NO;
     _sidebarCollapsed = NO;
+    _sidebarCollapsedProp = NO;
     _needsPreferredDividerPositions = YES;
     _layingOutSplitView = NO;
     _lastSidebarWidth = -1;
@@ -674,11 +680,42 @@ static char RNSidebarSplitViewStartupKey;
   return MAX(0, MIN(MAX(_listMinWidth, preferredListWidth), maxListWidth));
 }
 
+/// Pushes the effective collapsed state to AppKit. Only updateProps and recycling call this: layout passes must
+/// adopt the native state instead, or a stale prop would re-expand a sidebar AppKit just collapsed.
 - (void)updateSidebarCollapsed
 {
   if (_sidebarItem.collapsed != _sidebarCollapsed) {
     _sidebarItem.collapsed = _sidebarCollapsed;
   }
+}
+
+/// Adopts a collapse or expand AppKit performed itself and tells React. Idempotent, so every layout and resize
+/// notification can call it: AppKit posts NSSplitViewDidResizeSubviewsNotification as soon as the sidebar item's
+/// state flips and then once per animation step, and only the first call sees a difference.
+- (void)adoptNativeSidebarCollapsed
+{
+  BOOL collapsed = _sidebarItem.collapsed;
+  if (collapsed == _sidebarCollapsed) {
+    return;
+  }
+  _sidebarCollapsed = collapsed;
+  const auto eventEmitter = std::static_pointer_cast<const SidebarSplitViewEventEmitter>(_eventEmitter);
+  if (eventEmitter) {
+    eventEmitter->onSidebarCollapsedChange(SidebarSplitViewEventEmitter::OnSidebarCollapsedChange{
+      .collapsed = static_cast<bool>(collapsed),
+    });
+  }
+}
+
+/// A collapsed item keeps its container at the width it had (the container is only hidden), so the item, not the
+/// container, says whether the sidebar pane is open.
+- (CGRect)sidebarPaneBounds
+{
+  CGRect bounds = _sidebarContainer.bounds;
+  if (_sidebarItem.collapsed) {
+    bounds.size.width = 0;
+  }
+  return bounds;
 }
 
 - (void)applyAppearance
@@ -828,7 +865,7 @@ static char RNSidebarSplitViewStartupKey;
 
 - (void)syncReactSubviewFrames
 {
-  CGRect sidebarBounds = _sidebarContainer.bounds;
+  CGRect sidebarBounds = [self sidebarPaneBounds];
   CGRect contentBounds = _contentContainer.bounds;
 
   [self syncReactSubview:_sidebarReactView
@@ -1015,7 +1052,8 @@ static char RNSidebarSplitViewStartupKey;
 
 - (void)publishSplitViewLayoutAllowEstimatedReady:(BOOL)allowEstimatedReady
 {
-  CGFloat sidebarWidth = _sidebarContainer.bounds.size.width;
+  [self adoptNativeSidebarCollapsed];
+  CGFloat sidebarWidth = [self sidebarPaneBounds].size.width;
   CGFloat contentWidth = _contentContainer.bounds.size.width;
   CGFloat contentX = [_contentContainer convertRect:_contentContainer.bounds toView:self].origin.x;
   CGFloat sidebarHeight = _sidebarContainer.bounds.size.height;
@@ -1100,7 +1138,7 @@ static char RNSidebarSplitViewStartupKey;
   _splitViewController.view.frame = bounds;
   _splitViewController.splitView.frame = bounds;
   [self updateListItem];
-  [self updateSidebarCollapsed];
+  [self adoptNativeSidebarCollapsed];
   if (_contentContainer.bounds.size.width <= 0 ||
       _contentContainer.bounds.size.height <= 0 ||
       fabs(_contentContainer.bounds.size.height - bounds.size.height) >= 0.5) {
@@ -1237,11 +1275,17 @@ static char RNSidebarSplitViewStartupKey;
   if (nextAppearanceName.length == 0) {
     nextAppearanceName = @"system";
   }
+  // A changed prop is the last writer and wins over a native toggle React has not heard about yet (no event is
+  // sent for it: the app just set a newer value). An unchanged prop never overrides the native state.
+  BOOL collapsedPropChanged = _sidebarCollapsedProp != newProps.sidebarCollapsed;
+  if (!collapsedPropChanged) {
+    [self adoptNativeSidebarCollapsed];
+  }
   BOOL preferredWidthsChanged =
     fabs(_sidebarWidth - newProps.sidebarWidth) >= 0.5 ||
     fabs(_listWidth - newProps.listWidth) >= 0.5 ||
     _hasList != newProps.hasList ||
-    _sidebarCollapsed != newProps.sidebarCollapsed;
+    collapsedPropChanged;
   BOOL shouldRelayout =
     preferredWidthsChanged ||
     fabs(_sidebarMinWidth - newProps.sidebarMinWidth) >= 0.5 ||
@@ -1279,7 +1323,10 @@ static char RNSidebarSplitViewStartupKey;
   _listMinWidth = newProps.listMinWidth;
   _listWidth = newProps.listWidth;
   _hasList = newProps.hasList;
-  _sidebarCollapsed = newProps.sidebarCollapsed;
+  _sidebarCollapsedProp = newProps.sidebarCollapsed;
+  if (collapsedPropChanged) {
+    _sidebarCollapsed = newProps.sidebarCollapsed;
+  }
   if (preferredWidthsChanged) {
     _needsPreferredDividerPositions = YES;
   }
@@ -1397,6 +1444,7 @@ static char RNSidebarSplitViewStartupKey;
   _listWidth = 0;
   _hasList = NO;
   _sidebarCollapsed = NO;
+  _sidebarCollapsedProp = NO;
   _needsPreferredDividerPositions = YES;
   _layingOutSplitView = NO;
   _lastSidebarWidth = -1;
