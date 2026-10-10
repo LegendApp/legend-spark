@@ -249,7 +249,7 @@ test("feed-signing retries receive the same verified ZIP without repackaging or 
       const next = createHash("sha256").update(readFileSync(archive)).digest("hex");
       if (hash) expect(next).toBe(hash); hash = next;
       if (++attempts === 1) throw new Error("Keychain not available");
-      return { feed: "appcast.xml", archive };
+      return { feed: "appcast.xml", archive, deltas: [] };
     } };
     await expect(packageApp(h.root, {}, deps)).rejects.toThrow("Keychain not available");
     const copies = h.state.calls.filter(args => args[0] === "ditto").length;

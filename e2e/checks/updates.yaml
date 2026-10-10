@@ -1,0 +1,63 @@
+area: updates
+prefix: UPD
+checks:
+  UPD-AVAIL-01:
+    title: getUpdateAvailability() and getUpdateStatus() report the true reason (unsupported-platform, missing-module, go, development, unconfigured) without starting Sparkle
+    platforms: [macos, windows]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api"
+  UPD-UNSUP-01:
+    title: Every update command rejects with a typed SparkError where unavailable (E_UNSUPPORTED_PLATFORM on Windows, E_UNAVAILABLE in Runner/development/unconfigured apps)
+    platforms: [macos, windows]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api"
+  UPD-START-01:
+    title: startUpdates() starts the configured updater idempotently and keeps automatic checks off until enabled
+    platforms: [macos]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api"
+  UPD-CHECK-01:
+    title: checkForUpdates() starts interactive and background checks and reports progress through onUpdateEvent()
+    platforms: [macos]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api"
+  UPD-INTERVAL-01:
+    title: configureUpdates() persists automatic checks and check interval; intervals under 3600 s reject with E_INVALID_ARGUMENT instead of being clamped
+    platforms: [macos]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api"
+  UPD-INTERVAL-02:
+    title: Status reports the persisted interval before start and lastCheckedAt after a check
+    platforms: [macos]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api"
+  UPD-DELTA-01:
+    title: spark package with maximumDeltas publishes, reports and keeps only the new build's Ed25519-signed delta archives, before the signed appcast
+    platforms: [macos]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api; bun run test:sparkle"
+  UPD-DELTA-02:
+    title: Sparkle downloads the published delta for the installed build (downloading delta true), reports the full-archive fallback with delta false, and downloads the full archive (delta false) for a build without a delta
+    platforms: [macos]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api; bun run test:sparkle (real SPUUpdater; download and install not performed)"
+  UPD-DOWNGRADE-01:
+    title: Publication rejects a build number not greater than every recorded build, using Sparkle's version ordering
+    platforms: [macos]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api; bun run test:sparkle"
+  UPD-DOWNGRADE-02:
+    title: A signed appcast that only offers older builds reports notAvailable to background and interactive checks and starts no download
+    platforms: [macos]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api; bun run test:sparkle (real SPUUpdater)"
+  UPD-SKIP-01:
+    title: Skip This Version emits a skipped event whose build equals status skippedBuild (skippedMajorBuild and major true for a major upgrade); background checks stop offering it
+    platforms: [macos]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api; bun run test:sparkle (real SPUUpdater)"
+  UPD-SKIP-02:
+    title: clearSkippedUpdate() and an interactive check (which offers the skipped build) clear skippedBuild and skippedMajorBuild so background checks offer it again
+    platforms: [macos]
+    blocking: true
+    spec: "Spec §Updates; #148 UPD.api; bun run test:sparkle (real SPUUpdater)"
