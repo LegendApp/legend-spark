@@ -44,6 +44,17 @@
           "spec": {
             "type": "string",
             "minLength": 1
+          },
+          "covers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^\\./[A-Za-z0-9._/-]+(#[A-Za-z_$][\\w$]*(\\([A-Za-z0-9_-]*\\)\\.[A-Za-z_$][\\w$]*)?)?$",
+              "description": "an SDK surface ID: ./subpath, ./subpath#export or ./subpath#getXAvailability(arg).flag"
+            },
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "The @legendapp/spark surface this check verifies (see bun run e2e:coverage)."
           }
         },
         "required": [

@@ -1,0 +1,9 @@
+area: windows
+prefix: WIN
+checks:
+  WIN-OPEN-01:
+    title: openWindow opens a second window
+    covers: [./windows#openWindow]
+  WIN-AVAIL-01:
+    title: Window APIs report available on desktop
+    covers: [./windows#getWindowAvailability().available]

@@ -27,16 +27,20 @@ A file you name on the command line outside those folders is checked as a flow.
 
 ## Workflow for a flows task
 
-1. Add the checks your flow proves to `e2e/checks/<area>.yaml` (see
-   [Check registry](#check-registry)).
-2. Write `e2e/flows/<area>/<name>.yaml`: a header, `---`, then the commands.
+1. Add the checks your flow proves to `e2e/checks/<area>.yaml`, with the SDK surface
+   each one `covers` (see [Check registry](#check-registry)).
+2. Write `e2e/flows/<area>/<name>.yaml`: a header, `---`, then the commands. List
+   the check IDs in `checks:`.
 3. Run `bun run e2e:lint e2e/flows/<area>` and fix every finding. Lint also runs
    validation, so a clean lint means the files are valid too.
 4. Before you open a PR, run `bun run e2e:lint` with no arguments. It checks all of `e2e/`.
+5. Run `bun run e2e:coverage` and fix every problem in your area (see
+   [Coverage](#coverage)). Surface outside your area may stay uncovered.
 
 ```sh
-bun run e2e:validate [paths…]   # syntax + schema + semantic checks
-bun run e2e:lint [paths…]       # validate, plus the authoring rules below
+bun run e2e:validate [paths…]          # syntax + schema + semantic checks
+bun run e2e:lint [paths…]              # validate, plus the authoring rules below
+bun run e2e:coverage [paths…] [--json] # checks ↔ flows ↔ SDK surface
 ```
 
 Each problem prints as `file:line:column: message [rule]`. The exit code is 0 when
@@ -177,11 +181,76 @@ checks:
     platforms: [macos, windows]
     blocking: true
     spec: "Spec §2 Windows"
+    covers:
+      - ./windows#openWindow
+      - ./windows#setWindowBounds
 ```
 
 The validator rejects a prefix or file name mismatch, a malformed ID, a missing
-`title` and duplicate IDs. Coverage (every check has a flow, and every flow's IDs
-exist) is enforced by [#48](https://github.com/LegendApp/legend-spark/issues/48).
+`title`, duplicate IDs in a file, and a malformed or repeated `covers` entry.
+
+### Declaring coverage
+
+`covers` lists the `@legendapp/spark` surface the check verifies, as surface IDs:
+
+| Surface | ID | Example |
+|---|---|---|
+| subpath | `<subpath>` | `./config` |
+| export | `<subpath>#<export>` | `./windows#openWindow` |
+| availability flag | `<subpath>#<getXAvailability>(<arg>).<flag>` | `./windows#getWindowAvailability().available`, `./ui#getControlAvailability(select).available` |
+
+The subpath is the key in `packages/desktop/package.json` `exports`. A cover also
+covers what contains it: a flag covers its function's export, and an export covers
+its subpath. Covering `./windows#getWindowAvailability` does not cover its flags,
+though. Each flag needs a check that verifies it.
+
+Only list surface the flow really exercises. A cover is a claim that the flow
+proves the behavior, and the gate trusts it.
+
+## Coverage
+
+`bun run e2e:coverage` reads every registry and gate flow under `e2e/` and the SDK
+surface, then reports:
+
+| Rule | Problem |
+|---|---|
+| `no-flow` | A registered check that no flow lists in `checks:`. |
+| `unregistered-check` | A flow lists a check ID that no registry defines. |
+| `duplicate-check` | Two registries define the same check ID. |
+| `unknown-cover` | A `covers` entry that is not in the SDK surface (a typo, or a removed export). |
+| `schema`, `yaml`, … | A registry or flow that does not validate. The file is left out of coverage. |
+
+Then it lists the uncovered SDK surface, grouped by subpath. The required surface is:
+
+- every subpath in the SDK `exports`, except `./package.json` (package metadata),
+- every runtime export of each TypeScript entry, as the type checker sees it
+  (type-only exports may be covered, but aren't required),
+- every flag of every `get*Availability()` export: one per boolean property of its
+  result, and one per value when its first parameter is a string-literal union.
+
+`scripts/api-surface.ts` derives this surface. `tests/api-public-surface.test.ts`
+uses the same code for the `docs/api-public-surface.json` snapshot.
+
+Only checks that some flow lists count toward coverage. The exit code is 0 only when
+there are no problems and every required item is covered, 1 otherwise, and 2 for a
+usage error. Coverage is not part of `bun run test`: most areas have no checks yet,
+so it fails today. The release gate ([#54](https://github.com/LegendApp/legend-spark/issues/54))
+makes it blocking.
+
+`--json` prints the report for the gate and dashboards:
+
+```jsonc
+{
+  "ok": false,
+  "summary": { "checks": 12, "flows": 9, "required": 313, "covered": 40, "problems": 1 },
+  "checks": [{ "id": "WIN-FRAME-01", "area": "windows", "title": "…", "location": { "file": "e2e/checks/windows.yaml", "line": 4, "column": 3 },
+               "covers": ["./windows#openWindow"], "flows": ["e2e/flows/windows/frame.yaml"] }],
+  "surface": [{ "id": "./windows#openWindow", "kind": "export", "subpath": "./windows", "coveredBy": ["WIN-FRAME-01"] }],
+  "problems": [{ "file": "e2e/checks/windows.yaml", "line": 9, "column": 3, "rule": "no-flow", "message": "…", "area": "windows" }]
+}
+```
+
+`kind` is `subpath`, `export` or `availability`.
 
 ## Editor support
 

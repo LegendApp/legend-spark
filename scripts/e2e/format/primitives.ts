@@ -24,6 +24,8 @@ export const anyKey = (...keys: string[]): Schema => ({ anyOf: keys.map(key => (
 /** Exactly one of the keys must be present. */
 export const oneKey = (...keys: string[]): Schema => ({ oneOf: keys.map(key => ({ required: [key] })) });
 const pattern = (regex: string, description: string): Schema => ({ type: "string", pattern: regex, description });
+/** What a check covers in @legendapp/spark: `./subpath`, `./subpath#export` or `./subpath#getXAvailability(arg).flag`. */
+export const SURFACE_ID = pattern("^\\./[A-Za-z0-9._/-]+(#[A-Za-z_$][\\w$]*(\\([A-Za-z0-9_-]*\\)\\.[A-Za-z_$][\\w$]*)?)?$", "an SDK surface ID: ./subpath, ./subpath#export or ./subpath#getXAvailability(arg).flag");
 /** Pick a schema by YAML value type, so errors come from the branch the author meant. */
 export const byType = (object: Schema, other: Schema): Schema => ({ if: { type: "object" }, then: object, else: other });
 
