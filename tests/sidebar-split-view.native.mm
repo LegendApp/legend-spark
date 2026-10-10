@@ -156,11 +156,28 @@ int main(){@autoreleasepool{
  for(int i=0;i<4;i++) {
    auto next=std::make_shared<SidebarSplitViewProps>(*current);
    next->hasList=!current->hasList;next->sidebarCollapsed=!current->sidebarCollapsed;
+   size_t resizeCount=resizes.size();
    [v updateProps:next oldProps:current];spin();
    assert(controller.splitViewItems[0].collapsed==next->sidebarCollapsed);assert(changes.size()==eventCount);
+   assert(resizes.size()==resizeCount+1);
+   const auto &settled=resizes.back();
+   NSView *listContainer=[v valueForKey:@"listContainer"], *contentContainer=[v valueForKey:@"contentContainer"];
+   assert(fabs(settled.contentWidth-contentContainer.bounds.size.width)<0.5);
+   assert(fabs(settled.listWidth-(next->hasList ? listContainer.bounds.size.width : 0))<0.5);
+   assert(fabs(settled.listX-(next->hasList ? [listContainer convertRect:listContainer.bounds toView:v].origin.x : 0))<0.5);
    current=next;
  }
- puts("PASS full component changed props win before observation and alongside list insertion/removal");
+ puts("PASS full component changed props win before observation and alongside list insertion/removal with one settled resize");
+ // A controlled echo can equal the adopted state while winning over a newer unobserved opposite native toggle.
+ controller.splitViewItems[0].collapsed=true;spin();[v layout];checkCollapsed(true);
+ eventCount=changes.size();
+ [v setValue:@YES forKey:@"layingOutSplitView"];controller.splitViewItems[0].collapsed=false;
+ [v setValue:@NO forKey:@"layingOutSplitView"];
+ auto winningEcho=std::make_shared<SidebarSplitViewProps>(*current);winningEcho->sidebarCollapsed=true;
+ size_t resizeCount=resizes.size();
+ [v updateProps:winningEcho oldProps:current];spin();checkCollapsed(true);
+ assert(changes.size()==eventCount && resizes.size()==resizeCount+1);
+ puts("PASS full component winning echo forces one settled layout for unobserved native toggle");
  [v prepareForRecycle];spin();assert(!controller.splitViewItems[0].collapsed);
  changes.clear();resizes.clear();[v updateEventEmitter:std::make_shared<SidebarSplitViewEventEmitter>()];
  auto fresh=std::make_shared<SidebarSplitViewProps>();[v updateProps:fresh oldProps:v->_props];

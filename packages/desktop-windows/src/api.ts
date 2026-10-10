@@ -54,7 +54,9 @@ export async function getCursorPoint(): Promise<CursorPoint> { return windowCall
 export async function setWindowOptions(id: string, options: WindowUpdateOptions): Promise<void> {
   windowId(id); validateOptions(options, Platform.OS, false);
   const snapshot = JSON.parse(JSON.stringify(options)) as WindowUpdateOptions;
-  await windowCommand("options", { id, options: snapshot });
+  if (!snapshot.macos || Object.keys(snapshot).some(key => key !== "macos")) {
+    await windowCommand("options", { id, options: snapshot });
+  }
   if (snapshot.macos) await updateMacOSWindow(id, snapshot.macos);
 }
 /** Portable frame change. Animated moves are macOS-only: pass `macos.durationMs` and the call rejects on Windows rather than ignoring the request. */

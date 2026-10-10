@@ -10,30 +10,26 @@ gaps beneath the feature checklist: app/window lifecycle, launch arguments,
 file-dialog options, portable window options, and nested menu targeting. These
 need implementation or explicit contract decisions as well as native testing.
 
-## Confirmed Nitro integration blocker and proposed boundary (2026-10-03)
+## Nitro JSI initialization (2026-10-05)
 
-The current adapter calls `ReactContext.JSRuntime()` in
-`patches/windows/nitro/windows/SparkNitro/SparkNitro.h`. Pinned RNW 0.81.35's
-`Microsoft.ReactNative/IReactContext.cpp` fail-fasts for that call under
-`DEBUG && USE_FABRIC`; its `IReactContext.idl` also marks the runtime property
-experimental and deprecated for the new architecture.
+The adapter installs Nitro through RNW's two-argument `REACT_INIT` initializer,
+using the supplied `facebook::jsi::Runtime&` and the context's call-invoker
+dispatcher. The synchronous `install()` entry reports the retained initializer
+result, including native errors, without fetching a runtime through the deprecated
+`ReactContext.JSRuntime()` or `context.Handle().JSRuntime()` property. Pinned RNW
+0.81.35 fail-fasts for that property under Debug/Fabric.
 
-The narrow supported path in the pinned source is RNW's JSI initializer form:
-keep `REACT_INIT(Initialize)`, but declare the method with both
-`ReactContext const&` and `facebook::jsi::Runtime&`, then install Nitro directly
-from that runtime argument. `Microsoft.ReactNative.Cxx/NativeModules.h` recognizes
-two-argument init methods as JSI initializers and registers them with
-`AddJsiInitializer`; the runtime is supplied by the initializer boundary. Do not
-fetch `context.JSRuntime()` or `context.Handle().JSRuntime()` inside that method.
-The latter is the same deprecated `IReactContext.JSRuntime` property and is not a
-safe workaround. Keep the existing context call-invoker dispatcher for later
-Nitro callbacks.
+The portable C++ fixture executes the adapter with the initializer template from
+pinned RNW and checks supplied-runtime identity, missing-runtime behavior,
+installation errors, and replacement on a fresh module. It substitutes the WinRT
+and Nitro boundaries; it is not MSVC compilation or Windows startup evidence.
 
-This is a source-grounded proposal, not a compiled fix. Validate Debug Fabric
-startup on Windows x64 and ARM64, verify Nitro HybridObject creation and calls,
-exercise callback dispatch/reload, and confirm native buffer ownership before
-closing the blocker. No Windows compiler or runtime acceptance was available
-for this investigation.
+Windows x64 and ARM64 validation remains required: compile Debug/Fabric, exercise
+Nitro HybridObject creation and callbacks, reload, and confirm native buffer
+ownership. Notification acceptance must also cover custom action buttons,
+independent body/action payloads, and call-tone audio on immediate and scheduled
+toasts. The payload fixture checks the production XML construction with a
+Foundation DOM; actual WinRT delivery and activation remain unverified.
 
 ## What remains
 

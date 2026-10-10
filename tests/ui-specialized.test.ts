@@ -9,11 +9,13 @@ vi.mock("../packages/ui/src/appkit-split-view/SidebarSplitViewNativeComponent", 
 vi.mock("../packages/ui/src/sidebar/SidebarNativeComponent", () => ({ default: "Sidebar" }));
 vi.mock("../packages/ui/src/sidebar/SidebarItemNativeComponent", () => ({ default: "SidebarItem" }));
 vi.mock("../packages/ui/src/sf-symbol/SFSymbolNativeComponent", () => ({ default: "SFSymbol" }));
+vi.mock("../packages/ui/src/swipe-actions/SwipeActionsNativeComponent", () => ({ default: "SwipeActions" }));
 import { TextInputSearch, type TextInputSearchRef } from "../packages/ui/src/text-input-search";
 import { SidebarSplitView } from "../packages/ui/src/appkit-split-view";
 import { Sidebar, SidebarItem } from "../packages/ui/src/sidebar";
 import { GlassView, getGlassAvailability } from "../packages/ui/src/glass-effect-view";
 import { SFSymbol } from "../packages/ui/src/sf-symbol";
+import { SwipeActions } from "../packages/ui/src/swipe-actions";
 let rendered: any;
 async function mount(element: React.ReactElement) { await act(async () => { rendered = create(element, { createNodeMock: () => ({ measureInWindow: (cb: Function) => cb(0, 0, 100, 30) }) }); }); }
 beforeEach(() => {
@@ -90,6 +92,40 @@ test("split views host an optional native list column after the sidebar and cont
   expect(panes[2].props.style).toMatchObject({ width: 300, height: 100 });
   expect(onResize.mock.calls[0][0]).toMatchObject({ listWidth: 300, listX: 201, contentX: 502, phase: "ready" });
 });
+test.each([undefined, null, false, true, ""])("split views omit non-rendering conditional list values (%s)", async list => {
+  await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", list }));
+  const native = rendered.root.findByType("SidebarSplitView");
+  expect(native.props.hasList).toBe(false);
+  expect(native.children).toHaveLength(2);
+});
+test("split views retain content across list toggles and render a numeric zero list", async () => {
+  const mounted = vi.fn(), unmounted = vi.fn();
+  function Content() { React.useEffect(() => { mounted(); return unmounted; }, []); return React.createElement("ContentProbe"); }
+  const content = React.createElement(Content);
+  for (const list of [undefined, "List", null, 0]) {
+    const element = React.createElement(SidebarSplitView, { sidebar: "Sidebar", content, list });
+    if (!rendered) await mount(element); else await act(async () => rendered.update(element));
+    const native = rendered.root.findByType("SidebarSplitView");
+    expect(native.props.hasList).toBe(list === "List" || list === 0);
+    expect(mounted).toHaveBeenCalledTimes(1); expect(unmounted).not.toHaveBeenCalled();
+  }
+});
+test("split views require complete native list metrics but allow older initial hints", async () => {
+  const onResize = vi.fn(), onError = vi.fn();
+  await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", onResize, onError,
+    initialPaneMetrics: { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 200 } }));
+  const native = rendered.root.findByType("SidebarSplitView");
+  const data = { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 200, listHeight: 0, listWidth: 0, listX: 0, contentX: 201, height: 100, isLayoutReady: true };
+  for (const field of ["listWidth", "listHeight"] as const) {
+    for (const invalid of [undefined, NaN, -1]) {
+      native.props.onSplitViewDidResize({ nativeEvent: { ...data, [field]: invalid } });
+      expect(onError).toHaveBeenLastCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
+    }
+  }
+  expect(onResize).not.toHaveBeenCalled();
+  await act(async () => native.props.onSplitViewDidResize({ nativeEvent: data }));
+  expect(onResize).toHaveBeenCalledWith(expect.objectContaining({ listWidth: 0, listHeight: 0, phase: "ready" }));
+});
 test("sidebar data selection can be cleared and unknown/disabled choices reject", async () => {
   const onSelectionChange = vi.fn(), onError = vi.fn();
   await mount(React.createElement(Sidebar, { items: [{ id: "a", label: "A" }, { id: "b", label: "B", selectable: false }], selectedId: "a", onSelectionChange, onError }));
@@ -132,4 +168,45 @@ test("symbols accept style arrays and report only errors for the current symbol"
   const native = rendered.root.findByType("SFSymbol").props; expect(native.style).toEqual([{ height: 32, width: 32 }, [{ opacity: 0.5 }]]);
   native.onSymbolError({ nativeEvent: { name: "old", message: "old error" } }); expect(onError).not.toHaveBeenCalled();
   native.onSymbolError({ nativeEvent: { name: "doc", message: "missing" } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_NOT_FOUND" }));
+});
+test("swipe actions serialize validated actions and report only known IDs", async () => {
+  const onAction = vi.fn(), onError = vi.fn();
+  const archive = { id: "archive", title: "Archive", symbol: "archivebox", color: "#2E7D5B", dismisses: true }, snooze = { id: "snooze", title: "Snooze", symbol: "clock", color: "#C98A1BFF" };
+  await mount(React.createElement(SwipeActions, { leadingActions: [archive], trailingActions: [snooze], onAction, onError }, "Row"));
+  const native = rendered.root.findByType("SwipeActions").props;
+  expect(JSON.parse(native.leadingActionsJson)).toEqual([archive]); expect(JSON.parse(native.trailingActionsJson)).toEqual([{ ...snooze, dismisses: false }]);
+  native.onSwipeAction({ nativeEvent: { actionId: "snooze" } }); expect(onAction).toHaveBeenCalledWith("snooze");
+  native.onSwipeAction({ nativeEvent: { actionId: "gone" } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onAction).toHaveBeenCalledTimes(1);
+  expect(() => SwipeActions({ onAction, leadingActions: [{ ...archive, color: "green" }] })).toThrow("Swipe action colors");
+  expect(() => SwipeActions({ onAction, leadingActions: [archive], trailingActions: [archive] })).toThrow("Duplicate swipe action ID");
+});
+
+test("swipe actions require a callback and arrays at the public boundary", async () => {
+  const action = { id: "archive", title: "Archive", symbol: "archivebox.fill", color: "#3E8E63" };
+  for (const props of [
+    { leadingActions: [action] },
+    { onAction: null },
+    { onAction: "not a callback" },
+    { onAction: () => {}, leadingActions: null },
+    { onAction: () => {}, trailingActions: {} },
+  ]) {
+    await expect(mount(React.createElement(SwipeActions, props as never))).rejects.toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  }
+});
+
+test("swipe callbacks stop at unmount and platform fallbacks retain children", async () => {
+  const onAction = vi.fn(), onError = vi.fn();
+  const action = { id: "archive", title: "Archive", symbol: "archivebox.fill", color: "#3E8E63" };
+  await mount(React.createElement(SwipeActions, { leadingActions: [action], onAction, onError }));
+  const native = rendered.root.findByType("SwipeActions").props;
+  await act(async () => { rendered.unmount(); rendered = undefined; });
+  native.onSwipeAction({ nativeEvent: { actionId: "archive" } });
+  expect(onAction).not.toHaveBeenCalled();
+  for (const [os, present, code] of [["windows", true, "E_UNSUPPORTED_PLATFORM"], ["macos", false, "E_MODULE_UNAVAILABLE"]] as const) {
+    platform.OS = os; registered.mockReturnValue(present); onError.mockClear();
+    await mount(React.createElement(SwipeActions, { leadingActions: [action], onAction, onError, children: "Row" }));
+    expect(rendered.root.findByType("View").props.children).toBe("Row");
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code }));
+    await act(async () => { rendered.unmount(); rendered = undefined; });
+  }
 });

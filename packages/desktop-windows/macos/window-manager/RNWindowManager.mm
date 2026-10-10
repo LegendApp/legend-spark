@@ -1219,7 +1219,37 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       NSMutableDictionary *config = [item mutableCopy]; config[@"instanceId"] = objc_getAssociatedObject(window, NSSelectorFromString(@"sparkWindowInstanceId")) ?: @""; [configs addObject:config];
     }
   }
+  NSArray<NSDictionary *> *previousConfigs = self.toolbarItemConfigs[toolbar.identifier];
+  BOOL menuUpdate = previousConfigs != nil && previousConfigs.count == configs.count;
+  for (NSUInteger index = 0; menuUpdate && index < configs.count; index++) {
+    NSMutableDictionary *previous = [previousConfigs[index] mutableCopy];
+    NSMutableDictionary *next = [configs[index] mutableCopy];
+    if ([next[@"type"] isEqual:@"menuButton"]) {
+      [previous removeObjectForKey:@"menuItems"];
+      [next removeObjectForKey:@"menuItems"];
+    }
+    menuUpdate = [previous isEqualToDictionary:next];
+  }
   self.toolbarItemConfigs[toolbar.identifier] = configs;
+  if (menuUpdate) {
+    for (NSDictionary *config in configs) {
+      if (![config[@"type"] isEqual:@"menuButton"]) continue;
+      NSString *itemId = config[@"id"];
+      if (![itemId isKindOfClass:NSString.class] || itemId.length == 0) { menuUpdate = NO; break; }
+      NSString *itemIdentifier = [@"legend.toolbar." stringByAppendingString:itemId];
+      NSToolbarItem *item = nil;
+      for (NSToolbarItem *candidate in toolbar.items) {
+        if ([candidate.itemIdentifier isEqual:itemIdentifier]) { item = candidate; break; }
+      }
+      id control = item.view ?: item;
+      NSDictionary *metadata = control ? objc_getAssociatedObject(control, &LegendToolbarControlMetadataKey) : nil;
+      if (!metadata) { menuUpdate = NO; break; }
+      NSMutableDictionary *nextMetadata = [metadata mutableCopy];
+      nextMetadata[@"menuItems"] = config[@"menuItems"] ?: @[];
+      objc_setAssociatedObject(control, &LegendToolbarControlMetadataKey, nextMetadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (menuUpdate) return;
+  }
 
   while (toolbar.items.count > 0) {
     [toolbar removeItemAtIndex:toolbar.items.count - 1];
@@ -2416,6 +2446,15 @@ willBeInsertedIntoToolbar:(BOOL)flag
       resolve([self failureJson:@"Toolbar item does not support text"]);
       return;
     }
+    NSMutableArray *configs = [self.toolbarItemConfigs[window.toolbar.identifier] mutableCopy];
+    for (NSUInteger index = 0; index < configs.count; index++) {
+      if (![[self toolbarItemIdentifierForConfig:configs[index]] isEqualToString:toolbarIdentifier]) continue;
+      NSMutableDictionary *config = [configs[index] mutableCopy];
+      config[[toolbarItem.view isKindOfClass:NSTextField.class] ? @"text" : @"label"] = text ?: @"";
+      configs[index] = config;
+      break;
+    }
+    self.toolbarItemConfigs[window.toolbar.identifier] = configs;
     resolve([self successJson]);
   });
 #else
