@@ -1,4 +1,5 @@
 import { defineScreens } from "../../shell/registry";
+import { Buttons, Indicators, Inputs, Toggles } from "./ControlPrimitives";
 import { Glass } from "./Glass";
 import { Search } from "./Search";
 import { SFSymbols } from "./SFSymbols";
@@ -14,4 +15,8 @@ export default defineScreens("native-controls", [
   { id: "glass", title: "Glass", summary: "A native glass effect view.", component: Glass },
   { id: "symbol", title: "SF Symbols", summary: "SF Symbols at several sizes, scales and colors.", component: SFSymbols },
   { id: "search", title: "Search field", summary: "Native search fields with change events and programmatic focus.", component: Search },
+  { id: "toggles", title: "Toggles", summary: "Checkbox (with mixed), radio group, switch and disclosure triangle in every control size.", component: Toggles },
+  { id: "inputs", title: "Value inputs", summary: "Continuous and ticked sliders, stepper, combo box, token field and path control in every control size.", component: Inputs },
+  { id: "indicators", title: "Indicators", summary: "Determinate, indeterminate and spinner progress and a level indicator, driven by a stepper.", component: Indicators },
+  { id: "buttons", title: "Button styles", summary: "Push, bevel, toolbar, help and destructive buttons in every size; Return and Escape buttons.", component: Buttons },
 ]);
