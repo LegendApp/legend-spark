@@ -233,6 +233,7 @@ async function buildUnlocked(
     if (
       existing.runtime.fingerprint === runtime.fingerprint &&
       existing.preparation?.fingerprint === preparation.fingerprint &&
+      existing.product === path.basename(existing.app) &&
       existsSync(existing.app)
     ) {
       console.log(`Reusing ${existing.app}`);
@@ -243,6 +244,7 @@ async function buildUnlocked(
     ...preparationChanges(existing.preparation, preparation),
     ...(existing.runtime.fingerprint !== runtime.fingerprint ? ["runtime inputs changed"] : []),
     ...(!existsSync(existing.app) ? ["cached app missing"] : []),
+    ...(existing.product !== path.basename(existing.app) ? ["cached app product is unverified"] : []),
   ];
   console.log(`Building ${mode} runtime: ${reasons.join("; ")}.`);
   const nativeConfig = readAppConfig(root).expo;
@@ -336,10 +338,11 @@ async function buildUnlocked(
     },
   );
   const products = path.join(derived, "Build", "Products", configuration);
-  const product = readdirSync(products).find((name) => name.endsWith(".app"));
-  if (!product) throw new Error("Build completed without an app product.");
+  // The scheme's product, not the first .app: a renamed app leaves its old bundle in DerivedData.
+  const product = `${name}.app`;
+  if (!existsSync(path.join(products, product))) throw new Error(`Build completed without ${product}.`);
   const destination = stateFile(root, `products/macos-${runtime.arch}/${mode}/${product}`);
-  rmSync(destination, { recursive: true, force: true });
+  rmSync(path.dirname(destination), { recursive: true, force: true });
   mkdirSync(path.dirname(destination), { recursive: true });
   cpSync(path.join(products, product), destination, { recursive: true, verbatimSymlinks: true });
   if (
@@ -349,6 +352,8 @@ async function buildUnlocked(
     throw new Error("Standalone build is missing its JavaScript bundle.");
   const result = {
     app: destination,
+    // Older receipts may record a stale bundle selected from DerivedData.
+    product,
     runtime: runtimeFor(root, chosen.included, mode),
     preparation,
   };

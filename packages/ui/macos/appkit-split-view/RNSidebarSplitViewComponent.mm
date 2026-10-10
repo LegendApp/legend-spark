@@ -281,6 +281,19 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
 
 static char RNSidebarSplitViewStartupKey;
 
+// NSSplitViewController answers a divider double-click by snapping the pane beside it to its minimum or maximum
+// thickness (the shouldCollapse...forDoubleClick delegate is deprecated and never called). The snap bypasses the
+// layout flow React panes follow, and a sidebar here collapses only through the explicit toggle, so swallow it.
+// Dragging a divider is unaffected.
+@interface RNSidebarSplitViewController : NSSplitViewController
+@end
+
+@implementation RNSidebarSplitViewController
+- (void)splitView:(NSSplitView *)splitView doubleClickedOnDividerAtIndex:(NSInteger)dividerIndex
+{
+}
+@end
+
 // Startup must stay entirely in AppKit: constructing a Fabric view here would
 // read React feature flags before RCTReactNativeFactory configures them.
 @interface RNSidebarSplitViewStartupView : NSView
@@ -334,7 +347,7 @@ static char RNSidebarSplitViewStartupKey;
     sidebarItem.allowsFullHeightLayout = YES;
     contentItem.allowsFullHeightLayout = YES;
 
-    _controller = [NSSplitViewController new];
+    _controller = [RNSidebarSplitViewController new];
     _controller.minimumThicknessForInlineSidebars = 0;
     _controller.splitView.vertical = YES;
     _controller.splitView.dividerStyle = NSSplitViewDividerStyleThin;
@@ -443,12 +456,6 @@ static char RNSidebarSplitViewStartupKey;
   RCTUIView<RCTComponentViewProtocol> *_contentReactView;
   RCTUIView<RCTComponentViewProtocol> *_listReactView;
   id _resizeObserver;
-  id _contentFrameObserver;
-  id _contentBoundsObserver;
-  // React lays a pane out one commit after a native resize. Until then the content pane's React content is
-  // pinned to whichever edge held still: the window edge while a divider drags, the divider while the window resizes.
-  NSRect _lastContentFrame;
-  BOOL _contentAnchorsRight;
   LayoutMetrics _currentLayoutMetrics;
   LayoutMetrics _sidebarReactLayoutMetrics;
   LayoutMetrics _contentReactLayoutMetrics;
@@ -459,7 +466,12 @@ static char RNSidebarSplitViewStartupKey;
   CGFloat _listMinWidth;
   CGFloat _listWidth;
   BOOL _hasList;
+  // Effective collapsed state, which React knows. Follows the prop when the prop changes and the sidebar item when
+  // AppKit collapses it (toggleSidebar:, the toolbar button, ...); the latter is reported via onSidebarCollapsedChange.
   BOOL _sidebarCollapsed;
+  // The last sidebarCollapsed prop. Only a change of the prop overrides the effective state, so a stale prop never
+  // undoes a native toggle.
+  BOOL _sidebarCollapsedProp;
   // Preferred widths seed the dividers once; afterwards the user's drag owns them.
   BOOL _needsPreferredDividerPositions;
   // Our own layout pass resizes subviews several times; only its final state is published.
@@ -504,6 +516,7 @@ static char RNSidebarSplitViewStartupKey;
     _listWidth = 0;
     _hasList = NO;
     _sidebarCollapsed = NO;
+    _sidebarCollapsedProp = NO;
     _needsPreferredDividerPositions = YES;
     _layingOutSplitView = NO;
     _lastSidebarWidth = -1;
@@ -556,7 +569,7 @@ static char RNSidebarSplitViewStartupKey;
       _listItem.allowsFullHeightLayout = YES;
     }
 
-    _splitViewController = [NSSplitViewController new];
+    _splitViewController = [RNSidebarSplitViewController new];
     _splitViewController.splitView = [RNSidebarSplitViewNativeSplitView new];
     _splitViewController.minimumThicknessForInlineSidebars = 0;
     _splitViewController.splitView.vertical = YES;
@@ -566,39 +579,13 @@ static char RNSidebarSplitViewStartupKey;
     [_splitViewController addSplitViewItem:_contentItem];
     [self applyAppearance];
 
+    __weak RNSidebarSplitViewComponent *weakSelf = self;
     _resizeObserver = [[NSNotificationCenter defaultCenter]
       addObserverForName:NSSplitViewDidResizeSubviewsNotification
                   object:_splitViewController.splitView
                    queue:NSOperationQueue.mainQueue
               usingBlock:^(__unused NSNotification *notification) {
-                if (!self->_layingOutSplitView) {
-                  [self publishSplitViewLayoutAllowEstimatedReady:NO];
-                }
-              }];
-    // React applying a new frame sets the frame, then resets the bounds offset the anchor uses, so re-pin after
-    // either changes on the content root (and after its children's frames change in a commit).
-    __weak RNSidebarSplitViewComponent *weakSelf = self;
-    _contentFrameObserver = [[NSNotificationCenter defaultCenter]
-      addObserverForName:NSViewFrameDidChangeNotification
-                  object:nil
-                   queue:nil
-              usingBlock:^(NSNotification *notification) {
-                RNSidebarSplitViewComponent *strongSelf = weakSelf;
-                NSView *view = notification.object;
-                if (strongSelf && strongSelf->_contentReactView &&
-                    (view == strongSelf->_contentReactView || view.superview == strongSelf->_contentReactView)) {
-                  [strongSelf anchorContentReactView];
-                }
-              }];
-    _contentBoundsObserver = [[NSNotificationCenter defaultCenter]
-      addObserverForName:NSViewBoundsDidChangeNotification
-                  object:nil
-                   queue:nil
-              usingBlock:^(NSNotification *notification) {
-                RNSidebarSplitViewComponent *strongSelf = weakSelf;
-                if (strongSelf && notification.object == strongSelf->_contentReactView) {
-                  [strongSelf anchorContentReactView];
-                }
+                [weakSelf splitViewDidResize];
               }];
 
     [self addSubview:_splitViewController.view];
@@ -638,15 +625,15 @@ static char RNSidebarSplitViewStartupKey;
 
 - (CGFloat)listReserveWidth
 {
-  return _hasList ? _listMinWidth + _splitViewController.splitView.dividerThickness : 0;
+  return _hasList ? _listItem.minimumThickness + _splitViewController.splitView.dividerThickness : 0;
 }
 
 - (CGFloat)preferredSidebarWidthForBounds:(CGRect)bounds
 {
   CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
-  CGFloat maxSidebarWidth = bounds.size.width - _contentMinWidth - dividerThickness - [self listReserveWidth];
+  CGFloat maxSidebarWidth = bounds.size.width - _contentItem.minimumThickness - dividerThickness - [self listReserveWidth];
   CGFloat preferredSidebarWidth = _sidebarWidth > 0 ? _sidebarWidth : _sidebarMinWidth;
-  CGFloat sidebarWidth = MIN(MAX(_sidebarMinWidth, preferredSidebarWidth), maxSidebarWidth);
+  CGFloat sidebarWidth = MIN(MAX(_sidebarItem.minimumThickness, preferredSidebarWidth), maxSidebarWidth);
   return MAX(0, sidebarWidth);
 }
 
@@ -656,16 +643,47 @@ static char RNSidebarSplitViewStartupKey;
     return 0;
   }
   CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
-  CGFloat maxListWidth = bounds.size.width - sidebarExtent - _contentMinWidth - dividerThickness;
+  CGFloat maxListWidth = bounds.size.width - sidebarExtent - _contentItem.minimumThickness - dividerThickness;
   CGFloat preferredListWidth = _listWidth > 0 ? _listWidth : _listMinWidth;
-  return MAX(0, MIN(MAX(_listMinWidth, preferredListWidth), maxListWidth));
+  return MAX(0, MIN(MAX(_listItem.minimumThickness, preferredListWidth), maxListWidth));
 }
 
+/// Pushes the effective collapsed state to AppKit. Only updateProps and recycling call this: layout passes must
+/// adopt the native state instead, or a stale prop would re-expand a sidebar AppKit just collapsed.
 - (void)updateSidebarCollapsed
 {
   if (_sidebarItem.collapsed != _sidebarCollapsed) {
     _sidebarItem.collapsed = _sidebarCollapsed;
   }
+}
+
+/// Adopts a collapse or expand AppKit performed itself and tells React. Idempotent, so every layout and resize
+/// notification can call it: AppKit posts NSSplitViewDidResizeSubviewsNotification as soon as the sidebar item's
+/// state flips and then once per animation step, and only the first call sees a difference.
+- (void)adoptNativeSidebarCollapsed
+{
+  BOOL collapsed = _sidebarItem.collapsed;
+  if (collapsed == _sidebarCollapsed) {
+    return;
+  }
+  _sidebarCollapsed = collapsed;
+  const auto eventEmitter = std::static_pointer_cast<const SidebarSplitViewEventEmitter>(_eventEmitter);
+  if (eventEmitter) {
+    eventEmitter->onSidebarCollapsedChange(SidebarSplitViewEventEmitter::OnSidebarCollapsedChange{
+      .collapsed = static_cast<bool>(collapsed),
+    });
+  }
+}
+
+/// A collapsed item keeps its container at the width it had (the container is only hidden), so the item, not the
+/// container, says whether the sidebar pane is open.
+- (CGRect)sidebarPaneBounds
+{
+  CGRect bounds = _sidebarContainer.bounds;
+  if (_sidebarItem.collapsed) {
+    bounds.size.width = 0;
+  }
+  return bounds;
 }
 
 - (void)applyAppearance
@@ -815,7 +833,7 @@ static char RNSidebarSplitViewStartupKey;
 
 - (void)syncReactSubviewFrames
 {
-  CGRect sidebarBounds = _sidebarContainer.bounds;
+  CGRect sidebarBounds = [self sidebarPaneBounds];
   CGRect contentBounds = _contentContainer.bounds;
 
   [self syncReactSubview:_sidebarReactView
@@ -827,38 +845,6 @@ static char RNSidebarSplitViewStartupKey;
   [self syncReactSubview:_listReactView
              nativeBounds:_hasList ? _listContainer.bounds : CGRectZero
     previousLayoutMetrics:&_listReactLayoutMetrics];
-  [self anchorContentReactView];
-}
-
-/// Offsets the content pane's React root so its laid-out content meets the anchored edge. The offset is the gap
-/// between React's last layout width and the pane's native width, so it returns to zero once React catches up.
-- (void)anchorContentReactView
-{
-  NSView *root = _contentReactView;
-  if (!root) {
-    return;
-  }
-  // AppKit wraps each split item's view, so measure in our own coordinates rather than the wrapper's.
-  NSRect contentFrame = [_contentContainer convertRect:_contentContainer.bounds toView:self];
-  if (!NSEqualRects(contentFrame, _lastContentFrame)) {
-    // A divider drag holds the window edge still; any other resize (the window's) holds the pane's left edge.
-    // AppKit applies a drag's origin and width in separate steps, so the drag itself decides, not each step.
-    BOOL dragging = ((RNSidebarSplitViewNativeSplitView *)_splitViewController.splitView).trackingDivider;
-    if (dragging) {
-      _contentAnchorsRight = YES;
-    } else if (fabs(NSMinX(contentFrame) - NSMinX(_lastContentFrame)) < 0.5) {
-      _contentAnchorsRight = NO;
-    }
-    _lastContentFrame = contentFrame;
-  }
-  CGFloat laidOut = 0;
-  for (NSView *child in root.subviews) {
-    laidOut = MAX(laidOut, NSMaxX(child.frame));
-  }
-  CGFloat offset = _contentAnchorsRight && laidOut > 0 ? laidOut - NSWidth(root.bounds) : 0;
-  if (fabs(root.bounds.origin.x - offset) >= 0.25) {
-    [root setBoundsOrigin:NSMakePoint(offset, root.bounds.origin.y)];
-  }
 }
 
 - (void)syncReactSubview:(nullable RCTUIView<RCTComponentViewProtocol> *)subview
@@ -987,22 +973,25 @@ static char RNSidebarSplitViewStartupKey;
            nativeBounds:CGRectMake(0, 0, listWidth, bounds.size.height)
   previousLayoutMetrics:&_listReactLayoutMetrics];
   [self layoutContentTitlebarMaterial];
-  [self emitSplitViewDidResizeWithSidebarWidth:sidebarWidth
-                                  contentWidth:contentWidth
-                                      contentX:contentX
-                                 sidebarHeight:bounds.size.height
-                                 contentHeight:bounds.size.height
-                                        height:bounds.size.height
-                                     listWidth:listWidth
-                                         listX:listX
-                                   layoutReady:layoutReady];
+  if (!_layingOutSplitView) {
+    [self emitSplitViewDidResizeWithSidebarWidth:sidebarWidth
+                                    contentWidth:contentWidth
+                                        contentX:contentX
+                                   sidebarHeight:bounds.size.height
+                                   contentHeight:bounds.size.height
+                                          height:bounds.size.height
+                                       listWidth:listWidth
+                                           listX:_hasList ? listX : 0
+                                     layoutReady:layoutReady];
+  }
 
   return YES;
 }
 
 - (void)publishSplitViewLayoutAllowEstimatedReady:(BOOL)allowEstimatedReady
 {
-  CGFloat sidebarWidth = _sidebarContainer.bounds.size.width;
+  [self adoptNativeSidebarCollapsed];
+  CGFloat sidebarWidth = [self sidebarPaneBounds].size.width;
   CGFloat contentWidth = _contentContainer.bounds.size.width;
   CGFloat contentX = [_contentContainer convertRect:_contentContainer.bounds toView:self].origin.x;
   CGFloat sidebarHeight = _sidebarContainer.bounds.size.height;
@@ -1074,7 +1063,24 @@ static char RNSidebarSplitViewStartupKey;
     }
     [_splitViewController.splitView setPosition:sidebarExtent + listWidth ofDividerAtIndex:1];
   }
-  _needsPreferredDividerPositions = NO;
+  // A small startup frame can clamp a preference. Retry on later layouts until it fits,
+  // unless a real divider drag takes ownership in splitViewDidResize.
+  CGFloat desiredSidebarWidth = MAX(_sidebarItem.minimumThickness, _sidebarWidth > 0 ? _sidebarWidth : _sidebarMinWidth);
+  CGFloat desiredListWidth = MAX(_listItem.minimumThickness, _listWidth > 0 ? _listWidth : _listMinWidth);
+  _needsPreferredDividerPositions =
+    (!_sidebarCollapsed && [self preferredSidebarWidthForBounds:bounds] < desiredSidebarWidth - 0.5) ||
+    (_hasList && [self preferredListWidthForBounds:bounds sidebarExtent:sidebarExtent] < desiredListWidth - 0.5);
+}
+
+- (void)splitViewDidResize
+{
+  if (_layingOutSplitView) {
+    return;
+  }
+  if (((RNSidebarSplitViewNativeSplitView *)_splitViewController.splitView).trackingDivider) {
+    _needsPreferredDividerPositions = NO;
+  }
+  [self publishSplitViewLayoutAllowEstimatedReady:NO];
 }
 
 - (void)layoutSplitView
@@ -1086,8 +1092,9 @@ static char RNSidebarSplitViewStartupKey;
   CGRect bounds = [self currentLayoutBounds];
   _splitViewController.view.frame = bounds;
   _splitViewController.splitView.frame = bounds;
+  [self updateSplitItemSizing];
   [self updateListItem];
-  [self updateSidebarCollapsed];
+  [self adoptNativeSidebarCollapsed];
   if (_contentContainer.bounds.size.width <= 0 ||
       _contentContainer.bounds.size.height <= 0 ||
       fabs(_contentContainer.bounds.size.height - bounds.size.height) >= 0.5) {
@@ -1124,7 +1131,7 @@ static char RNSidebarSplitViewStartupKey;
       [self applyEstimatedSplitViewLayoutForBounds:[self currentLayoutBounds] layoutReady:NO];
     } else {
       [self syncReactSubview:_sidebarReactView
-                 nativeBounds:_sidebarContainer.bounds
+                 nativeBounds:[self sidebarPaneBounds]
         previousLayoutMetrics:&_sidebarReactLayoutMetrics];
     }
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -1220,15 +1227,27 @@ static char RNSidebarSplitViewStartupKey;
   const auto &newProps = *std::static_pointer_cast<SidebarSplitViewProps const>(props);
 
 #if TARGET_OS_OSX
+  // Collapse and accessory mutations can synchronously resize AppKit before list membership and sizing settle.
+  // Publish only after this prop transaction has completed, preserving any enclosing layout's guard.
+  BOOL wasLayingOutSplitView = _layingOutSplitView;
+  _layingOutSplitView = YES;
   NSString *nextAppearanceName = [NSString stringWithUTF8String:newProps.appearance.c_str()];
   if (nextAppearanceName.length == 0) {
     nextAppearanceName = @"system";
   }
+  // A changed prop is the last writer and wins over a native toggle React has not heard about yet (no event is
+  // sent for it: the app just set a newer value). An unchanged prop never overrides the native state.
+  BOOL collapsedPropChanged = _sidebarCollapsedProp != newProps.sidebarCollapsed;
+  if (!collapsedPropChanged) {
+    [self adoptNativeSidebarCollapsed];
+  }
+  // Echoing an adopted native state acknowledges it; it must not reseed user-dragged dividers.
+  BOOL effectiveCollapsedChanged = collapsedPropChanged && _sidebarCollapsed != newProps.sidebarCollapsed;
   BOOL preferredWidthsChanged =
     fabs(_sidebarWidth - newProps.sidebarWidth) >= 0.5 ||
     fabs(_listWidth - newProps.listWidth) >= 0.5 ||
     _hasList != newProps.hasList ||
-    _sidebarCollapsed != newProps.sidebarCollapsed;
+    effectiveCollapsedChanged;
   BOOL shouldRelayout =
     preferredWidthsChanged ||
     fabs(_sidebarMinWidth - newProps.sidebarMinWidth) >= 0.5 ||
@@ -1266,7 +1285,14 @@ static char RNSidebarSplitViewStartupKey;
   _listMinWidth = newProps.listMinWidth;
   _listWidth = newProps.listWidth;
   _hasList = newProps.hasList;
-  _sidebarCollapsed = newProps.sidebarCollapsed;
+  _sidebarCollapsedProp = newProps.sidebarCollapsed;
+  if (collapsedPropChanged) {
+    _sidebarCollapsed = newProps.sidebarCollapsed;
+  }
+  // Apply the winning prop before accessory/list mutations can trigger resize observers. A prop can match the
+  // adopted effective state while overriding a newer, unobserved native toggle; that still needs final metrics.
+  shouldRelayout = shouldRelayout || _sidebarItem.collapsed != _sidebarCollapsed;
+  [self updateSidebarCollapsed];
   if (preferredWidthsChanged) {
     _needsPreferredDividerPositions = YES;
   }
@@ -1286,14 +1312,12 @@ static char RNSidebarSplitViewStartupKey;
     _appearanceName = nextAppearanceName;
     [self applyAppearance];
   }
-  [self updateListItem];
-  [self updateSidebarCollapsed];
-  [self updateSplitItemSizing];
 #endif
 
   [super updateProps:props oldProps:oldProps];
 
 #if TARGET_OS_OSX
+  _layingOutSplitView = wasLayingOutSplitView;
   if (shouldRelayout || shouldRecreateContentTitlebarMaterial || shouldRecreateSidebarTitlebarMaterial) {
     _lastSidebarWidth = -1;
     _lastContentWidth = -1;
@@ -1384,6 +1408,7 @@ static char RNSidebarSplitViewStartupKey;
   _listWidth = 0;
   _hasList = NO;
   _sidebarCollapsed = NO;
+  _sidebarCollapsedProp = NO;
   _needsPreferredDividerPositions = YES;
   _layingOutSplitView = NO;
   _lastSidebarWidth = -1;
@@ -1420,12 +1445,6 @@ static char RNSidebarSplitViewStartupKey;
 #if TARGET_OS_OSX
   if (_resizeObserver) {
     [[NSNotificationCenter defaultCenter] removeObserver:_resizeObserver];
-  }
-  if (_contentFrameObserver) {
-    [[NSNotificationCenter defaultCenter] removeObserver:_contentFrameObserver];
-  }
-  if (_contentBoundsObserver) {
-    [[NSNotificationCenter defaultCenter] removeObserver:_contentBoundsObserver];
   }
 #endif
 }
