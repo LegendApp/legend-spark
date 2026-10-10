@@ -24,7 +24,7 @@ The [implementation record](api-cleanup.md) records the changes and checks per f
 | `/clipboard`, `/secure-storage`, `/links` | Deliberately selected Expo-shaped methods with documented Spark extensions. |
 | `/notifications`, `/updates`, `/processes` | Owned options, results and errors; cancellation/nonzero process exit are distinct from operational failure. |
 | `/audio`, `/auth-session`, `/sqlite`, `/webview` | Spark-owned resource/component contracts hide backend objects and types. |
-| `/drag-drop`, `/ui`, `/ui/search`, `/ui/split-view`, `/ui/sidebar`, `/ui/glass`, `/ui/symbol`, `/settings/window` | Named React Native props and consumer events; specialized native capabilities retain explicit boundaries. |
+| `/drag-drop`, `/ui`, `/ui/search`, `/ui/split-view`, `/ui/sidebar`, `/ui/glass`, `/ui/symbol`, `/ui/swipe`, `/settings/window` | Named React Native props and consumer events; specialized native capabilities retain explicit boundaries. |
 | `/ui/uniwind`, `/ui/classnames` | Explicit ecosystem integrations rather than promises of backend independence. |
 | `/contracts` | Shared error, availability and registration vocabulary. |
 | `/config`, `/schema.json`, `/config-plugin`, `/expo-config` | Typed Spark-owned configuration plus explicit upstream Expo composition. Schema field checks prevent accidental drift. |

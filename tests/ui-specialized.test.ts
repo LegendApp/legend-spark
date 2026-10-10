@@ -108,3 +108,33 @@ test("swipe actions serialize validated actions and report only known IDs", asyn
   expect(() => SwipeActions({ onAction, leadingActions: [{ ...archive, color: "green" }] })).toThrow("Swipe action colors");
   expect(() => SwipeActions({ onAction, leadingActions: [archive], trailingActions: [archive] })).toThrow("Duplicate swipe action ID");
 });
+
+test("swipe actions require a callback and arrays at the public boundary", async () => {
+  const action = { id: "archive", title: "Archive", symbol: "archivebox.fill", color: "#3E8E63" };
+  for (const props of [
+    { leadingActions: [action] },
+    { onAction: null },
+    { onAction: "not a callback" },
+    { onAction: () => {}, leadingActions: null },
+    { onAction: () => {}, trailingActions: {} },
+  ]) {
+    await expect(mount(React.createElement(SwipeActions, props as never))).rejects.toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  }
+});
+
+test("swipe callbacks stop at unmount and platform fallbacks retain children", async () => {
+  const onAction = vi.fn(), onError = vi.fn();
+  const action = { id: "archive", title: "Archive", symbol: "archivebox.fill", color: "#3E8E63" };
+  await mount(React.createElement(SwipeActions, { leadingActions: [action], onAction, onError }));
+  const native = rendered.root.findByType("SwipeActions").props;
+  await act(async () => { rendered.unmount(); rendered = undefined; });
+  native.onSwipeAction({ nativeEvent: { actionId: "archive" } });
+  expect(onAction).not.toHaveBeenCalled();
+  for (const [os, present, code] of [["windows", true, "E_UNSUPPORTED_PLATFORM"], ["macos", false, "E_MODULE_UNAVAILABLE"]] as const) {
+    platform.OS = os; registered.mockReturnValue(present); onError.mockClear();
+    await mount(React.createElement(SwipeActions, { leadingActions: [action], onAction, onError, children: "Row" }));
+    expect(rendered.root.findByType("View").props.children).toBe("Row");
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code }));
+    await act(async () => { rendered.unmount(); rendered = undefined; });
+  }
+});

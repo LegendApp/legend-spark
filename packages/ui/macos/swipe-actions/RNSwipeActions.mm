@@ -30,6 +30,12 @@ static void RNSwipeAnimate(NSTimeInterval duration, void (^changes)(void), void 
   } completionHandler:completion];
 }
 
+// React child frames use top-left coordinates, even inside private AppKit containers.
+@interface RNSwipeContainerView : NSView @end
+@implementation RNSwipeContainerView
+- (BOOL)isFlipped { return YES; }
+@end
+
 @class RNSwipeActions;
 
 @interface RNSwipeActionButton : NSView
@@ -101,6 +107,7 @@ static void RNSwipeAnimate(NSTimeInterval duration, void (^changes)(void), void 
 static __weak RNSwipeActions *RNSwipeOpenRow;
 
 @implementation RNSwipeActions {
+  NSView *_clipView;
   NSView *_actionsView;
   NSView *_contentView;
   NSArray<RNSwipeActionButton *> *_leading;
@@ -115,18 +122,24 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
   /** The button filling the revealed strip: the outermost once armed, or a tapped dismissing one. */
   RNSwipeActionButton *_takeover;
   BOOL _dismissed;
+  NSUInteger _generation;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame
 {
   if ((self = [super initWithFrame:frame])) {
     _props = std::make_shared<const SwipeActionsProps>();
-    _actionsView = [[NSView alloc] initWithFrame:self.bounds];
+    _clipView = [[RNSwipeContainerView alloc] initWithFrame:self.bounds];
+    _clipView.wantsLayer = YES;
+    // Fabric rewrites the host layer's masksToBounds from overflow props. Own this clip separately.
+    _clipView.layer.masksToBounds = YES;
+    [self addSubview:_clipView];
+    _actionsView = [[RNSwipeContainerView alloc] initWithFrame:self.bounds];
     _actionsView.wantsLayer = YES;
-    _contentView = [[NSView alloc] initWithFrame:self.bounds];
+    _contentView = [[RNSwipeContainerView alloc] initWithFrame:self.bounds];
     _contentView.wantsLayer = YES;
-    [self addSubview:_actionsView];
-    [self addSubview:_contentView];
+    [_clipView addSubview:_actionsView];
+    [_clipView addSubview:_contentView];
     _leading = @[];
     _trailing = @[];
     _pending = [NSMutableArray new];
@@ -189,7 +202,8 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
 - (void)layoutSubviews
 {
   [super layoutSubviews];
-  _actionsView.frame = self.bounds;
+  _clipView.frame = self.bounds;
+  _actionsView.frame = _clipView.bounds;
   if (_dismissed) _offset = _offset > 0 ? self.bounds.size.width : -self.bounds.size.width;
   [self applyOffset];
 }
@@ -202,6 +216,8 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
 
 - (void)resetPosition
 {
+  // Invalidate delayed action completions before this view acquires a new owner or actions.
+  ++_generation;
   if (RNSwipeOpenRow == self) RNSwipeOpenRow = nil;
   [_pending removeAllObjects];
   _gesture = RNSwipeGestureIdle;
@@ -220,7 +236,7 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
 
 - (void)applyOffset
 {
-  NSRect bounds = self.bounds;
+  NSRect bounds = _clipView.bounds;
   _contentView.frame = NSOffsetRect(bounds, _offset, 0);
   [self layoutButtons:_leading reveal:MAX(0, _offset) bounds:bounds];
   [self layoutButtons:_trailing reveal:MAX(0, -_offset) bounds:bounds];
@@ -298,7 +314,8 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
     return;
   }
   if (_gesture == RNSwipeGestureTracking) {
-    if (ended) [self settle];
+    if (event.phase == NSEventPhaseCancelled) [self close];
+    else if (ended) [self settle];
     else [self trackBy:dx];
     return;
   }
@@ -314,7 +331,10 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
     raw = copysign(kRubberLimit * distance / MAX(kRubberLimit - distance, 1), _offset) + dx;
   }
   _offset = [self resisted:raw];
-  RNSwipeActionButton *takeover = fabs(_offset) >= [self commitDistance] ? [self buttonsForOffset:_offset].firstObject : nil;
+  NSArray<RNSwipeActionButton *> *buttons = [self buttonsForOffset:_offset];
+  CGFloat restDistance = MIN(kButtonWidth * buttons.count, self.bounds.size.width);
+  // A closing gesture must never arm just because the resting buttons exceed the threshold.
+  RNSwipeActionButton *takeover = fabs(_offset) > restDistance && fabs(_offset) >= [self commitDistance] ? buttons.firstObject : nil;
   if (takeover != _takeover) {
     _takeover = takeover;
     [NSHapticFeedbackManager.defaultPerformer performFeedbackPattern:NSHapticFeedbackPatternAlignment performanceTime:NSHapticFeedbackPerformanceTimeNow];
@@ -330,7 +350,7 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
   NSArray<RNSwipeActionButton *> *buttons = [self buttonsForOffset:_offset];
   if (_takeover) { [self commit:_takeover]; return; }
   if (buttons.count && fabs(_offset) > kButtonWidth * 0.5) {
-    _offset = copysign(kButtonWidth * buttons.count, _offset);
+    _offset = copysign(MIN(kButtonWidth * buttons.count, self.bounds.size.width), _offset);
     RNSwipeOpenRow = self;
     RNSwipeAnimate(0.34, ^{ [self applyOffset]; }, nil);
     return;
@@ -365,9 +385,13 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
   }
   _dismissed = YES;
   _takeover = button;
-  _offset = copysign(self.bounds.size.width, _offset);
+  _offset = button.edge * self.bounds.size.width;
+  NSUInteger generation = _generation;
   __weak RNSwipeActions *weakSelf = self;
-  RNSwipeAnimate(0.26, ^{ [self applyOffset]; }, ^{ [weakSelf emit:actionId]; });
+  RNSwipeAnimate(0.26, ^{ [self applyOffset]; }, ^{
+    RNSwipeActions *view = weakSelf;
+    if (view && view->_generation == generation && view->_dismissed) [view emit:actionId];
+  });
 }
 
 - (void)emit:(NSString *)actionId
@@ -378,12 +402,13 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
 
 #pragma mark - Clicks while open
 
-- (NSView *)hitTest:(NSPoint)point
+- (NSView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event
 {
-  NSPoint local = [self convertPoint:point fromView:self.superview];
-  // An open row's content takes the first click to close, like Mail.
-  if (_offset != 0 && !_dismissed && NSPointInRect(local, _contentView.frame)) return self;
-  return [super hitTest:point];
+  NSView *hit = [super hitTest:point withEvent:event];
+  // Fabric parents use this local-coordinate route; AppKit's route delegates here too.
+  // Respect the superclass visibility/pointer-events result before consuming a close click.
+  if (hit && _offset != 0 && !_dismissed && NSPointInRect(point, self.bounds) && NSPointInRect(point, _contentView.frame)) return self;
+  return hit;
 }
 
 - (BOOL)mouseDownCanMoveWindow { return _offset == 0 && super.mouseDownCanMoveWindow; }
