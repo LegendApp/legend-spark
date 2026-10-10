@@ -8,8 +8,10 @@
     "dev": "bun ../../scripts/spark.mjs dev",
     "macos": "bun ../../scripts/spark.mjs dev --platform macos",
     "windows": "bun ../../scripts/spark.mjs dev --platform windows",
-    "rebuild:macos": "bun ../../scripts/spark.mjs sdk build-runner --project . --platform macos",
-    "rebuild:windows": "bun ../../scripts/spark.mjs sdk build-runner --project . --platform windows",
+    "rebuild:macos": "bun ../../scripts/spark.mjs build --dev --platform macos",
+    "rebuild:windows": "bun ../../scripts/spark.mjs build --dev --platform windows",
+    "build": "bun ../../scripts/spark.mjs build",
+    "package": "bun ../../scripts/spark.mjs package",
     "doctor": "bun ../../scripts/spark.mjs doctor"
   },
   "dependencies": {
