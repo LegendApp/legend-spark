@@ -142,12 +142,13 @@ type MenuItem =
 
 // Feature entrypoints expose only the item shapes their native surface accepts.
 type MenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean; icon?: MenuIcon; target?: MenuTarget; placement?: MenuPlacement };
+// `alternate` and `checked: 'mixed'` are macOS application-menu only; other surfaces and Windows reject them.
 type AppMenuItem =
   | { type: 'separator' }
-  | (MenuEntry & { type: 'action'; shortcut?: string })
-  | (MenuEntry & { type: 'checkbox'; checked: boolean; shortcut?: string })
+  | (MenuEntry & { type: 'action'; shortcut?: string; alternate?: boolean })
+  | (MenuEntry & { type: 'checkbox'; checked: boolean | 'mixed'; shortcut?: string; alternate?: boolean })
   | (MenuEntry & { type: 'submenu'; items: readonly AppMenuItem[] })
-  | (Omit<MenuEntry, 'label'> & { type: 'role'; role: MenuRole; label?: string; shortcut?: string });
+  | (Omit<MenuEntry, 'label'> & { type: 'role'; role: MenuRole; label?: string; shortcut?: string; alternate?: boolean });
 type MenuRootItem = Extract<AppMenuItem, { type: 'submenu' }>;
 type ContextMenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean };
 type ContextMenuItem = { type: 'separator' } | (ContextMenuEntry & { type: 'action' }) | (ContextMenuEntry & { type: 'checkbox'; checked: boolean });
@@ -162,8 +163,17 @@ type ToolbarMenuItem =
   | (ToolbarEntry & { type: 'slider'; min: number; max: number; value: number; suffix?: string });
 
 // /menus: imperative ownership plus useMenu in the same module.
-createMenu(options: { id: string; items: readonly MenuRootItem[]; onAction: MenuActionHandler }): Promise<Menu>;
+createMenu(options: {
+  id: string;
+  items: readonly MenuRootItem[];
+  onAction?: MenuActionHandler;
+  onOpen?: (event: { menuId: string }) => void; // macOS only; Windows rejects E_UNSUPPORTED_OPTION.
+  onClose?: (event: { menuId: string }) => void;
+}): Promise<Menu>;
+getMenuAvailability(feature?: 'alternates' | 'lifecycle' | 'helpSearch' | 'mixedState' | 'icons' | 'hiddenItems'): Availability;
 // Menu: update(options), remove(). Semantic roles target native responders.
+// An alternate must follow a visible non-alternate command with the same shortcut key and different modifiers.
+// `target: { menu: 'help' }` merges into Help on both platforms; on macOS it also registers AppKit Help search.
 // Application menus accept recursive action, checkbox, separator, submenu, and role items; sliders are toolbar-only.
 
 // /context-menu

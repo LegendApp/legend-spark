@@ -32,3 +32,11 @@ test("semantic targets validate their shape and hidden target overrides remain i
   for (const target of [{ id: "", role: "copy" }, { role: "bad" }, { menu: "unknown" }]) expect(() => menuItems([{ type: "action", id: "x", label: "X", target }] as never, supported, "macos")).toThrow();
   expect(() => menuItems([{ type: "action", id: "x", label: "X", target: { role: "copy" } }], support, "macos")).toThrow("targeting");
 });
+
+test("alternate and mixed checkbox state are gated by surface support", () => {
+  const items = [{ type: "action", id: "a", label: "A", alternate: true }, { type: "checkbox", id: "m", label: "M", checked: "mixed" }] as const;
+  expect(() => menuItems([items[0]], support, "macos")).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION", message: expect.stringContaining("alternate") }));
+  expect(() => menuItems([items[1]], support, "macos")).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION", message: expect.stringContaining("mixed") }));
+  expect(menuItems(items, { ...support, alternates: true, mixedState: true }, "macos")).toEqual([{ id: "a", title: "A", enabled: true, alternate: true }, { id: "m", title: "M", enabled: true, checked: false, mixed: true }]);
+  for (const item of [{ type: "separator", alternate: true }, { type: "submenu", id: "s", label: "S", items: [], alternate: true }, { type: "slider", id: "s", label: "S", min: 0, max: 1, value: 0, alternate: true }]) expect(() => menuItems([item] as never, { ...support, alternates: true }, "macos")).toThrow("property");
+});
