@@ -53,4 +53,57 @@ On macOS, `target: { role: 'copy' }` locates a native command regardless of loca
 
 Native publication is acknowledged before creation/update resolves. Publication is serialized across owners; callbacks are scoped to a unique registration, filtered to enabled visible actions, and stopped immediately on removal. Removal joins pending work and permits retry after failure. Duplicate owner IDs reject `E_ALREADY_EXISTS`. There is no public native bridge, global clear-all function or separate unowned action listener.
 
-`useMenu({ id, items, onAction, onError?, onCleanupError? })` returns loading, ready (with `menu`) or error state. Keep the `items` array stable when its structure has not changed. Callback changes use the latest committed callback without republishing. Unmount disposes even a registration that finishes late; remount waits for the old hook lifetime to finish cleanup. Cleanup failures are reported through `onCleanupError(error, menu)` so the owner can retry; otherwise they go to `onError` or the console. The hook is exported alongside `createMenu` because Spark assumes React Native.
+`useMenu({ id, items, onAction?, onOpen?, onClose?, onError?, onCleanupError? })` returns loading, ready (with `menu`) or error state. Keep the `items` array stable when its structure has not changed. Callback changes use the latest committed callback without republishing. Unmount disposes even a registration that finishes late; remount waits for the old hook lifetime to finish cleanup. Cleanup failures are reported through `onCleanupError(error, menu)` so the owner can retry; otherwise they go to `onError` or the console. The hook is exported alongside `createMenu` because Spark assumes React Native.
+
+### macOS application-menu features
+
+Application-menu checkboxes accept `checked: true | false | 'mixed'`; mixed state renders
+AppKit's dash. Action, checkbox and role items accept `alternate: true`: AppKit folds the
+item into the command before it and shows it while the user holds the alternate's
+modifiers. Creation rejects `E_INVALID_ARGUMENT` unless, ignoring hidden items, the
+previous sibling is a non-alternate action, checkbox or role with the same shortcut key
+and different modifiers (for example `Cmd+O` / `Cmd+Alt+O`). Neither item may use
+`target` or `placement`, because AppKit folds only adjacent items. When neither has a
+shortcut, the alternate gets the Option modifier. Other menu surfaces reject `alternate`
+and `'mixed'` with `E_UNSUPPORTED_OPTION`.
+
+`createMenu` and `useMenu` accept `onOpen(event)` and `onClose(event)`. Their
+`MenuLifecycleEvent` contains `menuId`, the contributed submenu item's ID (including
+nested submenus), not the registration's owner ID. Events are scoped to the current
+registration and delivered only for enabled, visible submenus after publication.
+For a shared submenu, the latest contribution requesting lifecycle callbacks receives
+events; a later contribution without callbacks preserves that observer.
+Removal immediately stops events, including when native cleanup fails. Callbacks
+cannot synchronously change the native menu before it opens; publish dynamic items
+with `menu.update` before opening. Hook callback changes use the latest committed
+handler; adding or removing all lifecycle observation replaces the owned registration.
+
+On macOS, a root submenu with `target: { menu: 'help' }` also becomes AppKit's Help menu,
+so its search field finds the application's menu commands. The label may be localized;
+identification uses the semantic target. Removing the contribution restores the host's
+prior Help menu. On Windows the same contribution merges into the Help root like any
+other semantic root, without search.
+
+```ts
+const menu = await createMenu({
+  id: 'advanced',
+  items: [{
+    type: 'submenu', id: 'help', label: 'Help', target: { menu: 'help' },
+    items: [{ type: 'action', id: 'guide', label: 'User Guide', icon: { type: 'symbol', name: 'book' } }],
+  }],
+  onOpen: ({ menuId }) => console.log('Opened', menuId),
+  onClose: ({ menuId }) => console.log('Closed', menuId),
+});
+```
+
+`getMenuAvailability(feature?)` accepts the `MenuFeature` values `alternates`,
+`lifecycle`, `helpSearch`, `mixedState`, `icons` and `hiddenItems`. macOS supports all
+six when the native module is installed. Windows supports `hiddenItems`; the other five
+report `{ available: false, reason: 'host-restriction' }`. On Windows, alternates, mixed
+checks, icons and lifecycle callbacks reject `E_UNSUPPORTED_OPTION`; a Help-targeted
+submenu is accepted without search. Without a feature, the query reports base menu
+availability. A missing native module reports `missing-module` and creation rejects
+`E_MODULE_UNAVAILABLE`; other platforms report `unsupported-platform` and reject
+`E_UNSUPPORTED_PLATFORM`.
+
+Windows Jump Lists are `createTaskbarMenu` in [system integration](system.md).

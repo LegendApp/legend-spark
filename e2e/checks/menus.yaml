@@ -1,0 +1,89 @@
+area: menus
+prefix: MENU
+checks:
+  MENU-CREATE-01:
+    title: createMenu publishes an owner-scoped application menu and delivers only that owner's actions
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/menus.md Application menus; #74"
+    covers:
+      - ./menus#createMenu
+  MENU-HOOK-01:
+    title: useMenu installs the menu for the screen's lifetime and delivers actions and open/close events to the latest callbacks
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/menus.md useMenu; #74"
+    covers:
+      - ./menus#useMenu
+  MENU-AVAIL-01:
+    title: getMenuAvailability(feature) reports all six features on macOS; on Windows only hiddenItems, the rest host-restriction
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/menus.md getMenuAvailability; #74"
+    covers:
+      - ./menus#getMenuAvailability
+      - ./menus#getMenuAvailability().available
+  MENU-ALT-01:
+    title: An alternate folds into its primary, appears while its modifiers are held, and dispatches its own action
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md macOS application-menu features; #74"
+    covers:
+      - ./menus#createMenu
+  MENU-ALT-02:
+    title: An alternate without an adjacent primary with the same key and different modifiers rejects E_INVALID_ARGUMENT before native changes
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md macOS application-menu features; #74"
+    covers:
+      - ./menus#createMenu
+  MENU-UNSUP-01:
+    title: Windows rejects alternates, mixed checks, icons and open/close callbacks with E_UNSUPPORTED_OPTION before native changes
+    platforms: [windows]
+    blocking: true
+    spec: "docs/menus.md getMenuAvailability; #74"
+    covers:
+      - ./menus#createMenu
+  MENU-LIFECYCLE-01:
+    title: onOpen/onClose report the contributed submenu's ID when it opens and closes
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md macOS application-menu features; #74"
+    covers:
+      - ./menus#createMenu
+      - ./menus#useMenu
+  MENU-HELP-01:
+    title: A root submenu targeting help becomes the AppKit Help menu, and Help search finds its commands
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md macOS application-menu features; #74"
+    covers:
+      - ./menus#createMenu
+  MENU-HELP-02:
+    title: A root submenu targeting help merges into the Windows Help menu and its commands dispatch
+    platforms: [windows]
+    blocking: true
+    spec: "docs/menus.md Application menus; #74"
+    covers:
+      - ./menus#createMenu
+  MENU-MIXED-01:
+    title: A checkbox with checked mixed shows AppKit's mixed-state dash
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md macOS application-menu features; #74"
+    covers:
+      - ./menus#createMenu
+  MENU-HIDDEN-01:
+    title: Hidden items are absent from the native menu and never dispatch
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/menus.md Menu contracts; #74"
+    covers:
+      - ./menus#createMenu
+  MENU-ICON-01:
+    title: A symbol icon renders its SF Symbol beside the item
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md Application menus; #74"
+    covers:
+      - ./menus#createMenu
