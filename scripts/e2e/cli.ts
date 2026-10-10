@@ -6,6 +6,7 @@ import { collect, type Kind } from "./files.ts";
 import { generatedFiles } from "./format/generate.ts";
 import { lintFlow, lintSubflow } from "./format/lint.ts";
 import { checkFlow, checkGate, checkRegistry, checkSubflow, formatDiagnostic, type Diagnostic } from "./format/parser.ts";
+import { BACKENDS, runCommand } from "./runner/run.ts";
 
 const repo = path.resolve(import.meta.dirname, "../..");
 const LABELS: Record<Kind, [string, string]> = { flow: ["flow", "flows"], subflow: ["subflow", "subflows"], registry: ["check registry", "check registries"], gate: ["gate manifest", "gate manifests"] };
@@ -50,7 +51,11 @@ if (mode === "schema") {
   const summary = [...counts].map(([kind, count]) => `${count} ${LABELS[kind][count === 1 ? 0 : 1]}`).join(", ") || "no flows, subflows, check registries or gate manifests";
   console.log(`${mode === "lint" ? "linted" : "validated"} ${files.length} file${files.length === 1 ? "" : "s"} (${summary}): ${problems} problem${problems === 1 ? "" : "s"}`);
   process.exitCode = problems ? 1 : 0;
+} else if (mode === "run") {
+  const controller = new AbortController();
+  for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
+  process.exitCode = await runCommand(args, { backends: BACKENDS, stdout: line => console.log(line), stderr: line => console.error(line), signal: controller.signal });
 } else {
-  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema");
+  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema | bun run e2e:run [flows…] [--backend …] [--agent] [--report dir] [--app path]");
   process.exitCode = 2;
 }
