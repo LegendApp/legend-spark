@@ -63,6 +63,13 @@ shell's own elements use area `infra` and screen `shell`: `infra-shell-root`,
 (`-url`, `-reason`), `infra-shell-error` and, before the locale is read,
 `infra-shell-starting`.
 
+Screens ported from legend-apps' `apps/test-kitchen-sink` live in their areas and
+use only public `@legendapp/spark` entry points: `native-controls` (sidebar ×3,
+split view, glass, SF Symbols, search field), `keyboard` (keyboard monitor),
+`windows` (window manager, including the macOS-only `/windows/macos` blur, and
+window controls) and `future-facing-capabilities` (AI command and tool runners).
+They share `Panel.tsx`.
+
 ## App-wide behavior
 
 `shell/app-controller.ts` starts once from `index.ts` and lives for the process:

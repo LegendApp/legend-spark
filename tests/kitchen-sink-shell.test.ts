@@ -96,7 +96,7 @@ test("the catalog rejects misplaced or malformed area modules", () => {
 test("every checked-in screens/<area> folder is a known area with an index", () => {
   const root = path.join(import.meta.dirname, "../examples/kitchen-sink/screens");
   const folders = readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name);
-  expect(folders).toContain("infra");
+  expect(folders).toEqual(expect.arrayContaining(["infra", "native-controls", "keyboard", "windows", "future-facing-capabilities"]));
   for (const folder of folders) {
     expect(AREAS.map(area => area.id)).toContain(folder);
     expect(existsSync(path.join(root, folder, "index.tsx")) || existsSync(path.join(root, folder, "index.ts"))).toBe(true);
