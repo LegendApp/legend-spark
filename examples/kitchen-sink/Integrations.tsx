@@ -4,31 +4,25 @@ import React, { useEffect, useRef, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import * as notifications from "@legendapp/spark/notifications";
 import { createTray } from "@legendapp/spark/tray";
-import * as updates from "@legendapp/spark/updates";
 import { showWindow } from "@legendapp/spark/windows";
+import { UpdatesScreen } from "./UpdatesScreen";
 
 export function Integrations({ report }: { report: (value: unknown) => void }) {
   const [permission, setPermission] = useState<string>("Loading…");
   const [trayActive, setTrayActive] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState<updates.UpdateStatus>();
   const tray = useRef<Awaited<ReturnType<typeof createTray>> | undefined>(undefined);
   const mounted = useRef(false);
   const [notificationEvents, reportNotification] = useEventResults(report);
   const [trayEvents, reportTray] = useEventResults(report);
-  const [updateEvents, reportUpdate] = useEventResults(report);
   useEffect(() => {
     mounted.current = true;
     let response: { remove(): void } | undefined;
     let disposed = false;
     void notifications.getNotificationPermission().then(value => { if (!disposed) setPermission(value.status); }).catch(reportNotification);
     void notifications.onNotificationResponse(reportNotification).then(value => { if (disposed) value.remove(); else response = value; }).catch(reportNotification);
-    void updates.getUpdateStatus().then(async value => { if (value.available) { await updates.startUpdates(); value = await updates.getUpdateStatus(); } if (!disposed) setUpdateStatus(value); }).catch(reportUpdate);
-    let events: { remove(): void } | undefined;
-    try { events = updates.onUpdateEvent(event => reportUpdate(event.state === "error" ? new Error(event.message ?? "Update failed") : event)); }
-    catch (error) { reportUpdate(error); }
-    return () => { disposed = true; mounted.current = false; response?.remove(); events?.remove(); void tray.current?.remove().catch(reportTray); tray.current = undefined; };
-  }, [reportNotification, reportTray, reportUpdate]);
+    return () => { disposed = true; mounted.current = false; response?.remove(); void tray.current?.remove().catch(reportTray); tray.current = undefined; };
+  }, [reportNotification, reportTray]);
   async function act(fn: () => Promise<unknown>) { try { const result = await fn(); if (result !== undefined) report(result); return result; } catch (error) { report(String(error)); throw error; } }
   async function toggleTray() {
     setBusy(true);
@@ -57,12 +51,6 @@ export function Integrations({ report }: { report: (value: unknown) => void }) {
       <ActionButton disabled={!trayActive || busy} onPress={() => act(async () => { await tray.current?.update({ title: "Hello" }); })}>Update menu-bar title</ActionButton>
     </View>
     <EventResults entries={trayEvents} empty="Create the menu-bar item, then choose an item from its menu." testID="tray-events" />
-    <Text style={{ fontSize: 18, fontWeight: "600" }} className="text-foreground">App updates</Text>
-    <Text className="text-muted">{updateStatus?.available ? "Signed updates configured" : `Updates unavailable: ${updateStatus?.reason ?? "Loading…"}`}</Text>
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-      <ActionButton disabled={!updateStatus?.available} onPress={() => act(updates.checkForUpdates)}>Check for updates</ActionButton>
-      <ActionButton disabled={!updateStatus?.available} onPress={() => act(async () => { await updates.configureUpdates({ automaticallyChecks: !updateStatus?.automaticallyChecks }); setUpdateStatus(await updates.getUpdateStatus()); })}>{updateStatus?.automaticallyChecks ? "Disable automatic checks" : "Enable automatic checks"}</ActionButton>
-    </View>
-    <EventResults entries={updateEvents} empty={updateStatus?.available ? "Check for updates to see progress here." : "Update events require a configured distribution build."} testID="update-events" />
+    <UpdatesScreen report={report} />
   </View>;
 }

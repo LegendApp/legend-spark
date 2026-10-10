@@ -1,6 +1,7 @@
 #import "RNDesktopUpdates.h"
 #import <RNDesktopApp/SparkDesktop.h>
 #import <Sparkle/Sparkle.h>
+#import "SparkUpdateState.h"
 
 @interface SparkUpdater : NSObject <SPUUpdaterDelegate>
 @property SPUStandardUpdaterController *controller;
@@ -22,10 +23,18 @@ static NSString *UnavailableReason(void) {
 + (instancetype)shared { static SparkUpdater *updater; static dispatch_once_t once; dispatch_once(&once, ^{ updater = [SparkUpdater new]; }); return updater; }
 - (NSDictionary *)status {
   NSString *reason = UnavailableReason();
-  NSMutableDictionary *result = [@{ @"available": @(!reason), @"started": @(self.started), @"canCheck": @(self.started && self.controller.updater.canCheckForUpdates), @"automaticallyChecks": @(self.started && self.controller.updater.automaticallyChecksForUpdates), @"checkIntervalSeconds": reason ? NSNull.null : @(self.started ? self.controller.updater.updateCheckInterval : 3600) } mutableCopy];
-  if (reason) result[@"reason"] = reason;
-  if (!reason) result[@"feedURL"] = [NSBundle.mainBundle objectForInfoDictionaryKey:@"SUFeedURL"];
-  return result;
+  if (reason) return @{ @"available": @NO, @"reason": reason, @"started": @NO, @"canCheck": @NO, @"automaticallyChecks": @NO, @"checkIntervalSeconds": NSNull.null, @"skippedBuild": NSNull.null, @"skippedMajorBuild": NSNull.null, @"lastCheckedAt": NSNull.null };
+  // Settings read the persisted preferences without starting Sparkle.
+  SPUUpdater *updater = self.started ? self.controller.updater : nil;
+  SPUUpdaterSettings *settings = updater ? nil : [[SPUUpdaterSettings alloc] initWithHostBundle:NSBundle.mainBundle];
+  NSDate *checked = updater.lastUpdateCheckDate;
+  NSMutableDictionary *status = [SparkSkippedUpdates(NSUserDefaults.standardUserDefaults) mutableCopy];
+  [status addEntriesFromDictionary:@{ @"available": @YES, @"started": @(self.started), @"canCheck": @(updater.canCheckForUpdates),
+    @"automaticallyChecks": @(updater ? updater.automaticallyChecksForUpdates : settings.automaticallyChecksForUpdates),
+    @"checkIntervalSeconds": @(updater ? updater.updateCheckInterval : settings.updateCheckInterval),
+    @"feedURL": [NSBundle.mainBundle objectForInfoDictionaryKey:@"SUFeedURL"],
+    @"lastCheckedAt": checked ? [[NSISO8601DateFormatter new] stringFromDate:checked] : NSNull.null }];
+  return status;
 }
 - (BOOL)start:(NSError **)error {
   if (self.started) return YES;
@@ -33,19 +42,17 @@ static NSString *UnavailableReason(void) {
   self.started = [self.controller.updater startUpdater:error];
   return self.started;
 }
-- (void)event:(NSString *)state item:(SUAppcastItem *)item error:(NSError *)error {
-  NSMutableDictionary *event = [@{ @"type": @"update", @"state": state } mutableCopy];
-  if (item) event[@"version"] = item.displayVersionString;
-  if (error) event[@"message"] = error.localizedDescription;
-  SparkEmit(event);
-}
+- (void)event:(NSString *)state item:(SUAppcastItem *)item error:(NSError *)error { SparkEmit(SparkUpdateEvent(state, item, error)); }
 - (BOOL)updater:(SPUUpdater *)updater mayPerformUpdateCheck:(SPUUpdateCheck)check error:(NSError **)error { [self event:@"checking" item:nil error:nil]; return YES; }
 - (void)updater:(SPUUpdater *)updater didFindValidUpdate:(SUAppcastItem *)item { [self event:@"available" item:item error:nil]; }
 - (void)updaterDidNotFindUpdate:(SPUUpdater *)updater error:(NSError *)error { [self event:@"notAvailable" item:nil error:nil]; }
 - (void)updater:(SPUUpdater *)updater willDownloadUpdate:(SUAppcastItem *)item withRequest:(NSMutableURLRequest *)request { [self event:@"downloading" item:item error:nil]; }
+- (void)updater:(SPUUpdater *)updater userDidMakeChoice:(SPUUserUpdateChoice)choice forUpdate:(SUAppcastItem *)item state:(SPUUserUpdateState *)state {
+  if (choice == SPUUserUpdateChoiceSkip) [self event:@"skipped" item:item error:nil];
+}
 - (void)updater:(SPUUpdater *)updater didDownloadUpdate:(SUAppcastItem *)item { [self event:@"downloaded" item:item error:nil]; }
 - (void)updater:(SPUUpdater *)updater willInstallUpdate:(SUAppcastItem *)item { [self event:@"installing" item:item error:nil]; }
-- (void)updater:(SPUUpdater *)updater didAbortWithError:(NSError *)error { [self event:@"error" item:nil error:error]; }
+- (void)updater:(SPUUpdater *)updater didAbortWithError:(NSError *)error { if (SparkReportsAbort(error)) [self event:@"error" item:nil error:error]; }
 @end
 @implementation RNDesktopUpdates
 RCT_EXPORT_MODULE(NativeDesktopUpdates)
@@ -55,17 +62,21 @@ RCT_EXPORT_MODULE(NativeDesktopUpdates)
   [NSRunLoop.mainRunLoop performBlock:^{
     SparkUpdater *updater = [SparkUpdater shared];
     if ([method isEqual:@"status"]) { resolve(SparkJSON([updater status])); return; }
-    if (![@[@"start", @"check", @"background", @"configure"] containsObject:method]) { SparkInvalid(reject, @"Unknown update operation"); return; }
+    if (![@[@"start", @"check", @"background", @"configure", @"clearSkipped"] containsObject:method]) { SparkInvalid(reject, @"Unknown update operation"); return; }
     NSDictionary *args = SparkArgs(json);
     if ([method isEqual:@"configure"]) {
       id enabled = args[@"automaticallyChecks"], interval = args[@"checkIntervalSeconds"];
       if ((enabled && (![enabled isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)enabled) != CFBooleanGetTypeID())) ||
-          (interval && (![interval isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)interval) == CFBooleanGetTypeID() || !isfinite([interval doubleValue]) || [interval doubleValue] <= 0))) {
+          (interval && (![interval isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)interval) == CFBooleanGetTypeID() || !isfinite([interval doubleValue]) || [interval doubleValue] < 3600))) {
         SparkInvalid(reject, @"Invalid updater configuration"); return;
       }
     }
     NSString *reason = UnavailableReason();
     if (reason) { reject(@"E_UNAVAILABLE", [@"Updates require a configured standalone release app; current state: " stringByAppendingString:reason], nil); return; }
+    if ([method isEqual:@"clearSkipped"]) {
+      SparkClearSkippedUpdates(NSUserDefaults.standardUserDefaults);
+      resolve(@"null"); return;
+    }
     NSError *error = nil;
     if (![updater start:&error]) { reject(@"E_NATIVE", error.localizedDescription ?: @"Could not start updater", error); return; }
     if ([method isEqual:@"check"]) {
