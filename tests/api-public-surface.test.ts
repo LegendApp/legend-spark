@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
-import ts from "typescript";
 import { expect, test } from "vitest";
+import { readSdkSurface } from "../scripts/api-surface.ts";
 
 // The umbrella package re-exports feature packages with `export *`, and the
 // feature packages expose their whole `src/` tree to Metro platform dispatch,
@@ -12,17 +11,7 @@ const snapshotPath = "docs/api-public-surface.json";
 
 test("the public export surface matches the reviewed snapshot", () => {
   const exports = JSON.parse(readFileSync("packages/desktop/package.json", "utf8")).exports as Record<string, string>;
-  const entries = Object.entries(exports).filter(([, path]) => path.endsWith(".ts"));
-  const config = ts.readConfigFile("tsconfig.json", ts.sys.readFile);
-  const options = ts.parseJsonConfigFileContent(config.config, ts.sys, process.cwd()).options;
-  const program = ts.createProgram(entries.map(([, path]) => resolve("packages/desktop", path)), options);
-  const checker = program.getTypeChecker();
-  const surface: Record<string, string[]> = {};
-  for (const [entry, path] of entries.sort()) {
-    const source = program.getSourceFile(resolve("packages/desktop", path))!;
-    const module = checker.getSymbolAtLocation(source)!;
-    surface[entry] = checker.getExportsOfModule(module).map(symbol => symbol.name).sort();
-  }
+  const surface = Object.fromEntries(Object.entries(readSdkSurface()).filter(([entry]) => exports[entry]!.endsWith(".ts")).map(([entry, { values, types }]) => [entry, [...values, ...types].sort()]));
   if (process.env.SPI) { writeFileSync(snapshotPath, JSON.stringify(surface, null, 2) + "\n"); }
   expect(existsSync(snapshotPath), `${snapshotPath} is missing. Regenerate it with SPI=1 after reviewing the surface.`).toBe(true);
   expect(surface).toEqual(JSON.parse(readFileSync(snapshotPath, "utf8")));
