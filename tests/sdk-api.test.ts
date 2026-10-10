@@ -229,14 +229,15 @@ test("tray scopes actions, serializes updates and waits before removing", async 
   await expect(item.update({ title: "Late" })).rejects.toThrow("removed");
 });
 test("updates expose availability without starting and preserve native errors", async () => {
-  handlers.set("NativeDesktopUpdates.status", () => ({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null }));
+  handlers.set("NativeDesktopUpdates.status", () => ({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null, skippedBuild: null, skippedMajorBuild: null, lastCheckedAt: null }));
   expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null });
-  expect(calls.map(call => call.method)).toEqual(["status"]);
+  expect(await updates.getUpdateAvailability()).toEqual({ available: false, reason: "go" });
+  expect(calls.map(call => call.method)).toEqual(["status", "status"]);
   handlers.set("NativeDesktopUpdates.check", () => { throw nativeError("E_UNAVAILABLE"); });
   await expect(updates.checkForUpdates()).rejects.toThrow("E_UNAVAILABLE");
   await updates.startUpdates(); await updates.configureUpdates({ automaticallyChecks: true });
   const events: unknown[] = []; const sub = updates.onUpdateEvent(event => events.push(event));
-  emit("NativeDesktopApp", "desktop", { type: "update", state: "available", version: "2" });
+  emit("NativeDesktopApp", "desktop", { type: "update", state: "available", version: "2", build: "2" });
   emit("NativeDesktopApp", "desktop", { type: "trayClick" }); expect(events).toHaveLength(1); sub.remove();
 });
 
@@ -514,7 +515,8 @@ test("rich clipboard keeps binary transport private and preserves coexisting OS 
 
 
 test("updater configuration validates every option before native side effects", async () => {
-  for (const config of [{ automaticallyChecks: "yes" }, { checkIntervalSeconds: 0 }, { checkIntervalSeconds: Infinity }, { unknown: true }]) {
+  // Sparkle clamps Release intervals below one hour; Spark rejects them instead of silently changing them.
+  for (const config of [{ automaticallyChecks: "yes" }, { checkIntervalSeconds: 0 }, { checkIntervalSeconds: 3599 }, { checkIntervalSeconds: Infinity }, { unknown: true }]) {
     await expect(updates.configureUpdates(config as never)).rejects.toThrow();
   }
   await expect(updates.checkForUpdates({ mode: "unknown" } as never)).rejects.toThrow();
@@ -522,6 +524,34 @@ test("updater configuration validates every option before native side effects", 
   await updates.configureUpdates({ automaticallyChecks: false, checkIntervalSeconds: 7200 });
   expect(calls.at(-1)?.args).toEqual({ automaticallyChecks: false, checkIntervalSeconds: 7200 });
   await updates.checkForUpdates({ mode: "background" }); expect(calls.at(-1)?.method).toBe("background");
+  await updates.configureUpdates({ checkIntervalSeconds: updates.MINIMUM_UPDATE_CHECK_INTERVAL_SECONDS });
+  expect(calls.at(-1)?.args).toEqual({ checkIntervalSeconds: 3600 });
+});
+
+test("updater reports skipped builds, check history and availability, and clears skips natively", async () => {
+  const status = { available: true, started: true, canCheck: true, automaticallyChecks: true, checkIntervalSeconds: 86400, feedURL: "https://example.com/appcast.xml", skippedBuild: "20", skippedMajorBuild: "30", lastCheckedAt: "2026-10-10T12:00:00Z" };
+  handlers.set("NativeDesktopUpdates.status", () => status);
+  expect(await updates.getUpdateStatus()).toEqual(status);
+  expect(await updates.getUpdateAvailability()).toEqual({ available: true });
+  for (const invalid of [{ skippedBuild: 2 }, { skippedMajorBuild: 3 }, { lastCheckedAt: 0 }, { skippedBuild: undefined }, { skippedMajorBuild: undefined }]) {
+    handlers.set("NativeDesktopUpdates.status", () => ({ ...status, ...invalid }));
+    await expect(updates.getUpdateStatus()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  await updates.clearSkippedUpdate(); expect(calls.at(-1)).toMatchObject({ method: "clearSkipped", args: {} });
+  const cause = nativeError("E_UNAVAILABLE");
+  handlers.set("NativeDesktopUpdates.clearSkipped", () => { throw cause; });
+  await expect(updates.clearSkippedUpdate()).rejects.toMatchObject({ code: "E_UNAVAILABLE", cause });
+});
+
+test("updater events carry display version and build, delta downloads and skipped major upgrades", async () => {
+  const listener = vi.fn(); const sub = updates.onUpdateEvent(listener);
+  const item = { type: "update", version: "1.3", build: "3" };
+  for (const event of [{ ...item, state: "downloading" }, { ...item, state: "downloading", delta: "yes" }, { ...item, state: "skipped" }, { type: "update", state: "skipped", version: "1.3", major: false }, { type: "update", state: "available", version: "1.3" }, { ...item, state: "available", build: 3 }]) emit("NativeDesktopApp", "desktop", event);
+  expect(listener).not.toHaveBeenCalled();
+  const valid = [{ ...item, state: "downloading", delta: true }, { ...item, state: "downloading", delta: false }, { ...item, state: "skipped", major: false }, { ...item, state: "skipped", major: true }];
+  for (const event of valid) emit("NativeDesktopApp", "desktop", event);
+  expect(listener.mock.calls.map(([event]) => event)).toEqual(valid);
+  sub.remove();
 });
 
 test("updater rejects malformed native status/results and preserves busy causes", async () => {
@@ -538,14 +568,16 @@ test("updater rejects malformed native status/results and preserves busy causes"
 
 test("updater subscriptions filter invalid events and unsupported platforms do not call native", async () => {
   const listener = vi.fn(); const sub = updates.onUpdateEvent(listener);
-  for (const event of [null, {}, { type: "update", state: "bogus" }, { type: "update", state: "available", version: 1 }]) emit("NativeDesktopApp", "desktop", event);
+  for (const event of [null, {}, { type: "update", state: "bogus" }, { type: "update", state: "available", version: 1, build: "1" }]) emit("NativeDesktopApp", "desktop", event);
   expect(listener).not.toHaveBeenCalled();
-  emit("NativeDesktopApp", "desktop", { type: "update", state: "available", version: "2" });
+  emit("NativeDesktopApp", "desktop", { type: "update", state: "available", version: "2", build: "2" });
   expect(listener).toHaveBeenCalledTimes(1); sub.remove(); sub.remove();
   emit("NativeDesktopApp", "desktop", { type: "update", state: "checking" }); expect(listener).toHaveBeenCalledTimes(1);
   platform.OS = "windows";
   expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "unsupported-platform" });
-  await expect(updates.startUpdates()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  expect(await updates.getUpdateAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
+  for (const operation of [updates.startUpdates, updates.checkForUpdates, () => updates.configureUpdates({}), updates.clearSkippedUpdate]) await expect(operation()).rejects.toMatchObject({ name: "SparkError", code: "E_UNSUPPORTED_PLATFORM" });
+  expect(() => updates.onUpdateEvent(() => {})).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
   expect(calls).toHaveLength(0);
 });
 

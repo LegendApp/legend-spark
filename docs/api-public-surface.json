@@ -514,13 +514,17 @@
   ],
   "./updates": [
     "CheckForUpdatesOptions",
+    "MINIMUM_UPDATE_CHECK_INTERVAL_SECONDS",
     "Subscription",
+    "UpdateAvailability",
     "UpdateConfiguration",
     "UpdateEvent",
     "UpdateStatus",
     "UpdateUnavailableReason",
     "checkForUpdates",
+    "clearSkippedUpdate",
     "configureUpdates",
+    "getUpdateAvailability",
     "getUpdateStatus",
     "onUpdateEvent",
     "startUpdates"
