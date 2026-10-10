@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { build } from "../packages/cli/src/build.ts";
@@ -59,6 +59,90 @@ beforeEach(() => {
 });
 
 afterEach(() => { vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); });
+
+test.each(["dev", "preview", "release"] as const)("%s builds select the renamed scheme product and clear only that output directory", async mode => {
+  configure(true);
+  const first = await build(root, mode);
+  const config = readJson(path.join(root, "app.json"));
+  config.expo.name = "Renamed Fixture";
+  writeJson(path.join(root, "app.json"), config);
+  const run = commands.run.getMockImplementation()!;
+  commands.run.mockImplementation(async (...args) => {
+    const result = await run(...args);
+    const argv = args[1];
+    if (argv.includes("prebuild")) {
+      renameSync(path.join(root, "macos/Fixture.xcworkspace"), path.join(root, "macos/RenamedFixture.xcworkspace"));
+    } else if (argv[0] === "xcodebuild") {
+      expect(argv[argv.indexOf("-scheme") + 1]).toBe("RenamedFixture-macOS");
+      const derived = argv[argv.indexOf("-derivedDataPath") + 1]!;
+      const configuration = argv[argv.indexOf("-configuration") + 1]!;
+      const resources = path.join(derived, "Build/Products", configuration, "RenamedFixture.app/Contents/Resources");
+      write(path.join(resources, "main.jsbundle"), "renamed bundle");
+      symlinkSync("main.jsbundle", path.join(resources, "bundle-link"));
+    }
+    return result;
+  });
+  const output = path.dirname(first.app);
+  const otherMode = path.join(path.dirname(output), mode === "dev" ? "release" : "dev", "keep");
+  const otherArch = path.join(root, ".spark/products", `macos-${first.runtime.arch === "arm64" ? "x64" : "arm64"}`, mode, "keep");
+  write(otherMode, "other mode");
+  write(otherArch, "other architecture");
+  const renamed = await build(root, mode);
+  expect(renamed.app).toBe(path.join(output, "RenamedFixture.app"));
+  expect(readFileSync(path.join(renamed.app, "Contents/Resources/main.jsbundle"), "utf8")).toBe("renamed bundle");
+  expect(readlinkSync(path.join(renamed.app, "Contents/Resources/bundle-link"))).toBe("main.jsbundle");
+  expect(existsSync(first.app)).toBe(false);
+  expect(readFileSync(otherMode, "utf8")).toBe("other mode");
+  expect(readFileSync(otherArch, "utf8")).toBe("other architecture");
+  expect(readJson(path.join(root, `.spark/${mode}-build.json`)).app).toBe(renamed.app);
+  expect(await build(root, mode)).toEqual(renamed);
+  expect(commandCount("xcodebuild")).toBe(2);
+});
+
+test("a missing expected product rejects without replacing the cached app or receipt, and a retry succeeds", async () => {
+  const first = await build(root, "dev");
+  const receipt = readFileSync(path.join(root, ".spark/dev-build.json"), "utf8");
+  const run = commands.run.getMockImplementation()!;
+  commands.run.mockImplementation(async (...args) => {
+    const result = await run(...args);
+    const argv = args[1];
+    if (argv[0] === "xcodebuild") {
+      const derived = argv[argv.indexOf("-derivedDataPath") + 1]!;
+      const products = path.join(derived, "Build/Products/Debug");
+      rmSync(path.join(products, "Fixture.app"), { recursive: true });
+      write(path.join(products, "OldFixture.app/Contents/Resources/main.jsbundle"), "stale bundle");
+    }
+    return result;
+  });
+  write(path.join(moduleRoot, "macos/Fixture.mm"), "changed source");
+  await expect(build(root, "dev")).rejects.toThrow("Build completed without Fixture.app.");
+  expect(readFileSync(path.join(first.app, "Contents/Resources/main.jsbundle"), "utf8")).toBe("built bundle");
+  expect(readFileSync(path.join(root, ".spark/dev-build.json"), "utf8")).toBe(receipt);
+  expect(existsSync(path.join(root, ".spark/build.lock"))).toBe(false);
+  commands.run.mockImplementation(run);
+  expect((await build(root, "dev")).app).toBe(first.app);
+  expect(readFileSync(path.join(first.app, "Contents/Resources/main.jsbundle"), "utf8")).toBe("built bundle");
+});
+
+test("legacy receipts with a stale product rebuild once instead of bypassing product selection", async () => {
+  const first = await build(root, "dev");
+  const stale = path.join(path.dirname(first.app), "OldFixture.app");
+  renameSync(first.app, stale);
+  write(path.join(stale, "Contents/Resources/main.jsbundle"), "stale bundle");
+  const receiptFile = path.join(root, ".spark/dev-build.json");
+  const legacy = readJson(receiptFile);
+  // The old CLI saved current fingerprints even when it copied an old bundle.
+  legacy.app = stale;
+  delete legacy.product;
+  writeJson(receiptFile, legacy);
+  const rebuilt = await build(root, "dev");
+  expect(rebuilt.app).toBe(first.app);
+  expect(readFileSync(path.join(rebuilt.app, "Contents/Resources/main.jsbundle"), "utf8")).toBe("built bundle");
+  expect(existsSync(stale)).toBe(false);
+  expect(readJson(receiptFile).product).toBe("Fixture.app");
+  expect(await build(root, "dev")).toEqual(rebuilt);
+  expect(commandCount("xcodebuild")).toBe(2);
+});
 
 test("dev -> release -> dev reuses the dev app despite release preparation and missing build intermediates", async () => {
   const dev = await build(root, "dev");
