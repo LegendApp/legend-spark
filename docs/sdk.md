@@ -49,7 +49,8 @@ Dev options such as `--no-open` and `--port 8082` pass through.
 
 If no compatible runtime is available, run `bun run rebuild:macos` (or
 `bun run rebuild:windows` on Windows) from `examples/kitchen-sink` with the
-native toolchain installed. This builds and registers the reusable runtime.
+native toolchain installed. Its URL scheme needs a custom runtime, so this builds
+one with `spark build --dev` for the next session.
 Ordinary app edits need no native rebuild. Native source and checked host
 configuration changes require a rebuilt binary, and the CLI checks compatibility
 before serving desktop JavaScript.
