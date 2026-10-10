@@ -1,0 +1,150 @@
+appId: so.legend.spark.examples.kitchensink
+name: Value input primitives in every size
+intent: >
+  On Native controls > Value inputs, in all four sizes: a continuous slider drag ends at an
+  extreme without snapping back to its controlled value; a ticked slider jumps to a click and
+  steps with the arrow keys; the stepper steps by 1; every character typed into the combo box
+  is kept; a typed token is committed; clicking the usr path component proposes its URL. A
+  combo box option can be chosen from its list. Disabled inputs ignore clicks.
+checks: [CTRL-SLIDER-01, CTRL-SLIDER-02, CTRL-STEPPER-01, CTRL-COMBO-01, CTRL-TOKEN-01, CTRL-PATH-01, CTRL-DISABLED-01, CTRL-A11Y-01]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/inputs" }
+- extendedWaitUntil: { visible: { id: native-controls-inputs-root }, timeout: 10s }
+- assertText: { id: native-controls-inputs-slider-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-inputs-stepper-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-inputs-combo-box-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-inputs-token-field-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-inputs-path-control-availability, equals: '{"available":true}' }
+# mini
+# Continuous drag: intermediate values must not snap the knob back to 40
+- dragAndDrop: { from: { point: "50%,50%", within: { id: native-controls-inputs-slider-mini } }, to: { point: "100%,50%", within: { id: native-controls-inputs-slider-mini } }, steps: 20 }
+- assertVisible: { id: native-controls-inputs-slider-mini-value, text: "/^(0|100)$/" }
+# Ticks with continuous=false: a click jumps, arrow keys step by 1 (mirrored in Arabic)
+- tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-mini } }
+- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-mini-value, equals: '25' }] }
+- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-mini-value, equals: '75' }] }
+- pressKey: Up
+- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-mini-value, equals: '26' }] }
+- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-mini-value, equals: '76' }] }
+- tapOn: { point: "50%,25%", within: { id: native-controls-inputs-stepper-mini } }
+- assertText: { id: native-controls-inputs-stepper-mini-value, equals: '41' }
+- tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-mini } }
+- tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-mini } }
+- assertText: { id: native-controls-inputs-stepper-mini-value, equals: '39' }
+# Every typed character survives while JS acknowledges earlier ones
+- tripleClickOn: { id: native-controls-inputs-combo-box-mini }
+- typeText: Courier
+- assertText: { id: native-controls-inputs-combo-box-mini-value, equals: '"Courier"' }
+- tapOn: { id: native-controls-inputs-token-field-mini }
+- shortcut: cmd+down
+- typeText: Desktop,
+- pressKey: Tab
+- assertText: { id: native-controls-inputs-token-field-mini-value, equals: '["Spark","Native","Desktop"]' }
+- assertText: { id: native-controls-inputs-path-control-mini-value, equals: '"file:///usr/bin"' }
+- tapOn: { text: usr, within: { id: native-controls-inputs-path-control-mini } }
+- assertVisible: { id: native-controls-inputs-path-control-mini-value, text: "/^\"file:\/\/\/usr\/?\"$/" }
+# small
+# Continuous drag: intermediate values must not snap the knob back to 40
+- dragAndDrop: { from: { point: "50%,50%", within: { id: native-controls-inputs-slider-small } }, to: { point: "100%,50%", within: { id: native-controls-inputs-slider-small } }, steps: 20 }
+- assertVisible: { id: native-controls-inputs-slider-small-value, text: "/^(0|100)$/" }
+# Ticks with continuous=false: a click jumps, arrow keys step by 1 (mirrored in Arabic)
+- tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-small } }
+- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-small-value, equals: '25' }] }
+- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-small-value, equals: '75' }] }
+- pressKey: Up
+- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-small-value, equals: '26' }] }
+- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-small-value, equals: '76' }] }
+- tapOn: { point: "50%,25%", within: { id: native-controls-inputs-stepper-small } }
+- assertText: { id: native-controls-inputs-stepper-small-value, equals: '41' }
+- tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-small } }
+- tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-small } }
+- assertText: { id: native-controls-inputs-stepper-small-value, equals: '39' }
+# Every typed character survives while JS acknowledges earlier ones
+- tripleClickOn: { id: native-controls-inputs-combo-box-small }
+- typeText: Futura
+- assertText: { id: native-controls-inputs-combo-box-small-value, equals: '"Futura"' }
+- tapOn: { id: native-controls-inputs-token-field-small }
+- shortcut: cmd+down
+- typeText: Desktop,
+- pressKey: Tab
+- assertText: { id: native-controls-inputs-token-field-small-value, equals: '["Spark","Native","Desktop"]' }
+- assertText: { id: native-controls-inputs-path-control-small-value, equals: '"file:///usr/bin"' }
+- tapOn: { text: usr, within: { id: native-controls-inputs-path-control-small } }
+- assertVisible: { id: native-controls-inputs-path-control-small-value, text: "/^\"file:\/\/\/usr\/?\"$/" }
+# regular
+# Continuous drag: intermediate values must not snap the knob back to 40
+- dragAndDrop: { from: { point: "50%,50%", within: { id: native-controls-inputs-slider-regular } }, to: { point: "100%,50%", within: { id: native-controls-inputs-slider-regular } }, steps: 20 }
+- assertVisible: { id: native-controls-inputs-slider-regular-value, text: "/^(0|100)$/" }
+# Ticks with continuous=false: a click jumps, arrow keys step by 1 (mirrored in Arabic)
+- tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-regular } }
+- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '25' }] }
+- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '75' }] }
+- pressKey: Up
+- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '26' }] }
+- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '76' }] }
+- tapOn: { point: "50%,25%", within: { id: native-controls-inputs-stepper-regular } }
+- assertText: { id: native-controls-inputs-stepper-regular-value, equals: '41' }
+- tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-regular } }
+- tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-regular } }
+- assertText: { id: native-controls-inputs-stepper-regular-value, equals: '39' }
+# Every typed character survives while JS acknowledges earlier ones
+- tripleClickOn: { id: native-controls-inputs-combo-box-regular }
+- typeText: Georgia
+- assertText: { id: native-controls-inputs-combo-box-regular-value, equals: '"Georgia"' }
+- tapOn: { id: native-controls-inputs-token-field-regular }
+- shortcut: cmd+down
+- typeText: Desktop,
+- pressKey: Tab
+- assertText: { id: native-controls-inputs-token-field-regular-value, equals: '["Spark","Native","Desktop"]' }
+- assertText: { id: native-controls-inputs-path-control-regular-value, equals: '"file:///usr/bin"' }
+- tapOn: { text: usr, within: { id: native-controls-inputs-path-control-regular } }
+- assertVisible: { id: native-controls-inputs-path-control-regular-value, text: "/^\"file:\/\/\/usr\/?\"$/" }
+# large
+# Continuous drag: intermediate values must not snap the knob back to 40
+- dragAndDrop: { from: { point: "50%,50%", within: { id: native-controls-inputs-slider-large } }, to: { point: "100%,50%", within: { id: native-controls-inputs-slider-large } }, steps: 20 }
+- assertVisible: { id: native-controls-inputs-slider-large-value, text: "/^(0|100)$/" }
+# Ticks with continuous=false: a click jumps, arrow keys step by 1 (mirrored in Arabic)
+- tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-large } }
+- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-large-value, equals: '25' }] }
+- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-large-value, equals: '75' }] }
+- pressKey: Up
+- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-large-value, equals: '26' }] }
+- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-large-value, equals: '76' }] }
+- tapOn: { point: "50%,25%", within: { id: native-controls-inputs-stepper-large } }
+- assertText: { id: native-controls-inputs-stepper-large-value, equals: '41' }
+- tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-large } }
+- tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-large } }
+- assertText: { id: native-controls-inputs-stepper-large-value, equals: '39' }
+# Every typed character survives while JS acknowledges earlier ones
+- tripleClickOn: { id: native-controls-inputs-combo-box-large }
+- typeText: Palatino
+- assertText: { id: native-controls-inputs-combo-box-large-value, equals: '"Palatino"' }
+- tapOn: { id: native-controls-inputs-token-field-large }
+- shortcut: cmd+down
+- typeText: Desktop,
+- pressKey: Tab
+- assertText: { id: native-controls-inputs-token-field-large-value, equals: '["Spark","Native","Desktop"]' }
+- assertText: { id: native-controls-inputs-path-control-large-value, equals: '"file:///usr/bin"' }
+- tapOn: { text: usr, within: { id: native-controls-inputs-path-control-large } }
+- assertVisible: { id: native-controls-inputs-path-control-large-value, text: "/^\"file:\/\/\/usr\/?\"$/" }
+# Choose an option from the combo box list (its button is on the trailing edge)
+- tapOn: { point: "94%,50%", within: { id: native-controls-inputs-combo-box-regular }, when: { matrix: { locale: en-US } } }
+- tapOn: { point: "6%,50%", within: { id: native-controls-inputs-combo-box-regular }, when: { matrix: { locale: ar } } }
+- tapOn: Avenir
+- assertText: { id: native-controls-inputs-combo-box-regular-value, equals: '"Avenir"' }
+# Disabled inputs ignore clicks
+- tapOn: { id: native-controls-inputs-disabled }
+- tapOn: { point: "50%,25%", within: { id: native-controls-inputs-stepper-regular } }
+- assertText: { id: native-controls-inputs-stepper-regular-value, equals: '39' }
+- tapOn: { point: "90%,50%", within: { id: native-controls-inputs-slider-ticks-regular } }
+- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '26' }] }
+- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '76' }] }
+- tapOn: { id: native-controls-inputs-disabled }
+- assertA11y: { id: native-controls-inputs-stepper-regular, label: "Stepper, Regular", when: { matrix: { locale: en-US } } }
+- assertA11y: { id: native-controls-inputs-stepper-regular, label: "عدّاد، عادي", when: { matrix: { locale: ar } } }
+- takeScreenshot: inputs
