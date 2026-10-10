@@ -49,7 +49,7 @@ The earlier API passed packed macOS Settings/kitchen-sink checks and iPhone 17 s
 
 ## Specialized macOS views
 
-Search, sidebar, split view, glass and SF Symbols keep capability-specific subpaths. They expose named props and owned events, layout refs and `onError`; generated native components are private. Availability queries are synchronous and use the shared result: `getSearchAvailability`, `getSidebarAvailability`, `getSplitViewAvailability`, `getGlassAvailability`, and `getSFSymbolAvailability`. Unsupported hosts preserve ordinary view content/layout and report through `onError`. These native implementations currently target macOS; a missing implementation is not advertised as platform parity.
+Search, sidebar, split view, swipe actions, glass and SF Symbols keep capability-specific subpaths. They expose named props and owned events, layout refs and `onError`; generated native components are private. Availability queries are synchronous and use the shared result: `getSearchAvailability`, `getSidebarAvailability`, `getSplitViewAvailability`, `getGlassAvailability`, `getSFSymbolAvailability`, and `getSwipeActionsAvailability`. Unsupported hosts preserve ordinary view content/layout and report through `onError`. These native implementations currently target macOS; a missing implementation is not advertised as platform parity.
 
 `TextInputSearch` under `/ui/search` is an AppKit search field with the same controlled/default-value distinction and disabled behavior as TextInput. It adds `placeholder`, explicit `appearance`, and a `TextInputSearchRef` with `focus`, `blur`, and measurement. Empty controlled values clear the field, and stale native edit counts cannot overwrite newer typing. Native arrow-key handling is left to the search field instead of unconditionally swallowing arrows. Retained refs reject after unmount.
 
@@ -75,6 +75,28 @@ Search, sidebar, split view, glass and SF Symbols keep capability-specific subpa
 `SFSymbol` under `/ui/symbol` retains its Apple-specific name and size/scale/offset options, accepts normal RN style arrays and accessibility props, and reports a missing OS symbol as `E_NOT_FOUND`. Its layout remains intact if no image is available. The redundant placeholder component is removed; applications can use an ordinary View for their own placeholders. `/ui/classnames` remains an explicitly library-specific `clsx`/`tailwind-merge` convenience.
 
 Specialized validation includes mounted React event/layout tests, actual AppKit search clearing/defaults and symbol error tests, and a glass implementation syntax check. Those checks substitute RN declarations and do not establish interactive Fabric, accessibility, glass tint rendering, or sidebar context-menu placement acceptance.
+
+`SwipeActions` under `/ui/swipe` wraps a logical list row. It takes `leadingActions` (swipe right), `trailingActions` (swipe left), and a required `onAction(id)` callback. Actions have unique nonempty `id`, `title`, and SF Symbol `symbol` strings, a `#RRGGBB` or `#RRGGBBAA` `color`, and optional `dismisses` (default false). Standard RN layout/accessibility props, measurement refs, and `onError` are supported; unsupported hosts preserve the children.
+
+```tsx
+<SwipeActions
+  key={`${message.id}:${resetRevision}`}
+  style={{ height: 64 }}
+  trailingActions={[
+    { id: 'delete', title: 'Delete', symbol: 'trash.fill', color: '#C2362F', dismisses: true },
+    { id: 'snooze', title: 'Snooze', symbol: 'clock.fill', color: '#D18F25' },
+  ]}
+  onAction={id => handleAction(id, message.id)}
+>
+  <MessageRow message={message} />
+</SwipeActions>
+```
+
+Phased trackpad events lock to an axis; buffered vertical events pass through to the enclosing scroll view. A partial horizontal swipe rests open, and opening another row closes the previous row. The first action on each side is outermost and can commit on a full swipe, beyond both the arming threshold and the resting buttons. Resting buttons fit within the row; when all available width is needed for them, use their buttons rather than full-swipe commit. A cancelled gesture closes without acting. Clicking open content closes it, while action buttons support mouse clicks and accessibility presses. A private clipping container keeps the reveal within the row independently of RN overflow styles; Reduce Motion shortens animations.
+
+A non-dismissing action reports as the row begins springing closed. A dismissing action reports after the row slides away and leaves that native view dismissed. The caller must remove the row, or remount it with a new React key to recover after failure or undo. In a JS-recycling list, key `SwipeActions` by the logical item ID so another item gets a fresh native owner; increment a reset revision to restore the same item. Fabric recycling and replacing action definitions reset native position and invalidate delayed completions, preventing an obsolete action from reaching a replacement owner.
+
+The swipe AppKit fixture runs the actual implementation for axis replay, rest/arm/cancel, clicks, accessibility presses, clipping ownership, child coordinates, recycling and delayed callbacks. Its Fabric transport declarations are substituted; it is distinct from full Fabric integration and platform release acceptance.
 
 ## Settings windows
 
