@@ -88,6 +88,17 @@ contents belong to each area. On macOS the app declares `en` and `ar`
 localizations, so it follows the system language or a launch override such as
 `-AppleLanguages "(ar)" -AppleLocale ar_EG`.
 
+## Screenshots for verification
+
+Agents capture the real app in-process, without showing a window or taking focus:
+
+```sh
+(cd examples/kitchen-sink && bun run rebuild:macos)   # once, and after native changes
+bun run ks:capture <area>/<screen> --appearance dark --out e2e/verification/<N>/
+```
+
+See [the in-app test driver](../../docs/test-driver.md) for options and what a capture contains.
+
 ## Install or rebuild the native runtime
 
 JavaScript dependencies do not include a native executable. The `spark-ks://`
