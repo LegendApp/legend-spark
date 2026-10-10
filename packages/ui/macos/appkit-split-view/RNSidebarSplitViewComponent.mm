@@ -281,6 +281,19 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
 
 static char RNSidebarSplitViewStartupKey;
 
+// NSSplitViewController answers a divider double-click by snapping the pane beside it to its minimum or maximum
+// thickness (the shouldCollapse...forDoubleClick delegate is deprecated and never called). The snap bypasses the
+// layout flow React panes follow, and a sidebar here collapses only through the explicit toggle, so swallow it.
+// Dragging a divider is unaffected.
+@interface RNSidebarSplitViewController : NSSplitViewController
+@end
+
+@implementation RNSidebarSplitViewController
+- (void)splitView:(NSSplitView *)splitView doubleClickedOnDividerAtIndex:(NSInteger)dividerIndex
+{
+}
+@end
+
 // Startup must stay entirely in AppKit: constructing a Fabric view here would
 // read React feature flags before RCTReactNativeFactory configures them.
 @interface RNSidebarSplitViewStartupView : NSView
@@ -334,7 +347,7 @@ static char RNSidebarSplitViewStartupKey;
     sidebarItem.allowsFullHeightLayout = YES;
     contentItem.allowsFullHeightLayout = YES;
 
-    _controller = [NSSplitViewController new];
+    _controller = [RNSidebarSplitViewController new];
     _controller.minimumThicknessForInlineSidebars = 0;
     _controller.splitView.vertical = YES;
     _controller.splitView.dividerStyle = NSSplitViewDividerStyleThin;
@@ -556,7 +569,7 @@ static char RNSidebarSplitViewStartupKey;
       _listItem.allowsFullHeightLayout = YES;
     }
 
-    _splitViewController = [NSSplitViewController new];
+    _splitViewController = [RNSidebarSplitViewController new];
     _splitViewController.splitView = [RNSidebarSplitViewNativeSplitView new];
     _splitViewController.minimumThicknessForInlineSidebars = 0;
     _splitViewController.splitView.vertical = YES;
