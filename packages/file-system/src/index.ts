@@ -112,7 +112,8 @@ export async function watch(path: string, listener: (path: string) => void, opti
   const id = `watch-${Date.now()}-${++nextWatch}`;
   let removed = false;
   const emitter = new NativeEventEmitter(native());
-  const subscription = emitter.addListener("change", (event: { id: string; path: string }) => {
+  const subscription = emitter.addListener("change", (payload: unknown) => {
+    const event = payload as { id?: unknown; path?: unknown } | null | undefined;
     if (!removed && event?.id === id && typeof event.path === "string") listener(event.path);
   });
   try { await call("watch", { path: location, id, recursive }); }

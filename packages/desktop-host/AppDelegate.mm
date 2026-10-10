@@ -6,6 +6,8 @@
 #include <cxxreact/ReactMarker.h>
 #import <React-RCTAppDelegate/RCTRootViewFactory.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
+#import <Expo/ExpoReactNativeFactory.h>
+#import <ReactCommon/RCTHost.h>
 
 #if __has_include(<NativeComposeThreadedRuntime/ThreadedRuntime.h>)
 #import <NativeComposeThreadedRuntime/ThreadedRuntime.h>
@@ -65,7 +67,9 @@
     name:RCTTriggerReloadCommandNotification object:nil];
 #endif
   facebook::react::ReactMarker::logMarkerDone(facebook::react::ReactMarker::INIT_REACT_RUNTIME_START, CACurrentMediaTime() * 1000);
-  [super applicationDidFinishLaunching:notification];
+  // Expo SDK 55+ installs global.expo from its factory's host runtime callback, not a bridge module.
+  self.reactNativeFactory = [[EXReactNativeFactory alloc] initWithDelegate:self];
+  if (self.automaticallyLoadReactNativeWindow) [self loadReactNativeWindow:notification.userInfo];
 }
 #if __has_include(<NativeComposeThreadedRuntime/ThreadedRuntime.h>)
 - (void)sparkResetRuntimes:(NSNotification *)notification { [ThreadedRuntime destroyAllRuntimes]; }
@@ -178,7 +182,6 @@
   SparkOpenURLs(urls);
   [sender replyToOpenOrPrint:NSApplicationDelegateReplySuccess];
 }
-- (NSURL *)sourceURLForBridge:(RCTBridge *)bridge { return [self bundleURL]; }
 - (NSURL *)bundleURL
 {
 #if DEBUG
@@ -193,5 +196,4 @@
 #endif
 }
 - (NSMenu *)applicationDockMenu:(NSApplication *)sender { return SparkDockMenu; }
-- (BOOL)concurrentRootEnabled { return YES; }
 @end

@@ -12,9 +12,9 @@ export async function configureExample(root: string, example: Example) {
   if (example === "diff-lite") suffixes.push("processes");
   const desktop = suffixes.map(name => name === "desktop" ? "@legendapp/spark" : `@legendapp/spark-${name}`);
   if (!pkg.dependencies["@legendapp/spark"]) throw new Error("SDK example requires @legendapp/spark");
-  Object.assign(pkg.dependencies, { "expo-document-picker": "14.0.8", "expo-file-system": "19.0.24", "expo-sharing": "14.0.8" });
+  Object.assign(pkg.dependencies, { "expo-document-picker": "58.0.4", "expo-file-system": "58.0.8", "expo-sharing": "58.0.16" });
   if (example !== "document-editor") pkg.dependencies["@react-native-async-storage/async-storage"] = "2.2.0";
-  if (example === "music-lite") pkg.dependencies["expo-audio"] = pkg.dependencies["expo-audio"] ?? pkg.overrides?.["expo-audio"] ?? pkg.resolutions?.["expo-audio"] ?? pkg.pnpm?.overrides?.["expo-audio"] ?? "1.1.1";
+  if (example === "music-lite") pkg.dependencies["expo-audio"] = pkg.dependencies["expo-audio"] ?? pkg.overrides?.["expo-audio"] ?? pkg.resolutions?.["expo-audio"] ?? pkg.pnpm?.overrides?.["expo-audio"] ?? "58.0.8";
   if (example === "diff-lite") pkg.dependencies["diff"] = "8.0.2";
   writeJson(path.join(root, "package.json"), pkg);
   const config = readJson(path.join(root, "desktop.config.json"));

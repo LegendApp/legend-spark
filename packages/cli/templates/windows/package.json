@@ -13,38 +13,43 @@
     "postinstall": "node node_modules/@legendapp/spark/init-template.cjs"
   },
   "dependencies": {
-    "expo": "54.0.37",
+    "expo": "58.0.7",
     "expo-desktop": "1.0.0",
     "expo-desktop-prebuild-config": "1.1.0",
     "expo-desktop-config-plugins": "1.2.0",
     "expo-desktop-metro-config": "54.81.0",
     "expo-desktop-template-bare-minimum": "54.81.1",
-    "react": "19.1.4",
-    "react-native": "0.81.6",
+    "react": "19.3.0",
+    "react-native": "0.88.0-rc.4",
     "@react-native-community/cli": "20.1.3",
     "typescript": "5.9.3",
-    "@types/react": "19.1.10",
+    "@types/react": "19.3.0",
     "react-native-windows": "0.81.35",
     "expo-desktop-modules-core": "54.0.14",
     "expo-desktop-stubs": "54.0.14",
     "@legendapp/spark": "0.0.1-next.3"
   },
   "overrides": {
-    "@expo/cli": "54.0.27",
+    "@expo/cli": "58.1.6",
+    "expo": "58.0.7",
+    "@expo/metro-config": "58.0.11",
+    "@react-native/metro-config": "0.88.0-rc.4",
+    "expo-modules-autolinking": "58.0.11",
     "react-native-nitro-modules": "0.35.7",
     "react-native-webview": "16.0.0",
     "@op-engineering/op-sqlite": "18.2.1",
-    "expo-asset": "12.0.13",
-    "expo-constants": "18.0.14",
-    "expo-file-system": "19.0.24",
-    "expo-font": "14.0.12",
-    "expo-keep-awake": "15.0.8",
-    "expo-modules-core": "3.0.30",
+    "expo-asset": "58.0.13",
+    "expo-constants": "58.0.10",
+    "expo-file-system": "58.0.8",
+    "expo-font": "58.0.7",
+    "expo-keep-awake": "58.0.3",
+    "expo-status-bar": "58.0.3",
+    "expo-modules-core": "58.0.15",
     "expo-desktop-modules-core": "54.0.14",
     "expo-desktop-stubs": "54.0.14",
-    "react": "19.1.4",
-    "react-native": "0.81.6",
-    "react-native-macos": "0.81.7",
+    "react": "19.3.0",
+    "react-native": "0.88.0-rc.4",
+    "react-native-macos": "0.88.0-rc.4",
     "react-native-windows": "0.81.35"
   },
   "expo": {
@@ -52,6 +57,11 @@
       "exclude": [
         "react",
         "react-native"
+      ]
+    },
+    "autolinking": {
+      "exclude": [
+        "react-native-windows"
       ]
     }
   }

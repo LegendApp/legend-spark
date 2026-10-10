@@ -1,20 +1,18 @@
-import type { HostComponent, ViewProps } from "react-native";
-import { codegenNativeComponent } from "react-native";
-import codegenNativeCommands from "react-native/Libraries/Utilities/codegenNativeCommands";
-import type { DirectEventHandler, Int32, WithDefault } from "react-native/Libraries/Types/CodegenTypes";
+import type { CodegenTypes, HostComponent, ViewProps } from "react-native";
+import { codegenNativeComponent, codegenNativeCommands } from "react-native";
 
 export type TextInputSearchChangeEvent = {
   text: string;
-  eventCount: Int32;
+  eventCount: CodegenTypes.Int32;
 };
 
 export interface NativeProps extends ViewProps {
   appearance?: string;
   defaultText?: string;
-  controlled?: WithDefault<boolean, false>;
-  disabled?: WithDefault<boolean, false>;
-  eventCount?: Int32;
-  onChangeText?: DirectEventHandler<TextInputSearchChangeEvent>;
+  controlled?: CodegenTypes.WithDefault<boolean, false>;
+  disabled?: CodegenTypes.WithDefault<boolean, false>;
+  eventCount?: CodegenTypes.Int32;
+  onChangeText?: CodegenTypes.DirectEventHandler<TextInputSearchChangeEvent>;
   placeholder?: string;
   text?: string;
 }

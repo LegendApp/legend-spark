@@ -6,6 +6,7 @@ import path from "node:path";
 const require = createRequire(import.meta.url);
 const { patchAutolinkingSource, installAutolinkingPatch } = require("../packages/config-plugin/autolinking.cjs");
 const source = readFileSync(require.resolve("expo-modules-autolinking/build/utils.js"), "utf8");
+const memoize = readFileSync(require.resolve("expo-modules-autolinking/build/memoize.js"), "utf8");
 test("Codex joins Expo Desktop's Apple autolinker while staying disabled on iOS", () => {
   const config = require.resolve("../packages/codex/react-native.config.js");
   const previous = process.env.SPARK_DESKTOP_AUTOLINK;
@@ -28,9 +29,10 @@ test("autolinking resolves symlinked podspec files without modifying the package
     const dependency = path.join(root, "node_modules/expo-modules-autolinking");
     mkdirSync(path.join(dependency, "build"), { recursive: true });
     const manifest = path.join(dependency, "package.json");
-    writeFileSync(manifest, JSON.stringify({ name: "expo-modules-autolinking", version: "3.0.27" }));
+    writeFileSync(manifest, JSON.stringify({ name: "expo-modules-autolinking", version: "58.0.11" }));
     const cache = path.join(root, "cache.js"), installed = path.join(dependency, "build/utils.js");
     writeFileSync(cache, source); linkSync(cache, installed);
+    writeFileSync(path.join(dependency, "build/memoize.js"), memoize);
     installAutolinkingPatch(root);
     expect(readFileSync(cache, "utf8")).toBe(source);
     expect(readFileSync(installed, "utf8")).toBe(patchAutolinkingSource(source));
@@ -49,6 +51,6 @@ test("autolinking resolves symlinked podspec files without modifying the package
       .toEqual([path.join(fixture, "a.podspec"), path.join(fixture, "b.podspec")]);
     expect(() => patchAutolinkingSource("changed upstream")).toThrow("source changed");
     writeFileSync(manifest, JSON.stringify({ name: "expo-modules-autolinking", version: "4.0.0" }));
-    expect(() => installAutolinkingPatch(root)).toThrow("requires expo-modules-autolinking@3.0.27");
+    expect(() => installAutolinkingPatch(root)).toThrow("requires expo-modules-autolinking@58.0.11");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

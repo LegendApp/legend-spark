@@ -48,7 +48,8 @@ export async function createMenu(options: MenuOptions): Promise<Menu> {
   if (options.onAction !== undefined && typeof options.onAction !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onAction callback");
   const id = options.id, onAction = options.onAction;
   let stopped = false, ready = false, ids = selectableMenuIds(items);
-  const subscription = new NativeEventEmitter(NativeMenu as never).addListener("NativeMenuAction", event => {
+  const subscription = new NativeEventEmitter(NativeMenu as never).addListener("NativeMenuAction", (payload: unknown) => {
+    const event = payload as { ownerId?: unknown; itemId?: unknown } | null | undefined;
     if (ready && !stopped && event && event.ownerId === token && typeof event.itemId === "string" && ids.has(event.itemId)) {
       // All owners share this emitter; one owner's throw must not swallow the other owners' actions.
       try { onAction?.({ type: "action", itemId: event.itemId }); }

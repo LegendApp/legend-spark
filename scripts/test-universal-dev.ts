@@ -6,7 +6,7 @@ import path from "node:path";
 import { create } from "../packages/cli/src/create.ts";
 import { availablePort } from "../packages/cli/src/local.ts";
 import { run } from "../packages/cli/src/commands.ts";
-import { readJson, writeJson } from "../packages/cli/src/project.ts";
+import { readJson, sourceMapSources, writeJson } from "../packages/cli/src/project.ts";
 
 // One real Expo process serves all five graphs. No native toolchains/devices required.
 const framework = path.resolve(import.meta.dirname, "..");
@@ -53,8 +53,7 @@ try {
     // Source maps exercise the desktop graph even while runtime launch is blocked.
     const mapResponse = await request(`/index.map?${query}`);
     assert.equal(mapResponse.status, 200);
-    const map = await mapResponse.json() as { sources: string[] };
-    const sources = map.sources;
+    const sources = sourceMapSources(await mapResponse.json());
     const adapter = platform === "macos" ? "index.tsx" : `index.${platform}.tsx`;
     assert.ok(sources.some(source => source.includes(`@legendapp/spark-ui/src/${adapter}`)), `${platform} UI adapter`);
     assert.ok(sources.some(source => source.includes(platform === "web" ? "uniwind/dist/module/core/config/config.js" : "uniwind/src/core/config/config.native.ts")), `${platform} Uniwind runtime`);

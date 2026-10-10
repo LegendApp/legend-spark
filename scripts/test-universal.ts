@@ -4,7 +4,7 @@ import path from "node:path";
 import { create } from "../packages/cli/src/create.ts";
 import { run } from "../packages/cli/src/commands.ts";
 import { nodeCommand } from "../packages/cli/src/windows.ts";
-import { readJson, writeJson } from "../packages/cli/src/project.ts";
+import { readJson, sourceMapSources, writeJson } from "../packages/cli/src/project.ts";
 
 // Fresh packed consumer: real native generation plus the same App.tsx in all five bundles.
 const framework = path.resolve(import.meta.dirname, "..");
@@ -42,7 +42,7 @@ const results = [];
 for (const platform of ["ios", "android", "web", "windows", "macos"]) {
   const sourceMap = path.join(output, `${platform}.map`);
   await run(root, nodeCommand(root, "expo", "expo", ["export:embed", "--entry-file", "index.ts", "--platform", platform, "--dev", "true", "--max-workers", "2", "--bundle-output", path.join(output, `${platform}.js`), "--sourcemap-output", sourceMap]), { capture: true, env: { CI: "1", SPARK_PLATFORM: platform } });
-  const sources: string[] = readJson(sourceMap).sources;
+  const sources = sourceMapSources(readJson(sourceMap));
   if (!sources.some(source => source.includes(`@legendapp/spark-ui/uniwind${platform === "web" ? ".web.ts" : ".ts"}`))) throw new Error(`${platform} did not load optional UI bindings`);
   const uniwindRuntime = platform === "web" ? "dist/module/core/config/config.js" : "src/core/config/config.native.ts";
   if (!sources.some(source => source.includes(`uniwind/${uniwindRuntime}`))) throw new Error(`${platform} selected the wrong Uniwind runtime`);

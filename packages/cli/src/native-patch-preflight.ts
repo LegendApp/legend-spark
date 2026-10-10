@@ -8,7 +8,6 @@ type PatchRecord = { version: string; patchHash: string; upstreamIntegrity?: str
 export type PackedPatchRequirements = { schema: 1; frameworkVersion: string; packages: Record<string, PatchRecord> };
 
 const required = ["@react-native-runtimes/core", "react-native-nitro-modules", "@op-engineering/op-sqlite", "react-native-webview"];
-const optional = ["expo-audio"];
 
 export function validatePackedNativePatches(packages: Pick<NativePackage, "name" | "json">[], requirements: PackedPatchRequirements | undefined, frameworkVersion = VERSION): string[] {
   if (!requirements || requirements.schema !== 1 || requirements.frameworkVersion !== frameworkVersion || !requirements.packages || typeof requirements.packages !== "object")
@@ -16,7 +15,7 @@ export function validatePackedNativePatches(packages: Pick<NativePackage, "name"
   const installed = new Map(packages.map(pkg => [pkg.name, pkg.json]));
   const errors: string[] = [];
   for (const name of required) if (!installed.has(name)) errors.push(`${name} is missing; reinstall the dependencies from this Spark SDK.`);
-  for (const name of [...required, ...optional]) {
+  for (const name of required) {
     const actual = installed.get(name);
     if (!actual) continue;
     const expected = requirements.packages[name];
@@ -39,10 +38,10 @@ export function validateWorkspaceNativePatches(root: string, packages: Pick<Nati
   const pins = readJson(path.join(framework, "patches/workspace/upstream.json")) as Record<string, { version: string; integrity?: string; revision?: string }>;
   const installed = new Map(packages.map(pkg => [pkg.name, pkg]));
   const errors: string[] = [];
-  for (const name of [...required, ...optional]) {
+  for (const name of required) {
     const pkg = installed.get(name);
     if (!pkg) {
-      if (required.includes(name)) errors.push(`${name} is missing; reinstall the dependencies from this Spark workspace.`);
+      errors.push(`${name} is missing; reinstall the dependencies from this Spark workspace.`);
       continue;
     }
     const entry = Object.entries(map).find(([key]) => key.slice(0, key.lastIndexOf("@")) === name);

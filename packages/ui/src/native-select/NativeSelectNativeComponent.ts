@@ -1,6 +1,5 @@
-import type { HostComponent, ViewProps } from "react-native";
+import type { CodegenTypes, HostComponent, ViewProps } from "react-native";
 import { codegenNativeComponent } from "react-native";
-import type { DirectEventHandler, Int32 } from "react-native/Libraries/Types/CodegenTypes";
 
 export type NativeSelectChangeEvent = {
   value: string;
@@ -8,9 +7,9 @@ export type NativeSelectChangeEvent = {
 
 export interface NativeProps extends ViewProps {
   enabled?: boolean;
-  selectionRevision?: Int32;
+  selectionRevision?: CodegenTypes.Int32;
   itemsJson: string;
-  onValueChange?: DirectEventHandler<NativeSelectChangeEvent>;
+  onValueChange?: CodegenTypes.DirectEventHandler<NativeSelectChangeEvent>;
   value: string;
 }
 

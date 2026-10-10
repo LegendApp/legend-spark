@@ -89,11 +89,11 @@ function manifest(archive: string, react: string) {
     private: true,
     dependencies: {
       "@legendapp/spark": `file:${archive}`,
-      expo: "54.0.37",
+      expo: "58.0.7",
       react,
-      "react-native": "0.81.6",
+      "react-native": "0.88.0-rc.4",
     },
-    devDependencies: { "@types/node": "24.13.6", "@types/react": "19.1.10", typescript: "5.9.3" },
+    devDependencies: { "@types/node": "24.13.6", "@types/react": "19.3.0", typescript: "5.9.3" },
   };
 }
 try {
@@ -105,14 +105,14 @@ try {
   const archiveName = path.basename(archive);
   const archiveHash = createHash("sha256").update(readFileSync(archive)).digest("hex");
   const consumer = path.join(root, "consumer"); mkdirSync(consumer);
-  writeFileSync(path.join(consumer, "package.json"), JSON.stringify(manifest(archive, "19.1.4"), null, 2) + "\n");
+  writeFileSync(path.join(consumer, "package.json"), JSON.stringify(manifest(archive, "19.3.0"), null, 2) + "\n");
   const install = await runNpm(consumer, managerInstallArgs("npm"));
   if (install.status !== 0) throw new Error(`Compatible packed consumer install failed (${install.status}):\n${install.output}`);
 
   const require = createRequire(path.join(consumer, "package.json"));
   const pkg = require("@legendapp/spark/package.json");
-  if (pkg.version !== VERSION || pkg.peerDependencies.react !== "19.1.4" || pkg.peerDependencies["react-native"] !== "0.81.6") throw new Error("Installed packed Spark peer baseline differs from the release manifest");
-  if (pkg.peerDependencies["react-dom"] !== "19.1.4" || pkg.peerDependenciesMeta?.["react-dom"]?.optional !== true) throw new Error("React DOM must remain an optional public peer");
+  if (pkg.version !== VERSION || pkg.peerDependencies.react !== "19.3.0" || pkg.peerDependencies["react-native"] !== "0.88.0-rc.4") throw new Error("Installed packed Spark peer baseline differs from the release manifest");
+  if (pkg.peerDependencies["react-dom"] !== "19.3.0" || pkg.peerDependenciesMeta?.["react-dom"]?.optional !== true) throw new Error("React DOM must remain an optional public peer");
   if (pkg.packageManager) throw new Error("The published SDK must not impose the repository package manager on consumers");
   await verifyCliRuntimes(consumer);
   const cliToolchain = verifyCliToolchain(consumer);
@@ -172,7 +172,7 @@ try {
     }
     const directory = path.join(root, `${manager}-consumer`); mkdirSync(directory);
     try {
-      writeFileSync(path.join(directory, "package.json"), JSON.stringify(manifest(archive, "19.1.4"), null, 2) + "\n");
+      writeFileSync(path.join(directory, "package.json"), JSON.stringify(manifest(archive, "19.3.0"), null, 2) + "\n");
       console.log(`Installing packed SDK with ${manager}@${version.output.trim()} (lifecycle scripts disabled).`);
       const managerInstall = await runManager(manager, directory, managerInstallArgs(manager));
       if (managerInstall.status !== 0) throw new Error(`${manager}@${version.output.trim()} failed to install the packed SDK graph:\n${managerInstall.output}`);

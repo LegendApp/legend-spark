@@ -9,14 +9,14 @@ import { windowsPatchHash } from "../scripts/prepare-windows-libraries.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 
-test("workspace patch and packaged release inventories contain the same five patched dependencies", () => {
+test("workspace patch and packaged release inventories contain the same patched dependencies", () => {
   const workspace = readJson(path.join(root, "package.json")).sparkWorkspacePatches;
   const workspaceNames = Object.keys(workspace).map(key => key.slice(0, key.lastIndexOf("@"))).sort();
   expect(workspaceNames).toEqual([...patchedPackageNames].sort());
 });
 
 test("release provenance rejects stale, missing, or modified patched archives", () => {
-  const name = "expo-audio", filename = "expo-audio-1.1.1-a1b2c3.tgz", bytes = Buffer.from("archive fixture");
+  const name = "react-native-webview", filename = "react-native-webview-1.1.1-a1b2c3.tgz", bytes = Buffer.from("archive fixture");
   const patchHash = "a".repeat(64), version = "1.1.1";
   const record: PackageProvenance = { file: filename, sha256: "", patchHash, version };
   const validRecord = { ...record, sha256: hash(bytes) };

@@ -26,7 +26,7 @@ for (const manager of ["npm", "pnpm", "yarn", "bun"] as const) {
       expect(pkg.dependencies["expo-desktop"]).toBe("1.0.0");
       expect(pkg.dependencies["expo-desktop-template-bare-minimum"]).toBe("54.81.1");
       expect(pins["expo-desktop-config-plugins"]).toBe("1.2.0");
-      expect(pins["react-native-macos"]).toBe("0.81.7");
+      expect(pins["react-native-macos"]).toBe("0.88.0-rc.4");
       expect(pkg.dependencies["@legendapp/spark"]).toBe(pins["@legendapp/spark"]);
       await refreshLocalPackages(root, manifest, manager);
       expect(readFileSync(path.join(root, "package.json"), "utf8")).toBe(first);

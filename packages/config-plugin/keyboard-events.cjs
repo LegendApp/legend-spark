@@ -1,4 +1,4 @@
-// RN macOS 0.81.7 legacy views embedded in Fabric can have no React tag.
+// RN macOS 0.81.7-0.88.0-rc.4 legacy views embedded in Fabric can have no React tag.
 const fs = require("node:fs");
 const path = require("node:path");
 const replacements = {
@@ -28,7 +28,7 @@ function patchKeyboardSource(file, source) {
 function installKeyboardEventsPatch(root) {
   const manifest = require.resolve("react-native-macos/package.json", { paths: [root] });
   const version = JSON.parse(fs.readFileSync(manifest, "utf8")).version;
-  if (version !== "0.81.7") throw new Error(`spark's keyboard patch requires react-native-macos@0.81.7; found ${version}.`);
+  if (version !== "0.88.0-rc.4") throw new Error(`spark's keyboard patch requires react-native-macos@0.88.0-rc.4; found ${version}.`);
   // Validate all targets before changing either file.
   const changes = Object.keys(replacements).map(relative => {
     const file = path.join(path.dirname(manifest), relative);

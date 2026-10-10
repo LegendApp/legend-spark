@@ -17,30 +17,38 @@ test("Metro readiness does not wait for Expo's dependency checks", async () => {
   for (const serverFails of [false, true]) {
     const events: string[] = [];
     const exports: any = {};
+    const chalk = Object.assign((strings: TemplateStringsArray) => strings.join(""), { gray: (value: string) => value });
     const modules: Record<string, unknown> = {
       "@expo/config": { getConfig: () => ({ exp: { platforms: ["macos"] }, pkg: {} }) },
-      chalk: { gray: (value: string) => value },
+      chalk,
       "../log": { log() {} },
       "../utils/profile": { profile: (fn: unknown) => fn },
       "../utils/env": { env: {} },
+      "../utils/interactive": { shouldReduceLogs: () => false, isInteractive: () => false },
       "./resolveOptions": { resolvePortsAsync: async () => ({ metroPort: 19091 }) },
       "./server/platformBundlers": { getPlatformBundlers: () => ({ macos: "metro" }) },
+      "./server/openPlatforms": { openPlatformsAsync: async () => {} },
+      "./server/MCP": { maybeCreateMCPServerAsync: async () => undefined },
       "./server/DevServerManager": { DevServerManager: class {
         async startAsync() { if (serverFails) throw new Error("server failed"); events.push("listening"); }
         getNativeDevServerPort() { return 19091; }
+        getDefaultDevServer() { return undefined; }
         async watchEnvironmentVariables() {}
         async bootstrapTypeScriptAsync() {}
       } },
-      "./doctor/dependencies/validateDependenciesVersions": { validateDependenciesVersionsAsync: async () => {
+      // Expo 58 starts dependency validation in the background; it may never settle offline.
+      "./checkDependenciesOnStart": { checkDependencies: () => {
         events.push("dependency check");
-        throw new Error("dependency check failed");
-      } },
+        return { promise: new Promise(() => {}) };
+      }, printDependencyCheckResult() {} },
     };
     new Function("require", "exports", source)((name: string) => name.endsWith("expo-dev-extension.cjs")
       ? { ready: (port: number) => { expect(port).toBe(19091); events.push("ready"); } }
       : modules[name] ?? {}, exports);
-    await expect(exports.startAsync(root, { dev: true }, {})).rejects.toThrow(serverFails ? "server failed" : "dependency check failed");
-    expect(events).toEqual(serverFails ? [] : ["listening", "ready", "dependency check"]);
+    const started = exports.startAsync(root, { dev: true }, {});
+    if (serverFails) await expect(started).rejects.toThrow("server failed");
+    else await started;
+    expect(events).toEqual(serverFails ? ["dependency check"] : ["dependency check", "listening", "ready"]);
   }
 });
 

@@ -9,7 +9,6 @@ export const patchedPackageNames = [
   "react-native-nitro-modules",
   "@op-engineering/op-sqlite",
   "react-native-webview",
-  "expo-audio",
 ] as const;
 
 export function hashFiles(root: string, files: string[], identity = "") {

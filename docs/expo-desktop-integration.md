@@ -1,6 +1,6 @@
 # Expo Desktop integration
 
-spark delegates project creation and native generation to the tested Expo Desktop release. The pinned CLI is `expo-desktop@1.0.0`; desktop native generation uses `expo-desktop-template-bare-minimum@54.81.1`. Config plugins are pinned to `expo-desktop-config-plugins@1.2.0`. Metro config is `54.81.0`; modules-core and stubs are `54.0.14`. Expo 54 / React Native 0.81 remain unchanged. Spark pins RN macOS `0.81.7` and RN Windows `0.81.35` in overrides as well as direct dependencies, preventing the upstream native template from installing conflicting desktop versions.
+spark delegates project creation and native generation to the tested Expo Desktop release. The pinned CLI is `expo-desktop@1.0.0`; desktop native generation uses `expo-desktop-template-bare-minimum@54.81.1`. Config plugins are pinned to `expo-desktop-config-plugins@1.2.0`. Metro config is `54.81.0` (its `@expo/metro-config` and `@react-native/metro-config` are overridden to the SDK 58 versions); modules-core and stubs are `54.0.14`. The app baseline is Expo 58 / React Native 0.88.0-rc.4; no Expo Desktop release targets SDK 58 yet. Spark pins RN macOS `0.88.0-rc.4` and RN Windows `0.81.35` in overrides as well as direct dependencies, preventing the upstream native template from installing conflicting desktop versions.
 
 ## Ownership
 
@@ -80,6 +80,11 @@ package cache hardlinks. It ships with desktop-config and participates in runtim
 compatibility. Existing runtimes need a native rebuild. Review/remove this patch
 when upgrading RN macOS. `bun scripts/test-keyboard-events.ts` builds and exercises
 the native regression; see [macOS evidence](macos-readiness-2026-09-18.md#webview-keyboard-follow-up).
+
+`expo-root-view-factory.cjs` patches `expo@58.0.7`'s `EXReactRootViewFactory.mm`.
+Its macOS branch assumes react-native-macos before 0.84, where `viewWithModuleName:` had no
+`bundleConfiguration:` variant. RN macOS 0.88 routes every variant through that selector, so
+the patch overrides it on macOS too. Remove it once Expo gates that branch on the RN macOS version.
 
 ## Expo development terminal patch
 

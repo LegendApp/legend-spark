@@ -35,12 +35,13 @@ try {
   metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], {
     cwd: root, env: { ...process.env, CI: "1" }, stdout: log, stderr: log,
   });
-  await waitFor(async () => fetch(`http://127.0.0.1:${port}/status`, { signal: AbortSignal.timeout(1000) }).then(r => r.ok, () => false), "Metro");
+  // Expo SDK 58 binds --localhost to the name "localhost" (::1 first), not 127.0.0.1.
+  await waitFor(async () => fetch(`http://localhost:${port}/status`, { signal: AbortSignal.timeout(1000) }).then(r => r.ok, () => false), "Metro");
   const executable = (await run(root, ["/usr/libexec/PlistBuddy", "-c", "Print :CFBundleExecutable", path.join(product.app, "Contents/Info.plist")], { capture: true })).trim();
   const report = path.join(root, `.spark/ui-results-${Date.now()}.json`);
   const output = processLog(path.join(root, ".spark/ui-app.log"));
-  app = spawnProcess([path.join(product.app, "Contents/MacOS", executable), "-RCT_jsLocation", `127.0.0.1:${port}`, "--spark-ui-report", report], {
-    cwd: root, env: { ...process.env, SPARK_BUNDLE_URL: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=true&minify=false` }, stdout: output, stderr: output,
+  app = spawnProcess([path.join(product.app, "Contents/MacOS", executable), "-RCT_jsLocation", `localhost:${port}`, "--spark-ui-report", report], {
+    cwd: root, env: { ...process.env, SPARK_BUNDLE_URL: `http://localhost:${port}/index.bundle?platform=macos&dev=true&minify=false` }, stdout: output, stderr: output,
   });
   await waitFor(async () => existsSync(report), "native UI checks");
   const result = readJson(report);

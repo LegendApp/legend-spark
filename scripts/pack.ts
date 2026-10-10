@@ -1,4 +1,3 @@
-import { packAudio } from "./prepare-audio.ts";
 import { packArchive } from "../packages/cli/src/pack-archive.ts";
 import { packSpark } from "./pack-spark.ts";
 import { packWindowsLibraries } from "./prepare-windows-libraries.ts";
@@ -20,7 +19,7 @@ const packages = [
   "fixtures/sdk-test-driver",
 ];
 const manifest: Record<string, string> = await packRuntimes(root, output);
-Object.assign(manifest, await packWindowsLibraries(output), await packAudio(root, output));
+Object.assign(manifest, await packWindowsLibraries(output));
 manifest["@legendapp/spark"] = await packSpark(root, output);
 for (const dir of packages) {
   const pkg = readJson(path.join(root, dir, "package.json"));
@@ -33,6 +32,13 @@ for (const dir of packages) {
   const immutable = file.replace(/\.tgz$/, `-${hash}.tgz`);
   copyFileSync(path.join(output, file), path.join(output, immutable));
   manifest[pkg.name] = immutable;
+}
+// Unpublished upstream archives the workspace pins by file: travel with the local SDK.
+for (const [name, spec] of Object.entries(readJson(path.join(root, "package.json")).overrides as Record<string, string>)) {
+  if (!spec.startsWith("file:")) continue;
+  const file = path.basename(spec.slice("file:".length));
+  copyFileSync(path.resolve(root, spec.slice("file:".length)), path.join(output, file));
+  manifest[name] = file;
 }
 writeJson(path.join(output, "manifest.json"), manifest);
 const names = Object.keys(manifest).filter(name => patchedPackageNames.includes(name as typeof patchedPackageNames[number])).sort();

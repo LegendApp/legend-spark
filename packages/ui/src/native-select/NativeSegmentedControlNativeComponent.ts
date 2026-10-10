@@ -1,6 +1,5 @@
-import type { HostComponent, ViewProps } from "react-native";
+import type { CodegenTypes, HostComponent, ViewProps } from "react-native";
 import { codegenNativeComponent } from "react-native";
-import type { DirectEventHandler, Int32 } from "react-native/Libraries/Types/CodegenTypes";
 
 export type NativeSegmentedControlChangeEvent = {
   value: string;
@@ -8,9 +7,9 @@ export type NativeSegmentedControlChangeEvent = {
 
 export interface NativeProps extends ViewProps {
   enabled?: boolean;
-  selectionRevision?: Int32;
+  selectionRevision?: CodegenTypes.Int32;
   segmentsJson: string;
-  onValueChange?: DirectEventHandler<NativeSegmentedControlChangeEvent>;
+  onValueChange?: CodegenTypes.DirectEventHandler<NativeSegmentedControlChangeEvent>;
   value: string;
 }
 

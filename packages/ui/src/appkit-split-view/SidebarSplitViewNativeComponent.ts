@@ -1,37 +1,36 @@
-import type { HostComponent, ViewProps } from "react-native";
+import type { CodegenTypes, HostComponent, ViewProps } from "react-native";
 import { codegenNativeComponent } from "react-native";
-import type { DirectEventHandler, Double } from "react-native/Libraries/Types/CodegenTypes";
 
 export type SidebarSplitViewResizeEvent = Readonly<{
-  contentHeight: Double;
-  contentWidth: Double;
-  contentX: Double;
-  height: Double;
+  contentHeight: CodegenTypes.Double;
+  contentWidth: CodegenTypes.Double;
+  contentX: CodegenTypes.Double;
+  height: CodegenTypes.Double;
   isLayoutReady: boolean;
   isVertical: boolean;
-  listHeight: Double;
-  listWidth: Double;
-  listX: Double;
-  sidebarHeight: Double;
-  sidebarWidth: Double;
+  listHeight: CodegenTypes.Double;
+  listWidth: CodegenTypes.Double;
+  listX: CodegenTypes.Double;
+  sidebarHeight: CodegenTypes.Double;
+  sidebarWidth: CodegenTypes.Double;
 }>;
 
 export interface NativeProps extends ViewProps {
   appearance?: string;
-  contentTitlebarHeight?: Double;
+  contentTitlebarHeight?: CodegenTypes.Double;
   contentTitlebarMaterial?: string;
   contentTitlebarOverlayColor?: string;
-  contentTitlebarOverlayOpacity?: Double;
-  contentMinWidth?: Double;
+  contentTitlebarOverlayOpacity?: CodegenTypes.Double;
+  contentMinWidth?: CodegenTypes.Double;
   hasList?: boolean;
-  listMinWidth?: Double;
-  listWidth?: Double;
-  onSplitViewDidResize?: DirectEventHandler<SidebarSplitViewResizeEvent>;
+  listMinWidth?: CodegenTypes.Double;
+  listWidth?: CodegenTypes.Double;
+  onSplitViewDidResize?: CodegenTypes.DirectEventHandler<SidebarSplitViewResizeEvent>;
   sidebarCollapsed?: boolean;
-  sidebarMinWidth?: Double;
+  sidebarMinWidth?: CodegenTypes.Double;
   sidebarTitlebarOverlayColor?: string;
-  sidebarTitlebarOverlayOpacity?: Double;
-  sidebarWidth?: Double;
+  sidebarTitlebarOverlayOpacity?: CodegenTypes.Double;
+  sidebarWidth?: CodegenTypes.Double;
 }
 
 export default codegenNativeComponent<NativeProps>("SidebarSplitView") as HostComponent<NativeProps>;

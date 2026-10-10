@@ -8,7 +8,7 @@ function withSparkClasses<Props extends { style?: StyleProp<ViewStyle> }>(Compon
     // withUniwind emits CSS classes on web, which cannot override our inline
     // default frames. Resolve through Uniwind so style-array precedence survives.
     const resolved = useResolveClassNames(className);
-    return createElement(Component, { ...props, style: [resolved as ViewStyle, style] } as Props);
+    return createElement(Component, { ...props, style: [resolved as ViewStyle, style] } as unknown as Props);
   };
 }
 

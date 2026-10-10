@@ -112,7 +112,7 @@ function patchSurface(source) {
 function installSurfaceLifecyclePatch(root) {
   const manifest = require.resolve("react-native-macos/package.json", { paths: [root] });
   const version = JSON.parse(fs.readFileSync(manifest, "utf8")).version;
-  if (version !== "0.81.7") throw new Error(`spark's Fabric lifecycle patch requires react-native-macos@0.81.7; found ${version}.`);
+  if (version !== "0.88.0-rc.4") throw new Error(`spark's Fabric lifecycle patch requires react-native-macos@0.88.0-rc.4; found ${version}.`);
   const file = path.join(path.dirname(manifest), "React/Fabric/Surface/RCTFabricSurface.mm");
   const before = fs.readFileSync(file, "utf8"), after = patchSurface(before);
   if (before !== after) {

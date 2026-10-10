@@ -85,7 +85,7 @@ test("single Spark archive resolves public exports and preserves private native 
     expect(manifest.spark.nativePatchRequirements.schema).toBe(1);
     expect(manifest.spark.nativePatchRequirements.frameworkVersion).toBe(VERSION);
     expect(Object.keys(manifest.spark.nativePatchRequirements.packages).sort()).toEqual([
-      "@op-engineering/op-sqlite", "@react-native-runtimes/core", "expo-audio", "react-native-nitro-modules", "react-native-webview",
+      "@op-engineering/op-sqlite", "@react-native-runtimes/core", "react-native-nitro-modules", "react-native-webview",
     ]);
     for (const requirement of Object.values(manifest.spark.nativePatchRequirements.packages) as any[])
       expect(requirement.patchHash).toMatch(/^[a-f0-9]{64}$/);
@@ -118,7 +118,7 @@ test("single Spark archive resolves public exports and preserves private native 
     expect(JSON.parse(pluginOut).SparkFrameworkVersion).toBe(manifest.version);
     const singletonPeers = ["expo", "react", "react-native", "react-dom"];
     for (const name of singletonPeers) expect(manifest.dependencies).not.toHaveProperty(name);
-    expect(manifest.peerDependencies).toMatchObject({ expo: "54.0.37", react: "19.1.4", "react-native": "0.81.6", "react-dom": "19.1.4" });
+    expect(manifest.peerDependencies).toMatchObject({ expo: "58.0.7", react: "19.3.0", "react-native": "0.88.0-rc.4", "react-dom": "19.3.0" });
     expect(manifest.peerDependenciesMeta["react-dom"]).toEqual({ optional: true });
     expect(manifest.dependencies["@react-native-runtimes/core"]).toBe("0.1.0-alpha.2");
     expect(manifest.dependencies["react-native-nitro-modules"]).toBe("0.35.7");

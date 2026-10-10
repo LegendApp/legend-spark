@@ -30,7 +30,7 @@ test("packed SDK records the exact patch recipes used by its public native packa
   expect(requirements.frameworkVersion).toBe(VERSION);
   expect(requirements.packages["@react-native-runtimes/core"].upstreamRevision).toBe(runtimesRevision);
   expect(() => assertRuntimesRevision("different-revision")).toThrow("does not match the revision used by the native patch builder");
-  expect(Object.keys(requirements.packages).sort()).toEqual([...requiredNames, "expo-audio"].sort());
+  expect(Object.keys(requirements.packages).sort()).toEqual([...requiredNames].sort());
   for (const record of Object.values(requirements.packages)) expect(record.patchHash).toMatch(/^[a-f0-9]{64}$/);
 });
 
@@ -64,15 +64,6 @@ test("packed preflight accepts matching patches and rejects absent, wrong-versio
   expect(validatePackedNativePatches(wrongVersion, fixtureRequirements).join(" ")).toContain("matching patched");
   const stale = packedFixtures(); stale[1].json.spark.patchHash = "b".repeat(64);
   expect(validatePackedNativePatches(stale, fixtureRequirements).join(" ")).toContain("matching patched");
-});
-
-test("optional Expo Audio is checked only when it is present in the selected native graph", () => {
-  expect(validatePackedNativePatches(packedFixtures(), fixtureRequirements)).toEqual([]);
-  const audio = { name: "expo-audio", version: "1.1.1", spark: { sdk: true, patchHash: "b".repeat(64), upstreamIntegrity: "sha512-upstream" } };
-  expect(validatePackedNativePatches([...packedFixtures(), { name: "expo-audio", json: audio } as any], {
-    ...fixtureRequirements,
-    packages: { ...fixtureRequirements.packages, "expo-audio": { version: "1.1.1", patchHash: "a".repeat(64), upstreamIntegrity: "sha512-upstream" } },
-  }).join(" ")).toContain("expo-audio@1.1.1");
 });
 
 test("workspace adapter stamps only after every patch hunk is applied and verifies idempotently", () => {

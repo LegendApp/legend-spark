@@ -1,4 +1,3 @@
-import { audioPatchHash } from "./prepare-audio.ts";
 import { runtimesPatchHash, runtimesRevision } from "./prepare-runtimes.ts";
 import { windowsPatchHash } from "./prepare-windows-libraries.ts";
 import { readJson } from "../packages/cli/src/project.ts";
@@ -35,11 +34,6 @@ export function nativePatchRequirements(root: string, frameworkVersion: string) 
       version: windows["react-native-webview"].version,
       patchHash: windowsPatchHash("react-native-webview", windows["react-native-webview"], root),
       upstreamIntegrity: windows["react-native-webview"].integrity,
-    },
-    "expo-audio": {
-      version: workspace["expo-audio"].version,
-      patchHash: audioPatchHash(root),
-      upstreamIntegrity: workspace["expo-audio"].integrity,
     },
   };
   return { schema: 1 as const, frameworkVersion, packages };

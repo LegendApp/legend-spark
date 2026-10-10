@@ -52,8 +52,11 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
   const release = manifestFile ? undefined : installedRelease();
   const req = createRequire(pkgFile);
   const installed = (name: string) => readJson(req.resolve(`${name}/package.json`)).version;
+  const template = path.resolve(import.meta.dirname, "../templates/universal");
+  const defaults = readJson(path.join(template, "package.json"));
   // Never upgrade the mobile baseline as a side effect of adding desktop.
-  for (const [name, version] of Object.entries({ expo: "54.0.37", "react-native": "0.81.6", react: "19.1.4" })) {
+  for (const name of ["expo", "react-native", "react"]) {
+    const version = defaults.dependencies[name] as string;
     let actual: string;
     try { actual = installed(name); } catch { throw new Error(`Install the app's dependencies first; ${name} is missing.`); }
     if (actual !== version) throw new Error(`The tested Expo Desktop beta needs ${name}@${version}; this app has ${actual}. Align the app's baseline separately, then retry. No files were changed.`);
@@ -110,8 +113,6 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
   const native = "react-native.config.js";
   files.set(native, composeExport(existsSync(path.join(root, native)) ? readFileSync(path.join(root, native), "utf8") : "module.exports = {};\n", native, "@legendapp/spark/native", "withSparkNative"));
 
-  const template = path.resolve(import.meta.dirname, "../templates/universal");
-  const defaults = readJson(path.join(template, "package.json"));
   const archives = packageSources(manifestFile, release);
   const local = ["@legendapp/spark"];
   const dependencies: Record<string, string> = {};
@@ -120,7 +121,7 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
     dependencies[name] = archives[name]!;
   }
   for (const [name, version] of Object.entries(defaults.dependencies)) {
-    if (name.startsWith("expo-desktop") || ["react-native-macos", "react-native-windows", "@react-native-community/cli"].includes(name)) dependencies[name] = version as string;
+    if (name.startsWith("expo-desktop") || ["react-native-macos", "react-native-windows", "@react-native-community/cli"].includes(name)) dependencies[name] = archives[name] ?? version as string;
   }
   pkg.dependencies ??= {};
   for (const [name, version] of Object.entries(dependencies)) {
@@ -128,14 +129,15 @@ export async function addDesktop(root: string, manifestFile: string | undefined)
     if (previous && previous !== version) throw new Error(`Existing ${name} dependency conflicts with the tested desktop version. Resolve it explicitly before retrying. No files were changed.`);
     if (!previous) pkg.dependencies[name] = version;
   }
-  // Resolve local transitive SDK packages without replacing any mobile pins.
-  const vendor = ["@react-native-runtimes/core", "react-native-nitro-modules", "@op-engineering/op-sqlite", "react-native-webview"];
-  const overrides: Record<string, string> = { ...Object.fromEntries(local.map(name => [name, dependencies[name]!])), "@expo/cli": "54.0.27",
-    "react-native-macos": defaults.overrides["react-native-macos"], "react-native-windows": defaults.overrides["react-native-windows"] };
-  for (const name of vendor) {
-    if (archives[name]) {
-      overrides[name] = archives[name]!;
-    }
+  // Resolve every SDK-carried archive (vendored and unpublished upstream builds) without replacing any mobile pins.
+  const overrides: Record<string, string> = { ...Object.fromEntries(local.map(name => [name, dependencies[name]!])),
+    ...Object.fromEntries(["@expo/cli", "@expo/metro-config", "@react-native/metro-config", "expo-modules-autolinking", "react-native-macos", "react-native-windows"]
+      .map(name => [name, defaults.overrides[name] as string])) };
+  Object.assign(overrides, archives);
+  // Expo Desktop's template package still depends on the SDK 54 baseline; hold it to the app's own verified specs.
+  for (const name of ["expo", "react", "react-native"]) {
+    const spec = pkg.dependencies[name] ?? pkg.devDependencies?.[name];
+    if (spec) overrides[name] = spec;
   }
   const overrideField = manager === "yarn" ? "resolutions" : "overrides";
   const owner = manager === "pnpm" ? (pkg.pnpm ??= {}) : pkg;

@@ -1,4 +1,3 @@
-import { packAudio } from "./prepare-audio.ts";
 import { spawnProcess } from "../packages/cli/src/process.ts";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -14,7 +13,7 @@ import { patchedPackageNames } from "./patch-inventory.ts";
 const root = path.resolve(import.meta.dirname, "..");
 const cache = path.join(root, ".spark/workspace-patches");
 mkdirSync(cache, { recursive: true });
-const archives: Record<string, string> = { ...await packRuntimes(root, cache), ...await packWindowsLibraries(cache), ...await packAudio(root, cache) };
+const archives: Record<string, string> = { ...await packRuntimes(root, cache), ...await packWindowsLibraries(cache) };
 if (JSON.stringify(Object.keys(archives).sort()) !== JSON.stringify([...patchedPackageNames].sort())) throw new Error("Workspace patch source set does not match the patched package inventory");
 const pins = readJson(path.join(root, "patches/workspace/upstream.json"));
 const patches: Record<string, string> = {};

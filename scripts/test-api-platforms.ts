@@ -2,7 +2,7 @@ import { applyOverrides, localArchive, managerCommand, packageManager } from "..
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { run, binary } from "../packages/cli/src/commands.ts";
-import { readJson, writeJson } from "../packages/cli/src/project.ts";
+import { readJson, sourceMapSources, writeJson } from "../packages/cli/src/project.ts";
 
 // A packed, minimal consumer proves platform selection independently of the macOS-only kitchen sink.
 const framework = path.resolve(import.meta.dirname, "..");
@@ -15,8 +15,8 @@ const archives = { "@legendapp/spark": localArchive(path.join(framework, "artifa
 mkdirSync(root, { recursive: true }); writeFileSync(path.join(root, ".spark-api-probe"), "managed\n");
 writeJson(path.join(root, "package.json"), {
   name: "spark-api-platform-probe", private: true, version: "1.0.0", main: "index.ts",
-  dependencies: { ...archives, "@expo/ui": "0.2.0-beta.9", expo: "54.0.37", "expo-clipboard": "8.0.8", "expo-secure-store": "15.0.8", "expo-linking": "8.0.12", react: "19.1.4", "react-native": "0.81.6", "react-dom": "19.1.4", "react-native-web": "0.21.0" },
-  overrides: { ...archives, expo: "54.0.37", "expo-constants": "18.0.14", "expo-modules-core": "3.0.30" },
+  dependencies: { ...archives, "@expo/ui": "58.0.15", expo: "58.0.7", "expo-clipboard": "58.0.3", "expo-secure-store": "58.0.2", "expo-linking": "58.0.11", react: "19.3.0", "react-native": "0.88.0-rc.4", "react-dom": "19.3.0", "react-native-web": "0.21.4" },
+  overrides: { ...archives, expo: "58.0.7", "expo-constants": "58.0.10", "expo-modules-core": "58.0.15" },
 });
 writeJson(path.join(root, "app.json"), { expo: { name: "API Platform Probe", slug: "spark-api-probe", platforms: ["ios", "android", "web"] } });
 writeFileSync(path.join(root, "metro.config.js"), 'const {getDefaultConfig} = require("expo/metro-config"); module.exports = getDefaultConfig(__dirname);\n');
@@ -31,7 +31,7 @@ const results = [];
 for (const platform of ["ios", "android", "web"]) {
   const sourceMap = path.join(output, `${platform}.map`);
   await run(root, [binary(root, "expo"), "export:embed", "--entry-file", "index.ts", "--platform", platform, "--dev", "true", "--max-workers", "2", "--bundle-output", path.join(output, `${platform}.js`), "--sourcemap-output", sourceMap], { capture: true });
-  const sources: string[] = readJson(sourceMap).sources;
+  const sources = sourceMapSources(readJson(sourceMap));
   if (sources.some(source => source.includes("NativeDesktop") || (source.includes("desktop-app/src") && !source.includes("desktop-app/src/contracts/")) || source.includes("SparkButtonNativeComponent"))) throw new Error(`${platform} bundle loads desktop native modules`);
   for (const name of ["clipboard", "secure-storage", "desktop-links"]) {
     if (!sources.some(source => source.includes(`@legendapp/spark-${name}/src/index.${platform}.ts`))) throw new Error(`${platform} did not select ${name}'s platform adapter`);
