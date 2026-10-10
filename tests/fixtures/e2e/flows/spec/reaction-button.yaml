@@ -1,0 +1,11 @@
+appId: so.legend.kitchensink
+name: Reaction button increments
+intent: Clicking the heart reaction bumps the count with a pop animation.
+checks: [CTRL-BTN-01, FLR-COUNT-01]
+tags: [smoke]
+---
+- launchApp: { clearState: true }
+- tapOn: "Tighten the loop"
+- tapOn: { id: reaction-heart }
+- assertVisible: "❤️ 13"
+- takeScreenshot: reacted

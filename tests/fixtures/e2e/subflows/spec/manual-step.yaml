@@ -1,0 +1,5 @@
+- manualStep:
+    instruction: Candidate window sits directly under the caret.
+    expect: Candidate window overlaps no text and tracks the caret.
+    evidence: screenshot        # screenshot | recording | none
+    signoff: required

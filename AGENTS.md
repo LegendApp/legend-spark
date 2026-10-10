@@ -13,3 +13,7 @@ requires an imperative counterpart or a justified React-only exception for every
 
 Public path changes must update `docs/api-export-inventory.json` and pass
 `tests/api-export-inventory.test.ts`.
+
+E2E verification flows (`e2e/`): write and check them with [docs/e2e-flows.md](docs/e2e-flows.md)
+(`bun run e2e:validate`, `bun run e2e:lint`). After changing `scripts/e2e/format/commands.ts`,
+run `bun run e2e:schema`.

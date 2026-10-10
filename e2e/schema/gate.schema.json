@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Spark e2e gate manifest",
+  "description": "e2e/gate.yaml: the release-gate suite.",
+  "type": "object",
+  "properties": {
+    "suite": {
+      "type": "string",
+      "minLength": 1
+    },
+    "appId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "build": {
+      "type": "object",
+      "properties": {
+        "macos": {
+          "type": "object",
+          "properties": {
+            "artifact": {
+              "type": "string",
+              "minLength": 1
+            },
+            "install": {
+              "type": "boolean"
+            },
+            "cleanUser": {
+              "type": "boolean"
+            },
+            "verifySignature": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "artifact"
+          ],
+          "additionalProperties": false
+        },
+        "windows": {
+          "type": "object",
+          "properties": {
+            "artifact": {
+              "type": "string",
+              "minLength": 1
+            },
+            "install": {
+              "type": "boolean"
+            },
+            "cleanUser": {
+              "type": "boolean"
+            },
+            "verifySignature": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "artifact"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "os": {
+            "type": "string",
+            "pattern": "^(macos|windows)-\\d+$"
+          },
+          "arch": {
+            "enum": [
+              "arm64",
+              "x86_64",
+              "x64"
+            ]
+          }
+        },
+        "required": [
+          "os",
+          "arch"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "blocking": {
+      "type": "object",
+      "properties": {
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "default": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "retries": {
+      "enum": [
+        0
+      ],
+      "description": "Flaky = failed: the gate never retries."
+    },
+    "budgets": {
+      "type": "string",
+      "minLength": 1
+    },
+    "coverage": {
+      "type": "object",
+      "properties": {
+        "checks": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exports": {
+          "type": "boolean"
+        },
+        "availability": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "json": {
+          "type": "string",
+          "minLength": 1
+        },
+        "junit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "html": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    }
+  },
+  "required": [
+    "suite",
+    "appId",
+    "build",
+    "targets",
+    "include"
+  ],
+  "additionalProperties": false
+}
