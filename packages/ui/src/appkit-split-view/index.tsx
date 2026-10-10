@@ -7,7 +7,7 @@ import NativeSplitView from "./SidebarSplitViewNativeComponent";
 export type SidebarSplitViewAppearance = "system" | "light" | "dark";
 export type SidebarSplitViewTitlebarMaterial = "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
 export interface SidebarSplitViewPaneMetrics { contentHeight: number; contentWidth: number; sidebarHeight: number; sidebarWidth: number; listHeight?: number; listWidth?: number }
-export interface SidebarSplitViewResizeEvent extends SidebarSplitViewPaneMetrics { contentX: number; listX: number; height: number; phase: "provisional" | "ready" }
+export interface SidebarSplitViewResizeEvent extends SidebarSplitViewPaneMetrics { listHeight: number; listWidth: number; contentX: number; listX: number; height: number; phase: "provisional" | "ready" }
 export interface SplitViewTitleBarOverlay { color: string; opacity?: number }
 export interface SplitViewTitleBarOptions {
   content?: { height?: number; material?: SidebarSplitViewTitlebarMaterial; overlay?: SplitViewTitleBarOverlay };
@@ -52,7 +52,7 @@ export function SidebarSplitView({ sidebar, content, list, children, appearance:
   appearance(theme); finite(contentMinWidth, "minimum content width"); finite(sidebarMinWidth, "minimum sidebar width"); finite(listMinWidth, "minimum list width");
   if (sidebarWidth !== undefined) finite(sidebarWidth, "sidebar width", sidebarMinWidth);
   if (listWidth !== undefined) finite(listWidth, "list width", listMinWidth);
-  const hasList = list !== undefined && list !== null;
+  const hasList = list !== undefined && list !== null && typeof list !== "boolean" && list !== "";
   if (typeof sidebarCollapsed !== "boolean" || children !== undefined) throw new SparkError("E_INVALID_ARGUMENT", "Use named sidebar/content panes and a boolean collapsed state");
   if (initialPaneMetrics !== undefined) metrics(initialPaneMetrics);
   keys(titleBar, ["content", "sidebar"]);
@@ -68,7 +68,7 @@ export function SidebarSplitView({ sidebar, content, list, children, appearance:
     if (!control.active()) return;
     let value: SidebarSplitViewResizeEvent;
     try {
-      const data = event?.nativeEvent; metrics(data); finite(data.contentX, "content x", -Infinity); finite(data.listX, "list x", -Infinity); finite(data.height, "height");
+      const data = event?.nativeEvent; metrics(data); finite(data.listHeight, "list height"); finite(data.listWidth, "list width"); finite(data.contentX, "content x", -Infinity); finite(data.listX, "list x", -Infinity); finite(data.height, "height");
       if (typeof data.isLayoutReady !== "boolean") throw new Error("Expected layout readiness");
       value = { contentHeight: data.contentHeight, contentWidth: data.contentWidth, sidebarHeight: data.sidebarHeight, sidebarWidth: data.sidebarWidth, listHeight: data.listHeight, listWidth: data.listWidth, contentX: data.contentX, listX: data.listX, height: data.height, phase: data.isLayoutReady ? "ready" : "provisional" };
     } catch (cause) { control.error(new SparkError("E_INVALID_DATA", "Invalid split-view layout", { cause })); return; }

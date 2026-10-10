@@ -68,6 +68,40 @@ test("split views host an optional native list column after the sidebar and cont
   expect(panes[2].props.style).toMatchObject({ width: 300, height: 100 });
   expect(onResize.mock.calls[0][0]).toMatchObject({ listWidth: 300, listX: 201, contentX: 502, phase: "ready" });
 });
+test.each([undefined, null, false, true, ""])("split views omit non-rendering conditional list values (%s)", async list => {
+  await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", list }));
+  const native = rendered.root.findByType("SidebarSplitView");
+  expect(native.props.hasList).toBe(false);
+  expect(native.children).toHaveLength(2);
+});
+test("split views retain content across list toggles and render a numeric zero list", async () => {
+  const mounted = vi.fn(), unmounted = vi.fn();
+  function Content() { React.useEffect(() => { mounted(); return unmounted; }, []); return React.createElement("ContentProbe"); }
+  const content = React.createElement(Content);
+  for (const list of [undefined, "List", null, 0]) {
+    const element = React.createElement(SidebarSplitView, { sidebar: "Sidebar", content, list });
+    if (!rendered) await mount(element); else await act(async () => rendered.update(element));
+    const native = rendered.root.findByType("SidebarSplitView");
+    expect(native.props.hasList).toBe(list === "List" || list === 0);
+    expect(mounted).toHaveBeenCalledTimes(1); expect(unmounted).not.toHaveBeenCalled();
+  }
+});
+test("split views require complete native list metrics but allow older initial hints", async () => {
+  const onResize = vi.fn(), onError = vi.fn();
+  await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", onResize, onError,
+    initialPaneMetrics: { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 200 } }));
+  const native = rendered.root.findByType("SidebarSplitView");
+  const data = { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 200, listHeight: 0, listWidth: 0, listX: 0, contentX: 201, height: 100, isLayoutReady: true };
+  for (const field of ["listWidth", "listHeight"] as const) {
+    for (const invalid of [undefined, NaN, -1]) {
+      native.props.onSplitViewDidResize({ nativeEvent: { ...data, [field]: invalid } });
+      expect(onError).toHaveBeenLastCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
+    }
+  }
+  expect(onResize).not.toHaveBeenCalled();
+  await act(async () => native.props.onSplitViewDidResize({ nativeEvent: data }));
+  expect(onResize).toHaveBeenCalledWith(expect.objectContaining({ listWidth: 0, listHeight: 0, phase: "ready" }));
+});
 test("sidebar data selection can be cleared and unknown/disabled choices reject", async () => {
   const onSelectionChange = vi.fn(), onError = vi.fn();
   await mount(React.createElement(Sidebar, { items: [{ id: "a", label: "A" }, { id: "b", label: "B", selectable: false }], selectedId: "a", onSelectionChange, onError }));

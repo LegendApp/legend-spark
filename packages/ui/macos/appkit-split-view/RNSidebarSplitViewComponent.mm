@@ -434,12 +434,6 @@ static char RNSidebarSplitViewStartupKey;
   RCTUIView<RCTComponentViewProtocol> *_contentReactView;
   RCTUIView<RCTComponentViewProtocol> *_listReactView;
   id _resizeObserver;
-  id _contentFrameObserver;
-  id _contentBoundsObserver;
-  // React lays a pane out one commit after a native resize. Until then the content pane's React content is
-  // pinned to whichever edge held still: the window edge while a divider drags, the divider while the window resizes.
-  NSRect _lastContentFrame;
-  BOOL _contentAnchorsRight;
   LayoutMetrics _currentLayoutMetrics;
   LayoutMetrics _sidebarReactLayoutMetrics;
   LayoutMetrics _contentReactLayoutMetrics;
@@ -557,39 +551,13 @@ static char RNSidebarSplitViewStartupKey;
     [_splitViewController addSplitViewItem:_contentItem];
     [self applyAppearance];
 
+    __weak RNSidebarSplitViewComponent *weakSelf = self;
     _resizeObserver = [[NSNotificationCenter defaultCenter]
       addObserverForName:NSSplitViewDidResizeSubviewsNotification
                   object:_splitViewController.splitView
                    queue:NSOperationQueue.mainQueue
               usingBlock:^(__unused NSNotification *notification) {
-                if (!self->_layingOutSplitView) {
-                  [self publishSplitViewLayoutAllowEstimatedReady:NO];
-                }
-              }];
-    // React applying a new frame sets the frame, then resets the bounds offset the anchor uses, so re-pin after
-    // either changes on the content root (and after its children's frames change in a commit).
-    __weak RNSidebarSplitViewComponent *weakSelf = self;
-    _contentFrameObserver = [[NSNotificationCenter defaultCenter]
-      addObserverForName:NSViewFrameDidChangeNotification
-                  object:nil
-                   queue:nil
-              usingBlock:^(NSNotification *notification) {
-                RNSidebarSplitViewComponent *strongSelf = weakSelf;
-                NSView *view = notification.object;
-                if (strongSelf && strongSelf->_contentReactView &&
-                    (view == strongSelf->_contentReactView || view.superview == strongSelf->_contentReactView)) {
-                  [strongSelf anchorContentReactView];
-                }
-              }];
-    _contentBoundsObserver = [[NSNotificationCenter defaultCenter]
-      addObserverForName:NSViewBoundsDidChangeNotification
-                  object:nil
-                   queue:nil
-              usingBlock:^(NSNotification *notification) {
-                RNSidebarSplitViewComponent *strongSelf = weakSelf;
-                if (strongSelf && notification.object == strongSelf->_contentReactView) {
-                  [strongSelf anchorContentReactView];
-                }
+                [weakSelf splitViewDidResize];
               }];
 
     [self addSubview:_splitViewController.view];
@@ -629,15 +597,15 @@ static char RNSidebarSplitViewStartupKey;
 
 - (CGFloat)listReserveWidth
 {
-  return _hasList ? _listMinWidth + _splitViewController.splitView.dividerThickness : 0;
+  return _hasList ? _listItem.minimumThickness + _splitViewController.splitView.dividerThickness : 0;
 }
 
 - (CGFloat)preferredSidebarWidthForBounds:(CGRect)bounds
 {
   CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
-  CGFloat maxSidebarWidth = bounds.size.width - _contentMinWidth - dividerThickness - [self listReserveWidth];
+  CGFloat maxSidebarWidth = bounds.size.width - _contentItem.minimumThickness - dividerThickness - [self listReserveWidth];
   CGFloat preferredSidebarWidth = _sidebarWidth > 0 ? _sidebarWidth : _sidebarMinWidth;
-  CGFloat sidebarWidth = MIN(MAX(_sidebarMinWidth, preferredSidebarWidth), maxSidebarWidth);
+  CGFloat sidebarWidth = MIN(MAX(_sidebarItem.minimumThickness, preferredSidebarWidth), maxSidebarWidth);
   return MAX(0, sidebarWidth);
 }
 
@@ -647,9 +615,9 @@ static char RNSidebarSplitViewStartupKey;
     return 0;
   }
   CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
-  CGFloat maxListWidth = bounds.size.width - sidebarExtent - _contentMinWidth - dividerThickness;
+  CGFloat maxListWidth = bounds.size.width - sidebarExtent - _contentItem.minimumThickness - dividerThickness;
   CGFloat preferredListWidth = _listWidth > 0 ? _listWidth : _listMinWidth;
-  return MAX(0, MIN(MAX(_listMinWidth, preferredListWidth), maxListWidth));
+  return MAX(0, MIN(MAX(_listItem.minimumThickness, preferredListWidth), maxListWidth));
 }
 
 - (void)updateSidebarCollapsed
@@ -818,38 +786,6 @@ static char RNSidebarSplitViewStartupKey;
   [self syncReactSubview:_listReactView
              nativeBounds:_hasList ? _listContainer.bounds : CGRectZero
     previousLayoutMetrics:&_listReactLayoutMetrics];
-  [self anchorContentReactView];
-}
-
-/// Offsets the content pane's React root so its laid-out content meets the anchored edge. The offset is the gap
-/// between React's last layout width and the pane's native width, so it returns to zero once React catches up.
-- (void)anchorContentReactView
-{
-  NSView *root = _contentReactView;
-  if (!root) {
-    return;
-  }
-  // AppKit wraps each split item's view, so measure in our own coordinates rather than the wrapper's.
-  NSRect contentFrame = [_contentContainer convertRect:_contentContainer.bounds toView:self];
-  if (!NSEqualRects(contentFrame, _lastContentFrame)) {
-    // A divider drag holds the window edge still; any other resize (the window's) holds the pane's left edge.
-    // AppKit applies a drag's origin and width in separate steps, so the drag itself decides, not each step.
-    BOOL dragging = ((RNSidebarSplitViewNativeSplitView *)_splitViewController.splitView).trackingDivider;
-    if (dragging) {
-      _contentAnchorsRight = YES;
-    } else if (fabs(NSMinX(contentFrame) - NSMinX(_lastContentFrame)) < 0.5) {
-      _contentAnchorsRight = NO;
-    }
-    _lastContentFrame = contentFrame;
-  }
-  CGFloat laidOut = 0;
-  for (NSView *child in root.subviews) {
-    laidOut = MAX(laidOut, NSMaxX(child.frame));
-  }
-  CGFloat offset = _contentAnchorsRight && laidOut > 0 ? laidOut - NSWidth(root.bounds) : 0;
-  if (fabs(root.bounds.origin.x - offset) >= 0.25) {
-    [root setBoundsOrigin:NSMakePoint(offset, root.bounds.origin.y)];
-  }
 }
 
 - (void)syncReactSubview:(nullable RCTUIView<RCTComponentViewProtocol> *)subview
@@ -978,15 +914,17 @@ static char RNSidebarSplitViewStartupKey;
            nativeBounds:CGRectMake(0, 0, listWidth, bounds.size.height)
   previousLayoutMetrics:&_listReactLayoutMetrics];
   [self layoutContentTitlebarMaterial];
-  [self emitSplitViewDidResizeWithSidebarWidth:sidebarWidth
-                                  contentWidth:contentWidth
-                                      contentX:contentX
-                                 sidebarHeight:bounds.size.height
-                                 contentHeight:bounds.size.height
-                                        height:bounds.size.height
-                                     listWidth:listWidth
-                                         listX:listX
-                                   layoutReady:layoutReady];
+  if (!_layingOutSplitView) {
+    [self emitSplitViewDidResizeWithSidebarWidth:sidebarWidth
+                                    contentWidth:contentWidth
+                                        contentX:contentX
+                                   sidebarHeight:bounds.size.height
+                                   contentHeight:bounds.size.height
+                                          height:bounds.size.height
+                                       listWidth:listWidth
+                                           listX:_hasList ? listX : 0
+                                     layoutReady:layoutReady];
+  }
 
   return YES;
 }
@@ -1065,7 +1003,24 @@ static char RNSidebarSplitViewStartupKey;
     }
     [_splitViewController.splitView setPosition:sidebarExtent + listWidth ofDividerAtIndex:1];
   }
-  _needsPreferredDividerPositions = NO;
+  // A small startup frame can clamp a preference. Retry on later layouts until it fits,
+  // unless a real divider drag takes ownership in splitViewDidResize.
+  CGFloat desiredSidebarWidth = MAX(_sidebarItem.minimumThickness, _sidebarWidth > 0 ? _sidebarWidth : _sidebarMinWidth);
+  CGFloat desiredListWidth = MAX(_listItem.minimumThickness, _listWidth > 0 ? _listWidth : _listMinWidth);
+  _needsPreferredDividerPositions =
+    (!_sidebarCollapsed && [self preferredSidebarWidthForBounds:bounds] < desiredSidebarWidth - 0.5) ||
+    (_hasList && [self preferredListWidthForBounds:bounds sidebarExtent:sidebarExtent] < desiredListWidth - 0.5);
+}
+
+- (void)splitViewDidResize
+{
+  if (_layingOutSplitView) {
+    return;
+  }
+  if (((RNSidebarSplitViewNativeSplitView *)_splitViewController.splitView).trackingDivider) {
+    _needsPreferredDividerPositions = NO;
+  }
+  [self publishSplitViewLayoutAllowEstimatedReady:NO];
 }
 
 - (void)layoutSplitView
@@ -1077,6 +1032,7 @@ static char RNSidebarSplitViewStartupKey;
   CGRect bounds = [self currentLayoutBounds];
   _splitViewController.view.frame = bounds;
   _splitViewController.splitView.frame = bounds;
+  [self updateSplitItemSizing];
   [self updateListItem];
   [self updateSidebarCollapsed];
   if (_contentContainer.bounds.size.width <= 0 ||
@@ -1277,9 +1233,6 @@ static char RNSidebarSplitViewStartupKey;
     _appearanceName = nextAppearanceName;
     [self applyAppearance];
   }
-  [self updateListItem];
-  [self updateSidebarCollapsed];
-  [self updateSplitItemSizing];
 #endif
 
   [super updateProps:props oldProps:oldProps];
@@ -1411,12 +1364,6 @@ static char RNSidebarSplitViewStartupKey;
 #if TARGET_OS_OSX
   if (_resizeObserver) {
     [[NSNotificationCenter defaultCenter] removeObserver:_resizeObserver];
-  }
-  if (_contentFrameObserver) {
-    [[NSNotificationCenter defaultCenter] removeObserver:_contentFrameObserver];
-  }
-  if (_contentBoundsObserver) {
-    [[NSNotificationCenter defaultCenter] removeObserver:_contentBoundsObserver];
   }
 #endif
 }
