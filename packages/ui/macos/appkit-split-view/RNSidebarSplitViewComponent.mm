@@ -1175,7 +1175,7 @@ static char RNSidebarSplitViewStartupKey;
       [self applyEstimatedSplitViewLayoutForBounds:[self currentLayoutBounds] layoutReady:NO];
     } else {
       [self syncReactSubview:_sidebarReactView
-                 nativeBounds:_sidebarContainer.bounds
+                 nativeBounds:[self sidebarPaneBounds]
         previousLayoutMetrics:&_sidebarReactLayoutMetrics];
     }
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -1281,11 +1281,13 @@ static char RNSidebarSplitViewStartupKey;
   if (!collapsedPropChanged) {
     [self adoptNativeSidebarCollapsed];
   }
+  // Echoing an adopted native state acknowledges it; it must not reseed user-dragged dividers.
+  BOOL effectiveCollapsedChanged = collapsedPropChanged && _sidebarCollapsed != newProps.sidebarCollapsed;
   BOOL preferredWidthsChanged =
     fabs(_sidebarWidth - newProps.sidebarWidth) >= 0.5 ||
     fabs(_listWidth - newProps.listWidth) >= 0.5 ||
     _hasList != newProps.hasList ||
-    collapsedPropChanged;
+    effectiveCollapsedChanged;
   BOOL shouldRelayout =
     preferredWidthsChanged ||
     fabs(_sidebarMinWidth - newProps.sidebarMinWidth) >= 0.5 ||
@@ -1327,6 +1329,8 @@ static char RNSidebarSplitViewStartupKey;
   if (collapsedPropChanged) {
     _sidebarCollapsed = newProps.sidebarCollapsed;
   }
+  // Apply the winning prop before accessory/list mutations can trigger resize observers.
+  [self updateSidebarCollapsed];
   if (preferredWidthsChanged) {
     _needsPreferredDividerPositions = YES;
   }
@@ -1347,7 +1351,6 @@ static char RNSidebarSplitViewStartupKey;
     [self applyAppearance];
   }
   [self updateListItem];
-  [self updateSidebarCollapsed];
   [self updateSplitItemSizing];
 #endif
 

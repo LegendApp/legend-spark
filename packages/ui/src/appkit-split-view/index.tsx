@@ -87,7 +87,7 @@ export function SidebarSplitView({ sidebar, content, list, children, appearance:
   return <NativeSplitView {...props} ref={control.ref} appearance={theme} contentMinWidth={contentMinWidth} sidebarMinWidth={sidebarMinWidth} sidebarWidth={sidebarWidth} hasList={hasList} listMinWidth={listMinWidth} listWidth={listWidth} sidebarCollapsed={sidebarCollapsed} onSplitViewDidResize={resize} onSidebarCollapsedChange={collapsedChange}
     contentTitlebarHeight={titleBar.content?.height ?? 0} contentTitlebarMaterial={material} contentTitlebarOverlayColor={titleBar.content?.overlay?.color} contentTitlebarOverlayOpacity={titleBar.content?.overlay?.opacity ?? (titleBar.content?.overlay ? 1 : 0)}
     sidebarTitlebarOverlayColor={titleBar.sidebar?.overlay?.color} sidebarTitlebarOverlayOpacity={titleBar.sidebar?.overlay?.opacity ?? (titleBar.sidebar?.overlay ? 1 : 0)}>
-    <View key="sidebar" style={{ position: "absolute", top: 0, left: 0, minWidth: 0, height: paneMetrics?.sidebarHeight, width: sidebarCollapsed ? 0 : paneMetrics?.sidebarWidth ?? sidebarWidth ?? sidebarMinWidth }}>{sidebar}</View>
+    <View key="sidebar" style={{ position: "absolute", top: 0, left: 0, minWidth: 0, height: paneMetrics?.sidebarHeight, width: paneMetrics?.sidebarWidth ?? (sidebarCollapsed ? 0 : sidebarWidth ?? sidebarMinWidth) }}>{sidebar}</View>
     <View key="content" style={{ position: "absolute", top: 0, left: 0, minWidth: 0, overflow: "hidden", height: paneMetrics?.contentHeight, width: paneMetrics?.contentWidth }}>{content}</View>
     {hasList ? <View key="list" style={{ position: "absolute", top: 0, left: 0, minWidth: 0, height: paneMetrics?.listHeight, width: paneMetrics?.listWidth ?? listWidth ?? listMinWidth }}>{list}</View> : null}
   </NativeSplitView>;
