@@ -36,7 +36,9 @@ test('abort and read failure both release handles', async () => {
 test('streaming writer splits chunks, preserves bytes, and closes when the source fails', async () => {
   const native = backend(); const bytes = new Uint8Array(MAX_CHUNK_SIZE + 7).fill(231);
   expect(await writeFileChunks(() => createFileHandle(native.call, '/file', 'write'), [bytes])).toBe(bytes.length);
-  expect(native.writes).toBe(2); expect(native.data).toEqual(bytes); expect(native.closed).toBe(1);
+  expect(native.writes).toBe(2);
+  // Exact byte comparison: toEqual walks a 1 MiB typed array element by element (~2s locally, >5s on CI runners).
+  expect(native.data).toBeInstanceOf(Uint8Array); expect(Buffer.compare(native.data, bytes)).toBe(0); expect(native.closed).toBe(1);
   const sourceFailure = new Error('source failed');
   async function* brokenAgain() { yield new Uint8Array([1]); throw sourceFailure; }
   await expect(writeFileChunks(() => createFileHandle(native.call, '/file', 'write'), brokenAgain())).rejects.toBe(sourceFailure); expect(native.closed).toBe(2);
