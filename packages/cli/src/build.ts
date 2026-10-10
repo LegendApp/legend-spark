@@ -233,6 +233,7 @@ async function buildUnlocked(
     if (
       existing.runtime.fingerprint === runtime.fingerprint &&
       existing.preparation?.fingerprint === preparation.fingerprint &&
+      existing.product === path.basename(existing.app) &&
       existsSync(existing.app)
     ) {
       console.log(`Reusing ${existing.app}`);
@@ -243,6 +244,7 @@ async function buildUnlocked(
     ...preparationChanges(existing.preparation, preparation),
     ...(existing.runtime.fingerprint !== runtime.fingerprint ? ["runtime inputs changed"] : []),
     ...(!existsSync(existing.app) ? ["cached app missing"] : []),
+    ...(existing.product !== path.basename(existing.app) ? ["cached app product is unverified"] : []),
   ];
   console.log(`Building ${mode} runtime: ${reasons.join("; ")}.`);
   const nativeConfig = readAppConfig(root).expo;
@@ -350,6 +352,8 @@ async function buildUnlocked(
     throw new Error("Standalone build is missing its JavaScript bundle.");
   const result = {
     app: destination,
+    // Older receipts may record a stale bundle selected from DerivedData.
+    product,
     runtime: runtimeFor(root, chosen.included, mode),
     preparation,
   };
