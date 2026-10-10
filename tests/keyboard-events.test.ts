@@ -27,7 +27,7 @@ test("keyboard patch validates all sources before writes and preserves package c
     const dependency = path.join(root, "node_modules/react-native-macos");
     mkdirSync(path.join(dependency, "React/Views"), { recursive: true });
     const manifest = path.join(dependency, "package.json");
-    writeFileSync(manifest, JSON.stringify({ name: "react-native-macos", version: "0.81.7" }));
+    writeFileSync(manifest, JSON.stringify({ name: "react-native-macos", version: "0.88.0-rc.4" }));
     for (const [index, file] of files.entries()) {
       const cache = path.join(root, `cache-${index}`);
       writeFileSync(cache, pristine(file)); linkSync(cache, path.join(dependency, file));
@@ -46,6 +46,6 @@ test("keyboard patch validates all sources before writes and preserves package c
       expect(statSync(installed).ino).toBe(inode);
     }
     writeFileSync(manifest, JSON.stringify({ name: "react-native-macos", version: "0.82.0" }));
-    expect(() => installKeyboardEventsPatch(root)).toThrow("requires react-native-macos@0.81.7");
+    expect(() => installKeyboardEventsPatch(root)).toThrow("requires react-native-macos@0.88.0-rc.4");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -5,7 +5,7 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import { run } from "../packages/cli/src/commands.ts";
 import { addDesktop } from "../packages/cli/src/add-desktop.ts";
-import { readJson, writeJson } from "../packages/cli/src/project.ts";
+import { readJson, sourceMapSources, writeJson } from "../packages/cli/src/project.ts";
 import { nodeCommand } from "../packages/cli/src/windows.ts";
 
 const framework = path.resolve(import.meta.dirname, "..");
@@ -14,8 +14,8 @@ if (existsSync(root)) throw new Error("Choose a fresh fixture directory");
 mkdirSync(path.join(root, "src"), { recursive: true });
 writeJson(path.join(root, "package.json"), { name: "existing-expo", version: "1.0.0", private: true, main: "src/bootstrap.ts", packageManager: `npm@${(await run(framework, ["npm", "--version"], { capture: true })).trim()}`,
   scripts: { start: "expo start", ios: "expo run:ios", android: "expo run:android", web: "expo start --web", macos: "echo existing script" },
-  dependencies: { expo: "54.0.37", react: "19.1.4", "react-native": "0.81.6", "react-dom": "19.1.4", "react-native-web": "0.21.0" },
-  devDependencies: { typescript: "5.9.3", "@types/react": "19.1.10" },
+  dependencies: { expo: "58.0.7", react: "19.3.0", "react-native": "0.88.0-rc.4", "react-dom": "19.3.0", "react-native-web": "0.21.4" },
+  devDependencies: { typescript: "5.9.3", "@types/react": "19.3.0" },
 });
 writeJson(path.join(root, "app.json"), { expo: { name: "ExistingApp", slug: "existing-app", version: "1.2.3", platforms: ["ios", "android", "web"], ios: { bundleIdentifier: "org.example.existing" }, android: { package: "org.example.existing" }, extra: { original: true } } });
 writeFileSync(path.join(root, "app.config.ts"), 'import type { ConfigContext } from "expo/config";\nexport default ({ config }: ConfigContext) => ({ ...config, extra: { ...config.extra, environment: process.env.APP_ENV ?? "local" }, plugins: ["./plugin.cjs"] });\n');
@@ -84,7 +84,7 @@ const output = path.join(root, ".spark/adoption-checks"); mkdirSync(output, { re
 for (const platform of ["ios", "android", "web", "macos", "windows"]) {
   const map = path.join(output, `${platform}.map`);
   await run(root, nodeCommand(root, "expo", "expo", ["export:embed", "--entry-file", pkg.main, "--platform", platform, "--dev", "true", "--max-workers", "2", "--bundle-output", path.join(output, `${platform}.js`), "--sourcemap-output", map]), { capture: true, env: { SPARK_PLATFORM: platform, CI: "1" } });
-  const sources = readJson(map).sources as string[];
+  const sources = sourceMapSources(readJson(map));
   assert.ok(sources.some(file => file.endsWith("src/bootstrap.ts")));
   assert.ok(sources.some(file => file.endsWith("src/label.ts")));
   console.log(`PASS ${platform}: original entry and custom Metro resolver`);

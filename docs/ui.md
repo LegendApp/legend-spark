@@ -68,6 +68,10 @@ Search, sidebar, split view, swipe actions, glass and SF Symbols keep capability
 />
 ```
 
+An optional `list` pane adds AppKit's content-list column between sidebar and content (the Mail layout: mailboxes | messages | message) inside the same native split view, with `listWidth` and `listMinWidth`. Prefer it over nesting a second `SidebarSplitView` in `content`: a nested split only learns its frame after the outer split's metrics round-trip through React, so every outer divider drag resizes it a commit late and its panes tear. Sidebar and list hold their widths when the window resizes; the content column absorbs the change. `onResize` adds `listWidth`, `listHeight` and `listX` (zero without a list).
+
+Preferred widths (`sidebarWidth`, `listWidth`) seed the dividers on first layout and again only when those props, `list` presence or `sidebarCollapsed` change. Afterwards a divider stays where the user dragged it across window resizes and re-layouts. Each native layout pass publishes one resize event with its final pane sizes.
+
 `onResize` reports owned pane dimensions, `contentX`, total `height`, and `phase: 'provisional' | 'ready'`. Both phases update layout. Zero dimensions remain zero, so collapsed panes cannot inherit stale sizes. Initial metrics are a mount-time hint; readiness comes from native layout. Title-bar overlay colors use `#RRGGBB` or `#RRGGBBAA`, with opacity in `[0, 1]` (default 1 when an overlay is supplied). Application-specific chrome presets are not exported.
 
 `GlassView` under `/ui/glass` is the single native glass container, with `glassStyle: 'regular' | 'clear'` and RN `ColorValue` tint. It replaces the overlapping GlassEffectView/GlassSurface wrappers and requires macOS 26; older systems preserve children without an effect and report the host restriction. Colors use RN's standard conversion, including its dynamic/system representations.

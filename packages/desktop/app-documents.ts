@@ -1,1 +1,1 @@
-export * from "@legendapp/spark-documents/src/index.tsx";
+export * from "@legendapp/spark-documents/src/index";

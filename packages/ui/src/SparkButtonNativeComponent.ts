@@ -1,12 +1,11 @@
-import type { HostComponent, ViewProps } from "react-native";
-import type { DirectEventHandler, WithDefault } from "react-native/Libraries/Types/CodegenTypes";
-import codegenNativeComponent from "react-native/Libraries/Utilities/codegenNativeComponent";
+import type { CodegenTypes, HostComponent, ViewProps } from "react-native";
+import { codegenNativeComponent } from "react-native";
 
 export interface NativeProps extends ViewProps {
-  onUnavailable?: DirectEventHandler<Readonly<{ message: string }>>;
+  onUnavailable?: CodegenTypes.DirectEventHandler<Readonly<{ message: string }>>;
   title: string;
-  disabled?: WithDefault<boolean, false>;
-  variant?: WithDefault<"default" | "bordered" | "borderless", "default">;
-  onButtonPress?: DirectEventHandler<Readonly<{}>>;
+  disabled?: CodegenTypes.WithDefault<boolean, false>;
+  variant?: CodegenTypes.WithDefault<"default" | "bordered" | "borderless", "default">;
+  onButtonPress?: CodegenTypes.DirectEventHandler<Readonly<{}>>;
 }
 export default codegenNativeComponent<NativeProps>("SparkButton") as HostComponent<NativeProps>;

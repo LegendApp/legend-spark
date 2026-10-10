@@ -48,10 +48,14 @@ test("all templates retain the tested desktop matrix", () => {
     expect(pkg.dependencies["expo-desktop-metro-config"]).toBe("54.81.0");
     expect(pkg.overrides["expo-desktop-modules-core"]).toBe("54.0.14");
     expect(pkg.overrides["expo-desktop-stubs"]).toBe("54.0.14");
-    expect(pkg.dependencies.expo).toBe("54.0.37");
-    expect(pkg.overrides["@expo/cli"]).toBe("54.0.27");
-    expect(pkg.dependencies["react-native"]).toBe("0.81.6");
-    expect(pkg.overrides["react-native-macos"]).toBe("0.81.7");
+    expect(pkg.dependencies.expo).toBe("58.0.7");
+    // expo-desktop-template-bare-minimum 54.81.1 depends on expo ~54; without this a nested SDK 54 expo conflicts natively.
+    expect(pkg.overrides.expo).toBe("58.0.7");
+    // expo-desktop-template-bare-minimum 54.81.1 depends on expo-status-bar ~3.0.9 (SDK 54).
+    expect(pkg.overrides["expo-status-bar"]).toBe("58.0.3");
+    expect(pkg.overrides["@expo/cli"]).toBe("58.1.6");
+    expect(pkg.dependencies["react-native"]).toBe("0.88.0-rc.4");
+    expect(pkg.overrides["react-native-macos"]).toBe("0.88.0-rc.4");
     expect(pkg.overrides["react-native-windows"]).toBe("0.81.35");
     expect(pkg.scripts.postinstall).toBe("node node_modules/@legendapp/spark/init-template.cjs");
   }

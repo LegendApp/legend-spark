@@ -4,7 +4,7 @@
 
 ## Current baseline
 
-This integration uses Expo Desktop **1.0.0-beta.5**, native template **54.81.1-beta.5**, React Native macOS **0.81.7**, and React Native Windows **0.81.35**. The first verified baseline requires installed Expo **54.0.37**, React Native **0.81.6**, and React **19.1.4**. The command rejects a different baseline before editing files; upgrading an existing app is a separate change.
+This integration uses Expo Desktop **1.0.0**, native template **54.81.1**, React Native macOS **0.88.0-rc.4**, and React Native Windows **0.81.35**. The baseline (read from the universal template) requires installed Expo **58.0.7**, React Native **0.88.0-rc.4**, and React **19.3.0**. The command rejects a different baseline before editing files; upgrading an existing app is a separate change.
 
 Packages are still distributed as local SDK archives. From the framework checkout:
 

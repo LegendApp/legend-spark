@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { Platform, Text, View } from "react-native";
 import { Button } from "@legendapp/spark/ui";
 import { showMessage } from "@legendapp/spark/dialogs";
@@ -19,7 +19,7 @@ async function requireError(action: () => Promise<unknown>, code: string) {
 export default function DesktopInteractionChecks({ check, onError, onBusy }: {
   check: (id: string, action: () => Promise<void>) => Promise<void>; onError: (message: string) => void; onBusy: (busy: boolean) => void;
 }) {
-  const anchor = useRef<View>(null);
+  const anchor = useRef<ComponentRef<typeof View>>(null);
   const drag = useRef({ entered: false, dropped: false });
   const [dragFeedback, setDragFeedback] = useState("Drag ‘Drag source’ onto the drop target below. Child buttons must remain clickable.");
   const [busy, setBusy] = useState(false);

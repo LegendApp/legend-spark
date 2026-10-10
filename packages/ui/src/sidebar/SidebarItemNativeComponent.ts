@@ -1,24 +1,23 @@
-import type { HostComponent, ViewProps } from "react-native";
+import type { CodegenTypes, HostComponent, ViewProps } from "react-native";
 import { codegenNativeComponent } from "react-native";
-import type { DirectEventHandler, Double } from "react-native/Libraries/Types/CodegenTypes";
 
 export type SidebarItemRightClickEvent = Readonly<{
   altKey: boolean;
-  button: Double;
+  button: CodegenTypes.Double;
   ctrlKey: boolean;
   metaKey: boolean;
-  pageX: Double;
-  pageY: Double;
+  pageX: CodegenTypes.Double;
+  pageY: CodegenTypes.Double;
   shiftKey: boolean;
-  x: Double;
-  y: Double;
+  x: CodegenTypes.Double;
+  y: CodegenTypes.Double;
 }>;
 
 export interface NativeProps extends ViewProps {
   autoHeight?: boolean;
   itemId?: string;
-  onRightClick?: DirectEventHandler<SidebarItemRightClickEvent>;
-  rowHeight?: Double;
+  onRightClick?: CodegenTypes.DirectEventHandler<SidebarItemRightClickEvent>;
+  rowHeight?: CodegenTypes.Double;
   selectable?: boolean;
 }
 

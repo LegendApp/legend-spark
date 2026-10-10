@@ -1,0 +1,196 @@
+diff --git a/ios/Expo/ExpoReactNativeFactory.swift b/ios/Expo/ExpoReactNativeFactory.swift
+index 158c9c9b43861fa942a2b9dbf582cb6101f9dc71..d06bd22ad61713e4fd6bf0de31b3e377e8507501 100644
+--- a/ios/Expo/ExpoReactNativeFactory.swift
++++ b/ios/Expo/ExpoReactNativeFactory.swift
+@@ -31,8 +31,6 @@ public class ExpoReactNativeFactory: ExpoReactNativeFactoryObjC, ExpoReactNative
+     super.init(delegate: delegate, releaseLevel: releaseLevel)
+   }
+ 
+-  // `RCTBundleConfiguration` is only available in react-native 0.84+, so it doesn't exist yet on react-native-macos.
+-#if os(iOS) || os(tvOS)
+   private var _bundleConfiguration: RCTBundleConfiguration?
+ 
+   public override var bundleConfiguration: RCTBundleConfiguration {
+@@ -70,7 +68,6 @@ public class ExpoReactNativeFactory: ExpoReactNativeFactoryObjC, ExpoReactNative
+     }
+ #endif
+   }
+-#endif
+ 
+   @MainActor
+   @objc func createRCTRootViewFactory() -> RCTRootViewFactory {
+@@ -121,14 +118,10 @@ public class ExpoReactNativeFactory: ExpoReactNativeFactoryObjC, ExpoReactNative
+       }
+     }
+ 
+-#if os(iOS) || os(tvOS)
+     adoptInfoPlistMetroPort()
+-#endif
+ 
+     let rootView: UIView
+     if let factory = self.rootViewFactory as? ExpoReactRootViewFactory {
+-      // bundleConfiguration is only accepted in react-native 0.84+
+-#if os(iOS) || os(tvOS)
+       let bundleConfiguration = ExpoBundleConfiguration.configuration(
+         bundleURL: withBundleURL ?? configuration?.bundleURLBlock()
+       )
+@@ -141,16 +134,7 @@ public class ExpoReactNativeFactory: ExpoReactNativeFactoryObjC, ExpoReactNative
+         bundleConfiguration: bundleConfiguration,
+         devMenuConfiguration: self.devMenuConfiguration
+       )
+-#else
+-      rootView = factory.superView(
+-        withModuleName: moduleName ?? defaultModuleName,
+-        initialProperties: initialProps,
+-        launchOptions: launchOptions ?? [:],
+-        devMenuConfiguration: self.devMenuConfiguration
+-      )
+-#endif
+     } else {
+-#if os(iOS) || os(tvOS)
+       let bundleConfiguration = ExpoBundleConfiguration.configuration(
+         bundleURL: withBundleURL ?? configuration?.bundleURLBlock()
+       )
+@@ -161,13 +145,6 @@ public class ExpoReactNativeFactory: ExpoReactNativeFactoryObjC, ExpoReactNative
+         bundleConfiguration: bundleConfiguration,
+         devMenuConfiguration: self.devMenuConfiguration ?? RCTDevMenuConfiguration.default()
+       )
+-#else
+-      rootView = rootViewFactory.view(
+-        withModuleName: moduleName ?? defaultModuleName,
+-        initialProperties: initialProps,
+-        launchOptions: launchOptions
+-      )
+-#endif
+     }
+ 
+     return rootView
+diff --git a/ios/ExpoObjC/AppDelegates/EXBundleConfiguration.mm b/ios/ExpoObjC/AppDelegates/EXBundleConfiguration.mm
+index 28ce78650fd659dfa315a0a07adcc14707244204..b4461e75cc4cb229793f166668cbc84a9ee2e619 100644
+--- a/ios/ExpoObjC/AppDelegates/EXBundleConfiguration.mm
++++ b/ios/ExpoObjC/AppDelegates/EXBundleConfiguration.mm
+@@ -2,7 +2,6 @@
+ 
+ #import <Expo/EXBundleConfiguration.h>
+ 
+-#if TARGET_OS_IOS || TARGET_OS_TV
+ 
+ @implementation EXBundleConfiguration {
+   NSURL *_bundleURL;
+@@ -82,4 +81,3 @@
+ 
+ @end
+ 
+-#endif
+diff --git a/ios/ExpoObjC/AppDelegates/EXReactRootViewFactory.mm b/ios/ExpoObjC/AppDelegates/EXReactRootViewFactory.mm
+index 9bae4717c5da16300928952c0abccddf7b342660..cf25600ef3f08b497bb0c008e2af025e55fcd09f 100644
+--- a/ios/ExpoObjC/AppDelegates/EXReactRootViewFactory.mm
++++ b/ios/ExpoObjC/AppDelegates/EXReactRootViewFactory.mm
+@@ -23,7 +23,6 @@
+   return self;
+ }
+ 
+-#if TARGET_OS_IOS || TARGET_OS_TV
+ - (UIView *)viewWithModuleName:(NSString *)moduleName
+              initialProperties:(nullable NSDictionary *)initialProperties
+                  launchOptions:(nullable NSDictionary *)launchOptions
+@@ -59,38 +58,6 @@
+                bundleConfiguration:bundleConfiguration
+               devMenuConfiguration:devMenuConfiguration];
+ }
+-#else
+-// react-native-macos routes every `viewWithModuleName:` variant, including the one called by
+-// `RCTReactNativeFactory`, through this one.
+-- (UIView *)viewWithModuleName:(NSString *)moduleName
+-             initialProperties:(nullable NSDictionary *)initialProperties
+-                 launchOptions:(nullable NSDictionary *)launchOptions
+-          devMenuConfiguration:(nullable RCTDevMenuConfiguration *)devMenuConfiguration
+-{
+-  if (self.reactDelegate != nil) {
+-    return [((id<EXReactDelegateProtocol>)self.reactDelegate) createReactRootViewWithModuleName:moduleName initialProperties:initialProperties launchOptions:launchOptions];
+-  }
+-  return [super viewWithModuleName:moduleName
+-                 initialProperties:initialProperties
+-                     launchOptions:launchOptions
+-              devMenuConfiguration:devMenuConfiguration];
+-}
+-
+-- (UIView *)superViewWithModuleName:(NSString *)moduleName
+-                  initialProperties:(nullable NSDictionary *)initialProperties
+-                      launchOptions:(nullable NSDictionary *)launchOptions
+-               devMenuConfiguration:(nullable RCTDevMenuConfiguration *)devMenuConfiguration
+-{
+-  if (devMenuConfiguration == nil) {
+-    devMenuConfiguration = [RCTDevMenuConfiguration defaultConfiguration];
+-  }
+-
+-  return [super viewWithModuleName:moduleName
+-                 initialProperties:initialProperties
+-                     launchOptions:launchOptions
+-              devMenuConfiguration:devMenuConfiguration];
+-}
+-#endif
+ 
+ - (NSURL *)bundleURL
+ {
+diff --git a/ios/ExpoObjC/AppDelegates/ExpoReactNativeFactory.mm b/ios/ExpoObjC/AppDelegates/ExpoReactNativeFactory.mm
+index 18364a87c7a821204f728f6ef760197271d7d98a..0f0ae33c6027fa89262b6e7516e186668f66a013 100644
+--- a/ios/ExpoObjC/AppDelegates/ExpoReactNativeFactory.mm
++++ b/ios/ExpoObjC/AppDelegates/ExpoReactNativeFactory.mm
+@@ -28,14 +28,6 @@
+ 
+ #pragma mark - RCTHostDelegate
+ 
+-#if TARGET_OS_OSX
+-// TODO: remove when bumping react-native-macos to 0.85
+-- (void)hostDidStart:(nonnull RCTHost *)host
+-{
+-  host.runtimeDelegate = self;
+-}
+-#endif
+-
+ // [JS thread]
+ - (void)host:(nonnull RCTHost *)host didInitializeRuntime:(facebook::jsi::Runtime &)runtime
+ {
+diff --git a/ios/ExpoObjC/include/Expo/EXBundleConfiguration.h b/ios/ExpoObjC/include/Expo/EXBundleConfiguration.h
+index 59031ae6a47c9fb46cc69df2cd97d53ddfc6b374..f27735ac74699b4d9f73becc948ef3dfbb97df41 100644
+--- a/ios/ExpoObjC/include/Expo/EXBundleConfiguration.h
++++ b/ios/ExpoObjC/include/Expo/EXBundleConfiguration.h
+@@ -7,7 +7,6 @@
+ 
+ NS_ASSUME_NONNULL_BEGIN
+ 
+-#if TARGET_OS_IOS || TARGET_OS_TV
+ 
+ NS_SWIFT_NAME(ExpoBundleConfiguration)
+ @interface EXBundleConfiguration : RCTBundleConfiguration
+@@ -18,6 +17,5 @@ NS_SWIFT_NAME(ExpoBundleConfiguration)
+ 
+ @end
+ 
+-#endif
+ 
+ NS_ASSUME_NONNULL_END
+diff --git a/ios/ExpoObjC/include/Expo/EXReactRootViewFactory.h b/ios/ExpoObjC/include/Expo/EXReactRootViewFactory.h
+index 1c36ec3f4be1e869a95c1cd1205d6fd794daff61..f68b7b1ff9689bb9b70718cd271e7682b57648de 100644
+--- a/ios/ExpoObjC/include/Expo/EXReactRootViewFactory.h
++++ b/ios/ExpoObjC/include/Expo/EXReactRootViewFactory.h
+@@ -24,18 +24,11 @@ NS_SWIFT_NAME(ExpoReactRootViewFactory)
+ /**
+  Calls super `viewWithModuleName:initialProperties:launchOptions:` from `RCTRootViewFactory`.
+  */
+-#if TARGET_OS_IOS || TARGET_OS_TV
+ - (UIView *)superViewWithModuleName:(NSString *)moduleName
+                   initialProperties:(nullable NSDictionary *)initialProperties
+                       launchOptions:(nullable NSDictionary *)launchOptions
+                 bundleConfiguration:(RCTBundleConfiguration *)bundleConfiguration
+                devMenuConfiguration:(nullable RCTDevMenuConfiguration *)devMenuConfiguration;
+-#else
+-- (UIView *)superViewWithModuleName:(NSString *)moduleName
+-                  initialProperties:(nullable NSDictionary *)initialProperties
+-                      launchOptions:(nullable NSDictionary *)launchOptions
+-               devMenuConfiguration:(nullable RCTDevMenuConfiguration *)devMenuConfiguration;
+-#endif
+ 
+ @end
+ 

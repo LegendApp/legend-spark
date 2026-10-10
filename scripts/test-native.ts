@@ -34,6 +34,8 @@ if (pkg.dependencies["@legendapp/spark-sdk-test-driver"]) {
 }
 const go = await build(root, "go");
 const port = await availablePort();
+// Expo SDK 58's --localhost binds Metro to localhost only (::1 on macOS), not every interface.
+const metroHost = `localhost:${port}`;
 const reportDir = path.join(root, ".spark/test-results"); mkdirSync(reportDir, { recursive: true });
 writeJson(path.join(root, ".spark/session.json"), { compatible: true, target: "test", port });
 const metroLog = processLog(path.join(reportDir, "metro.log"));
@@ -50,8 +52,8 @@ async function execute(app: string, phase: string, projectId: string, extraArgs:
   const executableName = (await run(root, ["/usr/libexec/PlistBuddy", "-c", "Print :CFBundleExecutable", path.join(app, "Contents/Info.plist")], { capture: true })).trim();
   writeFileSync(path.join(reportDir, `${phase}.log`), "");
   const appLog = processLog(path.join(reportDir, `${phase}.log`));
-  appProcess = spawnProcess([path.join(app, "Contents/MacOS", executableName), "-RCT_jsLocation", `127.0.0.1:${port}`, "--spark-test-report", reportFile, ...extraArgs], {
-    cwd: root, env: { ...process.env, SPARK_PROJECT_ID: projectId, SPARK_PROJECT_NAME: "SDK Tests", SPARK_PROJECT_VERSION: "9.8.7", SPARK_BUNDLE_URL: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=${development}&minify=false` }, stdout: appLog, stderr: appLog,
+  appProcess = spawnProcess([path.join(app, "Contents/MacOS", executableName), "-RCT_jsLocation", metroHost, "--spark-test-report", reportFile, ...extraArgs], {
+    cwd: root, env: { ...process.env, SPARK_PROJECT_ID: projectId, SPARK_PROJECT_NAME: "SDK Tests", SPARK_PROJECT_VERSION: "9.8.7", SPARK_BUNDLE_URL: `http://${metroHost}/index.bundle?platform=macos&dev=${development}&minify=false` }, stdout: appLog, stderr: appLog,
   });
   try {
     const result = await waitFor(async () => {
@@ -82,7 +84,7 @@ async function executeUI(app: string) {
   const fixture = path.resolve(import.meta.dirname, "../tests/native-ui");
   cpSync(fixture, directory, { recursive: true });
   const report = path.join(reportDir, `custom-ui-${Date.now()}.json`);
-  writeJson(path.join(directory, "configuration.json"), { app, report, location: `127.0.0.1:${port}`, bundleURL: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=true&minify=false` });
+  writeJson(path.join(directory, "configuration.json"), { app, report, location: metroHost, bundleURL: `http://${metroHost}/index.bundle?platform=macos&dev=true&minify=false` });
   await run(root, ["ruby", path.join(directory, "create-project.rb"), directory], { capture: true });
   await run(root, ["xcodebuild", "-project", path.join(directory, "SDKUITests.xcodeproj"), "-scheme", "SDKUITests", "-destination", "platform=macOS,arch=arm64", "-derivedDataPath", path.join(directory, "DerivedData"), "-resultBundlePath", path.join(reportDir, `ui-${Date.now()}.xcresult`), "CODE_SIGN_IDENTITY=-", "test"], { capture: true });
   const result = readJson(report);
@@ -92,7 +94,7 @@ async function executeUI(app: string) {
   return result;
 }
 async function ready() {
-  await waitFor(async () => fetch(`http://127.0.0.1:${port}/status`, { signal: AbortSignal.timeout(1000) }).then(response => response.ok ? true : undefined, () => undefined), 60000, "Metro startup");
+  await waitFor(async () => fetch(`http://${metroHost}/status`, { signal: AbortSignal.timeout(1000) }).then(response => response.ok ? true : undefined, () => undefined), 60000, "Metro startup");
 }
 async function restartMetro() { metro.kill(); await metro.exited; metro = startMetro(); await ready(); }
 const testIdentity = `spark.native-tests.${crypto.randomUUID()}`;
@@ -100,7 +102,7 @@ const configFile = path.join(root, existsSync(path.join(root, "desktop.config.js
 const originalConfig = readFileSync(configFile, "utf8");
 const originalApp = readFileSync(path.join(root, "App.tsx"), "utf8");
 try {
-  await waitFor(async () => fetch(`http://127.0.0.1:${port}/status`).then(response => response.ok ? true : undefined, () => undefined), 60000, "Metro startup");
+  await waitFor(async () => fetch(`http://${metroHost}/status`).then(response => response.ok ? true : undefined, () => undefined), 60000, "Metro startup");
   const first = await execute(go.app, "go-project-a", `${testIdentity}.a`, ["--spark-isolation-expect", "absent"]);
   const second = await execute(go.app, "go-project-b", `${testIdentity}.b`, ["--spark-isolation-expect", "absent", "--spark-isolation-cleanup"]);
   const resumed = await execute(go.app, "go-project-a-again", `${testIdentity}.a`, ["--spark-isolation-expect", "present", "--spark-isolation-cleanup"]);
@@ -137,9 +139,11 @@ try {
   writeJson(packageFile, pkg); await run(root, managerCommand(packageManager(root), ["install"]));
   writeFileSync(path.join(root, "test-driver.ts"), 'import driver from "@legendapp/spark-sdk-test-driver";\nexport type TestDriver = typeof driver;\nexport const testDriver: TestDriver = driver;\n');
   const customConfig = readJson(configFile);
-  const source = customConfig.expo ?? customConfig;
+  // desktop.config.json keeps Spark fields top-level; its `expo` key only holds backend overrides.
+  const desktopConfig = path.basename(configFile) === "desktop.config.json";
+  const source = desktopConfig ? customConfig : customConfig.expo;
   source.scheme = "spark-sdk-test";
-  const framework = customConfig.expo ? source.extra.spark : source;
+  const framework = desktopConfig ? source : source.extra.spark;
   framework.documentTypes = [{ name: "SDK text document", contentTypes: ["public.plain-text"], role: "Viewer" }];
   writeJson(configFile, customConfig);
   const custom = await build(root, "dev");

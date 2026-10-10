@@ -37,6 +37,11 @@ export type Runtime = {
 export function readJson(file: string): any {
   return JSON.parse(readFileSync(file, "utf8"));
 }
+type SourceMap = { sources?: string[]; sections?: { map: SourceMap }[] };
+/** Metro 0.87+ writes indexed (sectioned) source maps; plain maps keep top-level sources. */
+export function sourceMapSources(map: SourceMap): string[] {
+  return map.sources ?? map.sections!.flatMap(section => sourceMapSources(section.map));
+}
 export function writeJson(file: string, value: unknown) {
   const content = JSON.stringify(value, null, 2) + "\n";
   // Metro watches JSON too: rewriting unchanged session state on every runtime
@@ -149,6 +154,8 @@ export function hashFiles(root: string, entries: string[], windows = false): str
       )) {
         if (
           ["node_modules", "build", ".git", "Pods"].includes(child.name) || child.isSymbolicLink() ||
+          // expo-modules-jsi (SDK 58) builds its xcframework inside apple/; those are outputs, not inputs.
+          [".DerivedData", ".build", ".swiftpm", ".generated", "Products"].includes(child.name) ||
           (windows && (["Generated Files", "codegen", "obj", "x64", "ARM64", "Debug", "Release", ".vs", "packages", "packages.lock.json"].includes(child.name) || child.name.endsWith(".vcxproj.user") || child.name.startsWith("AutolinkedNativeModules.g.")))
         )
           continue;

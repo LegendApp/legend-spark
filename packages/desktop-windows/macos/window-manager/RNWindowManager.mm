@@ -1980,8 +1980,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
   } markers[] = {
     {@"initializeRuntimeStart", startupLogger.getInitReactRuntimeStartTime()},
     {@"executeJavaScriptBundleEntryPointStart", startupLogger.getRunJSBundleStartTime()},
-    {@"executeJavaScriptBundleEntryPointEnd", startupLogger.getRunJSBundleEndTime()},
-    {@"initializeRuntimeEnd", startupLogger.getInitReactRuntimeEndTime()},
+    // RN 0.88 no longer exposes the runtime-init and bundle end times.
     {@"endTime", startupLogger.getAppStartupEndTime()},
   };
   for (const auto& marker : markers) {

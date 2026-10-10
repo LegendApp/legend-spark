@@ -1,4 +1,4 @@
-// Lifecycle excerpt from react-native-macos 0.81.7 RCTFabricSurface.mm.
+// Lifecycle excerpt from react-native-macos RCTFabricSurface.mm (unchanged from 0.81.7 through 0.88.0-rc.4).
 // Copyright (c) Meta Platforms, Inc. and affiliates. MIT licensed.
   std::mutex _surfaceMutex;
 

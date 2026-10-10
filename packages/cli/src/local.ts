@@ -102,12 +102,13 @@ export function findGo(required: NativePackage[], preferred?: string, platform: 
 export async function availablePort(explicit?: number): Promise<number> {
   if (explicit !== undefined && (!Number.isInteger(explicit) || explicit < 1 || explicit > 65535)) throw new Error("Port must be an integer between 1 and 65535.");
   for (let port = explicit ?? 19120; port < (explicit === undefined ? 19220 : explicit + 1); port++) {
-    const free = await new Promise<boolean>((resolve, reject) => {
+    // Match Metro's wildcard bind and Expo SDK 58's --localhost bind (::1). On macOS each
+    // can succeed while another process owns the other listener.
+    let free = true;
+    for (const host of [undefined, "::1"]) free &&= await new Promise<boolean>((resolve, reject) => {
       const server = createServer();
       server.once("error", (error: NodeJS.ErrnoException) => error.code === "EADDRINUSE" ? resolve(false) : reject(error));
-      // Match Metro's wildcard bind. On macOS a loopback-only bind can succeed
-      // even while another process owns the wildcard IPv6 listener.
-      server.listen(port, () => server.close(() => resolve(true)));
+      server.listen(port, host, () => server.close(() => resolve(true)));
     });
     if (free) return port;
   }

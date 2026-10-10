@@ -1,1 +1,1 @@
-export * from "@legendapp/spark-settings-ui/src/index.tsx";
+export * from "@legendapp/spark-settings-ui/src/index";

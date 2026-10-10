@@ -21,13 +21,16 @@ function withDesktop(config, options = {}) {
     if (!["runtimes", "watch"].includes(key)) throw new Error(`Unknown desktop Metro option: ${key}`);
     if (value !== undefined && typeof value !== "boolean") throw new Error(`${key} must be boolean`);
   }
-  // Expo 54 sets the react-native export condition only for iOS/Android.
+  // Expo sets the react-native export condition only for platforms it knows (no Windows).
   // Desktop must also select native package exports (e.g. Uniwind's runtime).
   const conditions = { ...config.resolver?.unstable_conditionsByPlatform };
   for (const platform of ["macos", "windows"]) {
     conditions[platform] = [...new Set([...(conditions[platform] || []), "react-native"])];
   }
-  config = { ...config, resolver: { ...config.resolver, unstable_conditionsByPlatform: conditions } };
+  // Expo SDK 58 resolves macOS files as macos > ios > native. Spark's macOS adapters are the
+  // platform-less files and .ios files are UIKit/@expo/ui adapters, so macOS must skip .ios.
+  const platformExtensions = { ...config.resolver?.unstable_platformExtensions, macos: ["macos", "native"] };
+  config = { ...config, resolver: { ...config.resolver, unstable_conditionsByPlatform: conditions, unstable_platformExtensions: platformExtensions } };
   const root = path.resolve(config.projectRoot || process.cwd());
   // Keep the configured workspace root so lazy imports outside the app have
   // valid URLs. Only the prebuilt host's fixed entry URLs are app-relative.

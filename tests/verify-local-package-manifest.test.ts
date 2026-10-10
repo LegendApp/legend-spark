@@ -54,8 +54,8 @@ test("local manifest acceptance checks all archives against current provenance a
     await expect(verifyLocalPackageManifest(framework, path.join(output, "manifest.json"))).rejects.toThrow("unexpected package identity or version");
     writeFileSync(path.join(output, "manifest.json"), JSON.stringify(manifest));
 
-    writeFileSync(path.join(output, manifest["expo-audio"]!), "modified archive");
-    await expect(verifyLocalPackageManifest(framework, path.join(output, "manifest.json"))).rejects.toThrow("modified after packing: expo-audio");
+    writeFileSync(path.join(output, manifest["react-native-webview"]!), "modified archive");
+    await expect(verifyLocalPackageManifest(framework, path.join(output, "manifest.json"))).rejects.toThrow("modified after packing: react-native-webview");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

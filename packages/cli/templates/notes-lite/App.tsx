@@ -1,5 +1,5 @@
 import { Activation } from "./Activation";
-import { memo, useEffect, useMemo, useRef, useState, useContext } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useContext, type ComponentRef } from "react";
 import { FlatList, Pressable, SafeAreaView, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
 import { Button } from "@legendapp/spark/ui";
 import { io } from "./shared/io";
@@ -21,7 +21,7 @@ export default function App({ windowId = "main", windowProps }: { windowId?: str
   const state = useModel(notes);
   const palette = usePalette(state.theme ?? "system");
   const { width } = useWindowDimensions();
-  const search = useRef<TextInput>(null);
+  const search = useRef<ComponentRef<typeof TextInput>>(null);
   const [query, setQuery] = useState("");
   const [trash, setTrash] = useState(false);
   const [settings, setSettings] = useState(false);

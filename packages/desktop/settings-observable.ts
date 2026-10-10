@@ -1,1 +1,1 @@
-export * from "@legendapp/spark-settings/src/storage/index.ts";
+export * from "@legendapp/spark-settings/src/storage/index";

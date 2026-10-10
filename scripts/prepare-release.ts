@@ -9,7 +9,6 @@ import { packSpark } from "./pack-spark.ts";
 import { patchedPackageNames, validatePatchedArchive, type PackageProvenance } from "./patch-inventory.ts";
 import { runtimesPatchHash, runtimesRevision } from "./prepare-runtimes.ts";
 import { windowsPatchHash } from "./prepare-windows-libraries.ts";
-import { audioPatchHash } from "./prepare-audio.ts";
 
 // Stage an immutable release only from a signed/notarized Runner and clean source.
 const root = path.resolve(import.meta.dirname, "..");
@@ -58,7 +57,6 @@ try {
     "react-native-nitro-modules": windowsPatchHash("react-native-nitro-modules", windowsPins["react-native-nitro-modules"]),
     "@op-engineering/op-sqlite": windowsPatchHash("@op-engineering/op-sqlite", windowsPins["@op-engineering/op-sqlite"]),
     "react-native-webview": windowsPatchHash("react-native-webview", windowsPins["react-native-webview"]),
-    "expo-audio": audioPatchHash(root),
   };
   if (JSON.stringify(Object.keys(local).filter(name => patchedPackageNames.includes(name as typeof patchedPackageNames[number])).sort()) !== JSON.stringify([...patchedPackageNames].sort())) throw new Error("Local package manifest does not match patched release inventory");
   if (JSON.stringify(Object.keys(provenance).sort()) !== JSON.stringify([...patchedPackageNames].sort())) throw new Error("Missing or unexpected patched archive provenance records");
@@ -68,8 +66,8 @@ try {
     const archive = path.join(packages, filename);
     const bytes = readFileSync(archive);
     const metadata = JSON.parse(await run(root, ["tar", "-xOzf", archive, "package/package.json"], { capture: true }));
-    const expectedVersion = name === "@react-native-runtimes/core" || name === "expo-audio" ? workspacePins[name].version : windowsPins[name].version;
-    const expectedSource = name === "@react-native-runtimes/core" ? { upstreamRevision: runtimesRevision } : { upstreamIntegrity: name === "expo-audio" ? workspacePins[name].integrity : windowsPins[name].integrity };
+    const expectedVersion = name === "@react-native-runtimes/core" ? workspacePins[name].version : windowsPins[name].version;
+    const expectedSource = name === "@react-native-runtimes/core" ? { upstreamRevision: runtimesRevision } : { upstreamIntegrity: windowsPins[name].integrity };
     validatePatchedArchive(name, filename, bytes, provenance[name], metadata, expectedPatchHashes[name]!, expectedVersion, expectedSource);
     manifest.packages[name] = asset(archive);
   }

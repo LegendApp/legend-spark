@@ -1,1 +1,1 @@
-export * from "@legendapp/spark-ui/src/sf-symbol/index.tsx";
+export * from "@legendapp/spark-ui/src/sf-symbol/index";

@@ -2,7 +2,7 @@ import * as documents from "@legendapp/spark/app/documents";
 import { Button } from "./Controls";
 import { ActionButton } from "./ActionButton";
 import { EventResults, useEventResults } from "./EventResults";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import * as app from "@legendapp/spark/app";
 import * as windows from "@legendapp/spark/windows";
@@ -94,7 +94,7 @@ function Card({ title, children }: React.PropsWithChildren<{ title: string }>) {
 function KitchenSink({ runtime, projectId }: Props) {
   const [log, setLog] = useState<string[]>([]);
   const [document, setDocument] = useState({ path: "", saved: "", text: "Hello from a native desktop app.\n" });
-  const contextMenuAnchor = useRef<View>(null);
+  const contextMenuAnchor = useRef<ComponentRef<typeof View>>(null);
   const documentRef = useRef(document); documentRef.current = document;
   const [count, setCount] = useState<number | null>(null);
   const [secret, setSecret] = useState("");

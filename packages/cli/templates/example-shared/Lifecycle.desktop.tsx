@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Platform } from "react-native";
 import { beforeWindowClose, setWindowOptions, addWindowListener } from "@legendapp/spark/windows";
 import { beforeQuit } from "@legendapp/spark/app";
-import { createMenu, type MenuItem } from "@legendapp/spark/menus";
+import { createMenu, type MenuRootItem } from "@legendapp/spark/menus";
 import { registerShortcut } from "@legendapp/spark/shortcuts";
 import { mountSerial } from "./lifetime";
 import type { LifecycleProps } from "./lifecycle-types";
@@ -10,7 +10,7 @@ export function Lifecycle({ title, windowId = "main", flush, quit, commands, onE
   useEffect(() => { void setWindowOptions(windowId, { title: title }).catch(error => onError(String(error))); }, [title, windowId, onError]);
   useEffect(() => mountSerial(`window-${windowId}`, async retain => {
     const owner = `example-${windowId}`;
-    const items: MenuItem[] = [{ type: "submenu", id: "file", target: { menu: "file" }, label: "File", items: commands.map(({ id, title, key }) => ({ type: "action", id, label: title, shortcut: `CmdOrCtrl+${key}` })) }];
+    const items: MenuRootItem[] = [{ type: "submenu", id: "file", target: { menu: "file" }, label: "File", items: commands.map(({ id, title, key }) => ({ type: "action", id, label: title, shortcut: `CmdOrCtrl+${key}` })) }];
     const menu = await createMenu({ id: owner, items, onAction: event => { commands.find(command => command.id === event.itemId)?.run(); } });
     await retain(Promise.resolve(menu));
     await retain(addWindowListener(windowId, "focusChanged", event => { if (event.focused) void menu.update({ items }).catch(error => onError(String(error))); }));

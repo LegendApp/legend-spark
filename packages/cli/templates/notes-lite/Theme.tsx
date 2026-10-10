@@ -7,7 +7,7 @@ export const ThemeContext = createContext(light);
 export function usePalette(theme: Theme) {
   const system = useColorScheme();
   useEffect(() => {
-    if (Platform.OS !== "web") Appearance.setColorScheme(theme === "system" ? null : theme);
+    if (Platform.OS !== "web") Appearance.setColorScheme(theme === "system" ? "unspecified" : theme);
   }, [theme]);
   return (theme === "system" ? system : theme) === "dark" ? dark : light;
 }

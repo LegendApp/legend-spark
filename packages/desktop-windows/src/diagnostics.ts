@@ -5,8 +5,10 @@ export interface StartupTiming {
   startTime?: number;
   endTime?: number;
   initializeRuntimeStart?: number;
+  /** Not reported by React Native 0.88+. */
   initializeRuntimeEnd?: number;
   executeJavaScriptBundleEntryPointStart?: number;
+  /** Not reported by React Native 0.88+. */
   executeJavaScriptBundleEntryPointEnd?: number;
   mainWindowFirstVisibleTime?: number;
   mainWindowReactRootAttachedTime?: number;

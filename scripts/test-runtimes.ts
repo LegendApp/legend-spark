@@ -44,9 +44,10 @@ try {
     writeJson(path.join(root, ".spark/session.json"), { compatible: true, target: "test", port });
     const log = processLog(path.join(directory, "metro.log"));
     metro = spawnProcess([binary(root, "expo"), "start", "--localhost", "--port", String(port), "--max-workers", "2"], { cwd: root, env: { ...process.env, CI: "1" }, stdout: log, stderr: log });
+    // Expo SDK 58 binds --localhost to the name "localhost" (::1 first), not 127.0.0.1.
     let ready = false;
     for (let i = 0; i < 120; i++) {
-      if (await fetch(`http://127.0.0.1:${port}/status`, { signal: AbortSignal.timeout(1000) }).then(r => r.ok, () => false)) { ready = true; break; }
+      if (await fetch(`http://localhost:${port}/status`, { signal: AbortSignal.timeout(1000) }).then(r => r.ok, () => false)) { ready = true; break; }
       if (metro.exitCode !== null) throw new Error("Metro exited");
       await sleep(500);
     }
@@ -54,7 +55,7 @@ try {
   }
   const executable = (await run(root, ["/usr/libexec/PlistBuddy", "-c", "Print CFBundleExecutable", path.join(result.app, "Contents/Info.plist")], { capture: true })).trim();
   const log = processLog(path.join(directory, `${mode}.log`));
-  app = spawnProcess([path.join(result.app, "Contents/MacOS", executable), "-RCT_jsLocation", `127.0.0.1:${port}`, "--spark-runtimes-report", report, ...(mode === "dev" ? ["--spark-runtimes-reload"] : [])], { cwd: root, env: { ...process.env, ...projectEnvironment(root), SPARK_BUNDLE_URL: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=true&minify=false` }, stdout: log, stderr: log });
+  app = spawnProcess([path.join(result.app, "Contents/MacOS", executable), "-RCT_jsLocation", `localhost:${port}`, "--spark-runtimes-report", report, ...(mode === "dev" ? ["--spark-runtimes-reload"] : [])], { cwd: root, env: { ...process.env, ...projectEnvironment(root), SPARK_BUNDLE_URL: `http://localhost:${port}/index.bundle?platform=macos&dev=true&minify=false` }, stdout: log, stderr: log });
   if (process.argv.includes("--interactive")) {
     process.once("SIGINT", () => app?.kill());
     process.once("SIGTERM", () => app?.kill());

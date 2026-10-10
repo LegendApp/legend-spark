@@ -33,6 +33,7 @@ import {
   nativePackages,
   readJson,
   runtimeFor,
+  sourceMapSources,
   selection,
   stateFile,
   writeJson,
@@ -73,15 +74,15 @@ export async function analyze(root: string, packages = nativePackages(root)) {
     { env: { CI: "1", ...env }, label: "Analyzing production JavaScript" },
   );
   await exportBundle({ SPARK_RUNTIME_DISCOVERY: "1" });
-  const discovery = readJson(path.join(dir, "app.map"));
+  const discovery = sourceMapSources(readJson(path.join(dir, "app.map")));
   const runtimeCore = packages.find(pkg => pkg.name === "@react-native-runtimes/core");
-  const roots = (discovery.sources as string[]).filter(source => !source.includes("\0")).map(source => {
+  const roots = discovery.filter(source => !source.includes("\0")).map(source => {
     const absolute = path.resolve(root, source);
     // Expo emits URL-like /node_modules and /App.tsx paths as well as absolute paths.
     return existsSync(absolute) ? absolute : path.resolve(root, source.replace(/^\//, ""));
   }).filter(source => existsSync(source)).map(source => realpathSync(source));
-  const enabled = !!runtimeCore && (discovery.sources as string[]).some(source => (source.startsWith(runtimeCore.root + "/") || source.includes("/node_modules/@react-native-runtimes/core/")) && !source.endsWith("secondary-runtime-polyfill.js"));
-  if (enabled && !(discovery.sources as string[]).some(source => ["/@legendapp/spark-cli/src/runtime-entry.cjs", "/@legendapp/spark-cli/dist/runtime-entry.cjs"].some(entry => source.endsWith(entry)))) {
+  const enabled = !!runtimeCore && discovery.some(source => (source.startsWith(runtimeCore.root + "/") || source.includes("/node_modules/@react-native-runtimes/core/")) && !source.endsWith("secondary-runtime-polyfill.js"));
+  if (enabled && !discovery.some(source => ["/@legendapp/spark-cli/src/runtime-entry.cjs", "/@legendapp/spark-cli/dist/runtime-entry.cjs"].some(entry => source.endsWith(entry)))) {
     throw new Error("Runtimes requires withDesktop in metro.config.js and the worker-aware index.ts. See docs/runtimes.md migration instructions.");
   }
   const runtimeSources = path.join(dir, "runtime-sources.json");
@@ -91,9 +92,9 @@ export async function analyze(root: string, packages = nativePackages(root)) {
     (!source.includes("/node_modules/") || /["']@react-native-runtimes\/core["']/.test(readFileSync(source, "utf8")))
   ) });
   await exportBundle({ SPARK_RUNTIME_SOURCES: runtimeSources });
-  const map = readJson(path.join(dir, "app.map"));
+  const sources = sourceMapSources(readJson(path.join(dir, "app.map")));
   const used = new Set<string>();
-  for (const source of map.sources as string[]) {
+  for (const source of sources) {
     for (const pkg of packages) {
       // Metro's source map can contain absolute paths or project-relative node_modules paths.
       if (
@@ -114,7 +115,7 @@ export async function analyze(root: string, packages = nativePackages(root)) {
     included: result.included.map((p) => p.name),
     excluded: result.excluded.map((p) => p.name),
     reasons: result.reasons,
-    sources: map.sources,
+    sources,
   });
   return result;
 }
@@ -190,6 +191,9 @@ async function buildUnlocked(
   const excludedNames = [...new Set<string>([
     ...(readAppConfig(root).expo.autolinking?.exclude ?? []),
     ...chosen.excluded.map((p) => p.name),
+    // expo-desktop-template-bare-minimum installs it; its react-native.config.js throws without pwsh.exe,
+    // and expo-modules-autolinking 58 no longer swallows config load errors.
+    "react-native-windows",
   ])];
   writeJson(stateFile(root, "native-selection.json"), {
     excluded: excludedNames,
@@ -336,10 +340,11 @@ async function buildUnlocked(
     },
   );
   const products = path.join(derived, "Build", "Products", configuration);
-  const product = readdirSync(products).find((name) => name.endsWith(".app"));
-  if (!product) throw new Error("Build completed without an app product.");
+  // The scheme's product, not the first .app: a renamed app leaves its old bundle in DerivedData.
+  const product = `${name}.app`;
+  if (!existsSync(path.join(products, product))) throw new Error(`Build completed without ${product}.`);
   const destination = stateFile(root, `products/macos-${runtime.arch}/${mode}/${product}`);
-  rmSync(destination, { recursive: true, force: true });
+  rmSync(path.dirname(destination), { recursive: true, force: true });
   mkdirSync(path.dirname(destination), { recursive: true });
   cpSync(path.join(products, product), destination, { recursive: true, verbatimSymlinks: true });
   if (
@@ -368,7 +373,7 @@ async function buildUnlocked(
   copyHelpers(root, destination, readAppConfig(root).expo?.extra?.spark?.helpers);
   if (mode === "release") {
     // Hermes is prebuilt, so Xcode's app/Pod compiler settings cannot strip it.
-    const hermes = path.join(destination, "Contents/Frameworks/hermes.framework/Versions/Current/hermes");
+    const hermes = path.join(destination, "Contents/Frameworks/hermesvm.framework/Versions/Current/hermesvm");
     if (existsSync(hermes))
       await run(root, ["strip", "-S", "-x", hermes], { capture: true });
   }

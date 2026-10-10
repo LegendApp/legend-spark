@@ -13,7 +13,7 @@ export const viewPropKeys = [
   "accessible", "aria-busy", "aria-checked", "aria-disabled", "aria-expanded", "aria-hidden", "aria-label",
   "aria-labelledby", "aria-live", "aria-modal", "aria-selected", "aria-valuemax", "aria-valuemin", "aria-valuenow",
   "aria-valuetext", "collapsable", "collapsableChildren", "focusable", "hasTVPreferredFocus", "hitSlop", "id",
-  "importantForAccessibility", "isTVSelectable", "nativeID", "needsOffscreenAlphaCompositing",
+  "importantForAccessibility", "nativeID", "needsOffscreenAlphaCompositing",
   "onAccessibilityAction", "onAccessibilityEscape", "onAccessibilityTap", "onBlur", "onFocus", "onLayout",
   "onMagicTap", "onMoveShouldSetResponder", "onMoveShouldSetResponderCapture", "onPointerCancel",
   "onPointerCancelCapture", "onPointerDown", "onPointerDownCapture", "onPointerEnter", "onPointerEnterCapture",
@@ -23,6 +23,6 @@ export const viewPropKeys = [
   "onStartShouldSetResponder", "onStartShouldSetResponderCapture", "onTouchCancel", "onTouchEnd",
   "onTouchEndCapture", "onTouchMove", "onTouchStart", "pointerEvents", "removeClippedSubviews",
   "renderToHardwareTextureAndroid", "role", "screenReaderFocusable", "shouldRasterizeIOS", "style", "tabIndex",
-  "testID", "tvParallaxMagnification", "tvParallaxShiftDistanceX", "tvParallaxShiftDistanceY", "tvParallaxTiltAngle",
+  "testID",
 ] as const satisfies readonly (keyof Omit<ViewProps, "children">)[];
 export type ViewPropKey = (typeof viewPropKeys)[number];

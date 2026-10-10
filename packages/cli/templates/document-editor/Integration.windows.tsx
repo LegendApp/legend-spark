@@ -3,13 +3,13 @@ import { Text } from "react-native";
 import { Button } from "@legendapp/spark/ui";
 import { beforeWindowClose, openWindow, setWindowOptions, addWindowListener } from "@legendapp/spark/windows";
 import { beforeQuit } from "@legendapp/spark/app";
-import { useMenu, type MenuItem } from "@legendapp/spark/menus";
+import { useMenu, type MenuRootItem } from "@legendapp/spark/menus";
 import { registerShortcut } from "@legendapp/spark/shortcuts";
 import { subscribeToOpenRequests } from "@legendapp/spark/app/documents";
 import { readText } from "@legendapp/spark/files";
 import { sessions } from "./sessions";
 import type { DocumentSession } from "./document";
-const items: MenuItem[] = [{ type: "submenu", id: "file", target: { menu: "file" }, label: "File", items: [
+const items: MenuRootItem[] = [{ type: "submenu", id: "file", target: { menu: "file" }, label: "File", items: [
   { type: "action", id: "new", label: "New" }, { type: "action", id: "open", label: "Open…" }, { type: "action", id: "save", label: "Save" }, { type: "action", id: "saveAs", label: "Save As…" },
 ] }];
 let nextWindow = 0;

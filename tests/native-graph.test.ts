@@ -118,6 +118,12 @@ test("native source content changes invalidate hashes without build-directory no
     const initial = hashFiles(root, ["ios"]);
     writeFileSync(path.join(root, "ios/build/cache"), "noise");
     expect(hashFiles(root, ["ios"])).toBe(initial);
+    // expo-modules-jsi builds its xcframework in place during pod install and xcodebuild.
+    for (const dir of [".DerivedData", ".build", ".swiftpm", ".generated", "Products"]) {
+      mkdirSync(path.join(root, "ios", dir), { recursive: true });
+      writeFileSync(path.join(root, "ios", dir, "output"), "noise");
+    }
+    expect(hashFiles(root, ["ios"])).toBe(initial);
     writeFileSync(path.join(root, "ios/Module.mm"), "two");
     expect(hashFiles(root, ["ios"])).not.toBe(initial);
   } finally {

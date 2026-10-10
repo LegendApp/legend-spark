@@ -30,7 +30,7 @@ test("consumer patch is version-gated and does not modify a hardlinked package c
     const surface = path.join(pkg, "React/Fabric/Surface/RCTFabricSurface.mm");
     mkdirSync(path.dirname(surface), { recursive: true });
     const manifest = path.join(pkg, "package.json");
-    writeFileSync(manifest, JSON.stringify({ name: "react-native-macos", version: "0.81.7" }));
+    writeFileSync(manifest, JSON.stringify({ name: "react-native-macos", version: "0.88.0-rc.4" }));
     const original = readFileSync(new URL("./fixtures/fabric-surface-lifecycle.mm", import.meta.url), "utf8");
     const cache = path.join(root, "cached.mm"); writeFileSync(cache, original); linkSync(cache, surface);
     installSurfaceLifecyclePatch(root);
@@ -39,6 +39,6 @@ test("consumer patch is version-gated and does not modify a hardlinked package c
     const inode = statSync(surface).ino; installSurfaceLifecyclePatch(root);
     expect(statSync(surface).ino).toBe(inode);
     writeFileSync(manifest, JSON.stringify({ name: "react-native-macos", version: "0.82.0" }));
-    expect(() => installSurfaceLifecyclePatch(root)).toThrow("requires react-native-macos@0.81.7");
+    expect(() => installSurfaceLifecyclePatch(root)).toThrow("requires react-native-macos@0.88.0-rc.4");
   } finally { rmSync(root, {recursive: true, force: true}); }
 });
