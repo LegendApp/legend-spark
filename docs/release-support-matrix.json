@@ -2973,6 +2973,75 @@
       }
     },
     {
+      "path": "./ui/swipe",
+      "sourceTarget": "./ui-swipe.ts",
+      "kind": "ui",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-ui",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/ui-specialized.test.ts"
+        ],
+        "portableCommand": "bun run test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/ui/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/ui/macos/"
+        ],
+        "windows": [
+          "packages/ui/windows/",
+          "packages/ui/src/index.windows.tsx"
+        ],
+        "ios": [
+          "packages/ui/src/index.ios.tsx"
+        ],
+        "android": [
+          "packages/ui/src/index.android.tsx"
+        ],
+        "web": [
+          "packages/ui/src/index.web.tsx",
+          "packages/ui/uniwind.web.ts"
+        ]
+      }
+    },
+    {
       "path": "./ui/symbol",
       "sourceTarget": "./ui-symbol.ts",
       "kind": "ui",

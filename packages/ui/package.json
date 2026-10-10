@@ -43,6 +43,7 @@
         "Sidebar": "RNSidebar",
         "SidebarItem": "RNSidebarItem",
         "SFSymbol": "RNSFSymbol",
+        "SwipeActions": "RNSwipeActions",
         "NativeSelect": "RNNativeSelect",
         "NativeSegmentedControl": "RNNativeSegmentedControl",
         "TextInputSearch": "RNTextInputSearch"

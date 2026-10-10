@@ -61,6 +61,7 @@
     "./shortcuts/commands": "./shortcuts-commands.ts",
     "./shortcuts/keyboard": "./shortcuts-keyboard.ts",
     "./ui/glass": "./ui-glass.ts",
+    "./ui/swipe": "./ui-swipe.ts",
     "./ui/symbol": "./ui-symbol.ts",
     "./ui/search": "./ui-search.ts",
     "./settings/window": "./settings-window.ts",
