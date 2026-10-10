@@ -20,6 +20,7 @@
     "e2e:lint": "bun scripts/e2e/cli.ts lint",
     "e2e:schema": "bun scripts/e2e/cli.ts schema",
     "e2e:coverage": "bun scripts/e2e/cli.ts coverage",
+    "e2e:run": "bun scripts/e2e/cli.ts run",
     "test:native": "bun scripts/test-native.ts",
     "test:all": "bun run typecheck && bun run test && bun run test:sparkle && bun run test:updates && bun run test:integrations && bun run test:native && bun run test:expansion && bun run test:runtimes:all",
     "test:sparkle": "bun tests/sparkle.integration.ts",
