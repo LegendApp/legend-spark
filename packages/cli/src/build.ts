@@ -27,6 +27,7 @@ import {
   entryFile,
   digest,
   hashFiles,
+  installedPackages,
   nativePreparationInputs,
   nativeProjectFingerprint,
   localSigningIdentity,
@@ -42,12 +43,38 @@ import {
   type Runtime,
 } from "./project.ts";
 
+/**
+ * Absolute paths for Metro source map entries. Expo writes each module as "/"
+ * plus its path from Metro's server root, which is the workspace root for an
+ * in-repo app ("/packages/ui/src/index.tsx"). The entry module anchors that root.
+ */
+export function metroSourceFiles(entry: string, sources: string[]) {
+  const file = realpathSync(entry);
+  const serverRoots: string[] = [];
+  for (let dir = path.dirname(file); ; dir = path.dirname(dir)) {
+    if (sources.includes("/" + path.relative(dir, file).split(path.sep).join("/"))) serverRoots.push(dir);
+    if (dir === path.dirname(dir)) break;
+  }
+  if (serverRoots.length !== 1)
+    throw new Error(`Cannot locate Metro's server root: the production source map ${serverRoots.length ? `matches ${file} from ${serverRoots.join(" and ")}` : `does not contain ${file}`}.`);
+  return sources.filter(source => !source.includes("\0")).map(source => path.join(serverRoots[0], source));
+}
+
+/** A source file's path inside pkg, whether installed under node_modules or linked from a workspace. */
+export function packagePath(file: string, pkg: { name: string; root?: string }) {
+  if (pkg.root && file.startsWith(pkg.root + "/")) return file.slice(pkg.root.length + 1);
+  const marker = `/node_modules/${pkg.name}/`;
+  const index = file.lastIndexOf(marker);
+  return index < 0 ? undefined : file.slice(index + marker.length);
+}
+
 export async function analyze(root: string, packages = nativePackages(root)) {
   assertNativePatchPreflight(root);
   if (projectPlatform(root) === "windows") throw new Error("Windows production analysis is not implemented; use spark build --dev.");
   prepareConfig(root);
   const dir = stateFile(root, "analysis");
   mkdirSync(dir, { recursive: true });
+  const entry = path.resolve(root, entryFile(root));
   const exportBundle = async (env: Record<string, string>) => run(
     root,
     [
@@ -58,7 +85,7 @@ export async function analyze(root: string, packages = nativePackages(root)) {
       "--entry-file",
       // Metro resolves export entries from its server root, which can be the
       // containing workspace rather than this app's project root.
-      path.resolve(root, entryFile(root)),
+      entry,
       "--bundle-output",
       path.join(dir, "app.js"),
       "--sourcemap-output",
@@ -71,39 +98,29 @@ export async function analyze(root: string, packages = nativePackages(root)) {
       "2",
     ],
     { env: { CI: "1", ...env }, label: "Analyzing production JavaScript" },
-  );
-  await exportBundle({ SPARK_RUNTIME_DISCOVERY: "1" });
-  const discovery = readJson(path.join(dir, "app.map"));
+  ).then(() => metroSourceFiles(entry, readJson(path.join(dir, "app.map")).sources));
+  const discovered = await exportBundle({ SPARK_RUNTIME_DISCOVERY: "1" });
+  const installed = installedPackages(root);
   const runtimeCore = packages.find(pkg => pkg.name === "@react-native-runtimes/core");
-  const roots = (discovery.sources as string[]).filter(source => !source.includes("\0")).map(source => {
-    const absolute = path.resolve(root, source);
-    // Expo emits URL-like /node_modules and /App.tsx paths as well as absolute paths.
-    return existsSync(absolute) ? absolute : path.resolve(root, source.replace(/^\//, ""));
-  }).filter(source => existsSync(source)).map(source => realpathSync(source));
-  const enabled = !!runtimeCore && (discovery.sources as string[]).some(source => (source.startsWith(runtimeCore.root + "/") || source.includes("/node_modules/@react-native-runtimes/core/")) && !source.endsWith("secondary-runtime-polyfill.js"));
-  if (enabled && !(discovery.sources as string[]).some(source => ["/@legendapp/spark-cli/src/runtime-entry.cjs", "/@legendapp/spark-cli/dist/runtime-entry.cjs"].some(entry => source.endsWith(entry)))) {
+  const enabled = !!runtimeCore && discovered.some(file => {
+    const inside = packagePath(file, runtimeCore);
+    return inside !== undefined && !inside.endsWith("secondary-runtime-polyfill.js");
+  });
+  const cli = installed.find(pkg => pkg.name === "@legendapp/spark-cli") ?? { name: "@legendapp/spark-cli" };
+  if (enabled && !discovered.some(file => ["src/runtime-entry.cjs", "dist/runtime-entry.cjs"].includes(packagePath(file, cli) ?? ""))) {
     throw new Error("Runtimes requires withDesktop in metro.config.js and the worker-aware index.ts. See docs/runtimes.md migration instructions.");
   }
   const runtimeSources = path.join(dir, "runtime-sources.json");
-  writeJson(runtimeSources, { enabled, roots: roots.filter(source =>
-    /\.[jt]sx?$/.test(source) && !source.endsWith(".d.ts") &&
-    !source.includes("/node_modules/@react-native-runtimes/core/") &&
-    (!source.includes("/node_modules/") || /["']@react-native-runtimes\/core["']/.test(readFileSync(source, "utf8")))
+  writeJson(runtimeSources, { enabled, roots: discovered.filter(file => existsSync(file)).map(file => realpathSync(file)).filter(file =>
+    /\.[jt]sx?$/.test(file) && !file.endsWith(".d.ts") &&
+    !(runtimeCore && packagePath(file, runtimeCore) !== undefined) &&
+    // Dependencies (installed or workspace-linked) count only when they import runtimes.
+    (!installed.some(pkg => packagePath(file, pkg) !== undefined) && !file.includes("/node_modules/") ||
+      /["']@react-native-runtimes\/core["']/.test(readFileSync(file, "utf8")))
   ) });
-  await exportBundle({ SPARK_RUNTIME_SOURCES: runtimeSources });
+  const files = await exportBundle({ SPARK_RUNTIME_SOURCES: runtimeSources });
+  const used = new Set(packages.filter(pkg => files.some(file => packagePath(file, pkg) !== undefined)).map(pkg => pkg.name));
   const map = readJson(path.join(dir, "app.map"));
-  const used = new Set<string>();
-  for (const source of map.sources as string[]) {
-    for (const pkg of packages) {
-      // Metro's source map can contain absolute paths or project-relative node_modules paths.
-      if (
-        source.startsWith(pkg.root + "/") ||
-        source.includes(`/node_modules/${pkg.name}/`) ||
-        source.startsWith(`node_modules/${pkg.name}/`)
-      )
-        used.add(pkg.name);
-    }
-  }
   const config = readAppConfig(root);
   const result = selection(
     packages,
@@ -333,7 +350,8 @@ async function buildUnlocked(
       "build",
     ],
     {
-      env: { RCT_NEW_ARCH_ENABLED: "1", ENTRY_FILE: entryFile(root), ...(productionGraph ? { SPARK_RUNTIME_SOURCES: stateFile(root, "analysis/runtime-sources.json") } : {}) },
+      // Absolute, like analysis: Metro resolves a relative entry from its server root.
+      env: { RCT_NEW_ARCH_ENABLED: "1", ENTRY_FILE: path.resolve(root, entryFile(root)), ...(productionGraph ? { SPARK_RUNTIME_SOURCES: stateFile(root, "analysis/runtime-sources.json") } : {}) },
       label: `Building ${mode === "go" ? "Spark Runner" : mode} runtime (${configuration}, ${runtime.arch})`,
     },
   );

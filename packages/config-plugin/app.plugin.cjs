@@ -57,7 +57,8 @@ module.exports = function withSparkDesktop(config) {
     })))).replace(/#\{/g, "\\#{");
     mod.modResults.contents = mod.modResults.contents.replaceAll('"#{config[:reactNativePath]}-macos"', macOSPath);
     const selectionFile = statePath(mod.modRequest.projectRoot, "native-selection.json", "macos");
-    const included = fs.existsSync(selectionFile) ? JSON.parse(fs.readFileSync(selectionFile, "utf8")).included : [];
+    const { included, excluded } = fs.existsSync(selectionFile) ? JSON.parse(fs.readFileSync(selectionFile, "utf8")) : { included: [], excluded: [] };
+    mod.modResults.contents = require("./autolinking.cjs").excludeNativeModules(mod.modResults.contents, excluded);
     const updatePackage = included.find(pkg => pkg.name === "@legendapp/spark-updates");
     // Pin the spec and archive with the SDK, avoiding a mutable CocoaPods index.
     const sparkleMarker = "# spark: Sparkle pod";
