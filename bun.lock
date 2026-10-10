@@ -575,7 +575,7 @@
     "@expo/cli": "58.1.6",
     "@expo/metro-config": "58.0.11",
     "@op-engineering/op-sqlite": "18.2.1",
-    "@react-native-macos/virtualized-lists": "https://github.com/sethwebster/react-native-macos/releases/download/v0.88.0-rc.4-spark.0/react-native-macos-virtualized-lists-0.88.0-rc.4.tgz",
+    "@react-native-macos/virtualized-lists": "https://github.com/sethwebster/react-native-macos/releases/download/v0.88.0-rc.4-spark.1/react-native-macos-virtualized-lists-0.88.0-rc.4.tgz",
     "@react-native/metro-config": "0.88.0-rc.4",
     "expo": "58.0.7",
     "expo-asset": "58.0.13",
@@ -589,7 +589,7 @@
     "expo-modules-core": "58.0.15",
     "react": "19.3.0",
     "react-native": "0.88.0-rc.4",
-    "react-native-macos": "https://github.com/sethwebster/react-native-macos/releases/download/v0.88.0-rc.4-spark.0/react-native-macos-0.88.0-rc.4.tgz",
+    "react-native-macos": "https://github.com/sethwebster/react-native-macos/releases/download/v0.88.0-rc.4-spark.1/react-native-macos-0.88.0-rc.4.tgz",
     "react-native-nitro-modules": "0.35.7",
     "react-native-webview": "16.0.0",
     "react-native-windows": "0.81.35",
@@ -1021,7 +1021,7 @@
 
     "@react-native-community/cli-types": ["@react-native-community/cli-types@20.1.3", "", { "dependencies": { "joi": "^17.2.1" } }, "sha512-IdAcegf0pH1hVraxWTG1ACLkYC0LDQfqtaEf42ESyLIF3Xap70JzL/9tAlxw7lSCPZPFWhrcgU0TBc4SkC/ecw=="],
 
-    "@react-native-macos/virtualized-lists": ["@react-native-macos/virtualized-lists@https://github.com/sethwebster/react-native-macos/releases/download/v0.88.0-rc.4-spark.0/react-native-macos-virtualized-lists-0.88.0-rc.4.tgz", { "dependencies": { "invariant": "^2.2.4", "nullthrows": "^1.1.1" }, "peerDependencies": { "@types/react": "^19.2.0", "react": "*", "react-native": "0.88.0-rc.4" }, "optionalPeers": ["@types/react"] }, "sha512-Ha80VGM8880OCNpLpIZF1YkopfUGJbaJdZa7b/JUeGXvdNldcAgGp4Asb+7y8UfNe6QTaIKz0SxWeilwS+GY/Q=="],
+    "@react-native-macos/virtualized-lists": ["@react-native-macos/virtualized-lists@https://github.com/sethwebster/react-native-macos/releases/download/v0.88.0-rc.4-spark.1/react-native-macos-virtualized-lists-0.88.0-rc.4.tgz", { "dependencies": { "invariant": "^2.2.4", "nullthrows": "^1.1.1" }, "peerDependencies": { "@types/react": "^19.2.0", "react": "*", "react-native": "0.88.0-rc.4" }, "optionalPeers": ["@types/react"] }, "sha512-Ha80VGM8880OCNpLpIZF1YkopfUGJbaJdZa7b/JUeGXvdNldcAgGp4Asb+7y8UfNe6QTaIKz0SxWeilwS+GY/Q=="],
 
     "@react-native-runtimes/core": ["@react-native-runtimes/core@0.1.0-alpha.2", "", { "peerDependencies": { "@expo/config-plugins": ">=9.0.0", "react": "*", "react-native": "*", "react-native-nitro-modules": "*" } }, "sha512-of6A8BXTnIziF/+CaDQmIY0saC+5TpegJhs4CCkRXIhspWluSt3AcI/hYBwgHimJxH8BIsXpQ6JJT0EFZfq25g=="],
 
@@ -1963,7 +1963,7 @@
 
     "react-native-is-edge-to-edge": ["react-native-is-edge-to-edge@1.3.1", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-NIXU/iT5+ORyCc7p0z2nnlkouYKX425vuU1OEm6bMMtWWR9yvb+Xg5AZmImTKoF9abxCPqrKC3rOZsKzUYgYZA=="],
 
-    "react-native-macos": ["react-native-macos@https://github.com/sethwebster/react-native-macos/releases/download/v0.88.0-rc.4-spark.0/react-native-macos-0.88.0-rc.4.tgz", { "dependencies": { "@react-native-macos/virtualized-lists": "0.88.0-rc.4", "@react-native/asset-utils": "0.88.0-rc.4", "@react-native/codegen": "0.88.0-rc.4", "@react-native/community-cli-plugin": "0.88.0-rc.4", "@react-native/gradle-plugin": "0.88.0-rc.4", "@react-native/normalize-colors": "0.88.0-rc.4", "anser": "^1.4.9", "ansi-regex": "^5.0.0", "base64-js": "^1.5.1", "flow-enums-runtime": "^0.0.6", "flow-parser": "0.327.0", "glob": "^7.1.1", "hermes-compiler": "260318099.0.4", "invariant": "^2.2.4", "memoize-one": "^5.0.0", "metro": "^0.87.1", "metro-runtime": "^0.87.1", "metro-source-map": "^0.87.1", "micromatch": "^4.0.4", "nullthrows": "^1.1.1", "plist": "^3.1.0", "pretty-format": "^29.7.0", "promise": "^8.3.0", "react-devtools-core": "^6.1.5", "react-refresh": "^0.14.0", "regenerator-runtime": "^0.13.2", "scheduler": "0.28.0", "semver": "^7.1.3", "stacktrace-parser": "^0.1.10", "tinyglobby": "^0.2.15", "whatwg-fetch": "^3.0.0", "ws": "^7.5.10", "yargs": "^17.6.2" }, "peerDependencies": { "@types/react": "^19.1.1", "react": "^19.3.0", "react-native": "0.88.0-rc.4" }, "optionalPeers": ["@types/react"], "bin": { "react-native": "cli.js", "react-native-macos": "cli.js" } }, "sha512-oUFwTN1+vaCVgmjADkABclWS2+P2AI5ebQBNQhbMRulb6ZQKMwmk2HYr0r71UXTEJKvE7IEVaob/DLxlh1Rw/g=="],
+    "react-native-macos": ["react-native-macos@https://github.com/sethwebster/react-native-macos/releases/download/v0.88.0-rc.4-spark.1/react-native-macos-0.88.0-rc.4.tgz", { "dependencies": { "@react-native-macos/virtualized-lists": "0.88.0-rc.4", "@react-native/asset-utils": "0.88.0-rc.4", "@react-native/codegen": "0.88.0-rc.4", "@react-native/community-cli-plugin": "0.88.0-rc.4", "@react-native/gradle-plugin": "0.88.0-rc.4", "@react-native/normalize-colors": "0.88.0-rc.4", "anser": "^1.4.9", "ansi-regex": "^5.0.0", "base64-js": "^1.5.1", "flow-enums-runtime": "^0.0.6", "flow-parser": "0.327.0", "glob": "^7.1.1", "hermes-compiler": "260318099.0.4", "invariant": "^2.2.4", "memoize-one": "^5.0.0", "metro": "^0.87.1", "metro-runtime": "^0.87.1", "metro-source-map": "^0.87.1", "micromatch": "^4.0.4", "nullthrows": "^1.1.1", "plist": "^3.1.0", "pretty-format": "^29.7.0", "promise": "^8.3.0", "react-devtools-core": "^6.1.5", "react-refresh": "^0.14.0", "regenerator-runtime": "^0.13.2", "scheduler": "0.28.0", "semver": "^7.1.3", "stacktrace-parser": "^0.1.10", "tinyglobby": "^0.2.15", "whatwg-fetch": "^3.0.0", "ws": "^7.5.10", "yargs": "^17.6.2" }, "peerDependencies": { "@types/react": "^19.1.1", "react": "^19.3.0", "react-native": "0.88.0-rc.4" }, "optionalPeers": ["@types/react"], "bin": { "react-native": "cli.js", "react-native-macos": "cli.js" } }, "sha512-YBz8lBGjoVc3cTEwutNJOYRwkG5owBcQ0NLlXHGXambFZX8UvU6Qf7RvFpY3T3NzdKjQN1ZJb3O6kjMhDYBdrQ=="],
 
     "react-native-nitro-modules": ["react-native-nitro-modules@0.35.7", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-3EiU27EmnxTlD3pAXR2OBWeDg7+9tdjKrNQOPX08rFX5hJPNIT/h1i2PjvTUieOypCGTEi9nW/SNBtK3F+4HYg=="],
 
