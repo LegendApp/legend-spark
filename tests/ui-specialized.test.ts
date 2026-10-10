@@ -9,11 +9,13 @@ vi.mock("../packages/ui/src/appkit-split-view/SidebarSplitViewNativeComponent", 
 vi.mock("../packages/ui/src/sidebar/SidebarNativeComponent", () => ({ default: "Sidebar" }));
 vi.mock("../packages/ui/src/sidebar/SidebarItemNativeComponent", () => ({ default: "SidebarItem" }));
 vi.mock("../packages/ui/src/sf-symbol/SFSymbolNativeComponent", () => ({ default: "SFSymbol" }));
+vi.mock("../packages/ui/src/swipe-actions/SwipeActionsNativeComponent", () => ({ default: "SwipeActions" }));
 import { TextInputSearch, type TextInputSearchRef } from "../packages/ui/src/text-input-search";
 import { SidebarSplitView } from "../packages/ui/src/appkit-split-view";
 import { Sidebar, SidebarItem } from "../packages/ui/src/sidebar";
 import { GlassView, getGlassAvailability } from "../packages/ui/src/glass-effect-view";
 import { SFSymbol } from "../packages/ui/src/sf-symbol";
+import { SwipeActions } from "../packages/ui/src/swipe-actions";
 let rendered: any;
 async function mount(element: React.ReactElement) { await act(async () => { rendered = create(element, { createNodeMock: () => ({ measureInWindow: (cb: Function) => cb(0, 0, 100, 30) }) }); }); }
 beforeEach(() => {
@@ -144,4 +146,45 @@ test("symbols accept style arrays and report only errors for the current symbol"
   const native = rendered.root.findByType("SFSymbol").props; expect(native.style).toEqual([{ height: 32, width: 32 }, [{ opacity: 0.5 }]]);
   native.onSymbolError({ nativeEvent: { name: "old", message: "old error" } }); expect(onError).not.toHaveBeenCalled();
   native.onSymbolError({ nativeEvent: { name: "doc", message: "missing" } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_NOT_FOUND" }));
+});
+test("swipe actions serialize validated actions and report only known IDs", async () => {
+  const onAction = vi.fn(), onError = vi.fn();
+  const archive = { id: "archive", title: "Archive", symbol: "archivebox", color: "#2E7D5B", dismisses: true }, snooze = { id: "snooze", title: "Snooze", symbol: "clock", color: "#C98A1BFF" };
+  await mount(React.createElement(SwipeActions, { leadingActions: [archive], trailingActions: [snooze], onAction, onError }, "Row"));
+  const native = rendered.root.findByType("SwipeActions").props;
+  expect(JSON.parse(native.leadingActionsJson)).toEqual([archive]); expect(JSON.parse(native.trailingActionsJson)).toEqual([{ ...snooze, dismisses: false }]);
+  native.onSwipeAction({ nativeEvent: { actionId: "snooze" } }); expect(onAction).toHaveBeenCalledWith("snooze");
+  native.onSwipeAction({ nativeEvent: { actionId: "gone" } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onAction).toHaveBeenCalledTimes(1);
+  expect(() => SwipeActions({ onAction, leadingActions: [{ ...archive, color: "green" }] })).toThrow("Swipe action colors");
+  expect(() => SwipeActions({ onAction, leadingActions: [archive], trailingActions: [archive] })).toThrow("Duplicate swipe action ID");
+});
+
+test("swipe actions require a callback and arrays at the public boundary", async () => {
+  const action = { id: "archive", title: "Archive", symbol: "archivebox.fill", color: "#3E8E63" };
+  for (const props of [
+    { leadingActions: [action] },
+    { onAction: null },
+    { onAction: "not a callback" },
+    { onAction: () => {}, leadingActions: null },
+    { onAction: () => {}, trailingActions: {} },
+  ]) {
+    await expect(mount(React.createElement(SwipeActions, props as never))).rejects.toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  }
+});
+
+test("swipe callbacks stop at unmount and platform fallbacks retain children", async () => {
+  const onAction = vi.fn(), onError = vi.fn();
+  const action = { id: "archive", title: "Archive", symbol: "archivebox.fill", color: "#3E8E63" };
+  await mount(React.createElement(SwipeActions, { leadingActions: [action], onAction, onError }));
+  const native = rendered.root.findByType("SwipeActions").props;
+  await act(async () => { rendered.unmount(); rendered = undefined; });
+  native.onSwipeAction({ nativeEvent: { actionId: "archive" } });
+  expect(onAction).not.toHaveBeenCalled();
+  for (const [os, present, code] of [["windows", true, "E_UNSUPPORTED_PLATFORM"], ["macos", false, "E_MODULE_UNAVAILABLE"]] as const) {
+    platform.OS = os; registered.mockReturnValue(present); onError.mockClear();
+    await mount(React.createElement(SwipeActions, { leadingActions: [action], onAction, onError, children: "Row" }));
+    expect(rendered.root.findByType("View").props.children).toBe("Row");
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code }));
+    await act(async () => { rendered.unmount(); rendered = undefined; });
+  }
 });

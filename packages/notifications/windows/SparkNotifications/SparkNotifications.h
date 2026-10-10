@@ -108,22 +108,27 @@ struct NotificationsState : std::enable_shared_from_this<NotificationsState> {
       auto audio = xml.CreateElement(L"audio");
       auto tone = std::wstring(L"ms-winsoundevent:Notification.");
       if (sound == L"mail") tone += L"Mail"; else if (sound == L"message") tone += L"IM"; else if (sound == L"reminder") tone += L"Reminder";
-      else if (sound == L"call") { tone += L"Looping.Call"; audio.SetAttribute(L"duration", L"long"); }
+      else if (sound == L"call") { tone += L"Looping.Call"; audio.SetAttribute(L"loop", L"true"); xml.DocumentElement().SetAttribute(L"duration", L"long"); }
       else tone += L"Default";
       audio.SetAttribute(L"src", tone.c_str()); xml.DocumentElement().AppendChild(audio);
     }
     // Action buttons activate through the same CustomActivator as the toast body,
     // carrying their own action id in the activation arguments.
-    for (auto const &entry : args.GetNamedArray(L"actions", Json::JsonArray())) {
-      auto action = entry.GetObject();
-      auto button = xml.CreateElement(L"action");
-      // JsonObject is a reference type; parse a copy so each action carries its
-      // own action id without mutating the body/dismiss payload.
-      auto arguments = Json::JsonObject::Parse(response.Stringify());
-      arguments.SetNamedValue(L"action", Json::JsonValue::CreateStringValue(action.GetNamedString(L"id")));
-      button.SetAttribute(L"content", action.GetNamedString(L"label").c_str());
-      button.SetAttribute(L"arguments", arguments.Stringify().c_str());
-      xml.DocumentElement().AppendChild(button);
+    auto entries = args.GetNamedArray(L"actions", Json::JsonArray());
+    if (entries.Size() > 0) {
+      auto actions = xml.CreateElement(L"actions");
+      xml.DocumentElement().AppendChild(actions);
+      for (auto const &entry : entries) {
+        auto action = entry.GetObject();
+        auto button = xml.CreateElement(L"action");
+        // JsonObject is a reference type; parse a copy so each action carries its
+        // own action id without mutating the body/dismiss payload.
+        auto arguments = Json::JsonObject::Parse(response.Stringify());
+        arguments.SetNamedValue(L"action", Json::JsonValue::CreateStringValue(action.GetNamedString(L"id")));
+        button.SetAttribute(L"content", action.GetNamedString(L"label").c_str());
+        button.SetAttribute(L"arguments", arguments.Stringify().c_str());
+        actions.AppendChild(button);
+      }
     }
     auto tag = Hash(id); RemovePending(tag); Forget(tag);
     if (delay > 0) {
