@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: Windows menu items, hidden items and Help root
+intent: On Windows the Menu Audit menu shows its supported items without the hidden one, and the Help contribution merges into the Help menu; choosing items appears in the screen's event list.
+checks: [MENU-CREATE-01, MENU-HOOK-01, MENU-HIDDEN-01, MENU-HELP-02]
+tags: [menus]
+platforms: [windows]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://menus/audit" }
+- assertVisible: { text: Menu ready, within: { id: menus-audit-status } }
+- tapOn: { role: menuBarItem, label: Menu Audit }
+- assertVisible: Close Sample
+- assertVisible: Checked selection
+- assertNotVisible: Hidden sample
+- pressKey: Escape
+- selectMenu: Menu Audit > Close Sample
+- assertVisible: { text: "/Action close-sample/", within: { id: menus-audit-events } }
+- selectMenu: Help > Menu Audit Guide
+- assertVisible: { text: "/Action audit-guide/", within: { id: menus-audit-events } }
