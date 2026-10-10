@@ -3,6 +3,7 @@ export const REPORT_FLAGS = [
   "--spark-auth-report",
   "--spark-audio-report",
   "--spark-files-report",
+  "--spark-files-api-report",
   "--spark-foundation-report",
   "--spark-ui-report",
   "--spark-api-report",
