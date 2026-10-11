@@ -415,9 +415,10 @@ They come from the development build, so the sidebar subtitle reads `dev · <pro
 A flow that compares them against a release build must mask that line, or approve
 release-build goldens from its run.
 
-The Arabic catalog has no golden yet: scroll content renders mirrored
-([#234](https://github.com/LegendApp/legend-spark/issues/234)), and a golden of a bug
-would make the fix fail. Approve `macos/light/ar` and `macos/dark/ar` after #234 lands.
+The Arabic catalog has no golden yet. Scroll content no longer renders mirrored
+([#234](https://github.com/LegendApp/legend-spark/issues/234)), but Arabic text in
+full-width boxes still renders left-aligned, and a golden of a bug would make the fix
+fail. Approve `macos/light/ar` and `macos/dark/ar` once RTL text aligns to the right.
 
 ### Determinism
 
