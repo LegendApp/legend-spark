@@ -716,6 +716,7 @@
     "WindowListenerOptions",
     "WindowMacOS",
     "WindowOpenOptions",
+    "WindowOption",
     "WindowProvider",
     "WindowProviderProps",
     "WindowState",

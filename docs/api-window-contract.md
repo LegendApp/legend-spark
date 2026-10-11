@@ -48,6 +48,10 @@ interface WindowAppearanceOptions {
   minimizable?: boolean;
   minSize?: Size | null;
   maxSize?: Size | null;
+  aspectRatio?: number | null; // content width ÷ height, 0.05–20; null removes it
+  opacity?: number;            // 0–1
+  contentProtection?: boolean; // excluded from screenshots, recordings and screen sharing
+  ignoreMouseEvents?: boolean; // click-through
 }
 
 type WindowOpenOptions = WindowKind & WindowAppearanceOptions & {
@@ -81,7 +85,7 @@ interface WindowInfo {
 
 type CloseResult = { closed: true } | { closed: false; reason: 'vetoed' };
 
-getWindowAvailability(): Availability;
+getWindowAvailability(option?: WindowOption): Availability;
 openWindow(options: WindowOpenOptions): Promise<WindowInfo>;
 getWindow(id: WindowId): Promise<WindowInfo>;
 listWindows(): Promise<WindowInfo[]>;
@@ -164,7 +168,8 @@ Use `macos` option groups, with named public types, for features that are genuin
 | Style masks | Translate ordinary bits to common booleans/title-bar options; keep native panel styles under creation-only `macos.panelStyle`. |
 | Represented URL | `macos.representedUri`, nullable for clearing. |
 | Window level | `macos.level`; reject conflicting `alwaysOnTop` requests. |
-| Content layout guide, title visibility, material/blending/state, traffic lights | `macos.titleBar` group. |
+| Content layout guide, title visibility, material/blending/state, traffic lights and their position, subtitle | `macos.titleBar` group. |
+| Spaces, simple fullscreen, edited dot, window vibrancy | `macos.spaces`, `macos.simpleFullscreen`, `macos.documentEdited`, `macos.backgroundMaterial`. |
 | Toolbar style, items, titlebar controls | Typed `macos.toolbar` and `macos.titleBar.controls`. |
 | Startup split-view shell | `macos.startupSplitView`, nullable for clearing; preserve pre-React rendering. |
 | Shell restoration across launches | `macos.restoreOnLaunch`, separate from common saved bounds restoration. |
@@ -179,6 +184,81 @@ Use `macos` option groups, with named public types, for features that are genuin
 Use `/app` events `windowOpened` and `windowClosed` for application-wide registry changes across reused IDs. `usePrimaryWindowLifecycle` uses those events and initializes once per owning ID under React Strict Mode. Instance-specific listeners belong to `/windows`.
 
 `/windows/macos` exposes `setWindowBlur`, `focusToolbarSearch`, `setToolbarItemText` and `addMacOSWindowListener`; animated bounds are an option group on the portable `/windows` `setWindowBounds`, not a second export. `/app` owns `finishWindowRestoration`; `/diagnostics` owns startup timing. The old window-manager, window-controls and React-only import paths are removed without aliases.
+
+### Window options audit
+
+Audit of `openWindow`/`setWindowOptions` against the Windows epic (#12), done in #65. Every
+option below can be set when opening and changed later; an update publishes only the fields it
+names, to the native module that owns them. "Windows" means the Windows host in
+`packages/desktop-host/windows/application.inc`; this audit ran on macOS only, so the Windows
+column is from reading that code, not from running it. Windows work is tracked in #243.
+
+| Epic item | Spark option | macOS | Windows | Gap |
+|---|---|---|---|---|
+| Aspect ratio | `aspectRatio` (added) | `contentAspectRatio` | Rejects `E_UNSUPPORTED_OPTION` | Windows: `WM_SIZING` (#243) |
+| Closable | `closable` | Style mask | System menu Close disabled, close command ignored | None |
+| Minimizable | `minimizable` | Style mask | `OverlappedPresenter.IsMinimizable` | None |
+| Resizable | `resizable` | Style mask | `OverlappedPresenter.IsResizable` | None |
+| Min/max size | `minSize`, `maxSize` | `minSize`/`maxSize` | `WM_GETMINMAXINFO` track sizes | None |
+| Levels: normal, floating, always on top | `alwaysOnTop`; `macos.level` (`normal`, `floating`, `modalPanel`, `mainMenu`, `status`, `screenSaver`) | `level` | `alwaysOnTop` only (`IsAlwaysOnTop`) | Other levels have no Windows equivalent |
+| All Spaces vs active Space | `macos.spaces` (added): `default`, `all`, `active` | `collectionBehavior` | Not applicable | No public API pins a window to every virtual desktop |
+| Opacity | `opacity` (added) | `alphaValue` | Rejects `E_UNSUPPORTED_OPTION` | Windows: layered window alpha (#243) |
+| Background colour, transparency | `backgroundColor`, `transparent` | `backgroundColor`, `opaque` | Root composition brush, `WS_EX_NOREDIRECTIONBITMAP` | None |
+| Shadow | `hasShadow` | `hasShadow` | DWM non-client rendering policy | None |
+| Vibrancy / material | `macos.backgroundMaterial` (added, whole window); `macos.titleBar.material` (title bar) | `NSVisualEffectView` below the React surface | Not applicable | Windows backdrops are the Mica/Acrylic row |
+| Content protection | `contentProtection` (added) | `sharingType` none / read-only | Rejects `E_UNSUPPORTED_OPTION` | Windows: `SetWindowDisplayAffinity` (#243) |
+| Click-through | `ignoreMouseEvents` (added) | `ignoresMouseEvents` | Rejects `E_UNSUPPORTED_OPTION` | Windows: `WS_EX_TRANSPARENT` (#243) |
+| Simple fullscreen | `macos.simpleFullscreen` (added) | Covers the screen in the current Space | Not applicable | `setWindowFullscreen` is the portable fullscreen |
+| Traffic-light position | `macos.titleBar.trafficLightPosition` (added) | Moves the standard buttons | Not applicable | None |
+| Title bar styles: standard, hidden, hidden-inset, unified, compact | `titleBarStyle` (`default`, `overlay`, `hidden`, `borderless`); `macos.toolbar.style` (`unified`, `unifiedCompact`, `expanded`, `preference`, `automatic`) | Style mask, title bar transparency, toolbar style | `default`, `hidden`, `borderless`; `overlay` rejects | None: standard is `default`, Electron's hidden is `overlay`, hidden-inset is `overlay` with a unified toolbar or a traffic-light position, unified/compact are toolbar styles |
+| Subtitle | `macos.titleBar.subtitle` (added) | `subtitle` | Not applicable | None |
+| Represented file (proxy icon) | `macos.representedUri` | `representedURL` | Not applicable | None |
+| Edited dot | `macos.documentEdited` (added) | `documentEdited` | Not applicable | None |
+| Mica / Acrylic | None | Not applicable | Missing | Needs a typed `windows` backdrop option (#243) |
+
+`getWindowAvailability(option)` reports, for `WindowOption` (`aspectRatio`, `opacity`,
+`contentProtection`, `ignoreMouseEvents`, `spaces`, `simpleFullscreen`, `documentEdited`,
+`backgroundMaterial`, `subtitle`, `trafficLightPosition`), whether the current platform
+implements it: all of them on macOS, none on Windows (`unsupported-platform`). An unknown option
+throws `E_INVALID_ARGUMENT`. Options not in the list work wherever windows do, except where the
+table says otherwise. On Windows the four portable additions reject with
+`E_UNSUPPORTED_OPTION` (`Windows does not support <option> yet`) before any native call, and the
+`macos` group rejects as before.
+
+Option details:
+
+- `aspectRatio` constrains user resizing of the content area; it does not resize the window.
+- `contentProtection: false` restores the default read-only sharing. AppKit's `sharingType`
+  getter can keep reporting none afterwards; the window server's sharing state is correct, and the
+  native test reads that.
+- `trafficLightPosition` is the close button's offset from the window's leading top corner (top
+  right in right-to-left title bars). The title bar container grows to center the buttons at that
+  inset. It is reapplied when AppKit lays the title bar out again (resize, toolbar and title
+  changes, leaving fullscreen, buttons recreated after `closable`, `minimizable` and `resizable`
+  were all off) and left alone in native fullscreen. It needs a title bar; `null` restores
+  AppKit's layout.
+- `backgroundMaterial` adds behind-window vibrancy under the React surface, so it shows only
+  where the React content is transparent. The in-process test driver renders it as flat gray (see
+  [the test driver](test-driver.md#what-a-capture-contains)).
+- `simpleFullscreen` sizes the window to its screen in the current Space, hides the title bar,
+  traffic lights and toolbar, makes the window unmovable and not resizable, and auto-hides the Dock
+  and menu bar while the app is active. While it is on, `titleBarStyle`, `resizable`, `minSize`,
+  `maxSize` and `macos.titleBar` changes other than `subtitle`, and `setWindowBounds`,
+  `setWindowFullscreen`, `maximizeWindow`, `unmaximizeWindow` and `centerWindow`, reject
+  `E_BUSY`; turning it on while in native fullscreen rejects `E_BUSY`. Turning it off restores the
+  windowed frame and the hidden chrome. `restoreBounds` and frame autosave (`restoreOnLaunch`, the
+  host's `restoreFrame`) keep the windowed frame throughout. Closing the window ends it, and the
+  presentation options return to their previous value when the last such window ends it.
+  `WindowInfo.fullscreen` and `fullscreenChanged` report native fullscreen only. `openWindow`
+  enters it after all other options are applied.
+
+The Kitchen Sink `windows/window-options` screen opens a child window with options applied and
+changes each row on the live window; its flows are in `e2e/flows/windows/`. The native tests
+(`tests/window.native.mm`, run by `tests/window-native.test.ts` in left-to-right and right-to-left
+title bars, and `tests/window-manager.native.mm`) assert each option's `NSWindow` property after
+opening and after an update. The host configuration for the main window
+(`window` in `desktop.config.json`) does not take the added options yet; set them on the main
+window at run time with `setWindowOptions('main', …)`.
 
 ### Navigator: window types, singletons and multiwindow state
 

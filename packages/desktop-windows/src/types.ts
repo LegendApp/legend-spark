@@ -34,6 +34,14 @@ export interface WindowAppearanceOptions {
   /** Null clears this constraint back to the supported 100–20000 logical-unit range. */
   minSize?: Size | null;
   maxSize?: Size | null;
+  /** Content width ÷ height (0.05–20) kept while the user resizes; null removes it. macOS only for now. */
+  aspectRatio?: number | null;
+  /** Whole-window alpha, 0–1. macOS only for now. */
+  opacity?: number;
+  /** Excludes the window from screenshots, recordings and screen sharing. macOS only for now. */
+  contentProtection?: boolean;
+  /** Mouse events pass through to whatever is behind the window. macOS only for now. */
+  ignoreMouseEvents?: boolean;
 }
 export type WindowOpenOptions = WindowKind & WindowAppearanceOptions & {
   id: WindowId;
@@ -45,6 +53,8 @@ export type WindowOpenOptions = WindowKind & WindowAppearanceOptions & {
   restoreBounds?: boolean;
   macos?: MacOSWindowOptions;
 };
+/** Options whose availability differs by platform; see `getWindowAvailability(option)`. */
+export type WindowOption = "aspectRatio" | "opacity" | "contentProtection" | "ignoreMouseEvents" | "spaces" | "simpleFullscreen" | "documentEdited" | "backgroundMaterial" | "subtitle" | "trafficLightPosition";
 export interface WindowUpdateOptions extends WindowAppearanceOptions { macos?: MacOSWindowUpdateOptions }
 export interface WindowInfo {
   id: WindowId;
@@ -87,6 +97,10 @@ export interface MacOSTitleBarOptions {
   blendingMode?: "behindWindow" | "withinWindow";
   materialState?: "active" | "inactive" | "followsWindowActiveState";
   trafficLights?: boolean;
+  /** Close button's offset from the window's leading top corner (top-right in right-to-left title bars), 0–500 logical units; null restores AppKit's layout. */
+  trafficLightPosition?: { x: number; y: number } | null;
+  /** Secondary title line below the title; empty removes it. */
+  subtitle?: string;
   controls?: readonly MacOSTitleBarControl[];
 }
 export interface MacOSToolbarSegment { value: string; label: string; symbol?: string }
@@ -126,6 +140,14 @@ export interface MacOSWindowOptions {
   toolbar?: MacOSToolbarOptions;
   startupSplitView?: MacOSStartupSplitViewOptions | null;
   restoreOnLaunch?: boolean;
+  /** `default` stays on the Space it opened on, `all` shows on every Space, `active` follows the active Space. */
+  spaces?: "default" | "all" | "active";
+  /** Pre-Lion fullscreen: covers the screen without a new Space; the Dock and menu bar auto-hide. */
+  simpleFullscreen?: boolean;
+  /** The unsaved-changes dot in the close button. */
+  documentEdited?: boolean;
+  /** Behind-window vibrancy under the React content; `none` removes it. */
+  backgroundMaterial?: "none" | "sidebar" | "windowBackground" | "hudWindow" | "popover";
 }
 /** Panel class and startup shell are fixed when the native window is created. */
 export type MacOSWindowUpdateOptions = Omit<MacOSWindowOptions, "panelStyle">;

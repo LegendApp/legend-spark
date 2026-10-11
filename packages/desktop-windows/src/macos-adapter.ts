@@ -12,6 +12,17 @@ export async function macosCommand(operation: () => Promise<string>): Promise<vo
   const result = parseNativeResult(await invokeNative(operation), (value): value is { success: boolean; message?: string } => !!value && typeof value === "object" && typeof (value as any).success === "boolean");
   if (!result.success) throw new SparkError("E_NATIVE", result.message ?? "macOS window operation failed");
 }
+/** `macos` fields the window module applies with the common options; the window manager owns the rest. */
+export const COMMON_MACOS: readonly string[] = ["spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial"];
+const COMMON_TITLE_BAR: readonly string[] = ["subtitle", "trafficLightPosition"];
+/** The window manager's share of a `macos` group, or undefined when it has none. */
+export function appKitOptions<T extends MacOSWindowOptions>(options: T | undefined): T | undefined {
+  if (!options) return undefined;
+  const result: Record<string, unknown> = Object.fromEntries(Object.entries(options).filter(([key]) => !COMMON_MACOS.includes(key) && key !== "titleBar"));
+  const title = Object.entries(options.titleBar ?? {}).filter(([key]) => !COMMON_TITLE_BAR.includes(key));
+  if (title.length) result.titleBar = Object.fromEntries(title);
+  return Object.keys(result).length ? result as T : undefined;
+}
 export function macosOptions(options: MacOSWindowOptions | undefined): Record<string, unknown> {
   if (!options) return {};
   const result: Record<string, unknown> = {}, style: Record<string, unknown> = {};
