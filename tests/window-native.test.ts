@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 // The harness writes restoreBounds and frame autosave defaults under its executable's name, and removes them.
 const executable = "spark-window-native-test";
-test.skipIf(process.platform !== "darwin")("native window guards settle close decisions; window options apply at open and on update", () => {
+test.skipIf(process.platform !== "darwin")("native window guards settle close decisions; window options apply at open and on update; driver mode never shows windows", () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-window-native-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
@@ -18,6 +18,7 @@ test.skipIf(process.platform !== "darwin")("native window guards settle close de
     const result = execFileSync(output, { encoding: "utf8", timeout: 15000 });
     expect(result).toContain("Window guards passed");
     expect(result).toContain("Window options passed (left-to-right)");
+    expect(result).toContain("Driver mode windows stayed off screen");
     // Right-to-left title bars mirror the traffic lights; positions are measured from the leading edge.
     expect(execFileSync(output, ["-AppleTextDirection", "YES", "-NSForceRightToLeftWritingDirection", "YES"], { encoding: "utf8", timeout: 15000 })).toContain("Window options passed (right-to-left)");
   } finally {

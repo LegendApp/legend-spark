@@ -25,11 +25,20 @@ extern double LegendMainWindowReactRootAttachedTimeMs;
 #import <AppKit/AppKit.h>
 #if __has_include(<RNDesktopApp/SparkDesktop.h>)
 #import <RNDesktopApp/SparkDesktop.h>
+#import <RNDesktopApp/SparkTestDriver.h>
 // Safe-mode launches skip saved windows and frames (docs/app.md).
 static BOOL LegendSafeMode(void) { return SparkSafeMode(); }
+static BOOL LegendTestDriverActive(void) { return SparkTestDriverActive(); }
 #else
 static BOOL LegendSafeMode(void) { return NO; }
+static BOOL LegendTestDriverActive(void) { return NO; }
 #endif
+// Test driver mode never orders a window on screen (docs/test-driver.md): record it as shown instead.
+static BOOL LegendMayOrderFront(NSWindow *window) {
+  if (!LegendTestDriverActive()) return YES;
+  SparkSetDriverShown(window, YES);
+  return NO;
+}
 #import <CoreImage/CoreImage.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <objc/runtime.h>
@@ -629,7 +638,8 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
   id representedURLValue = hasRepresentedURL ? options[@"representedURL"] : nil;
   NSString *title = [options[@"title"] isKindOfClass:NSString.class] ? options[@"title"] : nil;
   if (hasTitle || hasRepresentedURL) {
-    LegendApplyWindowTitleAndRepresentedURL(window, title, hasRepresentedURL, representedURLValue, nil);
+    // An update that names only the represented URL keeps the current title.
+    LegendApplyWindowTitleAndRepresentedURL(window, hasTitle ? title : window.title, hasRepresentedURL, representedURLValue, nil);
   }
 
   NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
@@ -793,7 +803,7 @@ extern "C" void LegendPrecreateRestorableWindows(void)
       LegendPrepareSidebarSplitViewStartup(window, windowStyle[@"startupSplitView"]);
     }
     LegendPrecreatedWindows[identifier] = window;
-    if (![options[@"deferOrderFront"] boolValue]) {
+    if (![options[@"deferOrderFront"] boolValue] && LegendMayOrderFront(window)) {
       [window makeKeyAndOrderFront:nil];
       if (levelNumber) {
         [window orderFrontRegardless];
@@ -1303,7 +1313,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     ? representedObject[@"windowIdentifier"]
     : @"";
   NSWindow *window = (NSWindow *)self.windows[identifier];
-  [window makeKeyAndOrderFront:nil];
+  if (LegendMayOrderFront(window)) [window makeKeyAndOrderFront:nil];
   [window makeFirstResponder:searchField];
 }
 
@@ -2088,7 +2098,6 @@ willBeInsertedIntoToolbar:(BOOL)flag
     NSDictionary *options = [self parseObjectJSON:optionsJson];
     NSString *identifier = [options[@"identifier"] isKindOfClass:NSString.class] ? options[@"identifier"] : nil;
     NSString *moduleName = [options[@"moduleName"] isKindOfClass:NSString.class] ? options[@"moduleName"] : nil;
-    NSAppearance *darkAppearance = LegendDarkAppearance();
 
     if (moduleName.length == 0) {
       moduleName = identifier;
@@ -2197,11 +2206,8 @@ willBeInsertedIntoToolbar:(BOOL)flag
     LegendApplyContentLayoutModeOption(window, contentLayoutMode);
     LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
 
-    if (appearance) {
-      LegendApplyWindowAppearance(window, appearance);
-    } else if (darkAppearance) {
-      window.appearance = darkAppearance;
-    }
+    // Without an appearance option the window follows the app (`system`), as the contract specifies.
+    LegendApplyWindowAppearance(window, appearance);
     window.releasedWhenClosed = NO;
     LegendApplyWindowTitleAndRepresentedURL(window, title, hasRepresentedURL, representedURLValue, title);
     if (transparentTitlebar != nil) {
@@ -2273,7 +2279,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       LegendPrepareSidebarSplitViewStartup(window, windowStyle[@"startupSplitView"]);
     }
     BOOL presentedBeforeReactRoot = precreatedWindow != nil || !deferOrderFront;
-    if (!deferOrderFront && !window.visible) {
+    if (!deferOrderFront && !window.visible && LegendMayOrderFront(window)) {
       [window.contentView displayIfNeeded];
       [window displayIfNeeded];
       [window makeKeyAndOrderFront:nil];
@@ -2354,6 +2360,11 @@ willBeInsertedIntoToolbar:(BOOL)flag
 {
   if (![windowStyle[@"fullscreen"] boolValue] || (window.styleMask & NSWindowStyleMaskFullScreen)) {
     resolve([self successJson]);
+    return;
+  }
+  if (LegendTestDriverActive()) {
+    [window close];
+    reject(@"E_UNSUPPORTED_OPTION", @"Fullscreen opening needs an on-screen window; test driver mode never shows windows", nil);
     return;
   }
   objc_setAssociatedObject(window, &LegendManagedFullscreenPresentationKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -2546,7 +2557,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
     if (value) searchField.stringValue = value;
     [self sendToolbarSearchEventForField:searchField submitted:NO shiftKey:NO];
-    [window makeKeyAndOrderFront:nil];
+    if (LegendMayOrderFront(window)) [window makeKeyAndOrderFront:nil];
     [window makeFirstResponder:searchField];
     resolve([self successJson]);
   });
@@ -2604,8 +2615,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       resolve([self failureJson:@"Main window not found"]);
       return;
     }
-    [NSApp activateIgnoringOtherApps:YES];
-    [mainWindow makeKeyAndOrderFront:nil];
+    if (LegendMayOrderFront(mainWindow)) { [NSApp activateIgnoringOtherApps:YES]; [mainWindow makeKeyAndOrderFront:nil]; }
     resolve([self successJson]);
   });
 #else
@@ -2622,7 +2632,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       resolve([self failureJson:@"Main window not found"]);
       return;
     }
-    [mainWindow orderOut:nil];
+    SparkSetDriverShown(mainWindow, NO); [mainWindow orderOut:nil];
     [NSUserDefaults.standardUserDefaults removeObjectForKey:LegendMainWindowStartupSplitViewKey];
     [self sendWindowEventWithName:@"onWindowClosed"
                              body:@{@"identifier": @"main", @"moduleName": @"main"}];
@@ -2644,8 +2654,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       return;
     }
 
-    [NSApp activateIgnoringOtherApps:YES];
-    [window makeKeyAndOrderFront:nil];
+    if (LegendMayOrderFront(window)) { [NSApp activateIgnoringOtherApps:YES]; [window makeKeyAndOrderFront:nil]; }
     resolve([self successJson]);
   });
 #else

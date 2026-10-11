@@ -252,6 +252,10 @@ Option details:
   `WindowInfo.fullscreen` and `fullscreenChanged` report native fullscreen only. `openWindow`
   enters it after all other options are applied.
 
+Two fixes came out of this audit: a window opened without `appearance` follows the app
+(`system`, as the contract says) instead of being forced dark, and an update that sets only
+`macos.representedUri` keeps the window's title instead of replacing it with the file name.
+
 The Kitchen Sink `windows/window-options` screen opens a child window with options applied and
 changes each row on the live window; its flows are in `e2e/flows/windows/`. The native tests
 (`tests/window.native.mm`, run by `tests/window-native.test.ts` in left-to-right and right-to-left

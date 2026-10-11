@@ -76,8 +76,21 @@ A driven app never takes focus from the person using the Mac:
   instance of the same app.
 - App Nap is disabled for the process, so timers and rendering are not throttled.
 
-Windows that app code opens itself (for example with `@legendapp/spark/windows`) are
-still ordered on screen, without activation.
+- Windows that app code opens or shows with `@legendapp/spark/windows` are never ordered on
+  screen either. They are created, sized, styled and rendered as usual, and the window API
+  reports them as the app left them: `visible` is true after opening or `showWindow` and false
+  after `hideWindow`, with the matching `visibilityChanged` events. Capture them with
+  `capture` and `id:<window id>`.
+- Consequences: no window is ever key, so `focused` stays false. A modal window is not
+  attached to its parent as a sheet, so a second modal window does not reject `E_BUSY`.
+  Native fullscreen (`setWindowFullscreen`, and the legacy fullscreen opening) needs an
+  on-screen window and rejects `E_UNSUPPORTED_OPTION`. Options whose effect only the window
+  server shows (level, Spaces, content protection, click-through, opacity, shadow,
+  behind-window vibrancy) are applied to the `NSWindow` but cannot be seen in a capture.
+
+`tests/window.native.mm` checks that windows opened, shown, hidden and made modal in driver
+mode are never on screen (`NSWindow.visible` and the window server's on-screen flag) while the
+window API reports them as shown.
 
 ## Protocol
 

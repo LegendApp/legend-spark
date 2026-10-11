@@ -29,6 +29,8 @@ static NSString *SparkNamespace() { return @"window-tests"; }
 static NSString *SparkJSON(id value) { return [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingFragmentsAllowed error:nil] encoding:NSUTF8StringEncoding]; }
 static NSDictionary *SparkArgs(NSString *json) { return [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil]; }
 static void SparkInvalid(RCTPromiseRejectBlock reject, NSString *message) { reject(@"E_INVALID_ARGUMENT", message, nil); }
+static BOOL driverActive = NO;
+static BOOL SparkTestDriverActive(void) { return driverActive; }
 // ACTUAL_IMPLEMENTATION
 @interface TestWindow : NSObject
 @property (weak) id<NSWindowDelegate> delegate;
@@ -43,9 +45,18 @@ static void SparkInvalid(RCTPromiseRejectBlock reject, NSString *message) { reje
 - (void)close { self.closed = YES; [self.delegate windowWillClose:[NSNotification notificationWithName:NSWindowWillCloseNotification object:self]]; }
 @end
 static void Pump() { for (int i=0; i<20; ++i) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]]; }
-static NSString *failure = nil;
+static NSString *failure = nil, *reply = nil;
 static void Call(RNDesktopWindows *api, NSString *method, NSDictionary *args) {
-  failure = nil; [api call:method args:SparkJSON(args) resolve:^(id) {} reject:^(NSString *code, NSString *, NSError *) { failure = code; }]; Pump();
+  failure = nil; reply = nil; [api call:method args:SparkJSON(args) resolve:^(id value) { reply = value; } reject:^(NSString *code, NSString *, NSError *) { failure = code; }]; Pump();
+}
+static BOOL OnScreen(NSWindow *window) {
+  CFArrayRef ids = CFArrayCreate(NULL, (const void *[]){ (void *)(uintptr_t)window.windowNumber }, 1, NULL);
+  NSArray *info = CFBridgingRelease(CGWindowListCreateDescriptionFromArray(ids)); CFRelease(ids);
+  return window.visible || [info.firstObject[(id)kCGWindowIsOnscreen] boolValue];
+}
+static BOOL ReportedVisible(RNDesktopWindows *api, NSString *key) {
+  Call(api, @"info", @{ @"id": key }); assert(!failure);
+  return [SparkArgs(reply)[@"visible"] boolValue];
 }
 // Close button's leading top corner, measured from the window's leading top corner.
 static NSPoint CloseButtonOffset(NSWindow *window) {
@@ -156,6 +167,28 @@ static void TestWindowOptions(RNDesktopWindows *api) {
   [NSUserDefaults.standardUserDefaults removePersistentDomainForName:NSProcessInfo.processInfo.processName];
   printf("Window options passed (%s)\n", window.windowTitlebarLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft ? "right-to-left" : "left-to-right");
 }
+// Test driver mode never puts a window on screen; the window API still reports what the app showed.
+static void TestDriverMode(RNDesktopWindows *api) {
+  driverActive = YES;
+  NSWindow *parent = RealWindow(@"driver-parent"), *window = RealWindow(@"driver"), *sheet = RealWindow(@"driver-sheet");
+  Call(api, @"completeOpen", @{ @"id": @"driver-parent", @"size": @{ @"width": @500, @"height": @400 } }); assert(!failure);
+  Call(api, @"completeOpen", @{ @"id": @"driver", @"parentId": @"driver-parent", @"size": @{ @"width": @400, @"height": @300 }, @"opacity": @0.5, @"macos": @{ @"documentEdited": @YES } }); assert(!failure);
+  assert(!OnScreen(parent) && !OnScreen(window)); assert(window.parentWindow == parent);
+  assert(window.alphaValue == 0.5 && window.documentEdited && NSEqualSizes(window.frame.size, NSMakeSize(400, 300)));
+  assert(ReportedVisible(api, @"driver")); assert([events.lastObject[@"visible"] isEqual:@YES]);
+  Call(api, @"hide", @{ @"id": @"driver" }); assert(!failure && !ReportedVisible(api, @"driver")); assert([events.lastObject[@"visible"] isEqual:@NO]);
+  for (NSNumber *focus in @[@NO, @YES]) {
+    Call(api, @"show", @{ @"id": @"driver", @"focus": focus }); assert(!failure && ReportedVisible(api, @"driver") && !OnScreen(window));
+  }
+  Call(api, @"completeOpen", @{ @"id": @"driver-sheet", @"parentId": @"driver-parent", @"modal": @YES, @"kind": @"window" }); assert(!failure);
+  assert(!OnScreen(sheet) && !sheet.sheetParent && ReportedVisible(api, @"driver-sheet"));
+  Call(api, @"fullscreen", @{ @"id": @"driver", @"enabled": @YES }); assert([failure isEqual:@"E_UNSUPPORTED_OPTION"] && !OnScreen(window));
+  Call(api, @"options", @{ @"id": @"driver", @"options": @{ @"macos": @{ @"simpleFullscreen": @YES } } }); assert(!failure && !OnScreen(window));
+  Call(api, @"options", @{ @"id": @"driver", @"options": @{ @"macos": @{ @"simpleFullscreen": @NO } } }); assert(!failure);
+  for (NSWindow *opened in @[sheet, window, parent]) [opened close];
+  Pump(); driverActive = NO;
+  puts("Driver mode windows stayed off screen");
+}
 int main() { @autoreleasepool {
   events = [NSMutableArray new]; windows = LegendWindowRegistry.sharedRegistry.windows;
   TestWindow *window = [TestWindow new]; windows[@"editor"] = (NSWindow *)window;
@@ -180,4 +213,5 @@ int main() { @autoreleasepool {
   assert([failure isEqual:@"E_NOT_FOUND"]); assert(![delegates[@"editor"].instanceId isEqual:instance]);
   puts("Window guards passed");
   TestWindowOptions(api);
+  TestDriverMode(api);
 } }

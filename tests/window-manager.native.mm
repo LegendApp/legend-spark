@@ -60,6 +60,8 @@ void SparkEmit(NSDictionary *event) { [events addObject:event]; }
 NSDictionary *SparkStartupTiming() { return @{}; }
 NSDictionary *SparkLifecycleConfiguration() { return @{}; }
 extern "C" void SparkRebindWindowDelegate(NSWindow *, NSString *, id<NSWindowDelegate>) {}
+static BOOL driverActive = NO;
+static BOOL SparkTestDriverActive(void) { return driverActive; }
 // ACTUAL_IMPLEMENTATION
 extern "C" void LegendPrepareSidebarSplitViewStartup(NSWindow *, NSDictionary *) {}
 extern "C" BOOL LegendAttachSidebarSplitViewStartupRoot(NSWindow *, NSView *, void (^)(void)) { return NO; }
@@ -148,7 +150,7 @@ int main() { @autoreleasepool {
   // AppKit groups (macos-adapter's windowStyle wire format) apply on update, then change back.
   NSWindow *chrome = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 640, 480)
     styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
-  chrome.releasedWhenClosed = NO; manager.windows[@"chrome"] = chrome;
+  chrome.releasedWhenClosed = NO; chrome.title = @"Chrome"; manager.windows[@"chrome"] = chrome;
   void (^apply)(NSDictionary *) = ^(NSDictionary *value) {
     __block BOOL applied = NO;
     [manager setWindowOptions:@"chrome" optionsJson:[manager jsonStringFromObject:value] resolve:^(id result) { applied = [result containsString:@"true"]; } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
@@ -156,7 +158,7 @@ int main() { @autoreleasepool {
   };
   apply(@{ @"level": @(NSFloatingWindowLevel), @"representedURL": @"file:///Applications/", @"windowStyle": @{ @"trafficLights": @NO, @"titleVisibility": @"hidden",
     @"titlebarAppearsTransparent": @YES, @"hasToolbar": @YES, @"toolbarStyle": @"unifiedCompact", @"titlebarSeparatorStyle": @"none" } });
-  assert(chrome.level == NSFloatingWindowLevel); assert([chrome.representedURL.path isEqual:@"/Applications"]);
+  assert(chrome.level == NSFloatingWindowLevel); assert([chrome.representedURL.path isEqual:@"/Applications"]); assert([chrome.title isEqual:@"Chrome"]);
   assert([chrome standardWindowButton:NSWindowCloseButton].hidden && [chrome standardWindowButton:NSWindowZoomButton].hidden);
   assert(chrome.titleVisibility == NSWindowTitleHidden); assert(chrome.titlebarAppearsTransparent);
   assert(chrome.toolbar != nil); assert(chrome.toolbarStyle == NSWindowToolbarStyleUnifiedCompact); assert(chrome.titlebarSeparatorStyle == NSTitlebarSeparatorStyleNone);
@@ -164,6 +166,11 @@ int main() { @autoreleasepool {
     @"titlebarAppearsTransparent": @NO, @"hasToolbar": @NO } });
   assert(chrome.level == NSNormalWindowLevel); assert(!chrome.representedURL); assert(![chrome standardWindowButton:NSWindowCloseButton].hidden);
   assert(chrome.titleVisibility == NSWindowTitleVisible); assert(!chrome.titlebarAppearsTransparent); assert(!chrome.toolbar);
+  // Test driver mode records the window as shown without ordering it on screen.
+  driverActive = YES;
+  [manager showWindow:@"chrome" resolve:^(id result) { assert([result containsString:@"true"]); } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  assert(!chrome.visible && SparkDriverShown(chrome));
+  driverActive = NO;
   [manager.windows removeObjectForKey:@"chrome"]; [chrome close];
   puts("Window manager controls passed");
 } }

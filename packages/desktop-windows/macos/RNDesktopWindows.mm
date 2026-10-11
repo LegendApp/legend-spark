@@ -3,13 +3,24 @@
 #import "SparkWindowGeometry.h"
 #import <objc/runtime.h>
 #import <RNDesktopApp/SparkDesktop.h>
+#import <RNDesktopApp/SparkTestDriver.h>
 #import <React-RCTAppDelegate/RCTRootViewFactory.h>
 #import <React/RCTSurfaceHostingView.h>
 
-static void Show(NSWindow *window) {
-  if ([window isKindOfClass:NSPanel.class] && (window.styleMask & NSWindowStyleMaskNonactivatingPanel)) [window orderFrontRegardless];
+// Driver mode records the window as shown instead of ordering it on screen (docs/test-driver.md).
+static void Show(NSWindow *window, BOOL focus, NSWindow *sheetParent) {
+  if (SparkTestDriverActive()) { SparkSetDriverShown(window, YES); return; }
+  if (sheetParent) [sheetParent beginSheet:window completionHandler:nil];
+  else if (!focus) [window orderFront:nil];
+  else if ([window isKindOfClass:NSPanel.class] && (window.styleMask & NSWindowStyleMaskNonactivatingPanel)) [window orderFrontRegardless];
   else [window makeKeyAndOrderFront:nil];
 }
+static void Hide(NSWindow *window) {
+  SparkSetDriverShown(window, NO);
+  if (window.sheetParent) [window.sheetParent endSheet:window];
+  [window orderOut:nil];
+}
+static BOOL Visible(NSWindow *window) { return (SparkTestDriverActive() ? SparkDriverShown(window) : window.visible) && !NSApp.hidden; }
 static char SimpleFullscreenKey, TrafficLightKey, MaterialKey;
 static BOOL InSimpleFullscreen(NSWindow *window) { return objc_getAssociatedObject(window, &SimpleFullscreenKey) != nil; }
 static void SetSimpleFullscreen(NSWindow *window, BOOL enabled);
@@ -58,7 +69,7 @@ static void Event(NSString *type, NSString *key) {
     }
   } else if ([type isEqual:@"focus"] || [type isEqual:@"blur"]) { event[@"type"] = @"focusChanged"; event[@"focused"] = @([type isEqual:@"focus"]); }
   else if ([type isEqual:@"enterFullscreen"] || [type isEqual:@"leaveFullscreen"]) { event[@"type"] = @"fullscreenChanged"; event[@"fullscreen"] = @([type isEqual:@"enterFullscreen"]); }
-  else if ([type isEqual:@"visibilityChanged"]) event[@"visible"] = @(window.visible && !NSApp.hidden);
+  else if ([type isEqual:@"visibilityChanged"]) event[@"visible"] = @(Visible(window));
   SparkEmit(event);
 }
 @implementation SparkWindowDelegate
@@ -160,7 +171,7 @@ static NSDictionary *Info(NSString *key, NSWindow *window) {
   NSWindow *parent = window.sheetParent ?: window.parentWindow;
   for (NSString *candidate in windows) if (windows[candidate] == parent) { parentId = candidate; break; }
   return @{ @"id": key, @"instanceId": delegates[key].instanceId, @"kind": opening[@"kind"] ?: @"window",
-    @"title": window.title, @"parentId": parentId ?: NSNull.null, @"modal": @([opening[@"modal"] boolValue]), @"visible": @(window.visible && !NSApp.hidden), @"focused": @(window.keyWindow),
+    @"title": window.title, @"parentId": parentId ?: NSNull.null, @"modal": @([opening[@"modal"] boolValue]), @"visible": @(Visible(window)), @"focused": @(window.keyWindow),
     @"minimized": @(window.miniaturized), @"maximized": @(window.zoomed), @"fullscreen": @((window.styleMask & NSWindowStyleMaskFullScreen) != 0), @"bounds": SparkBoundsForWindow(window) };
 }
 static const NSWindowButton TrafficLights[] = { NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton };
@@ -422,9 +433,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       [window setFrame:frame display:NO]; delegate.restoreBounds = [args[@"restoreBounds"] boolValue];
       if (parent && ![args[@"modal"] boolValue]) [parent addChildWindow:window ordered:NSWindowAbove];
       objc_setAssociatedObject(window, @selector(call:args:resolve:reject:), [args copy], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-      if (![args[@"show"] isEqual:@NO]) {
-        if ([args[@"modal"] boolValue]) [parent beginSheet:window completionHandler:nil]; else Show(window);
-      } else [window orderOut:nil];
+      if (![args[@"show"] isEqual:@NO]) Show(window, YES, [args[@"modal"] boolValue] ? parent : nil); else Hide(window);
       Event(@"opened", key); Event(@"visibilityChanged", key); resolve(SparkJSON(Info(key, window))); return;
     }
     if ([method isEqual:@"discard"]) { delegate.guarded = NO; [window close]; return resolve(@"null"); }
@@ -441,13 +450,14 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
         else [delegate finishClose:NO];
       }
     } else if ([method isEqual:@"show"]) {
-      [window deminiaturize:nil]; NSDictionary *opening = objc_getAssociatedObject(window, @selector(call:args:resolve:reject:));
+      if (window.miniaturized) [window deminiaturize:nil];
+      NSDictionary *opening = objc_getAssociatedObject(window, @selector(call:args:resolve:reject:));
       if ([opening[@"modal"] boolValue] && !window.sheetParent) {
         NSWindow *parent = Window(opening[@"parentId"]);
         if (!parent) { reject(@"E_NOT_FOUND", @"Parent window has closed", nil); return; }
         if (parent.attachedSheet) { reject(@"E_BUSY", @"Parent already has a sheet", nil); return; }
-        [parent beginSheet:window completionHandler:nil];
-      } else if ([args[@"focus"] isEqual:@NO]) [window orderFront:nil]; else Show(window);
+        Show(window, YES, parent);
+      } else Show(window, ![args[@"focus"] isEqual:@NO], nil);
       Event(@"visibilityChanged", key);
     } else if ([method isEqual:@"options"]) {
       NSNumber *simpleFullscreen = args[@"options"][@"macos"][@"simpleFullscreen"];
@@ -462,10 +472,11 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       if (!screen) { reject(@"E_NOT_FOUND", @"Display is disconnected", nil); return; }
       NSRect frame = window.frame; frame.origin = NSMakePoint(NSMidX(screen.visibleFrame) - NSWidth(frame)/2, NSMidY(screen.visibleFrame) - NSHeight(frame)/2); [window setFrame:frame display:YES];
     } else if ([method isEqual:@"hide"]) {
-      if (window.sheetParent) [window.sheetParent endSheet:window]; [window orderOut:nil]; Event(@"visibilityChanged", key);
+      Hide(window); Event(@"visibilityChanged", key);
     } else if ([method isEqual:@"minimize"]) [window miniaturize:nil];
     else if ([method isEqual:@"fullscreen"]) {
       BOOL target = [args[@"enabled"] boolValue];
+      if (SparkTestDriverActive() && target != ((window.styleMask & NSWindowStyleMaskFullScreen) != 0)) { reject(@"E_UNSUPPORTED_OPTION", @"Native fullscreen needs an on-screen window; test driver mode never shows windows", nil); return; }
       if (delegate.fullscreenTarget && delegate.fullscreenTarget.boolValue != target) { reject(@"E_BUSY", @"Another fullscreen transition is pending", nil); return; }
       if (delegate.fullscreenTarget || ((window.styleMask & NSWindowStyleMaskFullScreen) != 0) != target) {
         [delegate.fullscreenWaiters addObject:@{ @"resolve": [resolve copy], @"reject": [reject copy] }];
