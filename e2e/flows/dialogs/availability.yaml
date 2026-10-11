@@ -1,0 +1,18 @@
+appId: so.legend.spark.examples.kitchensink
+name: Dialog feature availability on macOS
+intent: >
+  The Dialogs screen lists each dialog availability query as JSON. On macOS the open/save
+  panels, accessory controls, message dialogs, the "Don't ask again" checkbox, text prompts and
+  the About panel all report available.
+checks: [DLG-AVAIL-01]
+tags: [dialogs]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://dialogs/panels" }
+- extendedWaitUntil: { visible: { id: dialogs-panels-root }, timeout: 10s }
+- assertText: { id: dialogs-panels-availability-files, equals: 'files: {"available":true}' }
+- assertText: { id: dialogs-panels-availability-accessory, equals: 'accessory: {"available":true}' }
+- assertText: { id: dialogs-panels-availability-messages, equals: 'messages: {"available":true}' }
+- assertText: { id: dialogs-panels-availability-checkbox, equals: 'checkbox: {"available":true}' }
+- assertText: { id: dialogs-panels-availability-prompt, equals: 'prompt: {"available":true}' }
+- assertText: { id: dialogs-panels-availability-about-panel, equals: 'about-panel: {"available":true}' }

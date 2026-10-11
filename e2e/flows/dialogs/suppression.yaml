@@ -1,0 +1,45 @@
+appId: so.legend.spark.examples.kitchensink
+name: Don't ask again and confirm
+intent: >
+  "Empty Trash…" shows a warning alert with Cancel, Empty Trash (default) and a "Don't ask again"
+  checkbox. Checking the box and canceling returns checked:true but does not suppress. Checking it
+  and confirming suppresses: the next "Empty Trash…" empties without a dialog. "Ask again" clears
+  the suppression. "Confirm…" uses its Replace and Cancel labels and resolves true only for Replace.
+checks: [DLG-SUPPRESS-01, DLG-CONFIRM-01]
+tags: [dialogs]
+platforms: [macos, windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://dialogs/panels" }
+- extendedWaitUntil: { visible: { id: dialogs-panels-root }, timeout: 10s }
+- assertText: { id: dialogs-panels-suppressed, equals: "Don't ask again: off" }
+# Cancel never suppresses, even with the box checked
+- tapOn: { id: dialogs-panels-trash }
+- assertDialog: { kind: alert, text: Empty the Trash?, buttons: [Cancel, Empty Trash], default: Empty Trash }
+- tapOn: { text: Don't ask again, window: key }
+- tapOn: { text: Cancel, window: key }
+- assertText: { id: dialogs-panels-trash-result, equals: '{"buttonId":"cancel","checked":true,"emptied":false,"asked":true,"suppress":false}' }
+- assertText: { id: dialogs-panels-suppressed, equals: "Don't ask again: off" }
+# Confirming with the box checked suppresses the next dialog
+- tapOn: { id: dialogs-panels-trash }
+- assertDialog: { kind: alert, text: Empty the Trash? }
+- tapOn: { text: Don't ask again, window: key }
+- pressKey: Enter
+- assertText: { id: dialogs-panels-trash-result, equals: '{"buttonId":"empty","checked":true,"emptied":true,"asked":true,"suppress":true}' }
+- assertText: { id: dialogs-panels-suppressed, equals: "Don't ask again: on, the Trash empties without asking" }
+- tapOn: { id: dialogs-panels-trash }
+- assertText: { id: dialogs-panels-trash-result, equals: '{"emptied":true,"asked":false,"suppress":true}' }
+# Ask again restores the dialog with the box unchecked
+- tapOn: { id: dialogs-panels-ask-again }
+- assertText: { id: dialogs-panels-suppressed, equals: "Don't ask again: off" }
+- tapOn: { id: dialogs-panels-trash }
+- assertDialog: { kind: alert, text: Empty the Trash? }
+- pressKey: Escape
+- assertText: { id: dialogs-panels-trash-result, equals: '{"buttonId":"cancel","checked":false,"emptied":false,"asked":true,"suppress":false}' }
+# confirm()
+- tapOn: { id: dialogs-panels-confirm }
+- assertDialog: { kind: alert, text: Replace the document?, buttons: [Cancel, Replace], default: Replace }
+- pressKey: Escape
+- assertText: { id: dialogs-panels-confirm-result, equals: "false" }
+- tapOn: { id: dialogs-panels-confirm }
+- tapOn: { text: Replace, window: key }
+- assertText: { id: dialogs-panels-confirm-result, equals: "true" }

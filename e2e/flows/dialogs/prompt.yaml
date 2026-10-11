@@ -1,0 +1,33 @@
+appId: so.legend.spark.examples.kitchensink
+name: Plain and secure text prompts
+intent: >
+  "Rename…" shows an alert with a text field holding the selected default "Untitled"; typing
+  replaces it and Return confirms {"canceled":false,"value":"Draft"}. Escape returns
+  {"canceled":true}, distinct from confirming an empty value. "Unlock…" shows a secure field that
+  masks typed text; Unlock returns the value, which the screen reports by length.
+checks: [DLG-PROMPT-01, DLG-PROMPT-02]
+tags: [dialogs]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://dialogs/panels" }
+- extendedWaitUntil: { visible: { id: dialogs-panels-root }, timeout: 10s }
+- tapOn: { id: dialogs-panels-rename }
+- assertDialog: { kind: alert, text: Rename document, buttons: [Cancel, Rename], default: Rename }
+- assertVisible: { role: textField, text: Untitled, window: key }
+- inputText: Draft
+- pressKey: Enter
+- assertText: { id: dialogs-panels-rename-result, equals: '{"canceled":false,"value":"Draft"}' }
+- tapOn: { id: dialogs-panels-rename }
+- pressKey: Escape
+- assertText: { id: dialogs-panels-rename-result, equals: '{"canceled":true}' }
+- tapOn: { id: dialogs-panels-rename }
+- pressKey: Delete
+- pressKey: Enter
+- assertText: { id: dialogs-panels-rename-result, equals: '{"canceled":false,"value":""}' }
+# Secure prompt
+- tapOn: { id: dialogs-panels-unlock }
+- assertDialog: { kind: alert, text: Unlock vault, buttons: [Cancel, Unlock], default: Unlock }
+- inputText: hunter2
+- assertNotVisible: { text: hunter2, window: key }
+- tapOn: { text: Unlock, window: key }
+- assertText: { id: dialogs-panels-unlock-result, equals: '{"canceled":false,"length":7}' }
