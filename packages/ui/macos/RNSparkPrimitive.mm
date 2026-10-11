@@ -88,7 +88,7 @@ static NSDate *SparkDate(id milliseconds) { return [milliseconds isKindOfClass:N
   NSString *_kind;
   NSDictionary *_payload;
   NSString *_lastJSON;
-  NSString *_pendingError;
+  NSString *_pendingError, *_pendingErrorCode;
   // Events this view has emitted, and the latest count JS has echoed back through props.
   int _eventCount;
   int _acknowledged;
@@ -155,13 +155,13 @@ static NSDate *SparkDate(id milliseconds) { return [milliseconds isKindOfClass:N
 - (void)reportError:(NSString *)message code:(NSString *)code {
   const auto emitter = std::static_pointer_cast<const SparkPrimitiveEventEmitter>(_eventEmitter);
   if (emitter) emitter->onNativeError({ .message = message.UTF8String, .code = code.UTF8String, .eventCount = _eventCount });
-  else _pendingError = message;
+  else { _pendingError = message; _pendingErrorCode = code; }
 }
 - (void)updateEventEmitter:(EventEmitter::Shared const &)eventEmitter {
   [super updateEventEmitter:eventEmitter];
-  NSString *pending = _pendingError;
-  _pendingError = nil;
-  if (pending) [self reportError:pending];
+  NSString *pending = _pendingError, *code = _pendingErrorCode;
+  _pendingError = nil; _pendingErrorCode = nil;
+  if (pending) [self reportError:pending code:code];
 }
 // Every emitted value or failure is counted, so a value JS never accepts is restored once JS echoes the count.
 - (void)emitValue:(id)value {
@@ -221,11 +221,12 @@ static NSDate *SparkDate(id milliseconds) { return [milliseconds isKindOfClass:N
   id parsed = [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] ?: NSData.data options:0 error:&error];
   NSDictionary *payload = [parsed isKindOfClass:NSDictionary.class] ? parsed : nil;
   BOOL recreated = ![_kind isEqual:kind] || !_control;
+  // Malformed JSON is a broken bridge (E_INVALID_DATA); a name Foundation does not know is the caller's argument.
   NSString *problem = !payload ? [NSString stringWithFormat:@"Invalid %@ configuration JSON: %@", kind, error.localizedDescription ?: @"expected an object"] :
     [kind isEqual:@"date-picker"] ? SparkDatePickerProblem(payload) : nil;
   // Keep the last valid configuration on screen rather than blanking the control.
   if (problem) {
-    [self reportError:problem];
+    [self reportError:problem code:payload ? @"E_INVALID_ARGUMENT" : @"E_INVALID_DATA"];
     payload = nil;
     if (!recreated && _payload) { payload = _payload; json = _lastJSON; }
   }
@@ -354,7 +355,7 @@ static NSDate *SparkDate(id milliseconds) { return [milliseconds isKindOfClass:N
 }
 - (void)prepareForRecycle {
   _updating = YES; [self discardControl];
-  _kind = nil; _payload = nil; _lastJSON = nil; _pendingError = nil; _eventCount = 0; _acknowledged = 0; _disabled = NO; _updating = NO;
+  _kind = nil; _payload = nil; _lastJSON = nil; _pendingError = nil; _pendingErrorCode = nil; _eventCount = 0; _acknowledged = 0; _disabled = NO; _updating = NO;
   [super prepareForRecycle];
 }
 + (ComponentDescriptorProvider)componentDescriptorProvider { return concreteComponentDescriptorProvider<SparkPrimitiveComponentDescriptor>(); }

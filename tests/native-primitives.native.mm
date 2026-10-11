@@ -220,14 +220,14 @@ int main() { @autoreleasepool {
                           R"({"value":0,"mode":"date","variant":"text-field","min":null,"max":null,"locale":"","calendar":"","timeZone":"Mars/Olympus"})",
                           R"({"value":0,"mode":"date","variant":"text-field","min":null,"max":null,"locale":"","calendar":"martian","timeZone":""})"}) {
     errorCount = errors.size(); Render(dates, date, bad, lastCount);
-    assert(errors.size() == errorCount + 1 && errors.back().find("Unknown") != std::string::npos);
+    assert(errors.size() == errorCount + 1 && errors.back().find("Unknown") != std::string::npos && errorCodes.back() == "E_INVALID_ARGUMENT");
     assert(picker.datePickerStyle == NSDatePickerStyleClockAndCalendar && [picker.calendar.calendarIdentifier isEqual:NSCalendarIdentifierJapanese]);
   }
   // A fresh view whose first props are invalid shows nothing valid and reports it once attached.
   RNSparkPrimitive *badDate = [RNSparkPrimitive new]; auto badProps = std::make_shared<SparkPrimitiveProps>(); badProps->kind = "date-picker";
   badProps->valueJson = R"({"value":0,"mode":"date","variant":"text-field","min":null,"max":null,"locale":"","calendar":"","timeZone":"Nowhere"})";
   errorCount = errors.size(); [badDate updateProps:badProps oldProps:nullptr]; [badDate updateEventEmitter:std::make_shared<SparkPrimitiveEventEmitter>()];
-  assert(errors.size() == errorCount + 1);
+  assert(errors.size() == errorCount + 1 && errorCodes.back() == "E_INVALID_ARGUMENT");
 
   // Color well: style, alpha, hex round trip, reconciliation, and handing the shared panel over.
   RNSparkPrimitive *wells = [RNSparkPrimitive new]; wells.frame = NSMakeRect(0, 0, 52, 30);

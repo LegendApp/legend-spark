@@ -24,11 +24,12 @@ function Primitive<K extends PrimitiveKind>({ kind, props }: { kind: K; props: P
     catch (error) { control.error(error as SparkError); return; }
     if ("onValueChange" in props) (props.onValueChange as (value: unknown) => void)(value);
   }
-  // E_UNAVAILABLE: the control cannot show what it needs here (a ColorWell's panel in test driver mode).
+  // Native codes: E_UNAVAILABLE (a ColorWell's panel in test driver mode), E_INVALID_ARGUMENT (a locale, calendar
+  // or time zone Foundation does not know). Anything else is E_INVALID_DATA.
   function failed(event: NativeSyntheticEvent<{ message: string; code?: string; eventCount: number }>) {
     const data = event?.nativeEvent;
     if (isEventCount(data?.eventCount)) events.acknowledge(data.eventCount);
-    control.error(new SparkError(data?.code === "E_UNAVAILABLE" ? "E_UNAVAILABLE" : "E_INVALID_DATA", typeof data?.message === "string" ? data.message : "Invalid native control error"));
+    control.error(new SparkError(data?.code === "E_UNAVAILABLE" || data?.code === "E_INVALID_ARGUMENT" ? data.code : "E_INVALID_DATA", typeof data?.message === "string" ? data.message : "Invalid native control error"));
   }
   const size = props.size ?? "regular", height = { mini: 20, small: 24, regular: 30, large: 36 }[size];
   const label = props.accessibilityLabel ?? ("label" in props ? props.label : undefined);

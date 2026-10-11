@@ -114,12 +114,12 @@ test("native serialization and configuration failures report E_INVALID_DATA and 
   expect(onValueChange).not.toHaveBeenCalled();
 });
 
-test("a ColorWell that cannot show its panel reports E_UNAVAILABLE; any other native code stays E_INVALID_DATA", async () => {
+test("native E_UNAVAILABLE and E_INVALID_ARGUMENT pass through; any other native code is E_INVALID_DATA", async () => {
   const onError = vi.fn();
   await mount("color-well", { ...examples["color-well"], onError });
-  const fail = (code: unknown) => act(async () => rendered.root.findByType("SparkPrimitive").props.onNativeError({ nativeEvent: { message: "The color panel needs the screen", code, eventCount: 0 } }));
-  await fail("E_UNAVAILABLE"); await fail("E_PERMISSION_DENIED"); await fail(undefined);
-  expect(onError.mock.calls.map(([error]) => error.code)).toEqual(["E_UNAVAILABLE", "E_INVALID_DATA", "E_INVALID_DATA"]);
+  const fail = (code: unknown) => act(async () => rendered.root.findByType("SparkPrimitive").props.onNativeError({ nativeEvent: { message: "Native failure", code, eventCount: 0 } }));
+  await fail("E_UNAVAILABLE"); await fail("E_INVALID_ARGUMENT"); await fail("E_INVALID_DATA"); await fail("E_PERMISSION_DENIED"); await fail(undefined);
+  expect(onError.mock.calls.map(([error]) => error.code)).toEqual(["E_UNAVAILABLE", "E_INVALID_ARGUMENT", "E_INVALID_DATA", "E_INVALID_DATA", "E_INVALID_DATA"]);
 });
 
 test("malformed native edits report E_INVALID_DATA and restore controlled value without callbacks", async () => {
