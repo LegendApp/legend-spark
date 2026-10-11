@@ -371,7 +371,7 @@ static void TestDisplays(RNDesktopWindows *api) {
   NSArray *simulated = @[@{ @"id": @"901", @"primary": @YES }];
   assert([DriverCommand(@"simulateDisplays", @{ @"displays": simulated })[@"ok"] boolValue]);
   NSDictionary *event = events.lastObject;
-  assert([event[@"type"] isEqual:@"displaysChanged"] && [event[@"displays"] isEqual:simulated] && [event[@"sequence"] doubleValue] > sequence);
+  assert([event[@"type"] isEqual:@"displayDetailsChanged"] && [event[@"displays"] isEqual:simulated] && [event[@"sequence"] doubleValue] > sequence);
   Call(api, @"displayDetails", @{}); assert([SparkArgs(reply) isEqual:simulated]);
   assert([DriverCommand(@"simulateDisplays", @{ @"displays": NSNull.null })[@"ok"] boolValue]);
   assert([events.lastObject[@"displays"] count] == NSScreen.screens.count);

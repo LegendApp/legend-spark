@@ -15,7 +15,7 @@ const external: DisplayDetails = {
   workArea: { x: 0, y: 0, width: 2560, height: 1440 }, safeArea: { top: 0, left: 0, bottom: 0, right: 0 },
   refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: "Studio Display", gamut: "p3" }, edrHeadroom: { current: 1, potential: 1, reference: null },
 };
-const emit = (sequence: number, displays: unknown) => listeners.forEach(listener => listener({ type: "displaysChanged", sequence, displays }));
+const emit = (sequence: number, displays: unknown) => listeners.forEach(listener => listener({ type: "displayDetailsChanged", sequence, displays }));
 const tick = async () => { for (let n = 0; n < 10; n++) await Promise.resolve(); };
 let snapshot: { sequence: number; displays: unknown };
 beforeEach(() => {
@@ -97,9 +97,41 @@ test("events that arrive before the snapshot are applied after it; malformed eve
 
 test("invalid listeners reject before native calls; a failed observation unsubscribes", async () => {
   await expect(addDisplayListener(undefined as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
-  await expect(addDisplayListener(() => {}, { since: 1 } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(addDisplayListener(() => {}, { since: 1 } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(addDisplayListener(() => {}, { since: undefined } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(addDisplayListener(() => {}, { onError: 1 } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   expect(call).not.toHaveBeenCalled();
   call.mockRejectedValueOnce(Object.assign(new Error("boom"), { code: "E_NATIVE" }));
   await expect(addDisplayListener(() => {})).rejects.toMatchObject({ code: "E_NATIVE" });
   expect(listeners.size).toBe(0);
+});
+
+test("a snapshot that fails validation releases the native observation it started", async () => {
+  for (const bad of [{ sequence: 1, displays: [{ ...builtIn, refreshRate: null }] }, { sequence: "1", displays: [builtIn] }, null]) {
+    call.mockClear(); snapshot = bad as never;
+    await expect(addDisplayListener(() => {})).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+    expect(call.mock.calls.map(([method]) => method)).toEqual(["observeDisplays", "unobserveDisplays"]);
+    expect(listeners.size).toBe(0);
+  }
+  // A failed release is reported; the snapshot's error is the one thrown.
+  const errors: unknown[] = [];
+  snapshot = { sequence: 1, displays: [] };
+  call.mockImplementation(async (method: string) => {
+    if (method === "unobserveDisplays") throw Object.assign(new Error("gone"), { code: "E_NATIVE" });
+    return JSON.stringify(snapshot);
+  });
+  await expect(addDisplayListener(() => {}, { onError: error => errors.push(error) })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  expect(errors).toMatchObject([{ code: "E_NATIVE" }]);
+});
+
+test("native key order is not a change", async () => {
+  const events: unknown[] = [];
+  const registration = await addDisplayListener(event => events.push(event));
+  const reordered = Object.fromEntries(Object.entries(builtIn).reverse().map(([key, value]) =>
+    [key, value && typeof value === "object" ? Object.fromEntries(Object.entries(value).reverse()) : value]));
+  emit(4, [reordered]);
+  expect(events).toEqual([]);
+  emit(5, [{ ...reordered, refreshRate: { variable: false, maximum: 60, minimum: 60 } }]);
+  expect(events).toMatchObject([{ changed: [{ id: "1", fields: ["refreshRate"] }] }]);
+  await registration.remove();
 });

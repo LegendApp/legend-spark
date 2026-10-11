@@ -11,9 +11,9 @@ export interface DisplayInsets { top: number; left: number; bottom: number; righ
 /** In Hz. A fixed-rate display reports one rate; ProMotion and adaptive-sync displays vary between minimum and maximum. */
 export interface DisplayRefreshRate { minimum: number; maximum: number; variable: boolean }
 export interface DisplayColorSpace {
-  /** The display profile's name, such as "Color LCD"; null when the profile has none. */
+  /** The display profile's name as AppKit localizes it ("Color LCD" in English); for showing, not for matching. Null when the profile has none. */
   name: string | null;
-  /** The widest standard gamut the display can show. */
+  /** "p3" when the display can show the Display P3 gamut, else "srgb": P3-capable or not, not a precise gamut. */
   gamut: "srgb" | "p3";
 }
 /** Extended dynamic range headroom: the largest color component value, where 1 is SDR white. */
@@ -72,7 +72,14 @@ export async function getDisplayDetails(): Promise<DisplayDetails[]> {
   return windowCall("displayDetails", {}, isDetailsList);
 }
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/** Structural equality of JSON values, independent of key order. */
+function same(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, index) => same(value, b[index]));
+  if (!record(a) || !record(b)) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every(key => Object.hasOwn(b, key) && same(a[key], b[key]));
+}
 function compare(previous: readonly DisplayDetails[], displays: DisplayDetails[]): DisplayChangeEvent | undefined {
   const before = new Map(previous.map(display => [display.id, display]));
   const ids = new Set(displays.map(display => display.id));
@@ -93,7 +100,8 @@ function report(options: DisplayListenerOptions, cause: unknown) { try { (option
  * changes. Resolves once native observation runs; it stops with the last listener.
  */
 export async function addDisplayListener(listener: (event: DisplayChangeEvent) => void, options: DisplayListenerOptions = {}): Promise<AsyncRegistration> {
-  if (typeof listener !== "function" || !record(options) || Object.keys(options).some(key => key !== "onError") || (options.onError !== undefined && typeof options.onError !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Invalid display listener");
+  if (typeof listener !== "function" || !record(options) || (options.onError !== undefined && typeof options.onError !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Invalid display listener");
+  for (const key of Object.keys(options)) if (key !== "onError") throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported display listener option: ${key}`);
   requireAvailable();
   let last: DisplayDetails[] | undefined, sequence = 0, stopped = false;
   const buffered: DesktopEvent[] = [];
@@ -107,11 +115,20 @@ export async function addDisplayListener(listener: (event: DisplayChangeEvent) =
     last = event.displays;
     if (change) try { listener(change); } catch (cause) { report(options, cause); }
   };
-  const subscription = onDesktopEvent(consume, { types: ["displaysChanged"] });
+  // Not /system's payload-free "displaysChanged" (onSystemEvent): a separate event type, so neither stream reaches the other.
+  const subscription = onDesktopEvent(consume, { types: ["displayDetailsChanged"] });
+  let observing = false;
   try {
-    const snapshot = await windowCall("observeDisplays", {}, (value): value is { sequence: number; displays: DisplayDetails[] } => record(value) && finite(value.sequence) && isDetailsList(value.displays));
+    // Native observation starts before the snapshot is validated, so a rejected snapshot must release it.
+    const snapshot = await windowCall("observeDisplays", {}, (value): value is unknown => true);
+    observing = true;
+    if (!record(snapshot) || !finite(snapshot.sequence) || !isDetailsList(snapshot.displays)) throw new SparkError("E_INVALID_DATA", "Malformed display snapshot");
     sequence = snapshot.sequence; last = snapshot.displays;
     buffered.splice(0).forEach(consume);
-  } catch (cause) { stopped = true; subscription.remove(); throw cause; }
+  } catch (cause) {
+    stopped = true; subscription.remove();
+    if (observing) await windowCommand("unobserveDisplays", {}).catch(error => report(options, error));
+    throw cause;
+  }
   return asyncRegistration(() => { stopped = true; subscription.remove(); }, () => windowCommand("unobserveDisplays", {}));
 }

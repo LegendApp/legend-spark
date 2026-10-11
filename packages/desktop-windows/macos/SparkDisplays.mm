@@ -12,8 +12,13 @@ static NSDictionary *Details(NSScreen *screen, NSRect primary) {
   NSEdgeInsets safe = screen.safeAreaInsets;
   details[@"safeArea"] = @{ @"top": @(safe.top), @"left": @(safe.left), @"bottom": @(safe.bottom), @"right": @(safe.right) };
   // ProMotion and adaptive-sync displays vary between the two intervals; fixed-rate displays report one.
-  double maximum = Rounded(1 / screen.minimumRefreshInterval), minimum = Rounded(1 / screen.maximumRefreshInterval);
-  details[@"refreshRate"] = @{ @"maximum": @(maximum), @"minimum": @(minimum), @"variable": @(minimum < maximum) };
+  // A non-positive interval has no rate: null, which JavaScript rejects as E_INVALID_DATA (an infinite
+  // number would make NSJSONSerialization raise).
+  NSTimeInterval shortest = screen.minimumRefreshInterval, longest = screen.maximumRefreshInterval;
+  if (shortest > 0 && longest > 0) {
+    double maximum = Rounded(1 / shortest), minimum = Rounded(1 / longest);
+    details[@"refreshRate"] = @{ @"maximum": @(maximum), @"minimum": @(minimum), @"variable": @(minimum < maximum) };
+  } else details[@"refreshRate"] = NSNull.null;
   NSColorSpace *space = screen.colorSpace;
   NSString *name = space.localizedName ?: CFBridgingRelease(CGColorSpaceCopyName(space.CGColorSpace));
   details[@"colorSpace"] = @{ @"name": name ?: (id)NSNull.null, @"gamut": [screen canRepresentDisplayGamut:NSDisplayGamutP3] ? @"p3" : @"srgb" };

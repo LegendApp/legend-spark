@@ -549,9 +549,10 @@ static BOOL SetBounds(NSWindow *window, NSDictionary *bounds, double durationMs,
   else { [window setFrame:frame display:YES]; resolve(@"null"); }
   return YES;
 }
-// One sequence for every runtime, so a listener can drop events older than its snapshot.
+// One sequence for every runtime, so a listener can drop events older than its snapshot. Not /system's
+// "displaysChanged" (onSystemEvent), which carries no payload: the two streams stay separate.
 static double DisplaySequence;
-static void EmitDisplays(void) { SparkEmit(@{ @"type": @"displaysChanged", @"sequence": @(++DisplaySequence), @"displays": SparkDisplayDetails() }); }
+static void EmitDisplays(void) { SparkEmit(@{ @"type": @"displayDetailsChanged", @"sequence": @(++DisplaySequence), @"displays": SparkDisplayDetails() }); }
 // The in-app test driver's display source (docs/displays.md#simulated-displays). Reachable only through an
 // authenticated driver session: {"command": "simulateDisplays", "displays": [DisplayDetails, ...] | null}.
 @interface SparkDisplaysDriver : NSObject

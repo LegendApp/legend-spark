@@ -82,6 +82,9 @@ platforms: [macos]
 - assertText: { id: displays-graphics-displays-change-8-changed, equals: '[{"id":"901","fields":["primary","origin","refreshRate","colorSpace","edrHeadroom"]}]' }
 - assertNotVisible: { id: displays-graphics-displays-display-902 }
 - takeScreenshot: displays-change-events
+- scroll: { on: { id: displays-graphics-displays-display-901 }, direction: down, amount: 40 }
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-change-8-changed }, timeout: 5s }
+- takeScreenshot: displays-change-log
 # 9: the real displays come back.
 - simulateDisplays: { restore: true }
 - extendedWaitUntil: { visible: { id: displays-graphics-displays-change-9-removed }, timeout: 10s }

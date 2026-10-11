@@ -284,7 +284,7 @@ addDisplayListener(listener: (event: { displays; added; removed; changed: { id; 
 getDisplayAvailability(): Availability;
 ```
 
-Display details have their own path rather than widening `getDisplays()` in `/windows`, which stays the portable geometry subset that both hosts implement. Refresh rate is a `{ minimum, maximum, variable }` range so ProMotion and adaptive-sync displays are not reported as one fixed rate. Change events carry the whole new list plus a computed difference; native observation runs only while a listener holds it. macOS only for now; Windows is typed unsupported (#318). Details: [displays](displays.md).
+Display details have their own path rather than widening `getDisplays()` in `/windows`, which stays the portable geometry subset that both hosts implement. Refresh rate is a `{ minimum, maximum, variable }` range so ProMotion and adaptive-sync displays are not reported as one fixed rate. Change events carry the whole new list plus a computed difference; native observation runs only while a listener holds it. These events are separate from `onSystemEvent`'s payload-free `displaysChanged` in `/system`, which remains the portable "displays may have changed" signal; the two never reach each other's listeners. macOS only for now; Windows is typed unsupported (#318). Details: [displays](displays.md).
 
 ### Settings, persistence, and secure storage
 

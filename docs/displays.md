@@ -30,8 +30,8 @@ if (getDisplayAvailability().available) {
 | --- | --- | --- |
 | `origin` | Top-left of the display in the arrangement, in logical units from the primary display's top-left, Y downward. A display to the left has a negative `x`; one above has a negative `y`. | `NSScreen.frame` |
 | `safeArea` | `{ top, left, bottom, right }` insets clear of the camera housing (notch). `top` was 32 on a 16-inch MacBook Pro at its default 1728 × 1117; zero on displays without a notch. | `NSScreen.safeAreaInsets` |
-| `refreshRate` | `{ minimum, maximum, variable }` in Hz, rounded to 0.01. | `1 / maximumRefreshInterval`, `1 / minimumRefreshInterval` |
-| `colorSpace` | `{ name, gamut }`: the display profile's name (`null` if it has none) and `"p3"` or `"srgb"`, the widest standard gamut the display can show. | `NSScreen.colorSpace`, `canRepresentDisplayGamut:` |
+| `refreshRate` | `{ minimum, maximum, variable }` in Hz, rounded to 0.01. If AppKit reports a refresh interval that is not positive, there is no rate to report, and the call (or event) rejects with `E_INVALID_DATA` instead of inventing one. | `1 / maximumRefreshInterval`, `1 / minimumRefreshInterval` |
+| `colorSpace` | `{ name, gamut }`. `name` is the display profile's name as AppKit localizes it ("Color LCD" in English, "LCD ملونة" in Arabic), so show it but don't match on it; `null` if the profile has none. `gamut` is `"p3"` when the display can show Display P3 and `"srgb"` otherwise: P3-capable or not, not a measured gamut. | `NSScreen.colorSpace.localizedName`, `canRepresentDisplayGamut:` |
 | `edrHeadroom` | `{ current, potential, reference }`, the largest color component value where 1 is SDR white, rounded to 0.01. | `maximum…ExtendedDynamicRangeColorComponentValue` |
 
 ### Refresh rate
@@ -85,6 +85,10 @@ A listener only hears changes: notifications that leave every display the same a
 is any notification older than the listener's own starting snapshot. Removal stops callbacks
 immediately; native observation stops with the last listener in the runtime. A listener that throws,
 or a malformed native event, is reported to `onError` (default `console.error`).
+
+### Relation to `onSystemEvent("displaysChanged")`
+
+`onSystemEvent` in `@legendapp/spark/system` also reports `{ type: "displaysChanged" }` (macOS: screen parameter changes; Windows: `WM_DISPLAYCHANGE`). That event has no payload and no difference: it says only that something about the displays may have changed, and it works on Windows. `addDisplayListener` uses its own native event (`displayDetailsChanged`), so neither stream reaches the other's listeners. Use `onSystemEvent` for a cheap "re-measure" signal; use `addDisplayListener` for what changed.
 
 On macOS the sources are `NSApplicationDidChangeScreenParametersNotification` (connect, disconnect,
 arrangement, resolution, scale, work area and EDR headroom), `NSScreenColorSpaceDidChangeNotification`

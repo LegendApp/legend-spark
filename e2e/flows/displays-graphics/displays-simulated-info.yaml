@@ -7,7 +7,7 @@ intent: >
   a 32-point top safe area, 24-120 Hz variable refresh, P3 and EDR headroom up to 16. Display 902
   is a 60 Hz fixed-rate panel, the rate of the M1 MacBook Air, to the right. Display 903 is a 1x
   sRGB panel to the left, 200 points lower. Each card shows the values as given; only 901 is
-  primary.
+  primary. The flow restores the real displays at the end.
 checks: [DISP-INFO-01, DISP-SAFE-01, DISP-REFRESH-01, DISP-COLOR-01]
 tags: [displays-graphics]
 platforms: [macos]
@@ -42,3 +42,4 @@ platforms: [macos]
 - assertText: { id: displays-graphics-displays-display-901-edrHeadroom, equals: '{"current":1,"potential":16,"reference":null}' }
 - assertText: { id: displays-graphics-displays-display-902-edrHeadroom, equals: '{"current":1,"potential":1,"reference":null}' }
 - takeScreenshot: displays-simulated
+- simulateDisplays: { restore: true }
