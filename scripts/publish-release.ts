@@ -83,4 +83,8 @@ for (const name of publishedPackages) {
   const tags = JSON.parse(await run(root, ["npm", "view", name, "dist-tags", "--json"], { capture: true }));
   if (tags.next !== VERSION || (args.includes("--latest") && tags.latest !== VERSION)) throw new Error(`npm ${name} release tags did not update as requested`);
 }
+for (const name of publishedPackages) {
+  const removeStaging = spawnProcess(["npm", "dist-tag", "rm", name, "staging"], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+  if (await removeStaging.exited) throw new Error(`npm ${name} staging tag removal failed; retry with the same release artifacts`);
+}
 console.log(`Published ${tag} under next${args.includes("--latest") ? " and latest" : ""}. Native UI and clean-machine Runner acceptance remain separate evidence.`);

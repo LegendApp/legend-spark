@@ -32,8 +32,11 @@ vi.mock("../packages/cli/src/process.ts", () => ({ spawnProcess: (argv: string[]
   }
   if (argv[1] === "dist-tag") {
     for (const name of Object.keys(state.tags)) expect(state.checks.get(name)).toBe(2);
-    const name = argv[3]!.slice(0, argv[3]!.lastIndexOf("@"));
-    state.tags[name]![argv[4]!] = state.release.version;
+    if (argv[2] === "rm") delete state.tags[argv[3]!]![argv[4]!];
+    else {
+      const name = argv[3]!.slice(0, argv[3]!.lastIndexOf("@"));
+      state.tags[name]![argv[4]!] = state.release.version;
+    }
   }
   return { exited: Promise.resolve(code) };
 } }));
@@ -84,6 +87,8 @@ test.each(["success", "create failure", "not visible", "retry"])("release public
     expect(state.commands.filter(argv => argv[1] === "dist-tag").map(argv => argv.slice(3))).toEqual([
       ["@legendapp/spark@0.0.1-next.3", "next"], ["@legendapp/spark@0.0.1-next.3", "latest"],
       ["@legendapp/create-spark@0.0.1-next.3", "next"], ["@legendapp/create-spark@0.0.1-next.3", "latest"],
+      ["@legendapp/spark", "staging"], ["@legendapp/create-spark", "staging"],
     ]);
+    for (const tags of Object.values(state.tags)) expect(tags.staging).toBeUndefined();
   }
 });

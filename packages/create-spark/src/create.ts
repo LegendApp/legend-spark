@@ -14,5 +14,15 @@ export async function createSpark(args: string[]) {
   if (values.example && !examples.includes(values.example as Example)) throw new Error(`Use --example ${examples.join(" | ")}`);
   const platform = (values.platform ?? hostPlatform()) as AppPlatform;
   process.env.SPARK_PLATFORM = platform;
-  await create(path.resolve(positionals[1]!), values.packages ? path.resolve(values.packages) : undefined, platform, !!values.universal, values.example as Example | undefined, values["package-manager"] as PackageManager | undefined);
+  try {
+    await create(path.resolve(positionals[1]!), values.packages ? path.resolve(values.packages) : undefined, platform, !!values.universal, values.example as Example | undefined, values["package-manager"] as PackageManager | undefined);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Use create --universal")) {
+      throw new Error(error.message.replace("Use create --universal", `Use npm create @legendapp/spark@latest ${positionals[1] ?? "MyApp"} -- --universal`));
+    }
+    if (error instanceof Error && error.message.includes("Run spark --help")) {
+      throw new Error(error.message.replace("Run spark --help", "Run npm create @legendapp/spark@latest -- --help"));
+    }
+    throw error;
+  }
 }
