@@ -289,7 +289,10 @@ int main(int argc, char **argv) { @autoreleasepool {
   Delegate *delegate = [Delegate new]; NSApp.delegate = delegate;
   if ([mode isEqual:@"inert"]) {
     unsetenv("SPARK_TEST_DRIVER_DIR");
+    __block BOOL observed = NO;
+    SparkTestDriverObserveStart(^{ observed = YES; });
     Check(!SparkTestDriverStart() && !SparkTestDriverActive(), @"driver starts without the runner");
+    Check(!observed, @"start observers never run outside driver mode");
     puts("inert passed"); return 0;
   }
   if ([mode isEqual:@"refuse-directory"]) { PrepareDirectory(argv[2], 0755, 0600); SparkTestDriverStart(); return 0; }
@@ -297,7 +300,13 @@ int main(int argc, char **argv) { @autoreleasepool {
   PrepareDirectory(argv[2], 0700, 0600);
   NSWindow *window = MakeWindow();
   MakeMenu();
+  // Modules register before the driver starts (from +load); a late registration runs at once.
+  __block int early = 0, late = 0;
+  SparkTestDriverObserveStart(^{ early += SparkTestDriverActive() ? 1 : 100; });
+  Check(early == 0, @"start observers wait for the driver");
   Check(SparkTestDriverStart() && SparkTestDriverActive(), @"driver start");
+  SparkTestDriverObserveStart(^{ late++; });
+  Check(early == 1 && late == 1, @"start observers run once, with the driver active");
   // Optional modules add commands; built-in and duplicate names are refused.
   SparkTestDriverRegisterCommand(@"echo", ^(NSDictionary *request, SparkTestDriverReply reply) { reply(@{ @"ok": @YES, @"echo": request[@"value"] ?: NSNull.null }); });
   for (NSString *taken in @[@"ping", @"openFile", @"tap", @"echo"]) {

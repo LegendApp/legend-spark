@@ -34,6 +34,17 @@ static NSArray<NSString *> *SparkBuiltInCommands(void) {
   return [[@[@"ping", @"navigate", @"openFile", @"waitFor", @"elements", @"setAppAppearance", @"capture", @"menus", @"quit"]
     arrayByAddingObjectsFromArray:SparkDriverInputCommandNames()] arrayByAddingObjectsFromArray:SparkDriverFrameCommandNames()];
 }
+static NSMutableArray<dispatch_block_t> *SparkStartObservers(void) {
+  static NSMutableArray *observers;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ observers = [NSMutableArray new]; });
+  return observers;
+}
+void SparkTestDriverObserveStart(dispatch_block_t observer) {
+  NSCAssert(NSThread.isMainThread, @"Driver hooks are registered on the main thread");
+  if (active) observer();
+  else [SparkStartObservers() addObject:[observer copy]];
+}
 static NSMutableArray<dispatch_block_t> *SparkInputObservers(void) {
   static NSMutableArray *observers;
   static dispatch_once_t once;
@@ -491,6 +502,8 @@ BOOL SparkTestDriverStart(void) {
   listenFD = SparkListen(socketPath);
   if (listenFD < 0) SparkDriverRefuse([NSString stringWithFormat:@"Unable to listen on %@: %s", socketPath, strerror(errno)]);
   active = YES;
+  for (dispatch_block_t observer in SparkStartObservers()) observer();
+  [SparkStartObservers() removeAllObjects];
   // Never take focus from the person using this Mac, and avoid App Nap timer throttling.
   [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
   activity = [NSProcessInfo.processInfo beginActivityWithOptions:NSActivityUserInitiatedAllowingIdleSystemSleep reason:@"Spark test driver"];

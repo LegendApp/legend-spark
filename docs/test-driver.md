@@ -183,8 +183,10 @@ package registers its virtual clock, `setClock` and `advanceClock`
 that module answers them with `E_UNKNOWN_COMMAND`. The system package registers `simulateSystemEvent`
 ([system.md](system.md#testing-system-events)).
 
-Modules also get three hooks (`SparkTestDriver.h`, main thread): `SparkTestDriverFindView`
-finds a view by testID as `waitFor` does; `SparkTestDriverObserveInput` runs a block before
+Modules also get four hooks (`SparkTestDriver.h`, main thread): `SparkTestDriverFindView`
+finds a view by testID as `waitFor` does; `SparkTestDriverObserveStart` runs a block once the
+driver starts, never outside driver mode (motion turns its telemetry on there);
+`SparkTestDriverObserveInput` runs a block before
 every input command and before `navigate` and `openFile` deliver (motion uses it to tell
 motion caused by the last input from earlier motion); `SparkTestDriverWrapRender` wraps every
 `capture` render (motion uses it to render running animations at their presented values).

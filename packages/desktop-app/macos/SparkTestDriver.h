@@ -25,6 +25,9 @@ FOUNDATION_EXPORT void SparkTestDriverRegisterCommand(NSString *name, SparkTestD
 // Hooks for optional modules (main thread). The first visible view with this accessibility identifier (React
 // Native testID) in any window, or nil.
 FOUNDATION_EXPORT NSView *SparkTestDriverFindView(NSString *testID);
+// `observer` runs once the driver has started, or at once if it already has; never outside driver mode. Modules
+// turn on what only the driver needs (motion's telemetry).
+FOUNDATION_EXPORT void SparkTestDriverObserveStart(dispatch_block_t observer);
 // `observer` runs before the driver delivers input or a deep link or file (tap, hover, drag, scroll, pressKey,
 // typeText, navigate, openFile), so a module can tell what that input caused (motion's waitForMotion).
 FOUNDATION_EXPORT void SparkTestDriverObserveInput(dispatch_block_t observer);
