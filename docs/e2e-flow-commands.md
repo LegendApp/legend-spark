@@ -177,8 +177,8 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 
 | Command | Short form | Keys | Backend | Summary |
 |---|---|---|---|---|
-| `takeScreenshot` | value → `name` | `name`*, `window` | driver, maestro | Capture the app in-process (driver capture, no screen-recording permission). |
-| `assertScreenshot` | value → `golden` | `golden`*, `window`, `threshold`, `mask` | driver | Capture in-process and compare with golden/<platform>/<appearance>/<locale>/<golden>.png. |
+| `takeScreenshot` | value → `name` | `name`*, `window` | driver, maestro | Capture the app in-process (driver capture, no screen-recording permission) to output/<name>.png. |
+| `assertScreenshot` | value → `golden` | `golden`*, `window`, `threshold`, `tolerance`, `mask`, `maskRects` | driver | Capture in-process and compare with golden/<platform>/<appearance>/<locale>/<golden>.png: at most `threshold` of the pixels (default 0%) may differ by more than `tolerance` (CIEDE2000, default 2), ignoring anti-aliasing and masks (elements, or `maskRects` in points from the image's top-left). |
 | `startRecording` | bare | `name` | black-box | Start a screen recording. |
 | `stopRecording` | value → `name` | `name`* | black-box | Stop and save the recording. |
 | `assertNoFlicker` | — | `during`* | driver | Assert no blank or partial frames while a command runs. |

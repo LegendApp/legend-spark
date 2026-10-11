@@ -29,6 +29,8 @@ export const SURFACE_ID = pattern("^\\./[A-Za-z0-9._/-]+(#[A-Za-z_$][\\w$]*(\\([
 /** Pick a schema by YAML value type, so errors come from the branch the author meant. */
 export const byType = (object: Schema, other: Schema): Schema => ({ if: { type: "object" }, then: object, else: other });
 
+/** A screenshot or golden name; it becomes a file name. */
+export const fileName = pattern("^[A-Za-z0-9_-]{1,100}$", "a file name of 1-100 letters, digits, _ and -");
 export const percent = pattern("^\\d+(\\.\\d+)?%$", "a percentage such as 0.1%");
 export const pixels = described({ type: ["string", "number"], pattern: "^\\d+(\\.\\d+)?px$", minimum: 0 }, "a length such as 4px (a bare number is pixels)");
 export const point = pattern("^-?\\d+(\\.\\d+)?%?, ?-?\\d+(\\.\\d+)?%?$", "a point such as \"50%,20%\" or \"120,48\" (percent of the target, or points from its top-left)");

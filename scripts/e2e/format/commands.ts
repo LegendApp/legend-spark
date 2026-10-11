@@ -1,5 +1,5 @@
 import {
-  accelerator, anyKey, anyStr, anyValue, bool, bound, command, commands, condition, dict, duration, fraction, int, list, menuPath, modifier,
+  accelerator, anyKey, anyStr, anyValue, bool, bound, command, commands, condition, dict, duration, fileName, fraction, int, list, menuPath, modifier,
   num, obj, oneKey, oneOf, percent, pixels, point, scope, selector, SELECTOR_PROPS, size, str, TARGET_KEYS, text, windowSelector, WINDOW_PROPS,
   type Schema,
 } from "./primitives.ts";
@@ -184,8 +184,10 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   assertNoLayoutThrash: spec("motion", "Assert no repeated layout passes while a command runs.", { during: command }, { required: ["during"], driver: true }),
 
   // Visual
-  takeScreenshot: single("visual", "Capture the app in-process (driver capture, no screen-recording permission).", "name", str, { window: windowSelector }, { maestro: true, driver: true }),
-  assertScreenshot: single("visual", "Capture in-process and compare with golden/<platform>/<appearance>/<locale>/<golden>.png.", "golden", str, { window: windowSelector, threshold: percent, mask: list(selector) }, { driver: true }),
+  takeScreenshot: single("visual", "Capture the app in-process (driver capture, no screen-recording permission) to output/<name>.png.", "name", fileName, { window: windowSelector }, { maestro: true, driver: true }),
+  assertScreenshot: single("visual", "Capture in-process and compare with golden/<platform>/<appearance>/<locale>/<golden>.png: at most `threshold` of the pixels (default 0%) may differ by more than `tolerance` (CIEDE2000, default 2), ignoring anti-aliasing and masks (elements, or `maskRects` in points from the image's top-left).", "golden", fileName, {
+    window: windowSelector, threshold: percent, tolerance: { type: "number", minimum: 0, maximum: 100 }, mask: list(selector), maskRects: list(obj({ x: num, y: num, w: num, h: num }, ["x", "y", "w", "h"])),
+  }, { driver: true }),
   startRecording: spec("visual", "Start a screen recording.", { name: str }),
   stopRecording: single("visual", "Stop and save the recording.", "name", str),
   assertNoFlicker: spec("visual", "Assert no blank or partial frames while a command runs.", { during: command }, { required: ["during"], driver: true }),

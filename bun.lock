@@ -51,6 +51,7 @@
         "expo-secure-store": "15.0.8",
         "expo-sharing": "14.0.8",
         "expo-web-browser": "15.0.10",
+        "pngjs": "3.4.0",
         "react": "19.1.4",
         "react-native": "0.81.6",
         "react-native-nitro-modules": "0.35.7",

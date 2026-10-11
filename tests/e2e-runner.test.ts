@@ -360,7 +360,7 @@ describe("reports", () => {
     });
     const driver = new MemoryBackend(backend.clock, {
       name: "driver", kind: "driver", collect: false,
-      commands: { takeScreenshot: async (args, context) => { const file = path.join(context.outputDir, `${args.name}.png`); writeFileSync(file, "png"); context.addArtifact({ kind: "output", path: file }); } },
+      screenshot: async file => { writeFileSync(file, "png"); return { frame: WINDOW.frame, scale: 2 }; },
     });
     const dir = root({
       "flows/a/pass.yaml": flow("- takeScreenshot: home\n- tapOn: \"OK <b>\""),
@@ -376,7 +376,7 @@ describe("reports", () => {
     const { report } = await sample();
     expect(report).toMatchObject({ version: 1, platform: "macos", backends: [{ name: "memory", kind: "black-box" }, { name: "driver", kind: "driver" }], summary: { total: 3, passed: 1, failed: 1, skipped: 1 } });
     const [pass, fail] = report.flows as [FlowResult, FlowResult];
-    expect(pass.artifacts).toEqual([{ kind: "output", path: "flows/a/pass/run/output/home.png", backend: "driver" }]);
+    expect(pass.artifacts).toEqual([{ kind: "screenshot", path: "flows/a/pass/run/output/home.png", backend: "driver" }]);
     expect(fail.failure!.artifacts.map(artifact => artifact.path)).toEqual(["flows/a/fail/run/failure/elements-memory.json", "flows/a/fail/run/failure/memory-screenshot.png", "flows/a/fail/run/failure/memory.log", "flows/a/fail/run/failure/elements-driver.json"]);
     expect(fail).toMatchObject({ id: "flows/a/fail", name: "Test flow", intent: "The test intent.", checks: [], tags: [] });
   });

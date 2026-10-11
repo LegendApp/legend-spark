@@ -18,7 +18,7 @@ e2e/
   flows/<area>/<name>.yaml    # one behavior per flow; these are gate flows
   subflows/                   # reusable command lists (runFlow)
   fixtures/                   # docs, volumes, appcasts, clipboard payloads, network mocks
-  golden/<platform>/<appearance>/<locale>/<name>.png
+  golden/<platform>/<appearance>/<locale>/<name>.png   # see Visual goldens
 ```
 
 The CLI knows a file's kind from where it is: `checks/<area>.yaml` is a registry,
@@ -152,7 +152,7 @@ commands, frame timing, performance, `assertState`, and:
 - `setAppAppearance`: overrides the app's own appearance in-process. `setAppearance`
   changes the OS setting instead.
 - `takeScreenshot` and `assertScreenshot`: captured in-process by the driver, so they
-  need no screen-recording permission.
+  need no screen-recording permission. See [Visual goldens](#visual-goldens).
 
 There is no `retry` and no sleep command. Every command waits for its target, and a
 flaky flow counts as a failed flow. Use `extendedWaitUntil` to wait for state, or
@@ -233,6 +233,7 @@ index.html                     # static page; open it in a browser
 <flow path>/<matrix or "run">/
   tmp/                         # ${TMP}
   output/                      # takeScreenshot and other files the flow asked for
+  screenshots/                 # assertScreenshot: <name>.png, and on failure <name>.expected.png, <name>.diff.png
   failure/                     # elements-<backend>.json, screenshot, logs, driver trace
   backend-<name>/              # the backend's private directory (Session.dir)
 ```
@@ -244,9 +245,12 @@ restoration change anything.
 `interrupted`, `summary` (`total`, `passed`, `failed`, `skipped`) and `flows`. Each flow
 has `id`, `file`, `name`, `intent`, `checks`, `tags`, `matrix`, `status`, `skipReason`,
 `durationMs`, `steps` (every command run, with `depth`, `status` and duration), `failure`,
-`errors` (problems after the first failure), `artifacts` and `metrics` (see [Metrics](#metrics)). A `failure` has `kind`,
+`errors` (problems after the first failure), `artifacts`, `goldens` (see [Visual goldens](#visual-goldens)) and `metrics` (see [Metrics](#metrics)). A `failure` has `kind`,
 `message`, `command`, `location`, `stack`, `candidates`, `matches`, `artifacts` and, for
-invalid flows, `diagnostics`. Artifact paths are relative to the run directory.
+invalid flows, `diagnostics`. Artifact and golden paths are relative to the run directory.
+Artifact kinds are `screenshot`, `golden` (the expected image of a failed
+`assertScreenshot`), `diff`, `elements`, `logs`, `trace`, `recording` and `output`. The
+HTML page shows `screenshot`, `golden` and `diff` inline.
 
 Failure kinds: `assertion`, `not-found`, `ambiguous`, `unsupported` (a command, selector
 or matrix dimension the active backends cannot handle; never skipped silently),
@@ -291,6 +295,11 @@ name in `BACKENDS` in `scripts/e2e/runner/run.ts`.
   check that throws `Failure("assertion", …)`), `onRestore(label, undo)`, `run(commands)`
   for nested commands, `outputDir` with `addArtifact` for files the flow asked for, and
   `metric(name, value)` for measurements the gate checks against budgets.
+- `screenshot(file, window)` writes a PNG of a window (the main window when `window` is
+  undefined) and returns `{ frame, scale }`: the captured area in the coordinate space of
+  element frames, and its pixels per point. The runner implements `takeScreenshot` and
+  `assertScreenshot` with it, so they behave the same on every backend; it uses the first
+  backend of the kind the catalog asks for (driver) that has `screenshot`.
 - `matrix` lists the dimensions the backend applies, from `session.matrix` in `start`.
   `collect(dir)` writes failure evidence: a screenshot, logs, a driver trace.
 
@@ -300,7 +309,133 @@ The #52 driver protocol (`ping`, `navigate`, `waitFor`, `setAppAppearance`, `cap
 - `start` and `launchApp` launch the app in driver mode, and `openUrl` maps to `navigate`.
 - `query` supports `id` through `waitFor`, and returns at most the first match.
 - `matrix` has `appearance` (via `setAppAppearance`) and `locale` (a launch argument).
-- `takeScreenshot` and `collect` use `capture`, and `stop` uses `quit`.
+- `screenshot` and `collect` use `capture`, and `stop` uses `quit`.
+
+## Visual goldens
+
+`assertScreenshot` compares a capture with a reviewed PNG in the golden store:
+
+```
+e2e/golden/<platform>/<appearance>/<locale>/<name>[+<dimension>-<value>…].png
+```
+
+- The path comes from the running platform and the flow run's matrix. `appearance` and
+  `locale` are directories, so a flow that uses `assertScreenshot` must have both in its
+  header `matrix` (validation reports it; a subflow's screenshot in a flow without them
+  fails with `invalid`). Every other dimension is appended to the file name, sorted by
+  name: `sheet` with `reduceMotion: true` is `sheet+reduceMotion-true.png`. Header order
+  never changes a path.
+- `name` (and `takeScreenshot`'s `name`) is 1-100 letters, digits, `_` and `-`.
+
+```yaml
+matrix: { appearance: [light, dark], locale: [en, ar] }
+---
+- launchApp
+- assertScreenshot: catalog
+- assertScreenshot:
+    golden: editor
+    threshold: 0.05%                  # share of compared pixels that may differ (default 0%)
+    tolerance: 3                      # CIEDE2000 per pixel (default 2)
+    mask: [{ id: clock }]             # elements to ignore; each must match exactly one
+    maskRects: [{ x: 0, y: 0, w: 120, h: 28 }]   # points from the image's top-left
+```
+
+### Comparison
+
+`scripts/e2e/golden/diff.ts`, on 8-bit RGBA:
+
+1. Sizes must match. A capture with a different pixel size fails (a 1x display gives
+   half-size captures).
+2. Masked pixels are skipped: each `mask` element's frame, mapped through the capture's
+   `frame` and `scale`, and each `maskRects` rectangle, both grown to whole pixels.
+3. A pixel whose bytes differ is converted to CIELAB (values are read as sRGB; golden and
+   capture come from the same capture path) and compared with CIEDE2000. Pixels with
+   alpha are composited over white and over black, and the larger difference counts, so
+   alpha changes are not hidden. A difference up to `tolerance` is the same pixel. ΔE00
+   of 1 is about the smallest difference a person can see side by side; the default 2
+   absorbs rounding and color-management noise, not visible changes.
+4. A pixel beyond the tolerance is tolerated as anti-aliasing when, in either image, it
+   has at most two identical neighbours, lies between its darkest and brightest
+   neighbour, and one of those sits in a flat region of both images (after Vysniauskas,
+   2009). Text and edge blends that shift by a subpixel pass; a moved or recolored shape
+   does not.
+5. The assertion fails when the differing pixels exceed `threshold` of the compared
+   pixels. The default is 0%: with the tolerance and anti-aliasing rules, an unchanged
+   screen compares clean, and a one-glyph change still fails.
+
+A failure lists the capture (`screenshot`), the golden (`golden`, copied into the run) and
+the diff image (`diff`) in `failure.artifacts`, and the HTML report shows all three. The
+diff shows the golden faded to light gray, differing pixels in red, tolerated
+anti-aliasing in yellow and masks in blue. A missing golden fails the same way, with only
+the capture. The comparison runs once, after the capture; there is no retry.
+
+Each flow result has `goldens`: one entry per `assertScreenshot` that captured, with
+`id` (`<platform>/<appearance>/<locale>/<name>`), `golden`, `actual`, `status`
+(`passed`, `failed` or `missing`), `diff` and `stats` (`compared`, `different`,
+`antialiased`, `ratio`).
+
+### Approving goldens
+
+A run never writes the golden store, and neither does the gate: a missing golden fails,
+it is never accepted. Goldens change only through `e2e:golden approve`, in a reviewed commit:
+
+```sh
+bun run e2e:golden approve artifacts/e2e/run-…                       # every changed capture in the run
+bun run e2e:golden approve artifacts/e2e/run-…/flows/area/name        # one flow, every matrix run
+bun run e2e:golden approve artifacts/e2e/run-…/flows/area/name/appearance-dark+locale-ar
+bun run e2e:golden approve artifacts/e2e/run-…/flows/area/name/appearance-dark+locale-ar/screenshots/catalog.png   # one image
+bun run e2e:golden approve capture.png --to macos/light/en/infra-shell-catalog   # a capture made outside the runner
+```
+
+The path selects the `assertScreenshot` captures at or under it, using the run's
+`report.json`. Captures that failed or had no golden are copied to their golden path
+byte for byte; captures that passed are left alone. For each image it prints `added`
+(with the size), `updated` (the pixels that changed, and how many of those are beyond
+the default tolerance, or the old and new size) or `unchanged`. Open the capture and the
+diff before you approve, and read the approved PNG afterwards. Two captures in the
+selection for the same golden are an error; approve one by its path.
+
+`--to` takes a golden ID and is for captures from `bun run ks:capture` (see
+[docs/test-driver.md](test-driver.md)) until the driver backend
+([#226](https://github.com/LegendApp/legend-spark/issues/226)) runs flows:
+
+```sh
+bun run ks:capture --wait-for infra-shell-root --name catalog --appearance dark --locale en --out /tmp/goldens
+bun run e2e:golden approve /tmp/goldens/catalog.png --to macos/dark/en/infra-shell-catalog
+```
+
+Committed goldens:
+
+| Golden | Screen | Source |
+|---|---|---|
+| `macos/light/en/infra-shell-catalog` | Launch catalog (`infra-shell-root`) | `ks:capture --wait-for infra-shell-root --appearance light --locale en` |
+| `macos/dark/en/infra-shell-catalog` | The same, dark | `--appearance dark --locale en` |
+
+They come from the development build, so the sidebar subtitle reads `dev · <project ID>`.
+A flow that compares them against a release build must mask that line, or approve
+release-build goldens from its run.
+
+The Arabic catalog has no golden yet: scroll content renders mirrored
+([#234](https://github.com/LegendApp/legend-spark/issues/234)), and a golden of a bug
+would make the fix fail. Approve `macos/light/ar` and `macos/dark/ar` after #234 lands.
+
+### Determinism
+
+A golden only works if the same build renders the same pixels every time. The driver
+(or any backend that implements `screenshot`) must honor these before it captures:
+
+| Source of noise | What the backend must do | #52 driver today |
+|---|---|---|
+| Layout and React updates in flight | Capture only once mounted UI updates have settled | Yes: `capture` waits for no Fabric mount for 100 ms, else `E_NOT_SETTLED` |
+| Animations (Animated, Reanimated, Core Animation) | Capture at rest: settle, or `setClock: virtual` and `advanceClock` to a fixed point; with `reduceMotion` in the matrix, apply it | Settle only; the virtual clock (`setClock`, `advanceClock`) is not implemented |
+| Text caret blink | Hide the insertion point, or pin it on, so focused text fields look the same at any moment | Not handled: mask focused fields until it is |
+| Clocks and dates on screen | Mask them (`mask: [{ id: … }]`), or pin the app's time and time zone | Not handled: mask |
+| Window activation state | Always capture in the same state | Yes: driven apps never activate, so title bars are always inactive |
+| Appearance and locale | Apply the matrix values before the first capture | `setAppAppearance`; locale is a launch argument (`-AppleLanguages`) |
+| Backing scale | Capture at a fixed scale; goldens are @2x | Captures at the window's backing scale (2x on Retina displays) |
+| Color space | Keep it fixed per machine | Captures are tagged with the window's color space (Display P3 on most Macs) |
+| Fonts and OS rendering | Record goldens on the gate target's OS; a macOS major update can change text rendering | Not handled; the store has no OS version segment |
+| Content composited by the window server | Not capturable in-process | Behind-window vibrancy renders as flat gray; shadows and rounded corners are not captured |
 
 ## Lint rules
 

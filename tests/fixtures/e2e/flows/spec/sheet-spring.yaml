@@ -1,7 +1,7 @@
 appId: so.legend.kitchensink
 name: Sheet spring is interruptible
 checks: [MOT-INT-01, MOT-VEL-01]
-matrix: { reduceMotion: [false, true] }
+matrix: { appearance: [light], locale: [en], reduceMotion: [false, true] }
 ---
 - launchApp
 - setClock: virtual
