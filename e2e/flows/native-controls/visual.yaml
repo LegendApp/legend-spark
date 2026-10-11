@@ -2,11 +2,11 @@ appId: so.legend.spark.examples.kitchensink
 name: Native controls screens match their goldens
 intent: >
   Native controls screens open from their spark-ks:// deep links in the running Kitchen Sink and their roots render.
-  Split view, SF Symbols, Search field and Glass match the approved golden for the appearance (light and dark) and
-  locale, with the shell sidebar masked: SF Symbols and Glass in English and Arabic, Split view and Search field in
-  English only until they mirror in right-to-left layouts. The four size grids render but are not compared until their
-  layout bug is fixed. The three Sidebar screens mount without crashing (#252) but are not compared until their rows fit
-  (#264) and the selected row captures correctly (#265).
+  Split view, SF Symbols, Search field, Glass and the four size grids (Toggles, Value inputs, Indicators, Button styles)
+  match the approved golden for the appearance (light and dark) and locale, with the shell sidebar masked: SF Symbols,
+  Glass and the size grids in English and Arabic, Split view and Search field in English only until they mirror in
+  right-to-left layouts. The animated progress indicators are masked. The three Sidebar screens mount without crashing
+  (#252) but are not compared until their rows fit (#264) and the selected row captures correctly (#265).
 checks: [CTRL-VISUAL-01, CTRL-SIDEBAR-01]
 tags: [native-controls]
 platforms: [macos]
@@ -28,15 +28,30 @@ matrix:
 - launchApp: { openUrl: "spark-ks://native-controls/glass", stopApp: false }
 - assertVisible: { id: native-controls-glass-root }
 - assertScreenshot: { golden: native-controls-glass, mask: [{ id: infra-shell-sidebar }] }
-# No goldens: the size grids clip their Large column at the default window size (#253).
 - launchApp: { openUrl: "spark-ks://native-controls/toggles", stopApp: false }
 - assertVisible: { id: native-controls-toggles-root }
+- assertScreenshot: { golden: native-controls-toggles, mask: [{ id: infra-shell-sidebar }] }
 - launchApp: { openUrl: "spark-ks://native-controls/inputs", stopApp: false }
 - assertVisible: { id: native-controls-inputs-root }
+- assertScreenshot: { golden: native-controls-inputs, mask: [{ id: infra-shell-sidebar }] }
 - launchApp: { openUrl: "spark-ks://native-controls/indicators", stopApp: false }
 - assertVisible: { id: native-controls-indicators-root }
+# The indeterminate bar and the spinner animate.
+- assertScreenshot:
+    golden: native-controls-indicators
+    mask:
+      - { id: infra-shell-sidebar }
+      - { id: native-controls-indicators-progress-indeterminate-mini }
+      - { id: native-controls-indicators-progress-indeterminate-small }
+      - { id: native-controls-indicators-progress-indeterminate-regular }
+      - { id: native-controls-indicators-progress-indeterminate-large }
+      - { id: native-controls-indicators-progress-spinner-mini }
+      - { id: native-controls-indicators-progress-spinner-small }
+      - { id: native-controls-indicators-progress-spinner-regular }
+      - { id: native-controls-indicators-progress-spinner-large }
 - launchApp: { openUrl: "spark-ks://native-controls/buttons", stopApp: false }
 - assertVisible: { id: native-controls-buttons-root }
+- assertScreenshot: { golden: native-controls-buttons, mask: [{ id: infra-shell-sidebar }] }
 # No goldens: rows overflow the Sidebar's trailing edge (#264) and the selected row captures black (#265).
 - launchApp: { openUrl: "spark-ks://native-controls/sidebar-data-items", stopApp: false }
 - assertVisible: { id: native-controls-sidebar-data-items-list }

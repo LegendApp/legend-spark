@@ -14,7 +14,12 @@ const SIZES: readonly ControlSize[] = ["mini", "small", "regular", "large"];
 const frame = { width: "100%" } as const;
 type Shared = { testID: string; size: ControlSize; disabled: boolean; accessibilityLabel: string; style: typeof frame; onError: (error: SparkError) => void };
 type Render<T> = (value: T, set: (value: T) => void, shared: Shared) => ReactNode;
-type Row = { row: ControlRow; availability: unknown; render: (shared: Omit<Shared, "onError">) => ReactNode };
+/** `minWidth` (points) is the narrowest a sample still shows whole; the default fits four sizes across at the default window size. */
+type Row = { row: ControlRow; availability: unknown; minWidth?: number; render: (shared: Omit<Shared, "onError">) => ReactNode };
+const CELL = 160;
+const GAP = 12; // gap-3
+// Sizes reflow in pairs (4 across, then 2 + 2, then 1 per line) so a narrow content area never leaves one size alone on a line.
+const PAIRS = [SIZES.slice(0, 2), SIZES.slice(2)];
 
 const describe = (error: unknown) => error instanceof SparkError ? `SparkError:${error.code}` : `Unexpected error: ${String(error)}`;
 
@@ -45,20 +50,21 @@ function Gallery({ screen, rows, children }: { screen: string; rows: readonly Ro
       <Checkbox testID={`native-controls-${screen}-disabled`} label={t.disable} value={disabled} onValueChange={value => setDisabled(value === true)} />
     </Boundary>
     {children?.(disabled)}
-    <View className="flex-row gap-3 border-b border-border pb-2">
-      <Text className="w-36 text-xs font-semibold text-muted">{t.sizeColumn}</Text>
-      {SIZES.map(size => <Text key={size} className="min-w-36 flex-1 text-xs font-semibold text-muted">{t.sizes[size]}</Text>)}
-    </View>
-    {rows.map(({ row, availability, render }) => {
+    {rows.map(({ row, availability, minWidth = CELL, render }) => {
       const id = `native-controls-${screen}-${row}`;
-      return <View key={row} className="flex-row items-start gap-3">
-        <View className="w-36 gap-1">
-          <Text className="text-sm text-foreground">{t.rows[row]}</Text>
+      return <View key={row} className="gap-2 pt-2">
+        <View className="flex-row flex-wrap items-baseline gap-x-3 gap-y-1">
+          <Text className="text-sm font-semibold text-foreground">{t.rows[row]}</Text>
           <Text selectable className="font-mono text-xs text-muted" testID={`${id}-availability`}>{JSON.stringify(availability)}</Text>
         </View>
-        {SIZES.map(size => <View key={size} className="min-w-36 flex-1">
-          {render({ testID: `${id}-${size}`, size, disabled, accessibilityLabel: t.label(t.rows[row], t.sizes[size]), style: frame })}
-        </View>)}
+        <View className="flex-row flex-wrap gap-3">
+          {PAIRS.map(pair => <View key={pair[0]} className="flex-row flex-wrap gap-3" style={{ flexGrow: 1, flexShrink: 1, flexBasis: 2 * minWidth + GAP, minWidth }}>
+            {pair.map(size => <View key={size} className="gap-1" style={{ flexGrow: 1, flexBasis: minWidth }}>
+              <Text className="text-xs text-muted">{t.sizes[size]}</Text>
+              {render({ testID: `${id}-${size}`, size, disabled, accessibilityLabel: t.label(t.rows[row], t.sizes[size]), style: frame })}
+            </View>)}
+          </View>)}
+        </View>
       </View>;
     })}
   </ScrollView>;
@@ -77,14 +83,16 @@ export function Toggles() {
 }
 
 const FONTS = ["Helvetica", "Menlo", "Avenir"];
+// Every token and path component needs more room than CELL; these rows show two sizes across at the default window size.
+const WIDE = 260;
 export function Inputs() {
   return <Gallery screen="inputs" rows={[
     { row: "slider", availability: getControlAvailability("slider"), render: shared => <Sample initial={40} shared={shared} render={(value, set, props) => <Slider {...props} value={value} min={0} max={100} onValueChange={set} />} /> },
     { row: "slider-ticks", availability: getControlAvailability("slider"), render: shared => <Sample initial={40} shared={shared} render={(value, set, props) => <Slider {...props} value={value} min={0} max={100} ticks={5} continuous={false} onValueChange={set} />} /> },
     { row: "stepper", availability: getControlAvailability("stepper"), render: shared => <Sample initial={40} shared={shared} render={(value, set, props) => <Stepper {...props} value={value} min={0} max={100} onValueChange={set} />} /> },
     { row: "combo-box", availability: getControlAvailability("combo-box"), render: shared => <Sample initial="Helvetica" shared={shared} render={(value, set, props) => <ComboBox {...props} value={value} options={FONTS} onValueChange={set} />} /> },
-    { row: "token-field", availability: getControlAvailability("token-field"), render: shared => <Sample<readonly string[]> initial={["Spark", "Native"]} shared={shared} render={(value, set, props) => <TokenField {...props} value={value} onValueChange={set} />} /> },
-    { row: "path-control", availability: getControlAvailability("path-control"), render: shared => <Sample initial="file:///usr/bin" shared={shared} render={(value, set, props) => <PathControl {...props} value={value} onValueChange={set} />} /> },
+    { row: "token-field", availability: getControlAvailability("token-field"), minWidth: WIDE, render: shared => <Sample<readonly string[]> initial={["Spark", "Native"]} shared={shared} render={(value, set, props) => <TokenField {...props} value={value} onValueChange={set} />} /> },
+    { row: "path-control", availability: getControlAvailability("path-control"), minWidth: WIDE, render: shared => <Sample initial="file:///usr/bin" shared={shared} render={(value, set, props) => <PathControl {...props} value={value} onValueChange={set} />} /> },
   ]} />;
 }
 
@@ -141,7 +149,7 @@ function KeyboardButtons({ disabled }: { disabled: boolean }) {
       <RadioGroup testID={`${id}-size`} accessibilityLabel={t.keyboardSize} value={size} onValueChange={value => setSize(value as ControlSize)}
         options={SIZES.map(value => ({ label: t.sizes[value], value }))} style={{ width: 420 }} />
     </Boundary>
-    <View className="flex-row gap-3">
+    <View className="flex-row flex-wrap gap-3">
       <Presses shared={shared("default", t.defaultButton)}>{press => <Button {...shared("default", t.defaultButton)} variant="default" onPress={press}>{t.defaultButton}</Button>}</Presses>
       <Presses shared={shared("cancel", t.cancelButton)}>{press => <Button {...shared("cancel", t.cancelButton)} variant="cancel" onPress={press}>{t.cancelButton}</Button>}</Presses>
       <Presses shared={shared("plain", t.plainButton)}>{press => <Button testID={`${id}-plain`} disabled={disabled} accessibilityLabel={t.plainButton} style={frame} onPress={press}>{t.plainButton}</Button>}</Presses>

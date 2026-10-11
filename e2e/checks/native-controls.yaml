@@ -152,10 +152,10 @@ checks:
     covers:
       - ./ui#getControlAvailability
   CTRL-VISUAL-01:
-    title: The Split view, SF Symbols, Search field and Glass screens match their approved goldens in light and dark (SF Symbols and Glass also in Arabic; Split view and Search field wait for #256)
+    title: The Split view, SF Symbols, Search field, Glass and size grid screens match their approved goldens in light and dark (SF Symbols, Glass and the size grids also in Arabic; Split view and Search field wait for #256)
     platforms: [macos]
     blocking: true
-    spec: "docs/e2e-flows.md Visual goldens; #227; #254"
+    spec: "docs/e2e-flows.md Visual goldens; #227; #253; #254"
     covers:
       - ./ui/split-view#SidebarSplitView
       - ./ui/symbol#SFSymbol

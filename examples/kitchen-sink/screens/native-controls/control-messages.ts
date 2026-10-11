@@ -13,7 +13,6 @@ type ControlMessages = {
   sizes: Record<ControlSize, string>;
   rows: Record<ControlRow, string>;
   disable: string;
-  sizeColumn: string;
   checkboxLabel: string;
   switchLabel: string;
   disclosureLabel: string;
@@ -37,7 +36,6 @@ const en: ControlMessages = {
     plain: "Plain (no variant)", push: "Push", bevel: "Bevel", toolbar: "Toolbar", help: "Help", destructive: "Destructive",
   },
   disable: "Disable controls",
-  sizeColumn: "Control",
   checkboxLabel: "Selected",
   switchLabel: "Enabled",
   disclosureLabel: "Details",
@@ -60,7 +58,6 @@ const ar: ControlMessages = {
     plain: "عادي (بلا نمط)", push: "زر ضغط", bevel: "زر مشطوف", toolbar: "شريط الأدوات", help: "مساعدة", destructive: "إجراء حذف",
   },
   disable: "تعطيل عناصر التحكم",
-  sizeColumn: "عنصر التحكم",
   checkboxLabel: "محدد",
   switchLabel: "مفعّل",
   disclosureLabel: "التفاصيل",
