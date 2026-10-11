@@ -1,0 +1,138 @@
+area: document-model
+prefix: DOC
+checks:
+  DOC-SESSION-01:
+    title: "Untitled documents take the lowest free number, reuse a number freed by a removed session, and a duplicate is numbered as its own family"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+  DOC-DIRTY-01:
+    title: "Edits mark the session edited, the bound window's edited dot (macos.documentEdited) and proxy icon (macos.representedUri) follow, and useDocumentSessionState observes the state"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+      - ./app/documents#useDocumentSessionState
+  DOC-SAVE-01:
+    title: "Save As writes the file and the session continues there; Save writes in place, clears edited and records a version"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+  DOC-CONFLICT-01:
+    title: "A save over a file changed on disk reports { saved: false, reason: conflict } without overwriting it; save({ overwrite: true }) resolves it"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+  DOC-EXTERNAL-01:
+    title: "An external change reloads a clean document; under unsaved edits it flags a conflict instead"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+  DOC-AUTOSAVE-01:
+    title: "Autosave in place writes edits after the configured delay with the conflict-checked, coordinated save"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+  DOC-DUP-01:
+    title: "Duplicate opens an untitled, edited copy with the current contents and a localized copy name"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+  DOC-RENAME-01:
+    title: "Rename moves the file within its folder (coordinated); the session, window proxy icon and versions follow"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+  DOC-MOVE-01:
+    title: "Move To moves the file into another folder, keeping its name"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+  DOC-REVERT-01:
+    title: "Revert to Saved discards unsaved edits by reading the file again"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+  DOC-VERSIONS-01:
+    title: "NSFileVersion versions: addDocumentVersion records the contents, listDocumentVersions lists newest first with a readable path, and restoring replaces the file and keeps the replaced contents as a version"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#addDocumentVersion
+      - ./app/documents#listDocumentVersions
+      - ./app/documents#restoreDocumentVersion
+      - ./app/documents#createDocumentSession
+  DOC-LOCK-01:
+    title: "A locked document reports locked and read-only and refuses saves with E_READ_ONLY; unlocking allows saving"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+  DOC-REOPEN-01:
+    title: "Opening a document that a session already has open finds that session and focuses its window instead of opening it twice"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#findDocumentSession
+      - ./app/documents#subscribeToOpenRequests
+  DOC-OPENFILE-01:
+    title: "A file opened in the running app (application:openURLs:) opens in the Documents session"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#subscribeToOpenRequests
+      - ./app/documents#createDocumentSession
+  DOC-CLOSE-01:
+    title: "Closing an edited untitled document asks Save / Don't Save / Cancel; Cancel keeps it and Don't Save closes it (documents with a file autosave on close)"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#createDocumentSession
+  DOC-DOCAVAIL-01:
+    title: "getDocumentSessionAvailability() and getDocumentVersionsAvailability() report available on macOS"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#getDocumentSessionAvailability().available
+      - ./app/documents#getDocumentVersionsAvailability().available
+  DOC-DOCUNSUP-01:
+    title: "On Windows both availabilities report unsupported-platform and createDocumentSession throws E_UNSUPPORTED_PLATFORM (Windows: #280)"
+    platforms: [windows]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#getDocumentSessionAvailability
+      - ./app/documents#getDocumentVersionsAvailability
+      - ./app/documents#createDocumentSession
+  DOC-DOCVISUAL-01:
+    title: "The Documents screen, with an edited untitled document and the window's edited dot, matches its golden in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#112 DOC.api-versions"
+    covers:
+      - ./app/documents#useDocumentSessionState

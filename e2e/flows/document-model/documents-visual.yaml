@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Documents screen matches its golden
+intent: >
+  Document model > Documents opens from spark-ks://document-model/documents with its first document: untitled, holding
+  sample text, so it is edited and the window's close button shows the edited dot. The main window matches the
+  approved golden for the appearance and locale (light and dark, English and Arabic), with the shell sidebar masked.
+checks: [DOC-DOCVISUAL-01]
+tags: [document-model]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://document-model/documents" }
+- extendedWaitUntil: { visible: { id: document-model-documents-edited }, timeout: 15s }
+- assertScreenshot: { golden: document-model-documents, mask: [{ id: infra-shell-sidebar }] }

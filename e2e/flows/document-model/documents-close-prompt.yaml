@@ -1,0 +1,24 @@
+appId: so.legend.spark.examples.kitchensink
+name: Closing an edited untitled document asks to save
+intent: >
+  A new untitled document with a typed line is edited. Close document… shows a warning alert "Save changes?" with
+  Save (default), Don't Save and Cancel. Cancel keeps the document (result: cancel); Don't Save closes it and a new
+  untitled document replaces it (result: closed). Needs taps and alert buttons (black-box backend, #50).
+checks: [DOC-CLOSE-01, DOC-DIRTY-01]
+tags: [document-model]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://document-model/documents" }
+- extendedWaitUntil: { visible: { id: document-model-documents-name }, timeout: 15s }
+- tapOn: { id: document-model-documents-new }
+- tapOn: { id: document-model-documents-edit }
+- assertVisible: { id: document-model-documents-edited }
+- tapOn: { id: document-model-documents-close }
+- assertDialog: { kind: alert, text: Save changes?, buttons: [Save, "Don't Save", Cancel], default: Save }
+- tapOn: Cancel
+- assertText: { id: document-model-documents-result, equals: "Last result: cancel" }
+- assertVisible: { id: document-model-documents-edited }
+- tapOn: { id: document-model-documents-close }
+- tapOn: "Don't Save"
+- assertText: { id: document-model-documents-result, equals: "Last result: closed" }
+- assertVisible: { id: document-model-documents-saved }

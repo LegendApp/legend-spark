@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AsyncRegistration, Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 import { createDocumentAppController, type DocumentAppController, type DocumentAppControllerOptions } from "./controller";
 import { watchDocumentReload, type DocumentReloadOptions } from "./reload";
+import type { DocumentSession, DocumentState } from "./session";
 
 export interface UseWatchedDocumentReloadOptions extends Omit<DocumentReloadOptions, "path"> {
   path: string | null | undefined;
@@ -136,4 +137,13 @@ export function useDocumentAppController(options: UseDocumentAppControllerOption
     });
   }, [options.menus]);
   return state;
+}
+
+/** Observes a caller-owned session; unmounting never removes it. A removed session's state no longer changes. */
+export function useDocumentSessionState(session: DocumentSession): DocumentState {
+  const subscribe = useCallback((listener: () => void) => {
+    try { const subscription = session.subscribe(listener); return () => subscription.remove(); }
+    catch (error) { if ((error as { code?: string }).code === "E_CLOSED") return () => {}; throw error; }
+  }, [session]);
+  return useSyncExternalStore(subscribe, session.getState);
 }

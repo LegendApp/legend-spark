@@ -81,6 +81,7 @@ test("unsupported features reject with typed SparkError before native dispatch",
     ["getExtendedAttribute", () => files.getExtendedAttribute("C:\\a", "n")], ["setExtendedAttribute", () => files.setExtendedAttribute("C:\\a", "n", new Uint8Array())],
     ["removeExtendedAttribute", () => files.removeExtendedAttribute("C:\\a", "n")], ["readText coordinated", () => files.readText("C:\\a", { coordinated: true })],
     ["move coordinated", () => files.move("C:\\a", "C:\\b", { coordinated: true })],
+    ["writeTextIfUnchanged coordinated", () => files.writeTextIfUnchanged("C:\\a", "old", "new", { coordinated: true })],
   ];
   for (const [name, attempt] of attempts) {
     const error: any = await attempt().catch(error => error);
@@ -200,7 +201,10 @@ test("coordination is an explicit per-operation option", async () => {
   await files.writeText("/a", "t", { coordinated: true }); await files.writeBytes("/a", new Uint8Array([1]), { coordinated: true });
   await files.copy("/a", "/b", { coordinated: true, overwrite: true }); await files.move("/b", "/c", { coordinated: true });
   await files.remove("/c", { coordinated: true, recursive: true }); await files.readText("/a");
-  expect(calls.map(call => [call.method, call.args.coordinated])).toEqual([["readText", true], ["readBytes", true], ["writeText", true], ["writeBytes", true], ["copy", true], ["move", true], ["remove", true], ["readText", false]]);
+  handlers.set("writeTextIfUnchanged", () => true);
+  expect(await files.writeTextIfUnchanged("/a", "old", "new", { coordinated: true })).toEqual({ written: true });
+  expect(calls.map(call => [call.method, call.args.coordinated])).toEqual([["readText", true], ["readBytes", true], ["writeText", true], ["writeBytes", true], ["copy", true], ["move", true], ["remove", true], ["readText", false], ["writeTextIfUnchanged", true]]);
+  await expect(files.writeTextIfUnchanged("/a", "old", "new", { overwrite: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
   expect(calls[4].args.overwrite).toBe(true); expect(calls[6].args.recursive).toBe(true);
   await expect(files.readText("/a", { coordinate: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
   await expect(files.writeText("/a", "t", { coordinated: "yes" } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });

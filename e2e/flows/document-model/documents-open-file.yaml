@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Opening a file, then opening it again, in the Documents screen
+intent: >
+  With Document model > Documents showing, a file opened in the running app (application:openURLs: with a file URL)
+  opens in the screen's document session and is listed. Opening the same file again finds the session that has it
+  open (findDocumentSession) and focuses its window instead of opening it twice.
+checks: [DOC-OPENFILE-01, DOC-REOPEN-01]
+tags: [document-model]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://document-model/documents", openFile: "${FIXTURES}/docs/notes.md" }
+- extendedWaitUntil: { visible: { id: document-model-documents-opened-file }, timeout: 15s }
+- assertVisible: { id: document-model-documents-saved }
+- assertNotVisible: { id: document-model-documents-focused-existing }
+- launchApp: { stopApp: false, openFile: "${FIXTURES}/docs/notes.md" }
+- extendedWaitUntil: { visible: { id: document-model-documents-focused-existing }, timeout: 15s }
