@@ -7,7 +7,7 @@ import { readJson, writeJson } from "../packages/cli/src/project.ts";
 
 export async function packTemplates(root: string, output: string, packages: Record<string, string>) {
   const templates: Record<string, string> = {};
-  const sdk = Object.entries(packages).filter(([name]) => name !== "@legendapp/create-spark");
+  const sdk = Object.entries(packages);
   const local = Object.fromEntries(sdk.map(([name, file]) => [name, `file:./sdk/${file}`]));
   for (const [variant, folder] of Object.entries({ macos: "blank-typescript", windows: "windows", universal: "universal" })) {
     const source = path.join(root, "packages/cli/templates", folder);

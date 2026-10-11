@@ -32,20 +32,12 @@ test("local manifest acceptance checks all archives against current provenance a
     const sdk = path.join(output, sdkFile);
     renameSync(temporarySdk, sdk);
     manifest["@legendapp/spark"] = sdkFile;
-    const temporaryCreate = await pack(root, output, "fixture-create-spark.tgz", { name: "@legendapp/create-spark", version: VERSION, dependencies: { npm: "11.21.0" } });
-    const createFile = `legendapp-create-spark-${VERSION}-${hash(readFileSync(temporaryCreate)).slice(0, 12)}.tgz`;
-    renameSync(temporaryCreate, path.join(output, createFile));
-    manifest["@legendapp/create-spark"] = createFile;
     writeFileSync(path.join(output, "manifest.json"), JSON.stringify(manifest));
     writeFileSync(path.join(output, "provenance.json"), JSON.stringify(provenance));
 
     const verified = await verifyLocalPackageManifest(framework, path.join(output, "manifest.json"));
     expect(verified.sdkFile).toBe(sdkFile);
     expect(verified.sdkSha256).toBe(hash(readFileSync(sdk)));
-
-    writeFileSync(path.join(output, "manifest.json"), JSON.stringify({ ...manifest, "@legendapp/create-spark": undefined }));
-    await expect(verifyLocalPackageManifest(framework, path.join(output, "manifest.json"))).rejects.toThrow("Invalid package archive path: @legendapp/create-spark");
-    writeFileSync(path.join(output, "manifest.json"), JSON.stringify(manifest));
 
     const originalSdk = readFileSync(sdk);
     const alteredSdk = Buffer.from(originalSdk);

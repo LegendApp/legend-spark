@@ -28,13 +28,6 @@ export async function verifyLocalPackageManifest(root: string, manifestPath: str
   }
   const sdk = JSON.parse(await run(root, ["tar", "-xOzf", sdkPath, "package/package.json"], { capture: true }));
   if (sdk.name !== "@legendapp/spark" || sdk.version !== VERSION) throw new Error("Local Spark archive has an unexpected package identity or version.");
-  const createFile = manifest["@legendapp/create-spark"];
-  const createPath = archivePath("@legendapp/create-spark", createFile);
-  const createHashValue = createHash("sha256").update(readFileSync(createPath)).digest("hex");
-  if (createFile !== `legendapp-create-spark-${VERSION}-${createHashValue.slice(0, 12)}.tgz`) throw new Error("Local Create Spark archive name or content hash does not match the current SDK version.");
-  const create = JSON.parse(await run(root, ["tar", "-xOzf", createPath, "package/package.json"], { capture: true }));
-  if (create.name !== "@legendapp/create-spark" || create.version !== VERSION) throw new Error("Local Create Spark archive has an unexpected package identity or version.");
-  if (create.peerDependencies || Object.keys(create.dependencies ?? {}).some(name => !["npm", "cross-spawn", "expo-desktop"].includes(name))) throw new Error("Create Spark must depend only on peer-free installer tooling.");
   const requirements = nativePatchRequirements(root, VERSION);
   if (JSON.stringify(sdk.spark?.nativePatchRequirements) !== JSON.stringify(requirements)) throw new Error("Local Spark archive native patch requirements do not match the checked-in recipes.");
 

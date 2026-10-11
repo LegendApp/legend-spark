@@ -3,9 +3,10 @@ import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { packArchive } from "../packages/cli/src/pack-archive.ts";
-import { validateRelease } from "../packages/cli/src/release.ts";
+import { run } from "../packages/cli/src/commands.ts";
+import { validateRelease, type ReleaseManifest } from "../packages/cli/src/release.ts";
 
-export async function packCreateSpark(root, output, release) {
+export async function packCreateSpark(root: string, output: string, release?: ReleaseManifest) {
   const temporary = mkdtempSync(path.join(os.tmpdir(), "create-spark-package-"));
   try {
     const source = path.join(root, "packages/create-spark");
@@ -14,11 +15,8 @@ export async function packCreateSpark(root, output, release) {
     if (manifest.version !== cli.version) throw new Error("Create Spark and CLI versions must match");
     // Bundle the shared create implementation, with only installer tooling external.
     // This avoids installing the SDK's React/Expo peers just to create an app.
-    const result = await Bun.build({
-      entrypoints: [path.join(source, "src/index.ts")], outdir: path.join(temporary, "dist"),
-      target: "node", external: Object.keys(manifest.dependencies),
-    });
-    if (!result.success) throw new Error(result.logs.join("\n"));
+    await run(root, ["bun", "build", path.join(source, "src/index.ts"), "--outdir", path.join(temporary, "dist"),
+      "--target=node", ...Object.keys(manifest.dependencies).flatMap(name => ["--external", name])], { capture: true });
     cpSync(path.join(root, "packages/cli/src/npm-bin"), path.join(temporary, "dist/npm-bin"), { recursive: true });
     cpSync(path.join(root, "packages/cli/templates"), path.join(temporary, "templates"), { recursive: true });
     cpSync(path.join(root, "LICENSE"), path.join(temporary, "LICENSE"));

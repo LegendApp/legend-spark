@@ -6,8 +6,7 @@ import { readRuntime } from "../packages/cli/src/local.ts";
 import { readJson, VERSION, writeJson } from "../packages/cli/src/project.ts";
 import { releaseBase, validateRelease, type ReleaseAsset, type ReleaseManifest } from "../packages/cli/src/release.ts";
 import { packSpark } from "./pack-spark.ts";
-// @ts-ignore Bun build utility for the peer-free create launcher.
-import { packCreateSpark } from "./pack-create-spark.mjs";
+import { packCreateSpark } from "./pack-create-spark.ts";
 import { patchedPackageNames, validatePatchedArchive, type PackageProvenance } from "./patch-inventory.ts";
 import { runtimesPatchHash, runtimesRevision } from "./prepare-runtimes.ts";
 import { windowsPatchHash } from "./prepare-windows-libraries.ts";

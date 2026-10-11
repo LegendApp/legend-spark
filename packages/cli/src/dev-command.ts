@@ -4,7 +4,7 @@ import { prepareConfig, selectTarget, supportedPlatforms } from "@legendapp/spar
 import { dev } from "./dev.ts";
 import { findProject } from "./local.ts";
 import { hostPlatform } from "./platform.ts";
-import { nodeCommand } from "./windows.ts";
+import { nodeCommand } from "./process.ts";
 
 // Consume only spark options. Expo validates its flags, aliases and values.
 export function devArguments(args: string[]) {

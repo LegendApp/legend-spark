@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { existsSync, readFileSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { build } from "../packages/cli/src/build.ts";
 import { availablePort } from "../packages/cli/src/local.ts";
-import { nodeCommand } from "../packages/cli/src/windows.ts";
+import { nodeCommand } from "../packages/cli/src/process.ts";
 import { projectEnvironment } from "../packages/cli/src/project.ts";
 if (process.platform !== "darwin") throw Error("This regression targets RN macOS; use the manual acceptance checklist on Windows.");
 const root = path.resolve("examples/kitchen-sink");

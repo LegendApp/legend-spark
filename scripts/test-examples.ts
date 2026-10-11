@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { create } from "../packages/cli/src/create.ts";
 import { run } from "../packages/cli/src/commands.ts";
-import { nodeCommand } from "../packages/cli/src/windows.ts";
+import { nodeCommand } from "../packages/cli/src/process.ts";
 import { type Example } from "../packages/cli/src/examples.ts";
 const framework = path.resolve(import.meta.dirname, "..");
 const parent = path.resolve(process.argv[2] ?? `.spark/example-tests/${Date.now()}`);

@@ -3,7 +3,7 @@ import { acquireRunner } from "./runner-install.ts";
 import { spawnProcess } from "./process.ts";
 import { windowsMetroPort, stopWindowsMetro } from "./windows-metro.ts";
 import { architecture, projectPlatform } from "./platform.ts";
-import { nodeCommand } from "./windows.ts";
+import { nodeCommand } from "./process.ts";
 import { readAppConfig } from "./project.ts";
 import { existsSync, rmSync, watch } from "node:fs";
 import path from "node:path";

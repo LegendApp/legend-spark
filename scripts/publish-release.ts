@@ -73,6 +73,8 @@ for (const [index, name] of publishedPackages.entries()) {
     if (publishCode) throw new Error(`npm publish ${name} exited ${publishCode}`);
   }
   if (!await alreadyPublished(VERSION, archive, registryCommand, name)) throw new Error(`npm publication of ${name} is not visible yet; resume without changing the release artifacts`);
+}
+for (const name of publishedPackages) {
   for (const channel of ["next", ...(args.includes("--latest") ? ["latest"] : [])]) {
     const promote = spawnProcess(["npm", "dist-tag", "add", `${name}@${VERSION}`, channel], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
     if (await promote.exited) throw new Error(`npm ${name} ${channel} promotion failed; retry with the same release artifacts`);

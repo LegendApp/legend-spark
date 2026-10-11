@@ -116,5 +116,3 @@ export function isWindowsDebugProduct(relativeFile: string, arch: WindowsArchite
   const architectureIndex = parts.indexOf(arch);
   return parts.at(-1) === "myapp.exe" && architectureIndex >= 0 && parts.indexOf("debug", architectureIndex + 1) > architectureIndex;
 }
-
-export { nodeCommand } from "./process.ts";

@@ -1,12 +1,11 @@
 import { VERSION } from "../packages/cli/src/project.ts";
 import { spawnProcess } from "../packages/cli/src/process.ts";
 import { expect, test } from "vitest";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-// @ts-ignore Bun build utility shared with the pack scripts.
-import { packCreateSpark } from "../scripts/pack-create-spark.mjs";
+import { packCreateSpark } from "../scripts/pack-create-spark.ts";
 import { packSpark } from "../scripts/pack-spark.ts";
 import { installedPackages, nativePackages, selection, stateFile } from "../packages/cli/src/project.ts";
 import ts from "typescript";
@@ -209,6 +208,31 @@ test("Create Spark archive is peer-free and runs without installing the framewor
     const [out, err, code] = await Promise.all([new Response(help.stdout).text(), new Response(help.stderr).text(), help.exited]);
     expect(code, err).toBe(0);
     expect(out).toContain("npm create @legendapp/spark MyApp");
+    for (const platform of ["ios", "android", "web"]) {
+      const app = path.join(root, `App${platform}`);
+      const create = spawnProcess(["node", path.join(destination, manifest.bin["create-spark"]), app, "--platform", platform], { cwd: root });
+      const [stderr, status] = await Promise.all([new Response(create.stderr).text(), create.exited]);
+      expect(status).toBe(1);
+      expect(stderr).toContain("Use create --universal for mobile/web targets");
+      expect(existsSync(app)).toBe(false);
+    }
+    // Expose the bundle's internals only in the extracted test copy.
+    const bundle = path.join(destination, manifest.bin["create-spark"]);
+    const versionBinding = readFileSync(bundle, "utf8").match(/var (\w+) = readJson\(.*package\.json.*\)\.version/)!;
+    expect(versionBinding).not.toBeNull();
+    appendFileSync(bundle, `\nexport { installedRelease, ${versionBinding[1]} as VERSION };\n`);
+    const version = "0.0.1-next.999";
+    writeFileSync(path.join(destination, "package.json"), JSON.stringify({ ...manifest, version }));
+    writeFileSync(path.join(destination, "dist/release.json"), JSON.stringify({ ...release, version }));
+    const probe = spawnProcess(["node", "--input-type=module", "-e", `
+      process.argv = [process.execPath, "probe", "--help"];
+      const { installedRelease, VERSION } = await import(${JSON.stringify(bundle)});
+      console.log(JSON.stringify({ version: VERSION, release: installedRelease() }));
+    `], { cwd: root });
+    const [probeOut, probeErr, probeCode] = await Promise.all([new Response(probe.stdout).text(), new Response(probe.stderr).text(), probe.exited]);
+    expect(probeCode, probeErr).toBe(0);
+    expect(JSON.parse(probeOut.trim().split("\n").at(-1)!)).toEqual({ version, release: { ...release, version } });
+
     for (const variant of ["blank-typescript", "windows", "universal"]) {
       const template = JSON.parse(readFileSync(path.join(destination, "templates", variant, "package.json"), "utf8"));
       expect(template.dependencies).toMatchObject({ "@legendapp/spark": VERSION, react: "19.1.4", "react-native": "0.81.6", expo: "54.0.37" });

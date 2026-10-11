@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { run } from "../packages/cli/src/commands.ts";
 import { addDesktop } from "../packages/cli/src/add-desktop.ts";
 import { readJson, writeJson } from "../packages/cli/src/project.ts";
-import { nodeCommand } from "../packages/cli/src/windows.ts";
+import { nodeCommand } from "../packages/cli/src/process.ts";
 
 const framework = path.resolve(import.meta.dirname, "..");
 const root = path.resolve(process.argv[2] ?? `/tmp/ExistingExpo${Date.now()}`);

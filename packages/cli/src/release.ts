@@ -36,7 +36,7 @@ export function installedRelease(): ReleaseManifest | undefined {
 export function packageSources(manifest?: string, release = installedRelease()): Record<string, string> {
   let sources: Record<string, string>;
   if (manifest) {
-    sources = Object.fromEntries(Object.entries(readJson(manifest)).filter(([name]) => name !== "@legendapp/create-spark").map(([name, relative]) => {
+    sources = Object.fromEntries(Object.entries(readJson(manifest)).map(([name, relative]) => {
       const file = path.resolve(path.dirname(manifest), relative as string);
       if (!existsSync(file)) throw new Error(`Missing SDK archive: ${file}`);
       return [name, localArchive(file)];
