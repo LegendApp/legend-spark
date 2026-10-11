@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: Document session and versions availability on macOS
+intent: >
+  Document model > Documents lists getDocumentSessionAvailability() and getDocumentVersionsAvailability(); on macOS
+  both are available (coordinated file access and NSFileVersion), and the screen creates its session.
+checks: [DOC-DOCAVAIL-01]
+tags: [document-model]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://document-model/documents" }
+- extendedWaitUntil: { visible: { id: document-model-documents-availability-session-available }, timeout: 15s }
+- assertVisible: { id: document-model-documents-availability-versions-available }
+- assertVisible: { id: document-model-documents-name }

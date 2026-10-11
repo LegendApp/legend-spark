@@ -4,6 +4,8 @@ export * from "./requests";
 export { createDocumentTransitionGuard } from "./documentTransition";
 export * from "./controller";
 export * from "./reload";
+export { createDocumentSession, findDocumentSession, getDocumentSessionAvailability, type DocumentSession, type DocumentSessionOptions, type DocumentState, type DocumentSaveOptions, type DocumentSaveResult } from "./session";
+export { getDocumentVersionsAvailability, listDocumentVersions, addDocumentVersion, restoreDocumentVersion, type DocumentVersion } from "./versions";
 export * from "./hooks";
 
 export interface OpenSelectedDocumentPathOptions {

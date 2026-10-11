@@ -1,0 +1,31 @@
+appId: so.legend.spark.examples.kitchensink
+name: Document session operations on a temp document
+intent: >
+  Launched with --ks-documents-run, Document model > Documents runs every operation once on a fresh document in a
+  temporary folder, in order: untitled numbering, edit (edited dot), Save As, Save, a conflicting save then overwrite,
+  an external change reload, autosave in place, Duplicate, Rename, Move To, Revert to Saved, NSFileVersion versions
+  (add, list, restore), locking (E_READ_ONLY) and reopening the open document (focuses its window). Each check shows
+  document-model-documents-check-<id>-passed when it held; -failed with the error otherwise.
+checks: [DOC-SESSION-01, DOC-DIRTY-01, DOC-SAVE-01, DOC-CONFLICT-01, DOC-EXTERNAL-01, DOC-AUTOSAVE-01, DOC-DUP-01, DOC-RENAME-01, DOC-MOVE-01, DOC-REVERT-01, DOC-VERSIONS-01, DOC-LOCK-01, DOC-REOPEN-01]
+tags: [document-model]
+platforms: [macos]
+---
+- launchApp: { arguments: ["--ks-documents-run"], openUrl: "spark-ks://document-model/documents" }
+- extendedWaitUntil: { visible: { id: document-model-documents-checks-done }, timeout: 60s }
+- assertVisible: { id: document-model-documents-check-untitled-passed }
+- assertVisible: { id: document-model-documents-check-edited-passed }
+- assertVisible: { id: document-model-documents-check-save-as-passed }
+- assertVisible: { id: document-model-documents-check-save-passed }
+- assertVisible: { id: document-model-documents-check-conflict-passed }
+- assertVisible: { id: document-model-documents-check-external-passed }
+- assertVisible: { id: document-model-documents-check-autosave-passed }
+- assertVisible: { id: document-model-documents-check-duplicate-passed }
+- assertVisible: { id: document-model-documents-check-rename-passed }
+- assertVisible: { id: document-model-documents-check-move-to-passed }
+- assertVisible: { id: document-model-documents-check-revert-passed }
+- assertVisible: { id: document-model-documents-check-versions-passed }
+- assertVisible: { id: document-model-documents-check-locked-passed }
+- assertVisible: { id: document-model-documents-check-reopen-passed }
+- assertVisible: { id: document-model-documents-duplicate-edited }
+- assertVisible: { id: document-model-documents-focused-existing }
+- takeScreenshot: documents-checks

@@ -3,6 +3,7 @@
 #import <AppKit/AppKit.h>
 #import "SparkFileMutations.h"
 #import "SparkFileIntegration.h"
+#import "SparkDocumentFiles.h"
 #import <RNDesktopApp/SparkDesktop.h>
 #import <fcntl.h>
 #import <unistd.h>
@@ -51,13 +52,15 @@ static void Reject(RCTPromiseRejectBlock reject, NSError *error) {
   else SparkReject(reject, error);
 }
 static BOOL PositiveSize(id value) { return [value isKindOfClass:NSNumber.class] && [value doubleValue] >= 1 && [value doubleValue] <= 1024 && floor([value doubleValue]) == [value doubleValue]; }
-static NSArray<NSString *> *CoordinatedMethods(void) { return @[@"readText", @"readBytes", @"writeText", @"writeBytes", @"remove", @"copy", @"move"]; }
+static NSArray<NSString *> *CoordinatedMethods(void) { return @[@"readText", @"readBytes", @"writeText", @"writeBytes", @"writeTextIfUnchanged", @"remove", @"copy", @"move"]; }
 /** Operations that may run inside an NSFileCoordinator claim. */
 static id PathOperation(NSString *method, NSURL *url, NSURL *to, NSDictionary *args, NSError **error) {
   if ([method isEqual:@"readText"]) return [NSString stringWithContentsOfURL:url encoding:NSUTF8StringEncoding error:error];
   if ([method isEqual:@"readBytes"]) return [NSMutableData dataWithContentsOfURL:url options:0 error:error];
   if ([method isEqual:@"writeText"]) return [args[@"text"] writeToURL:url atomically:YES encoding:NSUTF8StringEncoding error:error] ? NSNull.null : nil;
   if ([method isEqual:@"writeBytes"]) return [args[@"bytes"] writeToURL:url options:NSDataWritingAtomic error:error] ? NSNull.null : nil;
+  // Inside a coordinated write claim the comparison and replacement exclude other coordinated writers.
+  if ([method isEqual:@"writeTextIfUnchanged"]) { NSError *failure = nil; BOOL written = SparkWriteTextIfUnchanged(url, args[@"expected"], args[@"text"], &failure); if (failure) { if (error) *error = failure; return nil; } return @(written); }
   if ([method isEqual:@"remove"]) { NSError *failure = nil; BOOL removed = SparkRemoveFile(url, [args[@"recursive"] boolValue], &failure); if (failure) { if (error) *error = failure; return nil; } return @(removed); }
   NSError *failure = nil;
   SparkTransferPath(url, to, [method isEqual:@"copy"] ? SparkTransferCopy : SparkTransferMove, [args[@"overwrite"] boolValue], &failure);
@@ -223,9 +226,11 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
         });
         return;
       }
-      else if ([method isEqual:@"writeTextIfUnchanged"]) {
-        result = @(SparkWriteTextIfUnchanged(url, args[@"expected"], args[@"text"], &error));
-      }
+      else if ([method isEqual:@"versions"]) result = SparkListFileVersions(url, &error);
+      else if ([method isEqual:@"addVersion"]) result = SparkAddFileVersion(url, &error);
+      else if ([method isEqual:@"restoreVersion"]) SparkRestoreFileVersion(url, args[@"id"], &error);
+      else if ([method isEqual:@"documentState"]) result = SparkDocumentFileState(url, &error);
+      else if ([method isEqual:@"setLocked"]) SparkSetFileLocked(url, [args[@"locked"] boolValue], &error);
       else if ([method isEqual:@"mkdir"]) [fm createDirectoryAtURL:url withIntermediateDirectories:[args[@"recursive"] boolValue] attributes:nil error:&error];
       else if ([method isEqual:@"stat"]) {
         NSDictionary *attrs = [fm attributesOfItemAtPath:url.path error:&error];

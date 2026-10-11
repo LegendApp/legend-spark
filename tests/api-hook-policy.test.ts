@@ -24,6 +24,7 @@ const policy: Record<string, Record<string, { imperative: string } | { reactOnly
   "./app/documents": {
     useDocumentAppController: { imperative: "createDocumentAppController" },
     useWatchedDocumentReload: { imperative: "watchDocumentReload" },
+    useDocumentSessionState: { imperative: "createDocumentSession" },
   },
 };
 

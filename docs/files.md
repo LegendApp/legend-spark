@@ -19,7 +19,7 @@ await remove(destination); // void; absence is success
 
 `list` returns immediate entries sorted by name, without issuing a metadata request for every child. `stat` describes symlinks themselves. `copy` recursively copies directories and preserves links, and `move` may copy then delete across volumes; both reject an existing destination with `E_ALREADY_EXISTS` unless `{ overwrite: true }` replaces it. Neither promises a transaction across multiple files. `mkdir` defaults to recursive creation; `remove` defaults to nonrecursive removal and rejects nonempty directories.
 
-Whole-file writes replace atomically on supported desktop backends. Conditional writes compare observed UTF-8 text before replacing; another process can still write between those steps. A conflict returns `{ written: false }`; missing files and IO failures reject. Invalid UTF-8 rejects. Use the [streaming APIs](file-streams.md) for bounded memory on large files.
+Whole-file writes replace atomically on supported desktop backends. Conditional writes compare observed UTF-8 text before replacing; another process can still write between those steps, unless both coordinate: with `{ coordinated: true }` (macOS) the comparison and replacement run inside one write claim. A conflict returns `{ written: false }`; missing files and IO failures reject. Invalid UTF-8 rejects. Use the [streaming APIs](file-streams.md) for bounded memory on large files.
 
 `watch(path, listener, { recursive })` resolves when native registration succeeds and returns an asynchronous `remove()`. Notifications invalidate cached data; they are not an exact change log. Recursive watches require a directory. Removal stops JS callbacks immediately, joins concurrent calls, and permits retry if native cleanup fails. File handles use `close()` with the same cleanup guarantees; new work rejects after closing starts, even if cleanup needs retry.
 
@@ -63,7 +63,7 @@ await writeText(path, text, { coordinated: true });
 const text = await readText(path, { coordinated: true });
 ```
 
-`readText`, `readBytes`, `writeText`, `writeBytes`, `copy`, `move` and `remove` accept `coordinated: true`. The operation then runs inside an `NSFileCoordinator` claim: a read claim for reads, a replacing write claim for writes, a deleting claim for `remove`, read plus write claims for `copy`, and moving plus replacing claims for `move`, which also reports the move to file presenters. Use it for files that other processes or iCloud Drive may change. Without the option, operations are uncoordinated, as before. Requesting coordination where it is unavailable rejects; it never runs uncoordinated.
+`readText`, `readBytes`, `writeText`, `writeBytes`, `writeTextIfUnchanged`, `copy`, `move` and `remove` accept `coordinated: true`. The operation then runs inside an `NSFileCoordinator` claim: a read claim for reads, a replacing write claim for writes (for `writeTextIfUnchanged`, around both the comparison and the replacement), a deleting claim for `remove`, read plus write claims for `copy`, and moving plus replacing claims for `move`, which also reports the move to file presenters. Use it for files that other processes or iCloud Drive may change. Without the option, operations are uncoordinated, as before. Requesting coordination where it is unavailable rejects; it never runs uncoordinated.
 
 ### Security-scoped bookmarks
 

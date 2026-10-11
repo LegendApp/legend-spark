@@ -131,10 +131,10 @@ export async function trash(path: string): Promise<void> { await call("trash", {
 
 /** Reveal an existing path in Finder or Explorer. */
 export async function revealInFileManager(path: string): Promise<void> { await call("reveal", { path: absolute(path) }); }
-/** Compare before replacing. Detects observed changes; not an OS-wide atomic compare-and-swap. */
-export async function writeTextIfUnchanged(path: string, expected: string, contents: string): Promise<{ written: boolean }> {
+/** Compare before replacing. Detects observed changes; not an OS-wide atomic compare-and-swap. With coordinated: true (macOS) the comparison and replacement run inside one NSFileCoordinator write claim, so no coordinated writer (another app's NSDocument, iCloud) can change the file between them. */
+export async function writeTextIfUnchanged(path: string, expected: string, contents: string, options: CoordinatedOptions = {}): Promise<{ written: boolean }> {
   if (typeof expected !== "string" || typeof contents !== "string") throw new SparkError("E_INVALID_ARGUMENT", "Expected text strings");
-  return { written: await call<boolean>("writeTextIfUnchanged", { path: absolute(path), expected, text: contents }) };
+  return { written: await call<boolean>("writeTextIfUnchanged", { path: absolute(path), expected, text: contents, coordinated: coordinated(options, "writeTextIfUnchanged") }) };
 }
 
 export { scanFiles, getFileScanAvailability } from "./file-scanner";

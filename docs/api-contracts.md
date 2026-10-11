@@ -119,6 +119,13 @@ noteRecentDocument(path: string): Promise<void>;
 getRecentDocuments(): Promise<RecentDocument[]>;
 clearRecentDocuments(): Promise<void>;
 subscribeToOpenRequests(listener): Promise<Subscription>;
+createDocumentSession(options: DocumentSessionOptions): DocumentSession; // macOS; see links-and-documents.md
+findDocumentSession(path: string): DocumentSession | undefined;
+getDocumentSessionAvailability(): Availability;
+listDocumentVersions(path: string): Promise<DocumentVersion[]>; // NSFileVersion
+addDocumentVersion(path: string): Promise<DocumentVersion>;
+restoreDocumentVersion(path: string, versionId: string): Promise<void>;
+getDocumentVersionsAvailability(): Availability;
 ```
 
 Process termination cannot acknowledge completed shutdown through a JavaScript promise. Define `quit` success as native acceptance after guards, not proof that the process exited. One coherent quit coordinator replaces request/complete/listen duplicates. App context exposes typed runtime information rather than arbitrary bridge data.
@@ -239,7 +246,7 @@ remove(path, options?): Promise<void>;
 trash(path): Promise<void>;
 copy(source, destination, options?): Promise<void>;
 move(source, destination, options?): Promise<void>;
-writeTextIfUnchanged(path, expected, contents): Promise<{ written: boolean }>;
+writeTextIfUnchanged(path, expected, contents, options?: { coordinated?: boolean }): Promise<{ written: boolean }>;
 openFile(path, options?): Promise<FileHandle>;
 readChunks(path, options?): AsyncIterable<Uint8Array>;
 writeChunks(path, chunks, options?): Promise<number>;
