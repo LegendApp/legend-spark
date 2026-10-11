@@ -177,7 +177,9 @@ fonts.font; // { family, postScriptName, size, weight, italic }: the installed f
   `'replaced'` when a newer session or an activated `ColorWell` takes the panel. `close()`
   stops callbacks at once, hides the panel if this session still owns it, and is idempotent;
   after a native failure it can be retried. A session that has already ended closes nothing.
-  While a font session is open, font panel changes go to it rather than to the focused text view.
+  While a font session is open, font changes go to it rather than to the focused text view:
+  the panel's own, and the Format › Font menu actions (Bold, Italic, Bigger, Smaller), which
+  the shared font manager routes to the same target. Text views get them again once it ends.
 - When JavaScript reloads, open sessions end without `onClose` and their panels are hidden.
 - `sampleScreenColor()` shows the system eyedropper (`NSColorSampler`). The user picks one
   on-screen color (opaque `#rrggbb`) or presses Escape (`{ canceled: true }`). Apple documents
