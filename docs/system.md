@@ -1,6 +1,6 @@
 # System integration
 
-`@legendapp/spark/system` owns OS information, events, login startup, app badges and progress, attention, power requests and launcher menus. `getSystemAvailability()` does not require an installed native module; `getSystemAvailability(feature)` reports one of `appBadge`, `appProgress`, `attention`, `dockMenu`, `taskbarMenu` and `thumbnailToolbar` for the running platform. Commands return `Promise<void>` and reject shared `SparkError` codes; query results are validated.
+`@legendapp/spark/system` owns OS information, events, login startup, app badges and progress, attention, power requests and launcher menus. `getSystemAvailability()` does not require an installed native module; `getSystemAvailability(feature)` reports one of `appBadge`, `appProgress`, `attention`, `dockMenu` and `taskbarMenu` for the running platform. Commands return `Promise<void>` and reject shared `SparkError` codes; query results are validated.
 
 ```ts
 const blocker = await preventSleep({ reason: 'Exporting video', kind: 'display' });
@@ -32,8 +32,6 @@ On macOS the Dock tile gets a content view that draws the app icon (`NSApp.appli
 
 On Windows `normal`, `paused` and `error` map to `TBPF_NORMAL`, `TBPF_PAUSED` (yellow) and `TBPF_ERROR` (red), and `indeterminate` to the marquee. The Windows code has not been compiled or run yet ([#302](https://github.com/LegendApp/legend-spark/issues/302)).
 
-## Jump Lists and the thumbnail toolbar
+## Jump Lists
 
 `createTaskbarMenu({ items, onAction, recentDocuments: true })` also adds the Jump List's Recent category, which lists files noted with `noteRecentDocument` whose type is registered to the app. Removing the menu deletes the custom list, so Windows shows its default Jump List again.
-
-`createThumbnailToolbar({ buttons, onAction })` defines up to seven buttons (`id`, `tooltip`, absolute `icon` path, `disabled`) under the main window's taskbar thumbnail. It validates the options, then rejects `E_UNSUPPORTED_PLATFORM` on every platform for now: macOS has no equivalent, and the Windows implementation is [#301](https://github.com/LegendApp/legend-spark/issues/301).

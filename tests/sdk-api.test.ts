@@ -786,17 +786,16 @@ test("app badges take text or a count, and progress validates before reaching na
   expect(calls).toHaveLength(0);
 });
 test("system feature availability is truthful per platform", () => {
-  const report = () => Object.fromEntries((["appBadge", "appProgress", "attention", "dockMenu", "taskbarMenu", "thumbnailToolbar"] as const).map(feature => [feature, system.getSystemAvailability(feature).available]));
+  const report = () => Object.fromEntries((["appBadge", "appProgress", "attention", "dockMenu", "taskbarMenu"] as const).map(feature => [feature, system.getSystemAvailability(feature).available]));
   expect(system.getSystemAvailability()).toEqual({ available: true });
-  expect(report()).toEqual({ appBadge: true, appProgress: true, attention: true, dockMenu: true, taskbarMenu: false, thumbnailToolbar: false });
+  expect(report()).toEqual({ appBadge: true, appProgress: true, attention: true, dockMenu: true, taskbarMenu: false });
   platform.OS = "windows";
-  expect(report()).toEqual({ appBadge: true, appProgress: true, attention: true, dockMenu: false, taskbarMenu: true, thumbnailToolbar: false });
-  expect(system.getSystemAvailability("thumbnailToolbar")).toEqual({ available: false, reason: "unsupported-platform" });
+  expect(report()).toEqual({ appBadge: true, appProgress: true, attention: true, dockMenu: false, taskbarMenu: true });
   platform.OS = "web";
   expect(system.getSystemAvailability("appBadge")).toEqual({ available: false, reason: "unsupported-platform" });
   expect(() => system.getSystemAvailability("dock" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
 });
-test("Jump Lists add the Recent category only when asked; thumbnail toolbars validate, then reject as unsupported", async () => {
+test("Jump Lists add the Recent category only when asked", async () => {
   platform.OS = "windows";
   const menu = await system.createTaskbarMenu({ items: [{ type: "action", id: "new", label: "New window" }], onAction: () => {}, recentDocuments: true });
   expect(calls.at(-1)?.args).toMatchObject({ recent: true }); await menu.remove();
@@ -805,16 +804,6 @@ test("Jump Lists add the Recent category only when asked; thumbnail toolbars val
   await expect(system.createTaskbarMenu({ items: [], onAction: () => {}, recentDocuments: "yes" } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   platform.OS = "macos";
   await expect(system.createDockMenu({ items: [], onAction: () => {}, recentDocuments: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
-  calls.length = 0;
-  const button = { id: "play", tooltip: "Play", icon: "C:\\App\\play.ico" };
-  platform.OS = "windows";
-  await expect(system.createThumbnailToolbar({ buttons: [button], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
-  for (const buttons of [[], Array.from({ length: 8 }, (_, index) => ({ ...button, id: `b${index}` })), [button, button], [{ ...button, tooltip: " " }], [{ ...button, icon: "play.ico" }], [{ ...button, tooltip: "x".repeat(260) }]])
-    await expect(system.createThumbnailToolbar({ buttons, onAction: () => {} })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
-  await expect(system.createThumbnailToolbar({ buttons: [{ ...button, label: "Play" }], onAction: () => {} } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
-  platform.OS = "macos";
-  await expect(system.createThumbnailToolbar({ buttons: [{ ...button, icon: "/tmp/play.png" }], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
-  expect(calls).toHaveLength(0);
 });
 
 test("application menu updates snapshot inputs, serialize and retain last successful owners", async () => {

@@ -3,7 +3,6 @@ import Native from "./NativeDesktopSystem";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { SparkError, asyncRegistration, invokeNative, parseNativeResult, type Availability, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { menuItems, selectableMenuIds, type MenuItem } from "@legendapp/spark-desktop-app/src/contracts/menu";
-import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 type SupportedDockLeaf = Exclude<MenuItem, { type: "submenu" | "role" | "slider" }> extends infer Item
   ? Item extends unknown ? Omit<Item, "target" | "placement" | "icon" | "shortcut" | "hidden"> : never
@@ -21,12 +20,9 @@ export interface TaskbarMenuOptions {
   /** Adds the Jump List's Recent category: files noted with `noteRecentDocument` whose type is registered to the app. */
   recentDocuments?: boolean;
 }
-/** Windows thumbnail toolbar button. `icon` is an absolute path to an .ico or .png file. */
-export interface ThumbnailToolbarButton { id: string; tooltip: string; icon: string; disabled?: boolean }
-export interface ThumbnailToolbarOptions { buttons: readonly ThumbnailToolbarButton[]; onAction: (event: { type: "action"; itemId: string }) => void }
 /** Determinate progress has a completed fraction from 0 to 1; paused and error tint the bar. */
 export type AppProgress = { state: "indeterminate" } | { state: "normal" | "paused" | "error"; value: number };
-export type SystemFeature = "appBadge" | "appProgress" | "attention" | "dockMenu" | "taskbarMenu" | "thumbnailToolbar";
+export type SystemFeature = "appBadge" | "appProgress" | "attention" | "dockMenu" | "taskbarMenu";
 export interface SystemInfo { osVersion: string; architecture: string; locale: string; dark: boolean; idleSeconds: number; onBattery: boolean; batteryLevel: number | null }
 export type SystemEvent = { type: "sleep" | "wake" | "lock" | "unlock" | "powerChanged" | "appearanceChanged" | "displaysChanged" };
 export type LoginItemStatus = "enabled" | "disabled" | "requiresApproval" | "notFound" | "unavailable";
@@ -34,10 +30,9 @@ export interface AttentionOptions { kind?: "informational" | "critical" }
 export interface PreventSleepOptions { reason: string; kind?: "display" | "system" }
 let sequence = 0;
 const token = () => `system-${Date.now()}-${++sequence}`;
-// The thumbnail toolbar is Windows-only and not implemented there yet (#301).
 const FEATURES: Record<SystemFeature, readonly string[]> = {
   appBadge: ["macos", "windows"], appProgress: ["macos", "windows"], attention: ["macos", "windows"],
-  dockMenu: ["macos"], taskbarMenu: ["windows"], thumbnailToolbar: [],
+  dockMenu: ["macos"], taskbarMenu: ["windows"],
 };
 /** Without a feature, whether the system module is usable at all. */
 export function getSystemAvailability(feature?: SystemFeature): Availability {
@@ -122,24 +117,6 @@ async function createLauncherMenu(value: LauncherMenuOptions, platform: "macos" 
 }
 export function createDockMenu(options: DockMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "macos"); }
 export function createTaskbarMenu(options: TaskbarMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "windows"); }
-/** Up to seven buttons under the taskbar thumbnail of the main window (Windows). */
-export async function createThumbnailToolbar(value: ThumbnailToolbarOptions): Promise<AsyncRegistration> {
-  options(value, ["buttons", "onAction"]);
-  if (typeof value.onAction !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onAction callback");
-  if (!Array.isArray(value.buttons) || value.buttons.length < 1 || value.buttons.length > 7) throw new SparkError("E_INVALID_ARGUMENT", "A thumbnail toolbar has one to seven buttons");
-  const ids = new Set<string>();
-  for (const button of value.buttons) {
-    options(button, ["id", "tooltip", "icon", "disabled"]);
-    if (typeof button.id !== "string" || !button.id || button.id.includes("\0") || ids.has(button.id)) throw new SparkError("E_INVALID_ARGUMENT", "Button ids must be nonempty and unique");
-    ids.add(button.id);
-    // THUMBBUTTON.szTip holds 259 characters.
-    if (typeof button.tooltip !== "string" || !button.tooltip.trim() || button.tooltip.length > 259 || button.tooltip.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "Buttons need a tooltip of at most 259 characters");
-    nativePath(button.icon, Platform.OS);
-    if (button.disabled !== undefined && typeof button.disabled !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected disabled boolean");
-  }
-  // FEATURES.thumbnailToolbar lists no platform until the Windows implementation (#301).
-  throw new SparkError("E_UNSUPPORTED_PLATFORM", `The thumbnail toolbar is unavailable on ${Platform.OS}`);
-}
 export async function onSystemEvent(handler: (event: SystemEvent) => void): Promise<AsyncRegistration> {
   if (typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected system event handler");
   const types: readonly SystemEvent["type"][] = ["sleep", "wake", "lock", "unlock", "powerChanged", "appearanceChanged", "displaysChanged"];

@@ -1,15 +1,15 @@
 appId: so.legend.spark.examples.kitchensink
-name: Dock badge, progress, Dock menu and thumbnail toolbar on macOS
+name: Dock badge, progress and Dock menu on macOS
 intent: >
   System integration > Dock & taskbar reports the system module, app badge, app progress, attention
-  and the Dock menu available on macOS, and the taskbar menu and thumbnail toolbar unsupported-platform.
+  and the Dock menu available on macOS, and the taskbar menu unsupported-platform.
   Badge text "New", count 3, 1,250 and clear resolve ok; progress 35%, indeterminate, paused at 60%,
   error at 80% and clear resolve ok, and 150% rejects SparkError:E_INVALID_ARGUMENT. The launcher
-  menu installs a Dock menu with a submenu and its removal reports "removed". The thumbnail toolbar
-  rejects SparkError:E_UNSUPPORTED_PLATFORM. The flow ends with the badge and progress cleared. A
+  menu installs a Dock menu with a submenu and its removal reports "removed". The flow ends with the
+  badge and progress cleared. A
   driven app has no Dock icon, so nothing appears in the Dock; tests/dock-tile-native.test.ts checks
   the Dock tile itself. Attention is in attention.yaml (manual: it bounces the real Dock icon).
-checks: [SYS-DOCKAVAIL-01, SYS-BADGE-01, SYS-PROGRESS-01, SYS-DOCKMENU-01, SYS-THUMB-01]
+checks: [SYS-DOCKAVAIL-01, SYS-BADGE-01, SYS-PROGRESS-01, SYS-DOCKMENU-01]
 tags: [system-integration]
 platforms: [macos]
 ---
@@ -21,7 +21,6 @@ platforms: [macos]
 - assertText: { id: system-integration-dock-availability-attention, equals: 'attention: {"available":true}' }
 - assertText: { id: system-integration-dock-availability-dockMenu, equals: 'dockMenu: {"available":true}' }
 - assertText: { id: system-integration-dock-availability-taskbarMenu, equals: 'taskbarMenu: {"available":false,"reason":"unsupported-platform"}' }
-- assertText: { id: system-integration-dock-availability-thumbnailToolbar, equals: 'thumbnailToolbar: {"available":false,"reason":"unsupported-platform"}' }
 # Badge
 - tapOn: { id: system-integration-dock-badge-text }
 - assertText: { id: system-integration-dock-badge-text-result, equals: ok }
@@ -44,10 +43,8 @@ platforms: [macos]
 - assertText: { id: system-integration-dock-progress-invalid-result, equals: SparkError:E_INVALID_ARGUMENT }
 - tapOn: { id: system-integration-dock-progress-clear }
 - assertText: { id: system-integration-dock-progress-clear-result, equals: ok }
-# Dock menu and thumbnail toolbar
+# Dock menu
 - tapOn: { id: system-integration-dock-launcher-install }
 - assertText: { id: system-integration-dock-launcher-install-result, equals: installed }
 - tapOn: { id: system-integration-dock-launcher-remove }
 - assertText: { id: system-integration-dock-launcher-remove-result, equals: removed }
-- tapOn: { id: system-integration-dock-thumbnail }
-- assertText: { id: system-integration-dock-thumbnail-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }

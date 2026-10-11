@@ -16,7 +16,7 @@ function Section({ title, hint, children }: PropsWithChildren<{ title: string; h
   </View>;
 }
 
-/** Dock and taskbar badge, progress, attention, launcher menus and the thumbnail toolbar through @legendapp/spark/system. */
+/** Dock and taskbar badge, progress, attention and launcher menus through @legendapp/spark/system. */
 export function DockTaskbar() {
   const t = useDockTaskbarMessages();
   const { availability, results, lastAction, run } = useDockTaskbarDemo(t);
@@ -53,9 +53,6 @@ export function DockTaskbar() {
       {demo("launcher-install", t.installLauncher)}
       {demo("launcher-remove", t.removeLauncher)}
       <Text selectable className="text-sm text-foreground" testID={`${ID}-last-action`}>{`${t.lastAction}: ${lastAction ?? t.noResult}`}</Text>
-    </Section>
-    <Section title={t.sections.thumbnail} hint={t.hints.thumbnail}>
-      {demo("thumbnail", t.addThumbnail)}
     </Section>
   </ScrollView>;
 }

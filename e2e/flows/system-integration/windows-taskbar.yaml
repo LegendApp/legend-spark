@@ -3,9 +3,9 @@ name: Taskbar badge, progress and Jump List on Windows
 intent: >
   On Windows the Dock & taskbar screen reports the taskbar menu available and the Dock menu
   unsupported-platform. Badge count and clear update the taskbar overlay icon, progress states show on
-  the taskbar button, the launcher menu installs a Jump List with tasks and the Recent category, and
-  the thumbnail toolbar rejects SparkError:E_UNSUPPORTED_PLATFORM until #301. Not yet run on Windows (#302).
-checks: [SYS-TASKBAR-01, SYS-THUMB-01]
+  the taskbar button, and the launcher menu installs a Jump List with tasks and the Recent category.
+  Not yet run on Windows (#302).
+checks: [SYS-TASKBAR-01]
 tags: [system-integration]
 platforms: [windows]
 ---
@@ -13,7 +13,6 @@ platforms: [windows]
 - extendedWaitUntil: { visible: { id: system-integration-dock-root }, timeout: 10s }
 - assertText: { id: system-integration-dock-availability-taskbarMenu, equals: 'taskbarMenu: {"available":true}' }
 - assertText: { id: system-integration-dock-availability-dockMenu, equals: 'dockMenu: {"available":false,"reason":"unsupported-platform"}' }
-- assertText: { id: system-integration-dock-availability-thumbnailToolbar, equals: 'thumbnailToolbar: {"available":false,"reason":"unsupported-platform"}' }
 - tapOn: { id: system-integration-dock-badge-count }
 - assertText: { id: system-integration-dock-badge-count-result, equals: ok }
 - tapOn: { id: system-integration-dock-badge-clear }
@@ -28,5 +27,3 @@ platforms: [windows]
 - assertText: { id: system-integration-dock-launcher-install-result, equals: installed }
 - tapOn: { id: system-integration-dock-launcher-remove }
 - assertText: { id: system-integration-dock-launcher-remove-result, equals: removed }
-- tapOn: { id: system-integration-dock-thumbnail }
-- assertText: { id: system-integration-dock-thumbnail-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }

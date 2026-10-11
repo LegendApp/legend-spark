@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
-import * as app from "@legendapp/spark/app";
 import { SparkError, type AsyncRegistration, type Availability } from "@legendapp/spark/contracts";
 import {
-  createDockMenu, createTaskbarMenu, createThumbnailToolbar, getSystemAvailability, requestAttention, setAppBadge, setAppProgress,
+  createDockMenu, createTaskbarMenu, getSystemAvailability, requestAttention, setAppBadge, setAppProgress,
   type AppProgress, type SystemFeature,
 } from "@legendapp/spark/system";
 import type { DockTaskbarMessages } from "./dock-taskbar-messages";
@@ -12,8 +11,8 @@ export type DemoId =
   | "badge-text" | "badge-count" | "badge-large" | "badge-clear"
   | "progress-35" | "progress-indeterminate" | "progress-paused" | "progress-error" | "progress-invalid" | "progress-clear"
   | "attention-informational" | "attention-critical" | "attention-stop"
-  | "launcher-install" | "launcher-remove" | "thumbnail";
-const FEATURES: readonly SystemFeature[] = ["appBadge", "appProgress", "attention", "dockMenu", "taskbarMenu", "thumbnailToolbar"];
+  | "launcher-install" | "launcher-remove";
+const FEATURES: readonly SystemFeature[] = ["appBadge", "appProgress", "attention", "dockMenu", "taskbarMenu"];
 const PROGRESS: Partial<Record<DemoId, AppProgress | null>> = {
   "progress-35": { state: "normal", value: 0.35 }, "progress-indeterminate": { state: "indeterminate" },
   "progress-paused": { state: "paused", value: 0.6 }, "progress-error": { state: "error", value: 0.8 }, "progress-clear": null,
@@ -27,15 +26,8 @@ export function dockAvailability(): Record<string, Availability> {
 }
 const describe = (value: unknown) => value instanceof SparkError ? `SparkError:${value.code}` : value instanceof Error ? `Error: ${value.message}` : String(value);
 
-async function thumbnailIcon(name: string) {
-  // Any absolute path: the call validates the buttons, then rejects until #301, before reading a file.
-  const executable = (await app.getAppContext()).launchArguments[0] ?? "";
-  const separator = Platform.OS === "windows" ? "\\" : "/";
-  return `${executable.slice(0, executable.lastIndexOf(separator))}${separator}${name}.ico`;
-}
-
 /**
- * Badge, progress, attention, the launcher menu and the thumbnail toolbar through @legendapp/spark/system.
+ * Badge, progress, attention and the launcher menu through @legendapp/spark/system.
  * Each result is "ok" (or what was requested) or SparkError:<code>. Unmounting removes the
  * registrations and clears the badge and progress this screen set.
  */
@@ -84,11 +76,6 @@ export function useDockTaskbarDemo(t: DockTaskbarMessages) {
         await current?.remove();
         launcher.current = undefined;
         return current ? "removed" : "none";
-      }
-      case "thumbnail": {
-        const [play, next] = await Promise.all([thumbnailIcon("play"), thumbnailIcon("next")]);
-        await createThumbnailToolbar({ buttons: [{ id: "play", tooltip: t.thumbnail.play, icon: play }, { id: "next", tooltip: t.thumbnail.next, icon: next }], onAction: ({ itemId }) => setLastAction(itemId) });
-        return "installed";
       }
     }
     return "ok";
