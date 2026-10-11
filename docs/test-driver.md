@@ -94,6 +94,12 @@ send one request at a time; each reply echoes `id`. Failures are
 | `capture` | `window` (`main`, `key`, `id:<identifier>`, `title:<title>`), `name`, `timeoutMs` (5000) | `file`, `width`, `height` (pixels), `scale`, once mounted UI updates have settled. `E_NOT_SETTLED` if they never do. |
 | `quit` | | `ok`, then the session ends and the app quits. |
 
+Optional modules add commands with `SparkTestDriverRegisterCommand` (main thread; built-in
+and duplicate names are refused), because the driver cannot link them itself. The motion
+package registers `setClock` and `advanceClock`, its virtual clock
+([motion.md](motion.md#virtual-clock-for-the-test-driver)). An app without that module
+answers them with `E_UNKNOWN_COMMAND`.
+
 "Settled" means no Fabric mount transaction for 100 ms. The host reports mounts through
 `RCTSurfacePresenterObserver`. `main` is the window with identifier `spark.main`. `key`
 fails with `E_NO_WINDOW` in driver mode, because an app that never activates has no key window.

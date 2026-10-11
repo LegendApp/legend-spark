@@ -332,13 +332,15 @@ fails with `invalid`.
 | matrix `appearance` | `setAppAppearance` after each launch (the app override; the OS setting is untouched) |
 | matrix `locale` | Launch arguments `-AppleLanguages (<locale>) -AppleLocale <locale>` |
 | `setAppAppearance` | `setAppAppearance`; lasts until the app quits |
+| `setClock`, `advanceClock` | The motion engine's `setClock` and `advanceClock` driver commands ([motion.md](motion.md#virtual-clock-for-the-test-driver)); `advanceClock` sends `duration` in milliseconds |
 | `takeScreenshot`, `assertScreenshot`, failure screenshot | `capture` of the main window. Element frames are points from the window's top-left, the capture's origin, so masks line up. The `window` key is `unsupported` (the driver cannot list windows). |
 | failure evidence | Each launch's app log, and a capture of the main window while the app runs |
 
 Everything else is `unsupported`, never skipped: black-box commands (input, menus,
 windows, OS state) need [#50](https://github.com/LegendApp/legend-spark/issues/50), and
-the other driver commands (motion and virtual clock, `assertStartup` and other
-performance commands, `assertState`) are not in the driver protocol yet.
+the other driver commands (motion assertions such as `assertMotion` and `assertFrames`,
+`assertStartup` and other performance commands, `assertState`) are not in the driver
+protocol yet.
 `tests/e2e-driver-backend.test.ts` covers the mapping with a fake driver
 (`tests/e2e-driver-fake.ts`); `e2e/flows/infra/catalog-driver.yaml` runs it end to end.
 

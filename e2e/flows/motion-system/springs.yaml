@@ -1,0 +1,32 @@
+appId: so.legend.spark.examples.kitchensink
+name: Spring presets resolve to SwiftUI parameters and settle
+intent: >
+  On Motion system > Springs and interruption, availability reads available, each preset row shows
+  the mass/stiffness/damping its preset resolves to, and Play presets springs all five boxes along
+  the track. Bouncy overshoots, smooth does not, and after 3 s of virtual clock every box reports
+  finished true. Playing again springs them back.
+checks: [MOT-AVAIL-01, MOT-SPRING-01]
+tags: [motion-system]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/springs" }
+- extendedWaitUntil: { visible: { id: motion-system-springs-root }, timeout: 10s }
+- assertText: { id: motion-system-springs-availability, equals: '{"available":true}' }
+- assertVisible: { id: motion-system-springs-default }
+- assertText: { id: motion-system-springs-default-parameters, equals: '{"mass":1,"stiffness":130.5,"damping":18.8}' }
+- assertText: { id: motion-system-springs-smooth-parameters, equals: '{"mass":1,"stiffness":157.9,"damping":25.1}' }
+- assertText: { id: motion-system-springs-snappy-parameters, equals: '{"mass":1,"stiffness":157.9,"damping":21.4}' }
+- assertText: { id: motion-system-springs-bouncy-parameters, equals: '{"mass":1,"stiffness":157.9,"damping":17.6}' }
+- assertText: { id: motion-system-springs-interactive-parameters, equals: '{"mass":1,"stiffness":1754.6,"damping":72}' }
+- tapOn: { id: motion-system-springs-play }
+- assertMotion: { target: { id: motion-system-springs-bouncy }, kind: spring, overshoot: { min: 2px }, settlesWithin: 1500ms }
+- assertMotion: { target: { id: motion-system-springs-smooth }, kind: spring, overshoot: { max: 0.5px }, settlesWithin: 1500ms }
+- assertText: { id: motion-system-springs-play-result, equals: '[{"finished":true},{"finished":true},{"finished":true},{"finished":true},{"finished":true}]' }
+- setClock: virtual
+- tapOn: { id: motion-system-springs-play }
+- advanceClock: 3s
+- assertText: { id: motion-system-springs-play-result, equals: '[{"finished":true},{"finished":true},{"finished":true},{"finished":true},{"finished":true}]' }
+- takeScreenshot: springs-settled

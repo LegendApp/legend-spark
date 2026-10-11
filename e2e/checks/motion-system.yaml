@@ -1,0 +1,94 @@
+area: motion-system
+prefix: MOT
+checks:
+  MOT-AVAIL-01:
+    title: getMotionAvailability() reports available on macOS and MotionView renders the engine's native view
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core"
+    covers:
+      - ./motion#getMotionAvailability().available
+      - ./motion#MotionView
+  MOT-SPRING-01:
+    title: Spring presets resolve to SwiftUI's response/bounce parameters and every preset settles at its target
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core"
+    covers:
+      - ./motion#spring
+      - ./motion#animate
+  MOT-INTERRUPT-01:
+    title: Interrupting a running timing with a spring keeps the presented value and velocity, and the replaced animation reports finished false
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core"
+    covers:
+      - ./motion#timing
+      - ./motion#getMotionState
+  MOT-HANDOFF-01:
+    title: A gesture release velocity seeds the spring; stopMotion freezes and setMotionValues jumps a property, interrupting it
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core"
+    covers:
+      - ./motion#stopMotion
+      - ./motion#setMotionValues
+  MOT-KEYFRAMES-01:
+    title: Keyframes pass through each value at its offset with per-segment easing and settle at the last value
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core"
+    covers:
+      - ./motion#keyframes
+  MOT-SEQUENCE-01:
+    title: A sequence chains steps with velocity carried between them, and repeat with reverse plays it back
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core"
+    covers:
+      - ./motion#sequence
+  MOT-STAGGER-01:
+    title: stagger starts each target eachMs apart from the center in one native plan
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core"
+    covers:
+      - ./motion#stagger
+  MOT-TIMELINE-01:
+    title: A timeline step with after previous starts when the previous step's natively solved spring settles
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core"
+    covers:
+      - ./motion#timeline
+  MOT-DECAY-01:
+    title: Decay with a clamp decelerates and springs onto the crossed bound
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core"
+    covers:
+      - ./motion#decay
+  MOT-SCROLL-01:
+    title: A scroll link drives opacity, scale and rotation from the scroll offset with no JavaScript per event, and stops after remove
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core"
+    covers:
+      - ./motion#linkScroll
+  MOT-JSBLOCK-01:
+    title: Blocking the JavaScript thread for 500 ms during an animation drops no frames and stalls none
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core"
+    covers:
+      - ./motion#recordMotionFrames
+  MOT-CLOCK-01:
+    title: The driver's virtual clock freezes motion and advanceClock steps it to deterministic values
+    platforms: [macos]
+    blocking: true
+    spec: "#174 MOT.core, #52 INFRA.driver"
+  MOT-UNSUP-01:
+    title: On Windows motion is typed unsupported (unsupported-platform, SparkError E_UNSUPPORTED_PLATFORM) with no substitute
+    platforms: [windows]
+    blocking: true
+    spec: "#174 MOT.core, follow-up #237"

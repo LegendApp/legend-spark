@@ -1,0 +1,32 @@
+appId: so.legend.spark.examples.kitchensink
+name: Motion screens and the virtual clock through the in-app driver
+intent: >
+  Each motion-system screen opens from its deep link and renders its root and MotionViews through
+  the in-app driver. On Scroll link and JS block, whose runner loops on the compositor from mount
+  (its loop readout appears once the engine accepted it), the motion clock switches to virtual,
+  advances 375 ms twice and returns to real time, and the window is captured. Light and dark,
+  English and Arabic.
+checks: [MOT-AVAIL-01, MOT-CLOCK-01]
+tags: [motion-system]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://motion-system/springs" }
+- assertVisible: { id: motion-system-springs-root }
+- assertVisible: { id: motion-system-springs-bouncy }
+- assertVisible: { id: motion-system-springs-slider }
+- takeScreenshot: springs
+- launchApp: { openUrl: "spark-ks://motion-system/timelines", stopApp: false }
+- assertVisible: { id: motion-system-timelines-root }
+- assertVisible: { id: motion-system-timelines-stagger-4 }
+- takeScreenshot: timelines
+- launchApp: { openUrl: "spark-ks://motion-system/scroll-and-frames", stopApp: false }
+- assertVisible: { id: motion-system-scroll-and-frames-badge }
+- assertVisible: { id: motion-system-scroll-and-frames-loop }
+- setClock: virtual
+- advanceClock: 375ms
+- advanceClock: 375ms
+- setClock: real
+- takeScreenshot: scroll-and-frames
