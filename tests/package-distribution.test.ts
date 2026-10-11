@@ -82,6 +82,9 @@ test("single Spark archive resolves public exports and preserves private native 
     writeFileSync(path.join(app, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": VERSION } }));
     writeFileSync(path.join(app, "desktop.config.json"), JSON.stringify({ name: "Packed", version: "1.0.0", projectId: "packed-test", macos: { bundleIdentifier: "org.example.packed" }, platforms: ["macos"] }));
     const req = createRequire(path.join(app, "package.json"));
+    const producer = createRequire(path.join(framework, "package.json"));
+    for (const name of ["react-native-vision-camera", "react-native-nitro-image", "react-native-nitro-modules", "diff"])
+      cpSync(path.dirname(producer.resolve(`${name}/package.json`)), path.join(app, "node_modules", name), { recursive: true });
     const manifest = req("@legendapp/spark/package.json");
     expect(manifest.spark.nativePatchRequirements.schema).toBe(1);
     expect(manifest.spark.nativePatchRequirements.frameworkVersion).toBe(VERSION);
@@ -122,7 +125,16 @@ test("single Spark archive resolves public exports and preserves private native 
     expect(manifest.peerDependencies).toMatchObject({ expo: "54.0.37", react: "19.1.4", "react-native": "0.81.6", "react-dom": "19.1.4" });
     expect(manifest.peerDependenciesMeta["react-dom"]).toEqual({ optional: true });
     expect(manifest.dependencies["@react-native-runtimes/core"]).toBe("0.1.0-alpha.2");
-    expect(manifest.dependencies["react-native-nitro-modules"]).toBe("0.35.7");
+    expect(manifest.dependencies["react-native-nitro-modules"]).toBe("0.37.0");
+    expect(manifest.dependencies["react-native-vision-camera"]).toBe("5.2.3");
+    expect(manifest.dependencies["react-native-nitro-image"]).toBe("0.15.2");
+    expect(manifest.scripts.postinstall).toBe("node postinstall.cjs");
+    expect(manifest.exports["./camera"]).toBe("./camera.ts");
+    expect(readFileSync(path.join(destination, "postinstall.cjs"), "utf8")).toContain("./vendor/node_modules/@legendapp/spark-desktop-config/native-patches.cjs");
+    for (const name of ["react-native-vision-camera", "react-native-nitro-image"]) {
+      expect(existsSync(path.join(destination, "vendor/node_modules", name))).toBe(false);
+      expect(readFileSync(path.join(destination, "patches/camera", `${name}.patch`))).toEqual(readFileSync(path.join(framework, "patches/camera", `${name}.patch`)));
+    }
     expect(JSON.parse(readFileSync(path.join(destination, "vendor/node_modules/@legendapp/spark-cli/dist/release.json"), "utf8"))).toEqual(release);
     const internal = readdirSync(path.join(framework, "packages")).map(name => JSON.parse(readFileSync(path.join(framework, "packages", name, "package.json"), "utf8"))).filter(pkg => pkg.private === true);
     const normalized = await createRequire(tooling.resolve("npm/package.json"))("pacote").manifest(path.join(root, file), { cache: path.join(root, "registry-cache") });

@@ -6,6 +6,15 @@ import { expect, test } from "vitest";
 // Every public hook must be either an adapter over a public imperative API or
 // inherently tied to React context/rendering. Adding a hook requires this review.
 const policy: Record<string, Record<string, { imperative: string } | { reactOnly: string }>> = {
+  "./camera": {
+    useCamera: { imperative: "VisionCamera.createCameraSession" },
+    useCameraDevice: { imperative: "getCameraDevice" },
+    useCameraDevices: { imperative: "getAllCameraDevices" },
+    useCameraPermission: { imperative: "VisionCamera.requestCameraPermission" },
+    useMicrophonePermission: { imperative: "VisionCamera.requestMicrophonePermission" },
+    usePhotoOutput: { imperative: "VisionCamera.createPhotoOutput" },
+    useVideoOutput: { imperative: "VisionCamera.createVideoOutput" },
+  },
   "./audio": { useAudioPlayer: { imperative: "createAudioPlayer" } },
   "./menus": { useMenu: { imperative: "createMenu" } },
   "./shortcuts/commands": {
@@ -42,7 +51,12 @@ test("all public hooks declare a public imperative core or a React-only rational
       const rule = policy[entry]?.[hook.name];
       expect(rule, `${entry}:${hook.name}: classify this hook using docs/api-design.md`).toBeDefined();
       if (rule && "imperative" in rule) {
-        const core = symbols.find(symbol => symbol.name === rule.imperative);
+        const [name, member] = rule.imperative.split(".");
+        let core = symbols.find(symbol => symbol.name === name);
+        if (core && member) {
+          const value = unalias(core);
+          core = checker.getTypeOfSymbolAtLocation(value, value.valueDeclaration!).getProperty(member);
+        }
         expect(core, `${entry} must export ${rule.imperative}`).toBeDefined();
         const declaration = core && unalias(core).valueDeclaration;
         expect(declaration, `${entry}:${rule.imperative} must be implemented`).toBeDefined();

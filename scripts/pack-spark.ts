@@ -40,6 +40,10 @@ export async function packSpark(root: string, output: string, release?: ReleaseM
       .filter(pkg => pkg.json.private === true || pkg.json.name === "@legendapp/spark");
     const publicPackage = packages.find(pkg => pkg.json.name === "@legendapp/spark")!;
     await unpack(await pack(path.join(root, "packages", publicPackage.directory)), stage);
+    mkdirSync(path.join(stage, "patches"));
+    mkdirSync(path.join(stage, "patches/camera"));
+    for (const file of ["upstream.json", "react-native-nitro-modules.patch", "react-native-nitro-image.patch", "react-native-vision-camera.patch"])
+      cpSync(path.join(root, "patches/camera", file), path.join(stage, "patches/camera", file));
     const manifest = JSON.parse(readFileSync(path.join(stage, "package.json"), "utf8"));
     manifest.spark = { ...manifest.spark, nativePatchRequirements: nativePatchRequirements(root, manifest.version) };
     const bundled = packages.filter(pkg => pkg !== publicPackage);

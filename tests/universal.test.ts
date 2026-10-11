@@ -38,7 +38,7 @@ test("switching targets preserves source, config, generated native projects, and
   const previous = process.env.SPARK_PLATFORM;
   const preserved = ["desktop.config.json", "package.json", "App.tsx", "app.json", ...shared.platforms.filter(p => p !== "web").map(p => `${p}/native-project.txt`)];
   try {
-    for (const file of preserved) { mkdirSync(path.dirname(path.join(root, file)), { recursive: true }); writeFileSync(path.join(root, file), file === "desktop.config.json" ? JSON.stringify(shared) : `preserve ${file}`); }
+    for (const file of preserved) { mkdirSync(path.dirname(path.join(root, file)), { recursive: true }); writeFileSync(path.join(root, file), file === "desktop.config.json" ? JSON.stringify(shared) : file === "package.json" ? JSON.stringify({ name: "app", dependencies: {} }) : `preserve ${file}`); }
     const before = preserved.map(file => readFileSync(path.join(root, file), "utf8"));
     for (const target of [...shared.platforms, "macos", "ios"]) {
       process.env.SPARK_PLATFORM = target;

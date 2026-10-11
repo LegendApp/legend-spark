@@ -48,7 +48,7 @@ export async function packRuntimes(root: string, output: string) {
   pkg.main = pkg.types = "src/index.ts";
   pkg.spark = { sdk: true, upstreamRevision: runtimesRevision, patchHash: hash };
   // The Metro scanner's Babel dependencies must be declared, not accidentally hoisted.
-  pkg.dependencies = { ...pkg.dependencies, "@babel/parser": "7.28.5", "@babel/traverse": "7.28.5", "react-native-nitro-modules": "0.35.7" };
+  pkg.dependencies = { ...pkg.dependencies, "@babel/parser": "7.28.5", "@babel/traverse": "7.28.5", "react-native-nitro-modules": "0.37.0" };
   writeJson(path.join(core, "package.json"), pkg);
   const file = `runtimes-${hash.slice(0, 12)}.tgz`;
   await packArchive(core, path.join(output, file));

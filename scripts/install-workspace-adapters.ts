@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { installedPackages } from "../packages/cli/src/project.ts";
+import { prepareNativePatches } from "../packages/config-plugin/native-patches.cjs";
 
 // Apply the same native adapters regardless of the selected package manager.
 // Apply the checked-in SDK deltas after install, with no network or native tools.
@@ -30,9 +31,10 @@ export function installWorkspaceAdapters(root: string) {
       let current = existsSync(target) ? readFileSync(target, "utf8") : "";
       if (relative === "package.json" && current) {
         const manifest = JSON.parse(current);
-        if (manifest.spark && Object.hasOwn(manifest.spark, "workspacePatch")) {
+        if (manifest.spark && (manifest.spark.workspacePatch || manifest.spark.dependencyPatch)) {
           // The receipt is added after patching; exclude it from hunk matching.
           delete manifest.spark.workspacePatch;
+          delete manifest.spark.dependencyPatch;
           if (!Object.keys(manifest.spark).length) delete manifest.spark;
           current = JSON.stringify(manifest, null, 2) + "\n";
         }
@@ -66,5 +68,6 @@ export function installWorkspaceAdapters(root: string) {
       renameSync(temporary, manifestFile);
     }
   }
+  prepareNativePatches(root);
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) installWorkspaceAdapters(path.resolve(import.meta.dirname, ".."));

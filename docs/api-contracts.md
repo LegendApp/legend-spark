@@ -71,6 +71,7 @@ A passthrough such as `export { WebView } from 'react-native-webview'` only stab
 | WebView | Spark owns a supported component/ref/event subset if it keeps `/webview`. Replace the passthrough with a real boundary. Do not clone every upstream prop. |
 | UI controls and desktop components | Spark owns props/ref/event contracts. Implementations may use RN, Expo UI, or native components. |
 | Legend State | Keep its Observable model upstream-owned. `/settings/observable` is explicitly a Legend State integration; do not pretend it is state-library-independent. |
+| Camera | `/camera` is an explicit VisionCamera integration with upstream components, hooks, types, and imperative factory semantics. Spark owns dependency/patch delivery; this is not a backend-independent contract. |
 | Runtimes, Nitro, routing, React Native, animation/gesture engines | Use upstream APIs directly. Their execution/object models are too central to hide behind a cheap adapter. Native support alone does not justify a Spark wrapper. |
 | `clsx`/Tailwind merge and Uniwind | Keep small explicit utility/styling integrations; document the library-specific semantics. These are not a universal styling contract. |
 | Music track drag/drop payloads | Move to the application/domain layer; Spark handles generic custom drag payloads. |

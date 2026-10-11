@@ -13,18 +13,19 @@ export function windowsPatchHash(name: string, pin: { version: string; integrity
   const workspacePin = readJson(path.join(sourceRoot, "patches/workspace/upstream.json"))[name];
   const workspacePatch = `patches/workspace/${name.replace(/^@/, "").replaceAll("/", "-")}@${workspacePin.version}.patch`;
   const files = [workspacePatch];
+  if (adapter === "nitro") files.push("patches/camera/react-native-nitro-modules.patch");
   if (adapter) files.push(...listFiles(path.join(sourceRoot, `patches/windows/${adapter}`)).map(file => path.relative(sourceRoot, file)));
   if (name === "react-native-webview") files.push("patches/windows/webview.patch");
   const recipe = readFileSync(import.meta.filename, "utf8") + readFileSync(new URL("./patch-inventory.ts", import.meta.url), "utf8");
   return hashFiles(sourceRoot, files, `${name}@${pin.version}:${pin.integrity}\0${recipe}`);
 }
-/** Keep upstream JS/C++ intact except for the explicit Windows portability edits. */
+/** Package the pinned native compatibility fixes for macOS and Windows. */
 export async function packWindowsLibraries(output: string) {
   const pins = readJson(path.join(root, "patches/windows/upstream.json")) as Record<string, { version: string; url: string; integrity: string }>;
   const result: Record<string, string> = {};
   for (const [name, pin] of Object.entries(pins)) {
     const cache = path.join(root, ".spark/vendor/windows", name.replaceAll("/", "-")); mkdirSync(cache, { recursive: true });
-    const archive = path.join(cache, "upstream.tgz");
+    const archive = path.join(cache, `upstream-${pin.version}.tgz`);
     if (!existsSync(archive)) { const response = await fetch(pin.url); if (!response.ok) throw new Error(`Download ${name}: HTTP ${response.status}`); writeFileSync(archive, new Uint8Array(await response.arrayBuffer())); }
     if (`sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}` !== pin.integrity) throw new Error(`Integrity mismatch: ${archive}`);
     const stage = path.join(cache, "stage"); rmSync(stage, { recursive: true, force: true }); mkdirSync(stage);
@@ -40,6 +41,13 @@ export async function packWindowsLibraries(output: string) {
       pkg.files = [...new Set([...(pkg.files ?? []), "windows", "react-native.config.js"])];
     }
     if (adapter === "nitro") {
+      const { parsePatch, applyPatch } = createRequire(import.meta.url)("diff");
+      for (const file of parsePatch(readFileSync(path.join(root, "patches/camera/react-native-nitro-modules.patch"), "utf8"))) {
+        const target = path.join(stage, file.newFileName.replace(/^b\//, ""));
+        const next = applyPatch(readFileSync(target, "utf8"), file);
+        if (next === false) throw new Error(`Could not apply Nitro macOS patch to ${target}`);
+        writeFileSync(target, next);
+      }
       // Export the portable C++ API from its DLL, so consumers share one registry.
       const defines = path.join(stage, "cpp/utils/NitroDefines.hpp");
       writeFileSync(defines, readFileSync(defines, "utf8") + `\n#ifdef _WIN32\n#ifdef NITRO_WINDOWS_EXPORTS\n#define NITRO_WINDOWS_API __declspec(dllexport)\n#else\n#define NITRO_WINDOWS_API __declspec(dllimport)\n#endif\n#else\n#define NITRO_WINDOWS_API\n#endif\n`);

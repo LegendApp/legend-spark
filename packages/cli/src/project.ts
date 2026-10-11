@@ -1,4 +1,5 @@
 import { nativeWindowOptions } from "@legendapp/spark-window-options";
+import { prepareNativePatches } from "@legendapp/spark-desktop-config/native-patches.cjs";
 import { macOSReleaseSettings } from "./macos-release.ts";
 import { projectPlatform, architecture, type DesktopPlatform } from "./platform.ts";
 import { resolveHelpers } from "./helpers.ts";
@@ -150,6 +151,7 @@ export function hashFiles(root: string, entries: string[], windows = false): str
   return hash.digest("hex");
 }
 export function nativePackages(root: string): NativePackage[] {
+  prepareNativePatches(root);
   const installed = installedPackages(root);
   if (projectPlatform(root) === "windows") return windowsNativePackages(root, installed);
   // Host/CNG code can change the native ABI without adding a TurboModule.

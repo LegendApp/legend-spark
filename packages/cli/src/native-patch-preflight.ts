@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { prepareNativePatches } from "@legendapp/spark-desktop-config/native-patches.cjs";
 import { findFramework } from "./local.ts";
 import { installedPackages, readJson, VERSION, type NativePackage } from "./project.ts";
 
@@ -68,6 +69,7 @@ export function validateWorkspaceNativePatches(root: string, packages: Pick<Nati
 }
 
 export function assertNativePatchPreflight(root: string) {
+  prepareNativePatches(root);
   const packages = installedPackages(root);
   const framework = findFramework(root);
   let errors: string[];

@@ -71,6 +71,7 @@
     "./diagnostics",
     "./ai",
     "./ai/codex",
-    "./ui/swipe"
+    "./ui/swipe",
+    "./camera"
   ]
 }

@@ -94,7 +94,7 @@
     "@legendapp/spark-notifications": "0.0.1-next.3",
     "@legendapp/spark-sqlite": "0.0.1-next.3",
     "@legendapp/spark-webview": "0.0.1-next.3",
-    "react-native-nitro-modules": "0.35.7",
+    "react-native-nitro-modules": "0.37.0",
     "@react-native-runtimes/core": "0.1.0-alpha.2",
     "@legendapp/spark-auth-session": "0.0.1-next.3",
     "expo-web-browser": "15.0.10",
@@ -112,7 +112,7 @@
     "expo": "54.0.37",
     "expo-constants": "18.0.14",
     "expo-modules-core": "3.0.30",
-    "react-native-nitro-modules": "0.35.7",
+    "react-native-nitro-modules": "0.37.0",
     "react-native-webview": "16.0.0",
     "@op-engineering/op-sqlite": "18.2.1",
     "expo-asset": "12.0.13",
@@ -125,7 +125,7 @@
     "react-native-windows": "0.81.35"
   },
   "sparkWorkspacePatches": {
-    "react-native-nitro-modules@0.35.7": "patches/workspace/react-native-nitro-modules@0.35.7.patch",
+    "react-native-nitro-modules@0.37.0": "patches/workspace/react-native-nitro-modules@0.37.0.patch",
     "@op-engineering/op-sqlite@18.2.1": "patches/workspace/op-engineering-op-sqlite@18.2.1.patch",
     "react-native-webview@16.0.0": "patches/workspace/react-native-webview@16.0.0.patch",
     "@react-native-runtimes/core@0.1.0-alpha.2": "patches/workspace/react-native-runtimes-core@0.1.0-alpha.2.patch",

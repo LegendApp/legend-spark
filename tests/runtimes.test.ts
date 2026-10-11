@@ -6,11 +6,11 @@ import { selection, type NativePackage } from "../packages/cli/src/project.ts";
 const { runtimePlan } = require("../packages/cli/src/metro.cjs");
 test("production prunes Runtimes and Nitro, retaining Nitro for other native consumers", () => {
   const pkg = (name: string, deps = {}, sdk = true): NativePackage => ({ name, sdk, root: name, requires: [], signature: name, json: { dependencies: deps } });
-  const core = pkg("@react-native-runtimes/core", { "react-native-nitro-modules": "0.35.7" });
+  const core = pkg("@react-native-runtimes/core", { "react-native-nitro-modules": "0.37.0" });
   const nitro = pkg("react-native-nitro-modules");
   expect(selection([core, nitro], new Set()).included).toEqual([]);
   expect(selection([core, nitro], new Set([core.name])).included).toEqual([core, nitro]);
-  const camera = pkg("camera", { [nitro.name]: "0.35.7" }, false);
+  const camera = pkg("camera", { [nitro.name]: "0.37.0" }, false);
   expect(selection([core, nitro, camera], new Set()).included).toEqual([nitro, camera]);
 });
 test("production registry uses the discovered graph, independent of installed packages and leftover task files", () => {

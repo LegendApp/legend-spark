@@ -28,22 +28,28 @@ test("release provenance rejects stale, missing, or modified patched archives", 
   expect(() => validatePatchedArchive(name, filename, bytes, undefined, metadata, patchHash, version, source)).toThrow("provenance");
 });
 
-test("Windows archive recipe identity changes with its checked-in workspace patch", () => {
+test("native archive recipe identity changes with workspace, Windows, and macOS patches", () => {
   const fixture = mkdtempSync(path.join(os.tmpdir(), "spark-patch-recipe-"));
   try {
     const workspace = path.join(fixture, "patches/workspace"), adapter = path.join(fixture, "patches/windows/nitro/windows");
     mkdirSync(workspace, { recursive: true }); mkdirSync(adapter, { recursive: true });
-    writeFileSync(path.join(workspace, "upstream.json"), JSON.stringify({ "react-native-nitro-modules": { version: "0.35.7" } }));
-    const patch = path.join(workspace, "react-native-nitro-modules@0.35.7.patch");
+    const camera = path.join(fixture, "patches/camera"); mkdirSync(camera, { recursive: true });
+    const macOSPatch = path.join(camera, "react-native-nitro-modules.patch");
+    writeFileSync(macOSPatch, "macOS fixture\n");
+    writeFileSync(path.join(workspace, "upstream.json"), JSON.stringify({ "react-native-nitro-modules": { version: "0.37.0" } }));
+    const patch = path.join(workspace, "react-native-nitro-modules@0.37.0.patch");
     writeFileSync(patch, "diff --git a/file b/file\nfirst\n");
     writeFileSync(path.join(adapter, "adapter.cpp"), "adapter fixture\n");
-    const pin = { version: "0.35.7", integrity: "sha512-fixture" };
+    const pin = { version: "0.37.0", integrity: "sha512-fixture" };
     const before = windowsPatchHash("react-native-nitro-modules", pin, fixture);
     writeFileSync(patch, "diff --git a/file b/file\nsecond\n");
     const afterPatch = windowsPatchHash("react-native-nitro-modules", pin, fixture);
     expect(afterPatch).not.toBe(before);
     writeFileSync(path.join(adapter, "adapter.cpp"), "changed adapter fixture\n");
     expect(windowsPatchHash("react-native-nitro-modules", pin, fixture)).not.toBe(afterPatch);
+    const afterWindows = windowsPatchHash("react-native-nitro-modules", pin, fixture);
+    writeFileSync(macOSPatch, "changed macOS fixture\n");
+    expect(windowsPatchHash("react-native-nitro-modules", pin, fixture)).not.toBe(afterWindows);
   } finally { rmSync(fixture, { recursive: true, force: true }); }
 });
 

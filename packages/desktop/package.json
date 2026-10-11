@@ -71,14 +71,16 @@
     "./windows/macos": "./windows-macos.ts",
     "./diagnostics": "./diagnostics.ts",
     "./ai": "./ai.ts",
-    "./ai/codex": "./ai-codex.ts"
+    "./ai/codex": "./ai-codex.ts",
+    "./camera": "./camera.ts"
   },
   "files": [
     "*.ts",
     "*.cjs",
     "schema.json",
     "bin",
-    "*.d.cts"
+    "*.d.cts",
+    "patches"
   ],
   "dependencies": {
     "@legendapp/spark-file-dialog": "0.0.1-next.3",
@@ -103,7 +105,7 @@
     "@legendapp/spark-webview": "0.0.1-next.3",
     "@legendapp/spark-sqlite": "0.0.1-next.3",
     "@react-native-runtimes/core": "0.1.0-alpha.2",
-    "react-native-nitro-modules": "0.35.7",
+    "react-native-nitro-modules": "0.37.0",
     "@legendapp/spark-cli": "0.0.1-next.3",
     "@legendapp/spark-ui": "0.0.1-next.3",
     "@legendapp/spark-audio": "0.0.1-next.3",
@@ -116,7 +118,9 @@
     "@legendapp/spark-settings-ui": "0.0.1-next.3",
     "@react-native-community/cli-types": "20.1.3",
     "@legendapp/spark-ai": "0.0.1-next.3",
-    "@legendapp/spark-codex": "0.0.1-next.3"
+    "@legendapp/spark-codex": "0.0.1-next.3",
+    "react-native-vision-camera": "5.2.3",
+    "react-native-nitro-image": "0.15.2"
   },
   "description": "Legend Spark \u2014 native applications with React Native and Expo",
   "bin": {
@@ -139,5 +143,8 @@
   "publishConfig": {
     "access": "public",
     "tag": "next"
+  },
+  "scripts": {
+    "postinstall": "node postinstall.cjs"
   }
 }

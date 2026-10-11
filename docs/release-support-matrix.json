@@ -3678,6 +3678,76 @@
         "android": [],
         "web": []
       }
+    },
+    {
+      "path": "./camera",
+      "sourceTarget": "./camera.ts",
+      "kind": "runtime-api",
+      "scope": "upstream-camera-integration",
+      "provider": "react-native-vision-camera, react-native-nitro-image, react-native-nitro-modules",
+      "intendedTargets": [
+        "macos",
+        "ios",
+        "android"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/native-dependency-patches.test.ts",
+          "tests/package-distribution.test.ts",
+          "tests/api-hook-policy.test.ts"
+        ],
+        "portableCommand": "bun run test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; then exercise camera capture as described in docs/camera.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; then exercise camera capture as described in docs/camera.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "VisionCamera has no Spark Windows or web implementation."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "VisionCamera has no Spark Windows or web implementation."
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform ios; then exercise camera capture as described in docs/camera.md"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform android; then exercise camera capture as described in docs/camera.md"
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "VisionCamera has no Spark Windows or web implementation."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop/camera.ts",
+        "packages/config-plugin/native-patches.cjs",
+        "patches/camera/upstream.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "patches/camera/react-native-vision-camera.patch",
+          "patches/camera/react-native-nitro-image.patch"
+        ],
+        "windows": [],
+        "ios": [
+          "packages/desktop/camera.ts"
+        ],
+        "android": [
+          "packages/desktop/camera.ts"
+        ],
+        "web": []
+      }
     }
   ]
 }

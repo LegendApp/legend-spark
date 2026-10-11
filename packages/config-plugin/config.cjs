@@ -69,6 +69,7 @@ function developmentConfig(value, target) {
   return result;
 }
 function expoConfig(root) {
+  require("./native-patches.cjs").prepareNativePatches(root);
   if (process.env.SPARK_DEV_SESSION === "1") {
     return developmentConfig(JSON.parse(fs.readFileSync(path.join(root, filename), "utf8")), process.env.SPARK_PLATFORM);
   }
@@ -137,6 +138,7 @@ function merge(base, override) {
 // Expo tools read this generated transport file. All framework consumers resolve
 // the canonical source; the generated file is never edited by SDK commands.
 function prepareConfig(root) {
+  require("./native-patches.cjs").prepareNativePatches(root);
   if (isExpoProject(root)) return readConfig(root);
   if (isUniversal(root)) {
     const file = path.join(root, "app.config.js");

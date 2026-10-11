@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, View } from "react-native";
 import { Text } from "./CameraText";
-import { Camera, VisionCamera, useCameraDevices, useCameraPermission, useMicrophonePermission, usePhotoOutput, useVideoOutput, type CameraDevice, type Recorder } from "react-native-vision-camera";
-import { NitroImage, type Image } from "react-native-nitro-image";
+import { Camera, VisionCamera, useCameraDevices, useCameraPermission, useMicrophonePermission, usePhotoOutput, useVideoOutput, NitroImage, type Image, type CameraDevice, type Recorder } from "@legendapp/spark/camera";
 import { saveFileDialog } from "@legendapp/spark/dialogs";
 import { revealInFileManager } from "@legendapp/spark/files";
 import { writeText } from "@legendapp/spark/files";

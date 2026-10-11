@@ -37,12 +37,13 @@ Our documentation provides a shared place to discover integrations, with attribu
 | [Margelo Runtimes](https://github.com/margelo/react-native-runtimes) | `@react-native-runtimes/core` | Independent Hermes workers; SDK pins and macOS/Windows adapters; automatic Metro/host setup; prebuilt inclusion and production pruning. See [Runtimes](runtimes.md). |
 | [React Native WebView](https://github.com/react-native-webview/react-native-webview) | `react-native-webview` | macOS WebKit and upstream Windows Fabric WebView2; pinned SDK version with explicit Windows fixes. See [WebView integration](desktop-api-expansion.md#webview-and-sqlite). |
 | [OP-SQLite](https://github.com/OP-Engineering/op-sqlite) | `@op-engineering/op-sqlite` | Native SQLite; Windows RNW JSI adapter with Unicode paths and per-runtime installation state; macOS production selection. See [SQLite integration](desktop-api-expansion.md#webview-and-sqlite). |
+| [VisionCamera](https://github.com/mrousavy/react-native-vision-camera) | `@legendapp/spark/camera` or `react-native-vision-camera` | Pinned dependency with automatic macOS patches for VisionCamera, Nitro Image, and shared Nitro. The Spark entry retains upstream semantics. See [Camera](camera.md). |
 
 The `/webview` export owns its source, props, events and ref types. Its adapter currently delegates to React Native WebView; applications needing the complete upstream surface can import that package directly. Spark does not forward arbitrary backend props. The `/sqlite` adapter owns `Database`, `SqlExecutor`, row/value and mutation result types. It adds project-scoped storage, queued queries, transaction lifetime and safe numeric/blob conversion; OP-SQLite objects do not cross its public boundary. Specialized OP-SQLite features remain direct upstream integrations. Neither adapter is a template for wrapping new libraries automatically.
 
 Applications should declare libraries they import directly as dependencies and retain the SDK's tested version overrides. The SDK prebuilt profile declares Runtimes; the minimal Windows starter does not require optional libraries. Installed native code is available in prebuilt/dev builds; production selection follows reachable imports and required native dependencies. Check each integration page for its validated platforms and limitations.
 
-Windows also supplies an adapter for `react-native-nitro-modules` 0.35.7. It installs
+Windows also supplies an adapter for `react-native-nitro-modules` 0.37.0. It installs
 the portable Nitro C++ runtime and registry through RNW JSI. A library with only
 Swift/Kotlin implementations still needs a Windows implementation and native project;
 Nitro support does not automatically port every Nitro library.

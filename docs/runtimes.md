@@ -73,7 +73,7 @@ Ignore `.threaded-runtime/` in Git. Remove the prototype's `runtimes.plugin.cjs`
 
 ## Pinned source and local distribution
 
-The SDK pack step fetches Margelo's repository at `58710c25c6e505dcc1292ee54d855408a6f7a42d`, applies the checked-in patches, and includes a normal patched core tarball in the SDK manifest. App installation needs no patch hook or upstream checkout. Core is `0.1.0-alpha.2`; Nitro is pinned to `0.35.7`.
+The SDK pack step fetches Margelo's repository at `58710c25c6e505dcc1292ee54d855408a6f7a42d`, applies the checked-in patches, and includes a normal patched core tarball in the SDK manifest. App installation needs no patch hook or upstream checkout. Core is `0.1.0-alpha.2`; Nitro is pinned to `0.37.0`.
 
 `patches/react-native-runtimes-macos.patch` contains the five-file macOS port for an upstream PR. `patches/react-native-runtimes-integration.patch` separately adds graph-selected entry generation, dispatcher cleanup and a worker-only event fallback. The packaging recipe and patches participate in the archive cache key; generated Nitro sources participate in native compatibility fingerprints. Keep these pins together until an upstream version replaces the patches.
 

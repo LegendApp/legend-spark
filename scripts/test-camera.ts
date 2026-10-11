@@ -19,7 +19,7 @@ if (!process.argv.includes("--run-only")) {
   cpSync(path.join(root, "App.tsx"), path.join(root, "KitchenSink.tsx"));
   for (const file of ["CameraText.tsx", "NitroCompatibility.tsx", probeOnly ? "ProbeApp.tsx" : "App.tsx"]) cpSync(path.join(framework, "examples/camera", file), path.join(root, file === "ProbeApp.tsx" ? "App.tsx" : file));
   if (!probeOnly) cpSync(path.join(framework, "examples/camera/CameraDemo.tsx"), path.join(root, "CameraDemo.tsx"));
-  await installCameraPackages(root, probeOnly);
+  await installCameraPackages(root);
   const config = readJson(path.join(root, "desktop.config.json"));
   config.macos.infoPlist = { ...config.macos.infoPlist,
     NSCameraUsageDescription: "Try camera preview and capture in the Spark camera example.",

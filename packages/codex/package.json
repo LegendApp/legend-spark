@@ -11,7 +11,7 @@
   "license": "MIT",
   "dependencies": {
     "@legendapp/spark-desktop-app": "0.0.1-next.3",
-    "react-native-nitro-modules": "0.35.7"
+    "react-native-nitro-modules": "0.37.0"
   },
   "files": [
     "src",

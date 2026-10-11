@@ -14,7 +14,7 @@ export async function runDesktopContracts(check: (id: string, action: () => Prom
   await runFileStreamChecks(check);
   await check("desktop.nitro", async () => {
     const { NitroModules } = await import("react-native-nitro-modules");
-    assertContract(NitroModules.version === "0.35.7" && NitroModules.isHybridObject(NitroModules), "Native Nitro proxy is missing or incompatible");
+    assertContract(NitroModules.version === "0.37.0" && NitroModules.isHybridObject(NitroModules), "Native Nitro proxy is missing or incompatible");
     const buffer = NitroModules.createNativeArrayBuffer(16); new Uint8Array(buffer).set([0, 127, 255]);
     assertContract(buffer.byteLength === 16 && new Uint8Array(buffer)[2] === 255, "Native buffer did not round-trip");
     assertContract(NitroModules.box(NitroModules).unbox().equals(NitroModules), "Hybrid object boxing lost identity");

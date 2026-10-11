@@ -15,7 +15,7 @@ This optional kitchen-sink example ports the published VisionCamera 5.2.3 packag
 | Target | macOS 14+, arm64 |
 | Build environment | Xcode 26.6, macOS SDK 26.5 |
 
-The React Native version did **not** change. Nitro 0.37 is isolated to this generated example; the framework's ordinary apps retain their existing dependency selection.
+The React Native version did **not** change. Spark now pins Nitro 0.37.0 across the SDK, including its AppKit view and RN 0.81 header compatibility fixes. Camera dependencies now come from the normal Spark installation; the example adds only its test probe. See [the camera integration](camera.md).
 
 The Debug app compiled and linked. Its generated Nitro view passed mount, prop update, native resize, unmount, exactly-once cleanup, and remount checks. The camera app passed 13 additional native runtime checks: RGBA color and row stride, pixel order, horizontal mirroring, PNG encoding/decoding, resizing, image file round-trip, camera discovery, session creation, preview output creation, an actual AppKit VisionCamera preview view mount, photo/video output creation, and explicit rejection of unsupported multi-camera requests. Camera discovery correctly returned zero devices on this machine.
 
@@ -62,7 +62,7 @@ For this machine, builds were staged under `/tmp` because Bun file reads in the 
 
 ## Patch layout and upstream path
 
-`patches/camera/upstream.json` pins each published archive and SHA-512 integrity. `scripts/prepare-camera.ts` verifies the archives, applies patches without fuzz, and installs content-addressed tarballs. No upstream branch is silently substituted. Generated bindings are included in the patches, so application builds do not need to rerun Nitrogen.
+`patches/camera/upstream.json` pins each published archive and SHA-512 integrity. The SDK ships these checked-in patches and applies them automatically to installed dependencies during installation and native preparation. `scripts/prepare-camera.ts` installs only the test probe. No upstream branch is silently substituted. Generated bindings are included in the patches, so application builds do not need to rerun Nitrogen.
 
 - **Nitro Modules:** expose a UIKit/AppKit platform view alias; keep Fabric-only C++ template headers out of Swift's public umbrella on RN 0.81.
 - **Nitrogen:** generate AppKit view imports/casts; use the macOS RN 0.81 `ViewProps` constructor; provide the private-header search path; call guarded view cleanup from deallocation for older RN versions. Both generator source and published JavaScript are patched. The probe and camera/image bindings were generated with this patched generator.

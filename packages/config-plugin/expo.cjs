@@ -5,6 +5,7 @@ const path = require('node:path');
 // Only an explicitly selected desktop command applies the Spark overlay.
 function withSparkExpo(original, root) {
   return context => {
+    require('./native-patches.cjs').prepareNativePatches(root);
     const base = typeof original === 'function' ? original(context) : original;
     const target = process.env.SPARK_PLATFORM;
     const development = process.env.SPARK_DEV_SESSION === '1';
