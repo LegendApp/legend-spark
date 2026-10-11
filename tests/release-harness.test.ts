@@ -92,6 +92,7 @@ describe("release harness on this machine", () => {
       ["xattr", "-p", "com.apple.quarantine", installed],
     ]);
     expect(run.apps.every(app => app === installed)).toBe(true);
+    expect(run.mac.calls.some(call => call[0] === "xattr" && call[1] === "-d")).toBe(false); // A release launches it quarantined.
     const gate: GateReport = JSON.parse(readFileSync(path.join(run.dir, "gate/report.json"), "utf8"));
     expect([gate.verdict, gate.build.artifact, gate.run]).toEqual(["PASS", installed, path.relative(run.env.repo, path.join(run.dir, "gate/run"))]);
     expect(run.report.gate).toEqual({ verdict: "PASS", report: "gate/report.json", reasons: [] });
@@ -192,6 +193,11 @@ describe("release harness on this machine", () => {
     expect(run.mac.calls).toContainEqual(["ditto", path.join(run.env.repo, "build/macos-arm64/KitchenSink.app"), path.join(create[4]!, "KitchenSink.app")]);
     expect(run.report.artifact).toEqual({ file: path.relative(run.env.repo, path.join(run.dir, "KitchenSink.dmg")), format: "dmg", sha256: expect.any(String), packagedFrom: "build/macos-arm64/KitchenSink.app" });
     expect(existsSync(path.join(run.dir, "KitchenSink.dmg"))).toBe(true);
+    // The verdicts are recorded with the quarantine on; then it is removed so macOS lets the rejected app start.
+    const app = run.report.install!.app;
+    expect(run.report.install).toMatchObject({ quarantine: "0081;00000000;;", quarantineRemoved: true });
+    expect(run.mac.calls.findIndex(call => call[0] === "xattr" && call[1] === "-d")).toBeGreaterThan(run.mac.calls.findIndex(call => call[0] === "spctl"));
+    expect(run.mac.calls).toContainEqual(["xattr", "-d", "-r", "com.apple.quarantine", app]);
     expect(run.report.gate!.verdict).toBe("PASS");
     expect(run.out.at(-1)).toContain("--local, not releasable");
   });

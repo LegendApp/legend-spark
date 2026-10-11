@@ -62,10 +62,13 @@ and 2 for a usage error.
 | Notarized, but the ticket is not stapled | fails | recorded |
 | `sourceRevision` missing, or not the report's commit | fails | recorded |
 | Gate after one of these failures | not run | runs |
+| Quarantine when the gate launches the app | kept | removed from the installed copy, after it is recorded, when Gatekeeper rejects the app (`install.quarantineRemoved`) |
 | `releasable` | PASS on a clean tree | always `false` |
 
 Local builds are ad-hoc signed and not notarized, so a release run fails them with
-`signature` and `notarization`. Use `--local` to exercise the install and gate path
+`signature` and `notarization`. macOS holds the launch of a quarantined app that
+Gatekeeper rejects before any of its code runs, so the driver would never start;
+that is why `--local` removes the quarantine before the gate. Use `--local` to exercise the install and gate path
 without Apple credentials. Its report says `"local": true, "releasable": false`, and
 the publish guard rejects it.
 
@@ -80,8 +83,8 @@ Gatekeeper rejects before launching it.
 `target`, `commit`, `dirty`, `startedAt`, `durationMs`, `environment`
 (`kind` `host` or `vm`; `clean`; the `host` the app was installed on; and `vm.driver` and
 `vm.image` for a VM), `artifact` (`file`, `format`, `sha256`, and `packagedFrom` for a
-`--local` DMG), `install` (`app`, `quarantine`, and `sourceRevision` when the app
-records one), `signature` (the verification above, `stapled` included, plus
+`--local` DMG), `install` (`app`, `quarantine`, `sourceRevision` when the app
+records one, and `quarantineRemoved` under `--local`), `signature` (the verification above, `stapled` included, plus
 `summary`), `gate` (`verdict`, `report`, `reasons`) and `reasons`
 (`{ check, message }`). `check` is one of `usage`, `target`, `source`, `artifact`,
 `install`, `quarantine`, `signature`, `notarization`, `revision`, `gate` or `vm`. A

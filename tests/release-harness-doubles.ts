@@ -55,6 +55,7 @@ export class FakeMac {
     if (failure) return failure;
     const [command, ...args] = argv;
     if (command === "xattr" && args[0] === "-w") { this.attributes.set(args[3]!, args[2]!); return ok(); }
+    if (command === "xattr" && args[0] === "-d" && args[1] === "-r") { this.attributes.delete(args[3]!); return ok(); }
     if (command === "xattr" && args[0] === "-p") {
       const value = this.attributes.get(args[2]!);
       return value ? ok(`${value}\n`) : { code: 1, stdout: "", stderr: `xattr: ${args[2]}: No such xattr: ${args[1]}` };

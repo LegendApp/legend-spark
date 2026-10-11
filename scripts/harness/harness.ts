@@ -9,7 +9,7 @@ import { runGate, type GateEnv } from "../e2e/gate/gate.ts";
 import { plan, repoPath, UsageError, type GatePlan, type Host } from "../e2e/gate/plan.ts";
 import { reasonText, writeGateReport } from "../e2e/gate/report.ts";
 import { reportDir } from "./guard.ts";
-import { describeSignature, HarnessError, install, judgeSignature, packageDmg, verify, type HarnessReason, type Sh, type Verification } from "./install.ts";
+import { describeSignature, HarnessError, install, judgeSignature, must, packageDmg, QUARANTINE, verify, type HarnessReason, type Sh, type Verification } from "./install.ts";
 import { vmProblem, type VmDriver } from "./vm.ts";
 
 export type HarnessOptions = {
@@ -53,7 +53,7 @@ export type HarnessReport = {
   environment: { kind: "host" | "vm"; clean: boolean; host: Host; vm?: { driver: string; image: string } };
   artifact?: { file: string; format: "dmg" | "zip"; sha256: string; packagedFrom?: string };
   /** `sourceRevision`: the commit the installed app says it was built from (spark-runtime.json), absent when it records none. */
-  install?: { app: string; quarantine: string; sourceRevision?: string };
+  install?: { app: string; quarantine: string; sourceRevision?: string; quarantineRemoved?: boolean };
   signature?: Verification & { summary: string };
   gate?: { verdict: "PASS" | "FAIL"; report: string; reasons: string[] };
   /** Every reason the verdict is FAIL. Empty means PASS. */
@@ -119,6 +119,13 @@ async function onHost(options: HarnessOptions, gatePlan: GatePlan, report: Harne
     if (problems.length && !options.local) {
       report.reasons.push({ check: "gate", message: "not run: the installed app failed the release checks above" });
       return;
+    }
+    // macOS holds the exec of a quarantined app that Gatekeeper rejects before it starts, so the driver never
+    // connects. `--local` has recorded both and is never releasable; it removes the quarantine so the gate can run.
+    if (options.local && !verification.gatekeeper.accepted) {
+      await must(env.sh, ["xattr", "-d", "-r", QUARANTINE, installed.app], "quarantine");
+      report.install.quarantineRemoved = true;
+      env.gate.stdout(`--local: removed ${QUARANTINE} from the installed copy so it can launch; Gatekeeper rejects it`);
     }
     const tested = plan(gatePlan.root, gatePlan.host, { target: options.target, artifact: installed.app });
     const files = { json: path.join(dir, "gate/report.json"), html: path.join(dir, "gate/index.html") };

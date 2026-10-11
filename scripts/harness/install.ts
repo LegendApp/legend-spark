@@ -27,7 +27,7 @@ export class HarnessError extends Error {
   constructor(readonly check: HarnessCheck, message: string) { super(message); }
 }
 
-async function must(run: Sh, argv: string[], check: HarnessCheck): Promise<Command> {
+export async function must(run: Sh, argv: string[], check: HarnessCheck): Promise<Command> {
   const result = await run(argv);
   if (result.code) throw new HarnessError(check, `${argv.join(" ")} exited ${result.code}: ${(result.stderr || result.stdout).trim()}`);
   return result;
