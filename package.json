@@ -115,7 +115,8 @@
     "yaml": "2.9.1",
     "ajv": "8.20.0",
     "pngjs": "3.4.0",
-    "@legendapp/spark-motion": "0.0.1-next.3"
+    "@legendapp/spark-motion": "0.0.1-next.3",
+    "@legendapp/spark-printing": "0.0.1-next.3"
   },
   "overrides": {
     "@expo/cli": "54.0.27",

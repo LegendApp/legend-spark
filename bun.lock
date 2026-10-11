@@ -25,6 +25,7 @@
         "@legendapp/spark-motion": "0.0.1-next.3",
         "@legendapp/spark-native-menu": "0.0.1-next.3",
         "@legendapp/spark-notifications": "0.0.1-next.3",
+        "@legendapp/spark-printing": "0.0.1-next.3",
         "@legendapp/spark-processes": "0.0.1-next.3",
         "@legendapp/spark-secure-storage": "0.0.1-next.3",
         "@legendapp/spark-settings": "0.0.1-next.3",
@@ -279,6 +280,7 @@
         "@legendapp/spark-motion": "0.0.1-next.3",
         "@legendapp/spark-native-menu": "0.0.1-next.3",
         "@legendapp/spark-notifications": "0.0.1-next.3",
+        "@legendapp/spark-printing": "0.0.1-next.3",
         "@legendapp/spark-processes": "0.0.1-next.3",
         "@legendapp/spark-secure-storage": "0.0.1-next.3",
         "@legendapp/spark-settings": "0.0.1-next.3",
@@ -461,6 +463,17 @@
     },
     "packages/notifications": {
       "name": "@legendapp/spark-notifications",
+      "version": "0.0.1-next.3",
+      "dependencies": {
+        "@legendapp/spark-desktop-app": "0.0.1-next.3",
+      },
+      "peerDependencies": {
+        "react": "19.1.4",
+        "react-native": "0.81.6",
+      },
+    },
+    "packages/printing": {
+      "name": "@legendapp/spark-printing",
       "version": "0.0.1-next.3",
       "dependencies": {
         "@legendapp/spark-desktop-app": "0.0.1-next.3",
@@ -952,6 +965,8 @@
     "@legendapp/spark-native-menu": ["@legendapp/spark-native-menu@workspace:packages/native-menu"],
 
     "@legendapp/spark-notifications": ["@legendapp/spark-notifications@workspace:packages/notifications"],
+
+    "@legendapp/spark-printing": ["@legendapp/spark-printing@workspace:packages/printing"],
 
     "@legendapp/spark-processes": ["@legendapp/spark-processes@workspace:packages/processes"],
 

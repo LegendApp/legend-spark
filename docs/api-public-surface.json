@@ -384,6 +384,27 @@
     "scheduleNotification",
     "showNotification"
   ],
+  "./printing": [
+    "ExportPDFOptions",
+    "ExportPDFResult",
+    "PageMargins",
+    "PageOrientation",
+    "PageSetup",
+    "PageSetupOptions",
+    "PageSetupResult",
+    "PaperSize",
+    "PrintContent",
+    "PrintOptions",
+    "PrintResult",
+    "PrintableView",
+    "PrintingFeature",
+    "exportPDF",
+    "getDefaultPageSetup",
+    "getPrintingAvailability",
+    "paperSizes",
+    "print",
+    "showPageSetup"
+  ],
   "./processes": [
     "ProcessExit",
     "ProcessHandle",
