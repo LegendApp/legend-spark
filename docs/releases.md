@@ -83,6 +83,10 @@ remain pending. Promoting npm `latest` does not change that support scope.
   native builds or runtime behavior.
 - Complete the dossier for the exact source and archive. Resolve platform gates
   for every platform advertised by the candidate.
+- Run the Kitchen Sink release gate, `bun run gate`, on each target in
+  `e2e/gate.yaml` (see [Release gate](e2e-flows.md#release-gate)). It fails today:
+  no e2e backend exists yet and coverage is incomplete. `bun run release` does not
+  run it yet ([#55](https://github.com/LegendApp/legend-spark/issues/55)).
 - Verify the configured GitHub repository visibility and npm identity before
   publishing; do not change either as an implicit release step.
 - For signed production Runner distribution, configure the authorized Developer

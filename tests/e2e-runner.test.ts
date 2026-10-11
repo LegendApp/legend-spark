@@ -72,6 +72,25 @@ describe("implicit waits and timeouts", () => {
     const { result } = await run(flow("- repeat: { while: { visible: X }, commands: [ { tapOn: X } ] }", "timeout: 1s\n"), [backend]);
     expect(result.failure).toMatchObject({ kind: "timeout", message: "the flow exceeded its 1000ms timeout" });
   });
+
+  test("a run deadline (the gate's time budget) fails the flow running then and every later flow", async () => {
+    const backend = memory({ elements: [element("x", { text: "X" })] });
+    const dir = root({ "flows/a/one.yaml": flow("- tapOn: X\n- tapOn: X\n- tapOn: X"), "flows/a/two.yaml": flow("- tapOn: X") });
+    const results = await runFlows(["one", "two"].map(name => path.join(dir, `flows/a/${name}.yaml`)), { backends: [backend], runDir: path.join(dir, "run"), clock: backend.clock, deadline: 75 });
+    expect(results.map(result => [result.id, result.failure?.kind, result.failure?.message, result.steps.length])).toEqual([
+      ["flows/a/one", "timeout", "the run exceeded its time budget", 3], ["flows/a/two", "timeout", "the run exceeded its time budget", 0],
+    ]);
+  });
+});
+
+describe("metrics", () => {
+  test("handlers record metrics on the flow result, in order; a non-finite value fails the command", async () => {
+    const backend = memory({ kind: "driver", commands: { assertMemory: async (args, context) => { context.metric("memory.mb", args.maxMB === 1 ? Number.NaN : 80); context.metric("memory.mb", 96.5); } } });
+    const { result } = await run(flow("- assertMemory: { maxMB: 120 }"), [backend]);
+    expect([result.status, result.metrics]).toEqual(["passed", { "memory.mb": [80, 96.5] }]);
+    const { result: bad } = await run(flow("- assertMemory: { maxMB: 1 }"), [backend]);
+    expect(bad.failure).toMatchObject({ kind: "error", message: "metric memory.mb must be a finite number, not NaN" });
+  });
 });
 
 describe("zero retries", () => {
@@ -415,7 +434,7 @@ describe("e2e:run", () => {
   test("usage errors exit 2", async () => {
     const dir = root({ "flows/a/pass.yaml": flow("- tapOn: Save"), "subflows/s.yaml": "- tapOn: X\n" });
     const cases: Array<[string[], Record<string, () => Backend>, string]> = [
-      [[dir], {}, "no backends are available yet: the macOS black-box backend lands with #50 and the in-app driver adapter with #52"],
+      [[dir], {}, "no backends are available yet: the macOS black-box backend lands with #50 and the in-app driver adapter with #226"],
       [[dir, "--backend", "nope"], { memory: () => memory() }, "unknown backend nope (available: memory)"],
       [[dir, "--frobnicate"], { memory: () => memory() }, "unknown option --frobnicate"],
       [[path.join(dir, "subflows/s.yaml")], { memory: () => memory() }, "not a flow"],

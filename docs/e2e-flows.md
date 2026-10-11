@@ -13,6 +13,7 @@ interface.
 e2e/
   schema/                     # generated JSON Schemas (do not edit)
   gate.yaml                   # release-gate manifest
+  budgets.yaml                # performance baselines per reference machine
   checks/<area>.yaml          # check registry, one file per area
   flows/<area>/<name>.yaml    # one behavior per flow; these are gate flows
   subflows/                   # reusable command lists (runFlow)
@@ -21,7 +22,7 @@ e2e/
 ```
 
 The CLI knows a file's kind from where it is: `checks/<area>.yaml` is a registry,
-`gate.yaml` is the manifest, anything under `subflows/` is a subflow, and anything
+`gate.yaml` is the manifest, `budgets.yaml` is the budgets file, anything under `subflows/` is a subflow, and anything
 under `flows/` is a flow. A directory scan skips YAML anywhere else, such as fixtures.
 A file you name on the command line outside those folders is checked as a flow.
 
@@ -170,7 +171,7 @@ is 0 when every flow passed or was skipped, 1 when one failed, and 2 for a usage
 
 **No production backend exists yet.** The macOS black-box backend (AX + CGEvent) lands
 with [#50](https://github.com/LegendApp/legend-spark/issues/50), and the adapter for the
-Spark in-app driver lands with [#52](https://github.com/LegendApp/legend-spark/issues/52).
+Spark in-app driver lands with [#226](https://github.com/LegendApp/legend-spark/issues/226).
 Until then, `e2e:run` exits 2 and says so. The runner's behavior is covered by
 `tests/e2e-runner.test.ts`, which uses an in-memory test backend.
 
@@ -243,7 +244,7 @@ restoration change anything.
 `interrupted`, `summary` (`total`, `passed`, `failed`, `skipped`) and `flows`. Each flow
 has `id`, `file`, `name`, `intent`, `checks`, `tags`, `matrix`, `status`, `skipReason`,
 `durationMs`, `steps` (every command run, with `depth`, `status` and duration), `failure`,
-`errors` (problems after the first failure) and `artifacts`. A `failure` has `kind`,
+`errors` (problems after the first failure), `artifacts` and `metrics` (see [Metrics](#metrics)). A `failure` has `kind`,
 `message`, `command`, `location`, `stack`, `candidates`, `matches`, `artifacts` and, for
 invalid flows, `diagnostics`. Artifact paths are relative to the run directory.
 
@@ -288,7 +289,8 @@ name in `BACKENDS` in `scripts/e2e/runner/run.ts`.
 - Handlers get a `CommandContext`. It has `target()`, `resolve(selector)` and
   `window(selector)` (waits with the shared semantics), `eventually(check)` (polls a
   check that throws `Failure("assertion", …)`), `onRestore(label, undo)`, `run(commands)`
-  for nested commands, and `outputDir` with `addArtifact` for files the flow asked for.
+  for nested commands, `outputDir` with `addArtifact` for files the flow asked for, and
+  `metric(name, value)` for measurements the gate checks against budgets.
 - `matrix` lists the dimensions the backend applies, from `session.matrix` in `start`.
   `collect(dir)` writes failure evidence: a screenshot, logs, a driver trace.
 
@@ -379,8 +381,7 @@ uses the same code for the `docs/api-public-surface.json` snapshot.
 Only checks that some flow lists count toward coverage. The exit code is 0 only when
 there are no problems and every required item is covered, 1 otherwise, and 2 for a
 usage error. Coverage is not part of `bun run test`: most areas have no checks yet,
-so it fails today. The release gate ([#54](https://github.com/LegendApp/legend-spark/issues/54))
-makes it blocking.
+so it fails today. The [release gate](#release-gate) makes it blocking.
 
 `--json` prints the report for the gate and dashboards:
 
@@ -397,10 +398,173 @@ makes it blocking.
 
 `kind` is `subpath`, `export` or `availability`.
 
+## Release gate
+
+```sh
+bun run gate                      # run the gate for this machine's target
+bun run gate --dry-run            # plan only: the target, checks, flows and budgets
+bun run gate --target macos-14/arm64@macbook-air-m1-8gb --dry-run   # plan another target
+```
+
+The gate certifies one target per run: the machine it runs on. The verdict is PASS
+only when every check below passes. The exit code is 0 on PASS, 1 on FAIL (or an
+invalid `e2e/gate.yaml`, whose problems it prints), and 2 for a usage error, such as a
+`--target` that is not in the manifest. It never passes vacuously. A missing target,
+backend, build, flow, baseline, measurement or sign-off is a failure with its own reason.
+
+**It fails today.** No backend exists yet (#50, #226), coverage is incomplete, and the
+budgets are not measured. The release scripts do not run it yet; that is
+[#55](https://github.com/LegendApp/legend-spark/issues/55).
+
+### Manifest
+
+`e2e/gate.yaml` (schema: `e2e/schema/gate.schema.json`). Every key is required except
+`build.<platform>.verifySignature` and `targets[].machine`.
+
+| Key | Meaning |
+|---|---|
+| `suite`, `appId` | Names for the report. |
+| `build.macos` / `build.windows` | `artifact`: the release build to test, relative to the repository root. `${ARCH}` becomes `arm64` or `x64`. `verifySignature: true` runs `codesign --verify --deep --strict` (macOS; Windows verification is not implemented, so asking for it fails). The flows get the artifact as `${APP_PATH}`. |
+| `targets` | `{ os, arch, machine? }`. `os` is `macos-<major>` or `windows-<10\|11>`; `arch` is `arm64` or `x64`, as Spark names them. `machine` names a reference machine from the budgets file: that target runs on that hardware and checks its budgets. |
+| `include` | Globs of gate flows, relative to `e2e/`. |
+| `blocking` | `{ tags, default }`. A flow blocks the release when it fails if it has one of `tags`, lists a check registered `blocking: true`, or `default` is true. A non-blocking failure is a warning. |
+| `retries` | Must be `0`. Flaky means failed; the gate never reruns a flow. |
+| `timeBudget` | The longest the whole run may take, such as `45m`. When it passes, the running flow and every later flow fail with `timeout`, and the gate fails. |
+| `budgets` | The budgets file, relative to `e2e/`. |
+| `coverage` | `{ checks, exports, availability }`. `checks` is the registry directory. `exports` requires every subpath and runtime export, and `availability` requires every availability flag. |
+| `signoffs` | The manual sign-off file, relative to the repository root. |
+| `report` | `{ json, html }`, relative to the repository root. The runner's own report goes in `run/` next to `json`. |
+
+**Target detection.** The gate reads the macOS major version (`sw_vers`) or the Windows
+build (22000 and later is Windows 11), the OS-reported CPU (not the process's, which
+may be emulated, and not `SPARK_*_ARCH`), and on macOS the model (`sysctl hw.model`)
+and memory. A machine-bound target matches only on its hardware. When both a
+machine-bound and a plain target match, the machine-bound one wins. `--target` picks a
+target by ID (`os/arch` or `os/arch@machine`). If this machine cannot be that target,
+the run fails without running flows; use `--dry-run` to plan other targets.
+
+### What runs
+
+1. **Source:** uncommitted changes fail. The gate certifies a commit.
+2. **Lint:** `bun run e2e:lint` over all of `e2e/`, including the manifest and budgets.
+3. **Coverage:** `bun run e2e:coverage` over the registries and every gate flow (for
+   all targets), with the required surface from `coverage`.
+4. **Build:** the target's artifact exists and, if asked, its signature verifies.
+5. **Flows:** the gate flows whose `platforms` include the target's platform, every
+   matrix combination, run through the runner with every registered backend for that
+   platform. Flows with `manual: true` are not run; `manual: partial` flows are run and
+   signed off. Any failed or skipped blocking run fails the gate.
+6. **Budgets** on a machine-bound target (see [Budgets](#budgets)).
+7. **Sign-offs** for every manual run (see [Manual sign-offs](#manual-sign-offs)).
+8. **Time budget** for the whole run.
+
+The gate runs every check even after one fails, so one report lists every reason.
+Flows don't run when there is no backend, no build, or this machine cannot be the
+`--target`.
+
+### Report
+
+`report.json` has `version`, `verdict` (`PASS` or `FAIL`), `reasons` (`{ check, message }`: every
+reason for FAIL), `warnings` (non-blocking failures), `suite`, `appId`, `startedAt`,
+`durationMs`, `timeBudgetMs`, `host`, `target`, `machine`, `commit`, `dirty`, `build`
+(`artifact`, `exists`, `signature`), `backends`, `coverage` (`required`, `covered`,
+`problems`), `flows` (one per run ID: `status` is `passed`, `failed`, `skipped`,
+`not-run`, `signed-off` or `unsigned`, plus `blocking`, `manual`, `failure`, `signoff`),
+`excluded` (flows for other platforms), `budgets` (one entry per measurement:
+`metric`, `flow`, `value`, `baseline`, `limit`, `status`) and `run` (the runner's report
+directory). `check` is one of `manifest`, `target`, `source`, `lint`, `coverage`,
+`build`, `backend`, `flows`, `time-budget`, `budgets` or `signoffs`. The HTML page shows
+the same and links to the runner's page.
+
+### Budgets
+
+`e2e/budgets.yaml` (schema: `e2e/schema/budgets.schema.json`) holds baselines per
+reference machine:
+
+```yaml
+machines:
+  macbook-air-m1-8gb:
+    name: MacBook Air (M1, 2020), 8 GB, 60 Hz display
+    model: MacBookAir10,1        # sysctl hw.model
+    memoryGB: 8
+budgets:
+  - metric: startup.coldMs
+    description: Cold launch to the first frame of the catalog
+    better: lower                # lower | higher
+    tolerance: 10%               # how much worse than the baseline still passes
+    baselines: { macbook-air-m1-8gb: not-measured }   # a number once measured
+    # blocking: false            # default true
+    # flows: [flows/startup/**]  # default: every gate flow that records the metric
+```
+
+On a target with `machine: M`, each budget with a baseline for `M` is checked against
+every value of its metric that a selected flow recorded. A value worse than the
+baseline by more than `tolerance` fails. A blocking budget **fails closed**:
+`not-measured` fails (the reason lists the values this run measured, so you can record
+one), and so does a budget that no flow recorded. Budgets without a baseline for `M`
+do not apply. Every machine with baselines needs a target in `gate.yaml`, and every
+`targets[].machine` needs a machine here. Otherwise the gate fails with `manifest`.
+
+To record a baseline, run the gate on the reference machine with the release build,
+take the value from the reason or from `budgets` in `report.json`, and replace
+`not-measured` with it in a reviewed change.
+
+The Kitchen Sink reference machines are the MacBook Air (M1, 8 GB) for startup,
+memory and 60 Hz frame rate (target `macos-14/arm64@macbook-air-m1-8gb`), and the
+base 14-inch MacBook Pro for 120 Hz frame rate (target
+`macos-27/arm64@macbook-pro-14-base`). No baselines are measured yet.
+
+### Metrics
+
+Backends record measurements with `context.metric(name, value)`. They appear in the
+run report as `metrics: { name: [values…] }` on each flow result. Budgets refer to
+these names, so backends (the driver adapter, #226) use them for the performance commands:
+
+| Command | Metrics |
+|---|---|
+| `assertStartup` | `startup.coldMs`, `startup.firstPaintMs` |
+| `assertMemory` | `memory.mb` |
+| `assertFrames` | `frames.fps`, `frames.dropped` |
+| `assertIdleCpu` | `cpu.idlePercent` |
+| `measure` | `measure.<name>` (milliseconds) |
+
+### Manual sign-offs
+
+Flows with `manual: true` or `manual: partial` need one passing sign-off per run ID, for
+this target and the commit under test. Until the sign-off mode
+([#57](https://github.com/LegendApp/legend-spark/issues/57)) writes this file, it is
+written by hand, and the runner reports a `manualStep` as `unsupported`, so a
+`manual: partial` flow fails. The file is `signoffs` from the manifest (schema:
+`e2e/schema/signoffs.schema.json`):
+
+```yaml
+signoffs:
+  - flow: flows/menus/macos-items[appearance=dark]   # the run ID from the gate report
+    target: macos-15/arm64
+    commit: 0123456789abcdef0123456789abcdef01234567  # git rev-parse HEAD
+    verdict: pass                                     # pass | fail
+    by: Jane Doe
+    at: 2026-10-10T14:03:00Z
+    evidence: [artifacts/gate/manual/macos-items-dark.png]   # optional, must exist
+    note: optional
+```
+
+A missing file, a missing or duplicated sign-off, `verdict: fail`, or missing evidence
+fails the gate with `signoffs`.
+
+### From a flows task
+
+Your flow is a gate flow as soon as it is under `flows/`. Before you open a PR, run
+`bun run gate --dry-run` to see it in the plan for your platform, and check that it is
+blocking (the default). If it measures performance, record metrics through the driver
+commands above. Ask for a budget in `e2e/budgets.yaml`, and leave it `not-measured`
+until someone measures it on the reference machine.
+
 ## Editor support
 
 `.vscode/settings.json` maps the schemas in `e2e/schema/` onto `e2e/flows`,
-`e2e/subflows`, `e2e/checks` and `e2e/gate.yaml`. With the recommended
+`e2e/subflows`, `e2e/checks`, `e2e/gate.yaml`, `e2e/budgets.yaml` and
+`artifacts/gate/signoffs.yaml`. With the recommended
 [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml)
 (`redhat.vscode-yaml`), the editor validates flows against the schema as you type.
 Some checks run only in the CLI: accelerator and regex syntax, `when.matrix` against

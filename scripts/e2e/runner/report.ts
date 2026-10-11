@@ -45,7 +45,7 @@ export function failureText(failure: FailureReport, artifactPath = (artifact: Ar
   ].join("\n");
 }
 
-const escape = (text: string) => text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/[<>&"]/g, char => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[char]!);
+export const escape = (text: string) => text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/[<>&"]/g, char => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[char]!);
 const seconds = (ms: number) => (ms / 1000).toFixed(3);
 
 export function junit(report: RunReport): string {

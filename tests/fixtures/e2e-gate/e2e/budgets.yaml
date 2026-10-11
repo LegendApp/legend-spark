@@ -1,0 +1,8 @@
+machines:
+  air-m1: { name: "MacBook Air (M1, 2020), 8 GB", model: "MacBookAir10,1", memoryGB: 8 }
+budgets:
+  - metric: startup.coldMs
+    description: Cold launch to the catalog
+    better: lower
+    tolerance: 10%
+    baselines: { air-m1: 700 }

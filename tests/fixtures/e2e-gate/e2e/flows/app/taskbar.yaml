@@ -1,0 +1,8 @@
+appId: so.legend.kitchensink
+name: Taskbar progress
+intent: The taskbar button shows download progress.
+checks: [APP-TASKBAR-01]
+platforms: [windows]
+---
+- launchApp
+- assertTaskbar: { progress: 0.5 }

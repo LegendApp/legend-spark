@@ -1,6 +1,6 @@
 import { COMMANDS, GROUPS, isBare, type CommandSpec } from "./commands.ts";
 import { SELECTOR_PROPS } from "./primitives.ts";
-import { buildFlowSchema, buildGateSchema, buildRegistrySchema } from "./schemas.ts";
+import { buildBudgetsSchema, buildFlowSchema, buildGateSchema, buildRegistrySchema, buildSignoffsSchema } from "./schemas.ts";
 
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 const code = (value: string) => `\`${value}\``;
@@ -45,6 +45,8 @@ export function generatedFiles(): Record<string, string> {
     "e2e/schema/flow.schema.json": json(buildFlowSchema()),
     "e2e/schema/checks.schema.json": json(buildRegistrySchema()),
     "e2e/schema/gate.schema.json": json(buildGateSchema()),
+    "e2e/schema/budgets.schema.json": json(buildBudgetsSchema()),
+    "e2e/schema/signoffs.schema.json": json(buildSignoffsSchema()),
     "docs/e2e-flow-commands.md": reference(),
   };
 }

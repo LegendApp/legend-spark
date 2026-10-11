@@ -1,0 +1,14 @@
+area: app
+prefix: APP
+checks:
+  APP-LAUNCH-01:
+    title: Cold launch shows the catalog
+    covers: [./app#launch]
+  APP-THEME-01:
+    title: The theme follows the appearance
+    covers: [./app#setTheme]
+  APP-IME-01:
+    title: The IME candidate window tracks the caret
+  APP-TASKBAR-01:
+    title: Taskbar progress shows on Windows
+    platforms: [windows]
