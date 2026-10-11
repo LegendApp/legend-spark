@@ -21,7 +21,8 @@ function usePopoverDemo() {
   const [detachable, setDetachable] = useState(false);
   const [anchor, setAnchor] = useState<PopoverAnchor>({ ref: anchorView });
   const [events, setEvents] = useState<string[]>([]);
-  const [error, setError] = useState<string>();
+  // Every reported error, so a repeated failure is visible as a new entry.
+  const [errors, setErrors] = useState<string[]>([]);
   const record = (event: string) => setEvents(previous => [...previous.slice(-4), event]);
   function show() {
     if (mode === "view") { setAnchor({ ref: anchorView }); setOpen(true); return; }
@@ -29,12 +30,12 @@ function usePopoverDemo() {
     anchorView.current?.measureInWindow((x, y, width, height) => { setAnchor({ rect: { x, y, width, height } }); setOpen(true); });
   }
   return {
-    anchorView, open, behavior, setBehavior, edge, setEdge, mode, setMode, detachable, setDetachable, anchor, events, error, show,
+    anchorView, open, behavior, setBehavior, edge, setEdge, mode, setMode, detachable, setDetachable, anchor, events, errors, show,
     close: () => setOpen(false),
     onShow: () => record("shown"),
     onClose: () => { record("closed"); setOpen(false); },
     onDetach: () => record("detached"),
-    onError: (reported: SparkError) => setError(describe(reported)),
+    onError: (reported: SparkError) => setErrors(previous => [...previous.slice(-4), describe(reported)]),
   };
 }
 
@@ -71,7 +72,7 @@ export function PopoverScreen() {
     </View>
     <Text selectable className="font-mono text-xs text-muted" testID={`${id}-open`}>{JSON.stringify({ open: demo.open, anchor: demo.mode })}</Text>
     <Text selectable className="font-mono text-xs text-muted" testID={`${id}-events`}>{JSON.stringify(demo.events)}</Text>
-    {demo.error && <Text selectable className="text-xs text-danger" testID={`${id}-error`}>{demo.error}</Text>}
+    {demo.errors.length > 0 && <Text selectable className="font-mono text-xs text-danger" testID={`${id}-error`}>{JSON.stringify(demo.errors)}</Text>}
     <Boundary id={`${id}-host`}>
       <Popover testID={`${id}-host`} open={demo.open} anchor={demo.anchor} behavior={demo.behavior} preferredEdge={demo.edge} detachable={demo.detachable}
         onShow={demo.onShow} onClose={demo.onClose} onDetach={demo.onDetach} onError={demo.onError}>

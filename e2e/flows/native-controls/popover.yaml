@@ -4,7 +4,7 @@ intent: >
   On Native controls > Popover, in driver mode, the behavior, edge, anchor and detachable settings take
   clicks, and Show popover (anchored to the button, then to its measured window rect) sets open to true.
   AppKit shows a popover only from a window on screen and driver-mode windows never are, so the popover
-  reports SparkError E_UNAVAILABLE through onError, reports no shown event, and its React content
+  reports SparkError E_UNAVAILABLE through onError for each anchor (the error readout counts them), reports no shown event, and its React content
   never appears in the main window. popover-black-box.yaml opens it on the black-box backend.
 checks: [CTRL-POPOVER-02]
 tags: [native-controls]
@@ -23,12 +23,13 @@ matrix:
 - tapOn: { id: native-controls-popover-detachable }
 - tapOn: { id: native-controls-popover-show }
 - assertText: { id: native-controls-popover-open, equals: '{"open":true,"anchor":"view"}' }
-- extendedWaitUntil: { visible: { id: native-controls-popover-error, text: "SparkError:E_UNAVAILABLE" }, timeout: 5s }
+- extendedWaitUntil: { visible: { id: native-controls-popover-error, text: '["SparkError:E_UNAVAILABLE"]' }, timeout: 5s }
 - assertText: { id: native-controls-popover-events, equals: "[]" }
 - assertNotVisible: { id: native-controls-popover-content }
 - tapOn: { id: native-controls-popover-anchor-mode.rect }
 - assertText: { id: native-controls-popover-open, equals: '{"open":true,"anchor":"rect"}' }
 - tapOn: { id: native-controls-popover-show }
+# The rect anchor is refused on its own: a second error, not the view anchor's.
+- extendedWaitUntil: { visible: { id: native-controls-popover-error, text: '["SparkError:E_UNAVAILABLE","SparkError:E_UNAVAILABLE"]' }, timeout: 5s }
 - assertText: { id: native-controls-popover-events, equals: "[]" }
-- assertText: { id: native-controls-popover-error, equals: "SparkError:E_UNAVAILABLE" }
 - assertNotVisible: { id: native-controls-popover-content }
