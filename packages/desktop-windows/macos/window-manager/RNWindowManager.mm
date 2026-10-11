@@ -1324,7 +1324,6 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     if ([allowed containsObject:itemIdentifier]) [toolbar insertItemWithItemIdentifier:itemIdentifier atIndex:toolbar.items.count];
   }
   layout.suspended--;
-  [layout save];
 }
 
 // Attaches a toolbar when the window has none of ours, stores the item configurations and
@@ -1395,17 +1394,19 @@ RCT_EXPORT_MODULE(NativeWindowManager)
                                   customization:hasCustomization ? (windowStyle[@"toolbarCustomization"] ?: NSNull.null) : nil
                                         configs:configs];
   NSToolbar *toolbar = window.toolbar;
+  // The app's changes are not customizations: only the user's are saved.
+  LegendToolbarLayout *layout = LegendToolbarLayoutFor(toolbar);
+  layout.suspended++;
   if (hasItems && !attached) [self updateToolbar:toolbar configs:configs previousConfigs:previousConfigs];
   if (shown) toolbar.visible = shown.boolValue;
   // Inserting items can change the display mode, so it applies after them. AppKit keeps
   // its current mode instead of showing labels only while an item has nothing to click
   // (a label item has no action, control or menu).
-  if (displayMode) {
-    NSToolbarDisplayMode mode = [displayMode isEqualToString:@"label"] ? NSToolbarDisplayModeLabelOnly
-      : [displayMode isEqualToString:@"iconAndLabel"] ? NSToolbarDisplayModeIconAndLabel : NSToolbarDisplayModeIconOnly;
-    toolbar.displayMode = mode;
-    if (toolbar.displayMode != mode) return @"AppKit shows labels only when every toolbar item responds to a click; label items do not";
-  }
+  NSToolbarDisplayMode mode = [displayMode isEqualToString:@"label"] ? NSToolbarDisplayModeLabelOnly
+    : [displayMode isEqualToString:@"iconAndLabel"] ? NSToolbarDisplayModeIconAndLabel : NSToolbarDisplayModeIconOnly;
+  if (displayMode) toolbar.displayMode = mode;
+  layout.suspended--;
+  if (displayMode && toolbar.displayMode != mode) return @"AppKit shows labels only when every toolbar item responds to a click; label items do not";
   return nil;
 }
 
@@ -1442,9 +1443,10 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     if (menuUpdate) return;
   }
 
-  // A customizable toolbar keeps the user's arrangement: items the update removed leave it,
-  // and new items appear only in the customization palette, as in any AppKit app.
-  [self setItemIdentifiers:LegendToolbarLayoutFor(toolbar) ? [toolbar.items valueForKey:@"itemIdentifier"] : [self toolbarDefaultItemIdentifiers:toolbar]
+  // Once the user has customized the toolbar it keeps their arrangement: items the update removed
+  // leave it, and new items appear only in the customization palette, as in any AppKit app.
+  // Until then it shows the app's items.
+  [self setItemIdentifiers:LegendToolbarLayoutFor(toolbar).saved ? [toolbar.items valueForKey:@"itemIdentifier"] : [self toolbarDefaultItemIdentifiers:toolbar]
                 forToolbar:toolbar];
 }
 

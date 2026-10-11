@@ -254,6 +254,23 @@ int main() { @autoreleasepool {
   // Opening applies the app's items without saving them as a customization.
   [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
   assert([NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey] == nil);
+  // App updates are not customizations: a new segmented value, a display mode, the shown state and new
+  // items leave no saved layout, and until the user customizes, the toolbar follows the app's items.
+  NSMutableArray *appItems = [barItems mutableCopy];
+  NSMutableDictionary *grid = [appItems[1] mutableCopy]; grid[@"selectedValue"] = @"grid"; appItems[1] = grid;
+  [appItems addObject:@{ @"id": @"export", @"type": @"button", @"label": @"Export" }];
+  [manager setWindowOptions:@"custom-a" optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"toolbarItems": appItems, @"toolbarDisplayMode": @"iconAndLabel", @"toolbarShown": @NO } }]
+    resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  [manager setWindowOptions:@"custom-a" optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"toolbarItems": barItems, @"toolbarDisplayMode": @"icon", @"toolbarShown": @YES } }]
+    resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+  assert([NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey] == nil);
+  [manager setWindowOptions:@"custom-a" optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"toolbarItems": appItems } }] resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  readToolbar(@"custom-a");
+  assert([toolbarState[@"itemIds"] containsObject:@"export"]);
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+  assert([NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey] == nil);
+  [manager setWindowOptions:@"custom-a" optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"toolbarItems": barItems } }] resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
   // The user drags Share out of the toolbar, picks Icon and Text and hides the toolbar (AppKit's
   // palette and context menu make these same toolbar changes).
   NSUInteger shareIndex = [[first.toolbar.items valueForKey:@"itemIdentifier"] indexOfObject:@"legend.toolbar.share"];
@@ -276,10 +293,11 @@ int main() { @autoreleasepool {
   readToolbar(@"custom-b");
   assert([toolbarState[@"itemIds"] isEqual:(@[@"sidebar", @"view"])]);
   assert([[manager toolbarAllowedItemIdentifiers:second.toolbar] containsObject:@"legend.toolbar.export"]);
-  // A second open window with the same ID restores the latest layout; each window then keeps its own.
+  // A second open window with the same ID restores the user's latest layout (the update was not
+  // saved); each window then keeps its own.
   NSWindow *third = customWindow(@"custom-c", barItems);
   readToolbar(@"custom-c");
-  assert([toolbarState[@"itemIds"] isEqual:(@[@"sidebar", @"view"])]);
+  assert([toolbarState[@"itemIds"] isEqual:(@[@"sidebar", @"view", @"sort"])]);
   // The user drags Share from the palette into the toolbar; the add is saved once AppKit has inserted it.
   [third.toolbar insertItemWithItemIdentifier:@"legend.toolbar.share" atIndex:2];
   [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
