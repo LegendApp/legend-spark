@@ -72,8 +72,9 @@ using namespace facebook::react;
   _kind = kind;
   if ([kind isEqual:@"checkbox"] || [kind isEqual:@"disclosure-triangle"]) {
     NSButton *button = [NSButton buttonWithTitle:@"" target:self action:@selector(changed:)];
-    button.buttonType = [kind isEqual:@"checkbox"] ? NSButtonTypeSwitch : NSButtonTypeOnOff;
-    if ([kind isEqual:@"disclosure-triangle"]) button.bezelStyle = NSBezelStyleDisclosure;
+    button.buttonType = [kind isEqual:@"checkbox"] ? NSButtonTypeSwitch : NSButtonTypePushOnPushOff;
+    // AppKit's disclosure triangle is image-only: the bezel leaves no room for a title, so its label is accessibility text.
+    if ([kind isEqual:@"disclosure-triangle"]) { button.bezelStyle = NSBezelStyleDisclosure; button.imagePosition = NSImageOnly; }
     _control = button;
   } else if ([kind isEqual:@"radio-group"]) {
     _control = [NSView new];
@@ -176,6 +177,8 @@ using namespace facebook::react;
   NSString *identifier = [NSString stringWithUTF8String:value.testId.c_str()];
   NSControlSize size = value.controlSize == "mini" ? NSControlSizeMini : value.controlSize == "small" ? NSControlSizeSmall : value.controlSize == "large" ? NSControlSizeLarge : NSControlSizeRegular;
   _control.accessibilityLabel = label; _control.accessibilityIdentifier = identifier;
+  // A button's cell is its accessibility element: a label set only on the button never reaches VoiceOver.
+  if ([_control isKindOfClass:NSButton.class]) [(NSButton *)_control cell].accessibilityLabel = label;
   if ([_control isKindOfClass:NSControl.class]) {
     NSControl *control = (NSControl *)_control;
     control.enabled = !_disabled; control.controlSize = size; control.font = [NSFont systemFontOfSize:[NSFont systemFontSizeForControlSize:size]];
@@ -197,13 +200,13 @@ using namespace facebook::react;
       radio.accessibilityIdentifier = [NSString stringWithFormat:@"%@.%@", identifier, options[radio.tag][@"value"]];
       if (reconcile) radio.state = [options[radio.tag][@"value"] isEqual:payload[@"value"]] ? NSControlStateValueOn : NSControlStateValueOff;
     }
-  } else if ([kind isEqual:@"checkbox"] || [kind isEqual:@"disclosure-triangle"]) {
+  } else if ([kind isEqual:@"checkbox"]) {
     NSButton *button = (NSButton *)_control;
     button.title = payload[@"label"] ?: @"";
-    button.allowsMixedState = [kind isEqual:@"checkbox"] && [payload[@"value"] isEqual:@"mixed"];
+    button.allowsMixedState = [payload[@"value"] isEqual:@"mixed"];
     if (reconcile) button.state = [payload[@"value"] isEqual:@"mixed"] ? NSControlStateValueMixed : [payload[@"value"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
-  } else if ([kind isEqual:@"switch"]) {
-    if (reconcile) [(NSSwitch *)_control setState:[payload[@"value"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff];
+  } else if ([kind isEqual:@"switch"] || [kind isEqual:@"disclosure-triangle"]) {
+    if (reconcile) [(id)_control setState:[payload[@"value"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff];
   } else if ([kind isEqual:@"slider"]) {
     RNSparkPrimitiveSlider *slider = (RNSparkPrimitiveSlider *)_control;
     slider.sparkStep = [payload[@"step"] doubleValue];
@@ -250,7 +253,7 @@ using namespace facebook::react;
     button.alignment = _rtl ? NSTextAlignmentRight : NSTextAlignmentLeft;
     button.imagePosition = _rtl ? NSImageRight : NSImageLeft;
   }
-  if ([_control isKindOfClass:NSSwitch.class] || [_control isKindOfClass:NSStepper.class] ||
+  if ([_control isKindOfClass:NSSwitch.class] || [_control isKindOfClass:NSStepper.class] || [_kind isEqual:@"disclosure-triangle"] ||
       ([_control isKindOfClass:NSProgressIndicator.class] && [(NSProgressIndicator *)_control style] == NSProgressIndicatorStyleSpinning)) {
     [(id)_control sizeToFit];
     NSSize size = _control.frame.size;

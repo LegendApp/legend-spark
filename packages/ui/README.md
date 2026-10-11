@@ -62,7 +62,7 @@ provided.
 | `PathControl` / `path-control` | File URL `value`, such as `file:///Users`; selecting a path component proposes its URL. |
 | `Progress` / `progress` | `{mode?: 'determinate', value: number}` with value in `[0, 1]`, or `{mode: 'indeterminate' \| 'spinner'}` without a value. Read-only. |
 | `LevelIndicator` / `level-indicator` | Read-only numeric `value`, `min=0`, `max=100`. |
-| `DisclosureTriangle` / `disclosure-triangle` | Boolean expanded `value`; optional `label`. The application owns the disclosed content. |
+| `DisclosureTriangle` / `disclosure-triangle` | Boolean expanded `value`; optional `label` supplies accessibility text (the native triangle has no visible title). Default frame is square, one control height wide. The application owns the disclosed content and its visible heading. |
 
 Numeric ranges require finite values, `min < max`, positive `step`, and a value
 inside the range. Radio options reuse the ordinary Select validation contract.
