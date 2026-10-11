@@ -74,7 +74,8 @@ void SparkApplyWindowOptions(NSWindow *window, NSDictionary *patch) {
 }
 void SparkRestoreWindow(NSWindow *window, NSString *key, NSDictionary *options) {
   [window center];
-  if ([options[@"restoreFrame"] boolValue]) {
+  // Safe mode neither reads nor saves the frame, so the saved one survives for the next normal launch.
+  if ([options[@"restoreFrame"] boolValue] && !SparkSafeMode()) {
     NSString *name = [NSString stringWithFormat:@"%@.%@", SparkNamespace(), key];
     [window setFrameUsingName:name]; [window setFrameAutosaveName:name];
     // Restored dimensions respect current constraints, rather than overriding them.

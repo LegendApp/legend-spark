@@ -25,6 +25,10 @@ extern double LegendMainWindowReactRootAttachedTimeMs;
 #import <AppKit/AppKit.h>
 #if __has_include(<RNDesktopApp/SparkDesktop.h>)
 #import <RNDesktopApp/SparkDesktop.h>
+// Safe-mode launches skip saved windows and frames (docs/app.md).
+static BOOL LegendSafeMode(void) { return SparkSafeMode(); }
+#else
+static BOOL LegendSafeMode(void) { return NO; }
 #endif
 #import <CoreImage/CoreImage.h>
 #import <CoreGraphics/CoreGraphics.h>
@@ -50,6 +54,7 @@ static NSString * const LegendMainWindowStartupSplitViewKey = @"LegendMainWindow
 
 extern "C" NSDictionary *LegendMainWindowStartupSplitViewConfiguration(void)
 {
+  if (LegendSafeMode()) return nil;
   NSDictionary *configuration = [NSUserDefaults.standardUserDefaults dictionaryForKey:LegendMainWindowStartupSplitViewKey];
   return [configuration[@"restoreOnLaunch"] isEqual:@NO] ? nil : configuration;
 }
@@ -714,6 +719,10 @@ extern "C" void LegendPrecreateRestorableWindows(void)
   }
 
   LegendPrecreatedWindows = [NSMutableDictionary new];
+  // Safe mode opens no saved windows; their records stay for the next normal launch.
+  if (LegendSafeMode()) {
+    return;
+  }
   for (NSDictionary *options in LegendReadRestorableWindowOptions()) {
     NSString *identifier = [options[@"identifier"] isKindOfClass:NSString.class] ? options[@"identifier"] : nil;
     if (identifier.length == 0 || ![options[@"restoreOnLaunch"] boolValue]) {
@@ -2257,7 +2266,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       LegendApplyBackgroundColorToView(window.contentView, startupBackgroundColor);
     }
 
-    if (!precreatedWindow && [options[@"restoreOnLaunch"] boolValue]) {
+    if (!precreatedWindow && [options[@"restoreOnLaunch"] boolValue] && !LegendSafeMode()) {
       [window setFrameAutosaveName:LegendManagedWindowFrameAutosaveName(identifier)];
     }
     if (!precreatedWindow && LegendPrepareSidebarSplitViewStartup) {

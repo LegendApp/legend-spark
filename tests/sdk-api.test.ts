@@ -57,7 +57,7 @@ const tick = () => sleep(1);
 function nativeError(code: string) { return Object.assign(new Error(code), { code }); }
 
 test("app context, activation, hide and quit call the native host", async () => {
-  handlers.set("NativeDesktopApp.context", () => ({ projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: {} } }));
+  handlers.set("NativeDesktopApp.context", () => ({ projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: {} }, launch: { safeMode: null, relaunched: false, instance: "primary" } }));
   handlers.set("NativeDesktopApp.quit", () => ({ quitRequested: true }));
   expect((await app.getAppContext()).projectId).toBe("a");
   await app.activate(); await app.hide(); await app.quit();
