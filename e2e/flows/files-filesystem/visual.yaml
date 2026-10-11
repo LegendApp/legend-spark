@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: File system APIs screen matches its golden
+intent: >
+  Files > File system APIs opens from spark-ks://files-filesystem/os-integration in the running Kitchen Sink, its root
+  renders, and the main window matches the approved golden for the appearance (light and dark, English and Arabic). Masked:
+  the shell sidebar, and the persisted bookmark line, which depends on what an earlier run saved.
+checks: [FILE-VISUAL-01]
+tags: [files-filesystem]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://files-filesystem/os-integration" }
+- assertVisible: { id: files-filesystem-os-integration-root }
+- assertScreenshot: { golden: files-filesystem-os-integration, mask: [{ id: infra-shell-sidebar }, { id: files-filesystem-os-integration-bookmark-restored }] }

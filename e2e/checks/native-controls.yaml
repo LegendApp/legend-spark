@@ -128,3 +128,12 @@ checks:
     spec: "#91 CTRL.api-primitives; #228"
     covers:
       - ./ui#getControlAvailability
+  CTRL-VISUAL-01:
+    title: The Split view, SF Symbols and Search field screens match their approved goldens in light and dark (SF Symbols also in Arabic; Split view and Search field wait for #256)
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #227"
+    covers:
+      - ./ui/split-view#SidebarSplitView
+      - ./ui/symbol#SFSymbol
+      - ./ui/search#TextInputSearch

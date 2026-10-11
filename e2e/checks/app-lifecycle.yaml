@@ -46,3 +46,8 @@ checks:
     spec: "#60 LIFE.api"
     covers:
       - ./app#getAppContext
+  LIFE-VISUAL-01:
+    title: The Launch & single instance screen, with its launch context read, matches its approved golden in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #227"

@@ -187,3 +187,8 @@ checks:
     platforms: [macos, windows]
     blocking: true
     spec: "#103 files: typed errors (full)"
+  FILE-VISUAL-01:
+    title: The File system APIs screen matches its approved golden in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #227"

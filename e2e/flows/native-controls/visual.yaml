@@ -1,0 +1,39 @@
+appId: so.legend.spark.examples.kitchensink
+name: Native controls screens match their goldens
+intent: >
+  Native controls screens open from their spark-ks:// deep links in the running Kitchen Sink and their roots render.
+  Split view, SF Symbols and Search field match the approved golden for the appearance (light and dark) and locale,
+  with the shell sidebar masked: SF Symbols in English and Arabic, Split view and Search field in English only until
+  they mirror in right-to-left layouts. Glass and the four size grids render but are not compared until their layout bugs
+  are fixed; the Sidebar screens crash on mount and are not opened.
+checks: [CTRL-VISUAL-01]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+# Sidebar: data items, dynamic heights and React rows crash on mount (#252).
+- launchApp: { openUrl: "spark-ks://native-controls/split-view" }
+- assertVisible: { id: native-controls-split-view-root }
+# Arabic: no golden until the view mirrors in RTL (#256).
+- assertScreenshot: { golden: native-controls-split-view, mask: [{ id: infra-shell-sidebar }], when: { matrix: { locale: en } } }
+- launchApp: { openUrl: "spark-ks://native-controls/symbol", stopApp: false }
+- assertVisible: { id: native-controls-symbol-root }
+- assertScreenshot: { golden: native-controls-symbol, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/search", stopApp: false }
+- assertVisible: { id: native-controls-search-root }
+# Arabic: no golden until the view mirrors in RTL (#256).
+- assertScreenshot: { golden: native-controls-search, mask: [{ id: infra-shell-sidebar }], when: { matrix: { locale: en } } }
+# No golden: GlassView lays out its children upside down (#254).
+- launchApp: { openUrl: "spark-ks://native-controls/glass", stopApp: false }
+- assertVisible: { id: native-controls-glass-root }
+# No goldens: the size grids clip their Large column at the default window size (#253).
+- launchApp: { openUrl: "spark-ks://native-controls/toggles", stopApp: false }
+- assertVisible: { id: native-controls-toggles-root }
+- launchApp: { openUrl: "spark-ks://native-controls/inputs", stopApp: false }
+- assertVisible: { id: native-controls-inputs-root }
+- launchApp: { openUrl: "spark-ks://native-controls/indicators", stopApp: false }
+- assertVisible: { id: native-controls-indicators-root }
+- launchApp: { openUrl: "spark-ks://native-controls/buttons", stopApp: false }
+- assertVisible: { id: native-controls-buttons-root }
