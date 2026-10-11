@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: A 500 ms JavaScript block drops no motion frames
+intent: >
+  On Motion system > Scroll link and JS block, the runner loops on the compositor from mount. Block JS
+  for 500 ms busy-waits the JavaScript thread while recording 1.5 s of the runner's frames; the display
+  link keeps its cadence (no dropped frames) and the presented transform changes on every animated
+  frame (no stalled frames). Real clock only.
+checks: [MOT-JSBLOCK-01]
+tags: [motion-system, performance]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/scroll-and-frames" }
+- extendedWaitUntil: { visible: { id: motion-system-scroll-and-frames-root }, timeout: 10s }
+- assertText: { id: motion-system-scroll-and-frames-loop, equals: '"running"' }
+- assertFrames: { during: { tapOn: { id: motion-system-scroll-and-frames-block } }, dropped: 0 }
+- extendedWaitUntil: { visible: { id: motion-system-scroll-and-frames-report, text: '/"droppedFrames":0,"stalledFrames":0,/' }, timeout: 5s }
+- assertVisible: { id: motion-system-scroll-and-frames-report, text: '/^\{"blockedMs":5\d\d,"frames":\d+,"animatedFrames":\d+,/' }

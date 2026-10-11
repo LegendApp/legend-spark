@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: Scroll-linked badge follows the list offset natively
+intent: >
+  On Motion system > Scroll link and JS block, Link to scroll links the badge to the list. Scrolling
+  the list past 400 pt fades the badge to 0.2, scales it to 0.6 and turns it 180 degrees, read back
+  from the engine; scrolling back to the top restores it. After Unlink, scrolling no longer changes it.
+checks: [MOT-SCROLL-01]
+tags: [motion-system]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/scroll-and-frames" }
+- extendedWaitUntil: { visible: { id: motion-system-scroll-and-frames-root }, timeout: 10s }
+- tapOn: { id: motion-system-scroll-and-frames-link }
+- assertText: { id: motion-system-scroll-and-frames-link-result, equals: '"linked"' }
+- tapOn: { id: motion-system-scroll-and-frames-read }
+- assertText: { id: motion-system-scroll-and-frames-badge-state, equals: '{"opacity":1,"scale":1,"rotate":0}' }
+- scroll: { on: { id: motion-system-scroll-and-frames-list }, direction: down, amount: 600, precise: true }
+- tapOn: { id: motion-system-scroll-and-frames-read }
+- assertText: { id: motion-system-scroll-and-frames-badge-state, equals: '{"opacity":0.2,"scale":0.6,"rotate":180}' }
+- scroll: { on: { id: motion-system-scroll-and-frames-list }, direction: up, amount: 600, precise: true }
+- tapOn: { id: motion-system-scroll-and-frames-read }
+- assertText: { id: motion-system-scroll-and-frames-badge-state, equals: '{"opacity":1,"scale":1,"rotate":0}' }
+- tapOn: { id: motion-system-scroll-and-frames-unlink }
+- assertText: { id: motion-system-scroll-and-frames-link-result, equals: '"unlinked"' }
+- scroll: { on: { id: motion-system-scroll-and-frames-list }, direction: down, amount: 600, precise: true }
+- tapOn: { id: motion-system-scroll-and-frames-read }
+- assertText: { id: motion-system-scroll-and-frames-badge-state, equals: '{"opacity":1,"scale":1,"rotate":0}' }
