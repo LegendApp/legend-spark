@@ -7,7 +7,7 @@ const options = {
   device: { type: "string" }, project: { type: "string" }, platform: { type: "string" },
   packages: { type: "string" }, port: { type: "string" }, runner: { type: "boolean" },
   dev: { type: "boolean" }, release: { type: "boolean" }, preview: { type: "boolean" },
-  force: { type: "boolean" }, "submission-id": { type: "string" }, help: { type: "boolean", short: "h" },
+  force: { type: "boolean" }, "dry-run": { type: "boolean" }, "submission-id": { type: "string" }, help: { type: "boolean", short: "h" },
 } as const;
 const commands: Record<string, { flags: readonly string[]; arguments: readonly [number, number] }> = {
   create: { flags: ["example", "package-manager", "universal", "platform", "packages"], arguments: [1, 1] },
@@ -21,6 +21,7 @@ const commands: Record<string, { flags: readonly string[]; arguments: readonly [
   build: { flags: ["project", "platform", "device", "port", "runner", "dev", "release", "preview", "force"], arguments: [0, 0] },
   prebuild: { flags: ["project", "platform"], arguments: [0, 0] },
   doctor: { flags: ["project"], arguments: [0, 0] },
+  upgrade: { flags: ["project", "dry-run"], arguments: [0, 0] },
   "updates init": { flags: ["project", "platform"], arguments: [1, 1] },
   credentials: { flags: ["project", "platform"], arguments: [0, 0] },
   package: { flags: ["project", "platform", "force", "submission-id"], arguments: [0, 0] },

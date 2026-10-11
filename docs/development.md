@@ -140,7 +140,13 @@ The prototype supports static `app.json` configuration. Programmatic app configu
 
 Use Node **24.19.0**, pinned in the checkout's `.nvmrc` (`nvm install && nvm use`). Node 24.12.0 fails to import `AndroidConfig` / `IOSConfig` from Expo's generated CommonJS modules when running Expo Desktop. Create/prebuild and the native doctor check the installed Expo Desktop config exports with the actual Node executable on PATH, so incompatible runtimes fail before native generation. This check does not patch Expo or change the Expo Desktop pin.
 
-`spark doctor` checks macOS, Node, CocoaPods, Xcode, and the macOS SDK. Install full Xcode, complete its first-launch/license setup, and select it with the normal Xcode command-line tools settings. Command Line Tools alone cannot build the generated macOS application. Install CocoaPods in a supported Ruby environment and ensure `pod` is on PATH.
+`spark doctor` checks app dependency pins before checking macOS, Node, CocoaPods, Xcode, and the macOS SDK (or the existing Windows toolchain checks on Windows). It exits with status 1 for missing/mismatched pins or toolchain failures. Install full Xcode, complete its first-launch/license setup, and select it with the normal Xcode command-line tools settings. Command Line Tools alone cannot build the generated macOS application. Install CocoaPods in a supported Ruby environment and ensure `pod` is on PATH.
+
+Apps must declare exact `react`, `react-native`, `react-native-macos`, and `expo` versions in `dependencies` or `devDependencies`. Spark reads the expected versions from the CLI's `blank-typescript/package.json` desktop starter, the compatibility matrix also used by `create`. Ranges are reported even when they include the expected version, because they permit other native versions. Existing npm/Bun `overrides`, Yarn `resolutions`, and `pnpm.overrides` entries are checked too, including nested and package-qualified selectors; npm `$dependency` references are accepted when the referenced spec matches.
+
+`catalog:` and `workspace:` specs are skipped with a note and left unchanged; check their resolved versions yourself. Only the app's `package.json` is checked. Workspace-root overrides are not checked, even though npm and pnpm apply overrides only from the workspace root.
+
+Run `spark upgrade --dry-run` to preview fixes, then `spark upgrade` to update mismatched specs and add missing direct pins to `dependencies`. Both commands support `--project <directory>`. Upgrade preserves existing key order and formatting, does not require native tooling, and does not install anything. Afterwards, run your package manager's install command (`npm install`, `pnpm install`, `yarn install`, or `bun install`).
 
 The CLI diagnoses missing tooling; it does not silently install Xcode or accept licenses. Re-run the build or switch after completing setup. No native prerequisites are invoked for a compatible Spark Runner launch.
 
