@@ -56,11 +56,11 @@ function env(options: { coldMs?: number | null; elements?: typeof ELEMENTS; blac
 
 async function gate(dir: string, options: Parameters<typeof env>[0] = {}, target?: string): Promise<GateReport> {
   const { env: gateEnv } = env(options);
-  return runGate(plan(path.join(dir, "e2e"), gateEnv.host(), target), gateEnv);
+  return runGate(plan(path.join(dir, "e2e"), gateEnv.host(), { target }), gateEnv);
 }
 async function scopedGate(dir: string, flows: string[], options: Parameters<typeof env>[0] = {}): Promise<GateReport> {
   const { env: gateEnv } = env(options);
-  return runGate(plan(path.join(dir, "e2e"), gateEnv.host(), undefined, flows), gateEnv);
+  return runGate(plan(path.join(dir, "e2e"), gateEnv.host(), { only: flows }), gateEnv);
 }
 const reasons = (report: GateReport) => report.reasons.map(reason => `${reason.check}: ${reason.message}`);
 
@@ -299,8 +299,22 @@ describe("gate command", () => {
     expect(text).toContain("  [target] --target windows-11/x64 needs windows-11/x64; this machine is macos-27/arm64, Mac16,5 with 128 GB.");
   });
 
+  test("--artifact tests another copy of the release build, such as the installed app from bun run harness", async () => {
+    const dir = repo({}, { build: false });
+    const installed = path.join(mkdtempSync(path.join(tmpdir(), "e2e-gate-installed-")), "Applications/KitchenSink.app");
+    mkdirSync(installed, { recursive: true });
+    const plan = env();
+    expect(await gateCommand(["--dry-run", "--artifact", installed], path.join(dir, "e2e"), plan.env)).toBe(0);
+    expect(plan.out.join("\n")).toContain(`Build: ${installed} (signature will be verified)`);
+    const signed: string[] = [];
+    const { env: gateEnv } = env({ verifySignature: artifact => { signed.push(artifact); return undefined; } });
+    expect(await gateCommand([`--artifact=${installed}`], path.join(dir, "e2e"), gateEnv)).toBe(0);
+    const report: GateReport = JSON.parse(readFileSync(path.join(dir, "reports/gate/report.json"), "utf8"));
+    expect([report.verdict, report.build, signed]).toEqual(["PASS", { artifact: installed, exists: true, signature: "verified" }, [installed]]);
+  });
+
   test("usage errors exit 2", async () => {
-    for (const [args, message] of [[["--target"], "--target needs a value"], [["--frobnicate"], "unknown argument --frobnicate"], [["--target", "macos-99/arm64"], "--target macos-99/arm64 is not in gate.yaml"]] as const) {
+    for (const [args, message] of [[["--target"], "--target needs a value"], [["--artifact"], "--artifact needs a value"], [["--frobnicate"], "unknown argument --frobnicate"], [["--target", "macos-99/arm64"], "--target macos-99/arm64 is not in gate.yaml"]] as const) {
       const { env: gateEnv, err } = env();
       expect(await gateCommand([...args], path.join(repo(), "e2e"), gateEnv)).toBe(2);
       expect(err.join("\n")).toContain(message);
@@ -313,10 +327,10 @@ describe("--flow and --agent", () => {
   const scoped = (dir: string) => JSON.parse(readFileSync(path.join(dir, "reports/gate/scoped/report.json"), "utf8")) as GateReport;
 
   test("arguments: repeatable --flow resolved from the working directory, --agent, --dry-run, inline values; usage errors", () => {
-    expect(parseGateArgs(["--flow", "e2e/flows/a.yaml", "--flow=e2e/flows/b", "--agent", "--target=macos-15/arm64", "--dry-run"])).toEqual({
-      target: "macos-15/arm64", flows: [path.resolve("e2e/flows/a.yaml"), path.resolve("e2e/flows/b")], agent: true, dryRun: true,
+    expect(parseGateArgs(["--flow", "e2e/flows/a.yaml", "--flow=e2e/flows/b", "--agent", "--target=macos-15/arm64", "--artifact", "Applications/KitchenSink.app", "--dry-run"])).toEqual({
+      target: "macos-15/arm64", flows: [path.resolve("e2e/flows/a.yaml"), path.resolve("e2e/flows/b")], artifact: path.resolve("Applications/KitchenSink.app"), agent: true, dryRun: true,
     });
-    expect(parseGateArgs([])).toEqual({ target: undefined, flows: [], agent: false, dryRun: false });
+    expect(parseGateArgs([])).toEqual({ target: undefined, flows: [], artifact: undefined, agent: false, dryRun: false });
     for (const [args, message] of [[["--flow"], "--flow needs a value"], [["--flow", "--agent"], "--flow needs a value"], [["--agent=yes"], "unknown argument --agent=yes"], [["x.yaml"], "unknown argument x.yaml"]] as const) {
       expect(() => parseGateArgs([...args])).toThrow(message);
     }

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { writeJson } from "../packages/cli/src/project.ts";
+import { requireHarnessPass } from "./harness/guard.ts";
 
 type Edit = { file: string; before: string; after: string };
 type State = { schema: 1; version: string; baseRevision: string; revision?: string; latest: boolean; edits: Edit[]; complete?: boolean };
@@ -70,6 +71,15 @@ export function verifyReleaseArchive(root: string, version: string, revision: st
     if (path.basename(name) !== name || createHash("sha256").update(readFileSync(path.join(folder, name))).digest("hex") !== expected) throw new Error(`Release artifact changed: ${name}`);
   }
   return path.join(folder, release.npm);
+}
+
+/** What `bun run release:publish` checks before it touches GitHub or npm: the clean staged revision, its unchanged artifacts, and a passing harness report for that revision on every release target. */
+export async function publishPreflight(root: string, version: string, git: (...args: string[]) => Promise<string>) {
+  const revision = (await git("rev-parse", "HEAD")).trim();
+  if ((await git("status", "--porcelain")).trim()) throw new Error("Publishing requires the clean source revision used to assemble this release.");
+  verifyReleaseArchive(root, version, revision);
+  requireHarnessPass(root, revision);
+  return revision;
 }
 
 export async function releaseWorkflow(root: string, options: { resume: boolean; latest: boolean }, execute: Execute, preflight: () => Promise<void>, runnerProject: (version: string) => string) {
@@ -161,6 +171,8 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     verifyReleaseArchive(root, state.version, state.revision!);
     await clean();
     if (await git("rev-parse", "HEAD") !== state.revision) throw new Error("Release source changed during artifact verification");
+    // Before anything leaves this machine: the installed release passed the harness on every release target.
+    requireHarnessPass(root, state.revision!);
     const tag = `v${state.version}`;
     const existingTag = await execute(["git", "rev-parse", "--verify", `refs/tags/${tag}^{commit}`], true);
     if (!existingTag.code && existingTag.output.trim() !== state.revision) throw new Error(`${tag} already points at another source revision`);

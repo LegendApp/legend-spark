@@ -51,6 +51,8 @@ export const platformOf = (os: string): Platform => os.startsWith("windows") ? "
 const describeHost = (host: Host) => `${host.os}/${host.arch}${host.model ? `, ${host.model} with ${host.memoryGB} GB` : ""}`;
 const describeMachine = (machine: Machine) => `${machine.name} (${machine.model}, ${machine.memoryGB} GB)`;
 const isMachine = (host: Host, machine: Machine | undefined) => !!machine && host.model === machine.model && host.memoryGB === machine.memoryGB;
+/** `file` relative to the repository, or absolute when it is outside it (an installed copy, for example). */
+export const repoPath = (repo: string, file: string) => path.relative(repo, file).startsWith("..") ? file : path.relative(repo, file);
 export const matchesAny = (file: string, globs: string[]) => globs.some(glob => path.matchesGlob(file, glob));
 
 /** Reads e2e/gate.yaml. Throws FlowFormatError when it does not validate: without it there is nothing to plan. */
@@ -131,8 +133,17 @@ function select(root: string, manifest: GateManifest, all: Array<{ path: string;
   return all.map(flow => flow.path).filter(flow => chosen.has(flow));
 }
 
-/** Plans the gate for this machine (or `override`); `only` (absolute paths) scopes it to the gate flows at or under them. */
-export function plan(root: string, host: Host, override?: string, only?: string[]): GatePlan {
+export type PlanOptions = {
+  /** Another target than this machine's (`--target`). */
+  target?: string;
+  /** Absolute paths (`--flow`): scope the run to the gate flows at or under them. */
+  only?: string[];
+  /** Replaces the manifest's build path, such as an installed copy of the release (`--artifact`, `bun run harness`). */
+  artifact?: string;
+};
+
+/** Plans the gate for this machine, or `options.target`. */
+export function plan(root: string, host: Host, { target: override, only, artifact }: PlanOptions = {}): GatePlan {
   root = path.resolve(root);
   const manifest = readManifest(root), repo = path.dirname(root), problems: Reason[] = [];
   const budgets = readBudgets(root, manifest, problems);
@@ -143,7 +154,7 @@ export function plan(root: string, host: Host, override?: string, only?: string[
 
   const build = target && manifest.build[target.platform];
   if (target && !build) problems.push({ check: "build", message: `gate.yaml has no ${target.platform} build to test` });
-  const artifact = build && path.resolve(repo, build.artifact.replaceAll("${ARCH}", target!.arch));
+  const tested = build && path.resolve(repo, artifact ?? build.artifact.replaceAll("${ARCH}", target!.arch));
 
   const all = gateFlows(root, manifest), scope = only && select(root, manifest, all, only);
   const blocking = blockingChecks(root, manifest), flows: PlannedFlow[] = [], excluded: GatePlan["excluded"] = [];
@@ -161,7 +172,7 @@ export function plan(root: string, host: Host, override?: string, only?: string[
     });
   }
   const planned = machine ? (budgets?.budgets ?? []).flatMap(budget => machine.id in budget.baselines ? [{ ...budget, baseline: budget.baselines[machine.id]! }] : []) : [];
-  return { manifest, root, repo, host, target, machine, artifact, flows, excluded, budgets: planned, problems, ...(scope ? { scope } : {}) };
+  return { manifest, root, repo, host, target, machine, artifact: tested, flows, excluded, budgets: planned, problems, ...(scope ? { scope } : {}) };
 }
 
 /** Where a run writes its reports: the manifest's paths, or `scoped/` next to them for a `--flow` run, so it never replaces a full gate report. */

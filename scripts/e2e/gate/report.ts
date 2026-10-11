@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { escape } from "../runner/report.ts";
 import type { GateReport } from "./gate.ts";
-import { reportFiles, type GatePlan, type Reason } from "./plan.ts";
+import { repoPath, reportFiles, type GatePlan, type Reason } from "./plan.ts";
 
 const flowKind = (manual: boolean | "partial") => manual === true ? "manual" : manual === "partial" ? "run + sign-off" : "run";
 
@@ -15,7 +15,7 @@ export function planText(plan: GatePlan, backends: string[]): string {
     `Gate plan: ${manifest.suite} (${manifest.appId})`,
     ...(scope ? [`Scope (--flow): ${scope.join(", ")}`] : []),
     `Target: ${target?.id ?? "none"} (this machine: ${plan.host.os}/${plan.host.arch}${plan.host.model ? `, ${plan.host.model}, ${plan.host.memoryGB} GB` : ""})`,
-    `Build: ${plan.artifact ? path.relative(plan.repo, plan.artifact) : "none"}${target && manifest.build[target.platform]?.verifySignature ? " (signature will be verified)" : ""}`,
+    `Build: ${plan.artifact ? repoPath(plan.repo, plan.artifact) : "none"}${target && manifest.build[target.platform]?.verifySignature ? " (signature will be verified)" : ""}`,
     `Backends: ${backends.join(", ") || `none for ${target?.platform ?? "this target"}: the gate will fail`}`,
     "Checks:",
     `  lint: every file under e2e/${scope ? " except flows outside the scope" : ""}`,

@@ -1,11 +1,11 @@
 import { loadReleaseEnv } from "./release-env.ts";
 import { spawnProcess } from "../packages/cli/src/process.ts";
-import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { run } from "../packages/cli/src/commands.ts";
 import { readJson, VERSION } from "../packages/cli/src/project.ts";
 import { alreadyPublished, releaseNotes } from "./npm-release.ts";
+import { publishPreflight } from "./release-workflow.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const args = process.argv.slice(2);
@@ -13,12 +13,7 @@ if (args.some(arg => arg !== "--latest")) throw new Error("Usage: bun run releas
 loadReleaseEnv(root);
 const folder = path.join(root, "artifacts/releases", VERSION);
 const release = readJson(path.join(folder, "release.json"));
-const revision = (await run(root, ["git", "rev-parse", "HEAD"], { capture: true })).trim();
-if (release.version !== VERSION || release.revision !== revision || (await run(root, ["git", "status", "--porcelain"], { capture: true })).trim()) throw new Error("Publishing requires the clean source revision used to assemble this release.");
-for (const [name, hash] of Object.entries(release.sha256)) {
-  if (path.basename(name) !== name || createHash("sha256").update(readFileSync(path.join(folder, name))).digest("hex") !== hash) throw new Error(`Release artifact changed: ${name}`);
-}
-if (!release.sha256[release.npm] || !release.sha256["runner-manifest.json"]) throw new Error("Incomplete release artifact manifest");
+const revision = await publishPreflight(root, VERSION, (...argv) => run(root, ["git", ...argv], { capture: true }));
 const repo = "LegendApp/legend-spark", tag = `v${VERSION}`;
 const repository = JSON.parse(await run(root, ["gh", "repo", "view", repo, "--json", "visibility"], { capture: true }));
 if (repository.visibility !== "PUBLIC") throw new Error("Runner downloads require a public distribution repository. Do not publish npm while release assets are private.");
