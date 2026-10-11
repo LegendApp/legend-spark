@@ -99,9 +99,14 @@ static void Event(NSString *type, NSString *key) {
 }
 // Native window tabs (docs/api-window-contract.md#window-tabs). Only Spark windows have IDs, so a
 // group lists its Spark windows; a window that is not tabbed is a group of one.
+// The registry is shared with other modules, so the window remembers its last key, checked on each use.
+static char WindowKeyKey;
 static NSString *KeyFor(NSWindow *window) {
-  for (NSString *key in windows) if (windows[key] == window) return key;
-  return nil;
+  NSString *key = objc_getAssociatedObject(window, &WindowKeyKey);
+  if (key && windows[key] == window) return key;
+  key = [windows allKeysForObject:window].firstObject;
+  objc_setAssociatedObject(window, &WindowKeyKey, key, OBJC_ASSOCIATION_COPY_NONATOMIC);
+  return key;
 }
 static NSArray<NSWindow *> *TabWindows(NSWindow *window) {
   NSArray<NSWindow *> *tabs = window.tabGroup.windows;
@@ -462,7 +467,8 @@ static BOOL JoinSavedTabs(NSWindow *window, NSString *key, NSArray *saved) {
 static void Present(NSWindow *window, SparkWindowDelegate *delegate, BOOL focus, NSWindow *sheetParent) {
   NSDictionary *restoring = delegate.restoringTabs; delegate.restoringTabs = nil;
   BOOL joined = restoring && JoinSavedTabs(window, delegate.windowID, restoring[@"tabs"]);
-  NSWindow *selection = joined && ![restoring[@"selected"] boolValue] ? SelectedTab(window) : window;
+  NSNumber *selected = restoring[@"selected"];
+  NSWindow *selection = joined && !([selected isKindOfClass:NSNumber.class] && selected.boolValue) ? SelectedTab(window) : window;
   Show(window, focus, sheetParent);
   if (joined) SelectTab(selection);
 }
@@ -631,13 +637,13 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       if (parent && ![args[@"modal"] boolValue]) [parent addChildWindow:window ordered:NSWindowAbove];
       objc_setAssociatedObject(window, @selector(call:args:resolve:reject:), [args copy], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
       // A new tab is the group's last tab, with its frame and tabbing identifier, and is selected once shown.
+      // AppKit keeps a window added before it is first shown (tests/window.native.mm, TestShownTabs).
       if (tabTarget) { window.tabbingIdentifier = tabTarget.tabbingIdentifier; [tabTarget.tabGroup addWindow:window]; }
       delegate.restoringTabs = restoreBounds && !tabTarget && [saved[@"tabs"] isKindOfClass:NSArray.class] ? saved : nil;
       if (![args[@"show"] isEqual:@NO]) Present(window, delegate, YES, [args[@"modal"] boolValue] ? parent : nil); else Hide(window);
       if (tabTarget) SelectTab(window);
       Event(@"opened", key); Event(@"visibilityChanged", key); resolve(SparkJSON(Info(key, window))); return;
     }
-      // AppKit keeps a window added before it is first shown (tests/window.native.mm, TestShownTabs).
     if ([method isEqual:@"discard"]) { delegate.guarded = NO; if (SparkTestDriverActive()) DetachTab(window); [window close]; return resolve(@"null"); }
     if ([method isEqual:@"close"]) { [delegate.closeWaiters addObject:[resolve copy]]; RequestClose(window, key); return; }
     if ([method isEqual:@"closeGuard"]) {
