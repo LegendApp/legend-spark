@@ -35,7 +35,7 @@ struct SidebarItemEventEmitter : EventEmitter {
   void onRightClick(OnRightClick event) const {}
 };
 enum class LayoutDirection { Undefined, LeftToRight, RightToLeft };
-struct LayoutMetrics { CGRect frame; LayoutDirection layoutDirection = LayoutDirection::LeftToRight; };
+struct LayoutMetrics { CGRect frame; LayoutDirection layoutDirection = LayoutDirection::Undefined; };
 struct SidebarComponentDescriptor {};
 struct SidebarItemComponentDescriptor {};
 using ComponentDescriptorProvider = int;
@@ -248,6 +248,14 @@ int main() { @autoreleasepool {
   CHECK(albums.superview == firstCell && NSEqualRects(albums.frame, firstCell.bounds));
   CHECK(!reactEvents->rowWidths.empty() && NSWidth(firstCell.bounds) == reactEvents->rowWidths.back());
   CHECK(RowsFit(react));
+
+  // Fabric's resolved direction reaches the list, and follows later updates.
+  NSScrollView *scroll = [view valueForKey:@"scrollView"];
+  for (auto direction : {LayoutDirection::LeftToRight, LayoutDirection::RightToLeft, LayoutDirection::LeftToRight}) {
+    [view updateLayoutMetrics:LayoutMetrics{CGRectMake(0, 0, 220, 300), direction} oldLayoutMetrics:LayoutMetrics{}];
+    auto expected = direction == LayoutDirection::RightToLeft ? NSUserInterfaceLayoutDirectionRightToLeft : NSUserInterfaceLayoutDirectionLeftToRight;
+    CHECK(scroll.userInterfaceLayoutDirection == expected && Table(view).userInterfaceLayoutDirection == expected);
+  }
 
   if (failures) return 1;
   std::puts("Sidebar mount, selective updates and row geometry passed");

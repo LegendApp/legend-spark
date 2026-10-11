@@ -1,4 +1,5 @@
 #import "RNSidebar.h"
+#import "RNSparkLayoutDirection.h"
 
 #import <react/renderer/components/RNSparkUISpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSparkUISpec/EventEmitters.h>
@@ -31,7 +32,7 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
 {
   NSTextField *title = self.textField;
   CGFloat height = title.intrinsicContentSize.height;
-  title.alignment = self.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft ? NSTextAlignmentRight : NSTextAlignmentLeft;
+  title.alignment = RNSparkLeadingTextAlignment(self.userInterfaceLayoutDirection);
   title.frame = NSMakeRect(12, round((NSHeight(self.bounds) - height) / 2), MAX(0, NSWidth(self.bounds) - 24), height);
 }
 
@@ -645,11 +646,14 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
   [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
 
 #if TARGET_OS_OSX
-  // Mirror with the React layout direction, which can differ from the application's.
-  const BOOL rightToLeft = layoutMetrics.layoutDirection == LayoutDirection::RightToLeft;
+  // Mirror with the React layout direction, which can differ from the application's. The vertical scroller
+  // sits on the trailing edge, which is the left in right-to-left layouts.
+  const NSUserInterfaceLayoutDirection direction = RNSparkLayoutDirection(layoutMetrics);
+  _scrollView.userInterfaceLayoutDirection = direction;
+  const BOOL rightToLeft = direction == NSUserInterfaceLayoutDirectionRightToLeft;
   if (rightToLeft != _rightToLeft) {
     _rightToLeft = rightToLeft;
-    _tableView.userInterfaceLayoutDirection = rightToLeft ? NSUserInterfaceLayoutDirectionRightToLeft : NSUserInterfaceLayoutDirectionLeftToRight;
+    _tableView.userInterfaceLayoutDirection = direction;
     [self reloadRows];
   }
 #endif
