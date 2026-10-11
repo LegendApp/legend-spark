@@ -332,10 +332,8 @@ static void TestTabRestoration(RNDesktopWindows *api) {
   [NSUserDefaults.standardUserDefaults removePersistentDomainForName:NSProcessInfo.processInfo.processName];
   puts("Window tab restoration passed");
 }
-int main() { @autoreleasepool {
-  events = [NSMutableArray new]; windows = LegendWindowRegistry.sharedRegistry.windows;
+static void TestGuards(RNDesktopWindows *api) {
   TestWindow *window = [TestWindow new]; windows[@"editor"] = (NSWindow *)window;
-  RNDesktopWindows *api = [RNDesktopWindows new];
   __block NSString *result = nil;
   auto call = ^(NSString *method, NSDictionary *args) {
     [api call:method args:SparkJSON(args) resolve:^(id value) { result = value; } reject:^(NSString *code, NSString *, NSError *) { failure = code; }]; Pump();
@@ -354,9 +352,22 @@ int main() { @autoreleasepool {
   TestWindow *replacement = [TestWindow new]; windows[@"editor"] = (NSWindow *)replacement;
   failure = nil; call(@"closeGuard", @{ @"id": @"editor", @"instanceId": instance, @"guardId": @"guard", @"enabled": @NO });
   assert([failure isEqual:@"E_NOT_FOUND"]); assert(![delegates[@"editor"].instanceId isEqual:instance]);
+  [windows removeObjectForKey:@"editor"];
   puts("Window guards passed");
-  TestWindowOptions(api);
-  TestDriverMode(api);
-  TestWindowTabs(api);
-  TestTabRestoration(api);
+}
+// Usage: test [suite] [-NSDefault value ...]. With a suite name, runs only that suite (the right-to-left
+// run needs only the direction-dependent options suite). Unbuffered, so a timeout shows the last suite reached.
+int main(int argc, char **argv) { @autoreleasepool {
+  setvbuf(stdout, NULL, _IONBF, 0);
+  [NSApplication sharedApplication];
+  events = [NSMutableArray new]; windows = LegendWindowRegistry.sharedRegistry.windows;
+  RNDesktopWindows *api = [RNDesktopWindows new];
+  NSDictionary<NSString *, void (^)(RNDesktopWindows *)> *suites = @{
+    @"guards": ^(RNDesktopWindows *a) { TestGuards(a); }, @"options": ^(RNDesktopWindows *a) { TestWindowOptions(a); },
+    @"driver": ^(RNDesktopWindows *a) { TestDriverMode(a); }, @"tabs": ^(RNDesktopWindows *a) { TestWindowTabs(a); },
+    @"tab-restoration": ^(RNDesktopWindows *a) { TestTabRestoration(a); },
+  };
+  NSString *only = argc > 1 && argv[1][0] != '-' ? @(argv[1]) : nil;
+  if (only && !suites[only]) { fprintf(stderr, "Unknown suite %s\n", argv[1]); return 2; }
+  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"tab-restoration"]) if (!only || [only isEqual:name]) suites[name](api);
 } }
