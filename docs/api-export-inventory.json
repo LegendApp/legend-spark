@@ -75,6 +75,7 @@
     "./ui/swipe",
     "./motion",
     "./printing",
-    "./ui/text-services"
+    "./ui/text-services",
+    "./ui/table"
   ]
 }

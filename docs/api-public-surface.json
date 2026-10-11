@@ -699,6 +699,27 @@
     "SFSymbolScale",
     "getSFSymbolAvailability"
   ],
+  "./ui/table": [
+    "Outline",
+    "OutlineProps",
+    "OutlineRow",
+    "Table",
+    "TableActivateEvent",
+    "TableBaseProps",
+    "TableColumn",
+    "TableColumnAlignment",
+    "TableColumnLayout",
+    "TableColumnLayoutProps",
+    "TableContextMenuEvent",
+    "TableProps",
+    "TableRow",
+    "TableSelectionMode",
+    "TableSelectionProps",
+    "TableSortDescriptor",
+    "TableSortDirection",
+    "TableSortProps",
+    "getTableAvailability"
+  ],
   "./ui/text-services": [
     "FindTextOptions",
     "FindTextResult",

@@ -102,6 +102,40 @@ A non-dismissing action reports as the row begins springing closed. A dismissing
 
 The swipe AppKit fixture runs the actual implementation for axis replay, rest/arm/cancel, clicks, accessibility presses, clipping ownership, child coordinates, recycling and delayed callbacks. Its Fabric transport declarations are substituted; it is distinct from full Fabric integration and platform release acceptance.
 
+## Tables and outlines
+
+`@legendapp/spark/ui/table` exports `Table` (AppKit `NSTableView`), `Outline` (`NSOutlineView`), `getTableAvailability()` and their named types. Both are available on macOS 14 and later. Windows, iOS, Android and web report `unsupported-platform`, and rendering either view there throws `E_UNSUPPORTED_PLATFORM` (`E_MODULE_UNAVAILABLE` when the macOS view is absent). No substitute is rendered. Windows is tracked in [#294](https://github.com/LegendApp/legend-spark/issues/294).
+
+```tsx
+import { Table, type TableSortDescriptor } from '@legendapp/spark/ui/table';
+
+const columns = [
+  { id: 'name', title: 'Name', width: 220, sortable: true },
+  { id: 'size', title: 'Size', width: 100, alignment: 'trailing', sortable: true },
+] as const;
+
+function Files({ files }: { files: readonly { id: string; cells: { name: string; size: string } }[] }) {
+  const [sort, setSort] = useState<TableSortDescriptor[]>([{ columnId: 'name', direction: 'ascending' }]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const rows = useMemo(() => sortFiles(files, sort), [files, sort]);
+  return <Table columns={columns} rows={rows} sort={sort} onSortChange={setSort} selectionMode="multiple"
+    selectedIds={selectedIds} onSelectionChange={setSelectedIds} onActivate={({ ids }) => open(ids)} style={{ flex: 1 }} />;
+}
+```
+
+- **Columns:** `id`, `title`, `width` (default 120), `minWidth`, `maxWidth`, `resizable` (default true), `sortable` (default false) and `alignment` (`leading`, `center`, `trailing`; leading is the right edge in right-to-left layouts). A width prop applies when the column is created or the prop changes; until then a user resize stays.
+- **Rows:** `{ id, cells }`, where `cells` maps column IDs to text. Outline rows add `children`; a row with `children` is expandable even when it is empty. IDs are unique across the whole tree. Rows are immutable: replace a row object to change it. Each row object is serialized once and cached by identity, rows travel to native in JSON chunks of 256, and native re-parses only chunks whose text changed. Sorting the same row objects serializes nothing again. AppKit's cell reuse virtualizes the rows, so 10,000 rows render only the visible cells.
+- **Cells are native text.** React-rendered cells are not supported: AppKit asks for cell views synchronously while it scrolls, and React Native cannot render a component synchronously on that thread, so React cells would appear blank until JavaScript caught up, and every reused cell would need its own mounted React tree. For short lists of rich React rows, use `Sidebar` with `SidebarItem` children.
+- **Sorting is controlled and done by the application.** `sort` is an array of `{ columnId, direction }`, primary key first. A header click calls `onSortChange` with AppKit's new descriptors (the clicked column first; earlier keys follow as tie-breakers). Sortable columns require `sort` and `onSortChange`.
+- **Selection is controlled.** `selectionMode` is `single` (default), `multiple` or `none`. `selectedIds` and `onSelectionChange(ids)` are required unless the mode is `none`. AppKit handles click, Shift-click ranges, Command-click toggles and arrow keys with and without Shift; Command-A selects every row while the view has focus. Type-select matches the first column. Selected rows inside a collapsed outline row are not shown as selected.
+- **Column layout:** users drag headers to reorder (`columnReordering`, default true) and drag edges to resize. Without `columnLayout`, the view owns widths and order and reports changes through `onColumnLayoutChange`. With `columnLayout` (an array of `{ id, width }` in display order), the layout is controlled: persist what `onColumnLayoutChange` reports, for example with `@legendapp/spark/settings`, and pass it back. Columns without an entry follow the listed ones.
+- **Outline expansion is controlled:** `expandedIds` and `onExpandedChange(ids)` (IDs in display order). Option-click expands or collapses a whole branch and is reported once. An expanded row inside a collapsed parent stays in `expandedIds` and reopens with its parent.
+- **Events:** `onActivate({ ids })` for a double-click or Return, and `onContextMenu({ rowId, ids, position })` for a right- or Control-click; the view shows no menu of its own, the click does not reach ancestor views, and it leaves the selection unchanged. `ids` is the selection when the clicked row is selected, otherwise only that row. `position` is in logical points from the window content's top-left, as `showContextMenu` takes it. `rowId` is `null` below the last row.
+
+Controlled state uses the event-count acknowledgment of the control primitives: native counts the changes it reports and reconciles `selectedIds`, `sort`, `columnLayout` and `expandedIds` only once JavaScript has processed every one of them. Props rendered before a user change never undo it, and a change the parent does not accept is restored. Native events may name rows that JavaScript has just replaced; those IDs are dropped. Invalid props throw `E_INVALID_ARGUMENT`, unknown column, row, sort and layout keys throw `E_UNSUPPORTED_OPTION`, and malformed native data is reported to `onError` as `E_INVALID_DATA`.
+
+`tests/ui-table-native.test.ts` compiles the actual AppKit view against substituted Fabric types and checks the null-oldProps mount, columns, chunked parsing, keyboard selection ranges, sort, layout, expansion (including a user collapse that keeps expanded descendants), context menus and right-to-left layout. It is not full Fabric integration. The Kitchen Sink `native-controls/table` and `native-controls/outline` screens are, and `e2e/flows/native-controls/table*.yaml` and `outline-interaction.yaml` drive them with in-app driver input (white-box).
+
 ## Settings windows
 
 `@legendapp/spark/settings/window` exports `SettingsWindow`, `VirtualizedSettingsWindow`, their named props, the shared `SettingsWindowPage` (`id`, `title`, `render`), and `createSettingsWindowOptions`. The options-only subpath is removed. This composition requires `@legendapp/list` as a peer and uses the macOS split-view capability.

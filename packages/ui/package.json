@@ -47,7 +47,8 @@
         "NativeSelect": "RNNativeSelect",
         "NativeSegmentedControl": "RNNativeSegmentedControl",
         "TextInputSearch": "RNTextInputSearch",
-        "SparkPrimitive": "RNSparkPrimitive"
+        "SparkPrimitive": "RNSparkPrimitive",
+        "SparkTable": "RNSparkTable"
       },
       "modulesProvider": {
         "NativeSparkTextServices": "RNSparkTextServices"
