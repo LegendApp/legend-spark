@@ -72,6 +72,7 @@
     "./ai",
     "./ai/codex",
     "./ui/swipe",
-    "./motion"
+    "./motion",
+    "./printing"
   ]
 }

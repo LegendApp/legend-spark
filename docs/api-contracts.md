@@ -260,6 +260,21 @@ Preserve conditional write semantics. Define overwrite/symlink behavior, absent-
 
 `readChunks` returns its async iterator synchronously: unknown option keys reject during iterator construction, while chunk-range and path validation happen when iteration first starts, before native open. `writeChunks` always returns a promise; option and path validation failures reject that promise before native file dispatch, and native IO failures reject it as well. Preserve this boundary rather than changing the iterator factory into an async function.
 
+### Printing
+
+```ts
+// /printing
+print(content: PrintContent, options?: { pageSetup?: PageSetup; windowId?: string; title?: string }): Promise<{ canceled: true } | { canceled: false; pageSetup: PageSetup }>;
+showPageSetup(options?: { pageSetup?: PageSetup; windowId?: string }): Promise<{ canceled: true } | { canceled: false; pageSetup: PageSetup }>;
+getDefaultPageSetup(): Promise<PageSetup>;
+exportPDF(content: PrintContent, path: string, options?: { pageSetup?: PageSetup; title?: string }): Promise<{ path: string; numberOfPages: number; pageSetup: PageSetup }>;
+getPrintingAvailability(feature?: "printPanel" | "pageSetup" | "pdfExport"): Availability;
+// PrintContent: text | html | pdf (path) | window (windowId) | view (a mounted View ref).
+// PageSetup: { paperSize (portrait sheet, points), orientation, margins (points) }, plain JSON the caller persists.
+```
+
+Printing is its own capability path: it applies to windows and views as well as documents, and its native module (AppKit printing, PDFKit) loads only when imported. Cancellation resolves `{ canceled: true }` like the dialogs; failures reject. PDF export renders the print layout directly and never reaches the printing system, so it is headless. Window and view content is a raster render of what they draw now. Details: [printing](printing.md).
+
 ### Settings, persistence, and secure storage
 
 ```ts
