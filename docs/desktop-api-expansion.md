@@ -122,7 +122,7 @@ hashes them for build caching, and includes native executables in the existing
 signing traversal. Helpers need to target the app's architecture. They do not
 require Node; native Rust, Swift, C/C++ or other standalone executables work.
 
-## Message dialogs and clipboard
+## Dialogs and clipboard
 
 ```ts
 import { showMessage, confirm } from "@legendapp/spark/dialogs";
@@ -133,10 +133,68 @@ const result = await showMessage({ title: "Save changes?", windowId: "main",
 // result: { buttonId: "cancel" | "save" | null, checked: boolean }
 ```
 
-The native result uses the selected button ID; a host dismissal returns `buttonId: null`. `checked` is always a boolean, including dialogs without a checkbox.
+The native result uses the selected button ID; a host dismissal returns `buttonId: null`. `checked` is present only when `checkbox` was supplied.
 
 Omit windowId for an application-modal dialog. Kinds are info/warning/error.
-Concurrent message dialogs reject E_BUSY. Existing open/save file panels remain.
+Concurrent message dialogs reject E_BUSY. `confirm(message, { title, confirmLabel, cancelLabel })` resolves true only for the confirm button; its labels default to English "Continue" and "Cancel", so localized apps pass their own.
+
+### "Don't ask again"
+
+The checkbox is AppKit's alert suppression button on macOS and the task dialog verification checkbox on Windows. Spark returns its state and stores nothing; persistence is the caller's choice. Record it only after a confirmed choice, so Cancel never suppresses, and give users a way to reset it:
+
+```ts
+const settings = createSettingsStore({ storage });
+async function emptyTrash() {
+  if (await settings.get("emptyTrash.suppressed") === true) return deleteTrash();
+  const { buttonId, checked } = await showMessage({ title: "Empty the Trash?", kind: "warning",
+    buttons: [{ id: "cancel", label: "Cancel" }, { id: "empty", label: "Empty Trash" }],
+    defaultButtonId: "empty", cancelButtonId: "cancel", checkbox: { label: "Don't ask again" } });
+  if (buttonId !== "empty") return;
+  if (checked) await settings.set("emptyTrash.suppressed", true);
+  await deleteTrash();
+}
+```
+
+### Text prompts
+
+```ts
+const name = await showPrompt({ title: "Rename document", defaultValue: "Untitled", placeholder: "Name",
+  confirmLabel: "Rename", cancelLabel: "Cancel" });
+if (!name.canceled) rename(name.value); // value may be ""
+```
+
+A prompt is a message dialog with one text field (`secure: true` uses NSSecureTextField). The default value is selected when it opens; Return confirms and Escape cancels. Cancel, Escape and dismissal all resolve `{ canceled: true }`, distinct from confirming an empty value. Labels default to English "OK" and "Cancel". macOS only.
+
+### Accessory controls
+
+Open and save panels accept `accessory`: 1–8 checkboxes and labeled pop-ups shown below the file browser. Values return with an accepted result, keyed by control ID in control order; each ID is also the control's accessibility identifier. The controls are data, not React views: panels run in a modal session where React content would not render or receive events reliably, and data keeps the result typed.
+
+```ts
+const result = await saveFileDialog({ defaultName: "Notes", accessory: [
+  { type: "popup", id: "format", label: "Format:", options: [{ value: "md", label: "Markdown" }, { value: "txt", label: "Plain text" }] },
+  { type: "checkbox", id: "metadata", label: "Include metadata", checked: true },
+] });
+// { canceled: false, path, accessory: { format: "md", metadata: true } }
+```
+
+Labels are shown as given (include a colon if the locale uses one). A pop-up selects its first option unless `value` names another. The format value does not change the file name's extension; the app applies it. macOS only; Windows rejects `accessory` with E_UNSUPPORTED_OPTION.
+
+### About panel
+
+`showAboutPanel(options?)` orders front the standard macOS About panel. `name`, `version` ("Version …"), `build` (in parentheses), `credits` (plain text), `copyright` and `iconPath` (an absolute image path) override the bundle's values; omitted fields keep them. It is not modal and resolves once shown. A missing icon file rejects E_NOT_FOUND and an unreadable one E_INVALID_DATA. The menu `about` role keeps showing the bundle's values; use an action item that calls `showAboutPanel` to show overrides.
+
+### Availability
+
+`getFileDialogAvailability(feature?)` and `getMessageDialogAvailability(feature?)` report the base dialogs without an argument, and `"accessory"`, `"checkbox"`, `"prompt"` or `"aboutPanel"` separately:
+
+| Feature | macOS | Windows |
+|---|---|---|
+| Open/save panels, message dialogs | available | available |
+| `checkbox` | available | available |
+| `accessory` | available | unsupported-platform; `accessory` rejects E_UNSUPPORTED_OPTION |
+| `prompt`, `aboutPanel` | available | unsupported-platform; calls reject E_UNSUPPORTED_PLATFORM |
+
+Windows implementations (IFileDialogCustomize controls, a prompt window, an About window) are tracked in [#247](https://github.com/LegendApp/legend-spark/issues/247).
 
 Clipboard adds readClipboard, writeClipboard, getClipboardFormats and
 clearClipboard. Rich content supports text, html, rtf, image ({ format: "png", bytes: Uint8Array }) and files
