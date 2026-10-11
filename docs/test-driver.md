@@ -40,6 +40,7 @@ in driver mode. Both use the client in `scripts/e2e/driver.ts`:
 ```ts
 const driver = await launchDriver({ executable, args, env });
 await driver.navigate("spark-ks://windows/frame-autosave");
+await driver.openFile("/path/to/notes.md");
 await driver.waitFor("windows-frame-autosave-root");
 await driver.setAppAppearance("dark");
 const { file } = await driver.capture("main", "frame-autosave-dark");
@@ -65,7 +66,7 @@ await driver.close();
 - Accepted sockets are made blocking explicitly and set `SO_NOSIGPIPE`, so partial
   messages are read whole and a client that disconnects cannot kill the app.
 
-## Focus
+## Focus and window state
 
 A driven app never takes focus from the person using the Mac:
 
@@ -75,7 +76,12 @@ A driven app never takes focus from the person using the Mac:
 - It skips the single-instance lock, so it never signals (and activates) a normal
   instance of the same app.
 - App Nap is disabled for the process, so timers and rendering are not throttled.
-
+- Window state is neither restored nor saved, so every driven launch starts at the
+  configured window sizes whatever earlier launches (driven or not) left behind: the main
+  window's frame autosave, child window bounds (`restoreBounds`), the window manager's
+  restorable windows and split-view chrome. AppKit's own restoration recreates no Spark window
+  (Spark registers no restoration class). `tests/driver-window-state.native.mm` seeds a
+  saved frame and checks a driven main window keeps its size.
 - Windows that app code opens or shows with `@legendapp/spark/windows` are never ordered on
   screen either. They are created, sized, styled and rendered as usual, and the window API
   reports them as the app left them: `visible` is true after opening or `showWindow` and false
@@ -102,6 +108,7 @@ send one request at a time; each reply echoes `id`. Failures are
 | --- | --- | --- |
 | `ping` | | `ok` |
 | `navigate` | `url`, `timeoutMs` (30000) | Waits for the first rendered UI to settle (so link listeners are subscribed), then opens the URL through `application:openURLs:`, the path the OS uses for deep links. |
+| `openFile` | `path`, `timeoutMs` (30000) | `path` must be absolute and exist (`E_INVALID_ARGUMENT`, `E_NOT_FOUND`). Waits like `navigate`, then opens a file URL for it through `application:openURLs:`, the path the OS uses for a file opened from Finder. `navigate` rejects file URLs, so only `openFile` delivers files. |
 | `waitFor` | `testID`, `timeoutMs` (10000) | `window` identifier and `frame` of the first visible view whose accessibility identifier (React Native `testID`) matches. `frame` is in points from the top-left of the window's frame view, the area `capture` renders, so frame × `scale` is the view's pixels in a capture. `E_TIMEOUT` otherwise; `timeoutMs: 0` checks once. |
 | `setAppAppearance` | `appearance` (`light`/`dark`), `timeoutMs` (10000) | Waits for the first rendered UI to settle (an override set while the app is still launching did not last), then sets `NSApp.appearance` (an app override; the OS setting is untouched; per-window appearances still win). If the effective appearance changed, replies `changed: true` once a UI update has mounted and settled, else `E_TIMEOUT`. `timeoutMs` bounds each wait. |
 | `capture` | `window` (`main`, `key`, `id:<identifier>`, `title:<title>`), `name`, `timeoutMs` (5000) | `file`, `width`, `height` (pixels), `scale`, once mounted UI updates have settled. `E_NOT_SETTLED` if they never do. |
