@@ -1,0 +1,34 @@
+appId: so.legend.spark.examples.kitchensink
+name: Outline expansion, selection and context menu by input
+intent: >
+  On Native controls > Outline (10,010 rows), Option-clicking the Group 1 triangle collapses Group 1 and
+  Folder 1.1 together, reported once; Option-clicking it again expands Group 1 and all ten of its folders,
+  reported once. A plain click collapses Group 1 while its folders stay in expandedIds, and another click
+  reopens them with it. Clicking the Folder 1.1 triangle collapses that folder alone. Clicking Group 1
+  selects it, and right-clicking Folder 1.1 reports a context menu for that row alone. Only Group 1 (row 0)
+  and Folder 1.1 (row 1) are clicked: rows below a collapsing or expanding row slide while AppKit animates.
+  Readouts are the JSON the API reports.
+checks: [CTRL-OUTLINE-02]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  locale: [en]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/outline" }
+- assertVisible: { id: native-controls-outline-list }
+- assertText: { id: native-controls-outline-expanded, equals: '["group-1","folder-1-1"]' }
+# Each disclosure triangle is the nearest one leading its row's name.
+- tapOn: { role: disclosureTriangle, leftOf: "Group 1", modifiers: [option] }
+- assertText: { id: native-controls-outline-expanded, equals: '[]' }
+- tapOn: { role: disclosureTriangle, leftOf: "Group 1", modifiers: [option] }
+- assertText: { id: native-controls-outline-expanded, equals: '["group-1","folder-1-1","folder-1-2","folder-1-3","folder-1-4","folder-1-5","folder-1-6","folder-1-7","folder-1-8","folder-1-9","folder-1-10"]' }
+- tapOn: { role: disclosureTriangle, leftOf: "Group 1" }
+- assertText: { id: native-controls-outline-expanded, equals: '["folder-1-1","folder-1-2","folder-1-3","folder-1-4","folder-1-5","folder-1-6","folder-1-7","folder-1-8","folder-1-9","folder-1-10"]' }
+- tapOn: { role: disclosureTriangle, leftOf: "Group 1" }
+- assertText: { id: native-controls-outline-expanded, equals: '["group-1","folder-1-1","folder-1-2","folder-1-3","folder-1-4","folder-1-5","folder-1-6","folder-1-7","folder-1-8","folder-1-9","folder-1-10"]' }
+- tapOn: { role: disclosureTriangle, leftOf: "Folder 1.1" }
+- assertText: { id: native-controls-outline-expanded, equals: '["group-1","folder-1-2","folder-1-3","folder-1-4","folder-1-5","folder-1-6","folder-1-7","folder-1-8","folder-1-9","folder-1-10"]' }
+- tapOn: "Group 1"
+- assertText: { id: native-controls-outline-selection, equals: '{"count":1,"first":["group-1"]}' }
+- rightClickOn: "Folder 1.1"
+- assertVisible: { id: native-controls-outline-event, text: '/^\{"contextMenu":\{"rowId":"folder-1-1","count":1,"first":\["folder-1-1"\],"position":\{"x":\d+,"y":\d+\}\}\}$/' }
