@@ -12,7 +12,7 @@ platforms: [macos]
 matrix:
   locale: [en-US, ar]
 ---
-- launchApp: { openUrl: "spark-ks://native-controls/popover" }
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/popover" }
 - extendedWaitUntil: { visible: { id: native-controls-popover-root }, timeout: 10s }
 - assertText: { id: native-controls-popover-availability, equals: '{"available":true}' }
 - assertVisible: { id: native-controls-popover-host }

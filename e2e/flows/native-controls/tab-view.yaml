@@ -14,7 +14,7 @@ matrix:
   appearance: [light, dark]
   locale: [en-US, ar]
 ---
-- launchApp: { openUrl: "spark-ks://native-controls/tab-view" }
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/tab-view" }
 - extendedWaitUntil: { visible: { id: native-controls-tab-view-root }, timeout: 10s }
 - assertText: { id: native-controls-tab-view-availability, equals: '{"available":true}' }
 - assertVisible: { id: native-controls-tab-view-content-general }
