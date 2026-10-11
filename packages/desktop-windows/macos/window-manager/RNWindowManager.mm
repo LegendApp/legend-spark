@@ -28,6 +28,7 @@ extern double LegendMainWindowReactRootAttachedTimeMs;
 #import <RNDesktopApp/SparkTestDriver.h>
 // Safe-mode launches skip saved windows and frames (docs/app.md).
 static BOOL LegendSafeMode(void) { return SparkSafeMode(); }
+// Driver-mode launches neither restore nor save window state: each starts from the configured defaults (docs/test-driver.md).
 static BOOL LegendTestDriverActive(void) { return SparkTestDriverActive(); }
 #else
 static BOOL LegendSafeMode(void) { return NO; }
@@ -63,7 +64,7 @@ static NSString * const LegendMainWindowStartupSplitViewKey = @"LegendMainWindow
 
 extern "C" NSDictionary *LegendMainWindowStartupSplitViewConfiguration(void)
 {
-  if (LegendSafeMode()) return nil;
+  if (LegendSafeMode() || LegendTestDriverActive()) return nil;
   NSDictionary *configuration = [NSUserDefaults.standardUserDefaults dictionaryForKey:LegendMainWindowStartupSplitViewKey];
   return [configuration[@"restoreOnLaunch"] isEqual:@NO] ? nil : configuration;
 }
@@ -131,6 +132,9 @@ static NSDictionary *LegendRestorableWindowOptions(NSDictionary *options)
 
 static void LegendWriteRestorableWindowOptions(NSArray<NSDictionary *> *options)
 {
+  if (LegendTestDriverActive()) {
+    return;
+  }
   NSMutableArray<NSString *> *records = [NSMutableArray new];
   for (NSDictionary *record in options) {
     NSData *data = [NSJSONSerialization dataWithJSONObject:record options:0 error:nil];
@@ -729,8 +733,8 @@ extern "C" void LegendPrecreateRestorableWindows(void)
   }
 
   LegendPrecreatedWindows = [NSMutableDictionary new];
-  // Safe mode opens no saved windows; their records stay for the next normal launch.
-  if (LegendSafeMode()) {
+  // Safe mode opens no saved windows; their records stay for the next normal launch. Driver mode neither.
+  if (LegendSafeMode() || LegendTestDriverActive()) {
     return;
   }
   for (NSDictionary *options in LegendReadRestorableWindowOptions()) {
@@ -2272,7 +2276,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       LegendApplyBackgroundColorToView(window.contentView, startupBackgroundColor);
     }
 
-    if (!precreatedWindow && [options[@"restoreOnLaunch"] boolValue] && !LegendSafeMode()) {
+    if (!precreatedWindow && [options[@"restoreOnLaunch"] boolValue] && !LegendSafeMode() && !LegendTestDriverActive()) {
       [window setFrameAutosaveName:LegendManagedWindowFrameAutosaveName(identifier)];
     }
     if (!precreatedWindow && LegendPrepareSidebarSplitViewStartup) {
@@ -2633,7 +2637,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
       return;
     }
     SparkSetDriverShown(mainWindow, NO); [mainWindow orderOut:nil];
-    [NSUserDefaults.standardUserDefaults removeObjectForKey:LegendMainWindowStartupSplitViewKey];
+    if (!LegendTestDriverActive()) {
+      [NSUserDefaults.standardUserDefaults removeObjectForKey:LegendMainWindowStartupSplitViewKey];
+    }
     [self sendWindowEventWithName:@"onWindowClosed"
                              body:@{@"identifier": @"main", @"moduleName": @"main"}];
     resolve([self successJson]);
@@ -2673,7 +2679,8 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
 
     NSDictionary *options = [self parseObjectJSON:optionsJson];
-    id startupSplitView = options[@"windowStyle"][@"startupSplitView"];
+    // Driver mode saves no window chrome.
+    id startupSplitView = LegendTestDriverActive() ? nil : options[@"windowStyle"][@"startupSplitView"];
     if ([startupSplitView isKindOfClass:NSDictionary.class]) {
       // Persist window chrome only, just like AppKit's saved frame. No document data.
       if (![startupSplitView isEqual:[NSUserDefaults.standardUserDefaults dictionaryForKey:LegendMainWindowStartupSplitViewKey]]) {

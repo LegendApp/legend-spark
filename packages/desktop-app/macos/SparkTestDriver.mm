@@ -30,7 +30,7 @@ static void SparkDriverTerminate(void) { ending = YES; [NSApp terminate:nil]; }
 BOOL SparkTestDriverActive(void) { return active; }
 BOOL SparkTestDriverEnding(void) { return ending; }
 void SparkTestDriverDidMount(void) { lastMount = CACurrentMediaTime(); }
-static NSArray<NSString *> *const SparkBuiltInCommands = @[@"ping", @"navigate", @"waitFor", @"setAppAppearance", @"capture", @"quit"];
+static NSArray<NSString *> *const SparkBuiltInCommands = @[@"ping", @"navigate", @"openFile", @"waitFor", @"setAppAppearance", @"capture", @"quit"];
 static NSMutableDictionary<NSString *, SparkTestDriverHandler> *SparkModuleCommands(void) {
   static NSMutableDictionary *commands;
   static dispatch_once_t once;
@@ -216,21 +216,32 @@ static void SparkSetAppearance(NSDictionary *request, SparkDriverReply reply) {
     });
   });
 }
+// Deep links and files arrive through application:openURLs:, the path the OS uses for a
+// clicked link or a file opened from Finder, once the first render has settled so the
+// app's link and open-file listeners are subscribed.
+static void SparkOpenURL(NSURL *url, NSDictionary *request, SparkDriverReply reply) {
+  id<NSApplicationDelegate> delegate = NSApp.delegate;
+  if (![delegate respondsToSelector:@selector(application:openURLs:)]) { reply(SparkFailure(@"E_UNSUPPORTED", @"The application delegate does not open URLs")); return; }
+  SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 30), ^{ return (BOOL)(lastMount > 0 && SparkSettled()); }, ^(BOOL rendered) {
+    if (!rendered) { reply(SparkFailure(@"E_TIMEOUT", @"The app has not rendered")); return; }
+    [delegate application:NSApp openURLs:@[url]];
+    reply(@{ @"ok": @YES });
+  });
+}
 static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   NSString *command = request[@"command"];
   if ([command isEqual:@"ping"]) reply(@{ @"ok": @YES });
   else if ([command isEqual:@"navigate"]) {
     NSURL *url = [request[@"url"] isKindOfClass:NSString.class] ? [NSURL URLWithString:request[@"url"]] : nil;
-    if (!url.scheme.length || url.isFileURL) { reply(SparkFailure(@"E_INVALID_ARGUMENT", @"navigate expects a non-file URL")); return; }
-    id<NSApplicationDelegate> delegate = NSApp.delegate;
-    if (![delegate respondsToSelector:@selector(application:openURLs:)]) { reply(SparkFailure(@"E_UNSUPPORTED", @"The application delegate does not open URLs")); return; }
-    // Deliver once the first render has settled, so the app's link listeners are
-    // subscribed, through the same path the OS uses for a clicked deep link.
-    SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 30), ^{ return (BOOL)(lastMount > 0 && SparkSettled()); }, ^(BOOL rendered) {
-      if (!rendered) { reply(SparkFailure(@"E_TIMEOUT", @"The app has not rendered")); return; }
-      [delegate application:NSApp openURLs:@[url]];
-      reply(@{ @"ok": @YES });
-    });
+    if (!url.scheme.length || url.isFileURL) { reply(SparkFailure(@"E_INVALID_ARGUMENT", @"navigate expects a non-file URL; open files with openFile")); return; }
+    SparkOpenURL(url, request, reply);
+  }
+  else if ([command isEqual:@"openFile"]) {
+    NSString *path = request[@"path"];
+    if (![path isKindOfClass:NSString.class] || !path.isAbsolutePath) { reply(SparkFailure(@"E_INVALID_ARGUMENT", @"openFile expects an absolute path")); return; }
+    BOOL directory = NO;
+    if (![NSFileManager.defaultManager fileExistsAtPath:path isDirectory:&directory]) { reply(SparkFailure(@"E_NOT_FOUND", [NSString stringWithFormat:@"No file at %@", path])); return; }
+    SparkOpenURL([NSURL fileURLWithPath:path isDirectory:directory], request, reply);
   }
   else if ([command isEqual:@"waitFor"]) {
     NSString *testID = request[@"testID"];

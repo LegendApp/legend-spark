@@ -12,6 +12,9 @@ export type Capture = { file: string; width: number; height: number; scale: numb
 export type LaunchOptions = { executable: string; args?: string[]; env?: Record<string, string>; log?: ProcessLog; startTimeoutMs?: number };
 type Reply = { id?: unknown; ok: boolean; error?: { code: string; message: string }; [key: string]: unknown };
 
+/** The environment variable that starts the in-app driver; the launch sets it. */
+export const DRIVER_ENV = "SPARK_TEST_DRIVER_DIR";
+
 export class DriverError extends Error {
   constructor(readonly code: string, message: string) { super(`${code}: ${message}`); }
 }
@@ -24,7 +27,7 @@ export async function launchDriver(options: LaunchOptions): Promise<Driver> {
   const token = randomBytes(32).toString("hex");
   writeFileSync(path.join(directory, "token"), token, { mode: 0o600, flag: "wx" });
   const app = spawnProcess([options.executable, ...(options.args ?? [])], {
-    env: { ...process.env, ...options.env, SPARK_TEST_DRIVER_DIR: directory },
+    env: { ...process.env, ...options.env, [DRIVER_ENV]: directory },
     stdout: options.log ?? "inherit", stderr: options.log ?? "inherit",
   });
   try {
@@ -110,6 +113,8 @@ export class Driver {
   async ping() { await this.request({ command: "ping" }, 10000); }
   /** Delivers a deep link through the app's URL handling once its first render has settled. */
   async navigate(url: string, timeoutMs = 30000) { await this.request({ command: "navigate", url, timeoutMs }, timeoutMs + 10000); }
+  /** Opens an existing file (absolute path) through the app's open-file handling once its first render has settled. */
+  async openFile(file: string, timeoutMs = 30000) { await this.request({ command: "openFile", path: file, timeoutMs }, timeoutMs + 10000); }
   /** Waits for a visible view whose accessibility identifier (React Native testID) matches. */
   async waitFor(testID: string, timeoutMs = 10000) {
     const reply = await this.request({ command: "waitFor", testID, timeoutMs }, timeoutMs + 10000);
