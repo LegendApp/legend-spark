@@ -1,0 +1,37 @@
+appId: so.legend.spark.examples.kitchensink
+name: Windows window options apply where implemented and reject the rest
+intent: >
+  On Windows the child opens with the portable options only. Resizable, closable, minimizable,
+  size limits, level, background and shadow change on the live child; opacity and the macOS-only
+  rows show E_UNSUPPORTED_OPTION in place of a new value. Windows implementations are tracked in #243.
+checks: [WIN-OPEN-01, WIN-OPTIONS-01, WIN-UNSUP-01]
+tags: [windows]
+platforms: [windows]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://windows/window-options" }
+- tapOn: { id: windows-window-options-open }
+- assertVisible: { text: Opened child, within: { id: windows-window-options-status } }
+- assertVisible: { id: secondary-window, window: { id: windows-window-options-child } }
+- focusWindow: { id: spark.main }
+- tapOn: { id: windows-window-options-resizable }
+- assertText: { id: windows-window-options-resizable-value, equals: "off" }
+- tapOn: { id: windows-window-options-closable }
+- assertText: { id: windows-window-options-closable-value, equals: "off" }
+- tapOn: { id: windows-window-options-minimizable }
+- assertText: { id: windows-window-options-minimizable-value, equals: "off" }
+- tapOn: { id: windows-window-options-size-limits }
+- assertText: { id: windows-window-options-size-limits-value, equals: 400x300 to 900x700 }
+- tapOn: { id: windows-window-options-level }
+- assertText: { id: windows-window-options-level-value, equals: floating }
+- tapOn: { id: windows-window-options-background }
+- assertText: { id: windows-window-options-background-value, equals: "#3366CC" }
+- tapOn: { id: windows-window-options-shadow }
+- assertText: { id: windows-window-options-shadow-value, equals: "off" }
+- tapOn: { id: windows-window-options-opacity }
+- assertVisible: { text: "/E_UNSUPPORTED_OPTION/", within: { id: windows-window-options-opacity-error } }
+- assertText: { id: windows-window-options-opacity-value, equals: "1" }
+- tapOn: { id: windows-window-options-edited }
+- assertVisible: { text: "/E_UNSUPPORTED_OPTION/", within: { id: windows-window-options-edited-error } }
+- tapOn: { id: windows-window-options-close }

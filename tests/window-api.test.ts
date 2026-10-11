@@ -143,3 +143,44 @@ test("macOS toolbar-only updates bypass portable window geometry", async () => {
   await windows.setWindowOptions("editor", {});
   expect(call).toHaveBeenCalledTimes(2);
 });
+
+test("option availability is truthful per platform and rejects unknown options", () => {
+  const options = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "subtitle", "trafficLightPosition"] as const;
+  platform.OS = "macos";
+  for (const option of options) expect(windows.getWindowAvailability(option)).toEqual({ available: true });
+  platform.OS = "windows";
+  expect(windows.getWindowAvailability()).toEqual({ available: true });
+  for (const option of options) expect(windows.getWindowAvailability(option)).toEqual({ available: false, reason: "unsupported-platform" });
+  platform.OS = "ios";
+  expect(windows.getWindowAvailability("opacity")).toEqual({ available: false, reason: "unsupported-platform" });
+  expect(() => windows.getWindowAvailability("resizable" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  expect(call).not.toHaveBeenCalled();
+});
+test("macOS option updates go only to the module that owns each field", async () => {
+  platform.OS = "macos";
+  const sent = () => call.mock.calls.filter(([method]) => method === "options").map(([, args]) => JSON.parse(args).options);
+  await windows.setWindowOptions("editor", { opacity: 0.5, macos: { documentEdited: true, titleBar: { subtitle: "Draft" } } });
+  expect(sent()).toEqual([{ opacity: 0.5, macos: { documentEdited: true, titleBar: { subtitle: "Draft" } } }]);
+  expect(managed.setWindowOptions).not.toHaveBeenCalled();
+  // Title-bar groups pass through the window module (simple fullscreen guard) before AppKit applies them.
+  await windows.setWindowOptions("editor", { macos: { titleBar: { trafficLights: false, trafficLightPosition: { x: 20, y: 18 } } } });
+  expect(sent()).toHaveLength(2);
+  expect(JSON.parse(managed.setWindowOptions.mock.calls[0][1]).windowStyle).toEqual({ trafficLights: false });
+  await windows.setWindowOptions("editor", { macos: { level: "floating" } });
+  expect(sent()).toHaveLength(2);
+  expect(managed.setWindowOptions).toHaveBeenCalledTimes(2);
+});
+test("macOS opening applies options with the window and enters simple fullscreen last", async () => {
+  platform.OS = "macos";
+  await windows.openWindow({ id: "editor", component: "Editor", opacity: 0.9, macos: { spaces: "all", titleBar: { subtitle: "Draft" } } });
+  expect(JSON.parse(call.mock.calls.find(([method]) => method === "completeOpen")![1])).toMatchObject({ opacity: 0.9, macos: { spaces: "all", titleBar: { subtitle: "Draft" } } });
+  expect(managed.setWindowOptions).not.toHaveBeenCalled();
+  call.mockClear();
+  await windows.openWindow({ id: "editor", component: "Editor", macos: { simpleFullscreen: true, toolbar: { visible: true } } });
+  const methods = call.mock.calls.map(([method]) => method);
+  expect(methods.slice(0, 2)).toEqual(["completeOpen", "options"]);
+  expect(JSON.parse(call.mock.calls[0][1]).macos).toEqual({ toolbar: { visible: true } });
+  expect(JSON.parse(call.mock.calls[1][1])).toEqual({ id: "editor", options: { macos: { simpleFullscreen: true } } });
+  expect(managed.setWindowOptions).toHaveBeenCalledOnce();
+  expect(managed.setWindowOptions.mock.invocationCallOrder[0]).toBeLessThan(call.mock.invocationCallOrder[1]);
+});

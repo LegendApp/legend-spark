@@ -3,13 +3,28 @@
 #import "SparkWindowGeometry.h"
 #import <objc/runtime.h>
 #import <RNDesktopApp/SparkDesktop.h>
+#import <RNDesktopApp/SparkTestDriver.h>
 #import <React-RCTAppDelegate/RCTRootViewFactory.h>
 #import <React/RCTSurfaceHostingView.h>
 
-static void Show(NSWindow *window) {
-  if ([window isKindOfClass:NSPanel.class] && (window.styleMask & NSWindowStyleMaskNonactivatingPanel)) [window orderFrontRegardless];
+// Driver mode records the window as shown instead of ordering it on screen (docs/test-driver.md).
+static void Show(NSWindow *window, BOOL focus, NSWindow *sheetParent) {
+  if (SparkTestDriverActive()) { SparkSetDriverShown(window, YES); return; }
+  if (sheetParent) [sheetParent beginSheet:window completionHandler:nil];
+  else if (!focus) [window orderFront:nil];
+  else if ([window isKindOfClass:NSPanel.class] && (window.styleMask & NSWindowStyleMaskNonactivatingPanel)) [window orderFrontRegardless];
   else [window makeKeyAndOrderFront:nil];
 }
+static void Hide(NSWindow *window) {
+  SparkSetDriverShown(window, NO);
+  if (window.sheetParent) [window.sheetParent endSheet:window];
+  [window orderOut:nil];
+}
+static BOOL Visible(NSWindow *window) { return (SparkTestDriverActive() ? SparkDriverShown(window) : window.visible) && !NSApp.hidden; }
+static char SimpleFullscreenKey, TrafficLightKey, MaterialKey;
+static BOOL InSimpleFullscreen(NSWindow *window) { return objc_getAssociatedObject(window, &SimpleFullscreenKey) != nil; }
+static void SetSimpleFullscreen(NSWindow *window, BOOL enabled);
+static void SetTrafficLightPosition(NSWindow *window, id position);
 @interface SparkWindowDelegate : NSObject <NSWindowDelegate>
 @property NSString *windowID;
 @property (nonatomic, weak) NSWindow *window;
@@ -47,14 +62,14 @@ static void Event(NSString *type, NSString *key) {
   NSMutableDictionary *event = [@{ @"type": type, @"windowId": key, @"instanceId": delegates[key].instanceId ?: @"" } mutableCopy];
   if ([type isEqual:@"move"] || [type isEqual:@"resize"] || [type isEqual:@"screenChanged"]) {
     event[@"type"] = @"boundsChanged"; event[@"bounds"] = SparkBoundsForWindow(window);
-    if (delegates[key].restoreBounds && !window.miniaturized && !(window.styleMask & NSWindowStyleMaskFullScreen)) {
+    if (delegates[key].restoreBounds && !window.miniaturized && !(window.styleMask & NSWindowStyleMaskFullScreen) && !InSimpleFullscreen(window)) {
       NSScreen *screen = SparkOwningScreen(window.frame);
       [NSUserDefaults.standardUserDefaults setObject:@{ @"version": @1, @"bounds": event[@"bounds"], @"persistentId": SparkPersistentScreenId(screen) ?: @"" }
         forKey:[NSString stringWithFormat:@"%@.bounds.%@", SparkNamespace(), key]];
     }
   } else if ([type isEqual:@"focus"] || [type isEqual:@"blur"]) { event[@"type"] = @"focusChanged"; event[@"focused"] = @([type isEqual:@"focus"]); }
   else if ([type isEqual:@"enterFullscreen"] || [type isEqual:@"leaveFullscreen"]) { event[@"type"] = @"fullscreenChanged"; event[@"fullscreen"] = @([type isEqual:@"enterFullscreen"]); }
-  else if ([type isEqual:@"visibilityChanged"]) event[@"visible"] = @(window.visible && !NSApp.hidden);
+  else if ([type isEqual:@"visibilityChanged"]) event[@"visible"] = @(Visible(window));
   SparkEmit(event);
 }
 @implementation SparkWindowDelegate
@@ -88,6 +103,8 @@ static void Event(NSString *type, NSString *key) {
 }
 - (void)windowWillClose:(NSNotification *)note {
   [self finishClose:YES]; [self finishFullscreen:NO];
+  // Give back the app-wide presentation options and saved frame, and stop layout observers.
+  SetSimpleFullscreen(note.object, NO); SetTrafficLightPosition(note.object, NSNull.null);
   BOOL managed = LegendWindowRegistry.sharedRegistry.moduleNames[self.windowID] != nil;
   if ([self.previousDelegate respondsToSelector:@selector(windowWillClose:)]) [self.previousDelegate windowWillClose:note];
   NSWindow *closing = note.object;
@@ -154,10 +171,135 @@ static NSDictionary *Info(NSString *key, NSWindow *window) {
   NSWindow *parent = window.sheetParent ?: window.parentWindow;
   for (NSString *candidate in windows) if (windows[candidate] == parent) { parentId = candidate; break; }
   return @{ @"id": key, @"instanceId": delegates[key].instanceId, @"kind": opening[@"kind"] ?: @"window",
-    @"title": window.title, @"parentId": parentId ?: NSNull.null, @"modal": @([opening[@"modal"] boolValue]), @"visible": @(window.visible && !NSApp.hidden), @"focused": @(window.keyWindow),
+    @"title": window.title, @"parentId": parentId ?: NSNull.null, @"modal": @([opening[@"modal"] boolValue]), @"visible": @(Visible(window)), @"focused": @(window.keyWindow),
     @"minimized": @(window.miniaturized), @"maximized": @(window.zoomed), @"fullscreen": @((window.styleMask & NSWindowStyleMaskFullScreen) != 0), @"bounds": SparkBoundsForWindow(window) };
 }
+static const NSWindowButton TrafficLights[] = { NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton };
+// Holds a requested traffic-light position and puts the buttons back whenever AppKit lays the
+// title bar out again (resize, toolbar and title changes, fullscreen exit, recreated buttons).
+@interface SparkTrafficLights : NSObject
+@property (nonatomic, weak) NSWindow *window;
+@property (nonatomic) NSPoint position;
+@property (nonatomic, weak) NSButton *observed;
+@property (nonatomic) NSArray<NSNumber *> *original; // AppKit's container height, close button leading x and y, spacing
+@property (nonatomic) NSMutableArray *windowObservers, *viewObservers;
+@property (nonatomic) BOOL scheduled;
+@end
+@implementation SparkTrafficLights
+// Lay out now, and once more after the current layout pass: AppKit can move the buttons again
+// later in the same pass (for example while adding a toolbar), ignoring changes made during it.
+- (void)observe:(id)object name:(NSNotificationName)name into:(NSMutableArray *)tokens {
+  __weak SparkTrafficLights *weakSelf = self;
+  [tokens addObject:[NSNotificationCenter.defaultCenter addObserverForName:name object:object queue:nil usingBlock:^(NSNotification *) {
+    SparkTrafficLights *lights = weakSelf;
+    [lights layout];
+    if (!lights || lights.scheduled) return;
+    lights.scheduled = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{ SparkTrafficLights *later = weakSelf; later.scheduled = NO; [later layout]; });
+  }]];
+}
+- (void)stop:(NSMutableArray *)tokens { for (id token in tokens) [NSNotificationCenter.defaultCenter removeObserver:token]; [tokens removeAllObjects]; }
+// Puts the close button `x` from the container's leading edge and `y` up from its bottom; the
+// other buttons keep AppKit's spacing. Right-to-left title bars put the close button at the right.
+- (void)place:(CGFloat)height x:(CGFloat)x y:(CGFloat)y spacing:(CGFloat)spacing {
+  NSWindow *window = self.window; NSButton *close = [window standardWindowButton:NSWindowCloseButton]; NSView *container = close.superview.superview;
+  NSRect frame = container.frame; frame.size.height = height; frame.origin.y = NSHeight(window.frame) - height;
+  if (!NSEqualRects(frame, container.frame)) container.frame = frame;
+  CGFloat start = window.windowTitlebarLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft ? NSWidth(frame) - x - NSWidth(close.frame) : x;
+  for (int index = 0; index < 3; index++) {
+    NSButton *button = [window standardWindowButton:TrafficLights[index]];
+    NSPoint origin = NSMakePoint(start + index * spacing, y);
+    if (button && !NSEqualPoints(origin, button.frame.origin)) [button setFrameOrigin:origin];
+  }
+}
+- (CGFloat)spacing {
+  NSButton *close = [self.window standardWindowButton:NSWindowCloseButton], *minimize = [self.window standardWindowButton:NSWindowMiniaturizeButton];
+  return minimize ? NSMinX(minimize.frame) - NSMinX(close.frame) : 0;
+}
+- (void)layout {
+  NSWindow *window = self.window;
+  NSButton *close = [window standardWindowButton:NSWindowCloseButton];
+  NSView *container = close.superview.superview;
+  if (!container || (window.styleMask & NSWindowStyleMaskFullScreen)) return;
+  if (close != self.observed) {
+    // AppKit recreates the buttons after closable, minimizable and resizable were all off.
+    [self stop:self.viewObservers]; self.observed = close;
+    BOOL rtl = window.windowTitlebarLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft;
+    self.original = @[@(NSHeight(container.frame)), @(rtl ? NSWidth(container.frame) - NSMaxX(close.frame) : NSMinX(close.frame)), @(NSMinY(close.frame)), @(self.spacing)];
+    for (NSView *view in @[close, container]) { view.postsFrameChangedNotifications = YES; [self observe:view name:NSViewFrameDidChangeNotification into:self.viewObservers]; }
+  }
+  // The container grows to center the buttons at the requested top inset (Electron's layout).
+  [self place:NSHeight(close.frame) + 2 * self.position.y x:self.position.x y:self.position.y spacing:self.spacing];
+}
+- (void)remove {
+  [self stop:self.windowObservers]; [self stop:self.viewObservers];
+  NSWindow *window = self.window;
+  if (self.observed && self.observed == [window standardWindowButton:NSWindowCloseButton] && !(window.styleMask & NSWindowStyleMaskFullScreen))
+    [self place:[self.original[0] doubleValue] x:[self.original[1] doubleValue] y:[self.original[2] doubleValue] spacing:[self.original[3] doubleValue]];
+}
+@end
+// Close button offset from the window's leading top corner; null restores AppKit's layout.
+static void SetTrafficLightPosition(NSWindow *window, id position) {
+  SparkTrafficLights *lights = objc_getAssociatedObject(window, &TrafficLightKey);
+  if (position == NSNull.null) { [lights remove]; objc_setAssociatedObject(window, &TrafficLightKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC); return; }
+  if (!lights) {
+    lights = [SparkTrafficLights new]; lights.window = window; lights.windowObservers = [NSMutableArray new]; lights.viewObservers = [NSMutableArray new];
+    for (NSNotificationName name in @[NSWindowDidResizeNotification, NSWindowDidExitFullScreenNotification]) [lights observe:window name:name into:lights.windowObservers];
+    objc_setAssociatedObject(window, &TrafficLightKey, lights, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
+  lights.position = NSMakePoint([position[@"x"] doubleValue], [position[@"y"] doubleValue]);
+  [lights layout];
+}
+static void SetBackgroundMaterial(NSWindow *window, NSString *name) {
+  NSDictionary *materials = @{ @"sidebar": @(NSVisualEffectMaterialSidebar), @"windowBackground": @(NSVisualEffectMaterialWindowBackground), @"hudWindow": @(NSVisualEffectMaterialHUDWindow), @"popover": @(NSVisualEffectMaterialPopover) };
+  NSVisualEffectView *view = objc_getAssociatedObject(window, &MaterialKey);
+  NSNumber *material = materials[name];
+  if (!material) { [view removeFromSuperview]; objc_setAssociatedObject(window, &MaterialKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC); return; }
+  if (!view) {
+    view = [[NSVisualEffectView alloc] initWithFrame:window.contentView.bounds];
+    view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    view.blendingMode = NSVisualEffectBlendingModeBehindWindow; view.state = NSVisualEffectStateFollowsWindowActiveState;
+    objc_setAssociatedObject(window, &MaterialKey, view, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
+  // Below the React surface, so transparent React content shows the material.
+  if (view.superview != window.contentView) { view.frame = window.contentView.bounds; [window.contentView addSubview:view positioned:NSWindowBelow relativeTo:nil]; }
+  view.material = (NSVisualEffectMaterial)material.integerValue;
+}
+static NSInteger SimpleFullscreenWindows;
+static NSApplicationPresentationOptions PresentationBeforeSimpleFullscreen;
+// Pre-Lion fullscreen: the window covers its screen in the current Space. Frame autosave and
+// restoreBounds keep the windowed frame; chrome hidden here is restored on exit.
+static void SetSimpleFullscreen(NSWindow *window, BOOL enabled) {
+  NSDictionary *saved = objc_getAssociatedObject(window, &SimpleFullscreenKey);
+  if (enabled == (saved != nil)) return;
+  const NSWindowStyleMask bits = NSWindowStyleMaskFullSizeContentView | NSWindowStyleMaskResizable;
+  if (enabled) {
+    NSMutableArray *hidden = [NSMutableArray new];
+    for (NSWindowButton kind : TrafficLights) [hidden addObject:@([window standardWindowButton:kind].hidden)];
+    objc_setAssociatedObject(window, &SimpleFullscreenKey, @{ @"frame": [NSValue valueWithRect:window.frame], @"mask": @(window.styleMask & bits), @"transparent": @(window.titlebarAppearsTransparent),
+      @"titleVisibility": @(window.titleVisibility), @"movable": @(window.movable), @"buttons": hidden, @"toolbar": @(window.toolbar.visible), @"autosave": window.frameAutosaveName ?: @"" }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (SimpleFullscreenWindows++ == 0) { PresentationBeforeSimpleFullscreen = NSApp.presentationOptions; NSApp.presentationOptions = NSApplicationPresentationAutoHideDock | NSApplicationPresentationAutoHideMenuBar; }
+    [window setFrameAutosaveName:@""];
+    window.styleMask = (window.styleMask | NSWindowStyleMaskFullSizeContentView) & ~NSWindowStyleMaskResizable;
+    window.titlebarAppearsTransparent = YES; window.titleVisibility = NSWindowTitleHidden; window.movable = NO; window.toolbar.visible = NO;
+    for (NSWindowButton kind : TrafficLights) [window standardWindowButton:kind].hidden = YES;
+    [window setFrame:(window.screen ?: NSScreen.mainScreen).frame display:YES];
+    return;
+  }
+  objc_setAssociatedObject(window, &SimpleFullscreenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  window.styleMask = (window.styleMask & ~bits) | [saved[@"mask"] unsignedIntegerValue];
+  window.titlebarAppearsTransparent = [saved[@"transparent"] boolValue]; window.titleVisibility = (NSWindowTitleVisibility)[saved[@"titleVisibility"] integerValue];
+  window.movable = [saved[@"movable"] boolValue]; window.toolbar.visible = [saved[@"toolbar"] boolValue];
+  for (int index = 0; index < 3; index++) [window standardWindowButton:TrafficLights[index]].hidden = [saved[@"buttons"][index] boolValue];
+  [window setFrame:[saved[@"frame"] rectValue] display:YES];
+  if ([saved[@"autosave"] length]) [window setFrameAutosaveName:saved[@"autosave"]];
+  if (--SimpleFullscreenWindows == 0) NSApp.presentationOptions = PresentationBeforeSimpleFullscreen;
+}
 static BOOL ApplyCommon(NSWindow *window, NSDictionary *options, RCTPromiseRejectBlock reject) {
+  NSDictionary *macos = options[@"macos"], *titleBar = macos[@"titleBar"];
+  if (InSimpleFullscreen(window) && (options[@"titleBarStyle"] || options[@"resizable"] || options[@"minSize"] || options[@"maxSize"] || titleBar.count > (titleBar[@"subtitle"] ? 1 : 0))) {
+    reject(@"E_BUSY", @"Leave simple fullscreen before changing the title bar, resizability or size constraints", nil); return NO;
+  }
   NSSize minimum = options[@"minSize"] ? (options[@"minSize"] == NSNull.null ? NSMakeSize(100, 100) : NSMakeSize([options[@"minSize"][@"width"] doubleValue], [options[@"minSize"][@"height"] doubleValue])) : window.minSize;
   NSSize maximum = options[@"maxSize"] ? (options[@"maxSize"] == NSNull.null ? NSMakeSize(20000, 20000) : NSMakeSize([options[@"maxSize"][@"width"] doubleValue], [options[@"maxSize"][@"height"] doubleValue])) : window.maxSize;
   if (minimum.width > maximum.width || minimum.height > maximum.height) { reject(@"E_INVALID_ARGUMENT", @"Conflicting window constraints", nil); return NO; }
@@ -179,7 +321,7 @@ static BOOL ApplyCommon(NSWindow *window, NSDictionary *options, RCTPromiseRejec
     NSWindowStyleMask bit = [key isEqual:@"resizable"] ? NSWindowStyleMaskResizable : [key isEqual:@"closable"] ? NSWindowStyleMaskClosable : NSWindowStyleMaskMiniaturizable;
     mask = [options[key] boolValue] ? mask | bit : mask & ~bit;
   }
-  window.styleMask = mask;
+  if (mask != window.styleMask) window.styleMask = mask;
   if (options[@"titleBarStyle"]) for (NSNumber *button in @[@(NSWindowCloseButton), @(NSWindowMiniaturizeButton), @(NSWindowZoomButton)]) [window standardWindowButton:(NSWindowButton)button.integerValue].hidden = [options[@"titleBarStyle"] isEqual:@"hidden"];
   if (options[@"alwaysOnTop"]) window.level = [options[@"alwaysOnTop"] boolValue] ? NSFloatingWindowLevel : NSNormalWindowLevel;
   if (options[@"hasShadow"]) window.hasShadow = [options[@"hasShadow"] boolValue];
@@ -190,11 +332,31 @@ static BOOL ApplyCommon(NSWindow *window, NSDictionary *options, RCTPromiseRejec
     window.backgroundColor = [NSColor colorWithSRGBRed:((rgba >> 24) & 255) / 255.0 green:((rgba >> 16) & 255) / 255.0 blue:((rgba >> 8) & 255) / 255.0 alpha:(rgba & 255) / 255.0];
     window.opaque = (rgba & 255) == 255;
   }
-  window.minSize = minimum; window.maxSize = maximum;
-  NSRect frame = window.frame;
-  frame.size.width = MIN(MAX(frame.size.width, minimum.width), maximum.width);
-  frame.size.height = MIN(MAX(frame.size.height, minimum.height), maximum.height);
-  [window setFrame:frame display:YES];
+  if (options[@"aspectRatio"]) {
+    // AppKit keeps one of the two: resize increments of 1 clear the content aspect ratio.
+    if (options[@"aspectRatio"] == NSNull.null) window.contentResizeIncrements = NSMakeSize(1, 1);
+    else window.contentAspectRatio = NSMakeSize([options[@"aspectRatio"] doubleValue], 1);
+  }
+  if (options[@"opacity"]) window.alphaValue = [options[@"opacity"] doubleValue];
+  if (options[@"contentProtection"]) window.sharingType = [options[@"contentProtection"] boolValue] ? NSWindowSharingNone : NSWindowSharingReadOnly;
+  if (options[@"ignoreMouseEvents"]) window.ignoresMouseEvents = [options[@"ignoreMouseEvents"] boolValue];
+  if (macos[@"spaces"]) {
+    NSString *spaces = macos[@"spaces"];
+    window.collectionBehavior = (window.collectionBehavior & ~(NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorMoveToActiveSpace))
+      | ([spaces isEqual:@"all"] ? NSWindowCollectionBehaviorCanJoinAllSpaces : [spaces isEqual:@"active"] ? NSWindowCollectionBehaviorMoveToActiveSpace : 0);
+  }
+  if (macos[@"documentEdited"]) window.documentEdited = [macos[@"documentEdited"] boolValue];
+  if (macos[@"backgroundMaterial"]) SetBackgroundMaterial(window, macos[@"backgroundMaterial"]);
+  if (titleBar[@"subtitle"]) window.subtitle = titleBar[@"subtitle"];
+  if (titleBar[@"trafficLightPosition"]) SetTrafficLightPosition(window, titleBar[@"trafficLightPosition"]);
+  else [objc_getAssociatedObject(window, &TrafficLightKey) layout];
+  if (options[@"minSize"] || options[@"maxSize"]) {
+    window.minSize = minimum; window.maxSize = maximum;
+    NSRect frame = window.frame;
+    frame.size.width = MIN(MAX(frame.size.width, minimum.width), maximum.width);
+    frame.size.height = MIN(MAX(frame.size.height, minimum.height), maximum.height);
+    if (!NSEqualRects(frame, window.frame)) [window setFrame:frame display:YES];
+  }
   return YES;
 }
 static BOOL SetBounds(NSWindow *window, NSDictionary *bounds, double durationMs, RCTPromiseResolveBlock resolve, RCTPromiseRejectBlock reject) {
@@ -241,6 +403,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
     SparkWindowDelegate *delegate = delegates[key];
     if (args[@"instanceId"] && ![args[@"instanceId"] isEqual:delegate.instanceId]) { reject(@"E_NOT_FOUND", @"Window instance has closed", nil); return; }
     if ([method isEqual:@"info"] || [method isEqual:@"observe"]) { resolve(SparkJSON(Info(key, window))); return; }
+    if (InSimpleFullscreen(window) && [@[@"bounds", @"fullscreen", @"maximize", @"unmaximize", @"center"] containsObject:method]) { reject(@"E_BUSY", @"Leave simple fullscreen first", nil); return; }
     if ([method isEqual:@"completeOpen"]) {
       NSWindow *parent = args[@"parentId"] ? Window(args[@"parentId"]) : nil;
       if (args[@"parentId"] && !parent) { reject(@"E_NOT_FOUND", @"Parent window not found", nil); return; }
@@ -270,9 +433,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       [window setFrame:frame display:NO]; delegate.restoreBounds = [args[@"restoreBounds"] boolValue];
       if (parent && ![args[@"modal"] boolValue]) [parent addChildWindow:window ordered:NSWindowAbove];
       objc_setAssociatedObject(window, @selector(call:args:resolve:reject:), [args copy], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-      if (![args[@"show"] isEqual:@NO]) {
-        if ([args[@"modal"] boolValue]) [parent beginSheet:window completionHandler:nil]; else Show(window);
-      } else [window orderOut:nil];
+      if (![args[@"show"] isEqual:@NO]) Show(window, YES, [args[@"modal"] boolValue] ? parent : nil); else Hide(window);
       Event(@"opened", key); Event(@"visibilityChanged", key); resolve(SparkJSON(Info(key, window))); return;
     }
     if ([method isEqual:@"discard"]) { delegate.guarded = NO; [window close]; return resolve(@"null"); }
@@ -289,15 +450,21 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
         else [delegate finishClose:NO];
       }
     } else if ([method isEqual:@"show"]) {
-      [window deminiaturize:nil]; NSDictionary *opening = objc_getAssociatedObject(window, @selector(call:args:resolve:reject:));
+      if (window.miniaturized) [window deminiaturize:nil];
+      NSDictionary *opening = objc_getAssociatedObject(window, @selector(call:args:resolve:reject:));
       if ([opening[@"modal"] boolValue] && !window.sheetParent) {
         NSWindow *parent = Window(opening[@"parentId"]);
         if (!parent) { reject(@"E_NOT_FOUND", @"Parent window has closed", nil); return; }
         if (parent.attachedSheet) { reject(@"E_BUSY", @"Parent already has a sheet", nil); return; }
-        [parent beginSheet:window completionHandler:nil];
-      } else if ([args[@"focus"] isEqual:@NO]) [window orderFront:nil]; else Show(window);
+        Show(window, YES, parent);
+      } else Show(window, ![args[@"focus"] isEqual:@NO], nil);
       Event(@"visibilityChanged", key);
-    } else if ([method isEqual:@"options"]) { if (!ApplyCommon(window, args[@"options"], reject)) return; }
+    } else if ([method isEqual:@"options"]) {
+      NSNumber *simpleFullscreen = args[@"options"][@"macos"][@"simpleFullscreen"];
+      if (simpleFullscreen.boolValue && (window.styleMask & NSWindowStyleMaskFullScreen)) { reject(@"E_BUSY", @"The window is in native fullscreen", nil); return; }
+      if (!ApplyCommon(window, args[@"options"], reject)) return;
+      if (simpleFullscreen) SetSimpleFullscreen(window, simpleFullscreen.boolValue);
+    }
     else if ([method isEqual:@"maximize"]) { if (!window.zoomed) [window zoom:nil]; }
     else if ([method isEqual:@"unmaximize"]) { if (window.zoomed) [window zoom:nil]; }
     else if ([method isEqual:@"center"]) {
@@ -305,10 +472,11 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       if (!screen) { reject(@"E_NOT_FOUND", @"Display is disconnected", nil); return; }
       NSRect frame = window.frame; frame.origin = NSMakePoint(NSMidX(screen.visibleFrame) - NSWidth(frame)/2, NSMidY(screen.visibleFrame) - NSHeight(frame)/2); [window setFrame:frame display:YES];
     } else if ([method isEqual:@"hide"]) {
-      if (window.sheetParent) [window.sheetParent endSheet:window]; [window orderOut:nil]; Event(@"visibilityChanged", key);
+      Hide(window); Event(@"visibilityChanged", key);
     } else if ([method isEqual:@"minimize"]) [window miniaturize:nil];
     else if ([method isEqual:@"fullscreen"]) {
       BOOL target = [args[@"enabled"] boolValue];
+      if (SparkTestDriverActive() && target != ((window.styleMask & NSWindowStyleMaskFullScreen) != 0)) { reject(@"E_UNSUPPORTED_OPTION", @"Native fullscreen needs an on-screen window; test driver mode never shows windows", nil); return; }
       if (delegate.fullscreenTarget && delegate.fullscreenTarget.boolValue != target) { reject(@"E_BUSY", @"Another fullscreen transition is pending", nil); return; }
       if (delegate.fullscreenTarget || ((window.styleMask & NSWindowStyleMaskFullScreen) != 0) != target) {
         [delegate.fullscreenWaiters addObject:@{ @"resolve": [resolve copy], @"reject": [reject copy] }];

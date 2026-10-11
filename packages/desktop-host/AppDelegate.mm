@@ -4,6 +4,7 @@
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTUIKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <objc/runtime.h>
 #include <cxxreact/ReactMarker.h>
 #import <React-RCTAppDelegate/RCTRootViewFactory.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
@@ -117,8 +118,10 @@
   self.window.contentView = placeholder;
   SparkPrepareMainWindow(self.window);
   // The test driver renders the window in-process without ever showing it.
-  if (!SparkTestDriverActive() && ![policy[@"hidden"] boolValue] && ![[NSBundle.mainBundle objectForInfoDictionaryKey:@"SparkMenuBarOnly"] boolValue]) {
-    [self.window makeKeyAndOrderFront:nil]; [self.window displayIfNeeded]; SparkRecordMainWindowShown();
+  if (![policy[@"hidden"] boolValue] && ![[NSBundle.mainBundle objectForInfoDictionaryKey:@"SparkMenuBarOnly"] boolValue]) {
+    // The window API reports it as shown (SparkSetDriverShown in @legendapp/spark-desktop-windows).
+    if (SparkTestDriverActive()) objc_setAssociatedObject(self.window, NSSelectorFromString(@"sparkDriverShown"), @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    else { [self.window makeKeyAndOrderFront:nil]; [self.window displayIfNeeded]; SparkRecordMainWindowShown(); }
   }
 }
 - (void)loadReactNativeWindow:(NSDictionary *)launchOptions {

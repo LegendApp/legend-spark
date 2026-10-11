@@ -55,11 +55,16 @@ export function jsonSnapshot(value: unknown, active = new Set<object>()): unknow
     return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, jsonSnapshot(entry, active)]));
   } finally { active.delete(value); }
 }
-const common = ["title", "appearance", "titleBarStyle", "backgroundColor", "transparent", "hasShadow", "alwaysOnTop", "resizable", "closable", "minimizable", "minSize", "maxSize", "macos"];
+/** Portable options implemented on macOS; Windows rejects them until its native host implements them. */
+const MACOS_ONLY_OPTIONS = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents"] as const;
+const common = ["title", "appearance", "titleBarStyle", "backgroundColor", "transparent", "hasShadow", "alwaysOnTop", "resizable", "closable", "minimizable", "minSize", "maxSize", ...MACOS_ONLY_OPTIONS, "macos"];
 export function validateOptions(options: WindowOpenOptions | WindowUpdateOptions, platform: string, opening: boolean): void {
   object(options, "window options"); keys(options, [...common, ...(opening ? ["id", "component", "props", "size", "position", "show", "restoreBounds", "kind", "parentId", "modal"] : [])]);
-  flags(options, ["transparent", "hasShadow", "alwaysOnTop", "resizable", "closable", "minimizable", "show", "restoreBounds", "modal"]);
+  if (platform === "windows") for (const key of MACOS_ONLY_OPTIONS) if (options[key] !== undefined) throw new SparkError("E_UNSUPPORTED_OPTION", `Windows does not support ${key} yet`);
+  flags(options, ["transparent", "hasShadow", "alwaysOnTop", "resizable", "closable", "minimizable", "contentProtection", "ignoreMouseEvents", "show", "restoreBounds", "modal"]);
   if (options.title !== undefined) text(options.title, "title");
+  if (options.aspectRatio !== undefined && options.aspectRatio !== null) number(options.aspectRatio, "aspectRatio", 0.05, 20);
+  if (options.opacity !== undefined) number(options.opacity, "opacity", 0, 1);
   enumValue(options.appearance, ["system", "light", "dark"], "appearance");
   enumValue(options.titleBarStyle, ["default", "overlay", "hidden", "borderless"], "titleBarStyle");
   if (platform === "windows" && options.titleBarStyle === "overlay") throw new SparkError("E_UNSUPPORTED_OPTION", "Windows does not support overlay title bars");
@@ -99,18 +104,25 @@ function entries(value: unknown, name: string): ObjectValue[] {
   return value;
 }
 export function validateMacOS(value: MacOSWindowOptions) {
-  object(value, "macos"); keys(value, ["panelStyle", "representedUri", "level", "titleBar", "toolbar", "startupSplitView", "restoreOnLaunch"]);
+  object(value, "macos"); keys(value, ["panelStyle", "representedUri", "level", "titleBar", "toolbar", "startupSplitView", "restoreOnLaunch", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial"]);
   enumValue(value.panelStyle, ["utility", "documentModal", "nonactivating"], "panelStyle");
   enumValue(value.level, ["normal", "floating", "modalPanel", "mainMenu", "status", "screenSaver"], "level");
-  flags(value, ["restoreOnLaunch"]);
+  enumValue(value.spaces, ["default", "all", "active"], "spaces");
+  enumValue(value.backgroundMaterial, ["none", "sidebar", "windowBackground", "hudWindow", "popover"], "backgroundMaterial");
+  flags(value, ["restoreOnLaunch", "simpleFullscreen", "documentEdited"]);
   if (value.representedUri !== undefined && value.representedUri !== null) {
     text(value.representedUri, "represented URI", false);
     try { new URL(value.representedUri); } catch { throw new SparkError("E_INVALID_ARGUMENT", "representedUri must be an absolute URI"); }
   }
   if (value.titleBar !== undefined) {
     const title = value.titleBar; object(title, "titleBar");
-    keys(title, ["contentLayout", "transparent", "titleVisibility", "separator", "material", "blendingMode", "materialState", "trafficLights", "controls"]);
+    keys(title, ["contentLayout", "transparent", "titleVisibility", "separator", "material", "blendingMode", "materialState", "trafficLights", "trafficLightPosition", "subtitle", "controls"]);
     flags(title, ["transparent", "trafficLights"]);
+    if (title.subtitle !== undefined) text(title.subtitle, "subtitle");
+    if (title.trafficLightPosition !== undefined && title.trafficLightPosition !== null) {
+      const point = title.trafficLightPosition; object(point, "trafficLightPosition"); keys(point, ["x", "y"]);
+      number(point.x, "trafficLightPosition.x", 0, 500); number(point.y, "trafficLightPosition.y", 0, 500);
+    }
     enumValue(title.contentLayout, ["contentLayoutGuide", "fullSize"], "contentLayout");
     enumValue(title.titleVisibility, ["visible", "hidden"], "titleVisibility");
     enumValue(title.separator, ["automatic", "none", "line", "shadow"], "separator");

@@ -3,16 +3,20 @@ import { SparkError, asyncRegistration, nativeError, type AsyncRegistration, typ
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import Native from "./NativeDesktopWindowManager";
-import { createMacOSWindow, macosNative, updateMacOSWindow } from "./macos-adapter";
+import { COMMON_MACOS, appKitOptions, createMacOSWindow, macosNative, updateMacOSWindow } from "./macos-adapter";
 import { bounds, keys, number, object, text, validateOptions, windowId } from "./validation";
 import { getNativeDisplays, isBounds, isInfo, record, subscribeToWindowInstance, windowCall, windowCommand, type NativeWindowInfo } from "./transport";
-import type { CenterWindowOptions, CloseResult, CursorPoint, DisplayInfo, SetWindowBoundsOptions, ShowWindowOptions, WindowBounds, WindowEventMap, WindowInfo, WindowOpenOptions, WindowUpdateOptions } from "./types";
+import type { CenterWindowOptions, CloseResult, CursorPoint, DisplayInfo, SetWindowBoundsOptions, ShowWindowOptions, WindowBounds, WindowEventMap, WindowInfo, WindowOpenOptions, WindowOption, WindowUpdateOptions } from "./types";
 export type * from "./types";
 
-export function getWindowAvailability(): Availability {
+const WINDOW_OPTIONS: readonly WindowOption[] = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "subtitle", "trafficLightPosition"];
+/** With an option, reports whether this platform implements it. Every listed option is macOS-only today; unlisted options work wherever windows do. */
+export function getWindowAvailability(option?: WindowOption): Availability {
+  if (option !== undefined && !WINDOW_OPTIONS.includes(option)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown window option");
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
   if (!Native) return { available: false, reason: "missing-module" };
   if (Platform.OS === "macos") try { macosNative(); } catch { return { available: false, reason: "missing-module" }; }
+  if (option !== undefined && Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };
   return { available: true };
 }
 function publicInfo(value: NativeWindowInfo): WindowInfo {
@@ -31,10 +35,15 @@ export async function openWindow(options: WindowOpenOptions): Promise<WindowInfo
     }
     await createMacOSWindow(snapshot);
     try {
+      // Simple fullscreen hides the chrome applied below, so it is entered last.
+      const simpleFullscreen = snapshot.macos?.simpleFullscreen;
+      if (simpleFullscreen !== undefined) delete snapshot.macos!.simpleFullscreen;
       const info = await windowCall("completeOpen", snapshot, isInfo);
       // Common chrome is applied first; explicit AppKit groups own their corresponding fields.
-      if (!snapshot.macos) return publicInfo(info);
-      await updateMacOSWindow(snapshot.id, snapshot.macos);
+      const appKit = appKitOptions(snapshot.macos);
+      if (!appKit && !simpleFullscreen) return publicInfo(info);
+      if (appKit) await updateMacOSWindow(snapshot.id, appKit);
+      if (simpleFullscreen) await windowCommand("options", { id: snapshot.id, options: { macos: { simpleFullscreen } } });
       // The window now exists: reflect the applied chrome, but a transient read-back
       // failure must not discard a window that opened successfully, so fall back to info.
       try { return await getWindow(snapshot.id); } catch { return publicInfo(info); }
@@ -54,10 +63,13 @@ export async function getCursorPoint(): Promise<CursorPoint> { return windowCall
 export async function setWindowOptions(id: string, options: WindowUpdateOptions): Promise<void> {
   windowId(id); validateOptions(options, Platform.OS, false);
   const snapshot = JSON.parse(JSON.stringify(options)) as WindowUpdateOptions;
-  if (!snapshot.macos || Object.keys(snapshot).some(key => key !== "macos")) {
+  // Publish each field to the module that owns it. The window module also checks title-bar
+  // changes against simple fullscreen, so any titleBar group goes through it first.
+  const appKit = appKitOptions(snapshot.macos);
+  if (!snapshot.macos || Object.keys(snapshot).some(key => key !== "macos") || snapshot.macos.titleBar || Object.keys(snapshot.macos).some(key => COMMON_MACOS.includes(key))) {
     await windowCommand("options", { id, options: snapshot });
   }
-  if (snapshot.macos) await updateMacOSWindow(id, snapshot.macos);
+  if (appKit) await updateMacOSWindow(id, appKit);
 }
 /** Portable frame change. Animated moves are macOS-only: pass `macos.durationMs` and the call rejects on Windows rather than ignoring the request. */
 export async function setWindowBounds(id: string, value: WindowBounds, options: SetWindowBoundsOptions = {}): Promise<void> {

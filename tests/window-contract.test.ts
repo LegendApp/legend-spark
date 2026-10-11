@@ -40,3 +40,20 @@ test("toolbar menus use shared menu IDs and numeric slider values", () => {
   expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "menu", id: "view", items: [{ type: "action", id: "a", label: "A", shortcut: "Cmd+A" }] }] } } } as unknown as Parameters<typeof validateOptions>[0], "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
   expect(() => validateOptions({ macos: { toolbar: { items: [{ type: "segmented", id: "view", value: "", segments: [{ value: "", label: "Empty" }, { value: "", label: "Duplicate" }] }] } } }, "macos", false)).toThrow();
 });
+test("window options from the #65 audit validate their values; Windows rejects the macOS-only ones", () => {
+  const portable = { aspectRatio: 1.6, opacity: 0.5, contentProtection: true, ignoreMouseEvents: false };
+  expect(() => validateOptions(portable, "macos", false)).not.toThrow();
+  expect(() => validateOptions({ ...base, ...portable, aspectRatio: null }, "macos", true)).not.toThrow();
+  for (const value of [{ aspectRatio: 0 }, { aspectRatio: 21 }, { opacity: -0.1 }, { opacity: 1.1 }, { opacity: NaN }, { contentProtection: "yes" }, { ignoreMouseEvents: 1 }])
+    expect(() => validateOptions(value as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  for (const [key, value] of Object.entries(portable))
+    expect(() => validateOptions({ [key]: value }, "windows", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION", message: `Windows does not support ${key} yet` }));
+  const macos = { spaces: "all", simpleFullscreen: true, documentEdited: true, backgroundMaterial: "hudWindow", titleBar: { subtitle: "Draft", trafficLightPosition: { x: 20, y: 18 } } } as const;
+  expect(() => validateOptions({ macos }, "macos", false)).not.toThrow();
+  expect(() => validateOptions({ macos: { titleBar: { trafficLightPosition: null, subtitle: "" } } }, "macos", false)).not.toThrow();
+  for (const value of [{ spaces: "every" }, { backgroundMaterial: "glass" }, { simpleFullscreen: "on" }, { documentEdited: 1 }, { titleBar: { subtitle: "a\0b" } },
+    { titleBar: { trafficLightPosition: { x: -1, y: 0 } } }, { titleBar: { trafficLightPosition: { x: 0, y: 501 } } }])
+    expect(() => validateOptions({ macos: value } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  expect(() => validateOptions({ macos: { titleBar: { trafficLightPosition: { x: 1, y: 1, z: 1 } } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+  expect(() => validateOptions({ macos }, "windows", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+});
