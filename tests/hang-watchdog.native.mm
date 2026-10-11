@@ -84,8 +84,9 @@ int main(void) {
       for (NSDictionary *frame in stack) fprintf(stdout, "  %s %s+%s %s\n", [frame[@"address"] UTF8String], [[frame[@"image"] lastPathComponent] UTF8String], [[frame[@"imageOffset"] description] UTF8String], [frame[@"symbol"] UTF8String] ?: "?");
 
       // A frame from a stale link register is left out: the spinning function appears once, called from main.
+      // 1.5 s, so a watchdog thread that a loaded CI machine runs late still samples the spin.
       atomic_store(&spinning, true);
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 400 * NSEC_PER_MSEC), dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{ atomic_store(&spinning, false); });
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1500 * NSEC_PER_MSEC), dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{ atomic_store(&spinning, false); });
       SparkTestSpinAfterCall();
       Spin(5, ^{ return (BOOL)(reports.count > 1); });
       CHECK(reports.count == 2);
