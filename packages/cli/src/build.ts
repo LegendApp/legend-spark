@@ -20,7 +20,8 @@ import {
   closeSync,
 } from "node:fs";
 import path from "node:path";
-import { registerRuntime } from "./local.ts";
+import { execFileSync } from "node:child_process";
+import { findFramework, registerRuntime } from "./local.ts";
 import { binary, doctor, run } from "./commands.ts";
 import {
   prepareConfig,
@@ -182,11 +183,19 @@ export async function build(
 /**
  * The source revision a Runner or release build embeds in spark-runtime.json (`SPARK_RELEASE_REVISION`), so a release
  * check can tie an installed app to the commit it certifies (prepare-release, docs/release-harness.md).
+ * `repository` is the checkout being built (the app for a release build, the Spark SDK for a Runner build): it must
+ * be at exactly that revision with a clean working tree, or the build would not be that revision.
  */
-export function releaseRevision(mode: "go" | "dev" | "preview" | "release", env: Record<string, string | undefined> = process.env): string | undefined {
+export function releaseRevision(mode: "go" | "dev" | "preview" | "release", repository: string | undefined, env: Record<string, string | undefined> = process.env): string | undefined {
   const revision = env.SPARK_RELEASE_REVISION;
   if (!revision || (mode !== "go" && mode !== "release")) return undefined;
   if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error("Invalid release source revision");
+  if (!repository) throw new Error(`SPARK_RELEASE_REVISION=${revision} needs a build from a git checkout of that revision; this one has no Spark SDK checkout.`);
+  const git = (...args: string[]) => execFileSync("git", ["-C", repository, ...args], { encoding: "utf8" }).trimEnd();
+  const head = git("rev-parse", "HEAD");
+  if (head !== revision) throw new Error(`SPARK_RELEASE_REVISION is ${revision}, but ${repository} is at ${head}. Check out the release revision, or build with SPARK_RELEASE_REVISION=$(git rev-parse HEAD).`);
+  const changes = git("status", "--porcelain");
+  if (changes) throw new Error(`SPARK_RELEASE_REVISION is ${revision}, but ${repository} has uncommitted changes, so the build would not be that revision. Commit or remove them:\n${changes}`);
   return revision;
 }
 
@@ -196,6 +205,8 @@ async function buildUnlocked(
   force: boolean,
 ): Promise<{ app: string; runtime: Runtime }> {
   if (projectPlatform(root) === "windows") return buildWindows(root, mode, force);
+  // Checked before the build writes generated files into the project.
+  const sourceRevision = releaseRevision(mode, mode === "go" ? findFramework() : root);
   prepareConfig(root);
   if (mode === "go") {
     const issues = goConfigurationIssues(readAppConfig(root));
@@ -215,7 +226,6 @@ async function buildUnlocked(
   if (productionHash)
     runtime.fingerprint = digest(runtime.fingerprint + productionHash);
   const resultFile = stateFile(root, `${mode}-build.json`);
-  const sourceRevision = releaseRevision(mode);
   const excludedNames = [...new Set<string>([
     ...(readAppConfig(root).expo.autolinking?.exclude ?? []),
     ...chosen.excluded.map((p) => p.name),

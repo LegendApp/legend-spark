@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -438,12 +439,39 @@ describe("commands", () => {
     expect([killed.code, Date.now() - started < 5000]).toEqual([1, true]);
   });
 
+  /** A real git checkout with one commit; returns its directory and HEAD. */
+  function checkout(): { dir: string; head: string } {
+    const dir = mkdtempSync(path.join(tmpdir(), "release-revision-"));
+    const git = (...args: string[]) => execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", ...args], { encoding: "utf8" }).trim();
+    git("init", "-q");
+    writeFileSync(path.join(dir, "app.json"), "{}\n");
+    git("add", "app.json");
+    git("commit", "-q", "-m", "release");
+    return { dir, head: git("rev-parse", "HEAD") };
+  }
+
   test("a release or Runner build embeds SPARK_RELEASE_REVISION as its source revision; other builds do not", () => {
-    expect(releaseRevision("release", { SPARK_RELEASE_REVISION: COMMIT })).toBe(COMMIT);
-    expect(releaseRevision("go", { SPARK_RELEASE_REVISION: COMMIT })).toBe(COMMIT);
-    expect(releaseRevision("dev", { SPARK_RELEASE_REVISION: COMMIT })).toBeUndefined();
-    expect(releaseRevision("release", {})).toBeUndefined();
-    expect(() => releaseRevision("release", { SPARK_RELEASE_REVISION: "HEAD" })).toThrow("Invalid release source revision");
+    const { dir, head } = checkout();
+    expect(releaseRevision("release", dir, { SPARK_RELEASE_REVISION: head })).toBe(head);
+    expect(releaseRevision("go", dir, { SPARK_RELEASE_REVISION: head })).toBe(head);
+    expect(releaseRevision("dev", dir, { SPARK_RELEASE_REVISION: COMMIT })).toBeUndefined();
+    expect(releaseRevision("release", dir, {})).toBeUndefined();
+    expect(() => releaseRevision("release", dir, { SPARK_RELEASE_REVISION: "HEAD" })).toThrow("Invalid release source revision");
+    expect(() => releaseRevision("go", undefined, { SPARK_RELEASE_REVISION: head })).toThrow("needs a build from a git checkout of that revision");
+  });
+
+  test("a release revision other than the checkout's HEAD is refused", () => {
+    const { dir, head } = checkout();
+    expect(() => releaseRevision("release", dir, { SPARK_RELEASE_REVISION: COMMIT })).toThrow(`SPARK_RELEASE_REVISION is ${COMMIT}, but ${dir} is at ${head}.`);
+  });
+
+  test("a release revision is refused while the checkout has uncommitted changes, tracked or untracked", () => {
+    const { dir, head } = checkout();
+    writeFileSync(path.join(dir, "app.json"), '{ "changed": true }\n');
+    expect(() => releaseRevision("release", dir, { SPARK_RELEASE_REVISION: head })).toThrow(/has uncommitted changes[^]* M app\.json/);
+    execFileSync("git", ["-C", dir, "checkout", "--", "app.json"]);
+    writeFileSync(path.join(dir, "extra.ts"), "export {};\n");
+    expect(() => releaseRevision("release", dir, { SPARK_RELEASE_REVISION: head })).toThrow(/has uncommitted changes[^]*\?\? extra\.ts/);
   });
 });
 

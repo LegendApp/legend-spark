@@ -25,7 +25,9 @@ and 2 for a usage error.
    `spark package` writes a signed, notarized, stapled `.zip` to
    `examples/kitchen-sink/dist/` ([packaging](packaging.md)), and the build records the
    revision as `sourceRevision` in the app's `Contents/Resources/spark-runtime.json`
-   (inside the signature), as the Runner build does. Without
+   (inside the signature), as the Runner build does. The build refuses a revision
+   other than the checkout's `HEAD`, or a working tree with uncommitted or untracked
+   changes, so the recorded revision is the source that was built. Without
    `--artifact`, `--local` packages the gate's release build
    (`cd examples/kitchen-sink && bun run build`) as a compressed DMG with the app and
    an `/Applications` link, as a release DMG is laid out. That DMG is kept in the
