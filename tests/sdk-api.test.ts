@@ -257,6 +257,19 @@ test("global hotkey conflicts clean subscriptions and distinct registrations dis
   await expect(globalShortcuts.registerGlobalShortcut("Cmd+Shift+K", () => {})).rejects.toThrow("E_BUSY");
   expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(1); await second.remove();
 });
+test("shortcut surfaces publish their live bindings for shortcut-map conflict reporting", async () => {
+  const { getShortcutInventory } = await import("../packages/desktop-app/src/contracts/shortcut-inventory.ts");
+  const local = await shortcuts.registerShortcut("Cmd+K", () => {}, { windowId: "editor" });
+  const global = await globalShortcuts.registerGlobalShortcut("Cmd+Shift+J", () => {});
+  const menu = await menus.createMenu({ id: "inventory", items: [{ type: "submenu", id: "file", label: "File", items: [{ type: "action", id: "save", label: "Save", shortcut: "Cmd+S", disabled: true }] }] });
+  expect(getShortcutInventory()).toEqual([
+    { accelerator: { key: "k", modifiers: 1 << 20 }, owner: { source: "shortcut", windowId: "editor" } },
+    { accelerator: { key: "j", modifiers: (1 << 20) | (1 << 17) }, owner: { source: "global-shortcut" } },
+    { accelerator: { key: "s", modifiers: 1 << 20 }, owner: { source: "menu", menuId: "inventory", itemId: "save" } },
+  ]);
+  await local.remove(); await global.remove(); await menu.remove();
+  expect(getShortcutInventory()).toEqual([]);
+});
 test("process subscriptions exist before launch and survive immediate exit", async () => {
   handlers.set("NativeDesktopProcesses.spawn", args => {
     emit("NativeDesktopApp", "desktop", { type: "processOutput", processId: args.id, stream: "stdout", bytes: new TextEncoder().encode("hi").buffer });

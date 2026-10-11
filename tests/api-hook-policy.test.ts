@@ -11,6 +11,7 @@ const policy: Record<string, Record<string, { imperative: string } | { reactOnly
   "./shortcuts/commands": {
     useRoutedHotkeys: { imperative: "createHotkeyRouter" },
     useHotkeySuspension: { imperative: "createHotkeyRouter" },
+    useShortcutMap: { imperative: "createShortcutMap" },
   },
   "./windows": {
     usePrimaryWindowLifecycle: { imperative: "createPrimaryWindowLifecycle" },

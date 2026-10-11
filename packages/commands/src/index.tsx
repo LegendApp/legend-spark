@@ -12,6 +12,9 @@ export type { HotkeyRouter, HotkeyRegistration, HotkeyScope, HotkeyRegistrationO
 export { hotkeyFileVersion, normalizeHotkeyFile, serializeHotkeyFile, normalizeHotkeyBindings, formatHotkey, matchesHotkey, getDefaultHotkeyBindings, getHotkeyBindingConflicts, hotkeyBindingListsEqual } from "./bindings";
 export type { HotkeyValue, HotkeyDefinition, HotkeyBindingState, HotkeyFile, HotkeyBindingLimitOptions, HotkeyMatchOptions } from "./bindings";
 export { createHotkeyStore, type HotkeyStoreOptions } from "./storage";
+export { createShortcutMap, getReservedShortcuts, getShortcutMapAvailability, shortcutMapVersion } from "./shortcut-map";
+export type { ShortcutMap, ShortcutMapOptions, ShortcutCommand, ShortcutMapScope, ShortcutPlatform, ReservedShortcut, ShortcutConflict, ShortcutConflictParty, ShortcutMapCommandState, ShortcutMapSnapshot, ShortcutMapChange, ShortcutCommandEvent, ShortcutMapHandlers, ShortcutMapRegisterOptions, ShortcutMapMenuBuilder, ShortcutMapFile } from "./shortcut-map";
+export { useShortcutMap } from "./shortcut-map-hooks";
 
 export type HotkeyRegistrationState = { status: "loading" } | { status: "ready"; registration: HotkeyRegistration } | { status: "error"; error: Error; registration?: HotkeyRegistration };
 export type UseRoutedHotkeysOptions<Id extends string> = HotkeyRegistrationOptions<Id> & { router: HotkeyRouter; onError?: (error: Error) => void; onCleanupError?: (error: unknown, registration: AsyncRegistration) => void };
@@ -22,7 +25,8 @@ export function useRoutedHotkeys<Id extends string>(options: UseRoutedHotkeysOpt
   const { router, definitions, bindings, priority, scope, enabled = true } = options;
   // Inline definition/binding literals must not rebuild native keyboard consumption every render.
   const definitionKey = JSON.stringify(definitions);
-  const bindingKey = bindings === undefined ? "" : JSON.stringify(bindings);
+  const bindingKey = JSON.stringify(bindings ?? {});
+  const registeredBindings = useRef(bindingKey);
   const handlerIds = JSON.stringify(definitions.filter(definition => Object.hasOwn(options.handlers, definition.id)).map(definition => definition.id));
   useEffect(() => {
     let active = true, registration: HotkeyRegistration | undefined;
@@ -43,11 +47,15 @@ export function useRoutedHotkeys<Id extends string>(options: UseRoutedHotkeysOpt
     const setup = transition.current.catch(() => {}).then(async () => {
       if (retry.current) await dispose(retry.current);
       if (!active) return;
-      const handle = await router.register({ definitions, bindings, priority, scope, handlers, enabled });
-      registration = handle;
+      const initialBindings = current.current.bindings ?? {};
+      const handle = await router.register({ definitions, bindings: initialBindings, priority, scope, handlers, enabled });
+      registration = handle; registeredBindings.current = JSON.stringify(initialBindings);
       if (!active) { await dispose(handle); return; }
       owner.current = handle;
       if ((current.current.enabled ?? true) !== enabled) await handle.setEnabled(current.current.enabled ?? true);
+      // Bindings that changed during setup switch atomically on the same registration.
+      const latest = current.current.bindings ?? {};
+      if (JSON.stringify(latest) !== registeredBindings.current) { registeredBindings.current = JSON.stringify(latest); await handle.setBindings(latest); }
       if (active) setState({ status: "ready", registration: handle });
     }).catch(report);
     transition.current = setup;
@@ -55,7 +63,17 @@ export function useRoutedHotkeys<Id extends string>(options: UseRoutedHotkeysOpt
       active = false; if (owner.current === registration) owner.current = undefined;
       if (registration) transition.current = setup.then(() => dispose(registration!)).catch(() => {});
     };
-  }, [router, definitionKey, bindingKey, priority, handlerIds, scope?.kind, scope?.kind === "window" ? scope.windowId : undefined]);
+  }, [router, definitionKey, priority, handlerIds, scope?.kind, scope?.kind === "window" ? scope.windowId : undefined]);
+  useEffect(() => {
+    const handle = owner.current;
+    if (!handle || registeredBindings.current === bindingKey) return;
+    registeredBindings.current = bindingKey;
+    void handle.setBindings(current.current.bindings ?? {}).catch(cause => {
+      if (owner.current !== handle) return;
+      const error = cause instanceof Error ? cause : new SparkError("E_NATIVE", "Command binding update failed", { cause });
+      setState({ status: "error", error, registration: handle }); current.current.onError?.(error);
+    });
+  }, [bindingKey]);
   useEffect(() => {
     const handle = owner.current;
     if (handle) void handle.setEnabled(enabled).then(() => {

@@ -12,7 +12,20 @@ export interface HotkeyRegistrationOptions<Id extends string = string> {
   priority?: number;
   scope?: HotkeyScope;
 }
-export interface HotkeyRegistration extends AsyncRegistration { setEnabled(enabled: boolean): Promise<void> }
+export interface HotkeyRegistration extends AsyncRegistration {
+  setEnabled(enabled: boolean): Promise<void>;
+  /** Replaces binding overrides. Each keydown fires either the old or the new binding, never both or neither. */
+  setBindings(bindings: Partial<HotkeyBindingState>): Promise<void>;
+}
+/** Internal two-phase binding change, so several surfaces can switch at one JavaScript commit point. */
+export interface StagedHotkeyBindings { commit(): void; settle(): Promise<void>; rollback(): Promise<void> }
+const stagers = new WeakMap<HotkeyRegistration, (bindings: Partial<HotkeyBindingState>) => Promise<StagedHotkeyBindings>>();
+/** Natively consumes the old and new bindings while JavaScript still dispatches the old ones. */
+export function stageHotkeyBindings(registration: HotkeyRegistration, bindings: Partial<HotkeyBindingState>): Promise<StagedHotkeyBindings> {
+  const stage = stagers.get(registration);
+  if (!stage) return Promise.reject(new SparkError("E_INVALID_ARGUMENT", "Expected a command registration"));
+  return stage(bindings);
+}
 export interface HotkeyRouter {
   register<Id extends string>(options: HotkeyRegistrationOptions<Id>): Promise<HotkeyRegistration>;
   suspend(scope?: HotkeyScope): Promise<AsyncRegistration>;
@@ -25,18 +38,21 @@ function validateScope(scope: HotkeyScope) {
   if (!scope || (scope.kind !== "application" && scope.kind !== "window") || (scope.kind === "window" && (typeof scope.windowId !== "string" || !scope.windowId))) throw new SparkError("E_INVALID_ARGUMENT", "Expected application or window scope");
 }
 export function createHotkeyRouter(): HotkeyRouter {
-  type Registration = Required<Pick<HotkeyRegistrationOptions, "definitions" | "handlers" | "scope" | "priority">> & { enabled: boolean; appliedEnabled: boolean; revision: number; bindings: Partial<HotkeyBindingState>; order: number };
+  type Registration = Required<Pick<HotkeyRegistrationOptions, "definitions" | "handlers" | "scope" | "priority">> & { enabled: boolean; appliedEnabled: boolean; revision: number; bindings: Partial<HotkeyBindingState>; staged?: Partial<HotkeyBindingState>; order: number };
   const registrations = new Set<Registration>(), suspensions = new Set<HotkeyScope>(), pressed = new Set<number>();
   type Candidate = { registration: Registration; definition: HotkeyDefinition; handler: NonNullable<RoutedHotkeyHandlers[string]>; binding: string; parsed: ReturnType<typeof parseBinding> };
   let candidates = new Map<string, Candidate[]>();
   const modifierBits = [16, 17, 18, 19, 20, 23].map(bit => 1 << bit);
+  const sorted = () => [...registrations].sort((a, b) => b.priority - a.priority || b.order - a.order);
+  const bindingsFor = (bindings: Partial<HotkeyBindingState>, definition: HotkeyDefinition) => Object.hasOwn(bindings, definition.id) ? bindings[definition.id]! : definition.defaultBindings;
+  const handlerFor = (registration: Registration, definition: HotkeyDefinition) => Object.hasOwn(registration.handlers, definition.id) ? registration.handlers[definition.id] : undefined;
   const rebuild = () => {
     const next = new Map<string, Candidate[]>();
-    for (const registration of [...registrations].sort((a, b) => b.priority - a.priority || b.order - a.order)) {
+    for (const registration of sorted()) {
       for (const definition of registration.definitions) {
-        const handler = Object.hasOwn(registration.handlers, definition.id) ? registration.handlers[definition.id] : undefined;
+        const handler = handlerFor(registration, definition);
         if (!handler) continue;
-        for (const binding of Object.hasOwn(registration.bindings, definition.id) ? registration.bindings[definition.id]! : definition.defaultBindings) {
+        for (const binding of bindingsFor(registration.bindings, definition)) {
           const parsed = parseBinding(binding), key = parsed.key.toLowerCase();
           const list = next.get(key) ?? [];
           list.push({ registration, definition, handler, binding, parsed }); next.set(key, list);
@@ -70,10 +86,15 @@ export function createHotkeyRouter(): HotkeyRouter {
     if ([...suspensions].some(scope => scope.kind === "application")) return [];
     const excludedWindowIds = [...suspensions].flatMap(scope => scope.kind === "window" ? [scope.windowId] : []);
     const rules: KeyboardConsumptionRule[] = [];
-    for (const values of candidates.values()) for (const { registration, definition, parsed } of values) {
+    // A staged change consumes both binding sets; dispatch still follows the committed set.
+    for (const registration of sorted()) {
       if (!registration.enabled) continue;
-      rules.push({ ...parsed, allowExtraModifiers: definition.allowExtraModifiers ?? false, repeat: definition.repeat ?? false,
-        ...(registration.scope.kind === "window" ? { windowIds: [registration.scope.windowId] } : {}), excludedWindowIds });
+      for (const definition of registration.definitions) {
+        if (!handlerFor(registration, definition)) continue;
+        const values = new Set([...bindingsFor(registration.bindings, definition), ...(registration.staged ? bindingsFor(registration.staged, definition) : [])]);
+        for (const binding of values) rules.push({ ...parseBinding(binding), allowExtraModifiers: definition.allowExtraModifiers ?? false, repeat: definition.repeat ?? false,
+          ...(registration.scope.kind === "window" ? { windowIds: [registration.scope.windowId] } : {}), excludedWindowIds });
+      }
     }
     return rules;
   };
@@ -106,8 +127,12 @@ export function createHotkeyRouter(): HotkeyRouter {
       if (!Number.isFinite(priority) || typeof enabled !== "boolean" || !handlers || typeof handlers !== "object" || !bindings || typeof bindings !== "object" || Array.isArray(bindings)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid command registration options");
       const ids = new Set(definitions.map(definition => definition.id));
       for (const [id, handler] of Object.entries(handlers)) if (!ids.has(id as never) || typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", `Invalid handler for command ${id}`);
-      for (const id of Object.keys(bindings)) if (!ids.has(id as never)) throw new SparkError("E_INVALID_ARGUMENT", `Unknown command binding: ${id}`);
-      const registration: Registration = { definitions: definitions.map(definition => ({ ...definition, defaultBindings: getDefaultHotkeyBindings(definition) })), bindings: Object.fromEntries(Object.entries(bindings).map(([id, values]) => [id, normalizeHotkeyBindings(values as readonly string[])])), enabled, appliedEnabled: enabled, revision: 0, handlers: { ...handlers }, scope: { ...scope }, priority, order: order++ };
+      const normalize = (value: Partial<HotkeyBindingState>) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new SparkError("E_INVALID_ARGUMENT", "Expected command bindings");
+        for (const id of Object.keys(value)) if (!ids.has(id as never)) throw new SparkError("E_INVALID_ARGUMENT", `Unknown command binding: ${id}`);
+        return Object.fromEntries(Object.entries(value).map(([id, values]) => [id, normalizeHotkeyBindings(values as readonly string[])]));
+      };
+      const registration: Registration = { definitions: definitions.map(definition => ({ ...definition, defaultBindings: getDefaultHotkeyBindings(definition) })), bindings: normalize(bindings), enabled, appliedEnabled: enabled, revision: 0, handlers: { ...handlers }, scope: { ...scope }, priority, order: order++ };
       registrations.add(registration);
       rebuild();
       try { await synchronize(); } catch (error) {
@@ -116,12 +141,35 @@ export function createHotkeyRouter(): HotkeyRouter {
         throw error;
       }
       const removal = asyncRegistration(() => { registrations.delete(registration); rebuild(); }, synchronize);
-      return { remove: removal.remove, async setEnabled(value) {
+      const stage = async (value: Partial<HotkeyBindingState>): Promise<StagedHotkeyBindings> => {
+        if (!registrations.has(registration)) throw new SparkError("E_CLOSED", "Command registration has been removed");
+        const next = normalize(value);
+        registration.staged = next;
+        const unstage = () => { if (registration.staged === next) registration.staged = undefined; };
+        try { await synchronize(); } catch (error) {
+          unstage();
+          try { await synchronize(); } catch (cleanupError) { throw new AggregateError([error, cleanupError], "Command binding change and rollback failed"); }
+          throw error;
+        }
+        let finished = false;
+        return {
+          commit() { if (finished) return; finished = true; if (registration.staged === next) { registration.bindings = next; registration.staged = undefined; rebuild(); } },
+          settle: synchronize,
+          async rollback() { if (!finished) { finished = true; unstage(); } await synchronize(); },
+        };
+      };
+      let bindingChanges: Promise<unknown> = Promise.resolve();
+      const handle: HotkeyRegistration = { remove: removal.remove, async setEnabled(value) {
         if (typeof value !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected enabled boolean");
         if (!registrations.has(registration)) throw new SparkError("E_CLOSED", "Command registration has been removed");
         const revision = ++registration.revision; registration.enabled = value;
         try { await synchronize(); } catch (error) { if (registration.revision === revision && registrations.has(registration)) registration.enabled = registration.appliedEnabled; throw error; }
+      }, setBindings(value) {
+        const change = bindingChanges.then(async () => { const staged = await stage(value); staged.commit(); await staged.settle(); });
+        bindingChanges = change.catch(() => {}); return change;
       } };
+      stagers.set(handle, stage);
+      return handle;
     },
     async suspend(scope = { kind: "application" }) {
       validateScope(scope); const snapshot = { ...scope }; suspensions.add(snapshot);
