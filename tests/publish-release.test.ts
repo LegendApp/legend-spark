@@ -5,6 +5,7 @@ import path from "node:path";
 const state = vi.hoisted(() => ({
   release: {} as any, commands: [] as string[][], checks: new Map<string, number>(),
   failCreate: false, visible: true, retry: false,
+  tags: {} as Record<string, Record<string, string>>,
 }));
 vi.mock("../scripts/release-env.ts", () => ({ loadReleaseEnv: vi.fn() }));
 vi.mock("../packages/cli/src/project.ts", () => ({ VERSION: "0.0.1-next.3", readJson: () => state.release }));
@@ -23,7 +24,18 @@ vi.mock("../scripts/npm-release.ts", async importOriginal => ({
 }));
 vi.mock("../packages/cli/src/process.ts", () => ({ spawnProcess: (argv: string[]) => {
   state.commands.push(argv);
-  return { exited: Promise.resolve(state.failCreate && argv[1] === "publish" && path.basename(argv[2]!) === "create-spark.tgz" ? 1 : 0) };
+  const code = state.failCreate && argv[1] === "publish" && path.basename(argv[2]!) === "create-spark.tgz" ? 1 : 0;
+  if (argv[1] === "publish" && !code) {
+    const name = path.basename(argv[2]!) === "spark.tgz" ? "@legendapp/spark" : "@legendapp/create-spark";
+    // npm publish implicitly moves its chosen dist-tag, even before promotion.
+    state.tags[name]![argv[argv.indexOf("--tag") + 1]!] = state.release.version;
+  }
+  if (argv[1] === "dist-tag") {
+    for (const name of Object.keys(state.tags)) expect(state.checks.get(name)).toBe(2);
+    const name = argv[3]!.slice(0, argv[3]!.lastIndexOf("@"));
+    state.tags[name]![argv[4]!] = state.release.version;
+  }
+  return { exited: Promise.resolve(code) };
 } }));
 vi.mock("../packages/cli/src/commands.ts", () => ({ run: async (_root: string, argv: string[]) => {
   if (argv[0] === "git") return argv[1] === "rev-parse" ? state.release.revision : "";
@@ -31,7 +43,7 @@ vi.mock("../packages/cli/src/commands.ts", () => ({ run: async (_root: string, a
   if (argv[1] === "api" && argv[2]?.includes("git/ref")) return JSON.stringify({ object: { type: "commit", sha: state.release.revision } });
   if (argv[1] === "api") return JSON.stringify([[{ tag_name: `v${state.release.version}`, draft: false,
     assets: Object.entries(state.release.sha256).map(([name, hash]) => ({ name, digest: `sha256:${hash}` })) }]]);
-  if (argv.includes("dist-tags")) return JSON.stringify({ next: state.release.version, latest: state.release.version });
+  if (argv.includes("dist-tags")) return JSON.stringify(state.tags[argv[2]!]);
   if (argv[1] === "release") return '{"isDraft":false}';
   return "";
 } }));
@@ -45,6 +57,10 @@ test.each(["success", "create failure", "not visible", "retry"])("release public
   state.failCreate = scenario === "create failure";
   state.visible = scenario !== "not visible";
   state.retry = scenario === "retry";
+  state.tags = {
+    "@legendapp/spark": { next: "0.0.1-next.2", latest: "0.0.1-next.1" },
+    "@legendapp/create-spark": { next: "0.0.1-next.2", latest: "0.0.1-next.1" },
+  };
   const hash = createHash("sha256").update("archive bytes").digest("hex");
   state.release = { version: "0.0.1-next.3", revision: "a".repeat(40), npm: "spark.tgz", createNpm: "create-spark.tgz",
     sha256: { "spark.tgz": hash, "create-spark.tgz": hash, "runner-manifest.json": hash } };
@@ -54,10 +70,15 @@ test.each(["success", "create failure", "not visible", "retry"])("release public
   if (state.failCreate || !state.visible) {
     await expect(publication).rejects.toThrow(state.failCreate ? "npm publish @legendapp/create-spark exited 1" : "not visible yet");
     expect(state.commands.some(argv => argv[1] === "dist-tag")).toBe(false);
+    for (const tags of Object.values(state.tags)) {
+      expect(tags.next).toBe("0.0.1-next.2");
+      expect(tags.latest).toBe("0.0.1-next.1");
+    }
   } else {
     await publication;
     const publishes = state.commands.filter(argv => argv[1] === "publish");
     expect(publishes.map(argv => path.basename(argv[2]!))).toEqual(state.retry ? [] : ["spark.tgz", "create-spark.tgz"]);
+    for (const argv of publishes) expect(argv.slice(-2)).toEqual(["--tag", "staging"]);
     const firstPromotion = state.commands.findIndex(argv => argv[1] === "dist-tag");
     expect(state.commands.slice(firstPromotion).every(argv => argv[1] === "dist-tag")).toBe(true);
     expect(state.commands.filter(argv => argv[1] === "dist-tag").map(argv => argv.slice(3))).toEqual([

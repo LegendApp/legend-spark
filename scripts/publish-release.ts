@@ -65,10 +65,11 @@ for (const [name, expected] of Object.entries(release.sha256)) {
 }
 if (existing.isDraft) await run(root, ["gh", "release", "edit", tag, "--repo", repo, "--draft=false", "--prerelease"]);
 // npm web authentication needs the terminal; piping output disables its prompt.
+// Publishing moves its dist-tag immediately; keep next/latest unchanged until both packages verify.
 for (const [index, name] of publishedPackages.entries()) {
   const archive = archives[index]!;
   if (!published[index]) {
-    const publish = spawnProcess(["npm", "publish", archive, "--access", "public", "--tag", "next"], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+    const publish = spawnProcess(["npm", "publish", archive, "--access", "public", "--tag", "staging"], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
     const publishCode = await publish.exited;
     if (publishCode) throw new Error(`npm publish ${name} exited ${publishCode}`);
   }
