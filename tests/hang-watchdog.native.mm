@@ -30,11 +30,32 @@ static void Spin(NSTimeInterval seconds, BOOL (^until)(void)) {
     [NSRunLoop.mainRunLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
 }
 
-static BOOL HasSymbol(NSArray *stack, NSString *symbol) {
+[[maybe_unused]] static BOOL HasSymbol(NSArray *stack, NSString *symbol) {
   for (NSDictionary *frame in stack) if ([frame[@"symbol"] isEqual:symbol]) return YES;
   return NO;
 }
 
+#ifdef SPARK_HANG_WATCHDOG_TEST_SIGNAL_DELAY_MS
+// Built with every answer reaching the watchdog thread long after the threshold (it wakes late):
+// pings the main thread answered in time are not hangs, and a real hang is still reported once.
+int main(void) {
+  @autoreleasepool {
+    NSMutableArray<NSDictionary *> *reports = [NSMutableArray new];
+    SparkHangWatchdog *watchdog = [[SparkHangWatchdog alloc] initWithThreshold:100 handler:^(NSDictionary *report) { [reports addObject:report]; }];
+    Spin(1.5, nil);
+    CHECK(reports.count == 0);
+    SparkTestBlockMainThread(600);
+    Spin(5, ^{ return (BOOL)(reports.count > 0); });
+    Spin(1, nil);
+    CHECK(reports.count == 1);
+    CHECK([reports.firstObject[@"durationMs"] doubleValue] >= 100);
+    [watchdog stop];
+  }
+  if (failures) { fprintf(stderr, "%d hang watchdog check(s) failed\n", failures); return 1; }
+  printf("Hang watchdog late-wake tests passed\n");
+  return 0;
+}
+#else
 int main(void) {
   @autoreleasepool {
     NSMutableArray<NSDictionary *> *reports = [NSMutableArray new];
@@ -125,3 +146,4 @@ int main(void) {
   printf("Hang watchdog native tests passed\n");
   return 0;
 }
+#endif

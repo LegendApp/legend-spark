@@ -26,7 +26,7 @@ hang, because events reach JavaScript through the main thread.
 
 - **Threshold.** Integer milliseconds from 50 to 60000; the default is 250 (the duration from which
   Apple's tools count a hang). The next ping goes out half a threshold after the last answer, so a hang
-  shorter than `thresholdMs` is never reported and one longer than 1.5 x `thresholdMs` normally is
+  shorter than `thresholdMs` is never reported (not even when the watchdog thread runs late) and one longer than 1.5 x `thresholdMs` normally is
   (a heavily loaded Mac can run the watchdog thread late).
 - **Duration.** `durationMs` runs from the unanswered ping to the moment the main thread answers it. It is a lower bound: the
   hang can have started up to half a threshold before that ping. Time the Mac spends asleep does

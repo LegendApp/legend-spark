@@ -14,9 +14,6 @@ static const uintptr_t kAddressMask = 0x00007FFFFFFFFFFFULL;
 static const uintptr_t kAddressMask = UINTPTR_MAX;
 #endif
 
-// Exported by libsystem_pthread (and listed in the SDK's libsystem_pthread.tbd) but not declared in its headers.
-extern "C" pthread_t pthread_main_thread_np(void);
-
 static BOOL ReadMemory(uintptr_t address, void *buffer, size_t size) {
   vm_size_t read = 0;
   return vm_read_overwrite(mach_task_self(), address, size, (vm_address_t)buffer, &read) == KERN_SUCCESS && read == size;
@@ -106,12 +103,16 @@ static NSArray<NSDictionary *> *Symbolicate(const uintptr_t *frames, size_t coun
 @implementation SparkHangWatchdog {
   NSUInteger _thresholdMs;
   SparkHangHandler _handler;
+  thread_t _mainThread;
   dispatch_semaphore_t _wake;
   atomic_bool _stopped;
 }
 
 - (instancetype)initWithThreshold:(NSUInteger)thresholdMs handler:(SparkHangHandler)handler {
   if (!(self = [super init])) return nil;
+  // The thread to watch is the one creating the watchdog, so it must be the main thread.
+  if (!NSThread.isMainThread) [NSException raise:NSInternalInconsistencyException format:@"SparkHangWatchdog must be created on the main thread"];
+  _mainThread = pthread_mach_thread_np(pthread_self());
   _thresholdMs = thresholdMs;
   _handler = [handler copy];
   _wake = dispatch_semaphore_create(0);
@@ -138,26 +139,31 @@ static NSArray<NSDictionary *> *Symbolicate(const uintptr_t *frames, size_t coun
     uint64_t sent = clock_gettime_nsec_np(CLOCK_UPTIME_RAW), startedAt = clock_gettime_nsec_np(CLOCK_REALTIME);
     dispatch_async(dispatch_get_main_queue(), ^{
       answeredAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+#ifdef SPARK_HANG_WATCHDOG_TEST_SIGNAL_DELAY_MS // tests/hang-watchdog.native.mm: the answer reaches the watchdog late.
+      usleep(SPARK_HANG_WATCHDOG_TEST_SIGNAL_DELAY_MS * 1000);
+#endif
       dispatch_semaphore_signal(answered);
     });
     if (dispatch_semaphore_wait(answered, dispatch_time(DISPATCH_TIME_NOW, threshold))) {
-      thread_t main = pthread_mach_thread_np(pthread_main_thread_np());
       uintptr_t frames[kMaxFrames];
       size_t count = 0, linkFrame = SIZE_MAX;
-      if (thread_suspend(main) == KERN_SUCCESS) {
-        count = Backtrace(main, frames, kMaxFrames, &linkFrame);
-        thread_resume(main);
+      if (thread_suspend(_mainThread) == KERN_SUCCESS) {
+        count = Backtrace(_mainThread, frames, kMaxFrames, &linkFrame);
+        thread_resume(_mainThread);
       }
       NSArray *stack = Symbolicate(frames, count, linkFrame);
       while (dispatch_semaphore_wait(answered, dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC)))
         if (atomic_load(&_stopped)) return;
-      NSDictionary *report = @{
-        @"durationMs": @((double)(answeredAt - sent) / NSEC_PER_MSEC),
-        @"thresholdMs": @(_thresholdMs),
-        @"startedAt": @((double)startedAt / NSEC_PER_MSEC),
-        @"stack": stack,
-      };
-      dispatch_async(dispatch_get_main_queue(), ^{ if (!atomic_load(&self->_stopped)) self->_handler(report); });
+      // Answered within the threshold, but its answer reached this thread late: not a hang.
+      if (answeredAt - sent >= (uint64_t)threshold) {
+        NSDictionary *report = @{
+          @"durationMs": @((double)(answeredAt - sent) / NSEC_PER_MSEC),
+          @"thresholdMs": @(_thresholdMs),
+          @"startedAt": @((double)startedAt / NSEC_PER_MSEC),
+          @"stack": stack,
+        };
+        dispatch_async(dispatch_get_main_queue(), ^{ if (!atomic_load(&self->_stopped)) self->_handler(report); });
+      }
     }
     // Ping again after half the threshold: a hang longer than 1.5 x the threshold is normally caught
     // (the watchdog thread itself can be scheduled late on a loaded machine).

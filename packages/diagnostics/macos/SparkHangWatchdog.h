@@ -15,7 +15,7 @@ typedef void (^SparkHangHandler)(NSDictionary *report);
  * the hang with the time it took. It holds no lock the main thread takes, and exits after stop.
  */
 @interface SparkHangWatchdog : NSObject
-/** Starts the watchdog thread. `handler` runs on the main queue, never after stop. */
+/** Starts the watchdog thread; call it on the main thread (it raises otherwise). `handler` runs on the main queue, never after stop. */
 - (instancetype)initWithThreshold:(NSUInteger)thresholdMs handler:(SparkHangHandler)handler NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 /** Stops reporting at once; the thread exits within 100 ms and releases the watchdog. */
