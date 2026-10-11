@@ -342,8 +342,9 @@ Neither command generates an application or compiles native code during install.
 `bun run macos` and `bun run windows` invoke the existing spark/Expo development
 session and prebuilt registry. Native dependencies come from the compatible binary;
 Metro supplies live JavaScript and CSS. No hosted download service exists yet.
-The explicit `rebuild:macos` / `rebuild:windows` commands build and register a
-matching prebuilt from this app's dependency graph. Native changes invalidate it;
+Its `spark-ks://` URL scheme requires a custom runtime, so the explicit
+`rebuild:macos` / `rebuild:windows` commands build a custom development runtime
+(`spark build --dev`) that the next session uses. Native changes invalidate it;
 screen changes Fast Refresh. Platform state and generated projects remain separate
 and ignored without changing the app's checked-in identity.
 

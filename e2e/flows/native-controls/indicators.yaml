@@ -1,0 +1,64 @@
+appId: so.legend.spark.examples.kitchensink
+name: Progress and level indicators in every size
+intent: >
+  On Native controls > Indicators, the Amount stepper drives determinate progress (amount / 10)
+  and the level indicator (amount) in all four sizes. Indeterminate and spinner progress stay
+  on screen, including after Disable controls is checked.
+checks: [CTRL-PROGRESS-01, CTRL-LEVEL-01, CTRL-STEPPER-01, CTRL-A11Y-01]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/indicators" }
+- extendedWaitUntil: { visible: { id: native-controls-indicators-root }, timeout: 10s }
+- assertText: { id: native-controls-indicators-progress-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-indicators-level-indicator-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-indicators-amount-value, equals: '4' }
+- assertText: { id: native-controls-indicators-progress-mini-value, equals: '0.4' }
+- assertText: { id: native-controls-indicators-level-indicator-mini-value, equals: '4' }
+- assertText: { id: native-controls-indicators-progress-small-value, equals: '0.4' }
+- assertText: { id: native-controls-indicators-level-indicator-small-value, equals: '4' }
+- assertText: { id: native-controls-indicators-progress-regular-value, equals: '0.4' }
+- assertText: { id: native-controls-indicators-level-indicator-regular-value, equals: '4' }
+- assertText: { id: native-controls-indicators-progress-large-value, equals: '0.4' }
+- assertText: { id: native-controls-indicators-level-indicator-large-value, equals: '4' }
+- tapOn: { point: "50%,25%", within: { id: native-controls-indicators-amount } }
+- assertText: { id: native-controls-indicators-amount-value, equals: '5' }
+- assertText: { id: native-controls-indicators-progress-mini-value, equals: '0.5' }
+- assertText: { id: native-controls-indicators-level-indicator-mini-value, equals: '5' }
+- assertA11y: { id: native-controls-indicators-level-indicator-mini, value: '5' }
+- assertVisible: { id: native-controls-indicators-progress-indeterminate-mini }
+- assertVisible: { id: native-controls-indicators-progress-spinner-mini }
+- assertText: { id: native-controls-indicators-progress-small-value, equals: '0.5' }
+- assertText: { id: native-controls-indicators-level-indicator-small-value, equals: '5' }
+- assertA11y: { id: native-controls-indicators-level-indicator-small, value: '5' }
+- assertVisible: { id: native-controls-indicators-progress-indeterminate-small }
+- assertVisible: { id: native-controls-indicators-progress-spinner-small }
+- assertText: { id: native-controls-indicators-progress-regular-value, equals: '0.5' }
+- assertText: { id: native-controls-indicators-level-indicator-regular-value, equals: '5' }
+- assertA11y: { id: native-controls-indicators-level-indicator-regular, value: '5' }
+- assertVisible: { id: native-controls-indicators-progress-indeterminate-regular }
+- assertVisible: { id: native-controls-indicators-progress-spinner-regular }
+- assertText: { id: native-controls-indicators-progress-large-value, equals: '0.5' }
+- assertText: { id: native-controls-indicators-level-indicator-large-value, equals: '5' }
+- assertA11y: { id: native-controls-indicators-level-indicator-large, value: '5' }
+- assertVisible: { id: native-controls-indicators-progress-indeterminate-large }
+- assertVisible: { id: native-controls-indicators-progress-spinner-large }
+- tapOn: { point: "50%,75%", within: { id: native-controls-indicators-amount } }
+- assertText: { id: native-controls-indicators-amount-value, equals: '4' }
+# Disabling read-only indicators keeps the animated ones on screen
+- tapOn: { id: native-controls-indicators-disabled }
+- assertVisible: { id: native-controls-indicators-progress-indeterminate-mini }
+- assertVisible: { id: native-controls-indicators-progress-spinner-mini }
+- assertVisible: { id: native-controls-indicators-progress-indeterminate-small }
+- assertVisible: { id: native-controls-indicators-progress-spinner-small }
+- assertVisible: { id: native-controls-indicators-progress-indeterminate-regular }
+- assertVisible: { id: native-controls-indicators-progress-spinner-regular }
+- assertVisible: { id: native-controls-indicators-progress-indeterminate-large }
+- assertVisible: { id: native-controls-indicators-progress-spinner-large }
+- tapOn: { id: native-controls-indicators-disabled }
+- assertA11y: { id: native-controls-indicators-level-indicator-regular, label: "Level indicator, Regular", when: { matrix: { locale: en-US } } }
+- assertA11y: { id: native-controls-indicators-level-indicator-regular, label: "مؤشر المستوى، عادي", when: { matrix: { locale: ar } } }
+- takeScreenshot: indicators

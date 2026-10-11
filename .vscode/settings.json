@@ -1,0 +1,9 @@
+{
+  "yaml.schemas": {
+    "./e2e/schema/flow.schema.json": ["e2e/flows/**/*.yaml", "e2e/subflows/**/*.yaml"],
+    "./e2e/schema/checks.schema.json": ["e2e/checks/*.yaml"],
+    "./e2e/schema/gate.schema.json": ["e2e/gate.yaml"],
+    "./e2e/schema/budgets.schema.json": ["e2e/budgets.yaml"],
+    "./e2e/schema/signoffs.schema.json": ["artifacts/gate/signoffs.yaml"]
+  }
+}

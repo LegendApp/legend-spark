@@ -16,24 +16,30 @@ export type MenuItem =
   | (Omit<MenuEntry, "label"> & { type: "role"; role: MenuRole; label?: string; shortcut?: string })
   | (MenuEntry & { type: "slider"; min: number; max: number; value: number; suffix?: string });
 export type MenuAction = { type: "action"; itemId: string } | { type: "valueChanged"; itemId: string; value: number };
+/** Validator input: the shared model plus application-menu fields that MenuSupport gates (`alternate`, checkbox `"mixed"`). */
+export type MenuInputItem =
+  | Exclude<MenuItem, { type: "action" | "checkbox" | "role" | "submenu" }>
+  | (Extract<MenuItem, { type: "action" | "role" }> & { alternate?: boolean })
+  | (Omit<Extract<MenuItem, { type: "checkbox" }>, "checked"> & { checked: boolean | "mixed"; alternate?: boolean })
+  | (Omit<Extract<MenuItem, { type: "submenu" }>, "items"> & { items: readonly MenuInputItem[] });
 /** Internal recursive subset helper for feature surfaces that support fewer menu item arms. */
 export type MenuItemTree<Leaf extends Exclude<MenuItem, { type: "submenu" }>> = Leaf | (Omit<Extract<MenuItem, { type: "submenu" }>, "items"> & { items: readonly MenuItemTree<Leaf>[] });
 /** Internal transport shape; never reexported from feature entry points. */
 export interface MenuWireItem {
   id?: string; title?: string; target?: MenuTarget; placement?: MenuPlacement; _sparkOwner?: string; _sparkIdentity?: string; enabled?: boolean; hidden?: boolean; checked?: boolean; separator?: boolean;
-  shortcut?: Accelerator; items?: MenuWireItem[]; role?: MenuRole; radio?: boolean;
+  shortcut?: Accelerator; items?: MenuWireItem[]; role?: MenuRole; radio?: boolean; alternate?: boolean; mixed?: boolean; _sparkLifecycle?: boolean;
   systemImageName?: string; imagePath?: string; slider?: { min: number; max: number; value: number; suffix?: string };
 }
-export interface MenuSupport { types: readonly MenuItem["type"][]; shortcuts?: boolean; icons?: readonly MenuIcon["type"][]; targeting?: boolean }
+export interface MenuSupport { types: readonly MenuItem["type"][]; shortcuts?: boolean; icons?: readonly MenuIcon["type"][]; targeting?: boolean; alternates?: boolean; mixedState?: boolean }
 const roles: readonly string[] = ["new", "open", "save", "saveAs", "clearRecentDocuments", "about", "settings", "services", "hide", "hideOthers", "showAll", "quit", "undo", "redo", "cut", "copy", "paste", "selectAll", "minimize", "zoom", "close", "toggleFullscreen"];
 function keys(value: object, allowed: readonly string[]) {
   for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported menu property: ${key}`);
 }
 /** Validate and snapshot the complete tree before a native side effect. */
-export function menuItems(input: readonly MenuItem[], support: MenuSupport, platform: "macos" | "windows"): MenuWireItem[] {
+export function menuItems(input: readonly MenuInputItem[], support: MenuSupport, platform: "macos" | "windows"): MenuWireItem[] {
   const ids = new Set<string>();
   const active = new Set<object>();
-  function visit(items: readonly MenuItem[], depth: number): MenuWireItem[] {
+  function visit(items: readonly MenuInputItem[], depth: number): MenuWireItem[] {
     if (!Array.isArray(items) || depth > 5 || active.has(items)) throw new SparkError("E_INVALID_ARGUMENT", "Menus must be acyclic arrays with at most five levels");
     active.add(items);
     try {
@@ -44,7 +50,7 @@ export function menuItems(input: readonly MenuItem[], support: MenuSupport, plat
         if (typeof item.id !== "string" || !item.id.length || item.id.length > 200 || item.id.includes("\0") || ids.has(item.id)) throw new SparkError("E_INVALID_ARGUMENT", "Menu item ids must be nonempty and unique");
         ids.add(item.id);
         const common = ["type", "id", "label", "disabled", "hidden", "icon", "target", "placement"];
-        keys(item, [...common, ...(item.type === "submenu" ? ["items"] : item.type === "slider" ? ["min", "max", "value", "suffix"] : item.type === "role" ? ["role", "shortcut"] : item.type === "checkbox" || item.type === "radio" ? ["checked", "shortcut"] : ["shortcut"])]);
+        keys(item, [...common, ...(item.type === "submenu" ? ["items"] : item.type === "slider" ? ["min", "max", "value", "suffix"] : item.type === "role" ? ["role", "shortcut", "alternate"] : item.type === "checkbox" ? ["checked", "shortcut", "alternate"] : item.type === "radio" ? ["checked", "shortcut"] : ["shortcut", "alternate"])]);
         if ((item.type !== "role" || item.label !== undefined) && (typeof item.label !== "string" || !item.label.trim())) throw new SparkError("E_INVALID_ARGUMENT", "Menu items need a label");
         if ([item.disabled, item.hidden].some(value => value !== undefined && typeof value !== "boolean")) throw new SparkError("E_INVALID_ARGUMENT", "Menu flags must be boolean");
         const result: MenuWireItem = { id: item.id, title: item.label, enabled: !item.disabled };
@@ -58,9 +64,17 @@ export function menuItems(input: readonly MenuItem[], support: MenuSupport, plat
             result.placement = item.placement.before !== undefined ? { before: menuTarget(item.placement.before) } : { after: menuTarget(item.placement.after!) };
           }
         }
+        if ("alternate" in item && item.alternate !== undefined) {
+          if (!support.alternates) throw new SparkError("E_UNSUPPORTED_OPTION", "This menu surface does not support alternate items");
+          if (typeof item.alternate !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Menu alternate must be boolean");
+          if (item.alternate) result.alternate = true;
+        }
         if (item.type === "checkbox" || item.type === "radio") {
-          if (typeof item.checked !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Checkbox and radio menus require checked state");
-          result.checked = item.checked;
+          if (item.type === "checkbox" && item.checked === "mixed") {
+            if (!support.mixedState) throw new SparkError("E_UNSUPPORTED_OPTION", "This menu surface does not support mixed checkbox state");
+            result.mixed = true;
+          } else if (typeof item.checked !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Checkbox and radio menus require checked state");
+          result.checked = item.checked === true;
           if (item.type === "radio") result.radio = true;
         }
         if (item.type === "submenu") result.items = visit(item.items, depth + 1);

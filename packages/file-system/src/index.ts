@@ -1,30 +1,24 @@
 import { NativeEventEmitter, Platform } from "react-native";
-import { callBinary, nativeBytes } from "@legendapp/spark-desktop-app/src/contracts/native-buffer";
-import { SparkError, invokeNative, asyncRegistration, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+import { nativeBytes } from "@legendapp/spark-desktop-app/src/contracts/native-buffer";
+import { SparkError, asyncRegistration, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
-import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
-import Native from "./NativeDesktopFileSystem";
+import { absolute, booleanOption, call as nativeCall, checkedOptions, featureAvailability, native, requireFeature } from "./native";
+export { getFileSystemAvailability } from "./native";
 import { createFileHandle, iterateFile, writeFileChunks, type FileMode, type ReadChunksOptions } from "./handles";
 export { FileCleanupError } from "./handles";
 export type { FileHandle, FileMode, ReadChunksOptions } from "./handles";
 export interface FileInfo { type: "file" | "directory" | "symlink"; size: number; modifiedAt: number }
 export interface DirectoryEntry { name: string; path: string }
 export interface CreateDirectoryOptions { recursive?: boolean }
-export interface RemoveOptions { recursive?: boolean }
-export interface CopyMoveOptions { overwrite?: boolean }
+/** coordinated: true runs the operation inside an NSFileCoordinator claim (macOS; see getFileCoordinationAvailability). */
+export interface CoordinatedOptions { coordinated?: boolean }
+export interface RemoveOptions extends CoordinatedOptions { recursive?: boolean }
+export interface CopyMoveOptions extends CoordinatedOptions { overwrite?: boolean }
 export interface WatchOptions { recursive?: boolean }
 export interface OpenFileOptions { mode?: FileMode }
 export interface WriteChunksOptions { mode?: "write" | "createNew"; signal?: AbortSignal }
-export function getFileSystemAvailability(): Availability {
-  if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
-  return Native ? { available: true } : { available: false, reason: "missing-module" };
-}
-function native() {
-  const availability = getFileSystemAvailability();
-  if (!availability.available) throw new SparkError(availability.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : "E_MODULE_UNAVAILABLE", "File IO requires a desktop host with NativeDesktopFileSystem installed");
-  return Native!;
-}
-const absolute = (path: string) => nativePath(path, Platform.OS);
+/** NSFileCoordinator claims for the coordinated option. Windows has no coordination service. */
+export function getFileCoordinationAvailability(): Availability { return featureAvailability("coordination"); }
 const isString = (value: unknown): value is string => typeof value === "string";
 function validResponse(method: string, value: unknown): boolean {
   if (["directory", "openFile"].includes(method)) return isString(value) && value.length > 0;
@@ -40,43 +34,33 @@ function validResponse(method: string, value: unknown): boolean {
   if (method === "remove" || method === "writeTextIfUnchanged") return typeof value === "boolean";
   return value === null;
 }
-async function call<T = void>(method: string, args: object): Promise<T> {
-  const { bytes, ...metadata } = args as { bytes?: Uint8Array };
-  const value = await invokeNative(() => callBinary(native(), "__sparkFileSystemBinary", method, metadata, bytes));
-  if (!validResponse(method, value)) throw new SparkError("E_INVALID_DATA", "Invalid native file response");
-  return value as T;
-}
-/** Rejects unknown or extra option keys so a misspelled option can never silently no-op. */
-function checkedOptions<T extends object>(options: T, allowed: readonly string[], label: string): T {
-  if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", `Expected ${label} options`);
-  for (const key of Object.keys(options)) if (!allowed.includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown ${label} option: ${key}`);
-  return options;
-}
+const call = <T = void>(method: string, args: object) => nativeCall<T>(method, args, value => validResponse(method, value));
 function recursiveOption(options: { recursive?: boolean }, fallback: boolean): boolean {
-  const value = checkedOptions(options, ["recursive"], "recursive");
-  if (value.recursive !== undefined && typeof value.recursive !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "recursive must be a boolean");
-  return value.recursive ?? fallback;
+  return booleanOption(checkedOptions(options, ["recursive"], "recursive").recursive, "recursive", fallback);
 }
-function overwriteOption(options: CopyMoveOptions): boolean {
-  const value = checkedOptions(options, ["overwrite"], "copy/move");
-  if (value.overwrite !== undefined && typeof value.overwrite !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "overwrite must be a boolean");
-  return value.overwrite ?? false;
+/** Validates the coordinated option; requesting coordination where it is unavailable rejects instead of running uncoordinated. */
+function coordinatedOption(options: CoordinatedOptions): boolean {
+  const coordinated = booleanOption(options.coordinated, "coordinated", false);
+  if (coordinated) requireFeature("coordination", "File coordination");
+  return coordinated;
 }
+function coordinated(options: CoordinatedOptions, label: string) { return coordinatedOption(checkedOptions(options, ["coordinated"], label)); }
 export async function getDirectory(kind: "data" | "cache" | "temp"): Promise<string> {
   if (!["data", "cache", "temp"].includes(kind)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid directory kind");
   const path = await call<string>("directory", { kind });
   try { return absolute(path); } catch (cause) { throw new SparkError("E_INVALID_DATA", "Invalid native directory path", { cause }); }
 }
 /** UTF-8. Invalid text rejects instead of inserting replacement characters. */
-export async function readText(path: string): Promise<string> { return call("readText", { path: absolute(path) }); }
-export async function writeText(path: string, text: string): Promise<void> {
+export async function readText(path: string, options: CoordinatedOptions = {}): Promise<string> { return call("readText", { path: absolute(path), coordinated: coordinated(options, "readText") }); }
+/** Atomic replacement. Read-only volumes reject with E_READ_ONLY and full volumes with E_NO_SPACE. */
+export async function writeText(path: string, text: string, options: CoordinatedOptions = {}): Promise<void> {
   if (typeof text !== "string") throw new SparkError("E_INVALID_ARGUMENT", "Expected a text string");
-  await call("writeText", { path: absolute(path), text });
+  await call("writeText", { path: absolute(path), text, coordinated: coordinated(options, "writeText") });
 }
-export async function readBytes(path: string): Promise<Uint8Array> { return nativeBytes(await call<ArrayBuffer>("readBytes", { path: absolute(path) })); }
-export async function writeBytes(path: string, bytes: Uint8Array): Promise<void> {
+export async function readBytes(path: string, options: CoordinatedOptions = {}): Promise<Uint8Array> { return nativeBytes(await call<ArrayBuffer>("readBytes", { path: absolute(path), coordinated: coordinated(options, "readBytes") })); }
+export async function writeBytes(path: string, bytes: Uint8Array, options: CoordinatedOptions = {}): Promise<void> {
   if (!(bytes instanceof Uint8Array)) throw new SparkError("E_INVALID_ARGUMENT", "Expected Uint8Array");
-  await call("writeBytes", { path: absolute(path), bytes });
+  await call("writeBytes", { path: absolute(path), bytes, coordinated: coordinated(options, "writeBytes") });
 }
 /** Describes the link itself, without following it. modifiedAt is Unix milliseconds. */
 export async function stat(path: string): Promise<FileInfo> { return call("stat", { path: absolute(path) }); }
@@ -95,14 +79,21 @@ export async function list(path: string): Promise<DirectoryEntry[]> {
 }
 export async function mkdir(path: string, options: CreateDirectoryOptions = {}): Promise<void> { await call("mkdir", { path: absolute(path), recursive: recursiveOption(options, true) }); }
 /** Absence is success; deleting a nonempty directory requires recursive: true. */
-export async function remove(path: string, options: RemoveOptions = {}): Promise<void> { await call("remove", { path: absolute(path), recursive: recursiveOption(options, false) }); }
+export async function remove(path: string, options: RemoveOptions = {}): Promise<void> {
+  checkedOptions(options, ["recursive", "coordinated"], "remove");
+  await call("remove", { path: absolute(path), recursive: booleanOption(options.recursive, "recursive", false), coordinated: coordinatedOption(options) });
+}
+function transferOptions(options: CopyMoveOptions) {
+  checkedOptions(options, ["overwrite", "coordinated"], "copy/move");
+  return { overwrite: booleanOption(options.overwrite, "overwrite", false), coordinated: coordinatedOption(options) };
+}
 /** Copies directories recursively and preserves symlinks. An existing destination rejects unless overwrite: true. Self-transfers and overlapping source/destination paths reject. Overwrite stages beside the destination and restores the previous destination if publication fails. If backup cleanup fails after commit, the native error reports the published destination and recoverable backup path. */
 export async function copy(source: string, destination: string, options: CopyMoveOptions = {}): Promise<void> {
-  await call("copy", { path: absolute(source), to: absolute(destination), overwrite: overwriteOption(options) });
+  await call("copy", { path: absolute(source), to: absolute(destination), ...transferOptions(options) });
 }
 /** An existing destination rejects unless overwrite: true. Self-transfers and overlapping source/destination paths reject. Cross-volume moves copy beside the destination before deleting the source. If source cleanup fails, the destination has been published, the source may be partially removed, and the previous destination is retained at a recovery path reported by the native error. Backup cleanup failures also report the committed destination and retained backup. */
 export async function move(source: string, destination: string, options: CopyMoveOptions = {}): Promise<void> {
-  await call("move", { path: absolute(source), to: absolute(destination), overwrite: overwriteOption(options) });
+  await call("move", { path: absolute(source), to: absolute(destination), ...transferOptions(options) });
 }
 let nextWatch = 0;
 /** Invalidation, not an exact change log. Recursive watches require a directory. */
@@ -147,4 +138,5 @@ export async function writeTextIfUnchanged(path: string, expected: string, conte
 }
 
 export { scanFiles, getFileScanAvailability } from "./file-scanner";
+export * from "./integration";
 export type { FileScanOptions, FileScanSkipEntry, ScannedFile, FileScanProgress, FileScanBatch, FileScanResult } from "./file-scanner";

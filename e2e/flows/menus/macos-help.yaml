@@ -1,0 +1,15 @@
+appId: so.legend.spark.examples.kitchensink
+name: macOS Help search finds the Help contribution
+intent: The screen's Help-targeted submenu becomes the AppKit Help menu, so typing in Help search finds Menu Audit Guide, and choosing the item dispatches its action.
+checks: [MENU-HELP-01]
+tags: [menus]
+platforms: [macos]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://menus/audit" }
+- assertVisible: { text: Menu ready, within: { id: menus-audit-status } }
+- searchHelpMenu: { query: Menu Audit Guide, expectItem: "Help > Menu Audit Guide" }
+- pressKey: Escape
+- selectMenu: Help > Menu Audit Guide
+- assertVisible: { text: "/Action audit-guide/", within: { id: menus-audit-events } }

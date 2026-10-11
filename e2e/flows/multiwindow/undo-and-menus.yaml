@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: Per-window undo and menus follow the key window
+intent: The Note menu appears while a note window is key and its Add Star acts on that window; Edit > Undo undoes only the key window's history; the Note menu goes away when the main window is key.
+checks: [MW-UNDO-01, MW-MENU-01]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/windows" }
+- tapOn: { id: multiwindow-windows-open-note }
+- focusWindow: { id: spark.main }
+- tapOn: { id: multiwindow-windows-open-note }
+- focusWindow: { title: "Note 1" }
+- selectMenu: Note > Add Star
+- assertVisible: { text: "Stars: 1 · this window", window: { title: "Note 1" } }
+- assertVisible: { text: "Stars: 0 · this window", window: { title: "Note 2" } }
+- assertMenuItem: { path: "Edit > Undo Add Star", enabled: true }
+- focusWindow: { title: "Note 2" }
+- assertMenuItem: { path: "Edit > Undo", enabled: false }
+- focusWindow: { title: "Note 1" }
+- selectMenu: Edit > Undo Add Star
+- assertVisible: { text: "Stars: 0 · this window", window: { title: "Note 1" } }
+- assertMenuItem: { path: "Edit > Redo Add Star", enabled: true }
+- focusWindow: { id: spark.main }
+- assertNotVisible: { role: menuBarItem, label: Note }

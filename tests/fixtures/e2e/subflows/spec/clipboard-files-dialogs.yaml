@@ -1,0 +1,9 @@
+- setClipboard: { html: "<b>x</b>", text: "x", concealed: false }
+- assertClipboard: { types: [public.html, public.utf8-plain-text], text: "x" }
+- createFixture: { path: "${TMP}/doc.txt", contents: "a\r\nb", encoding: utf-16le }
+- modifyFileExternally: { path: "${TMP}/doc.txt", append: "c", atomicSwap: true }
+- assertFile: { path: "${TMP}/doc.txt", exists: true, contains: "c", encoding: utf-16le, unchanged: false }
+- mountFixtureVolume: { image: fixtures/volumes/usb.dmg, as: USB }
+- ejectVolume: USB
+- handleDialog: { kind: save, name: "Report.pdf", path: "${TMP}", confirmOverwrite: true }
+- assertDialog: { kind: alert, text: "/unsaved changes/", buttons: [Save, "Don't Save", Cancel], default: Save, attachedTo: key }

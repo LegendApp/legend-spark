@@ -1,0 +1,14 @@
+appId: so.legend.kitchensink
+name: Sheet spring is interruptible
+checks: [MOT-INT-01, MOT-VEL-01]
+matrix: { reduceMotion: [false, true] }
+---
+- launchApp
+- setClock: virtual
+- shortcut: cmd+shift+n
+- advanceClock: 120ms
+- pressKey: Escape
+- captureMotion: { target: { id: new-doc-sheet }, until: settled, name: sheet-interrupt }
+- assertMotion: { target: { id: new-doc-sheet }, kind: spring, velocityContinuous: true, settlesWithin: 450ms, when: { matrix: { reduceMotion: false } } }
+- assertMotion: { target: { id: new-doc-sheet }, kind: crossfade, when: { matrix: { reduceMotion: true } } }
+- assertScreenshot: { golden: sheet-dismissed }

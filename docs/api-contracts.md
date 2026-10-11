@@ -125,7 +125,7 @@ Process termination cannot acknowledge completed shutdown through a JavaScript p
 
 Keep document-controller/reload/transition helpers with document APIs. Typed open requests distinguish file paths from URL activation. Subscribe before draining queued launch requests and deduplicate the overlap; document replay semantics. General path manipulation belongs in files, not document orchestration.
 
-`/windows` includes `openWindow`, state commands, events, guards, `createWindowsNavigator`, `WindowProvider`, and hooks. Use one ID/options/result model with explicit ownership. Keep useful native restoration and toolbar features. The [window appendix](./api-window-contract.md) contains signatures, coordinates and lifecycle decisions. Remove `/windows/react`, `/windows/managed`, and `/windows/controls`; retain internal source separation as useful.
+`/windows` includes `openWindow`, state commands, events, guards, `createWindowsNavigator` (window types, singletons, per-window services), `createWindowState`, `WindowProvider`, and hooks. Use one ID/options/result model with explicit ownership. Keep useful native restoration and toolbar features. The [window appendix](./api-window-contract.md) contains signatures, coordinates and lifecycle decisions. Remove `/windows/react`, `/windows/managed`, and `/windows/controls`; retain internal source separation as useful.
 
 ### Menus, context menus, tray, Dock, and shortcuts
 
@@ -142,12 +142,13 @@ type MenuItem =
 
 // Feature entrypoints expose only the item shapes their native surface accepts.
 type MenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean; icon?: MenuIcon; target?: MenuTarget; placement?: MenuPlacement };
+// `alternate` and `checked: 'mixed'` are macOS application-menu only; other surfaces and Windows reject them.
 type AppMenuItem =
   | { type: 'separator' }
-  | (MenuEntry & { type: 'action'; shortcut?: string })
-  | (MenuEntry & { type: 'checkbox'; checked: boolean; shortcut?: string })
+  | (MenuEntry & { type: 'action'; shortcut?: string; alternate?: boolean })
+  | (MenuEntry & { type: 'checkbox'; checked: boolean | 'mixed'; shortcut?: string; alternate?: boolean })
   | (MenuEntry & { type: 'submenu'; items: readonly AppMenuItem[] })
-  | (Omit<MenuEntry, 'label'> & { type: 'role'; role: MenuRole; label?: string; shortcut?: string });
+  | (Omit<MenuEntry, 'label'> & { type: 'role'; role: MenuRole; label?: string; shortcut?: string; alternate?: boolean });
 type MenuRootItem = Extract<AppMenuItem, { type: 'submenu' }>;
 type ContextMenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean };
 type ContextMenuItem = { type: 'separator' } | (ContextMenuEntry & { type: 'action' }) | (ContextMenuEntry & { type: 'checkbox'; checked: boolean });
@@ -162,8 +163,17 @@ type ToolbarMenuItem =
   | (ToolbarEntry & { type: 'slider'; min: number; max: number; value: number; suffix?: string });
 
 // /menus: imperative ownership plus useMenu in the same module.
-createMenu(options: { id: string; items: readonly MenuRootItem[]; onAction: MenuActionHandler }): Promise<Menu>;
+createMenu(options: {
+  id: string;
+  items: readonly MenuRootItem[];
+  onAction?: MenuActionHandler;
+  onOpen?: (event: { menuId: string }) => void; // macOS only; Windows rejects E_UNSUPPORTED_OPTION.
+  onClose?: (event: { menuId: string }) => void;
+}): Promise<Menu>;
+getMenuAvailability(feature?: 'alternates' | 'lifecycle' | 'helpSearch' | 'mixedState' | 'icons' | 'hiddenItems'): Availability;
 // Menu: update(options), remove(). Semantic roles target native responders.
+// An alternate must follow a visible non-alternate command with the same shortcut key and different modifiers.
+// `target: { menu: 'help' }` merges into Help on both platforms; on macOS it also registers AppKit Help search.
 // Application menus accept recursive action, checkbox, separator, submenu, and role items; sliders are toolbar-only.
 
 // /context-menu
@@ -269,7 +279,7 @@ Secure storage follows the selected Expo missing/null and options behavior where
 | `/clipboard` | Keep `getStringAsync(options?)`, `setStringAsync(text, options?)`, `hasStringAsync()`. Remove redundant text aliases. Rich `readClipboard`/`writeClipboard` use owned payload types with exclusive file-list vs text/image alternatives; no hidden encoding ambiguity. |
 | `/links` | Keep `openURL`, `canOpenURL`, `getInitialURL`, `addEventListener('url', listener)` semantics for the selected Expo subset. Keep `openPath(path)` as an explicit OS-opening extension; file reveal belongs in `/files`. Recent documents move to documents. |
 | `/notifications` | `getNotificationPermission()`, `requestNotificationPermission(options?)`, `showNotification({ id, content })`, `scheduleNotification({ id, content, trigger })`, cancel/list operations, and typed response subscription. Immediate vs scheduled is explicit; cancellation of pending vs removal of delivered notifications is explicit. |
-| `/updates` | One `getUpdateStatus`, `startUpdates`, `checkForUpdates(options?)`, `configureUpdates(options)`, typed event contract. Remove overlapping `AutoUpdater` facade. Checking returns when initiated; progress/completion arrives through events. Native app updater only. |
+| `/updates` | One `getUpdateStatus`, `getUpdateAvailability`, `startUpdates`, `checkForUpdates(options?)`, `configureUpdates(options)`, `clearSkippedUpdate`, typed event contract (delta downloads, skipped versions). Remove overlapping `AutoUpdater` facade. Checking returns when initiated; progress/completion arrives through events. Native app updater only. |
 | `/system` | Keep information/events. Group login startup and power operations by named types, without forcing a new subpath for every function. `requestAttention({ kind })` and `preventSleep({ reason, kind })` return owned registrations. Dock and taskbar menus use feature-local, platform-supported item trees. |
 
 Notification permissions distinguish status from ability to ask again where the backend provides it; do not fabricate a portable guarantee. Notification content carries portable tone names (`message`, `mail`, `reminder`, `call`, `error`) plus `default`/silent, each host mapping tones to its system sounds; 1–4 typed action buttons report their id through the response's `action` alongside `open`/`dismiss`. Unsupported system options reject rather than returning “disabled.” URL initial/live/replay rules are documented separately. [Expo Linking reference for the adopted subset](https://docs.expo.dev/versions/v54.0.0/sdk/linking/)

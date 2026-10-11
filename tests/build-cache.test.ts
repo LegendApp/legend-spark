@@ -24,6 +24,7 @@ beforeEach(() => {
   root = mkdtempSync(path.join(os.tmpdir(), "spark-build-cache-"));
   moduleRoot = path.join(root, "node_modules/fixture");
   writeJson(path.join(root, "package.json"), { main: "index.ts", dependencies: { fixture: "1.0.0" } });
+  write(path.join(root, "index.ts"), "import 'fixture';");
   writeJson(path.join(moduleRoot, "package.json"), { name: "fixture", version: "1.0.0", spark: { nativeModules: ["Fixture"] } });
   write(path.join(moduleRoot, "src/NativeFixture.ts"), "export const native = 1;");
   write(path.join(moduleRoot, "macos/Fixture.mm"), "native source");
@@ -46,7 +47,7 @@ beforeEach(() => {
       }
     } else if (argv.includes("export:embed")) {
       write(argv[argv.indexOf("--bundle-output") + 1]!, "fixture bundle");
-      write(argv[argv.indexOf("--sourcemap-output") + 1]!, JSON.stringify({ sources: [] }));
+      write(argv[argv.indexOf("--sourcemap-output") + 1]!, JSON.stringify({ sources: ["/index.ts"] }));
     } else if (argv[0] === "plutil" && argv.includes("json")) {
       return readFileSync(argv.at(-1)!, "utf8");
     } else if (argv[0] === "xcodebuild") {
@@ -152,6 +153,8 @@ test("dev -> release -> dev reuses the dev app despite release preparation and m
   configure(true);
   await build(root, "release");
   expect(commandCount("xcodebuild")).toBe(2);
+  // Xcode's bundle phase runs Metro from the server root, which can be a parent workspace.
+  expect(commands.run.mock.calls.find(([, argv]) => argv[0] === "xcodebuild" && argv.includes("Release"))![2].env.ENTRY_FILE).toBe(path.join(root, "index.ts"));
   expect(readJson(path.join(root, ".spark/native-preparation.json")).fingerprint).not.toBe(readJson(path.join(root, ".spark/dev-build.json")).preparation.fingerprint);
   configure();
   rmSync(path.join(root, "macos"), { recursive: true });

@@ -270,6 +270,12 @@ export function hostSourceSignature(root: string) {
     .filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
     .map(pkg => [pkg.name, hashFiles(pkg.root, ["package.json", "AppDelegate.mm", "windows", ...readdirSync(pkg.root).filter(file => file.endsWith(".cjs"))])])));
 }
+// CocoaPods lists each native source in the generated project, so adding or
+// removing one (not editing it) requires pod install.
+function nativeSourceNames(root: string) {
+  return ["macos", "ios", "cpp", "common"].filter(directory => existsSync(path.join(root, directory)))
+    .flatMap(directory => readdirSync(path.join(root, directory), { recursive: true }).map(name => path.join(directory, String(name)))).sort();
+}
 export function nativePreparationInputs(root: string, packages: NativePackage[]) {
   return {
     config: readAppConfig(root),
@@ -277,11 +283,11 @@ export function nativePreparationInputs(root: string, packages: NativePackage[])
       p.name,
       // CocoaPods records physical source paths, even for identical packages.
       p.root,
-      hashFiles(p.root, [
+      digest(hashFiles(p.root, [
         "package.json",
         p.json.codegenConfig?.jsSrcsDir ?? "src",
         ...readdirSync(p.root).filter((name) => name.endsWith(".podspec")),
-      ]),
+      ]) + JSON.stringify(nativeSourceNames(p.root))),
     ] as const),
     plugin: hostSourceSignature(root),
   };

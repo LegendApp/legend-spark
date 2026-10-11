@@ -15,7 +15,14 @@
     "spark": "bun scripts/spark.mjs",
     "kitchen-sink": "bun run --filter @spark-examples/kitchen-sink dev",
     "kitchen-sink:prepare": "bun scripts/prepare-kitchen-sink.ts",
+    "ks:capture": "bun scripts/ks-capture.ts",
     "settings": "bun scripts/settings.ts",
+    "e2e:validate": "bun scripts/e2e/cli.ts validate",
+    "e2e:lint": "bun scripts/e2e/cli.ts lint",
+    "e2e:schema": "bun scripts/e2e/cli.ts schema",
+    "e2e:coverage": "bun scripts/e2e/cli.ts coverage",
+    "e2e:run": "bun scripts/e2e/cli.ts run",
+    "gate": "bun scripts/e2e/cli.ts gate",
     "test:native": "bun scripts/test-native.ts",
     "test:all": "bun run typecheck && bun run test && bun run test:sparkle && bun run test:updates && bun run test:integrations && bun run test:native && bun run test:expansion && bun run test:runtimes:all",
     "test:sparkle": "bun tests/sparkle.integration.ts",
@@ -103,7 +110,9 @@
     "vitest": "5.0.1",
     "ws": "8.21.0",
     "@legendapp/list": "3.4.0",
-    "react-test-renderer": "19.1.4"
+    "react-test-renderer": "19.1.4",
+    "yaml": "2.9.1",
+    "ajv": "8.20.0"
   },
   "overrides": {
     "@expo/cli": "54.0.27",

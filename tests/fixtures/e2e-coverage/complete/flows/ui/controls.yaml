@@ -1,0 +1,6 @@
+appId: so.legend.kitchensink
+name: Native controls
+checks: [UI-CTRL-01]
+---
+- launchApp
+- assertVisible: { id: native-button }

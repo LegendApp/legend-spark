@@ -1,0 +1,13 @@
+appId: so.legend.kitchensink
+name: Tear off tab, edit in both, merge back
+checks: [MW-TEAR-01, MW-STATE-02, MOT-SHARED-03]
+---
+- launchApp: { clearState: true, openFile: "${FIXTURES}/docs/notes.md" }
+- assertWindow: { count: 1 }
+- tearOff: { tab: notes.md, to: "75%,50%" }
+- assertWindow: { count: 2, key: { title: notes.md } }
+- typeText: { text: "hello", into: { id: editor, window: { index: 1 } } }
+- assertVisible: { text: hello, window: { index: 0 } }      # shared state is live
+- mergeInto: { tab: notes.md, from: { index: 1 }, to: { index: 0 } }
+- assertWindow: { count: 1 }
+- assertNoLeaks: { since: flowStart }

@@ -8,8 +8,10 @@
     "dev": "bun ../../scripts/spark.mjs dev",
     "macos": "bun ../../scripts/spark.mjs dev --platform macos",
     "windows": "bun ../../scripts/spark.mjs dev --platform windows",
-    "rebuild:macos": "bun ../../scripts/spark.mjs sdk build-runner --project . --platform macos",
-    "rebuild:windows": "bun ../../scripts/spark.mjs sdk build-runner --project . --platform windows",
+    "rebuild:macos": "bun ../../scripts/spark.mjs build --dev --platform macos",
+    "rebuild:windows": "bun ../../scripts/spark.mjs build --dev --platform windows",
+    "build": "bun ../../scripts/spark.mjs build",
+    "package": "bun ../../scripts/spark.mjs package",
     "doctor": "bun ../../scripts/spark.mjs doctor"
   },
   "dependencies": {
@@ -36,6 +38,7 @@
     "tailwindcss": "4.2.4",
     "@legendapp/spark": "0.0.1-next.3",
     "@react-native-runtimes/core": "0.1.0-alpha.2",
+    "@legendapp/state": "3.0.0-beta.48",
     "react-native-nitro-modules": "0.35.7",
     "base64-js": "1.5.1",
     "@babel/parser": "7.28.5",

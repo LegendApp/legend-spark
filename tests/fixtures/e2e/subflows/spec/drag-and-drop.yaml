@@ -1,0 +1,5 @@
+- dragAndDrop: { from: { id: row-1 }, to: { id: row-4 }, modifiers: [option], holdAt: 300ms, steps: 30 }
+- dragFromFinder: { files: ["${FIXTURES}/a.png", "${FIXTURES}/b.png"], to: { id: drop-zone } }
+- dragToFinder: { from: { id: thumb-2 }, expectFile: ~/Desktop/thumb-2.png }
+- dragToDock: { files: ["${DOC}"] }
+- cancelDrag: { from: { id: row-1 }, via: escape }   # also asserts fly-back

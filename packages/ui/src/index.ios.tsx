@@ -1,3 +1,7 @@
+import { portableButtonVariant } from "./button";
+export { getButtonAvailability } from "./button";
+export type { ButtonVariant, ButtonAvailabilityOptions } from "./types";
+import { isPrimitiveKind } from "./primitives";
 import { useState, type ComponentProps } from "react";
 function ExpoButton(props: ComponentProps<typeof import("@expo/ui/swift-ui").Button>) {
   const Component = (require("@expo/ui/swift-ui") as typeof import("@expo/ui/swift-ui")).Button;
@@ -21,13 +25,14 @@ import type { ButtonProps, SelectProps, SegmentedControlProps, ControlKind } fro
 export type { ButtonProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export { TextInput } from "./mobile-input";
 export function getControlAvailability(control: ControlKind): Availability {
+  if (isPrimitiveKind(control)) return { available: false, reason: "unsupported-platform" };
   if (!["button", "text-input", "select", "segmented-control"].includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
   return control === "text-input" || requireOptionalNativeModule("ExpoUI") ? { available: true } : { available: false, reason: "missing-module" };
 }
 const fill = [frame({ maxWidth: Infinity, maxHeight: Infinity })];
 export function Button(props: ButtonProps) {
-  validateButton(props); const control = useControl(props, getControlAvailability("button"));
-  const { children, onPress, variant = "default", style, testID, accessibilityLabel = children } = props;
+  validateButton(props); const variant = portableButtonVariant(props); const control = useControl(props, getControlAvailability("button"));
+  const { children, onPress, style, testID, accessibilityLabel = children } = props;
   return <View ref={control.ref} style={[{ width: 160, height: 44 }, style]}>
     {control.failed ? <Text accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }} testID={testID}>{children}</Text> :
       <Host style={{ flex: 1 }}><ExpoButton onPress={() => { if (control.active()) onPress?.(); }} disabled={control.disabled}
@@ -57,3 +62,5 @@ function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }
 }
 export function Select(props: SelectProps) { return <Selection {...props} segmented={false} />; }
 export function SegmentedControl(props: SegmentedControlProps) { return <Selection {...props} segmented />; }
+
+export * from "./primitives-controls";

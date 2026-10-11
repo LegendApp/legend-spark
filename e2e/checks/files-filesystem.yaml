@@ -1,0 +1,189 @@
+area: files-filesystem
+prefix: FILE
+checks:
+  FILE-BOOKMARK-01:
+    title: "Security-scoped bookmarks: a bookmark created before relaunch resolves the moved target after relaunch and grants access"
+    platforms: [macos]
+    blocking: true
+    spec: "#103 files: createBookmark/accessBookmark/withBookmarkAccess (App Sandbox entitlement behavior: sandboxed run in tests/file-integration.test.ts)"
+    covers:
+      - ./files#createBookmark
+      - ./files#accessBookmark
+      - ./files#withBookmarkAccess
+  FILE-BOOKMARK-02:
+    title: "Security-scoped bookmarks: unsupported platforms and a missing module reject with typed SparkError"
+    platforms: [windows]
+    blocking: true
+    spec: "#103 files: createBookmark/accessBookmark (E_UNSUPPORTED_PLATFORM / E_MODULE_UNAVAILABLE; unsupported on windows; missing module unit-tested in tests/file-integration.test.ts)"
+  FILE-BOOKMARK-03:
+    title: "Security-scoped bookmarks: getBookmarkAvailability() matches what the operation does"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getBookmarkAvailability"
+    covers:
+      - ./files#getBookmarkAvailability().available
+  FILE-FDA-01:
+    title: "Full Disk Access detection: status reports granted or denied for the responsible process"
+    platforms: [macos]
+    blocking: true
+    spec: "#103 files: getFullDiskAccessStatus (sandboxed indeterminate: tests/file-integration.test.ts; openFullDiskAccessSettings and granting are manual)"
+    covers:
+      - ./files#getFullDiskAccessStatus
+  FILE-FDA-02:
+    title: "Full Disk Access detection: unsupported platforms and a missing module reject with typed SparkError"
+    platforms: [windows]
+    blocking: true
+    spec: "#103 files: getFullDiskAccessStatus/openFullDiskAccessSettings (E_UNSUPPORTED_PLATFORM / E_MODULE_UNAVAILABLE; unsupported on windows; missing module unit-tested in tests/file-integration.test.ts)"
+  FILE-FDA-03:
+    title: "Full Disk Access detection: getFullDiskAccessAvailability() matches what the operation does"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getFullDiskAccessAvailability"
+    covers:
+      - ./files#getFullDiskAccessAvailability().available
+  FILE-COORD-01:
+    title: "File coordination: coordinated operations run inside NSFileCoordinator claims"
+    platforms: [macos]
+    blocking: true
+    spec: "#103 files: coordinated option on readText/readBytes/writeText/writeBytes/copy/move/remove"
+  FILE-COORD-02:
+    title: "File coordination: unsupported platforms and a missing module reject with typed SparkError"
+    platforms: [windows]
+    blocking: true
+    spec: "#103 files: coordinated option on readText/readBytes/writeText/writeBytes/copy/move/remove (E_UNSUPPORTED_PLATFORM / E_MODULE_UNAVAILABLE; unsupported on windows; missing module unit-tested in tests/file-integration.test.ts)"
+  FILE-COORD-03:
+    title: "File coordination: getFileCoordinationAvailability() matches what the operation does"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getFileCoordinationAvailability"
+    covers:
+      - ./files#getFileCoordinationAvailability().available
+  FILE-OPENWITH-01:
+    title: "Open with a specific application: registered applications are listed with one default and the chosen application opens the file"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getApplicationsForFile/openWithApplication"
+    covers:
+      - ./files#getApplicationsForFile
+      - ./files#openWithApplication
+  FILE-OPENWITH-03:
+    title: "Open with a specific application: getOpenWithAvailability() matches what the operation does"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getOpenWithAvailability"
+    covers:
+      - ./files#getOpenWithAvailability().available
+  FILE-ICON-01:
+    title: "File icons: the system icon is returned as PNG bytes at the requested size"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getFileIcon"
+    covers:
+      - ./files#getFileIcon
+  FILE-ICON-03:
+    title: "File icons: getFileIconAvailability() matches what the operation does"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getFileIconAvailability"
+    covers:
+      - ./files#getFileIconAvailability().available
+  FILE-THUMB-01:
+    title: "Thumbnails: a content thumbnail is returned as PNG; content without one rejects E_UNAVAILABLE without an icon substitute"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getThumbnail"
+    covers:
+      - ./files#getThumbnail
+  FILE-THUMB-03:
+    title: "Thumbnails: getThumbnailAvailability() matches what the operation does"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getThumbnailAvailability"
+    covers:
+      - ./files#getThumbnailAvailability().available
+  FILE-QL-01:
+    title: "Quick Look previews: the Quick Look panel shows the requested items"
+    platforms: [macos]
+    blocking: true
+    spec: "#103 files: showQuickLook"
+    covers:
+      - ./files#showQuickLook
+  FILE-QL-02:
+    title: "Quick Look previews: unsupported platforms and a missing module reject with typed SparkError"
+    platforms: [windows]
+    blocking: true
+    spec: "#103 files: showQuickLook (E_UNSUPPORTED_PLATFORM / E_MODULE_UNAVAILABLE; unsupported on windows until #223; missing module unit-tested in tests/file-integration.test.ts)"
+  FILE-QL-03:
+    title: "Quick Look previews: getQuickLookAvailability() matches what the operation does"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getQuickLookAvailability"
+    covers:
+      - ./files#getQuickLookAvailability().available
+  FILE-XATTR-01:
+    title: "Extended attributes: attributes round trip bytes, absence is null and removal is idempotent"
+    platforms: [macos]
+    blocking: true
+    spec: "#103 files: listExtendedAttributes/getExtendedAttribute/setExtendedAttribute/removeExtendedAttribute"
+    covers:
+      - ./files#listExtendedAttributes
+      - ./files#getExtendedAttribute
+      - ./files#setExtendedAttribute
+      - ./files#removeExtendedAttribute
+  FILE-XATTR-02:
+    title: "Extended attributes: unsupported platforms and a missing module reject with typed SparkError"
+    platforms: [windows]
+    blocking: true
+    spec: "#103 files: listExtendedAttributes/getExtendedAttribute/setExtendedAttribute/removeExtendedAttribute (E_UNSUPPORTED_PLATFORM / E_MODULE_UNAVAILABLE; unsupported on windows; missing module unit-tested in tests/file-integration.test.ts)"
+  FILE-XATTR-03:
+    title: "Extended attributes: getExtendedAttributeAvailability() matches what the operation does"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getExtendedAttributeAvailability"
+    covers:
+      - ./files#getExtendedAttributeAvailability().available
+  FILE-QUAR-01:
+    title: "Quarantine flag: quarantine (macOS) or Mark of the Web (Windows) is recorded, read back and cleared"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getQuarantine/setQuarantine/clearQuarantine"
+    covers:
+      - ./files#getQuarantine
+      - ./files#setQuarantine
+      - ./files#clearQuarantine
+  FILE-QUAR-03:
+    title: "Quarantine flag: getQuarantineAvailability() matches what the operation does"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getQuarantineAvailability"
+    covers:
+      - ./files#getQuarantineAvailability().available
+  FILE-SPACE-01:
+    title: "Free disk space: volume total and available bytes are reported for an existing path"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getDiskSpace"
+    covers:
+      - ./files#getDiskSpace
+  FILE-SPACE-03:
+    title: "Free disk space: getDiskSpaceAvailability() matches what the operation does"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: getDiskSpaceAvailability"
+    covers:
+      - ./files#getDiskSpaceAvailability().available
+  FILE-ERR-01:
+    title: "Writes without permission reject E_PERMISSION_DENIED"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: typed errors (permission)"
+  FILE-ERR-02:
+    title: "Writes to a read-only volume reject E_READ_ONLY"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: typed errors (read-only)"
+  FILE-ERR-03:
+    title: "Writes to a full volume reject E_NO_SPACE"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#103 files: typed errors (full)"

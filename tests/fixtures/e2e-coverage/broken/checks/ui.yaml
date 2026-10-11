@@ -1,0 +1,6 @@
+area: ui
+prefix: UI
+checks:
+  UI-CTRL-01:
+    title: Native button renders on desktop
+    covers: [./ui#getControlAvailability(button).available]

@@ -24,7 +24,9 @@ test("desktop Expo subsets report missing native modules without failing at impo
 import * as updates from "../packages/updates/src/index";
 test("updater imports without native modules and reports availability", async () => {
   expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "missing-module" });
+  expect(await updates.getUpdateAvailability()).toEqual({ available: false, reason: "missing-module" });
   await expect(updates.startUpdates()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
+  await expect(updates.clearSkippedUpdate()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
   expect(() => updates.onUpdateEvent(() => {})).toThrow();
 });
 

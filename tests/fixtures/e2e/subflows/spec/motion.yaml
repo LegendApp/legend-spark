@@ -1,0 +1,14 @@
+- setClock: virtual
+- advanceClock: 120ms
+- captureMotion: { target: { id: sheet }, until: settled, name: sheet-open }
+- assertMotion:
+    target: { id: sheet }
+    kind: spring                # spring | timing | crossfade | none
+    velocityContinuous: true    # across every interruption
+    overshoot: { max: 4px }
+    settlesWithin: 450ms
+    frames: { at: [0, 25, 50, 75, 100], golden: sheet-open }
+- interruptAt: { progress: 0.4, with: { pressKey: Escape } }
+- assertFrames: { during: { runFlow: subflows/scroll-10k.yaml }, fps: { min: 118 }, dropped: 0 }   # real clock
+- assertPaused: { target: { id: spinner }, when: windowHidden }
+- assertNoLayoutThrash: { during: { runFlow: subflows/reflow.yaml } }

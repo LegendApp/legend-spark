@@ -2,6 +2,7 @@
   "$schema": "./node_modules/@legendapp/spark-desktop-config/schema.json",
   "name": "KitchenSink",
   "version": "0.1.0",
+  "scheme": "spark-ks",
   "window": {
     "size": {
       "width": 1000,
@@ -10,7 +11,13 @@
     "restoreBounds": true
   },
   "macos": {
-    "bundleIdentifier": "so.legend.spark.examples.kitchensink"
+    "bundleIdentifier": "so.legend.spark.examples.kitchensink",
+    "infoPlist": {
+      "CFBundleLocalizations": [
+        "en",
+        "ar"
+      ]
+    }
   },
   "platforms": [
     "macos",

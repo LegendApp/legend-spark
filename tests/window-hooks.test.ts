@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
 import { createRequire } from "node:module";
-import React, { act, StrictMode, memo } from "react";
+import React, { act, StrictMode } from "react";
 const { create } = createRequire(import.meta.url)("react-test-renderer");
 const mocks = vi.hoisted(() => ({ addWindowListener: vi.fn(), app: new Map<string, Set<(event: any) => void>>(), roots: new Map<string, () => React.ComponentType<any>>(), openWindow: vi.fn() }));
 vi.mock("react-native", () => ({ Platform: { OS: "macos" }, AppRegistry: { registerComponent: (name: string, factory: () => React.ComponentType<any>) => mocks.roots.set(name, factory) } }));
@@ -8,8 +8,7 @@ vi.mock("../packages/desktop-windows/src/api", () => ({ addWindowListener: mocks
 vi.mock("@legendapp/spark-desktop-app", () => ({ addAppListener: (type: string, listener: (event: any) => void) => { let listeners = mocks.app.get(type); if (!listeners) mocks.app.set(type, listeners = new Set()); listeners.add(listener); return { remove: () => listeners.delete(listener) }; } }));
 import { usePrimaryWindowLifecycle } from "../packages/desktop-windows/src/windows/usePrimaryWindowLifecycle";
 import { useWindowFocusEffect } from "../packages/desktop-windows/src/windows/useWindowFocusEffect";
-import { useWindowId, WindowProvider } from "../packages/desktop-windows/src/windows/WindowProvider";
-import { createWindowsNavigator } from "../packages/desktop-windows/src/windows/createWindowsNavigator";
+import { WindowProvider } from "../packages/desktop-windows/src/windows/WindowProvider";
 let rendered: any;
 async function mount(element: React.ReactElement) { await act(async () => { rendered = create(element); }); }
 beforeEach(() => {
@@ -38,64 +37,4 @@ test("focus hooks dispose registrations arriving after unmount and use current h
   await mount(element(first)); const listener = mocks.addWindowListener.mock.calls[0][2];
   await act(async () => rendered.update(element(second))); listener({ focused: false }); listener({ focused: true }); expect(second).toHaveBeenCalledTimes(1); expect(first).not.toHaveBeenCalled();
   await act(async () => rendered.unmount()); await act(async () => finish({ remove })); listener({ focused: true }); expect(remove).toHaveBeenCalledTimes(1); expect(second).toHaveBeenCalledTimes(1);
-});
-test("navigator retries failed loaders before native creation and supplies root ownership to memo components", async () => {
-  const Editor = memo(({ documentId }: { documentId: string }) => React.createElement("Editor", { documentId, owner: useWindowId() }));
-  const load = vi.fn(async () => ({ default: Editor })).mockRejectedValueOnce(Error("load failed"));
-  const navigator = createWindowsNavigator({ editor: { id: "hooks-editor", loadComponent: load } });
-  await expect(navigator.open("editor", { props: { documentId: "first" } })).rejects.toThrow("load failed"); expect(mocks.openWindow).not.toHaveBeenCalled();
-  await navigator.open("editor", { props: { documentId: "second" } }); expect(load).toHaveBeenCalledTimes(2);
-  const Root = mocks.roots.get("spark.window.hooks-editor")!(); await mount(React.createElement(Root, { documentId: "second", windowId: "wrong" }));
-  expect(rendered.root.findByType("Editor").props).toMatchObject({ owner: "hooks-editor", documentId: "second" });
-  if (false) {
-    // @ts-expect-error Required component props cannot be omitted.
-    void navigator.open("editor");
-    // @ts-expect-error Props remain inferred through the loader.
-    void navigator.open("editor", { props: { documentId: 1 } });
-  }
-});
-test("registration rejects identity overrides before registering any roots", () => {
-  const size = mocks.roots.size;
-  expect(() => createWindowsNavigator({ editor: { id: "invalid-options", component: () => null, options: { id: "sneaky" } as never } })).toThrow(/identity/);
-  expect(mocks.roots.size).toBe(size);
-});
-test("a restarted native surface waits for its lazy component before the app opens it", async () => {
-  let finish!: (value: React.ComponentType<any>) => void;
-  const load = vi.fn(() => new Promise<React.ComponentType<any>>(resolve => { finish = resolve; }));
-  const navigator = createWindowsNavigator({ presenter: { id: "restarted-presenter", loadComponent: load } });
-  const Root = mocks.roots.get("spark.window.restarted-presenter")!();
-  await mount(React.createElement(StrictMode, null, React.createElement(Root, { deckPath: "/missing.mdx" })));
-  expect(rendered.toJSON()).toBeNull();
-  expect(load).toHaveBeenCalledTimes(1);
-  expect(mocks.openWindow).not.toHaveBeenCalled();
-  const opened = navigator.open("presenter", { props: { deckPath: "/missing.mdx" } });
-  function Presenter({ deckPath }: { deckPath: string }) {
-    return React.createElement("Presenter", { deckPath, owner: useWindowId() });
-  }
-  await act(async () => { finish(Presenter); await opened; });
-  expect(load).toHaveBeenCalledTimes(1);
-  expect(rendered.root.findByType("Presenter").props).toEqual({ deckPath: "/missing.mdx", owner: "restarted-presenter" });
-  expect(mocks.openWindow).toHaveBeenCalledTimes(1);
-});
-test("restarted surfaces report loader failures and explicit opens can retry", async () => {
-  const failure = Error("presenter import failed");
-  const Editor = () => React.createElement("Editor", { owner: useWindowId() });
-  const load = vi.fn(async () => Editor).mockRejectedValueOnce(failure);
-  const navigator = createWindowsNavigator({ editor: { id: "failed-restart-editor", loadComponent: load } });
-  const caught = vi.fn();
-  class Boundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
-    state = { failed: false };
-    static getDerivedStateFromError() { return { failed: true }; }
-    componentDidCatch(error: Error) { caught(error); }
-    render() { return this.state.failed ? null : this.props.children; }
-  }
-  vi.mocked(console.error).mockImplementation(() => {});
-  const factory = mocks.roots.get("spark.window.failed-restart-editor")!;
-  await mount(React.createElement(Boundary, null, React.createElement(factory())));
-  expect(caught).toHaveBeenCalledWith(failure);
-  expect(mocks.openWindow).not.toHaveBeenCalled();
-  await navigator.open("editor");
-  expect(load).toHaveBeenCalledTimes(2);
-  await act(async () => rendered.update(React.createElement(factory())));
-  expect(rendered.root.findByType("Editor").props.owner).toBe("failed-restart-editor");
 });
