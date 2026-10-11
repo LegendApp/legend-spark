@@ -179,6 +179,17 @@ export async function build(
   }
 }
 
+/**
+ * The source revision a Runner or release build embeds in spark-runtime.json (`SPARK_RELEASE_REVISION`), so a release
+ * check can tie an installed app to the commit it certifies (prepare-release, docs/release-harness.md).
+ */
+export function releaseRevision(mode: "go" | "dev" | "preview" | "release", env: Record<string, string | undefined> = process.env): string | undefined {
+  const revision = env.SPARK_RELEASE_REVISION;
+  if (!revision || (mode !== "go" && mode !== "release")) return undefined;
+  if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error("Invalid release source revision");
+  return revision;
+}
+
 async function buildUnlocked(
   root: string,
   mode: "go" | "dev" | "preview" | "release",
@@ -204,6 +215,7 @@ async function buildUnlocked(
   if (productionHash)
     runtime.fingerprint = digest(runtime.fingerprint + productionHash);
   const resultFile = stateFile(root, `${mode}-build.json`);
+  const sourceRevision = releaseRevision(mode);
   const excludedNames = [...new Set<string>([
     ...(readAppConfig(root).expo.autolinking?.exclude ?? []),
     ...chosen.excluded.map((p) => p.name),
@@ -251,7 +263,8 @@ async function buildUnlocked(
       existing.runtime.fingerprint === runtime.fingerprint &&
       existing.preparation?.fingerprint === preparation.fingerprint &&
       existing.product === path.basename(existing.app) &&
-      existsSync(existing.app)
+      existsSync(existing.app) &&
+      (!sourceRevision || existing.runtime.sourceRevision === sourceRevision)
     ) {
       console.log(`Reusing ${existing.app}`);
       return existing;
@@ -262,6 +275,7 @@ async function buildUnlocked(
     ...(existing.runtime.fingerprint !== runtime.fingerprint ? ["runtime inputs changed"] : []),
     ...(!existsSync(existing.app) ? ["cached app missing"] : []),
     ...(existing.product !== path.basename(existing.app) ? ["cached app product is unverified"] : []),
+    ...(sourceRevision && existing.runtime.sourceRevision !== sourceRevision ? [`built from ${existing.runtime.sourceRevision ?? "an unrecorded revision"}, not ${sourceRevision}`] : []),
   ];
   console.log(`Building ${mode} runtime: ${reasons.join("; ")}.`);
   const nativeConfig = readAppConfig(root).expo;
@@ -375,10 +389,7 @@ async function buildUnlocked(
     runtime: runtimeFor(root, chosen.included, mode),
     preparation,
   };
-  if (mode === "go" && process.env.SPARK_RELEASE_REVISION) {
-    if (!/^[a-f0-9]{40}$/.test(process.env.SPARK_RELEASE_REVISION)) throw new Error("Invalid release source revision");
-    result.runtime.sourceRevision = process.env.SPARK_RELEASE_REVISION;
-  }
+  if (sourceRevision) result.runtime.sourceRevision = sourceRevision;
   if (productionHash)
     result.runtime.fingerprint = digest(
       result.runtime.fingerprint + productionHash,
