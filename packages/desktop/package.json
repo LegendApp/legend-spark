@@ -71,7 +71,8 @@
     "./windows/macos": "./windows-macos.ts",
     "./diagnostics": "./diagnostics.ts",
     "./ai": "./ai.ts",
-    "./ai/codex": "./ai-codex.ts"
+    "./ai/codex": "./ai-codex.ts",
+    "./motion": "./motion.ts"
   },
   "files": [
     "*.ts",
@@ -116,7 +117,8 @@
     "@legendapp/spark-settings-ui": "0.0.1-next.3",
     "@react-native-community/cli-types": "20.1.3",
     "@legendapp/spark-ai": "0.0.1-next.3",
-    "@legendapp/spark-codex": "0.0.1-next.3"
+    "@legendapp/spark-codex": "0.0.1-next.3",
+    "@legendapp/spark-motion": "0.0.1-next.3"
   },
   "description": "Legend Spark \u2014 native applications with React Native and Expo",
   "bin": {

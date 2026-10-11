@@ -1,0 +1,48 @@
+{
+  "name": "@legendapp/spark-motion",
+  "version": "0.0.1-next.3",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "src",
+    "cpp",
+    "macos",
+    "*.podspec",
+    "react-native.config.js"
+  ],
+  "peerDependencies": {
+    "react": "19.1.4",
+    "react-native": "0.81.6"
+  },
+  "codegenConfig": {
+    "name": "RNSparkMotionSpec",
+    "type": "all",
+    "jsSrcsDir": "src",
+    "ios": {
+      "modulesProvider": {
+        "NativeSparkMotion": "RNSparkMotion"
+      },
+      "componentProvider": {
+        "SparkMotionView": "RNSparkMotionView"
+      }
+    }
+  },
+  "spark": {
+    "sdk": true,
+    "nativeModules": [
+      "NativeSparkMotion"
+    ],
+    "pod": "RNSparkMotion",
+    "platforms": [
+      "macos"
+    ],
+    "requires": [
+      "@legendapp/spark-desktop-app"
+    ]
+  },
+  "dependencies": {
+    "@legendapp/spark-desktop-app": "0.0.1-next.3"
+  },
+  "private": true
+}

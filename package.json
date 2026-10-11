@@ -114,7 +114,8 @@
     "react-test-renderer": "19.1.4",
     "yaml": "2.9.1",
     "ajv": "8.20.0",
-    "pngjs": "3.4.0"
+    "pngjs": "3.4.0",
+    "@legendapp/spark-motion": "0.0.1-next.3"
   },
   "overrides": {
     "@expo/cli": "54.0.27",

@@ -3678,6 +3678,67 @@
         "android": [],
         "web": []
       }
+    },
+    {
+      "path": "./motion",
+      "sourceTarget": "./motion.ts",
+      "kind": "runtime-api",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-motion",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/motion.test.ts",
+          "tests/motion-native.test.ts"
+        ],
+        "portableCommand": "bun run test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "Typed unsupported: getMotionAvailability() reports unsupported-platform and operations fail with E_UNSUPPORTED_PLATFORM; Windows engine tracked in #237."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "Typed unsupported: getMotionAvailability() reports unsupported-platform and operations fail with E_UNSUPPORTED_PLATFORM; Windows engine tracked in #237."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/motion/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/motion/macos/",
+          "packages/motion/cpp/"
+        ],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
     }
   ]
 }

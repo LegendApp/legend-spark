@@ -167,6 +167,7 @@ Framework-owned capabilities are imported from `@legendapp/spark/<feature>`. Use
 | OS integration | `links`, `notifications`, `tray`, `system`: URLs/documents, local notifications, menu-bar items, Dock/startup/power integration |
 | Processes and distribution | `processes`, `updates`: child process I/O, timeouts and managed target-specific helper bundles, signed whole-app update integration |
 | Native controls and styling | `@legendapp/spark/ui`: native buttons, text inputs and selects; optional Uniwind bindings and system/light/dark themes |
+| Motion | `@legendapp/spark/motion`: compositor-run springs, timing, keyframes, sequences, staggers, decay and scroll links with velocity-preserving interruption ([guide](docs/motion.md)) |
 | Audio and authentication | `@legendapp/spark/audio`, `@legendapp/spark/auth-session`: playback and system media controls, external-browser authentication callback transport |
 | External libraries | React Native WebView, OP-SQLite, and Margelo Runtimes; see [integrated external libraries](docs/external-libraries.md) |
 
