@@ -1,22 +1,15 @@
-import { which } from "./process.ts";
+import { which, nodeCommand } from "./process.ts";
 import { prepareWindowsGeometry } from "./windows-geometry.ts";
 import { copyHelpers } from "./helpers.ts";
 import { registerWindowsAssociations } from "./windows-associations.ts";
 import { checkExpoDesktopNode } from "./expo-node.ts";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
 import type { WindowsArchitecture } from "./platform.ts";
 import { run } from "./commands.ts";
 import { prepareConfig, nativePackages, runtimeFor, stateFile, readJson, writeJson, validateBuildModules, goConfigurationIssues, readAppConfig, type Runtime } from "./project.ts";
 import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 
-// Windows .cmd shims are shell programs; run the package's actual JS entry.
-export function nodeCommand(root: string, name: string, bin: string, args: string[] = []) {
-  const req = createRequire(path.join(root, "package.json"));
-  const file = req.resolve(`${name}/package.json`), pkg = readJson(file);
-  return ["node", path.resolve(path.dirname(file), typeof pkg.bin === "string" ? pkg.bin : pkg.bin[bin]), ...args];
-}
 export async function preserveWindowsBuildOutputs(root: string, prepare: () => Promise<void>) {
   const windows = path.join(root, "windows");
   const outputs: string[] = [];
@@ -123,3 +116,5 @@ export function isWindowsDebugProduct(relativeFile: string, arch: WindowsArchite
   const architectureIndex = parts.indexOf(arch);
   return parts.at(-1) === "myapp.exe" && architectureIndex >= 0 && parts.indexOf("debug", architectureIndex + 1) > architectureIndex;
 }
+
+export { nodeCommand } from "./process.ts";

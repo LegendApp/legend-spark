@@ -1,6 +1,6 @@
 # Notes Lite acceptance
 
-Create an isolated app with `spark create NotesAcceptance --example notes-lite`,
+Create an isolated app with `npm create @legendapp/spark@next NotesAcceptance -- --example notes-lite`,
 install/select its compatible Spark Runner or build a development runtime,
 and run `npm run macos` or `npm run windows`. Use disposable notes. The example
 source is in `packages/cli/templates/notes-lite`; an already-created app does not

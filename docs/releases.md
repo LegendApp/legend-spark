@@ -151,7 +151,7 @@ bun run release:publish
 
 The publisher verifies staged checksums and repository visibility, creates a
 draft prerelease, uploads and verifies assets, publishes the GitHub release,
-and publishes the exact assembled npm archive under `next`. It does not replace
+and publishes both exact assembled npm archives (`@legendapp/spark` and the peer-free `@legendapp/create-spark`) under `next` with matching versions and tags. It does not replace
 existing assets or move tags. Run interactively if npm needs browser
 authentication. Inspect registry tags after publication: npm may assign `latest`
 to an initial release, and `--tag next` does not by itself prove that no
@@ -168,10 +168,12 @@ Run from a recipient account that has no checkout, registered SDK, cached Runner
 Bun, or Xcode. The exact manager and host version belong in the dossier:
 
 ```sh
-npx @legendapp/spark@next create MyApp
+npm create @legendapp/spark@next MyApp
 cd MyApp
 npm run dev
 ```
+
+`npx @legendapp/create-spark@next MyApp` uses the same creator. The installed `spark create` command also remains available.
 
 Press `d` and verify download progress, app launch, native controls, Fast Refresh,
 close/reopen, and offline reuse of the cached Runner. Interrupt a download and

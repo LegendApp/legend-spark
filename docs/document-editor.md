@@ -1,7 +1,7 @@
 # Shared document editor
 
 ```sh
-spark create MyEditor --example document-editor
+npm create @legendapp/spark@next MyEditor -- --example document-editor
 cd MyEditor
 npm run web
 # Or: npm run ios -- / android / macos / windows

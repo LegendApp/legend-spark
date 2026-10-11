@@ -18,7 +18,7 @@ bun run spark sdk build-runner
 bun run spark create /path/to/MyApp
 ```
 
-Once Spark is published, the entry point will be `npx @legendapp/spark@next create
+Once Spark is published, the entry point will be `npm create @legendapp/spark@next
 MyApp`. This merge does not publish Spark or rebuild its Runner. The existing
 Frame releases remain available under their original package and release tags.
 Published SDK bundles support automatic matching Runner downloads; the renamed

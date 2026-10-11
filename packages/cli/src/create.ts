@@ -5,11 +5,11 @@ import { spawnProcess } from "./process.ts";
 import { checkExpoDesktopNode } from "./expo-node.ts";
 import { configureExample, type Example } from "./examples.ts";
 import { hostPlatform, type AppPlatform } from "./platform.ts";
-import { nodeCommand } from "./windows.ts";
+import { nodeCommand } from "./process.ts";
 import { cpSync, existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { readJson, writeJson } from "./project.ts";
+import { readJson, writeJson } from "./json.ts";
 import { run } from "./commands.ts";
 
 // Resolve relative to the installed CLI so packed consumers use the same starter.

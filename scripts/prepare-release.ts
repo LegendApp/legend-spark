@@ -6,6 +6,8 @@ import { readRuntime } from "../packages/cli/src/local.ts";
 import { readJson, VERSION, writeJson } from "../packages/cli/src/project.ts";
 import { releaseBase, validateRelease, type ReleaseAsset, type ReleaseManifest } from "../packages/cli/src/release.ts";
 import { packSpark } from "./pack-spark.ts";
+// @ts-ignore Bun build utility for the peer-free create launcher.
+import { packCreateSpark } from "./pack-create-spark.mjs";
 import { patchedPackageNames, validatePatchedArchive, type PackageProvenance } from "./patch-inventory.ts";
 import { runtimesPatchHash, runtimesRevision } from "./prepare-runtimes.ts";
 import { windowsPatchHash } from "./prepare-windows-libraries.ts";
@@ -75,9 +77,10 @@ try {
   }
   validateRelease(manifest);
   const npm = await packSpark(root, stage, manifest);
+  const createNpm = await packCreateSpark(root, stage, manifest);
   writeJson(path.join(stage, "runner-manifest.json"), manifest);
   const hashes = Object.fromEntries(readdirSync(stage).sort().map(name => [name, createHash("sha256").update(readFileSync(path.join(stage, name))).digest("hex")]));
-  writeJson(path.join(stage, "release.json"), { version: VERSION, revision, npm, sha256: hashes });
+  writeJson(path.join(stage, "release.json"), { version: VERSION, revision, npm, createNpm, sha256: hashes });
   const { renameSync, writeFileSync } = await import("node:fs");
   writeFileSync(path.join(stage, "checksums.txt"), Object.entries(hashes).map(([name, hash]) => `${hash}  ${name}\n`).join(""));
   renameSync(stage, output);

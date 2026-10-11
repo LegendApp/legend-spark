@@ -38,6 +38,7 @@ function fixture() {
   write(".gitignore", ".spark/\nartifacts/\n");
   write("package.json", '{"version":"0.0.1-next.2","dependencies":{"@legendapp/spark":"0.0.1-next.2"}}\n');
   write("bun.lock", '{"lockfileVersion":1,"workspaces":{"":{"name":"spark-workspace","devDependencies":{"@legendapp/spark":"0.0.1-next.2"}}},}\n');
+  write("packages/create-spark/package.json", '{"name":"@legendapp/create-spark","version":"0.0.1-next.2"}\n');
   write("packages/desktop/package.json", '{"version":"0.0.1-next.2"}\n');
   write("packages/cli/templates/blank-typescript/package.json", '{"dependencies":{"@legendapp/spark":"0.0.1-next.2"}}\n');
   write("packages/cli/src/project.ts", 'export const VERSION = "0.0.1-next.2";\n');
@@ -54,9 +55,9 @@ function fixture() {
   const staged = () => {
     const version = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version;
     const folder = `artifacts/releases/${version}`;
-    write(`${folder}/spark.tgz`, "exact signed release archive"); write(`${folder}/runner-manifest.json`, "{}\n");
-    const sha256 = Object.fromEntries(["spark.tgz", "runner-manifest.json"].map(name => [name, createHash("sha256").update(readFileSync(path.join(root, folder, name))).digest("hex")]));
-    write(`${folder}/release.json`, JSON.stringify({ version, revision: git("rev-parse", "HEAD"), npm: "spark.tgz", sha256 }));
+    write(`${folder}/create-spark.tgz`, "exact create release archive"); write(`${folder}/spark.tgz`, "exact signed release archive"); write(`${folder}/runner-manifest.json`, "{}\n");
+    const sha256 = Object.fromEntries(["spark.tgz", "create-spark.tgz", "runner-manifest.json"].map(name => [name, createHash("sha256").update(readFileSync(path.join(root, folder, name))).digest("hex")]));
+    write(`${folder}/release.json`, JSON.stringify({ version, revision: git("rev-parse", "HEAD"), npm: "spark.tgz", createNpm: "create-spark.tgz", sha256 }));
   };
   const execute: Execute = async argv => {
     commands.push(argv);
@@ -111,6 +112,8 @@ test("failed checks, pending notarization and interrupted promotion resume one v
     expect(f.git("rev-parse", "HEAD")).toBe(releaseRevision);
     expect(f.git("rev-parse", "v0.0.1-next.3")).toBe(releaseRevision);
     expect(f.commands).toContainEqual(["bun", "run", "release:publish", "--latest"]);
+    expect(f.commands).toContainEqual(["npm", "view", "@legendapp/create-spark", "dist-tags", "--json"]);
+    expect(JSON.parse(readFileSync(path.join(f.root, "packages/create-spark/package.json"), "utf8")).version).toBe("0.0.1-next.3");
     expect(f.tags).toEqual({ next: "0.0.1-next.3", latest: "0.0.1-next.3" });
     expect(f.commands.filter(args => args.includes("release:runner"))).toHaveLength(2);
     expect(f.commands.filter(args => args[0] === "git" && args[1] === "commit")).toHaveLength(1);
@@ -235,7 +238,10 @@ test("npm retries accept exactly the published tarball and distinguish missing v
   try {
     const archive = path.join(root, "spark.tgz"); writeFileSync(archive, "release bytes");
     const metadata = { version: "0.0.1-next.3", "dist.integrity": `sha512-${createHash("sha512").update("release bytes").digest("base64")}` };
-    expect(await alreadyPublished(metadata.version, archive, async () => ({ code: 0, output: JSON.stringify(metadata) }))).toBe(true);
+    expect(await alreadyPublished(metadata.version, archive, async argv => {
+      expect(argv[2]).toBe("@legendapp/create-spark@0.0.1-next.3");
+      return { code: 0, output: JSON.stringify(metadata) };
+    }, "@legendapp/create-spark")).toBe(true);
     expect(await alreadyPublished(metadata.version, archive, async () => ({ code: 1, output: "npm error E404" }))).toBe(false);
     await expect(alreadyPublished(metadata.version, archive, async () => ({ code: 1, output: "E401 Unauthorized" }))).rejects.toThrow("Could not check");
     writeFileSync(archive, "different bytes");

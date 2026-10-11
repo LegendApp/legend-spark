@@ -20,7 +20,7 @@ test("public spark package exposes the CLI and component entry points", () => {
 test("framework packages and generated commands use spark names", () => {
   for (const directory of readdirSync(path.join(root, "packages"))) {
     const pkg = JSON.parse(readFileSync(path.join(root, "packages", directory, "package.json"), "utf8"));
-    expect(pkg.name === "@legendapp/spark" || pkg.name.startsWith("@legendapp/spark-")).toBe(true);
+    expect(pkg.name === "@legendapp/create-spark" || pkg.name === "@legendapp/spark" || pkg.name.startsWith("@legendapp/spark-")).toBe(true);
     expect(pkg.legend).toBeUndefined();
     expect(pkg.frame).toBeUndefined();
     for (const name of Object.keys(pkg.dependencies ?? {})) expect(name.startsWith("@legend-apps/") || name.startsWith("@legendapp/frame")).toBe(false);

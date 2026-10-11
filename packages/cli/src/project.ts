@@ -8,14 +8,14 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import {
   existsSync,
-  mkdirSync,
   readFileSync,
   readdirSync,
   realpathSync,
-  writeFileSync,
-  renameSync,
 } from "node:fs";
 import path from "node:path";
+
+import { readJson, writeJson } from "./json.ts";
+export { readJson, writeJson };
 
 export const VERSION = "0.0.1-next.3";
 export type Package = { name: string; root: string; json: any };
@@ -34,19 +34,6 @@ export type Runtime = {
   fingerprint: string;
   modules: Record<string, string>;
 };
-export function readJson(file: string): any {
-  return JSON.parse(readFileSync(file, "utf8"));
-}
-export function writeJson(file: string, value: unknown) {
-  const content = JSON.stringify(value, null, 2) + "\n";
-  // Metro watches JSON too: rewriting unchanged session state on every runtime
-  // check causes empty Fast Refresh updates even when app code has not changed.
-  if (existsSync(file) && readFileSync(file, "utf8") === content) return;
-  mkdirSync(path.dirname(file), { recursive: true });
-  const temporary = `${file}.${process.pid}.tmp`;
-  writeFileSync(temporary, content);
-  renameSync(temporary, file);
-}
 export function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }

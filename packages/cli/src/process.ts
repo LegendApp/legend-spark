@@ -1,3 +1,4 @@
+import { readJson } from "./json.ts";
 import path from "node:path";
 import { spawn as nodeSpawn, type ChildProcess, type StdioOptions, type Serializable } from "node:child_process";
 import { createRequire } from "node:module";
@@ -74,3 +75,10 @@ export function spawnProcess(argv: string[], options: ProcessOptions = {}): Mana
   return result;
 }
 export { which } from "./executable.ts";
+
+// Windows .cmd shims are shell programs; run the package's actual JS entry.
+export function nodeCommand(root: string, name: string, bin: string, args: string[] = []) {
+  const req = createRequire(path.join(root, "package.json"));
+  const file = req.resolve(`${name}/package.json`), pkg = readJson(file);
+  return ["node", path.resolve(path.dirname(file), typeof pkg.bin === "string" ? pkg.bin : pkg.bin[bin]), ...args];
+}

@@ -45,15 +45,17 @@ The development terminal explains incompatibilities and offers a build/switch ac
 
 ## Install the experimental prerelease
 
-The release workflow publishes one npm package, `@legendapp/spark`, containing the CLI and private implementation modules. Published prereleases use the `next` tag and require Node 24.19.0 or newer. Bun is optional.
+The release workflow publishes `@legendapp/spark`, containing the CLI and private implementation modules, and the peer-free `@legendapp/create-spark` app creator at the same version and dist-tag. Published prereleases use the `next` tag and require Node 24.19.0 or newer. Bun is optional.
 
 Once the matching npm package and GitHub assets have been published:
 
 ```sh
-npx @legendapp/spark@next create MyApp
+npm create @legendapp/spark@next MyApp
 cd MyApp
 npm run macos
 ```
+
+`npx @legendapp/create-spark@next MyApp` is equivalent. The creator installs only scaffolding tools before generating an app with the exact tested React, React Native, and Expo baseline. The installed `spark create` command remains available.
 
 The published CLI resolves patched dependencies from the matching GitHub prerelease and downloads the macOS ARM64 Spark Runner on first desktop launch. A source/local archive without embedded release metadata still needs a registered local SDK. Windows native acceptance remains pending; this release workflow does not supply a Windows Runner.
 
@@ -329,14 +331,14 @@ Use the [implementation plan](docs/implementation-plan.md) for original decision
 
 ## Shared application and SDK transfer
 
-`spark create MyEditor --example document-editor` creates a [shared document editor](docs/document-editor.md) using Expo adapters on mobile, browser file operations on web, and native desktop dialogs. The macOS example exercises windows, menus, shortcuts, file-open events, and unsaved-change guards. Windows includes native control/API/file-dialog implementations, with remaining native acceptance and lifecycle gaps listed in [known Windows issues](docs/windows-issues.md).
+`npm create @legendapp/spark@next MyEditor -- --example document-editor` creates a [shared document editor](docs/document-editor.md) using Expo adapters on mobile, browser file operations on web, and native desktop dialogs. The macOS example exercises windows, menus, shortcuts, file-open events, and unsaved-change guards. Windows includes native control/API/file-dialog implementations, with remaining native acceptance and lifecycle gaps listed in [known Windows issues](docs/windows-issues.md).
 
 [SDK export/import](docs/sdk-distribution.md) packages the CLI, module archives, and optional Spark Runner runtimes into a transferable directory. The recipient installs it without this checkout; Expo Desktop beta still owns creation and desktop generation, and spark retains native compatibility checks.
 
 ## Small application examples
 
 [Notes Lite, Music Lite, and Diff Lite](docs/example-apps.md) are standalone universal
-CLI examples, created with `spark create MyApp --example notes-lite` (or
+CLI examples, created with `npm create @legendapp/spark@next MyApp -- --example notes-lite` (or
 `music-lite` / `diff-lite`). They share application models and screens, with
 platform files for native lifecycle, selected-file access, and playback. Source
 ships with the CLI and depends only on public package imports.

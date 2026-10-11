@@ -35,7 +35,7 @@ export async function packSpark(root: string, output: string, release?: ReleaseM
     await command(["tar", "-xzf", archive, "--strip-components=1", "-C", destination], root);
   }
   try {
-    const directories = readdirSync(path.join(root, "packages")).filter(name => existsSync(path.join(root, "packages", name, "package.json"))).sort();
+    const directories = readdirSync(path.join(root, "packages")).filter(name => name !== "create-spark" && existsSync(path.join(root, "packages", name, "package.json"))).sort();
     const packages = directories.map(directory => ({ directory, json: JSON.parse(readFileSync(path.join(root, "packages", directory, "package.json"), "utf8")) }));
     const publicPackage = packages.find(pkg => pkg.json.name === "@legendapp/spark")!;
     await unpack(await pack(path.join(root, "packages", publicPackage.directory)), stage);

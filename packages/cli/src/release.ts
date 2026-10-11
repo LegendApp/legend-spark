@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
 import path from "node:path";
-import { readJson, VERSION } from "./project.ts";
+import { readJson } from "./json.ts";
 import { localArchive } from "./package-manager.ts";
+
+const VERSION = readJson(path.resolve(import.meta.dirname, "../package.json")).version as string;
 
 export type ReleaseAsset = { url: string; sha256: string; size: number };
 export type RunnerAsset = ReleaseAsset & { app: string; teamId: string; fingerprint: string };
@@ -34,7 +36,7 @@ export function installedRelease(): ReleaseManifest | undefined {
 export function packageSources(manifest?: string, release = installedRelease()): Record<string, string> {
   let sources: Record<string, string>;
   if (manifest) {
-    sources = Object.fromEntries(Object.entries(readJson(manifest)).map(([name, relative]) => {
+    sources = Object.fromEntries(Object.entries(readJson(manifest)).filter(([name]) => name !== "@legendapp/create-spark").map(([name, relative]) => {
       const file = path.resolve(path.dirname(manifest), relative as string);
       if (!existsSync(file)) throw new Error(`Missing SDK archive: ${file}`);
       return [name, localArchive(file)];

@@ -1,3 +1,4 @@
+import { publishedPackages } from "./npm-release.ts";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -65,7 +66,7 @@ export function applyVersionEdits(root: string, edits: Edit[]) {
 export function verifyReleaseArchive(root: string, version: string, revision: string) {
   const folder = path.join(root, "artifacts/releases", version);
   const release = JSON.parse(readFileSync(path.join(folder, "release.json"), "utf8"));
-  if (release.version !== version || release.revision !== revision || !release.sha256?.[release.npm] || !release.sha256["runner-manifest.json"]) throw new Error("Release artifacts do not match the selected version and source");
+  if (release.version !== version || release.revision !== revision || !release.sha256?.[release.npm] || !release.sha256[release.createNpm] || !release.sha256["runner-manifest.json"]) throw new Error("Release artifacts do not match the selected version and source");
   for (const [name, expected] of Object.entries(release.sha256)) {
     if (path.basename(name) !== name || createHash("sha256").update(readFileSync(path.join(folder, name))).digest("hex") !== expected) throw new Error(`Release artifact changed: ${name}`);
   }
@@ -168,8 +169,10 @@ export async function releaseWorkflow(root: string, options: { resume: boolean; 
     await git("push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`);
     await run(["bun", "run", "release:publish", ...(state.latest ? ["--latest"] : [])]);
   }
-  const tags = JSON.parse(await run(["npm", "view", "@legendapp/spark", "dist-tags", "--json"], true));
-  if (tags.next !== state.version || (state.latest && tags.latest !== state.version)) throw new Error("Published npm tags do not match the selected release");
+  for (const name of publishedPackages) {
+    const tags = JSON.parse(await run(["npm", "view", name, "dist-tags", "--json"], true));
+    if (tags.next !== state.version || (state.latest && tags.latest !== state.version)) throw new Error(`Published npm tags for ${name} do not match the selected release`);
+  }
   state.complete = true;
   writeJson(stateFile, state);
   console.log(`Released ${state.version}. Native UI and clean-recipient Runner acceptance must still be recorded separately.`);

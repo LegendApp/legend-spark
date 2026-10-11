@@ -1,6 +1,8 @@
 import { packAudio } from "./prepare-audio.ts";
 import { packArchive } from "../packages/cli/src/pack-archive.ts";
 import { packSpark } from "./pack-spark.ts";
+// @ts-ignore Bun build utility for the peer-free create launcher.
+import { packCreateSpark } from "./pack-create-spark.mjs";
 import { packWindowsLibraries } from "./prepare-windows-libraries.ts";
 import { packTemplates } from "./pack-templates.ts";
 import { packRuntimes } from "./prepare-runtimes.ts";
@@ -22,6 +24,7 @@ const packages = [
 const manifest: Record<string, string> = await packRuntimes(root, output);
 Object.assign(manifest, await packWindowsLibraries(output), await packAudio(root, output));
 manifest["@legendapp/spark"] = await packSpark(root, output);
+manifest["@legendapp/create-spark"] = await packCreateSpark(root, output);
 for (const dir of packages) {
   const pkg = readJson(path.join(root, dir, "package.json"));
   const file = `${pkg.name.replace(/^@/, "").replaceAll("/", "-")}-${pkg.version}.tgz`;

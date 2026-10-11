@@ -1,10 +1,12 @@
 import { VERSION } from "../packages/cli/src/project.ts";
 import { spawnProcess } from "../packages/cli/src/process.ts";
 import { expect, test } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+// @ts-ignore Bun build utility shared with the pack scripts.
+import { packCreateSpark } from "../scripts/pack-create-spark.mjs";
 import { packSpark } from "../scripts/pack-spark.ts";
 import { installedPackages, nativePackages, selection, stateFile } from "../packages/cli/src/project.ts";
 import ts from "typescript";
@@ -123,7 +125,7 @@ test("single Spark archive resolves public exports and preserves private native 
     expect(manifest.dependencies["@react-native-runtimes/core"]).toBe("0.1.0-alpha.2");
     expect(manifest.dependencies["react-native-nitro-modules"]).toBe("0.35.7");
     expect(JSON.parse(readFileSync(path.join(destination, "vendor/node_modules/@legendapp/spark-cli/dist/release.json"), "utf8"))).toEqual(release);
-    const internal = readdirSync(path.join(framework, "packages")).map(name => JSON.parse(readFileSync(path.join(framework, "packages", name, "package.json"), "utf8"))).filter(pkg => pkg.name !== "@legendapp/spark");
+    const internal = readdirSync(path.join(framework, "packages")).map(name => JSON.parse(readFileSync(path.join(framework, "packages", name, "package.json"), "utf8"))).filter(pkg => pkg.private === true);
     const normalized = await createRequire(tooling.resolve("npm/package.json"))("pacote").manifest(path.join(root, file), { cache: path.join(root, "registry-cache") });
     expect(normalized.bundleDependencies).toBeUndefined();
     expect(normalized.bundledDependencies).toBeUndefined();
@@ -173,4 +175,44 @@ test("single Spark archive resolves public exports and preserves private native 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+}, 120_000);
+
+
+test("Create Spark archive is peer-free and runs without installing the framework", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-create-package-"));
+  try {
+    const release = { schema: 1 as const, version: VERSION, revision: "a".repeat(40), packages: {}, runners: {} };
+    const file = await packCreateSpark(framework, root, release);
+    const destination = path.join(root, "package");
+    mkdirSync(destination);
+    const tar = spawnProcess(["tar", "-xzf", path.join(root, file), "--strip-components=1", "-C", destination]);
+    expect(await tar.exited).toBe(0);
+    const manifest = JSON.parse(readFileSync(path.join(destination, "package.json"), "utf8"));
+    expect(manifest.name).toBe("@legendapp/create-spark");
+    expect(manifest.version).toBe(VERSION);
+    expect(manifest.private).toBeUndefined();
+    expect(manifest.peerDependencies).toBeUndefined();
+    expect(Object.keys(manifest.dependencies).sort()).toEqual(["cross-spawn", "expo-desktop", "npm"]);
+    for (const name of ["react", "react-dom", "react-native", "react-native-macos", "expo", "@legendapp/spark"]) {
+      expect(manifest.dependencies).not.toHaveProperty(name);
+      expect(manifest.optionalDependencies ?? {}).not.toHaveProperty(name);
+      expect(manifest.peerDependencies ?? {}).not.toHaveProperty(name);
+    }
+    expect(JSON.parse(readFileSync(path.join(destination, "dist/release.json"), "utf8"))).toEqual(release);
+    const tooling = createRequire(path.join(framework, "packages/cli/package.json"));
+    // Supply just cross-spawn for this isolated launcher check; npm e2e installs the full tooling graph.
+    cpSync(path.dirname(tooling.resolve("cross-spawn/package.json")), path.join(destination, "node_modules/cross-spawn"), { recursive: true });
+    for (const name of ["path-key", "shebang-command", "shebang-regex", "which", "isexe"]) {
+      cpSync(path.dirname(tooling.resolve(`${name}/package.json`)), path.join(destination, "node_modules", name), { recursive: true });
+    }
+    const help = spawnProcess(["node", path.join(destination, manifest.bin["create-spark"]), "--help"], { cwd: root });
+    const [out, err, code] = await Promise.all([new Response(help.stdout).text(), new Response(help.stderr).text(), help.exited]);
+    expect(code, err).toBe(0);
+    expect(out).toContain("npm create @legendapp/spark MyApp");
+    for (const variant of ["blank-typescript", "windows", "universal"]) {
+      const template = JSON.parse(readFileSync(path.join(destination, "templates", variant, "package.json"), "utf8"));
+      expect(template.dependencies).toMatchObject({ "@legendapp/spark": VERSION, react: "19.1.4", "react-native": "0.81.6", expo: "54.0.37" });
+      expect(template.overrides).toMatchObject({ react: "19.1.4", "react-native": "0.81.6", "react-native-macos": "0.81.7" });
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
 }, 120_000);
