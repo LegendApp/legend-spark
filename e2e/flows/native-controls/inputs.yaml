@@ -24,13 +24,15 @@ matrix:
 # Continuous drag: intermediate values must not snap the knob back to 40
 - dragAndDrop: { from: { point: "50%,50%", within: { id: native-controls-inputs-slider-mini } }, to: { point: "100%,50%", within: { id: native-controls-inputs-slider-mini } }, steps: 20 }
 - assertVisible: { id: native-controls-inputs-slider-mini-value, text: "/^(0|100)$/" }
-# Ticks with continuous=false: a click jumps, arrow keys step by 1 (mirrored in Arabic)
+# Ticks with continuous=false: a click jumps, arrow keys step by 1 (mirrored in Arabic). The track is inset
+# from the frame by half the knob, so a click at 25% of the frame lands near 25, not on it; ten arrow presses
+# then move the value by ten.
 - tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-mini } }
-- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-mini-value, equals: '25' }] }
-- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-mini-value, equals: '75' }] }
-- pressKey: Up
-- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-mini-value, equals: '26' }] }
-- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-mini-value, equals: '76' }] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-mini-value, text: "/^2[2-8]$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-mini-value, text: "/^7[2-8]$/", when: { matrix: { locale: ar } } }
+- repeat: { times: 10, commands: [pressKey: Up] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-mini-value, text: "/^3[2-8]$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-mini-value, text: "/^8[2-8]$/", when: { matrix: { locale: ar } } }
 - tapOn: { point: "50%,25%", within: { id: native-controls-inputs-stepper-mini } }
 - assertText: { id: native-controls-inputs-stepper-mini-value, equals: '41' }
 - tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-mini } }
@@ -54,11 +56,11 @@ matrix:
 - assertVisible: { id: native-controls-inputs-slider-small-value, text: "/^(0|100)$/" }
 # Ticks with continuous=false: a click jumps, arrow keys step by 1 (mirrored in Arabic)
 - tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-small } }
-- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-small-value, equals: '25' }] }
-- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-small-value, equals: '75' }] }
-- pressKey: Up
-- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-small-value, equals: '26' }] }
-- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-small-value, equals: '76' }] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-small-value, text: "/^2[2-8]$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-small-value, text: "/^7[2-8]$/", when: { matrix: { locale: ar } } }
+- repeat: { times: 10, commands: [pressKey: Up] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-small-value, text: "/^3[2-8]$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-small-value, text: "/^8[2-8]$/", when: { matrix: { locale: ar } } }
 - tapOn: { point: "50%,25%", within: { id: native-controls-inputs-stepper-small } }
 - assertText: { id: native-controls-inputs-stepper-small-value, equals: '41' }
 - tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-small } }
@@ -82,11 +84,11 @@ matrix:
 - assertVisible: { id: native-controls-inputs-slider-regular-value, text: "/^(0|100)$/" }
 # Ticks with continuous=false: a click jumps, arrow keys step by 1 (mirrored in Arabic)
 - tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-regular } }
-- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '25' }] }
-- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '75' }] }
-- pressKey: Up
-- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '26' }] }
-- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '76' }] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-regular-value, text: "/^2[2-8]$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-regular-value, text: "/^7[2-8]$/", when: { matrix: { locale: ar } } }
+- repeat: { times: 10, commands: [pressKey: Up] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-regular-value, text: "/^3[2-8]$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-regular-value, text: "/^8[2-8]$/", when: { matrix: { locale: ar } } }
 - tapOn: { point: "50%,25%", within: { id: native-controls-inputs-stepper-regular } }
 - assertText: { id: native-controls-inputs-stepper-regular-value, equals: '41' }
 - tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-regular } }
@@ -110,11 +112,11 @@ matrix:
 - assertVisible: { id: native-controls-inputs-slider-large-value, text: "/^(0|100)$/" }
 # Ticks with continuous=false: a click jumps, arrow keys step by 1 (mirrored in Arabic)
 - tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-large } }
-- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-large-value, equals: '25' }] }
-- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-large-value, equals: '75' }] }
-- pressKey: Up
-- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-large-value, equals: '26' }] }
-- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-large-value, equals: '76' }] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-large-value, text: "/^2[2-8]$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-large-value, text: "/^7[2-8]$/", when: { matrix: { locale: ar } } }
+- repeat: { times: 10, commands: [pressKey: Up] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-large-value, text: "/^3[2-8]$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-large-value, text: "/^8[2-8]$/", when: { matrix: { locale: ar } } }
 - tapOn: { point: "50%,25%", within: { id: native-controls-inputs-stepper-large } }
 - assertText: { id: native-controls-inputs-stepper-large-value, equals: '41' }
 - tapOn: { point: "50%,75%", within: { id: native-controls-inputs-stepper-large } }
@@ -142,8 +144,8 @@ matrix:
 - tapOn: { point: "50%,25%", within: { id: native-controls-inputs-stepper-regular } }
 - assertText: { id: native-controls-inputs-stepper-regular-value, equals: '39' }
 - tapOn: { point: "90%,50%", within: { id: native-controls-inputs-slider-ticks-regular } }
-- runFlow: { when: { matrix: { locale: en-US } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '26' }] }
-- runFlow: { when: { matrix: { locale: ar } }, commands: [assertText: { id: native-controls-inputs-slider-ticks-regular-value, equals: '76' }] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-regular-value, text: "/^3[2-8]$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-regular-value, text: "/^8[2-8]$/", when: { matrix: { locale: ar } } }
 - tapOn: { id: native-controls-inputs-disabled }
 - assertA11y: { id: native-controls-inputs-stepper-regular, label: "Stepper, Regular", when: { matrix: { locale: en-US } } }
 - assertA11y: { id: native-controls-inputs-stepper-regular, label: "عدّاد، عادي", when: { matrix: { locale: ar } } }

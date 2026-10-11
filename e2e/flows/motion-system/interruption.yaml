@@ -14,7 +14,9 @@ platforms: [macos]
 - launchApp: { clearState: true, openUrl: "spark-ks://motion-system/springs" }
 - extendedWaitUntil: { visible: { id: motion-system-springs-root }, timeout: 10s }
 - setClock: virtual
+# The readout shows … once the start press is handled; the virtual clock advances only after that.
 - tapOn: { id: motion-system-springs-start }
+- assertText: { id: motion-system-springs-interruption-result, equals: "…" }
 - advanceClock: 1s
 - tapOn: { id: motion-system-springs-interrupt }
 - advanceClock: 3s
@@ -26,6 +28,7 @@ platforms: [macos]
 - tapOn: { id: motion-system-springs-reset }
 - assertText: { id: motion-system-springs-interruption-result, equals: '{"value":0,"velocity":0}' }
 - tapOn: { id: motion-system-springs-start }
+- assertText: { id: motion-system-springs-interruption-result, equals: "…" }
 - advanceClock: 500ms
 - tapOn: { id: motion-system-springs-stop }
 - assertText: { id: motion-system-springs-interruption-result, equals: '{"value":30,"velocity":0,"animating":[]}' }

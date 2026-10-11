@@ -17,23 +17,29 @@ matrix:
 - extendedWaitUntil: { visible: { id: motion-system-timelines-root }, timeout: 10s }
 - assertText: { id: motion-system-timelines-availability, equals: '{"available":true}' }
 - setClock: virtual
+# Each run shows … once the press is handled; the virtual clock advances only after that, so no time is lost.
 - tapOn: { id: motion-system-timelines-keyframes-run }
+- assertText: { id: motion-system-timelines-keyframes-result, equals: "…" }
 - advanceClock: 600ms
 - assertText: { id: motion-system-timelines-keyframes-result, equals: "…" }
 - advanceClock: 700ms
 - assertText: { id: motion-system-timelines-keyframes-result, equals: '{"finished":true}' }
 - tapOn: { id: motion-system-timelines-sequence-run }
+- assertText: { id: motion-system-timelines-sequence-result, equals: "…" }
 - advanceClock: 4s
 - assertText: { id: motion-system-timelines-sequence-result, equals: '{"finished":true}' }
 - tapOn: { id: motion-system-timelines-stagger-run }
+- assertText: { id: motion-system-timelines-stagger-result, equals: "…" }
 - advanceClock: 3s
 - assertText: { id: motion-system-timelines-stagger-result, equals: '{"finished":true}' }
 - tapOn: { id: motion-system-timelines-timeline-run }
+- assertText: { id: motion-system-timelines-timeline-result, equals: "…" }
 - advanceClock: 200ms
 - assertText: { id: motion-system-timelines-timeline-result, equals: "…" }
 - advanceClock: 4s
 - assertText: { id: motion-system-timelines-timeline-result, equals: '{"finished":true}' }
 - tapOn: { id: motion-system-timelines-decay-run }
+- assertText: { id: motion-system-timelines-decay-result, equals: "…" }
 - advanceClock: 4s
 - assertText: { id: motion-system-timelines-decay-result, equals: '{"finished":true}' }
 - tapOn: { id: motion-system-timelines-decay-back }
@@ -41,5 +47,6 @@ matrix:
 - assertText: { id: motion-system-timelines-decay-result, equals: '{"finished":true}' }
 - setClock: real
 - tapOn: { id: motion-system-timelines-decay-run }
+- assertText: { id: motion-system-timelines-decay-result, equals: "…" }
 - assertMotion: { target: { id: motion-system-timelines-decay }, settlesWithin: 3s }
 - takeScreenshot: timelines-settled
