@@ -8,7 +8,7 @@ From `bun run ks:capture system-integration/dock` against a Kitchen Sink dev bui
 
 | Image | Flags | What it shows |
 |---|---|---|
-| system-integration-dock-light.png | `--appearance light` | Availability: system, appBadge, appProgress, attention and dockMenu `{"available":true}`; taskbarMenu and thumbnailToolbar `unsupported-platform`. Badge, progress and attention triggers; results read `—` until run. |
+| system-integration-dock-light.png | `--appearance light` | Availability: system, appBadge, appProgress, attention and dockMenu `{"available":true}`; taskbarMenu `unsupported-platform`. Badge, progress and attention triggers; results read `—` until run. |
 | system-integration-dock-dark.png | `--appearance dark` | The same in dark. |
 | system-integration-dock-light-ar.png | `--appearance light --locale ar` | Arabic labels, laid out right to left. JSON readouts stay untranslated. |
 
