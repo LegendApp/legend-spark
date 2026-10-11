@@ -194,6 +194,8 @@ export class Driver {
   async startFrames() { return { refreshRate: (await this.request({ command: "startFrames" }, 10000)).refreshRate as number }; }
   /** Stops counting and reports frames, drops and the largest gap since startFrames. */
   async stopFrames() { return body<FrameReport>(await this.request({ command: "stopFrames" }, 10000)); }
+  /** Reports `displays` (DisplayDetails) through @legendapp/spark/displays instead of the real ones; null restores them (docs/displays.md#simulated-displays). */
+  async simulateDisplays(displays: readonly object[] | null) { await this.request({ command: "simulateDisplays", displays }, 10000); }
   /** Clicks a target in-process (docs/test-driver.md#input): `clickCount` 1-3, left or right button. */
   async tap(target: InputTarget, options: { button?: "left" | "right"; clickCount?: number; modifiers?: Modifier[] } = {}) {
     await this.request({ command: "tap", ...target, ...options }, 10000);

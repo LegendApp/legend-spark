@@ -190,7 +190,8 @@ package registers its virtual clock, `setClock` and `advanceClock`
 ([motion.md](motion.md#virtual-clock-for-the-test-driver)), and its telemetry, `motionState`,
 `waitForMotion` and `sampleMotion` ([motion.md](motion.md#motion-telemetry)). An app without
 that module answers them with `E_UNKNOWN_COMMAND`. The system package registers `simulateSystemEvent`
-([system.md](system.md#testing-system-events)).
+([system.md](system.md#testing-system-events)). The window package registers `simulateDisplays`, the
+display source of `@legendapp/spark/displays` ([displays.md](displays.md#simulated-displays)).
 
 Modules also get four hooks (`SparkTestDriver.h`, main thread): `SparkTestDriverFindView`
 finds a view by testID as `waitFor` does; `SparkTestDriverObserveStart` runs a block once the

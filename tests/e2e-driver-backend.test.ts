@@ -104,6 +104,15 @@ describe("command mapping", () => {
     expect(result.status).toBe("passed");
     expect(app.log.filter(line => line.startsWith("simulateSystemEvent"))).toEqual(['simulateSystemEvent {"type":"sleep"}', 'simulateSystemEvent {"type":"thermalChanged","thermal":"serious"}']);
   });
+
+  test("simulateDisplays replaces the reported displays and restore: true brings back the real ones", async () => {
+    const display = '{ id: "7", persistentId: null, name: TV, primary: true, origin: { x: 0, y: 0 }, size: { width: 1920, height: 1080 }, workArea: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1, safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: null, gamut: srgb }, edrHeadroom: { current: 1, potential: 1, reference: null } }';
+    const { result, app } = await run(`- launchApp\n- simulateDisplays: { displays: [${display}] }\n- simulateDisplays: { restore: true }`);
+    expect(result.status).toBe("passed");
+    const calls = app.log.filter(line => line.startsWith("simulateDisplays ")).map(line => JSON.parse(line.slice("simulateDisplays ".length)));
+    expect(calls).toEqual([[expect.objectContaining({ id: "7", persistentId: null, colorSpace: { name: null, gamut: "srgb" }, edrHeadroom: { current: 1, potential: 1, reference: null } })], null]);
+  });
+
   test("setAppAppearance maps to the driver; takeScreenshot captures the main window into the flow's output", async () => {
     const { result, app } = await run("- launchApp\n- setAppAppearance: dark\n- takeScreenshot: shot");
     expect(result.status).toBe("passed");

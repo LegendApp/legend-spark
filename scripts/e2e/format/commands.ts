@@ -40,6 +40,15 @@ const clicks = { modifiers: list(modifier) };
 const via = (...values: string[]) => oneOf(...values);
 const launch = { arguments: list(str, 0), env: dict(anyStr), openFile: str, openUrl: str };
 const appearance = oneOf("light", "dark", "system");
+const nullable = (type: string): Schema => ({ type: [type, "null"] });
+const fields = (properties: Record<string, Schema>) => obj(properties, Object.keys(properties));
+/** DisplayDetails from @legendapp/spark/displays, every field required: the driver reports it as given. */
+const simulatedDisplay = fields({
+  id: str, persistentId: nullable("string"), name: anyStr, primary: bool, origin: fields({ x: num, y: num }), size: fields({ width: num, height: num }),
+  workArea: fields({ x: num, y: num, width: num, height: num }), scaleFactor: num, safeArea: fields({ top: num, left: num, bottom: num, right: num }),
+  refreshRate: fields({ minimum: num, maximum: num, variable: bool }), colorSpace: fields({ name: nullable("string"), gamut: oneOf("srgb", "p3") }),
+  edrHeadroom: fields({ current: num, potential: num, reference: nullable("number") }),
+});
 
 export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   // Lifecycle
@@ -150,6 +159,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   setTimeZone: single("environment", "Set the OS time zone.", "timeZone", str),
   setSystemClock: single("environment", "Shift or set the OS clock.", "offset", { type: "string", pattern: "^([+-]\\d+(ms|s|m|h|d)|\\d{4}-\\d{2}-\\d{2}(T[0-9:.]+Z?)?)$", description: "an offset such as \"+3d\" or an ISO date" }),
   setDisplays: single("environment", "Configure virtual displays.", "displays", list(obj({ id: int(1), scale: num, refresh: num, arrangement: oneOf("leftOf", "rightOf", "above", "below") }, ["id"]))),
+  simulateDisplays: spec("environment", "Report these displays through @legendapp/spark/displays instead of the real ones, in-process; `restore: true` reports the real ones again. The OS display configuration is untouched (setDisplays changes it).", { displays: list(simulatedDisplay), restore: oneOf(true) }, { rule: oneKey("displays", "restore"), driver: true }),
   unplugDisplay: single("environment", "Disconnect a display.", "display", int(1)),
   sleepSystem: spec("environment", "Put the OS to sleep and wake it.", { for: duration }, { required: ["for"] }),
   simulatePower: spec("environment", "Simulate power source and thermal state.", { source: oneOf("battery", "ac"), lowPower: bool, thermal: oneOf("nominal", "fair", "serious", "critical") }, { rule: anyKey("source", "lowPower", "thermal") }),
