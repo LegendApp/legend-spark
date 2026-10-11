@@ -1,16 +1,18 @@
 #import "SparkDesktop.h"
 #import "SparkDesktopError.h"
 #import "SparkQuitCoordinator.h"
+#import "SparkInstance.h"
+#import "SparkTestDriver.h"
+#import <sys/wait.h>
 #import <CommonCrypto/CommonDigest.h>
-#import <sys/file.h>
-#import <fcntl.h>
-#import <unistd.h>
 NSString * const SparkDesktopEvent = @"SparkDesktopEvent";
 static NSMutableDictionary<NSString *, NSDictionary *> *jsQuitReplies;
 static NSUInteger quitGeneration = 0;
 static NSMutableArray *pendingURLs;
 static NSString *initialURL;
 static BOOL launchComplete = NO;
+// Non-nil only in a second process, which forwards its open requests instead of handling them.
+static NSMutableArray<NSURL *> *forwardedURLs;
 
 NSString *SparkJSON(id value) {
   NSData *data = [NSJSONSerialization dataWithJSONObject:value ?: NSNull.null options:NSJSONWritingFragmentsAllowed error:nil];
@@ -72,6 +74,7 @@ void SparkEmit(NSDictionary *event) {
 void SparkMarkLaunchComplete(void) { launchComplete = YES; }
 NSString *SparkInitialURL(void) { return initialURL; }
 void SparkOpenURLs(NSArray<NSURL *> *urls) {
+  if (forwardedURLs) { [forwardedURLs addObjectsFromArray:urls]; return; }
   if (!pendingURLs) pendingURLs = [NSMutableArray new];
   for (NSURL *url in urls) {
     if (!launchComplete && !url.isFileURL && !initialURL) initialURL = url.absoluteString;
@@ -111,25 +114,85 @@ void SparkReplyQuit(NSString *identifier, BOOL allow, NSUInteger generation) {
 void SparkObserveQuitDecision(SparkQuitReply observer) { [SparkQuitCoordinatorInstance() observeDecision:observer]; }
 NSApplicationTerminateReply SparkShouldQuit(void) { return [SparkQuitCoordinatorInstance() requestQuit]; }
 
-BOOL SparkAcquireInstance(void) {
-  static int lockFD = -1;
-  static id observer;
-  NSString *lockPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[SparkNamespace() stringByAppendingString:@".lock"]];
-  lockFD = open(lockPath.fileSystemRepresentation, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, 0600);
-  if (lockFD < 0) { NSLog(@"Unable to establish desktop instance lock: %s", strerror(errno)); return YES; }
-  NSString *name = [SparkNamespace() stringByAppendingString:@".secondInstance"];
-  if (flock(lockFD, LOCK_EX | LOCK_NB) != 0) {
-    close(lockFD); lockFD = -1;
-    [NSDistributedNotificationCenter.defaultCenter postNotificationName:name object:nil userInfo:@{ @"arguments": NSProcessInfo.processInfo.arguments } deliverImmediately:YES];
-    return NO;
-  }
-  observer = [NSDistributedNotificationCenter.defaultCenter addObserverForName:name object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
-    [NSApp activateIgnoringOtherApps:YES];
-    BOOL visible = NO;
-    for (NSWindow *window in NSApp.orderedWindows) if (window.isVisible && ![window isKindOfClass:NSPanel.class]) { visible = YES; break; }
-    [NSApp.delegate applicationShouldHandleReopen:NSApp hasVisibleWindows:visible];
-    SparkEmit(@{ @"type": @"secondInstance", @"arguments": note.userInfo[@"arguments"] ?: @[] });
+// A forwarded launch reaches the owner as both a secondInstance event and, for its
+// files and URLs, the same replayable open requests as a direct launch.
+static void SparkReceiveLaunch(NSDictionary *launch) {
+  [NSApp activateIgnoringOtherApps:YES];
+  BOOL visible = NO;
+  for (NSWindow *window in NSApp.orderedWindows) if (window.isVisible && ![window isKindOfClass:NSPanel.class]) { visible = YES; break; }
+  [NSApp.delegate applicationShouldHandleReopen:NSApp hasVisibleWindows:visible];
+  SparkEmit(@{ @"type": @"secondInstance", @"arguments": launch[@"arguments"], @"workingDirectory": launch[@"workingDirectory"], @"files": launch[@"files"], @"urls": launch[@"urls"] });
+  NSMutableArray<NSURL *> *urls = [NSMutableArray new];
+  for (NSString *path in launch[@"files"]) [urls addObject:[NSURL fileURLWithPath:path]];
+  for (NSString *value in launch[@"urls"]) { NSURL *url = [NSURL URLWithString:value]; if (url) [urls addObject:url]; }
+  if (urls.count) SparkOpenURLs(urls);
+}
+[[noreturn]] static void SparkLaunchFailed(NSString *message, NSError *error) {
+  NSLog(@"%@: %@", message, error.localizedDescription);
+  [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+  [NSApp activateIgnoringOtherApps:YES];
+  NSAlert *alert = [NSAlert new];
+  alert.messageText = message;
+  alert.informativeText = error.localizedDescription;
+  [alert runModal];
+  exit(1);
+}
+// The second process stays invisible until AppKit has delivered the open requests it
+// was launched with (they arrive before didFinishLaunching), then forwards and exits.
+static void SparkForwardLaunch(void) {
+  forwardedURLs = [NSMutableArray new];
+  [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
+  __block id observer = [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidFinishLaunchingNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
+    [NSNotificationCenter.defaultCenter removeObserver:observer];
+    NSMutableArray<NSString *> *files = [NSMutableArray new], *urls = [NSMutableArray new];
+    for (NSURL *url in forwardedURLs) { if (url.isFileURL) [files addObject:url.path]; else [urls addObject:url.absoluteString]; }
+    NSDictionary *launch = @{ @"arguments": NSProcessInfo.processInfo.arguments, @"workingDirectory": NSFileManager.defaultManager.currentDirectoryPath ?: @"/", @"files": files, @"urls": urls };
+    NSError *error;
+    if (!SparkInstanceForward(NSTemporaryDirectory(), SparkNamespace(), launch, 10, &error)) SparkLaunchFailed(@"The running app did not accept this launch", error);
+    exit(0);
   }];
-  return YES;
+}
+static NSString *safeModeTrigger;
+static BOOL relaunched = NO, instanceOwner = NO;
+BOOL SparkSafeMode(void) {
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--spark-safe-mode"]) safeModeTrigger = @"flag";
+    // A test-driver session never reads the keyboard: someone typing while it launches must not change the run.
+    else if (!SparkTestDriverActive() && (NSEvent.modifierFlags & NSEventModifierFlagShift)) safeModeTrigger = @"modifier";
+  });
+  return safeModeTrigger != nil;
+}
+NSDictionary *SparkLaunchState(void) {
+  return @{ @"safeMode": SparkSafeMode() ? safeModeTrigger : NSNull.null, @"relaunched": @(relaunched),
+    @"instance": instanceOwner ? @"primary" : @"test-driver" };
+}
+BOOL SparkAcquireInstance(void) {
+  SparkSafeMode();
+  NSString *parent = NSProcessInfo.processInfo.environment[@"SPARK_RELAUNCH_PARENT"];
+  NSError *error;
+  if (parent) {
+    unsetenv("SPARK_RELAUNCH_PARENT");
+    relaunched = YES;
+    // The previous instance holds the lock until it exits; it kills this process if its quit is vetoed.
+    if (!SparkInstanceWaitForExit(parent.intValue, &error)) SparkLaunchFailed(@"Unable to relaunch", error);
+  }
+  instanceOwner = SparkInstanceAcquire(NSTemporaryDirectory(), SparkNamespace(), ^(NSDictionary *launch) { SparkReceiveLaunch(launch); }, &error);
+  if (error) SparkLaunchFailed(@"Unable to establish the app instance lock", error);
+  if (!instanceOwner) SparkForwardLaunch();
+  return instanceOwner;
+}
+static pid_t relaunchChild = 0;
+void SparkRelaunch(NSArray<NSString *> *arguments, void (^completion)(NSDictionary *result, NSError *error)) {
+  if (!relaunchChild) {
+    NSError *error;
+    relaunchChild = SparkInstanceSpawnRelaunch(arguments, &error);
+    if (!relaunchChild) { completion(nil, error); return; }
+  }
+  SparkObserveQuitDecision(^(BOOL allow) {
+    if (!allow && relaunchChild) { kill(relaunchChild, SIGKILL); waitpid(relaunchChild, NULL, 0); relaunchChild = 0; }
+    completion(allow ? @{ @"quitRequested": @YES } : @{ @"quitRequested": @NO, @"reason": @"vetoed" }, nil);
+  });
+  [NSRunLoop.mainRunLoop performBlock:^{ [NSApp terminate:nil]; }];
 }
 NSMenu *SparkDockMenu = nil;

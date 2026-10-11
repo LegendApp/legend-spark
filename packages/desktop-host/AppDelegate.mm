@@ -25,7 +25,8 @@
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
   // A driven instance never signals (and so never activates) a normal running instance.
   self.sparkPrimaryInstance = SparkTestDriverStart() || SparkAcquireInstance();
-  if (!self.sparkPrimaryInstance) { [NSApp terminate:nil]; return; }
+  // A second process forwards its launch to the owner and exits (SparkAcquireInstance).
+  if (!self.sparkPrimaryInstance) return;
   facebook::react::ReactMarker::logMarkerDone(facebook::react::ReactMarker::APP_STARTUP_START, CACurrentMediaTime() * 1000);
   [self sparkPrepareMainMenu];
   SparkPrepareApplication();
@@ -94,7 +95,7 @@
   SparkApplyWindowOptions(self.window, options);
   SparkRestoreWindow(self.window, @"main", options);
   NSString *autosave = policy[@"autosaveName"];
-  if (autosave.length) { [self.window setFrameAutosaveName:autosave]; [self.window setFrameUsingName:autosave]; }
+  if (autosave.length && !SparkSafeMode()) { [self.window setFrameAutosaveName:autosave]; [self.window setFrameUsingName:autosave]; }
   if (policy[@"toolbarStyle"]) {
     self.window.toolbar = [[NSToolbar alloc] initWithIdentifier:@"main"];
     self.window.toolbar.displayMode = NSToolbarDisplayModeIconOnly;

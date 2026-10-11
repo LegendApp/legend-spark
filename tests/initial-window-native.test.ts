@@ -9,7 +9,8 @@ test.skipIf(process.platform !== "darwin")("initial AppKit window options size t
     const source = readFileSync("packages/desktop-app/macos/SparkWindow.mm", "utf8").replace('#import "SparkDesktop.h"', `#import <AppKit/AppKit.h>
 NSDictionary *SparkContext(void) { return @{}; }
 NSDictionary *SparkArgs(NSString *json) { return @{}; }
-NSString *SparkNamespace(void) { return @"test"; }`);
+NSString *SparkNamespace(void) { return @"test"; }
+BOOL SparkSafeMode(void) { return NO; }`);
     const input = path.join(directory, "test.mm"), output = path.join(directory, "test");
     writeFileSync(input, source + `
 #include <cassert>
