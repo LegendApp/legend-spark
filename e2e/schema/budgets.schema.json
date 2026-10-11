@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Spark e2e performance budgets",
+  "description": "e2e/budgets.yaml: metric baselines per reference machine. See docs/e2e-flows.md#budgets.",
+  "type": "object",
+  "properties": {
+    "machines": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The Mac model identifier (sysctl hw.model), such as MacBookAir10,1."
+          },
+          "memoryGB": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "name",
+          "model",
+          "memoryGB"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "budgets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "metric": {
+            "type": "string",
+            "pattern": "^[a-z][A-Za-z0-9]*(\\.[A-Za-z0-9-]+)+$",
+            "description": "A metric flows record, such as startup.coldMs (see docs/e2e-flows.md#metrics)."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "better": {
+            "enum": [
+              "lower",
+              "higher"
+            ]
+          },
+          "tolerance": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)?%$",
+            "description": "How far a measurement may be worse than the baseline, such as 10%."
+          },
+          "blocking": {
+            "type": "boolean",
+            "description": "Default true: a regression, a missing baseline or a missing measurement fails the gate."
+          },
+          "flows": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "description": "Globs of the flows this budget applies to (default: every gate flow that records the metric)."
+          },
+          "baselines": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+              "description": "a machine from machines"
+            },
+            "additionalProperties": {
+              "if": {
+                "type": "string"
+              },
+              "then": {
+                "enum": [
+                  "not-measured"
+                ]
+              },
+              "else": {
+                "type": "number",
+                "minimum": 0
+              },
+              "description": "The measured value on that machine, or not-measured."
+            }
+          }
+        },
+        "required": [
+          "metric",
+          "better",
+          "tolerance",
+          "baselines"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0
+    }
+  },
+  "required": [
+    "machines",
+    "budgets"
+  ],
+  "additionalProperties": false
+}

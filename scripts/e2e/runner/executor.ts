@@ -46,9 +46,15 @@ export type FlowResult = {
   errors: string[];
   /** Files the flow produced on purpose (takeScreenshot). */
   artifacts: Artifact[];
+  /** Measurements recorded by backends, by metric name, in recording order. */
+  metrics: Record<string, number[]>;
 };
 export type RunEvent = { event: "flow-start"; id: string; file: string; name?: string; intent?: string; matrix: Matrix } | { event: "flow-end"; result: FlowResult };
-export type RunOptions = { backends: Backend[]; runDir: string; app?: string; clock?: Clock; signal?: AbortSignal; onEvent?(event: RunEvent): void };
+export type RunOptions = {
+  backends: Backend[]; runDir: string; app?: string; clock?: Clock; signal?: AbortSignal; onEvent?(event: RunEvent): void;
+  /** Clock time after which every flow fails with `timeout`: the whole run's time budget. */
+  deadline?: number;
+};
 
 /** `120ms`, `1.5s`, `2m`, or a bare number of milliseconds. */
 export function ms(value: string | number): number {
@@ -147,9 +153,10 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   const flowTimeout = flow.header.timeout === undefined ? DEFAULT_FLOW_TIMEOUT_MS : ms(flow.header.timeout);
   const deadline = began + flowTimeout;
   const steps: StepResult[] = [], errors: string[] = [], outputs: Artifact[] = [];
+  const metrics: Record<string, number[]> = {};
   const restores: Array<{ label: string; undo: () => Promise<void> }> = [];
   const result = (status: FlowResult["status"], extra: Partial<FlowResult> = {}): FlowResult =>
-    ({ ...base, matrix, status, durationMs: Math.round(clock.now() - began), steps, errors, artifacts: outputs, ...extra });
+    ({ ...base, matrix, status, durationMs: Math.round(clock.now() - began), steps, errors, artifacts: outputs, metrics, ...extra });
   if (flow.header.platforms && !flow.header.platforms.includes(platform)) return result("skipped", { skipReason: `platforms: ${flow.header.platforms.join(", ")} (running ${platform})` });
 
   const outputDir = path.join(dir, "output");
@@ -158,6 +165,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   const live = () => {
     if (signal?.aborted) throw new Failure("interrupted", "the run was interrupted");
     if (clock.now() > deadline) throw new Failure("timeout", `the flow exceeded its ${flowTimeout}ms timeout`);
+    if (options.deadline !== undefined && clock.now() > options.deadline) throw new Failure("timeout", "the run exceeded its time budget");
   };
   async function eventually<T>(check: () => Promise<T>, timeoutMs: number): Promise<T> {
     const until = clock.now() + timeoutMs;
@@ -248,6 +256,10 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
       onRestore: (label, undo) => { restores.push({ label, undo }); },
       run: commands => runAll(commands, child(scope, command)),
       addArtifact: artifact => { outputs.push({ ...artifact, backend: backend.name }); },
+      metric: (name, value) => {
+        if (!Number.isFinite(value)) throw new Failure("error", `metric ${name} must be a finite number, not ${value}`);
+        (metrics[name] ??= []).push(value);
+      },
     };
     await backend.commands[command.name]!(args, context);
   }
@@ -349,7 +361,7 @@ export async function runFlows(files: string[], options: RunOptions): Promise<Fl
     if (!checked.value) {
       const { file: at, line, column } = checked.diagnostics[0]!;
       const result: FlowResult = {
-        id: relative, file, checks: [], tags: [], matrix: {}, status: "failed", durationMs: 0, steps: [], errors: [], artifacts: [],
+        id: relative, file, checks: [], tags: [], matrix: {}, status: "failed", durationMs: 0, steps: [], errors: [], artifacts: [], metrics: {},
         failure: { kind: "format", message: `${file} is not a valid flow`, location: { file: at, line, column }, stack: [], candidates: [], matches: [], artifacts: [], diagnostics: checked.diagnostics.map(formatDiagnostic) },
       };
       options.onEvent?.({ event: "flow-end", result });

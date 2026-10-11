@@ -1,0 +1,7 @@
+signoffs:
+  - flow: flows/app/ime
+    target: macos-14/arm64@air-m1
+    commit: 0123456789abcdef0123456789abcdef01234567
+    verdict: pass
+    by: Release Captain
+    at: 2026-10-10T12:00:00Z

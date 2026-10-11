@@ -1,12 +1,13 @@
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
-export type Kind = "flow" | "subflow" | "registry" | "gate";
+export type Kind = "flow" | "subflow" | "registry" | "gate" | "budgets";
 
-/** Kind by location: checks/<area>.yaml, gate.yaml, subflows/**, flows/**. Directory scans skip anything else (fixtures, goldens). */
+/** Kind by location: checks/<area>.yaml, gate.yaml, budgets.yaml, subflows/**, flows/**. Directory scans skip anything else (fixtures, goldens). */
 function classify(file: string, explicit: boolean): Kind | undefined {
   const segments = path.relative(process.cwd(), file).split(path.sep);
   if (segments.at(-1) === "gate.yaml") return "gate";
+  if (segments.at(-1) === "budgets.yaml") return "budgets";
   if (segments.at(-2) === "checks") return "registry";
   if (segments.includes("subflows")) return "subflow";
   if (segments.includes("flows") || explicit) return "flow";
