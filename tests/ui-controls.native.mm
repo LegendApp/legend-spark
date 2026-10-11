@@ -40,7 +40,8 @@ struct TextInputSearchComponentDescriptor {};
 struct SFSymbolComponentDescriptor {};
 struct NativeSelectComponentDescriptor {};
 struct NativeSegmentedControlComponentDescriptor {};
-struct LayoutMetrics {};
+enum class LayoutDirection { Undefined, LeftToRight, RightToLeft };
+struct LayoutMetrics { LayoutDirection layoutDirection = LayoutDirection::Undefined; };
 using ComponentDescriptorProvider = int;
 struct SparkTextInputComponentDescriptor {};
 template<class T> int concreteComponentDescriptorProvider() { return 0; }
@@ -131,5 +132,43 @@ int main() { @autoreleasepool {
   [symbol updateProps:symbolProps oldProps:symbol->_props]; assert(missingSymbols == 1);
   symbolProps->name = "doc"; [symbol updateProps:symbolProps oldProps:symbol->_props];
   symbolProps->name = "__spark_missing_symbol__"; [symbol updateProps:symbolProps oldProps:symbol->_props]; assert(missingSymbols == 2);
+  // Layout direction: Fabric's resolved direction reaches each AppKit control and follows later updates.
+  LayoutMetrics ltr{LayoutDirection::LeftToRight}, rtl{LayoutDirection::RightToLeft};
+  const auto R = NSUserInterfaceLayoutDirectionRightToLeft, L = NSUserInterfaceLayoutDirectionLeftToRight;
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 200) styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
+  // Search: the magnifier and cancel button live in subviews NSSearchField creates lazily; they mirror too.
+  RNTextInputSearch *rtlSearch = [RNTextInputSearch new]; rtlSearch.frame = NSMakeRect(0, 0, 300, 24);
+  [window.contentView addSubview:rtlSearch];
+  [rtlSearch updateLayoutMetrics:rtl oldLayoutMetrics:LayoutMetrics{}];
+  NSSearchField *rtlField = [rtlSearch valueForKey:@"textField"]; [rtlField layoutSubtreeIfNeeded];
+  auto magnifierX = [](NSSearchField *field) { return NSMidX([(NSSearchFieldCell *)field.cell searchButtonRectForBounds:field.bounds]); };
+  assert(rtlField.subviews.count > 0);
+  for (NSView *subview in rtlField.subviews) assert(subview.userInterfaceLayoutDirection == R);
+  assert(rtlField.userInterfaceLayoutDirection == R && rtlField.alignment == NSTextAlignmentRight && magnifierX(rtlField) > 150);
+  [rtlSearch updateLayoutMetrics:ltr oldLayoutMetrics:rtl];
+  for (NSView *subview in rtlField.subviews) assert(subview.userInterfaceLayoutDirection == L);
+  assert(rtlField.alignment == NSTextAlignmentLeft && magnifierX(rtlField) < 150);
+  [rtlSearch updateLayoutMetrics:rtl oldLayoutMetrics:ltr]; assert(magnifierX(rtlField) > 150 && rtlField.alignment == NSTextAlignmentRight);
+  // Segmented control: segments run from the right in RTL; indices and values keep their JS order.
+  segments->segmentsJson = R"([{"label":"One","value":"one"},{"label":"Two","value":"two"},{"label":"Three","value":"three"}])"; segments->value = "one";
+  [segmented updateProps:segments oldProps:segmented->_props]; segmented.frame = NSMakeRect(0, 40, 300, 28); [window.contentView addSubview:segmented];
+  auto leftmostSegment = [&] {
+    NSString *label; CGFloat minX = INFINITY;
+    for (id segment in [segmentsView.cell accessibilityChildren]) if (NSMinX([segment accessibilityFrame]) < minX) { minX = NSMinX([segment accessibilityFrame]); label = [segment accessibilityLabel]; }
+    return label;
+  };
+  [segmented updateLayoutMetrics:ltr oldLayoutMetrics:LayoutMetrics{}]; assert([leftmostSegment() isEqual:@"One"] && segmentsView.selectedSegment == 0);
+  [segmented updateLayoutMetrics:rtl oldLayoutMetrics:ltr];
+  assert(segmentsView.userInterfaceLayoutDirection == R && [leftmostSegment() isEqual:@"Three"] && segmentsView.selectedSegment == 0);
+  [segmented updateLayoutMetrics:ltr oldLayoutMetrics:rtl]; assert(segmentsView.userInterfaceLayoutDirection == L && [leftmostSegment() isEqual:@"One"]);
+  // Pop-up button, symbol image and text field.
+  NSImageView *symbolView = [symbol valueForKey:@"imageView"];
+  for (auto metrics : {rtl, ltr, rtl}) {
+    auto direction = metrics.layoutDirection == LayoutDirection::RightToLeft ? R : L;
+    [select updateLayoutMetrics:metrics oldLayoutMetrics:LayoutMetrics{}]; assert(popup.userInterfaceLayoutDirection == direction);
+    [symbol updateLayoutMetrics:metrics oldLayoutMetrics:LayoutMetrics{}]; assert(symbolView.userInterfaceLayoutDirection == direction);
+    [view updateLayoutMetrics:metrics oldLayoutMetrics:LayoutMetrics{}];
+    assert(field.userInterfaceLayoutDirection == direction && field.alignment == (direction == R ? NSTextAlignmentRight : NSTextAlignmentLeft));
+  }
   puts("Native text control tests passed");
 } }

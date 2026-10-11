@@ -1,4 +1,5 @@
 #import "RNTextInputSearch.h"
+#import "RNSparkLayoutDirection.h"
 
 #import <react/renderer/components/RNSparkUISpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSparkUISpec/EventEmitters.h>
@@ -21,6 +22,24 @@ static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName
   return nil;
 }
 
+// On macOS 26 NSSearchField draws its magnifier and cancel button in subviews it creates lazily, and those
+// read their own direction rather than the field's.
+@interface RNTextInputSearchField : NSSearchField
+@end
+
+@implementation RNTextInputSearchField
+- (void)setUserInterfaceLayoutDirection:(NSUserInterfaceLayoutDirection)direction
+{
+  [super setUserInterfaceLayoutDirection:direction];
+  for (NSView *subview in self.subviews) subview.userInterfaceLayoutDirection = direction;
+}
+
+- (void)didAddSubview:(NSView *)subview
+{
+  [super didAddSubview:subview];
+  subview.userInterfaceLayoutDirection = self.userInterfaceLayoutDirection;
+}
+@end
 #endif
 
 @interface RNTextInputSearch () <
@@ -46,7 +65,7 @@ static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName
   if (self = [super init]) {
     _props = std::make_shared<const TextInputSearchProps>();
 #if TARGET_OS_OSX
-    _textField = [NSSearchField new];
+    _textField = [RNTextInputSearchField new];
     _textField.delegate = self;
     _textField.focusRingType = NSFocusRingTypeNone;
     _textField.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -153,6 +172,11 @@ static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName
            oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics
 {
   [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
+#if TARGET_OS_OSX
+  NSUserInterfaceLayoutDirection direction = RNSparkLayoutDirection(layoutMetrics);
+  _textField.alignment = RNSparkLeadingTextAlignment(direction);
+  _textField.userInterfaceLayoutDirection = direction;
+#endif
   [self layoutSubviews];
 }
 

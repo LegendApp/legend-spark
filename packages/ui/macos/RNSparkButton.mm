@@ -1,4 +1,5 @@
 #import "RNSparkButton.h"
+#import "RNSparkLayoutDirection.h"
 #import <react/renderer/components/RNSparkUISpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSparkUISpec/EventEmitters.h>
 #import <react/renderer/components/RNSparkUISpec/Props.h>
@@ -48,6 +49,7 @@ using namespace facebook::react;
 - (void)layoutSubviews { [super layoutSubviews]; _button.frame = self.bounds; }
 - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics {
   [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
+  _button.userInterfaceLayoutDirection = RNSparkLayoutDirection(layoutMetrics);
   [self layoutSubviews];
 }
 - (void)prepareForRecycle {

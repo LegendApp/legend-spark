@@ -1,4 +1,5 @@
 #import "RNSparkPrimitive.h"
+#import "RNSparkLayoutDirection.h"
 #import "SparkColor.h"
 #import <RNDesktopApp/SparkTestDriver.h>
 #import <react/renderer/components/RNSparkUISpec/ComponentDescriptors.h>
@@ -328,7 +329,7 @@ static NSDate *SparkDate(id milliseconds) { return [milliseconds isKindOfClass:N
   _control.userInterfaceLayoutDirection = _rtl ? NSUserInterfaceLayoutDirectionRightToLeft : NSUserInterfaceLayoutDirectionLeftToRight;
   if ([_kind isEqual:@"checkbox"]) {
     NSButton *button = (NSButton *)_control;
-    button.alignment = _rtl ? NSTextAlignmentRight : NSTextAlignmentLeft;
+    button.alignment = RNSparkLeadingTextAlignment(_control.userInterfaceLayoutDirection);
     button.imagePosition = _rtl ? NSImageRight : NSImageLeft;
   }
   if ([_control isKindOfClass:NSSwitch.class] || [_control isKindOfClass:NSStepper.class] || [_kind isEqual:@"disclosure-triangle"] || [_kind isEqual:@"date-picker"] ||
@@ -350,7 +351,7 @@ static NSDate *SparkDate(id milliseconds) { return [milliseconds isKindOfClass:N
   }
 }
 - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics {
-  _rtl = layoutMetrics.layoutDirection == LayoutDirection::RightToLeft;
+  _rtl = RNSparkLayoutDirection(layoutMetrics) == NSUserInterfaceLayoutDirectionRightToLeft;
   [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics]; [self layoutSubviews];
 }
 - (void)prepareForRecycle {

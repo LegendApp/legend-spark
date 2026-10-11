@@ -8,8 +8,8 @@ test.skipIf(process.platform !== "darwin")("AppKit primitives keep in-flight edi
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-primitives-test-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
-    const source = readFileSync(path.join(root, "packages/ui/macos/SparkColor.h"), "utf8") + readFileSync(path.join(root, "packages/ui/macos/RNSparkPrimitive.mm"), "utf8")
-      .split("\n").filter(line => !line.startsWith("#import")).join("\n");
+    const source = readFileSync(path.join(root, "packages/ui/macos/SparkColor.h"), "utf8") + ["RNSparkLayoutDirection.h", "RNSparkPrimitive.mm"].map(name => readFileSync(path.join(root, "packages/ui/macos", name), "utf8")
+      .split("\n").filter(line => !line.startsWith("#import")).join("\n")).join("\n");
     const input = path.join(directory, "Primitives.mm"), output = path.join(directory, "test");
     writeFileSync(input, readFileSync(path.join(root, "tests/native-primitives.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", source));
     await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-Wno-objc-protocol-method-implementation", "-framework", "AppKit", input, "-o", output], { timeout: 120000 });

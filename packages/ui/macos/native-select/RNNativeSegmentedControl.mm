@@ -1,4 +1,5 @@
 #import "RNNativeSegmentedControl.h"
+#import "RNSparkLayoutDirection.h"
 
 #import <react/renderer/components/RNSparkUISpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSparkUISpec/EventEmitters.h>
@@ -183,6 +184,9 @@ using namespace facebook::react;
            oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics
 {
   [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
+#if TARGET_OS_OSX
+  _segmentedControl.userInterfaceLayoutDirection = RNSparkLayoutDirection(layoutMetrics);
+#endif
   [self layoutSubviews];
 }
 

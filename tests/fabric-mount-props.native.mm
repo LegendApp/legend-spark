@@ -12,13 +12,16 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <vector>
 namespace facebook::react {
 using Float = double;
 struct Point { Float x, y; };
 struct Size { Float width, height; bool operator==(const Size &) const = default; };
 struct Rect { Point origin; Size size; };
+enum class LayoutDirection { Undefined, LeftToRight, RightToLeft };
 struct LayoutMetrics {
   Rect frame{};
+  LayoutDirection layoutDirection = LayoutDirection::Undefined;
   struct {} contentInsets, borderWidth, overflowInset;
   bool operator==(const LayoutMetrics &other) const { return frame.size == other.frame.size; }
 };
@@ -40,7 +43,8 @@ struct SidebarSplitViewEventEmitter : EventEmitter {
     bool isLayoutReady, isVertical;
     double listHeight, listWidth, listX, sidebarHeight, sidebarWidth;
   };
-  void onSplitViewDidResize(OnSplitViewDidResize event) const {}
+  mutable std::vector<OnSplitViewDidResize> events;
+  void onSplitViewDidResize(OnSplitViewDidResize event) const { events.push_back(event); }
 };
 struct DesktopDragViewEventEmitter : EventEmitter {
   struct Event { std::string payload; };
@@ -105,6 +109,9 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
 @interface RNSparkMotionView : RCTViewComponentView @end
 @interface RNDesktopDragView : RCTViewComponentView <NSDraggingSource> @end
 // ACTUAL_IMPLEMENTATION
+@interface RNSidebarSplitViewComponent (Testing)
+- (BOOL)applyEstimatedSplitViewLayoutForBounds:(CGRect)bounds layoutReady:(BOOL)layoutReady;
+@end
 
 static int failures = 0;
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #condition); failures++; } } while (0)
@@ -123,6 +130,42 @@ int main() { @autoreleasepool {
   CHECK([split.appearance.name isEqual:NSAppearanceNameDarkAqua]);
   CHECK(controller.splitViewItems.count == 3);
   CHECK([[split valueForKey:@"sidebarItem"] isCollapsed]);
+
+  // Split view direction: AppKit puts the sidebar on the leading edge and keeps pane widths across
+  // LTR -> RTL -> LTR updates; published x positions are physical, as AppKit's own layout reports them.
+  RNSidebarSplitViewComponent *mirrored = [[RNSidebarSplitViewComponent alloc] initWithFrame:NSMakeRect(0, 0, 1000, 600)];
+  auto emitter = std::make_shared<SidebarSplitViewEventEmitter>();
+  mirrored->_eventEmitter = emitter;
+  auto mirroredProps = std::make_shared<SidebarSplitViewProps>();
+  mirroredProps->sidebarWidth = 240; mirroredProps->sidebarMinWidth = 180; mirroredProps->contentMinWidth = 320;
+  [mirrored updateProps:mirroredProps oldProps:nullptr];
+  NSView *sidebarPane = [mirrored valueForKey:@"sidebarContainer"], *contentPane = [mirrored valueForKey:@"contentContainer"];
+  auto paneFrame = [&](NSView *pane) { return [pane convertRect:pane.bounds toView:mirrored]; };
+  LayoutMetrics previous = EmptyLayoutMetrics;
+  for (auto direction : {LayoutDirection::LeftToRight, LayoutDirection::RightToLeft, LayoutDirection::LeftToRight}) {
+    LayoutMetrics metrics; metrics.frame = facebook::react::Rect{{0, 0}, {1000, 600}}; metrics.layoutDirection = direction;
+    [mirrored updateLayoutMetrics:metrics oldLayoutMetrics:previous]; previous = metrics;
+    BOOL rtl = direction == LayoutDirection::RightToLeft;
+    NSRect sidebarFrame = paneFrame(sidebarPane), contentFrame = paneFrame(contentPane);
+    CHECK([[mirrored valueForKey:@"splitViewController"] splitView].userInterfaceLayoutDirection ==
+      (rtl ? NSUserInterfaceLayoutDirectionRightToLeft : NSUserInterfaceLayoutDirectionLeftToRight));
+    CHECK(NSWidth(sidebarFrame) == 240);
+    CHECK(rtl ? NSMaxX(sidebarFrame) == 1000 && NSMinX(contentFrame) == 0 : NSMinX(sidebarFrame) == 0 && NSMaxX(contentFrame) == 1000);
+    CHECK(!emitter->events.empty() && emitter->events.back().sidebarWidth == 240 && emitter->events.back().contentX == NSMinX(contentFrame));
+  }
+  // A split mounted right to left starts mirrored.
+  previous.layoutDirection = LayoutDirection::RightToLeft;
+  RNSidebarSplitViewComponent *rtlFirst = [[RNSidebarSplitViewComponent alloc] initWithFrame:NSMakeRect(0, 0, 1000, 600)];
+  [rtlFirst updateProps:mirroredProps oldProps:nullptr];
+  [rtlFirst updateLayoutMetrics:previous oldLayoutMetrics:EmptyLayoutMetrics];
+  NSView *rtlSidebar = [rtlFirst valueForKey:@"sidebarContainer"];
+  NSRect rtlSidebarFrame = [rtlSidebar convertRect:rtlSidebar.bounds toView:rtlFirst];
+  CHECK(NSMaxX(rtlSidebarFrame) == 1000 && NSWidth(rtlSidebarFrame) == 240);
+  // The estimated layout used before AppKit lays the panes out mirrors the same way.
+  [mirrored updateLayoutMetrics:previous oldLayoutMetrics:previous];
+  [mirrored applyEstimatedSplitViewLayoutForBounds:CGRectMake(0, 0, 1000, 600) layoutReady:NO];
+  CHECK(NSMaxX(paneFrame(sidebarPane)) == 1000 && NSWidth(paneFrame(sidebarPane)) == 240 && NSMinX(paneFrame(contentPane)) == 0);
+  CHECK(emitter->events.back().contentX == 0);
 
   // Motion: `initial` values are applied at mount.
   RNSparkMotionView *motion = [[RNSparkMotionView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];

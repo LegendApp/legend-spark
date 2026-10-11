@@ -13,7 +13,8 @@ struct SwipeActionsEventEmitter : EventEmitter {
   mutable std::vector<std::string> actions;
   void onSwipeAction(OnSwipeAction event) const { actions.push_back(event.actionId); }
 };
-struct LayoutMetrics {}; struct SwipeActionsComponentDescriptor {};
+enum class LayoutDirection { Undefined, LeftToRight, RightToLeft };
+struct LayoutMetrics { LayoutDirection layoutDirection = LayoutDirection::Undefined; }; struct SwipeActionsComponentDescriptor {};
 using ComponentDescriptorProvider = int;
 template<class T> int concreteComponentDescriptorProvider() { return 0; }
 }
@@ -152,6 +153,22 @@ int main(int argc, char **argv) { @autoreleasepool {
     Scroll(row, NSEventPhaseBegan, 100); Scroll(row, NSEventPhaseChanged, -100);
     Check(fabs([[row valueForKey:@"offset"] doubleValue]) < 0.001, @"Rubber band drifted after reversing");
     Scroll(row, NSEventPhaseEnded, 0); Wait(); Check(Emitter(row)->actions.empty(), @"Empty side fired an action");
+  } else if (scenario == "rtl") {
+    LayoutMetrics ltr{LayoutDirection::LeftToRight}, rtl{LayoutDirection::RightToLeft};
+    auto offset = [&] { return [[row valueForKey:@"offset"] doubleValue]; };
+    [row updateLayoutMetrics:rtl oldLayoutMetrics:ltr];
+    Scroll(row, NSEventPhaseBegan, -50); Scroll(row, NSEventPhaseEnded, 0); Wait();
+    NSView *archive = [row valueForKey:@"leading"][0];
+    Check(offset() == -76 && NSMaxX(archive.frame) == 400 && NSWidth(archive.frame) == 76, @"RTL leading action did not rest on the right");
+    [row updateLayoutMetrics:ltr oldLayoutMetrics:rtl];
+    Check(offset() == 0, @"A direction change left the row open");
+    Scroll(row, NSEventPhaseBegan, -50); Scroll(row, NSEventPhaseEnded, 0); Wait();
+    NSView *remove = [row valueForKey:@"trailing"][0];
+    Check(offset() == -152 && NSMaxX(remove.frame) == 400, @"LTR trailing actions did not return to the right");
+    [row updateLayoutMetrics:rtl oldLayoutMetrics:ltr];
+    Check(offset() == 0 && archive.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft, @"RTL update did not close and mirror the row");
+    Scroll(row, NSEventPhaseBegan, 190); Scroll(row, NSEventPhaseEnded, 0); Wait();
+    Check(Emitter(row)->actions == std::vector<std::string>{"delete"}, @"RTL full rightward swipe did not commit the outer trailing action");
   } else if (scenario == "hit") {
     Scroll(row, NSEventPhaseBegan, 50); Scroll(row, NSEventPhaseEnded, 0); Wait();
     Check([row hitTest:NSMakePoint(450, 20)] == nil, @"Open content intercepted a point outside the row");
