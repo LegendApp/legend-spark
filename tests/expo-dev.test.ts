@@ -75,13 +75,14 @@ test("the patch rejects unsupported versions and modified upstream sources witho
     for (const [file, patched] of patches) {
       const source = readFileSync(file, "utf8");
       expect(source).not.toContain("expo-dev-extension.cjs");
-      expect(patched).toContain("expo-dev-extension.cjs");
+      if (file.endsWith("/JsInspector.js")) expect(patched.replace("app.title ?? app.deviceName", "app.deviceName")).toBe(source);
+      else expect(patched).toContain("expo-dev-extension.cjs");
       expect(() => new Function("require", "module", "exports", patched)).not.toThrow();
       const dest = path.join(cli, "build/src/start", file.split("/build/src/start/")[1]!);
       mkdirSync(path.dirname(dest), { recursive: true });
       writeFileSync(dest, source);
     }
-    expect(preparePatch(temp).size).toBe(3);
+    expect(preparePatch(temp).size).toBe(4);
     writeFileSync(path.join(cli, "build/src/start/interface/commandsTable.js"), "changed upstream source");
     expect(() => preparePatch(temp)).toThrow("Unsupported Expo CLI source");
   } finally { rmSync(temp, { recursive: true, force: true }); }

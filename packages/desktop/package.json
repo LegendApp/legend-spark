@@ -70,6 +70,7 @@
     "./contracts": "./contracts.ts",
     "./windows/macos": "./windows-macos.ts",
     "./diagnostics": "./diagnostics.ts",
+    "./devtools": "./devtools.ts",
     "./ai": "./ai.ts",
     "./ai/codex": "./ai-codex.ts",
     "./motion": "./motion.ts",

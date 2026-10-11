@@ -29,7 +29,9 @@ navigates to `spark-ks://<area>/<screen>`, waits for `<area>-<screen>-root` (or
 window to `<out>/<name>.png` and quits. The default name is
 `<area>-<screen>-<appearance>[-<locale>]` and the default output directory is
 `examples/kitchen-sink/.spark/captures`. `--locale` launches with `-AppleLanguages`. The JavaScript is built without `__DEV__`, like a release
-bundle; `--dev-bundle` serves a development bundle instead, to capture development-only UI.
+bundle; `--dev-bundle` serves a development bundle instead, to capture development-only UI. `--dev-server
+http://127.0.0.1:<port>` loads development JavaScript from a running `spark dev` instead, with its inspector proxy,
+for screens that need it, such as React Native DevTools ([devtools.md](devtools.md)).
 
 Flows run through the `driver` runner backend
 ([docs/e2e-flows.md](e2e-flows.md#the-driver-backend)):

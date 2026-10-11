@@ -114,6 +114,14 @@ version and exact source, is idempotent, and replaces the file atomically. Exist
 need a native rebuild. `tests/rtl-text-alignment-native.test.ts` compiles the patched and the
 upstream code and lays text out with TextKit.
 
+## RN macOS DevTools targets patch
+
+`react-native-macos@0.81.7` lists every JavaScript runtime as the same React Native DevTools target, titled
+`<bundle id> ()`. `devtools-targets.cjs` titles each by its runtime, `<CFBundleName> (shared runtime)` or
+`<CFBundleName> (isolated runtime: <name>)`, registering an isolated runtime's target once its runtime is named.
+Like the other patches, it checks the version and exact source, is idempotent, and replaces files atomically.
+Existing runtimes need a native rebuild. `tests/devtools-targets.test.ts` covers the patch; see [DevTools](devtools.md).
+
 ## Expo development terminal patch
 
 `spark dev` launches the app's installed `expo start` under Node, inheriting stdin/stdout/stderr. Its Node supervisor retains desktop runtime discovery, compatibility enforcement, native builds and owned app processes. It has no keyboard interface. Desktop actions and results travel over a private JSON IPC channel; no HTTP command endpoint is exposed.
@@ -122,15 +130,16 @@ frame consumes its own `--project`, `--platform`, `--runner-binary`, and `--no-o
 
 The shared development config advertises all declared platforms and omits native build overlays. Expo Desktop supplies multi-platform Metro defaults; the desktop runtime gate is selected per request and does not block mobile/web. `desktop.config.json` remains separate. Native builds keep target-specific config and state.
 
-`src/expo-dev-patch.cjs` pins `@expo/cli@54.0.27` and verifies SHA-256 hashes for three upstream modules before loading replacements in memory:
+`src/expo-dev-patch.cjs` pins `@expo/cli@54.0.27` and verifies SHA-256 hashes for four upstream modules before loading replacements in memory:
 
 - `commandsTable.js`: place desktop runtime switching after Expo's runtime switch, and desktop opening/building after its platform launch actions, in both compact and expanded help.
 - `startInterface.js`: dispatch `d`, `g`, and `b` through the desktop extension; log action failures without ending the session. Existing keys remain Expo's.
 - `startAsync.js`: notify the supervisor of the actual native server port and bundle options after startup, including noninteractive sessions.
+- `JsInspector.js`: title each `j` prompt choice by its debug target, so a desktop app's JavaScript runtimes are distinguishable ([DevTools](devtools.md)).
 
-`expo-dev-preload.cjs` changes module loading only inside this Expo process and restores the loader after the three modules load. Installed files are never rewritten. Forked Metro workers inherit Node's preload arguments but skip the extension. Templates pin the CLI version; an unexpected version or modified source produces an explicit startup error rather than silently losing desktop controls. Projects declaring no desktop platforms and direct `expo start` do not load the patch. Selecting `dev --platform ios`, Android, or web in a desktop-capable project keeps the patch and host desktop keys.
+`expo-dev-preload.cjs` changes module loading only inside this Expo process and restores the loader after the four modules load. Installed files are never rewritten. Forked Metro workers inherit Node's preload arguments but skip the extension. Templates pin the CLI version; an unexpected version or modified source produces an explicit startup error rather than silently losing desktop controls. Projects declaring no desktop platforms and direct `expo start` do not load the patch. Selecting `dev --platform ios`, Android, or web in a desktop-capable project keeps the patch and host desktop keys.
 
-On upgrade, review upstream changes, update the three source hashes and insertion points, and run `bun run test -- tests/expo-dev.test.ts` plus a real packed-consumer session. Verify opening/switching, build failures, reload/debugger, Fast Refresh, compatibility invalidation, restart and Ctrl+C. Windows native actions additionally need a Windows host.
+On upgrade, review upstream changes, update the four source hashes and insertion points, and run `bun run test -- tests/expo-dev.test.ts` plus a real packed-consumer session. Verify opening/switching, build failures, reload/debugger, Fast Refresh, compatibility invalidation, restart and Ctrl+C. Windows native actions additionally need a Windows host.
 
 Noninteractive sessions still start Expo and can auto-open a compatible runtime, but they do not accept keyboard commands over a pipe. Automation should use explicit build commands and restart the session; `scripts/test-windows.ts` follows that path.
 

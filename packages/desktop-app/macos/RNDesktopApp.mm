@@ -1,5 +1,6 @@
 #import "RNDesktopApp.h"
 #import "SparkDesktop.h"
+#import "SparkDevTools.h"
 @implementation RNDesktopApp { NSMutableSet<NSString *> *_guardIds; }
 - (instancetype)init { if ((self = [super init])) _guardIds = [NSMutableSet new]; return self; }
 RCT_EXPORT_MODULE(NativeDesktopApp)
@@ -37,6 +38,13 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
     else if ([method isEqual:@"replyQuit"]) { SparkReplyQuit(args[@"id"], [args[@"allow"] boolValue], [args[@"requestId"] unsignedIntegerValue]); resolve(@"null"); }
     else if ([method isEqual:@"hide"]) { [NSApp hide:nil]; resolve(@"null"); }
     else if ([method isEqual:@"activate"]) { [NSApp activateIgnoringOtherApps:YES]; resolve(@"null"); }
+#if RCT_DEV
+    else if ([method isEqual:@"openDevTools"]) {
+      id runtime = args[@"runtime"];
+      if (runtime && (![runtime isKindOfClass:NSString.class] || ![runtime length])) { SparkInvalid(reject, @"Expected an isolated runtime name"); return; }
+      SparkOpenDevTools(runtime, ^(NSString *code, NSString *message) { if (code) reject(code, message, nil); else resolve(@"null"); });
+    }
+#endif
     else SparkInvalid(reject, @"Unknown app operation");
   });
 }

@@ -10,6 +10,7 @@ const { inlinePlugin, constantFoldingPlugin } = require("metro-transform-plugins
 const collectDependencies = require("metro/private/ModuleGraph/worker/collectDependencies").default;
 const BOOTSTRAP = "packages/desktop/runtime-entry.cjs";
 const DEVELOPER_MENU = "@legendapp/spark-native-menu/src/developer-menu";
+const DEVTOOLS_OPENER = "@legendapp/spark-desktop-app/src/devtools-opener";
 
 /** The module's dependencies as Metro's transform worker collects them: inline __DEV__ (and fold constants when not dev) first. */
 function dependencies(file: string, dev: boolean): string[] {
@@ -22,20 +23,20 @@ function dependencies(file: string, dev: boolean): string[] {
 }
 
 test("Metro drops the Developer menu from the release bundle at compile time", () => {
-  expect(dependencies(BOOTSTRAP, true)).toEqual(["@legendapp/spark-cli/dist/runtime-entry.cjs", DEVELOPER_MENU]);
+  expect(dependencies(BOOTSTRAP, true)).toEqual(["@legendapp/spark-cli/dist/runtime-entry.cjs", DEVTOOLS_OPENER, DEVELOPER_MENU]);
   expect(dependencies(BOOTSTRAP, false)).toEqual(["@legendapp/spark-cli/dist/runtime-entry.cjs"]);
 });
 
 test("only the __DEV__ branch of the bootstrap reaches the Developer menu modules", () => {
   // Modules that exist only for the menu. developer-menu-state.ts stays: it is the public state, and holds no menu code.
-  const devOnly = /(?:native-menu\/src\/developer-menu(?:-messages)?|contracts\/developer-tools)["']/;
+  const devOnly = /(?:native-menu\/src\/developer-menu(?:-messages)?|contracts\/developer-tools|src\/devtools-opener)["']/;
   const sources = (directory: string): string[] => readdirSync(directory, { recursive: true, withFileTypes: true })
     .filter(entry => entry.isFile() && /\.(tsx?|cjs|js)$/.test(entry.name) && !entry.parentPath.includes("node_modules"))
     .map(entry => path.join(entry.parentPath, entry.name));
   const local = /from "\.\/developer-menu(?:-messages)?"/;
   const importers = [...sources("packages"), ...sources("examples/kitchen-sink")]
     .filter(file => devOnly.test(readFileSync(file, "utf8")) || (file.startsWith("packages/native-menu/") && local.test(readFileSync(file, "utf8"))));
-  expect(importers.sort()).toEqual([BOOTSTRAP, "packages/native-menu/src/developer-menu.ts"]);
+  expect(importers.sort()).toEqual(["packages/desktop-app/src/devtools-opener.ts", BOOTSTRAP, "packages/native-menu/src/developer-menu.ts"]);
 });
 
 test("the native Developer menu compiles only when RCT_DEV", () => {

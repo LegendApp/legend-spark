@@ -50,7 +50,9 @@ type Resolved = { app: string; executable: string; embedded: boolean } & AppIden
  * An app bundle in driver mode. A release build (`Contents/Resources/main.jsbundle`) runs its embedded JavaScript.
  * A dev build loads JavaScript over HTTP, so `open()` bundles the current Kitchen Sink source (no Metro), once per
  * mode, and serves it on 127.0.0.1 until `close()`. The default bundle is built without `__DEV__`; `{ dev: true }`
- * serves a development bundle (`__DEV__` code such as the Developer menu, LogBox), for `build: dev` flows.
+ * serves a development bundle (`__DEV__` code such as the Developer menu, LogBox), for `build: dev` flows. With
+ * `devServer` (a running `spark dev` origin such as http://127.0.0.1:8081), a dev build loads development JavaScript
+ * from that server instead, with its inspector proxy (React Native DevTools).
  */
 export class KitchenSinkApp {
   private resolved?: Resolved;
@@ -59,7 +61,7 @@ export class KitchenSinkApp {
   private server?: Server;
 
   /** `app` is a `.app` bundle; without it, the last dev build (`cd examples/kitchen-sink && bun run rebuild:macos`). It is resolved by `open()`. */
-  constructor(private readonly appPath?: string) {}
+  constructor(private readonly appPath?: string, private readonly devServer?: URL) {}
 
   private resolve(): Resolved {
     let app = this.appPath;
@@ -83,9 +85,10 @@ export class KitchenSinkApp {
   async open(options: { dev?: boolean; label?: string } = {}): Promise<{ app: string; bundleId: string }> {
     const resolved = this.resolved ??= this.resolve(), dev = options.dev ?? false;
     if (resolved.embedded) {
-      if (dev) throw new Error(`${resolved.app} embeds a release bundle; a development bundle needs a dev build (cd examples/kitchen-sink && bun run rebuild:macos)`);
+      if (dev || this.devServer) throw new Error(`${resolved.app} embeds a release bundle; development JavaScript needs a dev build (cd examples/kitchen-sink && bun run rebuild:macos)`);
       return resolved;
     }
+    if (this.devServer) return resolved;
     let bundle = this.bundles.get(dev);
     if (!bundle) {
       const work = mkdtempSync(path.join(os.tmpdir(), "ks-bundle-"));
@@ -133,9 +136,16 @@ export class KitchenSinkApp {
     const [languages, region] = this.reserved.locale;
     const locale = options.locale ? [languages, `(${options.locale})`, region, options.locale] : [];
     const resolved = this.resolved;
-    if (!resolved || (!resolved.embedded && !this.served)) throw new Error("KitchenSinkApp.open() must run before launch()");
+    if (!resolved || (!resolved.embedded && !this.served && !this.devServer)) throw new Error("KitchenSinkApp.open() must run before launch()");
     const extra = options.arguments ?? [];
     if (resolved.embedded) return launchDriver({ executable: resolved.executable, args: [...PINNED, ...locale, ...extra], env: options.env, log: options.log });
+    if (this.devServer) return launchDriver({
+      executable: resolved.executable,
+      // React Native's packager and inspector connections use RCT_jsLocation; the bundle comes from the server.
+      args: [JS_LOCATION, this.devServer.host, ...PINNED, ...locale, ...extra],
+      env: { ...options.env, [BUNDLE_URL]: new URL("/index.bundle?platform=macos&dev=true&minify=false", this.devServer).href },
+      log: options.log,
+    });
     const port = (this.server!.address() as AddressInfo).port;
     return launchDriver({
       executable: resolved.executable,
