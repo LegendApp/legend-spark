@@ -51,6 +51,41 @@ test("prints package, found, expected and the full location", () => {
   } finally { log.mockRestore(); }
 });
 
+test("version comparators retain package identity in override selectors", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-pin-comparators-"));
+  const file = path.join(root, "package.json");
+  const selectors = { "react@>v18.0.0": "wrong", "react@>=18 >v18.0.0": "wrong", "react@<18||>v18.0.0": "wrong", "parent@>v1.0.0>react@>v18.0.0": "wrong", "react@>v18.0.0>unrelated": "untouched" };
+  const pkg = { dependencies: pins, overrides: { "react@>v18.0.0": "wrong" }, pnpm: { overrides: selectors } };
+  try {
+    writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify({ platforms: ["macos"] }));
+    const source = JSON.stringify(pkg);
+    writeFileSync(file, source);
+    expect(dependencyPinIssues(pkg, ["macos"]).map(issue => issue.where)).toEqual([
+      ["overrides", "react@>v18.0.0"], ...Object.keys(selectors).slice(0, -1).map(selector => ["pnpm", "overrides", selector]),
+    ]);
+    upgradeDependencyPins(root);
+    expect(readFileSync(file, "utf8")).toBe(source.replaceAll('"wrong"', JSON.stringify(pins.react)));
+    expect(upgradeDependencyPins(root)).toEqual([]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test.each(["dependencies", "devDependencies"])("pnpm $ref overrides follow %s without being rewritten", section => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-pin-pnpm-ref-"));
+  const file = path.join(root, "package.json");
+  const pkg = { [section]: { ...pins, react: "wrong" }, pnpm: { overrides: { "parent>react": "$react", expo: "$expo" } } };
+  try {
+    writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify({ platforms: ["macos"] }));
+    const source = JSON.stringify(pkg);
+    writeFileSync(file, source);
+    expect(dependencyPinIssues(pkg, ["macos"]).map(issue => issue.where)).toEqual([[section, "react"], ["pnpm", "overrides", "parent>react"]]);
+    upgradeDependencyPins(root);
+    expect(readFileSync(file, "utf8")).toBe(source.replace('"wrong"', JSON.stringify(pins.react)));
+    const mtime = statSync(file).mtimeMs;
+    expect(upgradeDependencyPins(root)).toEqual([]);
+    expect(statSync(file).mtimeMs).toBe(mtime);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test("scoped selectors stay untouched while paths after scoped parents are checked", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-pin-scoped-"));
   const file = path.join(root, "package.json");
@@ -176,6 +211,34 @@ test("invalid manifests fail without being rewritten", () => {
 });
 
 test.each([
+  ["root", '"name":"first","name":"last"', "name"],
+  ["root", '"dependencies":{},"dependencies":{}', "dependencies"],
+  ["dependencies", '"dependencies":{"react":"wrong","react":"correct"}', "react"],
+  ["devDependencies", '"devDependencies":{"react":"correct","react":"wrong"}', "react"],
+  ["overrides", '"overrides":{"react":"wrong","react":"correct"}', "react"],
+  ["overrides → parent", '"overrides":{"parent":{"react":"wrong","react":"correct"}}', "react"],
+  ["resolutions", '"resolutions":{"**/react":"wrong","**/react":"correct"}', "**/react"],
+  ["pnpm", '"pnpm":{"overrides":{},"overrides":{}}', "overrides"],
+  ["pnpm → overrides", '"pnpm":{"overrides":{"react":"wrong","react":"correct"}}', "react"],
+  ["dependencies", '"dependencies":{"react":"wrong","re\\u0061ct":"correct"}', "react"],
+])("duplicate keys in %s fail without a write", (where, fragment, key) => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-pin-duplicate-"));
+  const file = path.join(root, "package.json");
+  const section = fragment.startsWith('"devDependencies"') ? "dependencies" : "devDependencies";
+  const source = `{${fragment.replaceAll('"correct"', JSON.stringify(pins.react))},"${section}":${JSON.stringify(pins)}}`;
+  try {
+    writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify({ platforms: ["macos"] }));
+    writeFileSync(file, source);
+    const mtime = statSync(file).mtimeMs;
+    for (const dryRun of [true, false]) {
+      expect(() => upgradeDependencyPins(root, dryRun)).toThrow(`package.json has duplicate key ${JSON.stringify(key)} in ${where}. No files were changed.`);
+      expect(readFileSync(file, "utf8")).toBe(source);
+      expect(statSync(file).mtimeMs).toBe(mtime);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test.each([
   ["desktop.config.json", ["windows"]],
   ["app.json", ["ios"]],
   ["desktop.config.json", ["ios", "macos"]],
@@ -198,7 +261,7 @@ test.each([
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test.each([false, true])("doctor completes toolchain checks (malformed app manifest: %s)", async malformed => {
+test.each(["no app", "malformed", "duplicate", "mismatched", "matching"])("doctor completes toolchain checks and ends with pin status (%s)", async manifest => {
   vi.resetModules();
   const commands = await import("../packages/cli/src/commands.ts");
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-doctor-"));
@@ -208,21 +271,25 @@ test.each([false, true])("doctor completes toolchain checks (malformed app manif
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const error = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
-    if (malformed) {
+    if (manifest !== "no app") {
       writeFileSync(path.join(root, "desktop.config.json"), JSON.stringify({ platforms: ["macos"] }));
-      writeFileSync(path.join(root, "package.json"), '{"dependencies":');
+      writeFileSync(path.join(root, "package.json"), manifest === "malformed" ? '{"dependencies":'
+        : manifest === "duplicate" ? `{"dependencies":${JSON.stringify(pins)},"dependencies":${JSON.stringify(pins)}}`
+        : JSON.stringify({ dependencies: { ...pins, react: manifest === "mismatched" ? "wrong" : pins.react } }));
     }
     process.argv = [argv[0], "spark", "doctor", "--project", root];
     await import("../packages/cli/src/index.ts");
     expect(doctor).toHaveBeenCalledWith(root);
     expect(log).toHaveBeenCalledWith("Native toolchain available.");
-    if (malformed) {
-      expect(error).toHaveBeenCalledWith(expect.stringContaining("Dependency pin check failed:"));
+    if (["malformed", "duplicate", "mismatched"].includes(manifest)) {
+      if (manifest !== "mismatched") expect(error).toHaveBeenCalledWith(expect.stringContaining("Dependency pin check failed:"));
       expect(process.exitCode).toBe(1);
+      expect(log.mock.calls.slice(-2).map(call => call[0])).toEqual(["Native toolchain available.", "Dependency pin issues found; run spark upgrade."]);
     } else {
-      expect(log).toHaveBeenCalledWith("No Spark app found; skipping dependency pin check.");
+      expect(log).toHaveBeenCalledWith(manifest === "no app" ? "No Spark app found; skipping dependency pin check." : "Dependency pins match Spark's expected versions.");
       expect(error).not.toHaveBeenCalled();
       expect(process.exitCode).toBe(exitCode);
+      expect(log.mock.calls.at(-1)?.[0]).toBe("Native toolchain available.");
     }
   } finally {
     process.argv = argv;

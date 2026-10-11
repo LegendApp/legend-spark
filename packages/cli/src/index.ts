@@ -7,7 +7,7 @@ import { hostPlatform, type AppPlatform } from "./platform.ts";
 import path from "node:path";
 import { cliArguments } from "./cli-arguments.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { prepareConfig, readConfig, isExpoProject, supportedPlatforms } from "@legendapp/spark-desktop-config/config.cjs";
+import { prepareConfig, readConfig, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
 import { nodeCommand, prepareWindows } from "./windows.ts";
 import { create, refreshLocalPackages } from "./create.ts";
 import { addDesktop } from "./add-desktop.ts";
@@ -21,7 +21,7 @@ import { doctor, run } from "./commands.ts";
 import { findFramework, findProject, sparkHome, creationManifest, packageManifest, registerRuntime } from "./local.ts";
 import { readJson, stateFile, VERSION, writeJson } from "./project.ts";
 import { devCommand } from "./dev-command.ts";
-import { dependencyPinIssues, printDependencyPins, upgradeDependencyPins } from "./dependency-pins.ts";
+import { printDependencyPins, upgradeDependencyPins } from "./dependency-pins.ts";
 
 async function main() {
   const argv = process.argv.slice(2);
@@ -155,22 +155,25 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       break;
     case "doctor": {
       let root: string | undefined;
+      let pinIssues = false;
       try { root = project(); } catch { console.log("No Spark app found; skipping dependency pin check."); }
       if (root) {
         try {
-          const issues = dependencyPinIssues(readJson(path.join(root, "package.json")), supportedPlatforms(root));
+          const issues = upgradeDependencyPins(root, true);
           printDependencyPins(issues);
           if (issues.length) {
             process.exitCode = 1;
-            console.log("Run spark upgrade to fix dependency pins.");
+            pinIssues = true;
           }
         } catch (error) {
           console.error(`Dependency pin check failed: ${error instanceof Error ? error.message : String(error)}`);
           process.exitCode = 1;
+          pinIssues = true;
         }
       }
       await doctor(root ?? start);
       console.log("Native toolchain available.");
+      if (pinIssues) console.log("Dependency pin issues found; run spark upgrade.");
       break;
     }
     case "upgrade": {
