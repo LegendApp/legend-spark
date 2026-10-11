@@ -19,9 +19,13 @@ and 2 for a usage error.
 
 ## What one run does
 
-1. **Artifact.** `--artifact` is the `.dmg` or `.zip` to install.
-   `cd examples/kitchen-sink && bun run package` (`spark package`) writes a signed,
-   notarized `.zip` to `examples/kitchen-sink/dist/` ([packaging](packaging.md)). Without
+1. **Artifact.** `--artifact` is the `.dmg` or `.zip` to install. Build the release
+   with the commit it certifies, then package it:
+   `cd examples/kitchen-sink && SPARK_RELEASE_REVISION=$(git rev-parse HEAD) bun run build && bun run package`.
+   `spark package` writes a signed, notarized, stapled `.zip` to
+   `examples/kitchen-sink/dist/` ([packaging](packaging.md)), and the build records the
+   revision as `sourceRevision` in the app's `Contents/Resources/spark-runtime.json`
+   (inside the signature), as the Runner build does. Without
    `--artifact`, `--local` packages the gate's release build
    (`cd examples/kitchen-sink && bun run build`) as a compressed DMG with the app and
    an `/Applications` link, as a release DMG is laid out. That DMG is kept in the
@@ -34,10 +38,15 @@ and 2 for a usage error.
    carry the download's quarantine to the installed app. An installed app without
    the attribute fails with `quarantine`.
 4. **Verify** the installed app: `codesign --verify --deep --strict`,
-   `codesign -dvvv` (signer, team, hardened runtime, timestamp) and
-   `spctl --assess --type execute` (Gatekeeper's verdict and `source=`). The console
-   and report print one line, such as `ad-hoc / not notarized` or
-   `Developer ID Application: Example Corp (ABCDE12345) / notarized`.
+   `codesign -dvvv` (signer, team, hardened runtime, timestamp),
+   `spctl --assess --type execute` (Gatekeeper's verdict and `source=`) and
+   `xcrun stapler validate` (the notarization ticket is stapled, so Gatekeeper
+   accepts the app offline). The harness never submits anything for notarization.
+   The console and report print one line, such as `ad-hoc / not notarized / not stapled`
+   or `Developer ID Application: Example Corp (ABCDE12345) / notarized / stapled`.
+   It also reads the installed app's `sourceRevision`: a release report certifies the
+   commit, so the app must have been built from it. An old signed artifact next to
+   today's checkout is another build, and fails with `revision`.
 5. **Gate.** `bun run gate --target <target> --artifact <installed app>` runs in
    process. Its report goes to `gate/` in the harness report directory.
 6. **Report:** `artifacts/harness/<commit>/<target>/report.json`, where `<target>` is
@@ -50,7 +59,9 @@ and 2 for a usage error.
 | Signature that does not verify | fails | fails |
 | Not Developer ID, no hardened runtime, no timestamp | fails | recorded |
 | Not notarized (Gatekeeper rejects it, or `source` is not `Notarized Developer ID`) | fails | recorded |
-| Gate after a signature failure | not run: Gatekeeper would block a person | runs |
+| Notarized, but the ticket is not stapled | fails | recorded |
+| `sourceRevision` missing, or not the report's commit | fails | recorded |
+| Gate after one of these failures | not run | runs |
 | `releasable` | PASS on a clean tree | always `false` |
 
 Local builds are ad-hoc signed and not notarized, so a release run fails them with
@@ -67,12 +78,20 @@ Gatekeeper rejects before launching it.
 
 `report.json` has `version` (1), `verdict` (`PASS` or `FAIL`), `releasable`, `local`,
 `target`, `commit`, `dirty`, `startedAt`, `durationMs`, `environment`
-(`kind` `host` or `vm`, the `host` the app was installed on, and `vm.driver` and
+(`kind` `host` or `vm`; `clean`; the `host` the app was installed on; and `vm.driver` and
 `vm.image` for a VM), `artifact` (`file`, `format`, `sha256`, and `packagedFrom` for a
-`--local` DMG), `install` (`app`, `quarantine`), `signature` (the verification above
-plus `summary`), `gate` (`verdict`, `report`, `reasons`) and `reasons`
+`--local` DMG), `install` (`app`, `quarantine`, and `sourceRevision` when the app
+records one), `signature` (the verification above, `stapled` included, plus
+`summary`), `gate` (`verdict`, `report`, `reasons`) and `reasons`
 (`{ check, message }`). `check` is one of `usage`, `target`, `source`, `artifact`,
-`install`, `quarantine`, `signature`, `notarization`, `gate` or `vm`.
+`install`, `quarantine`, `signature`, `notarization`, `revision`, `gate` or `vm`. A
+disk image that does not detach, even with `hdiutil detach -force`, is an `install`
+reason of its own and does not hide the error that stopped the install.
+
+`environment.clean` is `true` only for a fresh clone of a VM image. A run on this
+machine is `false`: it runs in the current account, with whatever developer tools it
+has, and the harness cannot tell a new account from a development one. The guard
+does not require `clean` yet (see [The publish guard](#the-publish-guard)).
 
 ## The machine matrix
 
@@ -108,8 +127,9 @@ The run:
    needs network), runs `bun scripts/harness/cli.ts --target … --artifact … --commit <sha>`,
    and copies `artifacts/harness/` back to the share, also on failure. `--commit` is
    only for this: the archive has no `.git`, and the harness refuses it in a checkout.
-4. Stops and deletes the clone, also when a step fails, and keeps the guest's report
-   with `environment.kind: vm`.
+4. Stops and deletes the clone, also when a step fails or the run is interrupted
+   (Ctrl-C or `SIGTERM` stops the boot or the guest's command first), and keeps the
+   guest's report with `environment.kind: vm` and `clean: true`.
 
 Nothing is installed in the guest system-wide: Bun and the checkout stay in the
 share and in `~/spark-harness`, and the app goes to a temporary `Applications/`.
@@ -117,8 +137,8 @@ share and in `~/spark-harness`, and the app goes to a temporary `Applications/`.
 The driver interface is in `scripts/harness/vm.ts`:
 
 ```ts
-type VmDriver = { name: string; boot(image: string, share: string): Promise<Guest> };
-type Guest = { share: string; exec(argv: string[]): Promise<{ code: number; output: string }>; dispose(): Promise<void> };
+type VmDriver = { name: string; boot(image: string, share: string, signal?: AbortSignal): Promise<Guest> };
+type Guest = { share: string; exec(argv: string[], signal?: AbortSignal): Promise<{ code: number; output: string }>; dispose(): Promise<void> };
 ```
 
 **tart** (`tartDriver`, macOS guests): `tart clone <image> <name>`,
@@ -147,24 +167,32 @@ checks before it touches GitHub or npm. Both call `requireHarnessPass`
 (`scripts/harness/guard.ts`). For the release's source revision (`release.json`
 `revision`, the commit the Runner records and `prepare-release` verifies), each
 release target needs `artifacts/harness/<revision>/<target>/report.json` with
-`verdict: PASS`, `releasable: true`, `local: false`, `dirty: false`, and the same
-`target` and `commit`. Otherwise publication stops and lists every missing or
-failing target.
+`verdict: PASS`, `releasable: true`, `local: false`, `dirty: false`, the same
+`target` and `commit`, and `install.sourceRevision` equal to the revision (the
+installed app was built from it). Otherwise publication stops. The message names
+every target without such a report, and for a missing one says where it has to run:
+on the reference machine itself, or on a Mac or tart VM running that macOS. Agents
+run no VMs on the shared development Mac, so those reports come from Seth.
 
 The release targets are every `macos-*/arm64` target in `e2e/gate.yaml`, reference
 machines included, because the automated release publishes macOS Apple Silicon.
+That is strict on purpose (it fails closed); narrowing it, and whether a release
+needs `environment.clean`, are open decisions.
 
 The release commit (`release: prepare <version>`) exists only on the release Mac
 until the workflow pushes it, so the workflow stops at the guard the first time.
 Then:
 
-1. For each VM target, on the release Mac:
+1. On the release Mac, at the release commit, build and package the Kitchen Sink with
+   `SPARK_RELEASE_REVISION=$(git rev-parse HEAD)` (step 1 above), so the `.zip`
+   records that commit.
+2. For each VM target, on the release Mac:
    `bun run harness --target <target> --artifact <zip> --vm <image>`. The VM gets the
    commit through `git archive`, so it does not need to be pushed.
-2. For each physical target (reference machines), get the commit there, for example
+3. For each physical target (reference machines), get the commit there, for example
    with `git bundle`, check it out cleanly, run `bun run harness --artifact <zip>`, and
    copy its `artifacts/harness/<revision>/<target>/` folder back to the release Mac.
-3. Run `bun run release --resume`.
+4. Run `bun run release --resume`.
 
 The reports are plain JSON. The guard checks their contents, not who wrote them;
 review copied reports as you would any release evidence.
