@@ -40,6 +40,8 @@ static Outcome *Call(Command command)
   return outcome;
 }
 static NSDictionary *JSON(id value) { return [NSJSONSerialization JSONObjectWithData:[value dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil]; }
+/** Telemetry replies are dictionaries already; module replies are JSON strings. */
+static NSDictionary *JSON0(id value) { return [value isKindOfClass:NSDictionary.class] ? value : JSON(value); }
 static NSDictionary *Timing(double to, double durationMs) { return @{ @"type": @"timing", @"to": @(to), @"durationMs": @(durationMs), @"easing": @[@0, @0, @1, @1] }; }
 static NSDictionary *Request(NSString *identifier, NSInteger tag, NSDictionary *tracks) { return @{ @"id": identifier, @"groups": @[@{ @"tag": @(tag), @"tracks": tracks }] }; }
 
@@ -155,6 +157,11 @@ int main()
     CHECK(reset->resolved && host.motionModel[Opacity] == 0.5);
     Outcome *badRecord = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion recordFrames:@{ @"tag": @7, @"durationMs": @0 } resolve:resolve reject:reject]; });
     CHECK([badRecord->code isEqual:@"E_INVALID_ARGUMENT"]);
+    // The window is never shown (as in driver mode): frames are recorded on the screen's display link.
+    Outcome *recorded = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion recordFrames:@{ @"tag": @7, @"durationMs": @150 } resolve:resolve reject:reject]; });
+    const CFTimeInterval recording = CACurrentMediaTime();
+    while (!recorded->code && !recorded->resolved && CACurrentMediaTime() - recording < 3) [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+    CHECK(recorded->resolved && [JSON(recorded->value)[@"frames"] intValue] >= 5 && [JSON(recorded->value)[@"refreshRate"] intValue] >= 30);
     Outcome *realAdvance = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:16 resolve:resolve reject:reject]; });
     CHECK([realAdvance->code isEqual:@"E_UNAVAILABLE"]);
 
@@ -183,9 +190,54 @@ int main()
     Outcome *stopped = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion stopAnimation:@"empty" resolve:resolve reject:reject]; });
     CHECK(stopped->resolved && second->resolved && [JSON(second->value)[@"finished"] isEqual:@NO]);
 
+    // Telemetry: the driver waits for motion after its last input, advances the virtual clock exactly to progress
+    // points, samples the motion's history and renders presented values.
+    NSView *child = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 5, 5)];
+    [host addSubview:child];
+    CHECK([motion hostForView:child] == host && [motion hostForView:window.contentView] == nil);
+    [motion noteInput];
+    Outcome *none = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion waitForMotion:7 until:@{ @"progress": @0.5 } timeout:0.05 resolve:resolve reject:reject]; });
+    while (!none->code && !none->resolved) [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+    CHECK([none->code isEqual:@"E_TIMEOUT"]);  // the earlier motions started before the input
+    Outcome *badUntil = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion waitForMotion:7 until:@{ @"progress": @0.5, @"settled": @YES } timeout:0 resolve:resolve reject:reject]; });
+    CHECK([badUntil->code isEqual:@"E_INVALID_ARGUMENT"]);
+    Outcome *glide = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"glide", 7, @{ @"translateX": Timing(200, 400) }) resolve:resolve reject:reject]; });
+    NSDictionary *started = JSON0(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion telemetry:7 resolve:resolve reject:reject]; })->value);
+    const double startMs = [started[@"motion"][@"startMs"] doubleValue], from = [started[@"motion"][@"startValues"][@"translateX"] doubleValue];
+    auto at = [from](double fraction) { return from + (200 - from) * fraction; };
+    CHECK([started[@"motion"][@"progress"] isEqual:@0] && [started[@"motion"][@"afterInput"] isEqual:@YES] && [started[@"motion"][@"kinds"][@"translateX"] isEqual:@"timing"]);
+    CHECK(std::abs([started[@"motion"][@"endMs"] doubleValue] - startMs - 400) < 1e-6 && [started[@"animating"] isEqual:@[@"translateX"]]);
+    Outcome *quarter = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion waitForMotion:7 until:@{ @"progress": @0.25 } timeout:1 resolve:resolve reject:reject]; });
+    CHECK(quarter->resolved && std::abs([JSON0(quarter->value)[@"timeMs"] doubleValue] - startMs - 100) < 1e-6);
+    CHECK(std::abs([JSON0(quarter->value)[@"values"][@"translateX"] doubleValue] - at(0.25)) < 1e-6);  // linear
+    // A capture renders the presented value, not the model (the final value), then restores the model.
+    __block CGFloat rendered = 0;
+    [motion presenting:^{ rendered = host.layer.transform.m41; }];
+    CHECK(std::abs(rendered - at(0.25)) < 1e-6 && host.motionModel[TranslateX] == 200 && host.layer.transform.m41 == 200);
+    Outcome *passed = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion waitForMotion:7 until:@{ @"progress": @0.1 } timeout:1 resolve:resolve reject:reject]; });
+    CHECK([passed->code isEqual:@"E_PASSED"]);
+    Outcome *done = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion waitForMotion:7 until:@{ @"settled": @YES } timeout:1 resolve:resolve reject:reject]; });
+    CHECK(done->resolved && [JSON0(done->value)[@"motion"][@"settled"] isEqual:@YES] && glide->resolved);
+    Outcome *sampled = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion sample:7 request:@{ @"intervalMs": @100 } resolve:resolve reject:reject]; });
+    NSArray *samples = JSON0(sampled->value)[@"samples"];
+    CHECK(samples.count == 5 && std::abs([samples[2][@"values"][@"translateX"] doubleValue] - at(0.5)) < 1e-6 && std::abs([samples[2][@"velocities"][@"translateX"] doubleValue] - (200 - from) / 0.4) < 1e-6);
+    CHECK([samples[4][@"values"][@"translateX"] isEqual:@200]);
+    Outcome *future = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion sample:7 request:@{ @"toMs": @(startMs + 1e6) } resolve:resolve reject:reject]; });
+    CHECK([future->code isEqual:@"E_INVALID_ARGUMENT"]);
+
     // Returning to real time resumes layers and re-bakes from the shifted schedule.
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
     CHECK(host.layer.speed == 1 && host.layer.timeOffset == 0);
+    // On the real clock the wait follows wall time; the reply reports where the motion was when it resolved.
+    [motion noteInput];
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"real", 7, @{ @"opacity": Timing(0.2, 300) }) resolve:resolve reject:reject]; });
+    Outcome *half = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion waitForMotion:7 until:@{ @"progress": @0.5 } timeout:2 resolve:resolve reject:reject]; });
+    while (!half->code && !half->resolved) [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.005]];
+    const double reached = [JSON0(half->value)[@"motion"][@"progress"] doubleValue];
+    CHECK(half->resolved && reached >= 0.5 && reached < 0.9);
+    Outcome *rest = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion waitForMotion:7 until:@{ @"settled": @YES } timeout:2 resolve:resolve reject:reject]; });
+    while (!rest->code && !rest->resolved) [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.005]];
+    CHECK(rest->resolved && [JSON0(rest->value)[@"motion"][@"settled"] isEqual:@YES] && std::abs([JSON0(rest->value)[@"values"][@"opacity"] doubleValue] - 0.2) < 1e-9);
     Outcome *bounds = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"slow" resolve:resolve reject:reject]; });
     CHECK([bounds->code isEqual:@"E_INVALID_ARGUMENT"]);
 

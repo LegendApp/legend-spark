@@ -171,14 +171,23 @@ send one request at a time; each reply echoes `id`. Failures are
 | `pressKey` | `key`, `modifiers`, `window` | One key press. `key` is one character: a character key, or AppKit's character for a function key (`"\r"` Return, `"\u001b"` Escape, `"\u007f"` Delete, `"\uf700"` Up arrow, `"\uf704"` F1). |
 | `typeText` | `text`, `window` | One key press per user-perceived character, any Unicode (no input method). A newline presses Return. |
 | `menus` | | `menus`: the application menu bar (`NSApp.mainMenu`) as a tree, after `-[NSMenu update]` validates it, so `enabled` and `state` are what a user opening the menu sees. Items have `title`, `id`, `enabled`, `hidden`, `state` (`on`/`off`/`mixed`), optional `shortcut` (`key`, `modifiers` as NSEventModifierFlags bits), `toolTip`, `alternate` and `items`; separators are `{ "separator": true }`. The system Services menu is not expanded. A driven app shows no menu bar, but it has one. |
+| `startFrames` | | `refreshRate`. Starts counting frames ([Frame timing](#frame-timing)). `E_BUSY` while counting, `E_UNAVAILABLE` without a display. |
+| `stopFrames` | | `frames`, `droppedFrames`, `maxFrameGapMs`, `durationMs`, `fps`, `refreshRate` since `startFrames`. `E_INVALID_STATE` without `startFrames`; `E_UNAVAILABLE` when the display link delivered fewer than two frames. |
 | `quit` | | `ok`, then the session ends and the app quits. |
 
 Optional modules add commands with `SparkTestDriverRegisterCommand` (main thread; built-in
 names, including the input commands, and duplicate names are refused), because the driver cannot link them itself. The motion
-package registers `setClock` and `advanceClock`, its virtual clock
-([motion.md](motion.md#virtual-clock-for-the-test-driver)). An app without that module
-answers them with `E_UNKNOWN_COMMAND`. The system package registers `simulateSystemEvent`
+package registers its virtual clock, `setClock` and `advanceClock`
+([motion.md](motion.md#virtual-clock-for-the-test-driver)), and its telemetry, `motionState`,
+`waitForMotion` and `sampleMotion` ([motion.md](motion.md#motion-telemetry)). An app without
+that module answers them with `E_UNKNOWN_COMMAND`. The system package registers `simulateSystemEvent`
 ([system.md](system.md#testing-system-events)).
+
+Modules also get three hooks (`SparkTestDriver.h`, main thread): `SparkTestDriverFindView`
+finds a view by testID as `waitFor` does; `SparkTestDriverObserveInput` runs a block before
+every input command and before `navigate` and `openFile` deliver (motion uses it to tell
+motion caused by the last input from earlier motion); `SparkTestDriverWrapRender` wraps every
+`capture` render (motion uses it to render running animations at their presented values).
 
 Requests run as main run-loop blocks in the common modes, not on the main dispatch queue.
 A nested run loop started from a main-queue block does not drain the main queue, so a
@@ -233,6 +242,19 @@ What AppKit does with in-process events, measured in `tests/test-driver.native.m
 | Tracking areas get `mouseEntered:`/`mouseExited:` from the window server. | Pointer moves send entered and exited events for the tracking areas the driver's pointer enters and leaves. An `NSTrackingInVisibleRect` area covers its view's `visibleRect`, which since macOS 14 extends past the bounds of views that do not clip. |
 | `NSScrollView` flings phased (trackpad gesture) scroll events delivered in a burst. | `scroll` sends one event without gesture or momentum phases; `precise` gives pixel deltas. |
 
+## Frame timing
+
+`startFrames` adds a `CADisplayLink` for the main screen (a driven app's windows are never on
+screen, so the link belongs to the screen) to the main run loop in the common modes, at the
+display's maximum rate. Every callback is a frame the main thread was free to produce. A gap
+between two callbacks of more than one refresh interval (`targetTimestamp − timestamp`) counts
+the missed intervals in `droppedFrames`; `fps` is frames per second between the first and last
+callback. This measures the app's main-thread cadence against the display's refresh, the
+budget every UI update and gesture has. It is not a measurement of what the window server
+composited, which needs out-of-process instrumentation (#50). `tests/test-driver.native.mm`
+(mode `hooks`) checks that an idle main thread keeps the display's cadence and that blocking
+it for 250 ms drops frames and shows a gap of at least 240 ms.
+
 ## What a capture contains
 
 `capture` renders the window's frame view (`contentView.superview`, including the title
@@ -250,6 +272,13 @@ Measured in `tests/test-driver.native.mm`, a window that was never shown:
 | Title bar and traffic lights | Yes, in the inactive style |
 | Behind-window vibrancy (`NSVisualEffectView`, `BehindWindow`) | No: a flat material gray, because the blur comes from the window server |
 | Window shadow and rounded corners | No: outside the frame view |
+
+`cacheDisplayInRect:` renders a layer's model `transform` and `opacity`, but not Core
+Animation animations (measured while building #52: a layer translated by its model transform
+rendered moved; the same translation as a running `CABasicAnimation` did not). Running motion
+would render at its final values, so the motion module wraps every capture render
+(`SparkTestDriverWrapRender`) and gives each `MotionView` its presented values, the engine's
+state at the current time, for the duration of the render, then restores the model.
 
 `-[CALayer renderInContext:]` on the frame view's or content view's layer was also tried.
 For a window that was never shown, it produced an empty, transparent image even after

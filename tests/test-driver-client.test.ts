@@ -29,6 +29,10 @@ test("launches with a private run directory and one-time token, then drives the 
     expect(await driver.setAppAppearance("dark")).toEqual({ changed: true });
     expect(await driver.setClock("virtual")).toEqual({ mode: "virtual", timeMs: 1000 });
     expect(await driver.advanceClock(16)).toEqual({ mode: "virtual", timeMs: 1016 });
+    expect(await driver.waitForMotion("box", { progress: 0.5 }, 2000)).toEqual({ clock: "virtual", timeMs: 1100, echo: { testID: "box", progress: 0.5, timeoutMs: 2000 } });
+    expect(await driver.sampleMotion("box", { fromMs: 1000, intervalMs: 50 })).toEqual({ fromMs: 1000, toMs: 1100, intervalMs: 50, truncated: false, samples: [] });
+    expect(await driver.startFrames()).toEqual({ refreshRate: 120 });
+    expect(await driver.stopFrames()).toEqual({ frames: 61, droppedFrames: 0, maxFrameGapMs: 8.3, durationMs: 500, fps: 120, refreshRate: 120 });
     const capture = await driver.capture("main", "home");
     expect(capture).toEqual({ file: path.join(driver.directory, "home.png"), width: 2000, height: 1400, scale: 2 });
     expect(readFileSync(capture.file, "utf8")).toBe("png");

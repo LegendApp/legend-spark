@@ -92,6 +92,7 @@ struct Track {
   double leadDuration = 0;
   double startValue = 0;
   Plays plays;
+  Spec::Kind kind = Spec::Kind::Spring;  // the spec's kind, for telemetry
   bool infinite() const { return plays.infinite(); }
   double duration() const { return leadDuration + plays.duration(); }
   /** An infinite track is periodic from here on, with `loopPeriod()`. */
@@ -109,6 +110,30 @@ struct Group {
   double offset = 0;
 };
 struct Plan { std::string id; std::vector<Group> groups; };
+const char *kindName(Spec::Kind kind);
+
+/** From `from` on, a property follows `track` (begun at `begin`), or holds `value` when there is none. */
+struct Segment { double from = 0; TrackPtr track; double begin = 0; double value = 0; };
+/** A moving property whose animation was replaced, stopped or set: its state just before and just after. */
+struct Interruption { double time = 0; Property property = Opacity; State before, after; };
+/**
+ * Telemetry of a view's latest motion: from the instant it started moving from rest until it settles. Every
+ * property's history is kept as segments, so its value and velocity at any time of the motion can be evaluated
+ * after the fact (docs/motion.md#motion-telemetry).
+ */
+struct Episode {
+  static constexpr size_t kMaxSegments = 4096;
+  double start = 0;
+  double end = 0;     // when it settles (or settled): the latest track end, or a stop; infinity while a track repeats forever
+  double latest = 0;  // the start or the last interruption
+  uint64_t event = 0; // Engine::events() at the start or the last interruption
+  Values startValues{};
+  std::array<std::vector<Segment>, PropertyCount> segments;
+  std::array<std::optional<Spec::Kind>, PropertyCount> kinds;  // the kind of each property's latest animation
+  std::vector<Interruption> interruptions;
+  bool truncated = false;  // a property exceeded kMaxSegments; later history was not kept
+  State at(Property property, double time) const;
+};
 struct Settled { std::string id; bool finished; };
 
 struct Bake {
@@ -157,6 +182,12 @@ public:
 
   State state(int64_t view, Property property, double now) const;
   bool animating(int64_t view, Property property, double now) const;
+  /** The property's track until it is replaced, stopped or swept (it may have ended by `now`), and its begin time. */
+  std::optional<std::pair<TrackPtr, double>> track(int64_t view, Property property) const;
+  /** The view's latest motion, or null when it has not moved since it was added. */
+  const Episode *episode(int64_t view) const;
+  /** Counts motion starts and interruptions of every view; an episode's `event` is the count at its latest one. */
+  uint64_t events() const { return events_; }
   ChannelBake bake(int64_t view, Channel channel, double now) const;
 
   void link(int64_t view, Property property, bool linked);
@@ -167,11 +198,17 @@ private:
   struct Slot { double model = 0; TrackPtr track; double begin = 0; std::string batch; bool linked = false; };
   using Slots = std::array<Slot, PropertyCount>;
   struct Batch { int pending = 0; bool interrupted = false; };
+  struct Snapshot { std::array<TrackPtr, PropertyCount> tracks; std::array<State, PropertyCount> states; std::array<bool, PropertyCount> animating{}; bool moving = false; };
+  Snapshot snapshot(const Slots &slots, double now) const;
+  /** Records what a mutation at `now` changed in the view's motion (docs/motion.md#motion-telemetry). */
+  void observe(int64_t view, const Snapshot &before, double now);
   void release(Slot &slot, bool finished, std::vector<Settled> &settled);
   static State slotState(const Slot &slot, double now);
   Slots &slots(int64_t view);
   std::unordered_map<int64_t, Slots> views_;
   std::unordered_map<std::string, Batch> batches_;
+  std::unordered_map<int64_t, Episode> episodes_;
+  uint64_t events_ = 0;
   bool virtual_ = false;
   double virtualTime_ = 0;
 };

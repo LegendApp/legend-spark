@@ -12,6 +12,12 @@ platforms: [macos]
 - launchApp: { clearState: true, openUrl: "spark-ks://motion-system/scroll-and-frames" }
 - extendedWaitUntil: { visible: { id: motion-system-scroll-and-frames-root }, timeout: 10s }
 - assertText: { id: motion-system-scroll-and-frames-loop, equals: '"running"' }
-- assertFrames: { during: { tapOn: { id: motion-system-scroll-and-frames-block } }, dropped: 0 }
-- extendedWaitUntil: { visible: { id: motion-system-scroll-and-frames-report, text: '/"droppedFrames":0,"stalledFrames":0,/' }, timeout: 5s }
+# Frames are counted from the press until the screen's own report appears, so the count spans the block.
+- assertFrames:
+    during:
+      runFlow:
+        commands:
+          - tapOn: { id: motion-system-scroll-and-frames-block }
+          - extendedWaitUntil: { visible: { id: motion-system-scroll-and-frames-report, text: '/"droppedFrames":0,"stalledFrames":0,/' }, timeout: 5s }
+    dropped: 0
 - assertVisible: { id: motion-system-scroll-and-frames-report, text: '/^\{"blockedMs":5\d\d,"frames":\d+,"animatedFrames":\d+,/' }

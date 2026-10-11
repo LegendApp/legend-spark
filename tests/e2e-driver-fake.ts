@@ -3,10 +3,23 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type InputTarget, type SimulatedSystemEvent } from "../scripts/e2e/driver.ts";
+import { DriverError, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
+export const FRAMES: FrameReport = { frames: 61, droppedFrames: 0, maxFrameGapMs: 8.4, durationMs: 500, fps: 120, refreshRate: 120 };
+
+/** A scripted motion for a testID: the telemetry the driver reports once it has settled, its samples, and the motion clock. */
+export type FakeMotion = { motion: Motion; samples: MotionSample[]; clock?: "virtual" | "real" };
+export const REST_VALUES = { opacity: 1, translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 };
+/** A settled motion from `startMs` to `endMs`; `overrides` replace any field. */
+export const fakeMotion = (overrides: Partial<Motion> = {}): Motion => ({
+  startMs: 1000, endMs: 1400, latestMs: 1000, settled: true, progress: 1, afterInput: true, startValues: REST_VALUES,
+  properties: ["translateX"], kinds: { translateX: "spring" }, interruptions: [], truncated: false, ...overrides,
+});
+/** Samples of translateX at 0, 100, ... ms from `startMs`. */
+export const fakeSamples = (translateX: number[], startMs = 1000): MotionSample[] =>
+  translateX.map((value, index) => ({ tMs: startMs + index * 100, values: { ...REST_VALUES, translateX: value }, velocities: { ...REST_VALUES, opacity: 0, scaleX: 0, scaleY: 0 } }));
 
 const describeTarget = (target: InputTarget) => "testID" in target ? `${target.testID}+${target.offset ? `${target.offset.x},${target.offset.y}` : "center"}` : `${target.point.x},${target.point.y}@${target.window ?? "main"}`;
 
@@ -18,7 +31,8 @@ export class FakeDriver implements DriverClient {
   running = true;
   private calls = 0;
   private readonly directory = mkdtempSync(path.join(tmpdir(), "fake-driver-"));
-  constructor(private readonly log: string[], private readonly views: Record<string, number>, private readonly extra: () => DriverElement[] = () => [], private readonly menuBar: DriverMenuItem[] = []) {}
+  constructor(private readonly log: string[], private readonly views: Record<string, number>, private readonly extra: () => DriverElement[] = () => [], private readonly menuBar: DriverMenuItem[] = [],
+    private readonly motions: () => Record<string, FakeMotion> = () => ({}), private readonly frames: () => FrameReport | DriverError = () => FRAMES) {}
 
   async navigate(url: string) { this.log.push(`navigate ${url}`); }
   async openFile(file: string) { this.log.push(`openFile ${file}`); }
@@ -32,6 +46,30 @@ export class FakeDriver implements DriverClient {
   async setClock(mode: "virtual" | "real") { this.log.push(`setClock ${mode}`); }
   async advanceClock(durationMs: number) { this.log.push(`advanceClock ${durationMs}`); }
   async simulateSystemEvent(event: SimulatedSystemEvent) { this.log.push(`simulateSystemEvent ${JSON.stringify(event)}`); }
+  private motionOf(testID: string) {
+    const scripted = this.motions()[testID];
+    const state: MotionState = { tag: 7, clock: scripted?.clock ?? "virtual", timeMs: scripted?.motion.endMs ?? 0, values: REST_VALUES, velocities: REST_VALUES, animating: [], motion: scripted?.motion ?? null };
+    return { scripted, state };
+  }
+  async motionState(testID: string) { this.log.push(`motionState ${testID}`); return this.motionOf(testID).state; }
+  async waitForMotion(testID: string, until: MotionUntil, timeoutMs?: number) {
+    this.log.push(`waitForMotion ${testID} ${JSON.stringify(until)} ${timeoutMs}`);
+    const { scripted, state } = this.motionOf(testID);
+    if (!scripted) throw new DriverError("E_TIMEOUT", "No motion of the view started or was interrupted after the last driver input");
+    return state;
+  }
+  async sampleMotion(testID: string, range: { fromMs?: number; toMs?: number; intervalMs?: number } = {}) {
+    this.log.push(`sampleMotion ${testID} ${JSON.stringify(range)}`);
+    const { scripted } = this.motionOf(testID);
+    return { fromMs: scripted!.motion.startMs, toMs: range.toMs ?? scripted!.motion.endMs!, intervalMs: 100, truncated: false, samples: scripted!.samples };
+  }
+  async startFrames() { this.log.push("startFrames"); return { refreshRate: 120 }; }
+  async stopFrames() {
+    this.log.push("stopFrames");
+    const frames = this.frames();
+    if (frames instanceof DriverError) throw frames;
+    return frames;
+  }
   async elements() {
     this.log.push("elements");
     const calls = ++this.calls;
@@ -55,6 +93,9 @@ export class FakeApp implements DriverApp {
   readonly drivers: FakeDriver[] = [];
   /** Extra elements of the in-process accessibility view; tests may change them while a flow runs. */
   elements: DriverElement[] = [];
+  /** Scripted motion telemetry by testID, and the next frame report (or driver failure). */
+  motions: Record<string, FakeMotion> = {};
+  frames: FrameReport | DriverError = FRAMES;
   constructor(private readonly views: Record<string, number> = {}, private readonly bundleId = "so.legend.spark.examples.kitchensink", readonly menuBar: DriverMenuItem[] = []) {}
 
   readonly reserved = { arguments: ["-RCT_jsLocation"], env: ["SPARK_TEST_DRIVER_DIR", "SPARK_BUNDLE_URL"], locale: ["-AppleLanguages", "-AppleLocale"] };
@@ -65,7 +106,7 @@ export class FakeApp implements DriverApp {
     const extra = [...(options.arguments.length ? [`args=${options.arguments.join(" ")}`] : []), ...(Object.keys(options.env).length ? [`env=${JSON.stringify(options.env)}`] : [])];
     this.log.push([`launch locale=${options.locale ?? "-"}`, ...extra, `log=${path.basename(options.log.file)}`].join(" "));
     writeFileSync(options.log.file, "app log");
-    const driver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar);
+    const driver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar, () => this.motions, () => this.frames);
     this.drivers.push(driver);
     return driver;
   }
@@ -100,6 +141,10 @@ const server = net.createServer(socket => {
       else if (message.command === "setAppAppearance") reply.changed = message.appearance === "dark";
       else if (message.command === "setClock") Object.assign(reply, { mode: message.mode, timeMs: 1000 });
       else if (message.command === "advanceClock") Object.assign(reply, { mode: "virtual", timeMs: 1000 + message.durationMs });
+      else if (message.command === "waitForMotion") Object.assign(reply, { clock: "virtual", timeMs: 1100, echo: { testID: message.testID, progress: message.progress, timeoutMs: message.timeoutMs } });
+      else if (message.command === "sampleMotion") Object.assign(reply, { fromMs: message.fromMs, toMs: 1100, intervalMs: message.intervalMs, truncated: false, samples: [] });
+      else if (message.command === "startFrames") reply.refreshRate = 120;
+      else if (message.command === "stopFrames") Object.assign(reply, { frames: 61, droppedFrames: 0, maxFrameGapMs: 8.3, durationMs: 500, fps: 120, refreshRate: 120 });
       else if (message.command === "capture") { fs.writeFileSync(path.join(dir, message.name + ".png"), "png", { mode: 0o600 }); Object.assign(reply, { file: message.name + ".png", width: 2000, height: 1400, scale: 2 }); }
       send(reply);
       if (message.command === "quit") { socket.end(); server.close(); }

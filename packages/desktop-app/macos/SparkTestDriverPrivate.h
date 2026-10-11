@@ -15,3 +15,7 @@ NSArray<NSString *> *SparkDriverInputCommandNames(void);
 // Called once when the driver starts.
 void SparkDriverInputStart(void);
 void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverReply reply);
+
+// Frame counting (SparkTestDriverFrames.mm): startFrames, stopFrames.
+NSArray<NSString *> *SparkDriverFrameCommandNames(void);
+void SparkDriverFrames(NSString *command, NSDictionary *request, SparkTestDriverReply reply);

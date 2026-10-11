@@ -8,6 +8,7 @@ import path from "node:path";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import { DriverError, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo, type Frame, type InputTarget, type Modifier } from "../driver.ts";
+import { motionCommands, type MotionClient } from "./driver-motion.ts";
 import { ms } from "./executor.ts";
 import { matchesText, parseSelector } from "./selectors.ts";
 import {
@@ -15,7 +16,7 @@ import {
 } from "./backend.ts";
 
 /** What the backend uses of a driver session (`Driver` in scripts/e2e/driver.ts). Tests pass a double. */
-export type DriverClient = {
+export type DriverClient = MotionClient & {
   readonly running: boolean;
   navigate(url: string): Promise<void>;
   openFile(file: string): Promise<void>;
@@ -71,6 +72,8 @@ export class DriverBackend implements Backend {
     advanceClock: async args => { await this.client().advanceClock(ms(args.duration as string | number)); },
     // The system module's injected events and state (docs/system.md#testing-system-events).
     simulateSystemEvent: async args => { await this.client().simulateSystemEvent(args as SimulatedSystemEvent); },
+    // Motion telemetry and frame counters (docs/e2e-flows.md#motion-and-frames).
+    ...motionCommands(() => this.client()),
     // Black-box commands, run here in-process (white-box) only when no black-box backend is active.
     tapOn: (args, context) => this.click(args, context, {}),
     doubleClickOn: (args, context) => this.click(args, context, { clickCount: 2 }),

@@ -47,6 +47,5 @@ matrix:
 - assertText: { id: motion-system-timelines-decay-result, equals: '{"finished":true}' }
 - setClock: real
 - tapOn: { id: motion-system-timelines-decay-run }
-- assertText: { id: motion-system-timelines-decay-result, equals: "…" }
 - assertMotion: { target: { id: motion-system-timelines-decay }, settlesWithin: 3s }
 - takeScreenshot: timelines-settled

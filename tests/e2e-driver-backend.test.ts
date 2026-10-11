@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import { DriverError } from "../scripts/e2e/driver.ts";
 import { runFlows } from "../scripts/e2e/runner/executor.ts";
 import { DriverBackend } from "../scripts/e2e/runner/driver-backend.ts";
-import { FakeApp, FRAME } from "./e2e-driver-fake.ts";
+import { FakeApp, fakeMotion, fakeSamples, FRAME, FRAMES } from "./e2e-driver-fake.ts";
 import { VirtualClock } from "./e2e-runner-backend.ts";
 
 const HEADER = "appId: so.legend.spark.examples.kitchensink\nname: Driver flow\nintent: The test intent.\n";
@@ -206,6 +206,118 @@ describe("white-box input (no black-box backend active)", () => {
     expect((await run("- launchApp\n- tapOn: X", app)).result.failure).toMatchObject({
       kind: "unsupported", message: 'backend driver cannot address the window of "x": it has no identifier',
     });
+  });
+});
+
+describe("motion and frames", () => {
+  const motionApp = (motion = fakeMotion(), samples = fakeSamples([0, 60, 104, 98, 100]), clock: "virtual" | "real" = "virtual") => {
+    const app = new FakeApp({ box: 1, go: 1 });
+    app.motions = { box: { motion, samples, clock } };
+    return app;
+  };
+  const motionLog = (app: FakeApp) => app.log.filter(line => /^(waitForMotion|sampleMotion|motionState|startFrames|stopFrames|tap|capture)/.test(line));
+
+  test("captureMotion waits for the motion after the last input to settle and writes its samples", async () => {
+    const { result, app } = await run("- launchApp\n- captureMotion: { target: { id: box }, name: open }\n- captureMotion: { target: { id: box }, until: 200ms, name: early }", motionApp());
+    expect(result.status).toBe("passed");
+    expect(motionLog(app)).toEqual([
+      'waitForMotion box {"settled":true} 5000', 'sampleMotion box {"toMs":1400}', 'waitForMotion box {"elapsedMs":200} 5000', 'sampleMotion box {"toMs":1200}',
+    ]);
+    const output = result.artifacts.find(artifact => artifact.path.endsWith("open.motion.json"))!;
+    const written = JSON.parse(readFileSync(output.path, "utf8"));
+    expect(written).toMatchObject({ testID: "box", clock: "virtual", motion: { startMs: 1000, endMs: 1400 }, toMs: 1400 });
+    expect(written.samples.map((sample: { values: { translateX: number } }) => sample.values.translateX)).toEqual([0, 60, 104, 98, 100]);
+  });
+
+  test("assertMotion checks kind, settle time and overshoot past the final value", async () => {
+    const passing = await run("- launchApp\n- assertMotion: { target: { id: box }, kind: spring, settlesWithin: 400ms, overshoot: { min: 3px, max: 4.5 } }", motionApp());
+    expect(passing.result.status).toBe("passed");
+    expect(motionLog(passing.app)).toEqual(['waitForMotion box {"settled":true} 5000', 'sampleMotion box {"toMs":1400}']);
+    const failing = await run("- launchApp\n- assertMotion: { target: { id: box }, kind: timing, settlesWithin: 300ms, overshoot: { max: 1px } }", motionApp());
+    expect(failing.result.failure).toMatchObject({
+      kind: "assertion",
+      message: "the motion of box after the last input: it settled 400 ms after it started, not within 300ms; it is not a timing: it moved translateX spring; it overshot 4px, more than 1px",
+    });
+    const redirected = await run("- launchApp\n- assertMotion: { target: { id: box }, settlesWithin: 300ms }", motionApp(fakeMotion({ latestMs: 1100 })));
+    expect(redirected.result.status).toBe("passed");  // 300 ms after its last interruption
+    const late = await run("- launchApp\n- assertMotion: { target: { id: box }, settlesWithin: 200ms }", motionApp(fakeMotion({ latestMs: 1100 })));
+    expect(late.result.failure?.message).toBe("the motion of box after the last input: it settled 300 ms after it was last interrupted, not within 200ms");
+    const crossfade = await run("- launchApp\n- assertMotion: { target: { id: box }, kind: crossfade }", motionApp(fakeMotion({ properties: ["opacity"], kinds: { opacity: "timing" } })));
+    expect(crossfade.result.status).toBe("passed");
+    const still = await run("- launchApp\n- assertMotion: { target: { id: box }, overshoot: { min: 1px } }", motionApp(fakeMotion(), fakeSamples([0, 5, 0])));
+    expect(still.result.failure).toMatchObject({ kind: "assertion", message: "the motion of box after the last input: overshoot is measured on a translation that travels; it moved translateX spring" });
+  });
+
+  test("velocityContinuous needs an interruption that kept value and velocity", async () => {
+    const handoff = (after: { value: number; velocity: number }) => fakeMotion({ interruptions: [{ timeMs: 1100, property: "translateX", before: { value: 60, velocity: 60 }, after }] });
+    expect((await run("- launchApp\n- assertMotion: { target: { id: box }, velocityContinuous: true }", motionApp(handoff({ value: 60, velocity: 60.00001 })))).result.status).toBe("passed");
+    expect((await run("- launchApp\n- assertMotion: { target: { id: box }, velocityContinuous: true }", motionApp(handoff({ value: 60, velocity: 0 })))).result.failure).toMatchObject({
+      kind: "assertion", message: "the motion of box after the last input: an interruption changed value or velocity: translateX 60 at 60/s → 60 at 0/s",
+    });
+    expect((await run("- launchApp\n- assertMotion: { target: { id: box }, velocityContinuous: true }", motionApp())).result.failure).toMatchObject({
+      kind: "assertion", message: "the motion of box after the last input: it was never interrupted, so velocity continuity was not exercised",
+    });
+    expect((await run("- launchApp\n- assertMotion: { target: { id: box }, velocityContinuous: false }", motionApp(handoff({ value: 60, velocity: 0 })))).result.status).toBe("passed");
+  });
+
+  test("kind: none checks there is no motion after the last input without waiting", async () => {
+    const quiet = new FakeApp({ box: 1 });
+    expect((await run("- launchApp\n- assertMotion: { target: { id: box }, kind: none }", quiet)).result.status).toBe("passed");
+    expect(motionLog(quiet)).toEqual(["motionState box"]);
+    expect((await run("- launchApp\n- assertMotion: { target: { id: box }, kind: none }", motionApp())).result.failure).toMatchObject({ kind: "assertion", message: "box moved after the last input (translateX spring)" });
+    expect((await run("- launchApp\n- assertMotion: { target: { id: box }, kind: none, settlesWithin: 1s }", motionApp())).result.failure).toMatchObject({ kind: "invalid" });
+  });
+
+  test("assertMotion frames advances the virtual clock to each progress point and compares every capture with its golden", async () => {
+    const matrix = "matrix:\n  appearance: [light]\n  locale: [en]\n";
+    const { result, app } = await run("- launchApp\n- assertMotion: { target: { id: box }, frames: { at: [100, 0, 12.5], golden: slide } }", motionApp(), matrix);
+    expect(motionLog(app)).toEqual([
+      "motionState box",
+      'waitForMotion box {"progress":0} 5000', "capture main capture-1",
+      'waitForMotion box {"progress":0.125} 5000', "capture main capture-2",
+      'waitForMotion box {"progress":1} 5000', "capture main capture-3",
+      "capture main capture-4", // failure evidence: no golden exists for any frame
+    ]);
+    expect(result.goldens.map(golden => golden.id)).toEqual(["macos/light/en/slide-0", "macos/light/en/slide-12_5", "macos/light/en/slide-100"]);
+    expect(result.failure?.kind).toBe("assertion");
+    expect(result.failure?.message.split("\n")).toHaveLength(3);
+    const real = await run("- launchApp\n- assertMotion: { target: { id: box }, frames: { at: [50], golden: slide } }", motionApp(fakeMotion(), fakeSamples([0]), "real"));
+    expect(real.result.failure).toMatchObject({ kind: "invalid", message: "assertMotion frames are exact frames of the virtual clock; run setClock: virtual before the motion starts" });
+  });
+
+  test("interruptAt waits for the progress point, then runs its command", async () => {
+    const { result, app } = await run("- launchApp\n- interruptAt: { target: { id: box }, progress: 0.25, with: { tapOn: { id: go } } }", motionApp());
+    expect(result.status).toBe("passed");
+    expect(motionLog(app)).toEqual(['waitForMotion box {"progress":0.25} 5000', 'tap go+50,20 {}']);
+    expect((await run("- launchApp\n- interruptAt: { progress: 0.25, with: { tapOn: { id: go } } }", motionApp())).result.failure).toMatchObject({ kind: "unsupported" });
+  });
+
+  test("motion that never starts, and targets without a testID, fail typed", async () => {
+    expect((await run("- launchApp\n- captureMotion: { target: { id: go }, name: x }", motionApp())).result.failure).toMatchObject({
+      kind: "timeout", message: "captureMotion: E_TIMEOUT: No motion of the view started or was interrupted after the last driver input",
+    });
+    const app = motionApp();
+    app.elements = [{ key: "label", window: "spark.main", text: "Box", frame: FRAME }];
+    expect((await run("- launchApp\n- assertMotion: { target: Box, kind: spring }", app)).result.failure).toMatchObject({ kind: "unsupported", message: 'backend driver reads motion by testID, and "Box" matched an element without one' });
+    expect((await run("- launchApp\n- captureMotion: { target: { id: box }, name: ../x }", motionApp())).result.failure).toMatchObject({ kind: "invalid" });
+  });
+
+  test("assertFrames counts frames around its command and records the gate metrics", async () => {
+    const { result, app } = await run("- launchApp\n- assertFrames: { during: { tapOn: { id: go } }, fps: { min: 110 }, dropped: 0 }", motionApp());
+    expect(result.status).toBe("passed");
+    expect(motionLog(app)).toEqual(["startFrames", "tap go+50,20 {}", "stopFrames"]);
+    expect(result.metrics).toEqual({ "frames.fps": [120], "frames.dropped": [0] });
+    const dropping = motionApp();
+    dropping.frames = { ...FRAMES, droppedFrames: 3, fps: 90, maxFrameGapMs: 33.4 };
+    expect((await run("- launchApp\n- assertFrames: { during: { tapOn: { id: go } }, fps: { min: 110 }, dropped: 0 }", dropping)).result.failure).toMatchObject({
+      kind: "assertion", message: "90 fps is below 110; 3 frames dropped, more than 0 (61 frames over 500 ms at 120 Hz; longest gap 33.4 ms)",
+    });
+    const blind = motionApp();
+    blind.frames = new DriverError("E_UNAVAILABLE", "The display link delivered 1 frames, so frame timing could not be measured");
+    expect((await run("- launchApp\n- assertFrames: { during: { tapOn: { id: go } }, dropped: 0 }", blind)).result.failure).toMatchObject({ kind: "unsupported" });
+    const broken = motionApp();
+    expect((await run("- launchApp\n- assertFrames: { during: { tapOn: { id: missing } }, dropped: 0 }", broken)).result.failure?.kind).toBe("not-found");
+    expect(motionLog(broken).filter(line => !line.startsWith("capture")).at(-1)).toBe("stopFrames");
   });
 });
 

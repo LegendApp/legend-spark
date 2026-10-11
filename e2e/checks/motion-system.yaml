@@ -99,3 +99,10 @@ checks:
     spec: "docs/e2e-flows.md Visual goldens; #227"
     covers:
       - ./motion#MotionView
+  MOT-TELEMETRY-01:
+    title: The driver reads a motion's telemetry (kind, settle time, overshoot, samples) and captures the window at progress points of it on the virtual clock, each frame showing the motion at that instant
+    platforms: [macos]
+    blocking: true
+    spec: "#52 INFRA.driver; docs/motion.md Motion telemetry"
+    covers:
+      - ./motion#MotionView

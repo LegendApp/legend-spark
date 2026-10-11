@@ -21,3 +21,14 @@ FOUNDATION_EXPORT BOOL SparkTestDriverEnding(void);
 typedef void (^SparkTestDriverReply)(NSDictionary *reply);
 typedef void (^SparkTestDriverHandler)(NSDictionary *request, SparkTestDriverReply reply);
 FOUNDATION_EXPORT void SparkTestDriverRegisterCommand(NSString *name, SparkTestDriverHandler handler);
+
+// Hooks for optional modules (main thread). The first visible view with this accessibility identifier (React
+// Native testID) in any window, or nil.
+FOUNDATION_EXPORT NSView *SparkTestDriverFindView(NSString *testID);
+// `observer` runs before the driver delivers input or a deep link or file (tap, hover, drag, scroll, pressKey,
+// typeText, navigate, openFile), so a module can tell what that input caused (motion's waitForMotion).
+FOUNDATION_EXPORT void SparkTestDriverObserveInput(dispatch_block_t observer);
+// `wrapper` runs around every in-process render of `capture` and must call `render` exactly once, synchronously.
+// Motion uses it to render the presented frame of running animations rather than their final values.
+typedef void (^SparkTestDriverRenderWrapper)(dispatch_block_t render);
+FOUNDATION_EXPORT void SparkTestDriverWrapRender(SparkTestDriverRenderWrapper wrapper);

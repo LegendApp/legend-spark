@@ -31,7 +31,36 @@ BOOL SparkTestDriverActive(void) { return active; }
 BOOL SparkTestDriverEnding(void) { return ending; }
 void SparkTestDriverDidMount(void) { lastMount = CACurrentMediaTime(); }
 static NSArray<NSString *> *SparkBuiltInCommands(void) {
-  return [@[@"ping", @"navigate", @"openFile", @"waitFor", @"elements", @"setAppAppearance", @"capture", @"menus", @"quit"] arrayByAddingObjectsFromArray:SparkDriverInputCommandNames()];
+  return [[@[@"ping", @"navigate", @"openFile", @"waitFor", @"elements", @"setAppAppearance", @"capture", @"menus", @"quit"]
+    arrayByAddingObjectsFromArray:SparkDriverInputCommandNames()] arrayByAddingObjectsFromArray:SparkDriverFrameCommandNames()];
+}
+static NSMutableArray<dispatch_block_t> *SparkInputObservers(void) {
+  static NSMutableArray *observers;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ observers = [NSMutableArray new]; });
+  return observers;
+}
+void SparkTestDriverObserveInput(dispatch_block_t observer) {
+  NSCAssert(NSThread.isMainThread, @"Driver hooks are registered on the main thread");
+  [SparkInputObservers() addObject:[observer copy]];
+}
+static void SparkNoteInput(void) { for (dispatch_block_t observer in SparkInputObservers()) observer(); }
+static NSMutableArray<SparkTestDriverRenderWrapper> *SparkRenderWrappers(void) {
+  static NSMutableArray *wrappers;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ wrappers = [NSMutableArray new]; });
+  return wrappers;
+}
+void SparkTestDriverWrapRender(SparkTestDriverRenderWrapper wrapper) {
+  NSCAssert(NSThread.isMainThread, @"Driver hooks are registered on the main thread");
+  [SparkRenderWrappers() addObject:[wrapper copy]];
+}
+// Runs `render` inside every registered wrapper, the first registered outermost.
+static void SparkWrapped(NSUInteger index, dispatch_block_t render) {
+  if (index == SparkRenderWrappers().count) { render(); return; }
+  __block BOOL rendered = NO;
+  SparkRenderWrappers()[index](^{ NSCAssert(!rendered, @"A render wrapper rendered twice"); rendered = YES; SparkWrapped(index + 1, render); });
+  NSCAssert(rendered, @"A render wrapper did not render");
 }
 static NSMutableDictionary<NSString *, SparkTestDriverHandler> *SparkModuleCommands(void) {
   static NSMutableDictionary *commands;
@@ -140,6 +169,7 @@ NSView *SparkDriverFindView(NSString *testID) {
   }
   return nil;
 }
+NSView *SparkTestDriverFindView(NSString *testID) { return SparkDriverFindView(testID); }
 NSWindow *SparkDriverResolveWindow(id target, NSString **failure) {
   if (![target isKindOfClass:NSString.class]) { *failure = @"Expected window: main, key, id:<identifier> or title:<title>"; return nil; }
   if ([target isEqual:@"key"]) {
@@ -194,9 +224,12 @@ static void SparkCapture(NSDictionary *request, SparkDriverReply reply) {
   SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 5), ^{ return SparkSettled(); }, ^(BOOL settled) {
     if (!settled) { reply(SparkDriverFailure(@"E_NOT_SETTLED", @"The UI kept mounting changes until the timeout")); return; }
     NSView *view = SparkDriverFrameView(window);
-    [window layoutIfNeeded];
-    [view displayIfNeeded];
-    NSBitmapImageRep *rep = SparkRender(view);
+    __block NSBitmapImageRep *rep = nil;
+    SparkWrapped(0, ^{
+      [window layoutIfNeeded];
+      [view displayIfNeeded];
+      rep = SparkRender(view);
+    });
     NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
     if (!png) { reply(SparkDriverFailure(@"E_RENDER", @"Rendering produced no image")); return; }
     NSString *file = [name stringByAppendingPathExtension:@"png"];
@@ -233,6 +266,7 @@ static void SparkOpenURL(NSURL *url, NSDictionary *request, SparkDriverReply rep
   if (![delegate respondsToSelector:@selector(application:openURLs:)]) { reply(SparkDriverFailure(@"E_UNSUPPORTED", @"The application delegate does not open URLs")); return; }
   SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 30), ^{ return (BOOL)(lastMount > 0 && SparkSettled()); }, ^(BOOL rendered) {
     if (!rendered) { reply(SparkDriverFailure(@"E_TIMEOUT", @"The app has not rendered")); return; }
+    SparkNoteInput();
     [delegate application:NSApp openURLs:@[url]];
     reply(@{ @"ok": @YES });
   });
@@ -374,7 +408,8 @@ static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   else if ([command isEqual:@"elements"]) SparkElements(reply);
   else if ([command isEqual:@"setAppAppearance"]) SparkSetAppearance(request, reply);
   else if ([command isEqual:@"capture"]) SparkCapture(request, reply);
-  else if ([SparkDriverInputCommandNames() containsObject:command]) SparkDriverInput(command, request, reply);
+  else if ([SparkDriverInputCommandNames() containsObject:command]) { SparkNoteInput(); SparkDriverInput(command, request, reply); }
+  else if ([SparkDriverFrameCommandNames() containsObject:command]) SparkDriverFrames(command, request, reply);
   else if ([command isEqual:@"menus"]) reply(@{ @"ok": @YES, @"menus": NSApp.mainMenu ? SparkMenuItems(NSApp.mainMenu) : @[] });
   else if ([command isKindOfClass:NSString.class] && SparkModuleCommands()[command]) SparkModuleCommands()[command](request, reply);
   else reply(SparkDriverFailure(@"E_UNKNOWN_COMMAND", [NSString stringWithFormat:@"Unknown command %@", command]));

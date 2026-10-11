@@ -1,5 +1,6 @@
 #import "SparkMotionCoordinator.h"
 #import <QuartzCore/QuartzCore.h>
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <vector>
@@ -204,6 +205,7 @@ static NSString *SparkJSONString(id object)
   NSMutableSet<SparkMotionFrameRecorder *> *_recorders;
   NSMutableArray<dispatch_block_t> *_awaitingMount;
   NSUInteger _sweepGeneration;
+  uint64_t _inputEvent;
 }
 
 + (instancetype)shared
@@ -611,20 +613,203 @@ static NSScrollView *SparkFindScrollView(NSView *view)
 - (void)advanceClock:(double)milliseconds resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
 {
   [self perform:^{
-    const double seconds = milliseconds / 1000;
-    self->_engine.advance(seconds);
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    for (NSView *host in self->_hosts.objectEnumerator) host.layer.timeOffset += seconds;
-    [CATransaction commit];
-    [self sweep];
+    [self advance:milliseconds / 1000];
     resolve(nil);
   } reject:reject];
+}
+
+/** Moves engine time and every motion layer's time forward together; throws Failure on the real clock. */
+- (void)advance:(double)seconds
+{
+  _engine.advance(seconds);
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  for (NSView *host in _hosts.objectEnumerator) host.layer.timeOffset += seconds;
+  [CATransaction commit];
+  [self sweep];
 }
 
 - (void)clock:(SparkMotionResolve)resolve
 {
   resolve(SparkJSONString(@{ @"mode": _engine.virtualClock() ? @"virtual" : @"real", @"timeMs": @(self.now * 1000) }));
+}
+
+#pragma mark - Motion telemetry
+
+static id SparkMilliseconds(double seconds) { return std::isfinite(seconds) ? @(seconds * 1000) : (id)NSNull.null; }
+static NSDictionary *SparkStateObject(const State &state) { return @{ @"value": @(state.value), @"velocity": @(state.velocity) }; }
+
+- (NSView<SparkMotionHost> *)hostForView:(NSView *)view
+{
+  for (NSView *candidate = view; candidate; candidate = candidate.superview)
+    if ([candidate conformsToProtocol:@protocol(SparkMotionHost)]) {
+      NSView<SparkMotionHost> *host = (NSView<SparkMotionHost> *)candidate;
+      if ([_hosts objectForKey:@(host.motionTag)] == host) return host;
+    }
+  return nil;
+}
+
+- (void)noteInput { _inputEvent = _engine.events(); }
+
+- (NSDictionary *)telemetry:(NSInteger)tag now:(double)now
+{
+  [self sweep];  // what ended by now settles first (its timer may not have fired yet), so values are final values
+  Values values, velocities;
+  NSMutableArray *animating = [NSMutableArray new];
+  for (int i = 0; i < PropertyCount; i++) {
+    const State state = _engine.state(tag, Property(i), now);
+    values[i] = state.value;
+    velocities[i] = state.velocity;
+    if (_engine.animating(tag, Property(i), now)) [animating addObject:@(propertyName(Property(i)))];
+  }
+  NSMutableDictionary *reply = [@{ @"tag": @(tag), @"clock": _engine.virtualClock() ? @"virtual" : @"real", @"timeMs": @(now * 1000),
+    @"values": SparkValuesObject(values), @"velocities": SparkValuesObject(velocities), @"animating": animating, @"motion": NSNull.null } mutableCopy];
+  const Episode *episode = _engine.episode(tag);
+  if (!episode) return reply;
+  const BOOL settled = animating.count == 0;
+  NSMutableDictionary *kinds = [NSMutableDictionary new];
+  NSMutableArray *moved = [NSMutableArray new];
+  for (int i = 0; i < PropertyCount; i++) {
+    if (episode->kinds[i]) kinds[@(propertyName(Property(i)))] = @(kindName(*episode->kinds[i]));
+    if (episode->segments[i].size() > 1 || episode->segments[i].front().track) [moved addObject:@(propertyName(Property(i)))];
+  }
+  NSMutableArray *interruptions = [NSMutableArray new];
+  for (const Interruption &interruption : episode->interruptions)
+    [interruptions addObject:@{ @"timeMs": @(interruption.time * 1000), @"property": @(propertyName(interruption.property)),
+      @"before": SparkStateObject(interruption.before), @"after": SparkStateObject(interruption.after) }];
+  const double span = episode->end - episode->start;
+  id progress = settled ? @1 : !std::isfinite(span) ? (id)NSNull.null : @(span > 0 ? std::clamp((now - episode->start) / span, 0.0, 1.0) : 1.0);
+  reply[@"motion"] = @{
+    @"startMs": @(episode->start * 1000), @"endMs": SparkMilliseconds(episode->end), @"latestMs": @(episode->latest * 1000),
+    @"settled": @(settled), @"progress": progress, @"afterInput": @(episode->event > _inputEvent),
+    @"startValues": SparkValuesObject(episode->startValues), @"properties": moved, @"kinds": kinds, @"interruptions": interruptions,
+    @"truncated": @(episode->truncated),
+  };
+  return reply;
+}
+
+- (void)telemetry:(NSInteger)tag resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
+{
+  [self perform:^{
+    if (![self->_hosts objectForKey:@(tag)]) throw SparkMotionUnmounted(tag);
+    resolve([self telemetry:tag now:self.now]);
+  } reject:reject];
+}
+
+/** When an episode reaches `until`, in engine time; throws Failure when it never does. */
+static double SparkMotionTarget(const Episode &episode, NSDictionary *until)
+{
+  if (until[@"progress"]) {
+    const double progress = SparkNumberValue(until[@"progress"], @"progress");
+    if (!(progress >= 0 && progress <= 1)) throw SparkMotionInvalid(@"progress is between 0 and 1");
+    if (std::isinf(episode.end)) throw Failure{"E_UNSUPPORTED_OPTION", "The motion repeats forever, so it has no progress; wait for elapsedMs instead"};
+    return episode.start + progress * (episode.end - episode.start);
+  }
+  if (until[@"elapsedMs"]) {
+    const double elapsed = SparkNumberValue(until[@"elapsedMs"], @"elapsedMs");
+    if (!(elapsed >= 0 && std::isfinite(elapsed))) throw SparkMotionInvalid(@"elapsedMs is a finite number of at least 0");
+    return std::min(episode.start + elapsed / 1000, episode.end);
+  }
+  if (std::isinf(episode.end)) throw Failure{"E_UNSUPPORTED_OPTION", "The motion repeats forever, so it never settles; wait for elapsedMs instead"};
+  return episode.end;
+}
+
+- (void)waitForMotion:(NSInteger)tag until:(NSDictionary *)until timeout:(double)timeout resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
+{
+  NSUInteger kinds = (until[@"progress"] != nil) + (until[@"elapsedMs"] != nil) + (SparkIsBoolean(until[@"settled"]) && [until[@"settled"] boolValue]);
+  if (kinds != 1 || until.count != 1) { reject(@"E_INVALID_ARGUMENT", @"waitForMotion waits for one of progress, elapsedMs or settled: true"); return; }
+  const double deadline = CACurrentMediaTime() + timeout;
+  __weak SparkMotionCoordinator *weakSelf = self;
+  __block NSTimer *timer = nil;
+  __block BOOL done = NO;
+  void (^finish)(void) = ^{ done = YES; [timer invalidate]; timer = nil; };
+  // Returns YES once it has replied.
+  BOOL (^check)(void) = ^BOOL {
+    SparkMotionCoordinator *coordinator = weakSelf;
+    if (!coordinator) return NO;
+    try {
+      if (![coordinator->_hosts objectForKey:@(tag)]) throw SparkMotionUnmounted(tag);
+      const Episode *episode = coordinator->_engine.episode(tag);
+      const BOOL current = episode && episode->event > coordinator->_inputEvent;
+      if (current) {
+        const double target = SparkMotionTarget(*episode, until), now = coordinator.now;
+        const BOOL progress = until[@"progress"] != nil;
+        if (progress && now > target + 1e-9 && coordinator->_engine.virtualClock())
+          throw Failure{"E_PASSED", "The motion is already past that progress on the virtual clock (" + std::to_string((now - episode->start) / (episode->end - episode->start)) + ")"};
+        if (now < target - 1e-9 && coordinator->_engine.virtualClock()) [coordinator advance:target - now];
+        if (coordinator.now >= target - 1e-9) {
+          if (progress && [until[@"progress"] doubleValue] < 1 && ![coordinator isAnimating:tag])
+            throw Failure{"E_PASSED", "The motion settled before reaching that progress"};
+          finish();
+          resolve([coordinator telemetry:tag now:coordinator.now]);
+          return YES;
+        }
+      }
+      if (CACurrentMediaTime() >= deadline) {
+        finish();
+        reject(@"E_TIMEOUT", current ? @"The motion did not get there before the timeout" : @"No motion of the view started or was interrupted after the last driver input");
+        return YES;
+      }
+    } catch (const Failure &failure) {
+      finish();
+      reject(@(failure.code.c_str()), @(failure.message.c_str()));
+      return YES;
+    }
+    return NO;
+  };
+  if (check()) return;
+  timer = [NSTimer timerWithTimeInterval:0.002 repeats:YES block:^(NSTimer *) { if (!done) check(); }];
+  [NSRunLoop.mainRunLoop addTimer:timer forMode:NSRunLoopCommonModes];
+}
+
+- (void)sample:(NSInteger)tag request:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
+{
+  [self perform:^{
+    if (![self->_hosts objectForKey:@(tag)]) throw SparkMotionUnmounted(tag);
+    const Episode *episode = self->_engine.episode(tag);
+    if (!episode) throw Failure{"E_NOT_FOUND", "The view has not moved"};
+    const double now = self.now;
+    const double from = request[@"fromMs"] ? SparkNumberValue(request[@"fromMs"], @"fromMs") / 1000 : episode->start;
+    const double to = request[@"toMs"] ? SparkNumberValue(request[@"toMs"], @"toMs") / 1000 : std::min(episode->end, now);
+    const double interval = SparkNumber(request, @"intervalMs", 1000 / Engine::kSampleRate) / 1000;
+    if (!(interval >= 0.001 && std::isfinite(interval))) throw SparkMotionInvalid(@"intervalMs is at least 1");
+    if (!(from >= episode->start - 1e-9 && from <= to)) throw SparkMotionInvalid(@"fromMs is within the motion and not after toMs");
+    if (to > now + 1e-9) throw Failure{"E_INVALID_ARGUMENT", "toMs is in the future: wait for the motion first"};
+    const double count = std::floor((to - from) / interval + 1e-9) + 1;
+    if (count > 20000) throw SparkMotionInvalid(@"At most 20000 samples; raise intervalMs");
+    NSMutableArray *samples = [NSMutableArray arrayWithCapacity:(NSUInteger)count + 1];
+    auto add = [&](double time) {
+      Values values, velocities;
+      for (int i = 0; i < PropertyCount; i++) {
+        const State state = episode->at(Property(i), time);
+        values[i] = state.value;
+        velocities[i] = state.velocity;
+      }
+      [samples addObject:@{ @"tMs": @(time * 1000), @"values": SparkValuesObject(values), @"velocities": SparkValuesObject(velocities) }];
+    };
+    for (double index = 0; index < count; index++) add(from + index * interval);
+    if (to - (from + (count - 1) * interval) > 1e-9) add(to);
+    resolve(@{ @"fromMs": @(from * 1000), @"toMs": @(to * 1000), @"intervalMs": @(interval * 1000), @"truncated": @(episode->truncated), @"samples": samples });
+  } reject:reject];
+}
+
+- (void)presenting:(dispatch_block_t)render
+{
+  const double now = self.now;
+  std::vector<std::pair<NSView<SparkMotionHost> *, Values>> models;
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  for (NSView<SparkMotionHost> *host in _hosts.objectEnumerator) {
+    if (!_engine.hasView(host.motionTag)) continue;
+    Values presented;
+    for (int i = 0; i < PropertyCount; i++) presented[i] = _engine.state(host.motionTag, Property(i), now).value;
+    if (presented == host.motionModel) continue;
+    models.emplace_back(host, host.motionModel);
+    [host applyMotionModel:presented];
+  }
+  render();
+  for (const auto &[host, model] : models) [host applyMotionModel:model];
+  [CATransaction commit];
 }
 
 #pragma mark - Frame telemetry
@@ -644,7 +829,11 @@ static NSScrollView *SparkFindScrollView(NSView *view)
     recorder.resolve = resolve;
     recorder.reject = reject;
     recorder.start = -1;
-    recorder.displayLink = [host displayLinkWithTarget:self selector:@selector(frame:)];
+    // A view's display link follows its window's display and never fires for a window that is not on screen (the
+    // test driver renders windows without showing them); the screen's link keeps the same cadence there.
+    NSScreen *screen = host.window.isVisible ? nil : host.window.screen ?: NSScreen.mainScreen;
+    if (!host.window.isVisible && !screen) throw Failure{"E_UNAVAILABLE", "No display is connected, so frames cannot be recorded"};
+    recorder.displayLink = screen ? [screen displayLinkWithTarget:self selector:@selector(frame:)] : [host displayLinkWithTarget:self selector:@selector(frame:)];
     [recorder.displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
     [self->_recorders addObject:recorder];
   } reject:reject];
