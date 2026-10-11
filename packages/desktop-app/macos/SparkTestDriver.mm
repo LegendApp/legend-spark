@@ -208,25 +208,36 @@ static NSBitmapImageRep *SparkRender(NSView *view) {
   [view cacheDisplayInRect:view.bounds toBitmapImageRep:rep];
   return rep;
 }
-// The unemphasized selection material (a selected source-list row in a window that is not key, which
-// driver windows never are) is a black layer that the window server turns into a tint with a vibrant
-// compositing filter. Drawn in-process the filter is skipped and the row is solid black, so for the
-// capture that layer is hidden under the system's unemphasized selection color, then restored.
+// A selected source-list row in a window that is not key (driver windows never are) draws its selection as
+// a black layer that the window server turns into a tint with a vibrant compositing filter. Drawn in-process
+// the filter is skipped and the row is solid black, so for the capture that layer is hidden under the
+// system's unemphasized selection color, then restored. The selection is the row view's subview that is not
+// a cell. On macOS 27 it is an NSVisualEffectView (material .selection) whose sublayer has the filter; on
+// macOS 26 it is a private view whose own layer has it.
+static void SparkCoverFilteredLayer(CALayer *layer, NSAppearance *appearance, NSMutableArray<dispatch_block_t> *restore) {
+  if (layer.hidden) return;
+  if (!layer.compositingFilter) {
+    for (CALayer *sublayer in [layer.sublayers copy]) SparkCoverFilteredLayer(sublayer, appearance, restore);
+    return;
+  }
+  CALayer *cover = [CALayer layer];
+  cover.frame = layer.frame; cover.cornerRadius = layer.cornerRadius; cover.cornerCurve = layer.cornerCurve; cover.maskedCorners = layer.maskedCorners;
+  [appearance performAsCurrentDrawingAppearance:^{ cover.backgroundColor = NSColor.unemphasizedSelectedContentBackgroundColor.CGColor; }];
+  [layer.superlayer insertSublayer:cover above:layer];
+  layer.hidden = YES;
+  [restore addObject:^{ layer.hidden = NO; [cover removeFromSuperlayer]; }];
+}
 static void SparkCoverSelectionMaterials(NSView *view, NSMutableArray<dispatch_block_t> *restore) {
   if (view.isHidden) return;
-  NSVisualEffectView *effect = [view isKindOfClass:NSVisualEffectView.class] ? (NSVisualEffectView *)view : nil;
-  if (effect.material == NSVisualEffectMaterialSelection && !effect.emphasized && effect.layer) {
-    [effect.layer displayIfNeeded]; // AppKit adds the material layer when the view's layer first displays.
-    for (CALayer *layer in effect.layer.sublayers) {
-      if (!layer.compositingFilter || layer.hidden) continue;
-      layer.hidden = YES;
-      [restore addObject:^{ layer.hidden = NO; }];
+  NSTableRowView *row = [view isKindOfClass:NSTableRowView.class] ? (NSTableRowView *)view : nil;
+  if (row.selected && !row.emphasized) {
+    NSMutableSet<NSView *> *cells = [NSMutableSet new];
+    for (NSInteger column = 0; column < row.numberOfColumns; column++) if ([row viewAtColumn:column]) [cells addObject:[row viewAtColumn:column]];
+    for (NSView *child in row.subviews) {
+      if ([cells containsObject:child] || child.isHidden || !child.layer) continue;
+      [child.layer displayIfNeeded]; // AppKit adds the material layer when the view's layer first displays.
+      SparkCoverFilteredLayer(child.layer, row.effectiveAppearance, restore);
     }
-    CALayer *cover = [CALayer layer];
-    cover.frame = effect.layer.bounds;
-    [effect.effectiveAppearance performAsCurrentDrawingAppearance:^{ cover.backgroundColor = NSColor.unemphasizedSelectedContentBackgroundColor.CGColor; }];
-    [effect.layer addSublayer:cover];
-    [restore addObject:^{ [cover removeFromSuperlayer]; }];
   }
   for (NSView *child in view.subviews) SparkCoverSelectionMaterials(child, restore);
 }

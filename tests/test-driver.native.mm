@@ -666,11 +666,18 @@ int main(int argc, char **argv) { @autoreleasepool {
       [NSString stringWithFormat:@"a selected source-list row captures in the unemphasized selection color %@, not %@", Describe(unemphasized), Describe(selection)]);
     NSRect unselected = [selectionTable convertRect:[selectionTable rectOfRow:1] toView:window.contentView];
     Check(Near(Sample(@"cache.png", NSMakeRect(NSMaxX(unselected) - 60, NSMinY(unselected), 20, NSHeight(unselected)), window), 1, 1, 1), @"an unselected row stays clear");
-    // The capture leaves the selection material as it was.
-    NSView *material = nil;
-    for (NSView *child in [selectionTable rowViewAtRow:0 makeIfNecessary:NO].subviews) if ([child isKindOfClass:NSVisualEffectView.class]) material = child;
-    Check(material.layer.sublayers.count == 1 && material.layer.sublayers.firstObject.compositingFilter && !material.layer.sublayers.firstObject.hidden,
-      @"the selection material is restored after the capture");
+    // The capture leaves the selection as it was: its filtered layer visible again and no cover left behind.
+    NSMutableArray<CALayer *> *filtered = [NSMutableArray new], *covers = [NSMutableArray new];
+    __block void (^walk)(CALayer *);
+    void (^visit)(CALayer *) = ^(CALayer *layer) {
+      if (layer.compositingFilter) [filtered addObject:layer];
+      NSColor *background = layer.backgroundColor ? [[NSColor colorWithCGColor:layer.backgroundColor] colorUsingColorSpace:NSColorSpace.sRGBColorSpace] : nil;
+      if (background.alphaComponent > 0.5 && Near(background, unemphasized.redComponent, unemphasized.greenComponent, unemphasized.blueComponent)) [covers addObject:layer];
+      for (CALayer *sublayer in layer.sublayers) walk(sublayer);
+    };
+    walk = visit;
+    walk([selectionTable rowViewAtRow:0 makeIfNecessary:NO].layer);
+    Check(filtered.count == 1 && !filtered.firstObject.hidden && covers.count == 0, @"the selection material is restored after the capture");
   }
   if ([mode isEqual:@"hooks"]) Check(Near(Sample(@"wrapped.png", NSMakeRect(0, 200, 100, 100), window), 0, 0, 1), @"capture renders inside the render wrappers");
   [NSFileManager.defaultManager removeItemAtPath:directory error:nil];
