@@ -150,10 +150,17 @@ export function motionCommands(client: () => MotionClient): Record<string, Comma
       await context.run([args.with as FlowCommand]);
     },
 
-    /** Counts main-thread display-link frames while `during` runs; records `frames.fps` and `frames.dropped`. */
+    /**
+     * Counts main-thread display-link frames while `during` runs, and until `for` from the start, sending the app nothing
+     * after `during` (a poll walks the view tree on the main thread); records `frames.fps` and `frames.dropped`.
+     */
     assertFrames: async (args, context) => {
       await driven("assertFrames", () => client().startFrames());
-      try { await context.run([args.during as FlowCommand]); } catch (error) {
+      const until = performance.now() + (args.for === undefined ? 0 : ms(args.for as string | number));
+      try {
+        await context.run([args.during as FlowCommand]);
+        await new Promise(resolve => setTimeout(resolve, Math.max(0, until - performance.now())));
+      } catch (error) {
         await client().stopFrames().catch(() => undefined);
         throw error;
       }

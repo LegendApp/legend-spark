@@ -5422,7 +5422,7 @@
             }
           },
           "assertFrames": {
-            "description": "[driver] Assert frame rate and drops while a command runs (real clock).",
+            "description": "[driver] Assert frame rate and drops while a command runs, and for at least `for` from the start (real clock).",
             "if": {
               "type": "object"
             },
@@ -5431,6 +5431,9 @@
               "properties": {
                 "during": {
                   "$ref": "#/definitions/command"
+                },
+                "for": {
+                  "$ref": "#/definitions/duration"
                 },
                 "fps": {
                   "type": "object",

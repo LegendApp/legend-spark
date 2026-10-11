@@ -307,6 +307,12 @@ describe("motion and frames", () => {
     expect(result.status).toBe("passed");
     expect(motionLog(app)).toEqual(["startFrames", "tap go+50,20 {}", "stopFrames"]);
     expect(result.metrics).toEqual({ "frames.fps": [120], "frames.dropped": [0] });
+    // `for` keeps counting after the command, sending the app nothing until then.
+    const started = performance.now();
+    const held = await run("- launchApp\n- assertFrames: { during: { tapOn: { id: go } }, for: 300ms, dropped: 0 }", motionApp());
+    expect(held.result.status).toBe("passed");
+    expect(performance.now() - started).toBeGreaterThanOrEqual(300);
+    expect(motionLog(held.app)).toEqual(["startFrames", "tap go+50,20 {}", "stopFrames"]);
     const dropping = motionApp();
     dropping.frames = { ...FRAMES, droppedFrames: 3, fps: 90, maxFrameGapMs: 33.4 };
     expect((await run("- launchApp\n- assertFrames: { during: { tapOn: { id: go } }, fps: { min: 110 }, dropped: 0 }", dropping)).result.failure).toMatchObject({
