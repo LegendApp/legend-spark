@@ -77,7 +77,7 @@ static auto PropsFor(bool dismisses = true) {
 static RNSwipeActions *Row(NSView *parent, bool dismisses = true, CGFloat width = 400) {
   RNSwipeActions *row = [[RNSwipeActions alloc] initWithFrame:NSMakeRect(0, 0, width, 60)];
   [parent addSubview:row]; row->_eventEmitter = std::make_shared<SwipeActionsEventEmitter>();
-  [row updateProps:PropsFor(dismisses) oldProps:row->_props]; [row layoutSubviews]; return row;
+  [row updateProps:PropsFor(dismisses) oldProps:nullptr]; [row layoutSubviews]; return row;
 }
 static auto Emitter(RNSwipeActions *row) { return std::static_pointer_cast<const SwipeActionsEventEmitter>(row->_eventEmitter); }
 int main(int argc, char **argv) { @autoreleasepool {
@@ -93,7 +93,7 @@ int main(int argc, char **argv) { @autoreleasepool {
   } else if (scenario == "recycle") {
     Scroll(row, NSEventPhaseBegan, 190); Scroll(row, NSEventPhaseEnded, 0);
     [row prepareForRecycle]; row->_eventEmitter = std::make_shared<SwipeActionsEventEmitter>();
-    [row updateProps:PropsFor() oldProps:row->_props]; Wait();
+    [row updateProps:PropsFor() oldProps:nullptr]; Wait();
     Check(Emitter(row)->actions.empty(), @"Dismissal fired on recycled row's replacement emitter");
   } else if (scenario == "replace") {
     Scroll(row, NSEventPhaseBegan, 190); Scroll(row, NSEventPhaseEnded, 0);
