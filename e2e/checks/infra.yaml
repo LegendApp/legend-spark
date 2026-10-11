@@ -1,0 +1,15 @@
+area: infra
+prefix: INFRA
+checks:
+  INFRA-DRIVER-01:
+    title: The in-app driver backend launches the Kitchen Sink without focus, finds the catalog root by testID and matches the catalog golden
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md The driver backend; #226"
+  INFRA-DRIVER-02:
+    title: A spark-ks:// URL opened in the running app arrives as a links "url" event and routes to the screen, whose root renders and is captured
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md The driver backend; #226"
+    covers:
+      - ./links#addEventListener

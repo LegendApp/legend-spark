@@ -2,18 +2,22 @@
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { collect } from "../files.ts";
+import { KitchenSinkApp } from "../kitchen-sink.ts";
 import type { Artifact, Backend, BackendFactory } from "./backend.ts";
+import { DriverBackend } from "./driver-backend.ts";
 import { realClock, runFlows, type Clock, type FailureReport, type FlowResult, type RunEvent, type RunOptions } from "./executor.ts";
 import { buildReport, failureText, writeReports, type RunReport } from "./report.ts";
 
 const repo = path.resolve(import.meta.dirname, "../../..");
 
 /**
- * Production backends by `--backend` name. The macOS black-box backend (AX + CGEvent) lands with #50 and the
- * Spark in-app driver adapter lands with #226; until then this table is empty and `e2e:run` says so.
+ * Production backends by `--backend` name. `driver` is the Spark in-app driver (docs/e2e-flows.md#the-driver-backend);
+ * the macOS black-box backend (AX + CGEvent) lands with #50.
  */
-export const BACKENDS: Readonly<Record<string, BackendFactory>> = {};
-export const NO_BACKENDS = "no backends are available yet: the macOS black-box backend lands with #50 and the in-app driver adapter with #226";
+export const BACKENDS: Readonly<Record<string, BackendFactory>> = {
+  driver: ({ app }) => new DriverBackend(new KitchenSinkApp(app)),
+};
+export const NO_BACKENDS = "no backends are registered";
 
 export type RunIO = { backends: Readonly<Record<string, BackendFactory>>; stdout(line: string): void; stderr(line: string): void; clock?: Clock; signal?: AbortSignal };
 const USAGE = "usage: bun run e2e:run [flow|dir…] [--backend name[,name…]] [--agent] [--report dir] [--app path]";

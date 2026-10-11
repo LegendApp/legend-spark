@@ -292,7 +292,21 @@ describe("dispatch", () => {
     expect((await run(flow("- takeScreenshot: shot"), [blackBox])).result.failure?.message).toBe("takeScreenshot needs a driver backend (active: memory (black-box))");
     const driver = memory({ kind: "driver", name: "driver", elements: [element("x", { text: "X" })] });
     expect((await run(flow("- tapOn: X"), [driver])).result.failure?.message).toBe("tapOn needs a black-box backend (active: driver (driver))");
-    expect((await run(flow("- assertVisible: X"), [driver])).result.failure?.message).toBe("assertVisible needs a black-box backend (active: driver)");
+  });
+
+  test("visibility checks use the black-box backend; with only a driver backend, they use the driver's query keys", async () => {
+    const blackBox = memory({ elements: [element("x", { id: "x" })] });
+    expect((await run(flow("- assertVisible: { id: x }"), [blackBox, memory({ kind: "driver", name: "driver" })])).result.status).toBe("passed");
+    const queried: string[] = [];
+    const driver = memory({ kind: "driver", name: "driver" });
+    Object.assign(driver, {
+      elements: undefined, queryKeys: new Set(["id"]),
+      query: async (atom: { id: string }) => { queried.push(atom.id); return atom.id === "x" ? [element("x", { id: "x" })] : []; },
+    });
+    const passed = await run(flow("- assertVisible: { id: x }\n- assertNotVisible: { id: gone }\n- extendedWaitUntil: { visible: { id: x } }"), [driver]);
+    expect(passed.result.status).toBe("passed");
+    expect(queried).toEqual(["x", "gone", "x"]);
+    expect((await run(flow("- assertVisible: X"), [driver])).result.failure).toMatchObject({ kind: "unsupported", message: "backend driver cannot select by text" });
   });
 
   test("lifecycle commands may run on a driver backend; selectors use only its query keys", async () => {
@@ -434,7 +448,7 @@ describe("e2e:run", () => {
   test("usage errors exit 2", async () => {
     const dir = root({ "flows/a/pass.yaml": flow("- tapOn: Save"), "subflows/s.yaml": "- tapOn: X\n" });
     const cases: Array<[string[], Record<string, () => Backend>, string]> = [
-      [[dir], {}, "no backends are available yet: the macOS black-box backend lands with #50 and the in-app driver adapter with #226"],
+      [[dir], {}, "no backends are registered"],
       [[dir, "--backend", "nope"], { memory: () => memory() }, "unknown backend nope (available: memory)"],
       [[dir, "--frobnicate"], { memory: () => memory() }, "unknown option --frobnicate"],
       [[path.join(dir, "subflows/s.yaml")], { memory: () => memory() }, "not a flow"],

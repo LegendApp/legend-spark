@@ -26,7 +26,7 @@ function LocalizedShell({ mode, projectId }: { mode?: string; projectId?: string
     <View className="w-64 border-e border-border bg-surface" testID="infra-shell-sidebar">
       <View className="gap-1 p-4">
         <Text className="text-xl font-bold text-foreground" accessibilityRole="header">{t.appTitle}</Text>
-        <Text className="text-xs text-muted">{t.subtitle(mode, projectId)}</Text>
+        <Text className="text-xs text-muted" testID="infra-shell-subtitle">{t.subtitle(mode, projectId)}</Text>
       </View>
       <ScrollView contentContainerClassName="pb-4">
         <NavRow testID="infra-shell-catalog" selected={location.kind === "catalog"} onPress={() => navigate({ kind: "catalog" })} title={t.allScreens} />
