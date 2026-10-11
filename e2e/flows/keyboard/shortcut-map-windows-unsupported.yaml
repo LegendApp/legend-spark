@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: Shortcut map dispatch is typed unsupported on Windows
+intent: >
+  On Windows the command router has no keyboard manager, so application, window and view scopes
+  report unsupported-platform and the screen installs only the global hotkey. The map still loads,
+  lists every command and reports conflicts; rebinding persists. Router support: #259.
+checks: [KEY-MAPUNSUP-01, KEY-MAPLIST-01]
+tags: [keyboard]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://keyboard/shortcut-map" }
+- extendedWaitUntil: { visible: { id: keyboard-shortcut-map-commands }, timeout: 15s }
+- assertText: { id: keyboard-shortcut-map-availability-application, equals: 'application: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: keyboard-shortcut-map-availability-window, equals: 'window: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: keyboard-shortcut-map-availability-view, equals: 'view: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: keyboard-shortcut-map-availability-global, equals: 'global: {"available":true}' }
+- assertVisible: { id: keyboard-shortcut-map-quick-capture-row }
+- tapOn: { id: keyboard-shortcut-map-example-rebind }
+- assertText: { id: keyboard-shortcut-map-result, equals: "Last change: ok" }
+- assertVisible: { id: keyboard-shortcut-map-new-note-customized }
+- tapOn: { id: keyboard-shortcut-map-reset-all }
+- assertNotVisible: { id: keyboard-shortcut-map-new-note-customized }

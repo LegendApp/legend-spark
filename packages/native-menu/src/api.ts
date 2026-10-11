@@ -2,6 +2,7 @@ import { NativeEventEmitter, Platform } from "react-native";
 import NativeMenu from "./NativeMenu";
 import { SparkError, asyncRegistration, invokeNative, type Availability, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { menuItems, selectableMenuIds, type MenuInputItem, type MenuWireItem, type MenuAction as SharedMenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
+import { setShortcutInventory, type ShortcutInventoryEntry } from "@legendapp/spark-desktop-app/src/contracts/shortcut-inventory";
 import { composeWindowsMenus } from "./windows-menus";
 type MenuLeaf = Extract<MenuInputItem, { type: "separator" | "action" | "checkbox" | "role" }>;
 export type MenuItem = MenuLeaf | (Omit<Extract<MenuInputItem, { type: "submenu" }>, "items"> & { items: readonly MenuItem[] });
@@ -74,7 +75,17 @@ async function publish(next: Map<string, Owner>): Promise<void> {
   const result = await invokeNative(() => NativeMenu!.publish(JSON.stringify(menus)));
   if (result !== undefined && result !== null) throw new SparkError("E_INVALID_DATA", "Native menu publication returned an unexpected result");
   owners = next;
+  // Disabled items are reported too: enabling one makes its key equivalent live again.
+  const shortcuts: ShortcutInventoryEntry[] = [];
+  const visit = (menuId: string, items: readonly MenuWireItem[]) => { for (const item of items) {
+    const itemId = item.id ?? item.role;
+    if (item.shortcut && itemId) shortcuts.push({ accelerator: item.shortcut, owner: { source: "menu", menuId, itemId } });
+    if (item.items) visit(menuId, item.items);
+  } };
+  for (const owner of next.values()) visit(owner.id, owner.items);
+  setShortcutInventory(inventoryToken, shortcuts);
 }
+const inventoryToken = {};
 export async function createMenu(options: MenuOptions): Promise<Menu> {
   available();
   const token = `menu-${Date.now()}-${++sequence}`;

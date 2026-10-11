@@ -1,0 +1,24 @@
+appId: so.legend.spark.examples.kitchensink
+name: Shortcut map lists commands and a default conflict
+intent: >
+  The Shortcut map screen renders every demo command row (app, window, view and global scopes) with
+  default bindings and no Customized badges. Clear console defaults to ⌘⇧K, which the app controller
+  registers with registerShortcut, so its row shows a conflict with that registered shortcut.
+checks: [KEY-MAPLIST-01, KEY-MAPCONFLICT-01]
+tags: [keyboard]
+platforms: [macos]
+matrix: { appearance: [light, dark], locale: [en, ar] }
+---
+- launchApp: { openUrl: "spark-ks://keyboard/shortcut-map" }
+- extendedWaitUntil: { visible: { id: keyboard-shortcut-map-commands }, timeout: 15s }
+- assertVisible: { id: keyboard-shortcut-map-new-note-row }
+- assertVisible: { id: keyboard-shortcut-map-open-recent-row }
+- assertVisible: { id: keyboard-shortcut-map-find-row }
+- assertVisible: { id: keyboard-shortcut-map-toggle-sidebar-row }
+- assertVisible: { id: keyboard-shortcut-map-bold-row }
+- assertVisible: { id: keyboard-shortcut-map-clear-console-row }
+- assertVisible: { id: keyboard-shortcut-map-quick-capture-row }
+- assertNotVisible: { id: keyboard-shortcut-map-new-note-customized }
+- assertVisible: { id: keyboard-shortcut-map-clear-console-conflict-shortcut }
+- assertNotVisible: { id: keyboard-shortcut-map-find-conflict-menu }
+- takeScreenshot: shortcut-map

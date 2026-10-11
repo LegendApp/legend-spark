@@ -1,0 +1,29 @@
+appId: so.legend.spark.examples.kitchensink
+name: Rebind, fire, persist and reset a shortcut
+intent: >
+  Rebinding New note to ⌘⇧N shows the binding with a Customized badge. Pressing ⌘⇧N fires New note
+  and pressing ⌘N no longer does. The rebinding survives a relaunch (Spark settings storage). Reset
+  all restores ⌘N and removes the badge.
+checks: [KEY-MAPREBIND-01, KEY-MAPLIVE-01, KEY-MAPPERSIST-01]
+tags: [keyboard]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://keyboard/shortcut-map" }
+- extendedWaitUntil: { visible: { id: keyboard-shortcut-map-commands }, timeout: 15s }
+- tapOn: { id: keyboard-shortcut-map-example-rebind }
+- assertText: { id: keyboard-shortcut-map-result, equals: "Last change: ok" }
+- assertText: { id: keyboard-shortcut-map-new-note-bindings, equals: "⌘ + ⇧ + N" }
+- assertVisible: { id: keyboard-shortcut-map-new-note-customized }
+- shortcut: cmd+shift+n
+- assertText: { id: keyboard-shortcut-map-fired, equals: "Fired New note with ⌘ + ⇧ + N (App)" }
+- shortcut: cmd+f
+- assertText: { id: keyboard-shortcut-map-fired, equals: "Fired Find with ⌘ + F (Window)" }
+- shortcut: cmd+n
+- assertText: { id: keyboard-shortcut-map-fired, equals: "Fired Find with ⌘ + F (Window)" }
+- stopApp
+- launchApp: { openUrl: "spark-ks://keyboard/shortcut-map" }
+- extendedWaitUntil: { visible: { id: keyboard-shortcut-map-commands }, timeout: 15s }
+- assertVisible: { id: keyboard-shortcut-map-new-note-customized }
+- tapOn: { id: keyboard-shortcut-map-reset-all }
+- assertNotVisible: { id: keyboard-shortcut-map-new-note-customized }
+- assertText: { id: keyboard-shortcut-map-new-note-bindings, equals: "⌘ + N" }

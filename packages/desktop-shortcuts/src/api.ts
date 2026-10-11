@@ -2,6 +2,7 @@ import { NativeEventEmitter, Platform } from "react-native";
 import Native from "./NativeDesktopShortcuts";
 import { parseAccelerator } from "@legendapp/spark-desktop-app/src/contracts/accelerator";
 import { SparkError, invokeNative, parseNativeResult, asyncRegistration, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+import { setShortcutInventory } from "@legendapp/spark-desktop-app/src/contracts/shortcut-inventory";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 export { parseAccelerator, type Accelerator } from "@legendapp/spark-desktop-app/src/contracts/accelerator";
 export interface ShortcutOptions { windowId?: string; repeat?: boolean }
@@ -40,6 +41,8 @@ export async function registerShortcut(accelerator: string, handler: () => void,
     catch (cleanup) { throw new SparkError("E_NATIVE", "Shortcut registration and cleanup failed", { cause: new AggregateError([cause, cleanup]) }); }
     throw cause;
   }
-  return asyncRegistration(() => { removed = true; subscription.remove(); }, async () => { await call("remove", { id }); });
+  const registration = asyncRegistration(() => { removed = true; subscription.remove(); setShortcutInventory(registration, []); }, async () => { await call("remove", { id }); });
+  setShortcutInventory(registration, [{ accelerator: parsed, owner: { source: "shortcut", ...(options.windowId ? { windowId: options.windowId } : {}) } }]);
+  return registration;
 }
 let nextID = 0;

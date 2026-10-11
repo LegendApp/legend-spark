@@ -3,6 +3,7 @@ import Native from "./NativeDesktopGlobalShortcuts";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { parseAccelerator } from "@legendapp/spark-desktop-app/src/contracts/accelerator";
 import { SparkError, invokeNative, parseNativeResult, asyncRegistration, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+import { setShortcutInventory } from "@legendapp/spark-desktop-app/src/contracts/shortcut-inventory";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 export interface GlobalShortcutOptions {
   /** Fire on keyboard auto-repeat. Windows registers without MOD_NOREPEAT; macOS hotkeys never deliver repeats, so true rejects there. */
@@ -41,5 +42,7 @@ export async function registerGlobalShortcut(accelerator: string, handler: () =>
     catch (cleanup) { throw new SparkError("E_NATIVE", "Shortcut registration and cleanup failed", { cause: new AggregateError([cause, cleanup]) }); }
     throw cause;
   }
-  return asyncRegistration(() => { removed = true; subscription.remove(); }, async () => { await call("remove", { id }); });
+  const registration = asyncRegistration(() => { removed = true; subscription.remove(); setShortcutInventory(registration, []); }, async () => { await call("remove", { id }); });
+  setShortcutInventory(registration, [{ accelerator: parsed, owner: { source: "global-shortcut" } }]);
+  return registration;
 }

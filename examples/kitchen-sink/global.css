@@ -16,6 +16,12 @@
       --color-success: #17633b;
       --color-danger: #aa2430;
       --color-highlight: #dbeafe;
+      /* Spark UI controls (HotkeyCapture) read these application tokens. */
+      --color-text-primary: #111827;
+      --color-text-tertiary: #6b7280;
+      --color-border-primary: #d1d5db;
+      --color-background-primary: #f5f6f8;
+      --color-accent-primary: #2563eb;
     }
     @variant dark {
       --color-background: #191a1b;
@@ -26,6 +32,11 @@
       --color-success: #86efac;
       --color-danger: #fca5a5;
       --color-highlight: #1e3a5f;
+      --color-text-primary: #f5f5f5;
+      --color-text-tertiary: #a3a3a3;
+      --color-border-primary: #3e4042;
+      --color-background-primary: #191a1b;
+      --color-accent-primary: #60a5fa;
     }
   }
 }
