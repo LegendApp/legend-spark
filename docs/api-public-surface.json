@@ -149,14 +149,22 @@
     "getStartupTiming"
   ],
   "./dialogs": [
+    "AboutPanelOptions",
     "ConfirmOptions",
+    "DialogAccessoryControl",
+    "DialogAccessoryOption",
+    "DialogAccessoryValues",
+    "FileDialogFeature",
     "FileDialogOptions",
     "FileFilter",
     "MessageDialogButton",
+    "MessageDialogFeature",
     "MessageDialogOptions",
     "MessageDialogResult",
     "OpenFileDialogOptions",
     "OpenFileDialogResult",
+    "PromptOptions",
+    "PromptResult",
     "SaveFileDialogOptions",
     "SaveFileDialogResult",
     "confirm",
@@ -164,7 +172,9 @@
     "getMessageDialogAvailability",
     "openFileDialog",
     "saveFileDialog",
-    "showMessage"
+    "showAboutPanel",
+    "showMessage",
+    "showPrompt"
   ],
   "./drag-drop": [
     "DragDropView",
