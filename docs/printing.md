@@ -84,6 +84,10 @@ the user saves as PDF from the panel.
 | Canceled | `{ canceled: true }` |
 | Failed | Rejects with a `SparkError` (below) |
 
+AppKit's `runOperation` returns NO both when the panel is canceled and when the job fails.
+Spark treats an unsuccessful run whose job disposition is `NSPrintCancelJob` as canceled, and
+any other unsuccessful run as a failure (`E_NATIVE`).
+
 Cancellation is an expected result and failures reject, as for every Spark command
 ([API conventions](api-contracts.md#3-shared-api-conventions)). One print or page setup panel
 runs at a time (`E_BUSY`), and a window that already shows a sheet rejects `E_BUSY`.
