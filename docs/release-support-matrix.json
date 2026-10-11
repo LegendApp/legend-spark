@@ -3639,7 +3639,7 @@
       "sourceTarget": "./diagnostics.ts",
       "kind": "runtime-api",
       "scope": "desktop-only",
-      "provider": "@legendapp/spark-desktop-windows",
+      "provider": "@legendapp/spark-desktop-windows, @legendapp/spark-diagnostics",
       "intendedTargets": [
         "macos",
         "windows"
@@ -3647,7 +3647,9 @@
       "relatedCatalogCases": [],
       "verification": {
         "unitTests": [
-          "tests/sdk-api.test.ts"
+          "tests/sdk-api.test.ts",
+          "tests/hang-watchdog.test.ts",
+          "tests/hang-watchdog-native.test.ts"
         ],
         "portableCommand": "bun run test",
         "platformAcceptance": {
@@ -3682,11 +3684,13 @@
         }
       },
       "providerSources": [
-        "packages/desktop-windows/package.json"
+        "packages/desktop-windows/package.json",
+        "packages/diagnostics/package.json"
       ],
       "platformSourceEvidence": {
         "macos": [
-          "packages/desktop-windows/macos/"
+          "packages/desktop-windows/macos/",
+          "packages/diagnostics/macos/"
         ],
         "windows": [
           "packages/desktop-windows/src/index.windows.ts"

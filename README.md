@@ -167,6 +167,7 @@ Framework-owned capabilities are imported from `@legendapp/spark/<feature>`. Use
 | OS integration | `links`, `notifications`, `tray`, `system`: URLs/documents, local notifications, menu-bar items, Dock/startup/power integration |
 | Processes and distribution | `processes`, `updates`: child process I/O, timeouts and managed target-specific helper bundles, signed whole-app update integration |
 | Native controls and styling | `@legendapp/spark/ui`: native buttons, text inputs and selects; optional Uniwind bindings and system/light/dark themes |
+| Diagnostics | `@legendapp/spark/diagnostics`: main-thread hang watchdog with stacks, startup timing ([guide](docs/diagnostics.md)) |
 | Printing | `@legendapp/spark/printing`: print panel with preview for text, HTML, PDFs, windows and views; page setup; headless PDF export ([guide](docs/printing.md)) |
 | Displays | `@legendapp/spark/displays`: arrangement, safe area (notch), refresh rate (fixed or variable), color space and EDR headroom per display; change events ([guide](docs/displays.md)) |
 | Motion | `@legendapp/spark/motion`: compositor-run springs, timing, keyframes, sequences, staggers, decay and scroll links with velocity-preserving interruption ([guide](docs/motion.md)) |
