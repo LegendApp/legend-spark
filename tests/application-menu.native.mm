@@ -139,5 +139,18 @@ int main() { @autoreleasepool {
   Check(NSApp.helpMenu == hostHelp.submenu && Find(hostHelp.submenu, @{ @"id": @"guide" }, NO), @"Existing Help menu was replaced instead of extended");
   Check(!Publish(module, @[]), @"Existing Help cleanup failed");
   Check(NSApp.helpMenu == hostHelp.submenu && [hostHelp.title isEqual:@"Host Help"] && !Find(hostHelp.submenu, @{ @"id": @"guide" }, NO), @"Existing Help menu was not restored");
+  // Window tab roles keep AppKit's responder-chain actions, and AppKit's own tab items are targetable by role.
+  NSMenuItem *windowItem = [[NSMenuItem alloc] initWithTitle:@"Localized Window" action:nil keyEquivalent:@""];
+  windowItem.submenu = [NSMenu new]; [main addItem:windowItem]; NSApp.windowsMenu = windowItem.submenu;
+  NSMenuItem *merge = [[NSMenuItem alloc] initWithTitle:@"Localized Merge All Windows" action:@selector(mergeAllWindows:) keyEquivalent:@""]; [windowItem.submenu addItem:merge];
+  NSDictionary *tabs = @{ @"id": @"tabs", @"title": @"Window", @"target": @{ @"menu": @"window" }, @"_sparkOwner": @"tabs-owner", @"items": @[
+    @{ @"id": @"new-tab", @"role": @"newTab", @"title": @"New Tab", @"enabled": @YES, @"placement": @{ @"before": @{ @"role": @"mergeAllWindows" } }, @"_sparkOwner": @"tabs-owner" },
+    @{ @"id": @"next-tab", @"role": @"selectNextTab", @"enabled": @YES, @"_sparkOwner": @"tabs-owner" } ] };
+  Check(!Publish(module, @[tabs]), @"Tab role publication failed");
+  NSMenuItem *newTab = Find(windowItem.submenu, @{ @"id": @"new-tab" }, NO), *nextTab = Find(windowItem.submenu, @{ @"id": @"next-tab" }, NO);
+  Check(newTab.action == @selector(newWindowForTab:) && !newTab.target && [windowItem.submenu indexOfItem:newTab] + 1 == [windowItem.submenu indexOfItem:merge], @"newTab role lost its responder action or placement");
+  Check(nextTab.action == @selector(selectNextTab:) && Find(windowItem.submenu, @{ @"role": @"mergeAllWindows" }, NO) == merge, @"Tab roles did not map to AppKit's tab actions");
+  Check(!Publish(module, @[]), @"Tab role removal failed");
+  Check(windowItem.submenu.numberOfItems == 1 && merge.action == @selector(mergeAllWindows:), @"Tab role removal did not restore the Window menu");
   puts("Application menu tests passed");
 } return 0; }

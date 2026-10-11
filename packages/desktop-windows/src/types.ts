@@ -42,7 +42,25 @@ export interface WindowAppearanceOptions {
   contentProtection?: boolean;
   /** Mouse events pass through to whatever is behind the window. macOS only for now. */
   ignoreMouseEvents?: boolean;
+  /** Native window tabs. macOS only for now. */
+  tabbing?: WindowTabbingOptions;
 }
+/** `automatic` follows the system "Prefer tabs when opening documents" setting, `preferred` joins a tab group when shown, `disallowed` never tabs. */
+export type WindowTabbingMode = "automatic" | "preferred" | "disallowed";
+export interface WindowTabbingOptions {
+  mode?: WindowTabbingMode;
+  /** Windows with the same identifier can share a tab group. 1–200 characters. */
+  identifier?: string;
+}
+/** The Spark windows of one tab group. A window that is not tabbed is a group of one. */
+export interface WindowTabGroup {
+  /** In tab order. */
+  windowIds: WindowId[];
+  /** Null when the selected tab is not a Spark window. */
+  selectedWindowId: WindowId | null;
+  tabBarVisible: boolean;
+}
+export interface WindowNewTabEvent { windowId: WindowId }
 export type WindowOpenOptions = WindowKind & WindowAppearanceOptions & {
   id: WindowId;
   component: string;
@@ -50,11 +68,14 @@ export type WindowOpenOptions = WindowKind & WindowAppearanceOptions & {
   size?: Size;
   position?: { displayId: DisplayId; x: number; y: number };
   show?: boolean;
+  /** Restores the saved frame and, for a tab, its place in its saved tab group. */
   restoreBounds?: boolean;
+  /** Opens as the last tab of this window's tab group and selects it. Needs `show`. macOS only for now. */
+  tabbedWith?: WindowId;
   macos?: MacOSWindowOptions;
 };
 /** Options whose availability differs by platform; see `getWindowAvailability(option)`. */
-export type WindowOption = "aspectRatio" | "opacity" | "contentProtection" | "ignoreMouseEvents" | "spaces" | "simpleFullscreen" | "documentEdited" | "backgroundMaterial" | "subtitle" | "trafficLightPosition";
+export type WindowOption = "aspectRatio" | "opacity" | "contentProtection" | "ignoreMouseEvents" | "tabbing" | "spaces" | "simpleFullscreen" | "documentEdited" | "backgroundMaterial" | "subtitle" | "trafficLightPosition";
 export interface WindowUpdateOptions extends WindowAppearanceOptions { macos?: MacOSWindowUpdateOptions }
 export interface WindowInfo {
   id: WindowId;
@@ -77,6 +98,10 @@ export interface WindowEventMap {
   boundsChanged: { windowId: WindowId; bounds: WindowBounds };
   visibilityChanged: { windowId: WindowId; visible: boolean };
   fullscreenChanged: { windowId: WindowId; fullscreen: boolean };
+  /** The window's tab group gained, lost or reordered windows, or showed or hid its tab bar. */
+  tabGroupChanged: { windowId: WindowId; tabGroup: WindowTabGroup };
+  /** Another tab of the window's group was selected. */
+  tabSelectionChanged: { windowId: WindowId; selectedWindowId: WindowId | null };
   closed: { windowId: WindowId };
 }
 export interface MacOSTitleBarControl {

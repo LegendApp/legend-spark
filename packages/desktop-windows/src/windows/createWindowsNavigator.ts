@@ -2,13 +2,13 @@ import { AppRegistry, NativeModules, Platform, UIManager } from "react-native";
 import { SparkError, asyncRegistration, nativeError, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import type { Menu, MenuAction, MenuRootItem } from "@legendapp/spark-native-menu";
 import type { RoutedHotkeyHandlers } from "@legendapp/spark-commands/src/router";
-import { addWindowListener, closeWindow, getWindow, getWindowAvailability, openWindow, setWindowOptions, showWindow } from "../api";
+import { addWindowListener, closeWindow, getWindow, getWindowAvailability, handleWindowNewTab, openWindow, setWindowOptions, showWindow } from "../api";
 import { addMacOSWindowListener } from "../macos";
 import type { CloseResult, WindowInfo, WindowOpenOptions } from "../types";
 import { keys, object, validateOptions, windowId as validWindowId } from "../validation";
 import { DefaultErrorFallback, createWindowRoot, type RootContent, type RootHost, type WindowRootProps } from "./root";
 import { createUndoStack } from "./undo";
-import type { IsolatedRuntime, NavigatorWindowOptions, UndoMenuLabels, WindowComponentProps, WindowConfigEntry, WindowErrorEvent, WindowInstance, WindowsConfig, WindowsNavigatorOptions } from "./types";
+import type { IsolatedRuntime, NavigatorWindowOptions, NewWindowTab, NewWindowTabRequest, UndoMenuLabels, WindowComponentProps, WindowConfigEntry, WindowErrorEvent, WindowInstance, WindowsConfig, WindowsNavigatorOptions } from "./types";
 
 export type NavigatorOpenOptions<P> = { props: P; options?: NavigatorWindowOptions };
 type OpenArguments<P> = {} extends P ? [options?: { props?: P; options?: NavigatorWindowOptions }] : [options: NavigatorOpenOptions<P>];
@@ -53,7 +53,7 @@ interface WindowRecord {
 }
 
 const namePattern = /^[a-zA-Z0-9_-]{1,48}$/;
-const entryKeys = ["id", "component", "loadComponent", "options", "runtime", "undoMenu", "menus", "onMenuAction", "hotkeys", "macos"];
+const entryKeys = ["id", "component", "loadComponent", "options", "runtime", "undoMenu", "menus", "onMenuAction", "hotkeys", "newTab", "macos"];
 const UNDO_ID = "spark-windows-undo", REDO_ID = "spark-windows-redo", EDIT_ID = "spark-windows-edit";
 const defaultUndoLabels: UndoMenuLabels = { edit: "Edit", undo: label => label ? `Undo ${label}` : "Undo", redo: label => label ? `Redo ${label}` : "Redo" };
 /** Registered root module names: `spark.window.<id>` for `id` entries, `spark.window.<name>` otherwise. */
@@ -113,7 +113,8 @@ function validateEntry(name: string, entry: WindowConfigEntry, options: WindowsN
     if (typeof (entry.component as { __threadedRuntime?: { name?: unknown } } | undefined)?.__threadedRuntime?.name !== "string") throw new SparkError("E_INVALID_ARGUMENT", `${name}: isolated windows render a threadedComponent(...) component`);
   }
   if (entry.undoMenu !== undefined && typeof entry.undoMenu !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "undoMenu must be boolean");
-  fn(entry.menus, "menus"); fn(entry.onMenuAction, "onMenuAction");
+  fn(entry.menus, "menus"); fn(entry.onMenuAction, "onMenuAction"); fn(entry.newTab, "newTab");
+  if (entry.newTab && Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_OPTION", `${Platform.OS === "windows" ? "Windows" : Platform.OS} does not support newTab yet`);
   if (entry.hotkeys !== undefined) {
     object(entry.hotkeys, "hotkeys"); keys(entry.hotkeys, ["definitions", "handlers"]);
     if (!Array.isArray(entry.hotkeys.definitions) || typeof entry.hotkeys.handlers !== "function") throw new SparkError("E_INVALID_ARGUMENT", "hotkeys need definitions and a handlers(instance) function");
@@ -148,7 +149,8 @@ function contentOf(entry: WindowConfigEntry): RootContent {
  * `open`. Each window gets an undo stack, menus that follow the key window, window-scoped hotkeys,
  * a macOS toolbar and an error boundary.
  */
-export function createWindowsNavigator<const T extends WindowsConfig>(config: T, options: WindowsNavigatorOptions = {}): WindowsNavigator<T> {
+type NewTabCheck<T extends WindowsConfig> = { [K in keyof T]: { newTab?: (instance: WindowInstance) => NewWindowTab<T> | Promise<NewWindowTab<T>> } };
+export function createWindowsNavigator<const T extends WindowsConfig>(config: T & NewTabCheck<T>, options: WindowsNavigatorOptions = {}): WindowsNavigator<T> {
   object(config, "navigator configuration"); object(options, "navigator options");
   keys(options, ["hotkeys", "undoLabels", "errorFallback", "onError"]);
   const entries = Object.entries(config), modules = new Set<string>();
@@ -298,6 +300,16 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T,
         };
       }
       keep(await options.hotkeys!.register({ definitions: entry.hotkeys.definitions, handlers: wrapped, scope: { kind: "window", windowId: id } }));
+    }
+    if (entry.newTab) {
+      const newTab = entry.newTab;
+      // The new window joins this window's tab group; failures are reported, never thrown at AppKit.
+      keep(await handleWindowNewTab(id, async () => {
+        const request: NewWindowTabRequest = await newTab(instance);
+        object(request, "new tab"); keys(request, ["name", "props", "options"]);
+        if (entryOf(request.name).id !== undefined) throw new SparkError("E_INVALID_ARGUMENT", `${request.name} has a fixed window ID and cannot open as a new tab`);
+        await openInstance(request.name, { props: request.props, options: { ...request.options, tabbedWith: id } });
+      }, { onError: fail("newTab") }));
     }
     if (Platform.OS === "macos" && entry.macos?.onToolbarEvent) {
       const onToolbarEvent = entry.macos.onToolbarEvent;

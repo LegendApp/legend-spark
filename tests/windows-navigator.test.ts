@@ -17,7 +17,9 @@ const mocks = vi.hoisted(() => ({
   app: new Set<(event: object) => void>(),
   toolbar: new Map<string, (event: object) => void>(),
   openWindow: vi.fn(), closeWindow: vi.fn(), showWindow: vi.fn(), getWindow: vi.fn(), setWindowOptions: vi.fn(),
-  addWindowListener: vi.fn(), addMacOSWindowListener: vi.fn(), createMenu: vi.fn(),
+  addWindowListener: vi.fn(), addMacOSWindowListener: vi.fn(), createMenu: vi.fn(), handleWindowNewTab: vi.fn(),
+  /** The + button of each window with a new-tab handler. */
+  plus: new Map<string, () => Promise<void>>(),
   menu: { update: vi.fn(), remove: vi.fn() },
   menuAction: undefined as undefined | ((action: object) => void),
 }));
@@ -31,7 +33,7 @@ vi.mock("react-native", () => ({
 vi.mock("../packages/desktop-windows/src/api", () => ({
   getWindowAvailability: () => mocks.windowAvailability,
   openWindow: mocks.openWindow, closeWindow: mocks.closeWindow, showWindow: mocks.showWindow, getWindow: mocks.getWindow,
-  setWindowOptions: mocks.setWindowOptions, addWindowListener: mocks.addWindowListener,
+  setWindowOptions: mocks.setWindowOptions, addWindowListener: mocks.addWindowListener, handleWindowNewTab: mocks.handleWindowNewTab,
 }));
 vi.mock("../packages/desktop-windows/src/macos", () => ({ addMacOSWindowListener: mocks.addMacOSWindowListener }));
 vi.mock("@legendapp/spark-native-menu", () => ({ createMenu: mocks.createMenu }));
@@ -89,6 +91,11 @@ beforeEach(() => {
     const entry: Listener = { id, token: mocks.windows.get(id)!, type, listener, removed: false };
     mocks.listeners.push(entry);
     return { remove: vi.fn(async () => { entry.removed = true; }) };
+  });
+  mocks.plus.clear();
+  mocks.handleWindowNewTab.mockReset().mockImplementation(async (id: string, handler: (event: object) => unknown, options: { onError(error: unknown): void }) => {
+    mocks.plus.set(id, () => Promise.resolve().then(() => handler({ windowId: id })).then(() => {}, options.onError));
+    return { remove: vi.fn(async () => { mocks.plus.delete(id); }) };
   });
   mocks.addMacOSWindowListener.mockReset().mockImplementation(async (id: string, listener: (event: object) => void) => { mocks.toolbar.set(id, listener); return { remove: vi.fn(async () => {}) }; });
   mocks.menu.update.mockReset().mockResolvedValue(undefined); mocks.menu.remove.mockReset().mockResolvedValue(undefined);
@@ -484,4 +491,35 @@ test("compat: identity overrides and failed loaders reject before native creatio
   await expect(navigator.close("many")).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   const one = await navigator.open("many"), two = await navigator.open("many");
   expect(one.id).not.toBe(two.id);
+});
+
+test("newTab opens the returned window type as a tab of the window whose + button was clicked", async () => {
+  const Doc = (_: { title: string }) => null, onError = vi.fn();
+  let tabs = 0;
+  const windows = track(createWindowsNavigator({
+    doc: { component: Doc, options: { tabbing: { mode: "preferred", identifier: "docs" } }, newTab: () => ({ name: "doc", props: { title: `Tab ${++tabs}` } }) },
+    start: { component: () => null, newTab: () => ({ name: "settings" }) },
+    settings: { id: "nav-tab-settings", component: () => null },
+  }, { onError }));
+  const first = await windows.openInstance("doc", { props: { title: "First" } });
+  expect(mocks.handleWindowNewTab).toHaveBeenCalledWith(first.id, expect.any(Function), expect.any(Object));
+  await mocks.plus.get(first.id)!(); await tick();
+  expect(mocks.openWindow.mock.calls.at(-1)![0]).toMatchObject({ tabbedWith: first.id, tabbing: { mode: "preferred", identifier: "docs" }, props: { props: { title: "Tab 1" } } });
+  expect(windows.list("doc")).toHaveLength(2);
+  // Singletons cannot open as a new tab; the failure is reported, not thrown at AppKit.
+  const start = await windows.openInstance("start");
+  await mocks.plus.get(start.id)!(); await tick();
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ windowId: start.id, phase: "newTab", error: expect.objectContaining({ code: "E_INVALID_ARGUMENT" }) }));
+  expect(mocks.windows.has("nav-tab-settings")).toBe(false);
+  await first.close(); await tick(); expect(mocks.plus.has(first.id)).toBe(false);
+  if (false) {
+    // @ts-expect-error newTab names an entry of this navigator.
+    createWindowsNavigator({ doc: { component: Doc, newTab: () => ({ name: "missing", props: { title: "x" } }) } });
+    // @ts-expect-error newTab passes the props of the entry it names.
+    createWindowsNavigator({ doc: { component: Doc, newTab: () => ({ name: "doc", props: { title: 1 } }) } });
+  }
+});
+test("newTab is macOS-only for now", () => {
+  mocks.platform.OS = "windows";
+  expect(() => createWindowsNavigator({ doc: { component: () => null, newTab: () => ({ name: "doc" }) } })).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
 });

@@ -56,15 +56,20 @@ export function jsonSnapshot(value: unknown, active = new Set<object>()): unknow
   } finally { active.delete(value); }
 }
 /** Portable options implemented on macOS; Windows rejects them until its native host implements them. */
-const MACOS_ONLY_OPTIONS = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents"] as const;
+const MACOS_ONLY_OPTIONS = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "tabbing"] as const;
 const common = ["title", "appearance", "titleBarStyle", "backgroundColor", "transparent", "hasShadow", "alwaysOnTop", "resizable", "closable", "minimizable", "minSize", "maxSize", ...MACOS_ONLY_OPTIONS, "macos"];
 export function validateOptions(options: WindowOpenOptions | WindowUpdateOptions, platform: string, opening: boolean): void {
-  object(options, "window options"); keys(options, [...common, ...(opening ? ["id", "component", "props", "size", "position", "show", "restoreBounds", "kind", "parentId", "modal"] : [])]);
-  if (platform === "windows") for (const key of MACOS_ONLY_OPTIONS) if (options[key] !== undefined) throw new SparkError("E_UNSUPPORTED_OPTION", `Windows does not support ${key} yet`);
+  object(options, "window options"); keys(options, [...common, ...(opening ? ["id", "component", "props", "size", "position", "show", "restoreBounds", "tabbedWith", "kind", "parentId", "modal"] : [])]);
+  if (platform === "windows") for (const key of [...MACOS_ONLY_OPTIONS, "tabbedWith"] as const) if ((options as WindowOpenOptions)[key] !== undefined) throw new SparkError("E_UNSUPPORTED_OPTION", `Windows does not support ${key} yet`);
   flags(options, ["transparent", "hasShadow", "alwaysOnTop", "resizable", "closable", "minimizable", "contentProtection", "ignoreMouseEvents", "show", "restoreBounds", "modal"]);
   if (options.title !== undefined) text(options.title, "title");
   if (options.aspectRatio !== undefined && options.aspectRatio !== null) number(options.aspectRatio, "aspectRatio", 0.05, 20);
   if (options.opacity !== undefined) number(options.opacity, "opacity", 0, 1);
+  if (options.tabbing !== undefined) {
+    object(options.tabbing, "tabbing"); keys(options.tabbing, ["mode", "identifier"]);
+    enumValue(options.tabbing.mode, ["automatic", "preferred", "disallowed"], "tabbing mode");
+    if (options.tabbing.identifier !== undefined) { text(options.tabbing.identifier, "tabbing identifier", false); if (options.tabbing.identifier.length > 200) throw new SparkError("E_INVALID_ARGUMENT", "Tabbing identifiers have at most 200 characters"); }
+  }
   enumValue(options.appearance, ["system", "light", "dark"], "appearance");
   enumValue(options.titleBarStyle, ["default", "overlay", "hidden", "borderless"], "titleBarStyle");
   if (platform === "windows" && options.titleBarStyle === "overlay") throw new SparkError("E_UNSUPPORTED_OPTION", "Windows does not support overlay title bars");
@@ -90,6 +95,10 @@ export function validateOptions(options: WindowOpenOptions | WindowUpdateOptions
       if (value.size.width < min.width || value.size.height < min.height || value.size.width > max.width || value.size.height > max.height) throw new SparkError("E_INVALID_ARGUMENT", "Window size is outside its constraints");
     }
     if (value.position !== undefined) position(value.position);
+    if (value.tabbedWith !== undefined) {
+      windowId(value.tabbedWith);
+      if (value.tabbedWith === value.id || value.parentId !== undefined || String(value.kind) === "overlay" || value.show === false || value.tabbing?.mode === "disallowed") throw new SparkError("E_INVALID_ARGUMENT", "A tab opens shown, in another ordinary window's group, with tabbing allowed");
+    }
     if (value.props !== undefined) { object(value.props, "props"); jsonSnapshot(value.props); }
   }
 }

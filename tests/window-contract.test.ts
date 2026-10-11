@@ -57,3 +57,14 @@ test("window options from the #65 audit validate their values; Windows rejects t
   expect(() => validateOptions({ macos: { titleBar: { trafficLightPosition: { x: 1, y: 1, z: 1 } } } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
   expect(() => validateOptions({ macos }, "windows", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
 });
+test("tabbing options and tabbedWith validate before native effects; Windows rejects them", () => {
+  expect(() => validateOptions({ ...base, tabbedWith: "main", tabbing: { mode: "preferred", identifier: "docs" } }, "macos", true)).not.toThrow();
+  expect(() => validateOptions({ tabbing: { mode: "automatic" } }, "macos", false)).not.toThrow();
+  for (const tabbing of [{ mode: "always" }, { identifier: "" }, { identifier: "x".repeat(201) }, { identifier: "a\0b" }])
+    expect(() => validateOptions({ tabbing } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  expect(() => validateOptions({ tabbing: { group: "docs" } } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+  for (const value of [{ tabbedWith: "editor" }, { tabbedWith: "../main" }, { tabbedWith: "main", show: false }, { tabbedWith: "main", parentId: "main" }, { tabbedWith: "main", kind: "overlay" }, { tabbedWith: "main", tabbing: { mode: "disallowed" } }])
+    expect(() => validateOptions({ ...base, ...value } as WindowOpenOptions, "macos", true)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  expect(() => validateOptions({ tabbedWith: "main" } as never, "macos", false)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION" }));
+  expect(() => validateOptions({ ...base, tabbedWith: "main" }, "windows", true)).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_OPTION", message: "Windows does not support tabbedWith yet" }));
+});

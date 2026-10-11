@@ -145,7 +145,7 @@ test("macOS toolbar-only updates bypass portable window geometry", async () => {
 });
 
 test("option availability is truthful per platform and rejects unknown options", () => {
-  const options = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "subtitle", "trafficLightPosition"] as const;
+  const options = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "tabbing", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "subtitle", "trafficLightPosition"] as const;
   platform.OS = "macos";
   for (const option of options) expect(windows.getWindowAvailability(option)).toEqual({ available: true });
   platform.OS = "windows";
@@ -183,4 +183,65 @@ test("macOS opening applies options with the window and enters simple fullscreen
   expect(JSON.parse(call.mock.calls[1][1])).toEqual({ id: "editor", options: { macos: { simpleFullscreen: true } } });
   expect(managed.setWindowOptions).toHaveBeenCalledOnce();
   expect(managed.setWindowOptions.mock.invocationCallOrder[0]).toBeLessThan(call.mock.invocationCallOrder[1]);
+});
+
+const group = { windowIds: ["editor", "notes"], selectedWindowId: "notes", tabBarVisible: true };
+test("tab groups are macOS-only and validated at the native boundary", async () => {
+  for (const operation of [() => windows.getWindowTabGroup("editor"), () => windows.listWindowTabGroups(), () => windows.selectWindowTab("editor"), () => windows.moveTabToNewWindow("editor"),
+    () => windows.mergeAllWindows("editor"), () => windows.setWindowTabBarVisible("editor", true), () => windows.handleWindowNewTab("editor", () => {}), () => windows.addWindowListener("editor", "tabGroupChanged", () => {})])
+    await expect(operation()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  await expect(windows.openWindow({ id: "notes", component: "Notes", tabbedWith: "editor" })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION", message: "Windows does not support tabbedWith yet" });
+  await expect(windows.setWindowOptions("editor", { tabbing: { mode: "preferred" } })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION", message: "Windows does not support tabbing yet" });
+  expect(call).not.toHaveBeenCalled();
+  platform.OS = "macos";
+  call.mockImplementation(async (method: string) => JSON.stringify(method === "tabGroup" ? { ...group, native: true } : method === "tabGroups" ? [group, { windowIds: ["main"], selectedWindowId: "main", tabBarVisible: false }] : null));
+  expect(await windows.getWindowTabGroup("editor")).toEqual(group);
+  expect(await windows.listWindowTabGroups()).toEqual([group, { windowIds: ["main"], selectedWindowId: "main", tabBarVisible: false }]);
+  for (const [operation, method, args] of [[() => windows.selectWindowTab("notes"), "selectTab", { id: "notes" }], [() => windows.moveTabToNewWindow("notes"), "moveTabToNewWindow", { id: "notes" }],
+    [() => windows.mergeAllWindows("editor"), "mergeAllWindows", { id: "editor" }], [() => windows.setWindowTabBarVisible("editor", false), "tabBar", { id: "editor", visible: false }]] as const) {
+    await operation(); expect(call.mock.calls.at(-1)![0]).toBe(method); expect(JSON.parse(call.mock.calls.at(-1)![1])).toEqual(args);
+  }
+  call.mockResolvedValueOnce(JSON.stringify({ windowIds: ["editor"], selectedWindowId: 3, tabBarVisible: false }));
+  await expect(windows.getWindowTabGroup("editor")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  await expect(windows.setWindowTabBarVisible("editor", "yes" as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(windows.selectWindowTab("../editor")).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+});
+test("tab listeners deliver validated group and selection changes for the live instance", async () => {
+  platform.OS = "macos";
+  const changed = vi.fn(), selected = vi.fn(), onError = vi.fn();
+  const groupChanges = await windows.addWindowListener("editor", "tabGroupChanged", changed, { onError });
+  const selections = await windows.addWindowListener("editor", "tabSelectionChanged", selected, { onError });
+  emit({ type: "tabGroupChanged", tabGroup: { ...group, extra: 1 } }); emit({ type: "tabSelectionChanged", selectedWindowId: null });
+  expect(changed).toHaveBeenCalledExactlyOnceWith({ windowId: "editor", tabGroup: group });
+  expect(selected).toHaveBeenCalledExactlyOnceWith({ windowId: "editor", selectedWindowId: null });
+  emit({ type: "tabGroupChanged", tabGroup: { windowIds: "editor" } }); emit({ type: "tabSelectionChanged", selectedWindowId: "" });
+  expect(onError).toHaveBeenCalledTimes(2); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
+  emit({ type: "tabSelectionChanged", instanceId: "instance-2", selectedWindowId: "notes" }); expect(selected).toHaveBeenCalledTimes(1);
+  await groupChanges.remove(); await selections.remove();
+});
+test("a new-tab handler owns the + button of the live window until removed", async () => {
+  platform.OS = "macos";
+  const handler = vi.fn(async () => { throw new Error("open failed"); }), onError = vi.fn();
+  const registration = await windows.handleWindowNewTab("editor", handler, { onError });
+  const enabled = JSON.parse(call.mock.calls.find(([method]) => method === "newTab")![1]);
+  expect(enabled).toEqual({ id: "editor", handlerId: expect.stringMatching(/^tab-/), enabled: true });
+  emit({ type: "newTabRequested", handlerId: "another" }); emit({ type: "newTabRequested", handlerId: enabled.handlerId }); await tick();
+  expect(handler).toHaveBeenCalledExactlyOnceWith({ windowId: "editor" });
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "open failed" }));
+  await registration.remove(); await registration.remove();
+  expect(call.mock.calls.filter(([method]) => method === "newTab").map(([, args]) => JSON.parse(args).enabled)).toEqual([true, false]);
+  emit({ type: "newTabRequested", handlerId: enabled.handlerId }); await tick(); expect(handler).toHaveBeenCalledTimes(1);
+  // A second handler rejects natively; nothing stays subscribed.
+  call.mockImplementation(async (method: string) => { if (method === "newTab") throw Object.assign(new Error("busy"), { code: "E_BUSY" }); return JSON.stringify(info); });
+  await expect(windows.handleWindowNewTab("editor", handler)).rejects.toMatchObject({ code: "E_BUSY" });
+  expect(listeners.size).toBe(0);
+  await expect(windows.handleWindowNewTab("editor", "open" as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+});
+test("macOS tab options reach the window module at open and on update", async () => {
+  platform.OS = "macos";
+  await windows.openWindow({ id: "notes", component: "Notes", tabbedWith: "editor", tabbing: { identifier: "docs" } });
+  expect(JSON.parse(call.mock.calls.find(([method]) => method === "completeOpen")![1])).toMatchObject({ tabbedWith: "editor", tabbing: { identifier: "docs" } });
+  await windows.setWindowOptions("editor", { tabbing: { mode: "disallowed" } });
+  expect(JSON.parse(call.mock.calls.at(-1)![1])).toEqual({ id: "editor", options: { tabbing: { mode: "disallowed" } } });
+  expect(managed.setWindowOptions).not.toHaveBeenCalled();
 });

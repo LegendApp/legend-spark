@@ -189,6 +189,149 @@ static void TestDriverMode(RNDesktopWindows *api) {
   Pump(); driverActive = NO;
   puts("Driver mode windows stayed off screen");
 }
+// The window IDs of a window's NSWindow tab group, in tab order (just the window when it is not tabbed).
+static NSArray *GroupIds(NSWindow *window) {
+  NSMutableArray *ids = [NSMutableArray new];
+  for (NSWindow *tab in TabWindows(window)) [ids addObject:KeyFor(tab) ?: @"?"];
+  return ids;
+}
+static NSString *SelectedId(NSWindow *window) { return KeyFor(SelectedTab(window)); }
+static NSDictionary *LastEvent(NSString *type, NSString *key) {
+  for (NSDictionary *event in events.reverseObjectEnumerator) if ([event[@"type"] isEqual:type] && [event[@"windowId"] isEqual:key]) return event;
+  return nil;
+}
+// Native window tabs in driver mode: every operation regroups real NSWindows that are never on screen.
+static void TestWindowTabs(RNDesktopWindows *api) {
+  driverActive = YES;
+  NSDictionary *docs = @{ @"mode": @"preferred", @"identifier": @"docs" };
+  NSWindow *one = RealWindow(@"tab-1"), *two = RealWindow(@"tab-2"), *three = RealWindow(@"tab-3");
+  Call(api, @"completeOpen", @{ @"id": @"tab-1", @"tabbing": docs }); assert(!failure);
+  assert(one.tabbingMode == NSWindowTabbingModePreferred && [one.tabbingIdentifier isEqual:@"docs"]);
+  Call(api, @"completeOpen", @{ @"id": @"tab-2", @"tabbedWith": @"tab-1" }); assert(!failure);
+  Call(api, @"completeOpen", @{ @"id": @"tab-3", @"tabbedWith": @"tab-1" }); assert(!failure);
+  // New tabs are the group's last tab, take its tabbing identifier, and are selected.
+  assert([GroupIds(one) isEqual:(@[@"tab-1", @"tab-2", @"tab-3"])] && one.tabGroup == three.tabGroup && [three.tabbingIdentifier isEqual:@"docs"]);
+  assert([SelectedId(one) isEqual:@"tab-3"] && one.tabGroup.tabBarVisible);
+  Call(api, @"tabGroup", @{ @"id": @"tab-2" }); assert(!failure);
+  assert([SparkArgs(reply) isEqual:(@{ @"windowIds": @[@"tab-1", @"tab-2", @"tab-3"], @"selectedWindowId": @"tab-3", @"tabBarVisible": @YES })]);
+  NSDictionary *changed = LastEvent(@"tabGroupChanged", @"tab-1");
+  assert([changed[@"tabGroup"][@"windowIds"] isEqual:(@[@"tab-1", @"tab-2", @"tab-3"])] && [changed[@"instanceId"] isEqual:delegates[@"tab-1"].instanceId]);
+  assert([LastEvent(@"tabSelectionChanged", @"tab-2")[@"selectedWindowId"] isEqual:@"tab-3"]);
+  for (NSDictionary *invalid in @[@{ @"tabbedWith": @"missing" }, @{ @"tabbedWith": @"tab-1", @"tabbing": @{ @"identifier": @"other" } }, @{ @"tabbedWith": @"tab-1", @"tabbing": @{ @"mode": @"disallowed" } }]) {
+    NSMutableDictionary *args = [invalid mutableCopy]; args[@"id"] = @"tab-invalid"; RealWindow(@"tab-invalid");
+    Call(api, @"completeOpen", args); assert([failure isEqual:[invalid[@"tabbedWith"] isEqual:@"missing"] ? @"E_NOT_FOUND" : @"E_INVALID_ARGUMENT"]);
+    assert([GroupIds(one) isEqual:(@[@"tab-1", @"tab-2", @"tab-3"])]);
+    [windows[@"tab-invalid"] close]; [windows removeObjectForKey:@"tab-invalid"];
+  }
+
+  [events removeAllObjects];
+  Call(api, @"selectTab", @{ @"id": @"tab-1" }); assert(!failure && [SelectedId(three) isEqual:@"tab-1"]);
+  assert([LastEvent(@"tabSelectionChanged", @"tab-3")[@"selectedWindowId"] isEqual:@"tab-1"] && !LastEvent(@"tabGroupChanged", @"tab-3"));
+  Call(api, @"tabBar", @{ @"id": @"tab-1", @"visible": @NO }); assert([failure isEqual:@"E_BUSY"] && one.tabGroup.tabBarVisible);
+
+  // Move Tab to New Window regroups without ordering the window on screen; moving a lone window changes nothing.
+  Call(api, @"moveTabToNewWindow", @{ @"id": @"tab-2" }); assert(!failure);
+  assert([GroupIds(one) isEqual:(@[@"tab-1", @"tab-3"])] && [GroupIds(two) isEqual:@[@"tab-2"]] && !OnScreen(two));
+  assert([LastEvent(@"tabGroupChanged", @"tab-2")[@"tabGroup"] isEqual:(@{ @"windowIds": @[@"tab-2"], @"selectedWindowId": @"tab-2", @"tabBarVisible": @NO })]);
+  assert([LastEvent(@"tabGroupChanged", @"tab-3")[@"tabGroup"][@"windowIds"] isEqual:(@[@"tab-1", @"tab-3"])]);
+  Call(api, @"moveTabToNewWindow", @{ @"id": @"tab-2" }); assert(!failure && [GroupIds(two) isEqual:@[@"tab-2"]]);
+
+  // Merge All Windows joins every shown window with the same identifier, in creation order; hidden and other windows stay.
+  NSWindow *four = RealWindow(@"tab-4"), *other = RealWindow(@"tab-other"), *hidden = RealWindow(@"tab-hidden"), *single = RealWindow(@"tab-single");
+  Call(api, @"completeOpen", @{ @"id": @"tab-4", @"tabbing": docs }); assert(!failure);
+  Call(api, @"completeOpen", @{ @"id": @"tab-other", @"tabbing": @{ @"identifier": @"other" } }); assert(!failure);
+  Call(api, @"completeOpen", @{ @"id": @"tab-hidden", @"tabbing": docs, @"show": @NO }); assert(!failure);
+  Call(api, @"completeOpen", @{ @"id": @"tab-single", @"tabbing": @{ @"mode": @"disallowed" } }); assert(!failure);
+  RealWindow(@"tab-invalid"); Call(api, @"completeOpen", @{ @"id": @"tab-invalid", @"tabbedWith": @"tab-hidden" });
+  assert([failure isEqual:@"E_INVALID_ARGUMENT"] && [GroupIds(hidden) isEqual:@[@"tab-hidden"]]); // A hidden window cannot take a tab.
+  [windows[@"tab-invalid"] close]; [windows removeObjectForKey:@"tab-invalid"];
+  assert([GroupIds(four) isEqual:@[@"tab-4"]]); // Driver mode never orders windows front, so AppKit's automatic tabbing never runs.
+  Call(api, @"mergeAllWindows", @{ @"id": @"tab-1" }); assert(!failure);
+  assert([GroupIds(one) isEqual:(@[@"tab-1", @"tab-3", @"tab-2", @"tab-4"])] && [GroupIds(other) isEqual:@[@"tab-other"]] && [GroupIds(hidden) isEqual:@[@"tab-hidden"]]);
+  // Windows that changed groups (tab-2 moved out earlier, tab-4 was alone) keep observing their new group.
+  for (NSString *key in @[@"tab-2", @"tab-4"]) assert([LastEvent(@"tabGroupChanged", key)[@"tabGroup"][@"windowIds"] isEqual:(@[@"tab-1", @"tab-3", @"tab-2", @"tab-4"])]);
+  Call(api, @"selectTab", @{ @"id": @"tab-4" }); assert(!failure);
+  assert([LastEvent(@"tabSelectionChanged", @"tab-2")[@"selectedWindowId"] isEqual:@"tab-4"]);
+  Call(api, @"selectTab", @{ @"id": @"tab-1" }); assert(!failure);
+  Call(api, @"tabGroups", @{}); assert(!failure);
+  NSArray *groups = (NSArray *)SparkArgs(reply);
+  assert([groups containsObject:(@{ @"windowIds": @[@"tab-1", @"tab-3", @"tab-2", @"tab-4"], @"selectedWindowId": @"tab-1", @"tabBarVisible": @YES })]);
+  NSUInteger listed = 0; for (NSDictionary *group in groups) listed += [group[@"windowIds"] count];
+  NSUInteger real = 0; for (NSString *key in windows) real += [windows[key] isKindOfClass:NSWindow.class];
+  assert(listed == real); // Every Spark window is in exactly one listed group.
+  Call(api, @"mergeAllWindows", @{ @"id": @"tab-single" }); assert([failure isEqual:@"E_INVALID_ARGUMENT"]);
+
+  // Show/Hide Tab Bar applies to a window without other tabs.
+  Call(api, @"tabBar", @{ @"id": @"tab-other", @"visible": @YES }); assert(!failure && other.tabGroup.tabBarVisible);
+  assert([LastEvent(@"tabGroupChanged", @"tab-other")[@"tabGroup"][@"tabBarVisible"] isEqual:@YES]);
+  Call(api, @"tabBar", @{ @"id": @"tab-other", @"visible": @NO }); assert(!failure && !other.tabGroup.tabBarVisible);
+  Call(api, @"tabBar", @{ @"id": @"tab-single", @"visible": @YES }); assert([failure isEqual:@"E_INVALID_ARGUMENT"]);
+
+  // Hiding a tab takes it out of its group, as AppKit does.
+  Call(api, @"hide", @{ @"id": @"tab-3" }); assert(!failure && [GroupIds(one) isEqual:(@[@"tab-1", @"tab-2", @"tab-4"])]);
+
+  // The + button: the delegate answers newWindowForTab: only while a handler is registered.
+  assert(![one respondsToSelector:@selector(newWindowForTab:)] || ![delegates[@"tab-1"] respondsToSelector:@selector(newWindowForTab:)]);
+  Call(api, @"newTab", @{ @"id": @"tab-1", @"handlerId": @"plus", @"enabled": @YES }); assert(!failure);
+  assert([NSApp targetForAction:@selector(newWindowForTab:) to:nil from:one] == delegates[@"tab-1"]);
+  assert([one tryToPerform:@selector(newWindowForTab:) with:nil]);
+  assert([events.lastObject isEqual:(@{ @"type": @"newTabRequested", @"windowId": @"tab-1", @"instanceId": delegates[@"tab-1"].instanceId, @"handlerId": @"plus" })]);
+  Call(api, @"newTab", @{ @"id": @"tab-1", @"handlerId": @"second", @"enabled": @YES }); assert([failure isEqual:@"E_BUSY"]);
+  Call(api, @"newTab", @{ @"id": @"tab-1", @"handlerId": @"second", @"enabled": @NO }); assert(!failure && delegates[@"tab-1"].tabHandlerId);
+  Call(api, @"newTab", @{ @"id": @"tab-1", @"handlerId": @"plus", @"enabled": @NO }); assert(!failure);
+  assert(![delegates[@"tab-1"] respondsToSelector:@selector(newWindowForTab:)] && ![one tryToPerform:@selector(newWindowForTab:) with:nil]);
+
+  // Closing a tab publishes the smaller group to the others.
+  [events removeAllObjects];
+  Call(api, @"close", @{ @"id": @"tab-2" }); assert(!failure);
+  assert([LastEvent(@"tabGroupChanged", @"tab-1")[@"tabGroup"][@"windowIds"] isEqual:(@[@"tab-1", @"tab-4"])]);
+  // Closing the group's tabs, AppKit's selected one first, never puts the next tab on screen.
+  for (NSString *key in @[@"tab-1", @"tab-3", @"tab-4", @"tab-other", @"tab-hidden", @"tab-single"]) {
+    Call(api, @"close", @{ @"id": key }); assert(!failure);
+    for (NSWindow *window in @[one, two, three, four, other, hidden, single]) assert(!OnScreen(window));
+  }
+  Pump(); driverActive = NO;
+  puts("Window tabs passed");
+}
+// restoreBounds saves each window's tab group; reopened windows rejoin it in the saved order and selection.
+static void TestTabRestoration(RNDesktopWindows *api) {
+  NSArray *ids = @[@"restore-a", @"restore-b", @"restore-c"];
+  NSMutableArray<NSWindow *> *opened = [NSMutableArray new];
+  // Driver mode ignores restoreBounds, so the windows open outside it, hidden; the user's tab arrangement is
+  // then applied in driver mode, where selecting a tab keeps it off screen.
+  for (NSString *key in ids) { [opened addObject:RealWindow(key)]; Call(api, @"completeOpen", @{ @"id": key, @"show": @NO, @"restoreBounds": @YES, @"tabbing": @{ @"identifier": @"restore" } }); assert(!failure); }
+  driverActive = YES;
+  [opened[0] addTabbedWindow:opened[2] ordered:NSWindowAbove]; [opened[2] addTabbedWindow:opened[1] ordered:NSWindowAbove];
+  SelectTab(opened[2]); Pump();
+  assert([GroupIds(opened[0]) isEqual:(@[@"restore-a", @"restore-c", @"restore-b"])]);
+  NSMutableDictionary *saved = [NSMutableDictionary new];
+  for (NSString *key in ids) {
+    NSDictionary *record = [NSUserDefaults.standardUserDefaults dictionaryForKey:SavedStateKey(key)];
+    assert([record[@"tabs"] isEqual:(@[@"restore-a", @"restore-c", @"restore-b"])] && [record[@"selected"] isEqual:@([key isEqual:@"restore-c"])] && record[@"bounds"]);
+    saved[key] = record;
+  }
+  // A window the user closes leaves its saved group.
+  Call(api, @"close", @{ @"id": @"restore-b" }); assert(!failure); Pump();
+  assert(![[NSUserDefaults.standardUserDefaults dictionaryForKey:SavedStateKey(@"restore-b")] objectForKey:@"tabs"]);
+  assert([[NSUserDefaults.standardUserDefaults dictionaryForKey:SavedStateKey(@"restore-a")][@"tabs"] isEqual:(@[@"restore-a", @"restore-c"])]);
+  for (NSString *key in @[@"restore-a", @"restore-c"]) { Call(api, @"close", @{ @"id": key }); assert(!failure); }
+  for (NSWindow *window in opened) assert(!OnScreen(window));
+  // Next launch: the records written before quitting. Windows reopen in another order and rejoin as they are shown.
+  for (NSString *key in ids) [NSUserDefaults.standardUserDefaults setObject:saved[key] forKey:SavedStateKey(key)];
+  driverActive = NO;
+  NSMutableDictionary<NSString *, NSWindow *> *restored = [NSMutableDictionary new];
+  for (NSString *key in @[@"restore-b", @"restore-c", @"restore-a"]) { restored[key] = RealWindow(key); Call(api, @"completeOpen", @{ @"id": key, @"show": @NO, @"restoreBounds": @YES, @"tabbing": @{ @"identifier": @"restore" } }); assert(!failure); }
+  driverActive = YES; // Presenting in driver mode keeps the windows off screen.
+  Call(api, @"show", @{ @"id": @"restore-b" }); assert(!failure && [GroupIds(restored[@"restore-b"]) isEqual:@[@"restore-b"]]);
+  Call(api, @"show", @{ @"id": @"restore-a" }); assert(!failure && [GroupIds(restored[@"restore-b"]) isEqual:(@[@"restore-a", @"restore-b"])] && [SelectedId(restored[@"restore-a"]) isEqual:@"restore-b"]);
+  Call(api, @"show", @{ @"id": @"restore-c" }); assert(!failure);
+  assert([GroupIds(restored[@"restore-a"]) isEqual:(@[@"restore-a", @"restore-c", @"restore-b"])] && [SelectedId(restored[@"restore-a"]) isEqual:@"restore-c"]);
+  // Closing tabs, the selected one first, never puts the next tab on screen.
+  for (NSString *key in @[@"restore-c", @"restore-a", @"restore-b"]) { Call(api, @"close", @{ @"id": key }); assert(!failure); for (NSWindow *window in restored.allValues) assert(!OnScreen(window)); }
+  Pump(); driverActive = NO;
+  [NSUserDefaults.standardUserDefaults removePersistentDomainForName:NSProcessInfo.processInfo.processName];
+  puts("Window tab restoration passed");
+}
 int main() { @autoreleasepool {
   events = [NSMutableArray new]; windows = LegendWindowRegistry.sharedRegistry.windows;
   TestWindow *window = [TestWindow new]; windows[@"editor"] = (NSWindow *)window;
@@ -214,4 +357,6 @@ int main() { @autoreleasepool {
   puts("Window guards passed");
   TestWindowOptions(api);
   TestDriverMode(api);
+  TestWindowTabs(api);
+  TestTabRestoration(api);
 } }
