@@ -41,7 +41,7 @@ RCT_EXPORT_MODULE(NativeSparkTextServices)
   NSTextView *textView = [self textView:tag reject:reject];
   if (!textView) return;
   if (SparkTextShowFindBar(textView)) resolve(nil);
-  else reject(@"E_UNSUPPORTED_OPTION", @"The text view has no find bar; use a multiline TextInput", nil);
+  else reject(@"E_INVALID_ARGUMENT", @"The text view has no find bar; use a multiline TextInput", nil);
 }
 
 - (void)lookUp:(double)tag resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject

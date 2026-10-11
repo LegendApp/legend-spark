@@ -137,7 +137,7 @@ selects the next one after the selection, scrolling it into view. It resolves
 match, or 0 when nothing was selected. Options: `caseSensitive` (default `false`), `wrap`
 (continue from the other end, default `true`) and `backwards` (select the match before the
 selection). Unknown option keys reject with `E_UNSUPPORTED_OPTION`. `showFindBar` focuses the
-input and shows its find bar. It rejects with `E_UNSUPPORTED_OPTION` for a view without one,
+input and shows its find bar. It rejects with `E_INVALID_ARGUMENT` for a view without one,
 such as selectable `Text`. All three operations reject with `E_INVALID_ARGUMENT` for a target
 without a text view (a single-line `TextInput`), with `E_NOT_FOUND` for an unmounted target,
 and with `E_UNSUPPORTED_PLATFORM` off macOS. Windows support is tracked in

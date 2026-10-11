@@ -80,7 +80,7 @@ export function findText(target: TextServicesTarget | null, query: string, optio
       .then(json => parseNativeResult(json, isFindResult));
   });
 }
-/** Focuses a multiline TextInput and shows its find bar; rejects `E_UNSUPPORTED_OPTION` for a view without one. */
+/** Focuses a multiline TextInput and shows its find bar; rejects `E_INVALID_ARGUMENT` for a view without one. */
 export function showFindBar(target: TextServicesTarget | null): Promise<void> {
   return invokeNative(() => native("findBar").showFindBar(tagOf(target)));
 }

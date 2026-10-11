@@ -82,8 +82,8 @@ test("showFindBar and lookUp target the mounted view and keep native error codes
   await showFindBar(input); await lookUp(input);
   expect(native.showFindBar).toHaveBeenCalledWith(42);
   expect(native.lookUp).toHaveBeenCalledWith(42);
-  native.showFindBar.mockRejectedValueOnce(Object.assign(new Error("The text view has no find bar"), { code: "E_UNSUPPORTED_OPTION" }));
-  expect(await rejection(showFindBar(input))).toBe("SparkError:E_UNSUPPORTED_OPTION");
+  native.showFindBar.mockRejectedValueOnce(Object.assign(new Error("The text view has no find bar"), { code: "E_INVALID_ARGUMENT" }));
+  expect(await rejection(showFindBar(input))).toBe("SparkError:E_INVALID_ARGUMENT");
   native.lookUp.mockRejectedValueOnce(Object.assign(new Error("unexpected"), { code: "SOMETHING" }));
   expect(await rejection(lookUp(input))).toBe("SparkError:E_NATIVE");
 });

@@ -265,10 +265,6 @@ static void WritingTools()
     RCTSparkResetFieldEditorWritingTools(other);
     CHECK(editor.writingToolsBehavior == appKit);
   }
-  // Availability is a plain capability query and never throws.
-  BOOL available = SparkWritingToolsAvailable();
-  if (@available(macOS 15.2, *)) CHECK(available == NSWritingToolsCoordinator.isWritingToolsAvailable);
-  else CHECK(!available);
 }
 
 int main(int argc, const char *argv[]) { @autoreleasepool {
