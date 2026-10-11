@@ -19,7 +19,7 @@ checks:
       - ./menus#getDeveloperMenuState
       - ./shortcuts/commands#getReservedShortcuts
   DEVT-MENU-03:
-    title: Developer menu items follow the key window's runtime; with no key window Reload stays enabled and every per-window item is disabled, and Open DevTools stays disabled with a tooltip until DevTools support registers
+    title: Developer menu items follow the key window's runtime; with no key window Reload stays enabled and every per-window item is disabled; Open DevTools is disabled with a tooltip only when no DevTools opener is registered (React Native DevTools registers one in development bundles)
     platforms: [macos]
     blocking: true
     spec: "docs/menus.md Developer menu; #270"
@@ -39,3 +39,61 @@ checks:
     spec: "docs/menus.md Developer menu; #270, #274"
     covers:
       - ./menus#getDeveloperMenuState
+  DEVT-AVAIL-01:
+    title: Without development JavaScript from the development server (release builds included), getDevToolsAvailability reports development-only and the DevTools screen offers no DevTools actions
+    platforms: [macos]
+    blocking: true
+    spec: "#268"
+    covers:
+      - ./devtools#getDevToolsAvailability
+      - ./devtools#getDevToolsAvailability().available
+  DEVT-AVAIL-02:
+    title: With a development bundle on macOS getDevToolsAvailability reports available and the DevTools screen offers Open DevTools for the shared and the worker runtime
+    platforms: [macos]
+    blocking: true
+    spec: "#268"
+    covers:
+      - ./devtools#getDevToolsAvailability
+      - ./devtools#getDevToolsAvailability().available
+  DEVT-UNSUP-01:
+    title: On Windows getDevToolsAvailability reports unsupported-platform and openDevTools rejects E_UNSUPPORTED_PLATFORM
+    platforms: [windows]
+    blocking: true
+    spec: "#268"
+    covers:
+      - ./devtools#getDevToolsAvailability
+  DEVT-TARGETS-01:
+    title: 'Each JS runtime is a separate debug target at the development server''s /json/list, titled "<app> (shared runtime)" and "<app> (isolated runtime: <name>)"'
+    platforms: [macos]
+    blocking: true
+    spec: "#268"
+    covers:
+      - ./devtools
+  DEVT-DEBUG-01:
+    title: Over CDP a target evaluates, reports console calls, pauses at a breakpoint in a source-mapped source file and pauses on uncaught exceptions
+    platforms: [macos]
+    blocking: true
+    spec: "#268"
+    covers:
+      - ./devtools
+  DEVT-RELOAD-01:
+    title: A debugger session survives Fast Refresh and a full reload of the shared runtime; an isolated runtime re-registers its target with the same title
+    platforms: [macos]
+    blocking: true
+    spec: "#268"
+    covers:
+      - ./devtools
+  DEVT-OPEN-01:
+    title: openDevTools asks the development server to open DevTools for the shared or an isolated runtime's target, rejects E_NOT_FOUND for a runtime that is not running, and ⌥⌘I opens the shared runtime
+    platforms: [macos]
+    blocking: true
+    spec: "#268"
+    covers:
+      - ./devtools#openDevTools
+  DEVT-VISUAL-01:
+    title: The DevTools screen matches its goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#268"
+    covers:
+      - ./devtools

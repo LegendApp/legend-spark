@@ -158,6 +158,13 @@
     "SparkErrorCode",
     "Subscription"
   ],
+  "./devtools": [
+    "DevToolsAvailability",
+    "DevToolsRuntime",
+    "OpenDevToolsOptions",
+    "getDevToolsAvailability",
+    "openDevTools"
+  ],
   "./diagnostics": [
     "StartupTiming",
     "getStartupTiming"

@@ -1,0 +1,18 @@
+appId: so.legend.spark.examples.kitchensink
+name: DevTools is available with a development bundle
+intent: >
+  With development JavaScript (__DEV__), getDevToolsAvailability reports available on macOS and the DevTools screen
+  shows the ⌥⌘I hint, Open DevTools for the shared and the ks-devtools worker runtime, and the probe actions.
+checks: [DEVT-AVAIL-02]
+tags: [devtools]
+platforms: [macos]
+build: dev
+timeout: 120s
+---
+- launchApp: { openUrl: "spark-ks://devtools/devtools" }
+- assertVisible: { id: devtools-devtools-root, timeout: 30s }
+- assertVisible: { id: devtools-devtools-shortcut }
+- assertVisible: { id: devtools-devtools-open-shared }
+- assertVisible: { id: devtools-devtools-open-worker }
+- assertVisible: { id: devtools-devtools-probe }
+- assertNotVisible: { id: devtools-devtools-unavailable }

@@ -1,5 +1,6 @@
 #import "AppDelegate.h"
 #import <RNDesktopApp/SparkDesktop.h>
+#import <RNDesktopApp/SparkDevTools.h>
 #import <RNDesktopApp/SparkTestDriver.h>
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTUIKit.h>
@@ -72,6 +73,10 @@
 #endif
   facebook::react::ReactMarker::logMarkerDone(facebook::react::ReactMarker::INIT_REACT_RUNTIME_START, CACurrentMediaTime() * 1000);
   [super applicationDidFinishLaunching:notification];
+#if RCT_DEV
+  __weak AppDelegate *weakSelf = self;
+  SparkInstallDevTools(^NSURL *{ return [weakSelf bundleURL]; });
+#endif
 }
 #if __has_include(<NativeComposeThreadedRuntime/ThreadedRuntime.h>)
 - (void)sparkResetRuntimes:(NSNotification *)notification { [ThreadedRuntime destroyAllRuntimes]; }

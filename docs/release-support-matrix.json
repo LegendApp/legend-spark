@@ -3564,6 +3564,67 @@
       }
     },
     {
+      "path": "./devtools",
+      "sourceTarget": "./devtools.ts",
+      "kind": "runtime-api",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-desktop-app",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/devtools.test.ts",
+          "tests/devtools-targets.test.ts"
+        ],
+        "portableCommand": "bun run test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; bun scripts/test-devtools.ts"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "Typed unsupported: getDevToolsAvailability() reports unsupported-platform and openDevTools() rejects E_UNSUPPORTED_PLATFORM."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "Typed unsupported: getDevToolsAvailability() reports unsupported-platform and openDevTools() rejects E_UNSUPPORTED_PLATFORM."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS development builds only; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS development builds only; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS development builds only; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/desktop-app/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/desktop-app/macos/",
+          "packages/config-plugin/devtools-targets.cjs"
+        ],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
       "path": "./ai",
       "sourceTarget": "./ai.ts",
       "kind": "runtime-api",

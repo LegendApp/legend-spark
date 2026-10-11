@@ -69,6 +69,7 @@
     "./contracts",
     "./windows/macos",
     "./diagnostics",
+    "./devtools",
     "./ai",
     "./ai/codex",
     "./ui/swipe",

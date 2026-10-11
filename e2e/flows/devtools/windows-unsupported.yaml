@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: DevTools is typed unsupported on Windows
+intent: >
+  On Windows getDevToolsAvailability reports unsupported-platform, so the DevTools screen shows its availability and
+  no DevTools actions.
+checks: [DEVT-UNSUP-01]
+tags: [devtools]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://devtools/devtools" }
+- assertText: { id: devtools-devtools-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertVisible: { id: devtools-devtools-unavailable }
+- assertNotVisible: { id: devtools-devtools-open-shared }

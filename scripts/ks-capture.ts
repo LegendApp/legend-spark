@@ -1,6 +1,7 @@
-// bun run ks:capture [<area>/<screen>] [--wait-for <testID>] [--appearance light|dark] [--locale <language>] [--name <name>] [--out <directory>] [--dev-bundle]
+// bun run ks:capture [<area>/<screen>] [--wait-for <testID>] [--appearance light|dark] [--locale <language>] [--name <name>] [--out <directory>] [--dev-bundle | --dev-server <origin>]
 // Launches the built Kitchen Sink in driver mode (it never shows a window or takes focus),
-// navigates, waits for the screen, renders the main window in-process to PNG and quits.
+// navigates, waits for the screen, renders the main window in-process to PNG and quits. `--dev-server` loads
+// development JavaScript from a running `spark dev` server (such as http://127.0.0.1:8081) instead of bundling.
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,9 +10,9 @@ import { processLog } from "../packages/cli/src/process.ts";
 import type { Driver } from "./e2e/driver.ts";
 import { KITCHEN_SINK, KitchenSinkApp, LOCALE } from "./e2e/kitchen-sink.ts";
 
-const usage = "Usage: bun run ks:capture [<area>/<screen>] [--wait-for <testID>] [--appearance light|dark] [--locale <language>] [--name <name>] [--out <directory>] [--dev-bundle]";
+const usage = "Usage: bun run ks:capture [<area>/<screen>] [--wait-for <testID>] [--appearance light|dark] [--locale <language>] [--name <name>] [--out <directory>] [--dev-bundle | --dev-server <origin>]";
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-  "wait-for": { type: "string" }, appearance: { type: "string" }, locale: { type: "string" }, name: { type: "string" }, out: { type: "string" }, "dev-bundle": { type: "boolean" }, help: { type: "boolean" },
+  "wait-for": { type: "string" }, appearance: { type: "string" }, locale: { type: "string" }, name: { type: "string" }, out: { type: "string" }, "dev-bundle": { type: "boolean" }, "dev-server": { type: "string" }, help: { type: "boolean" },
 } });
 if (values.help) { console.log(usage); process.exit(0); }
 const screen = positionals[0];
@@ -24,7 +25,10 @@ const testID = values["wait-for"] ?? `${screen!.replace("/", "-")}-root`;
 const name = values.name ?? [screen?.replace("/", "-") ?? testID, appearance, values.locale].filter(Boolean).join("-");
 
 const out = path.resolve(values.out ?? path.join(KITCHEN_SINK, ".spark/captures"));
-const app = new KitchenSinkApp();
+const devServer = values["dev-server"] === undefined ? undefined : new URL(values["dev-server"]);
+if (devServer && !["127.0.0.1", "localhost"].includes(devServer.hostname)) throw new Error("--dev-server is a loopback origin such as http://127.0.0.1:8081");
+if (devServer && values["dev-bundle"]) throw new Error("Pass --dev-bundle or --dev-server, not both");
+const app = new KitchenSinkApp(undefined, devServer);
 const work = mkdtempSync(path.join(os.tmpdir(), "ks-capture-"));
 let driver: Driver | undefined;
 const log = path.join(work, "app.log");
