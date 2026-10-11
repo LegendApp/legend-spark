@@ -12,6 +12,7 @@
 #include <propkey.h>
 #include <propvarutil.h>
 #include <winrt/Windows.Data.Json.h>
+#include <winrt/Windows.Globalization.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.System.Profile.h>
 #include <winrt/Windows.Security.Cryptography.h>
@@ -55,7 +56,13 @@ struct SystemState {
         if (w == PBT_APMSUSPEND) self->Emit("sleep");
         else if (w == PBT_APMRESUMEAUTOMATIC) self->Emit("wake");
         else if (w == PBT_APMPOWERSTATUSCHANGE) self->Emit("powerChanged");
-      } else if (message == WM_WTSSESSION_CHANGE) { if (w == WTS_SESSION_LOCK) self->Emit("lock"); else if (w == WTS_SESSION_UNLOCK) self->Emit("unlock"); }
+      } else if (message == WM_WTSSESSION_CHANGE) {
+        if (w == WTS_SESSION_LOCK) self->Emit("lock"); else if (w == WTS_SESSION_UNLOCK) self->Emit("unlock");
+        // Fast user switching connects and disconnects this session from the console.
+        else if (w == WTS_CONSOLE_CONNECT) self->Emit("sessionActive"); else if (w == WTS_CONSOLE_DISCONNECT) self->Emit("sessionInactive");
+      }
+      else if (message == WM_TIMECHANGE) self->Emit("clockChanged");
+      else if (message == WM_SETTINGCHANGE && l && wcscmp(reinterpret_cast<wchar_t const *>(l), L"intl") == 0) self->Emit("localeChanged");
       else if (message == WM_SETTINGCHANGE || message == WM_THEMECHANGED) self->Emit("appearanceChanged");
       else if (message == WM_DISPLAYCHANGE) self->Emit("displaysChanged");
     } catch (...) {}
@@ -129,6 +136,12 @@ struct SystemState {
     LASTINPUTINFO input{sizeof(LASTINPUTINFO)}; if (!GetLastInputInfo(&input)) throw_last_error(); number(L"idleSeconds", static_cast<DWORD>(GetTickCount() - input.dwTime) / 1000.0);
     SYSTEM_POWER_STATUS power{}; if (!GetSystemPowerStatus(&power)) throw_last_error(); result.SetNamedValue(L"onBattery", Json::JsonValue::CreateBooleanValue(power.ACLineStatus == 0));
     if (power.BatteryLifePercent <= 100 && !(power.BatteryFlag & 128)) number(L"batteryLevel", power.BatteryLifePercent / 100.0); else result.SetNamedValue(L"batteryLevel", Json::JsonValue::CreateNullValue());
+    result.SetNamedValue(L"lowPowerMode", Json::JsonValue::CreateBooleanValue(power.SystemStatusFlag == 1)); // Battery saver.
+    result.SetNamedValue(L"thermalState", Json::JsonValue::CreateNullValue()); // Windows has no public thermal-state API.
+    result.SetNamedValue(L"timeZone", Json::JsonValue::CreateStringValue(Windows::Globalization::Calendar().GetTimeZone()));
+    // Emulation exists only on Arm64: x86 reports its WOW64 machine, x64 reports none but GetSystemInfo sees x64.
+    USHORT process = 0, host = 0; if (!IsWow64Process2(GetCurrentProcess(), &process, &host)) throw_last_error();
+    result.SetNamedValue(L"translated", Json::JsonValue::CreateBooleanValue(host == IMAGE_FILE_MACHINE_ARM64 && (process != IMAGE_FILE_MACHINE_UNKNOWN || info.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_ARM64)));
     return result;
   }
 };

@@ -1,0 +1,37 @@
+appId: so.legend.spark.examples.kitchensink
+name: Power, thermal, network and memory events update the reported state
+intent: >
+  Each simulateSystemEvent here sets the state its event implies (thermal state serious, Low Power Mode on,
+  battery power, an offline network path) in the system module; the System state screen receives the
+  event, re-reads getSystemInfo and getNetworkStatus, and shows the new state. memoryPressure arrives with
+  its level. The Mac's real power, thermal and network state are untouched.
+checks: [SYS-EVENTS-02]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/state" }
+- assertVisible: { id: system-integration-state-listening }
+- assertVisible: { id: system-integration-state-thermal }
+- simulateSystemEvent: { type: thermalChanged, thermal: serious }
+- assertText: { id: system-integration-state-event-0, equals: thermalChanged }
+- assertText: { id: system-integration-state-thermal, equals: serious }
+- simulateSystemEvent: { type: lowPowerChanged, lowPower: true }
+- assertText: { id: system-integration-state-event-0, equals: lowPowerChanged }
+- assertText: { id: system-integration-state-low-power, equals: "Yes" }
+- simulateSystemEvent: { type: powerChanged, source: battery }
+- assertText: { id: system-integration-state-event-0, equals: powerChanged }
+- assertText: { id: system-integration-state-power-source, equals: Battery }
+- simulateSystemEvent: { type: networkChanged, network: offline }
+- assertText: { id: system-integration-state-event-0, equals: networkChanged }
+- assertText: { id: system-integration-state-network-status, equals: offline }
+- assertText: { id: system-integration-state-network-interfaces, equals: None }
+- simulateSystemEvent: { type: memoryPressure, level: critical }
+- assertText: { id: system-integration-state-event-0, equals: "memoryPressure: critical" }
+- simulateSystemEvent: { type: memoryPressure, level: normal }
+- assertText: { id: system-integration-state-event-0, equals: "memoryPressure: normal" }
+- takeScreenshot: system-state-injected
+- scroll: { on: { id: system-integration-state-content }, direction: down, amount: 2000 }
+- takeScreenshot: system-state-injected-state
+- simulateSystemEvent: { type: thermalChanged, thermal: nominal }
+- assertText: { id: system-integration-state-thermal, equals: nominal }
+- assertNotVisible: { id: system-integration-state-error }

@@ -99,6 +99,11 @@ describe("command mapping", () => {
     expect(app.log.filter(line => /Clock/.test(line))).toEqual(["setClock virtual", "advanceClock 1500", "advanceClock 16", "setClock real"]);
   });
 
+  test("simulateSystemEvent passes the event type and the state it implies to the driver", async () => {
+    const { result, app } = await run("- launchApp\n- simulateSystemEvent: sleep\n- simulateSystemEvent: { type: thermalChanged, thermal: serious }");
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => line.startsWith("simulateSystemEvent"))).toEqual(['simulateSystemEvent {"type":"sleep"}', 'simulateSystemEvent {"type":"thermalChanged","thermal":"serious"}']);
+  });
   test("setAppAppearance maps to the driver; takeScreenshot captures the main window into the flow's output", async () => {
     const { result, app } = await run("- launchApp\n- setAppAppearance: dark\n- takeScreenshot: shot");
     expect(result.status).toBe("passed");

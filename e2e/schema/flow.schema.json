@@ -4595,6 +4595,99 @@
               "type": "object"
             }
           },
+          "simulateSystemEvent": {
+            "description": "[driver] Deliver a system event to the app's onSystemEvent registrations in-process; the OS is untouched (sleepSystem, lockScreen and simulatePower change it). thermal, lowPower, source and network go with their event type and override what getSystemInfo and getNetworkStatus report until the app quits; memoryPressure needs level.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "enum": [
+                    "sleep",
+                    "wake",
+                    "lock",
+                    "unlock",
+                    "sessionActive",
+                    "sessionInactive",
+                    "powerChanged",
+                    "lowPowerChanged",
+                    "thermalChanged",
+                    "networkChanged",
+                    "proxyChanged",
+                    "localeChanged",
+                    "timeZoneChanged",
+                    "clockChanged",
+                    "memoryPressure",
+                    "appearanceChanged",
+                    "displaysChanged"
+                  ]
+                },
+                "thermal": {
+                  "enum": [
+                    "nominal",
+                    "fair",
+                    "serious",
+                    "critical"
+                  ]
+                },
+                "lowPower": {
+                  "type": "boolean"
+                },
+                "source": {
+                  "enum": [
+                    "battery",
+                    "ac"
+                  ]
+                },
+                "network": {
+                  "enum": [
+                    "online",
+                    "offline"
+                  ]
+                },
+                "level": {
+                  "enum": [
+                    "normal",
+                    "warning",
+                    "critical"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "enum": [
+                "sleep",
+                "wake",
+                "lock",
+                "unlock",
+                "sessionActive",
+                "sessionInactive",
+                "powerChanged",
+                "lowPowerChanged",
+                "thermalChanged",
+                "networkChanged",
+                "proxyChanged",
+                "localeChanged",
+                "timeZoneChanged",
+                "clockChanged",
+                "memoryPressure",
+                "appearanceChanged",
+                "displaysChanged"
+              ]
+            }
+          },
           "permission": {
             "description": "Grant, revoke or reset a privacy permission.",
             "if": {

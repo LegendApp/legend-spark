@@ -177,7 +177,8 @@ Optional modules add commands with `SparkTestDriverRegisterCommand` (main thread
 names, including the input commands, and duplicate names are refused), because the driver cannot link them itself. The motion
 package registers `setClock` and `advanceClock`, its virtual clock
 ([motion.md](motion.md#virtual-clock-for-the-test-driver)). An app without that module
-answers them with `E_UNKNOWN_COMMAND`.
+answers them with `E_UNKNOWN_COMMAND`. The system package registers `simulateSystemEvent`
+([system.md](system.md#testing-system-events)).
 
 Requests run as main run-loop blocks in the common modes, not on the main dispatch queue.
 A nested run loop started from a main-queue block does not drain the main queue, so a

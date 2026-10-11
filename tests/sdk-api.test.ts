@@ -886,3 +886,65 @@ test("tray image inputs are portable and delayed actions cannot reach a reused I
   platform.OS = "windows";
   const windows = await tray.createTray({ id: "windows", image: { path: "C:\\Icons\\tray.png" } }); await windows.remove();
 });
+
+const SYSTEM_INFO = { osVersion: "15", architecture: "x64", translated: true, locale: "en_US", timeZone: "America/New_York", dark: false, idleSeconds: 3, onBattery: true, batteryLevel: 0.5, lowPowerMode: true, thermalState: "serious" };
+test("system info reports Rosetta, time zone, Low Power Mode and thermal state, and rejects malformed values", async () => {
+  handlers.set("NativeDesktopSystem.info", () => SYSTEM_INFO);
+  expect(await system.getSystemInfo()).toEqual(SYSTEM_INFO);
+  handlers.set("NativeDesktopSystem.info", () => ({ ...SYSTEM_INFO, thermalState: null }));
+  expect((await system.getSystemInfo()).thermalState).toBeNull();
+  for (const bad of [{ thermalState: "hot" }, { translated: undefined }, { timeZone: "" }, { lowPowerMode: 1 }]) {
+    handlers.set("NativeDesktopSystem.info", () => ({ ...SYSTEM_INFO, ...bad }));
+    await expect(system.getSystemInfo()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+});
+test("network status validates the native path and is unsupported on Windows before any native call", async () => {
+  const status = { status: "online", interfaces: ["wifi", "loopback"], expensive: false, constrained: true, proxies: { http: "proxy.local:8080", https: null, socks: null, autoConfigURL: "http://wpad/wpad.dat" } };
+  handlers.set("NativeDesktopSystem.network", () => status);
+  expect(await system.getNetworkStatus()).toEqual(status);
+  for (const bad of [{ status: "maybe" }, { interfaces: ["bluetooth"] }, { proxies: { http: "" } }, { proxies: null }]) {
+    handlers.set("NativeDesktopSystem.network", () => ({ ...status, ...bad }));
+    await expect(system.getNetworkStatus()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  platform.OS = "windows"; calls.length = 0;
+  await expect(system.getNetworkStatus()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  expect(calls).toHaveLength(0);
+});
+test("system feature availability is per platform and rejects unknown features", () => {
+  for (const feature of ["thermalState", "networkStatus", "memoryPressure", "lowPowerChanges", "timeZoneChanges"] as const) expect(system.getSystemAvailability(feature)).toEqual({ available: true });
+  expect(() => system.getSystemAvailability("bluetooth" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  platform.OS = "windows";
+  expect(system.getSystemAvailability()).toEqual({ available: true });
+  expect(system.getSystemAvailability("thermalState")).toEqual({ available: false, reason: "unsupported-platform" });
+  platform.OS = "web";
+  expect(system.getSystemAvailability("networkStatus")).toEqual({ available: false, reason: "unsupported-platform" });
+});
+test("system events cover session, power, thermal, network, locale, clock and memory pressure; a pressure event without a valid level is E_INVALID_DATA", async () => {
+  const events: unknown[] = [], errors: unknown[] = [];
+  const subscription = await system.onSystemEvent(event => events.push(event), { onError: error => errors.push(error) });
+  expect(calls.at(-1)!.args.types).toHaveLength(17);
+  const types = ["sessionActive", "sessionInactive", "lowPowerChanged", "thermalChanged", "networkChanged", "proxyChanged", "localeChanged", "timeZoneChanged", "clockChanged"];
+  for (const type of types) emit("NativeDesktopApp", "desktop", { type });
+  emit("NativeDesktopApp", "desktop", { type: "memoryPressure", level: "critical", extra: 1 });
+  emit("NativeDesktopApp", "desktop", { type: "memoryPressure", level: "severe" });
+  emit("NativeDesktopApp", "desktop", { type: "memoryPressure" });
+  expect(events).toEqual([...types.map(type => ({ type })), { type: "memoryPressure", level: "critical" }]);
+  expect(errors).toEqual([expect.objectContaining({ code: "E_INVALID_DATA" }), expect.objectContaining({ code: "E_INVALID_DATA" })]);
+  await subscription.remove();
+  emit("NativeDesktopApp", "desktop", { type: "thermalChanged" }); expect(events).toHaveLength(types.length + 1);
+});
+test("system event subscriptions name the types native observers are installed for", async () => {
+  const events: unknown[] = [];
+  const subscription = await system.onSystemEvent(event => events.push(event), { types: ["displaysChanged", "displaysChanged"] });
+  expect(calls.at(-1)).toMatchObject({ method: "observe", args: { types: ["displaysChanged"] } });
+  emit("NativeDesktopApp", "desktop", { type: "networkChanged" }); emit("NativeDesktopApp", "desktop", { type: "displaysChanged" });
+  expect(events).toEqual([{ type: "displaysChanged" }]);
+  await subscription.remove(); calls.length = 0;
+  for (const options of [{ types: [] }, { types: ["bluetooth"] }, { types: "sleep" }, { onError: 1 }, { typo: true }]) await expect(system.onSystemEvent(() => {}, options as never)).rejects.toMatchObject({ code: expect.stringMatching(/E_INVALID_ARGUMENT|E_UNSUPPORTED_OPTION/) });
+  expect(calls).toHaveLength(0);
+});
+test("a failed native observe rejects and leaves no listener", async () => {
+  handlers.set("NativeDesktopSystem.observe", () => { throw nativeError("E_NATIVE"); });
+  await expect(system.onSystemEvent(() => {})).rejects.toMatchObject({ code: "E_NATIVE" });
+  expect(subscriptions.get("NativeDesktopApp.desktop")?.size ?? 0).toBe(0);
+});

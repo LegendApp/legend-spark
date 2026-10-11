@@ -11,5 +11,7 @@
 - simulatePower: { source: battery, lowPower: true, thermal: serious }
 - setNetwork: { offline: true }             # latency, bandwidth, proxy
 - lockScreen: { for: 5s }
+- simulateSystemEvent: sleep               # in-app event (driver); sleepSystem and lockScreen change the OS
+- simulateSystemEvent: { type: thermalChanged, thermal: serious }
 - permission: { reset: camera }             # grant | revoke | reset
 - setFocusMode: doNotDisturb

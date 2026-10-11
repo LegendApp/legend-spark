@@ -15,6 +15,8 @@ export type Capture = { file: string; width: number; height: number; scale: numb
  */
 export type InputTarget = { testID: string; offset?: { x: number; y: number } } | { point: { x: number; y: number }; window?: DriverWindow };
 export type Modifier = "cmd" | "ctrl" | "option" | "shift" | "fn";
+/** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
+export type SimulatedSystemEvent = { type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string };
 /** One entry of `elements`: a visible view with a testID, or an accessibility element, in waitFor frame coordinates. */
 export type DriverElement = { key: string; parent?: string; window: string; id?: string; role?: string; label?: string; text?: string; value?: string; frame: Frame };
 export type DriverWindowInfo = { id: string; title: string; key: boolean; main: boolean; frame: Frame };
@@ -153,6 +155,11 @@ export class Driver {
   async setClock(mode: "virtual" | "real") { return clock(await this.request({ command: "setClock", mode }, 10000)); }
   /** Advances the virtual motion clock and every motion layer together. */
   async advanceClock(durationMs: number) { return clock(await this.request({ command: "advanceClock", durationMs }, 10000)); }
+  /** Delivers a system event through the system module (docs/system.md#testing-system-events), with the state it implies. */
+  async simulateSystemEvent({ type, thermal, lowPower, source, network, level }: SimulatedSystemEvent) {
+    const state = { thermalState: thermal, lowPowerMode: lowPower, onBattery: source === undefined ? undefined : source === "battery", network, level };
+    await this.request({ command: "simulateSystemEvent", type, ...Object.fromEntries(Object.entries(state).filter(([, value]) => value !== undefined)) }, 10000);
+  }
   /** Clicks a target in-process (docs/test-driver.md#input): `clickCount` 1-3, left or right button. */
   async tap(target: InputTarget, options: { button?: "left" | "right"; clickCount?: number; modifiers?: Modifier[] } = {}) {
     await this.request({ command: "tap", ...target, ...options }, 10000);
