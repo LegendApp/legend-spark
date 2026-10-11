@@ -87,3 +87,11 @@ describe("clearAppState", () => {
     expect(existsSync(path.join(fake.home, "Library", "Application Support", NS))).toBe(true);
   });
 });
+
+test("clearState refuses relative, empty or root home/temp directories", () => {
+  const identity = { bundleId: "so.legend.spark.examples.kitchensink", projectId: "p", sandboxed: false };
+  for (const roots of [{ home: "", temp: "/tmp/x" }, { home: "/Users/x", temp: "" }, { home: "relative", temp: "/tmp/x" }, { home: "/", temp: "/tmp/x" }]) {
+    const host = { ...roots, running: () => [], deleteDefaults: () => { throw new Error("must not run"); } };
+    expect(() => clearAppState(identity, identity.bundleId, host)).toThrow(/not an absolute, non-root path/);
+  }
+});

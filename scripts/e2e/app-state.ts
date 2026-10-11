@@ -58,6 +58,10 @@ export function clearAppState(identity: AppIdentity, expected: string, host: Sta
   // cfprefsd and the app's open files would write the state back.
   const running = host.running(bundleId);
   if (running.length) throw new Error(`clearState needs ${bundleId} to be quit first; running: ${running.join(", ")}`);
+  // Every path below is joined onto these roots; a relative or empty root would delete relative to the working directory.
+  for (const [name, root] of [["home", host.home], ["temp", host.temp]] as const) {
+    if (!path.isAbsolute(root) || path.resolve(root) === path.parse(root).root) throw new Error(`clearState refuses: the ${name} directory "${root}" is not an absolute, non-root path`);
+  }
   const cleared = host.deleteDefaults(bundleId) ? [`defaults:${bundleId}`] : [];
   for (const file of statePaths(identity, host)) {
     if (!lstatSync(file, { throwIfNoEntry: false })) continue;
