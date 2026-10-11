@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-test.skipIf(process.platform !== "darwin")("native split views preserve divider ownership and final pane metrics", () => {
+test.skipIf(process.platform !== "darwin")("native split views preserve divider ownership and final pane metrics", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-split-view-test-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
@@ -19,9 +19,9 @@ test.skipIf(process.platform !== "darwin")("native split views preserve divider 
     const input = path.join(directory, "test.mm"), output = path.join(directory, "test");
     const fixture = readFileSync(path.join(root, "tests/split-view-layout.native.mm"), "utf8");
     writeFileSync(input, fixture.replace("// ACTUAL_CLASSES", classes).replace("// ACTUAL_METHODS", methods.map(method).join("\n")));
-    execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", input, "-o", output]);
+    await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", input, "-o", output]);
     for (const scenario of ["anchor", "metrics", "events", "clamp", "resize", "ownership", "toggle", "mount"]) {
-      expect(execFileSync(output, [scenario], { encoding: "utf8", timeout: 15000 })).toContain("Native split-view probe passed");
+      expect(await runOk(output, [scenario], { timeout: 15000 })).toContain("Native split-view probe passed");
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 30000);

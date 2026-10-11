@@ -1,12 +1,12 @@
 import { expect, test } from "vitest";
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 // Compiles the real RNNativeMenu.mm and SparkDeveloperMenu.mm as a development build (RCT_DEV 1), replacing only
 // React Native: hosts, module registries, DevSettings, the perf monitor and @react-native-runtimes/core classes.
-test.skipIf(process.platform !== "darwin")("the Developer menu targets the key window's runtime and validates against it", () => {
+test.skipIf(process.platform !== "darwin")("the Developer menu targets the key window's runtime and validates against it", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-developer-menu-test-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
@@ -62,7 +62,7 @@ static NSMutableArray<NSDictionary *> *Events;
     const input = path.join(directory, "DeveloperMenu.mm"), output = path.join(directory, "test");
     writeFileSync(input, [stubs, strip("packages/native-menu/ios/SparkDeveloperMenu.h"), strip("packages/native-menu/ios/RNNativeMenu.mm"),
       strip("packages/native-menu/ios/SparkDeveloperMenu.mm"), readFileSync(path.join(root, "tests/developer-menu.native.mm"), "utf8")].join("\n"));
-    execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++17", "-framework", "AppKit", input, "-o", output]);
-    expect(execFileSync(output, { encoding: "utf8", timeout: 15000 })).toContain("Developer menu tests passed");
+    await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++17", "-framework", "AppKit", input, "-o", output]);
+    expect(await runOk(output, [], { timeout: 15000 })).toContain("Developer menu tests passed");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 25000);

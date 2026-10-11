@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { createRequire } from "node:module";
 import { linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -46,7 +46,7 @@ test("RTL scroll patch install checks the version and preserves package cache ha
 });
 
 let directory: string, executable: string;
-beforeAll(() => {
+beforeAll(async () => {
   if (process.platform !== "darwin") return;
   directory = mkdtempSync(path.join(os.tmpdir(), "spark-rtl-scroll-test-"));
   const input = path.join(directory, "RTLScroll.mm");
@@ -55,10 +55,10 @@ beforeAll(() => {
     .replace("// ACTUAL_HELPER", between("static void RCTPreserveRTLRightEdge(", "\n}\n"))
     .replace("// ACTUAL_UPDATE_LAYOUT_METRICS", between("- (void)updateLayoutMetrics:", "#endif // macOS]\n}\n"))
     .replace("// ACTUAL_CONTENT_SIZE", between("  // contentSize reads the container", "  });\n")));
-  execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", input, "-o", executable]);
+  await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", input, "-o", executable]);
 }, 30000);
 afterAll(() => { if (directory) rmSync(directory, { recursive: true, force: true }); });
 
-test.skipIf(process.platform !== "darwin").each(["rtl-start", "first-content", "content-growth", "resize", "ltr", "vertical", "hit"])("AppKit RTL ScrollView: %s", scenario => {
-  expect(execFileSync(executable, [scenario], { encoding: "utf8", timeout: 15000 })).toContain(`PASS ${scenario}`);
-});
+test.skipIf(process.platform !== "darwin").each(["rtl-start", "first-content", "content-growth", "resize", "ltr", "vertical", "hit"])("AppKit RTL ScrollView: %s", async scenario => {
+  expect(await runOk(executable, [scenario], { timeout: 15000 })).toContain(`PASS ${scenario}`);
+}, 20000);

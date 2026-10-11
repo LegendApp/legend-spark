@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-test.skipIf(process.platform !== "darwin")("AppKit outer frames round-trip through display-relative logical bounds", () => {
+test.skipIf(process.platform !== "darwin")("AppKit outer frames round-trip through display-relative logical bounds", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-window-geometry-"));
   try {
     const header = path.resolve(import.meta.dirname, "../packages/desktop-windows/macos/SparkWindowGeometry.h");
@@ -35,7 +35,7 @@ int main() { @autoreleasepool {
       assert(NSEqualRects(frame, SparkAppKitFrame(bounds, screen)));
       puts("Window geometry passed");
     } }`);
-    execFileSync("clang++", ["-fobjc-arc", "-std=c++20", "-framework", "AppKit", "-framework", "CoreGraphics", input, "-o", output]);
-    expect(execFileSync(output, { encoding: "utf8", timeout: 10000 })).toContain("Window geometry passed");
+    await runOk("clang++", ["-fobjc-arc", "-std=c++20", "-framework", "AppKit", "-framework", "CoreGraphics", input, "-o", output]);
+    expect(await runOk(output, [], { timeout: 10000 })).toContain("Window geometry passed");
   } finally { rmSync(directory, { recursive: true, force: true }); }
-});
+}, 25000);
