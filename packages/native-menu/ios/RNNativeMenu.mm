@@ -8,7 +8,10 @@ static char RoleKey, LocationKey;
 static NSDictionary<NSString *, NSString *> *RoleSelectors(void) {
   return @{ @"new": @"newDocument:", @"open": @"openDocument:", @"save": @"saveDocument:", @"saveAs": @"saveDocumentAs:", @"clearRecentDocuments": @"clearRecentDocuments:",
     @"about": @"orderFrontStandardAboutPanel:", @"settings": @"showPreferencesWindow:", @"hide": @"hide:", @"hideOthers": @"hideOtherApplications:", @"showAll": @"unhideAllApplications:", @"quit": @"terminate:",
-    @"undo": @"undo:", @"redo": @"redo:", @"cut": @"cut:", @"copy": @"copy:", @"paste": @"paste:", @"selectAll": @"selectAll:", @"minimize": @"performMiniaturize:", @"zoom": @"performZoom:", @"close": @"performClose:", @"toggleFullscreen": @"toggleFullScreen:" };
+    @"undo": @"undo:", @"redo": @"redo:", @"cut": @"cut:", @"copy": @"copy:", @"paste": @"paste:", @"selectAll": @"selectAll:", @"minimize": @"performMiniaturize:", @"zoom": @"performZoom:", @"close": @"performClose:", @"toggleFullscreen": @"toggleFullScreen:",
+    // Window tabs: AppKit adds these to the Window and View menus while windows can tab; newTab is the tab bar's + button.
+    @"newTab": @"newWindowForTab:", @"toggleTabBar": @"toggleTabBar:", @"showAllTabs": @"toggleTabOverview:", @"selectPreviousTab": @"selectPreviousTab:",
+    @"selectNextTab": @"selectNextTab:", @"moveTabToNewWindow": @"moveTabToNewWindow:", @"mergeAllWindows": @"mergeAllWindows:" };
 }
 static NSString *Role(NSMenuItem *item) {
   NSString *role = objc_getAssociatedObject(item, &RoleKey);

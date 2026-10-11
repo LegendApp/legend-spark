@@ -61,9 +61,19 @@ interface WindowServices {
   menus?: (instance: WindowInstance) => readonly MenuRootItem[];
   onMenuAction?: (action: MenuAction, instance: WindowInstance) => void | Promise<void>;
   hotkeys?: WindowHotkeys;
+  /**
+   * The tab bar's + button, and the `newTab` menu role while the window is key: returns the window to
+   * open as the group's new last tab. The entry it names must not have a fixed `id`. macOS only for now.
+   */
+  newTab?: (instance: WindowInstance) => NewWindowTabRequest | Promise<NewWindowTabRequest>;
   /** Skipped on Windows by definition. */
   macos?: WindowMacOS;
 }
+/** What `newTab` returns; `createWindowsNavigator` checks `name` and `props` against the configuration. */
+export interface NewWindowTabRequest { name: string; props?: unknown; options?: NavigatorWindowOptions }
+type OpenRequestFor<P> = {} extends P ? { props?: P; options?: NavigatorWindowOptions } : { props: P; options?: NavigatorWindowOptions };
+/** A `newTab` result for one of the configuration's entries, with that entry's props. */
+export type NewWindowTab<T extends WindowsConfig> = { [K in keyof T & string]: { name: K } & OpenRequestFor<WindowComponentProps<T[K]>> }[keyof T & string];
 export type WindowComponentLoader<P = Record<string, never>> = () => ComponentType<P> | { default: ComponentType<P> } | Promise<ComponentType<P> | { default: ComponentType<P> }>;
 /** Any React component, whatever its props; `open` infers the props from the registered component. */
 export type WindowComponent = ((props: never) => unknown) | (abstract new (props: never) => unknown);
@@ -82,7 +92,7 @@ export type WindowComponentProps<T> = T extends { component: infer C } ? PropsOf
 export interface WindowErrorEvent {
   windowId: string;
   name: string;
-  phase: "render" | "menu" | "toolbar" | "hotkey" | "runtime" | "cleanup";
+  phase: "render" | "menu" | "toolbar" | "hotkey" | "newTab" | "runtime" | "cleanup";
   /** Render and handler failures are application errors; native failures are SparkErrors. */
   error: unknown;
 }

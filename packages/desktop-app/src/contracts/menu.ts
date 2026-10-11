@@ -2,7 +2,7 @@ import { SparkError } from "./index";
 import { nativePath } from "./path";
 import { parseAccelerator, type Accelerator } from "./accelerator";
 export type MenuIcon = { type: "symbol"; name: string } | { type: "image"; path: string };
-export type MenuRole = "new" | "open" | "save" | "saveAs" | "clearRecentDocuments" | "about" | "settings" | "services" | "hide" | "hideOthers" | "showAll" | "quit" | "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll" | "minimize" | "zoom" | "close" | "toggleFullscreen";
+export type MenuRole = "new" | "open" | "save" | "saveAs" | "clearRecentDocuments" | "about" | "settings" | "services" | "hide" | "hideOthers" | "showAll" | "quit" | "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll" | "minimize" | "zoom" | "close" | "toggleFullscreen" | "newTab" | "toggleTabBar" | "showAllTabs" | "selectPreviousTab" | "selectNextTab" | "moveTabToNewWindow" | "mergeAllWindows";
 export type MenuLocation = "app" | "file" | "edit" | "view" | "window" | "help";
 export type MenuTarget = { id: string } | { role: MenuRole } | { menu: MenuLocation };
 export type MenuPlacement = { before: MenuTarget; after?: never } | { after: MenuTarget; before?: never };
@@ -41,7 +41,7 @@ export type MenuDeveloperWire =
   /** The adapter adds the bundle URL and runtime of the target, then `lines`. `runtimes.isolated` contains `{name}`. */
   | { action: "bundleInfo"; title: string; ok: string; copy: string; labels: { bundleURL: string; runtime: string }; runtimes: { shared: string; isolated: string }; lines: string[] };
 export interface MenuSupport { types: readonly MenuItem["type"][]; shortcuts?: boolean; icons?: readonly MenuIcon["type"][]; targeting?: boolean; alternates?: boolean; mixedState?: boolean }
-const roles: readonly string[] = ["new", "open", "save", "saveAs", "clearRecentDocuments", "about", "settings", "services", "hide", "hideOthers", "showAll", "quit", "undo", "redo", "cut", "copy", "paste", "selectAll", "minimize", "zoom", "close", "toggleFullscreen"];
+const roles: readonly string[] = ["new", "open", "save", "saveAs", "clearRecentDocuments", "about", "settings", "services", "hide", "hideOthers", "showAll", "quit", "undo", "redo", "cut", "copy", "paste", "selectAll", "minimize", "zoom", "close", "toggleFullscreen", "newTab", "toggleTabBar", "showAllTabs", "selectPreviousTab", "selectNextTab", "moveTabToNewWindow", "mergeAllWindows"];
 function keys(value: object, allowed: readonly string[]) {
   for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported menu property: ${key}`);
 }

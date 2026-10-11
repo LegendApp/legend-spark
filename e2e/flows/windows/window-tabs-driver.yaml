@@ -1,0 +1,57 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window tabs regroup and report through the in-app driver
+intent: >
+  Windows > Window tabs runs the tab operations from spark-ks://windows/window-tabs?run=… deep links, each run starting
+  with no tab windows open; windows are numbered in opening order. The readout's test IDs encode each tab group (its
+  windows in tab order, the selected one and the tab bar), window 1's last tabGroupChanged and tabSelectionChanged
+  events, and the last rejection. Driver mode never shows a window: AppKit's tab groups are regrouped off screen and
+  the driver records which tab is selected (docs/test-driver.md). Light and dark, English and Arabic.
+checks: [WIN-TABAVAIL-01, WIN-TABGROUP-01, WIN-TABSELECT-01, WIN-TABEVENTS-01, WIN-TABMERGE-01, WIN-TABMOVE-01, WIN-TABBAR-01, WIN-TABINVALID-01]
+tags: [windows]
+platforms: [macos]
+timeout: 180s
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://windows/window-tabs" }
+- assertVisible: { id: windows-window-tabs-root }
+- assertVisible: { id: windows-window-tabs-availability-available }
+- assertVisible: { id: windows-window-tabs-group-count-0 }
+# Two new tabs in window 1: each is the group's last tab and becomes selected; window 1 hears both.
+- launchApp: { openUrl: "spark-ks://windows/window-tabs?run=open,tab-1,tab-1", stopApp: false }
+- assertVisible: { id: windows-window-tabs-steps-3 }
+- assertVisible: { id: windows-window-tabs-group-1-2-3-selected-3-bar-shown }
+- assertVisible: { id: windows-window-tabs-group-count-1 }
+- assertVisible: { id: windows-window-tabs-group-event-1-2-3 }
+- assertVisible: { id: windows-window-tabs-selection-event-3 }
+- takeScreenshot: window-tabs-group
+# Select a tab, then the next one after it (read back with getWindowTabGroup).
+- launchApp: { openUrl: "spark-ks://windows/window-tabs?run=open,tab-1,tab-1,select-1,next-1", stopApp: false }
+- assertVisible: { id: windows-window-tabs-steps-5 }
+- assertVisible: { id: windows-window-tabs-group-1-2-3-selected-2-bar-shown }
+- assertVisible: { id: windows-window-tabs-selection-event-2 }
+# Move a tab to a new window, then close the selected tab.
+- launchApp: { openUrl: "spark-ks://windows/window-tabs?run=open,tab-1,tab-1,tab-1,move-2,close-4", stopApp: false }
+- assertVisible: { id: windows-window-tabs-steps-6 }
+- assertVisible: { id: windows-window-tabs-group-1-3-selected-3-bar-shown }
+- assertVisible: { id: windows-window-tabs-group-2-selected-2-bar-hidden }
+- assertVisible: { id: windows-window-tabs-group-event-1-3 }
+- assertVisible: { id: windows-window-tabs-group-count-2 }
+# Merge every window that can tab into window 1; the window whose tabbing is disallowed stays apart and refuses a new tab.
+- launchApp: { openUrl: "spark-ks://windows/window-tabs?run=open,open,disallowed,open,merge-1,tab-3", stopApp: false }
+- assertVisible: { id: windows-window-tabs-steps-6 }
+- assertVisible: { id: windows-window-tabs-group-1-2-4-selected-1-bar-shown }
+- assertVisible: { id: windows-window-tabs-group-3-selected-3-bar-hidden }
+- assertVisible: { id: windows-window-tabs-group-event-1-2-4 }
+- assertVisible: { id: windows-window-tabs-error-E_INVALID_ARGUMENT }
+- takeScreenshot: window-tabs-merged
+# The tab bar of a lone window shows and hides; a group of several tabs keeps it.
+- launchApp: { openUrl: "spark-ks://windows/window-tabs?run=open,bar-1-show", stopApp: false }
+- assertVisible: { id: windows-window-tabs-steps-2 }
+- assertVisible: { id: windows-window-tabs-group-1-selected-1-bar-shown }
+- assertVisible: { id: windows-window-tabs-group-event-1 }
+- launchApp: { openUrl: "spark-ks://windows/window-tabs?run=open,bar-1-show,bar-1-hide,tab-1,bar-1-hide", stopApp: false }
+- assertVisible: { id: windows-window-tabs-steps-5 }
+- assertVisible: { id: windows-window-tabs-group-1-2-selected-2-bar-shown }
+- assertVisible: { id: windows-window-tabs-error-E_BUSY }

@@ -131,8 +131,12 @@ A driven app never takes focus from the person using the Mac:
   on-screen window and rejects `E_UNSUPPORTED_OPTION`. Options whose effect only the window
   server shows (level, Spaces, content protection, click-through, opacity, shadow,
   behind-window vibrancy) are applied to the `NSWindow` but cannot be seen in a capture.
+- Window tabs are real AppKit tab groups, regrouped without ordering anything on screen: AppKit's
+  automatic tabbing on show never runs, `moveTabToNewWindow` and `mergeAllWindows` use the tab group's
+  own add and remove, and the driver records which tab is selected, because selecting a tab orders it
+  on screen ([window tabs](api-window-contract.md#window-tabs)).
 
-`tests/window.native.mm` checks that windows opened, shown, hidden and made modal in driver
+`tests/window.native.mm` checks that windows opened, shown, hidden, made modal and tabbed in driver
 mode are never on screen (`NSWindow.visible` and the window server's on-screen flag) while the
 window API reports them as shown.
 
