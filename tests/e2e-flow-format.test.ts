@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,6 +11,7 @@ import {
 } from "../scripts/e2e/format/parser.ts";
 import { NESTED } from "../scripts/e2e/format/primitives.ts";
 import { ajv, buildBudgetsSchema, buildFlowSchema, buildGateSchema, buildRegistrySchema, buildSignoffsSchema } from "../scripts/e2e/format/schemas.ts";
+import { outcome, run } from "./subprocess.ts";
 
 const FIXTURES = "tests/fixtures/e2e";
 const read = (file: string) => readFileSync(path.join(FIXTURES, file), "utf8");
@@ -306,33 +306,37 @@ describe("lint", () => {
 });
 
 describe("cli", () => {
-  const run = (...args: string[]) => spawnSync(process.execPath, ["scripts/e2e/cli.ts", ...args], { encoding: "utf8" });
+  const cli = (...args: string[]) => run(process.execPath, ["scripts/e2e/cli.ts", ...args]);
+  // Each test starts Bun twice: 0.7-3.1 s per test across 37 macos-latest CI runs (p95 2.9 s), close to
+  // the 5 s default. 15 s is nearly 5x the slowest run seen.
+  const cliTimeoutMs = 15_000;
 
-  test("validates and lints a tree, classifying files by location", () => {
-    const validate = run("validate", FIXTURES);
-    expect(validate.status, validate.stderr).toBe(0);
+  test("validates and lints a tree, classifying files by location", async () => {
+    const validate = await cli("validate", FIXTURES);
+    expect(validate.status, outcome(validate)).toBe(0);
     expect(validate.stdout).toBe(`validated ${FLOW_FIXTURES.length + SUBFLOW_FIXTURES.length + 2} files (1 check registry, ${FLOW_FIXTURES.length} flows, 1 gate manifest, ${SUBFLOW_FIXTURES.length} subflows): 0 problems\n`);
-    const lint = run("lint", FIXTURES);
-    expect(lint.status).toBe(1);
+    const lint = await cli("lint", FIXTURES);
+    expect(lint.status, outcome(lint)).toBe(1);
     expect(lint.stdout).toMatch(/^tests\/fixtures\/e2e\/subflows\/spec\/selectors\.yaml:8:12: point selector: .*\[point-selector\]\n.*: 1 problem\n$/);
-  });
+  }, cliTimeoutMs);
 
-  test("reports every problem with its location and fails", () => {
+  test("reports every problem with its location and fails", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "e2e-cli-"));
     for (const dir of ["flows/editor", "checks", "fixtures"]) mkdirSync(path.join(root, dir), { recursive: true });
     writeFileSync(path.join(root, "flows/editor/save.yaml"), "appId: a\nname: Save\nbuild: dev\nchecks: [ED-SAVE-01]\n---\n- launchApp\n- sleep: 1s\n");
     writeFileSync(path.join(root, "checks/editor.yaml"), "area: editor\nprefix: ED\nchecks:\n  ED-SAVE-01: { title: Save writes the file }\n");
     writeFileSync(path.join(root, "fixtures/mock.yaml"), "not: [a flow\n");
-    const validate = run("validate", root);
-    expect(validate.status).toBe(1);
+    const validate = await cli("validate", root);
+    expect(validate.status, outcome(validate)).toBe(1);
     expect(validate.stdout).toMatch(/flows\/editor\/save\.yaml:7:3: "sleep" is not a command.*\[no-sleep\]\nvalidated 2 files \(1 check registry, 1 flow\): 1 problem\n$/);
-    const lint = run("lint", path.join(root, "flows/editor/save.yaml"));
+    const lint = await cli("lint", path.join(root, "flows/editor/save.yaml"));
     expect(lint.stdout).toMatch(/save\.yaml:3:8: gate flows run against release builds.*\[dev-build\]\n.*save\.yaml:7:3: .*\[no-sleep\]\nlinted 1 file \(1 flow\): 2 problems\n$/);
-  });
+  }, cliTimeoutMs);
 
-  test("rejects unknown modes and missing paths", () => {
-    expect(run("check").status).toBe(2);
-    const missing = run("validate", "e2e/does-not-exist");
+  test("rejects unknown modes and missing paths", async () => {
+    const unknown = await cli("check");
+    expect(unknown.status, outcome(unknown)).toBe(2);
+    const missing = await cli("validate", "e2e/does-not-exist");
     expect([missing.status, missing.stderr.trim()]).toEqual([2, `not found: ${path.resolve("e2e/does-not-exist")}`]);
-  });
+  }, cliTimeoutMs);
 });
