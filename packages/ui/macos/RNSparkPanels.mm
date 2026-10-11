@@ -38,8 +38,13 @@ static NSDictionary<NSString *, NSNumber *> *SparkColorModes(void) {
 @property NSString *colorSession, *fontSession;
 @property BOOL colorAlpha, colorWasContinuous;
 @property NSFont *font;
-@property NSColorSampler *sampler;
 @end
+// The sampler takes over the one pointer, so it is process-wide rather than per module: after a JS
+// reload the new module still sees it and refuses with E_BUSY. Its request belongs to the module that
+// started it, which settles it on invalidate; the sampler's later answer then reaches nobody.
+static NSColorSampler *SparkSampler;
+static __weak id SparkSamplerOwner;
+static void (^SparkSamplerSettle)(NSColor *color, BOOL invalidated);
 @implementation RNSparkPanels
 RCT_EXPORT_MODULE(NativeSparkPanels)
 + (BOOL)requiresMainQueueSetup { return NO; }
@@ -128,21 +133,28 @@ static BOOL SparkRefuseInDriver(RCTPromiseRejectBlock reject, NSString *what) {
   } else if ([method isEqual:@"sampleScreenColor"]) {
     if (SparkRefuseInDriver(reject, @"The eyedropper")) return;
     // One pointer, one sampler: a second request while the user is sampling is refused.
-    if (self.sampler) { reject(@"E_BUSY", @"The eyedropper is already sampling", nil); return; }
+    if (SparkSampler) { reject(@"E_BUSY", @"The eyedropper is already sampling", nil); return; }
     // The sampler runs in AppKit's ColorSampler service, which holds the screen-capture
     // allowance; this process receives only the chosen color, so it needs no Screen Recording.
-    self.sampler = [NSColorSampler new];
-    __weak RNSparkPanels *weakSelf = self;
-    [self.sampler showSamplerWithSelectionHandler:^(NSColor *color) {
-      weakSelf.sampler = nil;
+    SparkSampler = [NSColorSampler new]; SparkSamplerOwner = self;
+    SparkSamplerSettle = ^(NSColor *color, BOOL invalidated) {
       NSString *hex = color ? SparkHexFromColor(color, NO) : nil;
-      if (!color) resolve(SparkJSON(@{ @"canceled": @YES }));
+      if (invalidated) reject(@"E_CLOSED", @"JavaScript reloaded while the eyedropper was sampling", nil);
+      else if (!color) resolve(SparkJSON(@{ @"canceled": @YES }));
       else if (hex) resolve(SparkJSON(@{ @"canceled": @NO, @"color": hex }));
       else reject(@"E_INVALID_DATA", @"The sampled color has no sRGB form", nil);
+    };
+    [SparkSampler showSamplerWithSelectionHandler:^(NSColor *color) {
+      auto settle = SparkSamplerSettle;
+      SparkSampler = nil; SparkSamplerOwner = nil; SparkSamplerSettle = nil;
+      if (settle) settle(color, NO);
     }];
   } else SparkInvalid(reject, @"Unknown panel operation");
 }
 // A reload leaves nobody listening, so the panels this module owned leave the screen.
-- (void)invalidate { [self closeColorSession]; [self closeFontSession]; }
+- (void)invalidate {
+  [self closeColorSession]; [self closeFontSession];
+  if (SparkSamplerOwner == self && SparkSamplerSettle) { auto settle = SparkSamplerSettle; SparkSamplerSettle = nil; settle(nil, YES); }
+}
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeSparkPanelsSpecJSI>(params); }
 @end

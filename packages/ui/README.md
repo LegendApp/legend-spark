@@ -182,7 +182,8 @@ fonts.font; // { family, postScriptName, size, weight, italic }: the installed f
 - `sampleScreenColor()` shows the system eyedropper (`NSColorSampler`). The user picks one
   on-screen color (opaque `#rrggbb`) or presses Escape (`{ canceled: true }`). Apple documents
   it as needing no Screen Recording permission: the app receives only the chosen color. A
-  second call while the user is still sampling rejects with `E_BUSY`.
+  second call while the user is still sampling rejects with `E_BUSY`, also after a JavaScript
+  reload, which rejects the earlier call with `E_CLOSED`: AppKit cannot dismiss a sampler.
 - In test driver mode ([docs/test-driver.md](../../docs/test-driver.md)) nothing may reach the
   screen, so `showColorPanel`, `showFontPanel` and `sampleScreenColor` reject with
   `E_UNAVAILABLE` after validating their arguments. Availability still reports the app's

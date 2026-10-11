@@ -142,6 +142,16 @@ int main() { @autoreleasepool {
   assert(colorHidden == colorHiddenBefore + 1 && fontHidden == fontHiddenBefore + 1 && !panel.continuous);
   // A module with no session leaves panels another owner may be using.
   [[RNSparkPanels new] invalidate]; assert(colorHidden == colorHiddenBefore + 1 && fontHidden == fontHiddenBefore + 1);
+  // The sampler is process-wide: a reload settles the old request, and the new module is busy until the
+  // sampler on screen answers, which then reaches nobody.
+  holdSample = YES; __block NSString *settled = nil; __block int settles = 0;
+  RNSparkPanels *old = [RNSparkPanels new];
+  [old call:@"sampleScreenColor" args:@"{}" resolve:^(id value) { settles++; } reject:^(NSString *code, NSString *message, NSError *error) { settles++; settled = code; }];
+  [old invalidate]; assert(settles == 1 && [settled isEqual:@"E_CLOSED"]);
+  RNSparkPanels *reloaded = [RNSparkPanels new];
+  assert([Call(reloaded, @"sampleScreenColor", @{}).code isEqual:@"E_BUSY"]);
+  heldSample(NSColor.redColor); assert(settles == 1);
+  holdSample = NO; sampled = NSColor.greenColor; assert([JSON(Call(reloaded, @"sampleScreenColor", @{}).value)[@"canceled"] isEqual:@NO]);
   [NSNotificationCenter.defaultCenter postNotificationName:NSWindowWillCloseNotification object:panel];
   [NSNotificationCenter.defaultCenter postNotificationName:SparkColorPanelOwnerWillChange object:[NSObject new]];
   assert(events.count == count);
