@@ -32,7 +32,7 @@ function Primitive<K extends PrimitiveKind>({ kind, props }: { kind: K; props: P
   const size = props.size ?? "regular", height = { mini: 20, small: 24, regular: 30, large: 36 }[size];
   const label = props.accessibilityLabel ?? ("label" in props ? props.label : undefined);
   return <NativePrimitive ref={control.ref} kind={kind} controlSize={size} valueJson={valueJson} eventCount={events.eventCount} disabled={control.disabled}
-    onValueChange={changed} onNativeError={failed} accessibilityLabel={label} testID={props.testID} style={[{ width: 240, height }, props.style]} />;
+    onValueChange={changed} onNativeError={failed} accessibilityLabel={label} testID={props.testID} style={[{ width: kind === "disclosure-triangle" ? height : 240, height }, props.style]} />;
 }
 export function Checkbox(props: CheckboxProps) { return <Primitive kind="checkbox" props={props} />; }
 export function RadioGroup(props: RadioGroupProps) { return <Primitive kind="radio-group" props={props} />; }

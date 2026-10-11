@@ -62,7 +62,7 @@ int main() { @autoreleasepool {
   props->kind = "checkbox"; props->valueJson = R"({"value":"mixed","label":"Choice"})"; props->testId = "check"; props->accessibilityLabel = "Checkbox label";
   Update(view, props); NSButton *checkbox = [view valueForKey:@"control"];
   assert(checkbox.state == NSControlStateValueMixed); assert(checkbox.allowsMixedState); assert([checkbox.accessibilityLabel isEqual:@"Checkbox label"]);
-  assert([checkbox.accessibilityIdentifier isEqual:@"check"]);
+  assert([checkbox.accessibilityIdentifier isEqual:@"check"]); assert([checkbox.title isEqual:@"Choice"] && [[checkbox.cell accessibilityLabel] isEqual:@"Checkbox label"]);
   checkbox.state = NSControlStateValueOn; [view changed:checkbox]; assert(changes.back() == "true" && lastCount == 1);
   // Props that predate the event leave the edit alone; the echo of a vetoed edit restores the controlled value.
   Update(view, props); assert(checkbox.state == NSControlStateValueOn);
@@ -160,7 +160,19 @@ int main() { @autoreleasepool {
   props->kind = "level-indicator"; props->valueJson = R"({"value":5,"min":0,"max":10,"step":1})"; Update(view, props);
   NSLevelIndicator *level = [view valueForKey:@"control"]; assert(level.doubleValue == 5 && level.maxValue == 10);
   props->kind = "disclosure-triangle"; props->valueJson = R"({"value":true,"label":"Details"})"; Update(view, props);
+  props->accessibilityLabel = "Details";
   NSButton *disclosure = [view valueForKey:@"control"]; assert(disclosure.bezelStyle == NSBezelStyleDisclosure && disclosure.state == NSControlStateValueOn);
+  // Image-only, like AppKit's own disclosure triangle: a title would be truncated to an ellipsis beside the triangle.
+  assert(disclosure.title.length == 0 && disclosure.imagePosition == NSImageOnly);
+  Update(view, props);
+  assert([[disclosure.cell accessibilityRole] isEqual:NSAccessibilityDisclosureTriangleRole] && [[disclosure.cell accessibilityLabel] isEqual:@"Details"]);
+  assert(NSEqualSizes(disclosure.frame.size, disclosure.fittingSize) && NSMinX(disclosure.frame) == 0);
+  [view updateLayoutMetrics:rtl oldLayoutMetrics:LayoutMetrics{}];
+  assert(NSMaxX(disclosure.frame) == NSWidth(view.bounds) && disclosure.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft);
+  [view updateLayoutMetrics:LayoutMetrics{} oldLayoutMetrics:rtl];
+  Render(view, props, R"({"value":false,"label":"Details"})", lastCount); assert(disclosure.state == NSControlStateValueOff && disclosure.title.length == 0);
+  disclosure.state = NSControlStateValueOn; [view changed:disclosure]; assert(changes.back() == "true");
+  props->eventCount = lastCount; Update(view, props); assert(disclosure.state == NSControlStateValueOff);
   [view prepareForRecycle]; assert(view.subviews.count == 0);
   props->eventCount = 0; Update(view, props); assert(view.subviews.count == 1);
   disclosure = [view valueForKey:@"control"]; disclosure.state = NSControlStateValueOff; [view changed:disclosure]; assert(lastCount == 1);
