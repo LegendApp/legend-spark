@@ -127,7 +127,7 @@ describe("SDK surface", () => {
     const flagged = Object.entries(surface).flatMap(([subpath, entry]) => Object.keys(entry.flags).sort().map(name => `${subpath}#${name}`));
     const availability = Object.entries(surface).flatMap(([subpath, entry]) => entry.values.filter(name => /^get\w*Availability$/.test(name)).map(name => `${subpath}#${name}`));
     expect(flagged).toEqual(availability);
-    expect(surface["./windows"]!.flags).toEqual({ getWindowAvailability: ["().available"] });
+    expect(surface["./windows"]!.flags).toEqual({ getIsolatedRuntimeAvailability: ["().available"], getWindowAvailability: ["().available"] });
     const controls = ["button", "text-input", "select", "segmented-control", "checkbox", "radio-group", "switch", "slider", "stepper", "combo-box", "token-field", "path-control", "progress", "level-indicator", "disclosure-triangle"];
     expect(surface["./ui"]!.flags.getControlAvailability).toEqual(controls.map(kind => `(${kind}).available`));
     expect(surface["./ui"]!.flags.getButtonAvailability).toEqual(["().available"]);

@@ -125,7 +125,7 @@ Process termination cannot acknowledge completed shutdown through a JavaScript p
 
 Keep document-controller/reload/transition helpers with document APIs. Typed open requests distinguish file paths from URL activation. Subscribe before draining queued launch requests and deduplicate the overlap; document replay semantics. General path manipulation belongs in files, not document orchestration.
 
-`/windows` includes `openWindow`, state commands, events, guards, `createWindowsNavigator`, `WindowProvider`, and hooks. Use one ID/options/result model with explicit ownership. Keep useful native restoration and toolbar features. The [window appendix](./api-window-contract.md) contains signatures, coordinates and lifecycle decisions. Remove `/windows/react`, `/windows/managed`, and `/windows/controls`; retain internal source separation as useful.
+`/windows` includes `openWindow`, state commands, events, guards, `createWindowsNavigator` (window types, singletons, per-window services), `createWindowState`, `WindowProvider`, and hooks. Use one ID/options/result model with explicit ownership. Keep useful native restoration and toolbar features. The [window appendix](./api-window-contract.md) contains signatures, coordinates and lifecycle decisions. Remove `/windows/react`, `/windows/managed`, and `/windows/controls`; retain internal source separation as useful.
 
 ### Menus, context menus, tray, Dock, and shortcuts
 
