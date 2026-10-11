@@ -178,6 +178,7 @@ fonts.font; // { family, postScriptName, size, weight, italic }: the installed f
   stops callbacks at once, hides the panel if this session still owns it, and is idempotent;
   after a native failure it can be retried. A session that has already ended closes nothing.
   While a font session is open, font panel changes go to it rather than to the focused text view.
+- When JavaScript reloads, open sessions end without `onClose` and their panels are hidden.
 - `sampleScreenColor()` shows the system eyedropper (`NSColorSampler`). The user picks one
   on-screen color (opaque `#rrggbb`) or presses Escape (`{ canceled: true }`). Apple documents
   it as needing no Screen Recording permission: the app receives only the chosen color. A

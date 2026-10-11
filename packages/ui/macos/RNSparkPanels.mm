@@ -61,6 +61,9 @@ RCT_EXPORT_MODULE(NativeSparkPanels)
   if (NSFontManager.sharedFontManager.target == self) NSFontManager.sharedFontManager.target = nil;
   if (reason) SparkEmit(@{ @"type": @"fontPanelClose", @"sessionId": session, @"reason": reason });
 }
+// Ends this module's session without an event and takes its panel off screen; a panel another owner holds stays.
+- (void)closeColorSession { if (self.colorSession) { [self endColorSession:nil]; [NSColorPanel.sharedColorPanel orderOut:nil]; } }
+- (void)closeFontSession { if (self.fontSession) { [self endFontSession:nil]; [[NSFontManager.sharedFontManager fontPanel:NO] orderOut:nil]; } }
 - (void)colorPanelWillClose:(NSNotification *)notification { [self endColorSession:@"dismissed"]; }
 - (void)fontPanelWillClose:(NSNotification *)notification { [self endFontSession:@"dismissed"]; }
 - (void)colorOwnerWillChange:(NSNotification *)notification { if (notification.object != self) [self endColorSession:@"replaced"]; }
@@ -117,8 +120,8 @@ static BOOL SparkRefuseInDriver(RCTPromiseRejectBlock reject, NSString *what) {
   } else if ([method isEqual:@"colorPanel.close"] || [method isEqual:@"fontPanel.close"]) {
     BOOL color = [method isEqual:@"colorPanel.close"];
     // JS already stopped this session's callbacks; a session that has ended leaves the panel to its new owner.
-    if (color && [session isEqual:self.colorSession]) { [self endColorSession:nil]; [NSColorPanel.sharedColorPanel orderOut:nil]; }
-    if (!color && [session isEqual:self.fontSession]) { [self endFontSession:nil]; [[NSFontManager.sharedFontManager fontPanel:NO] orderOut:nil]; }
+    if (color && [session isEqual:self.colorSession]) [self closeColorSession];
+    if (!color && [session isEqual:self.fontSession]) [self closeFontSession];
     resolve(@"null");
   } else if ([method isEqual:@"sampleScreenColor"]) {
     if (SparkRefuseInDriver(reject, @"The eyedropper")) return;
@@ -137,6 +140,7 @@ static BOOL SparkRefuseInDriver(RCTPromiseRejectBlock reject, NSString *what) {
     }];
   } else SparkInvalid(reject, @"Unknown panel operation");
 }
-- (void)invalidate { [self endColorSession:nil]; [self endFontSession:nil]; }
+// A reload leaves nobody listening, so the panels this module owned leave the screen.
+- (void)invalidate { [self closeColorSession]; [self closeFontSession]; }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeSparkPanelsSpecJSI>(params); }
 @end

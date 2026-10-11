@@ -130,11 +130,15 @@ int main() { @autoreleasepool {
   [NSNotificationCenter.defaultCenter postNotificationName:SparkColorPanelOwnerWillChange object:[NSObject new]];
   assert(events.count == count);
 
-  // Reload: sessions end silently and the panels are released.
+  // Reload: sessions end silently, and the panels this module owned leave the screen.
+  int colorHiddenBefore = colorHidden, fontHiddenBefore = fontHidden;
   Call(panels, @"colorPanel.show", @{ @"sessionId": @"c5", @"color": @"", @"alpha": @NO, @"mode": @"" });
   Call(panels, @"fontPanel.show", @{ @"sessionId": @"f5", @"family": @"Menlo", @"size": @11, @"weight": @400, @"italic": @NO });
   count = events.count; [panels invalidate];
   assert(events.count == count && [panel valueForKey:@"target"] == nil && manager.target == nil);
+  assert(colorHidden == colorHiddenBefore + 1 && fontHidden == fontHiddenBefore + 1);
+  // A module with no session leaves panels another owner may be using.
+  [[RNSparkPanels new] invalidate]; assert(colorHidden == colorHiddenBefore + 1 && fontHidden == fontHiddenBefore + 1);
   [NSNotificationCenter.defaultCenter postNotificationName:NSWindowWillCloseNotification object:panel];
   [NSNotificationCenter.defaultCenter postNotificationName:SparkColorPanelOwnerWillChange object:[NSObject new]];
   assert(events.count == count);
