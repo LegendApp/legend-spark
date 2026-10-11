@@ -28,35 +28,62 @@ const describe = (value: unknown) => value instanceof SparkError ? `SparkError:$
 
 /**
  * Badge, progress, attention and the launcher menu through @legendapp/spark/system.
- * Each result is "ok" (or what was requested) or SparkError:<code>. Unmounting removes the
- * registrations and clears the badge and progress this screen set.
+ * Each result is "ok" (or what was requested) or SparkError:<code>. Unmounting cancels a pending
+ * attention request, removes the registrations and clears the badge and progress this screen set.
  */
 export function useDockTaskbarDemo(t: DockTaskbarMessages) {
   const [results, setResults] = useState<Partial<Record<DemoId, string>>>({});
   const [lastAction, setLastAction] = useState<string>();
   const attention = useRef<AsyncRegistration>(undefined);
   const launcher = useRef<AsyncRegistration>(undefined);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // Settles the pending attention delay as cancelled.
+  const pending = useRef<() => void>(undefined);
+  // Bumped by every attention request, Stop and unmount; a request that finds it changed is stale.
+  const generation = useRef(0);
+  const badgeSet = useRef(false);
+  const progressSet = useRef(false);
+
+  const cancelAttention = useCallback(() => {
+    const settle = pending.current;
+    pending.current = undefined;
+    settle?.();
+    return { generation: ++generation.current, cancelled: settle !== undefined };
+  }, []);
 
   const perform = useCallback(async (id: DemoId): Promise<string> => {
-    if (id in PROGRESS) { await setAppProgress(PROGRESS[id]!); return "ok"; }
+    if (id in PROGRESS) {
+      const progress = PROGRESS[id]!;
+      if (progress) progressSet.current = true;
+      await setAppProgress(progress);
+      if (!progress) progressSet.current = false;
+      return "ok";
+    }
     switch (id) {
-      case "badge-text": await setAppBadge(t.badgeText); return "ok";
-      case "badge-count": await setAppBadge(3); return "ok";
-      case "badge-large": await setAppBadge(1250); return "ok";
-      case "badge-clear": await setAppBadge(""); return "ok";
+      case "badge-text": badgeSet.current = true; await setAppBadge(t.badgeText); return "ok";
+      case "badge-count": badgeSet.current = true; await setAppBadge(3); return "ok";
+      case "badge-large": badgeSet.current = true; await setAppBadge(1250); return "ok";
+      case "badge-clear": await setAppBadge(""); badgeSet.current = false; return "ok";
       case "progress-invalid": await setAppProgress({ state: "normal", value: 1.5 }); return "ok";
       case "attention-informational": case "attention-critical": {
-        await attention.current?.remove();
-        await new Promise(resolve => { timer.current = setTimeout(resolve, ATTENTION_DELAY); });
-        attention.current = await requestAttention({ kind: id === "attention-critical" ? "critical" : "informational" });
+        const request = cancelAttention().generation;
+        const previous = attention.current; attention.current = undefined;
+        await previous?.remove();
+        const elapsed = request === generation.current && await new Promise<boolean>(resolve => {
+          const timer = setTimeout(() => { pending.current = undefined; resolve(true); }, ATTENTION_DELAY);
+          pending.current = () => { clearTimeout(timer); resolve(false); };
+        });
+        if (!elapsed) return "cancelled";
+        const registration = await requestAttention({ kind: id === "attention-critical" ? "critical" : "informational" });
+        // Stop, a newer request or unmount arrived while the request was in flight.
+        if (request !== generation.current) { await registration.remove(); return "cancelled"; }
+        attention.current = registration;
         return "requested";
       }
       case "attention-stop": {
-        clearTimeout(timer.current);
+        const { cancelled } = cancelAttention();
         const current = attention.current; attention.current = undefined;
         await current?.remove();
-        return current ? "removed" : "none";
+        return current ? "removed" : cancelled ? "cancelled" : "none";
       }
       case "launcher-install": {
         if (launcher.current) return "installed";
@@ -79,7 +106,7 @@ export function useDockTaskbarDemo(t: DockTaskbarMessages) {
       }
     }
     return "ok";
-  }, [t]);
+  }, [t, cancelAttention]);
 
   const run = useCallback(async (id: DemoId) => {
     let result: string;
@@ -88,13 +115,13 @@ export function useDockTaskbarDemo(t: DockTaskbarMessages) {
   }, [perform]);
 
   useEffect(() => () => {
-    clearTimeout(timer.current);
+    cancelAttention();
     const report = (error: unknown) => console.warn("Dock & taskbar cleanup failed", error);
     attention.current?.remove().catch(report); attention.current = undefined;
     launcher.current?.remove().catch(report); launcher.current = undefined;
-    setAppBadge("").catch(report);
-    setAppProgress(null).catch(report);
-  }, []);
+    if (badgeSet.current) setAppBadge("").catch(report);
+    if (progressSet.current) setAppProgress(null).catch(report);
+  }, [cancelAttention]);
 
   return { availability: dockAvailability(), results, lastAction, run };
 }
