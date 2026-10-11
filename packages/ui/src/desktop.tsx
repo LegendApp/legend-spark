@@ -6,20 +6,27 @@ import NativeSelect from "./native-select/NativeSelectNativeComponent";
 import WindowsSelect from "./SparkSelectNativeComponent";
 import NativeSegmentedControl from "./native-select/NativeSegmentedControlNativeComponent";
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
-import { useControl, useTextValue, validateButton } from "./control";
+import { isEventCount, useControl, useTextValue, validateButton } from "./control";
 import { getControlAvailability } from "./availability";
+import { getButtonAvailability, requireAppKitButtonOptions } from "./button";
 import { selectionIndex } from "./select";
 import type { ButtonProps, TextInputProps, SelectProps, SegmentedControlProps } from "./types";
 export type { ButtonProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export { getControlAvailability } from "./availability";
+export { getButtonAvailability } from "./button";
+export type { ButtonVariant, ButtonAvailabilityOptions } from "./types";
 
 export function Button(props: ButtonProps) {
   validateButton(props);
-  const control = useControl(props, getControlAvailability("button"));
-  const { children, variant = "default", onPress, accessibilityLabel = children, style, testID } = props;
-  if (control.failed) return <View ref={control.ref} style={[{ width: 160, height: 36 }, style]} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }}><Text>{children}</Text></View>;
-  return <NativeButton ref={control.ref} title={children} disabled={control.disabled} variant={variant} accessibilityLabel={accessibilityLabel}
-    onButtonPress={() => { if (control.active()) onPress?.(); }} onUnavailable={control.unavailable} testID={testID} style={[{ width: 160, height: 36 }, style]} />;
+  requireAppKitButtonOptions(props);
+  const control = useControl(props, getButtonAvailability({ variant: props.variant, size: props.size }));
+  const { children, size = "regular", onPress, accessibilityLabel = children, style, testID } = props;
+  // Only an explicit `default` is the AppKit Return-key button; an omitted variant is a plain push button.
+  const variant = props.variant ?? (Platform.OS === "macos" ? "push" : "default");
+  const frame = { width: variant === "help" ? 36 : 160, height: { mini: 20, small: 26, regular: 36, large: 44 }[size] };
+  if (control.failed) return <View ref={control.ref} style={[frame, style]} testID={testID} accessible accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: true }}><Text>{children}</Text></View>;
+  return <NativeButton ref={control.ref} title={children} disabled={control.disabled} variant={variant} controlSize={size} accessibilityLabel={accessibilityLabel}
+    onButtonPress={() => { if (control.active()) onPress?.(); }} onUnavailable={control.unavailable} testID={testID} style={[frame, style]} />;
 }
 export function TextInput(props: TextInputProps) {
   const control = useControl(props, getControlAvailability("text-input"));
@@ -27,7 +34,7 @@ export function TextInput(props: TextInputProps) {
   function changed(event: NativeSyntheticEvent<{ text: string; eventCount: number }>) {
     if (!control.active()) return;
     const data = event?.nativeEvent;
-    if (typeof data?.text !== "string" || !Number.isSafeInteger(data.eventCount) || data.eventCount < 1 || data.eventCount > 2147483647) { control.error(new SparkError("E_INVALID_DATA", "Invalid native text change")); return; }
+    if (typeof data?.text !== "string" || !isEventCount(data.eventCount)) { control.error(new SparkError("E_INVALID_DATA", "Invalid native text change")); return; }
     if (value.acknowledge(data.eventCount)) props.onChangeText?.(data.text);
   }
   const { accessibilityLabel, style, testID } = props;
@@ -54,3 +61,5 @@ function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }
 }
 export function Select(props: SelectProps) { return <Selection {...props} segmented={false} />; }
 export function SegmentedControl(props: SegmentedControlProps) { return <Selection {...props} segmented />; }
+
+export * from "./primitives-controls";

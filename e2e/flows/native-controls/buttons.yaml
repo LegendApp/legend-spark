@@ -1,0 +1,115 @@
+appId: so.legend.spark.examples.kitchensink
+name: Button styles, sizes, Return and Escape
+intent: >
+  On Native controls > Button styles, every plain (no variant), push, bevel, toolbar, help and
+  destructive button presses once in all four sizes. At each size, Return presses only the
+  variant="default" button and never the plain one, and Escape presses the variant="cancel"
+  button. Disabled buttons ignore clicks and Return.
+checks: [CTRL-BUTTON-01, CTRL-BUTTON-02, CTRL-DISABLED-01, CTRL-A11Y-01]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/buttons" }
+- extendedWaitUntil: { visible: { id: native-controls-buttons-root }, timeout: 10s }
+- assertText: { id: native-controls-buttons-plain-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-buttons-push-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-buttons-bevel-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-buttons-toolbar-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-buttons-help-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-buttons-destructive-availability, equals: '{"available":true}' }
+# mini
+- tapOn: { id: native-controls-buttons-plain-mini }
+- assertText: { id: native-controls-buttons-plain-mini-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-push-mini }
+- assertText: { id: native-controls-buttons-push-mini-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-bevel-mini }
+- assertText: { id: native-controls-buttons-bevel-mini-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-toolbar-mini }
+- assertText: { id: native-controls-buttons-toolbar-mini-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-help-mini }
+- assertText: { id: native-controls-buttons-help-mini-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-destructive-mini }
+- assertText: { id: native-controls-buttons-destructive-mini-value, equals: '1' }
+# small
+- tapOn: { id: native-controls-buttons-plain-small }
+- assertText: { id: native-controls-buttons-plain-small-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-push-small }
+- assertText: { id: native-controls-buttons-push-small-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-bevel-small }
+- assertText: { id: native-controls-buttons-bevel-small-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-toolbar-small }
+- assertText: { id: native-controls-buttons-toolbar-small-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-help-small }
+- assertText: { id: native-controls-buttons-help-small-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-destructive-small }
+- assertText: { id: native-controls-buttons-destructive-small-value, equals: '1' }
+# regular
+- tapOn: { id: native-controls-buttons-plain-regular }
+- assertText: { id: native-controls-buttons-plain-regular-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-push-regular }
+- assertText: { id: native-controls-buttons-push-regular-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-bevel-regular }
+- assertText: { id: native-controls-buttons-bevel-regular-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-toolbar-regular }
+- assertText: { id: native-controls-buttons-toolbar-regular-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-help-regular }
+- assertText: { id: native-controls-buttons-help-regular-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-destructive-regular }
+- assertText: { id: native-controls-buttons-destructive-regular-value, equals: '1' }
+# large
+- tapOn: { id: native-controls-buttons-plain-large }
+- assertText: { id: native-controls-buttons-plain-large-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-push-large }
+- assertText: { id: native-controls-buttons-push-large-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-bevel-large }
+- assertText: { id: native-controls-buttons-bevel-large-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-toolbar-large }
+- assertText: { id: native-controls-buttons-toolbar-large-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-help-large }
+- assertText: { id: native-controls-buttons-help-large-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-destructive-large }
+- assertText: { id: native-controls-buttons-destructive-large-value, equals: '1' }
+# Return and Escape at size mini
+- tapOn: { id: native-controls-buttons-keyboard-size.mini }
+- pressKey: Enter
+- assertText: { id: native-controls-buttons-keyboard-default-value, equals: '1' }
+- assertText: { id: native-controls-buttons-keyboard-plain-value, equals: '0' }
+- pressKey: Escape
+- assertText: { id: native-controls-buttons-keyboard-cancel-value, equals: '1' }
+# Return and Escape at size small
+- tapOn: { id: native-controls-buttons-keyboard-size.small }
+- pressKey: Enter
+- assertText: { id: native-controls-buttons-keyboard-default-value, equals: '2' }
+- assertText: { id: native-controls-buttons-keyboard-plain-value, equals: '0' }
+- pressKey: Escape
+- assertText: { id: native-controls-buttons-keyboard-cancel-value, equals: '2' }
+# Return and Escape at size regular
+- tapOn: { id: native-controls-buttons-keyboard-size.regular }
+- pressKey: Enter
+- assertText: { id: native-controls-buttons-keyboard-default-value, equals: '3' }
+- assertText: { id: native-controls-buttons-keyboard-plain-value, equals: '0' }
+- pressKey: Escape
+- assertText: { id: native-controls-buttons-keyboard-cancel-value, equals: '3' }
+# Return and Escape at size large
+- tapOn: { id: native-controls-buttons-keyboard-size.large }
+- pressKey: Enter
+- assertText: { id: native-controls-buttons-keyboard-default-value, equals: '4' }
+- assertText: { id: native-controls-buttons-keyboard-plain-value, equals: '0' }
+- pressKey: Escape
+- assertText: { id: native-controls-buttons-keyboard-cancel-value, equals: '4' }
+# A button without a variant still clicks
+- tapOn: { id: native-controls-buttons-keyboard-plain }
+- assertText: { id: native-controls-buttons-keyboard-plain-value, equals: '1' }
+# Disabled buttons ignore clicks and key equivalents
+- tapOn: { id: native-controls-buttons-disabled }
+- pressKey: Enter
+- assertText: { id: native-controls-buttons-keyboard-default-value, equals: '4' }
+- tapOn: { id: native-controls-buttons-push-regular }
+- assertText: { id: native-controls-buttons-push-regular-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-disabled }
+- assertA11y: { id: native-controls-buttons-keyboard-default, label: "Default", when: { matrix: { locale: en-US } } }
+- assertA11y: { id: native-controls-buttons-keyboard-default, label: "افتراضي", when: { matrix: { locale: ar } } }
+- takeScreenshot: buttons

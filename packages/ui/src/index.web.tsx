@@ -1,3 +1,7 @@
+import { portableButtonVariant } from "./button";
+export { getButtonAvailability } from "./button";
+export type { ButtonVariant, ButtonAvailabilityOptions } from "./types";
+import { isPrimitiveKind } from "./primitives";
 import { selectionIndex } from "./select";
 import type { CSSProperties } from "react";
 import { View } from "react-native";
@@ -6,14 +10,15 @@ import { useControl, useTextValue, validateButton } from "./control";
 import type { ButtonProps, TextInputProps, SelectProps, SegmentedControlProps, ControlKind } from "./types";
 export type { ButtonProps, TextInputProps, ControlledTextInputProps, UncontrolledTextInputProps, SelectProps, SelectOption, SegmentedControlProps, ControlProps, ControlRef, ControlKind } from "./types";
 export function getControlAvailability(control: ControlKind): Availability {
+  if (isPrimitiveKind(control)) return { available: false, reason: "unsupported-platform" };
   if (!["button", "text-input", "select", "segmented-control"].includes(control)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown control kind");
   return { available: true };
 }
 const nativeStyle: CSSProperties = { width: "100%", height: "100%", boxSizing: "border-box", font: "14px system-ui" };
 const borderlessStyle: CSSProperties = { ...nativeStyle, border: "none", background: "transparent" };
 export function Button(props: ButtonProps) {
-  validateButton(props); const control = useControl(props);
-  const { children, onPress, variant = "default", accessibilityLabel = children, style, testID } = props;
+  validateButton(props); const variant = portableButtonVariant(props); const control = useControl(props);
+  const { children, onPress, accessibilityLabel = children, style, testID } = props;
   return <View ref={control.ref} style={[{ width: 160, height: 36 }, style]} testID={testID}>
     <button type="button" disabled={control.disabled} onClick={() => { if (control.active()) onPress?.(); }} aria-label={accessibilityLabel}
       style={variant === "borderless" ? borderlessStyle : nativeStyle}>{children}</button>
@@ -52,3 +57,5 @@ export function SegmentedControl(props: SegmentedControlProps) {
     </div>
   </View>;
 }
+
+export * from "./primitives-controls";

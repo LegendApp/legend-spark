@@ -46,7 +46,8 @@
         "SwipeActions": "RNSwipeActions",
         "NativeSelect": "RNNativeSelect",
         "NativeSegmentedControl": "RNNativeSegmentedControl",
-        "TextInputSearch": "RNTextInputSearch"
+        "TextInputSearch": "RNTextInputSearch",
+        "SparkPrimitive": "RNSparkPrimitive"
       },
       "modulesProvider": {}
     },

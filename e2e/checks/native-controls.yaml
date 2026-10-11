@@ -1,0 +1,130 @@
+area: native-controls
+prefix: CTRL
+checks:
+  CTRL-CHECKBOX-01:
+    title: Checkbox toggles natively in every size, a mixed checkbox leaves the mixed state on click, and getControlAvailability('checkbox') reports available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Checkbox
+      - ./ui#getControlAvailability(checkbox).available
+  CTRL-RADIO-01:
+    title: RadioGroup selects the clicked option in every size and reports its value
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#RadioGroup
+      - ./ui#getControlAvailability(radio-group).available
+  CTRL-SWITCH-01:
+    title: Switch toggles in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Switch
+      - ./ui#getControlAvailability(switch).available
+  CTRL-DISCLOSURE-01:
+    title: DisclosureTriangle expands and collapses in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#DisclosureTriangle
+      - ./ui#getControlAvailability(disclosure-triangle).available
+  CTRL-SLIDER-01:
+    title: A continuous Slider drag reports intermediate values and is never reset by a stale controlled value
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Slider
+      - ./ui#getControlAvailability(slider).available
+  CTRL-SLIDER-02:
+    title: A Slider with ticks and continuous=false jumps to a click and steps with the arrow keys in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Slider
+  CTRL-STEPPER-01:
+    title: Stepper increments and decrements by its step in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Stepper
+      - ./ui#getControlAvailability(stepper).available
+  CTRL-COMBO-01:
+    title: ComboBox keeps every typed character (free text outside its options) and selects an option from its list
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#ComboBox
+      - ./ui#getControlAvailability(combo-box).available
+  CTRL-TOKEN-01:
+    title: TokenField commits a typed token and reports the token array
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#TokenField
+      - ./ui#getControlAvailability(token-field).available
+  CTRL-PATH-01:
+    title: PathControl proposes the file URL of the clicked path component
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#PathControl
+      - ./ui#getControlAvailability(path-control).available
+  CTRL-PROGRESS-01:
+    title: Determinate Progress follows its value; indeterminate and spinner Progress render in every size, including while disabled
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Progress
+      - ./ui#getControlAvailability(progress).available
+  CTRL-LEVEL-01:
+    title: LevelIndicator follows its value in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#LevelIndicator
+      - ./ui#getControlAvailability(level-indicator).available
+  CTRL-DISABLED-01:
+    title: Disabled primitives and buttons ignore clicks and keep their controlled values
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+  CTRL-A11Y-01:
+    title: Primitive accessibility labels are localized (en, ar) and layout mirrors in Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+  CTRL-BUTTON-01:
+    title: Plain, push, bevel, toolbar, help and destructive Buttons press in every size, and getButtonAvailability reports them available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Button
+      - ./ui#getButtonAvailability().available
+  CTRL-BUTTON-02:
+    title: Only an explicit variant="default" Button answers Return and only variant="cancel" answers Escape, in every size; a Button without a variant ignores Return
+    platforms: [macos]
+    blocking: true
+    spec: "#91 decision comment"
+    covers:
+      - ./ui#Button
+  CTRL-UNSUP-01:
+    title: On Windows every primitive reports unsupported-platform and rendering one throws SparkError E_UNSUPPORTED_PLATFORM (WinUI work is #228)
+    platforms: [windows]
+    blocking: true
+    spec: "#91 CTRL.api-primitives; #228"
+    covers:
+      - ./ui#getControlAvailability

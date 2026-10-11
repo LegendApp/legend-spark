@@ -1,0 +1,108 @@
+appId: so.legend.spark.examples.kitchensink
+name: Toggle primitives in every size
+intent: >
+  On Native controls > Toggles, clicking each checkbox, radio option, switch and disclosure
+  triangle in all four sizes updates the JSON value under it, and a mixed checkbox leaves the
+  mixed state. With Disable controls checked, clicks change nothing. Labels are localized and
+  the radio group mirrors in Arabic.
+checks: [CTRL-CHECKBOX-01, CTRL-RADIO-01, CTRL-SWITCH-01, CTRL-DISCLOSURE-01, CTRL-DISABLED-01, CTRL-A11Y-01]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/toggles" }
+- extendedWaitUntil: { visible: { id: native-controls-toggles-root }, timeout: 10s }
+- assertText: { id: native-controls-toggles-checkbox-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-toggles-radio-group-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-toggles-switch-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-toggles-disclosure-triangle-availability, equals: '{"available":true}' }
+# mini
+- tapOn: { id: native-controls-toggles-checkbox-mini }
+- assertText: { id: native-controls-toggles-checkbox-mini-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-checkbox-mini }
+- assertText: { id: native-controls-toggles-checkbox-mini-value, equals: 'false' }
+- assertText: { id: native-controls-toggles-checkbox-mixed-mini-value, equals: '"mixed"' }
+- tapOn: { id: native-controls-toggles-checkbox-mixed-mini }
+- assertVisible: { id: native-controls-toggles-checkbox-mixed-mini-value, text: "/^(true|false)$/" }
+- tapOn: { id: native-controls-toggles-radio-group-mini.second }
+- assertText: { id: native-controls-toggles-radio-group-mini-value, equals: '"second"' }
+- tapOn: { id: native-controls-toggles-radio-group-mini.first }
+- assertText: { id: native-controls-toggles-radio-group-mini-value, equals: '"first"' }
+- tapOn: { id: native-controls-toggles-switch-mini }
+- assertText: { id: native-controls-toggles-switch-mini-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-disclosure-triangle-mini }
+- assertText: { id: native-controls-toggles-disclosure-triangle-mini-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-disclosure-triangle-mini }
+- assertText: { id: native-controls-toggles-disclosure-triangle-mini-value, equals: 'false' }
+# small
+- tapOn: { id: native-controls-toggles-checkbox-small }
+- assertText: { id: native-controls-toggles-checkbox-small-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-checkbox-small }
+- assertText: { id: native-controls-toggles-checkbox-small-value, equals: 'false' }
+- assertText: { id: native-controls-toggles-checkbox-mixed-small-value, equals: '"mixed"' }
+- tapOn: { id: native-controls-toggles-checkbox-mixed-small }
+- assertVisible: { id: native-controls-toggles-checkbox-mixed-small-value, text: "/^(true|false)$/" }
+- tapOn: { id: native-controls-toggles-radio-group-small.second }
+- assertText: { id: native-controls-toggles-radio-group-small-value, equals: '"second"' }
+- tapOn: { id: native-controls-toggles-radio-group-small.first }
+- assertText: { id: native-controls-toggles-radio-group-small-value, equals: '"first"' }
+- tapOn: { id: native-controls-toggles-switch-small }
+- assertText: { id: native-controls-toggles-switch-small-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-disclosure-triangle-small }
+- assertText: { id: native-controls-toggles-disclosure-triangle-small-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-disclosure-triangle-small }
+- assertText: { id: native-controls-toggles-disclosure-triangle-small-value, equals: 'false' }
+# regular
+- tapOn: { id: native-controls-toggles-checkbox-regular }
+- assertText: { id: native-controls-toggles-checkbox-regular-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-checkbox-regular }
+- assertText: { id: native-controls-toggles-checkbox-regular-value, equals: 'false' }
+- assertText: { id: native-controls-toggles-checkbox-mixed-regular-value, equals: '"mixed"' }
+- tapOn: { id: native-controls-toggles-checkbox-mixed-regular }
+- assertVisible: { id: native-controls-toggles-checkbox-mixed-regular-value, text: "/^(true|false)$/" }
+- tapOn: { id: native-controls-toggles-radio-group-regular.second }
+- assertText: { id: native-controls-toggles-radio-group-regular-value, equals: '"second"' }
+- tapOn: { id: native-controls-toggles-radio-group-regular.first }
+- assertText: { id: native-controls-toggles-radio-group-regular-value, equals: '"first"' }
+- tapOn: { id: native-controls-toggles-switch-regular }
+- assertText: { id: native-controls-toggles-switch-regular-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-disclosure-triangle-regular }
+- assertText: { id: native-controls-toggles-disclosure-triangle-regular-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-disclosure-triangle-regular }
+- assertText: { id: native-controls-toggles-disclosure-triangle-regular-value, equals: 'false' }
+# large
+- tapOn: { id: native-controls-toggles-checkbox-large }
+- assertText: { id: native-controls-toggles-checkbox-large-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-checkbox-large }
+- assertText: { id: native-controls-toggles-checkbox-large-value, equals: 'false' }
+- assertText: { id: native-controls-toggles-checkbox-mixed-large-value, equals: '"mixed"' }
+- tapOn: { id: native-controls-toggles-checkbox-mixed-large }
+- assertVisible: { id: native-controls-toggles-checkbox-mixed-large-value, text: "/^(true|false)$/" }
+- tapOn: { id: native-controls-toggles-radio-group-large.second }
+- assertText: { id: native-controls-toggles-radio-group-large-value, equals: '"second"' }
+- tapOn: { id: native-controls-toggles-radio-group-large.first }
+- assertText: { id: native-controls-toggles-radio-group-large-value, equals: '"first"' }
+- tapOn: { id: native-controls-toggles-switch-large }
+- assertText: { id: native-controls-toggles-switch-large-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-disclosure-triangle-large }
+- assertText: { id: native-controls-toggles-disclosure-triangle-large-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-disclosure-triangle-large }
+- assertText: { id: native-controls-toggles-disclosure-triangle-large-value, equals: 'false' }
+# Disabled controls ignore clicks and keep their values
+- tapOn: { id: native-controls-toggles-disabled }
+- tapOn: { id: native-controls-toggles-switch-regular }
+- assertText: { id: native-controls-toggles-switch-regular-value, equals: 'true' }
+- tapOn: { id: native-controls-toggles-checkbox-regular }
+- assertText: { id: native-controls-toggles-checkbox-regular-value, equals: 'false' }
+- tapOn: { id: native-controls-toggles-radio-group-regular.second }
+- assertText: { id: native-controls-toggles-radio-group-regular-value, equals: '"first"' }
+- tapOn: { id: native-controls-toggles-disabled }
+# Localized labels; Arabic mirrors the layout
+- assertA11y: { id: native-controls-toggles-checkbox-regular, label: "Checkbox, Regular", when: { matrix: { locale: en-US } } }
+- assertA11y: { id: native-controls-toggles-checkbox-regular, label: "خانة اختيار، عادي", when: { matrix: { locale: ar } } }
+- assertA11y: { id: native-controls-toggles-radio-group-small.second, label: "Second", when: { matrix: { locale: en-US } } }
+- assertA11y: { id: native-controls-toggles-radio-group-small.second, label: "الثاني", when: { matrix: { locale: ar } } }
+- assertMirrored: { id: native-controls-toggles-radio-group-regular, when: { matrix: { locale: ar } } }
+- takeScreenshot: toggles

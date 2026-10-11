@@ -1,3 +1,4 @@
+import type { ControlSize } from "./primitives.types";
 import type { Ref } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import type { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
@@ -11,11 +12,12 @@ export interface ControlProps {
   ref?: Ref<ControlRef>;
   onError?: (error: SparkError) => void;
 }
+export type ButtonVariant = "default" | "bordered" | "borderless" | "push" | "bevel" | "toolbar" | "help" | "cancel" | "destructive";
+export interface ButtonAvailabilityOptions { variant?: ButtonVariant; size?: ControlSize }
 /** A native text button. Layout styles affect its frame, not OS-managed chrome. */
-export interface ButtonProps extends ControlProps {
+export interface ButtonProps extends ControlProps, ButtonAvailabilityOptions {
   children: string;
   onPress?: () => void;
-  variant?: "default" | "bordered" | "borderless";
 }
 export interface ControlledTextInputProps extends ControlProps {
   value: string;
@@ -36,4 +38,5 @@ export interface SelectProps extends ControlProps {
   onValueChange: (value: string) => void;
 }
 export interface SegmentedControlProps extends SelectProps {}
-export type ControlKind = "button" | "text-input" | "select" | "segmented-control";
+export type ControlKind = "button" | "text-input" | "select" | "segmented-control" | import("./primitives.types").PrimitiveKind;
+export type { ControlSize, PrimitiveKind, PrimitiveControlProps, NumericControlProps, CheckboxValue, CheckboxProps, RadioGroupProps, SwitchProps, DisclosureTriangleProps, SliderProps, StepperProps, LevelIndicatorProps, ComboBoxProps, TokenFieldProps, PathControlProps, ProgressProps } from "./primitives.types";
