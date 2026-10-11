@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 import type { SdkSurface } from "../scripts/api-surface.ts";
 import { checkBudgets, checkGate, checkSignoffs, formatDiagnostic } from "../scripts/e2e/format/parser.ts";
-import { gateCommand, runGate, type GateEnv, type GateReport } from "../scripts/e2e/gate/gate.ts";
+import { gateCommand, parseGateArgs, runGate, type GateEnv, type GateReport } from "../scripts/e2e/gate/gate.ts";
 import { plan, type Host } from "../scripts/e2e/gate/plan.ts";
 import type { Backend, CommandHandler } from "../scripts/e2e/runner/backend.ts";
 import { BACKENDS, NO_BACKENDS } from "../scripts/e2e/runner/run.ts";
@@ -57,6 +57,10 @@ function env(options: { coldMs?: number | null; elements?: typeof ELEMENTS; blac
 async function gate(dir: string, options: Parameters<typeof env>[0] = {}, target?: string): Promise<GateReport> {
   const { env: gateEnv } = env(options);
   return runGate(plan(path.join(dir, "e2e"), gateEnv.host(), target), gateEnv);
+}
+async function scopedGate(dir: string, flows: string[], options: Parameters<typeof env>[0] = {}): Promise<GateReport> {
+  const { env: gateEnv } = env(options);
+  return runGate(plan(path.join(dir, "e2e"), gateEnv.host(), undefined, flows), gateEnv);
 }
 const reasons = (report: GateReport) => report.reasons.map(reason => `${reason.check}: ${reason.message}`);
 
@@ -293,6 +297,96 @@ describe("gate command", () => {
       expect(await gateCommand([...args], path.join(repo(), "e2e"), gateEnv)).toBe(2);
       expect(err.join("\n")).toContain(message);
     }
+  });
+});
+
+describe("--flow and --agent", () => {
+  const OTHER = { "e2e/flows/other/broken.yaml": "appId: so.legend.kitchensink\nname: Broken\nintent: Lints badly.\nchecks: [OTH-NONE-01]\n---\n- sleep: 1s\n" };
+  const scoped = (dir: string) => JSON.parse(readFileSync(path.join(dir, "reports/gate/scoped/report.json"), "utf8")) as GateReport;
+
+  test("arguments: repeatable --flow resolved from the working directory, --agent, --dry-run, inline values; usage errors", () => {
+    expect(parseGateArgs(["--flow", "e2e/flows/a.yaml", "--flow=e2e/flows/b", "--agent", "--target=macos-15/arm64", "--dry-run"])).toEqual({
+      target: "macos-15/arm64", flows: [path.resolve("e2e/flows/a.yaml"), path.resolve("e2e/flows/b")], agent: true, dryRun: true,
+    });
+    expect(parseGateArgs([])).toEqual({ target: undefined, flows: [], agent: false, dryRun: false });
+    for (const [args, message] of [[["--flow"], "--flow needs a value"], [["--flow", "--agent"], "--flow needs a value"], [["--agent=yes"], "unknown argument --agent=yes"], [["x.yaml"], "unknown argument x.yaml"]] as const) {
+      expect(() => parseGateArgs([...args])).toThrow(message);
+    }
+  });
+
+  test("one flow runs alone with the gate's checks and writes a scoped report next to the gate's", async () => {
+    const dir = repo(OTHER);
+    const { env: gateEnv, out } = env({ source: () => ({ commit: COMMIT, dirty: true }) });
+    expect(await gateCommand(["--flow", path.join(dir, "e2e/flows/app/theme.yaml")], path.join(dir, "e2e"), gateEnv)).toBe(0);
+    const report = scoped(dir);
+    expect(report).toMatchObject({ verdict: "PASS", scope: ["flows/app/theme.yaml"], reasons: [], budgets: [], run: "reports/gate/scoped/run", build: { signature: "verified" } });
+    // Uncommitted changes are a warning: a scoped run certifies no commit. Other areas' lint and coverage problems are not its own.
+    expect(report.warnings).toEqual(["the working tree has uncommitted changes; a --flow run certifies no commit"]);
+    expect(report.flows.map(flow => [flow.id, flow.status])).toEqual([["flows/app/theme[appearance=light]", "passed"], ["flows/app/theme[appearance=dark]", "passed"]]);
+    expect(existsSync(path.join(dir, "reports/gate/report.json"))).toBe(false);
+    expect(out.at(-1)).toMatch(/^warning: the working tree has uncommitted changes; a --flow run certifies no commit\nGate PASS on macos-14\/arm64@air-m1 for flows\/app\/theme\.yaml \(--flow\): 0 reasons\. Report: .*reports\/gate\/scoped\/index\.html$/);
+  });
+
+  test("a scoped run fails for everything the gate would fail its flows for", async () => {
+    const theme = (dir: string) => [path.join(dir, "e2e/flows/app/theme.yaml")];
+    const lintBroken = repo();
+    edit(lintBroken, "e2e/flows/app/theme.yaml", "- tapOn: { id: theme-toggle }", "- tapOn: { id: theme-toggle }\n- sleep: 1s");
+    expect(reasons(await scopedGate(lintBroken, theme(lintBroken)))).toContainEqual(expect.stringMatching(/^lint: bun run e2e:lint found 1 problem:\n.*theme\.yaml:9:3: .*\[no-sleep\]$/));
+    const uncovered = repo();
+    edit(uncovered, "e2e/checks/app.yaml", "  APP-IME-01:", "  APP-ORPHAN-01:\n    title: Nothing verifies this\n  APP-IME-01:");
+    expect(reasons(await scopedGate(uncovered, theme(uncovered)))).toEqual([expect.stringMatching(/^coverage: bun run e2e:coverage found 1 problem in app:\n.*APP-ORPHAN-01 is not listed in any flow's checks \[no-flow\]$/)]);
+    const failing = repo();
+    expect(reasons(await scopedGate(failing, theme(failing), { elements: [element("catalog", { id: "catalog" })] }))).toEqual([
+      expect.stringMatching(/^flows: flows\/app\/theme\[appearance=light\]: .*\[not-found\]$/), expect.stringMatching(/^flows: flows\/app\/theme\[appearance=dark\]: .*\[not-found\]$/),
+    ]);
+    const unbuilt = repo({}, { build: false });
+    expect(reasons(await scopedGate(unbuilt, theme(unbuilt)))).toContain("build: the release build build/macos-arm64/KitchenSink.app does not exist");
+    const launch = repo();
+    expect(reasons(await scopedGate(launch, [path.join(launch, "e2e/flows/app/launch.yaml")], { coldMs: 800 }))).toEqual(["budgets: flows/app/launch: startup.coldMs 800 is above its budget 770 (baseline 700 +10%)"]);
+    // An area runs every gate flow under it, manual sign-offs included.
+    const area = repo();
+    edit(area, "e2e/gate.yaml", "signoffs/release.yaml", "signoffs/none.yaml");
+    const report = await scopedGate(area, [path.join(area, "e2e/flows/app")]);
+    expect(report.flows.map(flow => flow.id)).toEqual(["flows/app/ime", "flows/app/launch", "flows/app/theme[appearance=light]", "flows/app/theme[appearance=dark]"]);
+    expect(report.excluded).toEqual([{ path: "flows/app/taskbar.yaml", reason: "platforms: windows" }]);
+    expect(reasons(report)).toEqual(["signoffs: signoffs/none.yaml does not exist; 1 manual flow run need a sign-off: flows/app/ime"]);
+  });
+
+  test("--agent prints only JSON lines: flow events with the bundle path, then the verdict summary", async () => {
+    const dir = repo();
+    const { env: gateEnv, out } = env({ elements: [element("catalog", { id: "catalog" })] });
+    expect(await gateCommand(["--flow", path.join(dir, "e2e/flows/app/theme.yaml"), "--agent"], path.join(dir, "e2e"), gateEnv)).toBe(1);
+    const events = out.map(line => JSON.parse(line));
+    expect(events.map(event => event.event)).toEqual(["flow-start", "flow-end", "flow-start", "flow-end", "gate-end"]);
+    expect(events[1]).toMatchObject({ id: "flows/app/theme[appearance=light]", status: "failed", intent: "The theme toggle works in light and dark appearance.", failure: { command: "tapOn", kind: "not-found" } });
+    const summary = events.at(-1);
+    expect(summary).toMatchObject({
+      verdict: "FAIL", target: "macos-14/arm64@air-m1", scope: ["flows/app/theme.yaml"], warnings: [],
+      report: { json: path.join(dir, "reports/gate/scoped/report.json"), html: path.join(dir, "reports/gate/scoped/index.html") }, run: path.join(dir, "reports/gate/scoped/run"),
+    });
+    expect(summary.reasons.map((reason: { check: string }) => reason.check)).toEqual(["flows", "flows"]);
+    const bundle = path.join(dir, "reports/gate/scoped/run/flows/app/theme/appearance-light/failure/bundle.json");
+    expect(summary.flows[0]).toEqual({ id: "flows/app/theme[appearance=light]", status: "failed", blocking: true, failure: expect.stringContaining("[not-found]"), bundle });
+    expect(events[1].bundle).toBe(bundle);
+    expect(JSON.parse(readFileSync(bundle, "utf8"))).toMatchObject({ flow: { intent: "The theme toggle works in light and dark appearance.", matrix: { appearance: "light" } }, failure: { selector: { id: "theme-toggle" } }, run: { host: AIR } });
+    expect(scoped(dir).flows[0]!.bundle).toBe("reports/gate/scoped/run/flows/app/theme/appearance-light/failure/bundle.json");
+  });
+
+  test("--flow must name gate flows; --dry-run shows the scope", async () => {
+    const dir = repo({ "e2e/subflows/s.yaml": "- tapOn: X\n", "elsewhere/flow.yaml": "appId: x\nname: x\n---\n- launchApp\n" });
+    const cases: Array<[string, string]> = [
+      ["e2e/flows/app/nope.yaml", "--flow "], ["e2e/subflows/s.yaml", "not a flow (subflow)"], ["e2e/checks/app.yaml", "not a flow (registry)"],
+      ["elsewhere/flow.yaml", "not a gate flow (gate.yaml includes flows/**"], ["e2e/subflows", "no flows there"],
+    ];
+    for (const [file, message] of cases) {
+      const { env: gateEnv, err } = env();
+      expect(await gateCommand(["--flow", path.join(dir, file)], path.join(dir, "e2e"), gateEnv)).toBe(2);
+      expect(err.join("\n")).toContain(message);
+    }
+    const { env: gateEnv, out } = env();
+    expect(await gateCommand(["--dry-run", "--flow", path.join(dir, "e2e/flows/app/launch.yaml")], path.join(dir, "e2e"), gateEnv)).toBe(0);
+    expect(out.join("\n")).toContain("Scope (--flow): flows/app/launch.yaml\nTarget:");
+    expect(out.join("\n")).toContain("  report: reports/gate/scoped/report.json, reports/gate/scoped/index.html\nFlows for macos-14/arm64@air-m1: 1\n  run            blocking      flows/app/launch.yaml");
   });
 });
 

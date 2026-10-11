@@ -1,5 +1,5 @@
 // The release gate's plan: which target this run certifies, which flows it runs and which budgets apply (docs/e2e-flows.md#release-gate).
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { collect } from "../files.ts";
 import {
@@ -40,6 +40,8 @@ export type GatePlan = {
   /** Budgets with a baseline for this target's machine. */
   budgets: PlannedBudget[];
   problems: Reason[];
+  /** `--flow`: the selected gate flows, relative to e2e/. Undefined for the whole gate. */
+  scope?: string[];
 };
 
 export class UsageError extends Error {}
@@ -110,7 +112,27 @@ export function gateFlows(root: string, manifest: GateManifest): Array<{ path: s
     .map(([file]) => ({ path: path.relative(root, file), file }));
 }
 
-export function plan(root: string, host: Host, override?: string): GatePlan {
+/** The gate flows at or under each `--flow` path (absolute). Anything else is a usage error: a run never widens or narrows silently. */
+function select(root: string, manifest: GateManifest, all: Array<{ path: string; file: string }>, paths: string[]): string[] {
+  const chosen = new Set<string>();
+  for (const target of paths) {
+    const shown = path.relative(process.cwd(), target) || ".";
+    if (!existsSync(target)) throw new UsageError(`--flow ${shown}: not found`);
+    const found = collect(target);
+    if (!statSync(target).isDirectory() && found[0]![1] !== "flow") throw new UsageError(`--flow ${shown}: not a flow (${found[0]![1]})`);
+    const flows = found.filter(([, kind]) => kind === "flow").map(([file]) => file);
+    if (!flows.length) throw new UsageError(`--flow ${shown}: no flows there`);
+    for (const file of flows) {
+      const match = all.find(flow => flow.file === file);
+      if (!match) throw new UsageError(`--flow ${path.relative(process.cwd(), file)}: not a gate flow (gate.yaml includes ${manifest.include.join(", ")} under ${path.relative(process.cwd(), root) || "."})`);
+      chosen.add(match.path);
+    }
+  }
+  return all.map(flow => flow.path).filter(flow => chosen.has(flow));
+}
+
+/** Plans the gate for this machine (or `override`); `only` (absolute paths) scopes it to the gate flows at or under them. */
+export function plan(root: string, host: Host, override?: string, only?: string[]): GatePlan {
   root = path.resolve(root);
   const manifest = readManifest(root), repo = path.dirname(root), problems: Reason[] = [];
   const budgets = readBudgets(root, manifest, problems);
@@ -123,8 +145,9 @@ export function plan(root: string, host: Host, override?: string): GatePlan {
   if (target && !build) problems.push({ check: "build", message: `gate.yaml has no ${target.platform} build to test` });
   const artifact = build && path.resolve(repo, build.artifact.replaceAll("${ARCH}", target!.arch));
 
+  const all = gateFlows(root, manifest), scope = only && select(root, manifest, all, only);
   const blocking = blockingChecks(root, manifest), flows: PlannedFlow[] = [], excluded: GatePlan["excluded"] = [];
-  for (const { path: relative, file } of target ? gateFlows(root, manifest) : []) {
+  for (const { path: relative, file } of target ? all.filter(flow => !scope || scope.includes(flow.path)) : []) {
     const id = relative.replace(/\.ya?ml$/, "");
     const header = checkFlow(readFileSync(file, "utf8"), file).value?.header;
     // An invalid flow still runs, so the runner reports it as a `format` failure; lint reports it too.
@@ -138,5 +161,12 @@ export function plan(root: string, host: Host, override?: string): GatePlan {
     });
   }
   const planned = machine ? (budgets?.budgets ?? []).flatMap(budget => machine.id in budget.baselines ? [{ ...budget, baseline: budget.baselines[machine.id]! }] : []) : [];
-  return { manifest, root, repo, host, target, machine, artifact, flows, excluded, budgets: planned, problems };
+  return { manifest, root, repo, host, target, machine, artifact, flows, excluded, budgets: planned, problems, ...(scope ? { scope } : {}) };
+}
+
+/** Where a run writes its reports: the manifest's paths, or `scoped/` next to them for a `--flow` run, so it never replaces a full gate report. */
+export function reportFiles(plan: GatePlan) {
+  const json = path.join(plan.repo, plan.manifest.report.json), html = path.join(plan.repo, plan.manifest.report.html);
+  const scoped = (file: string) => plan.scope ? path.join(path.dirname(file), "scoped", path.basename(file)) : file;
+  return { json: scoped(json), html: scoped(html), run: path.join(path.dirname(scoped(json)), "run") };
 }

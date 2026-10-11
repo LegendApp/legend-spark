@@ -44,7 +44,7 @@ function withContainers(id: string): string[] {
 }
 
 /** Registries are named for their area; flows live in flows/<area>/. */
-function areaOf(file: string, kind: Kind): string {
+export function areaOf(file: string, kind: Kind): string {
   const segments = file.split(path.sep);
   const flows = segments.lastIndexOf("flows");
   return (kind === "registry" || flows < 0 ? segments.at(-1)! : segments[flows + 1]!).replace(/\.ya?ml$/, "");

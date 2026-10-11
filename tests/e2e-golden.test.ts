@@ -156,6 +156,12 @@ describe("assertScreenshot in the runner", () => {
     expect(report.flows[0]!.goldens[0]).toMatchObject({ status: "failed", diff: `${dir}/home.diff.png`, stats: { different: 25 } });
     expect(at(readPng(path.join(over.runDir, dir, "home.diff.png")), 2, 2)).toEqual([255, 0, 0, 255]);
     expect(html(report)).toContain('<img src="flows/area/test/appearance-light%2Blocale-en/screenshots/home.diff.png"');
+    // The failure bundle points at the same files, relative to its own directory.
+    const bundleDir = path.join(over.runDir, "flows/area/test/appearance-light+locale-en/failure");
+    const bundle = JSON.parse(readFileSync(path.join(bundleDir, "bundle.json"), "utf8"));
+    expect(bundle).toMatchObject({ screenshot: "../screenshots/home.png", failure: { command: "assertScreenshot", args: { golden: "home", threshold: "0.1%" } } });
+    expect(bundle.goldens).toEqual([expect.objectContaining({ id: GOLDEN, status: "failed", actual: "../screenshots/home.png", diff: "../screenshots/home.diff.png", stats: expect.objectContaining({ different: 25 }) })]);
+    expect(path.resolve(bundleDir, bundle.goldens[0].golden)).toBe(over.golden(GOLDEN));
   });
 
   test("the default threshold is 0%", async () => {

@@ -382,6 +382,56 @@ describe("flows that do not run", () => {
   });
 });
 
+describe("failure bundles", () => {
+  const read = (file: string) => JSON.parse(readFileSync(file, "utf8"));
+
+  test("a failed run writes failure/bundle.json: intent, failing step and resolved args, selector, evidence, steps, env and host", async () => {
+    const backend = memory({ elements: [element("save", { text: "Save", role: "button" })] });
+    const { result, dir } = await run(flow("- tapOn: Save\n- runFlow: { file: subflows/press.yaml, env: { WHAT: Sav } }", "env: { LABEL: x }\n"), [backend], {
+      host: { os: "macos-27", arch: "arm64" }, files: { "subflows/press.yaml": "- tapOn: { text: \"${WHAT}\", within: { id: toolbar } }\n" },
+    });
+    const failureDir = path.join(dir, "run/flows/area/test/run/failure");
+    expect(result.bundle).toBe(path.join(failureDir, "bundle.json"));
+    const bundle = read(result.bundle!);
+    expect(bundle).toMatchObject({
+      version: 1,
+      flow: { id: "flows/area/test", name: "Test flow", intent: "The test intent.", matrix: {}, env: { LABEL: "x", TMP: path.join(dir, "run/flows/area/test/run/tmp") } },
+      failure: {
+        kind: "not-found", command: "tapOn", args: { text: "Sav", within: { id: "toolbar" } }, selector: { text: "Sav", within: { id: "toolbar" } },
+        location: expect.stringMatching(/subflows\/press\.yaml:1:3$/), stack: [expect.stringMatching(/flows\/area\/test\.yaml:7:3$/)],
+      },
+      screenshot: "memory-screenshot.png",
+      goldens: [],
+      run: { platform: "macos", backends: [{ name: "memory", kind: "black-box" }], host: { os: "macos-27", arch: "arm64" } },
+    });
+    expect(path.resolve(failureDir, bundle.flow.source)).toBe(path.join(dir, "flows/area/test.yaml"));
+    expect(bundle.artifacts.map((artifact: { kind: string; path: string }) => [artifact.kind, artifact.path])).toEqual([["elements", "elements-memory.json"], ["screenshot", "memory-screenshot.png"], ["logs", "memory.log"]]);
+    for (const artifact of bundle.artifacts) expect(existsSync(path.resolve(failureDir, artifact.path))).toBe(true);
+    expect(bundle.steps.map((step: { command: string; status: string; depth: number }) => [step.command, step.status, step.depth])).toEqual([["tapOn", "passed", 0], ["runFlow", "failed", 0], ["tapOn", "failed", 1]]);
+  });
+
+  test("the last screenshot falls back to one the flow took; a passing run writes no bundle", async () => {
+    const shots = new MemoryBackend(new VirtualClock(), {
+      kind: "driver", name: "driver", collect: false, elements: [element("ok", { text: "OK" })],
+      screenshot: async file => { writeFileSync(file, "png"); return { frame: WINDOW.frame, scale: 2 }; },
+    });
+    const failed = await run(flow("- takeScreenshot: before\n- assertVisible: { text: Missing, timeout: 1s }"), [shots]);
+    expect(read(failed.result.bundle!)).toMatchObject({ screenshot: "../output/before.png", failure: { selector: { text: "Missing" } }, artifacts: [{ kind: "elements" }, { kind: "screenshot", path: "../output/before.png" }] });
+    const passed = await run(flow("- assertVisible: OK"), [memory({ elements: [element("ok", { text: "OK" })] })]);
+    expect(passed.result.bundle).toBeUndefined();
+    expect(existsSync(path.join(passed.dir, "run/flows/area/test/run/failure"))).toBe(false);
+  });
+
+  test("an undefined variable has no resolved args; an invalid flow gets a bundle with its diagnostics", async () => {
+    const undefinedVar = await run(flow("- tapOn: \"${NOPE}\""), [memory()]);
+    expect(read(undefinedVar.result.bundle!).failure).toMatchObject({ kind: "invalid", command: "tapOn", message: expect.stringContaining("${NOPE} is not defined") });
+    expect(read(undefinedVar.result.bundle!).failure.args).toBeUndefined();
+    const invalid = await run("appId: x\n---\n- tapOn: X\n", [memory()]);
+    expect(invalid.result.bundle).toBe(path.join(invalid.dir, "run/flows/area/test/run/failure/bundle.json"));
+    expect(read(invalid.result.bundle!)).toMatchObject({ flow: { id: "flows/area/test", env: {} }, failure: { kind: "format", diagnostics: [expect.stringContaining('missing required key "name"')] }, steps: [], artifacts: [] });
+  });
+});
+
 describe("reports", () => {
   async function sample() {
     const backend = memory({
@@ -409,7 +459,8 @@ describe("reports", () => {
     const [pass, fail] = report.flows as [FlowResult, FlowResult];
     expect(pass.artifacts).toEqual([{ kind: "screenshot", path: "flows/a/pass/run/output/home.png", backend: "driver" }]);
     expect(fail.failure!.artifacts.map(artifact => artifact.path)).toEqual(["flows/a/fail/run/failure/elements-memory.json", "flows/a/fail/run/failure/memory-screenshot.png", "flows/a/fail/run/failure/memory.log", "flows/a/fail/run/failure/elements-driver.json"]);
-    expect(fail).toMatchObject({ id: "flows/a/fail", name: "Test flow", intent: "The test intent.", checks: [], tags: [] });
+    expect(fail).toMatchObject({ id: "flows/a/fail", name: "Test flow", intent: "The test intent.", checks: [], tags: [], bundle: "flows/a/fail/run/failure/bundle.json" });
+    expect(pass.bundle).toBeUndefined();
   });
 
   test("JUnit: one suite per file, failures and skips", async () => {
@@ -417,6 +468,7 @@ describe("reports", () => {
     expect(xml).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?>\n<testsuites name="e2e" tests="3" failures="1" skipped="1" time="5.123">/);
     expect(xml).toContain('<failure type="not-found" message="no element matches {&quot;text&quot;:&quot;Nope&quot;} (waited 5000ms on memory)">');
     expect(xml).toContain("artifact screenshot (memory): flows/a/fail/run/failure/memory-screenshot.png");
+    expect(xml).toContain("bundle: flows/a/fail/run/failure/bundle.json");
     expect(xml).toContain('<skipped message="platforms: windows (running macos)"/>');
     expect(xml.match(/<testsuite /g)).toHaveLength(3);
   });
@@ -425,6 +477,7 @@ describe("reports", () => {
     const page = html((await sample()).report);
     expect(page).toContain('<details class="failed" open>');
     expect(page).toContain('<img src="flows/a/fail/run/failure/memory-screenshot.png"');
+    expect(page).toContain('Failure bundle: <a href="flows/a/fail/run/failure/bundle.json">');
     expect(page).toContain("OK &lt;b&gt;");
     expect(page).not.toContain("OK <b>");
   });
@@ -461,6 +514,7 @@ describe("e2e:run", () => {
     expect(failed.failure.candidates).toEqual([expect.objectContaining({ text: "Save" })]);
     expect(failed.failure.artifacts.every((artifact: { path: string }) => path.isAbsolute(artifact.path) && existsSync(artifact.path))).toBe(true);
     expect(failed.steps).toBeUndefined();
+    expect(path.isAbsolute(failed.bundle) && existsSync(failed.bundle)).toBe(true);
     expect(events[5]).toMatchObject({ summary: { total: 2, passed: 1, failed: 1, skipped: 0 }, reports: { json: path.join(report, "report.json") } });
     for (const file of ["report.json", "junit.xml", "index.html"]) expect(existsSync(path.join(report, file))).toBe(true);
   });
