@@ -76,7 +76,7 @@ checks:
     covers:
       - ./motion#linkScroll
   MOT-JSBLOCK-01:
-    title: Blocking the JavaScript thread for 500 ms during an animation drops no frames and stalls none
+    title: Blocking the JavaScript thread for 500 ms during an animation drops no more frames than an idle main thread (at most 6 in 2 s at 120 Hz) and stalls none
     platforms: [macos]
     blocking: true
     spec: "#174 MOT.core"
