@@ -30,10 +30,12 @@
     "AppContext",
     "AppEvent",
     "AppEventMap",
+    "AppLaunch",
     "AppRuntime",
     "AsyncRegistration",
     "BeforeQuitOptions",
     "QuitResult",
+    "RelaunchOptions",
     "Subscription",
     "activate",
     "addAppListener",
@@ -42,7 +44,8 @@
     "getAppAvailability",
     "getAppContext",
     "hide",
-    "quit"
+    "quit",
+    "relaunch"
   ],
   "./app/documents": [
     "AsyncRegistration",

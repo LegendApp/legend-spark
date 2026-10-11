@@ -1,17 +1,36 @@
 import { beforeEach, expect, test, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ call: vi.fn(), listeners: new Set<(event: any) => void>(), platform: { OS: "macos" } }));
 vi.mock("react-native", () => ({ Platform: mocks.platform, TurboModuleRegistry: { get: () => ({ call: mocks.call }) }, NativeEventEmitter: class { addListener(_: string, listener: (event: any) => void) { mocks.listeners.add(listener); return { remove: () => { mocks.listeners.delete(listener); } }; } } }));
-import { getAppContext, addAppListener, beforeQuit, quit } from "../packages/desktop-app/src/api";
+import { getAppContext, addAppListener, beforeQuit, quit, relaunch } from "../packages/desktop-app/src/api";
 const tick = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
 function emit(event: any) { for (const listener of mocks.listeners) listener(event); }
 function calls(method: string) { return mocks.call.mock.calls.filter(([name]) => name === method).map(([, json]) => JSON.parse(json)); }
 beforeEach(() => { mocks.call.mockReset().mockResolvedValue("null"); mocks.listeners.clear(); });
+const launch = { safeMode: null, relaunched: false, instance: "primary" };
 test("app context validates the complete contract and exposes only owned metadata", async () => {
-  for (const value of [null, {}, { projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: [] } }]) {
+  const base = { projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: {} } };
+  for (const value of [null, {}, { ...base, runtime: { mode: "dev", modules: [] }, launch }, base, { ...base, launch: { ...launch, safeMode: "always" } },
+    { ...base, launch: { ...launch, relaunched: "yes" } }, { ...base, launch: { ...launch, instance: "secondary" } }]) {
     mocks.call.mockResolvedValue(JSON.stringify(value)); await expect(getAppContext()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   }
-  mocks.call.mockResolvedValue(JSON.stringify({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" }, internal: "secret" }, extra: true }));
-  expect(await getAppContext()).toEqual({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" } } });
+  mocks.call.mockResolvedValue(JSON.stringify({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" }, internal: "secret" }, launch: { safeMode: "modifier", relaunched: true, instance: "test-driver", internal: 1 }, extra: true }));
+  expect(await getAppContext()).toEqual({ projectId: "a", name: "App", version: "1", launchArguments: ["app"], runtime: { mode: "dev", modules: { a: "1" } }, launch: { safeMode: "modifier", relaunched: true, instance: "test-driver" } });
+});
+test("relaunch validates options before native work and reports the shared quit decision", async () => {
+  await expect(relaunch({ arguments: "x" } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(relaunch({ arguments: ["a\0b"] })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(relaunch({ safeMode: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(relaunch({ arguments: undefined, extra: undefined } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(relaunch(null as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  expect(mocks.call).not.toHaveBeenCalled();
+  mocks.call.mockResolvedValue('{"quitRequested":false,"reason":"vetoed"}');
+  await expect(relaunch({ arguments: ["--spark-safe-mode"] })).resolves.toEqual({ quitRequested: false, reason: "vetoed" });
+  mocks.call.mockResolvedValue('{"quitRequested":true}');
+  await expect(relaunch()).resolves.toEqual({ quitRequested: true });
+  // Omitted arguments let the host reuse this launch's own arguments.
+  expect(calls("relaunch")).toEqual([{ arguments: ["--spark-safe-mode"] }, {}]);
+  mocks.call.mockResolvedValue("null"); await expect(relaunch()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  mocks.call.mockRejectedValue(Object.assign(Error("spawn failed"), { code: "E_IO" })); await expect(relaunch()).rejects.toMatchObject({ code: "E_NATIVE" });
 });
 test("quit joins concurrent requests and waits for the native decision", async () => {
   let resolve!: (value: string) => void;
@@ -24,9 +43,12 @@ test("quit joins concurrent requests and waits for the native decision", async (
 });
 test("live app events validate payloads and never expose guard protocol or unrelated events", () => {
   const listener = vi.fn(), registration = addAppListener("secondInstance", listener);
-  emit({ type: "secondInstance" }); emit({ type: "beforeQuit", requestId: 1 }); emit({ type: "secondInstance", arguments: ["app", "file"], nativePrivate: true });
-  expect(listener).toHaveBeenCalledExactlyOnceWith({ type: "secondInstance", arguments: ["app", "file"] }); registration.remove();
-  emit({ type: "secondInstance", arguments: [] }); expect(listener).toHaveBeenCalledTimes(1);
+  const forwarded = { arguments: ["app", "/tmp/a.txt"], workingDirectory: "/tmp", files: ["/tmp/a.txt"], urls: ["spark-ks://app-lifecycle/instance"] };
+  emit({ type: "secondInstance" }); emit({ type: "beforeQuit", requestId: 1 }); emit({ type: "secondInstance", arguments: ["app"] });
+  emit({ type: "secondInstance", ...forwarded, files: "a" }); emit({ type: "secondInstance", ...forwarded, workingDirectory: 1 });
+  emit({ type: "secondInstance", ...forwarded, nativePrivate: true });
+  expect(listener).toHaveBeenCalledExactlyOnceWith({ type: "secondInstance", ...forwarded }); registration.remove();
+  emit({ type: "secondInstance", ...forwarded }); expect(listener).toHaveBeenCalledTimes(1);
   expect(() => addAppListener("beforeQuit" as never, () => {})).toThrow();
 });
 test("independent guards ignore other owners, duplicate requests and stale approvals", async () => {

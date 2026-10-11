@@ -26,9 +26,11 @@ extern double LegendMainWindowReactRootAttachedTimeMs;
 #if __has_include(<RNDesktopApp/SparkDesktop.h>)
 #import <RNDesktopApp/SparkDesktop.h>
 #import <RNDesktopApp/SparkTestDriver.h>
-// Driver-mode launches neither restore nor save window state: each starts from the configured defaults (docs/test-driver.md).
+// Safe-mode (docs/app.md) and driver-mode (docs/test-driver.md) launches neither restore nor save window state.
+static BOOL LegendSafeMode(void) { return SparkSafeMode(); }
 static BOOL LegendTestDriverActive(void) { return SparkTestDriverActive(); }
 #else
+static BOOL LegendSafeMode(void) { return NO; }
 static BOOL LegendTestDriverActive(void) { return NO; }
 #endif
 #import <CoreImage/CoreImage.h>
@@ -55,7 +57,7 @@ static NSString * const LegendMainWindowStartupSplitViewKey = @"LegendMainWindow
 
 extern "C" NSDictionary *LegendMainWindowStartupSplitViewConfiguration(void)
 {
-  if (LegendTestDriverActive()) return nil;
+  if (LegendSafeMode() || LegendTestDriverActive()) return nil;
   NSDictionary *configuration = [NSUserDefaults.standardUserDefaults dictionaryForKey:LegendMainWindowStartupSplitViewKey];
   return [configuration[@"restoreOnLaunch"] isEqual:@NO] ? nil : configuration;
 }
@@ -724,8 +726,8 @@ extern "C" void LegendPrecreateRestorableWindows(void)
   }
 
   LegendPrecreatedWindows = [NSMutableDictionary new];
-  // Driver mode opens no saved windows; their records stay for the next normal launch.
-  if (LegendTestDriverActive()) {
+  // Safe and driver mode open no saved windows; their records stay for the next normal launch.
+  if (LegendSafeMode() || LegendTestDriverActive()) {
     return;
   }
   for (NSDictionary *options in LegendReadRestorableWindowOptions()) {
@@ -2271,7 +2273,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       LegendApplyBackgroundColorToView(window.contentView, startupBackgroundColor);
     }
 
-    if (!precreatedWindow && [options[@"restoreOnLaunch"] boolValue] && !LegendTestDriverActive()) {
+    if (!precreatedWindow && [options[@"restoreOnLaunch"] boolValue] && !LegendSafeMode() && !LegendTestDriverActive()) {
       [window setFrameAutosaveName:LegendManagedWindowFrameAutosaveName(identifier)];
     }
     if (!precreatedWindow && LegendPrepareSidebarSplitViewStartup) {

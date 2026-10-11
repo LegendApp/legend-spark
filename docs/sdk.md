@@ -144,8 +144,9 @@ pending. Window frames and display work areas use macOS screen points with a
 bottom-left origin. Closing all windows does not automatically quit the app.
 
 The host permits one running instance per project ID. A second launch forwards
-its arguments through the `secondInstance` app event, activates the existing app,
-and exits. Different projects using the Spark Runner remain independent processes.
+its arguments, working directory, files and URLs through the `secondInstance` app
+event, activates the existing app, and exits. Different projects using the Spark
+Runner remain independent processes. `relaunch()` and safe mode are in [app.md](app.md).
 
 ## Menus and shortcuts
 

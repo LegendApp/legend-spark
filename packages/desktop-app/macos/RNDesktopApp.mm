@@ -26,7 +26,7 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
         else reject(@"E_UNAVAILABLE", @"Customization is not enabled in this app", nil);
       }
     }
-    else if ([method isEqual:@"context"]) resolve(SparkJSON(SparkContext()));
+    else if ([method isEqual:@"context"]) { NSMutableDictionary *context = [SparkContext() mutableCopy]; context[@"launch"] = SparkLaunchState(); resolve(SparkJSON(context)); }
     else if ([method isEqual:@"initialURL"]) resolve(SparkJSON(SparkInitialURL()));
     else if ([method isEqual:@"pendingURLs"]) resolve(SparkJSON(SparkPendingURLs()));
     else if ([method isEqual:@"quit"]) {
@@ -34,6 +34,12 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
       // AppKit can enter a modal run loop while awaiting the JS decision. Do
       // not hold the main GCD queue that must deliver that decision.
       [NSRunLoop.mainRunLoop performBlock:^{ [NSApp terminate:nil]; }]; }
+    else if ([method isEqual:@"relaunch"]) {
+      NSArray *process = NSProcessInfo.processInfo.arguments;
+      NSArray *arguments = args[@"arguments"] ?: [process subarrayWithRange:NSMakeRange(1, process.count - 1)];
+      if (![arguments isKindOfClass:NSArray.class] || [arguments indexOfObjectPassingTest:^BOOL(id item, NSUInteger index, BOOL *stop) { return ![item isKindOfClass:NSString.class]; }] != NSNotFound) { SparkInvalid(reject, @"Expected relaunch arguments"); return; }
+      SparkRelaunch(arguments, ^(NSDictionary *result, NSError *error) { if (error) SparkReject(reject, error); else resolve(SparkJSON(result)); });
+    }
     else if ([method isEqual:@"quitGuard"]) {
       NSString *identifier = args[@"id"];
       if (![identifier isKindOfClass:NSString.class] || !identifier.length) { SparkInvalid(reject, @"Expected quit guard ID"); return; }
