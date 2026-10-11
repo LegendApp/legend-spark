@@ -1,0 +1,64 @@
+area: text-input-editing
+prefix: TEXT
+checks:
+  TEXT-SVCAVAIL-01:
+    title: getTextServicesAvailability reports services, lookUp and findBar available on macOS, and writingTools available on Writing Tools hardware (macOS 15.2+) or host-restriction otherwise
+    platforms: [macos]
+    blocking: true
+    spec: "#87 TEXT.api"
+    covers:
+      - ./ui/text-services#getTextServicesAvailability
+      - ./ui/text-services#getTextServicesAvailability(services).available
+      - ./ui/text-services#getTextServicesAvailability(lookUp).available
+      - ./ui/text-services#getTextServicesAvailability(findBar).available
+      - ./ui/text-services#getTextServicesAvailability(writingTools).available
+  TEXT-SVCUNSUP-01:
+    title: On Windows every text service reports unsupported-platform and findText, showFindBar and lookUp reject with SparkError E_UNSUPPORTED_PLATFORM (Windows follow-up #293)
+    platforms: [windows]
+    blocking: true
+    spec: "#87 TEXT.api; #293"
+    covers:
+      - ./ui/text-services#getTextServicesAvailability
+      - ./ui/text-services#findText
+      - ./ui/text-services#showFindBar
+      - ./ui/text-services#lookUp
+  TEXT-FIND-01:
+    title: findText counts every match, selects the next and previous match with a 1-based index, honors Match case, and without wrap selects nothing past the last match
+    platforms: [macos]
+    blocking: true
+    spec: "#87 TEXT.api"
+    covers:
+      - ./ui/text-services#findText
+  TEXT-FINDBAR-01:
+    title: showFindBar and Edit > Find (⌘F) in a multiline TextInput show the NSTextFinder find bar, which finds and selects matches in the note
+    platforms: [macos]
+    blocking: true
+    spec: "#87 TEXT.api"
+    covers:
+      - ./ui/text-services#showFindBar
+  TEXT-SERVICES-01:
+    title: Selected text in a React Native TextInput and a Spark TextInput offers the Services submenu, and a text-returning service replaces the selection and reaches onChangeText
+    platforms: [macos]
+    blocking: true
+    spec: "#87 TEXT.api"
+    covers:
+      - ./ui/text-services#getTextServicesAvailability(services).available
+  TEXT-LOOKUP-01:
+    title: lookUp shows the Look Up definition for the note's selection, and Look Up is in the context menu of selected text
+    platforms: [macos]
+    blocking: true
+    spec: "#87 TEXT.api"
+    covers:
+      - ./ui/text-services#lookUp
+  TEXT-WRITING-01:
+    title: writingToolsBehavior="none" removes Writing Tools from an input's context menu while default, complete and limited inputs offer it where the system does
+    platforms: [macos]
+    blocking: true
+    spec: "#87 TEXT.api"
+    covers:
+      - ./ui/text-services#WritingToolsBehavior
+  TEXT-SVCVISUAL-01:
+    title: The Text services screen renders through the in-app driver and matches its approved goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #87"

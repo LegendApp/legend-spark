@@ -434,7 +434,7 @@ This map accounts for all 63 original umbrella entries. “Fold” means update 
 | `/drag-drop`, `/drag-drop/views` | `/drag-drop`; generic payloads, one component contract. |
 | `/sqlite`, `/webview` | Keep only as real Spark-owned contracts, replacing passthrough backend types. |
 | `/ui`, `/ui/select-controls`, `/ui/search` | Common controls in `/ui`; retain a specialized search import only if native loading cost warrants it. Remove duplicate Select contracts. |
-| `/ui/split-view`, `/ui/sidebar`, `/ui/glass`, `/ui/symbol` | Keep coherent specialized UI capabilities; own types and availability behavior. |
+| `/ui/split-view`, `/ui/sidebar`, `/ui/glass`, `/ui/symbol`, `/ui/text-services` | Keep coherent specialized UI capabilities; own types and availability behavior. Text services act on mounted React Native text views and add the `writingToolsBehavior` TextInput trait. |
 | `/ui/uniwind`, `/ui/classnames` | Keep explicit styling integrations. |
 | `/config`, `/schema.json`, `/config-plugin`, `/expo-config` | Keep typed app configuration/plugin roles; one documented composition path per project mode. |
 | `/metro`, `/expo-metro`, `/universal`, `/native` | Consolidate documented Metro setup under `/metro`; retain native config integration as `/native`. Remove duplicate orchestration exports after generated configs are updated. |

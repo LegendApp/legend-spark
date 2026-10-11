@@ -122,6 +122,31 @@ upstream code and lays text out with TextKit.
 Like the other patches, it checks the version and exact source, is idempotent, and replaces files atomically.
 Existing runtimes need a native rebuild. `tests/devtools-targets.test.ts` covers the patch; see [DevTools](devtools.md).
 
+## RN macOS TextInput text services patch
+
+A multiline `react-native-macos@0.81.7` TextInput is an `NSTextView` in a scroll view, but it
+leaves the find bar off, so Edit > Find (⌘F) is disabled in it. Writing Tools has no per-input
+control. Both belong to the TextInput's native view, beside its other AppKit text traits
+(`spellCheck`, `grammarCheck`), so `text-services.cjs` patches TextInput rather than wrapping it:
+
+- `RCTUITextView` turns on `usesFindBar` and incremental search. AppKit then shows the
+  NSTextFinder find bar in the input's scroll view for Edit > Find, Find Next and Use Selection
+  for Find. Single-line inputs keep the window's field editor and have no find bar.
+- A `writingToolsBehavior` trait (`"default"`, `"complete"`, `"limited"`, `"none"`) goes from the
+  view config through `TextInputTraits` to `NSTextView.writingToolsBehavior` (macOS 15+). A
+  multiline input applies it to its text view, also after a multiline or secure-entry change
+  replaces the backed view. A single-line input applies it to the window's shared field editor
+  when it starts editing. When it stops, the field editor gets back its AppKit value (field
+  editors default to limited), unless another field already took it. An unknown value logs an
+  RN error and acts as `"default"`.
+
+`@legendapp/spark/ui/text-services` adds the `writingToolsBehavior` prop to React Native's
+`TextInputProps` type. Services and Look Up already work in RN and Spark text inputs through
+AppKit's own text views. Like the other patches, it checks the version and exact sources,
+validates every file before changing any, is idempotent, and replaces files atomically.
+Existing runtimes need a native rebuild. `tests/text-services-native.test.ts` compiles the
+patched initializer and Writing Tools helpers against AppKit.
+
 ## Expo development terminal patch
 
 `spark dev` launches the app's installed `expo start` under Node, inheriting stdin/stdout/stderr. Its Node supervisor retains desktop runtime discovery, compatibility enforcement, native builds and owned app processes. It has no keyboard interface. Desktop actions and results travel over a private JSON IPC channel; no HTTP command endpoint is exposed.

@@ -1,0 +1,26 @@
+appId: so.legend.spark.examples.kitchensink
+name: The NSTextFinder find bar in a multiline TextInput
+intent: >
+  Show the find bar calls showFindBar on the note (a multiline RN TextInput): it resolves and the find bar's
+  search field takes focus. Typing "Writing" and Return selects the match in the note ([45, 52]). Escape closes
+  the bar. With the note focused, Edit > Find (⌘F) shows the bar again, which the Spark patch enables in RN
+  multiline inputs. Black-box only: focus, the find bar field and menu state need the key window.
+checks: [TEXT-FINDBAR-01]
+tags: [text-input-editing, black-box]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://text-input-editing/text-services" }
+- extendedWaitUntil: { visible: { id: text-input-editing-text-services-root }, timeout: 15s }
+- tapOn: { id: text-input-editing-text-services-show-find-bar }
+- assertText: { id: text-input-editing-text-services-result, equals: "Result: ok" }
+- assertFocused: { role: searchField }
+- inputText: Writing
+- pressKey: Enter
+- assertSelection: { in: { id: text-input-editing-text-services-note }, range: [45, 52] }
+- pressKey: Escape
+- assertNotVisible: { role: searchField, within: { id: text-input-editing-text-services-note } }
+- tapOn: { id: text-input-editing-text-services-note }
+- assertMenuItem: { path: "Edit > Find > Find…", enabled: true }
+- shortcut: cmd+f
+- assertFocused: { role: searchField }
+- takeScreenshot: find-bar

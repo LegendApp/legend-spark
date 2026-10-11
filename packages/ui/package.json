@@ -33,7 +33,7 @@
   },
   "codegenConfig": {
     "name": "RNSparkUISpec",
-    "type": "components",
+    "type": "all",
     "jsSrcsDir": "src",
     "ios": {
       "componentProvider": {
@@ -49,7 +49,9 @@
         "TextInputSearch": "RNTextInputSearch",
         "SparkPrimitive": "RNSparkPrimitive"
       },
-      "modulesProvider": {}
+      "modulesProvider": {
+        "NativeSparkTextServices": "RNSparkTextServices"
+      }
     },
     "windows": {
       "namespace": "FrameUICodegen",
@@ -59,7 +61,9 @@
   },
   "spark": {
     "sdk": true,
-    "nativeModules": [],
+    "nativeModules": [
+      "NativeSparkTextServices"
+    ],
     "pod": "RNSparkUI",
     "platforms": [
       "macos",

@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: Look Up on the note's selection
+intent: >
+  With "Services" selected in the note, Look up the note's selection calls lookUp and resolves; AppKit shows the
+  Look Up panel for the word. Selected text also offers Look Up in its context menu. The panel is a system
+  window outside the app, so its content is a manual check.
+checks: [TEXT-LOOKUP-01]
+tags: [text-input-editing, black-box]
+platforms: [macos]
+build: release
+manual: partial
+timeout: 120s
+---
+- launchApp: { openUrl: "spark-ks://text-input-editing/text-services" }
+- extendedWaitUntil: { visible: { id: text-input-editing-text-services-root }, timeout: 15s }
+- selectText: { in: { id: text-input-editing-text-services-note }, range: [23, 31] }
+- tapOn: { id: text-input-editing-text-services-look-up }
+- assertText: { id: text-input-editing-text-services-result, equals: "Result: ok" }
+- manualStep:
+    instruction: Look at the Look Up panel that opened over the note.
+    expect: It shows dictionary or other Look Up results for "Services", anchored at the word in the note.
+    evidence: screenshot
+    signoff: required
+- pressKey: Escape
+- openContextMenu: { on: { id: text-input-editing-text-services-note } }
+- assertVisible: '/Look Up “Services”/'
+- pressKey: Escape

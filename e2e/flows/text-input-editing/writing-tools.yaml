@@ -1,0 +1,28 @@
+appId: so.legend.spark.examples.kitchensink
+name: writingToolsBehavior opts a TextInput in or out of Writing Tools
+intent: >
+  The input with writingToolsBehavior="none" has no Writing Tools in its context menu. On a Mac where
+  getTextServicesAvailability("writingTools") is available, the default, complete and limited inputs offer
+  Writing Tools; that check is manual because availability depends on the hardware and the user's
+  Apple Intelligence setting.
+checks: [TEXT-WRITING-01]
+tags: [text-input-editing, black-box]
+platforms: [macos]
+build: release
+manual: partial
+timeout: 120s
+---
+- launchApp: { openUrl: "spark-ks://text-input-editing/text-services" }
+- extendedWaitUntil: { visible: { id: text-input-editing-text-services-root }, timeout: 15s }
+- selectText: { in: { id: text-input-editing-text-services-writing-tools-none }, range: [0, 20] }
+- openContextMenu: { on: { id: text-input-editing-text-services-writing-tools-none } }
+- assertNotVisible: Writing Tools
+- pressKey: Escape
+- selectText: { in: { id: text-input-editing-text-services-writing-tools-default }, range: [0, 20] }
+- openContextMenu: { on: { id: text-input-editing-text-services-writing-tools-default } }
+- manualStep:
+    instruction: On a Mac with Apple Intelligence turned on, look at the context menu of the Default input, then repeat for the Complete and Limited inputs.
+    expect: Each shows Writing Tools; choosing Proofread opens inline suggestions for Complete and the Writing Tools panel for Limited. The None input never shows Writing Tools.
+    evidence: screenshot
+    signoff: required
+- pressKey: Escape
