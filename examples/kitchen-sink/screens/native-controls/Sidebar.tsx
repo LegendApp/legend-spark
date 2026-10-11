@@ -16,9 +16,9 @@ const reactRows = [
   { detail: "Updated today", id: "recent", title: "Recently Added" },
 ];
 const dynamicRows = [
-  { detail: "Compact row with fixed content.", height: 34, id: "compact", title: "Compact" },
-  { detail: "A medium row demonstrating auto height from React layout.", height: 58, id: "medium", title: "Medium" },
-  { detail: "A taller row. Resizing the window should keep the row heights tied to the React item layout.", height: 86, id: "tall", title: "Tall" },
+  { detail: "Compact row with fixed content.", minHeight: 34, id: "compact", title: "Compact" },
+  { detail: "A medium row demonstrating auto height from React layout.", minHeight: 58, id: "medium", title: "Medium" },
+  { detail: "A taller row. Resizing the window should keep the row heights tied to the React item layout.", minHeight: 86, id: "tall", title: "Tall" },
 ];
 // Native views take style; Uniwind classNames apply to React Native core components.
 const frame = { height: 210, width: 320, borderRadius: 8, overflow: "hidden" } as const;
@@ -30,7 +30,7 @@ function useSelection(initial: string) {
   return { selectedId, status, setStatus, onSelectionChange };
 }
 function Row({ title, detail }: { title: string; detail: string }) {
-  return <View className="flex-1 justify-center gap-1 px-3">
+  return <View className="grow justify-center gap-1 px-3">
     <Text className="text-sm font-bold text-foreground">{title}</Text>
     <Text className="text-xs text-muted">{detail}</Text>
   </View>;
@@ -52,7 +52,7 @@ export function SidebarDynamicHeights() {
     <Status testID="native-controls-sidebar-dynamic-heights-selected">Selected: {selectedId}</Status>
     <Status testID="native-controls-sidebar-dynamic-heights-status">{status}</Status>
     <Sidebar testID="native-controls-sidebar-dynamic-heights-list" style={frame} defaultRowHeight={28} selectedId={selectedId} onSelectionChange={onSelectionChange}>
-      {dynamicRows.map(row => <SidebarItem key={row.id} id={row.id} rowHeight="auto" style={{ height: row.height }}><Row {...row} /></SidebarItem>)}
+      {dynamicRows.map(row => <SidebarItem key={row.id} id={row.id} rowHeight="auto" style={{ minHeight: row.minHeight }}><Row {...row} /></SidebarItem>)}
     </Sidebar>
   </Panel>;
 }
