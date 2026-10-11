@@ -1,23 +1,34 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "vitest";
-import { clearAppState, sparkNamespace, statePaths, type AppIdentity, type StateHost } from "../scripts/e2e/app-state.ts";
+import { afterEach, describe, expect, test } from "vitest";
+import { clearAppState, DriverState, driverIdentity, exactState, sparkNamespace, statePaths, type AppIdentity, type StateHost } from "../scripts/e2e/app-state.ts";
 
 const BUNDLE_ID = "so.legend.spark.examples.kitchensink";
 const KITCHEN_SINK: AppIdentity = { bundleId: BUNDLE_ID, projectId: "c0bdf12f-0f35-4b71-8363-b83097388d7b", sandboxed: false };
 const NS = "spark.desktop.f24fabcdca7ee623a41d0258b883fdc21422e5c283c01f3ece499645ed451090";
+const DRIVER = driverIdentity(KITCHEN_SINK), DRIVER_NS = sparkNamespace(DRIVER.projectId);
+const ASN = 'ASN:0x0-0x1-"KitchenSink":';
 
+const cleanup: string[] = [];
+afterEach(() => { for (const dir of cleanup.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+
+/** A host whose home, temporary and cache directories are scratch directories. `running` answers from `processes`. */
 function host(overrides: Partial<StateHost> = {}) {
-  const root = mkdtempSync(path.join(tmpdir(), "e2e-app-state-"));
+  const base = mkdtempSync(path.join(tmpdir(), "e2e-app-state-"));
+  cleanup.push(base);
   const calls: string[] = [];
+  const processes: Record<string, string[]> = {};
   const value: StateHost = {
-    home: path.join(root, "home"), temp: path.join(root, "T"),
-    running: bundleId => { calls.push(`running ${bundleId}`); return []; },
+    home: path.join(base, "home"), temp: path.join(base, "T"), cache: path.join(base, "C"),
+    running: bundleId => { calls.push(`running ${bundleId}`); return processes[bundleId] ?? []; },
     deleteDefaults: domain => { calls.push(`defaults delete ${domain}`); return true; },
+    unregister: app => { calls.push(`unregister ${app}`); },
     ...overrides,
   };
-  return { host: value, calls, root };
+  mkdirSync(value.temp, { recursive: true });
+  return { host: value, calls, base, processes };
 }
 const touch = (file: string, text = "state") => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, text); };
 
@@ -34,64 +45,239 @@ describe("statePaths", () => {
       `/var/T/legend-codex-workspace/codex-home-${BUNDLE_ID}`,
     ]);
   });
+  test("the clone's identity is never the app's", () => {
+    expect(DRIVER).toEqual({ bundleId: `${BUNDLE_ID}.driver`, projectId: `${KITCHEN_SINK.projectId}.driver`, sandboxed: false });
+    expect(DRIVER_NS).not.toBe(NS);
+  });
 });
 
-describe("clearAppState", () => {
-  test("deletes the defaults domain and every state path that exists, leaving neighbours and link targets alone", () => {
-    const { host: fake, calls, root } = host();
+describe("exact sessions (the release gate)", () => {
+  test("clearState deletes the app's defaults domain and every state path that exists, leaving neighbours and link targets alone", () => {
+    const { host: fake, calls, base } = host();
     const lib = path.join(fake.home, "Library");
     touch(path.join(lib, "Application Support", NS, "settings", "infra-launch-state.json"));
     touch(path.join(lib, "Saved Application State", `${BUNDLE_ID}.savedState`, "windows.plist"));
     touch(path.join(fake.temp, `${NS}.lock`));
-    const outside = path.join(root, "outside");
+    const outside = path.join(base, "outside");
     touch(path.join(outside, "keep.txt"));
     mkdirSync(path.join(lib, "Caches"), { recursive: true });
     symlinkSync(outside, path.join(lib, "Caches", BUNDLE_ID));
     const neighbours = [path.join(lib, "Application Support", `${BUNDLE_ID}.other`), path.join(lib, "Caches", "com.example.app"), path.join(fake.temp, `${NS}-other`)];
     neighbours.forEach(file => touch(file));
 
-    expect(clearAppState(KITCHEN_SINK, BUNDLE_ID, fake)).toEqual([
+    expect(exactState("/apps/KitchenSink.app", KITCHEN_SINK, BUNDLE_ID, fake).clear()).toEqual([
       `defaults:${BUNDLE_ID}`, path.join(lib, "Application Support", NS), path.join(lib, "Caches", BUNDLE_ID),
       path.join(lib, "Saved Application State", `${BUNDLE_ID}.savedState`), path.join(fake.temp, `${NS}.lock`),
     ]);
-    expect(calls).toEqual([`running ${BUNDLE_ID}`, `defaults delete ${BUNDLE_ID}`]);
+    expect(calls).toEqual([`running ${BUNDLE_ID}`, `running ${BUNDLE_ID}`, `defaults delete ${BUNDLE_ID}`]);
     expect(statePaths(KITCHEN_SINK, fake).filter(file => existsSync(file))).toEqual([]);
     expect(readFileSync(path.join(outside, "keep.txt"), "utf8")).toBe("state");
     expect(neighbours.filter(file => existsSync(file))).toEqual(neighbours);
   });
 
-  test("a missing defaults domain and missing paths clear nothing", () => {
-    const { host: fake } = host({ deleteDefaults: () => false });
-    expect(clearAppState(KITCHEN_SINK, BUNDLE_ID, fake)).toEqual([]);
+  test("launches the app itself with no state environment, and refuses while any process of the app runs", () => {
+    const { host: fake, processes } = host();
+    const state = exactState("/apps/KitchenSink.app", KITCHEN_SINK, BUNDLE_ID, fake);
+    expect([state.app, state.identity, state.env]).toEqual(["/apps/KitchenSink.app", KITCHEN_SINK, {}]);
+    processes[BUNDLE_ID] = [ASN];
+    expect(() => exactState("/apps/KitchenSink.app", KITCHEN_SINK, BUNDLE_ID, fake))
+      .toThrow(`the exact app /apps/KitchenSink.app runs with ${BUNDLE_ID}'s own state, which another process of it uses; quit it first: ${ASN}`);
+    expect(() => state.clear()).toThrow(`clearState needs ${BUNDLE_ID} to be quit first; running: ${ASN}`);
   });
 
   test.each([
     [{ bundleId: "" }, BUNDLE_ID, 'clearState refuses bundle identifier "": not an app\'s reverse-DNS identifier'],
-    [{ bundleId: "kitchensink" }, "kitchensink", 'clearState refuses bundle identifier "kitchensink": not an app\'s reverse-DNS identifier'],
     [{ bundleId: "com.apple.finder" }, "com.apple.finder", 'clearState refuses bundle identifier "com.apple.finder": not an app\'s reverse-DNS identifier'],
     [{ bundleId: "so.legend/../x.y" }, "so.legend/../x.y", 'clearState refuses bundle identifier "so.legend/../x.y": not an app\'s reverse-DNS identifier'],
     [{ bundleId: "com.example.other" }, BUNDLE_ID, `clearState refuses com.example.other: only the gate manifest's app ${BUNDLE_ID} may be cleared`],
     [{ projectId: " " }, BUNDLE_ID, `clearState refuses ${BUNDLE_ID}: its Spark project identifier is empty`],
     [{ sandboxed: true }, BUNDLE_ID, `clearState does not support sandboxed apps: ${BUNDLE_ID} keeps its state in ~/Library/Containers/${BUNDLE_ID}`],
-  ])("refuses %o (expected %s) before touching anything", (identity, expected, message) => {
+  ])("clearState refuses %o (expected %s) before touching anything", (identity, expected, message) => {
     const { host: fake, calls } = host();
     expect(() => clearAppState({ ...KITCHEN_SINK, ...identity }, expected, fake)).toThrow(message);
     expect(calls).toEqual([]);
   });
 
-  test("refuses while the app runs", () => {
-    const { host: fake, calls } = host({ running: () => ['ASN:0x0-0x1-"KitchenSink":'] });
-    touch(path.join(fake.home, "Library", "Application Support", NS, "settings", "a.json"));
-    expect(() => clearAppState(KITCHEN_SINK, BUNDLE_ID, fake)).toThrow(`clearState needs ${BUNDLE_ID} to be quit first; running: ASN:0x0-0x1-"KitchenSink":`);
-    expect(calls).toEqual([]);
-    expect(existsSync(path.join(fake.home, "Library", "Application Support", NS))).toBe(true);
+  test("clearState refuses relative, empty or root directories", () => {
+    const { host: fake } = host();
+    for (const roots of [{ home: "" }, { temp: "relative" }, { cache: "/" }]) {
+      expect(() => clearAppState(KITCHEN_SINK, BUNDLE_ID, { ...fake, ...roots, deleteDefaults: () => { throw new Error("must not run"); } })).toThrow(/is not an absolute, non-root path/);
+    }
   });
 });
 
-test("clearState refuses relative, empty or root home/temp directories", () => {
-  const identity = { bundleId: "so.legend.spark.examples.kitchensink", projectId: "p", sandboxed: false };
-  for (const roots of [{ home: "", temp: "/tmp/x" }, { home: "/Users/x", temp: "" }, { home: "relative", temp: "/tmp/x" }, { home: "/", temp: "/tmp/x" }]) {
-    const host = { ...roots, running: () => [], deleteDefaults: () => { throw new Error("must not run"); } };
-    expect(() => clearAppState(identity, identity.bundleId, host)).toThrow(/not an absolute, non-root path/);
+describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)", () => {
+  const plist = (app: string, key: string) => execFileSync("plutil", ["-extract", key, "raw", "-o", "-", path.join(app, "Contents/Info.plist")], { encoding: "utf8" }).trim();
+  /** A signed app bundle, with `entitlements` when given. */
+  function bundle(entitlements?: Record<string, unknown>) {
+    const dir = mkdtempSync(path.join(tmpdir(), "e2e-app-state-app-")), app = path.join(dir, "Fake.app");
+    cleanup.push(dir);
+    mkdirSync(path.join(app, "Contents/MacOS"), { recursive: true });
+    // Entitlements live in a Mach-O signature; a script cannot carry them.
+    if (entitlements) copyFileSync("/usr/bin/true", path.join(app, "Contents/MacOS/Fake"));
+    else writeFileSync(path.join(app, "Contents/MacOS/Fake"), "#!/bin/sh\n", { mode: 0o755 });
+    const info = path.join(app, "Contents/Info.plist");
+    execFileSync("plutil", ["-create", "xml1", info]);
+    execFileSync("plutil", ["-insert", "CFBundleIdentifier", "-string", BUNDLE_ID, info]);
+    execFileSync("plutil", ["-insert", "CFBundleExecutable", "-string", "Fake", info]);
+    const sign = ["-s", "-"];
+    if (entitlements) {
+      const file = path.join(dir, "entitlements.plist");
+      writeFileSync(file, JSON.stringify(entitlements));
+      execFileSync("plutil", ["-convert", "xml1", file]);
+      sign.push("--entitlements", file);
+    }
+    execFileSync("codesign", ["--force", ...sign, app], { stdio: "ignore" });
+    return app;
   }
+  /** A session, disposed after the test. */
+  const sessions: DriverState[] = [];
+  afterEach(async () => { for (const state of sessions.splice(0)) await state.dispose(0).catch(() => {}); });
+  const create = (app: string, fake: StateHost, identity = KITCHEN_SINK) => {
+    const state = DriverState.create(app, identity, fake);
+    sessions.push(state);
+    return state;
+  };
+
+  test("clones the app with the driver identity, signed and unquarantined, its home and temporary directories in the session", () => {
+    const { host: fake, calls } = host();
+    const app = bundle();
+    execFileSync("xattr", ["-w", "com.apple.quarantine", "0081;00000000;test;", path.join(app, "Contents/Info.plist")]);
+    const state = create(app, fake);
+    expect(path.dirname(state.app)).toBe(state.root);
+    expect(path.dirname(state.root)).toBe(path.resolve(tmpdir()));
+    expect(path.basename(state.root)).toMatch(new RegExp(`^spark-driver-state-${DRIVER.bundleId}-`));
+    expect(state.identity).toEqual(DRIVER);
+    expect(state.env).toEqual({ CFFIXED_USER_HOME: path.join(state.root, "home"), DIRHELPER_USER_DIR_SUFFIX: DRIVER.bundleId });
+    expect([plist(state.app, "CFBundleIdentifier"), plist(state.app, "SparkProjectIdentifier")]).toEqual([DRIVER.bundleId, DRIVER.projectId]);
+    expect([plist(app, "CFBundleIdentifier"), plist(app, "CFBundleExecutable")]).toEqual([BUNDLE_ID, "Fake"]);
+    execFileSync("codesign", ["--verify", "--strict", state.app]);
+    expect(execFileSync("xattr", [path.join(state.app, "Contents/Info.plist")], { encoding: "utf8" })).not.toContain("com.apple.quarantine");
+    expect(existsSync(state.home)).toBe(true);
+    expect(calls).toEqual([`running ${DRIVER.bundleId}`, `defaults delete ${DRIVER.bundleId}`]);
+  });
+
+  test("starts clean: earlier sessions' roots are unregistered and deleted, and the clone's state outside a root is deleted", () => {
+    const { host: fake, calls } = host();
+    const stale = mkdtempSync(path.join(tmpdir(), `spark-driver-state-${DRIVER.bundleId}-`));
+    touch(path.join(stale, "KitchenSink.app", "Contents", "Info.plist"));
+    const other = mkdtempSync(path.join(tmpdir(), "spark-driver-state-com.example.other.driver-"));
+    cleanup.push(other);
+    const escaped = path.join(fake.home, "Library", "Saved Application State", `${DRIVER.bundleId}.savedState`, "data");
+    const own = path.join(fake.home, "Library", "Saved Application State", `${BUNDLE_ID}.savedState`, "data");
+    [escaped, own].forEach(file => touch(file));
+    create(bundle(), fake);
+    expect(calls).toContain(`unregister ${path.join(stale, "KitchenSink.app")}`);
+    expect([existsSync(stale), existsSync(other), existsSync(escaped), existsSync(own)]).toEqual([false, true, false, true]);
+  });
+
+  test("clearState deletes the session's defaults domain and files, never the clone, the app's own state or link targets", () => {
+    const { host: fake, calls, base } = host();
+    const state = create(bundle(), fake);
+    calls.length = 0;
+    const home = state.home;
+    touch(path.join(home, "Library", "Application Support", DRIVER_NS, "settings", "infra-launch-state.json"));
+    touch(path.join(fake.temp, DRIVER.bundleId, `${DRIVER_NS}.lock`));
+    touch(path.join(fake.cache, DRIVER.bundleId, DRIVER.bundleId, "Cache.db"));
+    const outside = path.join(base, "outside");
+    touch(path.join(outside, "keep.txt"));
+    mkdirSync(path.join(home, "Library", "Caches"), { recursive: true });
+    symlinkSync(outside, path.join(home, "Library", "Caches", DRIVER.bundleId));
+    // The clone and the app's own state (a developer's running instance).
+    const kept = [path.join(state.app, "Contents", "Info.plist"), ...statePaths(KITCHEN_SINK, fake)];
+    kept.forEach(file => touch(file));
+
+    expect(state.clear()).toEqual([
+      `defaults:${DRIVER.bundleId}`,
+      path.join(home, "Library", "Application Support", DRIVER_NS), path.join(home, "Library", "Caches", DRIVER.bundleId),
+      path.join(fake.temp, DRIVER.bundleId, `${DRIVER_NS}.lock`), path.join(fake.cache, DRIVER.bundleId, DRIVER.bundleId),
+    ]);
+    expect(calls).toEqual([`running ${DRIVER.bundleId}`, `defaults delete ${DRIVER.bundleId}`]);
+    expect([readdirSync(home), readdirSync(path.join(fake.temp, DRIVER.bundleId))]).toEqual([[], []]);
+    expect(readFileSync(path.join(outside, "keep.txt"), "utf8")).toBe("state");
+    expect(kept.filter(file => existsSync(file))).toEqual(kept);
+  });
+
+  test("clearState refuses while the clone runs, and names state the clone kept outside the session", () => {
+    const { host: fake, processes } = host();
+    const state = create(bundle(), fake);
+    const file = path.join(state.home, "Library", "Application Support", DRIVER_NS, "a.json");
+    touch(file);
+    processes[DRIVER.bundleId] = [ASN];
+    expect(() => state.clear()).toThrow(`clearState needs ${DRIVER.bundleId} to be quit first; running: ${ASN}`);
+    delete processes[DRIVER.bundleId];
+    const escaped = [path.join(fake.home, "Library", "Saved Application State", `${DRIVER.bundleId}.savedState`), path.join(fake.temp, DRIVER_NS)];
+    escaped.forEach(dir => touch(path.join(dir, "data")));
+    expect(() => state.clear()).toThrow(`clearState refuses: ${DRIVER.bundleId} kept state outside its driver state root, which it cannot isolate: ${escaped.join(", ")}`);
+    expect(existsSync(file)).toBe(true);
+  });
+
+  test("never empties a session directory that is a symbolic link", () => {
+    const { host: fake, base } = host();
+    const state = create(bundle(), fake);
+    const target = path.join(base, "elsewhere");
+    touch(path.join(target, "keep.txt"));
+    rmSync(path.join(fake.temp, DRIVER.bundleId), { recursive: true, force: true });
+    symlinkSync(target, path.join(fake.temp, DRIVER.bundleId));
+    expect(() => state.clear()).toThrow(`driver state refuses to empty ${path.join(fake.temp, DRIVER.bundleId)}: not a directory owned by this user`);
+    expect(existsSync(path.join(target, "keep.txt"))).toBe(true);
+    rmSync(path.join(fake.temp, DRIVER.bundleId));
+  });
+
+  test("one session per clone identity: a live session's lock refuses, a dead one's is taken over", () => {
+    const { host: fake } = host();
+    const app = bundle();
+    const first = create(app, fake);
+    const lock = path.join(fake.temp, `spark-driver-${DRIVER.bundleId}.lock`);
+    expect(readFileSync(path.join(lock, "pid"), "utf8")).toBe(String(process.pid));
+    expect(() => DriverState.create(app, KITCHEN_SINK, fake)).toThrow(`another driver session (pid ${process.pid}) runs ${DRIVER.bundleId}; ${lock} is its lock`);
+    expect(existsSync(first.root)).toBe(true);
+    writeFileSync(path.join(lock, "pid"), "2147483646");
+    create(app, fake);
+    expect(existsSync(first.root)).toBe(false);
+  });
+
+  test("refuses a running clone, a sandboxed app, a bad identifier and entitlements an ad hoc copy cannot carry, leaving nothing behind", () => {
+    const { host: fake, processes } = host();
+    const app = bundle();
+    const roots = () => readdirSync(tmpdir()).filter(name => name.startsWith(`spark-driver-state-${DRIVER.bundleId}-`)).length;
+    const before = roots();
+    processes[DRIVER.bundleId] = [ASN];
+    expect(() => DriverState.create(app, KITCHEN_SINK, fake)).toThrow(`another driver session runs ${DRIVER.bundleId}: ${ASN}`);
+    delete processes[DRIVER.bundleId];
+    expect(() => DriverState.create(app, { ...KITCHEN_SINK, sandboxed: true }, fake))
+      .toThrow(`driver launches do not support sandboxed apps: ${BUNDLE_ID} keeps its state in its container, ~/Library/Containers/${BUNDLE_ID}`);
+    expect(() => DriverState.create(app, { ...KITCHEN_SINK, bundleId: "com.apple.finder" }, fake)).toThrow('a driver launch refuses bundle identifier "com.apple.finder"');
+    expect(() => DriverState.create(bundle({ "keychain-access-groups": ["ABCDE12345.so.legend"], "com.apple.security.app-sandbox": false }), KITCHEN_SINK, fake))
+      .toThrow(/an ad hoc signed copy cannot carry its entitlements keychain-access-groups$/);
+    expect(roots()).toBe(before);
+    expect(existsSync(path.join(fake.temp, `spark-driver-${DRIVER.bundleId}.lock`))).toBe(false);
+  });
+
+  test("dispose waits for the clone to exit, then deletes the domain, the session's files, its registration and the root, and releases the lock", async () => {
+    const { host: fake, calls, processes } = host();
+    const state = create(bundle(), fake);
+    sessions.pop();
+    touch(path.join(fake.temp, DRIVER.bundleId, "x"));
+    touch(path.join(fake.cache, DRIVER.bundleId, "x"));
+    processes[DRIVER.bundleId] = [ASN];
+    setTimeout(() => { delete processes[DRIVER.bundleId]; }, 250);
+    calls.length = 0;
+    await state.dispose();
+    expect(calls.filter(call => !call.startsWith("running"))).toEqual([`defaults delete ${DRIVER.bundleId}`, `unregister ${state.app}`]);
+    expect(existsSync(state.root)).toBe(false);
+    // macOS protects the directories themselves (System Integrity Protection), so they stay, empty.
+    expect([fake.temp, fake.cache].map(dir => readdirSync(path.join(dir, DRIVER.bundleId)))).toEqual([[], []]);
+    expect(existsSync(path.join(fake.temp, `spark-driver-${DRIVER.bundleId}.lock`))).toBe(false);
+  });
+
+  test("dispose keeps the state of a clone that does not exit", async () => {
+    const { host: fake, processes } = host();
+    const state = create(bundle(), fake);
+    processes[DRIVER.bundleId] = [ASN];
+    await expect(state.dispose(200)).rejects.toThrow(`the driven clone ${DRIVER.bundleId} still runs 0.2 s after its session ended, so its state in ${state.root} is kept: ${ASN}`);
+    expect(existsSync(state.app)).toBe(true);
+    delete processes[DRIVER.bundleId];
+    cleanup.push(state.root);
+  });
 });

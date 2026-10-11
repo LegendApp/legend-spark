@@ -435,7 +435,7 @@ fails with `invalid`.
 
 | Flow | Driver |
 |---|---|
-| `launchApp` | Quits a running app, deletes its state for `clearState: true` ([clearState](#clearstate)), then launches in driver mode with the flow's `arguments` (after the driver's own, including the [pinned host settings](test-driver.md#pinned-host-settings), which a flow may override) and `env`. Then it delivers `openUrl` with `navigate` and `openFile` with `openFile`, both through `application:openURLs:` once the first render settles. With `stopApp: false` and the app running, it only delivers `openUrl` and `openFile`; `clearState`, `arguments` and `env` there are `invalid`. `openFile` must be an absolute path to an existing file (`invalid` otherwise). The driver reserves `SPARK_TEST_DRIVER_DIR` and `SPARK_BUNDLE_URL` in `env`, `-RCT_jsLocation` in `arguments`, and `-AppleLanguages`/`-AppleLocale` when the matrix sets `locale`; a flow that sets one is `invalid`. `appId` and `from` are `unsupported`. |
+| `launchApp` | Quits a running app, deletes the session's state for `clearState: true` ([App state](#app-state)), then launches in driver mode with the flow's `arguments` (after the driver's own, including the [pinned host settings](test-driver.md#pinned-host-settings), which a flow may override) and `env`. Then it delivers `openUrl` with `navigate` and `openFile` with `openFile`, both through `application:openURLs:` once the first render settles. With `stopApp: false` and the app running, it only delivers `openUrl` and `openFile`; `clearState`, `arguments` and `env` there are `invalid`. `openFile` must be an absolute path to an existing file (`invalid` otherwise). The driver reserves `SPARK_TEST_DRIVER_DIR`, `SPARK_BUNDLE_URL`, `CFFIXED_USER_HOME` and `DIRHELPER_USER_DIR_SUFFIX` in `env`, `-RCT_jsLocation` in `arguments`, and `-AppleLanguages`/`-AppleLocale` when the matrix sets `locale`; a flow that sets one is `invalid`. `appId` and `from` are `unsupported`. |
 | `stopApp`, end of flow | `quit`: the app's normal termination path |
 | Selectors (visibility checks, targets, mask selectors), window selectors | `elements`, one snapshot per poll: the in-process accessibility view (testIDs, roles, labels, text, frames, parents) of every window with an identifier. The runner matches every selector key against it. |
 | `tapOn`, `doubleClickOn`, `tripleClickOn`, `rightClickOn` (with `modifiers`), `hoverOn` | `tap` (`clickCount` 1-3, `button`) and `hover`. A target with an id is addressed by testID and offset: the driver scrolls it into view and fails when another view would receive the click. Others are addressed by point in their window. `hoverOn` `duration` is `unsupported`. |
@@ -488,18 +488,60 @@ it: `assertMotion` after a tap needs no `advanceClock`. Captures (`takeScreensho
 - captureMotion: { target: { id: slider }, name: slider-interrupted }
 ```
 
-#### clearState
+#### App state
 
-`launchApp: { clearState: true }` (`scripts/e2e/app-state.ts`) deletes what a macOS Spark app
-persists, after the app has quit and before it launches. Every location below was found in
-the Spark, React Native and React Native WebView code; `<bundle id>` is the app's
-`CFBundleIdentifier` and `<namespace>` is `SparkNamespace()`, `spark.desktop.` plus the SHA-256
-of `SparkProjectIdentifier` (the bundle identifier when that is absent). `$TMPDIR` is the app's
-`NSTemporaryDirectory()` (`getconf DARWIN_USER_TEMP_DIR`).
+A driver session (one flow, or one `ks:capture`) runs in one of two state modes (`scripts/e2e/app-state.ts`):
 
-| Deleted | What lives there |
+- **Isolated** (`bun run e2e:run`, `ks:capture`, `scripts/test-devtools.ts`): a clone of the app with its own
+  identity and state, described below. A flow (with or without `clearState`) can run while a developer runs the same
+  app, and can never change or delete that instance's data.
+- **Exact** (`bun run gate`): the gate flows run against the release artifact itself (the installed app), with its
+  real state and no state environment. `clearState` deletes the app's own state (the table below, under the real home
+  and `$TMPDIR`), only for the gate manifest's `appId`. A driven app skips the single-instance lock, so the session
+  refuses to start while any process with the app's bundle identifier runs, and `clearState` refuses likewise.
+
+An isolated session runs a clone of the app:
+
+- **Its own identity.** An APFS clone (`cp -c`, no copied data) of the app in a new 0700 directory, the session root
+  (`$TMPDIR/spark-driver-state-<bundle id>.driver-*`), with `CFBundleIdentifier` `<bundle id>.driver` and
+  `SparkProjectIdentifier` `<project id>.driver`, signed ad hoc keeping its entitlements and flags (the hardened
+  runtime), with its quarantine attribute removed. Its defaults domain, Keychain service and `<namespace>`
+  (`SparkNamespace()`, `spark.desktop.` plus the SHA-256 of the project identifier) are therefore never the app's. An
+  app with entitlements an ad hoc signature cannot carry (`keychain-access-groups`, `com.apple.application-identifier`,
+  `com.apple.developer.*`, team-prefixed application groups) is refused, as is a sandboxed app (its state is in its
+  container, outside the root).
+- **Its own home.** `CFFIXED_USER_HOME=<session root>/home` moves `NSHomeDirectory()` and every `~/Library` path
+  Foundation and WebKit derive from it (Application Support, Caches, HTTPStorages, WebKit).
+- **Its own temporary and cache directories.** `DIRHELPER_USER_DIR_SUFFIX=<bundle id>.driver` makes
+  `NSTemporaryDirectory()` `$(getconf DARWIN_USER_TEMP_DIR)<bundle id>.driver/`, and the per-user cache directory
+  (`DARWIN_USER_CACHE_DIR`, where React Native's URL cache and Metal shader caches go) likewise. macOS creates these
+  directories protected by System Integrity Protection: what they hold can be deleted, they cannot, so sessions share
+  them.
+- **One session at a time per clone identity.** A session takes the lock `$TMPDIR/spark-driver-<bundle id>.driver.lock`
+  (a directory holding its pid; a dead pid's lock is taken over) and refuses while another session's clone runs.
+- **A clean start and end.** Under the lock, a session deletes earlier sessions' roots (removing their LaunchServices
+  registrations, so no deleted copy claims the app's URL schemes), state of the clone's identity outside a root, the
+  defaults domain, and what the temporary and cache directories hold. Its end waits up to 10 s for the clone to exit,
+  then deletes the defaults domain, what those directories hold, the clone's LaunchServices registration and the root,
+  and releases the lock. A clone still running keeps its state, and the next session refuses until it exits.
+
+Measured on macOS 27 (26A428) with a small AppKit app launched like this:
+
+| Persistence | Where it went |
 |---|---|
-| `defaults delete <bundle id>` | Everything in `NSUserDefaults`: main and child window frames (`NSWindow Frame <namespace>.main`, `<namespace>.bounds.<id>`), the Spark recent-documents list, window-manager options, Sparkle's skipped versions and settings, React Native dev settings |
+| Application Support, Caches (`NSFileManager`, `NSSearchPathForDirectoriesInDomains`), `NSURLCache`, `NSHTTPCookieStorage` (HTTPStorages), WebView local storage and IndexedDB (`~/Library/WebKit/<bundle id>`) and WebKit caches | Under `CFFIXED_USER_HOME` |
+| `NSTemporaryDirectory()` and the per-user cache directory | Under `DIRHELPER_USER_DIR_SUFFIX` (no slash; with one, macOS ignores it). `TMPDIR` has no effect. |
+| `NSUserDefaults` | The real `~/Library/Preferences/<bundle id>.plist`, through `cfprefsd`, whatever `CFFIXED_USER_HOME`, `HOME` or `__CFPREFERENCES_AVOID_DAEMON` say. Hence the clone's own bundle identifier: its domain is `<bundle id>.driver`. |
+| WebKit's GPU, WebContent and Networking services | Their own `com.apple.WebKit.*+<bundle id>.driver` directories in the per-user temporary and cache directories. macOS protects them, so nothing deletes them; they are caches of the services, not website data. |
+
+In an isolated session, `launchApp: { clearState: true }` deletes the session's state after the app has quit and
+before it launches: the `<bundle id>.driver` defaults domain (`defaults delete`, through `cfprefsd`, so a quit app cannot write a cached domain
+back) and everything the session's home, temporary and cache directories hold. That holds everything the Spark,
+React Native and React Native WebView code persists:
+
+| State | What lives there |
+|---|---|
+| The defaults domain | Main and child window frames (`NSWindow Frame <namespace>.main`, `<namespace>.bounds.<id>`), the Spark recent-documents list, window-manager options, Sparkle's skipped versions and settings, React Native dev settings |
 | `~/Library/Application Support/<namespace>` | `settings`, file-system `data`, SQLite databases |
 | `~/Library/Application Support/<bundle id>` | React Native AsyncStorage |
 | `~/Library/Caches/<namespace>`, `~/Library/Caches/<bundle id>` | file-system `cache`; `NSURLCache`, Sparkle downloads, WebKit caches |
@@ -507,27 +549,32 @@ of `SparkProjectIdentifier` (the bundle identifier when that is absent). `$TMPDI
 | `~/Library/WebKit/<bundle id>` | WebView website data (`WKWebsiteDataStore.defaultDataStore`) |
 | `~/Library/Saved Application State/<bundle id>.savedState` | AppKit window restoration |
 | `$TMPDIR/<namespace>`, `$TMPDIR/<namespace>.setup`, `.lock`, `.sock` | file-system `temp`; the single-instance lock and socket |
-| `$TMPDIR/legend-codex-workspace/codex-home-<bundle id>` | the codex package's `CODEX_HOME` (a linked `auth.json` is unlinked, never followed) |
+| `$TMPDIR/legend-codex-workspace/codex-home-<bundle id>` | the codex package's `CODEX_HOME` |
 
 Each run writes what existed to `clear-state-<launch>.log` in the flow's backend directory.
 
+It fails closed. It refuses while the clone runs (`lsappinfo`), and when any of the locations above exists for the
+clone's identity under the real home or temporary directory (state the launch environment did not move), naming
+each. It deletes the defaults domain only when `defaults export` shows it holds a key (the messages of `defaults read`
+and `defaults delete` for a missing domain differ between macOS releases); `defaults delete` leaves an empty
+`~/Library/Preferences/<bundle id>.driver.plist`. Every directory it empties must be a real directory (not a symbolic
+link) owned by the user, and it deletes a root only under `$TMPDIR` with the session root's name.
+
 Not deleted:
 
-- **Keychain** (`@legendapp/spark/secure-storage`, service `<namespace>`). Only the app is in
-  the items' access list, so deleting them with `security` from the runner can raise a Keychain
+- **Keychain** (`@legendapp/spark/secure-storage`, service `<namespace>`): an isolated clone's items are in the login
+  Keychain under its own namespace, never the app's, and they accumulate there across sessions. Only the clone that
+  created them is in the items' access list, so deleting them with `security` from the runner can raise a Keychain
   prompt, and driver runs never show UI. A flow that needs empty secure storage removes its keys in the app.
 - **AppKit's recent documents** (`com.apple.sharedfilelist`): macOS denies access to it.
 - **Delivered notifications**: the notification center owns them.
 
-It refuses, before deleting anything, when the bundle identifier is not reverse-DNS (or is
-`com.apple.*`), is not the gate manifest's `appId`, the project identifier is empty, the app is
-sandboxed (its state is in `~/Library/Containers/<bundle id>`, which needs a permission that
-would prompt), or any process of the app is running (`lsappinfo`). `defaults delete` goes
-through `cfprefsd`, so a quit app cannot write a cached domain back. Nothing is globbed.
-`e2e/flows/infra/launch-state.yaml` checks it end to end: a setting (Application Support) and
-a recent document (the defaults domain) saved by one launch are found by the next and gone after
-`clearState`. Window frames never persist in driver mode ([docs/test-driver.md](test-driver.md#focus-and-window-state)),
-with or without `clearState`.
+A process the app starts inherits `CFFIXED_USER_HOME` and `DIRHELPER_USER_DIR_SUFFIX`. Lookups under the home, such as
+the codex package's `~/.codex/auth.json` and `~/.local/bin`, find the session's empty home.
+
+`e2e/flows/infra/launch-state.yaml` checks it end to end: a setting (Application Support) and a recent document
+(the defaults domain) saved by one launch are found by the next and gone after `clearState`. Window frames never
+persist in driver mode ([docs/test-driver.md](test-driver.md#focus-and-window-state)), with or without `clearState`.
 
 Input is synthesized in the app and dispatched through its own event path
 ([docs/test-driver.md](test-driver.md#input)): first responders, key equivalents, control
@@ -543,7 +590,7 @@ and the other performance commands, `assertState`) are not in the driver protoco
 ([#52](https://github.com/LegendApp/legend-spark/issues/52)).
 `tests/e2e-driver-backend.test.ts` covers the mapping with a fake driver
 (`tests/e2e-driver-fake.ts`), `tests/test-driver.native.mm` the driver's input on real
-AppKit controls, and `tests/e2e-app-state.test.ts` covers clearState;
+AppKit controls, and `tests/e2e-app-state.test.ts` and `tests/e2e-kitchen-sink-launch.test.ts` cover the app state and clearState;
 `e2e/flows/infra/catalog-driver.yaml` and `e2e/flows/infra/launch-state.yaml` run it end to end.
 
 ## Visual goldens

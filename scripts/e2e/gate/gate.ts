@@ -203,7 +203,7 @@ export async function runGate(plan: GatePlan, env: GateEnv, { agent = false } = 
   }
 
   const names = Object.keys(env.backends);
-  const backends = target ? names.map(name => env.backends[name]!({ app: plan.artifact })).filter(backend => backend.platform === target.platform) : [];
+  const backends = target ? names.map(name => env.backends[name]!({ app: plan.artifact, state: "exact" })).filter(backend => backend.platform === target.platform) : [];
   if (target && !names.length) reasons.push({ check: "backend", message: NO_BACKENDS });
   else if (target && !backends.length) reasons.push({ check: "backend", message: `no ${target.platform} backend is registered (registered: ${names.join(", ")})` });
   const automated = plan.flows.filter(flow => flow.manual !== true);

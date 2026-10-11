@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -26,6 +26,34 @@ beforeAll(() => {
   execFileSync("codesign", ["-s", "-", bundle], { stdio: "ignore" });
 });
 afterAll(() => { if (directory) rmSync(directory, { recursive: true, force: true }); });
+const plist = (app: string, key: string) => execFileSync("plutil", ["-extract", key, "raw", "-o", "-", path.join(app, "Contents/Info.plist")], { encoding: "utf8" }).trim();
+
+test.skipIf(process.platform !== "darwin")("driver launches run a clone of the app with its own identity and state, deleted by close", async () => {
+  const app = new KitchenSinkApp(bundle);
+  await app.open();
+  const first = await app.launch({ log: processLog(path.join(directory, "app.log")) });
+  let launch: { home: string; suffix: string };
+  try {
+    launch = JSON.parse(readFileSync(path.join(first.directory, "launch.json"), "utf8"));
+    const root = path.dirname(launch.home), clone = path.join(root, "Fake.app");
+    expect(launch.suffix).toBe("so.legend.spark.examples.fake.driver");
+    expect(existsSync(launch.home)).toBe(true);
+    expect([plist(clone, "CFBundleIdentifier"), plist(clone, "SparkProjectIdentifier")]).toEqual(["so.legend.spark.examples.fake.driver", "so.legend.spark.examples.fake.driver"]);
+    expect(plist(bundle, "CFBundleIdentifier")).toBe("so.legend.spark.examples.fake");
+    await first.quit();
+  } finally {
+    await first.close();
+  }
+  const second = await app.launch({ log: processLog(path.join(directory, "app.log")) });
+  try {
+    expect(JSON.parse(readFileSync(path.join(second.directory, "launch.json"), "utf8")).home).toBe(launch.home);
+    await second.quit();
+  } finally {
+    await second.close();
+    await app.close();
+  }
+  expect(existsSync(path.dirname(launch.home))).toBe(false);
+});
 
 test.skipIf(process.platform !== "darwin")("every driver launch pins the host rendering settings before the locale and the flow's arguments", async () => {
   const app = new KitchenSinkApp(bundle);

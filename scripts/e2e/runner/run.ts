@@ -15,7 +15,7 @@ const repo = path.resolve(import.meta.dirname, "../../..");
  * the macOS black-box backend (AX + CGEvent) lands with #50.
  */
 export const BACKENDS: Readonly<Record<string, BackendFactory>> = {
-  driver: ({ app }) => new DriverBackend(new KitchenSinkApp(app)),
+  driver: ({ app, state }) => new DriverBackend(new KitchenSinkApp(app, undefined, state)),
 };
 export const NO_BACKENDS = "no backends are registered";
 

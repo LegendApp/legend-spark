@@ -65,6 +65,14 @@ async function scopedGate(dir: string, flows: string[], options: Parameters<type
 const reasons = (report: GateReport) => report.reasons.map(reason => `${reason.check}: ${reason.message}`);
 
 describe("release gate", () => {
+  test("drives the exact release artifact with its own state, never an isolated copy", async () => {
+    const dir = repo(), factories: unknown[] = [];
+    const { env: gateEnv } = env();
+    const driver = gateEnv.backends.driver!;
+    await runGate(plan(path.join(dir, "e2e"), gateEnv.host()), { ...gateEnv, backends: { ...gateEnv.backends, driver: options => { factories.push(options); return driver(options); } } });
+    expect(factories).toEqual([{ app: path.join(dir, "build/macos-arm64/KitchenSink.app"), state: "exact" }]);
+  });
+
   test("a fully green tree passes and writes one JSON + HTML report", async () => {
     const dir = repo();
     const { env: gateEnv, out } = env();

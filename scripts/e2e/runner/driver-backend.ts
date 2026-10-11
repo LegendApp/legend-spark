@@ -39,10 +39,10 @@ export type DriverClient = MotionClient & {
 /** The app under test (`KitchenSinkApp` in scripts/e2e/kitchen-sink.ts): prepared per flow, launched in driver mode. */
 export type DriverApp = {
   /** `dev`: a `build: dev` flow, which needs the development JavaScript bundle (only a dev build can load one). */
-  open(options: { dev: boolean }): Promise<{ app: string; bundleId: string }>;
+  open(options: { dev: boolean }): Promise<{ app: string; bundleId: string; launchedBundleId: string }>;
   /** Launch arguments and environment variables the launch sets itself, so a flow may not; `locale` only when the matrix sets one. */
   readonly reserved: { readonly arguments: readonly string[]; readonly env: readonly string[]; readonly locale: readonly string[] };
-  /** Deletes the app's persisted state (docs/e2e-flows.md#clearstate) while it is not running; returns what existed. */
+  /** Deletes the state of the driver session (docs/e2e-flows.md#app-state) while the app is not running; returns what existed. */
   clearState(): Promise<string[]>;
   launch(options: { locale?: string; arguments: readonly string[]; env: Readonly<Record<string, string>>; log: ProcessLog }): Promise<DriverClient>;
   close(): Promise<void>;

@@ -9,7 +9,7 @@ import path from "node:path";
 import { binary, run } from "../../packages/cli/src/commands.ts";
 import type { ProcessLog } from "../../packages/cli/src/process.ts";
 import { entryFile, prepareConfig, readJson, stateFile } from "../../packages/cli/src/project.ts";
-import { clearAppState, type AppIdentity } from "./app-state.ts";
+import { DriverState, exactState, STATE_ENV, type AppIdentity, type AppState, type StateMode } from "./app-state.ts";
 import { DRIVER_ENV, launchDriver, type Driver } from "./driver.ts";
 import { readManifest } from "./gate/plan.ts";
 
@@ -47,7 +47,10 @@ const plistValue = (app: string, key: string) => {
 type Resolved = { app: string; executable: string; embedded: boolean } & AppIdentity;
 
 /**
- * An app bundle in driver mode. A release build (`Contents/Resources/main.jsbundle`) runs its embedded JavaScript.
+ * An app bundle in driver mode. `open()` starts a driver session (docs/e2e-flows.md#app-state), which every launch runs
+ * until `close()` ends it: with `state: "isolated"` (the default) a clone of the app with its own identity and state
+ * (`DriverState`), with `exact` (the release gate) the app itself and its real state.
+ * A release build (`Contents/Resources/main.jsbundle`) runs its embedded JavaScript.
  * A dev build loads JavaScript over HTTP, so `open()` bundles the current Kitchen Sink source (no Metro), once per
  * mode, and serves it on 127.0.0.1 until `close()`. The default bundle is built without `__DEV__`; `{ dev: true }`
  * serves a development bundle (`__DEV__` code such as the Developer menu, LogBox), for `build: dev` flows. With
@@ -59,9 +62,10 @@ export class KitchenSinkApp {
   private readonly bundles = new Map<boolean, Buffer>();
   private served?: { dev: boolean; bundle: Buffer };
   private server?: Server;
+  private state?: AppState;
 
   /** `app` is a `.app` bundle; without it, the last dev build (`cd examples/kitchen-sink && bun run rebuild:macos`). It is resolved by `open()`. */
-  constructor(private readonly appPath?: string, private readonly devServer?: URL) {}
+  constructor(private readonly appPath?: string, private readonly devServer?: URL, private readonly mode: StateMode = "isolated") {}
 
   private resolve(): Resolved {
     let app = this.appPath;
@@ -81,14 +85,26 @@ export class KitchenSinkApp {
     };
   }
 
-  /** Resolves the app, then bundles (first call per mode only) and serves the JavaScript a dev build loads. A release build needs neither. */
-  async open(options: { dev?: boolean; label?: string } = {}): Promise<{ app: string; bundleId: string }> {
-    const resolved = this.resolved ??= this.resolve(), dev = options.dev ?? false;
+  /**
+   * Resolves the app, bundles (first call per mode only) and serves the JavaScript a dev build loads (a release build
+   * needs neither), then starts a driver session. `bundleId` is the app's; `launchedBundleId` is what the launched
+   * process registers as (the clone's identity in an isolated session).
+   */
+  async open(options: { dev?: boolean; label?: string } = {}): Promise<{ app: string; bundleId: string; launchedBundleId: string }> {
+    const resolved = this.resolved ??= this.resolve();
+    await this.serve(resolved, options.dev ?? false, options.label);
+    this.state ??= this.mode === "exact"
+      ? exactState(resolved.app, resolved, readManifest(path.join(KITCHEN_SINK, "../../e2e")).appId)
+      : DriverState.create(resolved.app, resolved);
+    return { app: resolved.app, bundleId: resolved.bundleId, launchedBundleId: this.state.identity.bundleId };
+  }
+
+  private async serve(resolved: Resolved, dev: boolean, label: string | undefined) {
     if (resolved.embedded) {
       if (dev || this.devServer) throw new Error(`${resolved.app} embeds a release bundle; development JavaScript needs a dev build (cd examples/kitchen-sink && bun run rebuild:macos)`);
-      return resolved;
+      return;
     }
-    if (this.devServer) return resolved;
+    if (this.devServer) return;
     let bundle = this.bundles.get(dev);
     if (!bundle) {
       const work = mkdtempSync(path.join(os.tmpdir(), "ks-bundle-"));
@@ -96,7 +112,7 @@ export class KitchenSinkApp {
         const file = path.join(work, "index.bundle");
         prepareConfig(KITCHEN_SINK);
         await run(KITCHEN_SINK, [binary(KITCHEN_SINK, "expo"), "export:embed", "--platform", "macos", "--entry-file", path.resolve(KITCHEN_SINK, entryFile(KITCHEN_SINK)),
-          "--bundle-output", file, "--dev", String(dev), "--minify", "false", "--max-workers", "2"], { env: { CI: "1" }, capture: !options.label, label: options.label });
+          "--bundle-output", file, "--dev", String(dev), "--minify", "false", "--max-workers", "2"], { env: { CI: "1" }, capture: !label, label });
         bundle = readFileSync(file);
         this.bundles.set(dev, bundle);
       } finally {
@@ -104,7 +120,7 @@ export class KitchenSinkApp {
       }
     }
     this.served = { dev, bundle };
-    if (this.server) return resolved;
+    if (this.server) return;
     const server = createServer((request, response) => {
       if (new URL(request.url ?? "/", "http://127.0.0.1").pathname === "/index.bundle") {
         response.writeHead(200, { "Content-Type": "application/javascript" }).end(this.served!.bundle);
@@ -115,52 +131,55 @@ export class KitchenSinkApp {
     });
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
     this.server = server;
-    return resolved;
   }
 
-  /** Deletes the app's persisted state (`clearAppState`), allowing only the gate manifest's app. Returns what existed. */
+  /** Deletes the driver session's state (an isolated session never touches the app's own). Returns what existed. */
   async clearState(): Promise<string[]> {
-    if (!this.resolved) throw new Error("KitchenSinkApp.open() must run before clearState()");
-    return clearAppState(this.resolved, readManifest(path.join(KITCHEN_SINK, "../../e2e")).appId);
+    if (!this.state) throw new Error("KitchenSinkApp.open() must run before clearState()");
+    return this.state.clear();
   }
 
   /** What `launch` sets itself; a flow's own arguments and environment may not repeat it. `locale` only applies with a locale. */
-  readonly reserved = { arguments: [JS_LOCATION], env: [DRIVER_ENV, BUNDLE_URL], locale: ["-AppleLanguages", "-AppleLocale"] } as const;
+  readonly reserved = { arguments: [JS_LOCATION], env: [DRIVER_ENV, BUNDLE_URL, ...STATE_ENV], locale: ["-AppleLanguages", "-AppleLocale"] } as const;
 
   /**
-   * Launches the app in driver mode with `PINNED_DEFAULTS`, then the caller's `arguments` (after its own, so the last value
-   * of a key wins) and `env`. `locale` sets the app's language and region formats through launch arguments.
+   * Launches the driver session's app in driver mode with its state environment and `PINNED_DEFAULTS`, then the
+   * caller's `arguments` (after its own, so the last value of a key wins) and `env`. `locale` sets the app's language and region formats through launch arguments.
    */
   launch(options: { locale?: string; arguments?: readonly string[]; env?: Readonly<Record<string, string>>; log: ProcessLog }): Promise<Driver> {
     if (options.locale !== undefined && !LOCALE.test(options.locale)) throw new Error(`${options.locale} is not a language identifier such as ar or en-US`);
     const [languages, region] = this.reserved.locale;
     const locale = options.locale ? [languages, `(${options.locale})`, region, options.locale] : [];
-    const resolved = this.resolved;
-    if (!resolved || (!resolved.embedded && !this.served && !this.devServer)) throw new Error("KitchenSinkApp.open() must run before launch()");
+    const resolved = this.resolved, state = this.state;
+    if (!resolved || !state || (!resolved.embedded && !this.served && !this.devServer)) throw new Error("KitchenSinkApp.open() must run before launch()");
     const extra = options.arguments ?? [];
-    if (resolved.embedded) return launchDriver({ executable: resolved.executable, args: [...PINNED, ...locale, ...extra], env: options.env, log: options.log });
+    const executable = path.join(state.app, path.relative(resolved.app, resolved.executable)), env = { ...options.env, ...state.env };
+    if (resolved.embedded) return launchDriver({ executable, args: [...PINNED, ...locale, ...extra], env, log: options.log });
     if (this.devServer) return launchDriver({
-      executable: resolved.executable,
+      executable,
       // React Native's packager and inspector connections use RCT_jsLocation; the bundle comes from the server.
       args: [JS_LOCATION, this.devServer.host, ...PINNED, ...locale, ...extra],
-      env: { ...options.env, [BUNDLE_URL]: new URL("/index.bundle?platform=macos&dev=true&minify=false", this.devServer).href },
+      env: { ...env, [BUNDLE_URL]: new URL("/index.bundle?platform=macos&dev=true&minify=false", this.devServer).href },
       log: options.log,
     });
     const port = (this.server!.address() as AddressInfo).port;
     return launchDriver({
-      executable: resolved.executable,
+      executable,
       // RCT_jsLocation points React Native's packager connection at the same server as the bundle URL.
       args: [JS_LOCATION, `127.0.0.1:${port}`, ...PINNED, ...locale, ...extra],
-      env: { ...options.env, [BUNDLE_URL]: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=${this.served!.dev}&minify=false` },
+      env: { ...env, [BUNDLE_URL]: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=${this.served!.dev}&minify=false` },
       log: options.log,
     });
   }
 
-  /** Stops serving JavaScript; the bundles are kept for the next `open()`. */
+  /** Stops serving JavaScript and ends the driver session (an isolated one deletes its clone and state); the bundles are kept for the next `open()`. */
   async close() {
-    const server = this.server;
+    const server = this.server, state = this.state;
     this.server = undefined;
     this.served = undefined;
-    if (server) await new Promise<void>(resolve => server.close(() => resolve()));
+    this.state = undefined;
+    try { await state?.dispose(); } finally {
+      if (server) await new Promise<void>(resolve => server.close(() => resolve()));
+    }
   }
 }
