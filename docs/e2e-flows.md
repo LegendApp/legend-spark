@@ -444,10 +444,15 @@ Committed goldens:
 | `macos/dark/en/infra-shell-catalog` | The same, dark | `--appearance dark --locale en` |
 | `macos/light/ar/infra-shell-catalog` | The same, Arabic (right to left) | `--appearance light --locale ar` |
 | `macos/dark/ar/infra-shell-catalog` | The same, Arabic, dark | `--appearance dark --locale ar` |
+| `macos/{light,dark}/{en,ar}/<area>-<screen>` | Each screen that `e2e/flows/<area>/visual.yaml` compares | `bun run e2e:run e2e/flows/<area>/visual.yaml --backend driver`, then `e2e:golden approve` |
 
 They come from the development build, so the sidebar subtitle reads `dev · <project ID>`.
 A flow that compares them must mask that line (`mask: [{ id: infra-shell-subtitle }]`), as
-`e2e/flows/infra/catalog-driver.yaml` does.
+`e2e/flows/infra/catalog-driver.yaml` does. The `visual.yaml` flows mask the whole shell sidebar
+(`infra-shell-sidebar`; the catalog golden covers it), so a screen's golden changes only when
+that screen does, not when an area gains a screen. They also mask what changes between runs
+(the launch arguments, the main window frame, the persisted bookmark), and switch the motion
+clock to virtual before a screen with a looping animation opens.
 
 The Arabic goldens came after the RTL fixes for scroll content
 ([#234](https://github.com/LegendApp/legend-spark/issues/234)) and text alignment
@@ -457,6 +462,9 @@ The window size comes from `desktop.config.json` (1000x700 points), unless the s
 user defaults hold a saved `NSWindow Frame spark.desktop.…main` for
 `so.legend.spark.examples.kitchensink`. Then the capture has a different size and fails.
 Delete that key before you approve goldens.
+
+Screens with a known visual bug have no golden; their flow opens them and asserts the root
+only, with a comment naming the bug. A golden of a bug would make the fix fail.
 
 ### Determinism
 

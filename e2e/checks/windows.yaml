@@ -66,3 +66,8 @@ checks:
     spec: "docs/api-window-contract.md §Window options audit; #65, #243"
     covers:
       - ./windows#setWindowOptions
+  WIN-VISUAL-01:
+    title: The Window manager, Window options and Window controls screens match their approved goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #227"

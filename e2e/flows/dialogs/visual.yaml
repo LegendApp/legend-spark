@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Dialog features screen matches its golden
+intent: >
+  Dialogs > Dialog features opens from spark-ks://dialogs/panels in the running Kitchen Sink, its root renders, and
+  the main window matches the approved golden for the appearance and locale (light and dark, English and Arabic),
+  with the shell sidebar masked. No dialog is opened, so every result shows its initial state.
+checks: [DLG-VISUAL-01]
+tags: [dialogs]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://dialogs/panels" }
+- assertVisible: { id: dialogs-panels-root }
+- assertScreenshot: { golden: dialogs-panels, mask: [{ id: infra-shell-sidebar }] }

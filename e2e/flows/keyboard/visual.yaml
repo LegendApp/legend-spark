@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: Keyboard screens match their goldens
+intent: >
+  Keyboard > Keyboard monitor and Shortcut map open from their spark-ks:// deep links in the running Kitchen Sink,
+  their roots render (Shortcut map once its command list has loaded), and the main window matches the approved golden for the appearance (light and dark, English and Arabic), with the shell
+  sidebar masked.
+checks: [KEY-VISUAL-01]
+tags: [keyboard]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://keyboard/keyboard" }
+- assertVisible: { id: keyboard-keyboard-root }
+- assertScreenshot: { golden: keyboard-keyboard, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://keyboard/shortcut-map", stopApp: false }
+- assertVisible: { id: keyboard-shortcut-map-root }
+- assertVisible: { id: keyboard-shortcut-map-commands }
+- assertScreenshot: { golden: keyboard-shortcut-map, mask: [{ id: infra-shell-sidebar }] }

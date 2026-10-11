@@ -63,3 +63,8 @@ checks:
     spec: "#79 KEY.api"
     covers:
       - ./shortcuts/commands#getReservedShortcuts
+  KEY-VISUAL-01:
+    title: The Keyboard monitor and Shortcut map screens match their approved goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #227"

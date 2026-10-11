@@ -92,3 +92,10 @@ checks:
     platforms: [windows]
     blocking: true
     spec: "#174 MOT.core, follow-up #237"
+  MOT-VISUAL-01:
+    title: The Springs, Keyframes and timelines, and Scroll link and JS block screens match their approved goldens in light and dark, English and Arabic, with MotionViews at rest or paused by the virtual clock
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #227"
+    covers:
+      - ./motion#MotionView
