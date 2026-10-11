@@ -116,6 +116,14 @@ using namespace facebook::react;
 @implementation VisibleWindow
 - (BOOL)isVisible { return YES; }
 @end
+// Reports itself on screen or not, as set; it is never ordered on screen.
+@interface ToggledWindow : NSWindow
+@property (nonatomic) BOOL onScreen;
+@end
+@implementation ToggledWindow
+- (BOOL)isVisible { return _onScreen; }
+- (void)arrive { _onScreen = YES; [NSNotificationCenter.defaultCenter postNotificationName:NSWindowDidChangeOcclusionStateNotification object:self]; }
+@end
 
 static int failures = 0;
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #condition); failures++; } } while (0)
@@ -273,6 +281,42 @@ static void Popover() {
   [host removeFromSuperview];
   CHECK(!popover.shown);
   Drain();
+
+  // A show refused because the anchor window is off screen (created hidden, minimized, the app hidden) is retried
+  // when the window comes on screen; occlusion changes while it stays off screen retry nothing.
+  ToggledWindow *later = [[ToggledWindow alloc] initWithContentRect:NSMakeRect(0, 0, 600, 400) styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:YES];
+  RCTUIView *laterRoot = [[RCTUIView alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
+  later.contentView = laterRoot;
+  auto waiting = PopoverProps(true, Count(host));
+  [host updateProps:waiting oldProps:props]; props = waiting;
+  [laterRoot addSubview:anchor]; [laterRoot addSubview:host]; Spin();
+  CHECK(Drain() == "error:E_UNAVAILABLE" && !popover.shown);
+  [NSNotificationCenter.defaultCenter postNotificationName:NSWindowDidChangeOcclusionStateNotification object:later]; Spin();
+  CHECK(Drain().empty() && !popover.shown);
+  [later arrive]; Spin();
+  CHECK(popover.shown && popover.lastView == anchor && Drain() == "shown:" + std::to_string(Count(host)));
+  CHECK(![host valueForKey:@"awaitedWindow"]);
+  // It stops waiting when JS closes it, the host leaves the window, or the host is recycled.
+  enum Stop { Closed, Removed, Recycled };
+  for (Stop stop : { Closed, Removed, Recycled }) {
+    [popover close];
+    later.onScreen = NO;
+    auto reopen = PopoverProps(true, Count(host));
+    [host updateProps:reopen oldProps:props]; props = reopen;
+    if (!host.window) [laterRoot addSubview:host];
+    Spin();
+    CHECK(Drain().find("error:E_UNAVAILABLE") != std::string::npos && [host valueForKey:@"awaitedWindow"] == later);
+    if (stop == Closed) { auto shut = PopoverProps(false, Count(host)); [host updateProps:shut oldProps:props]; props = shut; }
+    else if (stop == Removed) [host removeFromSuperview];
+    else { [host prepareForRecycle]; props = PopoverProps(false, 0); [host setValue:popover forKey:@"popover"]; popover.delegate = host; }
+    Spin();
+    CHECK(![host valueForKey:@"awaitedWindow"]);
+    int shows = popover.shows;
+    [later arrive]; Spin();
+    CHECK(popover.shows == shows && !popover.shown);
+    Drain();
+  }
+  [host removeFromSuperview];
 
   // A real NSPopover silently ignores a show from a window that is not on screen (no delegate callbacks, no window),
   // so the component reports E_UNAVAILABLE instead of asking. Driver-mode windows are never on screen.

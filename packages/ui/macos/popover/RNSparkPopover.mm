@@ -24,6 +24,8 @@ using namespace facebook::react;
   NSInteger _anchorTag;
   BOOL _hasAnchorRect;
   NSRect _anchorRect;
+  // The off-screen anchor window a refused show waits for.
+  __weak NSWindow *_awaitedWindow;
 }
 - (instancetype)init {
   if (self = [super init]) {
@@ -87,8 +89,8 @@ using namespace facebook::react;
   _hasAnchorRect = next.hasAnchorRect;
   _anchorRect = NSMakeRect(next.anchorX, next.anchorY, next.anchorWidth, next.anchorHeight);
   _popover.behavior = [_behavior isEqual:@"semi-transient"] ? NSPopoverBehaviorSemitransient : [_behavior isEqual:@"application-defined"] ? NSPopoverBehaviorApplicationDefined : NSPopoverBehaviorTransient;
-  // Unrelated parent renders also update props; only a changed request (or a newly caught-up count) is reconciled,
-  // so a show that failed is not retried until something changes.
+  // Unrelated parent renders also update props; only a changed request (or a newly caught-up count) is reconciled.
+  // A show refused because the anchor window is off screen is retried when that window comes on screen.
   if (!previous || next.open != previous->open || next.eventCount != previous->eventCount || next.anchorTag != previous->anchorTag ||
       next.hasAnchorRect != previous->hasAnchorRect || next.anchorX != previous->anchorX || next.anchorY != previous->anchorY ||
       next.anchorWidth != previous->anchorWidth || next.anchorHeight != previous->anchorHeight) [self scheduleReconcile];
@@ -101,7 +103,7 @@ using namespace facebook::react;
 }
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];
-  if (!self.window) [_popover close];
+  if (!self.window) { [self stopAwaitingWindow]; [_popover close]; }
   else [self scheduleReconcile];
 }
 
@@ -116,14 +118,33 @@ using namespace facebook::react;
 }
 - (void)reconcile {
   _reconcileScheduled = NO;
+  [self stopAwaitingWindow];
   // Native closes JS has not processed yet stay in effect: `open` may predate them.
   if (_acknowledged != _eventCount || !self.window || _open == _popover.shown) return;
   if (!_open) { [_popover close]; return; }
   if (_anchorTag < 0) return; // JS reports an unmounted anchor ref.
   NSView *anchor = _anchorTag ? [self viewWithReactTag:_anchorTag] : self.window.contentView;
   if (!anchor) { [self reportError:@"E_NOT_FOUND" message:@"Popover anchor view is not mounted; a flattened view has no native view (set collapsable={false})"]; return; }
-  if (!anchor.window.visible) { [self reportError:@"E_UNAVAILABLE" message:@"Popover anchor window is not on screen"]; return; }
+  if (!anchor.window.visible) {
+    [self awaitWindow:anchor.window];
+    [self reportError:@"E_UNAVAILABLE" message:@"Popover anchor window is not on screen"];
+    return;
+  }
   [_popover showRelativeToRect:[self positioningRectIn:anchor] ofView:anchor preferredEdge:[self edgeIn:anchor]];
+}
+// AppKit shows a popover only from a window on screen. A refused show is retried when its anchor window comes on screen
+// (ordered front, deminiaturized, the app unhidden): each changes the window's occlusion state.
+- (void)awaitWindow:(NSWindow *)window {
+  _awaitedWindow = window;
+  [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(awaitedWindowDidChangeOcclusionState:) name:NSWindowDidChangeOcclusionStateNotification object:window];
+}
+- (void)stopAwaitingWindow {
+  if (!_awaitedWindow) return;
+  [NSNotificationCenter.defaultCenter removeObserver:self name:NSWindowDidChangeOcclusionStateNotification object:_awaitedWindow];
+  _awaitedWindow = nil;
+}
+- (void)awaitedWindowDidChangeOcclusionState:(NSNotification *)notification {
+  if (((NSWindow *)notification.object).visible) [self scheduleReconcile];
 }
 - (NSView *)viewWithReactTag:(NSInteger)tag {
   NSMutableArray<NSView *> *pending = [NSMutableArray arrayWithObject:self.window.contentView];
@@ -175,6 +196,7 @@ using namespace facebook::react;
 - (void)popoverDidDetach:(NSPopover *)popover { [self emit:@"detached"]; }
 
 - (void)prepareForRecycle {
+  [self stopAwaitingWindow];
   [self resetPopover];
   _open = NO; _detachable = NO; _rtl = NO; _anchorTag = 0; _hasAnchorRect = NO; _anchorRect = NSZeroRect;
   [super prepareForRecycle];
