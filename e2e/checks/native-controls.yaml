@@ -42,7 +42,14 @@ checks:
       - ./ui#Slider
       - ./ui#getControlAvailability(slider).available
   CTRL-SLIDER-02:
-    title: A Slider with ticks and continuous=false jumps to a click and steps with the arrow keys in every size
+    title: A Slider with ticks and continuous=false jumps to a click in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Slider
+  CTRL-SLIDER-03:
+    title: A focused Slider with ticks steps by 1 with the arrow keys in every size
     platforms: [macos]
     blocking: true
     spec: "#91 CTRL.api-primitives"
@@ -57,7 +64,15 @@ checks:
       - ./ui#Stepper
       - ./ui#getControlAvailability(stepper).available
   CTRL-COMBO-01:
-    title: ComboBox keeps every typed character (free text outside its options) and selects an option from its list
+    title: ComboBox keeps every typed character (free text outside its options)
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#ComboBox
+      - ./ui#getControlAvailability(combo-box).available
+  CTRL-COMBO-02:
+    title: ComboBox selects an option from its list
     platforms: [macos]
     blocking: true
     spec: "#91 CTRL.api-primitives"
