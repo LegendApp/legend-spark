@@ -1,0 +1,64 @@
+area: system-integration
+prefix: SYS
+checks:
+  SYS-DOCKAVAIL-01:
+    title: "getSystemAvailability reports the system module, app badge, app progress, attention and the Dock menu available on macOS, and the taskbar menu and thumbnail toolbar unsupported-platform"
+    platforms: [macos]
+    blocking: true
+    spec: "#123 SYS.api-dock"
+    covers:
+      - ./system
+      - ./system#getSystemAvailability
+      - ./system#getSystemAvailability().available
+  SYS-BADGE-01:
+    title: "setAppBadge sets badge text, a count (3, and 1,250 formatted natively) and clears it with an empty string"
+    platforms: [macos]
+    blocking: true
+    spec: "#123 SYS.api-dock"
+    covers:
+      - ./system#setAppBadge
+  SYS-PROGRESS-01:
+    title: "setAppProgress accepts normal (35%), indeterminate, paused (60%) and error (80%) progress and null to clear it; a value outside 0-1 rejects SparkError:E_INVALID_ARGUMENT (tests/dock-tile-native.test.ts checks the Dock tile rendering)"
+    platforms: [macos]
+    blocking: true
+    spec: "#123 SYS.api-dock"
+    covers:
+      - ./system#setAppProgress
+  SYS-ATTN-01:
+    title: "requestAttention with informational and critical kinds returns a registration whose removal cancels the request"
+    platforms: [macos]
+    blocking: true
+    spec: "#123 SYS.api-dock"
+    covers:
+      - ./system#requestAttention
+  SYS-DOCKMENU-01:
+    title: "createDockMenu installs a Dock menu with an action, a checkbox, a separator and a submenu, and its registration removes it"
+    platforms: [macos]
+    blocking: true
+    spec: "#123 SYS.api-dock"
+    covers:
+      - ./system#createDockMenu
+  SYS-THUMB-01:
+    title: "createThumbnailToolbar validates its buttons, then rejects SparkError:E_UNSUPPORTED_PLATFORM (macOS has no thumbnail toolbar; Windows: #301)"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#123 SYS.api-dock; Windows implementation in #301"
+    covers:
+      - ./system#createThumbnailToolbar
+  SYS-TASKBAR-01:
+    title: "On Windows the taskbar menu is available and the Dock menu unsupported-platform; badge counts, taskbar progress and a Jump List with tasks and the Recent category succeed"
+    platforms: [windows]
+    blocking: true
+    spec: "#123 SYS.api-dock; Windows verification in #302"
+    covers:
+      - ./system#getSystemAvailability().available
+      - ./system#setAppBadge
+      - ./system#setAppProgress
+      - ./system#createTaskbarMenu
+  SYS-DOCKVISUAL-01:
+    title: "The Dock & taskbar screen matches its golden in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#123 SYS.api-dock"
+    covers:
+      - ./system#getSystemAvailability().available
