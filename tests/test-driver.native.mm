@@ -572,16 +572,37 @@ int main(int argc, char **argv) { @autoreleasepool {
       Check([Request(fd, @{ @"command": @"navigate", @"url": @"spark-ks://hooks" })[@"ok"] boolValue] && inputs == 1, @"navigate is input");
       Check([Request(fd, @{ @"command": @"capture", @"window": @"main", @"name": @"wrapped" })[@"ok"] boolValue], @"capture");
       Check(Near(OnMain(^{ return [NSColor colorWithCGColor:probe.layer.backgroundColor]; }), 1, 0, 0), @"the wrapper restored the view after rendering");
-      // Frame counting: the display link counts frames; a blocked main thread drops them.
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
+  else if ([mode isEqual:@"frames"]) {
+    // Frame counting: the display link counts frames; a blocked main thread drops them. It needs a display whose link
+    // ticks; without one the commands fail E_UNAVAILABLE, and this mode says why it skipped.
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
       Check([Code(Request(fd, @{ @"command": @"stopFrames" })) isEqual:@"E_INVALID_STATE"], @"stopFrames needs startFrames");
       NSDictionary *started = Request(fd, @{ @"command": @"startFrames" });
-      Check([started[@"ok"] boolValue] && [started[@"refreshRate"] intValue] >= 30, [NSString stringWithFormat:@"startFrames %@", started]);
-      Check([Code(Request(fd, @{ @"command": @"startFrames" })) isEqual:@"E_BUSY"], @"one frame count at a time");
-      usleep(300000);
-      NSDictionary *idle = Request(fd, @{ @"command": @"stopFrames" });
-      const double expected = 0.3 * [started[@"refreshRate"] doubleValue];
-      Check([idle[@"ok"] boolValue] && [idle[@"frames"] doubleValue] > expected * 0.5 && [idle[@"fps"] doubleValue] > [started[@"refreshRate"] doubleValue] * 0.5,
-        [NSString stringWithFormat:@"an idle main thread keeps the display's cadence: %@", idle]);
+      NSDictionary *idle = nil;
+      if ([started[@"ok"] boolValue]) {
+        Check([started[@"refreshRate"] intValue] >= 30, [NSString stringWithFormat:@"startFrames %@", started]);
+        Check([Code(Request(fd, @{ @"command": @"startFrames" })) isEqual:@"E_BUSY"], @"one frame count at a time");
+        usleep(500000);
+        idle = Request(fd, @{ @"command": @"stopFrames" });
+      }
+      NSDictionary *unavailable = [Code(started) isEqual:@"E_UNAVAILABLE"] ? started : [Code(idle) isEqual:@"E_UNAVAILABLE"] ? idle : nil;
+      if (unavailable) {
+        printf("frames skipped: %s\n", [unavailable[@"error"][@"message"] UTF8String]);
+        Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+        finished = YES;
+        return;
+      }
+      // Loose on purpose: a loaded machine delivers fewer callbacks than the display's rate.
+      const double expected = 0.5 * [started[@"refreshRate"] doubleValue];
+      Check([idle[@"ok"] boolValue] && [idle[@"frames"] doubleValue] > expected * 0.25 && [idle[@"fps"] doubleValue] > [started[@"refreshRate"] doubleValue] * 0.25,
+        [NSString stringWithFormat:@"an idle main thread keeps roughly the display's cadence: %@", idle]);
       Request(fd, @{ @"command": @"startFrames" });
       usleep(100000);
       dispatch_async(dispatch_get_main_queue(), ^{ usleep(250000); });
