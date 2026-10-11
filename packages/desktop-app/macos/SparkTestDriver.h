@@ -10,3 +10,6 @@ FOUNDATION_EXPORT BOOL SparkTestDriverStart(void);
 FOUNDATION_EXPORT BOOL SparkTestDriverActive(void);
 // The host reports each mounted UI transaction; captures wait until mounts settle.
 FOUNDATION_EXPORT void SparkTestDriverDidMount(void);
+// YES once the runner's session has ended: that termination is teardown, not a user quit,
+// so the host terminates without running the app's quit guards.
+FOUNDATION_EXPORT BOOL SparkTestDriverEnding(void);

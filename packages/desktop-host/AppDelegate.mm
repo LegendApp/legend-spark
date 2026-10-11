@@ -158,7 +158,7 @@
   if ([behavior isEqual:@"request"]) { SparkEmit(@{ @"type": @"closeRequested", @"windowId": @"main" }); return NO; }
   return YES;
 }
-- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender { return SparkShouldQuit(); }
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender { return SparkTestDriverEnding() ? NSTerminateNow : SparkShouldQuit(); }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender { return NO; }
 - (void)applicationDidBecomeActive:(NSNotification *)note { SparkEmit(@{ @"type": @"activate" }); }
 - (void)applicationDidResignActive:(NSNotification *)note { SparkEmit(@{ @"type": @"deactivate" }); }

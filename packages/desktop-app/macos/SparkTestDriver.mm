@@ -12,7 +12,7 @@
 // first message is {"token": "..."}; then one request at a time, each answered
 // with {"id", "ok", ...} or {"id", "ok": false, "error": {"code", "message"}}.
 typedef void (^SparkDriverReply)(NSDictionary *reply);
-static BOOL active = NO;
+static BOOL active = NO, ending = NO;
 static int directoryFD = -1, listenFD = -1;
 static NSString *socketPath;
 static NSData *token;
@@ -26,8 +26,9 @@ static void SparkDriverRefuse(NSString *message) {
   NSLog(@"Spark test driver: %@", message);
   exit(78); // EX_CONFIG: the runner's launch contract was violated.
 }
-static void SparkDriverTerminate(void) { [NSApp terminate:nil]; }
+static void SparkDriverTerminate(void) { ending = YES; [NSApp terminate:nil]; }
 BOOL SparkTestDriverActive(void) { return active; }
+BOOL SparkTestDriverEnding(void) { return ending; }
 void SparkTestDriverDidMount(void) { lastMount = CACurrentMediaTime(); }
 
 static BOOL SparkPrivate(int fd, mode_t type, mode_t mode) {
