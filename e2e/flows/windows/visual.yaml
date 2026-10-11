@@ -1,10 +1,10 @@
 appId: so.legend.spark.examples.kitchensink
 name: Windows screens match their goldens
 intent: >
-  Windows > Window manager, Window options, Window tabs and Window controls open from their spark-ks:// deep links in the running Kitchen Sink,
+  Windows > Window manager, Window options, Window tabs, Window controls and Toolbar open from their spark-ks:// deep links in the running Kitchen Sink,
   their roots render, and the main window matches the approved golden for the appearance (light and dark, English and Arabic).
   Masked: the shell sidebar, and the row of the main window frame readout (display ID and position depend on the Mac). No child
-  window is opened, so Window options shows its availability lines and each row's initial value, and Window tabs
+  window is opened, so Window options and Toolbar show their availability lines and each row's initial value, and Window tabs
   shows no tab groups.
 checks: [WIN-VISUAL-01]
 tags: [windows]
@@ -26,3 +26,6 @@ matrix:
 - launchApp: { openUrl: "spark-ks://windows/window-controls", stopApp: false }
 - assertVisible: { id: windows-window-controls-root }
 - assertScreenshot: { golden: windows-window-controls, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://windows/toolbar", stopApp: false }
+- assertVisible: { id: windows-toolbar-root }
+- assertScreenshot: { golden: windows-toolbar, mask: [{ id: infra-shell-sidebar }] }

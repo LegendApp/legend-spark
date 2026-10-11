@@ -1,0 +1,36 @@
+appId: so.legend.spark.examples.kitchensink
+name: Toolbar feature availability and rejected requests
+intent: The toolbar screen lists each toolbar feature's availability for this platform, and its probe shows each invalid or unsupported request rejecting with the expected SparkError code.
+checks: [WIN-TBAVAIL-01, WIN-TBINVALID-01, WIN-TBUNSUP-01]
+tags: [windows]
+platforms: [macos, windows]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://windows/toolbar" }
+- assertVisible: { id: windows-toolbar-root }
+- runFlow:
+    when: { platform: macos }
+    commands:
+      - assertText: { id: windows-toolbar-availability-customization, equals: "customization: available" }
+      - assertText: { id: windows-toolbar-availability-displayMode, equals: "displayMode: available" }
+      - assertText: { id: windows-toolbar-availability-overflow, equals: "overflow: available" }
+      - assertText: { id: windows-toolbar-availability-shown, equals: "shown: available" }
+      - assertText: { id: windows-toolbar-availability-sidebarToggle, equals: "sidebarToggle: available" }
+      - tapOn: { id: windows-toolbar-probe }
+      - assertVisible: { text: "/displayMode text: E_INVALID_ARGUMENT/", within: { id: windows-toolbar-probe-result } }
+      - assertVisible: { text: "/customization id with a space: E_INVALID_ARGUMENT/", within: { id: windows-toolbar-probe-result } }
+      - assertVisible: { text: "/two sidebarToggle items: E_INVALID_ARGUMENT/", within: { id: windows-toolbar-probe-result } }
+      - assertVisible: { text: "/shown on a removed toolbar: E_INVALID_ARGUMENT/", within: { id: windows-toolbar-probe-result } }
+- runFlow:
+    when: { platform: windows }
+    commands:
+      - assertText: { id: windows-toolbar-availability-customization, equals: "customization: unsupported-platform" }
+      - assertText: { id: windows-toolbar-availability-displayMode, equals: "displayMode: unsupported-platform" }
+      - assertText: { id: windows-toolbar-availability-overflow, equals: "overflow: unsupported-platform" }
+      - assertText: { id: windows-toolbar-availability-shown, equals: "shown: unsupported-platform" }
+      - assertText: { id: windows-toolbar-availability-sidebarToggle, equals: "sidebarToggle: unsupported-platform" }
+      - tapOn: { id: windows-toolbar-probe }
+      - assertVisible: { text: "/macos toolbar group: E_UNSUPPORTED_OPTION/", within: { id: windows-toolbar-probe-result } }
+      - assertVisible: { text: "/getToolbarState: E_UNSUPPORTED_PLATFORM/", within: { id: windows-toolbar-probe-result } }
+      - assertVisible: { text: "/showToolbarCustomizationPalette: E_UNSUPPORTED_PLATFORM/", within: { id: windows-toolbar-probe-result } }

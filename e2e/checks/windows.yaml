@@ -141,7 +141,77 @@ checks:
     blocking: true
     spec: "docs/api-window-contract.md §Window tabs; #64"
   WIN-VISUAL-01:
-    title: The Window manager, Window options, Window tabs and Window controls screens match their approved goldens in light and dark, English and Arabic
+    title: The Window manager, Window options, Window tabs, Window controls and Toolbar screens match their approved goldens in light and dark, English and Arabic
     platforms: [macos]
     blocking: true
     spec: "docs/e2e-flows.md Visual goldens; #227"
+  WIN-TBAVAIL-01:
+    title: getToolbarAvailability(feature) reports every toolbar feature available on macOS and unsupported-platform on Windows
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Toolbar customization, display modes, overflow and visibility; #72"
+    covers:
+      - ./windows#getToolbarAvailability
+      - ./windows#getToolbarAvailability().available
+  WIN-TBMODE-01:
+    title: macos.toolbar.displayMode switches the live toolbar between icon, icon and label, and label only, and getToolbarState reports each
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Toolbar customization, display modes, overflow and visibility; #72"
+    covers:
+      - ./windows#setWindowOptions
+      - ./windows/macos#getToolbarState
+  WIN-TBSHOWN-01:
+    title: macos.toolbar.shown hides and shows the toolbar without removing its items
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Toolbar customization, display modes, overflow and visibility; #72"
+    covers:
+      - ./windows#setWindowOptions
+      - ./windows/macos#getToolbarState
+  WIN-TBOVERFLOW-01:
+    title: Narrowing the window moves trailing toolbar items into the overflow menu, and widening it brings them back
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Toolbar customization, display modes, overflow and visibility; #72"
+    covers:
+      - ./windows#setWindowBounds
+      - ./windows/macos#getToolbarState
+  WIN-TBCUSTOM-01:
+    title: macos.toolbar.customization turns user customization on with its ID and off again, and the toolbar keeps the app's items
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Toolbar customization, display modes, overflow and visibility; #72"
+    covers:
+      - ./windows#setWindowOptions
+      - ./windows/macos#getToolbarState
+  WIN-TBINVALID-01:
+    title: Invalid toolbar options (display mode, customization ID, two sidebar items, shown on a removed toolbar) reject E_INVALID_ARGUMENT before any native change
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Toolbar customization, display modes, overflow and visibility; #72"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-TBUNSUP-01:
+    title: Windows rejects toolbar options with E_UNSUPPORTED_OPTION and getToolbarState and showToolbarCustomizationPalette with E_UNSUPPORTED_PLATFORM
+    platforms: [windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Toolbar customization, display modes, overflow and visibility; #72"
+    covers:
+      - ./windows#setWindowOptions
+      - ./windows/macos#getToolbarState
+      - ./windows/macos#showToolbarCustomizationPalette
+  WIN-TBPALETTE-01:
+    title: Customize toolbar… opens AppKit's palette; a layout the user drags in, with its display mode, is restored when the window opens again
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Toolbar customization, display modes, overflow and visibility; #72"
+    covers:
+      - ./windows/macos#showToolbarCustomizationPalette
+  WIN-TBITEMS-01:
+    title: The sidebar item, and the overflow menu's entries for the menu and segmented items, send their toolbar events
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Toolbar customization, display modes, overflow and visibility; #72"
+    covers:
+      - ./windows/macos#addMacOSWindowListener

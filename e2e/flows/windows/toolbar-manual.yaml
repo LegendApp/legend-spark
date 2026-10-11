@@ -1,0 +1,43 @@
+appId: so.legend.spark.examples.kitchensink
+name: Toolbar palette, saved layout, sidebar item and overflow menu by hand
+intent: >
+  A person opens AppKit's Customize Toolbar palette from the toolbar screen, changes the layout and display mode,
+  and finds them restored when the child opens again with the same customization ID. They press the sidebar item
+  and choose entries from the overflow menu of a narrow window; the screen shows each toolbar event. The driver
+  never shows windows, so none of this can run in-process (the palette rejects E_UNAVAILABLE under the driver).
+checks: [WIN-TBPALETTE-01, WIN-TBITEMS-01]
+tags: [windows]
+platforms: [macos]
+build: release
+manual: true
+timeout: 10m
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://windows/toolbar" }
+- tapOn: { id: windows-toolbar-open }
+- tapOn: { id: windows-toolbar-customization }
+- assertText: { id: windows-toolbar-state-customization, equals: "customization: kitchen-sink.toolbar" }
+- tapOn: { id: windows-toolbar-customize }
+- manualStep:
+    instruction: 'In the Customize Toolbar sheet on Toolbar Child, drag Share out of the toolbar, choose Icon and Text under Show, then press Done. On the main window press Refresh state.'
+    expect: 'The sheet lists Sidebar, View, Sort, New and Share. Afterwards the toolbar shows icons with labels and no Share button, and the state reads "display mode: iconAndLabel" and "items: sidebar, view, sort, new".'
+    evidence: screenshot
+    signoff: required
+- tapOn: { id: windows-toolbar-close }
+- tapOn: { id: windows-toolbar-open }
+- tapOn: { id: windows-toolbar-customization }
+- manualStep:
+    instruction: 'Look at Toolbar Child after it opened again and customization was turned on.'
+    expect: 'The toolbar has icons with labels and no Share button, and the state reads "items: sidebar, view, sort, new".'
+    evidence: screenshot
+    signoff: required
+- manualStep:
+    instruction: 'Press the sidebar button at the leading end of Toolbar Child''s toolbar.'
+    expect: 'The screen''s last event reads "toolbarAction sidebar".'
+    evidence: none
+    signoff: required
+- tapOn: { id: windows-toolbar-width }
+- manualStep:
+    instruction: 'Open the » overflow menu at the trailing end of Toolbar Child''s toolbar. Choose Sort › Date, then open it again and choose View › Grid.'
+    expect: 'The last event reads "toolbarMenuAction sort/date", then "toolbarSelectionChanged view=grid"; reopening the menu shows Grid checked.'
+    evidence: none
+    signoff: required

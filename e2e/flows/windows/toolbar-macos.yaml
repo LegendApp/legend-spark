@@ -1,0 +1,49 @@
+appId: so.legend.spark.examples.kitchensink
+name: macOS toolbar display modes, shown state, overflow and customization on a live window
+intent: >
+  Open child window opens Toolbar Child with a sidebar item, a segmented control, a menu and two buttons, icon only,
+  every item fitting the 900-point window. Each Next press changes one toolbar feature on the live child and the
+  screen shows getToolbarState as AppKit reports it: icon and label, then label only, then icon again; hidden and
+  shown with the same items; at 420 points the trailing items move to the overflow menu and come back at 900;
+  customization on with its ID and the app's items (clearState leaves no saved layout), then off.
+checks: [WIN-TBMODE-01, WIN-TBSHOWN-01, WIN-TBOVERFLOW-01, WIN-TBCUSTOM-01]
+tags: [windows]
+platforms: [macos]
+build: release
+timeout: 120s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://windows/toolbar" }
+- tapOn: { id: windows-toolbar-open }
+- assertVisible: { text: Opened child, within: { id: windows-toolbar-status } }
+- assertText: { id: windows-toolbar-state-mode, equals: "display mode: icon" }
+- assertText: { id: windows-toolbar-state-shown, equals: "shown: yes" }
+- assertText: { id: windows-toolbar-state-items, equals: "items: sidebar, view, sort, new, share" }
+- assertText: { id: windows-toolbar-state-overflow, equals: "overflow: none" }
+- assertText: { id: windows-toolbar-state-customization, equals: "customization: off" }
+- tapOn: { id: windows-toolbar-display-mode }
+- assertText: { id: windows-toolbar-display-mode-value, equals: iconAndLabel }
+- assertText: { id: windows-toolbar-state-mode, equals: "display mode: iconAndLabel" }
+- tapOn: { id: windows-toolbar-display-mode }
+- assertText: { id: windows-toolbar-display-mode-value, equals: label }
+- assertText: { id: windows-toolbar-state-mode, equals: "display mode: label" }
+- tapOn: { id: windows-toolbar-display-mode }
+- assertText: { id: windows-toolbar-state-mode, equals: "display mode: icon" }
+- tapOn: { id: windows-toolbar-shown }
+- assertText: { id: windows-toolbar-shown-value, equals: "no" }
+- assertText: { id: windows-toolbar-state-shown, equals: "shown: no" }
+- assertText: { id: windows-toolbar-state-items, equals: "items: sidebar, view, sort, new, share" }
+- tapOn: { id: windows-toolbar-shown }
+- assertText: { id: windows-toolbar-state-shown, equals: "shown: yes" }
+- tapOn: { id: windows-toolbar-width }
+- assertText: { id: windows-toolbar-width-value, equals: "420" }
+- assertVisible: { text: "/^overflow: .*share$/", within: { id: windows-toolbar-state } }
+- tapOn: { id: windows-toolbar-width }
+- assertText: { id: windows-toolbar-width-value, equals: "900" }
+- assertText: { id: windows-toolbar-state-overflow, equals: "overflow: none" }
+- tapOn: { id: windows-toolbar-customization }
+- assertText: { id: windows-toolbar-state-customization, equals: "customization: kitchen-sink.toolbar" }
+- assertText: { id: windows-toolbar-state-items, equals: "items: sidebar, view, sort, new, share" }
+- tapOn: { id: windows-toolbar-customization }
+- assertText: { id: windows-toolbar-state-customization, equals: "customization: off" }
+- tapOn: { id: windows-toolbar-close }
+- assertVisible: { text: Closed child, within: { id: windows-toolbar-status } }
