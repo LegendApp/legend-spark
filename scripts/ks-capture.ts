@@ -1,4 +1,4 @@
-// bun run ks:capture [<area>/<screen>] [--wait-for <testID>] [--appearance light|dark] [--locale <language>] [--name <name>] [--out <directory>]
+// bun run ks:capture [<area>/<screen>] [--wait-for <testID>] [--appearance light|dark] [--locale <language>] [--name <name>] [--out <directory>] [--dev-bundle]
 // Launches the built Kitchen Sink in driver mode (it never shows a window or takes focus),
 // navigates, waits for the screen, renders the main window in-process to PNG and quits.
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -9,9 +9,9 @@ import { processLog } from "../packages/cli/src/process.ts";
 import type { Driver } from "./e2e/driver.ts";
 import { KITCHEN_SINK, KitchenSinkApp, LOCALE } from "./e2e/kitchen-sink.ts";
 
-const usage = "Usage: bun run ks:capture [<area>/<screen>] [--wait-for <testID>] [--appearance light|dark] [--locale <language>] [--name <name>] [--out <directory>]";
+const usage = "Usage: bun run ks:capture [<area>/<screen>] [--wait-for <testID>] [--appearance light|dark] [--locale <language>] [--name <name>] [--out <directory>] [--dev-bundle]";
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-  "wait-for": { type: "string" }, appearance: { type: "string" }, locale: { type: "string" }, name: { type: "string" }, out: { type: "string" }, help: { type: "boolean" },
+  "wait-for": { type: "string" }, appearance: { type: "string" }, locale: { type: "string" }, name: { type: "string" }, out: { type: "string" }, "dev-bundle": { type: "boolean" }, help: { type: "boolean" },
 } });
 if (values.help) { console.log(usage); process.exit(0); }
 const screen = positionals[0];
@@ -29,7 +29,8 @@ const work = mkdtempSync(path.join(os.tmpdir(), "ks-capture-"));
 let driver: Driver | undefined;
 const log = path.join(work, "app.log");
 try {
-  await app.open("Bundling Kitchen Sink JavaScript");
+  // --dev-bundle renders development-only UI (__DEV__), such as the Developer menu's status.
+  await app.open({ dev: values["dev-bundle"], label: "Bundling Kitchen Sink JavaScript" });
   driver = await app.launch({ locale: values.locale, log: processLog(log) });
   if (screen) await driver.navigate(`spark-ks://${screen}`);
   await driver.waitFor(testID, 30000);

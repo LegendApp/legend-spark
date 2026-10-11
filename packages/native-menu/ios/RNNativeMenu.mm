@@ -1,4 +1,5 @@
 #import "RNNativeMenu.h"
+#import "SparkDeveloperMenu.h"
 #import <React/RCTUtils.h>
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
@@ -62,7 +63,11 @@ static void Fail(NSString *code, NSString *message) { @throw [NSException except
 RCT_EXPORT_MODULE(NativeMenu)
 + (BOOL)requiresMainQueueSetup { return YES; }
 - (instancetype)init { if (self = [super init]) { _undo = [NSMutableArray new]; _published = @[]; } return self; }
+#if RCT_DEV
+- (NSArray<NSString *> *)supportedEvents { return @[@"NativeMenuAction", @"NativeMenuLifecycle", @"NativeDeveloperMenu"]; }
+#else
 - (NSArray<NSString *> *)supportedEvents { return @[@"NativeMenuAction", @"NativeMenuLifecycle"]; }
+#endif
 - (void)startObserving { self.observing = YES; }
 - (void)stopObserving { self.observing = NO; }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeMenuSpecJSI>(params); }
@@ -179,6 +184,10 @@ RCT_EXPORT_MODULE(NativeMenu)
       } else {
         item.action = @selector(selected:); item.target = self;
         item.representedObject = @{ @"ownerId": config[@"_sparkOwner"], @"itemId": config[@"id"] };
+#if RCT_DEV
+        NSDictionary *developer = config[@"_sparkDev"];
+        if (developer) { item.representedObject = @{ @"ownerId": config[@"_sparkOwner"], @"itemId": config[@"id"], @"developer": developer }; SparkDeveloperConfigure(item, developer); }
+#endif
       }
       [self apply:config to:item];
       if (config[@"role"] && !item.enabled) item.action = nil;
@@ -209,7 +218,23 @@ RCT_EXPORT_MODULE(NativeMenu)
     }
   });
 }
-- (void)selected:(NSMenuItem *)sender { if (sender.enabled && !sender.hidden) [self sendEventWithName:@"NativeMenuAction" body:sender.representedObject]; }
-- (BOOL)validateMenuItem:(NSMenuItem *)item { return item.enabled; }
+- (void)selected:(NSMenuItem *)sender {
+#if RCT_DEV
+  NSDictionary *developer = sender.representedObject[@"developer"];
+  if (developer) {
+    __weak RNNativeMenu *weakSelf = self;
+    SparkDeveloperPerform(sender, developer, ^(NSDictionary *body) { RNNativeMenu *module = weakSelf; if (module.observing) [module sendEventWithName:@"NativeDeveloperMenu" body:body]; });
+    return;
+  }
+#endif
+  if (sender.enabled && !sender.hidden) [self sendEventWithName:@"NativeMenuAction" body:sender.representedObject];
+}
+- (BOOL)validateMenuItem:(NSMenuItem *)item {
+#if RCT_DEV
+  NSDictionary *developer = [item.representedObject isKindOfClass:NSDictionary.class] ? item.representedObject[@"developer"] : nil;
+  if (developer) return SparkDeveloperValidate(item, developer);
+#endif
+  return item.enabled;
+}
 - (void)invalidate { RCTExecuteOnMainQueue(^{ [self restore]; self.published = @[]; }); [super invalidate]; }
 @end

@@ -297,6 +297,8 @@
   ],
   "./menus": [
     "AsyncRegistration",
+    "DeveloperMenuShortcutConflict",
+    "DeveloperMenuState",
     "Menu",
     "MenuAction",
     "MenuFeature",
@@ -312,7 +314,9 @@
     "MenuTarget",
     "MenuUpdate",
     "UseMenuOptions",
+    "addDeveloperMenuListener",
     "createMenu",
+    "getDeveloperMenuState",
     "getMenuAvailability",
     "useMenu"
   ],

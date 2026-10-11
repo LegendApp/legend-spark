@@ -1,7 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { gate } = require("./metro-gate.cjs");
-const ENTRY = "@legendapp/spark/runtime-entry";
+// @legendapp/spark/runtime-entry (packages/desktop/runtime-entry.cjs) requires this worker registry stub.
+const REGISTRY = ["@legendapp/spark-cli/dist/runtime-entry.cjs", "@legendapp/spark-cli/src/runtime-entry.cjs"];
 
 // Production discovery omits the registry: otherwise scanning an unused task
 // would itself make that task (and all its native dependencies) reachable.
@@ -73,7 +74,7 @@ function withDesktop(config, options = {}) {
   const enhanceMiddleware = config.server?.enhanceMiddleware;
   return { ...config,
     resolver: { ...config.resolver, resolveRequest(context, name, platform) {
-      if (name === ENTRY || name === "@legendapp/spark-cli/src/runtime-entry.cjs") return { type: "sourceFile", filePath: plan.enabled ? generatedEntry : path.join(__dirname, "runtime-entry.cjs") };
+      if (REGISTRY.includes(name)) return { type: "sourceFile", filePath: plan.enabled ? generatedEntry : path.join(__dirname, "runtime-entry.cjs") };
       return resolveRequest ? resolveRequest(context, name, platform) : context.resolveRequest(context, name, platform);
     } },
     server: { ...config.server, enhanceMiddleware(middleware, server) {

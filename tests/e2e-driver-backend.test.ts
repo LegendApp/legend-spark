@@ -71,6 +71,28 @@ describe("command mapping", () => {
     expect(result.failure).toMatchObject({ kind: "not-found", message: 'no element matches {"id":"missing"} (waited 300ms on driver)' });
   });
 
+  test("assertAppMenu checks the driver's menu snapshot by title path, and build: dev flows ask for the development bundle", async () => {
+    const menuBar = [{ title: "Developer", enabled: true, hidden: false, state: "off" as const, items: [
+      { title: "Reload", enabled: true, hidden: false, state: "off" as const },
+      { separator: true as const },
+      { title: "Open DevTools", enabled: false, hidden: false, state: "off" as const, toolTip: "Unavailable" },
+      { title: "Show Developer Menu", enabled: true, hidden: true, state: "off" as const, shortcut: { key: "z", modifiers: (1 << 18) | (1 << 20) } },
+    ] }];
+    const passing = await run([
+      "- launchApp", '- assertAppMenu: { path: "Developer > Reload", enabled: true }', '- assertAppMenu: { path: "Developer > Open DevTools", enabled: false, toolTip: Unavailable }',
+      '- assertAppMenu: { path: "Developer > Show Developer Menu", hidden: true, shortcut: Ctrl+Cmd+Z }', '- assertAppMenu: { path: "Window > Minimize", exists: false }',
+    ].join("\n"), new FakeApp({}, undefined, menuBar), "build: dev\n");
+    expect(passing.result.status).toBe("passed");
+    expect(passing.app.log[0]).toBe("open dev");
+    const wrongState = await run('- launchApp\n- assertAppMenu: { path: "Developer > Open DevTools", enabled: true, timeout: 200ms }', new FakeApp({}, undefined, menuBar));
+    expect(wrongState.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('expected enabled true, got false') });
+    expect(wrongState.app.log[0]).toBe("open");
+    const missing = await run('- launchApp\n- assertAppMenu: { path: "Developer > Inspect", timeout: 200ms }', new FakeApp({}, undefined, menuBar));
+    expect(missing.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('"Inspect" is not in [Reload, Open DevTools, Show Developer Menu]') });
+    const present = await run('- launchApp\n- assertAppMenu: { path: "Developer > Reload", exists: false, timeout: 200ms }', new FakeApp({}, undefined, menuBar));
+    expect(present.result.failure).toMatchObject({ kind: "assertion", message: "menu item Developer > Reload exists" });
+  });
+
   test("setClock and advanceClock drive the motion engine's virtual clock", async () => {
     const { result, app } = await run("- launchApp\n- setClock: virtual\n- advanceClock: 1.5s\n- advanceClock: 16\n- setClock: real");
     expect(result.status).toBe("passed");

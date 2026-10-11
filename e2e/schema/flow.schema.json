@@ -1337,6 +1337,56 @@
               "type": "object"
             }
           },
+          "assertAppMenu": {
+            "description": "[driver] Assert an app menu item from the in-app driver's menu snapshot, validated as when a user opens the menu (assertMenuItem is the black-box form). exists: false asserts it is absent.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "^.+( > .+)+$",
+                  "description": "a menu path such as \"File > Export > PDF…\""
+                },
+                "exists": {
+                  "type": "boolean"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "checked": {
+                  "type": "boolean"
+                },
+                "hidden": {
+                  "type": "boolean"
+                },
+                "shortcut": {
+                  "type": "string",
+                  "minLength": 1,
+                  "format": "accelerator"
+                },
+                "toolTip": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "assertMenuAlternate": {
             "description": "Assert the alternate item shown while a modifier is held.",
             "if": {

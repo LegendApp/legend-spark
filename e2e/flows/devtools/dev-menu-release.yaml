@@ -1,0 +1,14 @@
+appId: so.legend.spark.examples.kitchensink
+name: No Developer menu in a release bundle
+intent: JavaScript bundled without __DEV__ (every release build) installs no Developer menu, and the screen shows getDeveloperMenuState reporting release-build.
+checks: [DEVT-MENU-05]
+tags: [devtools]
+platforms: [macos]
+build: release
+timeout: 60s
+---
+- launchApp: { openUrl: "spark-ks://devtools/dev-menu" }
+- assertVisible: { id: devtools-dev-menu-root, timeout: 30s }
+- assertVisible: { id: devtools-dev-menu-state-unavailable-release-build }
+- assertAppMenu: { path: "Developer > Reload", exists: false }
+- assertAppMenu: { path: "Window > Minimize", exists: true }

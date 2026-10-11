@@ -107,3 +107,53 @@ availability. A missing native module reports `missing-module` and creation reje
 `E_UNSUPPORTED_PLATFORM`.
 
 Windows Jump Lists are `createTaskbarMenu` in [system integration](system.md).
+
+## Developer menu
+
+Development builds of a Spark app get a **Developer** menu in the menu bar, before Window.
+`@legendapp/spark/runtime-entry`, which managed app entries require first, installs it in the
+shared runtime. It is an ordinary menu owner (`spark-developer`), so it composes with the app's
+menus, its key equivalent is in the shortcut inventory, and its titles follow the system
+language (English and Arabic; other languages use English).
+
+| Item | Acts on |
+|---|---|
+| Reload | The app. Reloading the shared runtime restarts every runtime, isolated ones included. |
+| Open DevTools | React Native DevTools for the key window's runtime. Disabled, with a tooltip, until DevTools support registers ([#268](https://github.com/LegendApp/legend-spark/issues/268)). |
+| Toggle Element Inspector | The key window's runtime. |
+| Toggle Performance Monitor | The key window's runtime (its own frame rates and memory). |
+| Fast Refresh | The key window's runtime; checked while Fast Refresh is on there. |
+| Show Bundle Info | Bundle URL and runtime of the key window, mode, JavaScript engine, React Native and Spark versions, with Copy. |
+
+The key window's runtime is the isolated runtime of a navigator window with
+`runtime: { isolated }`, and the shared runtime for any other window with a React Native
+surface. Items other than Reload are disabled while no such window is key (always the case in
+a driven app). Enablement and the Fast Refresh check are computed when the menu is validated,
+so they always describe the window that is key at that moment.
+
+**Control-Command-Z** pops the menu up at the pointer, as on the iOS Simulator. Both the popup and the
+menu bar menu are AppKit menus, so the keyboard drives them (arrow keys, type to select, Return;
+Control-F2 reaches the menu bar). macOS does not
+reserve it (`getReservedShortcuts`) and Spark uses it nowhere else. When another menu, shortcut
+or global shortcut owns it, the Developer menu publishes without it, warns in the console, and
+claims it again once it is free.
+
+```ts
+import { addDeveloperMenuListener, getDeveloperMenuState } from '@legendapp/spark/menus';
+getDeveloperMenuState();
+// { status: 'ready', shortcut: 'Ctrl+Cmd+Z' }
+// { status: 'ready', shortcut: null, shortcutConflict: { shortcut, with: 'menu' | 'shortcut' | 'global-shortcut' | 'system', description } }
+// { status: 'unavailable', reason: 'release-build' | 'not-installed' | 'unsupported-platform' | 'missing-module' | 'host-restriction' }
+// { status: 'installing' } | { status: 'error', error }
+const subscription = addDeveloperMenuListener(state => console.log(state.status));
+subscription.remove();
+```
+
+`not-installed` means the app entry does not require `@legendapp/spark/runtime-entry`.
+Windows reports `unsupported-platform`: it has no native half yet.
+
+Release builds contain none of it. The bootstrap requires the menu inside `if (__DEV__)`, which
+Metro folds away before collecting dependencies, so the menu modules never enter a release
+bundle; the native half (`packages/native-menu/ios/SparkDeveloperMenu.mm` and its hooks in
+`RNNativeMenu.mm`) compiles only when `RCT_DEV`. `tests/developer-menu-release.test.ts` checks
+both, and in a release bundle `getDeveloperMenuState()` reports `release-build`.

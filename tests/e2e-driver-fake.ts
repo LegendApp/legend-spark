@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import type { DriverElement, DriverWindow, Frame, InputTarget } from "../scripts/e2e/driver.ts";
+import { DriverError, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type InputTarget } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -18,7 +18,7 @@ export class FakeDriver implements DriverClient {
   running = true;
   private calls = 0;
   private readonly directory = mkdtempSync(path.join(tmpdir(), "fake-driver-"));
-  constructor(private readonly log: string[], private readonly views: Record<string, number>, private readonly extra: () => DriverElement[] = () => []) {}
+  constructor(private readonly log: string[], private readonly views: Record<string, number>, private readonly extra: () => DriverElement[] = () => [], private readonly menuBar: DriverMenuItem[] = []) {}
 
   async navigate(url: string) { this.log.push(`navigate ${url}`); }
   async openFile(file: string) { this.log.push(`openFile ${file}`); }
@@ -43,6 +43,7 @@ export class FakeDriver implements DriverClient {
   async scroll(target: InputTarget, delta: object) { this.log.push(`scroll ${describeTarget(target)} ${JSON.stringify(delta)}`); }
   async pressKey(key: string, modifiers: string[] = []) { this.log.push(`pressKey ${JSON.stringify(key)} ${modifiers.join("+")}`); }
   async typeText(text: string) { this.log.push(`typeText ${text}`); }
+  async menus() { this.log.push("menus"); return this.menuBar; }
   async quit() { this.log.push("quit"); this.running = false; }
   async close() { this.log.push("close"); this.running = false; }
 }
@@ -53,17 +54,17 @@ export class FakeApp implements DriverApp {
   readonly drivers: FakeDriver[] = [];
   /** Extra elements of the in-process accessibility view; tests may change them while a flow runs. */
   elements: DriverElement[] = [];
-  constructor(private readonly views: Record<string, number> = {}, private readonly bundleId = "so.legend.spark.examples.kitchensink") {}
+  constructor(private readonly views: Record<string, number> = {}, private readonly bundleId = "so.legend.spark.examples.kitchensink", readonly menuBar: DriverMenuItem[] = []) {}
 
   readonly reserved = { arguments: ["-RCT_jsLocation"], env: ["SPARK_TEST_DRIVER_DIR", "SPARK_BUNDLE_URL"], locale: ["-AppleLanguages", "-AppleLocale"] };
 
-  async open() { this.log.push("open"); return { app: "/Apps/KitchenSink.app", bundleId: this.bundleId }; }
+  async open(options: { dev: boolean }) { this.log.push(options.dev ? "open dev" : "open"); return { app: "/Apps/KitchenSink.app", bundleId: this.bundleId }; }
   async clearState() { this.log.push("clearState"); return ["defaults:so.legend.spark.examples.kitchensink"]; }
   async launch(options: { locale?: string; arguments: readonly string[]; env: Readonly<Record<string, string>>; log: ProcessLog }) {
     const extra = [...(options.arguments.length ? [`args=${options.arguments.join(" ")}`] : []), ...(Object.keys(options.env).length ? [`env=${JSON.stringify(options.env)}`] : [])];
     this.log.push([`launch locale=${options.locale ?? "-"}`, ...extra, `log=${path.basename(options.log.file)}`].join(" "));
     writeFileSync(options.log.file, "app log");
-    const driver = new FakeDriver(this.log, this.views, () => this.elements);
+    const driver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar);
     this.drivers.push(driver);
     return driver;
   }

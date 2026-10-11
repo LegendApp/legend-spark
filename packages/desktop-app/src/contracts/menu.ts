@@ -29,7 +29,17 @@ export interface MenuWireItem {
   id?: string; title?: string; target?: MenuTarget; placement?: MenuPlacement; _sparkOwner?: string; _sparkIdentity?: string; enabled?: boolean; hidden?: boolean; checked?: boolean; separator?: boolean;
   shortcut?: Accelerator; items?: MenuWireItem[]; role?: MenuRole; radio?: boolean; alternate?: boolean; mixed?: boolean; _sparkLifecycle?: boolean;
   systemImageName?: string; imagePath?: string; slider?: { min: number; max: number; value: number; suffix?: string };
+  _sparkDev?: MenuDeveloperWire;
 }
+/**
+ * Development builds only: a Developer menu item (native-menu developer-menu.ts) that the macOS adapter performs
+ * against the key window's JavaScript runtime. Release builds compile out both producer and consumer.
+ */
+export type MenuDeveloperWire =
+  | { action: "reload" | "toggleInspector" | "togglePerfMonitor" | "toggleFastRefresh" | "showMenu" }
+  | { action: "openDevTools"; available: boolean; toolTip?: string }
+  /** The adapter adds the bundle URL and runtime of the target, then `lines`. `runtimes.isolated` contains `{name}`. */
+  | { action: "bundleInfo"; title: string; ok: string; copy: string; labels: { bundleURL: string; runtime: string }; runtimes: { shared: string; isolated: string }; lines: string[] };
 export interface MenuSupport { types: readonly MenuItem["type"][]; shortcuts?: boolean; icons?: readonly MenuIcon["type"][]; targeting?: boolean; alternates?: boolean; mixedState?: boolean }
 const roles: readonly string[] = ["new", "open", "save", "saveAs", "clearRecentDocuments", "about", "settings", "services", "hide", "hideOthers", "showAll", "quit", "undo", "redo", "cut", "copy", "paste", "selectAll", "minimize", "zoom", "close", "toggleFullscreen"];
 function keys(value: object, allowed: readonly string[]) {

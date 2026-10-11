@@ -53,6 +53,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 |---|---|---|---|---|
 | `selectMenu` | value → `path` | `path`* | black-box | Choose an app menu item. |
 | `assertMenuItem` | — | `path`*, `enabled`, `checked`, `shortcut` | black-box | Assert menu item state. |
+| `assertAppMenu` | — | `path`*, `exists`, `enabled`, `checked`, `hidden`, `shortcut`, `toolTip` | driver | Assert an app menu item from the in-app driver's menu snapshot, validated as when a user opens the menu (assertMenuItem is the black-box form). exists: false asserts it is absent. |
 | `assertMenuAlternate` | — | `path`*, `modifier`*, `becomes`* | black-box | Assert the alternate item shown while a modifier is held. |
 | `openContextMenu` | — | `on`*, `via` | black-box | Open a context menu on a target. |
 | `selectContextMenu` | value → `path` | `path`* | black-box | Choose an item in the open context menu. |

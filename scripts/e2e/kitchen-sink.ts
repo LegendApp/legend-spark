@@ -48,12 +48,14 @@ type Resolved = { app: string; executable: string; embedded: boolean } & AppIden
 
 /**
  * An app bundle in driver mode. A release build (`Contents/Resources/main.jsbundle`) runs its embedded JavaScript.
- * A dev build loads JavaScript over HTTP, so `open()` bundles the current Kitchen Sink source once (no Metro) and
- * serves it on 127.0.0.1 until `close()`.
+ * A dev build loads JavaScript over HTTP, so `open()` bundles the current Kitchen Sink source (no Metro), once per
+ * mode, and serves it on 127.0.0.1 until `close()`. The default bundle is built without `__DEV__`; `{ dev: true }`
+ * serves a development bundle (`__DEV__` code such as the Developer menu, LogBox), for `build: dev` flows.
  */
 export class KitchenSinkApp {
   private resolved?: Resolved;
-  private bundle?: Buffer;
+  private readonly bundles = new Map<boolean, Buffer>();
+  private served?: { dev: boolean; bundle: Buffer };
   private server?: Server;
 
   /** `app` is a `.app` bundle; without it, the last dev build (`cd examples/kitchen-sink && bun run rebuild:macos`). It is resolved by `open()`. */
@@ -77,26 +79,32 @@ export class KitchenSinkApp {
     };
   }
 
-  /** Resolves the app, then bundles (first call only) and serves the JavaScript a dev build loads. A release build needs neither. */
-  async open(label?: string): Promise<{ app: string; bundleId: string }> {
-    const resolved = this.resolved ??= this.resolve();
-    if (resolved.embedded || this.server) return resolved;
-    if (!this.bundle) {
+  /** Resolves the app, then bundles (first call per mode only) and serves the JavaScript a dev build loads. A release build needs neither. */
+  async open(options: { dev?: boolean; label?: string } = {}): Promise<{ app: string; bundleId: string }> {
+    const resolved = this.resolved ??= this.resolve(), dev = options.dev ?? false;
+    if (resolved.embedded) {
+      if (dev) throw new Error(`${resolved.app} embeds a release bundle; a development bundle needs a dev build (cd examples/kitchen-sink && bun run rebuild:macos)`);
+      return resolved;
+    }
+    let bundle = this.bundles.get(dev);
+    if (!bundle) {
       const work = mkdtempSync(path.join(os.tmpdir(), "ks-bundle-"));
       try {
         const file = path.join(work, "index.bundle");
         prepareConfig(KITCHEN_SINK);
         await run(KITCHEN_SINK, [binary(KITCHEN_SINK, "expo"), "export:embed", "--platform", "macos", "--entry-file", path.resolve(KITCHEN_SINK, entryFile(KITCHEN_SINK)),
-          "--bundle-output", file, "--dev", "false", "--minify", "false", "--max-workers", "2"], { env: { CI: "1" }, capture: !label, label });
-        this.bundle = readFileSync(file);
+          "--bundle-output", file, "--dev", String(dev), "--minify", "false", "--max-workers", "2"], { env: { CI: "1" }, capture: !options.label, label: options.label });
+        bundle = readFileSync(file);
+        this.bundles.set(dev, bundle);
       } finally {
         rmSync(work, { recursive: true, force: true });
       }
     }
-    const bundle = this.bundle;
+    this.served = { dev, bundle };
+    if (this.server) return resolved;
     const server = createServer((request, response) => {
       if (new URL(request.url ?? "/", "http://127.0.0.1").pathname === "/index.bundle") {
-        response.writeHead(200, { "Content-Type": "application/javascript" }).end(bundle);
+        response.writeHead(200, { "Content-Type": "application/javascript" }).end(this.served!.bundle);
         return;
       }
       console.error(`Kitchen Sink: the app requested ${request.url}, which is not served`);
@@ -125,7 +133,7 @@ export class KitchenSinkApp {
     const [languages, region] = this.reserved.locale;
     const locale = options.locale ? [languages, `(${options.locale})`, region, options.locale] : [];
     const resolved = this.resolved;
-    if (!resolved || (!resolved.embedded && !this.server)) throw new Error("KitchenSinkApp.open() must run before launch()");
+    if (!resolved || (!resolved.embedded && !this.served)) throw new Error("KitchenSinkApp.open() must run before launch()");
     const extra = options.arguments ?? [];
     if (resolved.embedded) return launchDriver({ executable: resolved.executable, args: [...PINNED, ...locale, ...extra], env: options.env, log: options.log });
     const port = (this.server!.address() as AddressInfo).port;
@@ -133,15 +141,16 @@ export class KitchenSinkApp {
       executable: resolved.executable,
       // RCT_jsLocation points React Native's packager connection at the same server as the bundle URL.
       args: [JS_LOCATION, `127.0.0.1:${port}`, ...PINNED, ...locale, ...extra],
-      env: { ...options.env, [BUNDLE_URL]: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=false&minify=false` },
+      env: { ...options.env, [BUNDLE_URL]: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=${this.served!.dev}&minify=false` },
       log: options.log,
     });
   }
 
-  /** Stops serving JavaScript; the bundle is kept for the next `open()`. */
+  /** Stops serving JavaScript; the bundles are kept for the next `open()`. */
   async close() {
     const server = this.server;
     this.server = undefined;
+    this.served = undefined;
     if (server) await new Promise<void>(resolve => server.close(() => resolve()));
   }
 }

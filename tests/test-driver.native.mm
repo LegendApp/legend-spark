@@ -261,6 +261,23 @@ static BOOL Near(NSColor *color, CGFloat r, CGFloat g, CGFloat b) {
 }
 static NSString *Describe(NSColor *color) { return [NSString stringWithFormat:@"%.2f,%.2f,%.2f", color.redComponent, color.greenComponent, color.blueComponent]; }
 
+// Validates its items off, as a responder with nothing to act on would.
+@interface MenuValidator : NSObject @end
+@implementation MenuValidator
+- (void)act:(id)sender {}
+- (BOOL)validateMenuItem:(NSMenuItem *)item { return NO; }
+@end
+static MenuValidator *validator;
+static void MakeMenu(void) {
+  NSMenu *main = [NSMenu new], *file = [[NSMenu alloc] initWithTitle:@"File"];
+  NSMenuItem *fileItem = [main addItemWithTitle:@"File" action:nil keyEquivalent:@""]; fileItem.submenu = file;
+  validator = [MenuValidator new];
+  NSMenuItem *save = [file addItemWithTitle:@"Save" action:@selector(act:) keyEquivalent:@"s"]; save.target = validator; save.identifier = @"save";
+  [file addItem:NSMenuItem.separatorItem];
+  NSMenuItem *show = [file addItemWithTitle:@"Show" action:nil keyEquivalent:@"z"];
+  show.keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagCommand; show.hidden = YES; show.toolTip = @"Hidden"; show.state = NSControlStateValueOn;
+  NSApp.mainMenu = main;
+}
 int main(int argc, char **argv) { @autoreleasepool {
   NSString *mode = argc > 1 ? @(argv[1]) : @"";
   openedURLs = [NSMutableArray new]; pending = [NSMutableData new];
@@ -275,6 +292,7 @@ int main(int argc, char **argv) { @autoreleasepool {
   if ([mode isEqual:@"refuse-token"]) { PrepareDirectory(argv[2], 0700, 0644); SparkTestDriverStart(); return 0; }
   PrepareDirectory(argv[2], 0700, 0600);
   NSWindow *window = MakeWindow();
+  MakeMenu();
   Check(SparkTestDriverStart() && SparkTestDriverActive(), @"driver start");
   // Optional modules add commands; built-in and duplicate names are refused.
   SparkTestDriverRegisterCommand(@"echo", ^(NSDictionary *request, SparkTestDriverReply reply) { reply(@{ @"ok": @YES, @"echo": request[@"value"] ?: NSNull.null }); });
@@ -318,6 +336,11 @@ int main(int argc, char **argv) { @autoreleasepool {
     Check([Request(fd, @{ @"command": @"ping" })[@"ok"] boolValue], @"ping");
     Check([Code(Request(fd, @{ @"command": @"fly" })) isEqual:@"E_UNKNOWN_COMMAND"], @"unknown command");
     Check([Request(fd, @{ @"command": @"echo", @"value": @3 })[@"echo"] isEqual:@3], @"registered module command");
+    NSArray *menus = Request(fd, @{ @"command": @"menus" })[@"menus"];
+    NSArray *fileMenu = [menus.firstObject[@"title"] isEqual:@"File"] ? menus.firstObject[@"items"] : nil;
+    Check(fileMenu.count == 3 && [fileMenu[1][@"separator"] boolValue], [NSString stringWithFormat:@"menus lists the menu bar: %@", menus]);
+    Check([fileMenu[0][@"id"] isEqual:@"save"] && ![fileMenu[0][@"enabled"] boolValue] && [fileMenu[0][@"shortcut"][@"key"] isEqual:@"s"] && [fileMenu[0][@"shortcut"][@"modifiers"] isEqual:@(NSEventModifierFlagCommand)], @"menus validates items before reporting them");
+    Check([fileMenu[2][@"hidden"] boolValue] && [fileMenu[2][@"state"] isEqual:@"on"] && [fileMenu[2][@"toolTip"] isEqual:@"Hidden"] && [fileMenu[2][@"shortcut"][@"modifiers"] isEqual:@(NSEventModifierFlagControl | NSEventModifierFlagCommand)], @"menus reports hidden items, state, tooltips and modifiers");
     Check([Request(fd, @{ @"command": @"navigate", @"url": @"spark-ks://windows/frame" })[@"ok"] boolValue], @"navigate");
     Check([Code(Request(fd, @{ @"command": @"navigate", @"url": @"file:///etc/hosts" })) isEqual:@"E_INVALID_ARGUMENT"], @"file URLs are not navigation");
     Check([Request(fd, @{ @"command": @"openFile", @"path": @"/etc/hosts" })[@"ok"] boolValue], @"openFile");

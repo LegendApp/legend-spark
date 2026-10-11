@@ -6,7 +6,7 @@ import { CHECK_ID } from "./primitives.ts";
 
 const byPosition = (diagnostics: Diagnostic[]) => diagnostics.sort((a, b) => a.line - b.line || a.column - b.column);
 
-function headerRules(loaded: Loaded, gate: boolean): Diagnostic[] {
+function headerRules(loaded: Loaded, gate: boolean, development: boolean): Diagnostic[] {
   const header = loaded.docs[0]!.contents as Node | null;
   if (!isMap(header)) return [];
   const out: Diagnostic[] = [];
@@ -16,7 +16,8 @@ function headerRules(loaded: Loaded, gate: boolean): Diagnostic[] {
     if (!isScalar(item) || typeof item.value !== "string" || !new RegExp(CHECK_ID).test(item.value)) out.push(diagnosticAt(loaded, item, "check-id", `check ID ${JSON.stringify(item.toJSON())} must look like PREFIX-NAME-NN, for example MW-TEAR-01`));
   }
   const build = header.get("build", true) as Node | undefined;
-  if (gate && isScalar(build) && build.value === "dev") out.push(diagnosticAt(loaded, build, "dev-build", "gate flows run against release builds: remove `build: dev`"));
+  if (gate && isScalar(build) && build.value === "dev") out.push(diagnosticAt(loaded, build, "dev-build", "gate flows run against release builds: remove `build: dev`, or move the flow to dev-flows/"));
+  if (development && !(isScalar(build) && build.value === "dev")) out.push(diagnosticAt(loaded, build ?? header, "dev-flow-build", "dev-flows/ holds development-build flows: add `build: dev`, or move the flow to flows/"));
   return out;
 }
 
@@ -34,10 +35,10 @@ function pointSelectors(loaded: Loaded): Diagnostic[] {
 }
 
 /** Validation problems plus the authoring rules the gate enforces. `gate` marks flows the release gate runs (under flows/). */
-export function lintFlow(source: string, file: string, { gate }: { gate: boolean }): Diagnostic[] {
+export function lintFlow(source: string, file: string, { gate, development = false }: { gate: boolean; development?: boolean }): Diagnostic[] {
   const { loaded, diagnostics } = checkFlow(source, file);
   if (loaded.diagnostics.length) return diagnostics;
-  return byPosition([...diagnostics, ...headerRules(loaded, gate), ...pointSelectors(loaded)]);
+  return byPosition([...diagnostics, ...headerRules(loaded, gate, development), ...pointSelectors(loaded)]);
 }
 
 export function lintSubflow(source: string, file: string): Diagnostic[] {
@@ -52,5 +53,6 @@ export function checkFile(mode: "validate" | "lint", kind: Kind, source: string,
   if (kind === "gate") return checkGate(source, file).diagnostics;
   if (kind === "budgets") return checkBudgets(source, file).diagnostics;
   if (kind === "subflow") return mode === "lint" ? lintSubflow(source, file) : checkSubflow(source, file).diagnostics;
-  return mode === "lint" ? lintFlow(source, file, { gate: file.split(path.sep).includes("flows") }) : checkFlow(source, file).diagnostics;
+  const segments = file.split(path.sep);
+  return mode === "lint" ? lintFlow(source, file, { gate: segments.includes("flows"), development: segments.includes("dev-flows") }) : checkFlow(source, file).diagnostics;
 }
