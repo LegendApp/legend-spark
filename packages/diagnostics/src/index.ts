@@ -73,7 +73,7 @@ let sequence = 0;
  * Watches the main thread until `remove()`. A watchdog thread pings the main run loop; when a ping goes
  * unanswered for `thresholdMs`, it samples the main thread's stack, and `onHang` gets the report once
  * the main thread answers. Hangs shorter than the threshold are never reported; hangs longer than
- * 1.5 x the threshold always are. Nothing runs while no watchdog is started. Each watchdog is
+ * 1.5 x the threshold normally are (the watchdog thread can run late on a loaded Mac). Nothing runs while no watchdog is started. Each watchdog is
  * independent, with its own thread and threshold.
  */
 export async function startHangWatchdog(options: HangWatchdogOptions): Promise<AsyncRegistration> {

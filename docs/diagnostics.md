@@ -26,8 +26,9 @@ hang, because events reach JavaScript through the main thread.
 
 - **Threshold.** Integer milliseconds from 50 to 60000; the default is 250 (the duration from which
   Apple's tools count a hang). The next ping goes out half a threshold after the last answer, so a hang
-  shorter than `thresholdMs` is never reported and one longer than 1.5 x `thresholdMs` always is.
-- **Duration.** `durationMs` runs from the unanswered ping to the answer. It is a lower bound: the
+  shorter than `thresholdMs` is never reported and one longer than 1.5 x `thresholdMs` normally is
+  (a heavily loaded Mac can run the watchdog thread late).
+- **Duration.** `durationMs` runs from the unanswered ping to the moment the main thread answers it. It is a lower bound: the
   hang can have started up to half a threshold before that ping. Time the Mac spends asleep does
   not count.
 - **Cost.** Nothing runs before `startHangWatchdog` or after `remove()`. A running watchdog is one
@@ -62,7 +63,8 @@ interface HangStackFrame {
 ```
 
 The stack is the frame-pointer chain, which arm64 and x86_64 macOS code always keeps; on arm64 a
-leaf function's caller comes from the link register. Up to 128 frames are reported. Pointer
+leaf function's caller comes from the link register, which is left out when it points back into
+the running function (a stale return address in a function that is not a leaf). Up to 128 frames are reported. Pointer
 authentication bits are removed from return addresses.
 
 `symbol` comes from `dladdr` after the main thread resumes. System libraries and debug builds

@@ -14,6 +14,9 @@ static const uintptr_t kAddressMask = 0x00007FFFFFFFFFFFULL;
 static const uintptr_t kAddressMask = UINTPTR_MAX;
 #endif
 
+// Exported by libsystem_pthread (and listed in the SDK's libsystem_pthread.tbd) but not declared in its headers.
+extern "C" pthread_t pthread_main_thread_np(void);
+
 static BOOL ReadMemory(uintptr_t address, void *buffer, size_t size) {
   vm_size_t read = 0;
   return vm_read_overwrite(mach_task_self(), address, size, (vm_address_t)buffer, &read) == KERN_SUCCESS && read == size;
@@ -21,7 +24,8 @@ static BOOL ReadMemory(uintptr_t address, void *buffer, size_t size) {
 
 // Runs while `thread` is suspended, so it only makes Mach calls and fills the caller's buffer:
 // anything that allocates or takes a lock could wait forever on the suspended thread.
-static size_t Backtrace(thread_t thread, uintptr_t *frames, size_t capacity) {
+// Sets `linkFrame` to the index of the frame taken from the link register, or SIZE_MAX if none was.
+static size_t Backtrace(thread_t thread, uintptr_t *frames, size_t capacity, size_t *linkFrame) {
   uintptr_t pc, fp, lr = 0;
 #if defined(__arm64__)
   arm_thread_state64_t state;
@@ -37,13 +41,15 @@ static size_t Backtrace(thread_t thread, uintptr_t *frames, size_t capacity) {
 #error Unsupported architecture
 #endif
   size_t n = 0;
+  *linkFrame = SIZE_MAX;
   frames[n++] = pc & kAddressMask;
   while (n < capacity && fp && !(fp % sizeof(uintptr_t))) {
     uintptr_t record[2]; // { caller's frame pointer, return address }
     if (!ReadMemory(fp, record, sizeof record)) break;
     uintptr_t returnAddress = record[1] & kAddressMask;
     // A leaf function (a system call stub, for one) pushes no frame: its caller is only in the link register.
-    if (lr && n == 1 && lr != returnAddress) frames[n++] = lr;
+    // In a function that did push a frame the register may hold a stale address; Symbolicate drops it then.
+    if (lr && n == 1 && lr != returnAddress) { *linkFrame = n; frames[n++] = lr; }
     if (!returnAddress || n == capacity) break;
     frames[n++] = returnAddress;
     if (record[0] <= fp) break; // Frames move toward the stack base; anything else is corrupt.
@@ -51,10 +57,6 @@ static size_t Backtrace(thread_t thread, uintptr_t *frames, size_t capacity) {
   }
   return n;
 }
-
-// Image initializers run on the main thread, so this is the main thread's port whoever starts a watchdog.
-static thread_t MainThread;
-__attribute__((constructor)) static void RecordMainThread(void) { MainThread = pthread_mach_thread_np(pthread_self()); }
 
 static NSString *Hex(uintptr_t value) { return [NSString stringWithFormat:@"0x%lx", (unsigned long)value]; }
 
@@ -70,11 +72,16 @@ static NSString *ImageUUID(const struct mach_header_64 *header) {
 
 // Image, offset and UUID locate each frame for offline symbolication (atos -l <imageAddress>);
 // symbol is the nearest dynamic symbol dladdr knows, which a stripped binary may lack.
-static NSArray<NSDictionary *> *Symbolicate(const uintptr_t *frames, size_t count) {
+static NSArray<NSDictionary *> *Symbolicate(const uintptr_t *frames, size_t count, size_t linkFrame) {
   NSMutableArray *stack = [NSMutableArray arrayWithCapacity:count];
   NSMutableDictionary<NSNumber *, NSString *> *uuids = [NSMutableDictionary new];
   for (size_t index = 0; index < count; index++) {
     uintptr_t address = frames[index];
+    // A link register pointing back into the function that is running is a stale return address of its own calls, not its caller.
+    if (index == linkFrame) {
+      Dl_info link, running;
+      if (dladdr((const void *)(address - 1), &link) && dladdr((const void *)frames[0], &running) && link.dli_saddr && link.dli_saddr == running.dli_saddr) continue;
+    }
     NSMutableDictionary *frame = [NSMutableDictionary dictionaryWithObject:Hex(address) forKey:@"address"];
     Dl_info info;
     // A return address follows its call; the call itself is what belongs to the calling function.
@@ -126,27 +133,34 @@ static NSArray<NSDictionary *> *Symbolicate(const uintptr_t *frames, size_t coun
   while (!atomic_load(&_stopped)) @autoreleasepool {
     // A fresh semaphore per ping, so a late answer to an earlier ping can never answer this one.
     dispatch_semaphore_t answered = dispatch_semaphore_create(0);
+    // Written by the main queue before it signals, read here only after the signal.
+    __block uint64_t answeredAt = 0;
     uint64_t sent = clock_gettime_nsec_np(CLOCK_UPTIME_RAW), startedAt = clock_gettime_nsec_np(CLOCK_REALTIME);
-    dispatch_async(dispatch_get_main_queue(), ^{ dispatch_semaphore_signal(answered); });
+    dispatch_async(dispatch_get_main_queue(), ^{
+      answeredAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+      dispatch_semaphore_signal(answered);
+    });
     if (dispatch_semaphore_wait(answered, dispatch_time(DISPATCH_TIME_NOW, threshold))) {
+      thread_t main = pthread_mach_thread_np(pthread_main_thread_np());
       uintptr_t frames[kMaxFrames];
-      size_t count = 0;
-      if (thread_suspend(MainThread) == KERN_SUCCESS) {
-        count = Backtrace(MainThread, frames, kMaxFrames);
-        thread_resume(MainThread);
+      size_t count = 0, linkFrame = SIZE_MAX;
+      if (thread_suspend(main) == KERN_SUCCESS) {
+        count = Backtrace(main, frames, kMaxFrames, &linkFrame);
+        thread_resume(main);
       }
-      NSArray *stack = Symbolicate(frames, count);
+      NSArray *stack = Symbolicate(frames, count, linkFrame);
       while (dispatch_semaphore_wait(answered, dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC)))
         if (atomic_load(&_stopped)) return;
       NSDictionary *report = @{
-        @"durationMs": @((double)(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - sent) / NSEC_PER_MSEC),
+        @"durationMs": @((double)(answeredAt - sent) / NSEC_PER_MSEC),
         @"thresholdMs": @(_thresholdMs),
         @"startedAt": @((double)startedAt / NSEC_PER_MSEC),
         @"stack": stack,
       };
       dispatch_async(dispatch_get_main_queue(), ^{ if (!atomic_load(&self->_stopped)) self->_handler(report); });
     }
-    // Ping again after half the threshold: any hang longer than 1.5 x the threshold is caught.
+    // Ping again after half the threshold: a hang longer than 1.5 x the threshold is normally caught
+    // (the watchdog thread itself can be scheduled late on a loaded machine).
     dispatch_semaphore_wait(_wake, dispatch_time(DISPATCH_TIME_NOW, threshold / 2));
   }
 }

@@ -3,6 +3,7 @@
 // short stalls are not; stop ends reporting and the watchdog thread.
 #import <Foundation/Foundation.h>
 #import "SparkHangWatchdog.h"
+#import <stdatomic.h>
 
 static int failures = 0;
 #define CHECK(...) do { if (!(__VA_ARGS__)) { fprintf(stderr, "FAILED line %d: %s\n", __LINE__, #__VA_ARGS__); failures++; } } while (0)
@@ -11,6 +12,15 @@ static int failures = 0;
 extern "C" __attribute__((noinline)) void SparkTestBlockMainThread(NSUInteger milliseconds) {
   SparkSimulateHang(milliseconds);
   __asm__ volatile("");
+}
+
+// A hang in a function that is not a leaf, spinning without calls after its last one: its link register
+// still holds that call's return address, which points back into itself and is not its caller.
+static atomic_bool spinning;
+extern "C" __attribute__((noinline)) void SparkTestCalled(void) { __asm__ volatile(""); }
+extern "C" __attribute__((noinline)) void SparkTestSpinAfterCall(void) {
+  SparkTestCalled();
+  while (atomic_load_explicit(&spinning, memory_order_relaxed)) {}
 }
 
 // Lets the main queue run (watchdog pings and report delivery) for `seconds`, or until `until` holds.
@@ -67,6 +77,16 @@ int main(void) {
       CHECK(HasSymbol(stack, @"SparkTestBlockMainThread"));
       CHECK(HasSymbol(stack, @"main"));
       for (NSDictionary *frame in stack) fprintf(stdout, "  %s %s+%s %s\n", [frame[@"address"] UTF8String], [[frame[@"image"] lastPathComponent] UTF8String], [[frame[@"imageOffset"] description] UTF8String], [frame[@"symbol"] UTF8String] ?: "?");
+
+      // A frame from a stale link register is left out: the spinning function appears once, called from main.
+      atomic_store(&spinning, true);
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 400 * NSEC_PER_MSEC), dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{ atomic_store(&spinning, false); });
+      SparkTestSpinAfterCall();
+      Spin(5, ^{ return (BOOL)(reports.count > 1); });
+      CHECK(reports.count == 2);
+      NSArray<NSDictionary *> *spinStack = reports.lastObject[@"stack"];
+      CHECK(spinStack.count >= 2 && [spinStack[0][@"symbol"] isEqual:@"SparkTestSpinAfterCall"] && [spinStack[1][@"symbol"] isEqual:@"main"]);
+      [reports removeLastObject];
 
       // Back-to-back hangs are reported separately.
       SparkTestBlockMainThread(300);
