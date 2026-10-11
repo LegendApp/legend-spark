@@ -70,6 +70,11 @@ split view, glass, SF Symbols, search field), `keyboard` (keyboard monitor),
 window controls) and `future-facing-capabilities` (AI command and tool runners).
 They share `Panel.tsx`.
 
+`multiwindow/windows` exercises `createWindowsNavigator` from `/windows`: note windows
+(one per open), a single Settings window, a document shared live across windows,
+per-window stars with promotion (`createWindowState`), per-window undo and menus, an
+error-isolation window and an isolated-runtime window.
+
 ## App-wide behavior
 
 `shell/app-controller.ts` starts once from `index.ts` and lives for the process:

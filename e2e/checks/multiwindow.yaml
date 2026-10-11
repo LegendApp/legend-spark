@@ -1,0 +1,62 @@
+area: multiwindow
+prefix: MW
+checks:
+  MW-TYPE-01:
+    title: A navigator entry without an id opens a new window with its own generated ID on every open
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Navigator"
+    covers:
+      - ./windows#createWindowsNavigator
+      - ./windows#useWindowInstance
+  MW-SINGLE-01:
+    title: A singleton entry (with id) opens one window; opening it again focuses that window instead of opening another
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Navigator"
+    covers:
+      - ./windows#createWindowsNavigator
+  MW-STATE-01:
+    title: An app-scoped document is live across two windows and the main window; an edit in one renders in the others
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Shared and scoped state"
+    covers:
+      - ./windows#createWindowsNavigator
+  MW-STATE-02:
+    title: Window-scoped state stays private to its window until promoted; an attached window then shares the promoted value
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Shared and scoped state"
+    covers:
+      - ./windows#createWindowState
+      - ./windows#useWindowState
+  MW-UNDO-01:
+    title: Each window has its own undo history, and Edit > Undo follows the key window
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Undo, keyboard, menus and toolbar per window"
+    covers:
+      - ./windows#useUndoState
+      - ./windows#createWindowsNavigator
+  MW-MENU-01:
+    title: The menu bar shows the key navigator window's menu, routes its actions to that window, and withdraws it when the main window is key
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Undo, keyboard, menus and toolbar per window"
+    covers:
+      - ./windows#createWindowsNavigator
+  MW-ERROR-01:
+    title: A render error replaces only that window's content with the default fallback; other windows keep working and Try again recovers
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Error isolation"
+    covers:
+      - ./windows#DefaultErrorFallback
+  MW-RUNTIME-01:
+    title: getIsolatedRuntimeAvailability reports available in the Kitchen Sink, and an isolated entry renders in its named runtime, not the main runtime
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Runtime model"
+    covers:
+      - ./windows#getIsolatedRuntimeAvailability().available
