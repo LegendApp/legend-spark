@@ -22,6 +22,7 @@
     "e2e:schema": "bun scripts/e2e/cli.ts schema",
     "e2e:coverage": "bun scripts/e2e/cli.ts coverage",
     "e2e:run": "bun scripts/e2e/cli.ts run",
+    "e2e:golden": "bun scripts/e2e/cli.ts golden",
     "gate": "bun scripts/e2e/cli.ts gate",
     "test:native": "bun scripts/test-native.ts",
     "test:all": "bun run typecheck && bun run test && bun run test:sparkle && bun run test:updates && bun run test:integrations && bun run test:native && bun run test:expansion && bun run test:runtimes:all",
@@ -112,7 +113,8 @@
     "@legendapp/list": "3.4.0",
     "react-test-renderer": "19.1.4",
     "yaml": "2.9.1",
-    "ajv": "8.20.0"
+    "ajv": "8.20.0",
+    "pngjs": "3.4.0"
   },
   "overrides": {
     "@expo/cli": "54.0.27",

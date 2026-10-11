@@ -12,12 +12,13 @@ export type RunReport = {
   backends: Array<{ name: string; kind: Backend["kind"] }>;
   interrupted: boolean;
   summary: { total: number; passed: number; failed: number; skipped: number };
-  /** Artifact paths are relative to the run directory (the directory holding report.json). */
+  /** Artifact and golden paths are relative to the run directory (the directory holding report.json). */
   flows: FlowResult[];
 };
 
 export function buildReport(results: FlowResult[], meta: { startedAt: Date; durationMs: number; backends: Backend[]; runDir: string; interrupted: boolean }): RunReport {
-  const relative = (artifacts: Artifact[]) => artifacts.map(artifact => ({ ...artifact, path: path.relative(meta.runDir, artifact.path) }));
+  const from = (file: string) => path.relative(meta.runDir, file);
+  const relative = (artifacts: Artifact[]) => artifacts.map(artifact => ({ ...artifact, path: from(artifact.path) }));
   const count = (status: FlowResult["status"]) => results.filter(result => result.status === status).length;
   return {
     version: 1, startedAt: meta.startedAt.toISOString(), durationMs: Math.round(meta.durationMs), platform: meta.backends[0]!.platform,
@@ -25,6 +26,7 @@ export function buildReport(results: FlowResult[], meta: { startedAt: Date; dura
     summary: { total: results.length, passed: count("passed"), failed: count("failed"), skipped: count("skipped") },
     flows: results.map(result => ({
       ...result, artifacts: relative(result.artifacts),
+      goldens: result.goldens.map(({ golden, actual, diff, ...rest }) => ({ ...rest, golden: from(golden), actual: from(actual), ...(diff ? { diff: from(diff) } : {}) })),
       ...(result.failure ? { failure: { ...result.failure, artifacts: relative(result.failure.artifacts) } } : {}),
     })),
   };
@@ -65,11 +67,13 @@ export function junit(report: RunReport): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="e2e" tests="${summary.total}" failures="${summary.failed}" skipped="${summary.skipped}" time="${seconds(report.durationMs)}">\n${suites.join("\n")}\n</testsuites>\n`;
 }
 
+const IMAGES = new Set<Artifact["kind"]>(["screenshot", "golden", "diff"]);
+
 export function html(report: RunReport): string {
   const link = (artifact: Artifact) => {
     const href = escape(artifact.path.split(path.sep).map(encodeURIComponent).join("/"));
     const name = `${artifact.kind}${artifact.backend ? ` (${artifact.backend})` : ""}: ${escape(artifact.path)}`;
-    return artifact.kind === "screenshot" ? `<figure><a href="${href}"><img src="${href}" alt="${name}"></a><figcaption>${name}</figcaption></figure>` : `<li><a href="${href}">${name}</a></li>`;
+    return IMAGES.has(artifact.kind) ? `<figure><a href="${href}"><img src="${href}" alt="${name}"></a><figcaption>${name}</figcaption></figure>` : `<li><a href="${href}">${name}</a></li>`;
   };
   const flows = report.flows.map(flow => {
     const failure = flow.failure;

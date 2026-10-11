@@ -175,6 +175,15 @@ function matrixDiagnostics(flow: FlowAst): Diagnostic[] {
   }));
 }
 
+/** A golden's path needs the appearance and locale it was rendered in (docs/e2e-flows.md#visual-goldens). */
+function goldenDiagnostics(flow: FlowAst): Diagnostic[] {
+  const missing = ["appearance", "locale"].filter(dimension => !flow.header.matrix?.[dimension]);
+  if (!missing.length) return [];
+  const all = [...flow.header.onFlowStart ?? [], ...flow.commands, ...flow.header.onFlowComplete ?? []];
+  return [...walk(all)].filter(command => command.name === "assertScreenshot")
+    .map(command => ({ ...command.location, rule: "schema", message: `assertScreenshot needs ${missing.join(" and ")} in the header matrix: the golden path is golden/<platform>/<appearance>/<locale>/<name>.png` }));
+}
+
 export type Checked<T> = { loaded: Loaded; diagnostics: Diagnostic[]; value?: T };
 
 export function checkFlow(source: string, file = "<flow>"): Checked<FlowAst> {
@@ -190,7 +199,7 @@ export function checkFlow(source: string, file = "<flow>"): Checked<FlowAst> {
     else delete header[hook];
   }
   const flow: FlowAst = { file, header, commands: toCommands({ loaded, doc: commandDoc }, commandDoc.contents, commandDoc.toJS() as unknown[]) };
-  const semantic = matrixDiagnostics(flow);
+  const semantic = [...matrixDiagnostics(flow), ...goldenDiagnostics(flow)];
   return semantic.length ? { loaded, diagnostics: semantic } : { loaded, diagnostics: [], value: flow };
 }
 

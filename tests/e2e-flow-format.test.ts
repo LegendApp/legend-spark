@@ -77,7 +77,7 @@ describe("spec examples", () => {
 
   test("parse into commands with canonical arguments, conditions and nested commands", () => {
     const sheet = parseFlow(read("flows/spec/sheet-spring.yaml"), "sheet-spring.yaml");
-    expect(sheet.header.matrix).toEqual({ reduceMotion: [false, true] });
+    expect(sheet.header.matrix).toEqual({ appearance: ["light"], locale: ["en"], reduceMotion: [false, true] });
     expect(sheet.commands.map(command => command.name)).toEqual(["launchApp", "setClock", "shortcut", "advanceClock", "pressKey", "captureMotion", "assertMotion", "assertMotion", "assertScreenshot"]);
     expect(sheet.commands[0]).toEqual({ name: "launchApp", args: {}, location: { file: "sheet-spring.yaml", line: 6, column: 3 } });
     expect(sheet.commands[2]!.args).toEqual({ keys: "cmd+shift+n" });

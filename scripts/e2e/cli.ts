@@ -7,6 +7,7 @@ import { generatedFiles } from "./format/generate.ts";
 import { checkFile } from "./format/lint.ts";
 import { formatDiagnostic } from "./format/parser.ts";
 import { gateCommand } from "./gate/gate.ts";
+import { goldenCommand } from "./golden/approve.ts";
 import { hostEnv } from "./gate/host.ts";
 import { BACKENDS, runCommand } from "./runner/run.ts";
 
@@ -48,6 +49,8 @@ if (mode === "schema") {
   const summary = [...counts].map(([kind, count]) => `${count} ${LABELS[kind][count === 1 ? 0 : 1]}`).join(", ") || "no flows, subflows, check registries, gate manifests or budgets files";
   console.log(`${mode === "lint" ? "linted" : "validated"} ${files.length} file${files.length === 1 ? "" : "s"} (${summary}): ${problems} problem${problems === 1 ? "" : "s"}`);
   process.exitCode = problems ? 1 : 0;
+} else if (mode === "golden") {
+  process.exitCode = goldenCommand(args, path.join(repo, "e2e"), { stdout: line => console.log(line), stderr: line => console.error(line) });
 } else if (mode === "run" || mode === "gate") {
   const controller = new AbortController();
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
@@ -55,6 +58,6 @@ if (mode === "schema") {
     ? await gateCommand(args, path.join(repo, "e2e"), { ...hostEnv(), signal: controller.signal })
     : await runCommand(args, { backends: BACKENDS, stdout: line => console.log(line), stderr: line => console.error(line), signal: controller.signal });
 } else {
-  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema | bun run e2e:run [flows…] [--backend …] [--agent] [--report dir] [--app path] | bun run gate [--target id] [--dry-run]");
+  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema | bun run e2e:run [flows…] [--backend …] [--agent] [--report dir] [--app path] | bun run gate [--target id] [--dry-run] | bun run e2e:golden approve <path> [--to <golden id>]");
   process.exitCode = 2;
 }
