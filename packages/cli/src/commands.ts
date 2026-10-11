@@ -3,7 +3,7 @@ import { checkExpoDesktopNode } from "./expo-node.ts";
 import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { stateFile } from "./project.ts";
+import { statePath as stateFile } from "@legendapp/spark-desktop-config/config.cjs";
 
 const running = new Map<string, Set<ReturnType<typeof spawnProcess>>>();
 const secretFlags = new Set(["--password", "--apple-id-password", "--token", "--secret", "--api-key", "-P"]);

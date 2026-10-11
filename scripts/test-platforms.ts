@@ -8,7 +8,7 @@ import { parseArgs } from "node:util";
 import { create } from "../packages/cli/src/create.ts";
 import { build } from "../packages/cli/src/build.ts";
 import { run, cancelCommands } from "../packages/cli/src/commands.ts";
-import { nodeCommand } from "../packages/cli/src/windows.ts";
+import { nodeCommand } from "../packages/cli/src/process.ts";
 import { architecture } from "../packages/cli/src/platform.ts";
 import { availablePort } from "../packages/cli/src/local.ts";
 import { readJson, writeJson, stateFile, projectEnvironment } from "../packages/cli/src/project.ts";

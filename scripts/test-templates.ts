@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { create } from "../packages/cli/src/create.ts";
 import { run } from "../packages/cli/src/commands.ts";
-import { nodeCommand } from "../packages/cli/src/windows.ts";
+import { nodeCommand } from "../packages/cli/src/process.ts";
 import { readJson } from "../packages/cli/src/project.ts";
 
 const framework = path.resolve(import.meta.dirname, "..");

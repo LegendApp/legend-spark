@@ -1,7 +1,7 @@
 import { packageManager, managerCommand } from "./package-manager.ts";
 import { cpSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { readJson, writeJson } from "./project.ts";
+import { readJson, writeJson } from "./json.ts";
 import { run } from "./commands.ts";
 export const examples = ["document-editor", "notes-lite", "music-lite", "diff-lite"] as const;
 export type Example = typeof examples[number];

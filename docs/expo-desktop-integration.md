@@ -24,7 +24,7 @@ Existing applications can use [`spark add desktop`](add-desktop.md) to compose d
 
 `packages/cli/templates/blank-typescript`, `windows`, and `universal` are complete application templates. `scripts/pack.ts` first packs SDK dependencies, then `scripts/pack-templates.ts` resolves the local archive paths into the template manifests and packs them. `artifacts/packages/templates.json` maps each variant to its archive.
 
-`spark create` selects that archive and invokes the real Expo Desktop CLI. It does not copy the starter, rename files, replace platform source files, or maintain an extraction implementation. Upstream validates alphanumeric application directory names; parent paths may include spaces.
+`npm create @legendapp/spark@next MyApp` and the installed `spark create MyApp` select that archive and invokes the real Expo Desktop CLI. It does not copy the starter, rename files, replace platform source files, or maintain an extraction implementation. Upstream validates alphanumeric application directory names; parent paths may include spaces.
 
 Each template has an initial `app.json` for upstream naming and native identifier generation, plus spark configuration defaults. After installation, `init-template.cjs` adopts the assigned name, bundle identifiers, and Windows project GUID into spark configuration. It then prepares the existing Expo configuration bridge. An existing spark project ID makes initialization a no-op, preserving subsequent user edits. If installing with lifecycle scripts disabled or creating with `--no-install`, run the template's postinstall after installing dependencies.
 

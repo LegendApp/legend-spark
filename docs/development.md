@@ -171,7 +171,7 @@ Keep generated files out of version control. Commit application source/configura
 
 Edit the complete templates under `packages/cli/templates/`: `blank-typescript` (macOS), `windows`, or `universal`. Their manifests own dependency pins and scripts. `spark sdk pack` resolves local SDK archives into template dependencies and emits npm tarballs plus `artifacts/packages/templates.json`. Repack after changing a template or SDK package.
 
-`spark create` invokes `expo-desktop@1.0.0 create-app --template <archive>`. Expo Desktop validates the directory/name, extracts files, assigns app/native identity, installs dependencies, and initializes Git. A template postinstall initializes spark's configuration once. It does not overwrite an existing project ID or user edits. Project basenames must be alphanumeric, following upstream validation; spaces in parent directories are supported.
+`npm create @legendapp/spark@next MyApp` (or the installed `spark create MyApp`) invokes `expo-desktop@1.0.0 create-app --template <archive>`. Expo Desktop validates the directory/name, extracts files, assigns app/native identity, installs dependencies, and initializes Git. A template postinstall initializes spark's configuration once. It does not overwrite an existing project ID or user edits. Project basenames must be alphanumeric, following upstream validation; spaces in parent directories are supported.
 
 Direct Expo Desktop template creation is also checked by `bun run test:templates`, including a consumer outside the checkout. These local archives reference local SDK tarballs; they are not a published package distribution. The [integration handoff](expo-desktop-integration.md) documents the npm compatibility pin and remaining build/launch limitations.
 

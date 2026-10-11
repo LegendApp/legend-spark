@@ -4,7 +4,7 @@ import { spawnProcess, processLog } from "../packages/cli/src/process.ts";
 import { cpSync, readdirSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { nodeCommand } from "../packages/cli/src/windows.ts";
+import { nodeCommand } from "../packages/cli/src/process.ts";
 import { availablePort } from "../packages/cli/src/local.ts";
 const framework = path.resolve(import.meta.dirname, "..");
 const binary = path.resolve(process.argv[2] ?? "examples/kitchen-sink/.spark/platforms/macos/products/dev/KitchenSink.app");

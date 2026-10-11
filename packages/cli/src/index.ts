@@ -1,5 +1,5 @@
 import type { PackageManager } from "./package-manager.ts";
-import { spawnProcess } from "./process.ts";
+import { nodeCommand, spawnProcess } from "./process.ts";
 import { examples, type Example } from "./examples.ts";
 import { prepareGoProfile } from "./go-profile.ts";
 import { exportSDK, importSDK } from "./sdk-transfer.ts";
@@ -8,7 +8,7 @@ import path from "node:path";
 import { cliArguments } from "./cli-arguments.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { prepareConfig, readConfig, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
-import { nodeCommand, prepareWindows } from "./windows.ts";
+import { prepareWindows } from "./windows.ts";
 import { create, refreshLocalPackages } from "./create.ts";
 import { addDesktop } from "./add-desktop.ts";
 import { buildMode } from "./build-mode.ts";
@@ -91,7 +91,6 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
     }
     case "create": {
       if (!positionals[1]) throw new Error("Usage: spark create MyApp");
-      if (!(values.universal || values.example) && !["macos", "windows"].includes(platform)) throw new Error("Use create --universal for mobile/web targets");
       await create(path.resolve(positionals[1]), creationManifest(values.packages as string | undefined), platform, !!values.universal || !!values.example, values.example as Example | undefined, values["package-manager"] as PackageManager | undefined);
       break;
     }

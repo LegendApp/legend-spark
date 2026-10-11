@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { run } from "../packages/cli/src/commands.ts";
 import { readJson, VERSION } from "../packages/cli/src/project.ts";
-import { alreadyPublished, releaseNotes } from "./npm-release.ts";
+import { alreadyPublished, publishedPackages, releaseNotes } from "./npm-release.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const args = process.argv.slice(2);
@@ -18,19 +18,20 @@ if (release.version !== VERSION || release.revision !== revision || (await run(r
 for (const [name, hash] of Object.entries(release.sha256)) {
   if (path.basename(name) !== name || createHash("sha256").update(readFileSync(path.join(folder, name))).digest("hex") !== hash) throw new Error(`Release artifact changed: ${name}`);
 }
-if (!release.sha256[release.npm] || !release.sha256["runner-manifest.json"]) throw new Error("Incomplete release artifact manifest");
+if (!release.sha256[release.npm] || !release.sha256[release.createNpm] || !release.sha256["runner-manifest.json"]) throw new Error("Incomplete release artifact manifest");
 const repo = "LegendApp/legend-spark", tag = `v${VERSION}`;
 const repository = JSON.parse(await run(root, ["gh", "repo", "view", repo, "--json", "visibility"], { capture: true }));
 if (repository.visibility !== "PUBLIC") throw new Error("Runner downloads require a public distribution repository. Do not publish npm while release assets are private.");
 await run(root, ["gh", "auth", "status"]);
 await run(root, ["npm", "whoami"]);
-const archive = path.join(folder, release.npm);
+const archives = [release.npm, release.createNpm].map(file => path.join(folder, file));
 const registryCommand = async (argv: string[]) => {
   const child = spawnProcess(argv, { cwd: root, stdout: "pipe", stderr: "pipe" });
   const [code, out, err] = await Promise.all([child.exited, new Response(child.stdout!).text(), new Response(child.stderr!).text()]);
   return { code, output: code ? out + err : out };
 };
-const published = await alreadyPublished(VERSION, archive, registryCommand);
+const published = [];
+for (const [index, name] of publishedPackages.entries()) published.push(await alreadyPublished(VERSION, archives[index]!, registryCommand, name));
 const ref = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/git/ref/tags/${tag}`], { capture: true }));
 let commit = ref.object;
 if (commit.type === "tag") commit = JSON.parse(await run(root, ["gh", "api", `repos/${repo}/git/tags/${commit.sha}`], { capture: true })).object;
@@ -64,16 +65,26 @@ for (const [name, expected] of Object.entries(release.sha256)) {
 }
 if (existing.isDraft) await run(root, ["gh", "release", "edit", tag, "--repo", repo, "--draft=false", "--prerelease"]);
 // npm web authentication needs the terminal; piping output disables its prompt.
-if (!published) {
-  const publish = spawnProcess(["npm", "publish", archive, "--access", "public", "--tag", "next"], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
-  const publishCode = await publish.exited;
-  if (publishCode) throw new Error(`npm publish exited ${publishCode}`);
+// Publishing moves its dist-tag immediately; keep next/latest unchanged until both packages verify.
+for (const [index, name] of publishedPackages.entries()) {
+  const archive = archives[index]!;
+  if (!published[index]) {
+    const publish = spawnProcess(["npm", "publish", archive, "--access", "public", "--tag", "staging"], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+    const publishCode = await publish.exited;
+    if (publishCode) throw new Error(`npm publish ${name} exited ${publishCode}`);
+  }
+  if (!await alreadyPublished(VERSION, archive, registryCommand, name)) throw new Error(`npm publication of ${name} is not visible yet; resume without changing the release artifacts`);
 }
-if (!await alreadyPublished(VERSION, archive, registryCommand)) throw new Error("npm publication is not visible yet; resume without changing the release artifacts");
-for (const channel of ["next", ...(args.includes("--latest") ? ["latest"] : [])]) {
-  const promote = spawnProcess(["npm", "dist-tag", "add", `@legendapp/spark@${VERSION}`, channel], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
-  if (await promote.exited) throw new Error(`npm ${channel} promotion failed; retry with the same release artifacts`);
+for (const name of publishedPackages) {
+  for (const channel of ["next", ...(args.includes("--latest") ? ["latest"] : [])]) {
+    const promote = spawnProcess(["npm", "dist-tag", "add", `${name}@${VERSION}`, channel], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+    if (await promote.exited) throw new Error(`npm ${name} ${channel} promotion failed; retry with the same release artifacts`);
+  }
+  const tags = JSON.parse(await run(root, ["npm", "view", name, "dist-tags", "--json"], { capture: true }));
+  if (tags.next !== VERSION || (args.includes("--latest") && tags.latest !== VERSION)) throw new Error(`npm ${name} release tags did not update as requested`);
 }
-const tags = JSON.parse(await run(root, ["npm", "view", "@legendapp/spark", "dist-tags", "--json"], { capture: true }));
-if (tags.next !== VERSION || (args.includes("--latest") && tags.latest !== VERSION)) throw new Error("npm release tags did not update as requested");
+for (const name of publishedPackages) {
+  const removeStaging = spawnProcess(["npm", "dist-tag", "rm", name, "staging"], { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+  if (await removeStaging.exited) throw new Error(`npm ${name} staging tag removal failed; retry with the same release artifacts`);
+}
 console.log(`Published ${tag} under next${args.includes("--latest") ? " and latest" : ""}. Native UI and clean-machine Runner acceptance remain separate evidence.`);

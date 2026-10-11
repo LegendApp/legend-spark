@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { create } from "../packages/cli/src/create.ts";
 import { run } from "../packages/cli/src/commands.ts";
-import { nodeCommand } from "../packages/cli/src/windows.ts";
+import { nodeCommand } from "../packages/cli/src/process.ts";
 import { readJson, writeJson } from "../packages/cli/src/project.ts";
 
 // Fresh packed consumer: real native generation plus the same App.tsx in all five bundles.

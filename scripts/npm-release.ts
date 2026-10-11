@@ -10,14 +10,16 @@ export function releaseNotes(changelog: string, version: string) {
   return changelog.slice(start + heading.length, end < 0 ? undefined : end).trim();
 }
 
-export async function alreadyPublished(version: string, archive: string, execute: Execute) {
-  const result = await execute(["npm", "view", `@legendapp/spark@${version}`, "version", "dist.integrity", "--json"], true);
+export const publishedPackages = ["@legendapp/spark", "@legendapp/create-spark"] as const;
+
+export async function alreadyPublished(version: string, archive: string, execute: Execute, name = "@legendapp/spark") {
+  const result = await execute(["npm", "view", `${name}@${version}`, "version", "dist.integrity", "--json"], true);
   if (result.code) {
     if (/\bE404\b/.test(result.output)) return false;
     throw new Error(`Could not check npm publication: ${result.output}`);
   }
   const metadata = JSON.parse(result.output);
   const integrity = `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}`;
-  if (metadata.version !== version || metadata["dist.integrity"] !== integrity) throw new Error(`npm ${version} contains different bytes. Never overwrite it; prepare a new version.`);
+  if (metadata.version !== version || metadata["dist.integrity"] !== integrity) throw new Error(`npm ${name}@${version} contains different bytes. Never overwrite it; prepare a new version.`);
   return true;
 }

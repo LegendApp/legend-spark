@@ -8,7 +8,8 @@ import { parseArgs } from "node:util";
 import { create } from "../packages/cli/src/create.ts";
 import { packageManifest } from "../packages/cli/src/local.ts";
 import { nativePackages, runtimeFor, incompatible, stateFile, writeJson, readJson, digest } from "../packages/cli/src/project.ts";
-import { nodeCommand, prepareWindows } from "../packages/cli/src/windows.ts";
+import { prepareWindows } from "../packages/cli/src/windows.ts";
+import { nodeCommand } from "../packages/cli/src/process.ts";
 import { run } from "../packages/cli/src/commands.ts";
 import { architecture } from "../packages/cli/src/platform.ts";
 

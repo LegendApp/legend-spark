@@ -242,6 +242,18 @@
         "react-native": "0.81.6",
       },
     },
+    "packages/create-spark": {
+      "name": "@legendapp/create-spark",
+      "version": "0.0.1-next.3",
+      "bin": {
+        "create-spark": "dist/index.js",
+      },
+      "dependencies": {
+        "cross-spawn": "7.0.6",
+        "expo-desktop": "1.0.0",
+        "npm": "11.21.0",
+      },
+    },
     "packages/desktop": {
       "name": "@legendapp/spark",
       "version": "0.0.1-next.3",
@@ -873,6 +885,8 @@
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.6.0", "", {}, "sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw=="],
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
+
+    "@legendapp/create-spark": ["@legendapp/create-spark@workspace:packages/create-spark"],
 
     "@legendapp/list": ["@legendapp/list@3.4.0", "", { "dependencies": { "use-sync-external-store": "^1.5.0" }, "peerDependencies": { "react": "*" } }, "sha512-Tlx7Uf9pRP/JbrekuWdKf1+42C9MTfl1wGkP8Lvmg2E2T9rCWQphYOs8aOkcvgbAkJ2S+WR+RTXHS2+6U+nROw=="],
 

@@ -5,9 +5,9 @@ beta template as Settings. Source ships inside the CLI; there are no dependencie
 on `legend-apps`, `legend-notes`, or another checkout.
 
 ```sh
-spark create MyNotes --example notes-lite
-spark create MyMusic --example music-lite
-spark create MyDiff --example diff-lite
+npm create @legendapp/spark@next MyNotes -- --example notes-lite
+npm create @legendapp/spark@next MyMusic -- --example music-lite
+npm create @legendapp/spark@next MyDiff -- --example diff-lite
 ```
 
 Inside each project, run `npm run web`, `npm run ios`, `npm run android`,

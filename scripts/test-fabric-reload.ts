@@ -4,7 +4,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import path from "node:path";
 import {writeFileSync,readFileSync,existsSync,rmSync} from 'node:fs';
 import {availablePort} from '../packages/cli/src/local.ts';
-import {nodeCommand} from '../packages/cli/src/windows.ts';
+import {nodeCommand} from '../packages/cli/src/process.ts';
 import {projectEnvironment} from '../packages/cli/src/project.ts';
 if (process.platform !== 'darwin') throw Error('Fabric reload acceptance requires macOS');
 const framework=path.resolve(import.meta.dirname,'..');

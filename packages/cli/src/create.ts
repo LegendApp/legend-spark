@@ -1,15 +1,15 @@
+import { creationManifest } from "./local.ts";
 import { installedRelease, materializeReleasePackages, packageSources, verifyMaterializedReleasePackages } from "./release.ts";
 import { packageManager, managerCommand, applyOverrides, localArchive, type PackageManager } from "./package-manager.ts";
 import { packArchive } from "./pack-archive.ts";
-import { spawnProcess } from "./process.ts";
+import { nodeCommand, spawnProcess } from "./process.ts";
 import { checkExpoDesktopNode } from "./expo-node.ts";
 import { configureExample, type Example } from "./examples.ts";
 import { hostPlatform, type AppPlatform } from "./platform.ts";
-import { nodeCommand } from "./windows.ts";
 import { cpSync, existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { readJson, writeJson } from "./project.ts";
+import { readJson, writeJson } from "./json.ts";
 import { run } from "./commands.ts";
 
 // Resolve relative to the installed CLI so packed consumers use the same starter.
@@ -38,6 +38,8 @@ export async function refreshLocalPackages(root: string, manifest: string, selec
 }
 
 export async function create(root: string, archiveManifest: string | undefined, platform: AppPlatform = hostPlatform(), universal = false, example?: Example, selectedManager?: PackageManager) {
+  if (!(universal || example) && !["macos", "windows"].includes(platform)) throw new Error("Use create --universal for mobile/web targets");
+  archiveManifest ??= creationManifest();
   const manager = packageManager(process.cwd(), selectedManager);
   await checkExpoDesktopNode(path.resolve(import.meta.dirname, ".."));
   const variant = universal || example ? "universal" : platform === "macos" ? "blank-typescript" : "windows";
