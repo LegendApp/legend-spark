@@ -1,0 +1,26 @@
+appId: so.legend.spark.examples.kitchensink
+name: Structured entries at every level reach app.log
+intent: >
+  After clearState the screen sets the level to debug and logs "Logging screen opened". "Log one
+  entry per level" writes debug, info, notice, error and fault entries with fields, then flushLogs
+  resolves. The screen reads app.log back: its newest line is the fault entry with its fields, the
+  error entry before it, and the debug entry is there too because the level is debug. The screen
+  is captured.
+checks: [REL-LOG-02]
+tags: [reliability-diagnostics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/logging" }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-entry-0-message, text: "Logging screen opened" }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-logging-file-0-name, equals: app.log }
+- tapOn: { id: reliability-diagnostics-logging-write-entries }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-write-entries-result, text: '{"written":5}' }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-entry-0-message, text: "Index is inconsistent" }, timeout: 10s }
+- assertVisible: { id: reliability-diagnostics-logging-entry-0-header, text: "/^\\d\\d:\\d\\d:\\d\\d\\.\\d{3} FAULT kitchen-sink\\.logging$/" }
+- assertText: { id: reliability-diagnostics-logging-entry-0-fields, equals: '{"expected":40,"found":39}' }
+- assertText: { id: reliability-diagnostics-logging-entry-1-message, equals: Upload failed }
+- assertText: { id: reliability-diagnostics-logging-entry-1-fields, equals: '{"file":"photo.heic","status":503,"attempt":2}' }
+- assertText: { id: reliability-diagnostics-logging-entry-4-message, equals: Cache lookup }
+- tapOn: { id: reliability-diagnostics-logging-flush }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-flush-result, text: "null" }, timeout: 10s }
+- takeScreenshot: logging-entries

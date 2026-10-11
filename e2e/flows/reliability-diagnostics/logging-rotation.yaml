@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: Log files rotate at their size limit
+intent: >
+  The screen configures 4,096-byte files with 3 kept. "Log 100 entries" writes about 14 KB, so
+  app.log rotates into app.1.log and app.2.log and the oldest files are deleted: the screen lists
+  exactly app.log, app.1.log and app.2.log, and every file is within 4,096 bytes. The newest entry
+  shown is the 100th.
+checks: [REL-LOG-03]
+tags: [reliability-diagnostics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/logging" }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-file-0-name }, timeout: 10s }
+- tapOn: { id: reliability-diagnostics-logging-write-burst }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-write-burst-result, text: '{"written":100}' }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-files-summary, text: '{"count":3,"withinLimit":true}' }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-logging-file-0-name, equals: app.log }
+- assertText: { id: reliability-diagnostics-logging-file-1-name, equals: app.1.log }
+- assertText: { id: reliability-diagnostics-logging-file-2-name, equals: app.2.log }
+- assertNotVisible: { id: reliability-diagnostics-logging-file-3-name }
+- assertText: { id: reliability-diagnostics-logging-entry-0-message, equals: Burst entry 100 of 100 }
+- takeScreenshot: logging-rotated

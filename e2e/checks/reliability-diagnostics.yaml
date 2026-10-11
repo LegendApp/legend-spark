@@ -1,0 +1,59 @@
+area: reliability-diagnostics
+prefix: REL
+checks:
+  REL-LOG-01:
+    title: getLoggingAvailability reports logging, the unified log, log files and diagnostics export as available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#165 REL.api-log"
+    covers:
+      - ./logging
+      - ./logging#getLoggingAvailability
+      - ./logging#getLoggingAvailability().available
+  REL-LOG-02:
+    title: A logger writes one entry per level (debug through fault) with structured fields; after flushLogs they are JSON lines in app.log, newest first on screen with their level, category, message and fields
+    platforms: [macos]
+    blocking: true
+    spec: "#165 REL.api-log"
+    covers:
+      - ./logging#createLogger
+      - ./logging#flushLogs
+      - ./logging#getLogFiles
+  REL-LOG-03:
+    title: With configureLogging at 4,096-byte files and 3 kept, 100 entries rotate app.log into app.1.log and app.2.log, no app.3.log remains, and every file stays within 4,096 bytes
+    platforms: [macos]
+    blocking: true
+    spec: "#165 REL.api-log"
+    covers:
+      - ./logging#configureLogging
+      - ./logging#getLogFiles
+  REL-LOG-04:
+    title: exportDiagnostics writes a local zip of diagnostics.json and the log files, without a panel, and reports its entries and size
+    platforms: [macos]
+    blocking: true
+    spec: "#165 REL.api-log"
+    covers:
+      - ./logging#exportDiagnostics
+  REL-LOG-05:
+    title: Export diagnostics asks for a destination with a save panel; canceling writes nothing and resolves {"canceled":true}, saving writes the zip there
+    platforms: [macos]
+    blocking: true
+    spec: "#165 REL.api-log"
+    covers:
+      - ./logging#exportDiagnostics
+  REL-LOG-06:
+    title: On Windows, logging and each feature report unsupported-platform, and writing entries, flushing and exporting fail with SparkError:E_UNSUPPORTED_PLATFORM
+    platforms: [windows]
+    blocking: true
+    spec: "#165 REL.api-log; Windows implementation in #319"
+    covers:
+      - ./logging#getLoggingAvailability().available
+  REL-LOG-07:
+    title: When a file takes the log folder's place, addLoggingErrorListener hears the failure once with a count, hears again when writing resumes with the total, and flushLogs rejects a LogWriteError counting the 2 entries not written
+    platforms: [macos]
+    blocking: true
+    spec: "#165 REL.api-log"
+    covers:
+      - ./logging#addLoggingErrorListener
+      - ./logging#LogWriteError
+      - ./logging#flushLogs
