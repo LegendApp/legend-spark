@@ -42,6 +42,16 @@ describe("coverage engine", () => {
     });
   });
 
+  test("dev-flows/ flows (build: dev, outside the gate) list checks for their area", () => {
+    const report = checkCoverage([
+      { file: "e2e/checks/devtools.yaml", kind: "registry", source: "area: devtools\nprefix: DEVT\nchecks:\n  DEVT-MENU-01:\n    title: Present\n    covers: [./config]\n" },
+      { file: "e2e/dev-flows/devtools/menu.yaml", kind: "flow", source: "appId: a\nname: Menu\nbuild: dev\nchecks: [DEVT-MENU-01]\n---\n- launchApp\n" },
+    ], { "./config": { values: [], types: [], flags: {} } });
+    expect(report.problems).toEqual([]);
+    expect(report.checks[0]).toMatchObject({ area: "devtools", flows: ["e2e/dev-flows/devtools/menu.yaml"] });
+    expect(collect("e2e/dev-flows")).toContainEqual(["e2e/dev-flows/devtools/dev-menu.yaml", "flow"]);
+  });
+
   test("detects every failure mode with its location and area", () => {
     const report = coverage("broken");
     expect(report.ok).toBe(false);

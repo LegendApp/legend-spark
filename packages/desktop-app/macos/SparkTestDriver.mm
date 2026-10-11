@@ -31,7 +31,7 @@ BOOL SparkTestDriverActive(void) { return active; }
 BOOL SparkTestDriverEnding(void) { return ending; }
 void SparkTestDriverDidMount(void) { lastMount = CACurrentMediaTime(); }
 static NSArray<NSString *> *SparkBuiltInCommands(void) {
-  return [@[@"ping", @"navigate", @"openFile", @"waitFor", @"elements", @"setAppAppearance", @"capture", @"quit"] arrayByAddingObjectsFromArray:SparkDriverInputCommandNames()];
+  return [@[@"ping", @"navigate", @"openFile", @"waitFor", @"elements", @"setAppAppearance", @"capture", @"menus", @"quit"] arrayByAddingObjectsFromArray:SparkDriverInputCommandNames()];
 }
 static NSMutableDictionary<NSString *, SparkTestDriverHandler> *SparkModuleCommands(void) {
   static NSMutableDictionary *commands;
@@ -315,6 +315,25 @@ static void SparkElements(SparkDriverReply reply) {
   }
   reply(@{ @"ok": @YES, @"windows": windows, @"elements": elements });
 }
+// The application menu as AppKit holds it. A driven app has no menu bar on screen, but NSApp.mainMenu exists.
+// -[NSMenu update] runs validation first, so `enabled` and `state` are what a user opening the menu would see.
+static NSArray *SparkMenuItems(NSMenu *menu) {
+  [menu update];
+  NSMutableArray *items = [NSMutableArray new];
+  for (NSMenuItem *item in menu.itemArray) {
+    if (item.isSeparatorItem) { [items addObject:@{ @"separator": @YES }]; continue; }
+    NSMutableDictionary *entry = [@{ @"title": item.title, @"enabled": @(item.enabled), @"hidden": @(item.hidden),
+      @"state": item.state == NSControlStateValueOn ? @"on" : item.state == NSControlStateValueMixed ? @"mixed" : @"off" } mutableCopy];
+    if (item.identifier) entry[@"id"] = item.identifier;
+    if (item.keyEquivalent.length) entry[@"shortcut"] = @{ @"key": item.keyEquivalent, @"modifiers": @(item.keyEquivalentModifierMask & NSEventModifierFlagDeviceIndependentFlagsMask) };
+    if (item.toolTip) entry[@"toolTip"] = item.toolTip;
+    if (item.alternate) entry[@"alternate"] = @YES;
+    // The Services menu is the system's; populating it would ask every installed service.
+    if (item.submenu && item.submenu != NSApp.servicesMenu) entry[@"items"] = SparkMenuItems(item.submenu);
+    [items addObject:entry];
+  }
+  return items;
+}
 static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   NSString *command = request[@"command"];
   if ([command isEqual:@"ping"]) reply(@{ @"ok": @YES });
@@ -343,6 +362,7 @@ static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   else if ([command isEqual:@"setAppAppearance"]) SparkSetAppearance(request, reply);
   else if ([command isEqual:@"capture"]) SparkCapture(request, reply);
   else if ([SparkDriverInputCommandNames() containsObject:command]) SparkDriverInput(command, request, reply);
+  else if ([command isEqual:@"menus"]) reply(@{ @"ok": @YES, @"menus": NSApp.mainMenu ? SparkMenuItems(NSApp.mainMenu) : @[] });
   else if ([command isKindOfClass:NSString.class] && SparkModuleCommands()[command]) SparkModuleCommands()[command](request, reply);
   else reply(SparkDriverFailure(@"E_UNKNOWN_COMMAND", [NSString stringWithFormat:@"Unknown command %@", command]));
 }

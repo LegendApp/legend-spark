@@ -18,6 +18,10 @@ export type Modifier = "cmd" | "ctrl" | "option" | "shift" | "fn";
 /** One entry of `elements`: a visible view with a testID, or an accessibility element, in waitFor frame coordinates. */
 export type DriverElement = { key: string; parent?: string; window: string; id?: string; role?: string; label?: string; text?: string; value?: string; frame: Frame };
 export type DriverWindowInfo = { id: string; title: string; key: boolean; main: boolean; frame: Frame };
+/** One application menu item as AppKit holds it (`menus`). `shortcut.modifiers` are NSEventModifierFlags bits. */
+export type DriverMenuItem =
+  | { separator: true }
+  | { separator?: undefined; title: string; id?: string; enabled: boolean; hidden: boolean; state: "on" | "off" | "mixed"; shortcut?: { key: string; modifiers: number }; toolTip?: string; alternate?: boolean; items?: DriverMenuItem[] };
 export type LaunchOptions = { executable: string; args?: string[]; env?: Record<string, string>; log?: ProcessLog; startTimeoutMs?: number };
 type Reply = { id?: unknown; ok: boolean; error?: { code: string; message: string }; [key: string]: unknown };
 
@@ -143,6 +147,8 @@ export class Driver {
     const reply = await this.request({ command: "capture", window, name, timeoutMs }, timeoutMs + 10000);
     return { file: path.join(this.directory, reply.file as string), width: reply.width as number, height: reply.height as number, scale: reply.scale as number };
   }
+  /** The application menu bar, validated as when a user opens it. A driven app shows no menu bar, but has one. */
+  async menus() { return (await this.request({ command: "menus" }, 10000)).menus as DriverMenuItem[]; }
   /** Switches the motion engine's clock (docs/motion.md#virtual-clock-for-the-test-driver). Needs the motion module in the app. */
   async setClock(mode: "virtual" | "real") { return clock(await this.request({ command: "setClock", mode }, 10000)); }
   /** Advances the virtual motion clock and every motion layer together. */

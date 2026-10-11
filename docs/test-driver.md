@@ -19,7 +19,7 @@ cd examples/kitchen-sink && bun run rebuild:macos   # spark build --dev
 Then capture from the repository root:
 
 ```sh
-bun run ks:capture <area>/<screen> [--appearance light|dark] [--locale ar] [--out e2e/verification/<N>/]
+bun run ks:capture <area>/<screen> [--appearance light|dark] [--locale ar] [--out e2e/verification/<N>/] [--dev-bundle]
 bun run ks:capture --wait-for infra-shell-root --name catalog-dark --appearance dark   # the launch screen
 ```
 
@@ -28,7 +28,8 @@ navigates to `spark-ks://<area>/<screen>`, waits for `<area>-<screen>-root` (or
 `--wait-for <testID>`), applies the app appearance (light by default), renders the main
 window to `<out>/<name>.png` and quits. The default name is
 `<area>-<screen>-<appearance>[-<locale>]` and the default output directory is
-`examples/kitchen-sink/.spark/captures`. `--locale` launches with `-AppleLanguages`.
+`examples/kitchen-sink/.spark/captures`. `--locale` launches with `-AppleLanguages`. The JavaScript is built without `__DEV__`, like a release
+bundle; `--dev-bundle` serves a development bundle instead, to capture development-only UI.
 
 Flows run through the `driver` runner backend
 ([docs/e2e-flows.md](e2e-flows.md#the-driver-backend)):
@@ -159,6 +160,7 @@ send one request at a time; each reply echoes `id`. Failures are
 | `scroll` | target, `deltaX`, `deltaY`, `precise` (false), `modifiers` | One scroll wheel event over the target. Deltas are positive toward the end of the content (down, right): points when `precise`, else lines. |
 | `pressKey` | `key`, `modifiers`, `window` | One key press. `key` is one character: a character key, or AppKit's character for a function key (`"\r"` Return, `"\u001b"` Escape, `"\u007f"` Delete, `"\uf700"` Up arrow, `"\uf704"` F1). |
 | `typeText` | `text`, `window` | One key press per user-perceived character, any Unicode (no input method). A newline presses Return. |
+| `menus` | | `menus`: the application menu bar (`NSApp.mainMenu`) as a tree, after `-[NSMenu update]` validates it, so `enabled` and `state` are what a user opening the menu sees. Items have `title`, `id`, `enabled`, `hidden`, `state` (`on`/`off`/`mixed`), optional `shortcut` (`key`, `modifiers` as NSEventModifierFlags bits), `toolTip`, `alternate` and `items`; separators are `{ "separator": true }`. The system Services menu is not expanded. A driven app shows no menu bar, but it has one. |
 | `quit` | | `ok`, then the session ends and the app quits. |
 
 Optional modules add commands with `SparkTestDriverRegisterCommand` (main thread; built-in

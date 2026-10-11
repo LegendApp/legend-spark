@@ -1,0 +1,41 @@
+area: devtools
+prefix: DEVT
+checks:
+  DEVT-MENU-01:
+    title: A development bundle publishes the Developer menu before Window, composed with the app's own menus, with Reload, Open DevTools, Toggle Element Inspector, Toggle Performance Monitor, Fast Refresh and Show Bundle Info, and reports it ready
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md Developer menu; #270"
+    covers:
+      - ./menus#getDeveloperMenuState
+      - ./menus#addDeveloperMenuListener
+      - ./menus#createMenu
+  DEVT-MENU-02:
+    title: The Developer menu claims Ctrl+Cmd+Z (not reserved by macOS, not used by the app) through a hidden item whose key equivalent pops the menu up
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md Developer menu; #270"
+    covers:
+      - ./menus#getDeveloperMenuState
+      - ./shortcuts/commands#getReservedShortcuts
+  DEVT-MENU-03:
+    title: Developer menu items follow the key window's runtime; with no key window Reload stays enabled and every per-window item is disabled, and Open DevTools stays disabled with a tooltip until DevTools support registers
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md Developer menu; #270"
+    covers:
+      - ./menus#createMenu
+  DEVT-MENU-04:
+    title: Developer menu titles follow the system language (English, Arabic)
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md Developer menu; #270"
+    covers:
+      - ./menus#getDeveloperMenuState
+  DEVT-MENU-05:
+    title: A release JavaScript bundle has no Developer menu, and getDeveloperMenuState reports release-build
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md Developer menu; #270, #274"
+    covers:
+      - ./menus#getDeveloperMenuState

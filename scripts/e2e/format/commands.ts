@@ -81,6 +81,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   // Menus
   selectMenu: single("menus", "Choose an app menu item.", "path", menuPath),
   assertMenuItem: spec("menus", "Assert menu item state.", { path: menuPath, enabled: bool, checked: bool, shortcut: accelerator }, { required: ["path"] }),
+  assertAppMenu: spec("menus", "Assert an app menu item from the in-app driver's menu snapshot, validated as when a user opens the menu (assertMenuItem is the black-box form). exists: false asserts it is absent.", { path: menuPath, exists: bool, enabled: bool, checked: bool, hidden: bool, shortcut: accelerator, toolTip: str }, { required: ["path"], driver: true }),
   assertMenuAlternate: spec("menus", "Assert the alternate item shown while a modifier is held.", { path: menuPath, modifier, becomes: str }, { required: ["path", "modifier", "becomes"] }),
   openContextMenu: spec("menus", "Open a context menu on a target.", { on: selector, via: via("rightClick", "ctrlClick", "menuKey", "shiftF10") }, { required: ["on"] }),
   selectContextMenu: single("menus", "Choose an item in the open context menu.", "path", str),

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { isMap, isScalar, type Document, type Node, type Pair } from "yaml";
 import type { SdkSurface } from "../api-surface.ts";
-import type { Kind } from "./files.ts";
+import { FLOW_DIRS, type Kind } from "./files.ts";
 import { checkFlow, checkRegistry, formatDiagnostic, locate, type Diagnostic, type SourceLocation } from "./format/parser.ts";
 
 export type SurfaceItem = { id: string; kind: "subpath" | "export" | "availability"; subpath: string; coveredBy: string[] };
@@ -43,10 +43,10 @@ function withContainers(id: string): string[] {
   return [...new Set([id, subpath, ...(name ? [`${subpath}#${name}`] : [])])];
 }
 
-/** Registries are named for their area; flows live in flows/<area>/. */
+/** Registries are named for their area; flows live in flows/<area>/ or dev-flows/<area>/. */
 export function areaOf(file: string, kind: Kind): string {
   const segments = file.split(path.sep);
-  const flows = segments.lastIndexOf("flows");
+  const flows = Math.max(...FLOW_DIRS.map(dir => segments.lastIndexOf(dir)));
   return (kind === "registry" || flows < 0 ? segments.at(-1)! : segments[flows + 1]!).replace(/\.ya?ml$/, "");
 }
 

@@ -1,0 +1,34 @@
+appId: so.legend.spark.examples.kitchensink
+name: Developer menu in a development build
+intent: A development bundle adds the Developer menu before Window, in the system language, with the hidden Ctrl+Cmd+Z item that pops it up. A driven app never has a key window, so only Reload is enabled and Open DevTools carries its unavailable tooltip.
+checks: [DEVT-MENU-01, DEVT-MENU-02, DEVT-MENU-03, DEVT-MENU-04]
+tags: [devtools]
+platforms: [macos]
+build: dev
+matrix: { locale: [en, ar] }
+timeout: 120s
+---
+- launchApp: { openUrl: "spark-ks://devtools/dev-menu" }
+- assertVisible: { id: devtools-dev-menu-root, timeout: 30s }
+- assertVisible: { id: devtools-dev-menu-state-ready, timeout: 15s }
+- runFlow:
+    when: { matrix: { locale: en } }
+    commands:
+      - assertAppMenu: { path: "Developer > Reload", enabled: true }
+      - assertAppMenu: { path: "Developer > Open DevTools", enabled: false, toolTip: "React Native DevTools is not available in this build." }
+      - assertAppMenu: { path: "Developer > Toggle Element Inspector", enabled: false }
+      - assertAppMenu: { path: "Developer > Toggle Performance Monitor", enabled: false }
+      - assertAppMenu: { path: "Developer > Fast Refresh", enabled: false }
+      - assertAppMenu: { path: "Developer > Show Bundle Info", enabled: false }
+      - assertAppMenu: { path: "Developer > Show Developer Menu", hidden: true, enabled: true, shortcut: Ctrl+Cmd+Z }
+      - assertAppMenu: { path: "Window > Minimize", exists: true }
+- runFlow:
+    when: { matrix: { locale: ar } }
+    commands:
+      - assertAppMenu: { path: "المطوّر > إعادة التحميل", enabled: true }
+      - assertAppMenu: { path: "المطوّر > فتح أدوات المطوّر", enabled: false, toolTip: "أدوات React Native للمطوّر غير متاحة في هذا الإصدار." }
+      - assertAppMenu: { path: "المطوّر > تبديل فاحص العناصر", enabled: false }
+      - assertAppMenu: { path: "المطوّر > تبديل مراقب الأداء", enabled: false }
+      - assertAppMenu: { path: "المطوّر > التحديث السريع", enabled: false }
+      - assertAppMenu: { path: "المطوّر > عرض معلومات الحزمة", enabled: false }
+      - assertAppMenu: { path: "المطوّر > عرض قائمة المطوّر", hidden: true, shortcut: Ctrl+Cmd+Z }

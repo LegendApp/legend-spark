@@ -4,6 +4,7 @@ import { SparkError, asyncRegistration, invokeNative, type Availability, type As
 import { menuItems, selectableMenuIds, type MenuInputItem, type MenuWireItem, type MenuAction as SharedMenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
 import { setShortcutInventory, type ShortcutInventoryEntry } from "@legendapp/spark-desktop-app/src/contracts/shortcut-inventory";
 import { composeWindowsMenus } from "./windows-menus";
+import { wireDecorators } from "./wire-decorators";
 type MenuLeaf = Extract<MenuInputItem, { type: "separator" | "action" | "checkbox" | "role" }>;
 export type MenuItem = MenuLeaf | (Omit<Extract<MenuInputItem, { type: "submenu" }>, "items"> & { items: readonly MenuItem[] });
 export type MenuFeature = "alternates" | "lifecycle" | "helpSearch" | "mixedState" | "icons" | "hiddenItems";
@@ -60,11 +61,12 @@ function submenuIds(items: MenuWireItem[]): Set<string> {
   }
   visit(items); return ids;
 }
-function snapshot(value: MenuUpdate, token: string, creating = false, lifecycle = false): MenuWireItem[] {
+function snapshot(id: string, value: MenuUpdate, token: string, creating = false, lifecycle = false): MenuWireItem[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new SparkError("E_INVALID_ARGUMENT", "Expected menu options");
   for (const key of Object.keys(value)) if (!["items", ...(creating ? ["id", "onAction", "onOpen", "onClose"] : [])].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported menu option: ${key}`);
   const items = applicationItems(value.items);
   if (items.some(item => !item.items)) throw new SparkError("E_INVALID_ARGUMENT", "Application menu roots must be submenus");
+  wireDecorators.get(id)?.(items);
   function annotate(items: MenuWireItem[]) { for (const item of items) { item._sparkOwner = token; if (item.items) { if (lifecycle) item._sparkLifecycle = true; annotate(item.items); } } }
   annotate(items); return items;
 }
@@ -89,7 +91,7 @@ const inventoryToken = {};
 export async function createMenu(options: MenuOptions): Promise<Menu> {
   available();
   const token = `menu-${Date.now()}-${++sequence}`;
-  const items = snapshot(options, token, true, Boolean(options?.onOpen || options?.onClose));
+  const items = snapshot(options?.id, options, token, true, Boolean(options?.onOpen || options?.onClose));
   for (const name of ["onAction", "onOpen", "onClose"] as const) {
     if (options[name] !== undefined && typeof options[name] !== "function") throw new SparkError("E_INVALID_ARGUMENT", `Expected ${name} callback`);
   }
@@ -123,7 +125,7 @@ export async function createMenu(options: MenuOptions): Promise<Menu> {
     id,
     async update(options) {
       if (stopped) throw new SparkError("E_CLOSED", "Menu was removed");
-      const items = snapshot(options, token, false, Boolean(onOpen || onClose));
+      const items = snapshot(id, options, token, false, Boolean(onOpen || onClose));
       await serial(async () => {
         // Callers commonly rebuild identical item literals each render; republishing the whole
         // bar would rebuild native menus for no visible change. Compare the wire trees first.
@@ -137,3 +139,4 @@ export async function createMenu(options: MenuOptions): Promise<Menu> {
   };
 }
 export { useMenu, type MenuState, type UseMenuOptions } from "./hooks";
+export { addDeveloperMenuListener, getDeveloperMenuState, type DeveloperMenuShortcutConflict, type DeveloperMenuState } from "./developer-menu-state";

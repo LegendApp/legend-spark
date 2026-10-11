@@ -82,7 +82,7 @@ test("the Shell renders English left to right and explains links that open no sc
   await mount(Shell);
   expect(host("infra-shell-root")[0].props.style).toEqual({ direction: "ltr" });
   expect(texts()).toContain("dev · ks");
-  expect(texts()).toContain("2 of 37 areas have screens. Every screen opens from spark-ks://<area>/<screen>.");
+  expect(texts()).toContain("2 of 38 areas have screens. Every screen opens from spark-ks://<area>/<screen>.");
   await act(async () => host("infra-shell-screen-windows-frame")[0].props.onPress());
   expect(host("infra-shell-breadcrumb-separator").map((node: any) => [text(node), node.props.style.writingDirection])).toEqual([["›", "ltr"], ["›", "ltr"]]);
   expect(host("windows-frame-root")).toHaveLength(1);

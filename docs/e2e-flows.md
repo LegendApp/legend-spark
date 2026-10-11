@@ -16,6 +16,7 @@ e2e/
   budgets.yaml                # performance baselines per reference machine
   checks/<area>.yaml          # check registry, one file per area
   flows/<area>/<name>.yaml    # one behavior per flow; these are gate flows
+  dev-flows/<area>/<name>.yaml  # `build: dev` flows: development builds only, outside the gate
   subflows/                   # reusable command lists (runFlow)
   fixtures/                   # docs, volumes, appcasts, clipboard payloads, network mocks
   golden/<platform>/<appearance>/<locale>/<name>.png   # see Visual goldens
@@ -23,7 +24,9 @@ e2e/
 
 The CLI knows a file's kind from where it is: `checks/<area>.yaml` is a registry,
 `gate.yaml` is the manifest, `budgets.yaml` is the budgets file, anything under `subflows/` is a subflow, and anything
-under `flows/` is a flow. A directory scan skips YAML anywhere else, such as fixtures.
+under `flows/` or `dev-flows/` is a flow. The release gate runs `flows/`, which test release builds. `dev-flows/` holds
+flows with `build: dev`, for behavior only a development build has (the Developer menu); they list checks for
+coverage like any flow, and you run them yourself against a development build. A directory scan skips YAML anywhere else, such as fixtures.
 A file you name on the command line outside those folders is checked as a flow.
 
 ## Workflow for a flows task
@@ -425,7 +428,9 @@ input, fully transparent and ignoring the real pointer. It drives the Kitchen Si
 the `--app` bundle (the gate passes its release build), or the last development build.
 A development build loads JavaScript over HTTP, so the backend bundles the current
 source once per run (`expo export:embed`, no Metro) and serves it to each launch; a release
-build runs its embedded bundle. A flow whose `appId` is not the app's bundle identifier
+build runs its embedded bundle. That bundle is built without `__DEV__`, like a release bundle;
+a `build: dev` flow gets a development bundle (`__DEV__` code such as the Developer menu and
+LogBox) instead, and fails against a release build, which can only run its embedded bundle. A flow whose `appId` is not the app's bundle identifier
 fails with `invalid`.
 
 | Flow | Driver |
@@ -443,6 +448,7 @@ fails with `invalid`.
 | matrix `appearance` | `setAppAppearance` after each launch (the app override; the OS setting is untouched) |
 | matrix `locale` | Launch arguments `-AppleLanguages (<locale>) -AppleLocale <locale>` |
 | `setAppAppearance` | `setAppAppearance`; lasts until the app quits |
+| `assertAppMenu` | `menus`: the menu bar as AppKit holds it, validated as when a user opens it. `path` matches titles; `exists: false` passes when any segment is missing. Polled like other checks. |
 | `setClock`, `advanceClock` | The motion engine's `setClock` and `advanceClock` driver commands ([motion.md](motion.md#virtual-clock-for-the-test-driver)); `advanceClock` sends `duration` in milliseconds |
 | `takeScreenshot`, `assertScreenshot`, failure screenshot | `capture` of the main window. Element frames are points from the window's top-left, the capture's origin, so masks line up. The `window` key is `unsupported` (the driver cannot list windows). |
 | failure evidence | Each launch's app log, and a capture of the main window while the app runs |
@@ -655,6 +661,7 @@ A golden only works if the same build renders the same pixels every time. The dr
 | `missing-checks` | The flow has no `checks:`, or an empty list. |
 | `check-id` | A check ID that is not `PREFIX-NAME-NN`, such as `MW-TEAR-01`. |
 | `dev-build` | `build: dev` in a gate flow (under `flows/`). |
+| `dev-flow-build` | A flow under `dev-flows/` without `build: dev`. |
 | `point-selector` | A `point` selector that is not anchored `within: { id }`. |
 | `schema`, `yaml`, `structure` | Validation problems (also reported by `e2e:validate`). |
 

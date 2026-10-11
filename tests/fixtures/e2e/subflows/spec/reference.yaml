@@ -37,6 +37,7 @@
 - selectMenu: "File > Export > PDF…"
 - assertMenuItem: { path: "View > Show Sidebar", enabled: true, checked: true, shortcut: "cmd+ctrl+s" }
 - assertMenuAlternate: { path: "File > Close", modifier: option, becomes: "Close All" }
+- assertAppMenu: { path: "Developer > Show Developer Menu", hidden: true, shortcut: "ctrl+cmd+z" }
 - openContextMenu: { on: { id: row-3 }, via: rightClick }
 - selectContextMenu: "Move To > Archive"
 - openDockMenu: { select: "New Window" }

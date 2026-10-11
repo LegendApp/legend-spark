@@ -6,8 +6,8 @@
 import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
-import { parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
-import type { Capture as DriverCapture, DriverElement, DriverWindow, DriverWindowInfo, InputTarget, Modifier } from "../driver.ts";
+import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
+import { DriverError, type Capture as DriverCapture, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo, type Frame, type InputTarget, type Modifier } from "../driver.ts";
 import { ms } from "./executor.ts";
 import { matchesText, parseSelector } from "./selectors.ts";
 import {
@@ -30,12 +30,14 @@ export type DriverClient = {
   scroll(target: InputTarget, delta: { deltaX?: number; deltaY?: number; precise?: boolean }): Promise<void>;
   pressKey(key: string, modifiers?: Modifier[]): Promise<void>;
   typeText(text: string): Promise<void>;
+  menus(): Promise<DriverMenuItem[]>;
   quit(): Promise<void>;
   close(): Promise<void>;
 };
 /** The app under test (`KitchenSinkApp` in scripts/e2e/kitchen-sink.ts): prepared per flow, launched in driver mode. */
 export type DriverApp = {
-  open(): Promise<{ app: string; bundleId: string }>;
+  /** `dev`: a `build: dev` flow, which needs the development JavaScript bundle (only a dev build can load one). */
+  open(options: { dev: boolean }): Promise<{ app: string; bundleId: string }>;
   /** Launch arguments and environment variables the launch sets itself, so a flow may not; `locale` only when the matrix sets one. */
   readonly reserved: { readonly arguments: readonly string[]; readonly env: readonly string[]; readonly locale: readonly string[] };
   /** Deletes the app's persisted state (docs/e2e-flows.md#clearstate) while it is not running; returns what existed. */
@@ -89,6 +91,8 @@ export class DriverBackend implements Backend {
     },
     assertText: (args, context) => this.assertText(args, context),
     assertA11y: (args, context) => this.assertA11y(args, context),
+    // White-box: the menu bar as AppKit holds it, validated as when a user opens it (assertMenuItem is the black-box form).
+    assertAppMenu: (args, context) => context.eventually(async () => assertMenu(await this.client().menus(), args)),
   };
   private session?: Session;
   private driver?: DriverClient;
@@ -102,7 +106,7 @@ export class DriverBackend implements Backend {
     this.session = session;
     this.logs = [];
     this.launches = 0;
-    const { app, bundleId } = await this.app.open();
+    const { app, bundleId } = await this.app.open({ dev: session.flow.header.build === "dev" });
     if (session.flow.header.appId === bundleId) return;
     await this.app.close(); // The runner stops only backends that started.
     throw new Failure("invalid", `the flow is for ${session.flow.header.appId}, but ${app} is ${bundleId}`);
@@ -269,5 +273,32 @@ export class DriverBackend implements Backend {
     const file = path.join(dir, "driver-main.png");
     await this.screenshot(file);
     return [...artifacts, { kind: "screenshot", path: file }];
+  }
+}
+
+const titleOf = (item: DriverMenuItem) => item.separator ? "" : item.title.trim();
+/** `path` is titles joined by " > " ("Developer > Reload"); every other key that is present must match. */
+export function assertMenu(menus: readonly DriverMenuItem[], args: Record<string, unknown>) {
+  const path = String(args.path), titles = path.split(" > ").map(title => title.trim());
+  let items: readonly DriverMenuItem[] | undefined = menus, item: DriverMenuItem | undefined;
+  for (const title of titles) {
+    item = items?.find(candidate => titleOf(candidate) === title);
+    if (!item || item.separator) {
+      if (args.exists === false) return;
+      throw new Failure("assertion", `no menu item ${path}: "${title}" is not in [${(items ?? []).filter(candidate => !candidate.separator).map(titleOf).join(", ")}]`);
+    }
+    items = item.items;
+  }
+  const found = item as Exclude<DriverMenuItem, { separator: true }>;
+  if (args.exists === false) throw new Failure("assertion", `menu item ${path} exists`);
+  const fail = (what: string, expected: unknown, actual: unknown) => { throw new Failure("assertion", `menu item ${path}: expected ${what} ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`); };
+  if (args.enabled !== undefined && found.enabled !== args.enabled) fail("enabled", args.enabled, found.enabled);
+  if (args.hidden !== undefined && found.hidden !== args.hidden) fail("hidden", args.hidden, found.hidden);
+  if (args.checked !== undefined && (found.state === "on") !== args.checked) fail("checked", args.checked, found.state);
+  if (args.toolTip !== undefined && found.toolTip !== args.toolTip) fail("toolTip", args.toolTip, found.toolTip ?? null);
+  if (args.shortcut !== undefined) {
+    const actual = found.shortcut ? formatAccelerator({ key: found.shortcut.key.toLowerCase(), modifiers: found.shortcut.modifiers }) : null;
+    const expected = formatAccelerator(parseAccelerator(String(args.shortcut), "macos", { allowUnmodifiedCharacter: true, allowExtendedKeys: true }));
+    if (actual !== expected) fail("shortcut", expected, actual);
   }
 }

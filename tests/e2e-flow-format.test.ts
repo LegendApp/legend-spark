@@ -220,7 +220,7 @@ describe("flow structure", () => {
 describe("catalog", () => {
   test("driver-backed commands are marked", () => {
     expect(Object.keys(COMMANDS).filter(name => COMMANDS[name]!.driver).sort()).toEqual([
-      "advanceClock", "assertEnergy", "assertFrames", "assertIdleCpu", "assertMemory", "assertMotion", "assertNoFlicker", "assertNoLayoutThrash", "assertNoLeaks",
+      "advanceClock", "assertAppMenu", "assertEnergy", "assertFrames", "assertIdleCpu", "assertMemory", "assertMotion", "assertNoFlicker", "assertNoLayoutThrash", "assertNoLeaks",
       "assertPaused", "assertScreenshot", "assertStartup", "assertState", "captureMotion", "interruptAt", "measure", "setAppAppearance", "setClock", "startTrace",
       "stopTrace", "takeScreenshot",
     ]);
@@ -280,6 +280,10 @@ describe("lint", () => {
     expect(lint(flow("- launchApp\n", "build: dev\n"))).toEqual(["4:8 dev-build"]);
     expect(lint(flow("- launchApp\n", "build: dev\n"), false)).toEqual([]);
     expect(lint(flow("- launchApp\n", "build: release\n"))).toEqual([]);
+    const development = (source: string) => lintFlow(source, "t.yaml", { gate: false, development: true }).map(diagnostic => `${diagnostic.line}:${diagnostic.column} ${diagnostic.rule}`);
+    expect(development(flow("- launchApp\n", "build: dev\n"))).toEqual([]);
+    expect(development(flow("- launchApp\n", "build: release\n"))).toEqual(["4:8 dev-flow-build"]);
+    expect(development(flow("- launchApp\n"))).toEqual(["1:1 dev-flow-build"]);
   });
 
   test("sleeps and unknown commands", () => {

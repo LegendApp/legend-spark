@@ -1,6 +1,7 @@
 // Runs parsed flows against backends (docs/e2e-flows.md#running-flows).
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { FLOW_DIRS } from "../files.ts";
 import { COMMANDS } from "../format/commands.ts";
 import { checkFlow, checkSubflow, formatDiagnostic, type Condition, type FlowAst, type FlowCommand, type SourceLocation } from "../format/parser.ts";
 import { NESTED, SELECTOR_PROPS } from "../format/primitives.ts";
@@ -98,9 +99,9 @@ function interpolateArgs(command: FlowCommand, env: Env): Record<string, unknown
 }
 const selectorArgs = (args: Record<string, unknown>) => Object.fromEntries(Object.entries(args).filter(([key]) => key in SELECTOR_PROPS));
 
-/** The e2e root of a flow: the parent of its nearest `flows` directory, else its own directory. */
+/** The e2e root of a flow: the parent of its nearest `flows` or `dev-flows` directory, else its own directory. */
 export function rootOf(file: string): string {
-  for (let dir = path.dirname(file); dir !== path.dirname(dir); dir = path.dirname(dir)) if (path.basename(dir) === "flows") return path.dirname(dir);
+  for (let dir = path.dirname(file); dir !== path.dirname(dir); dir = path.dirname(dir)) if (FLOW_DIRS.includes(path.basename(dir))) return path.dirname(dir);
   return path.dirname(file);
 }
 

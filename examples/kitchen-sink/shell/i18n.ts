@@ -105,6 +105,7 @@ const en: Messages = {
     "multiwindow": "Multiwindow",
     "component-library": "Component library",
     "future-facing-capabilities": "Future-facing capabilities",
+    "devtools": "DevTools",
   },
 };
 
@@ -185,6 +186,7 @@ const ar: Messages = {
     "multiwindow": "النوافذ المتعددة",
     "component-library": "مكتبة المكوّنات",
     "future-facing-capabilities": "القدرات المستقبلية",
+    "devtools": "أدوات المطوّر",
   },
 };
 
