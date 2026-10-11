@@ -30,7 +30,12 @@ window to `<out>/<name>.png` and quits. The default name is
 `<area>-<screen>-<appearance>[-<locale>]` and the default output directory is
 `examples/kitchen-sink/.spark/captures`. `--locale` launches with `-AppleLanguages`.
 
-Flows use the client in `scripts/e2e/driver.ts`:
+Flows run through the `driver` runner backend
+([docs/e2e-flows.md](e2e-flows.md#the-driver-backend)):
+`bun run e2e:run <flow> --backend driver`. It and `ks:capture` share
+`scripts/e2e/kitchen-sink.ts`, which resolves the app (a `.app` path, or the last
+development build), bundles and serves JavaScript to development builds, and launches
+in driver mode. Both use the client in `scripts/e2e/driver.ts`:
 
 ```ts
 const driver = await launchDriver({ executable, args, env });
@@ -84,8 +89,8 @@ send one request at a time; each reply echoes `id`. Failures are
 | --- | --- | --- |
 | `ping` | | `ok` |
 | `navigate` | `url`, `timeoutMs` (30000) | Waits for the first rendered UI to settle (so link listeners are subscribed), then opens the URL through `application:openURLs:`, the path the OS uses for deep links. |
-| `waitFor` | `testID`, `timeoutMs` (10000) | `window` identifier and `frame` (window coordinates) of the first visible view whose accessibility identifier (React Native `testID`) matches. `E_TIMEOUT` otherwise. |
-| `setAppAppearance` | `appearance` (`light`/`dark`), `timeoutMs` (10000) | Sets `NSApp.appearance` (an app override; the OS setting is untouched; per-window appearances still win). If the effective appearance changed, replies `changed: true` once a UI update has mounted and settled, else `E_TIMEOUT`. |
+| `waitFor` | `testID`, `timeoutMs` (10000) | `window` identifier and `frame` of the first visible view whose accessibility identifier (React Native `testID`) matches. `frame` is in points from the top-left of the window's frame view, the area `capture` renders, so frame × `scale` is the view's pixels in a capture. `E_TIMEOUT` otherwise; `timeoutMs: 0` checks once. |
+| `setAppAppearance` | `appearance` (`light`/`dark`), `timeoutMs` (10000) | Waits for the first rendered UI to settle (an override set while the app is still launching did not last), then sets `NSApp.appearance` (an app override; the OS setting is untouched; per-window appearances still win). If the effective appearance changed, replies `changed: true` once a UI update has mounted and settled, else `E_TIMEOUT`. `timeoutMs` bounds each wait. |
 | `capture` | `window` (`main`, `key`, `id:<identifier>`, `title:<title>`), `name`, `timeoutMs` (5000) | `file`, `width`, `height` (pixels), `scale`, once mounted UI updates have settled. `E_NOT_SETTLED` if they never do. |
 | `quit` | | `ok`, then the session ends and the app quits. |
 
