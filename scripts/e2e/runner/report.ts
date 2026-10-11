@@ -12,7 +12,7 @@ export type RunReport = {
   backends: Array<{ name: string; kind: Backend["kind"] }>;
   interrupted: boolean;
   summary: { total: number; passed: number; failed: number; skipped: number };
-  /** Artifact and golden paths are relative to the run directory (the directory holding report.json). */
+  /** Artifact, golden and bundle paths are relative to the run directory (the directory holding report.json). */
   flows: FlowResult[];
 };
 
@@ -28,6 +28,7 @@ export function buildReport(results: FlowResult[], meta: { startedAt: Date; dura
       ...result, artifacts: relative(result.artifacts),
       goldens: result.goldens.map(({ golden, actual, diff, ...rest }) => ({ ...rest, golden: from(golden), actual: from(actual), ...(diff ? { diff: from(diff) } : {}) })),
       ...(result.failure ? { failure: { ...result.failure, artifacts: relative(result.failure.artifacts) } } : {}),
+      ...(result.bundle ? { bundle: from(result.bundle) } : {}),
     })),
   };
 }
@@ -57,7 +58,7 @@ export function junit(report: RunReport): string {
     const cases = flows.map(flow => {
       const body = flow.status === "skipped" ? `<skipped message="${escape(flow.skipReason ?? "")}"/>`
         : flow.failure ? `<failure type="${flow.failure.kind}" message="${escape(flow.failure.message.split("\n")[0]!)}">${escape(failureText(flow.failure))}</failure>` : "";
-      const out = [...flow.errors, ...flow.artifacts.map(artifact => `artifact ${artifact.kind}: ${artifact.path}`)];
+      const out = [...flow.errors, ...flow.artifacts.map(artifact => `artifact ${artifact.kind}: ${artifact.path}`), ...(flow.bundle ? [`bundle: ${flow.bundle}`] : [])];
       return `    <testcase classname="${escape(file)}" name="${escape(label(flow))}" time="${seconds(flow.durationMs)}">${body}${out.length ? `<system-out>${escape(out.join("\n"))}</system-out>` : ""}</testcase>`;
     });
     const n = (status: FlowResult["status"]) => flows.filter(flow => flow.status === status).length;
@@ -81,7 +82,7 @@ export function html(report: RunReport): string {
     const artifacts = [...failure?.artifacts ?? [], ...flow.artifacts];
     return `<details class="${flow.status}"${flow.status === "failed" ? " open" : ""}><summary><b>${flow.status.toUpperCase()}</b> ${escape(label(flow))} <span>${escape(flow.file)} · ${flow.durationMs}ms</span></summary>
 ${flow.intent ? `<p>${escape(flow.intent)}</p>` : ""}${flow.whiteBox.length ? `<p>White-box (driver, in-process): ${escape(flow.whiteBox.join(", "))}</p>` : ""}${flow.skipReason ? `<p>Skipped: ${escape(flow.skipReason)}</p>` : ""}
-${failure ? `<pre>${escape(failureText(failure, artifact => artifact.path))}</pre>` : ""}${flow.errors.length ? `<pre>${escape(flow.errors.join("\n"))}</pre>` : ""}
+${failure ? `<pre>${escape(failureText(failure, artifact => artifact.path))}</pre>` : ""}${flow.bundle ? `<p>Failure bundle: <a href="${escape(flow.bundle.split(path.sep).map(encodeURIComponent).join("/"))}">${escape(flow.bundle)}</a></p>` : ""}${flow.errors.length ? `<pre>${escape(flow.errors.join("\n"))}</pre>` : ""}
 ${artifacts.length ? `<ul class="artifacts">${artifacts.map(link).join("")}</ul>` : ""}${steps ? `<ol class="steps">${steps}</ol>` : ""}</details>`;
   }).join("\n");
   const { summary } = report;

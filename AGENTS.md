@@ -16,4 +16,6 @@ Public path changes must update `docs/api-export-inventory.json` and pass
 
 E2E verification flows (`e2e/`): write and check them with [docs/e2e-flows.md](docs/e2e-flows.md)
 (`bun run e2e:validate`, `bun run e2e:lint`, `bun run e2e:coverage`, `bun run e2e:run`, `bun run e2e:golden approve`, and the release gate `bun run gate`). After changing `scripts/e2e/format/commands.ts`,
-run `bun run e2e:schema`.
+run `bun run e2e:schema`. To run one flow or area as the gate judges it, use
+`bun run gate --flow e2e/flows/<area>[/<name>.yaml] --agent`; to fix a failed flow, open the
+`bundle` path it prints and follow "Run, read and repair" in docs/e2e-flows.md.

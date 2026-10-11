@@ -8,7 +8,7 @@ import { checkFile } from "./format/lint.ts";
 import { formatDiagnostic } from "./format/parser.ts";
 import { gateCommand } from "./gate/gate.ts";
 import { goldenCommand } from "./golden/approve.ts";
-import { hostEnv } from "./gate/host.ts";
+import { detectHost, hostEnv } from "./gate/host.ts";
 import { BACKENDS, runCommand } from "./runner/run.ts";
 
 const repo = path.resolve(import.meta.dirname, "../..");
@@ -56,8 +56,8 @@ if (mode === "schema") {
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
   process.exitCode = mode === "gate"
     ? await gateCommand(args, path.join(repo, "e2e"), { ...hostEnv(), signal: controller.signal })
-    : await runCommand(args, { backends: BACKENDS, stdout: line => console.log(line), stderr: line => console.error(line), signal: controller.signal });
+    : await runCommand(args, { backends: BACKENDS, host: detectHost, stdout: line => console.log(line), stderr: line => console.error(line), signal: controller.signal });
 } else {
-  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema | bun run e2e:run [flows…] [--backend …] [--agent] [--report dir] [--app path] | bun run gate [--target id] [--dry-run] | bun run e2e:golden approve <path> [--to <golden id>]");
+  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema | bun run e2e:run [flows…] [--backend …] [--agent] [--report dir] [--app path] | bun run gate [--target id] [--flow path…] [--agent] [--dry-run] | bun run e2e:golden approve <path> [--to <golden id>]");
   process.exitCode = 2;
 }

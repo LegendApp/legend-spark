@@ -3,24 +3,27 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { escape } from "../runner/report.ts";
 import type { GateReport } from "./gate.ts";
-import type { GatePlan, Reason } from "./plan.ts";
+import { reportFiles, type GatePlan, type Reason } from "./plan.ts";
 
 const flowKind = (manual: boolean | "partial") => manual === true ? "manual" : manual === "partial" ? "run + sign-off" : "run";
 
 /** What `--dry-run` prints: the target, the checks, the flows and the budgets this run would use. */
 export function planText(plan: GatePlan, backends: string[]): string {
-  const { manifest, target, machine } = plan;
+  const { manifest, target, machine, scope } = plan;
+  const files = reportFiles(plan), shown = (file: string) => path.relative(plan.repo, file);
   const lines = [
     `Gate plan: ${manifest.suite} (${manifest.appId})`,
+    ...(scope ? [`Scope (--flow): ${scope.join(", ")}`] : []),
     `Target: ${target?.id ?? "none"} (this machine: ${plan.host.os}/${plan.host.arch}${plan.host.model ? `, ${plan.host.model}, ${plan.host.memoryGB} GB` : ""})`,
     `Build: ${plan.artifact ? path.relative(plan.repo, plan.artifact) : "none"}${target && manifest.build[target.platform]?.verifySignature ? " (signature will be verified)" : ""}`,
     `Backends: ${backends.join(", ") || `none for ${target?.platform ?? "this target"}: the gate will fail`}`,
     "Checks:",
-    "  lint: every file under e2e/",
-    `  coverage: registries in ${manifest.coverage.checks}, every gate flow; required: ${[manifest.coverage.exports && "subpaths and exports", manifest.coverage.availability && "availability flags"].filter(Boolean).join(", ") || "none"}`,
+    `  lint: every file under e2e/${scope ? " except flows outside the scope" : ""}`,
+    scope ? "  coverage: problems in the scope's areas (the whole surface is not required)"
+      : `  coverage: registries in ${manifest.coverage.checks}, every gate flow; required: ${[manifest.coverage.exports && "subpaths and exports", manifest.coverage.availability && "availability flags"].filter(Boolean).join(", ") || "none"}`,
     `  retries: ${manifest.retries}; whole-run time budget: ${manifest.timeBudget}`,
     `  sign-offs: ${manifest.signoffs}`,
-    `  report: ${manifest.report.json}, ${manifest.report.html}`,
+    `  report: ${shown(files.json)}, ${shown(files.html)}`,
     `Flows for ${target?.id ?? "no target"}: ${plan.flows.length}`,
     ...plan.flows.map(flow => `  ${flowKind(flow.manual).padEnd(15)}${(flow.blocking ? "blocking" : "non-blocking").padEnd(14)}${flow.path}${flow.ids.length > 1 ? ` (${flow.ids.length} matrix runs)` : ""}`),
     ...(plan.excluded.length ? [`Not for this target: ${plan.excluded.length}`, ...plan.excluded.map(flow => `  ${flow.path} (${flow.reason})`)] : []),
@@ -37,7 +40,7 @@ export function verdictText(report: GateReport, files: { json: string; html: str
   return [
     ...report.warnings.map(warning => `warning: ${warning}`),
     ...report.reasons.map(reasonText),
-    `Gate ${report.verdict} on ${report.target ?? "no target"}: ${report.reasons.length} reason${report.reasons.length === 1 ? "" : "s"}. Report: ${path.relative(process.cwd(), files.html)}`,
+    `Gate ${report.verdict} on ${report.target ?? "no target"}${report.scope ? ` for ${report.scope.length === 1 ? report.scope[0] : `${report.scope.length} flows`} (--flow)` : ""}: ${report.reasons.length} reason${report.reasons.length === 1 ? "" : "s"}. Report: ${path.relative(process.cwd(), files.html)}`,
   ].join("\n");
 }
 
@@ -56,6 +59,7 @@ pre{background:#f2f2f7;padding:.75em;overflow:auto;white-space:pre-wrap}table{bo
 </style></head><body>
 <h1>Release gate: <span class="verdict ${report.verdict}">${report.verdict}</span></h1>
 <p>${escape(report.suite)} · ${escape(report.appId)} · target <b>${escape(report.target ?? "none")}</b>${report.machine ? ` on ${escape(report.machine)}` : ""} · commit ${escape(report.commit)}${report.dirty ? " (uncommitted changes)" : ""} · ${escape(report.startedAt)} · ${report.durationMs}ms of ${report.timeBudgetMs}ms</p>
+${report.scope ? `<p>Scoped with --flow to ${escape(report.scope.join(", "))}; it certifies no release.</p>` : ""}
 <p>Build ${escape(report.build.artifact ?? "none")} · ${report.build.exists ? "present" : "missing"} · signature ${report.build.signature} · backends ${escape(report.backends.join(", ") || "none")} · ${runLink}</p>
 <h2>Reasons (${report.reasons.length})</h2>
 ${report.reasons.length ? report.reasons.map(reason => `<h3>${escape(reason.check)}</h3>${pre(reason.message)}`).join("\n") : "<p>None.</p>"}

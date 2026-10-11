@@ -19,7 +19,11 @@ export const BACKENDS: Readonly<Record<string, BackendFactory>> = {
 };
 export const NO_BACKENDS = "no backends are registered";
 
-export type RunIO = { backends: Readonly<Record<string, BackendFactory>>; stdout(line: string): void; stderr(line: string): void; clock?: Clock; signal?: AbortSignal };
+export type RunIO = {
+  backends: Readonly<Record<string, BackendFactory>>; stdout(line: string): void; stderr(line: string): void; clock?: Clock; signal?: AbortSignal;
+  /** The machine, recorded in failure bundles. */
+  host?(): object;
+};
 const USAGE = "usage: bun run e2e:run [flow|dir…] [--backend name[,name…]] [--agent] [--report dir] [--app path]";
 
 function parse(args: string[]) {
@@ -58,6 +62,7 @@ export function printer(io: Pick<RunIO, "stdout">, agent: boolean) {
     const status = { passed: "PASS", failed: "FAIL", skipped: "SKIP" }[result.status];
     io.stdout(`${status} ${result.id} (${result.durationMs}ms)${result.skipReason ? `: ${result.skipReason}` : ""}${result.whiteBox.length ? ` [white-box: ${result.whiteBox.join(", ")}]` : ""}`);
     if (result.failure) io.stdout(failureText(result.failure).replace(/^/gm, "  "));
+    if (result.bundle) io.stdout(`  bundle: ${path.relative(process.cwd(), result.bundle)}`);
     for (const error of result.errors) io.stdout(`  also: ${error}`);
   };
 }
@@ -93,7 +98,7 @@ export async function runCommand(args: string[], io: RunIO): Promise<number> {
 
   const runDir = path.resolve(options.report ?? path.join(repo, "artifacts/e2e", `run-${new Date().toISOString().replace(/[:.]/g, "-")}`));
   if (options.agent) io.stdout(JSON.stringify({ event: "run-start", runDir, platform: backends[0]!.platform, backends: backends.map(({ name, kind }) => ({ name, kind })), files: files.length }));
-  const { report, reports } = await runSuite(files, { backends, runDir, app: options.app && path.resolve(options.app), clock: io.clock, signal: io.signal, onEvent: printer(io, options.agent) });
+  const { report, reports } = await runSuite(files, { backends, runDir, app: options.app && path.resolve(options.app), clock: io.clock, signal: io.signal, host: io.host?.(), onEvent: printer(io, options.agent) });
   const { summary } = report;
   if (options.agent) io.stdout(JSON.stringify({ event: "run-end", summary, interrupted: report.interrupted, reports }));
   else io.stdout(`${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped${report.interrupted ? " (interrupted)" : ""}. Report: ${path.relative(process.cwd(), reports.html)}`);

@@ -7,6 +7,7 @@ import { NESTED, SELECTOR_PROPS } from "../format/primitives.ts";
 import {
   Failure, RETRYABLE, type Artifact, type Backend, type Candidate, type CommandContext, type FailureKind, type Matrix, type Target, type WindowInfo,
 } from "./backend.ts";
+import { writeBundle } from "./bundle.ts";
 import { assertScreenshot, takeScreenshot, type GoldenResult } from "./screenshot.ts";
 import { candidate, center, describe, filterElements, locate, nearby, parseSelector, parseWindow, pickWindows, type Finder, type Located, type Selector } from "./selectors.ts";
 
@@ -24,6 +25,8 @@ export type FailureReport = {
   message: string;
   /** The innermost command that failed, and the runFlow / repeat / nested-command call sites that led to it. */
   command?: string;
+  /** That command's arguments after `${VAR}` interpolation, when interpolation succeeded. */
+  args?: Record<string, unknown>;
   location: SourceLocation;
   stack: SourceLocation[];
   candidates: Candidate[];
@@ -44,6 +47,8 @@ export type FlowResult = {
   durationMs: number;
   steps: StepResult[];
   failure?: FailureReport;
+  /** The failure bundle (docs/e2e-flows.md#failure-bundles), written for every failed run. */
+  bundle?: string;
   /** Problems after the first failure: onFlowComplete, restoration, artifact collection, backend shutdown. */
   errors: string[];
   /** Files the flow produced on purpose (takeScreenshot). */
@@ -60,6 +65,8 @@ export type RunOptions = {
   backends: Backend[]; runDir: string; app?: string; clock?: Clock; signal?: AbortSignal; onEvent?(event: RunEvent): void;
   /** Clock time after which every flow fails with `timeout`: the whole run's time budget. */
   deadline?: number;
+  /** The machine running the flows, recorded in failure bundles. */
+  host?: object;
 };
 
 /** `120ms`, `1.5s`, `2m`, or a bare number of milliseconds. */
@@ -98,7 +105,7 @@ export function rootOf(file: string): string {
 }
 
 class CommandError extends Error {
-  constructor(readonly failure: Failure, readonly command: FlowCommand, readonly callers: SourceLocation[]) { super(failure.message); }
+  constructor(readonly failure: Failure, readonly command: FlowCommand, readonly callers: SourceLocation[], readonly args?: Record<string, unknown>) { super(failure.message); }
 }
 const toFailure = (error: unknown) => error instanceof Failure ? error : new Failure("error", error instanceof Error ? error.message : String(error));
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -297,14 +304,15 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
     const step: StepResult = { command: command.name, location: command.location, depth: scope.depth, status: "passed", durationMs: 0 };
     steps.push(step);
     const start = clock.now();
+    let args: Record<string, unknown> | undefined;
     try {
       live();
       if (command.when && (command.when.visible !== undefined || command.when.notVisible !== undefined) && observer().kind === "driver") step.whiteBox = true;
       if (command.when && !(await holds(interpolate(command.when, scope.env)))) step.status = "skipped";
-      else await dispatch(command, interpolateArgs(command, scope.env), scope, step);
+      else await dispatch(command, args = interpolateArgs(command, scope.env), scope, step);
     } catch (error) {
       step.status = "failed";
-      throw error instanceof CommandError ? error : new CommandError(toFailure(error), command, scope.stack);
+      throw error instanceof CommandError ? error : new CommandError(toFailure(error), command, scope.stack, args);
     } finally {
       step.durationMs = Math.round(clock.now() - start);
     }
@@ -334,9 +342,9 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   const headerLocation: SourceLocation = { file: flow.file, line: 1, column: 1 };
   let failure: FailureReport | undefined;
   async function fail(error: unknown) {
-    const { failure: cause, command, callers } = error instanceof CommandError ? error : { failure: toFailure(error), command: undefined, callers: [] };
+    const { failure: cause, command, callers, args } = error instanceof CommandError ? error : { failure: toFailure(error), command: undefined, callers: [], args: undefined };
     failure = {
-      kind: cause.kind, message: cause.message, command: command?.name, location: command?.location ?? headerLocation, stack: callers,
+      kind: cause.kind, message: cause.message, command: command?.name, ...(args ? { args } : {}), location: command?.location ?? headerLocation, stack: callers,
       candidates: cause.details.candidates ?? [], matches: cause.details.matches ?? [], artifacts: [...cause.details.artifacts ?? [], ...await collect()],
     };
   }
@@ -375,7 +383,9 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   for (const backend of started.reverse()) {
     try { await backend.stop(); } catch (error) { errors.push(`stop ${backend.name}: ${message(error)}`); }
   }
-  return result(failure ? "failed" : "passed", { failure });
+  if (!failure) return result("passed");
+  const failed = result("failed", { failure });
+  return { ...failed, bundle: writeBundle(path.join(dir, "failure"), { result: { ...failed, failure }, source: absolute, env, platform, backends, app: options.app, host: options.host }) };
 }
 
 /** Parses and runs flow files, every matrix combination, in order. Invalid flows are reported as `format` failures. */
@@ -394,6 +404,8 @@ export async function runFlows(files: string[], options: RunOptions): Promise<Fl
         id: relative, file, checks: [], tags: [], matrix: {}, status: "failed", durationMs: 0, steps: [], errors: [], artifacts: [], goldens: [], metrics: {}, whiteBox: [],
         failure: { kind: "format", message: `${file} is not a valid flow`, location: { file: at, line, column }, stack: [], candidates: [], matches: [], artifacts: [], diagnostics: checked.diagnostics.map(formatDiagnostic) },
       };
+      const { backends, app, host } = options;
+      result.bundle = writeBundle(path.join(options.runDir, relative, "run", "failure"), { result: { ...result, failure: result.failure! }, source: absolute, env: {}, platform: backends[0]!.platform, backends, app, host });
       options.onEvent?.({ event: "flow-end", result });
       results.push(result);
       continue;

@@ -39,6 +39,49 @@ A file you name on the command line outside those folders is checked as a flow.
 5. Before you open a PR, run `bun run e2e:lint` with no arguments. It checks all of `e2e/`.
 6. Run `bun run e2e:coverage` and fix every problem in your area (see
    [Coverage](#coverage)). Surface outside your area may stay uncovered.
+7. Run your flow, or your area, through the release gate against the release build:
+   `bun run gate --flow e2e/flows/<area> --agent` (see [Scoped runs](#scoped-runs---flow)).
+
+## Run, read and repair (for agents)
+
+| To | Run |
+|---|---|
+| Run one flow on the last development build | `bun run e2e:run e2e/flows/<area>/<name>.yaml --agent` |
+| Run an area | `bun run e2e:run e2e/flows/<area> --agent` |
+| Judge one flow or area as the gate does (release build, signature, lint, coverage, budgets, sign-offs) | `bun run gate --flow e2e/flows/<area>[/<name>.yaml] --agent` |
+
+Both print one JSON object per line ([Agent mode](#agent-mode)). Read the last line:
+`run-end` has the `summary`, `gate-end` has the `verdict` and every `reasons` entry. A
+failed run has a `bundle` path on its `flow-end` line (and in `gate-end.flows`). Exit
+codes are 0 (pass), 1 (fail) and 2 (usage error).
+
+To repair a failed flow, open its [failure bundle](#failure-bundles) and work from it:
+
+1. Read `flow.intent`. It says what the flow proves; the fix keeps that true. Never
+   weaken an assertion, raise a timeout or delete a step to make a flow pass.
+2. Go to `failure.location` (the innermost failing command; `failure.stack` lists the
+   `runFlow` and nested call sites above it). `failure.args` is that command after
+   `${VAR}` substitution, and `failure.selector` its selector.
+3. Use `failure.kind`:
+   - `not-found`: compare `failure.selector` with `failure.candidates`, the closest
+     elements on screen. A renamed testID or changed text is a flow fix; a missing
+     element is an app bug.
+   - `ambiguous`: `failure.matches` lists every match. Add `id`, `within`, `window` or
+     `index`.
+   - `assertion` from `assertScreenshot`: open the `goldens` entry's `actual`, `golden`
+     and `diff`. Approve only an intended change ([Approving goldens](#approving-goldens)).
+   - `unsupported`: the active backends cannot run that command. Don't remove it; see
+     [Backends](#backends).
+   - `format` or `invalid`: `failure.diagnostics` or the message names the problem.
+4. Open `screenshot` (the window when the flow failed) and the `elements-<backend>.json`
+   dump in `artifacts` to see what was on screen, and the `logs` artifacts for app errors.
+5. `steps` lists every command that ran, subflows included, so you can see how far the
+   flow got. `flow.env`, `flow.matrix` and `run` show the variables, matrix
+   combination, backends, app and machine it ran with.
+6. Rerun the flow, then the gate for it, until both pass.
+
+If the app is wrong rather than the flow, fix the app or open a task; don't change the
+flow to match a bug.
 
 ```sh
 bun run e2e:validate [paths…]          # syntax + schema + semantic checks
@@ -246,7 +289,7 @@ index.html                     # static page; open it in a browser
   tmp/                         # ${TMP}
   output/                      # takeScreenshot and other files the flow asked for
   screenshots/                 # assertScreenshot: <name>.png, and on failure <name>.expected.png, <name>.diff.png
-  failure/                     # elements-<backend>.json, screenshot, logs, driver trace
+  failure/                     # bundle.json, elements-<backend>.json, screenshot, logs, driver trace
   backend-<name>/              # the backend's private directory (Session.dir)
 ```
 
@@ -257,10 +300,11 @@ restoration change anything.
 `interrupted`, `summary` (`total`, `passed`, `failed`, `skipped`) and `flows`. Each flow
 has `id`, `file`, `name`, `intent`, `checks`, `tags`, `matrix`, `status`, `skipReason`,
 `durationMs`, `steps` (every command run, with `depth`, `status` and duration), `failure`,
-`errors` (problems after the first failure), `artifacts`, `goldens` (see [Visual goldens](#visual-goldens)), `metrics` (see [Metrics](#metrics)) and `whiteBox`
+`bundle` (the [failure bundle](#failure-bundles) of a failed run), `errors` (problems after the first failure), `artifacts`, `goldens` (see [Visual goldens](#visual-goldens)), `metrics` (see [Metrics](#metrics)) and `whiteBox`
 (the black-box commands a driver backend ran in-process, sorted; such steps have `whiteBox: true`). A `failure` has `kind`,
-`message`, `command`, `location`, `stack`, `candidates`, `matches`, `artifacts` and, for
-invalid flows, `diagnostics`. Artifact and golden paths are relative to the run directory.
+`message`, `command`, `args` (that command's arguments after `${VAR}` substitution, when it
+got that far), `location`, `stack`, `candidates`, `matches`, `artifacts` and, for
+invalid flows, `diagnostics`. Artifact, golden and bundle paths are relative to the run directory.
 Artifact kinds are `screenshot`, `golden` (the expected image of a failed
 `assertScreenshot`), `diff`, `elements`, `logs`, `trace`, `recording` and `output`. The
 HTML page shows `screenshot`, `golden` and `diff` inline.
@@ -278,12 +322,59 @@ or matrix dimension the active backends cannot handle; never skipped silently),
 | --- | --- |
 | `run-start` | `runDir`, `platform`, `backends`, `files` |
 | `flow-start` | `id`, `file`, `name`, `intent`, `matrix` |
-| `flow-end` | Everything in the report's flow entry except `steps`. `failure.location` and `failure.stack` are `file:line:column` strings, and artifact paths are absolute. |
+| `flow-end` | Everything in the report's flow entry except `steps`. `failure.location` and `failure.stack` are `file:line:column` strings, and artifact and `bundle` paths are absolute. |
 | `run-end` | `summary`, `interrupted`, `reports` (`json`, `junit`, `html`) |
 
-To repair a failing flow, read `intent`, go to `failure.location`, and compare the
-selector with `failure.candidates`. Then open the screenshot and the
-`elements-<backend>.json` dump from `failure.artifacts`.
+To repair a failing flow, open its `bundle` and follow
+[Run, read and repair](#run-read-and-repair-for-agents).
+
+### Failure bundles
+
+Every failed flow run (every matrix combination, invalid flows included) gets one
+`failure/bundle.json` in its run directory. The report's flow entry, the `flow-end` line,
+the JUnit output, the HTML page, the console and the gate report all point to it. It
+holds what a repair needs and refers to the evidence the runner already wrote; it never
+copies a file. Its paths are relative to the bundle's directory, so a run directory can
+be moved or uploaded whole. Source locations (`failure.location`, `failure.stack`) are
+`file:line:column`, relative to the working directory, as in the report.
+
+```jsonc
+{
+  "version": 1,
+  "flow": {
+    "id": "flows/menus/availability", "file": "e2e/flows/menus/availability.yaml", "name": "…", "intent": "…",
+    "checks": ["MENU-AVAIL-01"], "tags": [], "matrix": {},
+    "source": "../…/e2e/flows/menus/availability.yaml",
+    "env": { "FIXTURES": "…", "TMP": "…", "APP_PATH": "…" }           // runner variables and header env, resolved
+  },
+  "failure": {                                                       // the report's failure, plus:
+    "kind": "not-found", "message": "…", "command": "tapOn",
+    "args": { "id": "menus-open" }, "selector": { "id": "menus-open" },
+    "location": "e2e/flows/menus/availability.yaml:9:3", "stack": [],
+    "candidates": [], "matches": [], "artifacts": [{ "kind": "elements", "path": "elements-driver.json", "backend": "driver" }]
+  },
+  "screenshot": "driver-main.png",                                   // the last screenshot
+  "goldens": [],                                                     // assertScreenshot runs that did not pass
+  "artifacts": [ … ],                                                // all evidence
+  "steps": [{ "command": "launchApp", "location": { … }, "depth": 0, "status": "passed", "durationMs": 812 }, …],
+  "errors": [],
+  "run": { "platform": "macos", "backends": [{ "name": "driver", "kind": "driver" }], "app": "…", "host": { "os": "macos-27", "arch": "arm64", … } }
+}
+```
+
+| Key | Holds |
+|---|---|
+| `flow` | The flow's header fields, its matrix combination, its file (`source`) and every variable it ran with (`env`: `FIXTURES`, `TMP`, `APP_PATH` and the header `env`; `runFlow` env is not included) |
+| `failure` | The report's `failure`, plus `args` (the failing command's arguments after substitution; absent when substitution itself failed) and `selector` (its selector keys, or its `visible` / `notVisible` selector) |
+| `screenshot` | The last screenshot: the capture taken at the failure, or else the last one the flow took |
+| `goldens` | Each `assertScreenshot` that failed or had no golden: `id`, `golden`, `actual`, `diff`, `stats` ([Comparison](#comparison)) |
+| `artifacts` | The failure evidence (element tree, capture, logs, and anything a backend's `collect` returns), then the files the flow wrote on purpose. Any artifact kind a backend adds appears here with its `kind` and `backend`, so new driver evidence needs no bundle change |
+| `steps` | Every command that ran, subflows and nested commands included, in order |
+| `errors` | Problems after the first failure (`onFlowComplete`, restoration, stopping a backend) |
+| `run` | The platform, backends, `--app` and, from `bun run e2e:run` and the gate, the machine (`host`: OS, arch, model, memory) |
+
+The bundle is written after `onFlowComplete`, restoration and backend shutdown, so
+`errors` is complete; the evidence it lists was collected at the failure.
 
 ### Backends
 
@@ -656,6 +747,7 @@ so it fails today. The [release gate](#release-gate) makes it blocking.
 bun run gate                      # run the gate for this machine's target
 bun run gate --dry-run            # plan only: the target, checks, flows and budgets
 bun run gate --target macos-14/arm64@macbook-air-m1-8gb --dry-run   # plan another target
+bun run gate --flow e2e/flows/menus --agent   # only these gate flows, JSON lines (see Scoped runs)
 ```
 
 The gate certifies one target per run: the machine it runs on. The verdict is PASS
@@ -723,10 +815,10 @@ reason for FAIL), `warnings` (non-blocking failures), `suite`, `appId`, `started
 `durationMs`, `timeBudgetMs`, `host`, `target`, `machine`, `commit`, `dirty`, `build`
 (`artifact`, `exists`, `signature`), `backends`, `coverage` (`required`, `covered`,
 `problems`), `flows` (one per run ID: `status` is `passed`, `failed`, `skipped`,
-`not-run`, `signed-off` or `unsigned`, plus `blocking`, `manual`, `failure`, `signoff`),
+`not-run`, `signed-off` or `unsigned`, plus `blocking`, `manual`, `failure`, `bundle`, `signoff`),
 `excluded` (flows for other platforms), `budgets` (one entry per measurement:
 `metric`, `flow`, `value`, `baseline`, `limit`, `status`) and `run` (the runner's report
-directory). `check` is one of `manifest`, `target`, `source`, `lint`, `coverage`,
+directory) and, for a [scoped run](#scoped-runs---flow), `scope`. `check` is one of `manifest`, `target`, `source`, `lint`, `coverage`,
 `build`, `backend`, `flows`, `time-budget`, `budgets` or `signoffs`. The HTML page shows
 the same and links to the runner's page.
 
@@ -806,11 +898,53 @@ signoffs:
 A missing file, a missing or duplicated sign-off, `verdict: fail`, or missing evidence
 fails the gate with `signoffs`.
 
+### Scoped runs (`--flow`)
+
+```sh
+bun run gate --flow e2e/flows/menus/availability.yaml --agent   # one flow
+bun run gate --flow e2e/flows/menus --flow e2e/flows/dialogs     # areas; --flow repeats
+```
+
+`--flow` takes a gate flow or a directory of them; the run covers every gate flow at or
+under each path, all matrix combinations, manual flows included. A path that does not
+exist, is not a flow (a subflow, a registry) or is not a gate flow (outside `include`) is
+a usage error. A scoped run judges its flows exactly as the full gate does: the same
+target, release build and signature check, backends, zero retries, blocking rules, time
+budget and sign-offs. Only the checks about the rest of the tree are narrowed:
+
+| Check | Scoped run |
+|---|---|
+| Source | Uncommitted changes are a warning, not a reason: a scoped run certifies no commit |
+| Lint | Every file under `e2e/` except flows outside the scope |
+| Coverage | Problems in the scoped flows' areas (`flows/<area>/` and `checks/<area>.yaml`). The whole SDK surface is not required |
+| Budgets | Those a scoped flow recorded, or whose `flows` globs match a scoped flow |
+| Everything else | Unchanged |
+
+It writes `report.json`, `index.html` and the runner's `run/` under `scoped/` next to the
+manifest's report paths (`artifacts/gate/scoped/` for the Kitchen Sink), so it never
+replaces a full gate report, and the report's `scope` lists the flows. `--dry-run` with
+`--flow` prints the scoped plan.
+
+With `--agent`, the gate prints JSON lines only: `flow-start` and `flow-end` for each run
+(as in [Agent mode](#agent-mode), with the absolute `bundle` of a failed run), then one
+`gate-end` line:
+
+```jsonc
+{ "event": "gate-end", "verdict": "FAIL", "target": "macos-27/arm64", "scope": ["flows/menus/availability.yaml"],
+  "reasons": [{ "check": "flows", "message": "flows/menus/availability: …" }], "warnings": [],
+  "flows": [{ "id": "flows/menus/availability", "status": "failed", "blocking": true, "failure": "…", "bundle": "/…/artifacts/gate/scoped/run/flows/menus/availability/run/failure/bundle.json" }],
+  "report": { "json": "/…/artifacts/gate/scoped/report.json", "html": "/…/artifacts/gate/scoped/index.html" }, "run": "/…/artifacts/gate/scoped/run" }
+```
+
+`--agent` works without `--flow` too. The gate report's flow entries have `bundle`
+(relative to the repository root) for failed runs.
+
 ### From a flows task
 
 Your flow is a gate flow as soon as it is under `flows/`. Before you open a PR, run
 `bun run gate --dry-run` to see it in the plan for your platform, and check that it is
-blocking (the default). If it measures performance, record metrics through the driver
+blocking (the default). Then run `bun run gate --flow e2e/flows/<area> --agent` against
+the release build (`cd examples/kitchen-sink && bun run build`) and fix every reason. If it measures performance, record metrics through the driver
 commands above. Ask for a budget in `e2e/budgets.yaml`, and leave it `not-measured`
 until someone measures it on the reference machine.
 
