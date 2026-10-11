@@ -97,7 +97,7 @@ Without it, a sandboxed app's `createBookmark` and `accessBookmark` reject with 
 
 ### Full Disk Access
 
-`getFullDiskAccessStatus()` resolves `"granted"`, `"denied"` or `"indeterminate"`. It tries to open files that TCC protects but that Unix permissions let the user read. macOS attributes access to the responsible process, so an app launched from a terminal inherits that terminal's grant. A sandboxed app always gets `"indeterminate"` unless the probe succeeds, because the sandbox denies those files with the same `EPERM` as TCC. If no probe file exists, the call rejects with `E_UNAVAILABLE`.
+`getFullDiskAccessStatus()` resolves `"granted"`, `"denied"` or `"indeterminate"`. It tries to open files that TCC protects but that Unix permissions let the user read. macOS attributes access to the responsible process, so an app launched from a terminal inherits that terminal's grant. A sandboxed app always gets `"indeterminate"` unless a probe succeeds: sandbox denials hide TCC's answer, and their error varies by macOS release. Outside the sandbox, if no probe file exists, the call rejects with `E_UNAVAILABLE`.
 
 `openFullDiskAccessSettings()` opens System Settings › Privacy & Security › Full Disk Access. Only the user can grant access, and macOS applies a grant when the app next launches. Neither step can be automated, so both are manual verification steps.
 

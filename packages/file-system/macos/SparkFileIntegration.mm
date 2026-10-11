@@ -73,10 +73,13 @@ NSString *SparkFullDiskAccessStatus(NSArray<NSString *> *probes, BOOL sandboxed,
   for (NSString *probe in probes) {
     int fd = open(probe.fileSystemRepresentation, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
     if (fd >= 0) { close(fd); return @"granted"; }
-    // The sandbox denies these paths with the same EPERM as TCC, so denial proves nothing there.
-    if (errno == EPERM) return sandboxed ? @"indeterminate" : @"denied";
+    // Sandbox denials hide TCC's answer, and their errno varies by macOS release (EPERM, or
+    // ENOENT for paths outside the container), so a sandboxed failure of any kind proves nothing.
+    if (sandboxed) continue;
+    if (errno == EPERM) return @"denied";
     if (errno != ENOENT && errno != ENOTDIR) { Fail(error, Posix(errno)); return nil; }
   }
+  if (sandboxed) return @"indeterminate";
   Fail(error, Coded(@"E_UNAVAILABLE", @"No Full Disk Access probe exists on this system"));
   return nil;
 }
