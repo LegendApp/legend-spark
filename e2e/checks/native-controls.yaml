@@ -217,10 +217,10 @@ checks:
     covers:
       - ./ui#Button
   CTRL-SIDEBAR-01:
-    title: The Sidebar data items, dynamic heights and React rows screens mount without crashing in light and dark, English and Arabic (goldens wait for #264 and #265)
+    title: The Sidebar data items, dynamic heights and React rows screens mount and match their approved goldens in light and dark, English and Arabic
     platforms: [macos]
     blocking: true
-    spec: "docs/e2e-flows.md Visual goldens; #252"
+    spec: "docs/e2e-flows.md Visual goldens; #252; #264; #265"
     covers:
       - ./ui/sidebar#Sidebar
       - ./ui/sidebar#SidebarItem

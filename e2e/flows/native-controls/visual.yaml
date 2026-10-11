@@ -5,8 +5,9 @@ intent: >
   Split view, SF Symbols, Search field, Glass, Pickers and the four size grids (Toggles, Value inputs, Indicators, Button
   styles) match the approved golden for the appearance (light and dark) and locale, with the shell sidebar masked: SF
   Symbols, Glass, Pickers and the size grids in English and Arabic, Split view and Search field in English only until they
-  mirror in right-to-left layouts. The animated progress indicators are masked. The three Sidebar screens mount without
-  crashing (#252) but are not compared until their rows fit (#264) and the selected row captures correctly (#265). Popover
+  mirror in right-to-left layouts. The animated progress indicators are masked. The three Sidebar screens (data items,
+  dynamic heights, React rows) match their goldens in light and dark, English and Arabic: rows fit inside the Sidebar and
+  mirror in Arabic (#264), and the selected row shows the unemphasized selection color (#265). Popover
   and Tab view match their goldens in English and Arabic. Driver-mode windows are never on screen, so the popover cannot
   open: the flow checks that its native host mounts beside its anchor and that its closed content is not in the main
   window (popover-black-box.yaml opens it on the black-box backend). The tab view shows only the selected tab's
@@ -60,13 +61,15 @@ matrix:
 - launchApp: { openUrl: "spark-ks://native-controls/buttons", stopApp: false }
 - assertVisible: { id: native-controls-buttons-root }
 - assertScreenshot: { golden: native-controls-buttons, mask: [{ id: infra-shell-sidebar }] }
-# No goldens: rows overflow the Sidebar's trailing edge (#264) and the selected row captures black (#265).
 - launchApp: { openUrl: "spark-ks://native-controls/sidebar-data-items", stopApp: false }
 - assertVisible: { id: native-controls-sidebar-data-items-list }
+- assertScreenshot: { golden: native-controls-sidebar-data-items, mask: [{ id: infra-shell-sidebar }] }
 - launchApp: { openUrl: "spark-ks://native-controls/sidebar-dynamic-heights", stopApp: false }
 - assertVisible: { id: native-controls-sidebar-dynamic-heights-list }
+- assertScreenshot: { golden: native-controls-sidebar-dynamic-heights, mask: [{ id: infra-shell-sidebar }] }
 - launchApp: { openUrl: "spark-ks://native-controls/sidebar-react-rows", stopApp: false }
 - assertVisible: { id: native-controls-sidebar-react-rows-list }
+- assertScreenshot: { golden: native-controls-sidebar-react-rows, mask: [{ id: infra-shell-sidebar }] }
 - launchApp: { openUrl: "spark-ks://native-controls/popover", stopApp: false }
 - assertVisible: { id: native-controls-popover-root }
 - assertVisible: { id: native-controls-popover-host }
