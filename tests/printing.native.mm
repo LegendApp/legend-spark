@@ -68,20 +68,30 @@ int main(int argc, char **argv) { @autoreleasepool {
   [NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
   NSString *(^file)(NSString *) = ^(NSString *name) { return [directory stringByAppendingPathComponent:name]; };
 
-  // Page setup: the portrait sheet goes in, AppKit orients it, and it reads back unchanged.
+  // Page setup round trips exactly, whatever printers are installed. AppKit snaps the sheet to the
+  // current printer's paper list, or to its generic list on a Mac without printers (A4 becomes
+  // 595 x 842 there, 595.28 x 841.89 with a printer), so NSPrintInfo is only checked to the point.
   NSDictionary *a4Landscape = Setup(595.28, 841.89, @"landscape", 36, 54, 72, 18);
   NSPrintInfo *info = SparkPrintInfo(a4Landscape);
   CHECK(info.orientation == NSPaperOrientationLandscape);
-  CHECK(Near(info.paperSize.width, 841.89) && Near(info.paperSize.height, 595.28));
+  CHECK(fabs(info.paperSize.width - 841.89) <= 1 && fabs(info.paperSize.height - 595.28) <= 1);
   CHECK(info.topMargin == 36 && info.rightMargin == 54 && info.bottomMargin == 72 && info.leftMargin == 18);
   CHECK(!info.horizontallyCentered && !info.verticallyCentered);
-  NSDictionary *read = SparkPageSetup(info);
-  CHECK([read[@"orientation"] isEqual:@"landscape"]);
-  CHECK(Near([read[@"paperSize"][@"width"] doubleValue], 595.28) && Near([read[@"paperSize"][@"height"] doubleValue], 841.89));
-  CHECK([read[@"margins"] isEqual:a4Landscape[@"margins"]]);
-  NSDictionary *label = SparkPageSetup(SparkPrintInfo(Setup(288, 432, @"portrait", 9, 9, 9, 9)));
-  CHECK([label[@"orientation"] isEqual:@"portrait"] && [label[@"paperSize"] isEqual:(@{ @"width": @288, @"height": @432 })]); // Rounded to 0.01 point.
-  NSDictionary *defaults = SparkPageSetup(SparkPrintInfo(nil));
+  CHECK([SparkPageSetup(info, a4Landscape) isEqual:a4Landscape]);
+  // The generic list's A4 asked for on a Mac whose printer has 595.28 x 841.89: the same normalization.
+  NSDictionary *genericA4 = Setup(595, 842, @"portrait", 54, 54, 54, 54);
+  CHECK([SparkPageSetup(SparkPrintInfo(genericA4), genericA4) isEqual:genericA4]);
+  for (NSDictionary *setup in @[Setup(288, 432, @"portrait", 9, 9, 9, 9), Setup(288, 432, @"landscape", 9, 9, 9, 9), Setup(300, 500, @"landscape", 18, 18, 18, 18), Setup(612, 792, @"landscape", 72, 72, 72, 72)]) {
+    NSDictionary *read = SparkPageSetup(SparkPrintInfo(setup), setup);
+    if (![read isEqual:setup]) fprintf(stderr, "ROUND TRIP %s -> %s\n", setup.description.UTF8String, read.description.UTF8String);
+    CHECK([read isEqual:setup]);
+  }
+  // Without a requested setup (the panels' results) the values are AppKit's, rounded to 0.01 point,
+  // and the orientation follows the sheet's shape.
+  NSDictionary *read = SparkPageSetup(info, nil);
+  CHECK([read[@"orientation"] isEqual:@"landscape"] && [read[@"margins"] isEqual:a4Landscape[@"margins"]]);
+  CHECK(fabs([read[@"paperSize"][@"width"] doubleValue] - 595.28) <= 1 && fabs([read[@"paperSize"][@"height"] doubleValue] - 841.89) <= 1);
+  NSDictionary *defaults = SparkPageSetup(SparkPrintInfo(nil), nil);
   CHECK([defaults[@"paperSize"][@"width"] doubleValue] > 0 && [defaults[@"paperSize"][@"width"] doubleValue] <= [defaults[@"paperSize"][@"height"] doubleValue]);
 
   // Plain text on US Letter: several pages, each 612 x 792, text inside the margins only.
@@ -103,7 +113,7 @@ int main(int argc, char **argv) { @autoreleasepool {
   NSPrintOperation *operation = SparkPrintOperation(textView, letter, @"Printing test");
   CHECK(operation.showsPrintPanel && [operation.jobTitle isEqual:@"Printing test"]);
   CHECK((operation.printPanel.options & (NSPrintPanelShowsPreview | NSPrintPanelShowsPaperSize | NSPrintPanelShowsOrientation)) == (NSPrintPanelShowsPreview | NSPrintPanelShowsPaperSize | NSPrintPanelShowsOrientation));
-  CHECK(Near(operation.printInfo.paperSize.width, 612) && operation.printInfo.topMargin == 72);
+  CHECK(fabs(operation.printInfo.paperSize.width - 612) <= 1 && operation.printInfo.topMargin == 72);
   [NSPrintOperation setCurrentOperation:operation];
   NSRange range = NSMakeRange(0, 0);
   CHECK([textView knowsPageRange:&range]);

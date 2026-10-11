@@ -158,10 +158,14 @@ NSPrintInfo *SparkPrintInfo(NSDictionary *pageSetup)
   info.verticallyCentered = NO;
   if (!pageSetup) return info;
   NSDictionary *paper = pageSetup[@"paperSize"], *margins = pageSetup[@"margins"];
-  // AppKit swaps paperSize when the orientation changes, so the portrait sheet goes in first.
-  info.orientation = NSPaperOrientationPortrait;
-  info.paperSize = NSMakeSize([paper[@"width"] doubleValue], [paper[@"height"] doubleValue]);
-  if ([pageSetup[@"orientation"] isEqual:@"landscape"]) info.orientation = NSPaperOrientationLandscape;
+  BOOL landscape = [pageSetup[@"orientation"] isEqual:@"landscape"];
+  CGFloat width = [paper[@"width"] doubleValue], height = [paper[@"height"] doubleValue];
+  // Orientation first, then the sheet as it lies on the page. AppKit reinterprets paperSize from the
+  // current orientation (and a portrait-state custom sheet can flip the orientation), so nothing here
+  // relies on it swapping. It also snaps the sheet to the nearest paper of the current printer, or of
+  // its generic list when no printer is installed (A4 becomes 595 x 842 there).
+  info.orientation = landscape ? NSPaperOrientationLandscape : NSPaperOrientationPortrait;
+  info.paperSize = landscape ? NSMakeSize(height, width) : NSMakeSize(width, height);
   info.topMargin = [margins[@"top"] doubleValue];
   info.rightMargin = [margins[@"right"] doubleValue];
   info.bottomMargin = [margins[@"bottom"] doubleValue];
@@ -182,12 +186,19 @@ NSPrintOperation *SparkPrintOperation(SparkPrintView *view, NSDictionary *pageSe
 // AppKit stores named papers with float noise (287.99999 for 4 x 6 in); 0.01 point is 1/7200 inch.
 static NSNumber *SparkPoints(CGFloat value) { return @(round(value * 100) / 100); }
 
-NSDictionary *SparkPageSetup(NSPrintInfo *info)
+NSDictionary *SparkPageSetup(NSPrintInfo *info, NSDictionary *requested)
 {
   NSSize paper = info.paperSize;
+  // The shape decides the orientation; AppKit's flag is used only for a square sheet.
+  BOOL landscape = paper.width == paper.height ? info.orientation == NSPaperOrientationLandscape : paper.width > paper.height;
+  NSDictionary *sheet = @{ @"width": SparkPoints(MIN(paper.width, paper.height)), @"height": SparkPoints(MAX(paper.width, paper.height)) };
+  // A sheet AppKit snapped to its paper list within a point is the one that was asked for: keep the
+  // caller's values, so a setup round-trips the same on every Mac, with or without printers.
+  NSDictionary *asked = requested[@"paperSize"];
+  if (asked && fabs([asked[@"width"] doubleValue] - [sheet[@"width"] doubleValue]) <= 1 && fabs([asked[@"height"] doubleValue] - [sheet[@"height"] doubleValue]) <= 1) sheet = asked;
   return @{
-    @"paperSize": @{ @"width": SparkPoints(MIN(paper.width, paper.height)), @"height": SparkPoints(MAX(paper.width, paper.height)) },
-    @"orientation": info.orientation == NSPaperOrientationLandscape ? @"landscape" : @"portrait",
+    @"paperSize": sheet,
+    @"orientation": landscape ? @"landscape" : @"portrait",
     @"margins": @{ @"top": SparkPoints(info.topMargin), @"right": SparkPoints(info.rightMargin), @"bottom": SparkPoints(info.bottomMargin), @"left": SparkPoints(info.leftMargin) },
   };
 }

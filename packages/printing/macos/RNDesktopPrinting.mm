@@ -48,11 +48,11 @@ RCT_EXPORT_MODULE(NativeDesktopPrinting)
 {
   NSDictionary *args = SparkArgs(json);
   SparkPrintFailure failure = ^(NSString *code, NSString *message) { reject(code, message, nil); };
-  if ([method isEqual:@"defaultPageSetup"]) { resolve(SparkJSON(SparkPageSetup(SparkPrintInfo(nil)))); return; }
+  if ([method isEqual:@"defaultPageSetup"]) { resolve(SparkJSON(SparkPageSetup(SparkPrintInfo(nil), nil))); return; }
   if ([method isEqual:@"exportPDF"]) {
     SparkPrintView *view = [self viewForContent:args[@"content"] failure:failure];
     if (!view) return;
-    NSDictionary *pageSetup = args[@"pageSetup"] ?: SparkPageSetup(SparkPrintInfo(nil));
+    NSDictionary *pageSetup = args[@"pageSetup"] ?: SparkPageSetup(SparkPrintInfo(nil), nil);
     NSInteger pages = SparkExportPDF(view, pageSetup, args[@"path"], args[@"title"], failure);
     if (pages) resolve(SparkJSON(@{ @"path": args[@"path"], @"numberOfPages": @(pages), @"pageSetup": pageSetup }));
     return;
@@ -69,7 +69,7 @@ RCT_EXPORT_MODULE(NativeDesktopPrinting)
     NSPrintInfo *info = SparkPrintInfo(args[@"pageSetup"]);
     void (^done)(BOOL) = ^(BOOL changed) {
       self->_presenting = NO;
-      resolve(SparkJSON(changed ? @{ @"canceled": @NO, @"pageSetup": SparkPageSetup(info) } : @{ @"canceled": @YES }));
+      resolve(SparkJSON(changed ? @{ @"canceled": @NO, @"pageSetup": SparkPageSetup(info, args[@"pageSetup"]) } : @{ @"canceled": @YES }));
     };
     _presenting = YES;
     if (owner) [[NSPageLayout pageLayout] beginSheetUsingPrintInfo:info onWindow:owner completionHandler:^(NSPageLayoutResult result) { done(result == NSPageLayoutResultChanged); }];
@@ -82,7 +82,7 @@ RCT_EXPORT_MODULE(NativeDesktopPrinting)
   void (^done)(BOOL) = ^(BOOL success) {
     self->_presenting = NO;
     // AppKit sets NSPrintCancelJob when the panel is cancelled; any other unsuccessful run is a failure.
-    if (success) resolve(SparkJSON(@{ @"canceled": @NO, @"pageSetup": SparkPageSetup(operation.printInfo) }));
+    if (success) resolve(SparkJSON(@{ @"canceled": @NO, @"pageSetup": SparkPageSetup(operation.printInfo, args[@"pageSetup"]) }));
     else if ([operation.printInfo.jobDisposition isEqual:NSPrintCancelJob]) resolve(SparkJSON(@{ @"canceled": @YES }));
     else failure(@"E_NATIVE", @"The print job did not complete");
   };

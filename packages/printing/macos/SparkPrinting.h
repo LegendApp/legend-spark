@@ -20,8 +20,9 @@ typedef void (^SparkPrintFailure)(NSString *code, NSString *message);
 FOUNDATION_EXPORT NSPrintInfo *SparkPrintInfo(NSDictionary *_Nullable pageSetup);
 /// A print operation for `view` that shows the print panel with a live preview, paper size, orientation and scale.
 FOUNDATION_EXPORT NSPrintOperation *SparkPrintOperation(SparkPrintView *view, NSDictionary *_Nullable pageSetup, NSString *_Nullable jobTitle);
-/// The page setup of `info`; paperSize is the portrait sheet (width <= height).
-FOUNDATION_EXPORT NSDictionary *SparkPageSetup(NSPrintInfo *info);
+/// The page setup of `info`; paperSize is the portrait sheet (width <= height) and the orientation
+/// follows the sheet's shape. A sheet within 1 point of `requested`'s reads back as requested.
+FOUNDATION_EXPORT NSDictionary *SparkPageSetup(NSPrintInfo *info, NSDictionary *_Nullable requested);
 /// Renders every page into a PDF at `path` (atomically replacing a file) without the printing system,
 /// so it never shows UI or reaches a printer. Returns the page count, or 0 after calling failure.
 FOUNDATION_EXPORT NSInteger SparkExportPDF(SparkPrintView *view, NSDictionary *pageSetup, NSString *path, NSString *_Nullable title, SparkPrintFailure failure);

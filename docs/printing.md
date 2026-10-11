@@ -68,8 +68,12 @@ every call takes the setup to use.
   default margins. It differs between machines, so pass an explicit setup where output must be
   repeatable.
 - Validation: paper sides from 1 to 14,400 points (the largest PDF page), `width <= height`,
-  margins of 0 or more that leave at least 72 points of printable width and height. Values read
-  from AppKit are rounded to 0.01 point.
+  margins of 0 or more that leave at least 72 points of printable width and height.
+- AppKit snaps a sheet to the nearest paper of the current printer, or of its generic list on a
+  Mac without printers (there A4 is 595 x 842). A sheet within 1 point of the one passed in reads
+  back exactly as passed, so a setup round-trips the same with or without printers; other values
+  read from AppKit are rounded to 0.01 point. The orientation follows the sheet's shape. Printing
+  uses the snapped paper; `exportPDF` uses the exact values.
 
 ## Printing
 
