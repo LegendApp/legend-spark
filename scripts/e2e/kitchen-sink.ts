@@ -17,6 +17,23 @@ export const KITCHEN_SINK = path.resolve(import.meta.dirname, "../../examples/ki
 export const LOCALE = /^[A-Za-z]{2,3}([-_][A-Za-z0-9]+)*$/;
 
 const JS_LOCATION = "-RCT_jsLocation", BUNDLE_URL = "SPARK_BUNDLE_URL";
+/**
+ * Host settings AppKit renders from, pinned for every driver launch in the app's argument domain (launch arguments), so
+ * captures do not depend on the Mac's settings. Nothing outside the launched process changes.
+ * docs/test-driver.md#pinned-host-settings lists what each pins and what cannot be pinned.
+ */
+const PINNED_DEFAULTS: Readonly<Record<string, string>> = {
+  NSRequiresAquaSystemAppearance: "YES",
+  AppleReduceDesktopTinting: "YES",
+  AppleAccentColor: "4",
+  AppleHighlightColor: "0.698039 0.843137 1.000000 Blue",
+  increaseContrast: "NO",
+  reduceTransparency: "NO",
+  differentiateWithoutColor: "NO",
+  AppleShowScrollBars: "WhenScrolling",
+  AppleFontSmoothing: "2",
+};
+const PINNED = Object.entries(PINNED_DEFAULTS).flatMap(([key, value]) => [`-${key}`, value]);
 const plist = (app: string, key: string) =>
   execFileSync("plutil", ["-extract", key, "raw", "-o", "-", path.join(app, "Contents/Info.plist")], { encoding: "utf8" }).trim();
 /** An optional Info.plist string: undefined when the key is absent. */
@@ -100,8 +117,8 @@ export class KitchenSinkApp {
   readonly reserved = { arguments: [JS_LOCATION], env: [DRIVER_ENV, BUNDLE_URL], locale: ["-AppleLanguages", "-AppleLocale"] } as const;
 
   /**
-   * Launches the app in driver mode with the caller's `arguments` (after its own) and `env`. `locale` sets the app's
-   * language and region formats through launch arguments.
+   * Launches the app in driver mode with `PINNED_DEFAULTS`, then the caller's `arguments` (after its own, so the last value
+   * of a key wins) and `env`. `locale` sets the app's language and region formats through launch arguments.
    */
   launch(options: { locale?: string; arguments?: readonly string[]; env?: Readonly<Record<string, string>>; log: ProcessLog }): Promise<Driver> {
     if (options.locale !== undefined && !LOCALE.test(options.locale)) throw new Error(`${options.locale} is not a language identifier such as ar or en-US`);
@@ -110,12 +127,12 @@ export class KitchenSinkApp {
     const resolved = this.resolved;
     if (!resolved || (!resolved.embedded && !this.server)) throw new Error("KitchenSinkApp.open() must run before launch()");
     const extra = options.arguments ?? [];
-    if (resolved.embedded) return launchDriver({ executable: resolved.executable, args: [...locale, ...extra], env: options.env, log: options.log });
+    if (resolved.embedded) return launchDriver({ executable: resolved.executable, args: [...PINNED, ...locale, ...extra], env: options.env, log: options.log });
     const port = (this.server!.address() as AddressInfo).port;
     return launchDriver({
       executable: resolved.executable,
       // RCT_jsLocation points React Native's packager connection at the same server as the bundle URL.
-      args: [JS_LOCATION, `127.0.0.1:${port}`, ...locale, ...extra],
+      args: [JS_LOCATION, `127.0.0.1:${port}`, ...PINNED, ...locale, ...extra],
       env: { ...options.env, [BUNDLE_URL]: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=false&minify=false` },
       log: options.log,
     });

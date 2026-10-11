@@ -48,6 +48,41 @@ await driver.quit();
 await driver.close();
 ```
 
+## Pinned host settings
+
+AppKit draws some pixels from the Mac's settings, so the same build could capture differently
+at another time of day or on another Mac. `KitchenSinkApp.launch` (`scripts/e2e/kitchen-sink.ts`),
+which the driver backend and `ks:capture` share, passes the settings below as launch arguments.
+Launch arguments go into the app's argument domain (`NSArgumentDomain`): they apply to that one
+process and never change the user's or the system's settings. They come before the locale and
+the flow's own `arguments`, so a flow can override one (the last value wins).
+
+Measured on macOS 27 (26A428), with a small AppKit app that renders a never-shown window the
+way `capture` does, and with Kitchen Sink captures (the system appearance, tinting, contrast and
+transparency rows):
+
+| Argument | Pins | Evidence that AppKit reads it |
+| --- | --- | --- |
+| `-NSRequiresAquaSystemAppearance YES` | The system appearance the app sees: light. With Appearance set to Auto, the system turns dark at sunset. A dark app's inactive title text ("KitchenSink") then renders gray 135 instead of 151, so every dark golden recorded at night failed in the morning (#283). `setAppAppearance` still applies light and dark to the app. | With AppKit's in-process system appearance testing override set to dark (an experiment, not shipped), a capture differs from one under a light system in 1875 title-text pixels. With this argument, the two are identical. |
+| `-AppleReduceDesktopTinting YES` | Wallpaper tinting off. | `+[NSApplication isReduceDesktopTintingEnabled]` returns YES. Captures with tinting on and off were identical: the driven window is never on screen, so the window server has no wallpaper behind it to tint from. |
+| `-AppleAccentColor 4` | Blue accent colour. It also replaces an app's own accent colour. | `0` makes `controlAccentColor` red. |
+| `-AppleHighlightColor "0.698039 0.843137 1.000000 Blue"` | Blue text selection. | An orange value changes `selectedTextBackgroundColor`. |
+| `-increaseContrast NO` | Increase contrast off. | `YES` turns on `accessibilityDisplayShouldIncreaseContrast` and changes title text, labels and controls. |
+| `-reduceTransparency NO` | Reduce transparency off. | `YES` turns on `accessibilityDisplayShouldReduceTransparency` and turns the title bar from gray 70 to 30. |
+| `-differentiateWithoutColor NO` | Differentiate without colour off. | `YES` turns on `accessibilityDisplayShouldDifferentiateWithoutColor`. |
+| `-AppleShowScrollBars WhenScrolling` | Overlay scroll bars. Automatic would show legacy scroll bars while a mouse is connected. | `Always` makes `NSScroller.preferredScrollerStyle` legacy. |
+| `-AppleFontSmoothing 2` | Font smoothing on. | `0` changes text pixels; `1`, `2` and `3` render like the default. |
+
+Not pinned this way:
+
+- `AppleInterfaceStyle` and `AppleInterfaceStyleSwitchesAutomatically` have no effect in the
+  argument domain. `NSRequiresAquaSystemAppearance` pins the system appearance instead.
+- The display's colour space and backing scale, fonts and the macOS version depend on the Mac
+  ([Determinism](e2e-flows.md#determinism)).
+
+No capture needs a mask for host settings: every difference measured is pinned above.
+`tests/e2e-kitchen-sink-launch.test.ts` launches a fake app and checks its arguments.
+
 ## Launch contract and security
 
 - `SPARK_TEST_DRIVER_DIR` names a run directory the runner created: absolute, mode
