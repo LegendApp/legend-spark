@@ -1,0 +1,55 @@
+appId: so.legend.spark.examples.kitchensink
+name: Table selection, activation, context menu, sorting and column layout by input
+intent: >
+  On Native controls > Table (10,000 rows), clicking File 1 selects it alone; Shift-clicking File 4
+  selects the range File 1-4; Command-clicking File 2 removes it (count 3); Command-A selects all
+  10,000 rows. Double-clicking File 3 inside that selection activates all 10,000 rows; clicking File 5
+  and pressing Return activates File 5 alone; right-clicking File 9,
+  which is outside the selection, reports a context menu for File 9 alone. Clicking the Size header
+  sorts ascending (File 9973, 1 KB, first) and again descending; dragging the Name/Kind header edge
+  widens Name; dragging the Kind header to the leading edge moves Kind first. Readouts are the JSON
+  the API reports.
+checks: [CTRL-TABLE-03, CTRL-TABLE-04]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  locale: [en]
+---
+- launchApp: { openUrl: "spark-ks://native-controls/table" }
+- assertVisible: { id: native-controls-table-list }
+- assertText: { id: native-controls-table-selection, equals: '{"count":1,"first":["file-2"]}' }
+# Selection: click, Shift-click range, Command-click toggle, Command-A.
+- tapOn: "File 1"
+- assertText: { id: native-controls-table-selection, equals: '{"count":1,"first":["file-1"]}' }
+- tapOn: { text: "File 4", modifiers: [shift] }
+- assertText: { id: native-controls-table-selection, equals: '{"count":4,"first":["file-1","file-2","file-3"]}' }
+- tapOn: { text: "File 2", modifiers: [cmd] }
+- assertText: { id: native-controls-table-selection, equals: '{"count":3,"first":["file-1","file-3","file-4"]}' }
+- shortcut: cmd+a
+- assertText: { id: native-controls-table-selection, equals: '{"count":10000,"first":["file-1","file-2","file-3"]}' }
+# Activation and the context menu hook.
+# A double-click inside the selection activates the whole selection.
+- doubleClickOn: "File 3"
+- assertText: { id: native-controls-table-event, equals: '{"activate":{"count":10000,"first":["file-1","file-2","file-3"]}}' }
+# A click inside a multiple selection narrows it only once it cannot be a double-click: wait for it.
+- tapOn: "File 5"
+- assertText: { id: native-controls-table-selection, equals: '{"count":1,"first":["file-5"]}' }
+- pressKey: Enter
+- assertText: { id: native-controls-table-event, equals: '{"activate":{"count":1,"first":["file-5"]}}' }
+- rightClickOn: "File 9"
+- assertVisible: { id: native-controls-table-event, text: '/^\{"contextMenu":\{"rowId":"file-9","count":1,"first":\["file-9"\],"position":\{"x":\d+,"y":\d+\}\}\}$/' }
+- assertText: { id: native-controls-table-selection, equals: '{"count":1,"first":["file-5"]}' }
+- tapOn: { text: "File 7", modifiers: [ctrl] }
+- assertVisible: { id: native-controls-table-event, text: '/^\{"contextMenu":\{"rowId":"file-7","count":1,"first":\["file-7"\],"position":\{"x":\d+,"y":\d+\}\}\}$/' }
+- assertText: { id: native-controls-table-selection, equals: '{"count":1,"first":["file-5"]}' }
+# Sorting: the Size header, then again for descending.
+- tapOn: { point: "440,14", within: { id: native-controls-table-list } }
+- assertText: { id: native-controls-table-sort, equals: '[{"columnId":"size","direction":"ascending"},{"columnId":"name","direction":"ascending"}]' }
+- assertVisible: "File 9973"
+- tapOn: { point: "440,14", within: { id: native-controls-table-list } }
+- assertText: { id: native-controls-table-sort, equals: '[{"columnId":"size","direction":"descending"},{"columnId":"name","direction":"ascending"}]' }
+# Column layout: widen Name by its trailing header edge, then drag Kind to the leading edge.
+- dragAndDrop: { from: { point: "235,14", within: { id: native-controls-table-list } }, to: { point: "295,14", within: { id: native-controls-table-list } } }
+- assertVisible: { id: native-controls-table-columns, text: '/^\[\{"id":"name","width":2[6-9]\d\},\{"id":"kind","width":120\},\{"id":"size","width":130\}\]$/' }
+- dragAndDrop: { from: { point: "360,14", within: { id: native-controls-table-list } }, to: { point: "10,14", within: { id: native-controls-table-list } }, steps: 30 }
+- assertVisible: { id: native-controls-table-columns, text: '/^\[\{"id":"kind","width":120\},\{"id":"name","width":2[6-9]\d\},\{"id":"size","width":130\}\]$/' }

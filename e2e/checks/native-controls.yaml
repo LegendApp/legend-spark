@@ -144,6 +144,49 @@ checks:
     covers:
       - ./ui/sidebar#Sidebar
       - ./ui/sidebar#SidebarItem
+  CTRL-TABLE-01:
+    title: Table renders 10,000 native rows with a sorted, resizable header, a selected row and trailing-aligned sizes in light and dark, mirrored in Arabic, and getTableAvailability() reports available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#93 CTRL.api-table"
+    covers:
+      - ./ui/table#Table
+      - ./ui/table#getTableAvailability().available
+  CTRL-OUTLINE-01:
+    title: Outline renders 10,010 native rows in three levels with the controlled rows expanded and a nested row selected in light and dark, mirrored in Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#93 CTRL.api-table"
+    covers:
+      - ./ui/table#Outline
+  CTRL-TABLE-03:
+    title: Table selection follows click, Shift-click range, Command-click toggle and Command-A; double-click and Return report activation; a right-click outside the selection reports a context menu for that row alone
+    platforms: [macos]
+    blocking: true
+    spec: "#93 CTRL.api-table"
+    covers:
+      - ./ui/table#Table
+  CTRL-TABLE-04:
+    title: Clicking a sortable Table header reports ascending then descending sort descriptors and the application's sorted rows appear; dragging a header edge resizes and dragging a header reorders columns, reported in the controlled column layout
+    platforms: [macos]
+    blocking: true
+    spec: "#93 CTRL.api-table"
+    covers:
+      - ./ui/table#Table
+  CTRL-OUTLINE-02:
+    title: Outline triangles collapse and expand rows, collapsed rows keep their expanded descendants, Option-click collapses or expands a whole branch reported once, and selection and context menus report outline rows
+    platforms: [macos]
+    blocking: true
+    spec: "#93 CTRL.api-table"
+    covers:
+      - ./ui/table#Outline
+  CTRL-TABLE-02:
+    title: On Windows getTableAvailability() reports unsupported-platform and Table and Outline show SparkError E_UNSUPPORTED_PLATFORM in place of the view (Windows work is #294)
+    platforms: [windows]
+    blocking: true
+    spec: "#93 CTRL.api-table; #294"
+    covers:
+      - ./ui/table#getTableAvailability().available
   CTRL-UNSUP-01:
     title: On Windows every primitive reports unsupported-platform and rendering one throws SparkError E_UNSUPPORTED_PLATFORM (WinUI work is #228)
     platforms: [windows]
