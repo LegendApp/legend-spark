@@ -1,0 +1,30 @@
+appId: so.legend.spark.examples.kitchensink
+name: Dialog features are typed unsupported on Windows
+intent: >
+  On Windows the Dialogs screen reports accessory controls, prompts and the About panel as
+  unsupported-platform, while the panels, message dialogs and the checkbox stay available.
+  Triggering an accessory panel rejects SparkError:E_UNSUPPORTED_OPTION and a prompt or the About
+  panel rejects SparkError:E_UNSUPPORTED_PLATFORM, without showing a dialog. Implementations: #247.
+checks: [DLG-UNSUP-01]
+tags: [dialogs]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://dialogs/panels" }
+- extendedWaitUntil: { visible: { id: dialogs-panels-root }, timeout: 10s }
+- assertText: { id: dialogs-panels-availability-files, equals: 'files: {"available":true}' }
+- assertText: { id: dialogs-panels-availability-accessory, equals: 'accessory: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: dialogs-panels-availability-messages, equals: 'messages: {"available":true}' }
+- assertText: { id: dialogs-panels-availability-checkbox, equals: 'checkbox: {"available":true}' }
+- assertText: { id: dialogs-panels-availability-prompt, equals: 'prompt: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: dialogs-panels-availability-about-panel, equals: 'about-panel: {"available":false,"reason":"unsupported-platform"}' }
+- tapOn: { id: dialogs-panels-open }
+- assertText: { id: dialogs-panels-open-result, equals: SparkError:E_UNSUPPORTED_OPTION }
+- tapOn: { id: dialogs-panels-save }
+- assertText: { id: dialogs-panels-save-result, equals: SparkError:E_UNSUPPORTED_OPTION }
+- tapOn: { id: dialogs-panels-rename }
+- assertText: { id: dialogs-panels-rename-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: dialogs-panels-unlock }
+- assertText: { id: dialogs-panels-unlock-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: dialogs-panels-about }
+- assertText: { id: dialogs-panels-about-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertNotVisible: { text: Spark Kitchen Sink, window: key }

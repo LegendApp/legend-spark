@@ -1,0 +1,34 @@
+appId: so.legend.spark.examples.kitchensink
+name: Open and save panel accessory controls
+intent: >
+  "Open with accessory…" shows an open panel with an "Open read-only" checkbox below the file
+  browser; checking it and opening a file returns the path with the checkbox state.
+  "Save with format…" shows a save panel with a Format pop-up (Markdown selected) and a checked
+  "Include metadata" checkbox; choosing JSON, unchecking the box and saving returns the path with
+  both values. Canceling a save returns {"canceled":true} without accessory values.
+checks: [DLG-ACCESSORY-01, DLG-ACCESSORY-02]
+tags: [dialogs]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://dialogs/panels" }
+- extendedWaitUntil: { visible: { id: dialogs-panels-root }, timeout: 10s }
+- createFixture: { path: "${TMP}/notes.txt", contents: "Notes" }
+# Open: the checkbox accessory
+- tapOn: { id: dialogs-panels-open }
+- assertDialog: { kind: open }
+- assertVisible: { id: dialogs-panels-open-read-only, text: Open read-only }
+- tapOn: { id: dialogs-panels-open-read-only }
+- handleDialog: { kind: open, files: ["${TMP}/notes.txt"] }
+- assertVisible: { id: dialogs-panels-open-result, text: '/^\{"canceled":false,"paths":\[".*\/notes\.txt"\],"accessory":\{"dialogs-panels-open-read-only":true\}\}$/' }
+# Save: a format pop-up and a checkbox
+- tapOn: { id: dialogs-panels-save }
+- assertDialog: { kind: save }
+- assertVisible: { id: dialogs-panels-save-format, text: Markdown }
+- tapOn: { id: dialogs-panels-save-format }
+- tapOn: { text: JSON, role: menuItem }
+- tapOn: { id: dialogs-panels-save-metadata }
+- handleDialog: { kind: save, name: Notes.json, path: "${TMP}" }
+- assertVisible: { id: dialogs-panels-save-result, text: '/^\{"canceled":false,"path":".*\/Notes\.json","accessory":\{"dialogs-panels-save-format":"json","dialogs-panels-save-metadata":false\}\}$/' }
+- tapOn: { id: dialogs-panels-save }
+- handleDialog: { kind: save, cancel: true }
+- assertText: { id: dialogs-panels-save-result, equals: '{"canceled":true}' }
