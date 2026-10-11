@@ -213,7 +213,7 @@ test("Create Spark archive is peer-free and runs without installing the framewor
       const create = spawnProcess(["node", path.join(destination, manifest.bin["create-spark"]), app, "--platform", platform], { cwd: root });
       const [stderr, status] = await Promise.all([new Response(create.stderr).text(), create.exited]);
       expect(status).toBe(1);
-      expect(stderr).toContain("Use create --universal for mobile/web targets");
+      expect(stderr).toContain(`Use npm create @legendapp/spark@latest ${app} -- --universal for mobile/web targets`);
       expect(existsSync(app)).toBe(false);
     }
     // Expose the bundle's internals only in the extracted test copy.
