@@ -208,6 +208,28 @@ static NSBitmapImageRep *SparkRender(NSView *view) {
   [view cacheDisplayInRect:view.bounds toBitmapImageRep:rep];
   return rep;
 }
+// The unemphasized selection material (a selected source-list row in a window that is not key, which
+// driver windows never are) is a black layer that the window server turns into a tint with a vibrant
+// compositing filter. Drawn in-process the filter is skipped and the row is solid black, so for the
+// capture that layer is hidden under the system's unemphasized selection color, then restored.
+static void SparkCoverSelectionMaterials(NSView *view, NSMutableArray<dispatch_block_t> *restore) {
+  if (view.isHidden) return;
+  NSVisualEffectView *effect = [view isKindOfClass:NSVisualEffectView.class] ? (NSVisualEffectView *)view : nil;
+  if (effect.material == NSVisualEffectMaterialSelection && !effect.emphasized && effect.layer) {
+    [effect.layer displayIfNeeded]; // AppKit adds the material layer when the view's layer first displays.
+    for (CALayer *layer in effect.layer.sublayers) {
+      if (!layer.compositingFilter || layer.hidden) continue;
+      layer.hidden = YES;
+      [restore addObject:^{ layer.hidden = NO; }];
+    }
+    CALayer *cover = [CALayer layer];
+    cover.frame = effect.layer.bounds;
+    [effect.effectiveAppearance performAsCurrentDrawingAppearance:^{ cover.backgroundColor = NSColor.unemphasizedSelectedContentBackgroundColor.CGColor; }];
+    [effect.layer addSublayer:cover];
+    [restore addObject:^{ [cover removeFromSuperlayer]; }];
+  }
+  for (NSView *child in view.subviews) SparkCoverSelectionMaterials(child, restore);
+}
 // Captures are created only inside the runner's private run directory.
 static int SparkWriteCapture(NSString *file, NSData *data) {
   int fd = openat(directoryFD, file.fileSystemRepresentation, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
@@ -239,7 +261,13 @@ static void SparkCapture(NSDictionary *request, SparkDriverReply reply) {
     SparkWrapped(0, ^{
       [window layoutIfNeeded];
       [view displayIfNeeded];
+      NSMutableArray<dispatch_block_t> *restore = [NSMutableArray new];
+      [CATransaction begin];
+      [CATransaction setDisableActions:YES];
+      SparkCoverSelectionMaterials(view, restore);
       rep = SparkRender(view);
+      for (dispatch_block_t undo in restore) undo();
+      [CATransaction commit];
     });
     NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
     if (!png) { reply(SparkDriverFailure(@"E_RENDER", @"Rendering produced no image")); return; }

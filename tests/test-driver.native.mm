@@ -26,6 +26,16 @@ static const char *token = "0123456789abcdef0123456789abcdef0123456789abcdef0123
 - (void)drawRect:(NSRect)rect { [NSColor.greenColor setFill]; NSRectFill(self.bounds); }
 @end
 
+// Two empty rows in a source list, the style the Sidebar uses; the first is selected.
+@interface SourceList : NSObject <NSTableViewDataSource, NSTableViewDelegate>
+@end
+@implementation SourceList
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView { return 2; }
+- (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)column row:(NSInteger)row { return nil; }
+@end
+static SourceList *sourceList;
+static NSTableView *selectionTable;
+
 static void Check(BOOL condition, NSString *message) {
   if (!condition) { fprintf(stderr, "FAILED: %s\n", message.UTF8String); exit(1); }
 }
@@ -113,8 +123,17 @@ static NSWindow *MakeWindow(void) {
   button.frame = NSMakeRect(20, 100, 160, 32);
   NSTextField *label = [NSTextField labelWithString:@"Label"];
   label.frame = NSMakeRect(220, 100, 160, 32); label.font = [NSFont systemFontOfSize:28];
-  for (NSView *view in @[layerColor, drawn, image, effect, button, label]) [content addSubview:view];
+  sourceList = [SourceList new];
+  selectionTable = [NSTableView new];
+  selectionTable.style = NSTableViewStyleSourceList; selectionTable.headerView = nil; selectionTable.rowHeight = 28;
+  selectionTable.dataSource = sourceList; selectionTable.delegate = sourceList;
+  [selectionTable addTableColumn:[[NSTableColumn alloc] initWithIdentifier:@"column"]];
+  NSScrollView *list = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 400, 90)];
+  list.documentView = selectionTable; list.drawsBackground = NO;
+  for (NSView *view in @[layerColor, drawn, image, effect, button, label, list]) [content addSubview:view];
   window.contentView = content;
+  [selectionTable reloadData];
+  [selectionTable selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
   return window;
 }
 // Input targets (mode "input"): real AppKit controls plus views that record what they receive.
@@ -635,6 +654,23 @@ int main(int argc, char **argv) { @autoreleasepool {
     // Behind-window blur comes from the window server; in-process it is a flat material color.
     NSColor *vibrancy = Sample(@"cache.png", NSMakeRect(300, 200, 100, 100), window);
     printf("behind-window vibrancy renders as %s\n", Describe(vibrancy).UTF8String);
+    // A selected source-list row in a window that is not key: the window server tints its selection material,
+    // which in-process drawing renders black; the capture draws the unemphasized selection color instead.
+    NSRect selected = [selectionTable convertRect:[selectionTable rectOfRow:0] toView:window.contentView];
+    NSColor *selection = Sample(@"cache.png", NSMakeRect(NSMaxX(selected) - 60, NSMinY(selected), 20, NSHeight(selected)), window);
+    __block NSColor *unemphasized;
+    [[NSAppearance appearanceNamed:NSAppearanceNameAqua] performAsCurrentDrawingAppearance:^{
+      unemphasized = [NSColor.unemphasizedSelectedContentBackgroundColor colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+    }];
+    Check(Near(selection, unemphasized.redComponent, unemphasized.greenComponent, unemphasized.blueComponent),
+      [NSString stringWithFormat:@"a selected source-list row captures in the unemphasized selection color %@, not %@", Describe(unemphasized), Describe(selection)]);
+    NSRect unselected = [selectionTable convertRect:[selectionTable rectOfRow:1] toView:window.contentView];
+    Check(Near(Sample(@"cache.png", NSMakeRect(NSMaxX(unselected) - 60, NSMinY(unselected), 20, NSHeight(unselected)), window), 1, 1, 1), @"an unselected row stays clear");
+    // The capture leaves the selection material as it was.
+    NSView *material = nil;
+    for (NSView *child in [selectionTable rowViewAtRow:0 makeIfNecessary:NO].subviews) if ([child isKindOfClass:NSVisualEffectView.class]) material = child;
+    Check(material.layer.sublayers.count == 1 && material.layer.sublayers.firstObject.compositingFilter && !material.layer.sublayers.firstObject.hidden,
+      @"the selection material is restored after the capture");
   }
   if ([mode isEqual:@"hooks"]) Check(Near(Sample(@"wrapped.png", NSMakeRect(0, 200, 100, 100), window), 0, 0, 1), @"capture renders inside the render wrappers");
   [NSFileManager.defaultManager removeItemAtPath:directory error:nil];

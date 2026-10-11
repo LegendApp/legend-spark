@@ -732,7 +732,7 @@ A golden only works if the same build renders the same pixels every time. The dr
 | Backing scale | Capture at a fixed scale; goldens are @2x | Captures at the window's backing scale (2x on Retina displays) |
 | Color space | Keep it fixed per machine | Captures are tagged with the window's color space (Display P3 on most Macs) |
 | Fonts and OS rendering | Record goldens on the gate target's OS; a macOS major update can change text rendering | Not handled; the store has no OS version segment |
-| Content composited by the window server | Not capturable in-process | Behind-window vibrancy renders as flat gray; shadows and rounded corners are not captured |
+| Content composited by the window server | Not capturable in-process | Behind-window vibrancy renders as flat gray; the unemphasized row selection material is drawn as its system color; shadows and rounded corners are not captured |
 
 ## Lint rules
 
