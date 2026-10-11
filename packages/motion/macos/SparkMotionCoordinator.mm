@@ -649,6 +649,7 @@ static NSDictionary *SparkStateObject(const State &state) { return @{ @"value": 
   return nil;
 }
 
+- (void)recordTelemetry { _engine.setTelemetry(true); }
 - (void)noteInput { _inputEvent = _engine.events(); }
 
 - (NSDictionary *)telemetry:(NSInteger)tag now:(double)now

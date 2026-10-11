@@ -241,15 +241,19 @@ also pauses its subviews' own Core Animation, such as a spinner inside a `Motion
 
 ## Motion telemetry
 
-The engine records every view's latest **motion**: from the instant it starts moving from rest
-until it settles (`spark::motion::Episode`). Every mutation (start, interruption, `set`,
+In driver mode (the in-app test driver turns it on when it starts; it is off otherwise, so
+apps record nothing) the engine records every view's latest **motion**: from the instant it
+starts moving from rest until it settles (`spark::motion::Episode`). Every mutation (start, interruption, `set`,
 `stop`, completion) appends to each property's history the track that drives it from then on,
 so the value and velocity of any property at any time of the motion can be evaluated after
 the fact, with the same solver that drove the compositor. An **interruption** is a property
 that was animating and whose animation was replaced or stopped, or whose value or velocity
-jumped (a `set`): it is recorded with the state just before and just after. A property that
-starts moving while others move is not an interruption. A motion's `end` is when its last
-track ends (infinity while one repeats forever), or the instant it was stopped.
+jumped, or a resting property that `set` gave another value: it is recorded with the state
+just before and just after. A property that starts an animation from rest while others move
+is not an interruption, whatever velocity it starts with, but like an interruption it is the
+motion's latest event (`latestMs`), which `waitForMotion` sees. A motion keeps at most 1,024
+interruptions. A motion's `end` is when its last track ends (infinity while one repeats
+forever), or the instant it was stopped.
 
 The motion package registers three driver commands. They address a view by `testID`: the
 `MotionView` with it, or the `MotionView` containing the view with it (`E_NOT_FOUND`
@@ -257,8 +261,8 @@ otherwise). Times are engine milliseconds (media time on the real clock).
 
 | Command | Fields | Reply |
 | --- | --- | --- |
-| `motionState` | `testID` | `values`, `velocities`, `animating` now, `clock`, `timeMs`, and `motion`: `startMs`, `endMs` (null while repeating forever), `latestMs` (start or last interruption), `settled`, `progress` (0-1, null while repeating forever), `afterInput`, `startValues`, `properties` (moved), `kinds` (each property's latest animation: `spring`, `timing`, `keyframes`, `decay`, `sequence`), `interruptions` (`timeMs`, `property`, `before`, `after`), `truncated` (a property passed 4,096 history entries). `motion` is null before the view first moves. |
-| `waitForMotion` | `testID`, one of `progress` (0-1), `elapsedMs` (from the motion's start) or `settled: true`; `timeoutMs` (10000) | Waits until the view's motion started or was interrupted after the last driver input (`SparkTestDriverObserveInput`: input commands, `navigate`, `openFile`), then until it gets there, and replies like `motionState`. On the virtual clock it advances the clock exactly there (`E_PASSED` if the progress point is already behind); on the real clock it checks every 2 ms. `E_PASSED` when the motion settles before the progress point; `E_UNSUPPORTED_OPTION` for `progress` or `settled` of a motion that repeats forever; `E_TIMEOUT`. |
+| `motionState` | `testID` | `values`, `velocities`, `animating` now, `clock`, `timeMs`, and `motion`: `startMs`, `endMs` (null while repeating forever), `latestMs` (start, last interruption, or last animation started during the motion), `settled`, `progress` (0-1, null while repeating forever), `afterInput`, `startValues`, `properties` (moved), `kinds` (each property's latest animation: `spring`, `timing`, `keyframes`, `decay`, `sequence`), `interruptions` (`timeMs`, `property`, `before`, `after`), `truncated` (a property passed 4,096 history entries, or the motion 1,024 interruptions). `motion` is null before the view first moves. |
+| `waitForMotion` | `testID`, one of `progress` (0-1), `elapsedMs` (from the motion's start) or `settled: true`; `timeoutMs` (10000) | Waits until the view's motion started, was interrupted or started another property's animation after the last driver input (`SparkTestDriverObserveInput`: input commands, `navigate`, `openFile`), then until it gets there, and replies like `motionState`. On the virtual clock it advances the clock exactly there (`E_PASSED` if the progress point is already behind); on the real clock it checks every 2 ms. `E_PASSED` when the motion settles before the progress point; `E_UNSUPPORTED_OPTION` for `progress` or `settled` of a motion that repeats forever; `E_TIMEOUT`. |
 | `sampleMotion` | `testID`, `fromMs` (the motion's start), `toMs` (its end, or now), `intervalMs` (1000/120) | `samples`: `tMs`, `values`, `velocities` every `intervalMs` from `fromMs`, plus `toMs`; at most 20,000. `toMs` cannot be in the future. |
 
 A capture (the driver's `capture`) renders views in-process with `cacheDisplayInRect:`, which

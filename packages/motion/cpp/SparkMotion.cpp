@@ -513,7 +513,7 @@ void Engine::set(int64_t view, const std::vector<std::pair<Property, double>> &v
     release(target[property], false, settled);
     target[property].model = value;
   }
-  observe(view, before, now);
+  observe(view, before, now, true);
 }
 
 void Engine::stop(int64_t view, const std::vector<Property> &properties, double now, std::vector<Settled> &settled) {
@@ -561,6 +561,7 @@ void Engine::sweep(double now, std::vector<Settled> &settled) {
 
 Engine::Snapshot Engine::snapshot(const Slots &slots, double now) const {
   Snapshot out;
+  if (!telemetry_) return out;  // observe records nothing
   for (int i = 0; i < PropertyCount; i++) {
     const Slot &slot = slots[i];
     out.tracks[i] = slot.track;
@@ -571,13 +572,15 @@ Engine::Snapshot Engine::snapshot(const Slots &slots, double now) const {
   return out;
 }
 
-void Engine::observe(int64_t view, const Snapshot &before, double now) {
+void Engine::observe(int64_t view, const Snapshot &before, double now, bool setting) {
+  if (!telemetry_) return;
   const Slots &slots = views_.at(view);
   const Snapshot after = snapshot(slots, now);
   if (!before.moving && !after.moving) return;
   auto segment = [&](int i) { return Segment{now, after.tracks[i], slots[i].begin, after.states[i].value}; };
   Episode *episode;
-  if (!before.moving) {
+  // A view already moving when telemetry was turned on starts its episode here.
+  if (!before.moving || !episodes_.count(view)) {
     episode = &(episodes_[view] = Episode{});
     episode->start = episode->latest = now;
     episode->event = ++events_;
@@ -595,8 +598,15 @@ void Engine::observe(int64_t view, const Snapshot &before, double now) {
       if (episode->segments[i].size() < Episode::kMaxSegments) episode->segments[i].push_back(segment(i));
       else episode->truncated = true;
       if (after.tracks[i]) episode->kinds[i] = after.tracks[i]->kind;
-      if ((replaced && before.animating[i]) || jumped) {
-        episode->interruptions.push_back({now, Property(i), before.states[i], after.states[i]});
+      // A moving property replaced, stopped or set, or a resting one set to another value, is interrupted. A resting
+      // property that starts an animation is not, whatever velocity the animation starts with; either way the
+      // motion has a new latest event.
+      const bool interrupted = (before.animating[i] && (replaced || jumped)) || (setting && before.states[i].value != after.states[i].value);
+      if (interrupted) {
+        if (episode->interruptions.size() < Episode::kMaxInterruptions) episode->interruptions.push_back({now, Property(i), before.states[i], after.states[i]});
+        else episode->truncated = true;
+      }
+      if (interrupted || (replaced && after.tracks[i])) {
         episode->latest = now;
         episode->event = ++events_;
       }

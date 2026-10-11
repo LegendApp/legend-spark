@@ -49,6 +49,7 @@ int main()
 {
   @autoreleasepool {
     SparkMotionCoordinator *motion = SparkMotionCoordinator.shared;
+    [motion recordTelemetry];
     TestHost *host = [[TestHost alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];
     host.wantsLayer = YES;
     host.motionTag = 7;

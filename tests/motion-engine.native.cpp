@@ -169,6 +169,7 @@ int main() {
   validateRange({0, 50, 100}, {0, 10, 0});
 
   Engine engine;
+  engine.setTelemetry(true);
   std::vector<Settled> settled;
   std::vector<int64_t> touched;
   engine.addView(1, kIdentity);
@@ -342,6 +343,7 @@ int main() {
 
   // Episodes: a motion from rest to rest, with its history evaluable after the fact.
   Engine telemetry;
+  telemetry.setTelemetry(true);
   telemetry.addView(5, kIdentity);
   CHECK(!telemetry.episode(5));
   telemetry.set(5, {{TranslateX, 10}}, 1, settled);  // at rest: no motion
@@ -375,6 +377,39 @@ int main() {
   telemetry.run(plan("jump", 5, Rotate, timingTo(90, 1)), 30, settled, touched);
   telemetry.set(5, {{Rotate, 0}}, 30.5, settled);
   CHECK(telemetry.episode(5)->interruptions.size() == 1 && telemetry.episode(5)->end == 30.5);
+
+
+  // An animation that starts on a resting property while another moves is the motion's latest event (waitForMotion
+  // sees it), and not an interruption, whether it starts at rest (a spring) or at full speed (linear).
+  telemetry.run(plan("carrier", 5, TranslateX, timingTo(0, 10)), 40, settled, touched);
+  const Episode *carried = telemetry.episode(5);
+  const uint64_t started = carried->event;
+  telemetry.run(plan("late spring", 5, ScaleX, springTo(2)), 41, settled, touched);
+  CHECK(carried->event > started && carried->event == telemetry.events() && carried->latest == 41 && carried->interruptions.empty());
+  CHECK(carried->kinds[ScaleX] == Spec::Kind::Spring && carried->segments[ScaleX].size() == 2);
+  telemetry.run(plan("late linear", 5, ScaleY, timingTo(3, 1, {0, 0, 1, 1})), 42, settled, touched);
+  CHECK(carried->event == telemetry.events() && carried->latest == 42 && carried->interruptions.empty());
+  // Setting a resting property to another value during the motion is an interruption; setting it to its value is not.
+  telemetry.set(5, {{Opacity, 0.5}}, 43, settled);
+  CHECK(carried->interruptions.size() == 1 && carried->interruptions[0].property == Opacity && carried->interruptions[0].after.value == 0.5);
+  telemetry.set(5, {{Opacity, 0.5}}, 43.5, settled);
+  CHECK(carried->interruptions.size() == 1);
+  // A sweep that settles a finished animation is neither.
+  const uint64_t beforeSweep = telemetry.events();
+  telemetry.sweep(43.6, settled);
+  CHECK(telemetry.events() == beforeSweep);
+  // Interruptions are capped; the episode says it is truncated.
+  CHECK(!carried->truncated);
+  for (size_t index = 0; index <= Episode::kMaxInterruptions; index++) telemetry.set(5, {{Rotate, double(index % 2 ? 0 : 1)}}, 44 + index * 1e-6, settled);
+  CHECK(carried->interruptions.size() == Episode::kMaxInterruptions && carried->truncated);
+
+  // Telemetry is off by default and records nothing; turning it off forgets every episode.
+  Engine quiet;
+  quiet.addView(1, kIdentity);
+  quiet.run(plan("unrecorded", 1, Opacity, springTo(0)), 0, settled, touched);
+  CHECK(!quiet.episode(1) && quiet.events() == 0);
+  telemetry.setTelemetry(false);
+  CHECK(!telemetry.episode(5));
 
   if (failures) { std::printf("%d motion engine checks failed\n", failures); return 1; }
   std::puts("Motion engine tests passed");

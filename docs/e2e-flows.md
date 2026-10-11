@@ -460,7 +460,7 @@ fails with `invalid`.
 Motion commands read the engine's telemetry ([motion.md](motion.md#motion-telemetry)), not
 pixels: what the engine solved for the `MotionView` with the target's testID (or the
 `MotionView` containing it). They all address **the target's motion after the last input**:
-the motion it started, or an interruption of a running one, after the latest driver input
+the motion it started, an interruption of a running one, or an animation it added to a running one, after the latest driver input
 (`tapOn`, `pressKey`, `typeText`, `scroll`, `dragAndDrop`, `openUrl`, …). Each waits for that
 motion up to the command's `timeout` (default 5 s) and fails with `timeout` when none starts,
 so a command right after the input that triggers the motion is race-free. A motion runs from

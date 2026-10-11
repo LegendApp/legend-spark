@@ -123,15 +123,16 @@ struct Interruption { double time = 0; Property property = Opacity; State before
  */
 struct Episode {
   static constexpr size_t kMaxSegments = 4096;
+  static constexpr size_t kMaxInterruptions = 1024;
   double start = 0;
   double end = 0;     // when it settles (or settled): the latest track end, or a stop; infinity while a track repeats forever
-  double latest = 0;  // the start or the last interruption
-  uint64_t event = 0; // Engine::events() at the start or the last interruption
+  double latest = 0;  // the start, the last interruption, or the last animation started during the motion
+  uint64_t event = 0; // Engine::events() at `latest`
   Values startValues{};
   std::array<std::vector<Segment>, PropertyCount> segments;
   std::array<std::optional<Spec::Kind>, PropertyCount> kinds;  // the kind of each property's latest animation
   std::vector<Interruption> interruptions;
-  bool truncated = false;  // a property exceeded kMaxSegments; later history was not kept
+  bool truncated = false;  // a property exceeded kMaxSegments or the motion kMaxInterruptions; later history was not kept
   State at(Property property, double time) const;
 };
 struct Settled { std::string id; bool finished; };
@@ -184,9 +185,11 @@ public:
   bool animating(int64_t view, Property property, double now) const;
   /** The property's track until it is replaced, stopped or swept (it may have ended by `now`), and its begin time. */
   std::optional<std::pair<TrackPtr, double>> track(int64_t view, Property property) const;
-  /** The view's latest motion, or null when it has not moved since it was added. */
+  /** Records each view's latest motion from now on (off by default: the in-app test driver turns it on), or stops and forgets them. */
+  void setTelemetry(bool enabled) { telemetry_ = enabled; if (!enabled) episodes_.clear(); }
+  /** The view's latest motion, or null when it has not moved since it was added or telemetry is off. */
   const Episode *episode(int64_t view) const;
-  /** Counts motion starts and interruptions of every view; an episode's `event` is the count at its latest one. */
+  /** Counts motion starts, interruptions and animations started during a motion, of every view; an episode's `event` is the count at its latest one. */
   uint64_t events() const { return events_; }
   ChannelBake bake(int64_t view, Channel channel, double now) const;
 
@@ -200,8 +203,8 @@ private:
   struct Batch { int pending = 0; bool interrupted = false; };
   struct Snapshot { std::array<TrackPtr, PropertyCount> tracks; std::array<State, PropertyCount> states; std::array<bool, PropertyCount> animating{}; bool moving = false; };
   Snapshot snapshot(const Slots &slots, double now) const;
-  /** Records what a mutation at `now` changed in the view's motion (docs/motion.md#motion-telemetry). */
-  void observe(int64_t view, const Snapshot &before, double now);
+  /** Records what a mutation at `now` changed in the view's motion (docs/motion.md#motion-telemetry); `setting` for `set`. */
+  void observe(int64_t view, const Snapshot &before, double now, bool setting = false);
   void release(Slot &slot, bool finished, std::vector<Settled> &settled);
   static State slotState(const Slot &slot, double now);
   Slots &slots(int64_t view);
@@ -209,6 +212,7 @@ private:
   std::unordered_map<std::string, Batch> batches_;
   std::unordered_map<int64_t, Episode> episodes_;
   uint64_t events_ = 0;
+  bool telemetry_ = false;
   bool virtual_ = false;
   double virtualTime_ = 0;
 };

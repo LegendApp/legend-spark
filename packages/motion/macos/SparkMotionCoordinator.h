@@ -40,6 +40,8 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 // Motion telemetry for the in-app test driver (docs/motion.md#motion-telemetry). Replies are dictionaries.
 /** The registered MotionView that is `view` or its nearest ancestor. */
 - (nullable NSView<SparkMotionHost> *)hostForView:(NSView *)view;
+/** Starts recording each view's latest motion (the engine's telemetry is off by default); the driver calls it when it starts. */
+- (void)recordTelemetry;
 /** Marks a driver input (a click, key, deep link): waitForMotion waits for motion started or interrupted after it. */
 - (void)noteInput;
 /** Engine state now and the view's latest motion. */
