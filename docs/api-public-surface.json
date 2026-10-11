@@ -197,6 +197,22 @@
     "showMessage",
     "showPrompt"
   ],
+  "./displays": [
+    "AsyncRegistration",
+    "DisplayChangeEvent",
+    "DisplayColorSpace",
+    "DisplayDetails",
+    "DisplayEDRHeadroom",
+    "DisplayField",
+    "DisplayId",
+    "DisplayInfo",
+    "DisplayInsets",
+    "DisplayListenerOptions",
+    "DisplayRefreshRate",
+    "addDisplayListener",
+    "getDisplayAvailability",
+    "getDisplayDetails"
+  ],
   "./drag-drop": [
     "DragDropView",
     "DragDropViewProps",

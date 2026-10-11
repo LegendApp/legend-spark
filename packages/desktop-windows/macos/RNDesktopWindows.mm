@@ -1,6 +1,7 @@
 #import "RNDesktopWindows.h"
 #import "window-manager/LegendWindowRegistry.h"
 #import "SparkWindowGeometry.h"
+#import "SparkDisplays.h"
 #import <objc/runtime.h>
 #import <RNDesktopApp/SparkDesktop.h>
 #import <RNDesktopApp/SparkTestDriver.h>
@@ -548,6 +549,29 @@ static BOOL SetBounds(NSWindow *window, NSDictionary *bounds, double durationMs,
   else { [window setFrame:frame display:YES]; resolve(@"null"); }
   return YES;
 }
+// One sequence for every runtime, so a listener can drop events older than its snapshot.
+static double DisplaySequence;
+static void EmitDisplays(void) { SparkEmit(@{ @"type": @"displaysChanged", @"sequence": @(++DisplaySequence), @"displays": SparkDisplayDetails() }); }
+// The in-app test driver's display source (docs/displays.md#simulated-displays). Reachable only through an
+// authenticated driver session: {"command": "simulateDisplays", "displays": [DisplayDetails, ...] | null}.
+@interface SparkDisplaysDriver : NSObject
+@end
+@implementation SparkDisplaysDriver
++ (void)load {
+  SparkTestDriverRegisterCommand(@"simulateDisplays", ^(NSDictionary *request, SparkTestDriverReply reply) {
+    id displays = request[@"displays"];
+    BOOL valid = displays == NSNull.null || ([displays isKindOfClass:NSArray.class] && [displays count] > 0 && [NSJSONSerialization isValidJSONObject:displays]);
+    for (id display in valid && displays != NSNull.null ? displays : @[]) valid = valid && [display isKindOfClass:NSDictionary.class];
+    if (!valid) { reply(@{ @"ok": @NO, @"error": @{ @"code": @"E_INVALID_ARGUMENT", @"message": @"simulateDisplays expects a non-empty list of displays, or null" } }); return; }
+    SparkSimulateDisplays(displays == NSNull.null ? nil : displays);
+    reply(@{ @"ok": @YES, @"displays": SparkDisplayDetails() });
+  });
+}
+@end
+@interface RNDesktopWindows ()
+@property SparkDisplayObserver *displayObserver;
+@property NSUInteger displayObservers;
+@end
 @implementation RNDesktopWindows
 RCT_EXPORT_MODULE(NativeDesktopWindowManager)
 - (instancetype)init {
@@ -570,6 +594,16 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
     NSWindow *main = Window(@"main");
     if (main) InstallDelegate(main, @"main");
     if ([method isEqual:@"displays"]) { resolve(SparkJSON(SparkDisplayInfo())); return; }
+    if ([method isEqual:@"displayDetails"]) { resolve(SparkJSON(SparkDisplayDetails())); return; }
+    // Observation runs only while a listener in this runtime holds it.
+    if ([method isEqual:@"observeDisplays"]) {
+      if (self.displayObservers++ == 0) self.displayObserver = [[SparkDisplayObserver alloc] initWithHandler:^{ EmitDisplays(); }];
+      resolve(SparkJSON(@{ @"sequence": @(DisplaySequence), @"displays": SparkDisplayDetails() })); return;
+    }
+    if ([method isEqual:@"unobserveDisplays"]) {
+      if (self.displayObservers && --self.displayObservers == 0) { [self.displayObserver stop]; self.displayObserver = nil; }
+      resolve(@"null"); return;
+    }
     if ([method isEqual:@"cursorPoint"]) {
       resolve(SparkJSON(SparkCursorPoint()));
       return;
@@ -731,6 +765,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       delegate.guarded = NO; delegate.pending = NO; delegate.request++; [delegate finishClose:NO]; [delegate finishFullscreen:NO];
       delegate.tabHandlerId = nil;
     }
+    [self.displayObserver stop]; self.displayObserver = nil; self.displayObservers = 0;
   });
 }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params {

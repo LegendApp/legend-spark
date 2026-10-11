@@ -50,14 +50,15 @@ static inline NSDictionary *SparkCursorPoint(void) {
   NSScreen *primary = SparkPrimaryScreen();
   return @{ @"displayId": SparkScreenId(primary) ?: @"", @"x": @(point.x - NSMinX(primary.frame)), @"y": @(NSMaxY(primary.frame) - point.y) };
 }
+static inline NSDictionary *SparkDisplayInfoForScreen(NSScreen *screen) {
+  NSMutableDictionary *workArea = [SparkLogicalBounds(screen.visibleFrame, screen.frame, SparkScreenId(screen)) mutableCopy];
+  [workArea removeObjectForKey:@"displayId"];
+  return @{ @"id": SparkScreenId(screen), @"persistentId": SparkPersistentScreenId(screen) ?: NSNull.null,
+    @"name": screen.localizedName, @"primary": @(screen == SparkPrimaryScreen()),
+    @"size": @{ @"width": @(NSWidth(screen.frame)), @"height": @(NSHeight(screen.frame)) }, @"workArea": workArea, @"scaleFactor": @(screen.backingScaleFactor) };
+}
 static inline NSArray<NSDictionary *> *SparkDisplayInfo(void) {
   NSMutableArray *result = [NSMutableArray new];
-  for (NSScreen *screen in NSScreen.screens) {
-    NSMutableDictionary *workArea = [SparkLogicalBounds(screen.visibleFrame, screen.frame, SparkScreenId(screen)) mutableCopy];
-    [workArea removeObjectForKey:@"displayId"];
-    [result addObject:@{ @"id": SparkScreenId(screen), @"persistentId": SparkPersistentScreenId(screen) ?: NSNull.null,
-      @"name": screen.localizedName, @"primary": @(screen == SparkPrimaryScreen()),
-      @"size": @{ @"width": @(NSWidth(screen.frame)), @"height": @(NSHeight(screen.frame)) }, @"workArea": workArea, @"scaleFactor": @(screen.backingScaleFactor) }];
-  }
+  for (NSScreen *screen in NSScreen.screens) [result addObject:SparkDisplayInfoForScreen(screen)];
   return result;
 }

@@ -31,6 +31,10 @@ static NSDictionary *SparkArgs(NSString *json) { return [NSJSONSerialization JSO
 static void SparkInvalid(RCTPromiseRejectBlock reject, NSString *message) { reject(@"E_INVALID_ARGUMENT", message, nil); }
 static BOOL driverActive = NO;
 static BOOL SparkTestDriverActive(void) { return driverActive; }
+typedef void (^SparkTestDriverReply)(NSDictionary *reply);
+typedef void (^SparkTestDriverHandler)(NSDictionary *request, SparkTestDriverReply reply);
+static NSMutableDictionary<NSString *, SparkTestDriverHandler> *driverCommands;
+static void SparkTestDriverRegisterCommand(NSString *name, SparkTestDriverHandler handler) { if (!driverCommands) driverCommands = [NSMutableDictionary new]; driverCommands[name] = handler; }
 // ACTUAL_IMPLEMENTATION
 @interface TestWindow : NSObject
 @property (weak) id<NSWindowDelegate> delegate;
@@ -355,6 +359,30 @@ static void TestShownTabs(RNDesktopWindows *api) {
   Pump();
   puts("Shown window tabs passed");
 }
+static NSDictionary *DriverCommand(NSString *name, NSDictionary *request) {
+  __block NSDictionary *answer = nil; driverCommands[name](request, ^(NSDictionary *value) { answer = value; }); Pump(); return answer;
+}
+// Display observation through the module: observe returns a snapshot with the current sequence, the driver's
+// simulated source reaches listeners as displaysChanged, and unobserve stops native observation.
+static void TestDisplays(RNDesktopWindows *api) {
+  Call(api, @"observeDisplays", @{}); assert(!failure);
+  NSDictionary *snapshot = SparkArgs(reply); double sequence = [snapshot[@"sequence"] doubleValue];
+  assert([snapshot[@"displays"] count] == NSScreen.screens.count);
+  NSArray *simulated = @[@{ @"id": @"901", @"primary": @YES }];
+  assert([DriverCommand(@"simulateDisplays", @{ @"displays": simulated })[@"ok"] boolValue]);
+  NSDictionary *event = events.lastObject;
+  assert([event[@"type"] isEqual:@"displaysChanged"] && [event[@"displays"] isEqual:simulated] && [event[@"sequence"] doubleValue] > sequence);
+  Call(api, @"displayDetails", @{}); assert([SparkArgs(reply) isEqual:simulated]);
+  assert([DriverCommand(@"simulateDisplays", @{ @"displays": NSNull.null })[@"ok"] boolValue]);
+  assert([events.lastObject[@"displays"] count] == NSScreen.screens.count);
+  for (id invalid in @[@[], @"901", @[@1]]) assert([DriverCommand(@"simulateDisplays", @{ @"displays": invalid })[@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
+  assert([DriverCommand(@"simulateDisplays", @{})[@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
+  Call(api, @"unobserveDisplays", @{}); assert(!failure);
+  NSUInteger count = events.count;
+  DriverCommand(@"simulateDisplays", @{ @"displays": simulated }); DriverCommand(@"simulateDisplays", @{ @"displays": NSNull.null });
+  assert(events.count == count);
+  puts("Display observation passed");
+}
 static void TestGuards(RNDesktopWindows *api) {
   TestWindow *window = [TestWindow new]; windows[@"editor"] = (NSWindow *)window;
   __block NSString *result = nil;
@@ -389,8 +417,9 @@ int main(int argc, char **argv) { @autoreleasepool {
     @"guards": ^(RNDesktopWindows *a) { TestGuards(a); }, @"options": ^(RNDesktopWindows *a) { TestWindowOptions(a); },
     @"driver": ^(RNDesktopWindows *a) { TestDriverMode(a); }, @"tabs": ^(RNDesktopWindows *a) { TestWindowTabs(a); },
     @"shown-tabs": ^(RNDesktopWindows *a) { TestShownTabs(a); }, @"tab-restoration": ^(RNDesktopWindows *a) { TestTabRestoration(a); },
+    @"displays": ^(RNDesktopWindows *a) { TestDisplays(a); },
   };
   NSString *only = argc > 1 && argv[1][0] != '-' ? @(argv[1]) : nil;
   if (only && !suites[only]) { fprintf(stderr, "Unknown suite %s\n", argv[1]); return 2; }
-  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration"]) if (!only || [only isEqual:name]) suites[name](api);
+  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration", @"displays"]) if (!only || [only isEqual:name]) suites[name](api);
 } }

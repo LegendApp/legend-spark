@@ -78,6 +78,7 @@
     "./ui/text-services",
     "./ui/table",
     "./ui/popover",
-    "./ui/tab-view"
+    "./ui/tab-view",
+    "./displays"
   ]
 }

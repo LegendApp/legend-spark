@@ -275,6 +275,17 @@ getPrintingAvailability(feature?: "printPanel" | "pageSetup" | "pdfExport"): Ava
 
 Printing is its own capability path: it applies to windows and views as well as documents, and its native module (AppKit printing, PDFKit) loads only when imported. Cancellation resolves `{ canceled: true }` like the dialogs; failures reject. PDF export renders the print layout directly and never reaches the printing system, so it is headless. Window and view content is a raster render of what they draw now. Details: [printing](printing.md).
 
+### Displays
+
+```ts
+// /displays
+getDisplayDetails(): Promise<DisplayDetails[]>; // DisplayInfo + origin, safeArea, refreshRate, colorSpace, edrHeadroom
+addDisplayListener(listener: (event: { displays; added; removed; changed: { id; fields }[] }) => void, options?: { onError? }): Promise<AsyncRegistration>;
+getDisplayAvailability(): Availability;
+```
+
+Display details have their own path rather than widening `getDisplays()` in `/windows`, which stays the portable geometry subset that both hosts implement. Refresh rate is a `{ minimum, maximum, variable }` range so ProMotion and adaptive-sync displays are not reported as one fixed rate. Change events carry the whole new list plus a computed difference; native observation runs only while a listener holds it. macOS only for now; Windows is typed unsupported (#318). Details: [displays](displays.md).
+
 ### Settings, persistence, and secure storage
 
 ```ts
