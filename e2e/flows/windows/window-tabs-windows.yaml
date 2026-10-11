@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window tabs are typed unsupported on Windows
+intent: >
+  On Windows, Windows > Window tabs reports native window tabs as unsupported-platform, and a linked run that opens a
+  tab window shows the E_UNSUPPORTED_PLATFORM rejection; no tab window opens. Windows tabs are tracked in #295.
+checks: [WIN-TABAVAIL-01]
+tags: [windows]
+platforms: [windows]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://windows/window-tabs" }
+- assertVisible: { id: windows-window-tabs-availability-unsupported-platform }
+- launchApp: { openUrl: "spark-ks://windows/window-tabs?run=open", stopApp: false }
+- assertVisible: { id: windows-window-tabs-error-E_UNSUPPORTED_PLATFORM }
+- assertVisible: { id: windows-window-tabs-group-count-0 }
+- assertWindow: { count: 1 }

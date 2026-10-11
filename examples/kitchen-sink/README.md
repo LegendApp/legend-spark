@@ -80,6 +80,14 @@ changes each option from the Windows epic on the live child (one row per option)
 lists `getWindowAvailability(option)` and probes rejected requests. The audit is in
 [the window contract](../../docs/api-window-contract.md#window-options-audit).
 
+`windows/window-tabs` opens numbered windows of one navigator type that share a tabbing
+identifier, and runs the tab operations of `/windows` on them: new tabs (`tabbedWith`, the + button
+and Window ▸ New Tab through the entry's `newTab`), select, merge, move to a new window and the tab
+bar. Its readout lists the tab groups and window 1's tab events, with test IDs that encode them, and
+`spark-ks://windows/window-tabs?run=open,tab-1,select-1,…` runs a sequence of steps from a fresh
+start (steps in `screens/windows/window-tabs.ts`). See
+[the window contract](../../docs/api-window-contract.md#window-tabs).
+
 ## App-wide behavior
 
 `shell/app-controller.ts` starts once from `index.ts` and lives for the process:
