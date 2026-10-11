@@ -1,5 +1,5 @@
 #import <AppKit/AppKit.h>
-#import "SparkTestDriver.h"
+#import "SparkTestDriverPrivate.h"
 #include <atomic>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -85,6 +85,11 @@ static NSDictionary *Request(int fd, NSDictionary *request) {
   return reply;
 }
 static NSString *Code(NSDictionary *reply) { return reply[@"error"][@"code"]; }
+static NSDictionary *Frame(int fd, NSString *testID) {
+  NSDictionary *reply = Request(fd, @{ @"command": @"waitFor", @"testID": testID });
+  Check([reply[@"ok"] boolValue], [@"waitFor " stringByAppendingString:testID]);
+  return reply[@"frame"];
+}
 static void Client(void (^body)(void)) { [NSThread detachNewThreadWithBlock:body]; }
 
 static NSWindow *MakeWindow(void) {
@@ -112,6 +117,130 @@ static NSWindow *MakeWindow(void) {
   window.contentView = content;
   return window;
 }
+// Input targets (mode "input"): real AppKit controls plus views that record what they receive.
+static std::atomic<int> buttonPresses{0}, sliderActions{0}, defaultPresses{0}, menuActions{0}, fieldActions{0}, refusedClicks{0};
+static std::atomic<int> entered{0}, exited{0}, rightClicks{0}, flagChanges{0};
+static std::atomic<bool> modalRunning{false}, stopModal{false}, presented{false};
+static NSMutableArray<NSNumber *> *clickCounts;
+static NSMutableArray<NSString *> *dragNumbers; // Event numbers a Draggable saw: down, drags, up.
+static NSEvent *lastKey;
+@interface Actions : NSObject
+@end
+@implementation Actions
+- (void)button:(id)sender { buttonPresses++; }
+- (void)slider:(id)sender { sliderActions++; }
+- (void)defaultButton:(id)sender { defaultPresses++; }
+- (void)menu:(id)sender { menuActions++; }
+- (void)field:(id)sender { fieldActions++; }
+// A modal loop the app enters in response to input, like a modal session; input-stop ends it.
+- (void)modal:(id)sender {
+  modalRunning = true;
+  while (!stopModal) [NSRunLoop.mainRunLoop runMode:NSModalPanelRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+  modalRunning = false;
+}
+- (void)stop:(id)sender { stopModal = true; }
+@end
+@interface Recorder : NSView
+@property BOOL refuses;
+@end
+@implementation Recorder
+- (BOOL)acceptsFirstMouse:(NSEvent *)event { return !self.refuses; }
+- (BOOL)acceptsFirstResponder { return YES; }
+- (void)mouseDown:(NSEvent *)event {
+  if (self.refuses) refusedClicks++;
+  presented = self.window.isVisible && self.window.alphaValue == 0 && self.window.ignoresMouseEvents && !self.window.isKeyWindow && !NSApp.isActive;
+}
+- (void)mouseUp:(NSEvent *)event { [clickCounts addObject:@(event.clickCount)]; }
+- (void)rightMouseDown:(NSEvent *)event { rightClicks++; }
+- (void)mouseEntered:(NSEvent *)event { entered++; }
+- (void)mouseExited:(NSEvent *)event { exited++; }
+- (void)keyDown:(NSEvent *)event { lastKey = event; }
+- (void)flagsChanged:(NSEvent *)event { flagChanges++; }
+@end
+// Accepts the first mouse only when its acceptsFirstMouse property is set, as React Native views (RCTUIView) do.
+@interface FirstMouseView : NSView
+@property BOOL acceptsFirstMouse;
+@property int presses;
+@end
+@implementation FirstMouseView
+- (BOOL)acceptsFirstMouse:(NSEvent *)event { return self.acceptsFirstMouse; }
+- (void)mouseDown:(NSEvent *)event { self.presses++; }
+@end
+// Follows the pointer while dragged, like a draggable view in an app.
+@interface Draggable : NSView
+@end
+@implementation Draggable
+- (BOOL)acceptsFirstMouse:(NSEvent *)event { return YES; }
+- (void)mouseDown:(NSEvent *)event { [dragNumbers addObject:[NSString stringWithFormat:@"down %ld", (long)event.eventNumber]]; }
+- (void)mouseDragged:(NSEvent *)event {
+  [dragNumbers addObject:[NSString stringWithFormat:@"drag %ld", (long)event.eventNumber]];
+  [self setFrameOrigin:NSMakePoint(self.frame.origin.x + event.deltaX, self.frame.origin.y - event.deltaY)];
+}
+- (void)mouseUp:(NSEvent *)event { [dragNumbers addObject:[NSString stringWithFormat:@"up %ld", (long)event.eventNumber]]; }
+@end
+static Actions *actions;
+static NSWindow *MakeInputWindow(void) {
+  actions = [Actions new]; clickCounts = [NSMutableArray new]; dragNumbers = [NSMutableArray new];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 600, 500)
+    styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
+  window.identifier = @"input"; window.title = @"Input"; window.releasedWhenClosed = NO;
+  NSView *content = window.contentView;
+  content.wantsLayer = YES; content.layer.backgroundColor = NSColor.redColor.CGColor;
+  auto add = ^(NSView *view, NSString *testID, NSRect frame) { view.frame = frame; view.accessibilityIdentifier = testID; [content addSubview:view]; };
+  add([NSButton buttonWithTitle:@"Press" target:actions action:@selector(button:)], @"input-button", NSMakeRect(20, 440, 100, 32));
+  NSSlider *slider = [NSSlider sliderWithValue:0 minValue:0 maxValue:100 target:actions action:@selector(slider:)];
+  slider.continuous = YES;
+  add(slider, @"input-slider", NSMakeRect(140, 444, 200, 24));
+  NSTextField *field = [NSTextField textFieldWithString:@""]; field.target = actions; field.action = @selector(field:);
+  add(field, @"input-field", NSMakeRect(360, 444, 200, 24));
+  NSButton *defaultButton = [NSButton buttonWithTitle:@"OK" target:actions action:@selector(defaultButton:)]; defaultButton.keyEquivalent = @"\r";
+  add(defaultButton, @"input-default", NSMakeRect(20, 390, 100, 32));
+  add([NSButton buttonWithTitle:@"Modal" target:actions action:@selector(modal:)], @"input-modal", NSMakeRect(140, 390, 100, 32));
+  // The modal loop's own window, as a modal session runs one: its button ends the loop.
+  static NSPanel *panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 200, 100) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
+  panel.identifier = @"input-panel"; panel.releasedWhenClosed = NO;
+  NSButton *stop = [NSButton buttonWithTitle:@"Stop" target:actions action:@selector(stop:)];
+  stop.frame = NSMakeRect(20, 20, 100, 32); stop.accessibilityIdentifier = @"input-stop";
+  [panel.contentView addSubview:stop];
+  Recorder *recorder = [Recorder new];
+  add(recorder, @"input-recorder", NSMakeRect(20, 280, 100, 100));
+  // As React Native views track hover. (An NSTrackingInVisibleRect area covers the visibleRect, which since macOS 14
+  // extends past the bounds of views that do not clip.)
+  [recorder addTrackingArea:[[NSTrackingArea alloc] initWithRect:recorder.bounds options:NSTrackingActiveAlways | NSTrackingMouseEnteredAndExited owner:recorder userInfo:nil]];
+  Recorder *refuses = [Recorder new]; refuses.refuses = YES;
+  add(refuses, @"input-refuses", NSMakeRect(140, 280, 100, 100));
+  add([Draggable new], @"input-draggable", NSMakeRect(260, 280, 60, 60));
+  add([FirstMouseView new], @"input-first-mouse", NSMakeRect(340, 280, 60, 60));
+  NSPathControl *path = [NSPathControl new]; path.URL = [NSURL fileURLWithPath:@"/usr/bin"];
+  add(path, @"input-path", NSMakeRect(20, 230, 300, 22));
+  // A host view and the native control it hosts share a testID, as Spark's React Native controls do.
+  NSView *host = [NSView new];
+  add(host, @"input-hosted", NSMakeRect(400, 280, 190, 40));
+  NSButton *hosted = [NSButton buttonWithTitle:@"Hosted" target:actions action:@selector(button:)];
+  hosted.frame = NSMakeRect(0, 5, 70, 30); hosted.accessibilityIdentifier = @"input-hosted";
+  [host addSubview:hosted];
+  NSScrollView *scroll = [NSScrollView new];
+  scroll.documentView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 200, 2000)];
+  add(scroll, @"input-scroll", NSMakeRect(360, 20, 200, 200));
+  [scroll.documentView scrollPoint:NSMakePoint(0, 1800)]; // The top of the (y-up) document.
+  NSButton *deep = [NSButton buttonWithTitle:@"Deep" target:actions action:@selector(button:)];
+  deep.frame = NSMakeRect(20, 100, 100, 32); deep.accessibilityIdentifier = @"input-deep"; // Scrolled out of view.
+  [scroll.documentView addSubview:deep];
+  NSView *covered = [NSButton buttonWithTitle:@"Covered" target:actions action:@selector(button:)];
+  add(covered, @"input-covered", NSMakeRect(20, 20, 100, 32));
+  NSView *cover = [NSView new];
+  add(cover, @"input-cover", NSMakeRect(10, 10, 140, 60));
+  NSMenu *menu = [NSMenu new], *file = [[NSMenu alloc] initWithTitle:@"File"];
+  NSMenuItem *top = [NSMenuItem new]; top.submenu = file; [menu addItem:top];
+  [file addItemWithTitle:@"Act" action:@selector(menu:) keyEquivalent:@"k"].target = actions;
+  // Like the system's Globe-key items (Fn-E Emoji & Symbols): NSMenu ignores the Function flag when matching.
+  NSMenuItem *globe = [file addItemWithTitle:@"Globe" action:@selector(menu:) keyEquivalent:@"j"];
+  globe.target = actions; globe.keyEquivalentModifierMask = NSEventModifierFlagFunction;
+  NSApp.mainMenu = menu;
+  return window;
+}
+static id OnMain(id (^read)(void)) { __block id value; dispatch_sync(dispatch_get_main_queue(), ^{ value = read(); }); return value; }
+
 // Samples the center of a content-view rect (points, y-up) in a PNG written by the driver.
 static NSColor *Sample(NSString *file, NSRect rect, NSWindow *window) {
   NSBitmapImageRep *rep = [[NSBitmapImageRep imageRepWithData:[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:file]]]
@@ -149,7 +278,7 @@ int main(int argc, char **argv) { @autoreleasepool {
   Check(SparkTestDriverStart() && SparkTestDriverActive(), @"driver start");
   // Optional modules add commands; built-in and duplicate names are refused.
   SparkTestDriverRegisterCommand(@"echo", ^(NSDictionary *request, SparkTestDriverReply reply) { reply(@{ @"ok": @YES, @"echo": request[@"value"] ?: NSNull.null }); });
-  for (NSString *taken in @[@"ping", @"openFile", @"echo"]) {
+  for (NSString *taken in @[@"ping", @"openFile", @"tap", @"echo"]) {
     BOOL refused = NO;
     @try { SparkTestDriverRegisterCommand(taken, ^(NSDictionary *, SparkTestDriverReply reply) { reply(@{ @"ok": @NO }); }); } @catch (NSException *) { refused = YES; }
     Check(refused, [NSString stringWithFormat:@"%@ cannot be registered twice", taken]);
@@ -238,6 +367,149 @@ int main(int argc, char **argv) { @autoreleasepool {
     Check(Receive(fd) == nil, @"quit ends the session");
     finished = YES;
   });
+  else if ([mode isEqual:@"input"]) {
+    NSWindow *input = MakeInputWindow();
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+      auto ok = ^(NSDictionary *request) {
+        NSDictionary *reply = Request(fd, request);
+        Check([reply[@"ok"] boolValue], [NSString stringWithFormat:@"%@: %@", request, reply]);
+      };
+      auto center = ^(NSString *testID, CGFloat fx, CGFloat fy) {
+        NSDictionary *frame = Frame(fd, testID);
+        return @{ @"x": @([frame[@"x"] doubleValue] + [frame[@"width"] doubleValue] * fx), @"y": @([frame[@"y"] doubleValue] + [frame[@"height"] doubleValue] * fy) };
+      };
+      // The in-process accessibility view that selectors other than testID match against.
+      NSDictionary *tree = Request(fd, @{ @"command": @"elements" });
+      NSArray *elements = tree[@"elements"];
+      NSDictionary *button = [elements filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"id == 'input-button'"]].firstObject;
+      Check([button[@"role"] isEqual:@"button"] && [button[@"text"] isEqual:@"Press"] && [button[@"window"] isEqual:@"input"], [NSString stringWithFormat:@"elements: a button (%@)", button]);
+      NSDictionary *probe = [elements filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"id == 'probe-layer'"]].firstObject;
+      Check([probe[@"frame"] isEqual:Frame(fd, @"probe-layer")] && [probe[@"window"] isEqual:@"spark.main"], @"elements: frames as waitFor reports them");
+      NSDictionary *label = [elements filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"text == 'Label'"]].firstObject;
+      Check([label[@"role"] isEqual:@"staticText"] && label[@"parent"] == nil, [NSString stringWithFormat:@"elements: a label's text (%@)", label]);
+      NSArray *hostedElements = [elements filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"id == 'input-hosted'"]];
+      Check(hostedElements.count == 1 && [hostedElements[0][@"role"] isEqual:@"button"] && [hostedElements[0][@"text"] isEqual:@"Hosted"] && [hostedElements[0][@"frame"][@"width"] isEqual:@70],
+        [NSString stringWithFormat:@"elements: a hosted control with its host's testID is one element (%@)", hostedElements]);
+      NSDictionary *pathElement = [elements filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"id == 'input-path'"]].firstObject;
+      NSArray *components = [elements filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"text == 'usr'"]];
+      Check(components.count == 1 && [components[0][@"window"] isEqual:@"input"] && [components[0][@"frame"][@"x"] doubleValue] >= [pathElement[@"frame"][@"x"] doubleValue],
+        [NSString stringWithFormat:@"elements: accessibility parts of a control that are not views, such as path components (%@)", components]);
+      NSArray *windowIDs = [tree[@"windows"] valueForKey:@"id"];
+      Check([windowIDs containsObject:@"input"] && [windowIDs containsObject:@"spark.main"], [NSString stringWithFormat:@"elements: windows (%@)", windowIDs]);
+      NSSlider *slider = OnMain(^{ return SparkDriverFindView(@"input-slider"); });
+      // A point from waitFor's frame (top-left points of the frame view) lands where the frame says.
+      ok(@{ @"command": @"tap", @"window": @"id:input", @"point": center(@"input-slider", 0.75, 0.5) });
+      double value = [OnMain(^{ return @(slider.doubleValue); }) doubleValue];
+      Check(fabs(value - 75) < 4, [NSString stringWithFormat:@"a tap at 75%% of the slider sets it near 75 (%.1f)", value]);
+      Check([OnMain(^{ return @(!input.isVisible && input.alphaValue == 1 && !input.ignoresMouseEvents); }) boolValue], @"the window is off screen again after pointer input");
+      ok(@{ @"command": @"tap", @"testID": @"input-button" });
+      Check(buttonPresses == 1, @"a tap presses an NSButton (its tracking loop takes the queued mouseUp)");
+      int before = sliderActions;
+      ok(@{ @"command": @"drag", @"from": @{ @"point": center(@"input-slider", 0.25, 0.5) }, @"to": @{ @"point": center(@"input-slider", 1, 0.5) }, @"window": @"id:input", @"steps": @10 });
+      Check([OnMain(^{ return @(slider.doubleValue); }) doubleValue] == 100 && sliderActions - before >= 5, @"a drag moves a continuous slider through intermediate values");
+      NSView *draggable = OnMain(^{ return SparkDriverFindView(@"input-draggable"); });
+      NSDictionary *from = center(@"input-draggable", 0.5, 0.5);
+      ok(@{ @"command": @"drag", @"from": @{ @"testID": @"input-draggable" }, @"to": @{ @"point": @{ @"x": @([from[@"x"] doubleValue] + 50), @"y": @([from[@"y"] doubleValue] + 30) } }, @"window": @"id:input" });
+      NSPoint origin = [OnMain(^{ return [NSValue valueWithPoint:draggable.frame.origin]; }) pointValue];
+      Check(NSEqualPoints(origin, NSMakePoint(310, 250)), [NSString stringWithFormat:@"a drag moves a view by the pointer's travel (%@)", NSStringFromPoint(origin)]);
+      NSArray *numbers = OnMain(^{ return [dragNumbers copy]; });
+      NSString *number = [[numbers.firstObject componentsSeparatedByString:@" "] lastObject];
+      Check(numbers.count == 12 && [numbers.firstObject hasPrefix:@"down"] && [numbers.lastObject hasPrefix:@"up"] &&
+        [[numbers filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF ENDSWITH %@", [@" " stringByAppendingString:number]]] count] == 12,
+        [NSString stringWithFormat:@"a press, its drags and its release share one event number, as React Native expects (%@)", numbers]);
+      ok(@{ @"command": @"tap", @"testID": @"input-recorder", @"clickCount": @2 });
+      Check([OnMain(^{ return [clickCounts copy]; }) isEqual:(@[@1, @2])], @"a double click is two clicks with click counts 1 and 2");
+      Check(presented, @"during pointer input the window is on screen, transparent, ignoring real mouse events, not key, and the app inactive");
+      ok(@{ @"command": @"tap", @"testID": @"input-recorder", @"button": @"right" });
+      Check(rightClicks == 1, @"a right click");
+      Check(entered == 1 && exited == 0, @"moving onto a view enters its tracking area once");
+      ok(@{ @"command": @"hover", @"testID": @"input-button" });
+      Check(exited == 1, @"hovering elsewhere exits it");
+      ok(@{ @"command": @"hover", @"testID": @"input-recorder" });
+      Check(entered == 2, @"hover enters it again");
+      ok(@{ @"command": @"tap", @"testID": @"input-refuses" });
+      Check(refusedClicks == 0, @"a view that refuses first mouse ignores clicks, as in any inactive app");
+      FirstMouseView *firstMouse = OnMain(^{ return SparkDriverFindView(@"input-first-mouse"); });
+      ok(@{ @"command": @"tap", @"testID": @"input-first-mouse" });
+      Check([OnMain(^{ return @(firstMouse.presses == 1 && !firstMouse.acceptsFirstMouse); }) boolValue], @"a view with an acceptsFirstMouse property (React Native) gets the click, and the property is restored");
+      NSScrollView *scroll = OnMain(^{ return SparkDriverFindView(@"input-scroll"); });
+      ok(@{ @"command": @"scroll", @"testID": @"input-scroll", @"deltaY": @100, @"precise": @YES });
+      double offset = [OnMain(^{ return @(scroll.contentView.bounds.origin.y); }) doubleValue];
+      Check(offset == 1700, [NSString stringWithFormat:@"a precise scroll moves 100 points toward the end (%.1f)", offset]);
+      ok(@{ @"command": @"scroll", @"testID": @"input-scroll", @"deltaY": @-3 });
+      Check([OnMain(^{ return @(scroll.contentView.bounds.origin.y); }) doubleValue] > 1700, @"a line scroll moves back toward the start");
+      // As in XCUITest and Playwright, a testID target is scrolled into view, and must not be covered.
+      int pressed = buttonPresses;
+      ok(@{ @"command": @"tap", @"testID": @"input-deep" });
+      Check(buttonPresses == pressed + 1, @"a target scrolled out of view is scrolled into view and pressed");
+      Check([Code(Request(fd, @{ @"command": @"tap", @"testID": @"input-covered" })) isEqual:@"E_NOT_HITTABLE"] && buttonPresses == pressed + 1, @"a covered target is not clicked");
+      ok(@{ @"command": @"tap", @"testID": @"input-hosted" });
+      Check(buttonPresses == pressed + 2, @"a testID shared by a host and its control addresses the control, as elements reports it");
+      ok(@{ @"command": @"tap", @"testID": @"input-slider", @"offset": @{ @"x": @50, @"y": @12 } });
+      double quarter = [OnMain(^{ return @(slider.doubleValue); }) doubleValue];
+      Check(fabs(quarter - 25) < 4, [NSString stringWithFormat:@"offset is points from the target's top-left (%.1f)", quarter]);
+      // Keys go to the window of the last pointer input, through its first responder.
+      NSTextField *field = OnMain(^{ return SparkDriverFindView(@"input-field"); });
+      ok(@{ @"command": @"tap", @"testID": @"input-field" });
+      ok(@{ @"command": @"typeText", @"text": @"Héj😀 1+" });
+      NSString *typed = OnMain(^{ return field.currentEditor.string ?: field.stringValue; });
+      Check([typed isEqual:@"Héj😀 1+"], [NSString stringWithFormat:@"typeText types IME-free Unicode (%@)", typed]);
+      Check(menuActions == 0, @"a plain j is typed, not taken by a Fn-J menu item");
+      ok(@{ @"command": @"pressKey", @"key": @"\x7f" });
+      Check([OnMain(^{ return field.currentEditor.string; }) isEqual:@"Héj😀 1"], @"Backspace deletes a character");
+      ok(@{ @"command": @"typeText", @"text": @"\n" });
+      Check(defaultPresses == 1, @"Return presses the default button, as for a key window");
+      ok(@{ @"command": @"pressKey", @"key": @"k", @"modifiers": @[@"cmd"] });
+      Check(menuActions == 1, @"a key equivalent fires its main menu item");
+      ok(@{ @"command": @"tap", @"testID": @"input-recorder" });
+      ok(@{ @"command": @"pressKey", @"key": @"\uf700" });
+      NSEvent *up = OnMain(^{ return lastKey; });
+      Check(up.keyCode == 126 && (up.modifierFlags & NSEventModifierFlagFunction) && (up.modifierFlags & NSEventModifierFlagNumericPad), @"arrow keys carry their key code and hardware flags");
+      ok(@{ @"command": @"pressKey", @"key": @"s", @"modifiers": @[@"shift", @"option"] });
+      NSEvent *shifted = OnMain(^{ return lastKey; });
+      Check([shifted.charactersIgnoringModifiers isEqual:@"S"] && shifted.keyCode == 1 && flagChanges == 4 &&
+        (shifted.modifierFlags & NSEventModifierFlagShift) && (shifted.modifierFlags & NSEventModifierFlagOption), @"modifiers are pressed (flagsChanged) around the key");
+      // A command that leaves the app in a modal loop replies, and later requests run inside the loop.
+      ok(@{ @"command": @"tap", @"testID": @"input-modal" });
+      Check(modalRunning, @"the tap replies while the modal loop it started runs");
+      ok(@{ @"command": @"ping" });
+      ok(@{ @"command": @"capture", @"window": @"id:input", @"name": @"input" });
+      ok(@{ @"command": @"tap", @"testID": @"input-stop" });
+      for (int n = 0; n < 100 && modalRunning; n++) usleep(10000);
+      Check(!modalRunning, @"input inside the modal loop ends it");
+      Check([Code(Request(fd, @{ @"command": @"tap", @"testID": @"input-button", @"point": @{ @"x": @1, @"y": @1 } })) isEqual:@"E_INVALID_ARGUMENT"], @"testID or point");
+      Check([Code(Request(fd, @{ @"command": @"tap", @"testID": @"missing" })) isEqual:@"E_NOT_FOUND"], @"unknown testIDs fail");
+      Check([Code(Request(fd, @{ @"command": @"tap", @"window": @"id:input", @"point": @{ @"x": @-1, @"y": @1 } })) isEqual:@"E_INVALID_ARGUMENT"], @"points outside the window fail");
+      Check([Code(Request(fd, @{ @"command": @"tap", @"window": @"id:none", @"point": @{ @"x": @1, @"y": @1 } })) isEqual:@"E_NO_WINDOW"], @"unknown windows fail");
+      Check([Code(Request(fd, @{ @"command": @"pressKey", @"key": @"ab" })) isEqual:@"E_INVALID_ARGUMENT"], @"one key per press");
+      Check([Code(Request(fd, @{ @"command": @"pressKey", @"key": @"a", @"modifiers": @[@"hyper"] })) isEqual:@"E_INVALID_ARGUMENT"], @"unknown modifiers fail");
+      Check([Code(Request(fd, @{ @"command": @"scroll", @"testID": @"input-scroll" })) isEqual:@"E_INVALID_ARGUMENT"], @"scroll needs a delta");
+      Check([OnMain(^{ return @(!NSApp.isActive && !NSApp.keyWindow && NSApp.activationPolicy == NSApplicationActivationPolicyProhibited); }) boolValue], @"input never activates the app");
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
+  else if ([mode isEqual:@"menu"]) {
+    // A context menu would track the real pointer and keyboard: the driver closes it and fails the command.
+    NSView *menuView = [[NSView alloc] initWithFrame:NSMakeRect(250, 20, 100, 60)];
+    menuView.accessibilityIdentifier = @"menu-view";
+    menuView.menu = [[NSMenu alloc] initWithTitle:@"Context"];
+    [menuView.menu addItemWithTitle:@"Item" action:nil keyEquivalent:@""];
+    [window.contentView addSubview:menuView];
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+      NSDictionary *reply = Request(fd, @{ @"command": @"tap", @"testID": @"menu-view", @"button": @"right" });
+      Check([Code(reply) isEqual:@"E_MENU"], [NSString stringWithFormat:@"a right click that opens a context menu fails with E_MENU (%@)", reply]);
+      Check([Request(fd, @{ @"command": @"ping" })[@"ok"] boolValue], @"the session continues after the menu closed");
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
   else Check(NO, [@"unknown mode " stringByAppendingString:mode]);
 
   Pump(^{ return (BOOL)(finished && terminateRequested); }, 20);

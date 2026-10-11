@@ -9,6 +9,15 @@ import { spawnProcess, type ManagedProcess, type ProcessLog } from "../../packag
 export type DriverWindow = "main" | "key" | `id:${string}` | `title:${string}`;
 export type Frame = { x: number; y: number; width: number; height: number };
 export type Capture = { file: string; width: number; height: number; scale: number };
+/**
+ * What pointer input addresses: the first visible view with a testID (scrolled into view; `offset` points from its
+ * top-left, else its center), or a point in waitFor frame coordinates of a window.
+ */
+export type InputTarget = { testID: string; offset?: { x: number; y: number } } | { point: { x: number; y: number }; window?: DriverWindow };
+export type Modifier = "cmd" | "ctrl" | "option" | "shift" | "fn";
+/** One entry of `elements`: a visible view with a testID, or an accessibility element, in waitFor frame coordinates. */
+export type DriverElement = { key: string; parent?: string; window: string; id?: string; role?: string; label?: string; text?: string; value?: string; frame: Frame };
+export type DriverWindowInfo = { id: string; title: string; key: boolean; main: boolean; frame: Frame };
 export type LaunchOptions = { executable: string; args?: string[]; env?: Record<string, string>; log?: ProcessLog; startTimeoutMs?: number };
 type Reply = { id?: unknown; ok: boolean; error?: { code: string; message: string }; [key: string]: unknown };
 
@@ -120,6 +129,11 @@ export class Driver {
     const reply = await this.request({ command: "waitFor", testID, timeoutMs }, timeoutMs + 10000);
     return { window: reply.window as string, frame: reply.frame as Frame };
   }
+  /** The in-process accessibility view: windows (front to back) and their elements, with parent keys. */
+  async elements() {
+    const reply = await this.request({ command: "elements" }, 10000);
+    return { windows: reply.windows as DriverWindowInfo[], elements: reply.elements as DriverElement[] };
+  }
   /** Sets the app-level appearance (not the OS setting) and waits for the UI to re-render. */
   async setAppAppearance(appearance: "light" | "dark", timeoutMs = 10000) {
     return { changed: (await this.request({ command: "setAppAppearance", appearance, timeoutMs }, timeoutMs + 10000)).changed as boolean };
@@ -133,6 +147,28 @@ export class Driver {
   async setClock(mode: "virtual" | "real") { return clock(await this.request({ command: "setClock", mode }, 10000)); }
   /** Advances the virtual motion clock and every motion layer together. */
   async advanceClock(durationMs: number) { return clock(await this.request({ command: "advanceClock", durationMs }, 10000)); }
+  /** Clicks a target in-process (docs/test-driver.md#input): `clickCount` 1-3, left or right button. */
+  async tap(target: InputTarget, options: { button?: "left" | "right"; clickCount?: number; modifiers?: Modifier[] } = {}) {
+    await this.request({ command: "tap", ...target, ...options }, 10000);
+  }
+  /** Moves the driver's pointer onto a target: tracking-area enter and exit events and a mouse move. */
+  async hover(target: InputTarget) { await this.request({ command: "hover", ...target }, 10000); }
+  /** Presses at `from`, moves in `steps` (10) to `to`, and releases; both in one window. */
+  async drag(from: InputTarget, to: InputTarget, options: { steps?: number; modifiers?: Modifier[] } = {}) {
+    const window = "window" in from ? from.window : "window" in to ? to.window : undefined;
+    const point = (target: InputTarget) => "testID" in target ? { testID: target.testID, ...(target.offset ? { offset: target.offset } : {}) } : { point: target.point };
+    await this.request({ command: "drag", from: point(from), to: point(to), ...(window ? { window } : {}), ...options }, 10000);
+  }
+  /** Scrolls over a target, positive toward the end of the content: points with `precise`, else lines. */
+  async scroll(target: InputTarget, delta: { deltaX?: number; deltaY?: number; precise?: boolean }) {
+    await this.request({ command: "scroll", ...target, ...delta }, 10000);
+  }
+  /** Presses one key (a character, or AppKit's function-key character such as "\uf700") in the window of the last pointer input, or `window`. */
+  async pressKey(key: string, modifiers: Modifier[] = [], window?: DriverWindow) {
+    await this.request({ command: "pressKey", key, modifiers, ...(window ? { window } : {}) }, 10000);
+  }
+  /** Types text as one key press per character, in the window of the last pointer input, or `window`. */
+  async typeText(text: string, window?: DriverWindow) { await this.request({ command: "typeText", text, ...(window ? { window } : {}) }, 30000); }
   /** Ends the session; the app quits through its normal termination path. */
   async quit(timeoutMs = 15000) {
     await this.request({ command: "quit" }, 10000);
