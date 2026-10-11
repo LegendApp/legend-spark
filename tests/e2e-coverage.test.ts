@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
@@ -6,6 +5,7 @@ import { readSdkSurface, type SdkSurface } from "../scripts/api-surface.ts";
 import { checkCoverage, formatCoverage, type CoverageReport } from "../scripts/e2e/coverage.ts";
 import { collect } from "../scripts/e2e/files.ts";
 import { checkRegistry, formatDiagnostic } from "../scripts/e2e/format/parser.ts";
+import { outcome, run } from "./subprocess.ts";
 
 const FIXTURES = "tests/fixtures/e2e-coverage";
 const SURFACE: SdkSurface = {
@@ -137,11 +137,14 @@ describe("SDK surface", () => {
 });
 
 describe("cli", () => {
-  const run = (...args: string[]) => spawnSync(process.execPath, ["scripts/e2e/cli.ts", "coverage", ...args], { encoding: "utf8" });
+  const cli = (...args: string[]) => run(process.execPath, ["scripts/e2e/cli.ts", "coverage", ...args]);
+  // Each run type-checks the SDK surface in a fresh Bun: 1.5-5.3 s per test across 37 macos-latest CI runs
+  // (p95 4.7 s), so the 5 s default timed out (job 114483581310). 20 s is nearly 4x the slowest run seen.
+  const cliTimeoutMs = 20_000;
 
-  test("--json reports problems with locations and fails", () => {
-    const result = run(path.join(FIXTURES, "broken"), "--json");
-    expect(result.status, result.stderr).toBe(1);
+  test("--json reports problems with locations and fails", async () => {
+    const result = await cli(path.join(FIXTURES, "broken"), "--json");
+    expect(result.status, outcome(result)).toBe(1);
     const report = JSON.parse(result.stdout) as CoverageReport;
     expect(report.ok).toBe(false);
     expect(report.problems.map(problem => `${problem.file}:${problem.line} ${problem.rule}`)).toEqual([
@@ -153,16 +156,17 @@ describe("cli", () => {
     ]);
     expect(report.surface.find(item => item.id === "./windows#openWindow")).toEqual({ id: "./windows#openWindow", kind: "export", subpath: "./windows", coveredBy: ["WIN-OPEN-01"] });
     expect(report.summary.covered).toBeLessThan(report.summary.required);
-  });
+  }, cliTimeoutMs);
 
-  test("text output lists the uncovered SDK surface and fails", () => {
-    const result = run(path.join(FIXTURES, "complete"));
-    expect(result.status, result.stderr).toBe(1);
+  test("text output lists the uncovered SDK surface and fails", async () => {
+    const result = await cli(path.join(FIXTURES, "complete"));
+    expect(result.status, outcome(result)).toBe(1);
     expect(result.stdout).toMatch(/^Uncovered @legendapp\/spark surface .*\n {2}\.\/ai: \(subpath\), #buildAIInvocation, /m);
     expect(result.stdout).toMatch(/\ncoverage: \d+ of \d+ SDK subpaths, exports and availability flags covered; 4 checks, 3 flows; 0 problems\n$/);
-  });
+  }, cliTimeoutMs);
 
-  test("rejects missing paths", () => {
-    expect(run("e2e/does-not-exist").status).toBe(2);
-  });
+  test("rejects missing paths", async () => {
+    const result = await cli("e2e/does-not-exist");
+    expect(result.status, outcome(result)).toBe(2);
+  }, cliTimeoutMs);
 });
