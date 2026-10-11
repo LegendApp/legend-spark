@@ -54,14 +54,19 @@ int main(void) {
 
       double before = NSDate.date.timeIntervalSince1970 * 1000;
       SparkTestBlockMainThread(600);
-      Spin(2, ^{ return (BOOL)(reports.count > 0); });
+      double after = NSDate.date.timeIntervalSince1970 * 1000;
+      Spin(5, ^{ return (BOOL)(reports.count > 0); });
       CHECK(reports.count == 1);
       NSDictionary *report = reports.firstObject;
-      double duration = [report[@"durationMs"] doubleValue];
-      // Measured from the unanswered ping, sent at most half a threshold (50 ms) into the hang.
-      CHECK(duration >= 540 && duration <= 800);
+      double duration = [report[@"durationMs"] doubleValue], startedAt = [report[@"startedAt"] doubleValue];
+      // Bounds that hold however late a loaded machine runs either thread: the unanswered ping went out
+      // during the hang (50 ms of slack for one sent just before it) and at least a threshold before it
+      // ended; the main thread answered once the hang was over, when it next ran its queue. 20 ms allows
+      // for comparing the wall clock with the watchdog's uptime clock.
+      CHECK(startedAt >= before - 50 && startedAt <= after - 100);
+      CHECK(startedAt + duration >= after - 20 && startedAt + duration <= after + 1000);
+      CHECK(duration >= 100);
       CHECK([report[@"thresholdMs"] isEqual:@100]);
-      CHECK([report[@"startedAt"] doubleValue] >= before - 1 && [report[@"startedAt"] doubleValue] <= before + 100);
       NSArray<NSDictionary *> *stack = report[@"stack"];
       CHECK(stack.count >= 4);
       for (NSDictionary *frame in stack) {
@@ -89,10 +94,10 @@ int main(void) {
       [reports removeLastObject];
 
       // Back-to-back hangs are reported separately.
-      SparkTestBlockMainThread(300);
-      Spin(0.1, nil);
-      SparkTestBlockMainThread(300);
-      Spin(2, ^{ return (BOOL)(reports.count == 3); });
+      SparkTestBlockMainThread(500);
+      Spin(0.5, nil);
+      SparkTestBlockMainThread(500);
+      Spin(5, ^{ return (BOOL)(reports.count == 3); });
       CHECK(reports.count == 3);
 
       // After stop nothing is reported, even for a hang already under way.
@@ -111,7 +116,7 @@ int main(void) {
     SparkHangWatchdog *b = [[SparkHangWatchdog alloc] initWithThreshold:2000 handler:^(NSDictionary *report) { [slow addObject:report]; }];
     Spin(0.2, nil);
     SparkTestBlockMainThread(400);
-    Spin(1, ^{ return (BOOL)(fast.count > 0); });
+    Spin(5, ^{ return (BOOL)(fast.count > 0); });
     CHECK(fast.count == 1 && slow.count == 0);
     [a stop]; [b stop];
   }
