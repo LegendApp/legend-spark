@@ -188,14 +188,20 @@ static void SparkSetAppearance(NSDictionary *request, SparkDriverReply reply) {
   NSString *value = request[@"appearance"];
   NSAppearanceName name = [value isEqual:@"dark"] ? NSAppearanceNameDarkAqua : [value isEqual:@"light"] ? NSAppearanceNameAqua : nil;
   if (!name) { reply(SparkFailure(@"E_INVALID_ARGUMENT", @"Appearance is light or dark")); return; }
-  NSArray *names = @[NSAppearanceNameAqua, NSAppearanceNameDarkAqua];
-  BOOL changed = ![[NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:names] isEqualToString:name];
-  // The app-level override, independent of the OS setting; per-window overrides still win.
-  NSApp.appearance = [NSAppearance appearanceNamed:name];
-  if (!changed) { reply(@{ @"ok": @YES, @"changed": @NO }); return; }
-  CFTimeInterval changedAt = CACurrentMediaTime();
-  SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 10), ^{ return (BOOL)(lastMount > changedAt && SparkSettled()); }, ^(BOOL rendered) {
-    reply(rendered ? @{ @"ok": @YES, @"changed": @YES } : SparkFailure(@"E_TIMEOUT", @"No UI update followed the appearance change"));
+  NSTimeInterval timeout = SparkTimeout(request[@"timeoutMs"], 10);
+  // An override set while the app is still launching did not last (its first render came out in the OS
+  // appearance), so it is applied once the first rendered UI has settled, as navigate waits too.
+  SparkWaitUntil(timeout, ^{ return (BOOL)(lastMount > 0 && SparkSettled()); }, ^(BOOL launched) {
+    if (!launched) { reply(SparkFailure(@"E_TIMEOUT", @"The app has not rendered")); return; }
+    NSArray *names = @[NSAppearanceNameAqua, NSAppearanceNameDarkAqua];
+    BOOL changed = ![[NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:names] isEqualToString:name];
+    // The app-level override, independent of the OS setting; per-window overrides still win.
+    NSApp.appearance = [NSAppearance appearanceNamed:name];
+    if (!changed) { reply(@{ @"ok": @YES, @"changed": @NO }); return; }
+    CFTimeInterval changedAt = CACurrentMediaTime();
+    SparkWaitUntil(timeout, ^{ return (BOOL)(lastMount > changedAt && SparkSettled()); }, ^(BOOL rendered) {
+      reply(rendered ? @{ @"ok": @YES, @"changed": @YES } : SparkFailure(@"E_TIMEOUT", @"No UI update followed the appearance change"));
+    });
   });
 }
 static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
@@ -223,7 +229,10 @@ static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
       return NO;
     }, ^(BOOL found) {
       if (!found) { reply(SparkFailure(@"E_TIMEOUT", [NSString stringWithFormat:@"No view with testID %@", testID])); return; }
-      NSRect frame = [match convertRect:match.bounds toView:nil];
+      // Points from the top-left of the frame view, the area `capture` renders, so frames map onto capture pixels.
+      NSView *root = SparkFrameView(match.window);
+      NSRect frame = [match convertRect:match.bounds toView:root];
+      if (!root.isFlipped) frame.origin.y = NSHeight(root.bounds) - NSMaxY(frame);
       reply(@{ @"ok": @YES, @"window": match.window.identifier ?: @"", @"frame": @{ @"x": @(frame.origin.x), @"y": @(frame.origin.y), @"width": @(frame.size.width), @"height": @(frame.size.height) } });
     });
   }

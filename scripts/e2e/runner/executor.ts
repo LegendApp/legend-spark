@@ -195,17 +195,16 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
       throw error;
     }
   }
-  /** Visibility checks (assertVisible, extendedWaitUntil, when) are black-box. */
-  const observer = (name: string) => {
-    const backend = backends.find(candidate => candidate.kind === "black-box");
-    if (!backend) throw new Failure("unsupported", `${name} needs a black-box backend (active: ${backends.map(candidate => candidate.name).join(", ")})`);
-    return backend;
-  };
-  async function holds(condition: Condition, name: string): Promise<boolean> {
+  /**
+   * Visibility checks (assertVisible, extendedWaitUntil, when) use the black-box backend. With only a driver backend
+   * active, the driver answers them in-process for the selector keys it can query; other keys are unsupported.
+   */
+  const observer = () => backends.find(candidate => candidate.kind === "black-box") ?? backends[0]!;
+  async function holds(condition: Condition): Promise<boolean> {
     if (condition.platform && condition.platform !== platform) return false;
     if (condition.matrix && Object.entries(condition.matrix).some(([dimension, value]) => matrix[dimension] !== value)) return false;
     const visible = async (value: unknown) => {
-      const located = await locate(parseSelector(value, platform), finderFor(observer(`${name} when`)));
+      const located = await locate(parseSelector(value, platform), finderFor(observer()));
       return !located.problem && located.matches.length > 0;
     };
     if (condition.visible !== undefined && !(await visible(condition.visible))) return false;
@@ -237,15 +236,15 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
       case "repeat":
         for (let index = 0; args.times === undefined || index < (args.times as number); index++) {
           live();
-          if (args.while && !(await holds(args.while as Condition, command.name))) break;
+          if (args.while && !(await holds(args.while as Condition))) break;
           await runAll(args.commands as FlowCommand[], child(scope, command));
         }
         return;
       case "extendedWaitUntil":
-        await find(observer(command.name), args.visible ?? args.notVisible, args.visible !== undefined ? "any" : "none", timeoutMs);
+        await find(observer(), args.visible ?? args.notVisible, args.visible !== undefined ? "any" : "none", timeoutMs);
         return;
-      case "assertVisible": await find(observer(command.name), selectorArgs(args), "any", timeoutMs); return;
-      case "assertNotVisible": await find(observer(command.name), selectorArgs(args), "none", timeoutMs); return;
+      case "assertVisible": await find(observer(), selectorArgs(args), "any", timeoutMs); return;
+      case "assertNotVisible": await find(observer(), selectorArgs(args), "none", timeoutMs); return;
     }
     const backend = route(command.name, backends);
     const context: CommandContext = {
@@ -278,7 +277,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
     const start = clock.now();
     try {
       live();
-      if (command.when && !(await holds(interpolate(command.when, scope.env), command.name))) step.status = "skipped";
+      if (command.when && !(await holds(interpolate(command.when, scope.env)))) step.status = "skipped";
       else await dispatch(command, interpolateArgs(command, scope.env), scope);
     } catch (error) {
       step.status = "failed";

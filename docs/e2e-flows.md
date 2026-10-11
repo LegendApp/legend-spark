@@ -154,6 +154,10 @@ commands, frame timing, performance, `assertState`, and:
 - `takeScreenshot` and `assertScreenshot`: captured in-process by the driver, so they
   need no screen-recording permission. See [Visual goldens](#visual-goldens).
 
+Until the black-box backend lands, a run with only the driver backend checks `id`
+visibility in-process (see [The driver backend](#the-driver-backend)): a view in the
+rendered hierarchy of a window that is never put on screen, not what a user sees.
+
 There is no `retry` and no sleep command. Every command waits for its target, and a
 flaky flow counts as a failed flow. Use `extendedWaitUntil` to wait for state, or
 `setClock: virtual` with `advanceClock` to step through animation.
@@ -169,11 +173,16 @@ it. `--backend` picks backends by name; the default is every available backend.
 `--app` is the app under test, also available to flows as `${APP_PATH}`. The exit code
 is 0 when every flow passed or was skipped, 1 when one failed, and 2 for a usage error.
 
-**No production backend exists yet.** The macOS black-box backend (AX + CGEvent) lands
-with [#50](https://github.com/LegendApp/legend-spark/issues/50), and the adapter for the
-Spark in-app driver lands with [#226](https://github.com/LegendApp/legend-spark/issues/226).
-Until then, `e2e:run` exits 2 and says so. The runner's behavior is covered by
+One production backend exists: `driver`, the Spark in-app driver on macOS (see
+[The driver backend](#the-driver-backend)). The macOS black-box backend (AX + CGEvent)
+lands with [#50](https://github.com/LegendApp/legend-spark/issues/50); until then every
+black-box command fails as `unsupported`. The runner's behavior is covered by
 `tests/e2e-runner.test.ts`, which uses an in-memory test backend.
+
+```sh
+cd examples/kitchen-sink && bun run rebuild:macos            # once, and after native changes
+bun run e2e:run e2e/flows/infra/catalog-driver.yaml --backend driver
+```
 
 ### Semantics
 
@@ -281,7 +290,8 @@ name in `BACKENDS` in `scripts/e2e/runner/run.ts`.
   Commands marked **driver** run only on a driver backend. Other commands run only on a
   black-box backend, except lifecycle commands, which either kind may own. Visibility
   checks (`assertVisible`, `assertNotVisible`, `extendedWaitUntil`, `when`) use the
-  black-box backend.
+  black-box backend. When only a driver backend is active, they use the driver's
+  `queryKeys` (in-process, white-box), and any other selector key is `unsupported`.
 - `commands` is the dispatch table. If no eligible backend has a command, the flow fails
   with `unsupported`, naming the backend. The runner itself runs `runFlow`, `repeat`,
   `extendedWaitUntil`, `assertVisible` and `assertNotVisible`.
@@ -303,13 +313,34 @@ name in `BACKENDS` in `scripts/e2e/runner/run.ts`.
 - `matrix` lists the dimensions the backend applies, from `session.matrix` in `start`.
   `collect(dir)` writes failure evidence: a screenshot, logs, a driver trace.
 
-The #52 driver protocol (`ping`, `navigate`, `waitFor`, `setAppAppearance`, `capture`,
-`quit`) fits as a `driver` backend:
+### The driver backend
 
-- `start` and `launchApp` launch the app in driver mode, and `openUrl` maps to `navigate`.
-- `query` supports `id` through `waitFor`, and returns at most the first match.
-- `matrix` has `appearance` (via `setAppAppearance`) and `locale` (a launch argument).
-- `screenshot` and `collect` use `capture`, and `stop` uses `quit`.
+`--backend driver` (`scripts/e2e/runner/driver-backend.ts`) runs flows in-process through
+the Spark in-app driver ([docs/test-driver.md](test-driver.md)). The app never shows a
+window, activates or takes focus, and needs no TCC permission. It drives the Kitchen Sink:
+the `--app` bundle (the gate passes its release build), or the last development build.
+A development build loads JavaScript over HTTP, so the backend bundles the current
+source once per run (`expo export:embed`, no Metro) and serves it to each launch; a release
+build runs its embedded bundle. A flow whose `appId` is not the app's bundle identifier
+fails with `invalid`.
+
+| Flow | Driver |
+|---|---|
+| `launchApp` | Quits a running app, then launches in driver mode. With `stopApp: false` and the app running, it only delivers `openUrl`. `openUrl` uses `navigate` (the OS deep-link path, once the first render settles). Other keys (`clearState`, `arguments`, `env`, `openFile`, `appId`, `from`) are `unsupported`. |
+| `stopApp`, end of flow | `quit`: the app's normal termination path |
+| `id` selectors (visibility checks, mask selectors) | `waitFor` with no wait, polled by the runner; at most the first visible match in any window. Other selector keys and `within` are `unsupported`. |
+| matrix `appearance` | `setAppAppearance` after each launch (the app override; the OS setting is untouched) |
+| matrix `locale` | Launch arguments `-AppleLanguages (<locale>) -AppleLocale <locale>` |
+| `setAppAppearance` | `setAppAppearance`; lasts until the app quits |
+| `takeScreenshot`, `assertScreenshot`, failure screenshot | `capture` of the main window. Element frames are points from the window's top-left, the capture's origin, so masks line up. The `window` key is `unsupported` (the driver cannot list windows). |
+| failure evidence | Each launch's app log, and a capture of the main window while the app runs |
+
+Everything else is `unsupported`, never skipped: black-box commands (input, menus,
+windows, OS state) need [#50](https://github.com/LegendApp/legend-spark/issues/50), and
+the other driver commands (motion and virtual clock, `assertStartup` and other
+performance commands, `assertState`) are not in the driver protocol yet.
+`tests/e2e-driver-backend.test.ts` covers the mapping with a fake driver
+(`tests/e2e-driver-fake.ts`); `e2e/flows/infra/catalog-driver.yaml` runs it end to end.
 
 ## Visual goldens
 
@@ -396,8 +427,7 @@ diff before you approve, and read the approved PNG afterwards. Two captures in t
 selection for the same golden are an error; approve one by its path.
 
 `--to` takes a golden ID and is for captures from `bun run ks:capture` (see
-[docs/test-driver.md](test-driver.md)) until the driver backend
-([#226](https://github.com/LegendApp/legend-spark/issues/226)) runs flows:
+[docs/test-driver.md](test-driver.md)), outside a flow run:
 
 ```sh
 bun run ks:capture --wait-for infra-shell-root --name catalog --appearance dark --locale en --out /tmp/goldens
@@ -412,8 +442,8 @@ Committed goldens:
 | `macos/dark/en/infra-shell-catalog` | The same, dark | `--appearance dark --locale en` |
 
 They come from the development build, so the sidebar subtitle reads `dev · <project ID>`.
-A flow that compares them against a release build must mask that line, or approve
-release-build goldens from its run.
+A flow that compares them must mask that line (`mask: [{ id: infra-shell-subtitle }]`), as
+`e2e/flows/infra/catalog-driver.yaml` does.
 
 The Arabic catalog has no golden yet. Scroll content no longer renders mirrored
 ([#234](https://github.com/LegendApp/legend-spark/issues/234)), but Arabic text in
@@ -432,7 +462,7 @@ A golden only works if the same build renders the same pixels every time. The dr
 | Text caret blink | Hide the insertion point, or pin it on, so focused text fields look the same at any moment | Not handled: mask focused fields until it is |
 | Clocks and dates on screen | Mask them (`mask: [{ id: … }]`), or pin the app's time and time zone | Not handled: mask |
 | Window activation state | Always capture in the same state | Yes: driven apps never activate, so title bars are always inactive |
-| Appearance and locale | Apply the matrix values before the first capture | `setAppAppearance`; locale is a launch argument (`-AppleLanguages`) |
+| Appearance and locale | Apply the matrix values before the first capture | `setAppAppearance` once the first render settles; locale is a launch argument (`-AppleLanguages`) |
 | Backing scale | Capture at a fixed scale; goldens are @2x | Captures at the window's backing scale (2x on Retina displays) |
 | Color space | Keep it fixed per machine | Captures are tagged with the window's color space (Display P3 on most Macs) |
 | Fonts and OS rendering | Record goldens on the gate target's OS; a macOS major update can change text rendering | Not handled; the store has no OS version segment |
@@ -548,7 +578,8 @@ invalid `e2e/gate.yaml`, whose problems it prints), and 2 for a usage error, suc
 `--target` that is not in the manifest. It never passes vacuously. A missing target,
 backend, build, flow, baseline, measurement or sign-off is a failure with its own reason.
 
-**It fails today.** No backend exists yet (#50, #226), coverage is incomplete, and the
+**It fails today.** The only backend is the in-app driver, so every flow that needs a
+black-box command fails as `unsupported` until #50; coverage is incomplete, and the
 budgets are not measured. The release scripts do not run it yet; that is
 [#55](https://github.com/LegendApp/legend-spark/issues/55).
 
@@ -654,7 +685,7 @@ base 14-inch MacBook Pro for 120 Hz frame rate (target
 
 Backends record measurements with `context.metric(name, value)`. They appear in the
 run report as `metrics: { name: [values…] }` on each flow result. Budgets refer to
-these names, so backends (the driver adapter, #226) use them for the performance commands:
+these names, so backends use them for the performance commands (the driver backend does not implement them yet):
 
 | Command | Metrics |
 |---|---|
