@@ -6,10 +6,13 @@ intent: >
   PDF" from the panel's PDF menu saves the job to a file (no printer is used) and resolves
   canceled false with the panel's page setup (A4 portrait, 54-point margins, the app default after
   clearState). "Print this window…" and "Print receipt card…" preview the window and the white
-  receipt card before Cancel.
+  receipt card before Cancel. manual: true keeps the gate from running it: a wrong click on Print
+  would reach the Mac's real default printer. Run it by hand only with a fake or virtual default
+  printer, checking `lpstat -o` shows no new job before and after.
 checks: [DOC-PRINT-01, DOC-PRINT-02]
 tags: [document-model]
 platforms: [macos]
+manual: true
 ---
 - launchApp: { clearState: true, openUrl: "spark-ks://document-model/printing" }
 - extendedWaitUntil: { visible: { id: document-model-printing-root }, timeout: 10s }

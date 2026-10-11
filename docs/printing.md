@@ -143,4 +143,4 @@ page setup panel or window/view content.
   colors).
 - Kitchen Sink: Document model > Printing (`spark-ks://document-model/printing`). Launching with
   `--ks-print-export <path>` exports the report on start, because the driver backend cannot click
-  yet; `e2e/flows/document-model/pdf-export-driver.yaml` uses it.
+  yet; `e2e/flows/document-model/printing-pdf-export-driver.yaml` uses it.
