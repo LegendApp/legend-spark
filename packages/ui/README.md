@@ -95,3 +95,50 @@ there. The AppKit-only styles (`push`, `bevel`, `toolbar`, `help`, `cancel`,
 `destructive`) and explicit sizes throw `E_UNSUPPORTED_PLATFORM`. An absent macOS
 button manager throws `E_MODULE_UNAVAILABLE`. Unknown availability option keys throw
 `E_UNSUPPORTED_OPTION`.
+
+## Text services
+
+`@legendapp/spark/ui/text-services` covers AppKit text services in React Native `TextInput`,
+selectable `Text` and Spark `TextInput`. `getTextServicesAvailability(feature)` is
+synchronous:
+
+| Feature | macOS | Windows and other platforms |
+| --- | --- | --- |
+| `services` | Available. Selected text offers the Services menu (app menu and context menu), and a service's returned text replaces the selection and reaches `onChangeText`. AppKit's text views do this; there is no Spark call. | `unsupported-platform` |
+| `lookUp` | Available with the native module. Look Up and Force Click are built in; `lookUp(target)` shows the definition for the selection, or the word at the insertion point. | `unsupported-platform` |
+| `writingTools` | Available on macOS 15.2+ hardware that supports Writing Tools, even when the user has not turned it on; `host-restriction` otherwise. | `unsupported-platform` |
+| `findBar` | Available with the native module. Multiline `TextInput`s show the NSTextFinder find bar for Edit > Find (⌘F), with its own case and wrap options; `showFindBar(target)` and `findText(target, query, options)`. | `unsupported-platform` |
+
+`missing-module` means the macOS build lacks the text services module. Writing Tools is
+set per React Native `TextInput` with `writingToolsBehavior`: `"default"`, `"complete"`
+(inline), `"limited"` (panel) or `"none"` (opted out). Spark's config plugin adds the prop
+on macOS (see [Expo Desktop integration](../../docs/expo-desktop-integration.md)); other
+platforms ignore it. `complete` and `limited` are preferences the system applies when it can.
+
+```tsx
+import { useRef, useState } from 'react';
+import { Button, TextInput } from 'react-native';
+import { findText, getTextServicesAvailability, type FindTextResult } from '@legendapp/spark/ui/text-services';
+
+function Note() {
+  const note = useRef<TextInput>(null);
+  const [found, setFound] = useState<FindTextResult>();
+  return <>
+    <TextInput ref={note} multiline writingToolsBehavior="limited" defaultValue="Spark notes" />
+    <TextInput writingToolsBehavior="none" placeholder="License key" />
+    {getTextServicesAvailability('findBar').available && <Button title="Find next" onPress={() => findText(note.current, 'spark').then(setFound)} />}
+  </>;
+}
+```
+
+`findText` counts the non-overlapping substring matches of `query` in the whole text and
+selects the next one after the selection, scrolling it into view. It resolves
+`{ matchCount, matchIndex }`, where `matchIndex` is the 1-based position of the selected
+match, or 0 when nothing was selected. Options: `caseSensitive` (default `false`), `wrap`
+(continue from the other end, default `true`) and `backwards` (select the match before the
+selection). Unknown option keys reject with `E_UNSUPPORTED_OPTION`. `showFindBar` focuses the
+input and shows its find bar. It rejects with `E_UNSUPPORTED_OPTION` for a view without one,
+such as selectable `Text`. All three operations reject with `E_INVALID_ARGUMENT` for a target
+without a text view (a single-line `TextInput`), with `E_NOT_FOUND` for an unmounted target,
+and with `E_UNSUPPORTED_PLATFORM` off macOS. Windows support is tracked in
+[#293](https://github.com/LegendApp/legend-spark/issues/293).

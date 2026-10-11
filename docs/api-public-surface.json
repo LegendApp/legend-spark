@@ -699,6 +699,17 @@
     "SFSymbolScale",
     "getSFSymbolAvailability"
   ],
+  "./ui/text-services": [
+    "FindTextOptions",
+    "FindTextResult",
+    "TextServicesFeature",
+    "TextServicesTarget",
+    "WritingToolsBehavior",
+    "findText",
+    "getTextServicesAvailability",
+    "lookUp",
+    "showFindBar"
+  ],
   "./ui/uniwind": [
     "Button",
     "SegmentedControl",

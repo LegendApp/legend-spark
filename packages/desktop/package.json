@@ -64,6 +64,7 @@
     "./ui/swipe": "./ui-swipe.ts",
     "./ui/symbol": "./ui-symbol.ts",
     "./ui/search": "./ui-search.ts",
+    "./ui/text-services": "./ui-text-services.ts",
     "./settings/window": "./settings-window.ts",
     "./settings/observable": "./settings-observable.ts",
     "./ui/classnames": "./ui-classnames.ts",
