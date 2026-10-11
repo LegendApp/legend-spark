@@ -45,7 +45,8 @@ int main() { @autoreleasepool {
   auto props = std::make_shared<SparkButtonProps>();
   props->title = "Save"; props->accessibilityLabel = "Save document"; props->testId = "save-button";
   auto update = [&] { [view updateProps:props oldProps:view->_props]; };
-  update();
+  // RCTMountingManager mounts (Insert) with a null oldProps.
+  [view updateProps:props oldProps:nullptr];
   assert([button.title isEqual:@"Save"] && [button.accessibilityLabel isEqual:@"Save document"]);
   assert([button.accessibilityIdentifier isEqual:@"save-button"]);
   // The codegen default (an omitted variant) is a plain push button: no Return key equivalent.

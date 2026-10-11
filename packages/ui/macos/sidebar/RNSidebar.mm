@@ -577,18 +577,21 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
 {
   const auto &newProps = *std::static_pointer_cast<SidebarProps const>(props);
-  const auto &previous = *std::static_pointer_cast<SidebarProps const>(oldProps);
+  // Fabric mounts (Insert mutations) pass a null oldProps, possibly to a view that was configured
+  // before a move; with nothing to diff against, apply every prop.
+  const auto previous = std::static_pointer_cast<SidebarProps const>(oldProps);
 
 #if TARGET_OS_OSX
   _contentInsetTop = newProps.contentInsetTop;
   _defaultRowHeight = newProps.defaultRowHeight > 0 ? newProps.defaultRowHeight : 28;
-  const BOOL rowsChanged = newProps.itemsJson != previous.itemsJson || newProps.defaultRowHeight != previous.defaultRowHeight;
-  if (newProps.itemsJson != previous.itemsJson) _dataItems = [self itemsFromJson:newProps.itemsJson];
+  const BOOL itemsChanged = !previous || newProps.itemsJson != previous->itemsJson;
+  const BOOL rowsChanged = itemsChanged || newProps.defaultRowHeight != previous->defaultRowHeight;
+  if (itemsChanged) _dataItems = [self itemsFromJson:newProps.itemsJson];
   _selectedId = [NSString stringWithUTF8String:newProps.selectedId.c_str()];
   _scrollView.contentInsets = NSEdgeInsetsMake(_contentInsetTop, 0, 0, 0);
   if (rowsChanged) [self reloadRows];
-  else if (newProps.selectedId != previous.selectedId || newProps.selectionRevision != previous.selectionRevision) [self updateSelection];
-  if (newProps.contentInsetTop != previous.contentInsetTop) [self setNeedsLayout:YES];
+  else if (newProps.selectedId != previous->selectedId || newProps.selectionRevision != previous->selectionRevision) [self updateSelection];
+  if (!previous || newProps.contentInsetTop != previous->contentInsetTop) [self setNeedsLayout:YES];
 #endif
 
   [super updateProps:props oldProps:oldProps];

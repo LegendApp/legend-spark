@@ -60,7 +60,7 @@ int main() { @autoreleasepool {
   view->_eventEmitter = std::make_shared<SparkPrimitiveEventEmitter>();
   auto props = std::make_shared<SparkPrimitiveProps>();
   props->kind = "checkbox"; props->valueJson = R"({"value":"mixed","label":"Choice"})"; props->testId = "check"; props->accessibilityLabel = "Checkbox label";
-  Update(view, props); NSButton *checkbox = [view valueForKey:@"control"];
+  [view updateProps:props oldProps:nullptr]; NSButton *checkbox = [view valueForKey:@"control"];
   assert(checkbox.state == NSControlStateValueMixed); assert(checkbox.allowsMixedState); assert([checkbox.accessibilityLabel isEqual:@"Checkbox label"]);
   assert([checkbox.accessibilityIdentifier isEqual:@"check"]); assert([checkbox.title isEqual:@"Choice"] && [[checkbox.cell accessibilityLabel] isEqual:@"Checkbox label"]);
   checkbox.state = NSControlStateValueOn; [view changed:checkbox]; assert(changes.back() == "true" && lastCount == 1);
@@ -174,11 +174,11 @@ int main() { @autoreleasepool {
   disclosure.state = NSControlStateValueOn; [view changed:disclosure]; assert(changes.back() == "true");
   props->eventCount = lastCount; Update(view, props); assert(disclosure.state == NSControlStateValueOff);
   [view prepareForRecycle]; assert(view.subviews.count == 0);
-  props->eventCount = 0; Update(view, props); assert(view.subviews.count == 1);
+  props->eventCount = 0; [view updateProps:props oldProps:nullptr]; assert(view.subviews.count == 1);
   disclosure = [view valueForKey:@"control"]; disclosure.state = NSControlStateValueOff; [view changed:disclosure]; assert(lastCount == 1);
   // An error from props applied before the event emitter is attached is delivered once it is.
   RNSparkPrimitive *fresh = [RNSparkPrimitive new]; auto bad = std::make_shared<SparkPrimitiveProps>(); bad->kind = "switch"; bad->valueJson = "not json";
-  errorCount = errors.size(); Update(fresh, bad); assert(errors.size() == errorCount && fresh.subviews.count == 1);
+  errorCount = errors.size(); [fresh updateProps:bad oldProps:nullptr]; assert(errors.size() == errorCount && fresh.subviews.count == 1);
   [fresh updateEventEmitter:std::make_shared<SparkPrimitiveEventEmitter>()]; assert(errors.size() == errorCount + 1);
   puts("Native primitive tests passed");
 } }
