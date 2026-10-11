@@ -12,7 +12,7 @@ import { useControlMessages, type ControlRow } from "./control-messages";
 // API reports, so flows can assert them in any locale. Test IDs: native-controls-<screen>-<row>-<size>.
 const SIZES: readonly ControlSize[] = ["mini", "small", "regular", "large"];
 const frame = { width: "100%" } as const;
-type Shared = { testID: string; size: ControlSize; disabled: boolean; accessibilityLabel: string; style: typeof frame; onError: (error: SparkError) => void };
+export type Shared = { testID: string; size: ControlSize; disabled: boolean; accessibilityLabel: string; style?: typeof frame; onError: (error: SparkError) => void };
 type Render<T> = (value: T, set: (value: T) => void, shared: Shared) => ReactNode;
 /** `minWidth` (points) is the narrowest a sample still shows whole; the default fits four sizes across at the default window size. */
 type Row = { row: ControlRow; availability: unknown; minWidth?: number; render: (shared: Omit<Shared, "onError">) => ReactNode };
@@ -23,13 +23,13 @@ const PAIRS = [SIZES.slice(0, 2), SIZES.slice(2)];
 
 export const describe = (error: unknown) => error instanceof SparkError ? `SparkError:${error.code}` : `Unexpected error: ${String(error)}`;
 
-/** Renders a value-owning sample with its JSON readout and any reported error. */
-function Sample<T>({ initial, shared, render }: { initial: T; shared: Omit<Shared, "onError">; render: Render<T> }) {
+/** Renders a value-owning sample with its readout (JSON unless `format` is given) and any reported error. */
+export function Sample<T>({ initial, shared, render, format = JSON.stringify }: { initial: T; shared: Omit<Shared, "onError">; render: Render<T>; format?: (value: T) => string }) {
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string>();
   return <View className="min-w-36 flex-1 gap-1">
     <Boundary id={shared.testID}>{render(value, setValue, { ...shared, onError: reported => setError(describe(reported)) })}</Boundary>
-    <Text selectable className="font-mono text-xs text-muted" testID={`${shared.testID}-value`}>{JSON.stringify(value)}</Text>
+    <Text selectable className="font-mono text-xs text-muted" testID={`${shared.testID}-value`}>{format(value)}</Text>
     {error && <Text selectable className="text-xs text-danger" testID={`${shared.testID}-error`}>{error}</Text>}
   </View>;
 }

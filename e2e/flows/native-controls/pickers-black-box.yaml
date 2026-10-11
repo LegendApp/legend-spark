@@ -1,0 +1,82 @@
+appId: so.legend.spark.examples.kitchensink
+name: Picker keyboard editing, well popovers, and color and font panel sessions
+intent: >
+  On Native controls > Pickers (every picker in UTC, starting at 2026-03-14T09:30:00Z), with real
+  input: the up arrow on a focused date, time or date-and-time field changes the reported
+  Unix-millisecond value and its ISO readout; Up and Down on the March-2026-only picker never leave
+  March; clicking another March day in the calendar (the 16th in English) selects it and keeps 09:30; dragging the clock's minute
+  hand changes the time and keeps the date. The minimal well opens the system color popover and Escape closes it without
+  changing the value. Show color panel opens the system color panel (state open); clicking the
+  color well hands the panel to the well and ends the session as replaced; Close hides the panel
+  (state closed). Show font panel opens the font panel at Helvetica Neue 15 regular, reports the
+  resolved font, and Close hides it. With Disable controls checked, keys change nothing. Black-box
+  only: AppKit controls take keys only in the key window, and the panels and popovers need an
+  on-screen window, which driver mode never has (pickers.yaml and pickers-panels.yaml cover the
+  driver). Picking a color or font inside a panel is covered by tests/native-panels.native.mm and
+  tests/native-primitives.native.mm. The eyedropper is in the manual pickers-sampler.yaml.
+checks: [CTRL-DATE-01, CTRL-DATE-02, CTRL-COLOR-01, CTRL-COLORPANEL-01, CTRL-FONTPANEL-01, CTRL-DISABLED-01]
+tags: [native-controls, black-box]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/pickers" }
+- extendedWaitUntil: { visible: { id: native-controls-pickers-root }, timeout: 10s }
+# Keyboard: the focused field steps
+- tapOn: { id: native-controls-pickers-date }
+- pressKey: Up
+- assertNotVisible: { id: native-controls-pickers-date-value, text: "1773480600000 2026-03-14T09:30:00.000Z" }
+- assertVisible: { id: native-controls-pickers-date-value, text: "/^\\d+ \\d{4}-\\d\\d-\\d\\dT09:30:00\\.000Z$/" }
+- tapOn: { id: native-controls-pickers-time }
+- pressKey: Up
+- assertNotVisible: { id: native-controls-pickers-time-value, text: "1773480600000 2026-03-14T09:30:00.000Z" }
+- assertVisible: { id: native-controls-pickers-time-value, text: "/^\\d+ 2026-03-14T\\d\\d:\\d\\d:00\\.000Z$/" }
+- tapOn: { id: native-controls-pickers-date-time }
+- pressKey: Down
+- assertNotVisible: { id: native-controls-pickers-date-time-value, text: "1773480600000 2026-03-14T09:30:00.000Z" }
+- tapOn: { id: native-controls-pickers-text-field }
+- pressKey: Up
+- assertNotVisible: { id: native-controls-pickers-text-field-value, text: "1773480600000 2026-03-14T09:30:00.000Z" }
+- tapOn: { id: native-controls-pickers-bounded }
+- pressKey: Up
+- pressKey: Up
+- pressKey: Up
+- assertVisible: { id: native-controls-pickers-bounded-value, text: "/^\\d+ 2026-03-\\d\\dT09:30:00\\.000Z$/" }
+- pressKey: Tab
+- pressKey: Down
+- pressKey: Down
+- assertVisible: { id: native-controls-pickers-bounded-value, text: "/^\\d+ 2026-03-\\d\\dT09:30:00\\.000Z$/" }
+# Calendar and clock: a day click keeps the time, a clock-hand drag keeps the date
+- tapOn: { point: "24%,56%", within: { id: native-controls-pickers-calendar } }
+- assertNotVisible: { id: native-controls-pickers-calendar-value, text: "1773480600000 2026-03-14T09:30:00.000Z" }
+- assertVisible: { id: native-controls-pickers-calendar-value, text: "/^\\d+ 2026-03-\\d\\dT09:30:00\\.000Z$/" }
+- dragAndDrop: { from: { point: "50%,85%", within: { id: native-controls-pickers-clock } }, to: { point: "85%,50%", within: { id: native-controls-pickers-clock } }, steps: 10 }
+- assertNotVisible: { id: native-controls-pickers-clock-value, text: "1773480600000 2026-03-14T09:30:00.000Z" }
+- assertVisible: { id: native-controls-pickers-clock-value, text: "/^\\d+ 2026-03-14T\\d\\d:\\d\\d:00\\.000Z$/" }
+# The minimal well shows the system popover; Escape leaves the value alone
+- tapOn: { id: native-controls-pickers-well-minimal }
+- pressKey: Escape
+- assertText: { id: native-controls-pickers-well-minimal-value, equals: '"#cc3366"' }
+# Color panel sessions
+- assertText: { id: native-controls-pickers-availability-color-panel, equals: 'color-panel: {"available":true}' }
+- assertText: { id: native-controls-pickers-availability-font-panel, equals: 'font-panel: {"available":true}' }
+- tapOn: { id: native-controls-pickers-color-panel }
+- assertText: { id: native-controls-pickers-color-panel-state, equals: open }
+- tapOn: { id: native-controls-pickers-well }
+- assertText: { id: native-controls-pickers-color-panel-state, equals: replaced }
+- tapOn: { id: native-controls-pickers-color-panel }
+- assertText: { id: native-controls-pickers-color-panel-state, equals: open }
+- tapOn: { id: native-controls-pickers-color-panel-close }
+- assertText: { id: native-controls-pickers-color-panel-state, equals: closed }
+# Font panel session
+- tapOn: { id: native-controls-pickers-font-panel }
+- assertText: { id: native-controls-pickers-font-panel-state, equals: open }
+- assertText: { id: native-controls-pickers-font-panel-value, equals: '{"family":"Helvetica Neue","postScriptName":"HelveticaNeue","size":15,"weight":400,"italic":false}' }
+- tapOn: { id: native-controls-pickers-font-panel-close }
+- assertText: { id: native-controls-pickers-font-panel-state, equals: closed }
+# Disabled pickers ignore keys
+- tapOn: { id: native-controls-pickers-disabled }
+- tapOn: { id: native-controls-pickers-japanese }
+- pressKey: Up
+- assertText: { id: native-controls-pickers-japanese-value, equals: "1773480600000 2026-03-14T09:30:00.000Z" }

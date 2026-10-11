@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: Eyedropper picks a screen color or cancels
+intent: >
+  On Native controls > Pickers, Sample screen color shows the system eyedropper with no Screen
+  Recording prompt. Escape reports {"canceled":true}. Sampling again and clicking the "Color well"
+  swatch (#3366cc) reports {"canceled":false,"color":"#3366cc"} (sRGB; display color management can
+  shift the last digit). manual: true keeps every backend from running it: the eyedropper takes over
+  the real pointer and samples the real screen. Run it by hand only.
+checks: [CTRL-SAMPLER-01]
+tags: [native-controls]
+platforms: [macos]
+manual: true
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/pickers" }
+- extendedWaitUntil: { visible: { id: native-controls-pickers-root }, timeout: 10s }
+- assertText: { id: native-controls-pickers-availability-sampler, equals: 'sampler: {"available":true}' }
+- tapOn: { id: native-controls-pickers-sampler }
+- pressKey: Escape
+- assertText: { id: native-controls-pickers-sampler-result, equals: '{"canceled":true}' }
+- tapOn: { id: native-controls-pickers-sampler }
+- tapOn: { id: native-controls-pickers-well }
+- assertVisible: { id: native-controls-pickers-sampler-result, text: '/^\{"canceled":false,"color":"#3[0-9a-f]6[0-9a-f]c[0-9a-f]"\}$/' }

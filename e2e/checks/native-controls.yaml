@@ -111,6 +111,86 @@ checks:
     covers:
       - ./ui#LevelIndicator
       - ./ui#getControlAvailability(level-indicator).available
+  CTRL-DATE-01:
+    title: DatePicker in date, time and date-and-time modes, text-field-stepper, text-field and clock-calendar variants, reports Unix milliseconds for keyboard and stepper edits, and getControlAvailability('date-picker') reports available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#DatePicker
+      - ./ui#getControlAvailability(date-picker).available
+  CTRL-DATE-02:
+    title: A DatePicker never proposes a value outside min/max, and explicit locales and calendars (ar-SA Umm al-Qura, ja-JP Japanese) show their own digits, field order and eras
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#DatePicker
+  CTRL-COLOR-01:
+    title: ColorWell in default, minimal and expanded variants, with and without opacity, reports lowercase sRGB hex, and getControlAvailability('color-well') reports available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#ColorWell
+      - ./ui#getControlAvailability(color-well).available
+  CTRL-COLORPANEL-01:
+    title: showColorPanel opens the system color panel, streams chosen colors, ends with replaced when a ColorWell takes the panel and dismissed when the user closes it, and close() hides it
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#showColorPanel
+      - ./ui#getColorPanelAvailability
+      - ./ui#getColorPanelAvailability().available
+  CTRL-SAMPLER-01:
+    title: sampleScreenColor shows the system eyedropper without a Screen Recording prompt, returns the picked opaque color, and reports Escape as canceled (manual run only; it takes over the real pointer)
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#sampleScreenColor
+      - ./ui#getColorPanelAvailability
+  CTRL-FONTPANEL-01:
+    title: showFontPanel opens the system font panel at the given font, reports each change as a resolved font (family, PostScript name, size, weight, italic), and close() hides it
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#showFontPanel
+      - ./ui#getFontPanelAvailability
+      - ./ui#getFontPanelAvailability().available
+  CTRL-PANELS-02:
+    title: In test driver mode showColorPanel and showFontPanel reject with SparkError E_UNAVAILABLE and an activated ColorWell reports E_UNAVAILABLE through onError, so no panel reaches the screen, while getControlAvailability, getColorPanelAvailability (including the sampler) and getFontPanelAvailability still report available
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers; docs/test-driver.md Focus and window state"
+    covers:
+      - ./ui#showColorPanel
+      - ./ui#showFontPanel
+      - ./ui#ColorWell
+      - ./ui#getColorPanelAvailability
+      - ./ui#getColorPanelAvailability().available
+      - ./ui#getFontPanelAvailability
+      - ./ui#getFontPanelAvailability().available
+      - ./ui#getControlAvailability(date-picker).available
+      - ./ui#getControlAvailability(color-well).available
+  CTRL-VISUAL-02:
+    title: The Pickers screen renders its date pickers, calendar, clock and color wells and matches its approved golden in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers; docs/e2e-flows.md Visual goldens"
+    covers:
+      - ./ui#DatePicker
+      - ./ui#ColorWell
+  CTRL-UNSUP-03:
+    title: On Windows DatePicker, ColorWell and the color and font panels report unsupported-platform, rendering a picker throws SparkError E_UNSUPPORTED_PLATFORM, and panel calls reject with it (WinUI work is #298)
+    platforms: [windows]
+    blocking: true
+    spec: "#92 CTRL.api-pickers; #298"
+    covers:
+      - ./ui#getColorPanelAvailability
+      - ./ui#getFontPanelAvailability
   CTRL-DISABLED-01:
     title: Disabled primitives and buttons ignore clicks and keep their controlled values
     platforms: [macos]
