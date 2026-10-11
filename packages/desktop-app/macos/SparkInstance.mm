@@ -119,6 +119,9 @@ BOOL SparkInstanceAcquire(NSString *directory, NSString *name, SparkInstanceRece
   SparkInstanceReceiver handler = [receiver copy];
   dispatch_source_set_event_handler(source, ^{
     for (int client; (client = accept(listenFD, NULL, NULL)) >= 0;) {
+      // The socket sits in the per-user temporary directory; also refuse peers running as another user.
+      uid_t uid; gid_t gid;
+      if (getpeereid(client, &uid, &gid) || uid != getuid()) { close(client); continue; }
       int one = 1; struct timeval limit = { 5, 0 };
       fcntl(client, F_SETFD, FD_CLOEXEC); fcntl(client, F_SETFL, 0);
       setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
