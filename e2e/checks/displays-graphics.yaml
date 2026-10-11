@@ -1,0 +1,77 @@
+area: displays-graphics
+prefix: DISP
+checks:
+  DISP-AVAIL-01:
+    title: "getDisplayAvailability() reports available on macOS and getDisplayDetails() lists the real displays with refresh rate, color space, EDR headroom and safe area"
+    platforms: [macos]
+    blocking: true
+    spec: "#100 DISP.api"
+    covers:
+      - ./displays
+      - ./displays#getDisplayAvailability().available
+      - ./displays#getDisplayDetails
+  DISP-INFO-01:
+    title: "Display details report each display's arrangement origin, size, work area, scale factor and persistent ID, and which display is primary"
+    platforms: [macos]
+    blocking: true
+    spec: "#100 DISP.api"
+    covers:
+      - ./displays#getDisplayDetails
+  DISP-SAFE-01:
+    title: "A notched display reports the camera housing as a top safe-area inset; other displays report zero insets"
+    platforms: [macos]
+    blocking: true
+    spec: "#100 DISP.api"
+    covers:
+      - ./displays#getDisplayDetails
+  DISP-REFRESH-01:
+    title: "Refresh rate reports a variable range on ProMotion displays (24-120 Hz) and a single fixed rate (60 Hz) on fixed-rate displays"
+    platforms: [macos]
+    blocking: true
+    spec: "#100 DISP.api"
+    covers:
+      - ./displays#getDisplayDetails
+  DISP-COLOR-01:
+    title: "Display details report the color space (profile name, sRGB or P3 gamut) and EDR headroom (current, potential, reference)"
+    platforms: [macos]
+    blocking: true
+    spec: "#100 DISP.api"
+    covers:
+      - ./displays#getDisplayDetails
+  DISP-EVTCONNECT-01:
+    title: "addDisplayListener reports a connected display as added and a disconnected one as removed"
+    platforms: [macos]
+    blocking: true
+    spec: "#100 DISP.api"
+    covers:
+      - ./displays#addDisplayListener
+  DISP-EVTARRANGE-01:
+    title: "addDisplayListener reports a rearrangement as an origin change and a new primary display as primary and origin changes"
+    platforms: [macos]
+    blocking: true
+    spec: "#100 DISP.api"
+    covers:
+      - ./displays#addDisplayListener
+  DISP-EVTMODE-01:
+    title: "addDisplayListener reports resolution (size, work area), scale factor and refresh rate changes as the fields that changed"
+    platforms: [macos]
+    blocking: true
+    spec: "#100 DISP.api"
+    covers:
+      - ./displays#addDisplayListener
+  DISP-EVTCOLOR-01:
+    title: "addDisplayListener reports color space and EDR headroom changes"
+    platforms: [macos]
+    blocking: true
+    spec: "#100 DISP.api"
+    covers:
+      - ./displays#addDisplayListener
+  DISP-UNSUP-01:
+    title: "On Windows getDisplayAvailability() reports unsupported-platform and addDisplayListener and getDisplayDetails reject E_UNSUPPORTED_PLATFORM (Windows: #318)"
+    platforms: [windows]
+    blocking: true
+    spec: "#100 DISP.api"
+    covers:
+      - ./displays#getDisplayAvailability
+      - ./displays#getDisplayDetails
+      - ./displays#addDisplayListener

@@ -1,0 +1,89 @@
+appId: so.legend.spark.examples.kitchensink
+name: Display change events from a simulated display source
+intent: >
+  The Displays screen listens with addDisplayListener while the driver changes the simulated
+  display set (simulateDisplays; the OS display configuration is untouched). Each step is one
+  change the screen logs as change <n> with its added, removed and changed (display ID and
+  fields) lists: replacing the real displays with 901; connecting 902; moving 902 above 901;
+  making 902 primary; a new 902 resolution at 1x; 901 set to a fixed 60 Hz; 901 switched to an
+  sRGB profile while EDR content raises its current headroom; unplugging 902, which makes 901
+  primary again; and restoring the real displays.
+checks: [DISP-EVTCONNECT-01, DISP-EVTARRANGE-01, DISP-EVTMODE-01, DISP-EVTCOLOR-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://displays-graphics/displays" }
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-root }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-availability, equals: '{"available":true}' }
+# 1: the real displays are replaced by 901 alone.
+- simulateDisplays:
+    displays:
+      - &builtIn { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-change-1-added }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-change-1-added, equals: '["901"]' }
+# 2: 902 connects to the right.
+- simulateDisplays:
+    displays:
+      - *builtIn
+      - { id: "902", persistentId: SIM-902, name: Studio Display, primary: false, origin: { x: 1512, y: 0 }, size: { width: 2560, height: 1440 }, workArea: { x: 0, y: 0, width: 2560, height: 1440 }, scaleFactor: 2, safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: Studio Display, gamut: p3 }, edrHeadroom: { current: 1, potential: 1, reference: null } }
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-change-2-added }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-change-2-added, equals: '["902"]' }
+- assertText: { id: displays-graphics-displays-change-2-removed, equals: "[]" }
+- assertText: { id: displays-graphics-displays-change-2-changed, equals: "[]" }
+- assertText: { id: displays-graphics-displays-display-902-origin, equals: '{"x":1512,"y":0}' }
+# 3: 902 is moved above 901.
+- simulateDisplays:
+    displays:
+      - *builtIn
+      - { id: "902", persistentId: SIM-902, name: Studio Display, primary: false, origin: { x: -524, y: -1440 }, size: { width: 2560, height: 1440 }, workArea: { x: 0, y: 0, width: 2560, height: 1440 }, scaleFactor: 2, safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: Studio Display, gamut: p3 }, edrHeadroom: { current: 1, potential: 1, reference: null } }
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-change-3-changed }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-change-3-added, equals: "[]" }
+- assertText: { id: displays-graphics-displays-change-3-changed, equals: '[{"id":"902","fields":["origin"]}]' }
+# 4: 902 becomes the primary display; the arrangement is now measured from it.
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: false, origin: { x: 524, y: 1440 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+      - &externalPrimary { id: "902", persistentId: SIM-902, name: Studio Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 2560, height: 1440 }, workArea: { x: 0, y: 25, width: 2560, height: 1415 }, scaleFactor: 2, safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: Studio Display, gamut: p3 }, edrHeadroom: { current: 1, potential: 1, reference: null } }
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-change-4-changed }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-change-4-changed, equals: '[{"id":"901","fields":["primary","origin"]},{"id":"902","fields":["primary","origin","workArea"]}]' }
+- assertVisible: { id: displays-graphics-displays-display-902-primary }
+- assertNotVisible: { id: displays-graphics-displays-display-901-primary }
+# 5: 902 switches to 1920 x 1080 at 1x.
+- simulateDisplays:
+    displays:
+      - &builtInSecondary { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: false, origin: { x: 524, y: 1440 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+      - &externalHD { id: "902", persistentId: SIM-902, name: Studio Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1920, height: 1080 }, workArea: { x: 0, y: 25, width: 1920, height: 1055 }, scaleFactor: 1, safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: Studio Display, gamut: p3 }, edrHeadroom: { current: 1, potential: 1, reference: null } }
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-change-5-changed }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-change-5-changed, equals: '[{"id":"902","fields":["size","workArea","scaleFactor"]}]' }
+- assertText: { id: displays-graphics-displays-display-902-scaleFactor, equals: "1" }
+# 6: 901 is set to a fixed 60 Hz (ProMotion off).
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: false, origin: { x: 524, y: 1440 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+      - *externalHD
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-change-6-changed }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-change-6-changed, equals: '[{"id":"901","fields":["refreshRate"]}]' }
+- assertText: { id: displays-graphics-displays-display-901-refreshRate, equals: '{"minimum":60,"maximum":60,"variable":false}' }
+# 7: 901 switches to an sRGB profile while EDR content raises its current headroom.
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: false, origin: { x: 524, y: 1440 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: sRGB IEC61966-2.1, gamut: srgb }, edrHeadroom: { current: 3.5, potential: 16, reference: null } }
+      - *externalHD
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-change-7-changed }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-change-7-changed, equals: '[{"id":"901","fields":["colorSpace","edrHeadroom"]}]' }
+- assertText: { id: displays-graphics-displays-display-901-edrHeadroom, equals: '{"current":3.5,"potential":16,"reference":null}' }
+# 8: 902 is unplugged; 901 is the primary display again.
+- simulateDisplays:
+    displays:
+      - *builtIn
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-change-8-removed }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-change-8-added, equals: "[]" }
+- assertText: { id: displays-graphics-displays-change-8-removed, equals: '["902"]' }
+- assertText: { id: displays-graphics-displays-change-8-changed, equals: '[{"id":"901","fields":["primary","origin","refreshRate","colorSpace","edrHeadroom"]}]' }
+- assertNotVisible: { id: displays-graphics-displays-display-902 }
+- takeScreenshot: displays-change-events
+# 9: the real displays come back.
+- simulateDisplays: { restore: true }
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-change-9-removed }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-change-9-removed, equals: '["901"]' }
+- assertNotVisible: { id: displays-graphics-displays-display-901 }
