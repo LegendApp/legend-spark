@@ -21,6 +21,7 @@
         "@legendapp/spark-file-dialog": "0.0.1-next.3",
         "@legendapp/spark-file-system": "0.0.1-next.3",
         "@legendapp/spark-global-shortcuts": "0.0.1-next.3",
+        "@legendapp/spark-logging": "0.0.1-next.3",
         "@legendapp/spark-message-dialog": "0.0.1-next.3",
         "@legendapp/spark-motion": "0.0.1-next.3",
         "@legendapp/spark-native-menu": "0.0.1-next.3",
@@ -276,6 +277,7 @@
         "@legendapp/spark-file-dialog": "0.0.1-next.3",
         "@legendapp/spark-file-system": "0.0.1-next.3",
         "@legendapp/spark-global-shortcuts": "0.0.1-next.3",
+        "@legendapp/spark-logging": "0.0.1-next.3",
         "@legendapp/spark-message-dialog": "0.0.1-next.3",
         "@legendapp/spark-motion": "0.0.1-next.3",
         "@legendapp/spark-native-menu": "0.0.1-next.3",
@@ -419,6 +421,17 @@
     },
     "packages/global-shortcuts": {
       "name": "@legendapp/spark-global-shortcuts",
+      "version": "0.0.1-next.3",
+      "dependencies": {
+        "@legendapp/spark-desktop-app": "0.0.1-next.3",
+      },
+      "peerDependencies": {
+        "react": "19.1.4",
+        "react-native": "0.81.6",
+      },
+    },
+    "packages/logging": {
+      "name": "@legendapp/spark-logging",
       "version": "0.0.1-next.3",
       "dependencies": {
         "@legendapp/spark-desktop-app": "0.0.1-next.3",
@@ -956,6 +969,8 @@
     "@legendapp/spark-file-system": ["@legendapp/spark-file-system@workspace:packages/file-system"],
 
     "@legendapp/spark-global-shortcuts": ["@legendapp/spark-global-shortcuts@workspace:packages/global-shortcuts"],
+
+    "@legendapp/spark-logging": ["@legendapp/spark-logging@workspace:packages/logging"],
 
     "@legendapp/spark-message-dialog": ["@legendapp/spark-message-dialog@workspace:packages/message-dialog"],
 

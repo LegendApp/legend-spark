@@ -318,6 +318,27 @@
     "openPath",
     "openURL"
   ],
+  "./logging": [
+    "DiagnosticsExport",
+    "ExportDiagnosticsOptions",
+    "LogFields",
+    "LogFile",
+    "LogFileOptions",
+    "LogLevel",
+    "LogWriteError",
+    "Logger",
+    "LoggerOptions",
+    "LoggingErrorEvent",
+    "LoggingFeature",
+    "LoggingOptions",
+    "addLoggingErrorListener",
+    "configureLogging",
+    "createLogger",
+    "exportDiagnostics",
+    "flushLogs",
+    "getLogFiles",
+    "getLoggingAvailability"
+  ],
   "./menus": [
     "AsyncRegistration",
     "DeveloperMenuShortcutConflict",

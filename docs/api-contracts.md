@@ -336,6 +336,21 @@ resolveCommand(command: string): Promise<string | null>;
 
 Use a discriminated executable target: absolute executable/helper reference vs PATH-resolved command. Put environment, cwd, input, timeout, signal, output callbacks and output limits in named options. Keep direct argument arrays, not implicit shell parsing. A handle supports write, closeInput, terminate and exited. Result distinguishes exit code, termination, timeout and truncation; no ambiguous `signal: boolean`. Stream bytes; optionally decode text according to a declared encoding. Command-runner convenience and mocks use the same sequential/concurrent and failure policy. No separate public command-runner abstraction unless injection actually needs it.
 
+### Logging
+
+```ts
+// /logging
+createLogger(category: string, options?: { publicMessages?: boolean }): Logger; // debug/info/notice/error/fault(message, fields?): void
+configureLogging(options: { level?: LogLevel; files?: { directory?: string; maxFileBytes?: number; maxFiles?: number } | null }): Promise<void>;
+flushLogs(): Promise<void>; // Rejects LogWriteError { code, dropped } for the first failure since the last flush.
+addLoggingErrorListener(listener: (event: { code; message; dropped: number; recovered: boolean }) => void): Subscription;
+getLogFiles(): Promise<{ path: string; bytes: number; modifiedAt: number }[]>;
+exportDiagnostics(path: string, options?: { info?: LogFields }): Promise<{ path: string; bytes: number; entries: string[] }>;
+getLoggingAvailability(feature?: "systemLog" | "files" | "diagnostics"): Availability;
+```
+
+Logging is application-wide, so there is no hook. An entry call returns at once and never waits for native; entries below the level stay in JavaScript (a new level applies from the next call, and a rejected configuration restores the old one), and the rest reach one native serial queue in call order, which also orders configuration, flushes and exports. Over 10,000 waiting entries, new ones are dropped and counted. Each entry goes to the unified log (os_log: the bundle identifier as subsystem, the logger's category; message and fields private unless the logger asks for public messages) and, while files are on (the default), as one JSON line to `app.log`, rotated to `app.1.log` and on before an entry would pass `maxFileBytes`. Files hold every message and field in full. A file write failure is never thrown from the entry call nor dropped silently: it is logged once to the unified log, reported to error listeners with a count of entries lost, and rejected by the next `flushLogs`. `exportDiagnostics` zips `diagnostics.json` and the log files to a local path, replacing only a regular file, and sends nothing anywhere. macOS only for now; Windows (ETW) reports `unsupported-platform` (#319). Details: [logging](logging.md).
+
 ### Audio and auth
 
 ```ts

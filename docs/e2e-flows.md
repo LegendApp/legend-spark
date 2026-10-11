@@ -548,6 +548,7 @@ React Native and React Native WebView code persists:
 | `~/Library/HTTPStorages/<bundle id>`, `<bundle id>.binarycookies` there and in `~/Library/Cookies` | `NSURLSession` cookies and HSTS |
 | `~/Library/WebKit/<bundle id>` | WebView website data (`WKWebsiteDataStore.defaultDataStore`) |
 | `~/Library/Saved Application State/<bundle id>.savedState` | AppKit window restoration |
+| `~/Library/Logs/<bundle id>` | `@legendapp/spark/logging` files |
 | `$TMPDIR/<namespace>`, `$TMPDIR/<namespace>.setup`, `.lock`, `.sock` | file-system `temp`; the single-instance lock and socket |
 | `$TMPDIR/legend-codex-workspace/codex-home-<bundle id>` | the codex package's `CODEX_HOME` |
 

@@ -79,6 +79,7 @@
     "./ui/table",
     "./ui/popover",
     "./ui/tab-view",
-    "./displays"
+    "./displays",
+    "./logging"
   ]
 }

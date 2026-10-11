@@ -170,6 +170,7 @@ Framework-owned capabilities are imported from `@legendapp/spark/<feature>`. Use
 | Printing | `@legendapp/spark/printing`: print panel with preview for text, HTML, PDFs, windows and views; page setup; headless PDF export ([guide](docs/printing.md)) |
 | Displays | `@legendapp/spark/displays`: arrangement, safe area (notch), refresh rate (fixed or variable), color space and EDR headroom per display; change events ([guide](docs/displays.md)) |
 | Motion | `@legendapp/spark/motion`: compositor-run springs, timing, keyframes, sequences, staggers, decay and scroll links with velocity-preserving interruption ([guide](docs/motion.md)) |
+| Logging | `@legendapp/spark/logging`: structured entries to the unified log (os_log) and rotating JSON-lines files; a one-call diagnostics zip written locally ([guide](docs/logging.md)) |
 | Audio and authentication | `@legendapp/spark/audio`, `@legendapp/spark/auth-session`: playback and system media controls, external-browser authentication callback transport |
 | External libraries | React Native WebView, OP-SQLite, and Margelo Runtimes; see [integrated external libraries](docs/external-libraries.md) |
 
