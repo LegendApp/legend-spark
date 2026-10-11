@@ -770,6 +770,53 @@ test("launcher menus stop callbacks on failed removal and enforce surface suppor
   await expect(system.createTaskbarMenu({ items: [{ type: "submenu", id: "sub", label: "Sub", items: [] }], onAction: () => {} } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
 });
 
+test("app badges take text or a count, and progress validates before reaching native code", async () => {
+  await system.setAppBadge("New"); await system.setAppBadge(3); await system.setAppBadge(0); await system.setAppBadge("");
+  expect(calls.map(call => call.args)).toEqual([{ label: "New" }, { count: 3 }, { count: 0 }, { label: "" }]);
+  for (const value of [-1, 1.5, Number.NaN, 2 ** 53, "a\0b"]) await expect(system.setAppBadge(value as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  calls.length = 0;
+  await system.setAppProgress({ state: "normal", value: 0.35 }); await system.setAppProgress({ state: "indeterminate" });
+  await system.setAppProgress({ state: "paused", value: 0 }); await system.setAppProgress({ state: "error", value: 1 }); await system.setAppProgress(null);
+  expect(calls.map(call => [call.method, call.args])).toEqual([["progress", { state: "normal", value: 0.35 }], ["progress", { state: "indeterminate" }], ["progress", { state: "paused", value: 0 }], ["progress", { state: "error", value: 1 }], ["progress", { state: "none" }]]);
+  calls.length = 0;
+  for (const value of [{ state: "normal", value: 1.01 }, { state: "normal", value: -0.1 }, { state: "normal", value: Number.NaN }, { state: "normal" }, { state: "busy", value: 0.5 }, undefined, 0.5])
+    await expect(system.setAppProgress(value as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(system.setAppProgress({ state: "indeterminate", value: 0.5 } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(system.setAppProgress({ state: "normal", value: 0.5, color: "red" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(0);
+});
+test("system feature availability is truthful per platform", () => {
+  const report = () => Object.fromEntries((["appBadge", "appProgress", "attention", "dockMenu", "taskbarMenu", "thumbnailToolbar"] as const).map(feature => [feature, system.getSystemAvailability(feature).available]));
+  expect(system.getSystemAvailability()).toEqual({ available: true });
+  expect(report()).toEqual({ appBadge: true, appProgress: true, attention: true, dockMenu: true, taskbarMenu: false, thumbnailToolbar: false });
+  platform.OS = "windows";
+  expect(report()).toEqual({ appBadge: true, appProgress: true, attention: true, dockMenu: false, taskbarMenu: true, thumbnailToolbar: false });
+  expect(system.getSystemAvailability("thumbnailToolbar")).toEqual({ available: false, reason: "unsupported-platform" });
+  platform.OS = "web";
+  expect(system.getSystemAvailability("appBadge")).toEqual({ available: false, reason: "unsupported-platform" });
+  expect(() => system.getSystemAvailability("dock" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+});
+test("Jump Lists add the Recent category only when asked; thumbnail toolbars validate, then reject as unsupported", async () => {
+  platform.OS = "windows";
+  const menu = await system.createTaskbarMenu({ items: [{ type: "action", id: "new", label: "New window" }], onAction: () => {}, recentDocuments: true });
+  expect(calls.at(-1)?.args).toMatchObject({ recent: true }); await menu.remove();
+  const plain = await system.createTaskbarMenu({ items: [], onAction: () => {} });
+  expect(calls.at(-1)?.args).not.toHaveProperty("recent"); await plain.remove();
+  await expect(system.createTaskbarMenu({ items: [], onAction: () => {}, recentDocuments: "yes" } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  platform.OS = "macos";
+  await expect(system.createDockMenu({ items: [], onAction: () => {}, recentDocuments: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  calls.length = 0;
+  const button = { id: "play", tooltip: "Play", icon: "C:\\App\\play.ico" };
+  platform.OS = "windows";
+  await expect(system.createThumbnailToolbar({ buttons: [button], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  for (const buttons of [[], Array.from({ length: 8 }, (_, index) => ({ ...button, id: `b${index}` })), [button, button], [{ ...button, tooltip: " " }], [{ ...button, icon: "play.ico" }], [{ ...button, tooltip: "x".repeat(260) }]])
+    await expect(system.createThumbnailToolbar({ buttons, onAction: () => {} })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(system.createThumbnailToolbar({ buttons: [{ ...button, label: "Play" }], onAction: () => {} } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  platform.OS = "macos";
+  await expect(system.createThumbnailToolbar({ buttons: [{ ...button, icon: "/tmp/play.png" }], onAction: () => {} })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  expect(calls).toHaveLength(0);
+});
+
 test("application menu updates snapshot inputs, serialize and retain last successful owners", async () => {
   const received: unknown[] = [];
   const item = await menus.createMenu({ id: "queued", items: [], onAction: event => received.push(event) });

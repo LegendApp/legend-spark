@@ -567,6 +567,7 @@
     "openDatabase"
   ],
   "./system": [
+    "AppProgress",
     "AsyncRegistration",
     "AttentionOptions",
     "DockMenuItem",
@@ -574,11 +575,15 @@
     "LoginItemStatus",
     "PreventSleepOptions",
     "SystemEvent",
+    "SystemFeature",
     "SystemInfo",
     "TaskbarMenuItem",
     "TaskbarMenuOptions",
+    "ThumbnailToolbarButton",
+    "ThumbnailToolbarOptions",
     "createDockMenu",
     "createTaskbarMenu",
+    "createThumbnailToolbar",
     "getLoginItemStatus",
     "getSystemAvailability",
     "getSystemInfo",
@@ -586,6 +591,7 @@
     "preventSleep",
     "requestAttention",
     "setAppBadge",
+    "setAppProgress",
     "setLaunchAtLogin"
   ],
   "./tray": [
