@@ -2,11 +2,11 @@ appId: so.legend.spark.examples.kitchensink
 name: Native controls screens match their goldens
 intent: >
   Native controls screens open from their spark-ks:// deep links in the running Kitchen Sink and their roots render.
-  Split view, SF Symbols and Search field match the approved golden for the appearance (light and dark) and locale,
-  with the shell sidebar masked: SF Symbols in English and Arabic, Split view and Search field in English only until
-  they mirror in right-to-left layouts. Glass and the four size grids render but are not compared until their layout bugs
-  are fixed. The three Sidebar screens mount without crashing (#252) but are not compared until their rows fit (#264)
-  and the selected row captures correctly (#265).
+  Split view, SF Symbols, Search field and Glass match the approved golden for the appearance (light and dark) and
+  locale, with the shell sidebar masked: SF Symbols and Glass in English and Arabic, Split view and Search field in
+  English only until they mirror in right-to-left layouts. The four size grids render but are not compared until their
+  layout bug is fixed. The three Sidebar screens mount without crashing (#252) but are not compared until their rows fit
+  (#264) and the selected row captures correctly (#265).
 checks: [CTRL-VISUAL-01, CTRL-SIDEBAR-01]
 tags: [native-controls]
 platforms: [macos]
@@ -25,9 +25,9 @@ matrix:
 - assertVisible: { id: native-controls-search-root }
 # Arabic: no golden until the view mirrors in RTL (#256).
 - assertScreenshot: { golden: native-controls-search, mask: [{ id: infra-shell-sidebar }], when: { matrix: { locale: en } } }
-# No golden: GlassView lays out its children upside down (#254).
 - launchApp: { openUrl: "spark-ks://native-controls/glass", stopApp: false }
 - assertVisible: { id: native-controls-glass-root }
+- assertScreenshot: { golden: native-controls-glass, mask: [{ id: infra-shell-sidebar }] }
 # No goldens: the size grids clip their Large column at the default window size (#253).
 - launchApp: { openUrl: "spark-ks://native-controls/toggles", stopApp: false }
 - assertVisible: { id: native-controls-toggles-root }
