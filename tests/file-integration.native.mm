@@ -13,7 +13,9 @@ static int Sandboxed(BOOL bookmarkEntitlement) {
   CHECK(SparkIsSandboxed(), "sandbox detected");
   NSError *error = nil;
   NSString *status = SparkFullDiskAccessStatus(SparkFullDiskAccessProbes(), SparkIsSandboxed(), &error);
-  CHECK([status isEqual:@"indeterminate"], "sandboxed Full Disk Access is indeterminate, not denied");
+  // A sandbox hides TCC's denial, so a sandboxed process may only report what it proved: granted when a
+  // probe opened (CI runners carry broad privacy grants), otherwise indeterminate. Never denied.
+  CHECK([status isEqual:@"indeterminate"] || [status isEqual:@"granted"], "sandboxed Full Disk Access is indeterminate or granted, never denied");
   NSURL *file = [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:@"sandboxed-bookmark.txt"]];
   [@"inside" writeToURL:file atomically:YES encoding:NSUTF8StringEncoding error:nil];
   NSData *bookmark = SparkCreateBookmark(file, NO, &error);
