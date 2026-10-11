@@ -131,3 +131,33 @@ test("workspace Nitro adapters and automatic camera patch receipts survive repea
     expect(JSON.parse(first).spark).toMatchObject({ windowsAdapter: true, dependencyPatch: { version: "1.0.0" }, workspacePatch: { version: "1.0.0" } });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test("Markdown installs and repairs independently of camera or Nitro", () => {
+  const { root, spark, packages } = fixture(true);
+  const name = "react-native-enriched-markdown";
+  try {
+    const manifest = JSON.parse(readFileSync(path.join(spark, "package.json"), "utf8"));
+    manifest.dependencies = { [name]: "1.0.0" };
+    for (const camera of [...names, "react-native-nitro-modules"]) rmSync(path.join(packages, camera), { recursive: true });
+    writeFileSync(path.join(spark, "package.json"), JSON.stringify(manifest));
+    const directory = path.join(packages, name);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name, version: "1.0.0" }, null, 2) + "\n");
+    writeFileSync(path.join(directory, "Native.podspec"), "upstream\n");
+    const patch = "markdown.patch";
+    writeFileSync(path.join(spark, "patches/dependencies.json"), JSON.stringify({ [name]: { version: "1.0.0", integrity: "sha512-fixture", patch } }));
+    writeFileSync(path.join(spark, "patches", patch), readFileSync(path.join(spark, "patches/camera", `${names[0]}.patch`)));
+    expect(prepareNativePatches(root)).toEqual({ [name]: { root: realpathSync(directory) } });
+    const first = readFileSync(path.join(directory, "package.json"), "utf8");
+    expect(JSON.parse(first).spark).toMatchObject({ sdk: true, requires: [], dependencyPatch: { version: "1.0.0" } });
+    prepareNativePatches(root);
+    expect(readFileSync(path.join(directory, "package.json"), "utf8")).toBe(first);
+    const native = nativePackages(root);
+    expect(selection(native, new Set([name])).included.map(pkg => pkg.name)).toEqual([name]);
+    expect(selection(native, new Set()).included).toEqual([]);
+    rmSync(path.join(directory, "macos"), { recursive: true });
+    prepareNativePatches(root);
+    expect(readFileSync(path.join(directory, "macos/View.swift"), "utf8")).toBe("AppKit\n");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

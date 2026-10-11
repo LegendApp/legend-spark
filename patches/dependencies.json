@@ -1,0 +1,8 @@
+{
+  "react-native-enriched-markdown": {
+    "version": "1.0.2",
+    "url": "https://registry.npmjs.org/react-native-enriched-markdown/-/react-native-enriched-markdown-1.0.2.tgz",
+    "integrity": "sha512-zvVM4W1VMV/cYAKUTYoVheadOGHLbny2kALFn0vi5av/WFa0JSYboeeq/vPRqS5dc8qvUTjXwVlrkhrcuinNQA==",
+    "patch": "react-native-enriched-markdown@1.0.2.patch"
+  }
+}

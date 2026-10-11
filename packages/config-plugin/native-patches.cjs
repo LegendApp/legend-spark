@@ -15,12 +15,21 @@ function prepareNativePatches(root) {
   try { sparkFile = appRequire.resolve("@legendapp/spark/package.json"); }
   catch (error) { if (error.code === "MODULE_NOT_FOUND") return {}; throw error; }
   const spark = JSON.parse(fs.readFileSync(sparkFile, "utf8"));
-  if (!cameraPackages.some(name => spark.dependencies?.[name])) return {};
-  const active = ["react-native-nitro-modules", ...cameraPackages].filter(name => spark.dependencies?.[name]);
   const directory = path.dirname(sparkFile);
   const patchesRoot = spark.spark?.bundledModuleRoot
-    ? path.join(directory, "patches/camera") : path.resolve(__dirname, "../../patches/camera");
-  const pins = JSON.parse(fs.readFileSync(path.join(patchesRoot, "upstream.json"), "utf8"));
+    ? path.join(directory, "patches") : path.resolve(__dirname, "../../patches");
+  const pins = {};
+  if (cameraPackages.some(name => spark.dependencies?.[name])) {
+    const cameraPins = JSON.parse(fs.readFileSync(path.join(patchesRoot, "camera/upstream.json"), "utf8"));
+    for (const name of ["react-native-nitro-modules", ...cameraPackages]) {
+      pins[name] = { ...cameraPins[name], patch: `camera/${name}.patch`,
+        requires: name === "react-native-vision-camera" ? ["react-native-nitro-modules", "react-native-nitro-image"] : ["react-native-nitro-modules"] };
+    }
+  }
+  const integrations = path.join(patchesRoot, "dependencies.json");
+  if (fs.existsSync(integrations)) Object.assign(pins, JSON.parse(fs.readFileSync(integrations, "utf8")));
+  const active = Object.keys(pins).filter(name => spark.dependencies?.[name]);
+  if (!active.length) return {};
   const { parsePatch, applyPatch, reversePatch } = require("diff");
   const queue = [appRequire, createRequire(sparkFile)];
   const visited = new Set();
@@ -43,7 +52,7 @@ function prepareNativePatches(root) {
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
       const pin = pins[name];
       if (manifest.version !== pin.version) throw new Error(`Spark needs ${name}@${pin.version}; found ${manifest.version}. Use the SDK's pinned dependency version.`);
-      const bytes = fs.readFileSync(path.join(patchesRoot, `${name}.patch`));
+      const bytes = fs.readFileSync(path.join(patchesRoot, pin.patch));
       const writes = [];
       for (const patch of parsePatch(bytes.toString("utf8"))) {
         const relative = patch.newFileName.replace(/^b\//, "");
@@ -80,8 +89,7 @@ function prepareNativePatches(root) {
       patched.spark ??= {};
       if (name !== "react-native-nitro-modules") {
         patched.spark.sdk = true;
-        patched.spark.requires = name === "react-native-vision-camera"
-          ? ["react-native-nitro-modules", "react-native-nitro-image"] : ["react-native-nitro-modules"];
+        patched.spark.requires = pin.requires ?? [];
       }
       patched.spark.dependencyPatch = { schema: 1, version: pin.version,
         patchHash: createHash("sha256").update(bytes).digest("hex"), upstreamIntegrity: pin.integrity };

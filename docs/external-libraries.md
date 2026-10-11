@@ -55,3 +55,18 @@ loading and messaging, and independent Hermes runtime state, errors, and destruc
 See [known Windows limits](windows-issues.md). Optional OP-SQLite SQLCipher, libSQL,
 Turso, and vector builds are not enabled. WebView follows upstream Windows prop
 coverage and does not promise macOS-only WebKit features.
+
+## Built-in backend dependencies
+
+Spark installs `react-native-enriched-markdown` 1.0.2 as a pinned dependency and
+applies its checked-in compatibility patch automatically, using the same install
+and native-preparation boundaries as camera. Applications do not need a
+package-manager patch declaration. Reinstalls and disabled install scripts are
+handled by native preparation. The backend remains an ordinary npm dependency;
+its implementation is not extracted into the Spark archive. Production builds
+can prune its native module when unused.
+
+Markdown math and syntax-highlighting assets retain the upstream per-application
+configuration (`enriched-markdown` in the application's `package.json`). Those
+features can download and compile additional assets; automatic compatibility
+patching does not change that configuration.

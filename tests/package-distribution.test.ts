@@ -83,9 +83,17 @@ test("single Spark archive resolves public exports and preserves private native 
     writeFileSync(path.join(app, "desktop.config.json"), JSON.stringify({ name: "Packed", version: "1.0.0", projectId: "packed-test", macos: { bundleIdentifier: "org.example.packed" }, platforms: ["macos"] }));
     const req = createRequire(path.join(app, "package.json"));
     const producer = createRequire(path.join(framework, "package.json"));
-    for (const name of ["react-native-vision-camera", "react-native-nitro-image", "react-native-nitro-modules", "diff"])
+    for (const name of ["react-native-vision-camera", "react-native-nitro-image", "react-native-nitro-modules", "react-native-enriched-markdown", "diff"])
       cpSync(path.dirname(producer.resolve(`${name}/package.json`)), path.join(app, "node_modules", name), { recursive: true });
     const manifest = req("@legendapp/spark/package.json");
+    createRequire(path.join(destination, "package.json"))("./vendor/node_modules/@legendapp/spark-desktop-config/native-patches.cjs").prepareNativePatches(app);
+    expect(JSON.parse(readFileSync(path.join(app, "node_modules/react-native-enriched-markdown/package.json"), "utf8")).spark.dependencyPatch.version).toBe("1.0.2");
+    expect(readFileSync(path.join(destination, "patches/react-native-enriched-markdown@1.0.2.patch"))).toEqual(
+      readFileSync(path.join(framework, "patches/react-native-enriched-markdown@1.0.2.patch")),
+    );
+    expect(manifest.dependencies["react-native-enriched-markdown"]).toBe("1.0.2");
+    expect(manifest.peerDependencies["react-native-enriched-markdown"]).toBeUndefined();
+    expect(readFileSync(path.join(destination, "patches/dependencies.json"))).toEqual(readFileSync(path.join(framework, "patches/dependencies.json")));
     expect(manifest.spark.nativePatchRequirements.schema).toBe(1);
     expect(manifest.spark.nativePatchRequirements.frameworkVersion).toBe(VERSION);
     expect(Object.keys(manifest.spark.nativePatchRequirements.packages).sort()).toEqual([

@@ -44,6 +44,13 @@ export async function packSpark(root: string, output: string, release?: ReleaseM
     mkdirSync(path.join(stage, "patches/camera"));
     for (const file of ["upstream.json", "react-native-nitro-modules.patch", "react-native-nitro-image.patch", "react-native-vision-camera.patch"])
       cpSync(path.join(root, "patches/camera", file), path.join(stage, "patches/camera", file));
+    cpSync(path.join(root, "patches/dependencies.json"), path.join(stage, "patches/dependencies.json"));
+    const integrations = JSON.parse(readFileSync(path.join(root, "patches/dependencies.json"), "utf8"));
+    for (const pin of Object.values(integrations) as { patch: string }[]) {
+      const destination = path.join(stage, "patches", pin.patch);
+      mkdirSync(path.dirname(destination), { recursive: true });
+      cpSync(path.join(root, "patches", pin.patch), destination);
+    }
     const manifest = JSON.parse(readFileSync(path.join(stage, "package.json"), "utf8"));
     manifest.spark = { ...manifest.spark, nativePatchRequirements: nativePatchRequirements(root, manifest.version) };
     const bundled = packages.filter(pkg => pkg !== publicPackage);
@@ -81,6 +88,7 @@ export async function packSpark(root: string, output: string, release?: ReleaseM
     if (release) writeFileSync(path.join(stage, "node_modules/@legendapp/spark-cli/dist/release.json"), JSON.stringify(validateRelease(release), null, 2) + "\n");
     manifest.dependencies = { ...external, ...Object.fromEntries(bundled.map(pkg => [pkg.json.name, pkg.json.version])) };
     manifest.bundledDependencies = bundled.map(pkg => pkg.json.name);
+    for (const name of Object.keys(external)) { delete peers[name]; requiredPeers.delete(name); }
     manifest.peerDependencies = peers;
     manifest.peerDependenciesMeta = Object.fromEntries(Object.keys(peers).filter(name => !requiredPeers.has(name)).map(name => [name, { optional: true }]));
     writeFileSync(path.join(stage, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
