@@ -44,3 +44,4 @@ export function Select(props: SelectProps) { return <Selection {...props} />; }
 export function SegmentedControl(props: SegmentedControlProps) { return <Selection {...props} />; }
 
 export * from "./primitives-controls";
+export * from "./panels";

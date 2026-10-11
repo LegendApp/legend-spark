@@ -59,3 +59,4 @@ export function SegmentedControl(props: SegmentedControlProps) {
 }
 
 export * from "./primitives-controls";
+export * from "./panels";

@@ -138,7 +138,7 @@ describe("SDK surface", () => {
     const availability = Object.entries(surface).flatMap(([subpath, entry]) => entry.values.filter(name => /^get\w*Availability$/.test(name)).map(name => `${subpath}#${name}`));
     expect(flagged).toEqual(availability);
     expect(surface["./windows"]!.flags).toEqual({ getIsolatedRuntimeAvailability: ["().available"], getWindowAvailability: ["().available"] });
-    const controls = ["button", "text-input", "select", "segmented-control", "checkbox", "radio-group", "switch", "slider", "stepper", "combo-box", "token-field", "path-control", "progress", "level-indicator", "disclosure-triangle"];
+    const controls = ["button", "text-input", "select", "segmented-control", "checkbox", "radio-group", "switch", "slider", "stepper", "combo-box", "token-field", "path-control", "progress", "level-indicator", "disclosure-triangle", "date-picker", "color-well"];
     // Union member order follows TypeScript's literal interning, which any new "checkbox" literal elsewhere can change.
     expect([...surface["./ui"]!.flags.getControlAvailability!].sort()).toEqual(controls.map(kind => `(${kind}).available`).sort());
     expect(surface["./ui"]!.flags.getButtonAvailability).toEqual(["().available"]);

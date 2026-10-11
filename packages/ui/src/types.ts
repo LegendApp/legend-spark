@@ -39,4 +39,4 @@ export interface SelectProps extends ControlProps {
 }
 export interface SegmentedControlProps extends SelectProps {}
 export type ControlKind = "button" | "text-input" | "select" | "segmented-control" | import("./primitives.types").PrimitiveKind;
-export type { ControlSize, PrimitiveKind, PrimitiveControlProps, NumericControlProps, CheckboxValue, CheckboxProps, RadioGroupProps, SwitchProps, DisclosureTriangleProps, SliderProps, StepperProps, LevelIndicatorProps, ComboBoxProps, TokenFieldProps, PathControlProps, ProgressProps } from "./primitives.types";
+export type { ControlSize, PrimitiveKind, PrimitiveControlProps, NumericControlProps, CheckboxValue, CheckboxProps, RadioGroupProps, SwitchProps, DisclosureTriangleProps, SliderProps, StepperProps, LevelIndicatorProps, ComboBoxProps, TokenFieldProps, PathControlProps, ProgressProps, DatePickerProps, DatePickerMode, DatePickerVariant, DatePickerCalendar, ColorWellProps, ColorWellVariant } from "./primitives.types";

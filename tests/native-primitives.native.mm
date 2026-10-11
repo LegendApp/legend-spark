@@ -7,13 +7,13 @@ namespace facebook::react {
 struct Props { using Shared = std::shared_ptr<const Props>; virtual ~Props() = default; };
 struct SparkPrimitiveProps : Props { std::string kind, valueJson, controlSize = "regular", accessibilityLabel, testId; int eventCount = 0; bool disabled = false; };
 struct EventEmitter { using Shared = std::shared_ptr<const EventEmitter>; virtual ~EventEmitter() = default; };
-static std::vector<std::string> changes, errors;
+static std::vector<std::string> changes, errors, errorCodes;
 static int lastCount = 0;
 struct SparkPrimitiveEventEmitter : EventEmitter {
   struct OnValueChange { std::string valueJson; int eventCount; };
-  struct OnNativeError { std::string message; int eventCount; };
+  struct OnNativeError { std::string message, code; int eventCount; };
   void onValueChange(OnValueChange value) const { assert(value.eventCount > lastCount || value.eventCount == 1); lastCount = value.eventCount; changes.push_back(value.valueJson); }
-  void onNativeError(OnNativeError value) const { lastCount = value.eventCount; errors.push_back(value.message); }
+  void onNativeError(OnNativeError value) const { lastCount = value.eventCount; errors.push_back(value.message); errorCodes.push_back(value.code); }
 };
 struct SparkPrimitiveComponentDescriptor {};
 enum class LayoutDirection { LeftToRight, RightToLeft };
@@ -47,6 +47,15 @@ static BOOL animating = NO;
 - (void)startAnimation:(id)sender { animating = YES; }
 - (void)stopAnimation:(id)sender { animating = NO; }
 @end
+// Records the color panel instead of putting it on screen when a well activates.
+static int colorPanelShown = 0;
+@implementation NSColorPanel (Recording)
+- (void)orderFront:(id)sender { colorPanelShown++; }
+- (void)makeKeyAndOrderFront:(id)sender { colorPanelShown++; }
+- (void)orderFrontRegardless { colorPanelShown++; }
+@end
+static BOOL driverActive = NO;
+static BOOL SparkTestDriverActive(void) { return driverActive; }
 // ACTUAL_IMPLEMENTATION
 static void Update(RNSparkPrimitive *view, std::shared_ptr<SparkPrimitiveProps> props) { [view updateProps:props oldProps:view->_props]; }
 // JS echoes an event count after it processes that event; `json` is the value the parent rendered.
@@ -180,5 +189,78 @@ int main() { @autoreleasepool {
   RNSparkPrimitive *fresh = [RNSparkPrimitive new]; auto bad = std::make_shared<SparkPrimitiveProps>(); bad->kind = "switch"; bad->valueJson = "not json";
   errorCount = errors.size(); [fresh updateProps:bad oldProps:nullptr]; assert(errors.size() == errorCount && fresh.subviews.count == 1);
   [fresh updateEventEmitter:std::make_shared<SparkPrimitiveEventEmitter>()]; assert(errors.size() == errorCount + 1);
+  // Date picker: first mount with null oldProps; config, value round trip, min/max, locale, calendar, time zone, RTL.
+  RNSparkPrimitive *dates = [RNSparkPrimitive new]; dates.frame = NSMakeRect(0, 0, 300, 160);
+  dates->_eventEmitter = std::make_shared<SparkPrimitiveEventEmitter>(); lastCount = 0;
+  auto date = std::make_shared<SparkPrimitiveProps>(); date->kind = "date-picker"; date->testId = "date";
+  date->valueJson = R"({"value":1773480600000,"mode":"date-time","variant":"text-field-stepper","min":1767225600000,"max":1798761600000,"locale":"en-US","calendar":"","timeZone":"UTC"})";
+  [dates updateProps:date oldProps:nullptr]; NSDatePicker *picker = [dates valueForKey:@"control"];
+  assert([picker isKindOfClass:NSDatePicker.class] && picker.datePickerStyle == NSDatePickerStyleTextFieldAndStepper);
+  assert(picker.datePickerElements == (NSDatePickerElementFlagYearMonthDay | NSDatePickerElementFlagHourMinute));
+  assert(picker.dateValue.timeIntervalSince1970 == 1773480600 && picker.minDate.timeIntervalSince1970 == 1767225600 && picker.maxDate.timeIntervalSince1970 == 1798761600);
+  assert([picker.timeZone isEqual:[NSTimeZone timeZoneWithName:@"UTC"]] && [picker.locale.localeIdentifier isEqual:@"en-US"] && [picker.calendar.calendarIdentifier isEqual:NSCalendarIdentifierGregorian] && [picker.calendar.timeZone isEqual:picker.timeZone]);
+  assert([picker.accessibilityIdentifier isEqual:@"date"]);
+  picker.dateValue = [NSDate dateWithTimeIntervalSince1970:1773567000.0004]; [dates changed:picker]; assert(changes.back() == "1773567000000" && lastCount == 1);
+  // Stale props keep the edit; the echo of a vetoed edit restores the controlled date.
+  Update(dates, date); assert(picker.dateValue.timeIntervalSince1970 > 1773567000);
+  date->eventCount = lastCount; Update(dates, date); assert(picker.dateValue.timeIntervalSince1970 == 1773480600);
+  Render(dates, date, R"({"value":1773480600000,"mode":"time","variant":"clock-calendar","min":null,"max":null,"locale":"ar-SA","calendar":"","timeZone":"Asia/Riyadh"})", lastCount);
+  assert(picker.datePickerStyle == NSDatePickerStyleClockAndCalendar && picker.datePickerElements == NSDatePickerElementFlagHourMinute && !picker.minDate && !picker.maxDate);
+  // An omitted calendar is the locale's own.
+  assert([picker.calendar.calendarIdentifier isEqual:NSCalendarIdentifierIslamicUmmAlQura] && [picker.timeZone.name isEqual:@"Asia/Riyadh"]);
+  Render(dates, date, R"({"value":1773480600000,"mode":"date","variant":"clock-calendar","min":null,"max":null,"locale":"ar-SA","calendar":"japanese","timeZone":""})", lastCount);
+  assert([picker.calendar.calendarIdentifier isEqual:NSCalendarIdentifierJapanese] && [picker.timeZone isEqual:NSTimeZone.localTimeZone]);
+  // Sized to fit, at the leading edge.
+  assert(NSMinX(picker.frame) == 0 && fabs(NSWidth(picker.frame) - picker.fittingSize.width) < 1 && NSHeight(picker.frame) == picker.fittingSize.height);
+  [dates updateLayoutMetrics:rtl oldLayoutMetrics:LayoutMetrics{}];
+  assert(picker.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft && NSMaxX(picker.frame) == NSWidth(dates.bounds));
+  [dates updateLayoutMetrics:LayoutMetrics{} oldLayoutMetrics:rtl];
+  // Names Foundation does not know are reported, and the last valid configuration stays.
+  for (const char *bad : {R"({"value":0,"mode":"date","variant":"text-field","min":null,"max":null,"locale":"zz","calendar":"","timeZone":""})",
+                          R"({"value":0,"mode":"date","variant":"text-field","min":null,"max":null,"locale":"","calendar":"","timeZone":"Mars/Olympus"})",
+                          R"({"value":0,"mode":"date","variant":"text-field","min":null,"max":null,"locale":"","calendar":"martian","timeZone":""})"}) {
+    errorCount = errors.size(); Render(dates, date, bad, lastCount);
+    assert(errors.size() == errorCount + 1 && errors.back().find("Unknown") != std::string::npos);
+    assert(picker.datePickerStyle == NSDatePickerStyleClockAndCalendar && [picker.calendar.calendarIdentifier isEqual:NSCalendarIdentifierJapanese]);
+  }
+  // A fresh view whose first props are invalid shows nothing valid and reports it once attached.
+  RNSparkPrimitive *badDate = [RNSparkPrimitive new]; auto badProps = std::make_shared<SparkPrimitiveProps>(); badProps->kind = "date-picker";
+  badProps->valueJson = R"({"value":0,"mode":"date","variant":"text-field","min":null,"max":null,"locale":"","calendar":"","timeZone":"Nowhere"})";
+  errorCount = errors.size(); [badDate updateProps:badProps oldProps:nullptr]; [badDate updateEventEmitter:std::make_shared<SparkPrimitiveEventEmitter>()];
+  assert(errors.size() == errorCount + 1);
+
+  // Color well: style, alpha, hex round trip, reconciliation, and handing the shared panel over.
+  RNSparkPrimitive *wells = [RNSparkPrimitive new]; wells.frame = NSMakeRect(0, 0, 52, 30);
+  wells->_eventEmitter = std::make_shared<SparkPrimitiveEventEmitter>(); lastCount = 0;
+  auto color = std::make_shared<SparkPrimitiveProps>(); color->kind = "color-well"; color->valueJson = R"({"value":"#3366cc","alpha":false,"variant":"default"})";
+  [wells updateProps:color oldProps:nullptr]; NSColorWell *well = [wells valueForKey:@"control"];
+  assert(well.colorWellStyle == NSColorWellStyleDefault && !well.supportsAlpha && [SparkHexFromColor(well.color, NO) isEqual:@"#3366cc"]);
+  well.color = [NSColor colorWithSRGBRed:1 green:0.5 blue:0 alpha:1]; [wells changed:well]; assert(changes.back() == "\"#ff8000\"");
+  Update(wells, color); assert([SparkHexFromColor(well.color, NO) isEqual:@"#ff8000"]);
+  color->eventCount = lastCount; Update(wells, color); assert([SparkHexFromColor(well.color, NO) isEqual:@"#3366cc"]);
+  // Display P3 and other color spaces report their sRGB form.
+  well.color = [NSColor colorWithDisplayP3Red:0 green:0 blue:1 alpha:1]; [wells changed:well]; assert(changes.back().size() == 9);
+  Render(wells, color, R"({"value":"#11223380","alpha":true,"variant":"expanded"})", lastCount);
+  assert(well.colorWellStyle == NSColorWellStyleExpanded && well.supportsAlpha && [SparkHexFromColor(well.color, YES) isEqual:@"#11223380"]);
+  well.color = [NSColor colorWithSRGBRed:0 green:0 blue:0 alpha:0.25]; [wells changed:well]; assert(changes.back() == "\"#00000040\"");
+  // A pattern has no sRGB form: reported with its own count, never sent as a value.
+  changeCount = changes.size(); errorCount = errors.size();
+  well.color = [NSColor colorWithPatternImage:[NSImage imageWithSize:NSMakeSize(2, 2) flipped:NO drawingHandler:^BOOL(NSRect r) { return YES; }]];
+  [wells changed:well]; assert(changes.size() == changeCount && errors.size() == errorCount + 1 && errors.back().find("sRGB") != std::string::npos);
+  color->eventCount = lastCount; Update(wells, color); assert([SparkHexFromColor(well.color, YES) isEqual:@"#11223380"]);
+  Render(wells, color, R"({"value":"#11223380","alpha":true,"variant":"default"})", lastCount);
+  [well activate:YES]; assert(well.isActive && colorPanelShown > 0);
+  // Another owner (showColorPanel or a second well) takes the panel: this well lets go.
+  RNSparkPrimitive *otherView = [RNSparkPrimitive new]; otherView->_eventEmitter = std::make_shared<SparkPrimitiveEventEmitter>();
+  [otherView updateProps:color oldProps:nullptr]; NSColorWell *other = [otherView valueForKey:@"control"];
+  [other activate:YES]; assert(other.isActive && !well.isActive);
+  [NSNotificationCenter.defaultCenter postNotificationName:SparkColorPanelOwnerWillChange object:[NSObject new]]; assert(!other.isActive);
+  // Disabling or recycling an active well releases the panel.
+  // Driver mode never shows the panel: activating reports E_UNAVAILABLE and leaves the panel alone.
+  driverActive = YES; int panelShows = colorPanelShown; errorCount = errors.size();
+  [well activate:YES]; assert(!well.isActive && colorPanelShown == panelShows && errors.size() == errorCount + 1 && errorCodes.back() == "E_UNAVAILABLE");
+  driverActive = NO; assert(errorCodes[errorCount - 1] == "E_INVALID_DATA");
+  [well activate:YES]; color->disabled = true; Update(wells, color); assert(!well.isActive && !well.enabled); color->disabled = false;
+  [other activate:YES]; [otherView prepareForRecycle]; assert(!other.isActive && otherView.subviews.count == 0);
   puts("Native primitive tests passed");
 } }

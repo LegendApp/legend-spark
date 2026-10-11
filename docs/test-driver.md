@@ -135,6 +135,10 @@ A driven app never takes focus from the person using the Mac:
   automatic tabbing on show never runs, `moveTabToNewWindow` and `mergeAllWindows` use the tab group's
   own add and remove, and the driver records which tab is selected, because selecting a tab orders it
   on screen ([window tabs](api-window-contract.md#window-tabs)).
+- The shared color and font panels and the eyedropper would reach the screen (the eyedropper
+  takes over the real pointer), so `showColorPanel`, `showFontPanel` and `sampleScreenColor`
+  reject with `E_UNAVAILABLE`, and an activated `ColorWell` reports `E_UNAVAILABLE` through
+  `onError` without showing the panel.
 
 `tests/window.native.mm` checks that windows opened, shown, hidden, made modal and tabbed in driver
 mode are never on screen (`NSWindow.visible` and the window server's on-screen flag) while the
