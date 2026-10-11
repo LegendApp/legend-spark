@@ -367,6 +367,19 @@ int main() { @autoreleasepool {
   [outlineView selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
   CHECK(Last().kind == "selection" && Last().ids == std::vector<std::string>{ "empty" });
 
+  // An invalid row order keeps the previous tree, including the children of rows shared with unchanged chunks.
+  RNSparkTable *kept = [RNSparkTable new];
+  kept->_eventEmitter = std::make_shared<SparkTableEventEmitter>();
+  auto valid = Copy(outline); valid->expandedIds = { "a" };
+  valid->rowChunks = { "[" + Row(0, true, "a", "A") + "]", "[" + Row(1, false, "a1", "A1") + "," + Row(0, false, "b", "B") + "]" };
+  [kept updateProps:valid oldProps:nullptr];
+  id keptA = [Outline(kept) itemAtRow:0];
+  CHECK(Outline(kept).numberOfRows == 3 && [Outline(kept).dataSource outlineView:Outline(kept) numberOfChildrenOfItem:keptA] == 1);
+  auto misordered = Copy(valid); misordered->rowChunks[1] = "[" + Row(2, false, "x", "X") + "]"; Update(kept, misordered);
+  CHECK(Last().kind == "error" && [Outline(kept).dataSource outlineView:Outline(kept) numberOfChildrenOfItem:keptA] == 1);
+  [Outline(kept) reloadData];
+  CHECK(Outline(kept).numberOfRows == 3);
+
   // Recycling resets everything; the next mount is fresh.
   [tree prepareForRecycle];
   auto fresh = TableProps(); fresh->rowChunks = Chunks(2, 256); fresh->selectedIds = {};

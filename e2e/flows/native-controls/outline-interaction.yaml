@@ -14,7 +14,7 @@ platforms: [macos]
 matrix:
   locale: [en]
 ---
-- launchApp: { openUrl: "spark-ks://native-controls/outline" }
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/outline" }
 - assertVisible: { id: native-controls-outline-list }
 - assertText: { id: native-controls-outline-expanded, equals: '["group-1","folder-1-1"]' }
 # Each disclosure triangle is the nearest one leading its row's name.

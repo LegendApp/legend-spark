@@ -271,15 +271,18 @@ static std::string JSONString(id object) {
   NSMutableArray<RNSparkTableRow *> *all = [NSMutableArray new], *roots = [NSMutableArray new], *ancestors = [NSMutableArray new];
   NSMutableDictionary<NSString *, RNSparkTableRow *> *byId = [NSMutableDictionary new];
   NSMutableDictionary<NSString *, NSNumber *> *indexById = [NSMutableDictionary new];
+  // Rows are shared with the previous chunks, so their children change only once the whole order is valid.
+  NSMutableDictionary<NSString *, NSMutableArray<RNSparkTableRow *> *> *childrenById = [NSMutableDictionary new];
   for (NSArray<RNSparkTableRow *> *chunk in chunks) for (RNSparkTableRow *row in chunk) {
     if (row.depth < 0 || row.depth > (NSInteger)ancestors.count || (row.depth > 0 && !ancestors[row.depth - 1].expandable) || byId[row.rowId]) { [self reportError:@"Invalid table row order"]; return NO; }
     [ancestors removeObjectsInRange:NSMakeRange(row.depth, ancestors.count - row.depth)];
-    row.children = row.expandable ? [NSMutableArray new] : nil;
-    [row.depth ? ancestors.lastObject.children : roots addObject:row];
+    if (row.expandable) childrenById[row.rowId] = [NSMutableArray new];
+    [row.depth ? childrenById[ancestors.lastObject.rowId] : roots addObject:row];
     [ancestors addObject:row];
     byId[row.rowId] = row; indexById[row.rowId] = @(all.count);
     [all addObject:row];
   }
+  for (RNSparkTableRow *row in all) row.children = childrenById[row.rowId];
   _chunkSources = sources; _chunks = chunks; _rows = all; _roots = roots; _rowsById = byId; _indexById = indexById;
   return YES;
 }

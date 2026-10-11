@@ -15,7 +15,7 @@ platforms: [macos]
 matrix:
   locale: [en]
 ---
-- launchApp: { openUrl: "spark-ks://native-controls/table" }
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/table" }
 - assertVisible: { id: native-controls-table-list }
 - assertText: { id: native-controls-table-selection, equals: '{"count":1,"first":["file-2"]}' }
 # Selection: click, Shift-click range, Command-click toggle, Command-A.
