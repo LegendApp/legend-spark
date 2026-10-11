@@ -81,6 +81,23 @@ compatibility. Existing runtimes need a native rebuild. Review/remove this patch
 when upgrading RN macOS. `bun scripts/test-keyboard-events.ts` builds and exercises
 the native regression; see [macOS evidence](macos-readiness-2026-09-18.md#webview-keyboard-follow-up).
 
+## RN macOS RTL ScrollView patch
+
+In RTL, `react-native-macos@0.81.7` Fabric flips every ScrollView's content container
+with a `scale(-1, 1)` layer transform. The matching flip of the scroll view itself,
+which cancels it on iOS, is iOS-only, so scroll content renders mirrored on macOS.
+Mirroring the NSScrollView as well is not an option: AppKit scrolls `NSClipView` by its
+bounds origin and routes clicks, wheel deltas and scroller drags without layer transforms.
+
+`rtl-scroll-view.cjs` flips nothing on macOS. Yoga already places RTL content. Scroll
+offsets are reported and applied as plain left-edge offsets, with no RTL conversion. A
+scroll view that becomes RTL starts at its content's right end (the RTL leading edge), and
+keeps its distance from that end when its content or viewport size changes, as the mirrored
+iOS offset does. Like the
+other patches, it checks the version and exact source, is idempotent, and replaces the
+file atomically. Existing runtimes need a native rebuild. `tests/rtl-scroll-view-native.test.ts`
+compiles the patched methods against AppKit.
+
 ## Expo development terminal patch
 
 `spark dev` launches the app's installed `expo start` under Node, inheriting stdin/stdout/stderr. Its Node supervisor retains desktop runtime discovery, compatibility enforcement, native builds and owned app processes. It has no keyboard interface. Desktop actions and results travel over a private JSON IPC channel; no HTTP command endpoint is exposed.
