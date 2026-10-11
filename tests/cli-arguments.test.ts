@@ -11,3 +11,8 @@ test("accepts documented command shapes and rejects incompatible build modes", (
   expect(cliArguments(["create", "--help"]).values.help).toBe(true);
   expect(cliArguments(["sdk", "--help"]).values.help).toBe(true);
 });
+test("upgrade accepts project/dry-run and rejects unrelated flags and positionals", () => {
+  expect(cliArguments(["upgrade", "--project", "app", "--dry-run"]).values).toEqual({ project: "app", "dry-run": true });
+  expect(cliArguments(["upgrade", "--help"]).values.help).toBe(true);
+  for (const args of [["upgrade", "app"], ["upgrade", "--force"], ["upgrade", "--platform", "macos"], ["doctor", "--dry-run"]]) expect(() => cliArguments(args)).toThrow();
+});

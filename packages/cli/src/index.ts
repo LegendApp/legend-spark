@@ -7,7 +7,7 @@ import { hostPlatform, type AppPlatform } from "./platform.ts";
 import path from "node:path";
 import { cliArguments } from "./cli-arguments.ts";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { prepareConfig, readConfig, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
+import { prepareConfig, readConfig, isExpoProject, supportedPlatforms } from "@legendapp/spark-desktop-config/config.cjs";
 import { nodeCommand, prepareWindows } from "./windows.ts";
 import { create, refreshLocalPackages } from "./create.ts";
 import { addDesktop } from "./add-desktop.ts";
@@ -21,6 +21,7 @@ import { doctor, run } from "./commands.ts";
 import { findFramework, findProject, sparkHome, creationManifest, packageManifest, registerRuntime } from "./local.ts";
 import { readJson, stateFile, VERSION, writeJson } from "./project.ts";
 import { devCommand } from "./dev-command.ts";
+import { dependencyPinIssues, printDependencyPins, upgradeDependencyPins } from "./dependency-pins.ts";
 
 async function main() {
   const argv = process.argv.slice(2);
@@ -71,6 +72,8 @@ async function main() {
   spark build         Build a standalone desktop app
   spark prebuild      Generate a Windows/mobile native project
   spark package       Sign and notarize a distribution archive
+  spark doctor        Check app dependency pins and native tooling (exits 1 on issues)
+  spark upgrade       Align app dependency pins with Spark (--dry-run previews changes)
 
 Inside an app: npm run dev, npm run build, npm run package (or pnpm, yarn, bun)
 
@@ -150,10 +153,33 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       if (readConfig(project()).expo.platforms[0] !== "windows") throw new Error("For macOS, spark build --dev generates and builds the native project.");
       await prepareWindows(project(), "dev");
       break;
-    case "doctor":
-      await doctor(start);
+    case "doctor": {
+      let root: string | undefined;
+      try { root = project(); } catch { console.log("No Spark app found; skipping dependency pin check."); }
+      if (root) {
+        try {
+          const issues = dependencyPinIssues(readJson(path.join(root, "package.json")), supportedPlatforms(root));
+          printDependencyPins(issues);
+          if (issues.length) {
+            process.exitCode = 1;
+            console.log("Run spark upgrade to fix dependency pins.");
+          }
+        } catch (error) {
+          console.error(`Dependency pin check failed: ${error instanceof Error ? error.message : String(error)}`);
+          process.exitCode = 1;
+        }
+      }
+      await doctor(root ?? start);
       console.log("Native toolchain available.");
       break;
+    }
+    case "upgrade": {
+      const issues = upgradeDependencyPins(project(), !!values["dry-run"]);
+      console.log(values["dry-run"] ? "Dependency pin changes (dry run):" : "Dependency pin changes:");
+      printDependencyPins(issues);
+      if (issues.length) console.log(values["dry-run"] ? "No files changed. Run spark upgrade, then run your package manager's install command (npm/pnpm/yarn/bun install)." : "Updated package.json. Run your package manager's install command (npm/pnpm/yarn/bun install).");
+      break;
+    }
     case "updates": {
       if (positionals[1] !== "init" || !positionals[2]) throw new Error("Usage: spark updates init https://example.com/updates/appcast.xml");
       await initializeUpdates(project(), positionals[2]);
