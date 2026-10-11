@@ -6,13 +6,13 @@ import { harnessCommand } from "./harness.ts";
 import { sh } from "./install.ts";
 import { tartDriver } from "./vm.ts";
 
+// SIGINT/SIGTERM abort the run: the gate stops its flows, and a VM run stops waiting and disposes its clone.
 const controller = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
 const vm = tartDriver({
-  async run(argv) {
-    const child = spawnProcess(argv, { stdout: "pipe", stderr: "pipe" });
-    const [code, out, err] = await Promise.all([child.exited, new Response(child.stdout!).text(), new Response(child.stderr!).text()]);
-    return { code, output: out + err };
+  async run(argv, signal) {
+    const { code, stdout, stderr } = await sh(argv, signal);
+    return { code, output: stdout + stderr };
   },
   spawn: argv => spawnProcess(argv, { stdout: "ignore", stderr: "ignore" }),
 });

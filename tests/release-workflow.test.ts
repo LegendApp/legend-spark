@@ -55,7 +55,7 @@ function fixture() {
   /** The harness reports `bun run harness` writes for `revision` on both release targets. */
   const harness = (revision: string, fields: Record<string, unknown> = {}) => {
     for (const target of ["macos-14/arm64@air-m1", "macos-15/arm64"]) {
-      write(`artifacts/harness/${revision}/${target.replace("/", "-")}/report.json`, JSON.stringify({ version: 1, verdict: "PASS", releasable: true, local: false, target, commit: revision, dirty: false, reasons: [], ...fields }));
+      write(`artifacts/harness/${revision}/${target.replace("/", "-")}/report.json`, JSON.stringify({ version: 1, verdict: "PASS", releasable: true, local: false, target, commit: revision, dirty: false, reasons: [], install: { app: "/tmp/KitchenSink.app", quarantine: "0081;00000000;;", sourceRevision: revision }, ...fields }));
     }
   };
   const staged = () => {

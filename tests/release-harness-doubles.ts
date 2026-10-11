@@ -1,6 +1,7 @@
 // Test doubles for the release harness: a Mac's install and signing tools (FakeMac) and a VM driver (FakeVm).
 import { cpSync, existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { VERSION } from "../packages/cli/src/project.ts";
 import type { Command, Sh } from "../scripts/harness/install.ts";
 import type { Guest, GuestResult, VmDriver } from "../scripts/harness/vm.ts";
 
@@ -17,18 +18,24 @@ const DETAILS: Record<Signing, string> = {
 };
 
 /**
- * hdiutil, ditto, xattr, codesign, spctl and git archive over real temporary files. A quarantined disk image or archive
- * passes its quarantine to what is copied out of it, as macOS does, unless `propagate` is false.
+ * hdiutil, ditto, xattr, codesign, spctl, stapler and git archive over real temporary files. A quarantined disk image or
+ * archive passes its quarantine to what is copied out of it, as macOS does, unless `propagate` is false. The app inside
+ * records `revision` as its source revision (spark-runtime.json), or none when it is undefined. The first `busyDetaches`
+ * `hdiutil detach` calls fail as a busy volume does.
  */
 export class FakeMac {
   readonly calls: string[][] = [];
   private readonly attributes = new Map<string, string>();
   private readonly quarantinedVolumes = new Set<string>();
-  constructor(public signing: Signing = "notarized", private readonly propagate = true) {}
+  busyDetaches = 0;
+  constructor(public signing: Signing = "notarized", private readonly propagate = true, public revision: string | undefined = undefined, public stapled = true) {}
 
   private app(at: string) {
     mkdirSync(path.join(at, "Contents/MacOS"), { recursive: true });
+    mkdirSync(path.join(at, "Contents/Resources"), { recursive: true });
     writeFileSync(path.join(at, "Contents/Info.plist"), "<plist/>");
+    const runtime = { schema: 1, framework: VERSION, platform: "macos", arch: "arm64", mode: "release", fingerprint: "fixture", modules: {}, ...(this.revision ? { sourceRevision: this.revision } : {}) };
+    writeFileSync(path.join(at, "Contents/Resources/spark-runtime.json"), JSON.stringify(runtime));
   }
   private quarantined(file: string) {
     return this.attributes.has(file) || [...this.quarantinedVolumes].some(volume => file.startsWith(`${volume}/`));
@@ -37,8 +44,15 @@ export class FakeMac {
     if (this.propagate && this.quarantined(from)) this.attributes.set(to, "0081;00000000;;");
   }
 
-  readonly sh: Sh = argv => {
+  readonly sh: Sh = async argv => this.command(argv);
+
+  /** Commands (by name) that fail with the given result instead. */
+  readonly failures = new Map<string, Command>();
+
+  private command(argv: string[]): Command {
     this.calls.push(argv);
+    const failure = this.failures.get(argv[0]!);
+    if (failure) return failure;
     const [command, ...args] = argv;
     if (command === "xattr" && args[0] === "-w") { this.attributes.set(args[3]!, args[2]!); return ok(); }
     if (command === "xattr" && args[0] === "-p") {
@@ -53,7 +67,10 @@ export class FakeMac {
       if (this.attributes.has(args[1]!)) this.quarantinedVolumes.add(volume);
       return ok();
     }
-    if (command === "hdiutil" && args[0] === "detach") return ok();
+    if (command === "hdiutil" && args[0] === "detach") {
+      if (this.busyDetaches-- > 0) return { code: 16, stdout: "", stderr: `hdiutil: couldn't unmount "disk4" - Resource busy` };
+      return ok();
+    }
     if (command === "ditto" && args[0] === "-x") {
       this.app(path.join(args[3]!, APP));
       this.inherit(args[2]!, path.join(args[3]!, APP));
@@ -69,23 +86,28 @@ export class FakeMac {
       if (this.signing === "notarized") return ok("", `${app}: accepted\nsource=Notarized Developer ID\n`);
       return { code: 3, stdout: "", stderr: this.signing === "developer-id" ? `${app}: rejected\nsource=Unnotarized Developer ID\n` : `${app}: rejected\n` };
     }
+    if (command === "xcrun" && args[0] === "stapler") {
+      return this.signing === "notarized" && this.stapled ? ok(`Processing: ${args[2]}\nThe validate action worked!\n`) : { code: 65, stdout: `Processing: ${args[2]}\n${args[2]} does not have a ticket stapled to it.\n`, stderr: "" };
+    }
     if (command === "git" && args[2] === "archive") { writeFileSync(args[args.indexOf("-o") + 1]!, `source of ${args.at(-1)}`); return ok(); }
     throw new Error(`FakeMac: unexpected command ${argv.join(" ")}`);
-  };
+  }
 }
 
 /** A VM driver whose guest is a function of the shared directory (as the host sees it) and the command. */
 export class FakeVm implements VmDriver {
   readonly name = "fake";
   readonly events: string[] = [];
-  constructor(private readonly guest: (share: string, argv: string[]) => Promise<GuestResult>) {}
 
-  async boot(image: string, share: string): Promise<Guest> {
+  constructor(private readonly guest: (share: string, argv: string[], signal?: AbortSignal) => Promise<GuestResult>) {}
+
+  async boot(image: string, share: string, signal?: AbortSignal): Promise<Guest> {
     if (!existsSync(share)) throw new Error(`FakeVm: the share ${share} does not exist`);
+    signal?.throwIfAborted();
     this.events.push(`boot ${image}`);
     return {
       share: "/Volumes/Guest Share",
-      exec: async argv => { this.events.push("exec"); return this.guest(share, argv); },
+      exec: async (argv, execSignal) => { this.events.push("exec"); return this.guest(share, argv, execSignal); },
       dispose: async () => { this.events.push("dispose"); },
     };
   }

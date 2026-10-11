@@ -8,7 +8,8 @@ import type { Host } from "../scripts/e2e/gate/plan.ts";
 import type { CommandHandler } from "../scripts/e2e/runner/backend.ts";
 import { harnessProblems, releaseTargets, reportDir, requireHarnessPass } from "../scripts/harness/guard.ts";
 import { guestScript, harnessCommand, type HarnessEnv, type HarnessReport } from "../scripts/harness/harness.ts";
-import { judgeSignature, quarantineValue, verify } from "../scripts/harness/install.ts";
+import { releaseRevision } from "../packages/cli/src/build.ts";
+import { judgeSignature, quarantineValue, sh, verify } from "../scripts/harness/install.ts";
 import { tartDriver, vmProblem } from "../scripts/harness/vm.ts";
 import { element, MemoryBackend, VirtualClock } from "./e2e-runner-backend.ts";
 import { FakeMac, FakeVm, guestArgs, type Signing } from "./release-harness-doubles.ts";
@@ -36,12 +37,13 @@ function artifact(name: string): string {
   return file;
 }
 
-type Options = { signing?: Signing; propagate?: boolean; host?: Host; dirty?: boolean; elements?: ReturnType<typeof element>[]; vm?: FakeVm; dir?: string };
+/** `revision`: what the installed app records as its source revision (COMMIT unless given; null for none). */
+type Options = { signing?: Signing; propagate?: boolean; revision?: string | null; stapled?: boolean; host?: Host; dirty?: boolean; elements?: ReturnType<typeof element>[]; vm?: FakeVm; dir?: string; signal?: AbortSignal };
 
 /** The gate runs the fixture's flows on in-memory backends (tests/e2e-runner-backend.ts); `apps` records the app each backend was given. */
 function env(options: Options = {}) {
   const clock = new VirtualClock(), out: string[] = [], err: string[] = [], apps: Array<string | undefined> = [];
-  const mac = new FakeMac(options.signing ?? "notarized", options.propagate ?? true);
+  const mac = new FakeMac(options.signing ?? "notarized", options.propagate ?? true, options.revision === null ? undefined : options.revision ?? COMMIT, options.stapled ?? true);
   const launchApp: CommandHandler = async () => { await clock.sleep(100); };
   const gate: GateEnv = {
     backends: {
@@ -55,13 +57,15 @@ function env(options: Options = {}) {
     stdout: line => out.push(line),
     stderr: line => err.push(line),
     clock,
+    signal: options.signal,
   };
   const harnessEnv: HarnessEnv = { repo: options.dir ?? repo(), gate, sh: mac.sh, vm: options.vm ?? new FakeVm(async () => { throw new Error("no VM expected"); }), bun: process.execPath, now: () => new Date("2026-10-11T08:00:00Z") };
   return { env: harnessEnv, mac, out, err, apps };
 }
 
-async function harness(args: string[], options: Options = {}) {
+async function harness(args: string[], options: Options = {}, prepare: (mac: FakeMac) => void = () => {}) {
   const context = env(options);
+  prepare(context.mac);
   const code = await harnessCommand(args, context.env);
   const target = args.includes("--target") ? args[args.indexOf("--target") + 1] ?? "none" : (options.host ?? AIR) === AIR ? "macos-14/arm64@air-m1" : "macos-15/arm64";
   const dir = reportDir(context.env.repo, COMMIT, target);
@@ -74,12 +78,12 @@ describe("release harness on this machine", () => {
     const zip = artifact("KitchenSink-1.0-arm64.zip");
     const run = await harness(["--artifact", zip]);
     expect(run.code).toBe(0);
-    expect(run.report).toMatchObject({ verdict: "PASS", releasable: true, local: false, target: "macos-14/arm64@air-m1", commit: COMMIT, dirty: false, reasons: [], environment: { kind: "host", host: AIR } });
+    expect(run.report).toMatchObject({ verdict: "PASS", releasable: true, local: false, target: "macos-14/arm64@air-m1", commit: COMMIT, dirty: false, reasons: [], environment: { kind: "host", clean: false, host: AIR } });
     expect(run.report.artifact).toEqual({ file: zip, format: "zip", sha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
     const installed = run.report.install!.app;
     expect(installed).toMatch(/\/Applications\/KitchenSink\.app$/);
-    expect(run.report.install!.quarantine).toBe("0081;00000000;;");
-    expect(run.report.signature).toMatchObject({ summary: "Developer ID Application: Example Corp (ABCDE12345) / notarized", signature: "developer-id", teamId: "ABCDE12345", hardenedRuntime: true, timestamp: true, notarized: true, codesign: { valid: true } });
+    expect(run.report.install).toEqual({ app: installed, quarantine: "0081;00000000;;", sourceRevision: COMMIT });
+    expect(run.report.signature).toMatchObject({ summary: "Developer ID Application: Example Corp (ABCDE12345) / notarized / stapled", signature: "developer-id", teamId: "ABCDE12345", hardenedRuntime: true, timestamp: true, notarized: true, stapled: { valid: true }, codesign: { valid: true } });
     // Downloaded, quarantined, then extracted into the fresh Applications folder.
     const downloaded = path.join(path.dirname(path.dirname(installed)), "Downloads", "KitchenSink-1.0-arm64.zip");
     expect(run.mac.calls.slice(0, 3)).toEqual([
@@ -110,11 +114,11 @@ describe("release harness on this machine", () => {
     const run = await harness(["--artifact", artifact("KitchenSink.dmg")], { signing: "ad-hoc" });
     expect(run.code).toBe(1);
     expect(run.report).toMatchObject({ verdict: "FAIL", releasable: false, local: false });
-    expect(run.report.signature!.summary).toBe("ad-hoc / not notarized");
+    expect(run.report.signature!.summary).toBe("ad-hoc / not notarized / not stapled");
     expect(run.reasons).toEqual([
       "signature: the app is signed ad-hoc; a release needs a Developer ID Application signature",
       expect.stringMatching(/^notarization: Gatekeeper rejected the app; a release must be notarized: .*KitchenSink\.app: rejected$/),
-      "gate: not run: Gatekeeper would not let a person open this app",
+      "gate: not run: the installed app failed the release checks above",
     ]);
     expect(run.apps).toEqual([]);
     expect(existsSync(path.join(run.dir, "gate"))).toBe(false);
@@ -126,7 +130,55 @@ describe("release harness on this machine", () => {
       "signature: the signature does not enable the hardened runtime",
       "signature: the signature has no secure timestamp",
       expect.stringMatching(/^notarization: Gatekeeper rejected the app \(source=Unnotarized Developer ID\); a release must be notarized: /),
-      "gate: not run: Gatekeeper would not let a person open this app",
+      "gate: not run: the installed app failed the release checks above",
+    ]);
+  });
+
+  test("a notarized app without a stapled ticket fails in release mode", async () => {
+    const run = await harness(["--artifact", artifact("KitchenSink.zip")], { stapled: false });
+    expect(run.mac.calls).toContainEqual(["xcrun", "stapler", "validate", run.report.install!.app]);
+    expect(run.report.signature!.summary).toBe("Developer ID Application: Example Corp (ABCDE12345) / notarized / not stapled");
+    expect(run.reasons).toEqual([
+      expect.stringMatching(/^notarization: the notarization ticket is not stapled, so Gatekeeper needs the network to accept the app: .*does not have a ticket stapled to it\.$/s),
+      "gate: not run: the installed app failed the release checks above",
+    ]);
+    expect(run.apps).toEqual([]);
+  });
+
+  test("an app built from another commit, or recording none, fails in release mode and is never launched", async () => {
+    const old = "f".repeat(40);
+    const stale = await harness(["--artifact", artifact("KitchenSink.zip")], { revision: old });
+    expect([stale.code, stale.report.releasable, stale.report.install!.sourceRevision]).toEqual([1, false, old]);
+    expect(stale.reasons).toEqual([
+      `revision: the installed app was built from ${old}, not ${COMMIT}: this run would certify another build`,
+      "gate: not run: the installed app failed the release checks above",
+    ]);
+    expect(stale.apps).toEqual([]);
+    const unrecorded = await harness(["--artifact", artifact("KitchenSink.dmg")], { revision: null });
+    expect(unrecorded.report.install!.sourceRevision).toBeUndefined();
+    expect(unrecorded.reasons).toEqual([
+      `revision: the installed app records no source revision (Contents/Resources/spark-runtime.json sourceRevision), so nothing ties it to ${COMMIT}; build the release with SPARK_RELEASE_REVISION=${COMMIT}`,
+      "gate: not run: the installed app failed the release checks above",
+    ]);
+    // --local records it and runs the gate; it is never releasable anyway.
+    const local = await harness(["--local"], { signing: "ad-hoc", revision: null });
+    expect([local.report.verdict, local.report.install!.sourceRevision, local.report.gate!.verdict]).toEqual(["PASS", undefined, "PASS"]);
+    expect(local.out).toContainEqual(expect.stringMatching(/built from an unrecorded revision$/));
+  });
+
+  test("a disk image that will not detach is forced, then reported, without hiding the install's own error", async () => {
+    const forced = await harness(["--artifact", artifact("KitchenSink.dmg")], {}, mac => { mac.busyDetaches = 1; });
+    expect(forced.code).toBe(0);
+    const volume = forced.mac.calls.find(call => call[1] === "attach")!.at(-1)!;
+    expect(forced.mac.calls.filter(call => call[1] === "detach")).toEqual([["hdiutil", "detach", volume], ["hdiutil", "detach", "-force", volume]]);
+    const stuck = await harness(["--artifact", artifact("KitchenSink.dmg")], {}, mac => {
+      mac.busyDetaches = 2;
+      mac.failures.set("ditto", { code: 1, stdout: "", stderr: "ditto: No space left on device" });
+    });
+    expect(stuck.code).toBe(1);
+    expect(stuck.reasons).toEqual([
+      expect.stringMatching(/^install: hdiutil detach could not detach .*\/Volume, even with -force: hdiutil: couldn't unmount "disk4" - Resource busy$/),
+      expect.stringMatching(/^install: ditto .* exited 1: ditto: No space left on device$/),
     ]);
   });
 
@@ -134,7 +186,7 @@ describe("release harness on this machine", () => {
     const run = await harness(["--local"], { signing: "ad-hoc" });
     expect(run.code).toBe(0);
     expect(run.report).toMatchObject({ verdict: "PASS", local: true, releasable: false, reasons: [] });
-    expect(run.report.signature).toMatchObject({ summary: "ad-hoc / not notarized", signature: "ad-hoc", notarized: false, gatekeeper: { accepted: false } });
+    expect(run.report.signature).toMatchObject({ summary: "ad-hoc / not notarized / not stapled", signature: "ad-hoc", notarized: false, gatekeeper: { accepted: false } });
     const create = run.mac.calls.find(call => call[1] === "create")!;
     expect(create).toEqual(["hdiutil", "create", "-quiet", "-srcfolder", expect.stringMatching(/\/dmg$/), "-volname", "KitchenSink", "-format", "UDZO", "-o", expect.stringMatching(/\/KitchenSink\.dmg$/)]);
     expect(run.mac.calls).toContainEqual(["ditto", path.join(run.env.repo, "build/macos-arm64/KitchenSink.app"), path.join(create[4]!, "KitchenSink.app")]);
@@ -225,7 +277,8 @@ describe("release harness in a VM", () => {
     expect(seen.script).toContain("bun install --frozen-lockfile");
     expect(run.report).toMatchObject({
       verdict: "PASS", releasable: true, target: "macos-15/arm64", commit: COMMIT,
-      environment: { kind: "vm", host: SEQUOIA, vm: { driver: "fake", image: "ghcr.io/cirruslabs/macos-sequoia-vanilla:latest" } },
+      environment: { kind: "vm", clean: true, host: SEQUOIA, vm: { driver: "fake", image: "ghcr.io/cirruslabs/macos-sequoia-vanilla:latest" } },
+      install: { sourceRevision: COMMIT },
       artifact: { file: zip, format: "zip" },
     });
     expect(existsSync(path.join(run.dir, "gate/report.json"))).toBe(true);
@@ -271,6 +324,20 @@ describe("release harness in a VM", () => {
     const broken = new FakeVm(async () => { throw new Error("the guest agent went away"); });
     await expect(harness(["--artifact", artifact("KitchenSink.zip"), "--target", "macos-15/arm64", "--vm", "image"], { vm: broken })).rejects.toThrow("the guest agent went away");
     expect(broken.events).toEqual(["boot image", "exec", "dispose"]);
+  });
+
+  test("interrupting a VM run stops the guest's command and disposes the clone", async () => {
+    const controller = new AbortController();
+    const hung = new FakeVm((_share, _argv, signal) => new Promise(resolve => {
+      signal!.addEventListener("abort", () => resolve({ code: 143, output: "killed" }), { once: true });
+      setTimeout(() => controller.abort(), 10);
+    }));
+    const run = await harness(["--artifact", artifact("KitchenSink.zip"), "--target", "macos-15/arm64", "--vm", "image"], { vm: hung, signal: controller.signal });
+    expect(run.reasons).toEqual(["vm: interrupted; the clone was disposed"]);
+    expect(hung.events).toEqual(["boot image", "exec", "dispose"]);
+    const before = new FakeVm(async () => { throw new Error("no exec expected"); });
+    const aborted = await harness(["--artifact", artifact("KitchenSink.zip"), "--target", "macos-15/arm64", "--vm", "image"], { vm: before, signal: AbortSignal.abort() });
+    expect([aborted.reasons, before.events]).toEqual([["vm: interrupted; the clone was disposed"], []]);
   });
 
   test("the guest script unpacks the archive, installs with the shared Bun, and copies reports back even on failure", () => {
@@ -328,17 +395,61 @@ describe("tart driver", () => {
     await expect(clone.driver.boot("missing", "/tmp/share")).rejects.toThrow("image not found");
     expect(clone.calls).toHaveLength(1);
   });
+
+  test("an interrupted boot kills the waiting tart command, then stops and deletes the clone", async () => {
+    const calls: string[] = [], controller = new AbortController();
+    const driver = tartDriver({
+      run: (argv, signal) => {
+        calls.push(argv.join(" "));
+        if (argv[1] !== "ip" && argv[1] !== "clone") return Promise.resolve({ code: 0, output: "" });
+        if (argv[1] === "clone" && !signal) throw new Error("tart clone needs the signal");
+        if (argv[1] === "clone") return Promise.resolve({ code: 0, output: "" });
+        setTimeout(() => controller.abort(), 10);
+        return new Promise(resolve => signal!.addEventListener("abort", () => resolve({ code: 143, output: "" }), { once: true }));
+      },
+      spawn: argv => { calls.push(`spawn ${argv.join(" ")}`); return { exited: Promise.resolve(0), kill: () => {} }; },
+    });
+    await expect(driver.boot("image", "/tmp/share", controller.signal)).rejects.toThrow(/abort/i);
+    expect(calls.slice(-3)).toEqual([expect.stringMatching(/^tart ip /), expect.stringMatching(/^tart stop /), expect.stringMatching(/^tart delete /)]);
+    // Interrupted while cloning: the partial clone is deleted.
+    const cloning: string[] = [], during = new AbortController();
+    const early = tartDriver({
+      run: async argv => { cloning.push(argv.join(" ")); if (argv[1] === "clone") during.abort(); return { code: argv[1] === "clone" ? 143 : 0, output: "" }; },
+      spawn: () => { throw new Error("no boot expected"); },
+    });
+    await expect(early.boot("image", "/tmp/share", during.signal)).rejects.toThrow(/abort/i);
+    expect(cloning).toEqual([expect.stringMatching(/^tart clone image /), expect.stringMatching(/^tart delete /)]);
+  });
+});
+
+describe("commands", () => {
+  test("sh reads a command's whole output asynchronously, reports exit codes, and turns a missing or killed command into a failure", async () => {
+    const big = await sh(["/bin/sh", "-c", "head -c 1000000 /dev/zero | tr '\\0' a; echo err >&2; exit 3"]);
+    expect([big.code, big.stdout.length, big.stderr]).toEqual([3, 1_000_000, "err\n"]);
+    const missing = await sh(["/nonexistent/codesign"]);
+    expect([missing.code, missing.stderr]).toEqual([1, expect.stringContaining("ENOENT")]);
+    const started = Date.now(), killed = await sh(["/bin/sleep", "10"], AbortSignal.timeout(50));
+    expect([killed.code, Date.now() - started < 5000]).toEqual([1, true]);
+  });
+
+  test("a release or Runner build embeds SPARK_RELEASE_REVISION as its source revision; other builds do not", () => {
+    expect(releaseRevision("release", { SPARK_RELEASE_REVISION: COMMIT })).toBe(COMMIT);
+    expect(releaseRevision("go", { SPARK_RELEASE_REVISION: COMMIT })).toBe(COMMIT);
+    expect(releaseRevision("dev", { SPARK_RELEASE_REVISION: COMMIT })).toBeUndefined();
+    expect(releaseRevision("release", {})).toBeUndefined();
+    expect(() => releaseRevision("release", { SPARK_RELEASE_REVISION: "HEAD" })).toThrow("Invalid release source revision");
+  });
 });
 
 describe("signature verification", () => {
-  test("reads codesign and spctl output and judges it per mode", () => {
+  test("reads codesign, spctl and stapler output and judges it per mode", async () => {
     const mac = new FakeMac("ad-hoc");
-    const adhoc = verify("/x/KitchenSink.app", mac.sh);
+    const adhoc = await verify("/x/KitchenSink.app", mac.sh);
     expect(adhoc).toMatchObject({ signature: "ad-hoc", authority: undefined, hardenedRuntime: false, notarized: false, codesign: { valid: true }, gatekeeper: { accepted: false, source: undefined } });
     expect(judgeSignature(adhoc, true)).toEqual([]);
     expect(judgeSignature(adhoc, false).map(reason => reason.check)).toEqual(["signature", "notarization"]);
     mac.signing = "notarized";
-    const notarized = verify("/x/KitchenSink.app", mac.sh);
+    const notarized = await verify("/x/KitchenSink.app", mac.sh);
     expect(notarized).toMatchObject({ signature: "developer-id", gatekeeper: { accepted: true, source: "Notarized Developer ID" }, notarized: true });
     expect(judgeSignature(notarized, false)).toEqual([]);
   });
@@ -350,20 +461,23 @@ describe("publish guard", () => {
     expect(releaseTargets(path.resolve("."))).toEqual(["macos-14/arm64@macbook-air-m1-8gb", "macos-15/arm64", "macos-26/arm64", "macos-27/arm64", "macos-27/arm64@macbook-pro-14-base"]);
   });
 
+  const text = (dir: string, revision: string) => harnessProblems(dir, revision).map(({ target, problem }) => `${target}: ${problem}`);
+
   test("refuses without a passing non-local report for this exact commit on every release target, and accepts real passing reports", async () => {
     const dir = repo();
-    expect(harnessProblems(dir, COMMIT)).toEqual([
-      `macos-14/arm64@air-m1: no harness report at artifacts/harness/${COMMIT}/macos-14-arm64@air-m1/report.json; run bun run harness --target macos-14/arm64@air-m1 --artifact <signed .dmg or .zip> for ${COMMIT}`,
-      `macos-15/arm64: no harness report at artifacts/harness/${COMMIT}/macos-15-arm64/report.json; run bun run harness --target macos-15/arm64 --artifact <signed .dmg or .zip> for ${COMMIT}`,
+    expect(text(dir, COMMIT)).toEqual([
+      `macos-14/arm64@air-m1: no harness report at artifacts/harness/${COMMIT}/macos-14-arm64@air-m1/report.json; run bun run harness --target macos-14/arm64@air-m1 --artifact <signed .dmg or .zip> for ${COMMIT} on the reference machine air-m1 itself (physical hardware: Seth)`,
+      `macos-15/arm64: no harness report at artifacts/harness/${COMMIT}/macos-15-arm64/report.json; run bun run harness --target macos-15/arm64 --artifact <signed .dmg or .zip> for ${COMMIT} on a Mac running macos-15, or add --vm <macos-15 tart image> (no VMs run on the shared development Mac: Seth)`,
     ]);
+    expect(() => requireHarnessPass(dir, COMMIT)).toThrow(`Refusing to publish ${COMMIT}: every release target needs a passing harness report for this build (docs/release-harness.md).\nTargets without one (2 of 2): macos-14/arm64@air-m1, macos-15/arm64\n- macos-14/arm64@air-m1: no harness report`);
     await harness(["--local"], { dir, signing: "ad-hoc" });
     await harness(["--artifact", artifact("KitchenSink.zip"), "--target", "macos-15/arm64"], { dir, host: SEQUOIA, signing: "ad-hoc" });
-    expect(harnessProblems(dir, COMMIT)).toEqual([
+    expect(text(dir, COMMIT)).toEqual([
       `macos-14/arm64@air-m1: artifacts/harness/${COMMIT}/macos-14-arm64@air-m1/report.json is from a --local run, which is never releasable`,
       expect.stringMatching(/^macos-15\/arm64: the harness did not pass: \[signature\] the app is signed ad-hoc; .*; \[notarization\] .*; \[gate\] not run: /),
     ]);
-    expect(() => requireHarnessPass(dir, COMMIT)).toThrow(/^Refusing to publish 0123456789abcdef0123456789abcdef01234567: every release target needs a passing harness report for this build/);
     await harness(["--artifact", artifact("KitchenSink.zip")], { dir });
+    expect(() => requireHarnessPass(dir, COMMIT)).toThrow("\nTargets without one (1 of 2): macos-15/arm64\n");
     await harness(["--artifact", artifact("KitchenSink.dmg"), "--target", "macos-15/arm64"], { dir, host: SEQUOIA });
     expect(harnessProblems(dir, COMMIT)).toEqual([]);
     expect(() => requireHarnessPass(dir, COMMIT)).not.toThrow();
@@ -371,9 +485,25 @@ describe("publish guard", () => {
     expect(harnessProblems(dir, other)).toHaveLength(2);
     // A report copied to another commit's directory does not certify that commit.
     cpSync(path.join(dir, "artifacts/harness", COMMIT), path.join(dir, "artifacts/harness", other), { recursive: true });
-    expect(harnessProblems(dir, other)).toEqual([
+    expect(text(dir, other)).toEqual([
       `macos-14/arm64@air-m1: artifacts/harness/${other}/macos-14-arm64@air-m1/report.json is not a harness report for macos-14/arm64@air-m1 at ${other}`,
       `macos-15/arm64: artifacts/harness/${other}/macos-15-arm64/report.json is not a harness report for macos-15/arm64 at ${other}`,
     ]);
+  });
+
+  test("a passing report whose installed app was built from another commit, or records none, does not certify the release", async () => {
+    const dir = repo();
+    await harness(["--artifact", artifact("KitchenSink.zip")], { dir });
+    await harness(["--artifact", artifact("KitchenSink.zip"), "--target", "macos-15/arm64"], { dir, host: SEQUOIA });
+    expect(harnessProblems(dir, COMMIT)).toEqual([]);
+    // An old signed artifact next to today's clean checkout: the harness refuses it (see above), and a report edited to
+    // claim a pass, or written before reports recorded the revision, is refused by the guard.
+    const file = path.join(reportDir(dir, COMMIT, "macos-15/arm64"), "report.json");
+    const report: HarnessReport = JSON.parse(readFileSync(file, "utf8"));
+    writeFileSync(file, JSON.stringify({ ...report, install: { ...report.install, sourceRevision: "f".repeat(40) } }));
+    expect(text(dir, COMMIT)).toEqual([`macos-15/arm64: artifacts/harness/${COMMIT}/macos-15-arm64/report.json does not show the installed app was built from ${COMMIT} (it records ${"f".repeat(40)})`]);
+    writeFileSync(file, JSON.stringify({ ...report, install: { app: report.install!.app, quarantine: report.install!.quarantine } }));
+    expect(text(dir, COMMIT)).toEqual([`macos-15/arm64: artifacts/harness/${COMMIT}/macos-15-arm64/report.json does not show the installed app was built from ${COMMIT} (it records no source revision)`]);
+    expect(() => requireHarnessPass(dir, COMMIT)).toThrow("Targets without one (1 of 2): macos-15/arm64");
   });
 });

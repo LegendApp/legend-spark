@@ -3,6 +3,7 @@
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { readRuntime } from "../../packages/cli/src/local.ts";
 import { FlowFormatError } from "../e2e/format/parser.ts";
 import { runGate, type GateEnv } from "../e2e/gate/gate.ts";
 import { plan, repoPath, UsageError, type GatePlan, type Host } from "../e2e/gate/plan.ts";
@@ -45,10 +46,14 @@ export type HarnessReport = {
   dirty: boolean;
   startedAt: string;
   durationMs: number;
-  /** Where the app was installed: this machine, or a VM clone (`host` is then the guest). */
-  environment: { kind: "host" | "vm"; host: Host; vm?: { driver: string; image: string } };
+  /**
+   * Where the app was installed: this machine, or a VM clone (`host` is then the guest). `clean` is true only for a
+   * fresh clone of a VM image; on this machine the harness runs in the current account, with its developer tools.
+   */
+  environment: { kind: "host" | "vm"; clean: boolean; host: Host; vm?: { driver: string; image: string } };
   artifact?: { file: string; format: "dmg" | "zip"; sha256: string; packagedFrom?: string };
-  install?: { app: string; quarantine: string };
+  /** `sourceRevision`: the commit the installed app says it was built from (spark-runtime.json), absent when it records none. */
+  install?: { app: string; quarantine: string; sourceRevision?: string };
   signature?: Verification & { summary: string };
   gate?: { verdict: "PASS" | "FAIL"; report: string; reasons: string[] };
   /** Every reason the verdict is FAIL. Empty means PASS. */
@@ -72,7 +77,7 @@ export function guestScript(share: string, args: string[]): string {
 }
 
 /** The artifact to install: `--artifact`, or under `--local` the gate's release build packaged as a DMG in the report directory. */
-function artifactFor(options: HarnessOptions, gatePlan: GatePlan, work: string, dir: string, env: HarnessEnv): { file: string; packagedFrom?: string } {
+async function artifactFor(options: HarnessOptions, gatePlan: GatePlan, work: string, dir: string, env: HarnessEnv): Promise<{ file: string; packagedFrom?: string }> {
   if (options.artifact) {
     const file = path.resolve(options.artifact);
     if (!existsSync(file)) throw new HarnessError("artifact", `${file} does not exist`);
@@ -80,28 +85,39 @@ function artifactFor(options: HarnessOptions, gatePlan: GatePlan, work: string, 
   }
   const build = gatePlan.artifact;
   if (!build || !existsSync(build)) throw new HarnessError("artifact", `the release build ${build ? repoPath(env.repo, build) : "for this target"} does not exist; build it with cd examples/kitchen-sink && bun run build`);
-  const file = packageDmg(build, work, env.sh);
+  const file = await packageDmg(build, work, env.sh);
   mkdirSync(dir, { recursive: true });
   copyFileSync(file, path.join(dir, path.basename(file)));
   return { file: path.join(dir, path.basename(file)), packagedFrom: repoPath(env.repo, build) };
+}
+
+/**
+ * A release report certifies `commit`, so the installed app must say it was built from it: an old signed artifact
+ * next to today's checkout is another build. Without a recorded revision it fails. `--local` records it only.
+ */
+export function judgeRevision(revision: string | undefined, commit: string, local: boolean): HarnessReason[] {
+  if (local || revision === commit) return [];
+  if (!revision) return [{ check: "revision", message: `the installed app records no source revision (Contents/Resources/spark-runtime.json sourceRevision), so nothing ties it to ${commit}; build the release with SPARK_RELEASE_REVISION=${commit}` }];
+  return [{ check: "revision", message: `the installed app was built from ${revision}, not ${commit}: this run would certify another build` }];
 }
 
 /** Installs on this machine into a fresh temporary Applications folder, verifies, and runs the gate against the installed app. */
 async function onHost(options: HarnessOptions, gatePlan: GatePlan, report: HarnessReport, dir: string, env: HarnessEnv) {
   const work = mkdtempSync(path.join(os.tmpdir(), "spark-harness-"));
   try {
-    const { file, packagedFrom } = artifactFor(options, gatePlan, work, dir, env);
+    const { file, packagedFrom } = await artifactFor(options, gatePlan, work, dir, env);
     env.gate.stdout(`installing ${path.basename(file)} as a quarantined download…`);
-    const installed = install(file, work, env.sh, env.now?.());
+    const installed = await install(file, work, env.sh, report.reasons, env.now?.());
+    const sourceRevision = readRuntime(installed.app)?.sourceRevision;
     report.artifact = { file: repoPath(env.repo, file), format: installed.format, sha256: installed.sha256, ...(packagedFrom ? { packagedFrom } : {}) };
-    report.install = { app: installed.app, quarantine: installed.quarantine };
-    const verification = verify(installed.app, env.sh);
+    report.install = { app: installed.app, quarantine: installed.quarantine, ...(sourceRevision ? { sourceRevision } : {}) };
+    const verification = await verify(installed.app, env.sh);
     report.signature = { ...verification, summary: describeSignature(verification) };
-    env.gate.stdout(`signature: ${report.signature.summary}; Gatekeeper ${verification.gatekeeper.accepted ? "accepts" : "rejects"} it`);
-    const problems = judgeSignature(verification, options.local);
+    env.gate.stdout(`signature: ${report.signature.summary}; Gatekeeper ${verification.gatekeeper.accepted ? "accepts" : "rejects"} it; built from ${sourceRevision ?? "an unrecorded revision"}`);
+    const problems = [...judgeSignature(verification, options.local), ...judgeRevision(sourceRevision, report.commit, options.local)];
     report.reasons.push(...problems);
     if (problems.length && !options.local) {
-      report.reasons.push({ check: "gate", message: "not run: Gatekeeper would not let a person open this app" });
+      report.reasons.push({ check: "gate", message: "not run: the installed app failed the release checks above" });
       return;
     }
     const tested = plan(gatePlan.root, gatePlan.host, { target: options.target, artifact: installed.app });
@@ -110,7 +126,14 @@ async function onHost(options: HarnessOptions, gatePlan: GatePlan, report: Harne
     writeGateReport(gateReport, files, env.repo);
     report.gate = { verdict: gateReport.verdict, report: "gate/report.json", reasons: gateReport.reasons.map(reasonText) };
     if (gateReport.verdict === "FAIL") report.reasons.push({ check: "gate", message: `the release gate failed (${path.relative(env.repo, files.html)}):\n${report.gate.reasons.map(reason => `  ${reason.replace(/\n/g, "\n    ")}`).join("\n")}` });
-  } finally { rmSync(work, { recursive: true, force: true }); }
+  } finally { removeWork(work, report); }
+}
+
+/** Removes a temporary folder without hiding the run's own error; a folder that stays (a mounted volume, say) is a reason. */
+function removeWork(work: string, report: HarnessReport) {
+  try { rmSync(work, { recursive: true, force: true }); } catch (error) {
+    report.reasons.push({ check: "install", message: `could not remove ${work}: ${(error as Error).message}` });
+  }
 }
 
 /** Boots a clone of `options.vm`, runs the harness inside on a git archive of the commit, and takes the guest's report. */
@@ -120,27 +143,32 @@ async function inVm(options: HarnessOptions, gatePlan: GatePlan, report: Harness
   if (report.dirty) throw new HarnessError("source", "the VM installs from a git archive of HEAD; commit your changes first");
   const share = mkdtempSync(path.join(os.tmpdir(), "spark-harness-share-"));
   try {
-    const { file, packagedFrom } = artifactFor(options, gatePlan, share, dir, env);
+    const { file, packagedFrom } = await artifactFor(options, gatePlan, share, dir, env);
     copyFileSync(file, path.join(share, path.basename(file)));
-    const archive = env.sh(["git", "-C", env.repo, "archive", "--format=tar.gz", "-o", path.join(share, "source.tar.gz"), report.commit]);
+    const archive = await env.sh(["git", "-C", env.repo, "archive", "--format=tar.gz", "-o", path.join(share, "source.tar.gz"), report.commit]);
     if (archive.code) throw new HarnessError("vm", `git archive ${report.commit} failed: ${archive.stderr.trim()}`);
     copyFileSync(env.bun, path.join(share, "bun"));
     chmodSync(path.join(share, "bun"), 0o755);
+    // Interrupting (cli.ts aborts env.gate.signal on SIGINT/SIGTERM) stops the boot or the guest's run, and the clone is still disposed.
+    const signal = env.gate.signal;
+    const interrupted = () => { if (signal?.aborted) throw new HarnessError("vm", "interrupted; the clone was disposed"); };
+    interrupted();
     env.gate.stdout(`booting a ${env.vm.name} clone of ${options.vm}…`);
-    const guest = await env.vm.boot(options.vm!, share);
+    const guest = await env.vm.boot(options.vm!, share, signal).catch((error: unknown) => { interrupted(); throw error; });
     let result;
     try {
       result = await guest.exec(["/bin/bash", "-c", guestScript(guest.share, [
         "--target", target.id, "--artifact", `${guest.share}/${path.basename(file)}`, "--commit", report.commit, ...(options.local ? ["--local"] : []),
-      ])]);
+      ])], signal);
     } finally { await guest.dispose(); }
+    interrupted();
     env.gate.stdout(result.output.trimEnd());
     const out = path.join(share, "out", path.relative(path.join(env.repo, "artifacts/harness"), dir));
     if (!existsSync(path.join(out, "report.json"))) throw new HarnessError("vm", `the guest wrote no harness report (exit ${result.code}); its output is above`);
     cpSync(out, dir, { recursive: true });
     const guestReport = JSON.parse(readFileSync(path.join(dir, "report.json"), "utf8")) as HarnessReport;
     return {
-      ...guestReport, startedAt: report.startedAt, environment: { kind: "vm", host: guestReport.environment.host, vm: { driver: env.vm.name, image: options.vm! } },
+      ...guestReport, startedAt: report.startedAt, environment: { kind: "vm", clean: true, host: guestReport.environment.host, vm: { driver: env.vm.name, image: options.vm! } },
       ...(guestReport.artifact ? { artifact: { ...guestReport.artifact, file: repoPath(env.repo, file), ...(packagedFrom ? { packagedFrom } : {}) } } : {}),
     };
   } finally { rmSync(share, { recursive: true, force: true }); }
@@ -156,7 +184,7 @@ export async function runHarness(options: HarnessOptions, env: HarnessEnv): Prom
   rmSync(dir, { recursive: true, force: true });
   let report: HarnessReport = {
     version: 1, verdict: "FAIL", releasable: false, local: options.local, target: target?.id, commit, dirty,
-    startedAt: (env.now?.() ?? new Date()).toISOString(), durationMs: 0, environment: { kind: "host", host }, reasons: [],
+    startedAt: (env.now?.() ?? new Date()).toISOString(), durationMs: 0, environment: { kind: "host", clean: false, host }, reasons: [],
   };
   const fit = gatePlan.problems.filter(problem => problem.check === "target");
   try {
