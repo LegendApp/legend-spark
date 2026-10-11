@@ -121,6 +121,14 @@ checks:
     spec: "#91 decision comment"
     covers:
       - ./ui#Button
+  CTRL-SIDEBAR-01:
+    title: The Sidebar data items, dynamic heights and React rows screens mount without crashing in light and dark, English and Arabic (goldens wait for #264 and #265)
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #252"
+    covers:
+      - ./ui/sidebar#Sidebar
+      - ./ui/sidebar#SidebarItem
   CTRL-UNSUP-01:
     title: On Windows every primitive reports unsupported-platform and rendering one throws SparkError E_UNSUPPORTED_PLATFORM (WinUI work is #228)
     platforms: [windows]

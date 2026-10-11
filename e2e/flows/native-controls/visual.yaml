@@ -5,15 +5,15 @@ intent: >
   Split view, SF Symbols and Search field match the approved golden for the appearance (light and dark) and locale,
   with the shell sidebar masked: SF Symbols in English and Arabic, Split view and Search field in English only until
   they mirror in right-to-left layouts. Glass and the four size grids render but are not compared until their layout bugs
-  are fixed; the Sidebar screens crash on mount and are not opened.
-checks: [CTRL-VISUAL-01]
+  are fixed. The three Sidebar screens mount without crashing (#252) but are not compared until their rows fit (#264)
+  and the selected row captures correctly (#265).
+checks: [CTRL-VISUAL-01, CTRL-SIDEBAR-01]
 tags: [native-controls]
 platforms: [macos]
 matrix:
   appearance: [light, dark]
   locale: [en, ar]
 ---
-# Sidebar: data items, dynamic heights and React rows crash on mount (#252).
 - launchApp: { openUrl: "spark-ks://native-controls/split-view" }
 - assertVisible: { id: native-controls-split-view-root }
 # Arabic: no golden until the view mirrors in RTL (#256).
@@ -37,3 +37,10 @@ matrix:
 - assertVisible: { id: native-controls-indicators-root }
 - launchApp: { openUrl: "spark-ks://native-controls/buttons", stopApp: false }
 - assertVisible: { id: native-controls-buttons-root }
+# No goldens: rows overflow the Sidebar's trailing edge (#264) and the selected row captures black (#265).
+- launchApp: { openUrl: "spark-ks://native-controls/sidebar-data-items", stopApp: false }
+- assertVisible: { id: native-controls-sidebar-data-items-list }
+- launchApp: { openUrl: "spark-ks://native-controls/sidebar-dynamic-heights", stopApp: false }
+- assertVisible: { id: native-controls-sidebar-dynamic-heights-list }
+- launchApp: { openUrl: "spark-ks://native-controls/sidebar-react-rows", stopApp: false }
+- assertVisible: { id: native-controls-sidebar-react-rows-list }
