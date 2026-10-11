@@ -29,7 +29,7 @@ vi.mock("@legendapp/spark/ui", async () => {
     sampleScreenColor: async () => state.available ? { canceled: false, color: "#a1b2c3" } : unsupported(),
   };
 });
-for (const [file, names] of Object.entries({ Glass: ["Glass"], Search: ["Search"], SFSymbols: ["SFSymbols"], Sidebar: ["SidebarDataItems", "SidebarDynamicHeights", "SidebarReactRows"], SplitView: ["SplitView"] })) {
+for (const [file, names] of Object.entries({ Glass: ["Glass"], Search: ["Search"], SFSymbols: ["SFSymbols"], Sidebar: ["SidebarDataItems", "SidebarDynamicHeights", "SidebarReactRows"], SplitView: ["SplitView"], Table: ["TableScreen", "OutlineScreen"], PopoverScreen: ["PopoverScreen"], TabViewScreen: ["TabViewScreen"] })) {
   vi.doMock(`../examples/kitchen-sink/screens/native-controls/${file}`, () => Object.fromEntries(names.map(name => [name, () => null])));
 }
 import { Pickers } from "../examples/kitchen-sink/screens/native-controls/Pickers";

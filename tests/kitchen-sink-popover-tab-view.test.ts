@@ -31,7 +31,7 @@ const byID = (testID: string) => rendered.root.find((node: any) => typeof node.t
 const text = (testID: string) => byID(testID).props.children;
 
 test("the Popover and Tab view screens are registered last in native-controls", async () => {
-  for (const [file, names] of Object.entries({ ControlPrimitives: ["Buttons", "Indicators", "Inputs", "Toggles", "Boundary", "describe"], Glass: ["Glass"], Search: ["Search"], SFSymbols: ["SFSymbols"], Sidebar: ["SidebarDataItems", "SidebarDynamicHeights", "SidebarReactRows"], SplitView: ["SplitView"], Table: ["TableScreen", "OutlineScreen"] })) {
+  for (const [file, names] of Object.entries({ ControlPrimitives: ["Buttons", "Indicators", "Inputs", "Toggles", "Boundary", "describe"], Glass: ["Glass"], Pickers: ["Pickers"], Search: ["Search"], SFSymbols: ["SFSymbols"], Sidebar: ["SidebarDataItems", "SidebarDynamicHeights", "SidebarReactRows"], SplitView: ["SplitView"], Table: ["TableScreen", "OutlineScreen"] })) {
     vi.doMock(`../examples/kitchen-sink/screens/native-controls/${file}`, () => Object.fromEntries(names.map(name => [name, () => null])));
   }
   const { default: registered } = await import("../examples/kitchen-sink/screens/native-controls/index");
