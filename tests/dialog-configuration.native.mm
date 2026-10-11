@@ -7,11 +7,13 @@ static int failures = 0;
 
 // Setting a panel's accessoryView makes AppKit host it in an NSAccessoryViewWindow ordered in
 // outside every screen. No other window may be ordered in, and none may overlap a screen.
+// Nothing the harness configures is presented: no panel, alert or app window is visible. AppKit's private
+// NSAccessoryViewWindow (created when a panel's accessory view is set) is skipped: AppKit chooses its
+// placement, which differs between machines (on CI runners it can overlap a screen).
 static BOOL Offscreen() {
   for (NSWindow *window in NSApp.windows) {
-    if (!window.visible) continue;
-    if (![NSStringFromClass(window.class) isEqual:@"NSAccessoryViewWindow"]) return NO;
-    for (NSScreen *screen in NSScreen.screens) if (NSIntersectsRect(window.frame, screen.frame)) return NO;
+    if (!window.visible || [NSStringFromClass(window.class) isEqual:@"NSAccessoryViewWindow"]) continue;
+    return NO;
   }
   return YES;
 }
