@@ -47,6 +47,7 @@ int main() { @autoreleasepool {
   NSColorPanel *panel = NSColorPanel.sharedColorPanel;
 
   // Color: configure, take the target, present; setup reports no change.
+  panel.continuous = NO;
   Result shown = Call(panels, @"colorPanel.show", @{ @"sessionId": @"c1", @"color": @"#ff000080", @"alpha": @YES, @"mode": @"wheel" });
   assert([shown.value isEqual:@"null"] && !shown.code && colorShown == 1 && events.count == 0);
   assert(panel.showsAlpha && panel.mode == NSColorPanelModeWheel && panel.continuous && [panel valueForKey:@"target"] == panels && [SparkHexFromColor(panel.color, YES) isEqual:@"#ff000080"]);
@@ -62,6 +63,8 @@ int main() { @autoreleasepool {
   // A ColorWell taking the panel ends the session and releases the target.
   [NSNotificationCenter.defaultCenter postNotificationName:SparkColorPanelOwnerWillChange object:[NSObject new]];
   assert(([events.lastObject isEqual:@{ @"type": @"colorPanelClose", @"sessionId": @"c2", @"reason": @"replaced" }]) && [panel valueForKey:@"target"] == nil);
+  // A session makes the panel continuous only while it lasts; the owner's setting comes back.
+  assert(!panel.continuous);
   NSUInteger count = events.count; [panels colorChanged:panel]; assert(events.count == count);
   // The user closing the panel ends the session as dismissed.
   Call(panels, @"colorPanel.show", @{ @"sessionId": @"c3", @"color": @"#123456", @"alpha": @NO, @"mode": @"rgb" });
@@ -136,7 +139,7 @@ int main() { @autoreleasepool {
   Call(panels, @"fontPanel.show", @{ @"sessionId": @"f5", @"family": @"Menlo", @"size": @11, @"weight": @400, @"italic": @NO });
   count = events.count; [panels invalidate];
   assert(events.count == count && [panel valueForKey:@"target"] == nil && manager.target == nil);
-  assert(colorHidden == colorHiddenBefore + 1 && fontHidden == fontHiddenBefore + 1);
+  assert(colorHidden == colorHiddenBefore + 1 && fontHidden == fontHiddenBefore + 1 && !panel.continuous);
   // A module with no session leaves panels another owner may be using.
   [[RNSparkPanels new] invalidate]; assert(colorHidden == colorHiddenBefore + 1 && fontHidden == fontHiddenBefore + 1);
   [NSNotificationCenter.defaultCenter postNotificationName:NSWindowWillCloseNotification object:panel];

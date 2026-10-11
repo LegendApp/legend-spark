@@ -36,7 +36,7 @@ static NSDictionary<NSString *, NSNumber *> *SparkColorModes(void) {
 // Observers exist only while a session does, and a session's end removes them.
 @interface RNSparkPanels () <NSFontChanging>
 @property NSString *colorSession, *fontSession;
-@property BOOL colorAlpha;
+@property BOOL colorAlpha, colorWasContinuous;
 @property NSFont *font;
 @property NSColorSampler *sampler;
 @end
@@ -52,6 +52,7 @@ RCT_EXPORT_MODULE(NativeSparkPanels)
   // NSColorPanel has no target getter. A well taking over announces itself before it activates,
   // so clearing here never strips another owner's target.
   NSColorPanel.sharedColorPanel.target = nil; NSColorPanel.sharedColorPanel.action = NULL;
+  NSColorPanel.sharedColorPanel.continuous = self.colorWasContinuous;
   if (reason) SparkEmit(@{ @"type": @"colorPanelClose", @"sessionId": session, @"reason": reason });
 }
 - (void)endFontSession:(NSString *)reason {
@@ -95,6 +96,7 @@ static BOOL SparkRefuseInDriver(RCTPromiseRejectBlock reject, NSString *what) {
     [NSNotificationCenter.defaultCenter postNotificationName:SparkColorPanelOwnerWillChange object:self];
     NSColorPanel *panel = NSColorPanel.sharedColorPanel;
     // Configure before taking the target, so setup never reports a change.
+    self.colorWasContinuous = panel.continuous;
     panel.showsAlpha = [args[@"alpha"] boolValue]; panel.continuous = YES;
     if (mode) panel.mode = (NSColorPanelMode)mode.integerValue;
     if ([args[@"color"] length]) panel.color = SparkColorFromHex(args[@"color"]);
