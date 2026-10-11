@@ -69,7 +69,7 @@ ${report.warnings.length ? `<h2>Warnings (${report.warnings.length})</h2>${pre(r
 <h2>Flows (${report.flows.length})</h2>
 ${table(["Run", "Kind", "Blocking", "Status", "Time", "Failure or sign-off"], report.flows.map(flow => [
     escape(flow.id), flowKind(flow.manual), flow.blocking ? "yes" : "no", `<b>${flow.status}</b>`, flow.durationMs === undefined ? "" : `${flow.durationMs}ms`,
-    escape(flow.failure ?? (flow.signoff ? `${flow.signoff.verdict} by ${flow.signoff.by}, ${flow.signoff.at}` : "")),
+    escape(flow.failure ?? (flow.signoff ? `${flow.signoff.verdict} by ${flow.signoff.by} on ${flow.signoff.machine}, ${flow.signoff.at}${flow.signoff.note ? `: ${flow.signoff.note}` : ""}` : flow.manualSteps?.length ? `awaiting sign-off: ${flow.manualSteps.map(step => step.instruction).join(" / ")}` : "")),
   ]))}
 ${report.excluded.length ? `<h2>Not for this target (${report.excluded.length})</h2>${table(["Flow", "Why"], report.excluded.map(flow => [escape(flow.path), escape(flow.reason)]))}` : ""}
 <h2>Budgets${report.machine ? ` on ${escape(report.machine)}` : ""}</h2>

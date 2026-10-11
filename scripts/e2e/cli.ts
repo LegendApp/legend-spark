@@ -8,7 +8,8 @@ import { checkFile } from "./format/lint.ts";
 import { formatDiagnostic } from "./format/parser.ts";
 import { gateCommand } from "./gate/gate.ts";
 import { goldenCommand } from "./golden/approve.ts";
-import { detectHost, hostEnv } from "./gate/host.ts";
+import { detectHost, hostEnv, signoffEnv } from "./gate/host.ts";
+import { signoffCommand } from "./gate/signoff.ts";
 import { BACKENDS, runCommand } from "./runner/run.ts";
 
 const repo = path.resolve(import.meta.dirname, "../..");
@@ -51,6 +52,8 @@ if (mode === "schema") {
   process.exitCode = problems ? 1 : 0;
 } else if (mode === "golden") {
   process.exitCode = goldenCommand(args, path.join(repo, "e2e"), { stdout: line => console.log(line), stderr: line => console.error(line) });
+} else if (mode === "signoff") {
+  process.exitCode = await signoffCommand(args, path.join(repo, "e2e"), signoffEnv());
 } else if (mode === "run" || mode === "gate") {
   const controller = new AbortController();
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
@@ -58,6 +61,6 @@ if (mode === "schema") {
     ? await gateCommand(args, path.join(repo, "e2e"), { ...hostEnv(), signal: controller.signal })
     : await runCommand(args, { backends: BACKENDS, host: detectHost, stdout: line => console.log(line), stderr: line => console.error(line), signal: controller.signal });
 } else {
-  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema | bun run e2e:run [flows…] [--backend …] [--agent] [--report dir] [--app path] | bun run gate [--target id] [--flow path…] [--agent] [--dry-run] | bun run e2e:golden approve <path> [--to <golden id>]");
+  console.error("usage: bun run e2e:validate [paths…] | bun run e2e:lint [paths…] | bun run e2e:coverage [paths…] [--json] | bun run e2e:schema | bun run e2e:run [flows…] [--backend …] [--agent] [--report dir] [--app path] | bun run gate [--target id] [--flow path…] [--agent] [--dry-run] | bun run gate:signoff [--list] | bun run e2e:golden approve <path> [--to <golden id>]");
   process.exitCode = 2;
 }

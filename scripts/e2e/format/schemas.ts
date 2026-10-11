@@ -161,18 +161,20 @@ export function buildSignoffsSchema(): Schema {
   return {
     $schema: DRAFT,
     title: "Spark e2e manual sign-offs",
-    description: "Sign-offs for manual flows, one per flow run, target and commit. See docs/e2e-flows.md#manual-sign-offs.",
+    description: "Sign-offs for manual flows, one per flow run, target, commit and flow content. Written by bun run gate:signoff. See docs/e2e-flows.md#manual-sign-offs.",
     ...obj({
       signoffs: list(obj({
         flow: { ...str, description: "The flow run ID from the gate report, such as flows/ime/candidate[appearance=dark]." },
         target: { ...str, description: "The gate target, such as macos-15/arm64." },
         commit: { type: "string", pattern: "^[0-9a-f]{40}$", description: "a full 40-character commit SHA" },
+        flowHash: { type: "string", pattern: "^[0-9a-f]{64}$", description: "a 64-character SHA-256 of the flow file (the gate report's flowHash)" },
         verdict: oneOf("pass", "fail"),
-        by: { ...str, description: "Who signed off." },
+        by: { ...str, description: "Who signed off: git user.name <user.email>." },
+        machine: { ...str, description: "The machine it was signed on: host name and model." },
         at: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})$", description: "an ISO 8601 timestamp, such as 2026-10-10T12:00:00Z" },
         evidence: { ...list(str, 0), description: "Screenshots or recordings, relative to the repository root." },
-        note: str,
-      }, ["flow", "target", "commit", "verdict", "by", "at"]), 0),
+        note: { ...str, description: "What the person saw. Required with verdict: fail." },
+      }, ["flow", "target", "commit", "flowHash", "verdict", "by", "machine", "at"], { if: { properties: { verdict: { const: "fail" } }, required: ["verdict"] }, then: { required: ["note"] } }), 0),
     }, ["signoffs"]),
   };
 }

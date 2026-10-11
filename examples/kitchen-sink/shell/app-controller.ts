@@ -9,9 +9,9 @@ import { registerShortcut } from "@legendapp/spark/shortcuts";
 import { getSystemInfo } from "@legendapp/spark/system";
 import * as windows from "@legendapp/spark/windows";
 import { eventEntry, type Entry } from "../EventResults";
-import { reportLaunch } from "../launch";
+import { argument, reportLaunch, SIGNOFF_FLAG } from "../launch";
 import { MESSAGES, isRTL, resolveLocale, type Locale, type Messages } from "./i18n";
-import { listenForDeepLinks } from "./navigation";
+import { listenForDeepLinks, navigate } from "./navigation";
 
 // The Kitchen Sink's app-wide state and registrations: the Document menu, ⌘⇧K, the unsaved-changes
 // prompts on quit and main-window close, and deep links. They live for the process; screens observe them.
@@ -80,6 +80,7 @@ export async function startAppController(): Promise<void> {
     const context = await app.getAppContext();
     if (reportLaunch(context.launchArguments)) return;
     update({ locale: resolveLocale((await getSystemInfo()).locale) });
+    if (argument(context.launchArguments, SIGNOFF_FLAG)) navigate({ kind: "screen", area: "infra", screen: "sign-off" });
   } catch (error) { fail(error); return; }
   const t = strings();
   listenForDeepLinks(fail);

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Spark e2e manual sign-offs",
-  "description": "Sign-offs for manual flows, one per flow run, target and commit. See docs/e2e-flows.md#manual-sign-offs.",
+  "description": "Sign-offs for manual flows, one per flow run, target, commit and flow content. Written by bun run gate:signoff. See docs/e2e-flows.md#manual-sign-offs.",
   "type": "object",
   "properties": {
     "signoffs": {
@@ -24,6 +24,11 @@
             "pattern": "^[0-9a-f]{40}$",
             "description": "a full 40-character commit SHA"
           },
+          "flowHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "a 64-character SHA-256 of the flow file (the gate report's flowHash)"
+          },
           "verdict": {
             "enum": [
               "pass",
@@ -33,7 +38,12 @@
           "by": {
             "type": "string",
             "minLength": 1,
-            "description": "Who signed off."
+            "description": "Who signed off: git user.name <user.email>."
+          },
+          "machine": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The machine it was signed on: host name and model."
           },
           "at": {
             "type": "string",
@@ -51,18 +61,36 @@
           },
           "note": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "What the person saw. Required with verdict: fail."
           }
         },
         "required": [
           "flow",
           "target",
           "commit",
+          "flowHash",
           "verdict",
           "by",
+          "machine",
           "at"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "if": {
+          "properties": {
+            "verdict": {
+              "const": "fail"
+            }
+          },
+          "required": [
+            "verdict"
+          ]
+        },
+        "then": {
+          "required": [
+            "note"
+          ]
+        }
       },
       "minItems": 0
     }

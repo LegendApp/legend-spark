@@ -52,6 +52,7 @@ A file you name on the command line outside those folders is checked as a flow.
 | Run one flow on the last development build | `bun run e2e:run e2e/flows/<area>/<name>.yaml --agent` |
 | Run an area | `bun run e2e:run e2e/flows/<area> --agent` |
 | Judge one flow or area as the gate does (release build, signature, lint, coverage, budgets, sign-offs) | `bun run gate --flow e2e/flows/<area>[/<name>.yaml] --agent` |
+| See what a manual flow's run awaits from a person (you never sign off: see [From an agent](#from-an-agent)) | `bun run gate:signoff --list --scoped` after the `--flow` run |
 
 Both print one JSON object per line ([Agent mode](#agent-mode)). Read the last line:
 `run-end` has the `summary`, `gate-end` has the `verdict` and every `reasons` entry. A
@@ -257,6 +258,12 @@ bun run e2e:run e2e/flows/infra/catalog-driver.yaml --backend driver
   it report the failing command plus every call site (`stack`).
 - **`repeat`** checks `while` before each iteration and stops after `times`. With only
   `while`, the flow timeout bounds it.
+- **`manualStep`.** The runner never performs it. It records the step as awaiting sign-off (step status
+  `awaiting-signoff`, and an entry in the flow's `manual`), captures the main window in-process for
+  `evidence: screenshot` (on the driver backend, into `<run>/manual/step-<n>.png`), and runs the next command. Defaults
+  are `evidence: none` and `signoff: required`. `evidence: recording` is `unsupported`: no backend records the screen.
+  A manualStep is valid only in a flow with `manual: partial` or `manual: true` (validation reports an inline one; one in
+  a subflow fails with `invalid`), because only those flows get a sign-off. See [Manual sign-offs](#manual-sign-offs).
 - **Restoration.** Commands that change OS or app state register an undo. When the flow
   exits (pass, failure, timeout or Ctrl-C), the runner runs `onFlowComplete`, then the
   undos last-in first-out, then stops the backends. If a restoration fails, a flow that
@@ -300,11 +307,12 @@ Failure evidence is collected when the failure happens, before `onFlowComplete` 
 restoration change anything.
 
 `report.json` has `version`, `startedAt`, `durationMs`, `platform`, `backends`,
-`interrupted`, `summary` (`total`, `passed`, `failed`, `skipped`) and `flows`. Each flow
+`interrupted`, `summary` (`total`, `passed`, `failed`, `skipped`, and `awaitingSignoff`: runs with manual steps) and `flows`. Each flow
 has `id`, `file`, `name`, `intent`, `checks`, `tags`, `matrix`, `status`, `skipReason`,
 `durationMs`, `steps` (every command run, with `depth`, `status` and duration), `failure`,
-`bundle` (the [failure bundle](#failure-bundles) of a failed run), `errors` (problems after the first failure), `artifacts`, `goldens` (see [Visual goldens](#visual-goldens)), `metrics` (see [Metrics](#metrics)) and `whiteBox`
-(the black-box commands a driver backend ran in-process, sorted; such steps have `whiteBox: true`). A `failure` has `kind`,
+`bundle` (the [failure bundle](#failure-bundles) of a failed run), `errors` (problems after the first failure), `artifacts`, `goldens` (see [Visual goldens](#visual-goldens)), `metrics` (see [Metrics](#metrics)) `whiteBox`
+(the black-box commands a driver backend ran in-process, sorted; such steps have `whiteBox: true`) and `manual` (each manualStep reached: `instruction`, `expect`, `evidence`, `signoff`, `location`, `stack` and `screenshot`).
+A run with manual steps still passes; the console prints each one as `awaiting sign-off`. A `failure` has `kind`,
 `message`, `command`, `args` (that command's arguments after `${VAR}` substitution, when it
 got that far), `location`, `stack`, `candidates`, `matches`, `artifacts` and, for
 invalid flows, `diagnostics`. Artifact, golden and bundle paths are relative to the run directory.
@@ -897,8 +905,8 @@ the run fails without running flows; use `--dry-run` to plan other targets.
 4. **Build:** the target's artifact exists and, if asked, its signature verifies.
 5. **Flows:** the gate flows whose `platforms` include the target's platform, every
    matrix combination, run through the runner with every registered backend for that
-   platform. Flows with `manual: true` are not run; `manual: partial` flows are run and
-   signed off. Any failed or skipped blocking run fails the gate.
+   platform. Flows with `manual: true` are not run; `manual: partial` flows are run, and
+   their manual steps are recorded for sign-off. Any failed or skipped blocking run fails the gate.
 6. **Budgets** on a machine-bound target (see [Budgets](#budgets)).
 7. **Sign-offs** for every manual run (see [Manual sign-offs](#manual-sign-offs)).
 8. **Time budget** for the whole run.
@@ -914,7 +922,8 @@ reason for FAIL), `warnings` (non-blocking failures), `suite`, `appId`, `started
 `durationMs`, `timeBudgetMs`, `host`, `target`, `machine`, `commit`, `dirty`, `build`
 (`artifact`, `exists`, `signature`), `backends`, `coverage` (`required`, `covered`,
 `problems`), `flows` (one per run ID: `status` is `passed`, `failed`, `skipped`,
-`not-run`, `signed-off` or `unsigned`, plus `blocking`, `manual`, `failure`, `bundle`, `signoff`),
+`not-run`, `signed-off` or `unsigned`, plus `blocking`, `manual`, `failure`, `bundle`, and for manual runs `manualSteps`, `flowHash`
+and `signoff`; `manualSteps` screenshot paths are relative to the repository root),
 `excluded` (flows for other platforms), `budgets` (one entry per measurement:
 `metric`, `flow`, `value`, `baseline`, `limit`, `status`) and `run` (the runner's report
 directory) and, for a [scoped run](#scoped-runs---flow), `scope`. `check` is one of `manifest`, `target`, `source`, `lint`, `coverage`,
@@ -975,27 +984,127 @@ these names, so backends use them for the performance commands (the driver backe
 
 ### Manual sign-offs
 
-Flows with `manual: true` or `manual: partial` need one passing sign-off per run ID, for
-this target and the commit under test. Until the sign-off mode
-([#57](https://github.com/LegendApp/legend-spark/issues/57)) writes this file, it is
-written by hand, and the runner reports a `manualStep` as `unsupported`, so a
-`manual: partial` flow fails. The file is `signoffs` from the manifest (schema:
-`e2e/schema/signoffs.schema.json`):
+Some checks need a person: a menu's marks are legible, an IME candidate window sits under
+the caret, VoiceOver reads in order. A flow marks them with `manualStep`, and its header says how
+the rest runs:
+
+- `manual: partial`: the automated steps run. At each `manualStep` the runner records the
+  instruction and, for `evidence: screenshot`, captures the window in-process, then runs on.
+  A person signs off what the capture (or the running app) shows.
+- `manual: true`: nothing runs. The gate plans the flow's manual steps (following `runFlow` files
+  and `when: { platform, matrix }`; steps behind a `visible` condition are listed) and a person
+  performs them.
+
+```yaml
+manual: partial
+---
+- launchApp: { openUrl: "spark-ks://menus/audit" }
+- tapOn: { role: menuBarItem, label: Menu Audit }
+- manualStep:
+    instruction: Look at the open Menu Audit menu in the screenshot.
+    expect: Mixed selection shows a dash, not a checkmark.
+    evidence: screenshot      # screenshot | recording | none (default none; recording is unsupported)
+    signoff: required         # required | optional (default required)
+- pressKey: Escape
+```
+
+A run needs one passing sign-off for this target, this commit **and this content of the flow file**
+when it reaches a step with `signoff: required`. A run whose steps are all `optional` may have one. A
+`manual: true` flow with no required step fails the gate, because nothing would verify it. A `partial`
+run that fails before its manual step fails as a flow and needs no sign-off until it passes.
+
+#### Running a manual flow (people)
+
+```sh
+cd examples/kitchen-sink && bun run build   # the release build the gate tests
+bun run gate --flow e2e/flows/menus/macos-items.yaml   # or the full gate: bun run gate
+bun run gate:signoff --scoped   # opens the checklist for that run (without --scoped: the last full gate run)
+bun run gate --flow e2e/flows/menus/macos-items.yaml   # applies the sign-offs
+```
+
+Commit first: `gate:signoff` refuses uncommitted changes, because a sign-off certifies a commit. It
+reads the last gate report (`--scoped`: the last `gate --flow` report) and refuses when it is for another
+target or another commit than HEAD, when a manual flow file changed since, or when either run had
+uncommitted changes. It writes a session to
+`<sign-off file's directory>/manual/<first 12 of the commit>/session.json`, copies the runner's
+screenshots next to it (the next gate run deletes its run directory), and opens a new instance of the
+release build with `--ks-signoff <session.json>` (`open -W -n`). Quit any running Kitchen Sink first:
+its single-instance lock would take the session instead, and the command then reports that no
+sign-offs were recorded.
+
+The app opens **Gate infrastructure > Manual sign-off** (`spark-ks://infra/sign-off`). It shows the
+target, commit and who is signing (`git config user.name` and `user.email`, and the host name and
+model), then each run with its name, intent, steps (`instruction`, `expect`, the screenshot the
+in-app driver captured at that step, without screen-recording permission) and a note field. For a
+`manual: true` step, do it in the app (the checklist keeps its state while you visit other screens),
+then come back. **Pass** or **Fail** records the decision at once in the session's `decisions.json`:
+
+- **Fail** needs a note that says what was wrong.
+- **Pass** needs evidence: the runner's screenshots, or a note when a step asks for evidence that was
+  not captured (a `manual: true` flow never runs, so it has none). A step with `evidence: none` needs neither.
+- A `partial` run whose automated steps did not pass is listed as not ready, with the failure, and
+  cannot be signed off.
+
+When the app quits, the command checks the decisions (each must be a ready run of the session, with
+its target, commit, flow hash and signer), prints them, and asks you to type your `user.name` to sign
+them. Only then does it replace any earlier sign-off of the same run on this target and write the
+sign-off file, validated against its schema. Any other answer writes nothing.
+
+#### From an agent
+
+**Agents never sign off.** Run the manual flow the way the gate judges it, and report what awaits a
+person:
+
+```sh
+bun run gate --flow e2e/flows/<area>/<flow>.yaml --agent   # an unsigned manual run fails with check "signoffs"
+bun run gate:signoff --list --scoped                         # prints each run, its steps and screenshots; opens nothing
+```
+
+`bun run gate:signoff` without `--list` refuses unless stdin and stdout are a terminal, before it
+writes anything. Do not run it through a pseudo-terminal, drive the checklist, or write
+`decisions.json` or the sign-off file: say in your PR which runs await sign-off and stop.
+
+#### Trust model
+
+This is a local tool, not a cryptographic one. The sign-off file is plain YAML on the machine that ran
+the gate (`artifacts/gate/`, not committed), and anyone with a shell there can write a well-formed one
+by hand. The tooling makes the honest path the only easy one and fails closed: the gate accepts only a
+sign-off for the exact target, commit and flow content it is judging; `gate:signoff` needs a terminal
+and a typed confirmation, and names the person from git config. `by` records who confirmed, not proof
+of who they are. Treat a sign-off as the statement of whoever controls that machine, and review it
+like any other release record.
+
+#### The sign-off file
+
+`signoffs` from the manifest (schema: `e2e/schema/signoffs.schema.json`), written by `gate:signoff`:
 
 ```yaml
 signoffs:
   - flow: flows/menus/macos-items[appearance=dark]   # the run ID from the gate report
     target: macos-15/arm64
     commit: 0123456789abcdef0123456789abcdef01234567  # git rev-parse HEAD
+    flowHash: 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae  # SHA-256 of the flow file
     verdict: pass                                     # pass | fail
-    by: Jane Doe
-    at: 2026-10-10T14:03:00Z
-    evidence: [artifacts/gate/manual/macos-items-dark.png]   # optional, must exist
-    note: optional
+    by: Jane Doe <jane@example.com>                   # git user.name <user.email>, confirmed at the terminal
+    machine: qa-mac (Mac16,5)                         # host name (model)
+    at: 2026-10-10T14:03:00Z                          # when the person decided
+    evidence: [artifacts/gate/manual/0123456789ab/evidence/flows-menus-macos-items-appearance-dark-1.png]
+    note: required with verdict fail
 ```
 
-A missing file, a missing or duplicated sign-off, `verdict: fail`, or missing evidence
-fails the gate with `signoffs`.
+`flowHash` is the SHA-256 of the flow file's bytes (the gate report has it per manual run as
+`flowHash`). It covers the flow file only, not the subflows it runs; those are covered by `commit`. The
+gate fails with `signoffs` when the file is missing or invalid, a required sign-off is missing, a run
+has more than one sign-off for this commit and flow content, the only sign-off is stale (for another
+commit or flow content: the reason names both and says when the flow changed), the verdict is `fail`
+(the reason carries the note), or evidence is missing. A manual `true` run without a valid sign-off is
+`unsigned` in the report.
+
+`tests/e2e-gate.test.ts` covers each case with fixture gate runs and drives the checklist service
+(`examples/kitchen-sink/screens/infra/sign-off.ts`) end to end through `gate:signoff`, with test doubles
+for the app launch and the person's typed confirmation; `tests/e2e-runner.test.ts` covers the runner's
+manual steps; `e2e/flows/infra/sign-off.yaml` opens the checklist with
+`e2e/fixtures/signoff/session.json` through the driver.
 
 ### Scoped runs (`--flow`)
 
@@ -1043,7 +1152,9 @@ With `--agent`, the gate prints JSON lines only: `flow-start` and `flow-end` for
 Your flow is a gate flow as soon as it is under `flows/`. Before you open a PR, run
 `bun run gate --dry-run` to see it in the plan for your platform, and check that it is
 blocking (the default). Then run `bun run gate --flow e2e/flows/<area> --agent` against
-the release build (`cd examples/kitchen-sink && bun run build`) and fix every reason. If it measures performance, record metrics through the driver
+the release build (`cd examples/kitchen-sink && bun run build`) and fix every reason. If it needs a person, use `manualStep` in a `manual: partial` flow (or
+`manual: true` when nothing can be automated), with an `instruction` a stranger can follow and an
+`expect` that is true or false at a glance, and say in the PR that it awaits sign-off. If it measures performance, record metrics through the driver
 commands above. Ask for a budget in `e2e/budgets.yaml`, and leave it `not-measured`
 until someone measures it on the reference machine.
 

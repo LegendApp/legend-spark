@@ -340,6 +340,64 @@ describe("dispatch", () => {
   });
 });
 
+describe("manual steps", () => {
+  const capture = (backend: { log: string[] }) => async (file: string) => { backend.log.push("capture"); writeFileSync(file, "png"); return { frame: WINDOW.frame, scale: 2 }; };
+  const step = "- manualStep: { instruction: Look at the open menu., expect: Mixed shows a dash., evidence: screenshot }";
+
+  test("a manualStep in a partial flow awaits sign-off with an in-process screenshot, and the automated steps run on", async () => {
+    const app = memory({ elements: [element("menu", { text: "Menu" })] });
+    const driver = new MemoryBackend(app.clock, { name: "driver", kind: "driver", collect: false });
+    Object.assign(driver, { screenshot: capture(driver) });
+    const { result, dir } = await run(flow(`${step}\n- tapOn: Menu`, "manual: partial\n"), [app, driver]);
+    expect(result.status).toBe("passed");
+    expect(result.steps.map(entry => [entry.command, entry.status])).toEqual([["manualStep", "awaiting-signoff"], ["tapOn", "passed"]]);
+    expect(result.manual).toEqual([{
+      instruction: "Look at the open menu.", expect: "Mixed shows a dash.", evidence: "screenshot", signoff: "required",
+      location: expect.objectContaining({ line: 6, column: 3 }), stack: [], screenshot: path.join(dir, "run/flows/area/test/run/manual/step-1.png"),
+    }]);
+    expect(driver.log).toEqual(["start", "capture", "stop"]);
+    expect(app.log).toContain("tapOn menu");
+    expect(result.artifacts).toEqual([{ kind: "screenshot", path: result.manual[0]!.screenshot, backend: "driver" }]);
+    const report = buildReport([result], { startedAt: new Date(), durationMs: 1, backends: [app, driver], runDir: path.join(dir, "run"), interrupted: false });
+    expect(report.summary).toMatchObject({ passed: 1, awaitingSignoff: 1 });
+    expect(report.flows[0]!.manual[0]!.screenshot).toBe("flows/area/test/run/manual/step-1.png");
+    expect(html(report)).toContain("awaiting sign-off (");
+    expect(junit(report)).toContain("Look at the open menu. Expect: Mixed shows a dash.");
+  });
+
+  test("evidence: none needs no capture; signoff and evidence default to required and none; when skips the step", async () => {
+    const { result } = await run(flow("- manualStep: { instruction: Listen., expect: A chime. }\n- manualStep: { instruction: Skip., expect: Nothing., when: { platform: windows } }", "manual: true\n"), [memory()]);
+    expect(result.status).toBe("passed");
+    expect(result.manual).toEqual([expect.objectContaining({ instruction: "Listen.", evidence: "none", signoff: "required" })]);
+    expect(result.manual[0]!.screenshot).toBeUndefined();
+    expect(result.steps.map(entry => entry.status)).toEqual(["awaiting-signoff", "skipped"]);
+  });
+
+  test("evidence the backends cannot capture is unsupported, never skipped", async () => {
+    const { result } = await run(flow(step, "manual: partial\n"), [memory()]);
+    expect(result.failure).toMatchObject({ kind: "unsupported", command: "manualStep", message: "manualStep evidence: screenshot needs a driver backend with screenshot() (active: memory (black-box))" });
+    const recording = await run(flow("- manualStep: { instruction: Watch., expect: Smooth., evidence: recording }", "manual: partial\n"), [memory()]);
+    expect(recording.result.failure).toMatchObject({ kind: "unsupported", message: "manualStep evidence: recording: no backend records the screen" });
+  });
+
+  test("a manualStep outside a manual flow is invalid: validation rejects it inline, the runner through a subflow", async () => {
+    const inline = await run(flow(step), [memory()]);
+    expect(inline.result.failure).toMatchObject({ kind: "format", diagnostics: [expect.stringMatching(/test\.yaml:5:3: manualStep needs `manual: partial` .* or `manual: true` in the header \[schema\]$/)] });
+    const nested = await run(flow("- runFlow: subflows/look.yaml"), [memory()], { files: { "subflows/look.yaml": `${step}\n` } });
+    expect(nested.result.failure).toMatchObject({ kind: "invalid", command: "manualStep", message: "manualStep needs `manual: partial` or `manual: true` in the flow header, so the gate asks for its sign-off" });
+    expect(nested.result.failure!.stack).toHaveLength(1);
+  });
+
+  test("e2e:run prints what awaits sign-off and still exits 0", async () => {
+    const dir = root({ "flows/a/look.yaml": flow("- manualStep: { instruction: Listen., expect: A chime. }", "manual: partial\n") });
+    const out: string[] = [];
+    const code = await runCommand([path.join(dir, "flows"), "--report", path.join(dir, "r")], { backends: { memory: () => memory() }, stdout: line => out.push(line), stderr: () => {} });
+    expect(code).toBe(0);
+    expect(out[1]).toMatch(/^  awaiting sign-off \(.*look\.yaml:6\): Listen\. Expect: A chime\.$/);
+    expect(out.at(-1)).toMatch(/^1 passed, 0 failed, 0 skipped, 1 awaiting sign-off \(bun run gate, then bun run gate:signoff\)\. Report: /);
+  });
+});
+
 describe("restoration", () => {
   test("undos run last-in first-out on failure, before backends stop", async () => {
     const backend = memory({

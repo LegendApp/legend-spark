@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "target": "macos-27/arm64",
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "by": "Release Captain <captain@example.com>",
+  "machine": "qa-mac (Mac16,5)",
+  "decisions": "decisions.json",
+  "items": [
+    {
+      "flow": "flows/menus/macos-items[appearance=light]",
+      "name": "macOS menu alternates, mixed state, icons, hidden items and open/close events",
+      "kind": "partial",
+      "flowHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ready": true,
+      "steps": [
+        {
+          "instruction": "Look at the open Menu Audit menu in the screenshot.",
+          "expect": "Mixed selection shows a dash, not a checkmark. Starred sample shows a filled star. Hidden sample is absent. Text and marks are legible in this appearance.",
+          "evidence": "screenshot",
+          "signoff": "required",
+          "location": "e2e/flows/menus/macos-items.yaml:26:3",
+          "screenshot": "../../golden/macos/light/en/menus-audit.png"
+        }
+      ]
+    },
+    {
+      "flow": "flows/text-input-editing/ime-candidates",
+      "name": "IME candidate window tracks the caret",
+      "intent": "A person confirms the candidate window sits under the caret.",
+      "kind": "manual",
+      "flowHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "ready": true,
+      "steps": [
+        {
+          "instruction": "Type \"nihongo\" with the Japanese Romaji input source.",
+          "expect": "The candidate window sits directly under the caret and overlaps no text.",
+          "evidence": "screenshot",
+          "signoff": "required",
+          "location": "e2e/flows/text-input-editing/ime-candidates.yaml:8:3"
+        }
+      ]
+    },
+    {
+      "flow": "flows/menus/macos-items[appearance=dark]",
+      "name": "macOS menu alternates, mixed state, icons, hidden items and open/close events",
+      "kind": "partial",
+      "flowHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ready": false,
+      "reason": "The automated steps failed: e2e/flows/menus/macos-items.yaml:19:3: assertMenuItem: assertMenuItem needs a black-box backend (active: driver (driver)) [unsupported]",
+      "steps": []
+    },
+    {
+      "flow": "flows/accessibility/voiceover-catalog",
+      "name": "VoiceOver reads the catalog in order",
+      "kind": "manual",
+      "flowHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "ready": true,
+      "steps": [
+        {
+          "instruction": "Turn on VoiceOver and move through the catalog with VO-Right.",
+          "expect": "Each area is read with its title and screen count, in reading order.",
+          "evidence": "none",
+          "signoff": "required",
+          "location": "e2e/flows/accessibility/voiceover-catalog.yaml:9:3"
+        }
+      ],
+      "signoff": {
+        "flow": "flows/accessibility/voiceover-catalog",
+        "target": "macos-27/arm64",
+        "commit": "0123456789abcdef0123456789abcdef01234567",
+        "flowHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "verdict": "pass",
+        "by": "Release Captain <captain@example.com>",
+        "machine": "qa-mac (Mac16,5)",
+        "at": "2026-10-11T09:30:00Z",
+        "note": "All 37 areas read in order."
+      }
+    }
+  ]
+}

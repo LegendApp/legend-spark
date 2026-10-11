@@ -1,11 +1,13 @@
 // The gate's view of the real machine: OS target, reference-machine identity, git state and code signatures.
 import { execFileSync, spawnSync } from "node:child_process";
-import { machine, release } from "node:os";
+import { hostname, machine, release } from "node:os";
 import path from "node:path";
+import { createInterface } from "node:readline/promises";
 import { macOSArchitecture, windowsArchitecture } from "../../../packages/cli/src/platform.ts";
 import { readSdkSurface } from "../../api-surface.ts";
 import { BACKENDS } from "../runner/run.ts";
 import type { GateEnv } from "./gate.ts";
+import type { Signer, SignoffEnv } from "./signoff.ts";
 import type { Host } from "./plan.ts";
 
 const repo = path.resolve(import.meta.dirname, "../../..");
@@ -41,3 +43,25 @@ export const hostEnv = (): GateEnv => ({
   stdout: line => console.log(line),
   stderr: line => console.error(line),
 });
+
+/** git user.name and user.email; both must be set, because the sign-off names the person. */
+function signer(): Signer {
+  const config = (key: string) => spawnSync("git", ["config", key], { cwd: repo, encoding: "utf8" }).stdout.trim();
+  const [name, email] = [config("user.name"), config("user.email")];
+  if (!name || !email) throw new Error("set git config user.name and user.email: a sign-off names the person who signed");
+  return { name, email, machine: `${hostname()} (${detectHost().model ?? `${process.platform}/${machine()}`})` };
+}
+
+async function ask(question: string): Promise<string> {
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  try { return await prompt.question(question); } finally { prompt.close(); }
+}
+
+/** Opens a new instance of the app through LaunchServices, so it is a normal, focused app, and waits for it to quit. */
+async function launch(app: string, session: string) {
+  if (process.platform !== "darwin") throw new Error("gate:signoff opens the app on macOS only; Windows has no sign-off launcher yet");
+  const result = spawnSync("open", ["-W", "-n", "-a", app, "--args", "--ks-signoff", session], { stdio: "inherit" });
+  if (result.status !== 0) throw new Error(`open exited ${result.status ?? result.signal}`);
+}
+
+export const signoffEnv = (): SignoffEnv => ({ ...hostEnv(), signer, interactive: !!process.stdin.isTTY && !!process.stdout.isTTY, ask, launch });

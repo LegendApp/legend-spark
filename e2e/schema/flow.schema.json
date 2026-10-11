@@ -7211,7 +7211,7 @@
             }
           },
           "manualStep": {
-            "description": "A step a person performs and signs off.",
+            "description": "A step a person performs and signs off. The runner records it as awaiting sign-off, with an in-process capture for `evidence: screenshot`, and runs on; `bun run gate:signoff` collects the sign-off. Only in `manual: partial` or `manual: true` flows.",
             "if": {
               "type": "object"
             },

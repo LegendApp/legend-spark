@@ -12,6 +12,9 @@ export const REPORT_FLAGS = [
 ] as const;
 export type ReportFlag = (typeof REPORT_FLAGS)[number];
 
+/** `--ks-signoff <session.json>`: `bun run gate:signoff` opens the sign-off checklist (screens/infra/sign-off.ts) with a session. */
+export const SIGNOFF_FLAG = "--ks-signoff";
+
 export function argument(args: readonly string[], name: string) { const at = args.indexOf(name); return at < 0 ? undefined : args[at + 1]; }
 
 /** The first report flag with a value, in REPORT_FLAGS order; undefined for an interactive launch. */

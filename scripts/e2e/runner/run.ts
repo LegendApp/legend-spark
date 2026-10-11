@@ -6,7 +6,7 @@ import { KitchenSinkApp } from "../kitchen-sink.ts";
 import type { Artifact, Backend, BackendFactory } from "./backend.ts";
 import { DriverBackend } from "./driver-backend.ts";
 import { realClock, runFlows, type Clock, type FailureReport, type FlowResult, type RunEvent, type RunOptions } from "./executor.ts";
-import { buildReport, failureText, writeReports, type RunReport } from "./report.ts";
+import { buildReport, failureText, manualText, writeReports, type RunReport } from "./report.ts";
 
 const repo = path.resolve(import.meta.dirname, "../../..");
 
@@ -58,9 +58,13 @@ export function printer(io: Pick<RunIO, "stdout">, agent: boolean) {
   return (event: RunEvent) => {
     if (event.event === "flow-start") { if (agent) line(event); return; }
     const { steps: _steps, ...result }: FlowResult = event.result;
-    if (agent) return line({ event: "flow-end", ...result, artifacts: result.artifacts.map(absolute), ...(result.failure ? { failure: agentFailure(result.failure) } : {}) });
+    if (agent) {
+      const manual = result.manual.map(step => step.screenshot ? { ...step, screenshot: path.resolve(step.screenshot) } : step);
+      return line({ event: "flow-end", ...result, manual, artifacts: result.artifacts.map(absolute), ...(result.failure ? { failure: agentFailure(result.failure) } : {}) });
+    }
     const status = { passed: "PASS", failed: "FAIL", skipped: "SKIP" }[result.status];
     io.stdout(`${status} ${result.id} (${result.durationMs}ms)${result.skipReason ? `: ${result.skipReason}` : ""}${result.whiteBox.length ? ` [white-box: ${result.whiteBox.join(", ")}]` : ""}`);
+    for (const text of manualText(result)) io.stdout(`  ${text}`);
     if (result.failure) io.stdout(failureText(result.failure).replace(/^/gm, "  "));
     if (result.bundle) io.stdout(`  bundle: ${path.relative(process.cwd(), result.bundle)}`);
     for (const error of result.errors) io.stdout(`  also: ${error}`);
@@ -101,6 +105,6 @@ export async function runCommand(args: string[], io: RunIO): Promise<number> {
   const { report, reports } = await runSuite(files, { backends, runDir, app: options.app && path.resolve(options.app), clock: io.clock, signal: io.signal, host: io.host?.(), onEvent: printer(io, options.agent) });
   const { summary } = report;
   if (options.agent) io.stdout(JSON.stringify({ event: "run-end", summary, interrupted: report.interrupted, reports }));
-  else io.stdout(`${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped${report.interrupted ? " (interrupted)" : ""}. Report: ${path.relative(process.cwd(), reports.html)}`);
+  else io.stdout(`${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped${summary.awaitingSignoff ? `, ${summary.awaitingSignoff} awaiting sign-off (bun run gate, then bun run gate:signoff)` : ""}${report.interrupted ? " (interrupted)" : ""}. Report: ${path.relative(process.cwd(), reports.html)}`);
   return summary.failed ? 1 : 0;
 }

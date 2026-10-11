@@ -38,3 +38,10 @@ manual: true
 - takeScreenshot: print-card-preview
 - tapOn: { text: Cancel, window: key }
 - assertText: { id: document-model-printing-print-card-result, equals: '{"canceled":true}' }
+- manualStep:
+    instruction: >-
+      With a fake or virtual default printer (lpstat -o shows no new job before and after), open
+      Document model > Printing in the release build and do the steps above by hand.
+    expect: >-
+      Each panel and preview appears as the steps describe, Cancel resolves {"canceled":true},
+      Save as PDF writes Report.pdf, and no job reaches a printer.
