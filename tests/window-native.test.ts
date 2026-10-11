@@ -16,7 +16,7 @@ test.skipIf(process.platform !== "darwin")("native window guards settle close de
     writeFileSync(input, prelude + readFileSync(path.join(root, "tests/window.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", registry + "\n" + source));
     await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "CoreGraphics", input, "-o", output], { timeout: 60000 });
     const result = await runOk(output, [], { timeout: 60000 });
-    for (const suite of ["Window guards passed", "Window options passed (left-to-right)", "Driver mode windows stayed off screen", "Window tabs passed", "Window tab restoration passed"]) expect(result).toContain(suite);
+    for (const suite of ["Window guards passed", "Window options passed (left-to-right)", "Driver mode windows stayed off screen", "Window tabs passed", "Shown window tabs passed", "Window tab restoration passed"]) expect(result).toContain(suite);
     // Right-to-left title bars mirror the traffic lights; positions are measured from the leading edge. Only the options suite depends on direction.
     expect(await runOk(output, ["options", "-AppleTextDirection", "YES", "-NSForceRightToLeftWritingDirection", "YES"], { timeout: 30000 })).toBe("Window options passed (right-to-left)\n");
   } finally {

@@ -74,8 +74,13 @@ static NSVisualEffectView *Material(NSWindow *window) {
   for (NSView *view in window.contentView.subviews) if ([view isKindOfClass:NSVisualEffectView.class]) return (NSVisualEffectView *)view;
   return nil;
 }
-static NSWindow *RealWindow(NSString *key) {
-  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(200, 200, 640, 480) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
+// A window AppKit leaves where it is put: ordering a window front normally moves it back onto a screen.
+@interface OffscreenWindow : NSWindow @end
+@implementation OffscreenWindow
+- (NSRect)constrainFrameRect:(NSRect)frame toScreen:(NSScreen *)screen { return frame; }
+@end
+static NSWindow *RealWindow(NSString *key, Class type = NSWindow.class) {
+  NSWindow *window = [[type alloc] initWithContentRect:NSMakeRect(200, 200, 640, 480) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
   window.releasedWhenClosed = NO; windows[key] = window; return window;
 }
 // Every option is applied at open, then changed on the live window. Windows are never shown.
@@ -332,6 +337,24 @@ static void TestTabRestoration(RNDesktopWindows *api) {
   [NSUserDefaults.standardUserDefaults removePersistentDomainForName:NSProcessInfo.processInfo.processName];
   puts("Window tab restoration passed");
 }
+// Outside driver mode a new tab joins its group once shown: AppKit keeps only shown windows in tab groups.
+// The windows are fully transparent, off every screen, and never activate the app, so nothing appears.
+static void TestShownTabs(RNDesktopWindows *api) {
+  NSScreen *primary = SparkPrimaryScreen();
+  NSDictionary *offscreen = @{ @"displayId": SparkScreenId(primary), @"x": @(-4 * NSWidth(primary.frame)), @"y": @0 };
+  NSWindow *first = RealWindow(@"shown-1", OffscreenWindow.class), *second = RealWindow(@"shown-2", OffscreenWindow.class);
+  NSDictionary *unseen = @{ @"opacity": @0, @"ignoreMouseEvents": @YES, @"position": offscreen };
+  NSMutableDictionary *one = [unseen mutableCopy], *two = [unseen mutableCopy];
+  [one addEntriesFromDictionary:@{ @"id": @"shown-1", @"tabbing": @{ @"identifier": @"shown" } }]; [two addEntriesFromDictionary:@{ @"id": @"shown-2", @"tabbedWith": @"shown-1" }];
+  Call(api, @"completeOpen", one); assert(!failure);
+  Call(api, @"completeOpen", two); assert(!failure);
+  for (NSWindow *window in @[first, second]) for (NSScreen *screen in NSScreen.screens) if (NSIntersectsRect(window.frame, screen.frame)) { fprintf(stderr, "%s on screen at %s\n", KeyFor(window).UTF8String, NSStringFromRect(window.frame).UTF8String); abort(); }
+  assert(first.visible && second.visible && !NSApp.active);
+  assert([GroupIds(first) isEqual:(@[@"shown-1", @"shown-2"])] && [SelectedId(first) isEqual:@"shown-2"] && [second.tabbingIdentifier isEqual:@"shown"]);
+  for (NSString *key in @[@"shown-2", @"shown-1"]) { Call(api, @"close", @{ @"id": key }); assert(!failure); }
+  Pump();
+  puts("Shown window tabs passed");
+}
 static void TestGuards(RNDesktopWindows *api) {
   TestWindow *window = [TestWindow new]; windows[@"editor"] = (NSWindow *)window;
   __block NSString *result = nil;
@@ -365,9 +388,9 @@ int main(int argc, char **argv) { @autoreleasepool {
   NSDictionary<NSString *, void (^)(RNDesktopWindows *)> *suites = @{
     @"guards": ^(RNDesktopWindows *a) { TestGuards(a); }, @"options": ^(RNDesktopWindows *a) { TestWindowOptions(a); },
     @"driver": ^(RNDesktopWindows *a) { TestDriverMode(a); }, @"tabs": ^(RNDesktopWindows *a) { TestWindowTabs(a); },
-    @"tab-restoration": ^(RNDesktopWindows *a) { TestTabRestoration(a); },
+    @"shown-tabs": ^(RNDesktopWindows *a) { TestShownTabs(a); }, @"tab-restoration": ^(RNDesktopWindows *a) { TestTabRestoration(a); },
   };
   NSString *only = argc > 1 && argv[1][0] != '-' ? @(argv[1]) : nil;
   if (only && !suites[only]) { fprintf(stderr, "Unknown suite %s\n", argv[1]); return 2; }
-  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"tab-restoration"]) if (!only || [only isEqual:name]) suites[name](api);
+  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration"]) if (!only || [only isEqual:name]) suites[name](api);
 } }

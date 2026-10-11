@@ -637,6 +637,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       if (tabTarget) SelectTab(window);
       Event(@"opened", key); Event(@"visibilityChanged", key); resolve(SparkJSON(Info(key, window))); return;
     }
+      // AppKit keeps a window added before it is first shown (tests/window.native.mm, TestShownTabs).
     if ([method isEqual:@"discard"]) { delegate.guarded = NO; if (SparkTestDriverActive()) DetachTab(window); [window close]; return resolve(@"null"); }
     if ([method isEqual:@"close"]) { [delegate.closeWaiters addObject:[resolve copy]]; RequestClose(window, key); return; }
     if ([method isEqual:@"closeGuard"]) {
