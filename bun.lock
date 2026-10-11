@@ -71,6 +71,7 @@
         "@babel/traverse": "7.28.5",
         "@expo/ui": "0.2.0-beta.9",
         "@legendapp/spark": "0.0.1-next.3",
+        "@legendapp/state": "3.0.0-beta.48",
         "@react-native-async-storage/async-storage": "2.2.0",
         "@react-native-community/cli": "20.1.3",
         "@react-native-community/cli-platform-apple": "20.1.3",
@@ -348,9 +349,17 @@
         "@legendapp/state": "^3.0.0-beta.42",
       },
       "peerDependencies": {
+        "@legendapp/spark-commands": "0.0.1-next.3",
+        "@legendapp/spark-native-menu": "0.0.1-next.3",
+        "@react-native-runtimes/core": "0.1.0-alpha.2",
         "react": "19.1.4",
         "react-native": "0.81.6",
       },
+      "optionalPeers": [
+        "@legendapp/spark-commands",
+        "@legendapp/spark-native-menu",
+        "@react-native-runtimes/core",
+      ],
     },
     "packages/documents": {
       "name": "@legendapp/spark-documents",

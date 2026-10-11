@@ -180,37 +180,178 @@ Use `/app` events `windowOpened` and `windowClosed` for application-wide registr
 
 `/windows/macos` exposes `setWindowBlur`, `focusToolbarSearch`, `setToolbarItemText` and `addMacOSWindowListener`; animated bounds are an option group on the portable `/windows` `setWindowBounds`, not a second export. `/app` owns `finishWindowRestoration`; `/diagnostics` owns startup timing. The old window-manager, window-controls and React-only import paths are removed without aliases.
 
-### React registration and navigation
+### Navigator: window types, singletons and multiwindow state
 
-Retain `createWindowsNavigator` with these semantics:
-
-- Exactly one of `component` or `loadComponent` per entry.
-- `id` in registration; callers cannot override identity in `open`.
-- `open(name, { props, options })` infers props from that named component.
-- `options` excludes identity, registered component and props; native component names stay internal to registration.
-- `close(name)` returns the same `CloseResult` as imperative close.
-- `getId(name)`, `prefetch(name)`, and `show(name)` remain simple conveniences.
-- Distinguish named singleton windows from any future multi-instance navigator explicitly.
-- `useWindowId()` requires a provider and reports the actual root owner.
-- Focus/close hooks use fresh handlers and dispose on root changes/unmount.
-
-Example of the intended consumer experience:
+`createWindowsNavigator(config, options?)` is the one registration API for React window roots.
+Every window it opens is an ordinary `openWindow` window with an explicit ID, the same events,
+close guards and options. There is no separate multiwindow path and no Spark router.
 
 ```tsx
-import { createWindowsNavigator, useWindowId } from '@legendapp/spark/windows';
+import { createWindowsNavigator, createWindowState, useWindowInstance } from '@legendapp/spark/windows';
 
-const windows = createWindowsNavigator({
+export const windows = createWindowsNavigator({
   editor: {
-    id: 'editor',
-    component: Editor,
-    options: { title: 'Editor', size: { width: 960, height: 720 } },
+    component: Editor,                      // no `id`: a new window per open()
+    options: { title: 'Untitled', size: { width: 900, height: 640 } },
+    undoMenu: true,
+    menus: instance => [{ type: 'submenu', id: 'format', label: 'Format', items: [
+      { type: 'action', id: 'bold', label: 'Bold', shortcut: 'CmdOrCtrl+B' },
+    ] }],
+    onMenuAction: (action, instance) => applyFormat(instance.id, action.itemId),
   },
+  settings: { id: 'settings', loadComponent: () => import('./Settings'), options: { title: 'Settings' } },
 });
 
-await windows.open('editor', { props: { documentId: 'notes' } });
-await windows.show('editor');
-const result = await windows.close('editor');
+const editor = await windows.openInstance('editor', { props: { documentId: 'notes' } });
+await windows.openInstance('settings'); // focuses the live Settings window if one exists
+await editor.close();                   // CloseResult, as closeWindow
 ```
 
-Type-level acceptance: `documentId` is checked against `Editor` props, required props cannot be omitted, and an identifier override fails compilation. Separate roots still do not inherit arbitrary React providers; the navigator must not imply that they do.
+The original navigator contract is unchanged and still works as before:
 
+- `open(name, { props, options })` resolves the native `WindowInfo`. For an `id` entry it rejects
+  `E_ALREADY_EXISTS` while that window is open (apps use this to show the existing window instead).
+- `close(name)` resolves the `CloseResult` of `closeWindow`; `show(name)` shows and focuses;
+  `getId(name)` returns the entry's ID; `prefetch(name)` loads a lazy component.
+- `id` entries register their root as `spark.window.<id>` and receive their props directly.
+- `close`, `show` and `getId` need an `id` entry; for other entries they fail `E_INVALID_ARGUMENT`.
+
+Added:
+
+- Exactly one of `component` or `loadComponent`. Loaders run before native creation; a failed
+  loader leaves no native window and stays retryable.
+- `id` is optional. With `id` the entry is a singleton: `openInstance` on a live window shows and
+  focuses it and returns the same handle; props are not re-applied; concurrent calls share one
+  native open. Without `id`, each `open`/`openInstance` creates a window with a generated ID
+  (`<name>-<suffix>`), and the root is registered as `spark.window.<name>`.
+- Both open methods infer props from the registered component; required props cannot be omitted.
+  `options` excludes identity, component and props.
+- `openInstance` resolves a `WindowInstance` once the window exists and its services are
+  installed: `id`, `name`, `runtime`, `undo`, `isOpen()`, `focus()`, `close()`, `refreshMenus()`,
+  `refreshToolbar()`. A closed instance rejects `focus`/`close`/`refreshToolbar` with `E_CLOSED`,
+  so a stale handle never acts on a later window that reuses its ID. Windows opened with `open`
+  get the same per-window services.
+- `get(windowId)`, `list(name?)`, `getKeyWindowId()` and `subscribe(listener)` observe the
+  navigator's open windows. `remove()` stops the navigator's listeners and menus without closing
+  windows; afterwards every method except `getId` rejects or throws `E_CLOSED`.
+- `useWindowId()` works in every navigator root. `useWindowInstance()` returns the owning
+  instance. Separate roots do not inherit arbitrary React providers.
+- `@legendapp/spark-native-menu` is an optional peer. It is loaded only when an entry declares
+  `menus` or `undoMenu`; if it is missing then, opening that window rejects `E_MODULE_UNAVAILABLE`
+  and leaves no window. Windows without menus never load it.
+
+**Instance lifetime.** Closure is tracked per native window instance (`addWindowListener(id,
+'closed')`, which binds to the instance token), never from the ID-only `/app` `windowClosed`
+event. `close()` that resolves `{ closed: true }` ends the instance immediately. Opening a
+singleton whose window closed natively before its event arrived detects the missing window and
+opens a new one. A late close event of the earlier instance cannot dispose the new one.
+
+After a JavaScript reload, native restarts each window's root with its original props. The root
+re-adopts its instance: the navigator confirms the native window, reinstalls services and
+continues. A singleton `openInstance` during that adoption waits for it and never replaces the
+adopted window; `open` rejects `E_ALREADY_EXISTS` as for any open window. Generated IDs give up stable per-instance frame autosave; use `restoreBounds` on singletons.
+
+#### Runtime model
+
+All windows share the main JavaScript runtime by default. An entry may opt into an isolated
+runtime; heavy computation belongs in workers (`ThreadedRuntime.run`, see [Runtimes](runtimes.md)).
+
+| | Shared runtime (default) | Isolated runtime (opt-in per entry) |
+|---|---|---|
+| Heap | One heap; module state is shared by every window root | A named `@react-native-runtimes/core` runtime |
+| State | Any observable is live in every window | Only serialized props cross the boundary |
+| Spark APIs | All, in every window | Window/menu/OS UI APIs stay on the main runtime |
+| Failure scope | Render errors are contained per window; uncaught async errors and long synchronous work are runtime-wide | Contained in that runtime |
+| Use for | Documents, inspectors, settings, palettes | Untrusted or plugin content |
+
+```ts
+import * as Runtimes from '@react-native-runtimes/core';
+createWindowsNavigator({
+  plugin: { component: PluginPanel /* threadedComponent('plugin-panel', Impl) */, runtime: { isolated: 'plugins', module: Runtimes } },
+});
+```
+
+The native window still belongs to the main runtime; its root renders the upstream
+`Runtimes.Threaded` surface. Entries naming the same runtime share its heap. A window holds its
+runtime from the moment opening starts, so the runtime is destroyed only after the last window
+using it, in any navigator, has closed; a destroy still in flight completes before the next window
+uses the name. Do not use a window runtime name for workers. The application passes the Runtimes
+module, so apps without isolated windows keep Runtimes [pruned from production](runtimes.md#development-and-production).
+`getIsolatedRuntimeAvailability()` reports whether the Runtimes native module and its surface view
+are present; opening an isolated entry without them rejects `E_MODULE_UNAVAILABLE` (or
+`E_UNSUPPORTED_PLATFORM`) before a native window exists. Upstream threaded surfaces are not part of
+Spark's validated Runtimes support yet.
+
+#### Shared and scoped state
+
+In the shared runtime the same observable is live in every window: a document opened in two
+windows is one Legend State object, and an edit in one renders in the other. `createWindowState`
+adds a per-window scope and promotion:
+
+```ts
+const drafts = createWindowState<Draft>({ initial: window => ({ text: '' }) });
+
+drafts.get(editor);              // private to this window instance; freed with it
+drafts.promote(editor, 'notes'); // the same observable becomes app-scoped under 'notes'
+drafts.attach(other, 'notes');   // another window reads and writes the same value
+drafts.release('notes');         // E_BUSY while an open window is attached
+```
+
+- Values are keyed by window instance, so a later window reusing an ID starts fresh.
+- Calls for a closed window throw `E_CLOSED`; nothing is recreated for it.
+- `promote` keeps the observable's identity. App-scoped values outlive their windows until
+  released; there is no reference counting that could delete data when the last window closes.
+- `useWindowState(state)` returns the current window's observable and re-renders when its binding
+  changes, not on value changes. Read values with Legend State's `useValue`.
+- Isolated windows cannot participate; they receive props.
+
+#### Per-window routing and deep links
+
+Spark does not own a router. Each window is its own React root, so a window renders its own
+upstream navigator (for example a React Navigation container) with independent state. Deep links
+use the application's routing configuration: receive the URL with `/links`, choose or open the
+window, and hand the path to that window's upstream linking configuration through props.
+
+```ts
+links.addEventListener('url', event => {
+  const path = routeFor(event.url);  // the app's own parsing
+  if (path) void windows.openInstance('editor', { props: { initialPath: path } });
+});
+```
+
+#### Undo, keyboard, menus and toolbar per window
+
+- Every instance owns an undo stack (`instance.undo`: `push({ label, undo, redo })`, `undo()`,
+  `redo()`, `clear()`, `getState()`, `subscribe`), capped at 100 entries. `useUndoState()`
+  observes the current window's stack.
+- The menu bar follows the key window. The navigator tracks focus for its windows and publishes
+  one menu contribution: the key window's `menus(instance)` items, plus Edit ▸ Undo/Redo bound to
+  its stack when `undoMenu: true` (native `undo`/`redo` roles on macOS, accelerator actions on
+  Windows). Actions go to `onMenuAction(action, instance)` of the window whose items are published.
+  With no key window the contribution is withdrawn. Changes are coalesced to at most one menu
+  update per tick, and the menu skips unchanged trees.
+- Keyboard scope uses `/shortcuts/commands`: pass the hotkey router as `options.hotkeys`; an
+  entry's `hotkeys.definitions` and `handlers(instance)` register with
+  `scope: { kind: 'window', windowId }` and are removed when the window closes.
+- `macos.toolbar(instance)` supplies the toolbar at open, `instance.refreshToolbar()` re-applies
+  it, and `macos.onToolbarEvent(event, instance)` receives that window's toolbar events. Skipped on
+  Windows by definition.
+
+#### Error isolation
+
+Each root has its own error boundary. A render error replaces only that window's content with a
+fallback offering **Try again** (remounts the content) and **Close window**, and reports
+`{ windowId, name, phase, error }` to `options.onError` (default `console.error`). Menu, toolbar and
+hotkey handler failures are reported the same way. Pass `errorFallback` to localize the fallback;
+the default renders English strings. Setup is not partial: if a window's services cannot be
+installed, the window is closed and `open` rejects with the original failure. An uncaught async
+error or a synchronous infinite loop in the shared runtime still affects every window; use an
+isolated runtime when that matters.
+
+#### Status
+
+The navigator, state, undo, menu, hotkey, toolbar and error-boundary behavior is implemented in
+shared JavaScript and covered by unit tests against mocked native modules
+(`tests/windows-navigator.test.ts`, including the original navigator contract; `tests/windows-navigator-menuless.test.ts` without the menu module). The Kitchen Sink `multiwindow` screen and its flows
+(`e2e/flows/multiwindow/`) exercise it, but no flow backend exists yet, so native acceptance on
+macOS and Windows is pending. The commands router behind window hotkeys requires macOS.

@@ -11,7 +11,21 @@
   ],
   "peerDependencies": {
     "react": "19.1.4",
-    "react-native": "0.81.6"
+    "react-native": "0.81.6",
+    "@legendapp/spark-commands": "0.0.1-next.3",
+    "@react-native-runtimes/core": "0.1.0-alpha.2",
+    "@legendapp/spark-native-menu": "0.0.1-next.3"
+  },
+  "peerDependenciesMeta": {
+    "@legendapp/spark-commands": {
+      "optional": true
+    },
+    "@react-native-runtimes/core": {
+      "optional": true
+    },
+    "@legendapp/spark-native-menu": {
+      "optional": true
+    }
   },
   "codegenConfig": {
     "name": "RNDesktopWindowsSpec",
