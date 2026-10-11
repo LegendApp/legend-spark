@@ -874,9 +874,11 @@
     "MacOSStartupSplitViewOptions",
     "MacOSTitleBarControl",
     "MacOSTitleBarOptions",
+    "MacOSToolbarDisplayMode",
     "MacOSToolbarItem",
     "MacOSToolbarOptions",
     "MacOSToolbarSegment",
+    "MacOSToolbarState",
     "MacOSWindowBlurOptions",
     "MacOSWindowBoundsOptions",
     "MacOSWindowEvent",
@@ -891,6 +893,7 @@
     "SetWindowBoundsOptions",
     "ShowWindowOptions",
     "Size",
+    "ToolbarFeature",
     "UndoEntry",
     "UndoMenuLabels",
     "UndoStack",
@@ -936,6 +939,7 @@
     "getCursorPoint",
     "getDisplays",
     "getIsolatedRuntimeAvailability",
+    "getToolbarAvailability",
     "getWindow",
     "getWindowAvailability",
     "getWindowTabGroup",
@@ -966,14 +970,18 @@
   "./windows/macos": [
     "AsyncRegistration",
     "FocusToolbarSearchOptions",
+    "MacOSToolbarDisplayMode",
     "MacOSToolbarItem",
     "MacOSToolbarOptions",
+    "MacOSToolbarState",
     "MacOSWindowBlurOptions",
     "MacOSWindowEvent",
     "MenuAction",
     "addMacOSWindowListener",
     "focusToolbarSearch",
+    "getToolbarState",
     "setToolbarItemText",
-    "setWindowBlur"
+    "setWindowBlur",
+    "showToolbarCustomizationPalette"
   ]
 }

@@ -46,6 +46,9 @@ export function macosOptions(options: MacOSWindowOptions | undefined): Record<st
   if (options.toolbar) {
     if (options.toolbar.visible !== undefined) style.hasToolbar = options.toolbar.visible;
     if (options.toolbar.style !== undefined) style.toolbarStyle = options.toolbar.style;
+    if (options.toolbar.shown !== undefined) style.toolbarShown = options.toolbar.shown;
+    if (options.toolbar.displayMode !== undefined) style.toolbarDisplayMode = options.toolbar.displayMode;
+    if (options.toolbar.customization !== undefined) style.toolbarCustomization = options.toolbar.customization?.id ?? null;
     if (options.toolbar.items) style.toolbarItems = options.toolbar.items.map(item => {
       const { type, ...common } = item;
       if (type === "segmented") { const value = item as Extract<typeof item, { type: "segmented" }>; return { ...common, type, selectedValue: value.value, segments: value.segments.map(({ symbol, ...segment }) => ({ ...segment, systemImageName: symbol })) }; }

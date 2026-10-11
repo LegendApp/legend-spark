@@ -145,12 +145,19 @@ export function validateMacOS(value: MacOSWindowOptions) {
     }
   }
   if (value.toolbar !== undefined) {
-    object(value.toolbar, "toolbar"); keys(value.toolbar, ["visible", "style", "items"]); flags(value.toolbar, ["visible"]);
-    enumValue(value.toolbar.style, ["automatic", "expanded", "preference", "unified", "unifiedCompact"], "toolbar style");
-    if (value.toolbar.items !== undefined) for (const item of entries(value.toolbar.items, "toolbar item")) {
-      const fields: Record<string, string[]> = { button: ["disabled", "bordered", "symbol", "tooltip", "monospacedDigits", "width"], menu: ["disabled", "bordered", "symbol", "tooltip", "width", "items"], label: ["text", "width"], search: ["disabled", "collapses", "placeholder", "value", "width"], segmented: ["segments", "value"] };
+    const toolbar = value.toolbar; object(toolbar, "toolbar"); keys(toolbar, ["visible", "style", "items", "shown", "displayMode", "customization"]); flags(toolbar, ["visible", "shown"]);
+    enumValue(toolbar.style, ["automatic", "expanded", "preference", "unified", "unifiedCompact"], "toolbar style");
+    enumValue(toolbar.displayMode, ["icon", "label", "iconAndLabel"], "toolbar displayMode");
+    if (toolbar.customization !== undefined && toolbar.customization !== null) {
+      object(toolbar.customization, "toolbar customization"); keys(toolbar.customization, ["id"]);
+      if (typeof toolbar.customization.id !== "string" || !/^[A-Za-z0-9_.-]{1,100}$/.test(toolbar.customization.id)) throw new SparkError("E_INVALID_ARGUMENT", "Toolbar customization IDs require 1–100 letters, numbers, periods, underscores or hyphens");
+    }
+    if (toolbar.visible === false && ["shown", "displayMode", "customization"].some(key => toolbar[key] !== undefined)) throw new SparkError("E_INVALID_ARGUMENT", "shown, displayMode and customization need an attached toolbar");
+    if (toolbar.items !== undefined) for (const item of entries(toolbar.items, "toolbar item")) {
+      const fields: Record<string, string[]> = { button: ["label", "disabled", "bordered", "symbol", "tooltip", "monospacedDigits", "width"], menu: ["label", "disabled", "bordered", "symbol", "tooltip", "width", "items"], label: ["label", "text", "width"], search: ["label", "disabled", "collapses", "placeholder", "value", "width"], segmented: ["label", "segments", "value"], sidebarToggle: [] };
       if (typeof item.type !== "string" || !Object.hasOwn(fields, item.type)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown toolbar item type");
-      keys(item, ["id", "label", "placement", "type", ...fields[item.type]]);
+      keys(item, ["id", "placement", "type", ...fields[item.type]]);
+      if (item.type === "sidebarToggle" && toolbar.items.filter(entry => entry.type === "sidebarToggle").length > 1) throw new SparkError("E_INVALID_ARGUMENT", "A toolbar has at most one sidebarToggle item");
       flags(item, ["disabled", "bordered", "monospacedDigits", "collapses"]);
       enumValue(item.placement, ["leading", "trailing"], "toolbar placement");
       for (const field of ["label", "symbol", "tooltip", "text", "placeholder"]) if (item[field] !== undefined) text(item[field], field);

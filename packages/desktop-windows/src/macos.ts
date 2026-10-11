@@ -1,11 +1,11 @@
-import { SparkError, nativeError, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
+import { SparkError, invokeNative, nativeError, parseNativeResult, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { macosCommand, macosNative } from "./macos-adapter";
 import { subscribeToWindowInstance } from "./transport";
 import { type WindowListenerOptions } from "./api";
 import { keys, number, object, text, windowId } from "./validation";
-import type { MacOSWindowBlurOptions, MacOSWindowEvent } from "./types";
-export type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSToolbarItem, MacOSToolbarOptions, MenuAction } from "./types";
+import type { MacOSToolbarState, MacOSWindowBlurOptions, MacOSWindowEvent } from "./types";
+export type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSToolbarDisplayMode, MacOSToolbarItem, MacOSToolbarOptions, MacOSToolbarState, MenuAction } from "./types";
 /** Animated frame changes go through `setWindowBounds` from `/windows` with a `macos.durationMs` group, which rejects on Windows. */
 export async function setWindowBlur(id: string, options: MacOSWindowBlurOptions): Promise<void> {
   const native = macosNative(); windowId(id); object(options, "blur options"); keys(options, ["radius", "durationMs"]);
@@ -21,6 +21,23 @@ export async function focusToolbarSearch(id: string, itemId: string, options: Fo
 export async function setToolbarItemText(id: string, itemId: string, value: string): Promise<void> {
   const native = macosNative(); windowId(id); text(itemId, "toolbar item ID", false); text(value, "toolbar text");
   await macosCommand(() => native.setWindowToolbarItemText(id, itemId, value));
+}
+const ids = (value: unknown): value is string[] => Array.isArray(value) && value.every(id => typeof id === "string");
+const isToolbarState = (value: unknown): value is MacOSToolbarState => {
+  const state = value as MacOSToolbarState;
+  return !!state && typeof state === "object" && typeof state.shown === "boolean" && ["icon", "label", "iconAndLabel"].includes(state.displayMode)
+    && (state.customizationId === null || typeof state.customizationId === "string") && ids(state.itemIds) && ids(state.overflowItemIds);
+};
+/** The toolbar as AppKit has it now, including the user's customization and which items overflow at the current width. Rejects `E_NOT_FOUND` when the window has no toolbar. */
+export async function getToolbarState(id: string): Promise<MacOSToolbarState> {
+  const native = macosNative(); windowId(id);
+  const { shown, displayMode, customizationId, itemIds, overflowItemIds } = parseNativeResult(await invokeNative(() => native.getWindowToolbarState(id)), isToolbarState);
+  return { shown, displayMode, customizationId, itemIds, overflowItemIds };
+}
+/** Opens AppKit's Customize Toolbar sheet on the window. Requires `macos.toolbar.customization`; resolves when the sheet opens. */
+export async function showToolbarCustomizationPalette(id: string): Promise<void> {
+  const native = macosNative(); windowId(id);
+  await invokeNative(() => native.runWindowToolbarCustomizationPalette(id));
 }
 export async function addMacOSWindowListener(id: string, listener: (event: MacOSWindowEvent) => void, options: WindowListenerOptions = {}): Promise<AsyncRegistration> {
   macosNative(); windowId(id); object(options, "listener options"); keys(options, ["onError"]);

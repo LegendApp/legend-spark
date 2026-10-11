@@ -6,7 +6,7 @@ import Native from "./NativeDesktopWindowManager";
 import { COMMON_MACOS, appKitOptions, createMacOSWindow, macosNative, updateMacOSWindow } from "./macos-adapter";
 import { bounds, keys, number, object, text, validateOptions, windowId } from "./validation";
 import { getNativeDisplays, isBounds, isInfo, record, subscribeToWindowInstance, windowCall, windowCommand, type NativeWindowInfo } from "./transport";
-import type { CenterWindowOptions, CloseResult, CursorPoint, DisplayInfo, SetWindowBoundsOptions, ShowWindowOptions, WindowBounds, WindowEventMap, WindowInfo, WindowNewTabEvent, WindowOpenOptions, WindowOption, WindowTabGroup, WindowUpdateOptions } from "./types";
+import type { CenterWindowOptions, CloseResult, CursorPoint, DisplayInfo, SetWindowBoundsOptions, ShowWindowOptions, ToolbarFeature, WindowBounds, WindowEventMap, WindowInfo, WindowNewTabEvent, WindowOpenOptions, WindowOption, WindowTabGroup, WindowUpdateOptions } from "./types";
 export type * from "./types";
 
 const WINDOW_OPTIONS: readonly WindowOption[] = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "tabbing", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "subtitle", "trafficLightPosition"];
@@ -17,6 +17,17 @@ export function getWindowAvailability(option?: WindowOption): Availability {
   if (!Native) return { available: false, reason: "missing-module" };
   if (Platform.OS === "macos") try { macosNative(); } catch { return { available: false, reason: "missing-module" }; }
   if (option !== undefined && Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };
+  return { available: true };
+}
+const TOOLBAR_FEATURES: readonly ToolbarFeature[] = ["customization", "displayMode", "overflow", "shown", "sidebarToggle"];
+/**
+ * Window toolbars (`macos.toolbar`) are an AppKit `NSToolbar`. Windows has no toolbar yet: every feature
+ * reports `unsupported-platform` there, and toolbar options reject with `E_UNSUPPORTED_OPTION`.
+ */
+export function getToolbarAvailability(feature?: ToolbarFeature): Availability {
+  if (feature !== undefined && !TOOLBAR_FEATURES.includes(feature)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown toolbar feature");
+  if (Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };
+  try { macosNative(); } catch { return { available: false, reason: "missing-module" }; }
   return { available: true };
 }
 function publicInfo(value: NativeWindowInfo): WindowInfo {

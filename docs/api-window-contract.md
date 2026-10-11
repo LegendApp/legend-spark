@@ -183,11 +183,33 @@ Use `macos` option groups, with named public types, for features that are genuin
 | Startup timing | Diagnostics entry point, not window options. |
 | Display sleep prevention | `/system` power assertion; remove the duplicate window-manager convenience API. |
 
-`MacOSToolbarItem` is a discriminated union of button, menu, label, search and segmented items. Menu entries use the shared action/checkbox/separator/slider schema; this surface rejects submenus, shortcuts, semantic roles and image files. `addMacOSWindowListener` returns an acknowledged registration for typed title-bar, toolbar, search and menu events; slider actions carry a numeric value. Search focus may optionally replace its text, including an empty string. Segmented values may be empty strings; `null` represents no selection.
+`MacOSToolbarItem` is a discriminated union of button, menu, label, search, segmented and sidebarToggle items. Menu entries use the shared action/checkbox/separator/slider schema; this surface rejects submenus, shortcuts, semantic roles and image files. `addMacOSWindowListener` returns an acknowledged registration for typed title-bar, toolbar, search and menu events; slider actions carry a numeric value. Search focus may optionally replace its text, including an empty string. Segmented values may be empty strings; `null` represents no selection.
 
 Use `/app` events `windowOpened` and `windowClosed` for application-wide registry changes across reused IDs. `usePrimaryWindowLifecycle` uses those events and initializes once per owning ID under React Strict Mode. Instance-specific listeners belong to `/windows`.
 
-`/windows/macos` exposes `setWindowBlur`, `focusToolbarSearch`, `setToolbarItemText` and `addMacOSWindowListener`; animated bounds are an option group on the portable `/windows` `setWindowBounds`, not a second export. `/app` owns `finishWindowRestoration`; `/diagnostics` owns startup timing. The old window-manager, window-controls and React-only import paths are removed without aliases.
+`/windows/macos` exposes `setWindowBlur`, `focusToolbarSearch`, `setToolbarItemText`, `getToolbarState`, `showToolbarCustomizationPalette` and `addMacOSWindowListener`; animated bounds are an option group on the portable `/windows` `setWindowBounds`, not a second export. `/app` owns `finishWindowRestoration`; `/diagnostics` owns startup timing. The old window-manager, window-controls and React-only import paths are removed without aliases.
+
+### Toolbar customization, display modes, overflow and visibility
+
+Added in #72 to `macos.toolbar` (open and update) and `/windows/macos`. `getToolbarAvailability(feature?)`
+from `/windows` reports each feature (`customization`, `displayMode`, `overflow`, `shown`, `sidebarToggle`):
+available on macOS when the window module is present, `unsupported-platform` on Windows. Windows has no
+toolbar yet; its `macos` group rejects with `E_UNSUPPORTED_OPTION` (WIN-UNSUP-01) and the `/windows/macos`
+commands reject with `E_UNSUPPORTED_PLATFORM`.
+
+| Feature | Spark | AppKit | Notes |
+|---|---|---|---|
+| Customization palette | `customization: { id }`, `showToolbarCustomizationPalette(id)` | `allowsUserCustomization`, `runCustomizationPalette:` | The toolbar's context menu also offers Customize Toolbar…. `null` turns it off and shows the app's `items` again. The palette is a sheet: it rejects `E_UNAVAILABLE` without customization and under the test driver, which never shows windows. |
+| Persisted layout | user defaults key `SparkToolbarLayout.<id>`: item order, display mode, shown state | — | Saved on each user change (item added or removed, display mode, shown) and restored when a window opens or turns customization on with that `id`. Spark does not use `autosavesConfiguration`: it works through toolbar families, which mirror every change into each toolbar with the same identifier, including a closed window's toolbar that is not yet released, and AppKit throws when their items differ. Open windows with the same `id` therefore do not mirror each other; the latest change wins. Item updates keep the user's arrangement: new items appear in the palette, removed items leave. Opening and item updates are not saved as customizations. |
+| Display modes | `displayMode: "icon" \| "label" \| "iconAndLabel"` | `NSToolbarDisplayMode` | Default `icon`, as before. AppKit shows labels only when every item responds to a click; with a `label` item in the toolbar it keeps the current mode, and Spark rejects the request with `E_UNSUPPORTED_OPTION` (other fields in the same request have been applied). |
+| Overflow | automatic; `getToolbarState(id).overflowItemIds` | `visibleItems`, `menuFormRepresentation` | Items that do not fit move to AppKit's » menu. Menu buttons and segmented controls get a submenu form, rebuilt from current state when it opens (AppKit's default form for a view item only clicks the hidden view); choosing an entry sends the same `toolbarMenuAction` or `toolbarSelectionChanged` event. The label-only mode uses the same forms. |
+| Show/hide | `shown: boolean` | `NSToolbar.visible` | Like View › Show/Hide Toolbar; the toolbar keeps its items. `visible: false` still removes the toolbar, and rejects `shown`, `displayMode` and `customization` in the same request. |
+| Sidebar toggle | `{ type: "sidebarToggle", id, placement? }` | label, tooltip and symbol of `NSToolbarToggleSidebarItemIdentifier` | AppKit's own item (`NSToolbarToggleSidebarItem`) always sends `toggleSidebar:` through the responder chain and ignores a target, while Spark sidebars are React state. Spark builds an item with the standard item's localized label, tooltip and symbol that sends `toolbarAction` with its `id`. At most one per toolbar. |
+
+`getToolbarState(id)` resolves `{ shown, displayMode, customizationId, itemIds, overflowItemIds }` as AppKit
+has it now, after any user customization; it rejects `E_NOT_FOUND` when the window has no toolbar. The native
+harness (`tests/window-manager.native.mm`) covers each row on real `NSToolbar`s, including overflow in a narrow
+window that is never shown.
 
 ### Window options audit
 

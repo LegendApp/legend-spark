@@ -147,6 +147,159 @@ int main() { @autoreleasepool {
   [manager applyToolbarItemsFromOptions:changed toWindow:window identifier:@"brightness-probe"];
   assert(![window.toolbar.items isEqualToArray:originalItems]);
   [window close];
+  // Toolbar display modes, shown state, sidebar item, overflow and its menu forms (#72).
+  __block NSDictionary *toolbarState = nil;
+  void (^readToolbar)(NSString *) = ^(NSString *windowId) {
+    toolbarState = nil;
+    [manager getWindowToolbarState:windowId resolve:^(id result) { toolbarState = [NSJSONSerialization JSONObjectWithData:[result dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil]; } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+    assert(toolbarState);
+  };
+  NSWindow *bar = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1400, 500)
+    styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
+  bar.releasedWhenClosed = NO; manager.windows[@"bar"] = bar;
+  error = nil;
+  [manager getWindowToolbarState:@"bar" resolve:^(id) { assert(false); } reject:^(NSString *code, NSString *, NSError *) { error = code; }];
+  assert([error isEqual:@"E_NOT_FOUND"]);
+  __block NSArray *barItems = @[
+    @{ @"id": @"sidebar", @"type": @"sidebarToggle", @"placement": @"leading" },
+    @{ @"id": @"view", @"type": @"segmented", @"label": @"View", @"selectedValue": @"list", @"segments": @[@{ @"value": @"list", @"label": @"List" }, @{ @"value": @"grid", @"label": @"Grid" }] },
+    @{ @"id": @"sort", @"type": @"menuButton", @"label": @"Sort", @"menuItems": @[@{ @"id": @"name", @"title": @"Name", @"checked": @YES }, @{ @"id": @"date", @"title": @"Date" }] },
+    @{ @"id": @"share", @"type": @"button", @"label": @"Share", @"systemImageName": @"square.and.arrow.up" },
+    @{ @"id": @"status", @"type": @"label", @"label": @"Status", @"text": @"Ready" },
+  ];
+  [manager setWindowOptions:@"bar" optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"hasToolbar": @YES, @"toolbarItems": barItems, @"toolbarDisplayMode": @"iconAndLabel", @"toolbarShown": @NO } }]
+    resolve:^(id result) { assert([result containsString:@"true"]); } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  assert(bar.toolbar.displayMode == NSToolbarDisplayModeIconAndLabel); assert(!bar.toolbar.visible); assert(!bar.toolbar.allowsUserCustomization);
+  readToolbar(@"bar");
+  assert([toolbarState[@"shown"] isEqual:@NO]); assert([toolbarState[@"displayMode"] isEqual:@"iconAndLabel"]); assert(toolbarState[@"customizationId"] == NSNull.null);
+  assert([toolbarState[@"itemIds"] isEqual:(@[@"sidebar", @"view", @"sort", @"share", @"status"])]); assert([toolbarState[@"overflowItemIds"] count] == 0);
+  // AppKit refuses label-only mode while a label item (nothing to click) is in the toolbar.
+  error = nil;
+  [manager setWindowOptions:@"bar" optionsJson:@"{\"windowStyle\":{\"toolbarDisplayMode\":\"label\"}}" resolve:^(id) { assert(false); } reject:^(NSString *code, NSString *, NSError *) { error = code; }];
+  assert([error isEqual:@"E_UNSUPPORTED_OPTION"]); assert(bar.toolbar.displayMode == NSToolbarDisplayModeIconAndLabel);
+  barItems = [barItems subarrayWithRange:NSMakeRange(0, 4)];
+  [manager setWindowOptions:@"bar" optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"toolbarItems": barItems, @"toolbarDisplayMode": @"label", @"toolbarShown": @YES } }]
+    resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  assert(bar.toolbar.displayMode == NSToolbarDisplayModeLabelOnly); assert(bar.toolbar.visible);
+  readToolbar(@"bar");
+  assert([toolbarState[@"displayMode"] isEqual:@"label"]); assert([toolbarState[@"shown"] isEqual:@YES]);
+  [manager setWindowOptions:@"bar" optionsJson:@"{\"windowStyle\":{\"toolbarDisplayMode\":\"icon\"}}" resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  readToolbar(@"bar");
+  assert([toolbarState[@"displayMode"] isEqual:@"icon"]); assert([toolbarState[@"overflowItemIds"] count] == 0);
+  // AppKit's sidebar label and symbol, reported to JavaScript as a toolbarAction for its ID.
+  NSToolbarItem *sidebarItem = bar.toolbar.items.firstObject;
+  assert([sidebarItem.itemIdentifier isEqual:@"legend.toolbar.sidebar"]); assert([sidebarItem.label isEqual:@"Sidebar"]); assert(sidebarItem.image);
+  assert(sidebarItem.target == manager); assert(sidebarItem.action == @selector(toolbarButtonItemPressed:));
+  [manager toolbarButtonItemPressed:sidebarItem];
+  assert([events.lastObject[@"type"] isEqual:@"toolbarAction"]); assert([events.lastObject[@"itemId"] isEqual:@"sidebar"]); assert([events.lastObject[@"windowId"] isEqual:@"bar"]);
+  // A narrow window moves trailing items into the overflow menu; widening brings them back.
+  [bar setFrame:NSMakeRect(0, 0, 360, 500) display:NO];
+  readToolbar(@"bar");
+  NSArray *overflow = toolbarState[@"overflowItemIds"];
+  assert(overflow.count > 0 && overflow.count < 4); assert([overflow containsObject:@"share"]); assert(![overflow containsObject:@"sidebar"]);
+  printf("Narrow toolbar overflow: %s\n", [[overflow componentsJoinedByString:@","] UTF8String]);
+  [bar setFrame:NSMakeRect(0, 0, 1400, 500) display:NO];
+  readToolbar(@"bar");
+  assert([toolbarState[@"overflowItemIds"] count] == 0);
+  // Menu forms used by the overflow menu and label-only mode: submenus built from current state.
+  NSToolbarItem *viewItem = nil, *sortItem = nil;
+  for (NSToolbarItem *item in bar.toolbar.items) {
+    if ([item.itemIdentifier isEqual:@"legend.toolbar.view"]) viewItem = item;
+    if ([item.itemIdentifier isEqual:@"legend.toolbar.sort"]) sortItem = item;
+  }
+  NSMenu *sortMenu = sortItem.menuFormRepresentation.submenu;
+  assert([sortItem.menuFormRepresentation.title isEqual:@"Sort"]); assert(sortMenu);
+  [sortMenu.delegate menuNeedsUpdate:sortMenu];
+  assert(sortMenu.numberOfItems == 2); assert([[sortMenu itemAtIndex:0].title isEqual:@"Name"]); assert([sortMenu itemAtIndex:0].state == NSControlStateValueOn);
+  NSMenuItem *dateItem = [sortMenu itemAtIndex:1];
+  [manager performSelector:dateItem.action withObject:dateItem];
+  assert([events.lastObject[@"type"] isEqual:@"toolbarMenuAction"]); assert([events.lastObject[@"action"][@"itemId"] isEqual:@"date"]);
+  // A menu button without entries (a clickable readout) presses itself from the overflow menu.
+  NSToolbarItem *elapsedItem = [manager toolbar:bar.toolbar itemForItemIdentifier:@"legend.toolbar.elapsed" willBeInsertedIntoToolbar:NO];
+  assert(elapsedItem == nil);
+  manager.toolbarItemConfigs[bar.toolbar.identifier] = [manager.toolbarItemConfigs[bar.toolbar.identifier] arrayByAddingObject:@{ @"id": @"elapsed", @"type": @"menuButton", @"label": @"0:00", @"menuItems": @[] }];
+  elapsedItem = [manager toolbar:bar.toolbar itemForItemIdentifier:@"legend.toolbar.elapsed" willBeInsertedIntoToolbar:NO];
+  assert(!elapsedItem.menuFormRepresentation.submenu); assert(elapsedItem.menuFormRepresentation.action);
+  [manager performSelector:elapsedItem.menuFormRepresentation.action withObject:elapsedItem.menuFormRepresentation];
+  assert([events.lastObject[@"type"] isEqual:@"toolbarAction"]); assert([events.lastObject[@"itemId"] isEqual:@"elapsed"]);
+  NSMenu *viewMenu = viewItem.menuFormRepresentation.submenu;
+  [viewMenu.delegate menuNeedsUpdate:viewMenu];
+  assert(viewMenu.numberOfItems == 2); assert([[viewMenu itemAtIndex:1].title isEqual:@"Grid"]);
+  assert([viewMenu itemAtIndex:0].state == NSControlStateValueOn && [viewMenu itemAtIndex:1].state == NSControlStateValueOff);
+  NSMenuItem *gridItem = [viewMenu itemAtIndex:1];
+  [manager performSelector:gridItem.action withObject:gridItem];
+  assert([events.lastObject[@"type"] isEqual:@"toolbarSelectionChanged"]); assert([events.lastObject[@"value"] isEqual:@"grid"]);
+  assert([(NSSegmentedControl *)viewItem.view selectedSegment] == 1);
+  [viewMenu.delegate menuNeedsUpdate:viewMenu];
+  assert([viewMenu itemAtIndex:1].state == NSControlStateValueOn);
+  // The palette needs customization, and driver mode never shows it.
+  error = nil;
+  [manager runWindowToolbarCustomizationPalette:@"bar" resolve:^(id) { assert(false); } reject:^(NSString *code, NSString *, NSError *) { error = code; }];
+  assert([error isEqual:@"E_UNAVAILABLE"]);
+  // Customization: the user's layout persists under the customization ID and restores in a new window.
+  NSString *customId = [@"spark-test-" stringByAppendingString:NSUUID.UUID.UUIDString];
+  NSString *defaultsKey = [@"SparkToolbarLayout." stringByAppendingString:customId];
+  NSWindow *(^customWindow)(NSString *, NSArray *) = ^NSWindow *(NSString *windowId, NSArray *items) {
+    NSWindow *value = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1400, 500)
+      styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
+    value.releasedWhenClosed = NO; manager.windows[windowId] = value;
+    [manager setWindowOptions:windowId optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"hasToolbar": @YES, @"toolbarItems": items, @"toolbarCustomization": customId } }]
+      resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+    return value;
+  };
+  NSWindow *first = customWindow(@"custom-a", barItems);
+  assert(first.toolbar.allowsUserCustomization); assert(!first.toolbar.autosavesConfiguration);
+  readToolbar(@"custom-a");
+  assert([toolbarState[@"customizationId"] isEqual:customId]); assert([toolbarState[@"itemIds"] count] == 4);
+  // Opening applies the app's items without saving them as a customization.
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+  assert([NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey] == nil);
+  // The user drags Share out of the toolbar, picks Icon and Text and hides the toolbar (AppKit's
+  // palette and context menu make these same toolbar changes).
+  NSUInteger shareIndex = [[first.toolbar.items valueForKey:@"itemIdentifier"] indexOfObject:@"legend.toolbar.share"];
+  [first.toolbar removeItemAtIndex:shareIndex];
+  first.toolbar.displayMode = NSToolbarDisplayModeIconAndLabel;
+  first.toolbar.visible = NO;
+  NSDictionary *saved = [NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey];
+  assert(![saved[@"items"] containsObject:@"legend.toolbar.share"]); assert([saved[@"shown"] isEqual:@NO]); assert([saved[@"displayMode"] integerValue] == NSToolbarDisplayModeIconAndLabel);
+  // Closing a customizable window keeps the saved layout.
+  [manager handleWindowClosedForIdentifier:@"custom-a" closeWindow:YES];
+  assert([[NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey] isEqual:saved]);
+  NSWindow *second = customWindow(@"custom-b", barItems);
+  readToolbar(@"custom-b");
+  assert([toolbarState[@"itemIds"] isEqual:(@[@"sidebar", @"view", @"sort"])]); assert([toolbarState[@"shown"] isEqual:@NO]);
+  assert([toolbarState[@"displayMode"] isEqual:@"iconAndLabel"]);
+  // Later item updates keep the user's arrangement: new items go to the palette, removed items leave.
+  NSMutableArray *updatedItems = [[barItems subarrayWithRange:NSMakeRange(0, 2)] mutableCopy];
+  [updatedItems addObject:@{ @"id": @"export", @"type": @"button", @"label": @"Export" }];
+  [manager setWindowOptions:@"custom-b" optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"toolbarItems": updatedItems } }] resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  readToolbar(@"custom-b");
+  assert([toolbarState[@"itemIds"] isEqual:(@[@"sidebar", @"view"])]);
+  assert([[manager toolbarAllowedItemIdentifiers:second.toolbar] containsObject:@"legend.toolbar.export"]);
+  // A second open window with the same ID restores the latest layout; each window then keeps its own.
+  NSWindow *third = customWindow(@"custom-c", barItems);
+  readToolbar(@"custom-c");
+  assert([toolbarState[@"itemIds"] isEqual:(@[@"sidebar", @"view"])]);
+  // The user drags Share from the palette into the toolbar; the add is saved once AppKit has inserted it.
+  [third.toolbar insertItemWithItemIdentifier:@"legend.toolbar.share" atIndex:2];
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+  assert([[NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey][@"items"] containsObject:@"legend.toolbar.share"]);
+  [third.toolbar removeItemAtIndex:0];
+  readToolbar(@"custom-b");
+  assert([toolbarState[@"itemIds"] isEqual:(@[@"sidebar", @"view"])]);
+  [manager handleWindowClosedForIdentifier:@"custom-c" closeWindow:YES];
+  // Turning customization off shows the app's items again and stops saving.
+  [manager setWindowOptions:@"custom-b" optionsJson:@"{\"windowStyle\":{\"toolbarCustomization\":null}}" resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  readToolbar(@"custom-b");
+  assert(toolbarState[@"customizationId"] == NSNull.null); assert(!second.toolbar.allowsUserCustomization);
+  assert([toolbarState[@"itemIds"] isEqual:(@[@"sidebar", @"view", @"export"])]);
+  NSDictionary *latest = [NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey];
+  [second.toolbar removeItemAtIndex:0];
+  assert([[NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey] isEqual:latest]);
+  [manager handleWindowClosedForIdentifier:@"custom-b" closeWindow:YES];
+  [manager handleWindowClosedForIdentifier:@"bar" closeWindow:YES];
+  [NSUserDefaults.standardUserDefaults removeObjectForKey:defaultsKey];
+  puts("Toolbar customization, display modes, overflow and sidebar item passed");
   // AppKit groups (macos-adapter's windowStyle wire format) apply on update, then change back.
   NSWindow *chrome = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 640, 480)
     styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
