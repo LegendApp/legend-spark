@@ -1,18 +1,21 @@
 #import "AppDelegate.h"
 #import <RNDesktopApp/SparkDesktop.h>
+#import <RNDesktopApp/SparkTestDriver.h>
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTUIKit.h>
 #import <QuartzCore/QuartzCore.h>
 #include <cxxreact/ReactMarker.h>
 #import <React-RCTAppDelegate/RCTRootViewFactory.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
+#import <React/RCTSurfacePresenter.h>
+#import <ReactCommon/RCTHost.h>
 
 #if __has_include(<NativeComposeThreadedRuntime/ThreadedRuntime.h>)
 #import <NativeComposeThreadedRuntime/ThreadedRuntime.h>
 #import <React/RCTReloadCommand.h>
 #endif
 
-@interface AppDelegate () <NSWindowDelegate>
+@interface AppDelegate () <NSWindowDelegate, RCTSurfacePresenterObserver>
 @property (nonatomic, assign) BOOL sparkPrimaryInstance;
 @property (nonatomic, weak) NSWindow *sparkLastFocusedWindow;
 @property (nonatomic, strong) NSColor *sparkStartupColor;
@@ -20,7 +23,8 @@
 
 @implementation AppDelegate
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
-  self.sparkPrimaryInstance = SparkAcquireInstance();
+  // A driven instance never signals (and so never activates) a normal running instance.
+  self.sparkPrimaryInstance = SparkTestDriverStart() || SparkAcquireInstance();
   if (!self.sparkPrimaryInstance) { [NSApp terminate:nil]; return; }
   facebook::react::ReactMarker::logMarkerDone(facebook::react::ReactMarker::APP_STARTUP_START, CACurrentMediaTime() * 1000);
   [self sparkPrepareMainMenu];
@@ -111,13 +115,19 @@
   placeholder.wantsLayer = YES; placeholder.layer.backgroundColor = self.sparkStartupColor.CGColor;
   self.window.contentView = placeholder;
   SparkPrepareMainWindow(self.window);
-  if (![policy[@"hidden"] boolValue] && ![[NSBundle.mainBundle objectForInfoDictionaryKey:@"SparkMenuBarOnly"] boolValue]) {
+  // The test driver renders the window in-process without ever showing it.
+  if (!SparkTestDriverActive() && ![policy[@"hidden"] boolValue] && ![[NSBundle.mainBundle objectForInfoDictionaryKey:@"SparkMenuBarOnly"] boolValue]) {
     [self.window makeKeyAndOrderFront:nil]; [self.window displayIfNeeded]; SparkRecordMainWindowShown();
   }
 }
 - (void)loadReactNativeWindow:(NSDictionary *)launchOptions {
   [self sparkPrepareMainWindow];
   NSView *root = [self.rootViewFactory viewWithModuleName:self.moduleName initialProperties:self.initialProps launchOptions:launchOptions];
+  if (SparkTestDriverActive()) {
+    RCTSurfacePresenter *presenter = self.rootViewFactory.reactHost.surfacePresenter;
+    if (!presenter) [NSException raise:NSInternalInconsistencyException format:@"The test driver needs the Fabric surface presenter"];
+    [presenter addObserver:self];
+  }
   root.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   NSDictionary *options = SparkWindowConfiguration();
   if ([options[@"transparent"] boolValue] || options[@"backgroundColor"] || SparkLifecycleConfiguration()[@"mainWindow"][@"backgroundColors"])
@@ -141,13 +151,14 @@
     }
   });
 }
+- (void)didMountComponentsWithRootTag:(NSInteger)rootTag { SparkTestDriverDidMount(); }
 - (BOOL)windowShouldClose:(NSWindow *)window {
   NSString *behavior = SparkLifecycleConfiguration()[@"mainWindow"][@"closeBehavior"];
   if ([behavior isEqual:@"hide"]) { [window orderOut:nil]; return NO; }
   if ([behavior isEqual:@"request"]) { SparkEmit(@{ @"type": @"closeRequested", @"windowId": @"main" }); return NO; }
   return YES;
 }
-- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender { return SparkShouldQuit(); }
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender { return SparkTestDriverEnding() ? NSTerminateNow : SparkShouldQuit(); }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender { return NO; }
 - (void)applicationDidBecomeActive:(NSNotification *)note { SparkEmit(@{ @"type": @"activate" }); }
 - (void)applicationDidResignActive:(NSNotification *)note { SparkEmit(@{ @"type": @"deactivate" }); }

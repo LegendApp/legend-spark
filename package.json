@@ -15,6 +15,7 @@
     "spark": "bun scripts/spark.mjs",
     "kitchen-sink": "bun run --filter @spark-examples/kitchen-sink dev",
     "kitchen-sink:prepare": "bun scripts/prepare-kitchen-sink.ts",
+    "ks:capture": "bun scripts/ks-capture.ts",
     "settings": "bun scripts/settings.ts",
     "e2e:validate": "bun scripts/e2e/cli.ts validate",
     "e2e:lint": "bun scripts/e2e/cli.ts lint",

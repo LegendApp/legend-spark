@@ -34,6 +34,24 @@ test("CocoaPods preparation changes when identical native packages move", () => 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test("CocoaPods preparation changes when a native source is added, not when one is edited", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spark-native-sources-"));
+  try {
+    writeFileSync(path.join(root, "package.json"), "{}");
+    writeFileSync(path.join(root, "app.json"), JSON.stringify({ expo: { name: "Fixture" } }));
+    const location = path.join(root, "fixture");
+    mkdirSync(path.join(location, "macos"), { recursive: true });
+    writeFileSync(path.join(location, "package.json"), JSON.stringify({ name: "fixture", version: "1.0.0" }));
+    writeFileSync(path.join(location, "macos/Module.mm"), "// one");
+    const packages = [{ name: "fixture", root: location, json: {}, sdk: false, requires: [], signature: "same" } as NativePackage];
+    const original = nativePreparationFingerprint(root, packages);
+    writeFileSync(path.join(location, "macos/Module.mm"), "// edited");
+    expect(nativePreparationFingerprint(root, packages)).toBe(original);
+    writeFileSync(path.join(location, "macos/Added.mm"), "");
+    expect(nativePreparationFingerprint(root, packages)).not.toBe(original);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test("local development signing is opt-in and cannot affect distribution builds", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-dev-signing-"));
   try {
