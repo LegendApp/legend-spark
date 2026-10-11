@@ -7,6 +7,7 @@ import * as files from "@legendapp/spark/files";
 import { AuthChecks } from "./AuthChecks";
 import { AudioChecks } from "./AudioChecks";
 import { FileStreamChecks } from "./FileStreamChecks";
+import { OSIntegrationReport } from "./screens/files-filesystem/OSIntegration";
 import { FoundationChecks } from "./FoundationChecks";
 import { runSidecarChecks } from "./sidecar-checks";
 import { runChecks, type Check } from "./checks";
@@ -22,6 +23,7 @@ const reports: Record<ReportFlag, (report: string, args: readonly string[]) => R
   "--spark-auth-report": (report, args) => <AuthChecks report={report} provider={argument(args, "--spark-auth-provider")!} />,
   "--spark-audio-report": (report, args) => <AudioChecks report={report} source={argument(args, "--spark-audio-source")!} />,
   "--spark-files-report": report => <FileStreamChecks report={report} />,
+  "--spark-files-api-report": (report, args) => <OSIntegrationReport report={report} args={args} />,
   "--spark-foundation-report": report => <FoundationChecks report={report} />,
   "--spark-ui-report": report => <NativeControls report={report} />,
   "--spark-api-report": (report, args) => <APIChecks report={report} expectedInitial={argument(args, "--spark-api-initial") ?? null} />,

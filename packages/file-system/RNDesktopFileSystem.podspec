@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.source = { :path => "." }
   s.platforms = { :osx => "14.0" }
   s.source_files = "macos/**/*.{h,m,mm}"
-  s.frameworks = "CoreServices"
+  s.frameworks = "CoreServices", "Quartz", "QuickLookThumbnailing", "Security", "UniformTypeIdentifiers"
   s.dependency "React-Core"
   s.dependency "ReactCodegen"
   s.dependency "RNDesktopApp"

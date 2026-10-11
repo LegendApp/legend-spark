@@ -3,6 +3,7 @@
 #include <SparkBinaryWindows.hpp>
 #include <shlobj.h>
 #include <shlwapi.h>
+#include <wincodec.h>
 #include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <filesystem>
@@ -21,6 +22,8 @@
 #pragma comment(lib, "Ole32.lib")
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
+#pragma comment(lib, "Windowscodecs.lib")
+#pragma comment(lib, "Gdi32.lib")
 
 namespace winrt::SparkFileSystem {
 namespace React = Microsoft::ReactNative;
@@ -52,11 +55,18 @@ inline std::string ErrorCode(DWORD error) {
     case ERROR_ACCESS_DENIED: case ERROR_PRIVILEGE_NOT_HELD: return "E_PERMISSION";
     case ERROR_ALREADY_EXISTS: case ERROR_FILE_EXISTS: return "E_EXISTS";
     case ERROR_DIR_NOT_EMPTY: return "E_NOT_EMPTY";
+    case ERROR_WRITE_PROTECT: return "E_READ_ONLY";
+    case ERROR_DISK_FULL: case ERROR_HANDLE_DISK_FULL: case ERROR_DISK_QUOTA_EXCEEDED: return "E_NO_SPACE";
     case ERROR_INVALID_HANDLE: return "E_CLOSED";
     case ERROR_INVALID_PARAMETER: case ERROR_INVALID_NAME: return "E_INVALID_ARGUMENT";
     default: return "E_IO";
   }
 }
+// A failure whose Spark code is chosen explicitly rather than mapped from an OS error.
+struct CodedError : std::runtime_error {
+  std::string code;
+  CodedError(std::string value, std::string const &message) : std::runtime_error(message), code(std::move(value)) {}
+};
 template <class Promise> inline void Reject(Promise const &promise) noexcept {
   try { throw; }
   catch (fs::filesystem_error const &e) {
@@ -65,7 +75,10 @@ template <class Promise> inline void Reject(Promise const &promise) noexcept {
     else if (code == std::errc::permission_denied) kind = "E_PERMISSION";
     else if (code == std::errc::file_exists) kind = "E_EXISTS";
     else if (code == std::errc::directory_not_empty) kind = "E_NOT_EMPTY";
+    else if (code == std::errc::read_only_file_system) kind = "E_READ_ONLY";
+    else if (code == std::errc::no_space_on_device) kind = "E_NO_SPACE";
     promise.Reject(React::ReactError{kind, e.what()});
+  } catch (CodedError const &e) { promise.Reject(React::ReactError{e.code, e.what()});
   } catch (hresult_error const &e) {
     promise.Reject(React::ReactError{e.code() == E_INVALIDARG ? "E_INVALID_ARGUMENT" : ErrorCode(HRESULT_CODE(e.code())), to_string(e.message())});
   } catch (std::exception const &e) { promise.Reject(React::ReactError{"E_IO", e.what()}); }
@@ -150,6 +163,162 @@ inline void Transfer(fs::path const &from, fs::path const &to, bool move, bool o
     if (!stagedByRename) { std::error_code ignored; fs::remove_all(stage, ignored); }
     throw;
   }
+}
+inline void RequireExisting(fs::path const &path) {
+  if (fs::symlink_status(path).type() == fs::file_type::not_found) throw fs::filesystem_error("No such file or directory", path, std::make_error_code(std::errc::no_such_file_or_directory));
+}
+// Mark of the Web lives in the Zone.Identifier alternate data stream.
+inline fs::path ZoneStream(fs::path const &path) { return fs::path(path.wstring() + L":Zone.Identifier"); }
+inline Json::IJsonValue GetQuarantine(fs::path const &path) {
+  RequireExisting(path);
+  std::vector<uint8_t> bytes;
+  try { bytes = Read(ZoneStream(path)); }
+  catch (hresult_error const &e) { if (HRESULT_CODE(e.code()) == ERROR_FILE_NOT_FOUND) return Json::JsonValue::CreateNullValue(); throw; }
+  std::string text(bytes.begin(), bytes.end()), line; Json::JsonObject result; int zone = -1;
+  for (size_t start = 0; start <= text.size();) {
+    auto end = text.find('\n', start); line = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    auto equals = line.find('=');
+    if (equals != std::string::npos) {
+      auto key = line.substr(0, equals), value = line.substr(equals + 1);
+      if (key == "ZoneId") zone = std::atoi(value.c_str());
+      else if (key == "ReferrerUrl") result.SetNamedValue(L"originURL", Json::JsonValue::CreateStringValue(to_hstring(value)));
+      else if (key == "HostUrl") result.SetNamedValue(L"dataURL", Json::JsonValue::CreateStringValue(to_hstring(value)));
+    }
+    if (end == std::string::npos) break; start = end + 1;
+  }
+  // Zones below Internet (3) do not mark content as downloaded from an untrusted source.
+  if (zone < 3) return Json::JsonValue::CreateNullValue();
+  return result;
+}
+inline void SetQuarantine(fs::path const &path, Json::JsonObject const &info) {
+  RequireExisting(path);
+  if (info.HasKey(L"agentName") || info.HasKey(L"timestamp")) throw hresult_invalid_argument(L"Windows Mark of the Web records no agentName or timestamp");
+  std::string text = "[ZoneTransfer]\r\nZoneId=3\r\n";
+  for (auto [key, name] : { std::pair{L"originURL", "ReferrerUrl"}, std::pair{L"dataURL", "HostUrl"} }) {
+    if (!info.HasKey(key)) continue;
+    auto value = to_string(info.GetNamedString(key));
+    if (value.find_first_of("\r\n") != std::string::npos) throw hresult_invalid_argument(L"Quarantine URLs cannot contain line breaks");
+    text += std::string(name) + "=" + value + "\r\n";
+  }
+  auto stream = Open(ZoneStream(path), GENERIC_WRITE, CREATE_ALWAYS);
+  DWORD count = 0;
+  if (!WriteFile(stream.get(), text.data(), static_cast<DWORD>(text.size()), &count, nullptr) || count != text.size()) throw_last_error();
+}
+inline void ClearQuarantine(fs::path const &path) {
+  RequireExisting(path);
+  if (!DeleteFileW(ZoneStream(path).c_str()) && GetLastError() != ERROR_FILE_NOT_FOUND) throw_last_error();
+}
+inline int ImageSize(Json::JsonObject const &args) {
+  auto size = args.GetNamedNumber(L"size");
+  if (!std::isfinite(size) || size < 1 || size > 1024 || std::floor(size) != size) throw hresult_invalid_argument(L"Image size must be an integer from 1 to 1024");
+  return static_cast<int>(size);
+}
+// The shell's icon or thumbnail, fitted within size and encoded as PNG. SIIGBF_THUMBNAILONLY fails
+// instead of substituting the icon when no thumbnail provider handles the file.
+inline std::vector<uint8_t> ShellImage(fs::path const &path, int size, bool thumbnail) {
+  RequireExisting(path);
+  com_ptr<IShellItemImageFactory> factory;
+  check_hresult(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(factory.put())));
+  HBITMAP bitmap = nullptr;
+  auto result = factory->GetImage(SIZE{size, size}, thumbnail ? SIIGBF_THUMBNAILONLY : SIIGBF_ICONONLY, &bitmap);
+  if (FAILED(result)) {
+    if (thumbnail) throw CodedError("E_UNAVAILABLE", "No thumbnail is available for this file");
+    throw_hresult(result);
+  }
+  std::unique_ptr<std::remove_pointer_t<HBITMAP>, decltype(&DeleteObject)> owned(bitmap, &DeleteObject);
+  // Opaque thumbnails can arrive with an all-zero alpha channel; treat those as opaque.
+  DIBSECTION dib{}; bool alpha = false;
+  if (GetObjectW(bitmap, sizeof dib, &dib) == sizeof dib && dib.dsBm.bmBitsPixel == 32 && dib.dsBm.bmBits) {
+    auto pixels = static_cast<uint8_t const *>(dib.dsBm.bmBits);
+    for (LONG i = 3, end = dib.dsBm.bmWidthBytes * dib.dsBm.bmHeight; i < end && !alpha; i += 4) alpha = pixels[i] != 0;
+  }
+  auto wic = create_instance<IWICImagingFactory>(CLSID_WICImagingFactory);
+  com_ptr<IWICBitmap> source;
+  check_hresult(wic->CreateBitmapFromHBITMAP(bitmap, nullptr, alpha ? WICBitmapUsePremultipliedAlpha : WICBitmapIgnoreAlpha, source.put()));
+  com_ptr<IStream> stream; stream.attach(SHCreateMemStream(nullptr, 0));
+  if (!stream) throw hresult_error(E_OUTOFMEMORY);
+  com_ptr<IWICBitmapEncoder> encoder; com_ptr<IWICBitmapFrameEncode> frame;
+  check_hresult(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, encoder.put()));
+  check_hresult(encoder->Initialize(stream.get(), WICBitmapEncoderNoCache));
+  check_hresult(encoder->CreateNewFrame(frame.put(), nullptr));
+  check_hresult(frame->Initialize(nullptr));
+  UINT width = 0, height = 0; check_hresult(source->GetSize(&width, &height));
+  check_hresult(frame->SetSize(width, height));
+  WICPixelFormatGUID format = GUID_WICPixelFormat32bppBGRA;
+  check_hresult(frame->SetPixelFormat(&format));
+  check_hresult(frame->WriteSource(source.get(), nullptr));
+  check_hresult(frame->Commit()); check_hresult(encoder->Commit());
+  ULARGE_INTEGER length{}; check_hresult(IStream_Size(stream.get(), &length)); check_hresult(IStream_Reset(stream.get()));
+  std::vector<uint8_t> png(static_cast<size_t>(length.QuadPart));
+  check_hresult(IStream_Read(stream.get(), png.data(), static_cast<ULONG>(png.size())));
+  return png;
+}
+inline Json::IJsonValue DiskSpace(fs::path const &path) {
+  RequireExisting(path);
+  auto directory = fs::is_directory(path) ? path : path.parent_path();
+  ULARGE_INTEGER available{}, total{}, free{};
+  if (!GetDiskFreeSpaceExW(directory.c_str(), &available, &total, &free)) throw_last_error();
+  Json::JsonObject result;
+  result.SetNamedValue(L"totalBytes", Json::JsonValue::CreateNumberValue(static_cast<double>(total.QuadPart)));
+  result.SetNamedValue(L"availableBytes", Json::JsonValue::CreateNumberValue(static_cast<double>(available.QuadPart)));
+  return result;
+}
+// Registered handlers for the file's extension. Name is the handler's executable path.
+template <class Visit> inline void EachHandler(fs::path const &path, Visit visit) {
+  RequireExisting(path);
+  auto extension = path.extension().wstring();
+  if (extension.empty()) return;
+  com_ptr<IEnumAssocHandlers> handlers;
+  check_hresult(SHAssocEnumHandlers(extension.c_str(), ASSOC_FILTER_RECOMMENDED, handlers.put()));
+  for (;;) {
+    com_ptr<IAssocHandler> handler; ULONG fetched = 0;
+    if (handlers->Next(1, handler.put(), &fetched) != S_OK || !fetched) break;
+    PWSTR name = nullptr, label = nullptr;
+    if (FAILED(handler->GetName(&name))) continue;
+    std::wstring executable(name); CoTaskMemFree(name);
+    std::wstring display = SUCCEEDED(handler->GetUIName(&label)) ? std::wstring(label) : fs::path(executable).stem().wstring();
+    if (label) CoTaskMemFree(label);
+    if (visit(handler, executable, display)) return;
+  }
+}
+inline Json::IJsonValue Applications(fs::path const &path) {
+  wchar_t preferred[MAX_PATH]{}; DWORD length = MAX_PATH;
+  auto extension = path.extension().wstring();
+  bool hasDefault = !extension.empty() && SUCCEEDED(AssocQueryStringW(ASSOCF_NOTRUNCATE, ASSOCSTR_EXECUTABLE, extension.c_str(), nullptr, preferred, &length));
+  Json::JsonArray result; bool defaultSeen = false; std::vector<std::wstring> seen;
+  EachHandler(path, [&](com_ptr<IAssocHandler> const &, std::wstring const &executable, std::wstring const &display) {
+    for (auto const &item : seen) if (CompareStringOrdinal(item.c_str(), -1, executable.c_str(), -1, TRUE) == CSTR_EQUAL) return false;
+    seen.push_back(executable);
+    bool isDefault = hasDefault && !defaultSeen && CompareStringOrdinal(preferred, -1, executable.c_str(), -1, TRUE) == CSTR_EQUAL;
+    defaultSeen = defaultSeen || isDefault;
+    Json::JsonObject app;
+    app.SetNamedValue(L"name", Json::JsonValue::CreateStringValue(display));
+    app.SetNamedValue(L"path", Json::JsonValue::CreateStringValue(executable));
+    app.SetNamedValue(L"isDefault", Json::JsonValue::CreateBooleanValue(isDefault));
+    result.Append(app); return false;
+  });
+  return result;
+}
+// Invokes the registered handler; an unregistered application is rejected rather than launched with arguments.
+inline void OpenWith(fs::path const &path, fs::path const &application) {
+  bool opened = false;
+  EachHandler(path, [&](com_ptr<IAssocHandler> const &handler, std::wstring const &executable, std::wstring const &) {
+    if (CompareStringOrdinal(executable.c_str(), -1, application.c_str(), -1, TRUE) != CSTR_EQUAL) return false;
+    com_ptr<IShellItem> item; check_hresult(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(item.put())));
+    com_ptr<IDataObject> data; check_hresult(item->BindToHandler(nullptr, BHID_DataObject, IID_PPV_ARGS(data.put())));
+    check_hresult(handler->Invoke(data.get())); opened = true; return true;
+  });
+  if (!opened) throw hresult_error(HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND), L"The application is not registered to open this file");
+}
+// Shell UI actions run on the UI thread.
+inline void RunShellAction(std::string const &method, Json::JsonObject const &args) {
+  auto path = FilePath(args.GetNamedString(L"path"));
+  if (method == "openWith") { OpenWith(path, FilePath(args.GetNamedString(L"application"))); return; }
+  PIDLIST_ABSOLUTE item = nullptr;
+  check_hresult(SHParseDisplayName(path.c_str(), nullptr, &item, 0, nullptr));
+  auto result = SHOpenFolderAndSelectItems(item, 0, nullptr, 0);
+  CoTaskMemFree(item); check_hresult(result);
 }
 inline fs::path Directory(hstring const &kind) {
   wchar_t identity[201]{}; auto count = GetEnvironmentVariableW(L"SPARK_PROJECT_ID", identity, 201);
@@ -275,6 +444,15 @@ struct FileQueue {
       files.emplace(to_string(hstring(identifier)), std::move(file)); return Json::JsonValue::CreateStringValue(identifier);
     }
     if (method == "trash") { Trash(path); return Json::JsonValue::Parse(L"null"); }
+    if (method == "diskSpace") return DiskSpace(path);
+    if (method == "icon" || method == "thumbnail") {
+      if (!output) throw hresult_invalid_argument(L"Expected binary transport");
+      *output = ShellImage(path, ImageSize(args), method == "thumbnail"); return Json::JsonValue::CreateNullValue();
+    }
+    if (method == "applications") return Applications(path);
+    if (method == "getQuarantine") return GetQuarantine(path);
+    if (method == "setQuarantine") { SetQuarantine(path, args.GetNamedObject(L"info")); return Json::JsonValue::Parse(L"null"); }
+    if (method == "clearQuarantine") { ClearQuarantine(path); return Json::JsonValue::Parse(L"null"); }
     if (method == "readText") {
       const auto bytes = Read(path); std::string text(bytes.begin(), bytes.end());
       if (text.starts_with("\xef\xbb\xbf")) text.erase(0, 3);
@@ -329,15 +507,14 @@ struct SparkFileSystem {
   REACT_SYNC_METHOD(installBinary) std::optional<std::string> installBinary() noexcept {
     try {
     spark::binary::Install(context, "__sparkFileSystemBinary", [queue = queue](std::string method, std::string encoded, std::optional<std::vector<uint8_t>> bytes, spark::binary::Completion finish) {
-      if (method == "reveal") {
-        queue->context.UIDispatcher().Post([encoded, promise = spark::binary::NativePromise(finish)] {
-          PIDLIST_ABSOLUTE item = nullptr;
-          try { auto path = FilePath(Json::JsonObject::Parse(to_hstring(encoded)).GetNamedString(L"path")); check_hresult(SHParseDisplayName(path.c_str(), nullptr, &item, 0, nullptr)); auto result = SHOpenFolderAndSelectItems(item, 0, nullptr, 0); CoTaskMemFree(item); item = nullptr; check_hresult(result); promise.Resolve("null"); }
-          catch (...) { if (item) CoTaskMemFree(item); Reject(promise); }
+      if (method == "reveal" || method == "openWith") {
+        queue->context.UIDispatcher().Post([method, encoded, promise = spark::binary::NativePromise(finish)] {
+          try { RunShellAction(method, Json::JsonObject::Parse(to_hstring(encoded))); promise.Resolve("null"); }
+          catch (...) { Reject(promise); }
         }); return;
       }
       queue->Post([queue, method = std::move(method), encoded = std::move(encoded), bytes = std::move(bytes), promise = spark::binary::NativePromise(finish)] {
-        try { std::vector<uint8_t> output; auto result = queue->Call(method, Json::JsonObject::Parse(to_hstring(encoded)), bytes, &output); spark::binary::Response response{to_string(result.Stringify()), {}, {}}; if (method == "readBytes" || method == "readChunk") response.bytes = std::make_shared<spark::binary::Bytes>(std::move(output)); promise.Resolve(std::move(response)); }
+        try { std::vector<uint8_t> output; auto result = queue->Call(method, Json::JsonObject::Parse(to_hstring(encoded)), bytes, &output); spark::binary::Response response{to_string(result.Stringify()), {}, {}}; if (method == "readBytes" || method == "readChunk" || method == "icon" || method == "thumbnail") response.bytes = std::make_shared<spark::binary::Bytes>(std::move(output)); promise.Resolve(std::move(response)); }
         catch (...) { Reject(promise); }
       });
     });
@@ -348,15 +525,10 @@ struct SparkFileSystem {
   }
 
   REACT_METHOD(call) void call(std::string method, std::string args, React::ReactPromise<std::string> promise) noexcept {
-    if (method == "reveal") {
-      context.UIDispatcher().Post([args, promise] {
-        PIDLIST_ABSOLUTE item = nullptr;
-        try {
-          auto path = FilePath(Json::JsonObject::Parse(to_hstring(args)).GetNamedString(L"path"));
-          check_hresult(SHParseDisplayName(path.c_str(), nullptr, &item, 0, nullptr));
-          auto result = SHOpenFolderAndSelectItems(item, 0, nullptr, 0);
-          CoTaskMemFree(item); item = nullptr; check_hresult(result); promise.Resolve("null");
-        } catch (...) { if (item) CoTaskMemFree(item); Reject(promise); }
+    if (method == "reveal" || method == "openWith") {
+      context.UIDispatcher().Post([method, args, promise] {
+        try { RunShellAction(method, Json::JsonObject::Parse(to_hstring(args))); promise.Resolve("null"); }
+        catch (...) { Reject(promise); }
       });
       return;
     }
