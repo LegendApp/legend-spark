@@ -17,7 +17,8 @@ const POLL_MS = 100;
 export type Clock = { now(): number; sleep(ms: number): Promise<void> };
 export const realClock: Clock = { now: () => performance.now(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)) };
 
-export type StepResult = { command: string; location: SourceLocation; depth: number; status: "passed" | "failed" | "skipped"; durationMs: number };
+/** `whiteBox`: a black-box command or visibility check that a driver backend answered in-process (no black-box backend was active). */
+export type StepResult = { command: string; location: SourceLocation; depth: number; status: "passed" | "failed" | "skipped"; durationMs: number; whiteBox?: true };
 export type FailureReport = {
   kind: FailureKind;
   message: string;
@@ -51,6 +52,8 @@ export type FlowResult = {
   goldens: GoldenResult[];
   /** Measurements recorded by backends, by metric name, in recording order. */
   metrics: Record<string, number[]>;
+  /** Black-box commands this flow ran white-box on a driver backend (see StepResult.whiteBox), sorted. */
+  whiteBox: string[];
 };
 export type RunEvent = { event: "flow-start"; id: string; file: string; name?: string; intent?: string; matrix: Matrix } | { event: "flow-end"; result: FlowResult };
 export type RunOptions = {
@@ -103,15 +106,25 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 /** Commands the runner implements on top of `Backend.screenshot`. */
 const SCREENSHOT = new Set(["takeScreenshot", "assertScreenshot"]);
 
-/** Which backend may run a catalog command: driver commands need a driver backend; lifecycle commands take either kind. */
-function route(name: string, backends: Backend[]): Backend {
-  const spec = COMMANDS[name]!;
-  const kinds = spec.driver ? ["driver"] : spec.group === "lifecycle" ? ["black-box", "driver"] : ["black-box"];
+/** Flows with this tag run black-box commands and visibility checks only on a black-box backend, never white-box. */
+export const BLACK_BOX_TAG = "black-box";
+
+/**
+ * Which backend may run a catalog command: driver commands need a driver backend; lifecycle commands take either kind.
+ * Other commands are black-box; with no black-box backend active, a driver backend that implements one runs it
+ * in-process, and the step is labelled white-box, unless the flow forbids white-box steps.
+ */
+function route(name: string, backends: Backend[], allowWhiteBox: boolean): { backend: Backend; whiteBox: boolean } {
+  const spec = COMMANDS[name]!, blackBox = !spec.driver && spec.group !== "lifecycle";
+  const active = () => backends.map(backend => `${backend.name} (${backend.kind})`).join(", ");
+  const fallback = allowWhiteBox && blackBox && !backends.some(backend => backend.kind === "black-box");
+  const kinds = spec.driver ? ["driver"] : blackBox && !fallback ? ["black-box"] : ["black-box", "driver"];
   const eligible = backends.filter(backend => kinds.includes(backend.kind));
-  if (!eligible.length) throw new Failure("unsupported", `${name} needs a ${kinds.join(" or ")} backend (active: ${backends.map(backend => `${backend.name} (${backend.kind})`).join(", ")})`);
+  if (!eligible.length) throw new Failure("unsupported", `${name} needs a ${kinds.join(" or ")} backend (active: ${active()})`);
   const backend = eligible.find(candidate => SCREENSHOT.has(name) ? !!candidate.screenshot : Object.hasOwn(candidate.commands, name));
+  if (!backend && fallback) throw new Failure("unsupported", `${name} needs a black-box backend (active: ${active()}); backend ${eligible.map(candidate => candidate.name).join(", ")} cannot run it in-process`);
   if (!backend) throw new Failure("unsupported", `${name} is not supported by backend ${eligible.map(candidate => candidate.name).join(", ")}${SCREENSHOT.has(name) ? " (no screenshot())" : ""}`);
-  return backend;
+  return { backend, whiteBox: blackBox && backend.kind === "driver" };
 }
 
 function finderFor(backend: Backend): Finder {
@@ -161,8 +174,10 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   const steps: StepResult[] = [], errors: string[] = [], outputs: Artifact[] = [], goldens: GoldenResult[] = [];
   const metrics: Record<string, number[]> = {};
   const restores: Array<{ label: string; undo: () => Promise<void> }> = [];
-  const result = (status: FlowResult["status"], extra: Partial<FlowResult> = {}): FlowResult =>
-    ({ ...base, matrix, status, durationMs: Math.round(clock.now() - began), steps, errors, artifacts: outputs, goldens, metrics, ...extra });
+  const result = (status: FlowResult["status"], extra: Partial<FlowResult> = {}): FlowResult => ({
+    ...base, matrix, status, durationMs: Math.round(clock.now() - began), steps, errors, artifacts: outputs, goldens, metrics,
+    whiteBox: [...new Set(steps.filter(step => step.whiteBox).map(step => step.command))].sort(), ...extra,
+  });
   if (flow.header.platforms && !flow.header.platforms.includes(platform)) return result("skipped", { skipReason: `platforms: ${flow.header.platforms.join(", ")} (running ${platform})` });
 
   const outputDir = path.join(dir, "output");
@@ -199,7 +214,12 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
    * Visibility checks (assertVisible, extendedWaitUntil, when) use the black-box backend. With only a driver backend
    * active, the driver answers them in-process for the selector keys it can query; other keys are unsupported.
    */
-  const observer = () => backends.find(candidate => candidate.kind === "black-box") ?? backends[0]!;
+  const allowWhiteBox = !(flow.header.tags ?? []).includes(BLACK_BOX_TAG);
+  const observer = () => {
+    const backend = backends.find(candidate => candidate.kind === "black-box") ?? backends[0]!;
+    if (!allowWhiteBox && backend.kind !== "black-box") throw new Failure("unsupported", `a flow tagged ${BLACK_BOX_TAG} checks visibility only on a black-box backend (active: ${backends.map(candidate => `${candidate.name} (${candidate.kind})`).join(", ")})`);
+    return backend;
+  };
   async function holds(condition: Condition): Promise<boolean> {
     if (condition.platform && condition.platform !== platform) return false;
     if (condition.matrix && Object.entries(condition.matrix).some(([dimension, value]) => matrix[dimension] !== value)) return false;
@@ -229,8 +249,9 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
     await runAll(checked.value, child(scope, command, { env, file: target, files: [...scope.files, target] }));
   }
 
-  async function dispatch(command: FlowCommand, args: Record<string, unknown>, scope: Scope) {
+  async function dispatch(command: FlowCommand, args: Record<string, unknown>, scope: Scope, step: StepResult) {
     const timeoutMs = command.timeout === undefined ? DEFAULT_TIMEOUT_MS : ms(command.timeout);
+    const observed = () => { if (observer().kind === "driver") step.whiteBox = true; return observer(); };
     switch (command.name) {
       case "runFlow": return runFlowCommand(args, command, scope);
       case "repeat":
@@ -241,12 +262,13 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
         }
         return;
       case "extendedWaitUntil":
-        await find(observer(), args.visible ?? args.notVisible, args.visible !== undefined ? "any" : "none", timeoutMs);
+        await find(observed(), args.visible ?? args.notVisible, args.visible !== undefined ? "any" : "none", timeoutMs);
         return;
-      case "assertVisible": await find(observer(), selectorArgs(args), "any", timeoutMs); return;
-      case "assertNotVisible": await find(observer(), selectorArgs(args), "none", timeoutMs); return;
+      case "assertVisible": await find(observed(), selectorArgs(args), "any", timeoutMs); return;
+      case "assertNotVisible": await find(observed(), selectorArgs(args), "none", timeoutMs); return;
     }
-    const backend = route(command.name, backends);
+    const { backend, whiteBox } = route(command.name, backends, allowWhiteBox);
+    if (whiteBox) step.whiteBox = true;
     const context: CommandContext = {
       command: { ...command, args }, timeoutMs, platform, matrix, outputDir,
       resolve: async value => (await find(backend, value, "one", timeoutMs))!,
@@ -277,8 +299,9 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
     const start = clock.now();
     try {
       live();
+      if (command.when && (command.when.visible !== undefined || command.when.notVisible !== undefined) && observer().kind === "driver") step.whiteBox = true;
       if (command.when && !(await holds(interpolate(command.when, scope.env)))) step.status = "skipped";
-      else await dispatch(command, interpolateArgs(command, scope.env), scope);
+      else await dispatch(command, interpolateArgs(command, scope.env), scope, step);
     } catch (error) {
       step.status = "failed";
       throw error instanceof CommandError ? error : new CommandError(toFailure(error), command, scope.stack);
@@ -368,7 +391,7 @@ export async function runFlows(files: string[], options: RunOptions): Promise<Fl
     if (!checked.value) {
       const { file: at, line, column } = checked.diagnostics[0]!;
       const result: FlowResult = {
-        id: relative, file, checks: [], tags: [], matrix: {}, status: "failed", durationMs: 0, steps: [], errors: [], artifacts: [], goldens: [], metrics: {},
+        id: relative, file, checks: [], tags: [], matrix: {}, status: "failed", durationMs: 0, steps: [], errors: [], artifacts: [], goldens: [], metrics: {}, whiteBox: [],
         failure: { kind: "format", message: `${file} is not a valid flow`, location: { file: at, line, column }, stack: [], candidates: [], matches: [], artifacts: [], diagnostics: checked.diagnostics.map(formatDiagnostic) },
       };
       options.onEvent?.({ event: "flow-end", result });

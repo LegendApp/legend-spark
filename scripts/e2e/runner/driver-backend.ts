@@ -1,23 +1,35 @@
 // The Spark in-app driver (docs/test-driver.md) as a runner backend: white-box, in-process, macOS
-// (docs/e2e-flows.md#the-driver-backend). Commands it cannot serve are missing from `commands`, so the runner fails
-// them as unsupported; OS input and the accessibility tree belong to the black-box backend (#50).
+// (docs/e2e-flows.md#the-driver-backend). It selects through the app's in-process accessibility view and runs the
+// black-box commands it implements (input, assertText, assertA11y) with in-process events when no black-box backend
+// is active; the runner labels those steps white-box. Commands it cannot serve are missing from `commands`, so the
+// runner fails them as unsupported; real OS input and the accessibility tree belong to the black-box backend (#50).
 import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
-import { DriverError, type Capture as DriverCapture, type DriverWindow, type Frame } from "../driver.ts";
+import { parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
+import type { Capture as DriverCapture, DriverElement, DriverWindow, DriverWindowInfo, InputTarget, Modifier } from "../driver.ts";
 import { ms } from "./executor.ts";
-import { Failure, type Artifact, type Atom, type AtomKey, type Backend, type Capture, type CommandHandler, type Element, type QueryScope, type Session } from "./backend.ts";
+import { matchesText, parseSelector } from "./selectors.ts";
+import {
+  Failure, type Artifact, type Backend, type Capture, type CommandContext, type CommandHandler, type Element, type Session, type Target, type WindowInfo,
+} from "./backend.ts";
 
 /** What the backend uses of a driver session (`Driver` in scripts/e2e/driver.ts). Tests pass a double. */
 export type DriverClient = {
   readonly running: boolean;
   navigate(url: string): Promise<void>;
   openFile(file: string): Promise<void>;
-  waitFor(testID: string, timeoutMs?: number): Promise<{ window: string; frame: Frame }>;
   setAppAppearance(appearance: "light" | "dark", timeoutMs?: number): Promise<{ changed: boolean }>;
   capture(window: DriverWindow, name: string): Promise<DriverCapture>;
   setClock(mode: "virtual" | "real"): Promise<unknown>;
   advanceClock(durationMs: number): Promise<unknown>;
+  elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
+  tap(target: InputTarget, options?: { button?: "left" | "right"; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
+  hover(target: InputTarget): Promise<void>;
+  drag(from: InputTarget, to: InputTarget, options?: { steps?: number; modifiers?: Modifier[] }): Promise<void>;
+  scroll(target: InputTarget, delta: { deltaX?: number; deltaY?: number; precise?: boolean }): Promise<void>;
+  pressKey(key: string, modifiers?: Modifier[]): Promise<void>;
+  typeText(text: string): Promise<void>;
   quit(): Promise<void>;
   close(): Promise<void>;
 };
@@ -34,6 +46,10 @@ export type DriverApp = {
 
 const LAUNCH_KEYS = new Set(["clearState", "arguments", "env", "openFile", "openUrl", "stopApp"]);
 const FRESH_KEYS = ["clearState", "arguments", "env"];
+/** NSEventModifierFlags bits (parseAccelerator) to driver modifier names. Caps Lock is not a key the driver presses. */
+const MODIFIER_BITS: Array<[number, Modifier]> = [[1 << 20, "cmd"], [1 << 18, "ctrl"], [1 << 19, "option"], [1 << 17, "shift"], [1 << 23, "fn"]];
+/** scroll without `amount`: points when precise, else lines. */
+const SCROLL_AMOUNT = { precise: 100, lines: 3 };
 /** The first render includes loading JavaScript, so the matrix appearance waits longer than an in-flow change. */
 const LAUNCH_APPEARANCE_MS = 30000;
 
@@ -43,7 +59,6 @@ export class DriverBackend implements Backend {
   readonly platform = "macos";
   /** `appearance` through setAppAppearance after each launch; `locale` through launch arguments. */
   readonly matrix: ReadonlySet<string> = new Set(["appearance", "locale"]);
-  readonly queryKeys: ReadonlySet<AtomKey> = new Set(["id"]);
   readonly commands: Readonly<Record<string, CommandHandler>> = {
     launchApp: args => this.launchApp(args),
     stopApp: () => this.quit(),
@@ -51,6 +66,29 @@ export class DriverBackend implements Backend {
     // The motion engine's virtual clock (docs/motion.md#virtual-clock-for-the-test-driver).
     setClock: async args => { await this.client().setClock(args.mode as "virtual" | "real"); },
     advanceClock: async args => { await this.client().advanceClock(ms(args.duration as string | number)); },
+    // Black-box commands, run here in-process (white-box) only when no black-box backend is active.
+    tapOn: (args, context) => this.click(args, context, {}),
+    doubleClickOn: (args, context) => this.click(args, context, { clickCount: 2 }),
+    tripleClickOn: (args, context) => this.click(args, context, { clickCount: 3 }),
+    rightClickOn: (args, context) => this.click(args, context, { button: "right" }),
+    hoverOn: async (args, context) => {
+      this.unsupported("hoverOn", args, ["duration"]);
+      await this.client().hover(this.input(await context.target()));
+    },
+    inputText: (args, context) => this.type(args, context),
+    typeText: (args, context) => this.type(args, context),
+    pressKey: async args => this.press(String(args.key)),
+    shortcut: async args => this.press(String(args.keys)),
+    scroll: (args, context) => this.scroll(args, context),
+    swipe: (args, context) => this.swipe(args, context),
+    dragAndDrop: async (args, context) => {
+      this.unsupported("dragAndDrop", args, ["holdAt"]);
+      const from = await context.resolve(args.from), to = await context.resolve(args.to);
+      if (from.element.window !== to.element.window) throw new Failure("unsupported", "backend driver drags only within one window");
+      await this.client().drag(this.input(from), this.input(to), { ...(args.steps === undefined ? {} : { steps: args.steps as number }), ...this.modifiers(args) });
+    },
+    assertText: (args, context) => this.assertText(args, context),
+    assertA11y: (args, context) => this.assertA11y(args, context),
   };
   private session?: Session;
   private driver?: DriverClient;
@@ -127,17 +165,94 @@ export class DriverBackend implements Backend {
     try { if (driver.running) await driver.quit(); } finally { await driver.close(); }
   }
 
-  /** `id` only, through `waitFor` (an in-process testID search of every window); at most the first match. */
-  async query(atom: Atom, scope: QueryScope): Promise<Element[]> {
-    if (scope.within) throw new Failure("unsupported", "backend driver cannot select within an element");
-    const id = atom.id!;
-    try {
-      const { window, frame } = await this.client().waitFor(id, 0);
-      return scope.window === undefined || scope.window === window ? [{ key: `${window}#${id}`, window, id, frame }] : [];
-    } catch (error) {
-      if (error instanceof DriverError && error.code === "E_TIMEOUT") return [];
-      throw error;
+  /** Every element of the in-process accessibility view (`elements`): the runner matches every selector key against it. */
+  async elements(): Promise<Element[]> { return (await this.client().elements()).elements; }
+  /** The app's windows with identifiers, front to back; each frame is the window in its own element coordinates. */
+  async windows(): Promise<WindowInfo[]> { return (await this.client().elements()).windows; }
+
+  private unsupported(command: string, args: Record<string, unknown>, keys: string[]) {
+    const used = keys.filter(key => args[key] !== undefined);
+    if (used.length) throw new Failure("unsupported", `${command} ${used.join(", ")} is not supported by backend driver`);
+  }
+  /**
+   * A resolved target as driver input: by testID with the point as an offset, which the driver scrolls into view and
+   * hit-checks; or the point (waitFor frame coordinates) in its window.
+   */
+  private input({ element, point }: Target): InputTarget {
+    if (element.id) return { testID: element.id, offset: { x: point.x - element.frame.x, y: point.y - element.frame.y } };
+    if (!element.window) throw new Failure("unsupported", `backend driver cannot address the window of ${JSON.stringify(element.key)}: it has no identifier`);
+    return { point, window: `id:${element.window}` };
+  }
+  private modifiers(args: Record<string, unknown>) {
+    return args.modifiers === undefined ? {} : { modifiers: (args.modifiers as string[]).map(name => (name === "alt" ? "option" : name) as Modifier) };
+  }
+  private async click(args: Record<string, unknown>, context: CommandContext, options: { button?: "left" | "right"; clickCount?: number }) {
+    await this.client().tap(this.input(await context.target()), { ...options, ...this.modifiers(args) });
+  }
+  /** `into` is clicked first (focusing it); then one key press per character. inputText types too: the driver has no one-step insert. */
+  private async type(args: Record<string, unknown>, context: CommandContext) {
+    if (args.into !== undefined) await this.client().tap(this.input(await context.resolve(args.into)));
+    await this.client().typeText(String(args.text));
+  }
+  /** An accelerator such as `Escape` or `cmd+shift+s`, pressed in the window of the last pointer input. */
+  private async press(accelerator: string) {
+    const { key, modifiers } = parseAccelerator(accelerator, "macos", { allowUnmodifiedCharacter: true, allowExtendedKeys: true });
+    if (key.length !== 1 || modifiers & (1 << 16)) throw new Failure("unsupported", `backend driver cannot press ${accelerator}`);
+    await this.client().pressKey(key, MODIFIER_BITS.filter(([bit]) => modifiers & bit).map(([, name]) => name));
+  }
+  /** `amount` in points when precise, else lines; `down` and `right` scroll toward the end of the content. */
+  private async scroll(args: Record<string, unknown>, context: CommandContext) {
+    this.unsupported("scroll", args, ["momentum"]);
+    if (args.on === undefined) throw new Failure("unsupported", "backend driver scrolls only `on` a target");
+    const precise = args.precise === true, amount = (args.amount as number | undefined) ?? (precise ? SCROLL_AMOUNT.precise : SCROLL_AMOUNT.lines);
+    const direction = (args.direction as string | undefined) ?? "down";
+    const sign = direction === "down" || direction === "right" ? 1 : -1;
+    await this.client().scroll(this.input(await context.resolve(args.on)), { [direction === "up" || direction === "down" ? "deltaY" : "deltaX"]: sign * amount, precise });
+  }
+  /**
+   * A swipe as a precise scroll over `from` by the fingers' travel, content following the fingers: from `start` to `end`
+   * (points in `from`), or half of `from` in `direction`.
+   */
+  private async swipe(args: Record<string, unknown>, context: CommandContext) {
+    this.unsupported("swipe", args, ["duration"]);
+    if (args.from === undefined) throw new Failure("unsupported", "backend driver swipes only `from` a target");
+    if ((args.fingers as number | undefined ?? 1) > 2) throw new Failure("unsupported", "backend driver swipes with one or two fingers (a scroll)");
+    const from = await context.resolve(args.from);
+    let travel: { x: number; y: number };
+    if (args.start !== undefined) {
+      const start = await context.resolve({ point: args.start, within: args.from }), end = await context.resolve({ point: args.end ?? args.start, within: args.from });
+      travel = { x: end.point.x - start.point.x, y: end.point.y - start.point.y };
+    } else {
+      const { width, height } = from.element.frame, direction = args.direction as string;
+      travel = { x: direction === "left" ? -width / 2 : direction === "right" ? width / 2 : 0, y: direction === "up" ? -height / 2 : direction === "down" ? height / 2 : 0 };
     }
+    await this.client().scroll(this.input(from), { deltaX: -travel.x, deltaY: -travel.y, precise: true });
+  }
+  /** The one element with this testID in the in-process accessibility view. */
+  private async element(id: string): Promise<DriverElement> {
+    const found = (await this.client().elements()).elements.filter(element => element.id === id);
+    if (found.length !== 1) throw new Failure(found.length ? "ambiguous" : "not-found", `${JSON.stringify({ id })} matched ${found.length} elements; it must match one`);
+    return found[0]!;
+  }
+  /** The element's text (string value, title, or displayed text) in the in-process accessibility view. */
+  private async assertText(args: Record<string, unknown>, context: CommandContext) {
+    this.unsupported("assertText", args, ["lineEndings"]);
+    const id = String(args.id), equals = String(args.equals);
+    await context.eventually(async () => {
+      const { text } = await this.element(id);
+      if (text !== equals) throw new Failure("assertion", `the text of ${JSON.stringify({ id })} is ${JSON.stringify(text ?? null)}, not ${JSON.stringify(equals)}`);
+    });
+  }
+  /** `label`, `role` and `value` of the element as NSAccessibility reports them in-process; `label` matches like a selector's. */
+  private async assertA11y(args: Record<string, unknown>, context: CommandContext) {
+    this.unsupported("assertA11y", args, ["hint"]);
+    const id = String(args.id), label = args.label === undefined ? undefined : parseSelector({ label: args.label }, context.platform).atom.label!;
+    await context.eventually(async () => {
+      const element = await this.element(id);
+      if (label && !matchesText(label, element.label)) throw new Failure("assertion", `the accessibility label of ${JSON.stringify({ id })} is ${JSON.stringify(element.label ?? null)}, not ${JSON.stringify(args.label)}`);
+      if (args.role !== undefined && element.role !== args.role) throw new Failure("assertion", `the accessibility role of ${JSON.stringify({ id })} is ${JSON.stringify(element.role ?? null)}, not ${JSON.stringify(args.role)}`);
+      if (args.value !== undefined && element.value !== args.value) throw new Failure("assertion", `the accessibility value of ${JSON.stringify({ id })} is ${JSON.stringify(element.value ?? null)}, not ${JSON.stringify(args.value)}`);
+    });
   }
 
   /** The main window, rendered in-process. Element frames are points from its top-left, so the capture's frame starts at 0,0. */

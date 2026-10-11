@@ -27,6 +27,8 @@ matrix:
 - assertText: { id: motion-system-springs-play-result, equals: '[{"finished":true},{"finished":true},{"finished":true},{"finished":true},{"finished":true}]' }
 - setClock: virtual
 - tapOn: { id: motion-system-springs-play }
+# The readout shows … once the press is handled; the virtual clock advances only after that.
+- assertText: { id: motion-system-springs-play-result, equals: "…" }
 - advanceClock: 3s
 - assertText: { id: motion-system-springs-play-result, equals: '[{"finished":true},{"finished":true},{"finished":true},{"finished":true},{"finished":true}]' }
 - takeScreenshot: springs-settled

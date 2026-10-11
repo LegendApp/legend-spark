@@ -56,7 +56,7 @@ export function printer(io: Pick<RunIO, "stdout">, agent: boolean) {
     const { steps: _steps, ...result }: FlowResult = event.result;
     if (agent) return line({ event: "flow-end", ...result, artifacts: result.artifacts.map(absolute), ...(result.failure ? { failure: agentFailure(result.failure) } : {}) });
     const status = { passed: "PASS", failed: "FAIL", skipped: "SKIP" }[result.status];
-    io.stdout(`${status} ${result.id} (${result.durationMs}ms)${result.skipReason ? `: ${result.skipReason}` : ""}`);
+    io.stdout(`${status} ${result.id} (${result.durationMs}ms)${result.skipReason ? `: ${result.skipReason}` : ""}${result.whiteBox.length ? ` [white-box: ${result.whiteBox.join(", ")}]` : ""}`);
     if (result.failure) io.stdout(failureText(result.failure).replace(/^/gm, "  "));
     for (const error of result.errors) io.stdout(`  also: ${error}`);
   };
