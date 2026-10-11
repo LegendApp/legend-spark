@@ -272,6 +272,24 @@ int main() { @autoreleasepool {
   [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
   assert([NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey] == nil);
   [manager setWindowOptions:@"custom-a" optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"toolbarItems": barItems } }] resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  // The user hides the toolbar and picks Icon and Text: those are saved, the items are not, and
+  // the app's item updates still apply.
+  first.toolbar.visible = NO;
+  first.toolbar.displayMode = NSToolbarDisplayModeIconAndLabel;
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+  NSDictionary *viewOnly = [NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey];
+  assert([viewOnly[@"shown"] isEqual:@NO]); assert([viewOnly[@"displayMode"] integerValue] == NSToolbarDisplayModeIconAndLabel);
+  assert(viewOnly[@"items"] == nil);
+  [manager setWindowOptions:@"custom-a" optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"toolbarItems": appItems } }] resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  readToolbar(@"custom-a");
+  assert([toolbarState[@"itemIds"] containsObject:@"export"]);
+  [manager setWindowOptions:@"custom-a" optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"toolbarItems": barItems } }] resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  readToolbar(@"custom-a");
+  assert(![toolbarState[@"itemIds"] containsObject:@"export"]);
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+  assert([NSUserDefaults.standardUserDefaults dictionaryForKey:defaultsKey][@"items"] == nil);
+  first.toolbar.visible = YES;
+  first.toolbar.displayMode = NSToolbarDisplayModeIconOnly;
   // The user drags Share out of the toolbar, picks Icon and Text and hides the toolbar (AppKit's
   // palette and context menu make these same toolbar changes).
   NSUInteger shareIndex = [[first.toolbar.items valueForKey:@"itemIdentifier"] indexOfObject:@"legend.toolbar.share"];

@@ -519,7 +519,8 @@ static NSToolbar *LegendCreateToolbar(NSString *windowIdentifier)
 }
 
 // A customizable toolbar's layout (items, display mode, shown state) persists in user
-// defaults under its customization ID. Spark saves and restores it rather than using
+// defaults under its customization ID. Each part is saved only when the user changes it, so
+// the app's items keep applying until the user adds or removes one. Spark saves and restores it rather than using
 // AppKit's autosave, which works through toolbar families: toolbars sharing an identifier
 // mirror every change into each other, including a closed window's toolbar that is not yet
 // released, and AppKit throws when their items differ.
@@ -529,7 +530,7 @@ static NSToolbar *LegendCreateToolbar(NSString *windowIdentifier)
 @property (nonatomic) NSInteger suspended;
 - (instancetype)initWithToolbar:(NSToolbar *)toolbar customizationId:(NSString *)customizationId;
 - (NSDictionary *)saved;
-- (void)save;
+- (void)saveItems;
 - (void)stop;
 @end
 
@@ -549,10 +550,10 @@ static NSToolbar *LegendCreateToolbar(NSString *windowIdentifier)
     // An added item joins toolbar.items after this notification.
     _added = [NSNotificationCenter.defaultCenter addObserverForName:NSToolbarWillAddItemNotification object:toolbar queue:nil
       usingBlock:^(NSNotification *note) {
-        if (weakSelf.suspended == 0) dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf save]; });
+        if (weakSelf.suspended == 0) dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf saveItems]; });
       }];
     _removed = [NSNotificationCenter.defaultCenter addObserverForName:NSToolbarDidRemoveItemNotification object:toolbar queue:nil
-      usingBlock:^(NSNotification *note) { [weakSelf save]; }];
+      usingBlock:^(NSNotification *note) { [weakSelf saveItems]; }];
     [toolbar addObserver:self forKeyPath:@"displayMode" options:0 context:NULL];
     [toolbar addObserver:self forKeyPath:@"visible" options:0 context:NULL];
     _observing = YES;
@@ -570,20 +571,24 @@ static NSToolbar *LegendCreateToolbar(NSString *windowIdentifier)
   return [NSUserDefaults.standardUserDefaults dictionaryForKey:[self defaultsKey]];
 }
 
-- (void)save
+- (void)save:(NSString *)part value:(id (^)(NSToolbar *toolbar))value
 {
   NSToolbar *toolbar = _toolbar;
   if (!toolbar || !_observing || self.suspended > 0) return;
-  [NSUserDefaults.standardUserDefaults setObject:@{
-    @"items": [toolbar.items valueForKey:@"itemIdentifier"],
-    @"displayMode": @(toolbar.displayMode),
-    @"shown": @(toolbar.visible),
-  } forKey:[self defaultsKey]];
+  NSMutableDictionary *layout = [self.saved mutableCopy] ?: [NSMutableDictionary new];
+  layout[part] = value(toolbar);
+  [NSUserDefaults.standardUserDefaults setObject:layout forKey:[self defaultsKey]];
+}
+
+- (void)saveItems
+{
+  [self save:@"items" value:^id(NSToolbar *toolbar) { return [toolbar.items valueForKey:@"itemIdentifier"]; }];
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
 {
-  [self save];
+  if ([keyPath isEqualToString:@"displayMode"]) [self save:@"displayMode" value:^id(NSToolbar *toolbar) { return @(toolbar.displayMode); }];
+  else [self save:@"shown" value:^id(NSToolbar *toolbar) { return @(toolbar.visible); }];
 }
 
 - (void)stop
@@ -1443,10 +1448,12 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     if (menuUpdate) return;
   }
 
-  // Once the user has customized the toolbar it keeps their arrangement: items the update removed
-  // leave it, and new items appear only in the customization palette, as in any AppKit app.
-  // Until then it shows the app's items.
-  [self setItemIdentifiers:LegendToolbarLayoutFor(toolbar).saved ? [toolbar.items valueForKey:@"itemIdentifier"] : [self toolbarDefaultItemIdentifiers:toolbar]
+  // Once the user has added or removed an item the toolbar keeps their arrangement: items the
+  // update removed leave it, and new items appear only in the customization palette, as in any
+  // AppKit app. Until then (a saved display mode or shown state alone doesn't count) it shows
+  // the app's items.
+  BOOL customized = [LegendToolbarLayoutFor(toolbar).saved[@"items"] isKindOfClass:NSArray.class];
+  [self setItemIdentifiers:customized ? [toolbar.items valueForKey:@"itemIdentifier"] : [self toolbarDefaultItemIdentifiers:toolbar]
                 forToolbar:toolbar];
 }
 
