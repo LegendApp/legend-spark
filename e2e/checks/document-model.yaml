@@ -136,3 +136,56 @@ checks:
     spec: "#112 DOC.api-versions"
     covers:
       - ./app/documents#useDocumentSessionState
+  DOC-AVAIL-01:
+    title: getPrintingAvailability reports printing, the print panel, page setup and PDF export as available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#111 DOC.api-print"
+    covers:
+      - ./printing
+      - ./printing#getPrintingAvailability
+      - ./printing#getPrintingAvailability().available
+  DOC-PRINT-01:
+    title: print shows the print panel as a sheet on the given window with a live preview; Cancel resolves {"canceled":true}, saving through the panel's PDF menu resolves canceled false with the page setup
+    platforms: [macos]
+    blocking: true
+    spec: "#111 DOC.api-print"
+    covers:
+      - ./printing#print
+  DOC-PRINT-02:
+    title: print previews a window's rendered content and a single View (by ref) scaled to the page width, including layer colors and text
+    platforms: [macos]
+    blocking: true
+    spec: "#111 DOC.api-print"
+    covers:
+      - ./printing#print
+  DOC-SETUP-01:
+    title: showPageSetup shows the page setup sheet; a confirmed paper and orientation return as a typed PageSetup the app keeps in its settings across launches; Cancel returns {"canceled":true}; getDefaultPageSetup returns the system's setup
+    platforms: [macos]
+    blocking: true
+    spec: "#111 DOC.api-print"
+    covers:
+      - ./printing#showPageSetup
+      - ./printing#getDefaultPageSetup
+  DOC-PDF-01:
+    title: exportPDF writes the report (multi-page, reflowed), the main window and one View by ref headless, with no panel and no printer, as PDFs of the requested paper (A4 portrait, 595 x 842 points)
+    platforms: [macos]
+    blocking: true
+    spec: "#111 DOC.api-print"
+    covers:
+      - ./printing#exportPDF
+      - ./printing#paperSizes
+  DOC-PDF-02:
+    title: Exporting through a save panel writes the PDF to the chosen path and reports its page count and page setup
+    platforms: [macos]
+    blocking: true
+    spec: "#111 DOC.api-print"
+    covers:
+      - ./printing#exportPDF
+  DOC-UNSUP-01:
+    title: On Windows, printing and each feature report unsupported-platform, and print, page setup and export reject SparkError:E_UNSUPPORTED_PLATFORM without showing UI
+    platforms: [windows]
+    blocking: true
+    spec: "#111 DOC.api-print; Windows implementation in #275"
+    covers:
+      - ./printing#getPrintingAvailability().available

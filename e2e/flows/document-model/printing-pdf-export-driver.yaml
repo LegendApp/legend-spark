@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: Headless PDF export through the in-app driver
+intent: >
+  Driver mode cannot click yet (#50), so the Printing screen exports on launch when it gets
+  --ks-print-export <folder>, always with the app's default page setup (A4 portrait, 54-point
+  margins) so saved state cannot change it. exportPDF writes report.pdf (HTML, reflowed),
+  window.pdf (the main window as drawn) and card.pdf (the receipt card View, by ref) to ${TMP}
+  without showing a panel or reaching a printer. The screen then shows one marker per file:
+  the report is three 595 x 842 point pages, the window and the card one page each. The window is
+  captured.
+checks: [DOC-PDF-01]
+tags: [document-model]
+platforms: [macos]
+---
+- launchApp: { arguments: ["--ks-print-export", "${TMP}"], openUrl: "spark-ks://document-model/printing" }
+- assertVisible: { id: document-model-printing-root }
+- extendedWaitUntil: { visible: { id: document-model-printing-exported-report-3-pages-595x842 }, timeout: 20s }
+- extendedWaitUntil: { visible: { id: document-model-printing-exported-window-1-pages-595x842 }, timeout: 20s }
+- extendedWaitUntil: { visible: { id: document-model-printing-exported-card-1-pages-595x842 }, timeout: 20s }
+- takeScreenshot: printing-exported
