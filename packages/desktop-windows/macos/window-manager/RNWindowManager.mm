@@ -562,7 +562,7 @@ static NSToolbar *LegendCreateToolbar(NSString *windowIdentifier)
 
 - (NSString *)defaultsKey
 {
-  return [@"SparkToolbarLayout." stringByAppendingString:_customizationId];
+  return [NSString stringWithFormat:@"%@.toolbarLayout.%@", SparkNamespace(), _customizationId];
 }
 
 - (NSDictionary *)saved
@@ -1597,10 +1597,14 @@ willBeInsertedIntoToolbar:(BOOL)flag
   if ([type isEqualToString:@"sidebarToggle"]) {
     // AppKit's own sidebar item always sends toggleSidebar: through the responder chain and
     // ignores a target, while Spark sidebars are React state. This item takes the standard
-    // item's localized label, tooltip and symbol, and reports a toolbarAction for its ID.
-    NSToolbar *standard = [[NSToolbar alloc] initWithIdentifier:[@"LegendToolbar.Sidebar." stringByAppendingString:NSUUID.UUID.UUIDString]];
-    [standard insertItemWithItemIdentifier:NSToolbarToggleSidebarItemIdentifier atIndex:0];
-    NSToolbarItem *standardItem = standard.items.firstObject;
+    // item's localized label, tooltip and symbol (read once), and reports a toolbarAction for its ID.
+    static NSToolbarItem *standardItem;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+      NSToolbar *standard = [[NSToolbar alloc] initWithIdentifier:@"LegendToolbar.Sidebar"];
+      [standard insertItemWithItemIdentifier:NSToolbarToggleSidebarItemIdentifier atIndex:0];
+      standardItem = standard.items.firstObject;
+    });
     NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
     toolbarItem.label = standardItem.label;
     toolbarItem.paletteLabel = standardItem.paletteLabel;

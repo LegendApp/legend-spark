@@ -59,6 +59,7 @@ NSString *const SparkDesktopEvent = @"desktop";
 void SparkEmit(NSDictionary *event) { [events addObject:event]; }
 NSDictionary *SparkStartupTiming() { return @{}; }
 NSDictionary *SparkLifecycleConfiguration() { return @{}; }
+NSString *SparkNamespace(void) { return @"window-manager-tests"; }
 extern "C" void SparkRebindWindowDelegate(NSWindow *, NSString *, id<NSWindowDelegate>) {}
 static BOOL driverActive = NO;
 static BOOL SparkTestDriverActive(void) { return driverActive; }
@@ -238,7 +239,7 @@ int main() { @autoreleasepool {
   assert([error isEqual:@"E_UNAVAILABLE"]);
   // Customization: the user's layout persists under the customization ID and restores in a new window.
   NSString *customId = [@"spark-test-" stringByAppendingString:NSUUID.UUID.UUIDString];
-  NSString *defaultsKey = [@"SparkToolbarLayout." stringByAppendingString:customId];
+  NSString *defaultsKey = [@"window-manager-tests.toolbarLayout." stringByAppendingString:customId];
   NSWindow *(^customWindow)(NSString *, NSArray *) = ^NSWindow *(NSString *windowId, NSArray *items) {
     NSWindow *value = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1400, 500)
       styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
