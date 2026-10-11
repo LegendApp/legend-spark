@@ -77,10 +77,10 @@ export function html(report: RunReport): string {
   };
   const flows = report.flows.map(flow => {
     const failure = flow.failure;
-    const steps = flow.steps.map(step => `<li class="${step.status}" style="margin-left:${step.depth * 1.5}em">${step.command} <span>${step.location.file}:${step.location.line} · ${step.status} · ${step.durationMs}ms</span></li>`).join("");
+    const steps = flow.steps.map(step => `<li class="${step.status}" style="margin-left:${step.depth * 1.5}em">${step.command} <span>${step.location.file}:${step.location.line} · ${step.status} · ${step.durationMs}ms${step.whiteBox ? " · white-box" : ""}</span></li>`).join("");
     const artifacts = [...failure?.artifacts ?? [], ...flow.artifacts];
     return `<details class="${flow.status}"${flow.status === "failed" ? " open" : ""}><summary><b>${flow.status.toUpperCase()}</b> ${escape(label(flow))} <span>${escape(flow.file)} · ${flow.durationMs}ms</span></summary>
-${flow.intent ? `<p>${escape(flow.intent)}</p>` : ""}${flow.skipReason ? `<p>Skipped: ${escape(flow.skipReason)}</p>` : ""}
+${flow.intent ? `<p>${escape(flow.intent)}</p>` : ""}${flow.whiteBox.length ? `<p>White-box (driver, in-process): ${escape(flow.whiteBox.join(", "))}</p>` : ""}${flow.skipReason ? `<p>Skipped: ${escape(flow.skipReason)}</p>` : ""}
 ${failure ? `<pre>${escape(failureText(failure, artifact => artifact.path))}</pre>` : ""}${flow.errors.length ? `<pre>${escape(flow.errors.join("\n"))}</pre>` : ""}
 ${artifacts.length ? `<ul class="artifacts">${artifacts.map(link).join("")}</ul>` : ""}${steps ? `<ol class="steps">${steps}</ol>` : ""}</details>`;
   }).join("\n");

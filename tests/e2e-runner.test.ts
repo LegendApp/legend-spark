@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import { Failure, type Backend, type Element } from "../scripts/e2e/runner/backend.ts";
 import { expandMatrix, ms, runFlows, type FlowResult, type RunOptions } from "../scripts/e2e/runner/executor.ts";
 import { buildReport, html, junit } from "../scripts/e2e/runner/report.ts";
-import { runCommand } from "../scripts/e2e/runner/run.ts";
+import { printer, runCommand } from "../scripts/e2e/runner/run.ts";
 import { filterElements, locate, nearby, parseSelector, type Finder } from "../scripts/e2e/runner/selectors.ts";
 import { element, MemoryBackend, VirtualClock, WINDOW } from "./e2e-runner-backend.ts";
 
@@ -287,11 +287,28 @@ describe("dispatch", () => {
     expect(result.failure).toMatchObject({ kind: "unsupported", command: "openWindow", message: "openWindow is not supported by backend memory" });
   });
 
-  test("driver commands need a driver backend; black-box commands never run on one", async () => {
+  test("driver commands need a driver backend; black-box commands run on a driver backend only when no black-box backend is active", async () => {
     const blackBox = memory({ commands: { takeScreenshot: async () => {} } });
     expect((await run(flow("- takeScreenshot: shot"), [blackBox])).result.failure?.message).toBe("takeScreenshot needs a driver backend (active: memory (black-box))");
+    const both = [memory({ elements: [element("x", { text: "X" })] }), memory({ kind: "driver", name: "driver", elements: [element("x", { text: "X" })] })];
+    const routed = await run(flow("- tapOn: X\n- assertVisible: X"), both);
+    expect([both[0]!.log, both[1]!.log, routed.result.whiteBox]).toEqual([["start", "tapOn x", "stop"], ["start", "stop"], []]);
     const driver = memory({ kind: "driver", name: "driver", elements: [element("x", { text: "X" })] });
-    expect((await run(flow("- tapOn: X"), [driver])).result.failure?.message).toBe("tapOn needs a black-box backend (active: driver (driver))");
+    const whiteBox = await run(flow("- tapOn: X\n- assertVisible: X\n- assertNotVisible: { text: Gone, when: { visible: X } }"), [driver]);
+    expect(driver.log).toEqual(["start", "tapOn x", "stop"]);
+    expect(whiteBox.result.steps.map(step => [step.command, step.whiteBox ?? false])).toEqual([["tapOn", true], ["assertVisible", true], ["assertNotVisible", true]]);
+    expect(whiteBox.result.whiteBox).toEqual(["assertNotVisible", "assertVisible", "tapOn"]);
+    expect((await run(flow("- openWindow"), [driver])).result.failure?.message).toBe("openWindow needs a black-box backend (active: driver (driver)); backend driver cannot run it in-process");
+  });
+
+  test("a flow tagged black-box never runs white-box", async () => {
+    const driver = memory({ kind: "driver", name: "driver", elements: [element("x", { text: "X" })] });
+    const tagged = (commands: string) => run(flow(commands, "tags: [black-box]\n"), [driver]);
+    expect((await tagged("- tapOn: X")).result.failure).toMatchObject({ kind: "unsupported", message: "tapOn needs a black-box backend (active: driver (driver))" });
+    expect((await tagged("- assertVisible: X")).result.failure).toMatchObject({ kind: "unsupported", message: "a flow tagged black-box checks visibility only on a black-box backend (active: driver (driver))" });
+    expect(driver.log).toEqual(["start", "stop", "start", "stop"]);
+    const blackBox = memory({ elements: [element("x", { text: "X" })] });
+    expect((await run(flow("- tapOn: X\n- assertVisible: X", "tags: [black-box]\n"), [blackBox])).result).toMatchObject({ status: "passed", whiteBox: [] });
   });
 
   test("visibility checks use the black-box backend; with only a driver backend, they use the driver's query keys", async () => {
@@ -410,6 +427,17 @@ describe("reports", () => {
     expect(page).toContain('<img src="flows/a/fail/run/failure/memory-screenshot.png"');
     expect(page).toContain("OK &lt;b&gt;");
     expect(page).not.toContain("OK <b>");
+  });
+
+  test("HTML and the console label steps a driver backend ran white-box", async () => {
+    const driver = memory({ kind: "driver", name: "driver", elements: [element("x", { text: "X" })] });
+    const { results, dir } = await run(flow("- tapOn: X"), [driver]);
+    const page = html(buildReport(results, { startedAt: new Date(0), durationMs: 1, backends: [driver], runDir: path.join(dir, "run"), interrupted: false }));
+    expect(page).toContain("White-box (driver, in-process): tapOn");
+    expect(page).toMatch(/tapOn <span>[^<]* · white-box<\/span>/);
+    const lines: string[] = [];
+    printer({ stdout: line => lines.push(line) }, false)({ event: "flow-end", result: results[0]! });
+    expect(lines[0]).toMatch(/^PASS flows\/area\/test \(\d+ms\) \[white-box: tapOn\]$/);
   });
 });
 

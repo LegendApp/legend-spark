@@ -60,10 +60,10 @@ describe("command mapping", () => {
     expect(app.log).toEqual(["open", "launch locale=- log=app-1.log", "navigate spark-ks://a/b", `openFile ${file}`, `openFile ${file}`, "quit", "close", "app close"]);
   });
 
-  test("id selectors query waitFor in-process without waiting, and the runner polls", async () => {
+  test("selectors match the in-process accessibility view, one elements snapshot per poll", async () => {
     const { result, app } = await run("- launchApp\n- assertVisible: { id: root }\n- assertNotVisible: { id: gone }\n- extendedWaitUntil: { visible: { id: root } }", new FakeApp({ root: 3 }));
     expect(result.status).toBe("passed");
-    expect(app.log.filter(line => line.startsWith("waitFor"))).toEqual(["waitFor root 0", "waitFor root 0", "waitFor root 0", "waitFor gone 0", "waitFor root 0"]);
+    expect(app.log.filter(line => line === "elements")).toHaveLength(5);
   });
 
   test("a missing testID is not-found after the command's timeout", async () => {
@@ -90,27 +90,113 @@ describe("command mapping", () => {
     await backend.start({ flow: { header: { appId: "so.legend.spark.examples.kitchensink" } } as never, matrix: {}, platform: "macos", dir });
     await backend.commands.launchApp!({}, {} as never);
     expect(await backend.screenshot(path.join(dir, "a.png"))).toEqual({ frame: { x: 0, y: 0, width: 1000, height: 700 }, scale: 2 });
-    expect(await backend.query({ id: "root" }, {})).toEqual([{ key: "spark.main#root", window: "spark.main", id: "root", frame: FRAME }]);
+    expect(await backend.elements()).toEqual([{ key: "root", window: "spark.main", id: "root", frame: FRAME }]);
+    expect(await backend.windows()).toEqual([{ id: "spark.main", title: "Kitchen Sink", key: false, main: true, frame: { x: 0, y: 0, width: 1000, height: 700 } }]);
     await backend.stop();
   });
 
-  test("a failure collects the app logs and a capture of the main window", async () => {
+  test("a failure collects the element tree, the app logs and a capture of the main window", async () => {
     const { result } = await run("- launchApp\n- assertVisible: { id: missing, timeout: 100ms }");
     expect(result.failure!.artifacts.map(artifact => [artifact.kind, path.basename(artifact.path), artifact.backend])).toEqual([
-      ["logs", "app-1.log", "driver"], ["screenshot", "driver-main.png", "driver"],
+      ["elements", "elements-driver.json", "driver"], ["logs", "app-1.log", "driver"], ["screenshot", "driver-main.png", "driver"],
     ]);
-    expect(existsSync(result.failure!.artifacts[1]!.path)).toBe(true);
+    expect(existsSync(result.failure!.artifacts[2]!.path)).toBe(true);
+  });
+});
+
+describe("white-box input (no black-box backend active)", () => {
+  // FRAME is { x: 10, y: 20, width: 100, height: 40 }: its center is 60,40 in the main window.
+  test.each([
+    ["- tapOn: { id: save }", 'tap save+50,20 {}'],
+    ["- doubleClickOn: { id: save }", 'tap save+50,20 {"clickCount":2}'],
+    ["- tripleClickOn: { id: save }", 'tap save+50,20 {"clickCount":3}'],
+    ["- rightClickOn: { id: save, modifiers: [cmd, alt] }", 'tap save+50,20 {"button":"right","modifiers":["cmd","option"]}'],
+    ['- tapOn: { point: "25%,50%", within: { id: save } }', 'tap save+25,20 {}'],
+    ["- hoverOn: { id: save }", "hover save+50,20"],
+    ["- typeText: Hé😀", "typeText Hé😀"],
+    ["- pressKey: Enter", 'pressKey "\\r" '],
+    ["- pressKey: Up", 'pressKey "\uf700" '],
+    ["- shortcut: cmd+shift+s", 'pressKey "s" cmd+shift'],
+    ["- scroll: { on: { id: list }, direction: up, amount: 600, precise: true }", 'scroll list+50,20 {"deltaY":-600,"precise":true}'],
+    ["- scroll: { on: { id: list }, direction: right }", 'scroll list+50,20 {"deltaX":3,"precise":false}'],
+    ["- scroll: { on: { id: list } }", 'scroll list+50,20 {"deltaY":3,"precise":false}'],
+    ["- swipe: { from: { id: list }, direction: up }", 'scroll list+50,20 {"deltaX":0,"deltaY":20,"precise":true}'],
+    ['- swipe: { from: { id: list }, start: "50%,10%", end: "20%,90%" }', 'scroll list+50,20 {"deltaX":30,"deltaY":-32,"precise":true}'],
+    ["- dragAndDrop: { from: { id: save }, to: { id: list }, steps: 20 }", 'drag save+50,20 list+50,20 {"steps":20}'],
+  ])("%s", async (command, call) => {
+    const { result, app } = await run(`- launchApp\n${command}`, new FakeApp({ save: 1, list: 1 }));
+    expect(result.failure).toBeUndefined();
+    expect(app.log.filter(line => /^(tap|hover|typeText|pressKey|scroll|drag) /.test(line))).toEqual([call]);
+  });
+
+  test("inputText and typeText click `into` first, then type", async () => {
+    const { result, app } = await run('- launchApp\n- inputText: { text: " Shared!", into: { id: field } }', new FakeApp({ field: 1 }));
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => /^(tap|typeText) /.test(line))).toEqual(["tap field+50,20 {}", "typeText  Shared!"]);
+  });
+
+  test("steps the driver ran in place of a black-box backend are labelled white-box; lifecycle and driver commands are not", async () => {
+    const { result } = await run("- launchApp\n- tapOn: { id: save }\n- assertVisible: { id: save }\n- setClock: virtual", new FakeApp({ save: 1 }));
+    expect(result.steps.map(step => [step.command, step.whiteBox ?? false])).toEqual([["launchApp", false], ["tapOn", true], ["assertVisible", true], ["setClock", false]]);
+    expect(result.whiteBox).toEqual(["assertVisible", "tapOn"]);
+  });
+
+  test("text, label, role and within select through the in-process accessibility view", async () => {
+    const app = new FakeApp({ path: 1 });
+    app.elements = [
+      { key: "u", parent: "path", window: "spark.main", role: "button", text: "usr", frame: { x: 0, y: 0, width: 20, height: 10 } },
+      { key: "b", window: "spark.main", role: "button", label: "Save", text: "Save", frame: { x: 100, y: 100, width: 40, height: 20 } },
+    ];
+    const { result } = await run("- launchApp\n- tapOn: { text: usr, within: { id: path } }\n- assertVisible: { role: button, label: Save }\n- tapOn: Save", app);
+    expect(result.status).toBe("passed");
+    // Elements without a testID are addressed by point in their window, without scrolling into view.
+    expect(app.log.filter(line => line.startsWith("tap "))).toEqual(["tap 10,5@id:spark.main {}", "tap 120,110@id:spark.main {}"]);
+  });
+
+  test("assertText waits for the element's text; a mismatch is an assertion failure", async () => {
+    const app = new FakeApp();
+    let snapshots = 0;
+    Object.defineProperty(app, "elements", { get: () => [{ key: "v", window: "spark.main", id: "value", text: ++snapshots < 3 ? "0" : "1", frame: FRAME }] });
+    expect((await run("- launchApp\n- assertText: { id: value, equals: '1' }", app)).result.status).toBe("passed");
+    expect(snapshots).toBe(3);
+    const failed = await run("- launchApp\n- assertText: { id: value, equals: '2', timeout: 300ms }", app);
+    expect(failed.result.failure).toMatchObject({ kind: "assertion", message: 'the text of {"id":"value"} is "1", not "2"' });
+    expect((await run("- launchApp\n- assertText: { id: gone, equals: x, timeout: 100ms }", app)).result.failure).toMatchObject({ kind: "not-found" });
+  });
+
+  test("assertA11y checks the label, role and value NSAccessibility reports in-process", async () => {
+    const app = new FakeApp();
+    app.elements = [{ key: "d", window: "spark.main", id: "default", role: "button", label: "افتراضي", value: "5", frame: FRAME }];
+    expect((await run('- launchApp\n- assertA11y: { id: default, label: "افتراضي", role: button, value: "5" }\n- assertA11y: { id: default, label: "/^اف/" }', app)).result.status).toBe("passed");
+    expect((await run("- launchApp\n- assertA11y: { id: default, label: Default, timeout: 100ms }", app)).result.failure).toMatchObject({
+      kind: "assertion", message: 'the accessibility label of {"id":"default"} is "افتراضي", not "Default"',
+    });
+  });
+
+  test("an element without a testID in a window without an identifier cannot be addressed", async () => {
+    const app = new FakeApp();
+    app.elements = [{ key: "x", window: "", text: "X", frame: FRAME }];
+    expect((await run("- launchApp\n- tapOn: X", app)).result.failure).toMatchObject({
+      kind: "unsupported", message: 'backend driver cannot address the window of "x": it has no identifier',
+    });
   });
 });
 
 describe("unsupported and invalid", () => {
   test.each([
-    ["- tapOn: { id: save }", "tapOn needs a black-box backend (active: driver (driver))"],
-    ["- inputText: hello", "inputText needs a black-box backend (active: driver (driver))"],
+    ["- assertA11y: { id: save, hint: Saves }", "assertA11y hint is not supported by backend driver"],
+    ["- selectMenu: File > Open", "selectMenu needs a black-box backend (active: driver (driver)); backend driver cannot run it in-process"],
+    ["- hoverOn: { id: save, duration: 1s }", "hoverOn duration is not supported by backend driver"],
+    ["- scroll: { on: { id: list }, momentum: true }", "scroll momentum is not supported by backend driver"],
+    ["- scroll: { direction: down }", "backend driver scrolls only `on` a target"],
+    ["- swipe: { direction: up }", "backend driver swipes only `from` a target"],
+    ["- swipe: { from: { id: list }, direction: up, fingers: 3 }", "backend driver swipes with one or two fingers (a scroll)"],
+    ["- dragAndDrop: { from: { id: save }, to: { id: list }, holdAt: 1s }", "dragAndDrop holdAt is not supported by backend driver"],
+    ["- assertText: { id: save, equals: x, lineEndings: crlf }", "assertText lineEndings is not supported by backend driver"],
+    ["- pressKey: MediaPlayPause", "backend driver cannot press MediaPlayPause"],
+    ["- pressKey: capslock+a", "backend driver cannot press capslock+a"],
     ["- killApp", "killApp is not supported by backend driver"],
     ["- assertStartup: { coldMs: { max: 900 } }", "assertStartup is not supported by backend driver"],
-    ["- assertVisible: Save", "backend driver cannot select by text"],
-    ["- assertVisible: { id: row, within: { id: list } }", "backend driver cannot select within an element"],
     ["- launchApp: { appId: com.example.other, from: dock }", "launchApp appId, from is not supported by backend driver"],
   ])("%s fails as unsupported", async (command, message) => {
     const views = { list: 1, row: 1 };

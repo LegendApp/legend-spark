@@ -154,9 +154,11 @@ commands, frame timing, performance, `assertState`, and:
 - `takeScreenshot` and `assertScreenshot`: captured in-process by the driver, so they
   need no screen-recording permission. See [Visual goldens](#visual-goldens).
 
-Until the black-box backend lands, a run with only the driver backend checks `id`
-visibility in-process (see [The driver backend](#the-driver-backend)): a view in the
-rendered hierarchy of a window that is never put on screen, not what a user sees.
+Until the black-box backend lands, a run with only the driver backend runs visibility
+checks, selectors, input (`tapOn`, `typeText`, `pressKey`, `scroll`, `dragAndDrop` and
+others), `assertText` and `assertA11y` in-process (see [The driver backend](#the-driver-backend)):
+events the app dispatches to itself and the views of its own windows, not what a user sees
+or does. The runner labels those steps white-box in reports.
 
 There is no `retry` and no sleep command. Every command waits for its target, and a
 flaky flow counts as a failed flow. Use `extendedWaitUntil` to wait for state, or
@@ -175,7 +177,8 @@ is 0 when every flow passed or was skipped, 1 when one failed, and 2 for a usage
 
 One production backend exists: `driver`, the Spark in-app driver on macOS (see
 [The driver backend](#the-driver-backend)). The macOS black-box backend (AX + CGEvent)
-lands with [#50](https://github.com/LegendApp/legend-spark/issues/50); until then every
+lands with [#50](https://github.com/LegendApp/legend-spark/issues/50); until then the driver
+runs the black-box commands it implements in-process, labelled white-box, and every other
 black-box command fails as `unsupported`. The runner's behavior is covered by
 `tests/e2e-runner.test.ts`, which uses an in-memory test backend.
 
@@ -254,7 +257,8 @@ restoration change anything.
 `interrupted`, `summary` (`total`, `passed`, `failed`, `skipped`) and `flows`. Each flow
 has `id`, `file`, `name`, `intent`, `checks`, `tags`, `matrix`, `status`, `skipReason`,
 `durationMs`, `steps` (every command run, with `depth`, `status` and duration), `failure`,
-`errors` (problems after the first failure), `artifacts`, `goldens` (see [Visual goldens](#visual-goldens)) and `metrics` (see [Metrics](#metrics)). A `failure` has `kind`,
+`errors` (problems after the first failure), `artifacts`, `goldens` (see [Visual goldens](#visual-goldens)), `metrics` (see [Metrics](#metrics)) and `whiteBox`
+(the black-box commands a driver backend ran in-process, sorted; such steps have `whiteBox: true`). A `failure` has `kind`,
 `message`, `command`, `location`, `stack`, `candidates`, `matches`, `artifacts` and, for
 invalid flows, `diagnostics`. Artifact and golden paths are relative to the run directory.
 Artifact kinds are `screenshot`, `golden` (the expected image of a failed
@@ -287,11 +291,19 @@ A backend implements `Backend` in `scripts/e2e/runner/backend.ts` and is registe
 name in `BACKENDS` in `scripts/e2e/runner/run.ts`.
 
 - `kind` is `black-box` (OS input and the accessibility tree) or `driver` (in-process).
-  Commands marked **driver** run only on a driver backend. Other commands run only on a
-  black-box backend, except lifecycle commands, which either kind may own. Visibility
-  checks (`assertVisible`, `assertNotVisible`, `extendedWaitUntil`, `when`) use the
-  black-box backend. When only a driver backend is active, they use the driver's
-  `queryKeys` (in-process, white-box), and any other selector key is `unsupported`.
+  Commands marked **driver** run only on a driver backend. Lifecycle commands run on
+  either kind. Other commands are black-box: they run on a black-box backend, and when no
+  black-box backend is active, on a driver backend that implements them. Visibility checks
+  (`assertVisible`, `assertNotVisible`, `extendedWaitUntil`, `when`) use the black-box
+  backend, or the driver backend when it is the only kind active. A black-box command or
+  visibility check answered by a driver backend is a white-box step: the report marks it
+  (`whiteBox` on the step and the flow, "white-box" in the HTML page and the console line).
+  A flow tagged `black-box` never runs white-box: without a black-box backend, its black-box
+  commands and visibility checks are `unsupported`. Use it for behavior the driver cannot
+  reproduce, such as keyboard input to AppKit controls.
+- The release gate accepts white-box passes for now; they stay labelled in its report. Once the
+  black-box backend lands ([#50](https://github.com/LegendApp/legend-spark/issues/50), which needs
+  a TCC grant), `gate.yaml` will gain a per-tag `requireBlackBox` option.
 - `commands` is the dispatch table. If no eligible backend has a command, the flow fails
   with `unsupported`, naming the backend. The runner itself runs `runFlow`, `repeat`,
   `extendedWaitUntil`, `assertVisible` and `assertNotVisible`.
@@ -316,8 +328,9 @@ name in `BACKENDS` in `scripts/e2e/runner/run.ts`.
 ### The driver backend
 
 `--backend driver` (`scripts/e2e/runner/driver-backend.ts`) runs flows in-process through
-the Spark in-app driver ([docs/test-driver.md](test-driver.md)). The app never shows a
-window, activates or takes focus, and needs no TCC permission. It drives the Kitchen Sink:
+the Spark in-app driver ([docs/test-driver.md](test-driver.md)). The app never activates
+or takes focus, and needs no TCC permission; its windows are on screen only during pointer
+input, fully transparent and ignoring the real pointer. It drives the Kitchen Sink:
 the `--app` bundle (the gate passes its release build), or the last development build.
 A development build loads JavaScript over HTTP, so the backend bundles the current
 source once per run (`expo export:embed`, no Metro) and serves it to each launch; a release
@@ -328,7 +341,14 @@ fails with `invalid`.
 |---|---|
 | `launchApp` | Quits a running app, deletes its state for `clearState: true` ([clearState](#clearstate)), then launches in driver mode with the flow's `arguments` (after the driver's own) and `env`. Then it delivers `openUrl` with `navigate` and `openFile` with `openFile`, both through `application:openURLs:` once the first render settles. With `stopApp: false` and the app running, it only delivers `openUrl` and `openFile`; `clearState`, `arguments` and `env` there are `invalid`. `openFile` must be an absolute path to an existing file (`invalid` otherwise). The driver reserves `SPARK_TEST_DRIVER_DIR` and `SPARK_BUNDLE_URL` in `env`, `-RCT_jsLocation` in `arguments`, and `-AppleLanguages`/`-AppleLocale` when the matrix sets `locale`; a flow that sets one is `invalid`. `appId` and `from` are `unsupported`. |
 | `stopApp`, end of flow | `quit`: the app's normal termination path |
-| `id` selectors (visibility checks, mask selectors) | `waitFor` with no wait, polled by the runner; at most the first visible match in any window. Other selector keys and `within` are `unsupported`. |
+| Selectors (visibility checks, targets, mask selectors), window selectors | `elements`, one snapshot per poll: the in-process accessibility view (testIDs, roles, labels, text, frames, parents) of every window with an identifier. The runner matches every selector key against it. |
+| `tapOn`, `doubleClickOn`, `tripleClickOn`, `rightClickOn` (with `modifiers`), `hoverOn` | `tap` (`clickCount` 1-3, `button`) and `hover`. A target with an id is addressed by testID and offset: the driver scrolls it into view and fails when another view would receive the click. Others are addressed by point in their window. `hoverOn` `duration` is `unsupported`. |
+| `typeText`, `inputText` (with `into`) | `into` is clicked first; then `typeText`, one key press per character (`inputText` too: the driver has no one-step insert). |
+| `pressKey`, `shortcut` | `pressKey` of the parsed accelerator, in the window of the last pointer input. Media keys and Caps Lock are `unsupported`. |
+| `scroll` | `scroll` over `on` (required): `amount` (default 100 points when `precise`, else 3 lines) in `direction` (default `down`). `momentum` is `unsupported`. |
+| `swipe` | A precise `scroll` over `from` (required) by the fingers' travel, content following the fingers: `start` to `end`, or half of `from` in `direction`. More than two fingers and `duration` are `unsupported`. |
+| `dragAndDrop` | `drag` from `from` to `to` in one window, with `steps` and `modifiers`. `holdAt` is `unsupported`. AppKit drag sessions (pasteboard drag and drop) need the window server and the black-box backend. |
+| `assertText`, `assertA11y` | The element's `text`, and its `label`, `role` and `value`, from `elements`, polled until they match. `lineEndings` and `hint` are `unsupported`. |
 | matrix `appearance` | `setAppAppearance` after each launch (the app override; the OS setting is untouched) |
 | matrix `locale` | Launch arguments `-AppleLanguages (<locale>) -AppleLocale <locale>` |
 | `setAppAppearance` | `setAppAppearance`; lasts until the app quits |
@@ -377,13 +397,21 @@ a recent document (the defaults domain) saved by one launch are found by the nex
 `clearState`. Window frames never persist in driver mode ([docs/test-driver.md](test-driver.md#focus-and-window-state)),
 with or without `clearState`.
 
-Everything else is `unsupported`, never skipped: black-box commands (input, menus,
-windows, OS state) need [#50](https://github.com/LegendApp/legend-spark/issues/50), and
-the other driver commands (motion assertions such as `assertMotion` and `assertFrames`,
+Input is synthesized in the app and dispatched through its own event path
+([docs/test-driver.md](test-driver.md#input)): first responders, key equivalents, control
+tracking and React Native gestures behave as for real input, but nothing proves the real
+input path, local event monitors do not see driver key events, and AppKit controls ignore
+driver arrow keys (they take keyboard input only in the key window). A native menu the
+input opens is closed at once and the command fails.
+
+Everything else is `unsupported`, never skipped: other black-box commands (menus, windows,
+OS state) need [#50](https://github.com/LegendApp/legend-spark/issues/50), and the other
+driver commands (motion assertions such as `assertMotion` and `assertFrames`,
 `assertStartup` and other performance commands, `assertState`) are not in the driver
 protocol yet.
 `tests/e2e-driver-backend.test.ts` covers the mapping with a fake driver
-(`tests/e2e-driver-fake.ts`) and `tests/e2e-app-state.test.ts` covers clearState;
+(`tests/e2e-driver-fake.ts`), `tests/test-driver.native.mm` the driver's input on real
+AppKit controls, and `tests/e2e-app-state.test.ts` covers clearState;
 `e2e/flows/infra/catalog-driver.yaml` and `e2e/flows/infra/launch-state.yaml` run it end to end.
 
 ## Visual goldens
@@ -636,8 +664,9 @@ invalid `e2e/gate.yaml`, whose problems it prints), and 2 for a usage error, suc
 `--target` that is not in the manifest. It never passes vacuously. A missing target,
 backend, build, flow, baseline, measurement or sign-off is a failure with its own reason.
 
-**It fails today.** The only backend is the in-app driver, so every flow that needs a
-black-box command fails as `unsupported` until #50; coverage is incomplete, and the
+**It fails today.** The only backend is the in-app driver, so a flow that needs a
+black-box command the driver cannot run in-process fails as `unsupported` until #50 (the
+others pass white-box, labelled in the report); coverage is incomplete, and the
 budgets are not measured. The release scripts do not run it yet; that is
 [#55](https://github.com/LegendApp/legend-spark/issues/55).
 
