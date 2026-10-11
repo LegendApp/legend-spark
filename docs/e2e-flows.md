@@ -442,15 +442,21 @@ Committed goldens:
 |---|---|---|
 | `macos/light/en/infra-shell-catalog` | Launch catalog (`infra-shell-root`) | `ks:capture --wait-for infra-shell-root --appearance light --locale en` |
 | `macos/dark/en/infra-shell-catalog` | The same, dark | `--appearance dark --locale en` |
+| `macos/light/ar/infra-shell-catalog` | The same, Arabic (right to left) | `--appearance light --locale ar` |
+| `macos/dark/ar/infra-shell-catalog` | The same, Arabic, dark | `--appearance dark --locale ar` |
 
 They come from the development build, so the sidebar subtitle reads `dev · <project ID>`.
 A flow that compares them must mask that line (`mask: [{ id: infra-shell-subtitle }]`), as
 `e2e/flows/infra/catalog-driver.yaml` does.
 
-The Arabic catalog has no golden yet. Scroll content no longer renders mirrored
-([#234](https://github.com/LegendApp/legend-spark/issues/234)), but Arabic text in
-full-width boxes still renders left-aligned, and a golden of a bug would make the fix
-fail. Approve `macos/light/ar` and `macos/dark/ar` once RTL text aligns to the right.
+The Arabic goldens came after the RTL fixes for scroll content
+([#234](https://github.com/LegendApp/legend-spark/issues/234)) and text alignment
+([#245](https://github.com/LegendApp/legend-spark/issues/245)).
+
+The window size comes from `desktop.config.json` (1000x700 points), unless the shared
+user defaults hold a saved `NSWindow Frame spark.desktop.…main` for
+`so.legend.spark.examples.kitchensink`. Then the capture has a different size and fails.
+Delete that key before you approve goldens.
 
 ### Determinism
 

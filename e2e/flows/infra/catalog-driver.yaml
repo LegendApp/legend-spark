@@ -5,13 +5,13 @@ intent: >
   (infra-shell-catalog) render, and the window matches the approved catalog golden with the build
   subtitle (dev or release, project ID) masked. Opening spark-ks://native-controls/buttons in the
   running app routes to Native controls > Button styles, whose root (native-controls-buttons-root)
-  renders, and the window is captured. Runs in light and dark, in English.
+  renders, and the window is captured. Runs in light and dark, in English and Arabic (right to left).
 checks: [INFRA-DRIVER-01, INFRA-DRIVER-02]
 tags: [infra]
 platforms: [macos]
 matrix:
   appearance: [light, dark]
-  locale: [en]
+  locale: [en, ar]
 ---
 - launchApp
 - assertVisible: { id: infra-shell-root }
