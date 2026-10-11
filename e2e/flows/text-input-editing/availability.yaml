@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Text services availability on macOS
+intent: >
+  The Text services screen lists getTextServicesAvailability for each feature as JSON. On macOS Services
+  (AppKit), Look Up and the find bar are available. Writing Tools is available on a Mac that supports it
+  (macOS 15.2+ hardware), otherwise host-restriction; either answer is truthful, nothing else is.
+checks: [TEXT-SVCAVAIL-01]
+tags: [text-input-editing]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://text-input-editing/text-services" }
+- extendedWaitUntil: { visible: { id: text-input-editing-text-services-root }, timeout: 15s }
+- assertText: { id: text-input-editing-text-services-availability-services, equals: 'services: {"available":true}' }
+- assertText: { id: text-input-editing-text-services-availability-lookUp, equals: 'lookUp: {"available":true}' }
+- assertText: { id: text-input-editing-text-services-availability-findBar, equals: 'findBar: {"available":true}' }
+- assertVisible: { text: '/^writingTools: \{"available":(true|false,"reason":"host-restriction")\}$/', within: { id: text-input-editing-text-services-availability-writingTools } }

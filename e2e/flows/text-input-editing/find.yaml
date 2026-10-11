@@ -1,0 +1,30 @@
+appId: so.legend.spark.examples.kitchensink
+name: findText counts, selects, matches case and wraps
+intent: >
+  The note holds "spark" five times in any case (twice in lower case). Find next with the default query
+  selects the first match (1 of 5), then the second; Find previous goes back to the first and, wrapping,
+  to the last (SPARK). With Match case on there are two matches: Find next after SPARK wraps to the first.
+  With Wrap around off, Find next selects the second and then nothing past it (matchIndex 0). Every
+  matchIndex after the first follows from the selection the previous call left.
+checks: [TEXT-FIND-01]
+tags: [text-input-editing]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://text-input-editing/text-services" }
+- extendedWaitUntil: { visible: { id: text-input-editing-text-services-root }, timeout: 15s }
+- tapOn: { id: text-input-editing-text-services-find-next }
+- assertText: { id: text-input-editing-text-services-result, equals: 'Result: {"matchCount":5,"matchIndex":1}' }
+- tapOn: { id: text-input-editing-text-services-find-next }
+- assertText: { id: text-input-editing-text-services-result, equals: 'Result: {"matchCount":5,"matchIndex":2}' }
+- tapOn: { id: text-input-editing-text-services-find-previous }
+- assertText: { id: text-input-editing-text-services-result, equals: 'Result: {"matchCount":5,"matchIndex":1}' }
+- tapOn: { id: text-input-editing-text-services-find-previous }
+- assertText: { id: text-input-editing-text-services-result, equals: 'Result: {"matchCount":5,"matchIndex":5}' }
+- tapOn: { id: text-input-editing-text-services-find-case }
+- tapOn: { id: text-input-editing-text-services-find-next }
+- assertText: { id: text-input-editing-text-services-result, equals: 'Result: {"matchCount":2,"matchIndex":1}' }
+- tapOn: { id: text-input-editing-text-services-find-wrap }
+- tapOn: { id: text-input-editing-text-services-find-next }
+- assertText: { id: text-input-editing-text-services-result, equals: 'Result: {"matchCount":2,"matchIndex":2}' }
+- tapOn: { id: text-input-editing-text-services-find-next }
+- assertText: { id: text-input-editing-text-services-result, equals: 'Result: {"matchCount":2,"matchIndex":0}' }

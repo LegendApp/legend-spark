@@ -1,0 +1,24 @@
+appId: so.legend.spark.examples.kitchensink
+name: Text services screen matches its goldens
+intent: >
+  Text input & editing > Text services opens from its spark-ks:// deep link through the in-app driver: the
+  root, the multiline note (an RN TextInput with the find bar), the Spark TextInput, the four
+  writingToolsBehavior inputs and the find controls render, and the window matches the approved golden in
+  light and dark, English and Arabic. The shell sidebar and the writingTools availability row (it depends on
+  the Mac's Writing Tools support) are masked.
+checks: [TEXT-SVCVISUAL-01]
+tags: [text-input-editing]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://text-input-editing/text-services" }
+- assertVisible: { id: text-input-editing-text-services-root }
+- assertVisible: { id: text-input-editing-text-services-note }
+- assertVisible: { id: text-input-editing-text-services-spark-input }
+- assertVisible: { id: text-input-editing-text-services-writing-tools-none }
+- assertVisible: { id: text-input-editing-text-services-find-next }
+- assertScreenshot:
+    golden: text-input-editing-text-services
+    mask: [{ id: infra-shell-sidebar }, { id: text-input-editing-text-services-availability-writingTools }]
