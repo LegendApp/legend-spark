@@ -11,8 +11,8 @@ intent: >
   (state closed). Show font panel opens the font panel at Helvetica Neue 15 regular, reports the
   resolved font, and Close hides it. With Disable controls checked, keys change nothing. Black-box
   only: AppKit controls take keys only in the key window, and the panels and popovers need an
-  on-screen window, which driver mode never has (pickers.yaml and pickers-panels.yaml cover the
-  driver). Picking a color or font inside a panel is covered by tests/native-panels.native.mm and
+  on-screen window, which driver mode never has (pickers.yaml covers the driver, and
+  visual.yaml the pickers' goldens). Picking a color or font inside a panel is covered by tests/native-panels.native.mm and
   tests/native-primitives.native.mm. The eyedropper is in the manual pickers-sampler.yaml.
 checks: [CTRL-DATE-01, CTRL-DATE-02, CTRL-COLOR-01, CTRL-COLORPANEL-01, CTRL-FONTPANEL-01, CTRL-DISABLED-01]
 tags: [native-controls, black-box]
