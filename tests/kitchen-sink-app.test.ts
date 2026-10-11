@@ -35,7 +35,10 @@ vi.mock("@legendapp/spark/links", () => ({ addEventListener: () => ({ remove() {
 vi.mock("../examples/kitchen-sink/shell/catalog", async () => {
   const { createCatalog, defineScreens } = await import("../examples/kitchen-sink/shell/registry.ts");
   const component = () => React.createElement("Text", null, "Frame screen body");
-  return { catalog: createCatalog([["./windows/index.tsx", { default: defineScreens("windows", [{ id: "frame", title: "Frame", summary: "Frame summary", component }]) }]]) };
+  return { catalog: createCatalog([
+    ["./windows/index.tsx", { default: defineScreens("windows", [{ id: "frame", title: "Frame", summary: "Frame summary", component }]) }],
+    ["./future-facing-capabilities/index.tsx", { default: defineScreens("future-facing-capabilities", [{ id: "ai-command-runner", title: "AI: command runner", summary: "Runner summary", component }]) }],
+  ]) };
 });
 
 let rendered: any;
@@ -68,7 +71,8 @@ test("the Shell renders Arabic right to left, with a mirrored breadcrumb and the
   expect(text(host("infra-shell-theme-toggle")[0])).toBe("المظهر: النظام ← فاتح");
   expect(host("infra-shell-area-windows")[0].props.accessibilityLabel).toBe("النوافذ، شاشة واحدة");
   await act(async () => navigation.navigate({ kind: "screen", area: "windows", screen: "frame" }));
-  expect(host("infra-shell-breadcrumb-separator").map(text)).toEqual(["‹", "‹"]);
+  // One glyph; its right-to-left writing direction makes bidi draw it as "‹", along the reading direction.
+  expect(host("infra-shell-breadcrumb-separator").map((node: any) => [text(node), node.props.style.writingDirection])).toEqual([["›", "rtl"], ["›", "rtl"]]);
   expect(text(host("infra-shell-breadcrumb")[0])).toContain("النوافذ");
   expect(text(host("windows-frame-root")[0])).toBe("Frame screen body");
 });
@@ -78,9 +82,9 @@ test("the Shell renders English left to right and explains links that open no sc
   await mount(Shell);
   expect(host("infra-shell-root")[0].props.style).toEqual({ direction: "ltr" });
   expect(texts()).toContain("dev · ks");
-  expect(texts()).toContain("1 of 37 areas have screens. Every screen opens from spark-ks://<area>/<screen>.");
+  expect(texts()).toContain("2 of 37 areas have screens. Every screen opens from spark-ks://<area>/<screen>.");
   await act(async () => host("infra-shell-screen-windows-frame")[0].props.onPress());
-  expect(host("infra-shell-breadcrumb-separator").map(text)).toEqual(["›", "›"]);
+  expect(host("infra-shell-breadcrumb-separator").map((node: any) => [text(node), node.props.style.writingDirection])).toEqual([["›", "ltr"], ["›", "ltr"]]);
   expect(host("windows-frame-root")).toHaveLength(1);
   await act(async () => navigation.openLink("spark-ks://windows/missing"));
   expect(host("windows-frame-root")).toHaveLength(0);
@@ -89,6 +93,27 @@ test("the Shell renders English left to right and explains links that open no sc
   expect(text(host("infra-shell-not-found-reason")[0])).toBe("Only spark-ks:// links open Kitchen Sink screens.");
   await act(async () => navigation.openLink("spark-ks://menus"));
   expect(text(host("infra-shell-area-empty")[0])).toBe("No screens registered yet. Add them in screens/menus/index.tsx.");
+});
+
+test("a long breadcrumb truncates its middle crumb first, then the current one, and keeps the full path as tooltip and label", async () => {
+  for (const [locale, path] of [["en_US", "All screens › Future-facing capabilities › AI: command runner"], ["ar", "كل الشاشات › القدرات المستقبلية › AI: command runner"]]) {
+    spark.locale = async () => locale!;
+    vi.resetModules();
+    const { navigation, Shell } = await start();
+    await mount(Shell);
+    await act(async () => navigation.navigate({ kind: "screen", area: "future-facing-capabilities", screen: "ai-command-runner" }));
+    const breadcrumb = host("infra-shell-breadcrumb")[0];
+    expect(breadcrumb.props).toMatchObject({ accessibilityLabel: path, tooltip: path });
+    // Clips rather than overlap the theme toggle, whatever the window width.
+    expect(breadcrumb.props.className).toContain("overflow-hidden");
+    const [root, middle] = breadcrumb.findAll((node: any) => node.type === "Pressable");
+    const current = breadcrumb.findAll((node: any) => node.type === "Text" && node.props.accessibilityRole === "header");
+    expect(current.map(text)).toEqual(["AI: command runner"]);
+    expect([root, middle, current[0]].map(node => node.props.style.flexShrink)).toEqual([0, 1000, 1]);
+    expect(middle.props.style.minWidth).toBeGreaterThan(0);
+    for (const crumb of breadcrumb.findAll((node: any) => node.type === "Text" && node.props.testID !== "infra-shell-breadcrumb-separator")) expect(crumb.props.numberOfLines).toBe(1);
+    await act(async () => { rendered.unmount(); rendered = undefined; });
+  }
 });
 
 test("the Shell waits for the locale and shows a startup failure", async () => {

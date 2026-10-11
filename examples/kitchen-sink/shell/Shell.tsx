@@ -59,18 +59,25 @@ function Breadcrumb({ location }: { location: Location }) {
   const { t, rtl } = useI18n();
   const area = location.kind === "area" || location.kind === "screen" ? catalog.area(location.area) : undefined;
   const screen = location.kind === "screen" ? catalog.screen(location.area, location.screen) : undefined;
-  // The separator points along the reading direction.
-  const separator = <Text className="text-muted" testID="infra-shell-breadcrumb-separator">{rtl ? "‹" : "›"}</Text>;
-  return <View className="flex-1 flex-row items-center gap-2" testID="infra-shell-breadcrumb">
-    <Crumb onPress={location.kind === "catalog" ? undefined : () => navigate({ kind: "catalog" })}>{t.allScreens}</Crumb>
-    {area && <>{separator}<Crumb onPress={location.kind === "screen" ? () => navigate({ kind: "area", area: area.id }) : undefined}>{t.areas[area.id]}</Crumb></>}
-    {screen && <>{separator}<Crumb>{screen.title}</Crumb></>}
+  // "›" is bidi-mirrored: with an explicit right-to-left writing direction it draws as "‹", along the reading direction.
+  const separator = <Text className="text-muted" style={{ writingDirection: rtl ? "rtl" : "ltr" }} testID="infra-shell-breadcrumb-separator">›</Text>;
+  const path = [t.allScreens, area && t.areas[area.id], screen?.title].filter(Boolean).join(" › ");
+  // Crumbs truncate instead of running under the theme toggle; the tooltip and label keep the full path.
+  // `tooltip` is a react-native-macos/-windows View prop that the react-native types lack.
+  return <View className="flex-1 flex-row items-center gap-2 overflow-hidden" testID="infra-shell-breadcrumb" accessibilityLabel={path} {...{ tooltip: path }}>
+    <Crumb shrink={area ? 0 : 1} onPress={location.kind === "catalog" ? undefined : () => navigate({ kind: "catalog" })}>{t.allScreens}</Crumb>
+    {area && <>{separator}<Crumb shrink={screen ? MIDDLE_SHRINK : 1} onPress={location.kind === "screen" ? () => navigate({ kind: "area", area: area.id }) : undefined}>{t.areas[area.id]}</Crumb></>}
+    {screen && <>{separator}<Crumb shrink={1}>{screen.title}</Crumb></>}
   </View>;
 }
-function Crumb({ children, onPress }: { children: ReactNode; onPress?: () => void }) {
+// Yoga splits overflow by flexShrink × width, so a middle crumb absorbs it (down to room for an ellipsis)
+// before the last crumb loses a visible fraction of a point. The root keeps its width.
+const MIDDLE_SHRINK = 1000;
+function Crumb({ children, onPress, shrink }: { children: ReactNode; onPress?: () => void; shrink: number }) {
+  const style = { flexShrink: shrink, minWidth: shrink === MIDDLE_SHRINK ? 32 : 0 };
   return onPress
-    ? <Pressable accessibilityRole="link" onPress={onPress}><Text className="text-sm text-muted">{children}</Text></Pressable>
-    : <Text className="text-sm font-semibold text-foreground" accessibilityRole="header">{children}</Text>;
+    ? <Pressable accessibilityRole="link" onPress={onPress} style={style}><Text numberOfLines={1} className="text-sm text-muted">{children}</Text></Pressable>
+    : <Text numberOfLines={1} style={style} className="text-sm font-semibold text-foreground" accessibilityRole="header">{children}</Text>;
 }
 
 function Content({ location }: { location: Location }) {

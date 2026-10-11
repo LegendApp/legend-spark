@@ -2,10 +2,10 @@ area: future-facing-capabilities
 prefix: FUT
 checks:
   FUT-VISUAL-01:
-    title: The AI tool runner screen, with its tool SegmentedControl and Buttons, matches its approved golden in light and dark (English; Arabic waits for #256)
+    title: The AI tool runner screen, with its tool SegmentedControl and Buttons, matches its approved golden in light and dark (English; Arabic waits for #256); AI command runner, with its long shell breadcrumb truncated, matches its goldens in light and dark, English and Arabic
     platforms: [macos]
     blocking: true
-    spec: "docs/e2e-flows.md Visual goldens; #227"
+    spec: "docs/e2e-flows.md Visual goldens; #227; #255"
     covers:
       - ./ui/uniwind#SegmentedControl
       - ./ui/uniwind#Button
