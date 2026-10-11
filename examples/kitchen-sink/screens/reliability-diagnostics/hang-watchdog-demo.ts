@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { SparkError } from "@legendapp/spark/contracts";
 import { getHangWatchdogAvailability, simulateHang, startHangWatchdog, type HangReport, type HangStackFrame } from "@legendapp/spark/diagnostics";
 import { useRegistrations } from "../../shell/registrations";
@@ -22,14 +22,21 @@ export function frameText(frame: HangStackFrame) {
   return `${image ?? "?"}  ${frame.address}  ${place}`;
 }
 
+/** A block of the main thread: its length, and wall-clock times taken just before the call and once it resolved. */
+export type BlockWindow = { blockedMs: number; before: number; after: number };
+
 /**
  * How a report of a simulated hang compares with the block that caused it, as JSON for the screen and its
- * flows: the duration is within the watchdog's resolution of the block (it can start up to half a
- * threshold late, and the main thread answers once queued work is done), the stack names
- * SparkSimulateHang, and every frame is located in an image.
+ * flows. The timing bounds hold however late the machine runs anything: the unanswered ping went out
+ * once the block was asked for (50 ms of slack for a ping already queued) and at least a threshold
+ * before it resolved; it was answered after the block's full length and well within a second of the
+ * call resolving; and the hang lasted at least the threshold. 20 ms allows for comparing the wall clock
+ * with the watchdog's uptime clock. The stack names SparkSimulateHang, and every frame is located in an image.
  */
-export function simulatedCheck(report: HangReport, blockedMs: number) {
-  const durationMatches = report.durationMs >= blockedMs - report.thresholdMs / 2 - 25 && report.durationMs <= blockedMs + 250;
+export function simulatedCheck(report: HangReport, { blockedMs, before, after }: BlockWindow) {
+  const answeredAt = report.startedAt + report.durationMs;
+  const durationMatches = report.startedAt >= before - 50 && report.startedAt <= after - report.thresholdMs
+    && report.durationMs >= report.thresholdMs && answeredAt >= before + blockedMs - 20 && answeredAt <= after + 1000;
   const framesLocated = report.stack.length > 0 && report.stack.every(frame => frame.image !== undefined && frame.imageOffset !== undefined && frame.imageUUID !== undefined);
   return JSON.stringify({ blockedMs, thresholdMs: report.thresholdMs, durationMatches, stackHasSimulateHang: isSimulated(report), framesLocated });
 }
@@ -44,11 +51,11 @@ export function useHangWatchdogDemo() {
   const [watching, setWatching] = useState(true);
   const [started, setStarted] = useState<number>();
   const [reports, setReports] = useState<HangReport[]>([]);
-  const [simulated, setSimulated] = useState<string>();
+  const [simulatedReport, setSimulatedReport] = useState<HangReport>();
+  const [blockWindow, setBlockWindow] = useState<BlockWindow>();
   const [error, setError] = useState<string>();
   const [blocking, setBlocking] = useState<Block>();
   const [blockResult, setBlockResult] = useState<string>();
-  const lastBlock = useRef<Block>(undefined);
 
   useRegistrations(hold => {
     setStarted(undefined);
@@ -57,20 +64,24 @@ export function useHangWatchdogDemo() {
       thresholdMs,
       onHang: report => {
         setReports(current => [report, ...current].slice(0, KEEP));
-        if (lastBlock.current !== undefined && isSimulated(report)) setSimulated(simulatedCheck(report, lastBlock.current));
+        if (isSimulated(report)) setSimulatedReport(report);
       },
     }).then(watchdog => { setStarted(thresholdMs); setError(undefined); return watchdog; }));
   }, cause => setError(describe(cause)), [watching, thresholdMs]);
 
   const block = useCallback(async (ms: Block) => {
-    lastBlock.current = ms;
     setBlocking(ms);
-    try { await simulateHang(ms); setBlockResult(`blocked ${ms}`); }
+    setSimulatedReport(undefined);
+    setBlockWindow(undefined);
+    const before = Date.now();
+    try { await simulateHang(ms); setBlockWindow({ blockedMs: ms, before, after: Date.now() }); setBlockResult(`blocked ${ms}`); }
     catch (cause) { setBlockResult(describe(cause)); }
     finally { setBlocking(undefined); }
   }, []);
-  const clear = useCallback(() => { setReports([]); setSimulated(undefined); setBlockResult(undefined); }, []);
+  const clear = useCallback(() => { setReports([]); setSimulatedReport(undefined); setBlockResult(undefined); }, []);
 
+  // The report can arrive before or after the block's call resolves; the check needs both.
+  const simulated = simulatedReport && blockWindow ? simulatedCheck(simulatedReport, blockWindow) : undefined;
   const state = error ?? (!watching ? "stopped" : started === undefined ? "starting" : `watching ${started}`);
   return { thresholdMs, setThreshold, watching, setWatching, state, reports, simulated, blocking, blockResult, block, clear };
 }
