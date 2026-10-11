@@ -1,11 +1,13 @@
 import { defineScreens } from "../../shell/registry";
 import { Buttons, Indicators, Inputs, Toggles } from "./ControlPrimitives";
 import { Glass } from "./Glass";
+import { PopoverScreen } from "./PopoverScreen";
 import { Search } from "./Search";
 import { SFSymbols } from "./SFSymbols";
 import { SidebarDataItems, SidebarDynamicHeights, SidebarReactRows } from "./Sidebar";
 import { SplitView } from "./SplitView";
 import { OutlineScreen, TableScreen } from "./Table";
+import { TabViewScreen } from "./TabViewScreen";
 
 // Ported from legend-apps' apps/test-kitchen-sink.
 export default defineScreens("native-controls", [
@@ -22,4 +24,6 @@ export default defineScreens("native-controls", [
   { id: "buttons", title: "Button styles", summary: "Push, bevel, toolbar, help and destructive buttons in every size; Return and Escape buttons.", component: Buttons },
   { id: "table", title: "Table", summary: "A native NSTableView of 10,000 rows: sorting, column resize and reorder with a controlled layout, multiple selection, activation and context-menu events.", component: TableScreen },
   { id: "outline", title: "Outline", summary: "A native NSOutlineView of 10,010 rows in three levels with controlled expansion and selection.", component: OutlineScreen },
+  { id: "popover", title: "Popover", summary: "A native popover anchored to a view or a window rect, with behaviors, preferred edges, detaching and React content.", component: PopoverScreen },
+  { id: "tab-view", title: "Tab view", summary: "A native tab view with React content per tab, tab positions and borders, and controlled selection.", component: TabViewScreen },
 ]);

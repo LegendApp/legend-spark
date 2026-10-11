@@ -20,3 +20,9 @@ export function appearance(value: unknown) {
 export function callback(value: unknown, name: string) {
   if (value !== undefined && typeof value !== "function") throw new SparkError("E_INVALID_ARGUMENT", `Expected ${name} callback`);
 }
+/** Native containers have no substitute: an unavailable one throws during render. */
+export function requireAvailable(availability: Availability, name: string) {
+  if (availability.available) return;
+  const code = availability.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : availability.reason === "missing-module" ? "E_MODULE_UNAVAILABLE" : "E_UNAVAILABLE";
+  throw new SparkError(code, `${name} is unavailable: ${availability.reason}`);
+}

@@ -213,6 +213,10 @@ static NSWindow *MakeInputWindow(void) {
   add([FirstMouseView new], @"input-first-mouse", NSMakeRect(340, 280, 60, 60));
   NSPathControl *path = [NSPathControl new]; path.URL = [NSURL fileURLWithPath:@"/usr/bin"];
   add(path, @"input-path", NSMakeRect(20, 230, 300, 22));
+  // An NSTabView's tab buttons are accessibility elements that are not views, like path components.
+  NSTabView *tabs = [NSTabView new];
+  for (NSString *name in @[@"One", @"Two"]) { NSTabViewItem *item = [[NSTabViewItem alloc] initWithIdentifier:name]; item.label = name; [tabs addTabViewItem:item]; }
+  add(tabs, @"input-tabs", NSMakeRect(20, 90, 320, 120));
   // A host view and the native control it hosts share a testID, as Spark's React Native controls do.
   NSView *host = [NSView new];
   add(host, @"input-hosted", NSMakeRect(400, 280, 190, 40));
@@ -420,6 +424,9 @@ int main(int argc, char **argv) { @autoreleasepool {
       NSArray *components = [elements filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"text == 'usr'"]];
       Check(components.count == 1 && [components[0][@"window"] isEqual:@"input"] && [components[0][@"frame"][@"x"] doubleValue] >= [pathElement[@"frame"][@"x"] doubleValue],
         [NSString stringWithFormat:@"elements: accessibility parts of a control that are not views, such as path components (%@)", components]);
+      NSArray *tabButtons = [elements filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"role == 'radioButton' AND window == 'input'"]];
+      NSDictionary *two = [tabButtons filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"label == 'Two' OR text == 'Two'"]].firstObject;
+      Check(tabButtons.count == 2 && two != nil, [NSString stringWithFormat:@"elements: tab view tab buttons (%@)", tabButtons]);
       NSArray *windowIDs = [tree[@"windows"] valueForKey:@"id"];
       Check([windowIDs containsObject:@"input"] && [windowIDs containsObject:@"spark.main"], [NSString stringWithFormat:@"elements: windows (%@)", windowIDs]);
       NSSlider *slider = OnMain(^{ return SparkDriverFindView(@"input-slider"); });
@@ -428,6 +435,10 @@ int main(int argc, char **argv) { @autoreleasepool {
       double value = [OnMain(^{ return @(slider.doubleValue); }) doubleValue];
       Check(fabs(value - 75) < 4, [NSString stringWithFormat:@"a tap at 75%% of the slider sets it near 75 (%.1f)", value]);
       Check([OnMain(^{ return @(!input.isVisible && input.alphaValue == 1 && !input.ignoresMouseEvents); }) boolValue], @"the window is off screen again after pointer input");
+      NSDictionary *twoFrame = two[@"frame"];
+      ok(@{ @"command": @"tap", @"window": @"id:input", @"point": @{ @"x": @([twoFrame[@"x"] doubleValue] + [twoFrame[@"width"] doubleValue] / 2), @"y": @([twoFrame[@"y"] doubleValue] + [twoFrame[@"height"] doubleValue] / 2) } });
+      NSString *selectedTab = OnMain(^{ return [((NSTabView *)SparkDriverFindView(@"input-tabs")).selectedTabViewItem.identifier description]; });
+      Check([selectedTab isEqual:@"Two"], [NSString stringWithFormat:@"a tap on a tab button at its elements frame selects the tab (%@)", selectedTab]);
       ok(@{ @"command": @"tap", @"testID": @"input-button" });
       Check(buttonPresses == 1, @"a tap presses an NSButton (its tracking loop takes the queued mouseUp)");
       int before = sliderActions;

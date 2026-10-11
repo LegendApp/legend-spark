@@ -6,8 +6,13 @@ intent: >
   match the approved golden for the appearance (light and dark) and locale, with the shell sidebar masked: SF Symbols,
   Glass and the size grids in English and Arabic, Split view and Search field in English only until they mirror in
   right-to-left layouts. The animated progress indicators are masked. The three Sidebar screens mount without crashing
-  (#252) but are not compared until their rows fit (#264) and the selected row captures correctly (#265).
-checks: [CTRL-VISUAL-01, CTRL-SIDEBAR-01]
+  (#252) but are not compared until their rows fit (#264) and the selected row captures correctly (#265). Popover and
+  Tab view match their goldens in English and Arabic. Driver-mode windows are never on screen, so the popover cannot
+  open: the flow checks that its native host mounts beside its anchor and that its closed content is not in the main
+  window (popover-black-box.yaml opens it on the black-box backend). The tab view shows only the selected tab's
+  content. In-process captures draw AppKit's tab row without the selected label in light and as a blank white bar in
+  dark (docs/ui.md, Tab view), so these goldens cannot check the tab labels.
+checks: [CTRL-VISUAL-01, CTRL-SIDEBAR-01, CTRL-POPOVER-02, CTRL-TABVIEW-02]
 tags: [native-controls]
 platforms: [macos]
 matrix:
@@ -59,3 +64,19 @@ matrix:
 - assertVisible: { id: native-controls-sidebar-dynamic-heights-list }
 - launchApp: { openUrl: "spark-ks://native-controls/sidebar-react-rows", stopApp: false }
 - assertVisible: { id: native-controls-sidebar-react-rows-list }
+- launchApp: { openUrl: "spark-ks://native-controls/popover", stopApp: false }
+- assertVisible: { id: native-controls-popover-root }
+- assertVisible: { id: native-controls-popover-host }
+- assertNotVisible: { id: native-controls-popover-host-error }
+- assertVisible: { id: native-controls-popover-anchor }
+- assertNotVisible: { id: native-controls-popover-content }
+- assertNotVisible: { id: native-controls-popover-error }
+- assertScreenshot: { golden: native-controls-popover, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/tab-view", stopApp: false }
+- assertVisible: { id: native-controls-tab-view-root }
+- assertVisible: { id: native-controls-tab-view-tabs }
+- assertNotVisible: { id: native-controls-tab-view-tabs-error }
+- assertVisible: { id: native-controls-tab-view-content-general }
+- assertNotVisible: { id: native-controls-tab-view-content-appearance }
+- assertNotVisible: { id: native-controls-tab-view-content-advanced }
+- assertScreenshot: { golden: native-controls-tab-view, mask: [{ id: infra-shell-sidebar }] }
