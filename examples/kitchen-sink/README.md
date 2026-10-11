@@ -75,6 +75,11 @@ They share `Panel.tsx`.
 per-window stars with promotion (`createWindowState`), per-window undo and menus, an
 error-isolation window and an isolated-runtime window.
 
+`windows/window-options` opens a child window with options applied at open, then
+changes each option from the Windows epic on the live child (one row per option),
+lists `getWindowAvailability(option)` and probes rejected requests. The audit is in
+[the window contract](../../docs/api-window-contract.md#window-options-audit).
+
 ## App-wide behavior
 
 `shell/app-controller.ts` starts once from `index.ts` and lives for the process:

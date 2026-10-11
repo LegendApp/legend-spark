@@ -1,0 +1,68 @@
+area: windows
+prefix: WIN
+checks:
+  WIN-AVAIL-01:
+    title: getWindowAvailability(option) reports every listed option available on macOS and unsupported-platform on Windows; an unknown option throws
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#getWindowAvailability
+      - ./windows#getWindowAvailability().available
+  WIN-OPEN-01:
+    title: "openWindow applies every supported option when the window opens (macOS: 16:10 aspect ratio, overlay title bar, traffic lights at 20,18, subtitle, edited dot)"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#openWindow
+  WIN-OPTIONS-01:
+    title: setWindowOptions changes one option on the live window per request, and each row shows the value it applied
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-LEVEL-01:
+    title: alwaysOnTop raises the window to the floating level and false returns it to normal
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-EDITED-01:
+    title: macos.documentEdited shows and clears the edited dot
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#openWindow
+      - ./windows#setWindowOptions
+  WIN-CHROME-01:
+    title: Title bar chrome follows the options (traffic-light position, subtitle, title bar and toolbar styles, represented file proxy icon)
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-SIMPLEFS-01:
+    title: macos.simpleFullscreen covers the screen without a new Space, rejects title bar and size changes with E_BUSY, and restores the windowed frame on exit
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-INVALID-01:
+    title: Out-of-range option values reject E_INVALID_ARGUMENT before any native change
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-UNSUP-01:
+    title: Windows rejects aspectRatio, opacity, contentProtection, ignoreMouseEvents and the macos group with E_UNSUPPORTED_OPTION before any native change
+    platforms: [windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65, #243"
+    covers:
+      - ./windows#setWindowOptions
