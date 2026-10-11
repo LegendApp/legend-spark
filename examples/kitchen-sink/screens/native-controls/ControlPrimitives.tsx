@@ -21,7 +21,7 @@ const GAP = 12; // gap-3
 // Sizes reflow in pairs (4 across, then 2 + 2, then 1 per line) so a narrow content area never leaves one size alone on a line.
 const PAIRS = [SIZES.slice(0, 2), SIZES.slice(2)];
 
-const describe = (error: unknown) => error instanceof SparkError ? `SparkError:${error.code}` : `Unexpected error: ${String(error)}`;
+export const describe = (error: unknown) => error instanceof SparkError ? `SparkError:${error.code}` : `Unexpected error: ${String(error)}`;
 
 /** Renders a value-owning sample with its JSON readout and any reported error. */
 function Sample<T>({ initial, shared, render }: { initial: T; shared: Omit<Shared, "onError">; render: Render<T> }) {
@@ -35,7 +35,7 @@ function Sample<T>({ initial, shared, render }: { initial: T; shared: Omit<Share
 }
 
 /** Shows a render-time SparkError (such as E_UNSUPPORTED_PLATFORM) where the control would be. */
-class Boundary extends Component<PropsWithChildren<{ id: string }>, { error?: unknown }> {
+export class Boundary extends Component<PropsWithChildren<{ id: string }>, { error?: unknown }> {
   state: { error?: unknown } = {};
   static getDerivedStateFromError(error: unknown) { return { error }; }
   render() { return this.state.error ? <Text selectable className="text-xs text-danger" testID={`${this.props.id}-error`}>{describe(this.state.error)}</Text> : this.props.children; }

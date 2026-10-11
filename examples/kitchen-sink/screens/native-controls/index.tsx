@@ -5,6 +5,7 @@ import { Search } from "./Search";
 import { SFSymbols } from "./SFSymbols";
 import { SidebarDataItems, SidebarDynamicHeights, SidebarReactRows } from "./Sidebar";
 import { SplitView } from "./SplitView";
+import { OutlineScreen, TableScreen } from "./Table";
 
 // Ported from legend-apps' apps/test-kitchen-sink.
 export default defineScreens("native-controls", [
@@ -19,4 +20,6 @@ export default defineScreens("native-controls", [
   { id: "inputs", title: "Value inputs", summary: "Continuous and ticked sliders, stepper, combo box, token field and path control in every control size.", component: Inputs },
   { id: "indicators", title: "Indicators", summary: "Determinate, indeterminate and spinner progress and a level indicator, driven by a stepper.", component: Indicators },
   { id: "buttons", title: "Button styles", summary: "Push, bevel, toolbar, help and destructive buttons in every size; Return and Escape buttons.", component: Buttons },
+  { id: "table", title: "Table", summary: "A native NSTableView of 10,000 rows: sorting, column resize and reorder with a controlled layout, multiple selection, activation and context-menu events.", component: TableScreen },
+  { id: "outline", title: "Outline", summary: "A native NSOutlineView of 10,010 rows in three levels with controlled expansion and selection.", component: OutlineScreen },
 ]);
