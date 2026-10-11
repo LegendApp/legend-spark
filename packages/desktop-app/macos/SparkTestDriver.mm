@@ -11,7 +11,7 @@
 // Protocol: newline-delimited JSON over a Unix socket in the run directory. The
 // first message is {"token": "..."}; then one request at a time, each answered
 // with {"id", "ok", ...} or {"id", "ok": false, "error": {"code", "message"}}.
-typedef void (^SparkDriverReply)(NSDictionary *reply);
+typedef SparkTestDriverReply SparkDriverReply;
 static BOOL active = NO, ending = NO;
 static int directoryFD = -1, listenFD = -1;
 static NSString *socketPath;
@@ -30,6 +30,18 @@ static void SparkDriverTerminate(void) { ending = YES; [NSApp terminate:nil]; }
 BOOL SparkTestDriverActive(void) { return active; }
 BOOL SparkTestDriverEnding(void) { return ending; }
 void SparkTestDriverDidMount(void) { lastMount = CACurrentMediaTime(); }
+static NSArray<NSString *> *const SparkBuiltInCommands = @[@"ping", @"navigate", @"waitFor", @"setAppAppearance", @"capture", @"quit"];
+static NSMutableDictionary<NSString *, SparkTestDriverHandler> *SparkModuleCommands(void) {
+  static NSMutableDictionary *commands;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ commands = [NSMutableDictionary new]; });
+  return commands;
+}
+void SparkTestDriverRegisterCommand(NSString *name, SparkTestDriverHandler handler) {
+  NSCAssert(NSThread.isMainThread, @"Driver commands are registered on the main thread");
+  if ([SparkBuiltInCommands containsObject:name] || SparkModuleCommands()[name]) [NSException raise:NSInvalidArgumentException format:@"Driver command %@ is already defined", name];
+  SparkModuleCommands()[name] = [handler copy];
+}
 
 static BOOL SparkPrivate(int fd, mode_t type, mode_t mode) {
   struct stat info;
@@ -238,6 +250,7 @@ static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   }
   else if ([command isEqual:@"setAppAppearance"]) SparkSetAppearance(request, reply);
   else if ([command isEqual:@"capture"]) SparkCapture(request, reply);
+  else if ([command isKindOfClass:NSString.class] && SparkModuleCommands()[command]) SparkModuleCommands()[command](request, reply);
   else reply(SparkFailure(@"E_UNKNOWN_COMMAND", [NSString stringWithFormat:@"Unknown command %@", command]));
 }
 

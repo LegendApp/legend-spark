@@ -55,6 +55,8 @@ function socketReady(socket: string, app: ManagedProcess, timeoutMs: number) {
   });
 }
 
+const clock = (reply: Reply) => ({ mode: reply.mode as "virtual" | "real", timeMs: reply.timeMs as number });
+
 /** One authenticated session; requests run one at a time. Quitting or disconnecting quits the app. */
 export class Driver {
   private buffer = "";
@@ -122,6 +124,10 @@ export class Driver {
     const reply = await this.request({ command: "capture", window, name, timeoutMs }, timeoutMs + 10000);
     return { file: path.join(this.directory, reply.file as string), width: reply.width as number, height: reply.height as number, scale: reply.scale as number };
   }
+  /** Switches the motion engine's clock (docs/motion.md#virtual-clock-for-the-test-driver). Needs the motion module in the app. */
+  async setClock(mode: "virtual" | "real") { return clock(await this.request({ command: "setClock", mode }, 10000)); }
+  /** Advances the virtual motion clock and every motion layer together. */
+  async advanceClock(durationMs: number) { return clock(await this.request({ command: "advanceClock", durationMs }, 10000)); }
   /** Ends the session; the app quits through its normal termination path. */
   async quit(timeoutMs = 15000) {
     await this.request({ command: "quit" }, 10000);

@@ -29,6 +29,8 @@ export class FakeDriver implements DriverClient {
     writeFileSync(file, `png ${name}`);
     return { file, width: 2000, height: 1400, scale: 2 };
   }
+  async setClock(mode: "virtual" | "real") { this.log.push(`setClock ${mode}`); }
+  async advanceClock(durationMs: number) { this.log.push(`advanceClock ${durationMs}`); }
   async quit() { this.log.push("quit"); this.running = false; }
   async close() { this.log.push("close"); this.running = false; }
 }

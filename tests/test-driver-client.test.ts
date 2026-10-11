@@ -29,6 +29,8 @@ const server = net.createServer(socket => {
       if (message.command === "waitFor" && message.testID === "missing") Object.assign(reply, { ok: false, error: { code: "E_TIMEOUT", message: "No view with testID missing" } });
       else if (message.command === "waitFor") Object.assign(reply, { window: "spark.main", frame: { x: 0, y: 0, width: 10, height: 20 } });
       else if (message.command === "setAppAppearance") reply.changed = message.appearance === "dark";
+      else if (message.command === "setClock") Object.assign(reply, { mode: message.mode, timeMs: 1000 });
+      else if (message.command === "advanceClock") Object.assign(reply, { mode: "virtual", timeMs: 1000 + message.durationMs });
       else if (message.command === "capture") { fs.writeFileSync(path.join(dir, message.name + ".png"), "png", { mode: 0o600 }); Object.assign(reply, { file: message.name + ".png", width: 2000, height: 1400, scale: 2 }); }
       send(reply);
       if (message.command === "quit") { socket.end(); server.close(); }
@@ -57,6 +59,8 @@ test("launches with a private run directory and one-time token, then drives the 
     expect(missing).toBeInstanceOf(DriverError);
     expect(missing.code).toBe("E_TIMEOUT");
     expect(await driver.setAppAppearance("dark")).toEqual({ changed: true });
+    expect(await driver.setClock("virtual")).toEqual({ mode: "virtual", timeMs: 1000 });
+    expect(await driver.advanceClock(16)).toEqual({ mode: "virtual", timeMs: 1016 });
     const capture = await driver.capture("main", "home");
     expect(capture).toEqual({ file: path.join(driver.directory, "home.png"), width: 2000, height: 1400, scale: 2 });
     expect(readFileSync(capture.file, "utf8")).toBe("png");

@@ -45,6 +45,12 @@ describe("command mapping", () => {
     expect(result.failure).toMatchObject({ kind: "not-found", message: 'no element matches {"id":"missing"} (waited 300ms on driver)' });
   });
 
+  test("setClock and advanceClock drive the motion engine's virtual clock", async () => {
+    const { result, app } = await run("- launchApp\n- setClock: virtual\n- advanceClock: 1.5s\n- advanceClock: 16\n- setClock: real");
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => /Clock/.test(line))).toEqual(["setClock virtual", "advanceClock 1500", "advanceClock 16", "setClock real"]);
+  });
+
   test("setAppAppearance maps to the driver; takeScreenshot captures the main window into the flow's output", async () => {
     const { result, app } = await run("- launchApp\n- setAppAppearance: dark\n- takeScreenshot: shot");
     expect(result.status).toBe("passed");

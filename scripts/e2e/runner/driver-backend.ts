@@ -5,6 +5,7 @@ import { copyFileSync } from "node:fs";
 import path from "node:path";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
 import { DriverError, type Capture as DriverCapture, type DriverWindow, type Frame } from "../driver.ts";
+import { ms } from "./executor.ts";
 import { Failure, type Artifact, type Atom, type AtomKey, type Backend, type Capture, type CommandHandler, type Element, type QueryScope, type Session } from "./backend.ts";
 
 /** What the backend uses of a driver session (`Driver` in scripts/e2e/driver.ts). Tests pass a double. */
@@ -14,6 +15,8 @@ export type DriverClient = {
   waitFor(testID: string, timeoutMs?: number): Promise<{ window: string; frame: Frame }>;
   setAppAppearance(appearance: "light" | "dark", timeoutMs?: number): Promise<{ changed: boolean }>;
   capture(window: DriverWindow, name: string): Promise<DriverCapture>;
+  setClock(mode: "virtual" | "real"): Promise<unknown>;
+  advanceClock(durationMs: number): Promise<unknown>;
   quit(): Promise<void>;
   close(): Promise<void>;
 };
@@ -39,6 +42,9 @@ export class DriverBackend implements Backend {
     launchApp: args => this.launchApp(args),
     stopApp: () => this.quit(),
     setAppAppearance: async args => { await this.client().setAppAppearance(args.appearance as "light" | "dark"); },
+    // The motion engine's virtual clock (docs/motion.md#virtual-clock-for-the-test-driver).
+    setClock: async args => { await this.client().setClock(args.mode as "virtual" | "real"); },
+    advanceClock: async args => { await this.client().advanceClock(ms(args.duration as string | number)); },
   };
   private session?: Session;
   private driver?: DriverClient;

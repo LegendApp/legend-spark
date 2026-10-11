@@ -147,6 +147,13 @@ int main(int argc, char **argv) { @autoreleasepool {
   PrepareDirectory(argv[2], 0700, 0600);
   NSWindow *window = MakeWindow();
   Check(SparkTestDriverStart() && SparkTestDriverActive(), @"driver start");
+  // Optional modules add commands; built-in and duplicate names are refused.
+  SparkTestDriverRegisterCommand(@"echo", ^(NSDictionary *request, SparkTestDriverReply reply) { reply(@{ @"ok": @YES, @"echo": request[@"value"] ?: NSNull.null }); });
+  for (NSString *taken in @[@"ping", @"echo"]) {
+    BOOL refused = NO;
+    @try { SparkTestDriverRegisterCommand(taken, ^(NSDictionary *, SparkTestDriverReply reply) { reply(@{ @"ok": @NO }); }); } @catch (NSException *) { refused = YES; }
+    Check(refused, [NSString stringWithFormat:@"%@ cannot be registered twice", taken]);
+  }
   SparkTestDriverDidMount(); // The host's first UI mount.
   Check(!getenv("SPARK_TEST_DRIVER_DIR"), @"driver mode is not inherited by child processes");
   Check(access([directory stringByAppendingPathComponent:@"token"].fileSystemRepresentation, F_OK) != 0, @"token is one-time");
@@ -181,6 +188,7 @@ int main(int argc, char **argv) { @autoreleasepool {
     Check([hello[@"ok"] boolValue] && [hello[@"protocol"] isEqual:@1], @"authenticated");
     Check([Request(fd, @{ @"command": @"ping" })[@"ok"] boolValue], @"ping");
     Check([Code(Request(fd, @{ @"command": @"fly" })) isEqual:@"E_UNKNOWN_COMMAND"], @"unknown command");
+    Check([Request(fd, @{ @"command": @"echo", @"value": @3 })[@"echo"] isEqual:@3], @"registered module command");
     Check([Request(fd, @{ @"command": @"navigate", @"url": @"spark-ks://windows/frame" })[@"ok"] boolValue], @"navigate");
     Check([Code(Request(fd, @{ @"command": @"navigate", @"url": @"file:///etc/passwd" })) isEqual:@"E_INVALID_ARGUMENT"], @"file URLs are not navigation");
     NSDictionary *found = Request(fd, @{ @"command": @"waitFor", @"testID": @"probe-layer" });
