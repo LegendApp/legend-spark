@@ -29,11 +29,20 @@
 //   the command's last event, so later requests run inside that loop.
 // - A native menu would track the real pointer and keyboard on screen, so a command that opens one closes it and
 //   fails with E_MENU: menus need the black-box backend.
+// - NSEvent has no factory for trackpad gestures. The window server sends them as gesture events (CGEvent type 29)
+//   whose HID type names the gesture, and +[NSEvent eventWithCGEvent:] turns such an event into a magnify, rotate,
+//   swipe, smart magnify or pressure NSEvent. The fields are private; they are listed below as measured. A driven app
+//   has no key window, and -[NSApplication sendEvent:] drops magnify, rotate, swipe and smart magnify events then, so
+//   the driver sends those to the window (-[NSWindow sendEvent:]), which gives them to the view under the pointer.
+//   Pressure events need a gesture phase and arrive between the press and release of a click.
 
 static NSString *const SparkInputMode = @"SparkTestDriverInput"; // No sources: dequeueing in it runs nothing else.
 static const NSEventMask SparkPointerMask = NSEventMaskLeftMouseDown | NSEventMaskLeftMouseUp | NSEventMaskLeftMouseDragged |
   NSEventMaskRightMouseDown | NSEventMaskRightMouseUp | NSEventMaskRightMouseDragged | NSEventMaskMouseMoved |
-  NSEventMaskMouseEntered | NSEventMaskMouseExited | NSEventMaskScrollWheel;
+  NSEventMaskOtherMouseDown | NSEventMaskOtherMouseUp | NSEventMaskMouseEntered | NSEventMaskMouseExited | NSEventMaskScrollWheel | NSEventMaskPressure;
+// Events the driver gives to the window directly (see SparkDeliver).
+static const NSEventMask SparkKeyMask = NSEventMaskKeyDown | NSEventMaskKeyUp | NSEventMaskFlagsChanged;
+static const NSEventMask SparkGestureMask = NSEventMaskMagnify | NSEventMaskRotate | NSEventMaskSwipe | NSEventMaskSmartMagnify;
 static NSTimeInterval lastTime = 0;
 static NSInteger clickNumber = 0; // Like the window server, a press and its drags and release share one event number.
 static NSPoint pointer = { NAN, NAN }; // The driver's pointer, in screen coordinates. The real pointer never moves.
@@ -41,7 +50,7 @@ static __weak NSWindow *focus; // The window of the last pointer input: what a c
 static NSMapTable<NSTrackingArea *, NSWindow *> *hovered; // Tracking areas the driver's pointer is inside.
 
 NSArray<NSString *> *SparkDriverInputCommandNames(void) {
-  static NSArray *names = @[@"tap", @"hover", @"drag", @"scroll", @"pressKey", @"typeText"];
+  static NSArray *names = @[@"tap", @"hover", @"drag", @"scroll", @"gesture", @"cursor", @"pressKey", @"typeText"];
   return names;
 }
 
@@ -49,7 +58,10 @@ NSArray<NSString *> *SparkDriverInputCommandNames(void) {
 // copies events), and 8 ms apart, a plausible input rate for velocity and double-click logic.
 static NSTimeInterval SparkEventTime(void) { return lastTime = MAX(lastTime + 0.008, NSProcessInfo.processInfo.systemUptime); }
 
-void SparkDriverInputStart(void) { hovered = [NSMapTable weakToWeakObjectsMapTable]; }
+void SparkDriverInputStart(void) {
+  hovered = [NSMapTable weakToWeakObjectsMapTable];
+  SparkDriverCursorStart();
+}
 // A key window performs its default button on Return or Enter (NSWindow.defaultButtonCell). The button's own key
 // equivalent check refuses in a window that is not key once that window has been on screen, as pointer input
 // puts it, so the driver performs it for the window it treats as key.
@@ -74,7 +86,7 @@ static void SparkRouteKey(NSEvent *event, NSWindow *window) {
 #pragma mark Events
 
 static NSEvent *SparkMouse(NSEventType type, NSWindow *window, NSPoint location, NSEventModifierFlags flags, NSInteger clicks) {
-  BOOL down = type == NSEventTypeLeftMouseDown || type == NSEventTypeRightMouseDown;
+  BOOL down = type == NSEventTypeLeftMouseDown || type == NSEventTypeRightMouseDown || type == NSEventTypeOtherMouseDown;
   BOOL pressed = down || type == NSEventTypeLeftMouseDragged || type == NSEventTypeRightMouseDragged;
   NSEvent *event = [NSEvent mouseEventWithType:type location:location modifierFlags:flags timestamp:SparkEventTime() windowNumber:window.windowNumber
     context:nil eventNumber:down ? ++clickNumber : clickNumber clickCount:clicks pressure:pressed ? 1 : 0];
@@ -101,6 +113,37 @@ static NSEvent *SparkScroll(NSWindow *window, NSPoint location, NSEventModifierF
   CGEventSetIntegerValueField(event, precise ? kCGScrollWheelEventPointDeltaAxis2 : kCGScrollWheelEventDeltaAxis2, llround(-dx));
   CGEventSetDoubleValueField(event, kCGScrollWheelEventFixedPtDeltaAxis1, -dy);
   CGEventSetDoubleValueField(event, kCGScrollWheelEventFixedPtDeltaAxis2, -dx);
+  NSEvent *result = [NSEvent eventWithCGEvent:event];
+  CFRelease(event);
+  return result;
+}
+// A press or release of mouse button `button` (0 left, 1 right, 2 middle, 3 back, 4 forward). AppKit's factory
+// numbers every other-mouse event button 2, so other buttons are a copy with the button number set.
+static NSEvent *SparkButton(BOOL down, NSInteger button, NSWindow *window, NSPoint location, NSEventModifierFlags flags, NSInteger clicks) {
+  NSEventType type = button == 0 ? (down ? NSEventTypeLeftMouseDown : NSEventTypeLeftMouseUp) : button == 1 ? (down ? NSEventTypeRightMouseDown : NSEventTypeRightMouseUp)
+    : (down ? NSEventTypeOtherMouseDown : NSEventTypeOtherMouseUp);
+  NSEvent *event = SparkMouse(type, window, location, flags, clicks);
+  if (button < 2) return event;
+  CGEventRef copy = CGEventCreateCopy(event.CGEvent);
+  CGEventSetIntegerValueField(copy, kCGMouseEventButtonNumber, button);
+  event = [NSEvent eventWithCGEvent:copy];
+  CFRelease(copy);
+  return event;
+}
+// Gesture events: CGEvent type 29 with these private fields, as +[NSEvent eventWithCGEvent:] reads them. The HID type
+// selects the NSEvent: 8 magnify, 5 rotate, 16 swipe, 22 smart magnify, 32 pressure.
+enum : uint32_t { SparkGestureHIDType = 110, SparkGestureMagnification = 113, SparkGestureRotation = 114, SparkGestureSwipe = 115,
+  SparkGesturePhase = 132, SparkGestureStage = 143, SparkGestureStageTransition = 147, SparkGesturePressure = 148 };
+static NSEvent *SparkGesture(NSWindow *window, NSPoint location, NSEventModifierFlags flags, int64_t hidType, NSEventPhase phase, NSDictionary<NSNumber *, NSNumber *> *values) {
+  CGEventRef event = CGEventCreateCopy(SparkMouse(NSEventTypeMouseMoved, window, location, flags, 0).CGEvent);
+  CGEventSetType(event, (CGEventType)29);
+  CGEventSetIntegerValueField(event, (CGEventField)SparkGestureHIDType, hidType);
+  // The window server's phases are 1 began, 2 changed and 4 ended; AppKit maps them to NSEventPhase.
+  CGEventSetIntegerValueField(event, (CGEventField)SparkGesturePhase, phase == NSEventPhaseBegan ? 1 : phase == NSEventPhaseChanged ? 2 : phase == NSEventPhaseEnded ? 4 : 0);
+  [values enumerateKeysAndObjectsUsingBlock:^(NSNumber *field, NSNumber *value, BOOL *) {
+    if (field.unsignedIntValue == SparkGestureSwipe || field.unsignedIntValue == SparkGestureStage) CGEventSetIntegerValueField(event, (CGEventField)field.unsignedIntValue, value.longLongValue);
+    else CGEventSetDoubleValueField(event, (CGEventField)field.unsignedIntValue, value.doubleValue);
+  }];
   NSEvent *result = [NSEvent eventWithCGEvent:event];
   CFRelease(event);
   return result;
@@ -222,6 +265,7 @@ static void SparkAreasAt(NSView *view, NSPoint location, NSMutableArray<NSTracki
 // target window as the key window of the active app, so every entered-and-exited tracking area is active; while
 // dragging, only those enabled during mouse drags (NSTrackingEnabledDuringMouseDrag) change.
 static NSArray<NSEvent *> *SparkMove(NSWindow *window, NSPoint location, NSEventType type, NSEventModifierFlags flags) {
+  SparkDriverCursorMoved();
   NSMutableArray<NSTrackingArea *> *inside = [NSMutableArray new];
   SparkAreasAt(SparkDriverFrameView(window), location, inside);
   BOOL dragging = type == NSEventTypeLeftMouseDragged;
@@ -326,29 +370,74 @@ static void SparkDeliver(NSWindow *window, NSArray<NSEvent *> *events, void (^do
     CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{ [menu cancelTrackingWithoutAnimation]; });
     CFRunLoopWakeUp(CFRunLoopGetMain());
   }];
-  NSEventMask keys = NSEventMaskKeyDown | NSEventMaskKeyUp | NSEventMaskFlagsChanged;
-  if (NSEventMaskFromType(events.firstObject.type) & keys) {
-    for (NSEvent *event in events) {
-      routingLast = event == events.lastObject;
-      SparkRouteKey(event, window);
-    }
-  } else {
-    for (NSEvent *event in events) [NSApp postEvent:event atStart:NO];
+  NSMutableArray<NSEvent *> *queued = [NSMutableArray new];
+  void (^dispatchQueued)(void) = ^{
+    for (NSEvent *event in queued) [NSApp postEvent:event atStart:NO];
+    [queued removeAllObjects];
     for (NSEvent *event; (event = [NSApp nextEventMatchingMask:SparkPointerMask untilDate:nil inMode:SparkInputMode dequeue:YES]);) [NSApp sendEvent:event];
+  };
+  for (NSEvent *event in events) {
+    NSEventMask mask = NSEventMaskFromType(event.type);
+    if (!(mask & (SparkKeyMask | SparkGestureMask))) { [queued addObject:event]; continue; }
+    dispatchQueued();
+    routingLast = event == events.lastObject;
+    if (mask & SparkKeyMask) SparkRouteKey(event, window);
+    else [window sendEvent:event];
   }
+  dispatchQueued();
   [NSNotificationCenter.defaultCenter removeObserver:tracking];
   CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, kCFRunLoopCommonModes);
   CFRelease(observer);
   finish(menu ? [NSString stringWithFormat:@"The input opened the native menu \"%@\", which the driver closed: menus need the black-box backend", menu.title] : nil);
 }
 
-static NSArray<NSEvent *> *SparkClick(NSWindow *window, NSPoint location, BOOL right, NSInteger clicks, NSEventModifierFlags flags) {
+static NSArray<NSEvent *> *SparkClick(NSWindow *window, NSPoint location, NSInteger button, NSInteger clicks, NSEventModifierFlags flags) {
   NSMutableArray<NSEvent *> *events = [SparkMove(window, location, NSEventTypeMouseMoved, flags) mutableCopy];
   for (NSInteger click = 1; click <= clicks; click++) {
-    [events addObject:SparkMouse(right ? NSEventTypeRightMouseDown : NSEventTypeLeftMouseDown, window, location, flags, click)];
-    [events addObject:SparkMouse(right ? NSEventTypeRightMouseUp : NSEventTypeLeftMouseUp, window, location, flags, click)];
+    [events addObject:SparkButton(YES, button, window, location, flags, click)];
+    [events addObject:SparkButton(NO, button, window, location, flags, click)];
   }
   return events;
+}
+// A trackpad gesture over `location`, after moving the driver's pointer there. Magnify and rotate begin, change in
+// `steps` equal parts of the total, and end. A pressure gesture is a click whose pressure rises through stage 1 (a
+// click) and, for `stage` 2, into stage 2 (a force click), then falls before the release.
+static NSArray<NSEvent *> *SparkGestureEvents(NSWindow *window, NSPoint location, NSString *kind, NSDictionary *request, NSInteger steps, NSEventModifierFlags flags) {
+  NSMutableArray<NSEvent *> *events = [SparkMove(window, location, NSEventTypeMouseMoved, flags) mutableCopy];
+  auto gesture = ^(int64_t type, NSEventPhase phase, NSDictionary *values) { [events addObject:SparkGesture(window, location, flags, type, phase, values)]; };
+  if ([kind isEqual:@"magnify"] || [kind isEqual:@"rotate"]) {
+    BOOL magnify = [kind isEqual:@"magnify"];
+    NSNumber *field = @(magnify ? SparkGestureMagnification : SparkGestureRotation);
+    double total = [request[magnify ? @"magnification" : @"rotation"] doubleValue];
+    gesture(magnify ? 8 : 5, NSEventPhaseBegan, @{ field: @0 });
+    for (NSInteger step = 0; step < steps; step++) gesture(magnify ? 8 : 5, NSEventPhaseChanged, @{ field: @(total / steps) });
+    gesture(magnify ? 8 : 5, NSEventPhaseEnded, @{ field: @0 });
+  } else if ([kind isEqual:@"swipe"]) {
+    // IOHIDSwipeMask: up 1, down 2, left 4, right 8.
+    gesture(16, NSEventPhaseNone, @{ @(SparkGestureSwipe): @{ @"up": @1, @"down": @2, @"left": @4, @"right": @8 }[request[@"direction"]] });
+  } else if ([kind isEqual:@"smartMagnify"]) {
+    gesture(22, NSEventPhaseNone, @{});
+  } else {
+    NSInteger stage = [request[@"stage"] ?: @2 integerValue];
+    [events addObject:SparkButton(YES, 0, window, location, flags, 1)];
+    auto pressure = ^(NSInteger at, double value, double transition, NSEventPhase phase) {
+      gesture(32, phase, @{ @(SparkGestureStage): @(at), @(SparkGesturePressure): @(value), @(SparkGestureStageTransition): @(transition) });
+    };
+    pressure(1, 0.25, 0, NSEventPhaseBegan);
+    pressure(1, 0.5, 0, NSEventPhaseChanged);
+    pressure(1, 1, stage == 2 ? 0.5 : 0, NSEventPhaseChanged);
+    if (stage == 2) pressure(2, 0.5, 0, NSEventPhaseChanged);
+    pressure(0, 0, 0, NSEventPhaseEnded);
+    [events addObject:SparkButton(NO, 0, window, location, flags, 1)];
+  }
+  return events;
+}
+// The driver's pointer: its window and location there, after a pointer command.
+static NSWindow *SparkPointerWindow(NSPoint *location, NSDictionary **failure) {
+  NSWindow *window = focus;
+  if (!window || isnan(pointer.x)) { *failure = SparkDriverFailure(@"E_INVALID_ARGUMENT", @"The driver's pointer has not moved yet: give a target"); return nil; }
+  *location = [window convertPointFromScreen:pointer];
+  return window;
 }
 static NSArray<NSEvent *> *SparkDrag(NSWindow *window, NSPoint from, NSPoint to, NSInteger steps, NSEventModifierFlags flags) {
   NSMutableArray<NSEvent *> *events = [SparkMove(window, from, NSEventTypeMouseMoved, flags) mutableCopy];
@@ -380,10 +469,10 @@ void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverR
   if (!SparkParseModifiers(request[@"modifiers"], &flags)) { invalid(@"modifiers is a list of cmd, ctrl, option, shift and fn"); return; }
   if ([command isEqual:@"tap"]) {
     NSInteger clicks;
-    id button = request[@"button"] ?: @"left";
-    if (![button isEqual:@"left"] && ![button isEqual:@"right"]) { invalid(@"button is left or right"); return; }
+    NSNumber *button = @{ @"left": @0, @"right": @1, @"back": @3, @"forward": @4 }[request[@"button"] ?: @"left"];
+    if (!button) { invalid(@"button is left, right, back or forward"); return; }
     if (!SparkInteger(request[@"clickCount"], 1, 1, 3, &clicks)) { invalid(@"clickCount is 1, 2 or 3"); return; }
-    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkClick(window, location, [button isEqual:@"right"], clicks, flags);
+    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkClick(window, location, button.integerValue, clicks, flags);
   } else if ([command isEqual:@"hover"]) {
     if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkMove(window, location, NSEventTypeMouseMoved, flags);
   } else if ([command isEqual:@"drag"]) {
@@ -403,6 +492,25 @@ void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverR
       [move addObject:SparkScroll(window, location, flags, [dx doubleValue], [dy doubleValue], [precise boolValue])];
       events = move;
     }
+  } else if ([command isEqual:@"gesture"]) {
+    NSString *kind = request[@"kind"];
+    NSInteger steps, stage;
+    if (![@[@"magnify", @"rotate", @"swipe", @"smartMagnify", @"pressure"] containsObject:kind ?: @""]) { invalid(@"kind is magnify, rotate, swipe, smartMagnify or pressure"); return; }
+    if (!SparkInteger(request[@"steps"], 10, 1, 100, &steps)) { invalid(@"steps is 1-100"); return; }
+    id magnification = request[@"magnification"], rotation = request[@"rotation"];
+    if ([kind isEqual:@"magnify"] && (!magnification || !SparkNumber(magnification) || [magnification doubleValue] <= -1 || [magnification doubleValue] == 0)) { invalid(@"magnification is a nonzero scale change greater than -1"); return; }
+    if ([kind isEqual:@"rotate"] && (!rotation || !SparkNumber(rotation) || [rotation doubleValue] == 0)) { invalid(@"rotation is nonzero degrees, counterclockwise positive"); return; }
+    if ([kind isEqual:@"swipe"] && ![@[@"left", @"right", @"up", @"down"] containsObject:request[@"direction"] ?: @""]) { invalid(@"direction is left, right, up or down"); return; }
+    if ([kind isEqual:@"pressure"] && !SparkInteger(request[@"stage"], 2, 1, 2, &stage)) { invalid(@"stage is 1 (click) or 2 (force click)"); return; }
+    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkGestureEvents(window, location, kind, request, steps, flags);
+  } else if ([command isEqual:@"cursor"]) {
+    BOOL targeted = request[@"testID"] || request[@"point"];
+    window = targeted ? SparkTarget(request, request[@"window"], YES, &location, &failure) : SparkPointerWindow(&location, &failure);
+    if (!window) { reply(failure); return; }
+    NSMutableDictionary *result = [SparkDriverCursorAt(window, location) mutableCopy];
+    result[@"ok"] = @YES;
+    reply(result);
+    return;
   } else if ([command isEqual:@"pressKey"]) {
     NSString *key = request[@"key"];
     if (![key isKindOfClass:NSString.class] || key.length != 1) { invalid(@"key is one character: a character key, or AppKit's character for a function key"); return; }
@@ -420,7 +528,8 @@ void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverR
     }
   }
   if (!events) { reply(failure); return; }
-  BOOL keys = [command isEqual:@"pressKey"] || [command isEqual:@"typeText"], press = [command isEqual:@"tap"] || [command isEqual:@"drag"];
+  BOOL keys = [command isEqual:@"pressKey"] || [command isEqual:@"typeText"];
+  BOOL press = [command isEqual:@"tap"] || [command isEqual:@"drag"] || [request[@"kind"] isEqual:@"pressure"];
   dispatch_block_t restore = keys ? ^{} : SparkPresent(window, press ? &location : NULL);
   SparkDeliver(window, events, ^(NSString *menu) { reply(menu ? SparkDriverFailure(@"E_MENU", menu) : @{ @"ok": @YES }); });
   restore();

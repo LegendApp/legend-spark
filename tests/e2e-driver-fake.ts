@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent } from "../scripts/e2e/driver.ts";
+import { DriverError, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -32,7 +32,8 @@ export class FakeDriver implements DriverClient {
   private calls = 0;
   private readonly directory = mkdtempSync(path.join(tmpdir(), "fake-driver-"));
   constructor(private readonly log: string[], private readonly views: Record<string, number>, private readonly extra: () => DriverElement[] = () => [], private readonly menuBar: DriverMenuItem[] = [],
-    private readonly motions: () => Record<string, FakeMotion> = () => ({}), private readonly frames: () => FrameReport | DriverError = () => FRAMES) {}
+    private readonly motions: () => Record<string, FakeMotion> = () => ({}), private readonly frames: () => FrameReport | DriverError = () => FRAMES,
+    private readonly cursorAt: () => DriverCursor = () => ({ cursor: "arrow", hiddenUntilMoved: false })) {}
 
   async navigate(url: string) { this.log.push(`navigate ${url}`); }
   async openFile(file: string) { this.log.push(`openFile ${file}`); }
@@ -78,6 +79,8 @@ export class FakeDriver implements DriverClient {
     return { windows: [{ id: "spark.main", title: "Kitchen Sink", key: false, main: true, frame: { x: 0, y: 0, width: 1000, height: 700 } }], elements: [...own, ...this.extra()] };
   }
   async tap(target: InputTarget, options: object = {}) { this.log.push(`tap ${describeTarget(target)} ${JSON.stringify(options)}`); }
+  async gesture(target: InputTarget, gesture: Gesture, modifiers?: string[]) { this.log.push(`gesture ${describeTarget(target)} ${JSON.stringify(gesture)}${modifiers ? ` ${modifiers.join("+")}` : ""}`); }
+  async cursor(target?: InputTarget) { this.log.push(`cursor${target ? ` ${describeTarget(target)}` : ""}`); return this.cursorAt(); }
   async hover(target: InputTarget) { this.log.push(`hover ${describeTarget(target)}`); }
   async drag(from: InputTarget, to: InputTarget, options: object = {}) { this.log.push(`drag ${describeTarget(from)} ${describeTarget(to)} ${JSON.stringify(options)}`); }
   async scroll(target: InputTarget, delta: object) { this.log.push(`scroll ${describeTarget(target)} ${JSON.stringify(delta)}`); }
@@ -97,6 +100,8 @@ export class FakeApp implements DriverApp {
   /** Scripted motion telemetry by testID, and the next frame report (or driver failure). */
   motions: Record<string, FakeMotion> = {};
   frames: FrameReport | DriverError = FRAMES;
+  /** What the driver's `cursor` command reports; tests may change it while a flow runs. */
+  cursor: DriverCursor = { cursor: "arrow", hiddenUntilMoved: false };
   constructor(private readonly views: Record<string, number> = {}, private readonly bundleId = "so.legend.spark.examples.kitchensink", readonly menuBar: DriverMenuItem[] = []) {}
 
   readonly reserved = { arguments: ["-RCT_jsLocation"], env: ["SPARK_TEST_DRIVER_DIR", "SPARK_BUNDLE_URL"], locale: ["-AppleLanguages", "-AppleLocale"] };
@@ -107,7 +112,7 @@ export class FakeApp implements DriverApp {
     const extra = [...(options.arguments.length ? [`args=${options.arguments.join(" ")}`] : []), ...(Object.keys(options.env).length ? [`env=${JSON.stringify(options.env)}`] : [])];
     this.log.push([`launch locale=${options.locale ?? "-"}`, ...extra, `log=${path.basename(options.log.file)}`].join(" "));
     writeFileSync(options.log.file, "app log");
-    const driver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar, () => this.motions, () => this.frames);
+    const driver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar, () => this.motions, () => this.frames, () => this.cursor);
     this.drivers.push(driver);
     return driver;
   }

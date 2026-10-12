@@ -1,13 +1,16 @@
 // The Spark in-app driver (docs/test-driver.md) as a runner backend: white-box, in-process, macOS
 // (docs/e2e-flows.md#the-driver-backend). It selects through the app's in-process accessibility view and runs the
-// black-box commands it implements (input, assertText, assertA11y) with in-process events when no black-box backend
+// black-box commands it implements (input, gestures, assertCursor, assertText, assertA11y) with in-process events when no black-box backend
 // is active; the runner labels those steps white-box. Commands it cannot serve are missing from `commands`, so the
 // runner fails them as unsupported; real OS input and the accessibility tree belong to the black-box backend (#50).
 import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
-import { DriverError, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo, type Frame, type InputTarget, type Modifier } from "../driver.ts";
+import {
+  DriverError, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton,
+} from "../driver.ts";
 import { motionCommands, type MotionClient } from "./driver-motion.ts";
 import { ms } from "./executor.ts";
 import { matchesText, parseSelector } from "./selectors.ts";
@@ -27,7 +30,9 @@ export type DriverClient = MotionClient & {
   simulateSystemEvent(event: SimulatedSystemEvent): Promise<void>;
   simulateDisplays(displays: readonly object[] | null): Promise<void>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
-  tap(target: InputTarget, options?: { button?: "left" | "right"; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
+  tap(target: InputTarget, options?: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
+  gesture(target: InputTarget, gesture: Gesture, modifiers?: Modifier[]): Promise<void>;
+  cursor(target?: InputTarget): Promise<DriverCursor>;
   hover(target: InputTarget): Promise<void>;
   drag(from: InputTarget, to: InputTarget, options?: { steps?: number; modifiers?: Modifier[] }): Promise<void>;
   scroll(target: InputTarget, delta: { deltaX?: number; deltaY?: number; precise?: boolean }): Promise<void>;
@@ -82,6 +87,24 @@ export class DriverBackend implements Backend {
     doubleClickOn: (args, context) => this.click(args, context, { clickCount: 2 }),
     tripleClickOn: (args, context) => this.click(args, context, { clickCount: 3 }),
     rightClickOn: (args, context) => this.click(args, context, { button: "right" }),
+    // Mouse buttons 3 and 4, and trackpad gestures, as AppKit delivers them (docs/test-driver.md#input).
+    mouseButton: async (args, context) => {
+      if (args.on === undefined) throw new Failure("unsupported", "backend driver presses a mouse button only `on` a target");
+      await this.client().tap(this.input(await context.resolve(args.on)), { button: args.button as MouseButton });
+    },
+    forceClickOn: async (args, context) => { await this.client().gesture(this.input(await context.target()), { kind: "pressure", stage: 2 }, this.modifiers(args).modifiers); },
+    smartZoomOn: async (_args, context) => { await this.client().gesture(this.input(await context.target()), { kind: "smartMagnify" }); },
+    pinch: async (args, context) => {
+      const scale = args.scale as number;
+      if (!(scale > 0) || scale === 1) throw new Failure("invalid", "pinch scale is a positive factor other than 1");
+      await this.client().gesture(await this.on("pinch", args, context), { kind: "magnify", magnification: scale - 1 });
+    },
+    // Flow degrees are clockwise, as React Native's rotate transform; AppKit's rotation is counterclockwise.
+    rotate: async (args, context) => {
+      if (args.degrees === 0) throw new Failure("invalid", "rotate degrees are nonzero");
+      await this.client().gesture(await this.on("rotate", args, context), { kind: "rotate", rotation: -(args.degrees as number) });
+    },
+    assertCursor: (args, context) => this.assertCursor(args, context),
     hoverOn: async (args, context) => {
       this.unsupported("hoverOn", args, ["duration"]);
       await this.client().hover(this.input(await context.target()));
@@ -199,7 +222,7 @@ export class DriverBackend implements Backend {
   private modifiers(args: Record<string, unknown>) {
     return args.modifiers === undefined ? {} : { modifiers: (args.modifiers as string[]).map(name => (name === "alt" ? "option" : name) as Modifier) };
   }
-  private async click(args: Record<string, unknown>, context: CommandContext, options: { button?: "left" | "right"; clickCount?: number }) {
+  private async click(args: Record<string, unknown>, context: CommandContext, options: { button?: MouseButton; clickCount?: number }) {
     await this.client().tap(this.input(await context.target()), { ...options, ...this.modifiers(args) });
   }
   /** `into` is clicked first (focusing it); then one key press per character. inputText types too: the driver has no one-step insert. */
@@ -223,14 +246,21 @@ export class DriverBackend implements Backend {
     await this.client().scroll(this.input(await context.resolve(args.on)), { [direction === "up" || direction === "down" ? "deltaY" : "deltaX"]: sign * amount, precise });
   }
   /**
-   * A swipe as a precise scroll over `from` by the fingers' travel, content following the fingers: from `start` to `end`
-   * (points in `from`), or half of `from` in `direction`.
+   * A one- or two-finger swipe as a precise scroll over `from` by the fingers' travel, content following the fingers: from
+   * `start` to `end` (points in `from`), or half of `from` in `direction`. Three fingers are AppKit's swipe gesture
+   * (swipeWithEvent:) in `direction`.
    */
   private async swipe(args: Record<string, unknown>, context: CommandContext) {
     this.unsupported("swipe", args, ["duration"]);
     if (args.from === undefined) throw new Failure("unsupported", "backend driver swipes only `from` a target");
-    if ((args.fingers as number | undefined ?? 1) > 2) throw new Failure("unsupported", "backend driver swipes with one or two fingers (a scroll)");
+    const fingers = args.fingers as number | undefined ?? 1;
+    if (fingers > 3) throw new Failure("unsupported", "backend driver swipes with one or two fingers (a scroll) or three (a swipe gesture)");
     const from = await context.resolve(args.from);
+    if (fingers === 3) {
+      if (args.direction === undefined) throw new Failure("unsupported", "backend driver swipes three fingers only in a `direction`");
+      await this.client().gesture(this.input(from), { kind: "swipe", direction: args.direction as "left" | "right" | "up" | "down" });
+      return;
+    }
     let travel: { x: number; y: number };
     if (args.start !== undefined) {
       const start = await context.resolve({ point: args.start, within: args.from }), end = await context.resolve({ point: args.end ?? args.start, within: args.from });
@@ -240,6 +270,23 @@ export class DriverBackend implements Backend {
       travel = { x: direction === "left" ? -width / 2 : direction === "right" ? width / 2 : 0, y: direction === "up" ? -height / 2 : direction === "down" ? height / 2 : 0 };
     }
     await this.client().scroll(this.input(from), { deltaX: -travel.x, deltaY: -travel.y, precise: true });
+  }
+  private async on(command: string, args: Record<string, unknown>, context: CommandContext): Promise<InputTarget> {
+    if (args.on === undefined) throw new Failure("unsupported", `backend driver performs ${command} only \`on\` a target`);
+    return this.input(await context.resolve(args.on));
+  }
+  /**
+   * `on` moves the driver's pointer onto the target first, which ends a cursor hidden until the pointer moves. `hidden`
+   * asserts that hiding; any other name is the shape AppKit would show, which hiding fails.
+   */
+  private async assertCursor(args: Record<string, unknown>, context: CommandContext) {
+    if (args.on !== undefined) await this.client().hover(this.input(await context.resolve(args.on)));
+    const expected = String(args.cursor);
+    await context.eventually(async () => {
+      const { cursor, hiddenUntilMoved } = await this.client().cursor();
+      const actual = hiddenUntilMoved ? "hidden" : cursor;
+      if (actual !== expected) throw new Failure("assertion", `the cursor is ${actual}${hiddenUntilMoved ? ` (${cursor} once the pointer moves)` : ""}, not ${expected}`);
+    });
   }
   /** The one element with this testID in the in-process accessibility view. */
   private async element(id: string): Promise<DriverElement> {

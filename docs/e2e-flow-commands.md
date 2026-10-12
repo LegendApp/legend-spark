@@ -91,14 +91,15 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | `middleClickOn` | value → `text` | any selector, `modifiers` | black-box | Middle-click a target. |
 | `forceClickOn` | value → `text` | any selector, `modifiers` | black-box | Force-click a target. |
 | `hoverOn` | value → `text` | any selector, `duration` | black-box | Hover over a target. |
-| `mouseButton` | value → `button` | `button`* | black-box | Press an extra mouse button. |
+| `mouseButton` | value → `button` | `button`*, `on` | black-box | Press an extra mouse button, on a target or where the pointer is. |
 | `assertVisible` | value → `text` | any selector | black-box, maestro | Assert a target is visible. |
 | `assertNotVisible` | value → `text` | any selector | black-box, maestro | Assert a target is not visible. |
 | `scroll` | bare | `on`, `direction`, `amount`, `precise`, `momentum` | black-box, maestro | Scroll (Maestro: bare scroll scrolls down). |
 | `swipe` | — | `from`, `direction`, `start`, `end`, `fingers`, `duration`; at least one of `direction`, `start` | black-box, maestro | Swipe by direction, or from start to end. |
+| `smartZoomOn` | value → `text` | any selector | black-box | Double-tap a target with two fingers (smart zoom). |
 | `pinch` | — | `on`, `scale`* | black-box | Pinch to zoom. |
-| `rotate` | — | `on`, `degrees`* | black-box | Rotate with two fingers. |
-| `assertCursor` | value → `cursor` | `cursor`*, `on` | black-box | Assert the pointer cursor shape. |
+| `rotate` | — | `on`, `degrees`* | black-box | Rotate with two fingers; degrees are clockwise. |
+| `assertCursor` | value → `cursor` | `cursor`*, `on` | black-box | Assert the pointer cursor shape (AppKit's name, such as arrow, IBeam or pointingHand, or hidden), on a target or where the pointer is. |
 | `assertTooltip` | — | `on`*, `text`*, `within` | black-box | Hover a target and assert its tooltip. |
 
 ## Drag & drop

@@ -68,6 +68,7 @@
 - hoverOn: { id: row-1, duration: 800ms }
 - forceClickOn: { id: row-1 }
 - mouseButton: back
+- smartZoomOn: { id: row-1 }
 - scroll: { direction: down, amount: 3, precise: true, momentum: true }
 - swipe: { fingers: 2, direction: left }
 - pinch: { scale: 2.0 }

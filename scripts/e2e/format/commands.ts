@@ -122,14 +122,15 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   middleClickOn: onTarget("pointer", "Middle-click a target.", clicks),
   forceClickOn: onTarget("pointer", "Force-click a target.", clicks),
   hoverOn: onTarget("pointer", "Hover over a target.", { duration }),
-  mouseButton: single("pointer", "Press an extra mouse button.", "button", oneOf("back", "forward")),
+  mouseButton: single("pointer", "Press an extra mouse button, on a target or where the pointer is.", "button", oneOf("back", "forward"), { on: selector }),
   assertVisible: onTarget("pointer", "Assert a target is visible.", {}, { maestro: true }),
   assertNotVisible: onTarget("pointer", "Assert a target is not visible.", {}, { maestro: true }),
   scroll: spec("pointer", "Scroll (Maestro: bare scroll scrolls down).", { on: selector, direction: oneOf("up", "down", "left", "right"), amount: num, precise: bool, momentum: bool }, { maestro: true }),
   swipe: spec("pointer", "Swipe by direction, or from start to end.", { from: selector, direction: oneOf("up", "down", "left", "right"), start: point, end: point, fingers: int(1), duration }, { rule: anyKey("direction", "start"), maestro: true }),
+  smartZoomOn: onTarget("pointer", "Double-tap a target with two fingers (smart zoom)."),
   pinch: spec("pointer", "Pinch to zoom.", { on: selector, scale: num }, { required: ["scale"] }),
-  rotate: spec("pointer", "Rotate with two fingers.", { on: selector, degrees: num }, { required: ["degrees"] }),
-  assertCursor: single("pointer", "Assert the pointer cursor shape.", "cursor", str, { on: selector }),
+  rotate: spec("pointer", "Rotate with two fingers; degrees are clockwise.", { on: selector, degrees: num }, { required: ["degrees"] }),
+  assertCursor: single("pointer", "Assert the pointer cursor shape (AppKit's name, such as arrow, IBeam or pointingHand, or hidden), on a target or where the pointer is.", "cursor", str, { on: selector }),
   assertTooltip: spec("pointer", "Hover a target and assert its tooltip.", { on: selector, text, within: duration }, { required: ["on", "text"] }),
 
   // Drag & drop

@@ -2994,7 +2994,7 @@
             }
           },
           "mouseButton": {
-            "description": "Press an extra mouse button.",
+            "description": "Press an extra mouse button, on a target or where the pointer is.",
             "if": {
               "type": "object"
             },
@@ -3006,6 +3006,9 @@
                     "back",
                     "forward"
                   ]
+                },
+                "on": {
+                  "$ref": "#/definitions/selector"
                 },
                 "when": {
                   "$ref": "#/definitions/condition"
@@ -3350,6 +3353,117 @@
               "type": "object"
             }
           },
+          "smartZoomOn": {
+            "description": "Double-tap a target with two fingers (smart zoom).",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "testID: AX identifier on macOS, AutomationId on Windows"
+                },
+                "role": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "accessibility role, such as button, tab or textField"
+                },
+                "label": {
+                  "$ref": "#/definitions/text"
+                },
+                "text": {
+                  "$ref": "#/definitions/text"
+                },
+                "within": {
+                  "$ref": "#/definitions/selector"
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "window": {
+                  "$ref": "#/definitions/window"
+                },
+                "below": {
+                  "$ref": "#/definitions/selector"
+                },
+                "above": {
+                  "$ref": "#/definitions/selector"
+                },
+                "leftOf": {
+                  "$ref": "#/definitions/selector"
+                },
+                "rightOf": {
+                  "$ref": "#/definitions/selector"
+                },
+                "point": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?%?, ?-?\\d+(\\.\\d+)?%?$",
+                  "description": "a point such as \"50%,20%\" or \"120,48\" (percent of the target, or points from its top-left)"
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "id"
+                  ]
+                },
+                {
+                  "required": [
+                    "role"
+                  ]
+                },
+                {
+                  "required": [
+                    "label"
+                  ]
+                },
+                {
+                  "required": [
+                    "text"
+                  ]
+                },
+                {
+                  "required": [
+                    "point"
+                  ]
+                },
+                {
+                  "required": [
+                    "below"
+                  ]
+                },
+                {
+                  "required": [
+                    "above"
+                  ]
+                },
+                {
+                  "required": [
+                    "leftOf"
+                  ]
+                },
+                {
+                  "required": [
+                    "rightOf"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "$ref": "#/definitions/text"
+            }
+          },
           "pinch": {
             "description": "Pinch to zoom.",
             "if": {
@@ -3381,7 +3495,7 @@
             }
           },
           "rotate": {
-            "description": "Rotate with two fingers.",
+            "description": "Rotate with two fingers; degrees are clockwise.",
             "if": {
               "type": "object"
             },
@@ -3411,7 +3525,7 @@
             }
           },
           "assertCursor": {
-            "description": "Assert the pointer cursor shape.",
+            "description": "Assert the pointer cursor shape (AppKit's name, such as arrow, IBeam or pointingHand, or hidden), on a target or where the pointer is.",
             "if": {
               "type": "object"
             },

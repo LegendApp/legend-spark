@@ -201,8 +201,8 @@ commands, frame timing, performance, `assertState`, and:
   need no screen-recording permission. See [Visual goldens](#visual-goldens).
 
 Until the black-box backend lands, a run with only the driver backend runs visibility
-checks, selectors, input (`tapOn`, `typeText`, `pressKey`, `scroll`, `dragAndDrop` and
-others), `assertText` and `assertA11y` in-process (see [The driver backend](#the-driver-backend)):
+checks, selectors, input (`tapOn`, `typeText`, `pressKey`, `scroll`, `dragAndDrop`, trackpad
+gestures and others), `assertCursor`, `assertText` and `assertA11y` in-process (see [The driver backend](#the-driver-backend)):
 events the app dispatches to itself and the views of its own windows, not what a user sees
 or does. The runner labels those steps white-box in reports.
 
@@ -442,7 +442,10 @@ fails with `invalid`.
 | `typeText`, `inputText` (with `into`) | `into` is clicked first; then `typeText`, one key press per character (`inputText` too: the driver has no one-step insert). |
 | `pressKey`, `shortcut` | `pressKey` of the parsed accelerator, in the window of the last pointer input. Media keys and Caps Lock are `unsupported`. |
 | `scroll` | `scroll` over `on` (required): `amount` (default 100 points when `precise`, else 3 lines) in `direction` (default `down`). `momentum` is `unsupported`. |
-| `swipe` | A precise `scroll` over `from` (required) by the fingers' travel, content following the fingers: `start` to `end`, or half of `from` in `direction`. More than two fingers and `duration` are `unsupported`. |
+| `swipe` | One or two fingers: a precise `scroll` over `from` (required) by the fingers' travel, content following the fingers: `start` to `end`, or half of `from` in `direction`. Three fingers: a `gesture` swipe (`swipeWithEvent:`) in `direction` (required). More than three fingers and `duration` are `unsupported`. |
+| `mouseButton` | `tap` with `button` `back` or `forward` (mouse buttons 3 and 4) on `on` (required). |
+| `pinch`, `rotate`, `smartZoomOn`, `forceClickOn` | `gesture` over `on` (required for `pinch` and `rotate`): `magnify` by `scale` − 1; `rotate` by `degrees` (clockwise in flows, so AppKit's counterclockwise rotation is −`degrees`); `smartMagnify`; `pressure` up to stage 2 (a force click, with `modifiers`). Each is delivered as AppKit's trackpad events, between a began and an ended phase where AppKit uses them ([test-driver.md](test-driver.md#input)). |
+| `assertCursor` | `hover` onto `on`, if given, then `cursor` at the driver's pointer, polled until it matches: AppKit's cursor name (`arrow`, `IBeam`, `pointingHand`, `crosshair`, `openHand`, `operationNotAllowed`, …, `custom(<symbol or file name>)` for Spark custom cursors), or `hidden` while the cursor is hidden until the pointer moves ([test-driver.md](test-driver.md#cursor)). |
 | `dragAndDrop` | `drag` from `from` to `to` in one window, with `steps` and `modifiers`. `holdAt` is `unsupported`. AppKit drag sessions (pasteboard drag and drop) need the window server and the black-box backend. |
 | `assertText`, `assertA11y` | The element's `text`, and its `label`, `role` and `value`, from `elements`, polled until they match. `lineEndings` and `hint` are `unsupported`. |
 | matrix `appearance` | `setAppAppearance` after each launch (the app override; the OS setting is untouched) |

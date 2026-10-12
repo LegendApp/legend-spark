@@ -159,10 +159,18 @@ describe("white-box input (no black-box backend active)", () => {
     ["- swipe: { from: { id: list }, direction: up }", 'scroll list+50,20 {"deltaX":0,"deltaY":20,"precise":true}'],
     ['- swipe: { from: { id: list }, start: "50%,10%", end: "20%,90%" }', 'scroll list+50,20 {"deltaX":30,"deltaY":-32,"precise":true}'],
     ["- dragAndDrop: { from: { id: save }, to: { id: list }, steps: 20 }", 'drag save+50,20 list+50,20 {"steps":20}'],
+    ["- mouseButton: { button: back, on: { id: save } }", 'tap save+50,20 {"button":"back"}'],
+    ["- mouseButton: { button: forward, on: { id: save } }", 'tap save+50,20 {"button":"forward"}'],
+    ["- forceClickOn: { id: save, modifiers: [shift] }", 'gesture save+50,20 {"kind":"pressure","stage":2} shift'],
+    ["- smartZoomOn: { id: save }", 'gesture save+50,20 {"kind":"smartMagnify"}'],
+    ["- pinch: { on: { id: list }, scale: 1.5 }", 'gesture list+50,20 {"kind":"magnify","magnification":0.5}'],
+    ["- pinch: { on: { id: list }, scale: 0.5 }", 'gesture list+50,20 {"kind":"magnify","magnification":-0.5}'],
+    ["- rotate: { on: { id: list }, degrees: 30 }", 'gesture list+50,20 {"kind":"rotate","rotation":-30}'],
+    ["- swipe: { from: { id: list }, direction: left, fingers: 3 }", 'gesture list+50,20 {"kind":"swipe","direction":"left"}'],
   ])("%s", async (command, call) => {
     const { result, app } = await run(`- launchApp\n${command}`, new FakeApp({ save: 1, list: 1 }));
     expect(result.failure).toBeUndefined();
-    expect(app.log.filter(line => /^(tap|hover|typeText|pressKey|scroll|drag) /.test(line))).toEqual([call]);
+    expect(app.log.filter(line => /^(tap|hover|typeText|pressKey|scroll|drag|gesture) /.test(line))).toEqual([call]);
   });
 
   test("inputText and typeText click `into` first, then type", async () => {
@@ -206,6 +214,21 @@ describe("white-box input (no black-box backend active)", () => {
     expect((await run('- launchApp\n- assertA11y: { id: default, label: "افتراضي", role: button, value: "5" }\n- assertA11y: { id: default, label: "/^اف/" }', app)).result.status).toBe("passed");
     expect((await run("- launchApp\n- assertA11y: { id: default, label: Default, timeout: 100ms }", app)).result.failure).toMatchObject({
       kind: "assertion", message: 'the accessibility label of {"id":"default"} is "افتراضي", not "Default"',
+    });
+  });
+
+  test("assertCursor moves onto `on` first, then waits for AppKit's cursor; hidden is the cursor hidden until the pointer moves", async () => {
+    const app = new FakeApp({ link: 1 });
+    let queries = 0;
+    Object.defineProperty(app, "cursor", { get: () => ({ cursor: ++queries < 3 ? "arrow" : "pointingHand", hiddenUntilMoved: false }) });
+    const { result } = await run("- launchApp\n- assertCursor: { cursor: pointingHand, on: { id: link } }", app);
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => /^(hover|cursor)/.test(line))).toEqual(["hover link+50,20", "cursor", "cursor", "cursor"]);
+    const hidden = new FakeApp();
+    hidden.cursor = { cursor: "IBeam", hiddenUntilMoved: true };
+    expect((await run("- launchApp\n- assertCursor: hidden", hidden)).result.status).toBe("passed");
+    expect((await run("- launchApp\n- assertCursor: { cursor: IBeam, timeout: 100ms }", hidden)).result.failure).toMatchObject({
+      kind: "assertion", message: "the cursor is hidden (IBeam once the pointer moves), not IBeam",
     });
   });
 
@@ -344,7 +367,11 @@ describe("unsupported and invalid", () => {
     ["- scroll: { on: { id: list }, momentum: true }", "scroll momentum is not supported by backend driver"],
     ["- scroll: { direction: down }", "backend driver scrolls only `on` a target"],
     ["- swipe: { direction: up }", "backend driver swipes only `from` a target"],
-    ["- swipe: { from: { id: list }, direction: up, fingers: 3 }", "backend driver swipes with one or two fingers (a scroll)"],
+    ["- swipe: { from: { id: list }, direction: up, fingers: 4 }", "backend driver swipes with one or two fingers (a scroll) or three (a swipe gesture)"],
+    ['- swipe: { from: { id: list }, start: "10%,50%", end: "90%,50%", fingers: 3 }', "backend driver swipes three fingers only in a `direction`"],
+    ["- mouseButton: back", "backend driver presses a mouse button only `on` a target"],
+    ["- pinch: { scale: 2 }", "backend driver performs pinch only `on` a target"],
+    ["- rotate: { degrees: 10 }", "backend driver performs rotate only `on` a target"],
     ["- dragAndDrop: { from: { id: save }, to: { id: list }, holdAt: 1s }", "dragAndDrop holdAt is not supported by backend driver"],
     ["- assertText: { id: save, equals: x, lineEndings: crlf }", "assertText lineEndings is not supported by backend driver"],
     ["- pressKey: MediaPlayPause", "backend driver cannot press MediaPlayPause"],

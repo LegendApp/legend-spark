@@ -37,7 +37,8 @@
 - middleClickOn: "Docs"
 - forceClickOn: "notes.md"
 - hoverOn: Share
-- mouseButton: { button: forward }
+- mouseButton: { button: forward, on: { id: row-1 } }
+- smartZoomOn: "notes.md"
 - assertNotVisible: "Loading…"
 - assertNotVisible: { id: spinner, window: main }
 - scroll

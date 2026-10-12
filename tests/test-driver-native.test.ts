@@ -6,7 +6,7 @@ import { outcome, run, runOk } from "./subprocess.ts";
 const darwin = process.platform === "darwin";
 const root = path.resolve(import.meta.dirname, "..");
 const native = path.join(root, "packages/desktop-app/macos");
-const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverFrames.mm"].map(file => path.join(native, file));
+const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm"].map(file => path.join(native, file));
 const compile = (sources: string[], output: string, include: string[] = []) => runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore",
   "-I", native, ...include.flatMap(directory => ["-I", directory]), ...sources, "-o", output], { timeout: 120_000 });
 let directory = "", harness = "", windowState = "";
@@ -63,6 +63,9 @@ test.skipIf(!darwin)("driver mode keeps the configured window size although a fr
 }, 90_000);
 test.skipIf(!darwin)("input: clicks, drags, hover, scroll, typing and keys reach real AppKit controls in-process without activating, and modal loops do not block the session", async () => {
   await passes("input");
+}, 90_000);
+test.skipIf(!darwin)("pointer: gestures, pressure, back and forward buttons and cursor queries in-process; cursor hiding is recorded, never applied", async () => {
+  await passes("pointer");
 }, 90_000);
 test.skipIf(!darwin)("module hooks: start and input observers, render wrappers around captures", async () => {
   await passes("hooks");
