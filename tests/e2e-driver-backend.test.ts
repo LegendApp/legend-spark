@@ -517,6 +517,19 @@ describe("motion and frames", () => {
     expect((await run("- launchApp\n- assertFrames: { during: { tapOn: { id: missing } }, dropped: 0 }", broken)).result.failure?.kind).toBe("not-found");
     expect(motionLog(broken).filter(line => !line.startsWith("capture")).at(-1)).toBe("stopFrames");
   });
+  test("assertFrames with trace: true records the frame timeline and writes it as a Chrome trace artifact; without, it asks for none", async () => {
+    const app = motionApp();
+    app.frames = { ...FRAMES, timeline: { timestamps: [0, 8.3, 25], intervalMs: 8.333, motion: [{ view: "box", startMs: 0, endMs: 25 }], truncated: false } };
+    const { result } = await run("- launchApp\n- assertFrames: { during: { tapOn: { id: go } }, dropped: 5, trace: true }", app);
+    expect(result.status).toBe("passed");
+    expect(motionLog(app)).toEqual(['startFrames {"timeline":true}', "tap go+50,20 {}", "stopFrames"]);
+    const trace = result.artifacts.find(artifact => artifact.kind === "trace");
+    expect(trace?.path).toMatch(/frames-1\.trace\.json$/);
+    const events = JSON.parse(readFileSync(trace!.path, "utf8")).traceEvents as { name: string; tid: number; ph: string; dur?: number }[];
+    expect(events.filter(event => event.ph === "X").map(event => [event.name, event.tid, event.dur])).toEqual([["Frame", 1, 8300], ["Dropped 1 frame", 1, 16700], ["box", 2, 25000]]);
+    const plain = await run("- launchApp\n- assertFrames: { during: { tapOn: { id: go } }, dropped: 5 }", motionApp());
+    expect(plain.result.artifacts.filter(artifact => artifact.kind === "trace")).toEqual([]);
+  });
 });
 
 describe("app inspection", () => {

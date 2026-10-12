@@ -1,9 +1,11 @@
 // Motion and frame commands of the driver backend (docs/e2e-flows.md#motion-and-frames): captureMotion, assertMotion,
 // interruptAt, assertPaused and assertFrames, on the motion telemetry and frame counters of the in-app driver
 // (docs/motion.md#motion-telemetry, docs/test-driver.md#frame-timing). A metric the app cannot measure fails typed;
-// nothing is estimated on the runner side.
+// nothing is estimated on the runner side. assertFrames with `trace: true` writes the frame timeline as a Chrome trace
+// with the development profiler's trace builder (docs/devtools.md#frame-timeline), so a frame budget's failure and a developer's profile read alike.
 import { writeFileSync } from "node:fs";
 import path from "node:path";
+import { chromeTrace } from "../../../packages/desktop-app/src/profiler/trace.ts";
 import { DriverError, type FrameReport, type Motion, type MotionInterruption, type MotionProperty, type MotionSamples, type MotionState, type MotionUntil } from "../driver.ts";
 import type { FlowCommand } from "../format/parser.ts";
 import { Failure, type CommandContext, type CommandHandler, type FailureKind } from "./backend.ts";
@@ -17,7 +19,7 @@ export type MotionClient = {
   sampleMotion(testID: string, range?: { fromMs?: number; toMs?: number; intervalMs?: number }): Promise<MotionSamples>;
   simulateOcclusion(testID: string, visible: boolean): Promise<void>;
   advanceClock(durationMs: number): Promise<unknown>;
-  startFrames(): Promise<{ refreshRate: number }>;
+  startFrames(options?: { timeline?: boolean }): Promise<{ refreshRate: number }>;
   stopFrames(): Promise<FrameReport>;
 };
 
@@ -68,6 +70,7 @@ export function motionCommands(client: () => MotionClient): Record<string, Comma
     if (!element.id) throw new Failure("unsupported", `backend driver reads motion by testID, and ${describe(selector)} matched an element without one`);
     return element.id;
   }
+  let traces = 0;
   const settled = (id: string, what: string, context: CommandContext) => driven(what, () => client().waitForMotion(id, { settled: true }, context.timeoutMs));
 
   /** Captures the window at each progress point of the motion (percent of its start to its end) and compares it with `<golden>-<percent>`, with assertScreenshot's masks. */
@@ -184,10 +187,13 @@ export function motionCommands(client: () => MotionClient): Record<string, Comma
 
     /**
      * Counts main-thread display-link frames while `during` runs, and until `for` from the start, sending the app nothing
-     * after `during` (a poll walks the view tree on the main thread); records `frames.fps` and `frames.dropped`.
+     * after `during` (a poll walks the view tree on the main thread); records `frames.fps` and `frames.dropped`. With
+     * `trace: true` it also records the frame timeline (frames and MotionView animations, which it polls each frame) and
+     * writes it as the trace artifact `frames-<n>.trace.json`.
      */
     assertFrames: async (args, context) => {
-      await driven("assertFrames", () => client().startFrames());
+      const timeline = args.trace === true;
+      await driven("assertFrames", () => client().startFrames({ timeline }));
       const until = performance.now() + (args.for === undefined ? 0 : ms(args.for as string | number));
       try {
         await context.run([args.during as FlowCommand]);
@@ -197,6 +203,11 @@ export function motionCommands(client: () => MotionClient): Record<string, Comma
         throw error;
       }
       const report = await driven("assertFrames", () => client().stopFrames());
+      if (report.timeline) {
+        const file = path.join(context.outputDir, `frames-${++traces}.trace.json`);
+        writeFileSync(file, JSON.stringify(chromeTrace({ process: "assertFrames", frames: report.timeline })));
+        context.addArtifact({ kind: "trace", path: file });
+      }
       context.metric("frames.fps", report.fps);
       context.metric("frames.dropped", report.droppedFrames);
       const problems: string[] = [], fps = args.fps as { min?: number; max?: number } | undefined;

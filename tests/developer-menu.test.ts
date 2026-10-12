@@ -37,8 +37,8 @@ test("the Developer menu is one menu owner, composed with the app's menus, place
   await developer.installDeveloperMenu();
   expect(published().map(root => root.id)).toEqual(["document", "spark-developer"]);
   expect(developerRoot()).toMatchObject({ title: "Developer", placement: { before: { menu: "window" } } });
-  expect(developerRoot().items!.map(entry => entry.separator ? "-" : entry.title)).toEqual(["Reload", "-", "Open DevTools", "Toggle Element Inspector", "Toggle Performance Monitor", "Fast Refresh", "-", "Show Bundle Info", "Show Developer Menu"]);
-  expect(developerRoot().items!.filter(entry => !entry.separator).map(entry => entry._sparkDev?.action)).toEqual(["reload", "openDevTools", "toggleInspector", "togglePerfMonitor", "toggleFastRefresh", "bundleInfo", "showMenu"]);
+  expect(developerRoot().items!.map(entry => entry.separator ? "-" : entry.title)).toEqual(["Reload", "-", "Open DevTools", "Toggle Element Inspector", "Toggle Performance Monitor", "Fast Refresh", "-", "Start Profiling", "Stop Profiling…", "-", "Show Bundle Info", "Show Developer Menu"]);
+  expect(developerRoot().items!.filter(entry => !entry.separator).map(entry => entry._sparkDev?.action)).toEqual(["reload", "openDevTools", "toggleInspector", "togglePerfMonitor", "toggleFastRefresh", "startProfiling", "stopProfiling", "bundleInfo", "showMenu"]);
   expect(item("spark-developer-fast-refresh")).toMatchObject({ checked: false });
   // The hidden trigger carries the shortcut: Ctrl (1 << 18) + Cmd (1 << 20).
   expect(item("spark-developer-show")).toMatchObject({ hidden: true, enabled: true, shortcut: { key: "z", modifiers: (1 << 18) | (1 << 20) } });
@@ -65,6 +65,34 @@ test("Open DevTools is disabled with a tooltip until DevTools support registers,
   registration.remove();
   await settle();
   expect(item("spark-developer-devtools")!._sparkDev).toMatchObject({ available: false });
+});
+
+test("Start Profiling is disabled with a tooltip without the profiler; with it, Start and Stop Profiling… run it and report the files", async () => {
+  const { developer } = await modules();
+  await developer.installDeveloperMenu();
+  expect(item("spark-developer-start-profiling")!._sparkDev).toEqual({ action: "startProfiling", available: false, toolTip: "The profiler is not available in this build." });
+  expect(item("spark-developer-stop-profiling")!._sparkDev).toEqual({ action: "stopProfiling", prompt: "Save Profile Here", message: "Choose a folder for the profile: a Chrome trace and a .cpuprofile for each JavaScript runtime." });
+
+  vi.resetModules();
+  state.listeners.clear();
+  const { registerProfiler } = await import("../packages/desktop-app/src/profiler");
+  const result = { directory: "/tmp/p", trace: "/tmp/p/a.trace.json", frames: {} as never, motions: 0, truncated: false, missing: [],
+    profiles: [{ runtime: "shared" as const, path: "/tmp/p/b.cpuprofile", samples: 3, sourceMaps: "unavailable" as const, reason: "no server" }] };
+  const start = vi.fn(async () => {}), stop = vi.fn(async () => result);
+  registerProfiler({ start, stop, recording: async () => false, observe: () => ({ remove() {} }) });
+  await (await import("../packages/native-menu/src/developer-menu")).installDeveloperMenu();
+  expect(item("spark-developer-start-profiling")!._sparkDev).toEqual({ action: "startProfiling", available: true });
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  const emit = (event: unknown) => { for (const listener of state.listeners.get("NativeDeveloperMenu") ?? []) listener(event); };
+  emit({ action: "startProfiling" });
+  // Stop needs the folder the developer chose; cancelling the panel sends nothing.
+  emit({ action: "stopProfiling" });
+  emit({ action: "stopProfiling", directory: "/tmp/p" });
+  await settle();
+  expect(start.mock.calls).toEqual([[1000]]);
+  expect(stop.mock.calls).toEqual([["/tmp/p"]]);
+  expect(info.mock.calls.at(-1)![0]).toBe("Profile saved. Trace: /tmp/p/a.trace.json\n/tmp/p/b.cpuprofile (3 samples, no source maps: no server)");
+  info.mockRestore();
 });
 
 test("the shortcut is free of macOS reservations and yields to a binding another owner holds", async () => {

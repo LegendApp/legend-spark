@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: The profiler is typed unsupported on Windows
+intent: >
+  On Windows getProfilerAvailability reports unsupported-platform, so the Profiling screen shows its availability and
+  no recording controls.
+checks: [DEVT-UNSUP-03]
+tags: [devtools]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://devtools/profiling" }
+- assertText: { id: devtools-profiling-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertVisible: { id: devtools-profiling-unavailable }
+- assertNotVisible: { id: devtools-profiling-start }

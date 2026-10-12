@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { KITCHEN_SINK } from "./e2e/kitchen-sink.ts";
 import { startDevSession, type Message, type Target } from "./testing/dev-session.ts";
+import { sourceMap } from "./testing/source-map.ts";
 
 const recorder = mkdtempSync(path.join(os.tmpdir(), "ks-devtools-browser-"));
 const launches = path.join(recorder, "launches.txt"), chrome = path.join(recorder, "chrome");
@@ -23,36 +24,6 @@ const markerSource = readFileSync(markerFile, "utf8");
 let debuggerEvents: Message[] = [];
 let SHARED = "", WORKER = "";
 const pass = (message: string) => console.log(`PASS ${message}`);
-
-// Source map v3: generated [line, column] <-> [source, line] for the probe module (lines and columns from 0).
-function sourceMap(map: { sources: string[]; mappings: string }) {
-  const digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  const segments: { line: number; column: number; source: number; sourceLine: number }[] = [];
-  let source = 0, sourceLine = 0, sourceColumn = 0;
-  map.mappings.split(";").forEach((text, line) => {
-    let column = 0;
-    for (const segment of text.split(",").filter(Boolean)) {
-      const values: number[] = [];
-      for (let i = 0, value = 0, shift = 0; i < segment.length; i++) {
-        const digit = digits.indexOf(segment[i]!);
-        value += (digit & 31) << shift;
-        if (digit & 32) { shift += 5; continue; }
-        values.push(value & 1 ? -(value >>> 1) : value >>> 1); value = 0; shift = 0;
-      }
-      column += values[0]!;
-      if (values.length < 4) continue;
-      source += values[1]!; sourceLine += values[2]!; sourceColumn += values[3]!;
-      segments.push({ line, column, source, sourceLine });
-    }
-  });
-  return {
-    generated(file: string, line: number) { return segments.find(item => map.sources[item.source]!.endsWith(file) && item.sourceLine === line); },
-    original(line: number, column: number) {
-      const item = segments.filter(entry => entry.line === line && entry.column <= column).at(-1);
-      return item && { source: map.sources[item.source]!, line: item.sourceLine };
-    },
-  };
-}
 
 try {
   const { driver, name, launchedBundleId } = await dev.launch();

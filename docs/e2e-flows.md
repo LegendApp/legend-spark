@@ -575,7 +575,7 @@ rest to rest; a later interruption extends it.
 | `assertMotion: { target, kind, settlesWithin, overshoot, velocityContinuous, frames }` | Waits until the motion settles, then checks it. `kind`: `spring` (every property it moved ended with a spring), `timing` (timing or keyframes), `crossfade` (opacity moved, and every other property it moved changed at once, as a [Reduce Motion](motion.md#reduce-motion) alternate's `jump`), or `none`, which checks at once that the target has not moved since the last input. `settlesWithin`: from its start, or its last interruption, to its settle time. `overshoot: { min, max }`: how far a translation went past its final value in the direction of travel, in points (`px`). `velocityContinuous: true`: the motion was interrupted, and every interruption kept each property's value and velocity (within the engine's rest thresholds); `false` asserts a jump. `frames: { at: [percents], golden, mask, maskRects }` first captures the window at each percent of the motion (its start to its planned end) and compares it with golden `<golden>-<percent>` (`12.5` becomes `12_5`) like `assertScreenshot`, with the same masks; this needs `setClock: virtual` before the motion starts, so every frame is exact, and a flow matrix with `appearance` and `locale`. |
 | `assertPaused: { target, when }` | `when: windowHidden` or `occluded` (the same state for motion). Checks the target is animating, hides its window with the motion driver's `simulateOcclusion` ([motion.md](motion.md#hidden-windows)), checks its animation paused and held its values for 250 ms (advanced on the virtual clock), then shows the window and checks the animation resumed. The window is shown again when the check fails. Other `when` values are `unsupported`. |
 | `interruptAt: { target, progress, with }` | Waits until the motion reaches `progress` (0-1 of its start to its planned end), then runs `with`. On the virtual clock the clock advances exactly there; on the real clock `with` runs once it got there, a driver round trip late at most. `target` is required. |
-| `assertFrames: { during, for, fps, dropped }` | Counts the main thread's display-link frames while `during` runs, and until `for` (a duration) from the start, and records the `frames.fps` and `frames.dropped` [metrics](#metrics). `dropped` is the most missed refresh intervals allowed; `fps: { min, max }` bounds the frames per second. This is the app's main-thread cadence, not what the window server composited. A display link that delivers fewer than two frames fails `unsupported`. Commands return as soon as their input is dispatched, so cover the work with `for`: after `during` the runner sends the app nothing until then. A wait in `during` (a `runFlow` with an `extendedWaitUntil`) works too, but each of its polls walks the view tree on the main thread (about 8 ms in the Kitchen Sink, measured), which can itself drop frames at 120 Hz. |
+| `assertFrames: { during, for, fps, dropped }` | Counts the main thread's display-link frames while `during` runs, and until `for` (a duration) from the start, and records the `frames.fps` and `frames.dropped` [metrics](#metrics). `dropped` is the most missed refresh intervals allowed; `fps: { min, max }` bounds the frames per second. This is the app's main-thread cadence, not what the window server composited. A display link that delivers fewer than two frames fails `unsupported`. With `trace: true` it also records the frame timeline (each frame, and each MotionView animation by testID, which it polls every frame) and writes it as a Chrome trace, the artifact `frames-<n>.trace.json` that Chrome DevTools' Performance panel and Perfetto open, built as the development profiler builds its trace ([devtools.md](devtools.md#frame-timeline)). Commands return as soon as their input is dispatched, so cover the work with `for`: after `during` the runner sends the app nothing until then. A wait in `during` (a `runFlow` with an `extendedWaitUntil`) works too, but each of its polls walks the view tree on the main thread (about 8 ms in the Kitchen Sink, measured), which can itself drop frames at 120 Hz. |
 
 On the virtual clock, waiting for a settled motion (or a progress point) advances the clock to
 it: `assertMotion` after a tap needs no `advanceClock`. Captures (`takeScreenshot`,
@@ -632,7 +632,7 @@ A failed `assertNoLayoutThrash` or `assertNoFlicker` writes the driver's report 
 #### Release-safety probe
 
 `assertNoDebugSurface: { for }` checks that a running release build has no debug surface (#274; `DEVT-REL-01`
-to `04`, `e2e/flows/devtools/release-probe.yaml`). It quits the app if it runs, starts a decoy development server (a
+to `05`, `e2e/flows/devtools/release-probe.yaml`). It quits the app if it runs, starts a decoy development server (a
 TCP listener on 127.0.0.1 the runner owns) and launches the app pointed at it, with `-RCT_jsLocation <decoy>` and
 `SPARK_BUNDLE_URL=http://<decoy>/index.bundle?…`, the settings a development build reads. Once its first rendered UI
 has settled (up to 30 s) and `for` (default 2s) more, it takes one snapshot and fails with every finding:
@@ -645,11 +645,15 @@ has settled (up to 30 s) and `for` (default 2s) more, it takes one snapshot and 
   so it has no single-instance socket. lsof failing, or not listing the process's files, fails the command.
 - **Menus:** the driver's `menus` snapshot, every level and hidden items included: the Developer menu (its
   `spark-developer` identifiers, or any of its titles in English or Arabic, such as Reload or Show Developer Menu) and
-  any item whose title names DevTools, an inspector, a debugger or a dev menu.
+  any item whose title names DevTools, an inspector, a debugger, a profiler or profiling, or a dev menu.
 - **JavaScript:** every bundle and script in the app (`.jsbundle`, `.bundle`, `.hbc`, `.js`, `.cjs`, `.mjs`, at any
   depth) is searched for the network inspector's marker (`spark-network-inspector`,
-  `packages/desktop-app/src/network-inspector/marker.ts`), which Hermes bytecode keeps as a string. An app with no
-  JavaScript to search is a finding too ([devtools.md](devtools.md#network-inspector), #271).
+  `packages/desktop-app/src/network-inspector/marker.ts`) and the profiler's (`spark-profiler`,
+  `packages/desktop-app/src/profiler/marker.ts`), which Hermes bytecode keeps as strings. An app with no JavaScript to
+  search is a finding too ([devtools.md](devtools.md#network-inspector), #271; [devtools.md](devtools.md#profiling),
+  #272).
+- **Native code:** every Mach-O file in the app, at any depth, is searched for the profiler's marker, which its native
+  half (`SparkProfiler.mm`) holds as a string. An app with no Mach-O file is a finding too (#272).
 
 It is a `build: release` check: a development build connects to the decoy (or the bundle server) and has the Developer
 menu, so it fails. The gate runs it on the gate's artifact; `bun run harness` runs the gate with the installed artifact

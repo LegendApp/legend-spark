@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: assertFrames writes the frame timeline as a Chrome trace
+intent: >
+  The gate's frame budget and the development profiler share one recorder. On Motion system > Scroll link and JS
+  block, whose runner loops on the compositor from mount, assertFrames with trace: true counts frames for 1 s while the
+  JavaScript thread is blocked for 500 ms and writes the frame timeline (each frame, dropped frames, and the
+  MotionViews animating) as the artifact frames-1.trace.json, which Chrome DevTools' Performance panel and Perfetto
+  open. The bound is loose: this flow checks the trace, js-block.yaml the budget. Real clock only.
+checks: [DEVT-PROF-06]
+tags: [devtools, performance]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/scroll-and-frames" }
+- extendedWaitUntil: { visible: { id: motion-system-scroll-and-frames-root }, timeout: 10s }
+- assertText: { id: motion-system-scroll-and-frames-loop, equals: '"running"' }
+- assertFrames: { during: { tapOn: { id: motion-system-scroll-and-frames-block } }, for: 1s, fps: { min: 1 }, trace: true }

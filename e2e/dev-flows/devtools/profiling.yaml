@@ -1,0 +1,31 @@
+appId: so.legend.spark.examples.kitchensink
+name: Profiling in a development session
+intent: >
+  Source maps come from spark dev's Metro, and React Native DevTools reaches each runtime through its inspector
+  proxy; neither the release gate nor the driver's own bundle server provides them. bun scripts/test-profiler.ts
+  drives it headlessly: it starts spark dev, launches the dev build in driver mode on the Profiling screen with its
+  worker runtime, and over CDP, as React Native DevTools does, profiles each runtime, records a Performance panel
+  trace, takes a heap snapshot of each runtime and records an allocation timeline and allocation sampling. Then it
+  records with startProfiling and stopProfiling while both runtimes run JavaScript and a MotionView slides, and reads
+  the files back. Choosing a folder in Stop Profiling…'s panel and reading the trace in a trace viewer needs a person.
+checks: [DEVT-PROF-01, DEVT-PROF-02, DEVT-PROF-03]
+tags: [devtools]
+platforms: [macos]
+build: dev
+manual: true
+---
+- manualStep:
+    instruction: After cd examples/kitchen-sink && bun run rebuild:macos, run bun scripts/test-profiler.ts from the repository root with the display awake.
+    expect: It prints PASS for the DevTools Profiler, Performance panel and Memory checks of each runtime, the API's errors, the profiles, the trace, the frame timeline and the default directory, and exits 0. With the display asleep it prints SKIP for the frame timeline instead.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: Run bun run macos in examples/kitchen-sink and open DevTools › Profiling. Choose Developer › Start Profiling, press Run JavaScript for 300 ms, Run JavaScript in the worker and Slide the box, then choose Developer › Stop Profiling…, pick a folder and press Save Profile Here. Open the .trace.json in ui.perfetto.dev or Chrome DevTools' Performance panel, and a .cpuprofile in Chrome DevTools.
+    expect: The console logs where the profile was saved. The trace shows the main thread's frames, the box's slide on the compositor track, and a JavaScript track per runtime whose fibonacci slices name screens/devtools/profiling-workload.ts; each .cpuprofile opens with the same source-mapped frames.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: In the same app press ⌥⌘I, open the Memory panel and take a heap snapshot after pressing Allocate; then open DevTools for the worker (DevTools › React Native DevTools › Open DevTools for the worker) and take one there.
+    expect: The shared runtime's snapshot contains ks-heap-shared:button; the worker's snapshot is smaller and does not.
+    evidence: none
+    signoff: required

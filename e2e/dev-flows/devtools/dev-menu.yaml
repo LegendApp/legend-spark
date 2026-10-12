@@ -1,6 +1,6 @@
 appId: so.legend.spark.examples.kitchensink
 name: Developer menu in a development build
-intent: A development bundle adds the Developer menu before Window, in the system language, with the hidden Ctrl+Cmd+Z item that pops it up. A driven app never has a key window, so only Reload is enabled. React Native DevTools registers its opener in development bundles, so Open DevTools carries no unavailable tooltip; it is disabled only for want of a key window.
+intent: A development bundle adds the Developer menu before Window, in the system language, with the hidden Ctrl+Cmd+Z item that pops it up. A driven app never has a key window, so only Reload and Start Profiling, which act on the whole app, are enabled. React Native DevTools registers its opener in development bundles, so Open DevTools carries no unavailable tooltip; it is disabled only for want of a key window.
 checks: [DEVT-MENU-01, DEVT-MENU-02, DEVT-MENU-03, DEVT-MENU-04]
 tags: [devtools]
 platforms: [macos]
@@ -19,6 +19,8 @@ timeout: 120s
       - assertAppMenu: { path: "Developer > Toggle Element Inspector", enabled: false }
       - assertAppMenu: { path: "Developer > Toggle Performance Monitor", enabled: false }
       - assertAppMenu: { path: "Developer > Fast Refresh", enabled: false }
+      - assertAppMenu: { path: "Developer > Start Profiling", enabled: true }
+      - assertAppMenu: { path: "Developer > Stop Profiling…", enabled: false }
       - assertAppMenu: { path: "Developer > Show Bundle Info", enabled: false }
       - assertAppMenu: { path: "Developer > Show Developer Menu", hidden: true, enabled: true, shortcut: Ctrl+Cmd+Z }
       - assertAppMenu: { path: "Window > Minimize", exists: true }
@@ -30,5 +32,7 @@ timeout: 120s
       - assertAppMenu: { path: "المطوّر > تبديل فاحص العناصر", enabled: false }
       - assertAppMenu: { path: "المطوّر > تبديل مراقب الأداء", enabled: false }
       - assertAppMenu: { path: "المطوّر > التحديث السريع", enabled: false }
+      - assertAppMenu: { path: "المطوّر > بدء تحليل الأداء", enabled: true }
+      - assertAppMenu: { path: "المطوّر > إيقاف تحليل الأداء…", enabled: false }
       - assertAppMenu: { path: "المطوّر > عرض معلومات الحزمة", enabled: false }
       - assertAppMenu: { path: "المطوّر > عرض قائمة المطوّر", hidden: true, shortcut: Ctrl+Cmd+Z }

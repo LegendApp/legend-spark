@@ -6,9 +6,10 @@ import { outcome, run, runOk } from "./subprocess.ts";
 const darwin = process.platform === "darwin";
 const root = path.resolve(import.meta.dirname, "..");
 const native = path.join(root, "packages/desktop-app/macos");
-const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm", "SparkTestDriverCommits.mm", "SparkTestDriverAudit.mm"].map(file => path.join(native, file));
+// The frame counter records on the frame timeline (SparkFrameTimeline.mm), which compiles with the driver (SPARK_TEST_DRIVER).
+const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm", "SparkTestDriverCommits.mm", "SparkTestDriverAudit.mm", "SparkFrameTimeline.mm"].map(file => path.join(native, file));
 const compile = (sources: string[], output: string, include: string[] = [], flags: string[] = []) => runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore",
-  ...flags, "-I", native, ...include.flatMap(directory => ["-I", directory]), ...sources, "-o", output], { timeout: 120_000 });
+  "-DSPARK_TEST_DRIVER=1", ...flags, "-I", native, ...include.flatMap(directory => ["-I", directory]), ...sources, "-o", output], { timeout: 120_000 });
 // Gesture and extra mouse button synthesis use private CoreGraphics functions, compiled only on request
 // (docs/test-driver.md#private-event-functions). The harness opts in; `withoutPrivateEvents` is an app that does not.
 const PRIVATE_EVENTS = ["-DSPARK_TEST_DRIVER_PRIVATE_EVENTS=1"];

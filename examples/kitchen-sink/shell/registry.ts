@@ -1,11 +1,14 @@
 import { createElement, type ComponentType } from "react";
 import { View } from "react-native";
 import { AREAS, type Area, type AreaId } from "./areas";
+import type { Locale } from "./i18n";
 
 export type Screen = {
   /** Lowercase kebab-case; the deep link is spark-ks://<area>/<id>. */
   id: string;
+  /** English; `titles` has it in other languages the shell speaks. */
   title: string;
+  titles?: Partial<Record<Locale, string>>;
   summary: string;
   component: ComponentType;
 };
@@ -20,6 +23,9 @@ export type Catalog = {
 };
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** The screen's title in `locale`, falling back to English (`title`) where it has none. */
+export function screenTitle(screen: Screen, locale: Locale): string { return screen.titles?.[locale] ?? screen.title; }
 
 /** The test driver waits for this ID to confirm a navigated screen has rendered. */
 export function screenRootTestID(area: string, screen: string) { return `${area}-${screen}-root`; }

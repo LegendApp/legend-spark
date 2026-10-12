@@ -199,6 +199,7 @@
   "./devtools": [
     "DevToolsAvailability",
     "DevToolsRuntime",
+    "MissingRuntime",
     "NetworkBody",
     "NetworkCallFrame",
     "NetworkEntry",
@@ -206,12 +207,22 @@
     "NetworkInspectorOptions",
     "NetworkSource",
     "OpenDevToolsOptions",
+    "ProfiledRuntime",
+    "ProfilingFrames",
+    "ProfilingResult",
+    "StartProfilingOptions",
+    "StopProfilingOptions",
     "addNetworkListener",
+    "addProfilingListener",
     "configureNetworkInspector",
     "getDevToolsAvailability",
     "getNetworkInspectorAvailability",
     "getNetworkLog",
-    "openDevTools"
+    "getProfilerAvailability",
+    "isProfiling",
+    "openDevTools",
+    "startProfiling",
+    "stopProfiling"
   ],
   "./diagnostics": [
     "CrashReport",

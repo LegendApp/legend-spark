@@ -650,6 +650,14 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   return NO;
 }
 
+- (NSArray<NSString *> *)animatingViews
+{
+  NSMutableArray<NSString *> *views = [NSMutableArray new];
+  for (NSView<SparkMotionHost> *host in _hosts.objectEnumerator)
+    if ([self isAnimating:host.motionTag]) [views addObject:host.accessibilityIdentifier.length ? host.accessibilityIdentifier : [NSString stringWithFormat:@"MotionView %ld", (long)host.motionTag]];
+  return views;
+}
+
 #pragma mark - Baking
 
 /** The layer key paths a channel's animations drive; the mask channel's are its mask layer's. */

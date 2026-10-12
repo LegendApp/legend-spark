@@ -121,7 +121,7 @@ test("the Kitchen Sink, which the gate drives as a release build, opts in", () =
 // Both include the crash reporter and the hang watchdog, whose native simulated crashes and simulated hangs need the driver.
 const native = path.join(root, "packages/desktop-app/macos"), diagnostics = path.join(root, "packages/diagnostics/macos");
 const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm", "SparkTestDriverCommits.mm",
-  "SparkTestDriverAudit.mm"].map(file => path.join(native, file));
+  "SparkTestDriverAudit.mm", "SparkFrameTimeline.mm"].map(file => path.join(native, file));
 const crashSources = ["SparkCrashReporter.mm", "SparkHangWatchdog.mm", "SparkStack.mm"].map(file => path.join(diagnostics, file));
 const host = `#import "SparkTestDriver.h"
 #import "SparkCrashReporter.h"
