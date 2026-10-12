@@ -16,14 +16,14 @@ import { BACKENDS, NO_BACKENDS } from "../scripts/e2e/runner/run.ts";
 import { element, MemoryBackend, VirtualClock, WINDOW } from "./e2e-runner-backend.ts";
 
 // The Kitchen Sink checklist service (screens/infra/sign-off.ts) runs against these: the app's launch arguments, and files on disk.
-const app = vi.hoisted(() => ({ args: [] as string[], quitGuards: [] as Array<() => boolean | Promise<boolean>> }));
+const app = vi.hoisted(() => ({ args: [] as string[], quitGuards: [] as Array<() => boolean | Promise<boolean>>, writeError: undefined as string | undefined }));
 vi.mock("@legendapp/spark/app", () => ({
   getAppContext: async () => ({ launchArguments: app.args }),
   beforeQuit: async (handler: () => boolean | Promise<boolean>) => { app.quitGuards.push(handler); return { remove: async () => {} }; },
 }));
 vi.mock("@legendapp/spark/files", async () => {
   const fs = await import("node:fs");
-  return { readText: async (file: string) => fs.readFileSync(file, "utf8"), writeText: async (file: string, text: string) => fs.writeFileSync(file, text), exists: async (file: string) => fs.existsSync(file) };
+  return { readText: async (file: string) => fs.readFileSync(file, "utf8"), writeText: async (file: string, text: string) => { if (app.writeError) throw new Error(app.writeError); fs.writeFileSync(file, text); }, exists: async (file: string) => fs.existsSync(file) };
 });
 
 const FIXTURE = "tests/fixtures/e2e-gate";
@@ -594,6 +594,7 @@ function signoff(dir: string, options: { launch?: SignoffEnv["launch"]; answer?:
 /** The Kitchen Sink checklist service, freshly loaded as a launch with `--ks-signoff <session>` would load it. */
 async function checklist(session: string) {
   app.args = ["KitchenSink", "--ks-signoff", session];
+  app.writeError = undefined;
   vi.resetModules();
   const service = await import("../examples/kitchen-sink/screens/infra/sign-off.ts");
   await service.loadSignOff();
@@ -766,7 +767,7 @@ describe("gate:signoff", () => {
     ]) expect(() => merge(decision("flows/app/menu", { evidence: [file!] }))).toThrow(`the decision for flows/app/menu names evidence ${file}, ${problem}`);
   });
 
-  test("the checklist's quit guard waits until every decision is written", async () => {
+  test("the checklist's quit guard waits until every decision is written, and keeps the app open while writing fails", async () => {
     const dir = repo(MENU);
     await gateCommand([], path.join(dir, "e2e"), env().env);
     const decisionsFile = path.join(dir, SESSION_DIR, "decisions.json");
@@ -781,11 +782,65 @@ describe("gate:signoff", () => {
         // Cmd-Q right after Pass: the guard approves the quit only once the decision is on disk.
         quitResult = await app.quitGuards[0]!();
         expect(existsSync(decisionsFile)).toBe(true);
+        // While the decisions cannot be written, the app stays open with the error; once a write works, it quits.
+        app.writeError = "disk full";
+        expect(service.decide("flows/app/ime", "pass", "Under the caret.")).toBeUndefined();
+        expect(await app.quitGuards[0]!()).toBe(false);
+        expect(service.getSignOffState()).toMatchObject({ saveError: "disk full" });
+        app.writeError = undefined;
+        expect(await app.quitGuards[0]!()).toBe(true);
+        expect(service.getSignOffState()).toMatchObject({ saveError: undefined });
       },
     });
-    expect(await quitting.run()).toBe(0);
+    expect([await quitting.run(), quitting.err]).toEqual([0, []]);
     expect(quitResult).toBe(true);
-    expect(quitting.out.at(-1)).toBe("Wrote 1 sign-off to signoffs/release.yaml. Run bun run gate to apply them.");
+    expect(quitting.out.at(-1)).toBe("Wrote 2 sign-offs to signoffs/release.yaml. Run bun run gate to apply them.");
+  });
+
+  test("decisions of an interrupted session survive the next gate:signoff and are confirmed then; ones that no longer belong are dropped", async () => {
+    const dir = repo(MENU);
+    await gateCommand([], path.join(dir, "e2e"), env().env);
+    const sessionDir = path.join(dir, SESSION_DIR), decisionsFile = path.join(sessionDir, "decisions.json");
+    const before = readFileSync(path.join(dir, "signoffs/release.yaml"), "utf8");
+    // The person passes both runs, then the command is interrupted before they confirm (here: they do not confirm).
+    const interrupted = signoff(dir, {
+      answer: "",
+      launch: async (_artifact, session) => {
+        const service = await checklist(session);
+        service.decide("flows/app/ime", "pass", "Under the caret.");
+        service.decide("flows/app/menu", "pass", "");
+        await service.flushSignOff();
+      },
+    });
+    expect(await interrupted.run()).toBe(1);
+    expect(readFileSync(path.join(dir, "signoffs/release.yaml"), "utf8")).toBe(before);
+    const listed = signoff(dir);
+    expect(await listed.run(["--list"])).toBe(0);
+    expect(listed.out.filter(line => /^  \S/.test(line))).toEqual(["  decided pass, not confirmed yet: flows/app/ime (manual)", "  decided pass, not confirmed yet: flows/app/menu (run + sign-off)"]);
+    expect(listed.err).toEqual([]);
+
+    // A decision that is not this session's, or whose screenshot a later gate run replaced, is dropped and says why.
+    const decisions = JSON.parse(readFileSync(decisionsFile, "utf8")) as SignoffDecisions;
+    writeFileSync(decisionsFile, JSON.stringify({ version: 1, signoffs: [{ ...decisions.signoffs[0]!, by: "Agent <agent@example.com>" }, decisions.signoffs[1]] }));
+    writeFileSync(path.join(sessionDir, "evidence/flows-app-menu-1.png"), "an older capture");
+    const dropping = signoff(dir);
+    expect(await dropping.run(["--list"])).toBe(0);
+    expect(dropping.err).toEqual([
+      'gate:signoff: dropped an unconfirmed decision of an earlier session: the decision for flows/app/ime has by "Agent <agent@example.com>"; the session\'s is "Jane Doe <jane@example.com>"',
+      "gate:signoff: dropped an unconfirmed decision of an earlier session: the screenshot the decision for flows/app/menu names changed in a later gate run",
+    ]);
+    expect(existsSync(decisionsFile)).toBe(false);
+
+    // Kept decisions reopen in the checklist, and the person confirms them without deciding again.
+    writeFileSync(decisionsFile, JSON.stringify(decisions));
+    const resumed = signoff(dir, {
+      launch: async (_artifact, session) => {
+        expect((await checklist(session)).getSignOffState()).toMatchObject({ decisions: { "flows/app/ime": { verdict: "pass" }, "flows/app/menu": { verdict: "pass" } } });
+      },
+    });
+    expect(await resumed.run()).toBe(0);
+    expect(resumed.out.at(-1)).toBe("Wrote 2 sign-offs to signoffs/release.yaml. Run bun run gate to apply them.");
+    expect(reasons(await gate(dir))).toEqual([]);
   });
 
   test("--scoped signs off the last gate --flow run", async () => {

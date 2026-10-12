@@ -48,19 +48,22 @@ function staleness(report: GateReport, gatePlan: GatePlan, source: { commit: str
 
 /**
  * The checklist session for the gate report's manual runs, in `dir`. Screenshots the runner captured are copied next to
- * it (the next gate run deletes its run directory), so evidence outlives the run.
+ * it (the next gate run deletes its run directory), so evidence outlives the run. Decisions an interrupted session left
+ * unconfirmed in its decisions file are kept when they still belong to this session and their screenshots are unchanged,
+ * so the checklist shows them again and the person confirms them this time; `dropped` says why the others were not.
  */
-export function writeSession(report: GateReport, gatePlan: GatePlan, signer: Pick<SignoffSession, "by" | "machine">, existing: Signoff[], dir: string): SignoffSession {
-  rmSync(path.join(dir, DECISIONS), { force: true });
+export function writeSession(report: GateReport, gatePlan: GatePlan, signer: Pick<SignoffSession, "by" | "machine">, existing: Signoff[], dir: string): { session: SignoffSession; kept: Signoff[]; dropped: string[] } {
   mkdirSync(path.join(dir, "evidence"), { recursive: true });
   const planned = new Map(gatePlan.flows.map(flow => [flow.path, flow]));
+  const changed = new Set<string>();
   const items = report.flows.filter(entry => entry.manual).map((entry): SignoffItem => {
     const flow = planned.get(entry.path);
     const steps = (entry.manualSteps ?? []).map((step, index) => {
       if (!step.screenshot) return step;
-      const source = path.join(gatePlan.repo, step.screenshot), copy = path.join("evidence", `${slug(entry.id)}-${index + 1}.png`);
+      const source = path.join(gatePlan.repo, step.screenshot), copy = path.join("evidence", `${slug(entry.id)}-${index + 1}.png`), target = path.join(dir, copy);
       if (!existsSync(source)) throw new Error(`${step.screenshot} from the last gate run is gone. Run bun run gate again`);
-      copyFileSync(source, path.join(dir, copy));
+      if (existsSync(target) && !readFileSync(target).equals(readFileSync(source))) changed.add(copy);
+      copyFileSync(source, target);
       return { ...step, screenshot: copy };
     });
     const kind = entry.manual === true ? "manual" : "partial";
@@ -72,7 +75,20 @@ export function writeSession(report: GateReport, gatePlan: GatePlan, signer: Pic
   });
   const session: SignoffSession = { version: 1, target: report.target!, commit: report.commit, ...signer, decisions: DECISIONS, items };
   writeFileSync(path.join(dir, "session.json"), `${JSON.stringify(session, null, 2)}\n`);
-  return session;
+
+  const decisionsFile = path.join(dir, DECISIONS), kept: Signoff[] = [], dropped: string[] = [];
+  if (!existsSync(decisionsFile)) return { session, kept, dropped };
+  let earlier: Signoff[] = [];
+  try { earlier = (JSON.parse(readFileSync(decisionsFile, "utf8")) as SignoffDecisions).signoffs ?? []; } catch (error) { dropped.push(`${DECISIONS} is unreadable: ${(error as Error).message}`); }
+  for (const signoff of earlier) {
+    const problem = decisionProblem(session, dir, signoff)
+      ?? (signoff.evidence?.some(file => changed.has(path.normalize(file))) ? `the screenshot the decision for ${signoff.flow} names changed in a later gate run` : undefined);
+    if (problem) dropped.push(problem);
+    else kept.push(signoff);
+  }
+  if (kept.length) writeFileSync(decisionsFile, `${JSON.stringify({ version: 1, signoffs: kept } satisfies SignoffDecisions, null, 2)}\n`);
+  else rmSync(decisionsFile);
+  return { session, kept, dropped };
 }
 
 const PROBLEMS: Record<SignOffProblem, string> = {
@@ -82,30 +98,35 @@ const PROBLEMS: Record<SignOffProblem, string> = {
 };
 
 /**
- * Merges the checklist's decisions into the sign-off file: each replaces any earlier sign-off of its run on this target.
- * The decisions file is only as trustworthy as the checklist that wrote it, so the rules are checked again here: decisions
- * must belong to the session (its runs, target, commit, flow content and signer), follow signOffProblem, and name evidence
- * inside the session's evidence/ folder (no `..` or symlink out of it). Evidence becomes repository-relative.
+ * Why a decision cannot be merged, or undefined. The decisions file is only as trustworthy as the checklist that wrote it,
+ * so the rules are checked again here: a decision must belong to the session (its ready runs, target, commit, flow content
+ * and signer), follow signOffProblem, and name evidence inside the session's evidence/ folder (no `..` or symlink out of it).
+ */
+function decisionProblem(session: SignoffSession, dir: string, signoff: Signoff): string | undefined {
+  const item = session.items.find(candidate => candidate.ready && candidate.flow === signoff.flow);
+  if (!item) return `the decisions name ${signoff.flow}, which this session cannot sign off`;
+  const expected = { target: session.target, commit: session.commit, flowHash: item.flowHash, by: session.by, machine: session.machine };
+  const foreign = (Object.keys(expected) as Array<keyof typeof expected>).find(key => signoff[key] !== expected[key]);
+  if (foreign) return `the decision for ${signoff.flow} has ${foreign} ${JSON.stringify(signoff[foreign])}; the session's is ${JSON.stringify(expected[foreign])}`;
+  const problem = signOffProblem(item, signoff.verdict, signoff.note);
+  if (problem) return `the decision for ${signoff.flow} is a ${signoff.verdict} without a note: ${PROBLEMS[problem]}`;
+  const evidenceDir = realpathSync(path.join(dir, "evidence"));
+  for (const file of signoff.evidence ?? []) {
+    let real: string;
+    try { real = realpathSync(path.resolve(dir, file)); } catch { return `the decision for ${signoff.flow} names evidence ${file}, which does not exist`; }
+    if (path.dirname(real) !== evidenceDir) return `the decision for ${signoff.flow} names evidence ${file}, which is not in the session's evidence/ folder`;
+  }
+}
+
+/**
+ * Merges the checklist's decisions into the sign-off file after checking each with decisionProblem: each replaces any
+ * earlier sign-off of its run on this target. Evidence becomes repository-relative.
  */
 export function mergeDecisions(session: SignoffSession, dir: string, repo: string, existing: Signoff[], decisions: SignoffDecisions): Signoff[] {
-  const ready = new Map(session.items.filter(item => item.ready).map(item => [item.flow, item]));
-  const evidenceDir = realpathSync(path.join(dir, "evidence"));
   const made = decisions.signoffs.map(signoff => {
-    const item = ready.get(signoff.flow);
-    if (!item) throw new Error(`the decisions name ${signoff.flow}, which this session cannot sign off`);
-    const expected = { target: session.target, commit: session.commit, flowHash: item.flowHash, by: session.by, machine: session.machine };
-    const foreign = (Object.keys(expected) as Array<keyof typeof expected>).find(key => signoff[key] !== expected[key]);
-    if (foreign) throw new Error(`the decision for ${signoff.flow} has ${foreign} ${JSON.stringify(signoff[foreign])}; the session's is ${JSON.stringify(expected[foreign])}`);
-    const problem = signOffProblem(item, signoff.verdict, signoff.note);
-    if (problem) throw new Error(`the decision for ${signoff.flow} is a ${signoff.verdict} without a note: ${PROBLEMS[problem]}`);
-    const evidence = signoff.evidence?.map(file => {
-      const resolved = path.resolve(dir, file);
-      let real: string;
-      try { real = realpathSync(resolved); } catch { throw new Error(`the decision for ${signoff.flow} names evidence ${file}, which does not exist`); }
-      if (path.dirname(real) !== evidenceDir) throw new Error(`the decision for ${signoff.flow} names evidence ${file}, which is not in the session's evidence/ folder`);
-      return path.relative(repo, resolved);
-    });
-    return { ...signoff, ...(evidence ? { evidence } : {}) };
+    const problem = decisionProblem(session, dir, signoff);
+    if (problem) throw new Error(problem);
+    return { ...signoff, ...(signoff.evidence ? { evidence: signoff.evidence.map(file => path.relative(repo, path.resolve(dir, file))) } : {}) };
   });
   if (new Set(made.map(signoff => signoff.flow)).size !== made.length) throw new Error("the decisions sign off a run twice");
   const replaced = new Set(made.map(signoff => signoff.flow));
@@ -121,10 +142,11 @@ export function writeSignoffs(file: string, signoffs: Signoff[]) {
   writeFileSync(file, text);
 }
 
-function describe(session: SignoffSession, stdout: (line: string) => void) {
+function describe(session: SignoffSession, kept: Signoff[], stdout: (line: string) => void) {
   stdout(`Sign-off session for ${session.target} at commit ${session.commit.slice(0, 12)}, as ${session.by} on ${session.machine}:`);
   for (const item of session.items) {
-    stdout(`  ${item.signoff ? `signed ${item.signoff.verdict}` : item.ready ? "pending" : "not ready"}: ${item.flow} (${item.kind === "manual" ? "manual" : "run + sign-off"})${item.reason ? `: ${item.reason}` : ""}`);
+    const decided = kept.find(signoff => signoff.flow === item.flow);
+    stdout(`  ${decided ? `decided ${decided.verdict}, not confirmed yet` : item.signoff ? `signed ${item.signoff.verdict}` : item.ready ? "pending" : "not ready"}: ${item.flow} (${item.kind === "manual" ? "manual" : "run + sign-off"})${item.reason ? `: ${item.reason}` : ""}`);
     for (const step of item.steps) stdout(`    ${step.location}: ${step.instruction} Expect: ${step.expect}${step.screenshot ? ` [${step.screenshot}: ${step.capture}]` : " [no screenshot: a pass needs a note]"}${step.signoff === "optional" ? " (optional)" : ""}`);
   }
 }
@@ -160,10 +182,12 @@ export async function signoffCommand(args: string[], root: string, env: SignoffE
 
   const dir = path.join(path.dirname(signoffsFile), "manual", report.commit.slice(0, 12));
   const by = `${signer.name} <${signer.email}>`;
-  let session: SignoffSession;
-  try { session = writeSession(report, gatePlan, { by, machine: signer.machine }, existing, dir); } catch (error) { return fail((error as Error).message); }
+  let written: ReturnType<typeof writeSession>;
+  try { written = writeSession(report, gatePlan, { by, machine: signer.machine }, existing, dir); } catch (error) { return fail((error as Error).message); }
+  const { session, kept, dropped } = written;
   if (!session.items.length) { env.stdout(`No manual flow runs for ${session.target}: nothing to sign off.`); return 0; }
-  describe(session, env.stdout);
+  describe(session, kept, env.stdout);
+  for (const problem of dropped) env.stderr(`gate:signoff: dropped an unconfirmed decision of an earlier session: ${problem}`);
   if (list) return 0;
 
   if (!gatePlan.artifact || !existsSync(gatePlan.artifact)) return fail(`the release build ${gatePlan.artifact ? path.relative(gatePlan.repo, gatePlan.artifact) : "for this target"} does not exist`);

@@ -59,8 +59,9 @@ export function loadSignOff(): Promise<void> {
       const dir = file.slice(0, file.lastIndexOf("/"));
       const decisionsFile = resolvePath(dir, session.decisions);
       const made = await files.exists(decisionsFile) ? (JSON.parse(await files.readText(decisionsFile)) as SignoffDecisions).signoffs : [];
-      // A quit right after a decision must not lose it: bun run gate:signoff reads the decisions file once the app exits.
-      await app.beforeQuit(async () => { await flushSignOff(); return true; });
+      // A quit must not lose a decision: bun run gate:signoff reads the decisions file once the app exits. The guard writes
+      // every decision again after any pending write, and keeps the app open (showing saveError) while that write fails.
+      await app.beforeQuit(async () => { await save(); return state.status !== "ready" || !state.saveError; });
       set({ status: "ready", session, dir, decisions: Object.fromEntries(made.map(signoff => [signoff.flow, signoff])) });
     } catch (error) {
       set({ status: "error", error: describe(error) });

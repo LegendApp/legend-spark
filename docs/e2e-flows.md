@@ -1047,7 +1047,8 @@ model), then each run with its name, intent, steps (`instruction`, `expect`, and
 step names with what it shows, such as `child-opened (window {"id":"windows-window-options-child"})`)
 and a note field. For a step without a screenshot, do it in the app (the checklist keeps its state
 while you visit other screens), then come back. **Pass** or **Fail** records the decision at once in
-the session's `decisions.json`, and the app's quit guard waits for that write:
+the session's `decisions.json`. The app's quit guard writes them again and quits only once that write
+succeeds; while it fails, the app stays open and shows the error:
 
 - **Fail** needs a note that says what was wrong.
 - **Pass** needs a screenshot for every step, or a note saying what you saw (a live check, or a
@@ -1060,6 +1061,11 @@ with its target, commit, flow hash and signer, follow the note rules above, and 
 inside the session's `evidence/` folder, with no `..` or symlink out of it), prints them, and asks you to type your `user.name` to sign
 them. Only then does it replace any earlier sign-off of the same run on this target and write the
 sign-off file, validated against its schema. Any other answer writes nothing.
+
+An interrupted session (the command stopped, or you did not confirm) leaves its decisions in
+`decisions.json`. The next `gate:signoff` keeps those that still pass the checks above and whose
+screenshots no later gate run replaced, lists them as `decided pass, not confirmed yet`, shows them in
+the checklist, and asks you to confirm them when the app quits. It prints why it dropped any other.
 
 #### From an agent
 
