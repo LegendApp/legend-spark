@@ -63,6 +63,7 @@ export function statePaths({ bundleId, projectId }: AppIdentity, { home, temp }:
     path.join(library, "Cookies", `${bundleId}.binarycookies`),
     path.join(library, "WebKit", bundleId), // WKWebsiteDataStore.defaultDataStore
     path.join(library, "Saved Application State", `${bundleId}.savedState`), // AppKit window restoration
+    path.join(library, "Logs", bundleId), // @legendapp/spark/logging files
     path.join(temp, ns), // file-system "temp"
     ...[".setup", ".lock", ".sock"].map(suffix => path.join(temp, `${ns}${suffix}`)), // the single-instance lock
     path.join(temp, "legend-codex-workspace", `codex-home-${bundleId}`), // the codex package's CODEX_HOME

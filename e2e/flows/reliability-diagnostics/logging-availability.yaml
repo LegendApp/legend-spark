@@ -1,0 +1,18 @@
+appId: so.legend.spark.examples.kitchensink
+name: Logging availability on macOS
+intent: >
+  The Logging screen lists each getLoggingAvailability query as JSON. On macOS logging, the unified
+  log, log files and diagnostics export all report available, and the screen's configureLogging
+  call succeeds (no setup error is shown).
+checks: [REL-LOG-01]
+tags: [reliability-diagnostics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/logging" }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-root }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-logging-availability-logging, equals: 'logging: {"available":true}' }
+- assertText: { id: reliability-diagnostics-logging-availability-system-log, equals: 'system-log: {"available":true}' }
+- assertText: { id: reliability-diagnostics-logging-availability-files, equals: 'files: {"available":true}' }
+- assertText: { id: reliability-diagnostics-logging-availability-diagnostics, equals: 'diagnostics: {"available":true}' }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-file-0-name }, timeout: 10s }
+- assertNotVisible: { id: reliability-diagnostics-logging-setup-result }

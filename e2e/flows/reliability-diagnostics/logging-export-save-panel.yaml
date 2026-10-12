@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: Export diagnostics through a save panel
+intent: >
+  "Export diagnostics…" asks for a destination with a save panel (sheet on the main window,
+  suggested name "Kitchen Sink Diagnostics.zip"). Canceling resolves {"canceled":true} and writes
+  nothing; saving writes the zip of diagnostics.json and app.log there.
+checks: [REL-LOG-05]
+tags: [reliability-diagnostics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/logging" }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-file-0-name }, timeout: 10s }
+- tapOn: { id: reliability-diagnostics-logging-export }
+- handleDialog: { kind: save, cancel: true }
+- assertText: { id: reliability-diagnostics-logging-export-result, equals: '{"canceled":true}' }
+- tapOn: { id: reliability-diagnostics-logging-export }
+- assertDialog: { kind: save }
+- handleDialog: { kind: save, name: Diagnostics.zip, path: "${TMP}" }
+- assertFile: { path: "${TMP}/Diagnostics.zip", exists: true }
+- assertText: { id: reliability-diagnostics-logging-export-result, equals: '{"entries":["diagnostics.json","logs/app.log"]}' }

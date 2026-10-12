@@ -1,0 +1,19 @@
+appId: so.legend.spark.examples.kitchensink
+name: Diagnostics export to a local zip through the in-app driver
+intent: >
+  With --ks-diagnostics-dir <folder>, "Export diagnostics…" skips the save panel and calls
+  exportDiagnostics(<folder>/Diagnostics.zip) after the screen's entries are logged. The zip is
+  written locally and holds diagnostics.json and app.log (no rotation has happened after
+  clearState); the screen shows its entries, path and size. Nothing is sent anywhere.
+checks: [REL-LOG-04]
+tags: [reliability-diagnostics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, arguments: ["--ks-diagnostics-dir", "${TMP}"], openUrl: "spark-ks://reliability-diagnostics/logging" }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-file-0-name }, timeout: 10s }
+- tapOn: { id: reliability-diagnostics-logging-write-entries }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-write-entries-result, text: '{"written":5}' }, timeout: 10s }
+- tapOn: { id: reliability-diagnostics-logging-export }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-export-result, text: '{"entries":["diagnostics.json","logs/app.log"]}' }, timeout: 20s }
+- assertText: { id: reliability-diagnostics-logging-exported-name, equals: Diagnostics.zip }
+- takeScreenshot: logging-exported

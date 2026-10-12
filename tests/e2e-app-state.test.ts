@@ -40,7 +40,7 @@ describe("statePaths", () => {
       `/Users/a/Library/Caches/${NS}`, `/Users/a/Library/Caches/${BUNDLE_ID}`,
       `/Users/a/Library/HTTPStorages/${BUNDLE_ID}`, `/Users/a/Library/HTTPStorages/${BUNDLE_ID}.binarycookies`,
       `/Users/a/Library/Cookies/${BUNDLE_ID}.binarycookies`, `/Users/a/Library/WebKit/${BUNDLE_ID}`,
-      `/Users/a/Library/Saved Application State/${BUNDLE_ID}.savedState`,
+      `/Users/a/Library/Saved Application State/${BUNDLE_ID}.savedState`, `/Users/a/Library/Logs/${BUNDLE_ID}`,
       `/var/T/${NS}`, `/var/T/${NS}.setup`, `/var/T/${NS}.lock`, `/var/T/${NS}.sock`,
       `/var/T/legend-codex-workspace/codex-home-${BUNDLE_ID}`,
     ]);
