@@ -1,0 +1,10 @@
+appId: so.legend.spark.examples.kitchensink
+name: Release build has no DLL search-order hijack
+intent: >
+  The Windows counterpart of load-paths. It needs Windows hardware and the Windows backend (#51); until then
+  assertLoadPaths fails on Windows as unsupported, which blocks the Windows gate.
+checks: [SEC-DLL-01]
+tags: [security]
+platforms: [windows]
+---
+- assertLoadPaths: "${APP_PATH}"

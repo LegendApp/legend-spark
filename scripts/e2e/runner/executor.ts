@@ -9,6 +9,7 @@ import {
   Failure, RETRYABLE, type Artifact, type Backend, type Candidate, type CommandContext, type FailureKind, type Matrix, type Target, type WindowInfo,
 } from "./backend.ts";
 import { writeBundle } from "./bundle.ts";
+import { ARTIFACT_COMMANDS } from "./security.ts";
 import { assertScreenshot, takeScreenshot, type GoldenResult } from "./screenshot.ts";
 import { candidate, center, describe, filterElements, locate, nearby, parseSelector, parseWindow, pickWindows, type Finder, type Located, type Selector } from "./selectors.ts";
 
@@ -296,6 +297,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
       case "assertVisible": await find(observed(), selectorArgs(args), "any", timeoutMs); return;
       case "assertNotVisible": await find(observed(), selectorArgs(args), "none", timeoutMs); return;
     }
+    if (COMMANDS[command.name]!.runner) return ARTIFACT_COMMANDS[command.name]!(args, platform);
     const { backend, whiteBox } = route(command.name, backends, allowWhiteBox);
     if (whiteBox) step.whiteBox = true;
     const context: CommandContext = {
@@ -362,6 +364,8 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   }
 
   const started: Backend[] = [];
+  // A flow of runner commands alone audits the build on disk: it starts no backend, so it never opens the app or its state.
+  const sessions = flow.header.onFlowStart || flow.header.onFlowComplete || flow.commands.some(command => !COMMANDS[command.name]!.runner || command.when) ? backends : [];
   /** Failure evidence from every started backend: its element tree, plus whatever it collects (screenshot, logs, trace). */
   async function collect(): Promise<Artifact[]> {
     const out = path.join(dir, "failure");
@@ -400,7 +404,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
     for (const dimension of Object.keys(matrix)) {
       if (!backends.some(backend => backend.matrix.has(dimension))) throw new Failure("unsupported", `no active backend applies matrix dimension ${dimension} (active: ${backends.map(backend => backend.name).join(", ")})`);
     }
-    for (const backend of backends) {
+    for (const backend of sessions) {
       const own = path.join(dir, `backend-${backend.name}`);
       mkdirSync(own, { recursive: true });
       await backend.start({ flow, matrix, platform, app: options.app, dir: own });
@@ -411,7 +415,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   } catch (error) {
     await fail(error);
   }
-  if (flow.header.onFlowComplete && started.length === backends.length) {
+  if (flow.header.onFlowComplete && started.length === sessions.length) {
     try { await runAll(flow.header.onFlowComplete, scope); } catch (error) {
       if (failure) errors.push(`onFlowComplete: ${message(error)}`);
       else await fail(error);

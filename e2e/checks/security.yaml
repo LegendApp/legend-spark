@@ -1,0 +1,33 @@
+area: security
+prefix: SEC
+checks:
+  SEC-ENT-01:
+    title: Every process of the release build is signed with only the entitlements its flow allows, each with a reason (Kitchen Sink allows none); get-task-allow and hardened runtime exceptions such as disable-library-validation, allow-dyld-environment-variables and allow-unsigned-executable-memory fail unless allowed, and an allowed entitlement no process carries fails
+    platforms: [macos]
+    blocking: true
+    spec: "#168 SEC.audit; assertEntitlements"
+  SEC-SANDBOX-01:
+    title: The direct-distribution build sandboxes no process (com.apple.security.app-sandbox); the sandboxed variant (#154) sandboxes every process
+    platforms: [macos]
+    blocking: true
+    spec: "#168 SEC.audit; #154 DIST.mas; assertEntitlements sandbox"
+  SEC-HR-01:
+    title: Every Mach-O file of the release build is signed by the main executable's Developer ID team (not ad-hoc) and every process has the hardened runtime
+    platforms: [macos]
+    blocking: true
+    spec: "#168 SEC.audit; assertCodeSigning (an ad-hoc local build fails it: only spark package signs with a team)"
+  SEC-LV-01:
+    title: Library validation is in force in every process; no process carries com.apple.security.cs.disable-library-validation, and all code shares the main executable's team so library validation accepts it
+    platforms: [macos]
+    blocking: true
+    spec: "#168 SEC.audit; assertCodeSigning"
+  SEC-DYLD-01:
+    title: No dylib hijack path; every LC_RPATH is inside the bundle or a SIP-protected system location, every dependency (weak ones too) resolves to a file inside the bundle or a system library, and no LC_DYLD_ENVIRONMENT is set
+    platforms: [macos]
+    blocking: true
+    spec: "#168 SEC.audit; assertLoadPaths"
+  SEC-DLL-01:
+    title: No DLL search-order hijack on Windows; the app and its DLLs load dependencies only from System32 and the app directory, and a DLL planted in the working directory or PATH is never loaded
+    platforms: [windows]
+    blocking: true
+    spec: "#168 SEC.audit; assertLoadPaths on Windows needs Windows hardware and the Windows backend (#51)"

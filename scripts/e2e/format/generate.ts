@@ -26,13 +26,14 @@ function reference(): string {
     "- **Short form**: `bare` means the command can stand alone (`- launchApp`); `value → key` means `- cmd: value` is `- cmd: { key: value }`.",
     "- **Keys**: `*` = required. `any selector` = the selector keys (`id`, `role`, `label`, `text`, `within`, `index`, `window`, `below`, `above`, `leftOf`, `rightOf`, `point`); a bare string is visible text.",
     "- **driver**: needs the Spark in-app driver (white-box). Everything else is black-box (OS input + accessibility tree).",
+    "- **runner**: the runner runs it over the build on disk, with no backend.",
     "- **maestro**: Maestro core command; keeps Maestro semantics.",
   ];
   for (const [group, title] of Object.entries(GROUPS)) {
     lines.push("", `## ${title}`, "", "| Command | Short form | Keys | Backend | Summary |", "|---|---|---|---|---|");
     for (const [name, spec] of Object.entries(COMMANDS).filter(([, spec]) => spec.group === group)) {
       const short = [isBare(spec) && "bare", spec.shorthand && `value → ${code(spec.shorthand)}`].filter(Boolean).join(", ") || "—";
-      const backend = [spec.driver ? "driver" : "black-box", spec.maestro && "maestro"].filter(Boolean).join(", ");
+      const backend = [spec.runner ? "runner" : spec.driver ? "driver" : "black-box", spec.maestro && "maestro"].filter(Boolean).join(", ");
       lines.push(`| ${code(name)} | ${short} | ${keysOf(spec)} | ${backend} | ${spec.summary.replace(/\|/g, "\\|")} |`);
     }
   }

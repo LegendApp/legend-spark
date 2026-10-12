@@ -60,6 +60,7 @@ module.exports = function withSparkDesktop(config) {
       paths: [mod.modRequest.projectRoot],
     })))).replace(/#\{/g, "\\#{");
     mod.modResults.contents = mod.modResults.contents.replaceAll('"#{config[:reactNativePath]}-macos"', macOSPath);
+    mod.modResults.contents = require("./rpaths.cjs").toolchainRpathsPodfile(mod.modResults.contents);
     const selectionFile = statePath(mod.modRequest.projectRoot, "native-selection.json", "macos");
     const { included, excluded } = fs.existsSync(selectionFile) ? JSON.parse(fs.readFileSync(selectionFile, "utf8")) : { included: [], excluded: [] };
     mod.modResults.contents = require("./autolinking.cjs").excludeNativeModules(mod.modResults.contents, excluded);

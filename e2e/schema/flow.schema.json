@@ -7080,6 +7080,103 @@
               "type": "object"
             }
           },
+          "assertEntitlements": {
+            "description": "Assert every process of the app is signed with only the entitlements `allow` names, each with its reason, and never get-task-allow; an `allow` entry no process carries fails. `sandbox`: whether this is the sandboxed variant, which sandboxes every process.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "app": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sandbox": {
+                  "type": "boolean"
+                },
+                "allow": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "app",
+                "sandbox"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "object"
+            }
+          },
+          "assertCodeSigning": {
+            "description": "Assert every Mach-O file of the app is signed by the main executable's team (not ad-hoc), every process has the hardened runtime, and none disables library validation.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "app": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "app"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "assertLoadPaths": {
+            "description": "Assert no load path lets a library from outside the bundle or the system into the app: LC_RPATH entries, dependencies (weak ones too) and LC_DYLD_ENVIRONMENT. On Windows: the DLL search order, not implemented yet (#51).",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "app": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "app"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "runFlow": {
             "description": "[maestro] Run a subflow file, or inline commands.",
             "if": {

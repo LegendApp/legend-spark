@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: Release build has the hardened runtime and library validation
+intent: >
+  Reads the code signature of every Mach-O file in the release build on disk. All of it is signed by the main
+  executable's Developer ID team, every process has the hardened runtime, and none turns library validation off. An
+  ad-hoc build (cd examples/kitchen-sink && bun run build) fails this: only spark package signs with a team.
+checks: [SEC-HR-01, SEC-LV-01]
+tags: [security]
+platforms: [macos]
+---
+- assertCodeSigning: "${APP_PATH}"

@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: Release build entitlements are the minimal set
+intent: >
+  Reads the signed entitlements of every process in the release build on disk. The Kitchen Sink is the direct-distribution
+  variant and declares no entitlements, so no process may carry any, and none may be sandboxed. An entitlement a release
+  needs goes in `allow` with the reason.
+checks: [SEC-ENT-01, SEC-SANDBOX-01]
+tags: [security]
+platforms: [macos]
+---
+- assertEntitlements: { app: "${APP_PATH}", sandbox: false }
