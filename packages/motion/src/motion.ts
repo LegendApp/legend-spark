@@ -56,6 +56,8 @@ export interface TimelineStep { target: MotionTarget | null; values: MotionAnima
 export interface MotionEnvironment {
   /** The user's Reduce Motion setting; animations started while it is on play their alternate. */
   reduceMotion: boolean;
+  /** The user's Reduce Transparency setting; AppKit then draws backdrop materials opaque (docs/motion.md#backdrop-materials). */
+  reduceTransparency: boolean;
   lowPowerMode: boolean;
   /** The refresh rate of the display showing the view's window (the main display without a view); null without a display. */
   maximumFrameRate: number | null;
@@ -253,14 +255,14 @@ export function linkScroll(target: MotionTarget | null, options: ScrollLinkOptio
 }
 
 /**
- * Reduce Motion, Low Power Mode, the frame rate motion runs at, and whether the target's window is visible. Without a
+ * Reduce Motion, Reduce Transparency, Low Power Mode, the frame rate motion runs at, and whether the target's window is visible. Without a
  * target it reads the main display. Read it when it matters: animations read the system themselves when they start.
  */
 export function getMotionEnvironment(target?: MotionTarget | null): Promise<MotionEnvironment> {
   return invokeNative(async () => {
     const native = motionModule();
     const json = await native.environment(target === undefined ? 0 : tagOf(target));
-    return parseNativeResult(json, (value): value is MotionEnvironment => isRecord(value) && typeof value.reduceMotion === "boolean" && typeof value.lowPowerMode === "boolean"
+    return parseNativeResult(json, (value): value is MotionEnvironment => isRecord(value) && typeof value.reduceMotion === "boolean" && typeof value.reduceTransparency === "boolean" && typeof value.lowPowerMode === "boolean"
       && (value.maximumFrameRate === null || typeof value.maximumFrameRate === "number") && typeof value.frameRate === "number"
       && (value.windowVisible === null || typeof value.windowVisible === "boolean"));
   });

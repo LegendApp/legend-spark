@@ -18,6 +18,7 @@ using spark::motion::Values;
 @end
 
 static NSString *SparkMotionString(const std::string &value) { return value.empty() ? nil : [NSString stringWithUTF8String:value.c_str()]; }
+static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil : [NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:json.data() length:json.size()] options:0 error:nil]; }
 
 @implementation RNSparkMotionView {
   Values _model;
@@ -25,6 +26,8 @@ static NSString *SparkMotionString(const std::string &value) { return value.empt
   NSString *_layout;
   NSString *_sharedId;
   NSDictionary *_transition;
+  NSDictionary *_crossfade;
+  SparkMotionMaterialStack *_material;
   uint32_t _owned;
 }
 
@@ -58,6 +61,8 @@ static NSString *SparkMotionString(const std::string &value) { return value.empt
 - (NSString *)motionLayout { return _layout; }
 - (NSString *)motionSharedId { return _sharedId; }
 - (NSDictionary *)motionTransition { return _transition; }
+- (SparkMotionMaterialStack *)motionMaterial { return _material; }
+- (NSDictionary *)motionCrossfade { return _crossfade; }
 - (BOOL)motionRightToLeft { return _layoutMetrics.layoutDirection == LayoutDirection::RightToLeft; }
 - (uint32_t)motionOwnedChannels { return _owned; }
 - (void)setMotionOwnedChannels:(uint32_t)owned { _owned = owned; }
@@ -94,16 +99,22 @@ static NSString *SparkMotionString(const std::string &value) { return value.empt
   // JavaScript validates these; the transition JSON is parsed once per change.
   _layout = SparkMotionString(motionProps.layout);
   _sharedId = SparkMotionString(motionProps.sharedId);
-  if (!oldProps || motionProps.transition != std::static_pointer_cast<const SparkMotionViewProps>(oldProps)->transition) {
-    id transition = motionProps.transition.empty() ? nil : [NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:motionProps.transition.data() length:motionProps.transition.size()] options:0 error:nil];
+  const auto *old = oldProps ? std::static_pointer_cast<const SparkMotionViewProps>(oldProps).get() : nullptr;
+  if (!old || motionProps.transition != old->transition) {
+    id transition = SparkMotionJSON(motionProps.transition);
     _transition = [transition isKindOfClass:NSDictionary.class] ? transition : nil;
   }
+  if (!old || motionProps.crossfade != old->crossfade) {
+    id crossfade = SparkMotionJSON(motionProps.crossfade);
+    _crossfade = [crossfade isKindOfClass:NSDictionary.class] ? crossfade : nil;
+  }
+  if (!old || motionProps.tintColor != old->tintColor || motionProps.material != old->material) [self updateMaterial:motionProps changed:!old || motionProps.material != old->material];
   if (_tag) return;
   // `initial` applies once, at mount; later renders never overwrite engine-owned values.
   Values initial = spark::motion::kIdentity;
   const auto &json = std::static_pointer_cast<const SparkMotionViewProps>(props)->initialValues;
   // JavaScript validates `initial`; anything else in the JSON is ignored rather than trusted.
-  id values = json.empty() ? nil : [NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:json.data() length:json.size()] options:0 error:nil];
+  id values = SparkMotionJSON(json);
   if ([values isKindOfClass:NSDictionary.class]) {
     for (id name in (NSDictionary *)values) {
       auto property = [name isKindOfClass:NSString.class] ? spark::motion::propertyFromName([name UTF8String]) : std::nullopt;
@@ -115,6 +126,33 @@ static NSString *SparkMotionString(const std::string &value) { return value.empt
   }
   _tag = self.reactTag.integerValue;
   [SparkMotionCoordinator.shared registerHost:self initial:initial];
+}
+
+// A MotionMaterial (docs/motion.md#backdrop-materials) has no React children (JavaScript rejects them), so its material
+// stack is this view's only subview and never shifts the indexes Fabric mounts children at.
+- (void)updateMaterial:(const SparkMotionViewProps &)props changed:(BOOL)changed
+{
+  NSDictionary *config = SparkMotionJSON(props.material);
+  if (![config isKindOfClass:NSDictionary.class]) return;
+  if (!_material) {
+    _material = [[SparkMotionMaterialStack alloc] initWithFrame:self.bounds];
+    [self addSubview:_material positioned:NSWindowBelow relativeTo:nil];
+  }
+  NSArray *tint = SparkMotionJSON(props.tintColor);
+  id color = nil;
+  if ([tint isKindOfClass:NSArray.class] && tint.count == 4 && [[tint filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self isKindOfClass: %@", NSNumber.class]] count] == 4) {
+    static CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceExtendedSRGB);
+    const spark::motion::Rgba rgba = spark::motion::oklchToSrgb([tint[0] doubleValue], [tint[1] doubleValue], [tint[2] doubleValue], [tint[3] doubleValue]);
+    const CGFloat components[] = {rgba.red, rgba.green, rgba.blue, rgba.alpha};
+    color = CFBridgingRelease(CGColorCreate(space, components));
+  }
+  [_material setTintColor:(__bridge CGColorRef)color];
+  if (!changed) return;
+  NSString *error = nil;
+  NSView *material = [SparkMotionMaterialStack materialView:config error:&error];
+  // JavaScript validated the material and its availability; only a malformed native prop gets here.
+  if (!material) { NSLog(@"Spark motion: material rejected: %@", error); return; }
+  [SparkMotionCoordinator.shared host:self crossfadeTo:material];
 }
 
 - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics

@@ -42,6 +42,7 @@ static BOOL SparkMotionBlurred(NSView *view)
   for (CIFilter *filter in view.layer.filters) if ([filter.name isEqual:kBlurFilter]) return YES;
   return NO;
 }
+static SparkMotionMaterialStack *SparkMotionMaterialOf(NSView<SparkMotionHost> *host) { return [host respondsToSelector:@selector(motionMaterial)] ? host.motionMaterial : nil; }
 /** The mask's frame in layer coordinates: the view's bounds inset by the mask insets; start and end follow the layout direction. */
 static CGRect SparkMotionMaskRect(NSView *view, const Values &values, BOOL rightToLeft)
 {
@@ -71,6 +72,12 @@ void SparkMotionApplyLayer(NSView<SparkMotionHost> *host, const Values &values)
     mask.frame = SparkMotionMaskRect(host, values, host.motionRightToLeft);
     mask.cornerRadius = MAX(0, values[MaskRadius]);
     layer.mask = mask;  // React Native clears a view's mask when it invalidates its layer
+  }
+  if (SparkMotionMaterialStack *material = SparkMotionMaterialOf(host)) {
+    material.layer.opacity = std::clamp(values[MaterialIntensity], 0.0, 1.0);
+    material.tintLayer.opacity = std::clamp(values[MaterialTintOpacity], 0.0, 1.0);
+    material.incomingLayer.opacity = std::clamp(values[MaterialCrossfade], 0.0, 1.0);
+    [material setCornerRadius:layer.cornerRadius];
   }
 }
 
@@ -401,6 +408,11 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   id simulated = [self simulated:@"reduceMotion"];
   return simulated ? [simulated boolValue] : NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion;
 }
+- (BOOL)reduceTransparency
+{
+  id simulated = [self simulated:@"reduceTransparency"];
+  return simulated ? [simulated boolValue] : NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency;
+}
 - (BOOL)lowPower
 {
   id simulated = [self simulated:@"lowPowerMode"];
@@ -538,7 +550,7 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     }
     const NSInteger maximum = [self maximumFrameRate:host];
     resolve(SparkJSONString(@{
-      @"reduceMotion": @(self.reduceMotion), @"lowPowerMode": @(self.lowPower),
+      @"reduceMotion": @(self.reduceMotion), @"reduceTransparency": @(self.reduceTransparency), @"lowPowerMode": @(self.lowPower),
       @"maximumFrameRate": maximum > 0 ? @(maximum) : (id)NSNull.null, @"frameRate": @([self frameRate:host]),
       @"windowVisible": host.window ? @(![self windowHidden:host.window]) : (id)NSNull.null,
     }));
@@ -622,14 +634,21 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   return styled;
 }
 
-/** Throws E_UNSUPPORTED_OPTION for a property whose channel React Native draws for the view's style on another layer. */
+/**
+ * Throws E_UNSUPPORTED_OPTION for a property whose channel React Native draws for the view's style on another layer, or a
+ * material property of a view without a material, and E_INVALID_ARGUMENT for the crossfade, which only material changes drive.
+ */
 - (void)checkOwnable:(NSInteger)tag properties:(const std::vector<Property> &)properties
 {
   NSView<SparkMotionHost> *host = [_hosts objectForKey:@(tag)];
+  for (Property property : properties)
+    if (property == MaterialCrossfade) throw SparkMotionInvalid(@"materialCrossfade follows a MotionMaterial's material changes; animate materialIntensity instead");
   if (!host) return;  // the engine reports an unmounted view
   const uint32_t style = host.motionStyleChannels;
   for (Property property : properties) {
     const Channel channel = channelOf(property);
+    if (channel == Channel::Material && !SparkMotionMaterialOf(host))
+      throw Failure{"E_UNSUPPORTED_OPTION", std::string(propertyName(property)) + ": the view has no backdrop material; use a MotionMaterial"};
     if (!(style & SparkMotionChannelBit(channel))) continue;
     throw Failure{"E_UNSUPPORTED_OPTION", std::string(propertyName(property)) + (channel == Channel::Mask
       ? ": the view's style clips its content with a mask (overflow hidden with per-corner radii), which a motion mask would replace"
@@ -660,7 +679,7 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
 
 #pragma mark - Baking
 
-/** The layer key paths a channel's animations drive; the mask channel's are its mask layer's. */
+/** The layer key paths a channel's animations drive; the mask channel's are its mask layer's, the material channel's its material stack's. */
 static NSArray<NSString *> *SparkMotionKeyPaths(Channel channel)
 {
   switch (channel) {
@@ -671,6 +690,7 @@ static NSArray<NSString *> *SparkMotionKeyPaths(Channel channel)
     case Channel::Shadow: return @[@"shadowOpacity", @"shadowRadius", @"shadowOffset"];
     case Channel::Blur: return @[@"filters.sparkBlur.inputRadius"];
     case Channel::Mask: return @[@"bounds", @"position", @"cornerRadius"];
+    case Channel::Material: return @[@"opacity", @"opacity", @"opacity"];  // the material stack's, the tint's and the incoming material's layers
     case Channel::Count: break;
   }
   return @[];
@@ -694,6 +714,7 @@ static id SparkMotionSample(Channel channel, NSUInteger index, const Values &sam
       const CGRect rect = SparkMotionMaskRect(host, sample, host.motionRightToLeft);
       return index == 0 ? [NSValue valueWithRect:NSMakeRect(0, 0, rect.size.width, rect.size.height)] : [NSValue valueWithPoint:NSMakePoint(CGRectGetMidX(rect), CGRectGetMidY(rect))];
     }
+    case Channel::Material: return @(std::clamp(sample[index == 0 ? MaterialIntensity : index == 1 ? MaterialTintOpacity : MaterialCrossfade], 0.0, 1.0));
     case Channel::Count: break;
   }
   return nil;
@@ -744,9 +765,12 @@ static BOOL SparkMotionAnimating(Engine &engine, NSInteger tag, Channel channel,
   SparkMotionInstallEffects(host, blur, mask);
   const double local = [layer convertTime:CACurrentMediaTime() fromLayer:nil];
   for (const auto &[channel, bake] : bakes) {
-    CALayer *target = channel == Channel::Mask ? SparkMotionMask(host) : layer;
+    SparkMotionMaterialStack *material = SparkMotionMaterialOf(host);
+    if (channel == Channel::Material && !material) continue;  // checkOwnable keeps plain MotionViews from animating it
     NSArray<NSString *> *keyPaths = SparkMotionKeyPaths(channel);
     for (NSUInteger index = 0; index < keyPaths.count; index++) {
+      CALayer *target = channel == Channel::Mask ? SparkMotionMask(host) : channel != Channel::Material ? layer : index == 0 ? material.layer : index == 1 ? material.tintLayer : material.incomingLayer;
+      if (!target) continue;
       NSString *lead = [@"spark.motion." stringByAppendingString:keyPaths[index]], *loop = [lead stringByAppendingString:@".loop"];
       [target removeAnimationForKey:lead];
       [target removeAnimationForKey:loop];
@@ -815,8 +839,16 @@ static BOOL SparkMotionAnimating(Engine &engine, NSInteger tag, Channel channel,
     if ((SparkMotionBlurred(host) && host.motionModel[Blur] <= 0 && !SparkMotionAnimating(_engine, host.motionTag, Channel::Blur, self.now)) ||
         (SparkMotionMask(host) && !SparkMotionMasks(host.motionModel) && !SparkMotionAnimating(_engine, host.motionTag, Channel::Mask, self.now)))
       [self apply:host.motionTag channels:{Channel::Blur, Channel::Mask}];
+  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects]) [self dropCoveredMaterials:host];
   [self settle:settled];
   [self scheduleSweep];
+}
+
+/** A material that finished crossfading in covers the ones under it: they are removed (each still costs a backdrop pass). */
+- (void)dropCoveredMaterials:(NSView<SparkMotionHost> *)host
+{
+  SparkMotionMaterialStack *material = SparkMotionMaterialOf(host);
+  if (material.materialCount > 1 && host.motionModel[MaterialCrossfade] >= 1 && !_engine.animating(host.motionTag, MaterialCrossfade, self.now)) [material dropCovered];
 }
 
 #pragma mark - Commands
@@ -1299,6 +1331,45 @@ static NSRect SparkLayoutRect(NSView *view, NSView *reference)
   }
 }
 
+#pragma mark - Backdrop materials
+
+- (void)host:(NSView<SparkMotionHost> *)host crossfadeTo:(NSView *)material
+{
+  SparkMotionMaterialStack *stack = SparkMotionMaterialOf(host);
+  const NSInteger tag = host.motionTag;
+  // Not shown yet, nothing to fade from; or no transition, which JavaScript always sends (a malformed native prop).
+  NSDictionary *crossfade = [host respondsToSelector:@selector(motionCrossfade)] ? host.motionCrossfade : nil;
+  if ([_hosts objectForKey:@(tag)] != host || !crossfade) { [stack push:material replace:YES]; return; }
+  static NSUInteger crossfades = 0;
+  try {
+    NSMutableDictionary *transition = [crossfade mutableCopy];
+    transition[@"to"] = @1;
+    Plan plan;
+    plan.id = [NSString stringWithFormat:@"material-%ld-%lu", (long)tag, (unsigned long)++crossfades].UTF8String;
+    Spec spec = SparkSpec(transition, MaterialCrossfade);
+    spec.from = State{0, 0};
+    plan.groups.push_back(Group{tag, {{MaterialCrossfade, spec}}});
+    plan.reduceMotion = self.reduceMotion;  // a crossfade is a fade: Reduce Motion plays it as its 200 ms fade, without overshoot
+    [self syncHidden:tag];
+    // The material showing now stays where it is (an interrupted crossfade: as far as it got) until the new one covers it.
+    [stack freezeIncomingAt:std::clamp(_engine.state(tag, MaterialCrossfade, self.now).value, 0.0, 1.0)];
+    [stack push:material replace:NO];
+    std::vector<Settled> settled;
+    std::vector<int64_t> touched;
+    _engine.run(plan, self.now, settled, touched);
+    [self moveResumedCues];
+    [self applyAll:tag];
+    [self dropCoveredMaterials:host];  // a hidden window completes it at once
+    [self settle:settled];
+    [self scheduleSweep];
+  } catch (const Failure &failure) {
+    [self moveResumedCues];
+    // JavaScript validated the transition; only a malformed native prop gets here, and no caller awaits a crossfade.
+    NSLog(@"Spark motion: material crossfade rejected: %s", failure.message.c_str());
+    [stack push:material replace:YES];
+  }
+}
+
 #pragma mark - Symbol effects
 
 - (void)registerSymbol:(NSView<SparkMotionSymbolHost> *)host
@@ -1521,16 +1592,17 @@ static NSDictionary *SparkStateObject(const State &state) { return @{ @"value": 
 {
   _engine.setTelemetry(true);
   _driven = YES;
-  // Pinned like the driver's other host settings: flows behave the same on a Mac with Reduce Motion or Low Power Mode
-  // on, until simulateSystemEvent changes them.
+  // Pinned like the driver's other host settings: flows behave the same on a Mac with Reduce Motion, Reduce
+  // Transparency or Low Power Mode on, until simulateSystemEvent changes them.
   _simulated[@"reduceMotion"] = @NO;
+  _simulated[@"reduceTransparency"] = @NO;
   _simulated[@"lowPowerMode"] = @NO;
 }
 
 - (void)simulate:(NSDictionary *)values
 {
   // null stops simulating a value (simulateDisplays' restore).
-  for (NSString *key in @[@"reduceMotion", @"lowPowerMode", @"maximumFramesPerSecond"]) {
+  for (NSString *key in @[@"reduceMotion", @"reduceTransparency", @"lowPowerMode", @"maximumFramesPerSecond"]) {
     if (values[key] == NSNull.null) [_simulated removeObjectForKey:key];
     else if (values[key]) _simulated[key] = values[key];
   }

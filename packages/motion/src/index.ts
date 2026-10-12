@@ -21,4 +21,8 @@ export type { MotionTextProps, MotionTextTransition } from "./MotionText";
 export { MotionSymbol } from "./MotionSymbol";
 export type { MotionSymbolProps } from "./MotionSymbol";
 export { getSymbolEffectAvailability, playSymbolEffect, stopSymbolEffects } from "./symbols";
+export { MotionMaterial } from "./MotionMaterial";
+export type { MotionMaterialProps } from "./MotionMaterial";
+export { getMaterialAvailability } from "./materials";
+export type { MotionMaterialName, MotionMaterialBlending, MotionMaterialState } from "./materials";
 export type { MotionSymbolTarget, SymbolEffect, SymbolEffectDirection, SymbolEffectOptions, SymbolEffectPlayback, SymbolReplaceTransition } from "./symbols";

@@ -10,6 +10,12 @@ export interface NativeProps extends ViewProps {
   sharedId?: string;
   /** JSON of the validated layout and shared-element transition. */
   transition?: string;
+  /** MotionMaterial: JSON of the validated material (`material`, `blendingMode`, `state`, `emphasized`); a change crossfades. */
+  material?: string;
+  /** MotionMaterial: JSON of the tint color's OKLCH components `[L, C, H, alpha]`. */
+  tintColor?: string;
+  /** MotionMaterial: JSON of the validated crossfade transition. */
+  crossfade?: string;
 }
 
 export default codegenNativeComponent<NativeProps>("SparkMotionView") as HostComponent<NativeProps>;

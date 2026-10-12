@@ -88,7 +88,7 @@ checks:
     blocking: true
     spec: "#174 MOT.core, #52 INFRA.driver"
   MOT-UNSUP-01:
-    title: On Windows motion is typed unsupported (unsupported-platform, SparkError E_UNSUPPORTED_PLATFORM) with no substitute, layout and presence included
+    title: On Windows motion is typed unsupported (unsupported-platform, SparkError E_UNSUPPORTED_PLATFORM) with no substitute, layout, presence and backdrop materials included
     platforms: [windows]
     blocking: true
     spec: "#174 MOT.core, #175 MOT.layout, follow-ups #237 and #376"
@@ -115,7 +115,7 @@ checks:
     covers:
       - ./motion#MotionView
   MOT-VISUAL-01:
-    title: The Springs, Keyframes and timelines, Scroll link and JS block, Layout, presence and shared elements, Visual effects, Text and symbols, and Accessibility, power and lifecycle screens match their approved goldens in light and dark, English and Arabic, with MotionViews at rest or paused by the virtual clock
+    title: The Springs, Keyframes and timelines, Scroll link and JS block, Layout, presence and shared elements, Visual effects, Backdrop materials, Text and symbols, and Accessibility, power and lifecycle screens match their approved goldens in light and dark, English and Arabic, with MotionViews at rest or paused by the virtual clock
     platforms: [macos]
     blocking: true
     spec: "docs/e2e-flows.md Visual goldens; #227"
@@ -203,6 +203,39 @@ checks:
     spec: "#176 MOT.effects, #177 MOT.a11y"
     covers:
       - ./motion#animate
+  MOT-MATERIAL-01:
+    title: A MotionMaterial crossfades on the engine when its material changes (interruptible, the old material removed once covered), fades its intensity and springs its tint opacity on the compositor, and getMaterialAvailability reports each material, Liquid Glass included, truthfully
+    platforms: [macos]
+    blocking: true
+    spec: "#407 MOT.vibrancy"
+    covers:
+      - ./motion#MotionMaterial
+      - ./motion#getMaterialAvailability
+      - ./motion#animate
+      - ./motion#getMaterialAvailability(titlebar).available
+      - ./motion#getMaterialAvailability(selection).available
+      - ./motion#getMaterialAvailability(menu).available
+      - ./motion#getMaterialAvailability(popover).available
+      - ./motion#getMaterialAvailability(sidebar).available
+      - ./motion#getMaterialAvailability(headerView).available
+      - ./motion#getMaterialAvailability(sheet).available
+      - ./motion#getMaterialAvailability(windowBackground).available
+      - ./motion#getMaterialAvailability(hudWindow).available
+      - ./motion#getMaterialAvailability(fullScreenUI).available
+      - ./motion#getMaterialAvailability(toolTip).available
+      - ./motion#getMaterialAvailability(contentBackground).available
+      - ./motion#getMaterialAvailability(underWindowBackground).available
+      - ./motion#getMaterialAvailability(underPageBackground).available
+      - ./motion#getMaterialAvailability(glass).available
+      - ./motion#getMaterialAvailability(clearGlass).available
+  MOT-MATREDUCE-01:
+    title: With Reduce Motion on (simulated), a material crossfade written as a spring plays as a 200 ms fade; Reduce Transparency (simulated) is reported by getMotionEnvironment
+    platforms: [macos]
+    blocking: true
+    spec: "#407 MOT.vibrancy, #177 MOT.a11y"
+    covers:
+      - ./motion#MotionMaterial
+      - ./motion#getMotionEnvironment
   MOT-PATH-01:
     title: motionPath moves a view along an SVG path as keyframes the engine plays on the compositor, turned to the path's heading, and it settles at the path's end
     platforms: [macos]

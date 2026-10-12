@@ -8,7 +8,7 @@ export const BLUE = "#2563eb", YELLOW = "#facc15";
 export const REVEAL_WIDTH = 200, REVEAL_HEIGHT = 56;
 const round = (value: number) => Math.round(value * 100) / 100;
 
-async function settledValues<K extends string>(target: MotionTarget | null, finished: Promise<{ finished: boolean }>, keys: readonly K[]) {
+export async function settledValues<K extends string>(target: MotionTarget | null, finished: Promise<{ finished: boolean }>, keys: readonly K[]) {
   const outcome = await finished;
   const { values } = await getMotionState(target);
   return { ...outcome, ...Object.fromEntries(keys.map(key => [key, round(values[key as keyof typeof values])])) as Record<K, number> };
