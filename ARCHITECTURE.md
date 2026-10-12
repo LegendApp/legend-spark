@@ -216,7 +216,7 @@ See [packaging](docs/packaging.md) and [desktop integrations](docs/desktop-integ
 | App `.spark/native-preparation.json` | Native generation/dependency preparation fingerprint |
 | App `.spark/*-build.json` | Successful artifacts and runtime fingerprints |
 | App `.spark/commands.jsonl`, `.spark/logs/` | Invoked commands and full process diagnostics |
-| App `.spark/products/`, `.spark/DerivedData/` | Local app products and Xcode build outputs |
+| App `.spark/products/`, `.spark/DerivedData/` | Local app products and Xcode build outputs. A macOS build finishes the app and its dSYMs in `<mode>.staging` and swaps it with `<mode>` in one rename, so readers never see a partial product |
 | App `.spark/packaging/`, `dist/` | Resumable packaging state and final distribution artifacts |
 | App `.threaded-runtime/` | Generated worker entry/registration files |
 | `docs/evidence/` | Ignored machine-specific validation artifacts |
