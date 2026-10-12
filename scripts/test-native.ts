@@ -107,7 +107,6 @@ try {
   if (first.dataDirectory === second.dataDirectory || first.dataDirectory !== resumed.dataDirectory) throw new Error("Go storage isolation failed");
   pkg = readJson(packageFile); delete pkg.dependencies["@legendapp/spark-sdk-test-driver"]; writeJson(packageFile, pkg);
   await run(root, managerCommand(packageManager(root), ["install"]));
-  writeFileSync(path.join(root, "test-driver.ts"), 'export type TestDriver = { call(method: string, args: string): Promise<string> };\nexport const testDriver: TestDriver | undefined = undefined;\n');
   writeFileSync(path.join(root, "App.tsx"), reducedApp);
   const preview = await build(root, "preview");
   for (const name of ["native-menu", "context-menu", "desktop-windows", "desktop-shortcuts", "desktop-links", "file-dialog", "secure-storage", "notifications", "tray", "updates", "processes", "global-shortcuts", "system", "message-dialog", "drag-drop"]) {
@@ -135,7 +134,6 @@ try {
   pkg = readJson(packageFile);
   pkg.dependencies["@legendapp/spark-sdk-test-driver"] = pkg.overrides["@legendapp/spark-sdk-test-driver"];
   writeJson(packageFile, pkg); await run(root, managerCommand(packageManager(root), ["install"]));
-  writeFileSync(path.join(root, "test-driver.ts"), 'import driver from "@legendapp/spark-sdk-test-driver";\nexport type TestDriver = typeof driver;\nexport const testDriver: TestDriver = driver;\n');
   const customConfig = readJson(configFile);
   const source = customConfig.expo ?? customConfig;
   source.scheme = "spark-sdk-test";

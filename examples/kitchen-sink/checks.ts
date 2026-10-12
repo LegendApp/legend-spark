@@ -15,7 +15,7 @@ import { showContextMenu } from "@legendapp/spark/context-menu";
 import { createMenu } from "@legendapp/spark/menus";
 import { openFileDialog, saveFileDialog } from "@legendapp/spark/dialogs";
 import { readText, writeText, writeTextIfUnchanged } from "@legendapp/spark/files";
-import type { TestDriver } from "./test-driver";
+import type { SDKTestDriver } from "./sdk-test-driver";
 export type Check = { name: string; passed: boolean; error?: string; duration: number };
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
@@ -28,7 +28,7 @@ async function until(predicate: () => boolean | Promise<boolean>, message: strin
   while (Date.now() < end) { if (await predicate()) return; await delay(40); }
   throw new Error(message);
 }
-export async function runChecks(onResult: (result: Check) => void | Promise<void>, driver?: TestDriver, isolation?: { expect: "absent" | "present"; cleanup: boolean }) {
+export async function runChecks(onResult: (result: Check) => void | Promise<void>, driver: SDKTestDriver | null, isolation?: { expect: "absent" | "present"; cleanup: boolean }) {
   const results: Check[] = [];
   async function check(name: string, action: () => Promise<void>) {
     const start = Date.now(); let result: Check;

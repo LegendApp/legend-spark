@@ -1,9 +1,8 @@
 import { useEffect } from "react";
-import { Text, TurboModuleRegistry, type TurboModule } from "react-native";
+import { Text } from "react-native";
 import { createAudioPlayer, createMediaSession } from "@legendapp/spark/audio";
 import * as files from "@legendapp/spark/files";
-import type { TestDriver } from "./test-driver";
-const driver = TurboModuleRegistry.get<TestDriver & TurboModule>("NativeSDKTestDriver");
+import { sdkTestDriver as driver } from "./sdk-test-driver";
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 export function AudioChecks({ report, source }: { report: string; source: string }) {

@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { writeText } from "@legendapp/spark/files";
 import { quit } from "@legendapp/spark/app";
 import { runAPIChecks } from "./api-checks";
-import { testDriver } from "./test-driver";
+import { sdkTestDriver } from "./sdk-test-driver";
 import type { Check } from "./checks";
 
 async function execute(onResult: (check: Check) => void, expectedInitial?: string | null) {
@@ -14,8 +14,8 @@ async function execute(onResult: (check: Check) => void, expectedInitial?: strin
     try { await action(); } catch (cause) { error = String(cause); }
     const result = { name, contracts, passed: error === undefined, error, duration: Date.now() - start };
     results.push(result); onResult(result);
-  }, testDriver, expectedInitial);
-  return { passed: results.every(check => check.passed), results, nativeDriver: !!testDriver };
+  }, sdkTestDriver, expectedInitial);
+  return { passed: results.every(check => check.passed), results, nativeDriver: !!sdkTestDriver };
 }
 export function APIChecks({ report, expectedInitial }: { report?: string; expectedInitial?: string | null }) {
   const [results, setResults] = useState<Check[]>([]);
@@ -38,7 +38,7 @@ export function APIChecks({ report, expectedInitial }: { report?: string; expect
   }
   return <View style={{ gap: 8 }} testID="expo-api-checks">
     {!report && <Button disabled={running} onPress={() => void run().catch(console.error)}>{running ? "Checking APIs…" : "Run Expo API checks"}</Button>}
-    {!testDriver && <Text style={styles.note} className="text-muted">Clipboard mutation and injected URL checks run in the dedicated native test build.</Text>}
+    {!sdkTestDriver && <Text style={styles.note} className="text-muted">Clipboard mutation and injected URL checks run in the dedicated native test build.</Text>}
     {results.map(result => <Text key={result.name} className={result.passed ? "text-success" : "text-danger"} style={{ fontSize: 14 }}>{result.passed ? "PASS" : "FAIL"} {result.name}{result.error ? `: ${result.error}` : ""}</Text>)}
   </View>;
 }

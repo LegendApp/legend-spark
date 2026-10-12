@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { Button, TextInput, Select } from "@legendapp/spark/ui";
 import { writeText } from "@legendapp/spark/files";
 import { quit } from "@legendapp/spark/app";
-import { testDriver } from "./test-driver";
+import { sdkTestDriver } from "./sdk-test-driver";
 
 export function NativeControls({ report }: { report?: string }) {
   const [count, setCount] = useState(0);
@@ -46,7 +46,7 @@ export function NativeControls({ report }: { report?: string }) {
 const initialOptions = [{ label: "Same label", value: "first" }, { label: "Same label", value: "second" }];
 const reversedOptions = [...initialOptions].reverse();
 async function runNativeButtonChecks(snapshot: () => { count: number; generation: number; name: string; choice: string }) {
-  const driver = testDriver;
+  const driver = sdkTestDriver;
   if (!driver) throw new Error("Native button checks require the test-only driver");
   const call = async (method: string, id: string) => JSON.parse(await driver.call(method, JSON.stringify({ id })));
   const state = () => call("buttonState", "native-button-increment");

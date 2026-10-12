@@ -1,10 +1,9 @@
 import { useEffect, useRef } from "react";
-import { Text, View, TurboModuleRegistry, type TurboModule } from "react-native";
+import { Text, View } from "react-native";
 import { DragDropView, type DropEvent, type DragOverEvent } from "@legendapp/spark/drag-drop";
 import { writeText } from "@legendapp/spark/files";
 import { openWindow, closeWindow } from "@legendapp/spark/windows";
-import type { TestDriver } from "./test-driver";
-const testDriver = TurboModuleRegistry.get<TestDriver & TurboModule>("NativeSDKTestDriver");
+import { sdkTestDriver } from "./sdk-test-driver";
 import { runFoundationChecks } from "./foundation-checks";
 const source = { data: { "application/x-spark-test-item": '{"id":42}' } };
 const types = ["application/x-spark-test-item"];
@@ -20,7 +19,7 @@ export function FoundationChecks({ report }: { report: string }) {
       };
       void (async () => {
         await runFoundationChecks(check);
-        const driver = testDriver;
+        const driver = sdkTestDriver;
         if (driver) {
           await check("AppKit overlay is transparent, borderless, nonactivating and status-level", async () => {
             try {
@@ -41,7 +40,7 @@ export function FoundationChecks({ report }: { report: string }) {
             if (drag.current.drop || drag.current.over || drag.current.operation !== "none") throw new Error("Rejected operation delivered drop/hover");
           });
         }
-        await writeText(report, JSON.stringify({ passed: results.every(result => result.passed), nativeDriver: !!testDriver, results }, null, 2));
+        await writeText(report, JSON.stringify({ passed: results.every(result => result.passed), nativeDriver: !!sdkTestDriver, results }, null, 2));
       })().catch(error => void writeText(report, JSON.stringify({ passed: false, error: String(error), results })));
     }, 250);
     return () => clearTimeout(timer);

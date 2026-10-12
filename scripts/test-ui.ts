@@ -1,7 +1,7 @@
 import { spawnProcess, processLog } from "../packages/cli/src/process.ts";
 import { setTimeout as sleep } from "node:timers/promises";
 import { managerCommand, packageManager } from "../packages/cli/src/package-manager.ts";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { prepareKitchenSink } from "./prepare-kitchen-sink.ts";
 import { build } from "../packages/cli/src/build.ts";
@@ -15,9 +15,6 @@ const pkg = readJson(path.join(root, "package.json"));
 pkg.dependencies["@legendapp/spark-sdk-test-driver"] = pkg.overrides["@legendapp/spark-sdk-test-driver"];
 writeJson(path.join(root, "package.json"), pkg);
 await run(root, managerCommand(packageManager(root), ["install"]));
-const driverFile = path.join(root, "test-driver.ts");
-const originalDriver = readFileSync(driverFile, "utf8");
-writeFileSync(driverFile, 'import driver from "@legendapp/spark-sdk-test-driver";\nexport type TestDriver = typeof driver;\nexport const testDriver = driver;\n');
 let metro: ReturnType<typeof spawnProcess> | undefined;
 let app: ReturnType<typeof spawnProcess> | undefined;
 async function waitFor(predicate: () => Promise<boolean>, description: string) {
@@ -50,5 +47,4 @@ try {
 } finally {
   if (app && app.exitCode === null) { app.kill(); await app.exited; }
   if (metro) { metro.kill(); await metro.exited; }
-  writeFileSync(driverFile, originalDriver);
 }

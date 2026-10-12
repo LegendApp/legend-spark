@@ -15,7 +15,7 @@ import { APIChecks } from "./APIChecks";
 import { NativeControls } from "./NativeControls";
 import { ExpansionChecks } from "./ExpansionChecks";
 import { Shell } from "./shell/Shell";
-import { testDriver } from "./test-driver";
+import { sdkTestDriver } from "./sdk-test-driver";
 import { argument, reportLaunch, type ReportFlag } from "./launch";
 
 type Props = Partial<app.AppContext> & { windowId?: string; windowProps?: { overlay?: boolean; message?: string; readyFile?: string } };
@@ -61,7 +61,7 @@ function AutomatedChecks({ report, args }: { report: string; args: readonly stri
     // Let the main React window mount before opening secondary roots.
     const timer = setTimeout(() => {
       if (started) return; started = true;
-      void (args.includes("--spark-sidecar-probe") ? runSidecarChecks() : runChecks(async result => { setChecks(previous => [...previous, result]); await files.writeText(`${report}.progress`, JSON.stringify(result)); }, testDriver, argument(args, "--spark-isolation-expect") ? { expect: argument(args, "--spark-isolation-expect") as "absent" | "present", cleanup: args.includes("--spark-isolation-cleanup") } : undefined))
+      void (args.includes("--spark-sidecar-probe") ? runSidecarChecks() : runChecks(async result => { setChecks(previous => [...previous, result]); await files.writeText(`${report}.progress`, JSON.stringify(result)); }, sdkTestDriver, argument(args, "--spark-isolation-expect") ? { expect: argument(args, "--spark-isolation-expect") as "absent" | "present", cleanup: args.includes("--spark-isolation-cleanup") } : undefined))
         .then(async result => {
           await files.writeText(report, JSON.stringify(result, null, 2));
           if (args.includes("--spark-test-quit-on-complete")) { await new Promise(resolve => setTimeout(resolve, 2500)); await app.beforeQuit(() => true); await app.quit(); }
