@@ -18,17 +18,14 @@ matrix:
 - assertText: { id: native-controls-toggles-radio-group-availability, equals: '{"available":true}' }
 - assertText: { id: native-controls-toggles-switch-availability, equals: '{"available":true}' }
 - assertText: { id: native-controls-toggles-disclosure-triangle-availability, equals: '{"available":true}' }
-# A checkbox fills its column; only its box and title take clicks, so it is clicked on the box (leading edge).
+# A checkbox takes its column's leading edge at its own size, so a tap at the centre of its frame lands on its box or title (#370).
 # mini
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-mini }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-mini }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-mini }
 - assertText: { id: native-controls-toggles-checkbox-mini-value, equals: 'true' }
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-mini }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-mini }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-mini }
 - assertText: { id: native-controls-toggles-checkbox-mini-value, equals: 'false' }
 - assertText: { id: native-controls-toggles-checkbox-mixed-mini-value, equals: '"mixed"' }
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-mixed-mini }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-mixed-mini }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-mixed-mini }
 - assertVisible: { id: native-controls-toggles-checkbox-mixed-mini-value, text: "/^(true|false)$/" }
 - tapOn: { id: native-controls-toggles-radio-group-mini.second }
 - assertText: { id: native-controls-toggles-radio-group-mini-value, equals: '"second"' }
@@ -41,15 +38,12 @@ matrix:
 - tapOn: { id: native-controls-toggles-disclosure-triangle-mini }
 - assertText: { id: native-controls-toggles-disclosure-triangle-mini-value, equals: 'false' }
 # small
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-small }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-small }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-small }
 - assertText: { id: native-controls-toggles-checkbox-small-value, equals: 'true' }
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-small }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-small }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-small }
 - assertText: { id: native-controls-toggles-checkbox-small-value, equals: 'false' }
 - assertText: { id: native-controls-toggles-checkbox-mixed-small-value, equals: '"mixed"' }
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-mixed-small }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-mixed-small }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-mixed-small }
 - assertVisible: { id: native-controls-toggles-checkbox-mixed-small-value, text: "/^(true|false)$/" }
 - tapOn: { id: native-controls-toggles-radio-group-small.second }
 - assertText: { id: native-controls-toggles-radio-group-small-value, equals: '"second"' }
@@ -62,15 +56,12 @@ matrix:
 - tapOn: { id: native-controls-toggles-disclosure-triangle-small }
 - assertText: { id: native-controls-toggles-disclosure-triangle-small-value, equals: 'false' }
 # regular
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-regular }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-regular }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-regular }
 - assertText: { id: native-controls-toggles-checkbox-regular-value, equals: 'true' }
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-regular }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-regular }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-regular }
 - assertText: { id: native-controls-toggles-checkbox-regular-value, equals: 'false' }
 - assertText: { id: native-controls-toggles-checkbox-mixed-regular-value, equals: '"mixed"' }
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-mixed-regular }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-mixed-regular }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-mixed-regular }
 - assertVisible: { id: native-controls-toggles-checkbox-mixed-regular-value, text: "/^(true|false)$/" }
 - tapOn: { id: native-controls-toggles-radio-group-regular.second }
 - assertText: { id: native-controls-toggles-radio-group-regular-value, equals: '"second"' }
@@ -83,15 +74,12 @@ matrix:
 - tapOn: { id: native-controls-toggles-disclosure-triangle-regular }
 - assertText: { id: native-controls-toggles-disclosure-triangle-regular-value, equals: 'false' }
 # large
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-large }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-large }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-large }
 - assertText: { id: native-controls-toggles-checkbox-large-value, equals: 'true' }
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-large }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-large }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-large }
 - assertText: { id: native-controls-toggles-checkbox-large-value, equals: 'false' }
 - assertText: { id: native-controls-toggles-checkbox-mixed-large-value, equals: '"mixed"' }
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-mixed-large }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-mixed-large }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-mixed-large }
 - assertVisible: { id: native-controls-toggles-checkbox-mixed-large-value, text: "/^(true|false)$/" }
 - tapOn: { id: native-controls-toggles-radio-group-large.second }
 - assertText: { id: native-controls-toggles-radio-group-large-value, equals: '"second"' }
@@ -107,8 +95,7 @@ matrix:
 - tapOn: { id: native-controls-toggles-disabled }
 - tapOn: { id: native-controls-toggles-switch-regular }
 - assertText: { id: native-controls-toggles-switch-regular-value, equals: 'true' }
-- tapOn: { point: "5%,50%", within: { id: native-controls-toggles-checkbox-regular }, when: { matrix: { locale: en-US } } }
-- tapOn: { point: "95%,50%", within: { id: native-controls-toggles-checkbox-regular }, when: { matrix: { locale: ar } } }
+- tapOn: { id: native-controls-toggles-checkbox-regular }
 - assertText: { id: native-controls-toggles-checkbox-regular-value, equals: 'false' }
 - tapOn: { id: native-controls-toggles-radio-group-regular.second }
 - assertText: { id: native-controls-toggles-radio-group-regular-value, equals: '"first"' }

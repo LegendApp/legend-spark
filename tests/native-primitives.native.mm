@@ -262,5 +262,28 @@ int main() { @autoreleasepool {
   driverActive = NO; assert(errorCodes[errorCount - 1] == "E_INVALID_DATA");
   [well activate:YES]; color->disabled = true; Update(wells, color); assert(!well.isActive && !well.enabled); color->disabled = false;
   [other activate:YES]; [otherView prepareForRecycle]; assert(!other.isActive && otherView.subviews.count == 0);
+
+  // A checkbox's cell takes clicks only on its box and title (#370). The button takes the host's leading edge at its
+  // fitted size, so a click at the centre of its frame (where the driver taps an id) lands on the box or title. On the
+  // host's whole 240-point frame, the centre of "Disable controls" falls just past the title.
+  RNSparkPrimitive *checks = [RNSparkPrimitive new]; checks.frame = NSMakeRect(0, 0, 240, 30);
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 100) styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:YES];
+  window.releasedWhenClosed = NO; [window.contentView addSubview:checks];
+  auto check = std::make_shared<SparkPrimitiveProps>(); check->kind = "checkbox"; check->valueJson = R"({"value":false,"label":"Disable controls"})";
+  [checks updateProps:check oldProps:nullptr]; NSButton *box = [checks valueForKey:@"control"];
+  auto clickable = [&](NSPoint inBox) {
+    NSEvent *click = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown location:[box convertPoint:inBox toView:nil] modifierFlags:0 timestamp:0
+      windowNumber:window.windowNumber context:nil eventNumber:0 clickCount:1 pressure:1];
+    return [box.cell hitTestForEvent:click inRect:box.bounds ofView:box] != NSCellHitNone;
+  };
+  for (LayoutDirection direction : {LayoutDirection::LeftToRight, LayoutDirection::RightToLeft}) {
+    LayoutMetrics metrics; metrics.layoutDirection = direction; [checks updateLayoutMetrics:metrics oldLayoutMetrics:LayoutMetrics{}];
+    assert(NSEqualSizes(box.frame.size, box.fittingSize) && NSWidth(box.frame) < NSWidth(checks.bounds));
+    assert(direction == LayoutDirection::RightToLeft ? NSMaxX(box.frame) == NSWidth(checks.bounds) : NSMinX(box.frame) == 0);
+    assert(NSMidY(box.frame) == NSMidY(checks.bounds) && clickable(NSMakePoint(NSMidX(box.bounds), NSMidY(box.bounds))));
+  }
+  // A title wider than the host keeps the button inside it.
+  Render(checks, check, R"({"value":false,"label":"A checkbox title far longer than the two hundred and forty points its host gives it"})", 0);
+  assert(NSWidth(box.frame) == NSWidth(checks.bounds) && NSMinX(box.frame) == 0);
   puts("Native primitive tests passed");
 } }
