@@ -222,6 +222,11 @@ public:
   double setHidden(int64_t view, bool hidden, double now, std::vector<Settled> &settled);
   bool hidden(int64_t view) const { return hidden_.count(view) != 0; }
   bool paused(int64_t view) const { return pausedAt_.count(view) != 0; }
+  /**
+   * How far each view's tracks moved since the last call because a paused view resumed: when shown again, or while an
+   * operation (run, set, stop, stopBatch) ran on it. Whatever the caller times by those tracks (cues) moves with them.
+   */
+  std::unordered_map<int64_t, double> takeResumeShifts() { return std::exchange(resumed_, {}); }
 
   State state(int64_t view, Property property, double now) const;
   bool animating(int64_t view, Property property, double now) const;
@@ -263,6 +268,7 @@ private:
   std::unordered_map<int64_t, Slots> views_;
   std::unordered_set<int64_t> hidden_;
   std::unordered_map<int64_t, double> pausedAt_;
+  std::unordered_map<int64_t, double> resumed_;
   std::unordered_map<std::string, Batch> batches_;
   std::unordered_map<int64_t, Episode> episodes_;
   uint64_t events_ = 0;

@@ -388,6 +388,7 @@ void Engine::removeView(int64_t view, std::vector<Settled> &settled) {
   episodes_.erase(view);
   hidden_.erase(view);
   pausedAt_.erase(view);
+  resumed_.erase(view);
 }
 Engine::Slots &Engine::slots(int64_t view) {
   auto found = views_.find(view);
@@ -464,6 +465,7 @@ double Engine::resume(int64_t view, double now) {
   if (found == pausedAt_.end()) return 0;
   const double shift = now - found->second;
   pausedAt_.erase(found);
+  resumed_[view] += shift;
   for (Slot &slot : views_.at(view)) slot.begin += shift;
   auto episode = episodes_.find(view);
   if (episode != episodes_.end()) shiftEpisode(episode->second, shift);

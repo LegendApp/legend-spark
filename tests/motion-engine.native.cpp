@@ -556,10 +556,16 @@ int main() {
     hide.run(plan("while hidden", 1, Opacity, timingTo(0.2, 1)), 6, done, views);
     CHECK(done.size() == 1 && done[0].id == "while hidden" && done[0].finished && near(hide.state(1, Opacity, 6).value, 0.2, 1e-12));
     CHECK(hide.paused(1) && near(hide.state(1, Rotate, 6).value, 90, 1e-6));
+    // That operation resumed view 1 for its duration: its tracks moved by the 5.75 s it had been paused, and the caller
+    // learns it (cues timed by those tracks move with them). View 2 has not resumed.
+    const auto shifts = hide.takeResumeShifts();
+    CHECK(shifts.size() == 1 && near(shifts.at(1), 5.75, 1e-9) && hide.takeResumeShifts().empty());
     // Shown again 10 s after hiding: the loop and the paused plan resume where they were. View 1 was last paused by the
     // operation at 6 s, so its last paused interval is 4.25 s.
     CHECK(near(hide.setHidden(1, false, 10.25, done), 4.25, 1e-9) && near(hide.setHidden(2, false, 10.25, done), 10, 1e-9));
     CHECK(!hide.paused(1) && near(hide.state(1, Rotate, 10.5).value, 180, 1e-6) && near(hide.state(2, TranslateY, 10.5).value, 5, 1e-9));
+    const auto shown = hide.takeResumeShifts();
+    CHECK(shown.size() == 2 && near(shown.at(1), 4.25, 1e-9) && near(shown.at(2), 10, 1e-9));
     CHECK(near(*hide.nextCompletion(), 11, 1e-9));
     done.clear();
     hide.sweep(11, done);

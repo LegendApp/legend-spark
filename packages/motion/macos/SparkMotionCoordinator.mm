@@ -247,7 +247,6 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   NSHashTable<NSView *> *_mounting;  // registered, not yet past their first mounting transaction
   NSUInteger _sweepGeneration;
   uint64_t _inputEvent;
-  NSHashTable<NSWindow *> *_hiddenWindows;     // windows whose occlusion state last said not visible
   NSMutableArray<SparkMotionCue *> *_cues;     // pending, in no particular order
   CADisplayLink *_cueLink;                     // only within two frames of the next cue
   NSUInteger _cueGeneration;
@@ -255,6 +254,7 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   BOOL _driven;                                // a driver run: cues are recorded, not played; windows count as visible
   NSMutableDictionary *_simulated;             // driver overrides of reduceMotion, lowPowerMode, maximumFramesPerSecond
   NSMutableArray<NSDictionary *> *_cueLog;     // cues a driver run recorded instead of playing
+  NSHashTable<NSWindow *> *_hiddenWindows;     // windows simulateWindow:visible: hides (driven windows are never on screen)
 #endif
   NSArray *_observers;                         // system and window observers, while a MotionView is registered
 }
@@ -278,11 +278,11 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     _layoutMarks = [NSMapTable weakToStrongObjectsMapTable];
     _sharedMarks = [NSMutableDictionary new];
     _mounting = [NSHashTable weakObjectsHashTable];
-    _hiddenWindows = [NSHashTable weakObjectsHashTable];
     _cues = [NSMutableArray new];
 #if SPARK_TEST_DRIVER
     _simulated = [NSMutableDictionary new];
     _cueLog = [NSMutableArray new];
+    _hiddenWindows = [NSHashTable weakObjectsHashTable];
 #endif
   }
   return self;
@@ -333,7 +333,26 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   const NSInteger maximum = [self maximumFrameRate:view];
   return maximum > 0 ? MIN((double)maximum, cap) : cap;
 }
-- (BOOL)windowHidden:(nullable NSWindow *)window { return window && [_hiddenWindows containsObject:window]; }
+/**
+ * Whether `window` is hidden, minimized or fully occluded, read from its occlusion state each time (nothing cached, so
+ * a window already occluded when its first view mounts counts as hidden). A driver run's windows are never on screen:
+ * there only simulateWindow:visible: hides them.
+ */
+- (BOOL)windowHidden:(nullable NSWindow *)window
+{
+  if (!window) return NO;
+#if SPARK_TEST_DRIVER
+  if (_driven) return [_hiddenWindows containsObject:window];
+#endif
+  return (window.occlusionState & NSWindowOcclusionStateVisible) == 0;
+}
+
+/** Cues follow their view's tracks: when a paused view resumed (shown, or for an operation), they move by as much. */
+- (void)moveResumedCues
+{
+  for (const auto &[tag, shift] : _engine.takeResumeShifts())
+    for (SparkMotionCue *cue in _cues) if (cue.tag == tag) cue.time += shift;
+}
 
 /**
  * Brings the engine's hidden state of a view in line with its window, re-baking and settling what changed. Operations
@@ -346,8 +365,8 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   const BOOL hidden = [self windowHidden:host.window];
   if (hidden == _engine.hidden(tag)) return;
   std::vector<Settled> concealed;
-  const double shift = _engine.setHidden(tag, hidden, self.now, concealed);
-  if (shift > 0) for (SparkMotionCue *cue in _cues) if (cue.tag == tag) cue.time += shift;
+  _engine.setHidden(tag, hidden, self.now, concealed);
+  [self moveResumedCues];
   // A finished animation of a hidden window has no cue to play.
   for (const Settled &item : concealed) [self dropCues:@(item.id.c_str())];
   [self applyAll:tag];
@@ -355,10 +374,8 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
 }
 
 /** Applies a window's visibility to its views: hidden ones complete or pause, shown ones resume. */
-- (void)window:(NSWindow *)window visible:(BOOL)visible
+- (void)windowVisibilityChanged:(NSWindow *)window
 {
-  if (visible != [self windowHidden:window]) return;
-  if (visible) [_hiddenWindows removeObject:window]; else [_hiddenWindows addObject:window];
   for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects]) if (host.window == window) [self syncHidden:host.motionTag];
   [self scheduleSweep];
   [self scheduleCues];
@@ -378,7 +395,10 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     _engine.stop(tag, all, self.now, settled);
     [self applyAll:tag];
   }
+  [self moveResumedCues];
+#if SPARK_TEST_DRIVER
   [_hiddenWindows removeObject:window];
+#endif
   [self settle:settled];
   [self scheduleSweep];
   [self scheduleCues];
@@ -414,8 +434,8 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     [center addObserverForName:NSWindowDidChangeOcclusionStateNotification object:nil queue:main usingBlock:^(NSNotification *note) {
       SparkMotionCoordinator *coordinator = weakSelf;
       NSWindow *window = note.object;
-      // A driven app's windows are never on screen; their visibility is simulated.
-      if (coordinator && !coordinator.driven) [coordinator window:window visible:(window.occlusionState & NSWindowOcclusionStateVisible) != 0];
+      // A driven app's windows are never on screen; their visibility is simulated (windowHidden:).
+      if (coordinator && !coordinator.driven) [coordinator windowVisibilityChanged:window];
     }],
     [center addObserverForName:NSWindowWillCloseNotification object:nil queue:main usingBlock:^(NSNotification *note) { [weakSelf windowWillClose:note.object]; }],
   ];
@@ -596,11 +616,13 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
  */
 - (void)perform:(void (^)(void))operation reject:(SparkMotionReject)reject until:(double)deadline
 {
-  try { operation(); return; }
+  // An operation on a paused view resumes it while it runs (also when it then fails): its cues move with its tracks.
+  try { operation(); [self moveResumedCues]; return; }
   catch (const Failure &failure) {
+    [self moveResumedCues];
     if (!failure.unmounted || CACurrentMediaTime() >= deadline) { reject(@(failure.code.c_str()), @(failure.message.c_str())); return; }
   }
-  catch (const std::exception &error) { reject(@"E_NATIVE", [NSString stringWithFormat:@"Motion engine failure: %s", error.what()]); return; }
+  catch (const std::exception &error) { [self moveResumedCues]; reject(@"E_NATIVE", [NSString stringWithFormat:@"Motion engine failure: %s", error.what()]); return; }
   __block BOOL done = NO;
   __weak SparkMotionCoordinator *weakSelf = self;
   dispatch_block_t retry = ^{
@@ -682,6 +704,7 @@ static SparkMotionCue *SparkCue(id value)
     std::vector<int64_t> touched;
     const double now = self.now;
     const Started started = self->_engine.run(plan, now, settled, touched);
+    [self moveResumedCues];  // before this plan's cues, which are timed from now
     self->_completions[identifier] = resolve;
     for (NSUInteger i = 0; i < cues.count; i++) {
       cues[i].batch = identifier;
@@ -1128,7 +1151,11 @@ static NSDictionary *SparkStateObject(const State &state) { return @{ @"value": 
   [self scheduleCues];
 }
 
-- (void)simulateWindow:(NSWindow *)window visible:(BOOL)visible { [self window:window visible:visible]; }
+- (void)simulateWindow:(NSWindow *)window visible:(BOOL)visible
+{
+  if (visible) [_hiddenWindows removeObject:window]; else [_hiddenWindows addObject:window];
+  [self windowVisibilityChanged:window];
+}
 - (void)noteInput { _inputEvent = _engine.events(); }
 
 - (NSDictionary *)telemetry:(NSInteger)tag now:(double)now

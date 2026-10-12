@@ -402,13 +402,18 @@ int main()
     // A hidden window: the finite animation jumps to its end and finishes, the loop pauses; shown again, it resumes.
     NSMutableDictionary *spinPlan = [Request(@"spin", 9, @{ @"rotate": @{ @"type": @"timing", @"to": @360, @"durationMs": @1000, @"easing": @[@0, @0, @1, @1], @"repeat": @"infinite" } }) mutableCopy];
     spinPlan[@"cues"] = @[@{ @"at": @750, @"haptic": @"generic" }];
+    auto telemetry = [&](NSInteger tag) { return JSON0(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion telemetry:tag resolve:resolve reject:reject]; })->value); };
+    const double spinStart = [telemetry(9)[@"timeMs"] doubleValue];
     Outcome *spin = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:spinPlan resolve:resolve reject:reject]; });
     Outcome *slideAway = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"away", 9, @{ @"translateX": Timing(80, 1000) }) resolve:resolve reject:reject]; });
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:250 resolve:resolve reject:reject]; });
     [motion simulateWindow:other visible:NO];
     CHECK(slideAway->resolved && [JSON(slideAway->value)[@"finished"] isEqual:@YES] && card.motionModel[TranslateX] == 80 && !spin->resolved);
     CHECK([environment(9)[@"windowVisible"] isEqual:@NO] && card.layer.animationKeys.count == 0 && std::abs(card.motionModel[Rotate] - 90) < 1e-6);
-    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:2000 resolve:resolve reject:reject]; });
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:1000 resolve:resolve reject:reject]; });
+    // An operation on the hidden view resumes it while it runs: its cue moves with the loop's tracks, not only at show.
+    CHECK(!Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @9, @"values": @{ @"translateY": @5 } } resolve:resolve reject:reject]; })->code);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:1000 resolve:resolve reject:reject]; });
     NSDictionary *frozen = JSON0(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion telemetry:9 resolve:resolve reject:reject]; })->value);
     CHECK([frozen[@"paused"] isEqual:@YES] && [frozen[@"hidden"] isEqual:@YES] && std::abs([frozen[@"values"][@"rotate"] doubleValue] - 90) < 1e-6);
     CHECK([[frozen[@"cues"] lastObject][@"frameMs"] isEqual:NSNull.null]);  // the cue at 750 ms waits for the paused loop
@@ -417,6 +422,8 @@ int main()
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:500 resolve:resolve reject:reject]; });
     NSDictionary *resumed = JSON0(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion telemetry:9 resolve:resolve reject:reject]; })->value);
     CHECK([resumed[@"paused"] isEqual:@NO] && std::abs([resumed[@"values"][@"rotate"] doubleValue] - 270) < 1e-6 && [[resumed[@"cues"] lastObject][@"frameMs"] isKindOfClass:NSNumber.class]);
+    // It played 750 ms of loop time after the start, plus the 2 s the window was hidden.
+    CHECK(std::abs([[resumed[@"cues"] lastObject][@"frameMs"] doubleValue] - (spinStart + 750 + 2000)) < 1e-6);
     // Pause instead of completing: the plan's whenHidden.
     NSMutableDictionary *held = [Request(@"held", 9, @{ @"opacity": Timing(0, 1000) }) mutableCopy];
     held[@"whenHidden"] = @"pause";
@@ -430,6 +437,22 @@ int main()
     CHECK(card.layer.animationKeys.count == 0);
     [motion unregisterTag:9];
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
+
+    // Outside a driver run, visibility is the window's occlusion state, read when needed: a window that is not on screen
+    // (never shown here) is hidden from the first view that mounts in it, with no notification.
+    SparkMotionCoordinator *app = [SparkMotionCoordinator new];
+    TestHost *offscreen = [[TestHost alloc] initWithFrame:NSMakeRect(0, 0, 40, 40)];
+    offscreen.wantsLayer = YES;
+    offscreen.motionTag = 11;
+    NSWindow *unshown = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 100, 100) styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
+    unshown.releasedWhenClosed = NO;
+    [unshown.contentView addSubview:offscreen];
+    CHECK((unshown.occlusionState & NSWindowOcclusionStateVisible) == 0);
+    [app registerHost:offscreen initial:kIdentity];
+    CHECK([JSON(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [app environment:11 resolve:resolve reject:reject]; })->value)[@"windowVisible"] isEqual:@NO]);
+    Outcome *offscreenSlide = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [app run:Request(@"offscreen", 11, @{ @"translateX": Timing(30, 5000) }) resolve:resolve reject:reject]; });
+    CHECK(offscreenSlide->resolved && [JSON(offscreenSlide->value)[@"finished"] isEqual:@YES] && offscreen.motionModel[TranslateX] == 30 && offscreen.layer.animationKeys.count == 0);
+    [app unregisterTag:11];
   }
   if (failures) { std::printf("%d motion coordinator checks failed\n", failures); return 1; }
   std::puts("Motion coordinator tests passed");
