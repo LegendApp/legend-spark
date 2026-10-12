@@ -62,7 +62,7 @@ export function Pointer() {
     </Section>
     <Section title={t.sections.typing}>
       <Text className="text-xs text-muted">{t.typingHint}</Text>
-      <TextInput testID={`${ID}-typing`} placeholder={t.placeholder} className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground" />
+      <TextInput testID={`${ID}-typing`} accessibilityLabel={t.typingField} placeholder={t.placeholder} className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground" />
       <View className="gap-1">
         <Button testID={`${ID}-hide`} onPress={() => void hide()}>{t.hide}</Button>
         <Result id="hide" value={results.hide} none={t.none} />

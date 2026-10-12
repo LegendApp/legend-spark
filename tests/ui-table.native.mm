@@ -316,6 +316,13 @@ int main() { @autoreleasepool {
   CHECK(outlineView.numberOfRows == 5); // a, a1, a2, b, empty
   CHECK([[[outlineView itemAtRow:1] valueForKey:@"rowId"] isEqual:@"a1"] && [outlineView isExpandable:[outlineView itemAtRow:4]]);
   CHECK(events.empty());
+  // Each disclosure triangle is labelled with its row's outline column text.
+  [tree updateLayoutMetrics:LayoutMetrics{CGRectMake(0, 0, 600, 400)} oldLayoutMetrics:LayoutMetrics{}];
+  window.contentView = tree;
+  [window layoutIfNeeded];
+  NSView *disclosure = nil;
+  for (NSView *child in [outlineView rowViewAtRow:3 makeIfNecessary:NO].subviews) if ([child.identifier isEqual:NSOutlineViewDisclosureButtonKey]) disclosure = child;
+  CHECK([disclosure.accessibilityLabel isEqual:@"B"]);
   id b = [outlineView itemAtRow:3];
   [outlineView expandItem:b];
   // Not reported yet, and props that arrive before the report cannot collapse it.

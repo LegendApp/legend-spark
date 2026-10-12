@@ -10,7 +10,7 @@
     @variant light {
       --color-background: #f5f6f8;
       --color-foreground: #111827;
-      --color-muted: #6b7280;
+      --color-muted: #4b5563;
       --color-surface: #ffffff;
       --color-border: #d1d5db;
       --color-success: #17633b;
@@ -18,7 +18,7 @@
       --color-highlight: #dbeafe;
       /* Spark UI controls (HotkeyCapture) read these application tokens. */
       --color-text-primary: #111827;
-      --color-text-tertiary: #6b7280;
+      --color-text-tertiary: #4b5563;
       --color-border-primary: #d1d5db;
       --color-background-primary: #f5f6f8;
       --color-accent-primary: #2563eb;

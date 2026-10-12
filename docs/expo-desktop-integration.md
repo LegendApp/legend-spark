@@ -114,6 +114,16 @@ version and exact source, is idempotent, and replaces the file atomically. Exist
 need a native rebuild. `tests/rtl-text-alignment-native.test.ts` compiles the patched and the
 upstream code and lays text out with TextKit.
 
+## RN macOS TextInput accessibility patch
+
+`react-native-macos@0.81.7` Fabric sets a TextInput's `accessibilityLabel` on the backed text input view. A multiline
+input's is `RCTWrappedTextView`, a plain view around a scroll view, while the `NSTextView` inside it is the
+accessibility element, so VoiceOver announced a labelled multiline input without its label.
+`text-input-accessibility.cjs` keeps the label on that text view. Like the other patches, it checks the version and
+exact source, is idempotent, and replaces the file atomically; existing runtimes need a native rebuild.
+`tests/text-input-accessibility.test.ts` covers the patch; the Kitchen Sink accessibility audit
+([e2e-flows.md](e2e-flows.md#accessibility-audit)) checks the labels in the running app.
+
 ## RN macOS DevTools targets patch
 
 `react-native-macos@0.81.7` lists every JavaScript runtime as the same React Native DevTools target, titled
