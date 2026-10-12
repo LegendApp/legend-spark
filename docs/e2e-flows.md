@@ -627,6 +627,28 @@ identifier runs, a copy someone is using included, and for any domain but the fl
 A failed `assertNoLayoutThrash` or `assertNoFlicker` writes the driver's report to
 `output/<command>-line<line>.commits.json`.
 
+#### Release-safety probe
+
+`assertNoDebugSurface: { for }` checks that a running release build has no debug surface (#274; `DEVT-REL-01`
+to `03`, `e2e/flows/devtools/release-probe.yaml`). It quits the app if it runs, starts a decoy development server (a
+TCP listener on 127.0.0.1 the runner owns) and launches the app pointed at it, with `-RCT_jsLocation <decoy>` and
+`SPARK_BUNDLE_URL=http://<decoy>/index.bundle?…`, the settings a development build reads. Once its first rendered UI
+has settled (up to 30 s) and `for` (default 2s) more, it takes one snapshot and fails with every finding:
+
+- **Development server:** any connection to the decoy. A release build loads its embedded JavaScript and opens no
+  packager, inspector or HMR connection.
+- **Sockets:** `lsof -p <app pid>` (outside the app, not through the driver). Any IPv4 or IPv6 socket, listening or
+  connected, is a finding, and so is any bound Unix socket (one with a path) other than the driver's own channel
+  (`driver.sock` in the session's run directory). A driven app skips the single-instance lock ([app state](#app-state)),
+  so it has no single-instance socket. lsof failing, or not listing the process's files, fails the command.
+- **Menus:** the driver's `menus` snapshot, every level and hidden items included: the Developer menu (its
+  `spark-developer` identifiers, or any of its titles in English or Arabic, such as Reload or Show Developer Menu) and
+  any item whose title names DevTools, an inspector, a debugger or a dev menu.
+
+It is a `build: release` check: a development build connects to the decoy (or the bundle server) and has the Developer
+menu, so it fails. The gate runs it on the gate's artifact; `bun run harness` runs the gate with the installed artifact
+(`--artifact`), so the probe runs against the signed app it installed.
+
 #### App state
 
 A driver session (one flow, or one `ks:capture`) runs in one of two state modes (`scripts/e2e/app-state.ts`):
@@ -1085,7 +1107,7 @@ hygiene (#153):
 | `DIST-HYG-05` | Every Mach-O UUID in the app has a dSYM in `build.<platform>.symbols` (the build's `dSYMs/` folder next to the app). |
 | `DIST-HYG-06` | No file holds an absolute path of the build machine (`/Users/<name>/`, `/home/<name>/`, `/var/folders/`, `C:\Users\<name>\`). |
 | `DIST-HYG-07` | No file holds a credential: private keys, AWS, GitHub, Slack, Google, Stripe, npm or API secret keys. |
-| `DIST-HYG-08` | Info.plist: `CFBundleIdentifier` is the manifest's `appId`; package type `APPL`; name; an executable that exists; numeric versions; `LSMinimumSystemVersion` 14 or earlier; `NSPrincipalClass` `NSApplication`; no `NSAllowsArbitraryLoads` and no App Transport Security exception for localhost. |
+| `DIST-HYG-08` | Info.plist: `CFBundleIdentifier` is the manifest's `appId`; package type `APPL`; name; an executable that exists; numeric versions; `LSMinimumSystemVersion` 14 or earlier; `NSPrincipalClass` `NSApplication`; no `NSAllowsArbitraryLoads`, no App Transport Security exception for localhost and no `NSAllowsLocalNetworking` (development builds only: `spark build` removes it from release builds, #274). |
 | `DIST-HYG-09` | The artifact's size is within `build.<platform>.sizeBudgetMB`. |
 | `DIST-HYG-10` | `Contents/Resources/ThirdPartyNotices.txt` lists packages, each with a license, including every embedded framework. |
 

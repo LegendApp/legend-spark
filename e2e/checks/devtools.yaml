@@ -97,3 +97,27 @@ checks:
     spec: "#268"
     covers:
       - ./devtools
+  # Release safety (#274): a running release build has no debug surface. The driver backend's release-safety probe
+  # (assertNoDebugSurface, docs/e2e-flows.md#release-safety-probe) checks the gate's artifact, which the release harness
+  # installs (bun run harness runs the gate with --artifact <installed app>).
+  DEVT-REL-01:
+    title: A running release build has no Developer menu and no debug menu item (Reload, Open DevTools, Toggle Element Inspector, Toggle Performance Monitor, Fast Refresh, Show Bundle Info, or another DevTools, inspector or debugger item), hidden items included
+    platforms: [macos]
+    blocking: true
+    spec: "#274"
+    covers:
+      - ./devtools
+  DEVT-REL-02:
+    title: A running release build listens on no port and holds no network socket; its only bound Unix socket is the test driver's channel
+    platforms: [macos]
+    blocking: true
+    spec: "#274"
+    covers:
+      - ./devtools
+  DEVT-REL-03:
+    title: Launched with a development server address (RCT_jsLocation and SPARK_BUNDLE_URL), a release build never connects to it
+    platforms: [macos]
+    blocking: true
+    spec: "#274"
+    covers:
+      - ./devtools
