@@ -115,7 +115,7 @@ checks:
     covers:
       - ./motion#MotionView
   MOT-VISUAL-01:
-    title: The Springs, Keyframes and timelines, Scroll link and JS block, and Layout, presence and shared elements screens match their approved goldens in light and dark, English and Arabic, with MotionViews at rest or paused by the virtual clock
+    title: The Springs, Keyframes and timelines, Scroll link and JS block, Layout, presence and shared elements, and Accessibility, power and lifecycle screens match their approved goldens in light and dark, English and Arabic, with MotionViews at rest or paused by the virtual clock
     platforms: [macos]
     blocking: true
     spec: "docs/e2e-flows.md Visual goldens; #227"
@@ -128,3 +128,39 @@ checks:
     spec: "#52 INFRA.driver; docs/motion.md Motion telemetry"
     covers:
       - ./motion#MotionView
+  MOT-REDUCE-01:
+    title: With Reduce Motion on (simulated), a slide jumps and fades in within 200 ms, a shake plays its designed dim pulse, and the instant alternate jumps; off, the slide springs as written
+    platforms: [macos]
+    blocking: true
+    spec: "#177 MOT.a11y"
+    covers:
+      - ./motion#getMotionEnvironment
+      - ./motion#animate
+  MOT-POWER-01:
+    title: Motion runs at 120 Hz on a 120 Hz display, at 60 Hz on a 60 Hz display, and at 60 Hz in Low Power Mode (simulated displays and power state)
+    platforms: [macos]
+    blocking: true
+    spec: "#177 MOT.a11y"
+    covers:
+      - ./motion#getMotionEnvironment
+  MOT-HIDDEN-01:
+    title: While the window is hidden a repeating animation pauses where it is and resumes when shown, and a finite animation jumps to its end and finishes
+    platforms: [macos]
+    blocking: true
+    spec: "#177 MOT.a11y"
+    covers:
+      - ./motion#animate
+  MOT-CANCEL-01:
+    title: Unmounting a MotionView during its animation cancels it and the animation reports finished false
+    platforms: [macos]
+    blocking: true
+    spec: "#177 MOT.a11y"
+    covers:
+      - ./motion#MotionView
+  MOT-CUES-01:
+    title: A plan's haptic and sound cues are recorded on the frames that show their times (driver runs record cues instead of playing them)
+    platforms: [macos]
+    blocking: true
+    spec: "#177 MOT.a11y"
+    covers:
+      - ./motion#animate

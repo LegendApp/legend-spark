@@ -10,6 +10,9 @@
 //   {"command": "motionState", "testID"} → engine state and the view's latest motion
 //   {"command": "waitForMotion", "testID", "progress" | "elapsedMs" | "settled": true, "timeoutMs"} → motionState
 //   {"command": "sampleMotion", "testID", "fromMs", "toMs", "intervalMs"} → {"samples": [{"tMs", "values", "velocities"}]}
+//   {"command": "simulateOcclusion", "testID", "visible"} → {"mode", "timeMs"}: the window of that view counts as hidden or visible
+// simulateSystemEvent's reduceMotion and lowPowerMode, and simulateDisplays' primary refresh rate, reach motion through
+// SparkTestDriverObserveSimulatedState.
 static SparkMotionReject SparkMotionDriverFailure(SparkTestDriverReply reply)
 {
   return ^(NSString *code, NSString *message) { reply(@{ @"ok": @NO, @"error": @{ @"code": code, @"message": message } }); };
@@ -53,6 +56,7 @@ static NSInteger SparkMotionDriverTarget(NSDictionary *request, SparkTestDriverR
   SparkMotionCoordinator *motion = SparkMotionCoordinator.shared;
   SparkTestDriverObserveStart(^{ [motion recordTelemetry]; });
   SparkTestDriverObserveInput(^{ [motion noteInput]; });
+  SparkTestDriverObserveSimulatedState(^(NSDictionary *values) { [motion simulate:values]; });
   // Captures render the presented frame of running animations: the compositor plays them, in-process rendering does not.
   SparkTestDriverWrapRender(^(dispatch_block_t render) { [motion presenting:render]; });
   SparkTestDriverRegisterCommand(@"setClock", ^(NSDictionary *request, SparkTestDriverReply reply) {
@@ -77,6 +81,16 @@ static NSInteger SparkMotionDriverTarget(NSDictionary *request, SparkTestDriverR
     NSMutableDictionary *until = [NSMutableDictionary new];
     for (NSString *key in @[@"progress", @"elapsedMs", @"settled"]) until[key] = request[key];
     [motion waitForMotion:tag until:until timeout:[timeout doubleValue] / 1000 resolve:SparkMotionDriverReply(reply) reject:SparkMotionDriverFailure(reply)];
+  });
+  SparkTestDriverRegisterCommand(@"simulateOcclusion", ^(NSDictionary *request, SparkTestDriverReply reply) {
+    id visible = request[@"visible"];
+    if (![visible isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)visible) != CFBooleanGetTypeID()) { SparkMotionDriverFailure(reply)(@"E_INVALID_ARGUMENT", @"simulateOcclusion expects visible: true or false"); return; }
+    NSInteger tag = SparkMotionDriverTarget(request, reply);
+    if (!tag) return;
+    NSWindow *window = SparkTestDriverFindView(request[@"testID"]).window;
+    if (!window) { SparkMotionDriverFailure(reply)(@"E_NOT_FOUND", @"The MotionView is not in a window"); return; }
+    [motion simulateWindow:window visible:[visible boolValue]];
+    SparkMotionDriverSuccess(reply)(nil);
   });
   SparkTestDriverRegisterCommand(@"sampleMotion", ^(NSDictionary *request, SparkTestDriverReply reply) {
     NSInteger tag = SparkMotionDriverTarget(request, reply);

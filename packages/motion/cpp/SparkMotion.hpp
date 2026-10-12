@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -34,7 +35,8 @@ struct Easing { double x1 = 0, y1 = 0, x2 = 1, y2 = 1; };
 
 /** An animation description. Times are seconds. buildCurve validates it. */
 struct Spec {
-  enum class Kind { Spring, Timing, Keyframes, Decay, Sequence } kind = Kind::Spring;
+  /** `Jump`: a Reduce Motion alternate that changes the value at once (never parsed from a request). */
+  enum class Kind { Spring, Timing, Keyframes, Decay, Sequence, Jump } kind = Kind::Spring;
   double to = 0;
   SpringParams spring;
   std::optional<double> velocity;  // explicit velocity overrides the inherited one
@@ -104,13 +106,31 @@ struct Track {
 };
 using TrackPtr = std::shared_ptr<const Track>;
 
+using Tracks = std::vector<std::pair<Property, Spec>>;
 struct Group {
   int64_t view = 0;
-  std::vector<std::pair<Property, Spec>> tracks;
+  Tracks tracks;
   bool afterPrevious = false;
   double offset = 0;
+  /** The caller's designed Reduce Motion alternate for this step; it replaces `tracks` when Reduce Motion is on. */
+  std::optional<Tracks> reduced;
 };
-struct Plan { std::string id; std::vector<Group> groups; };
+/** What a step without its own alternate plays when Reduce Motion is on (docs/motion.md#reduce-motion). */
+enum class Reduce { Fade, Instant, Play };
+struct Plan {
+  std::string id;
+  std::vector<Group> groups;
+  bool reduceMotion = false;  // the user's Reduce Motion setting when the plan starts
+  Reduce reduce = Reduce::Fade;
+  bool pauseWhenHidden = false;  // otherwise finite tracks complete when their view is hidden
+  /** Haptic and sound cues: seconds after the plan starts, or null for its end (docs/motion.md#cues). */
+  std::vector<std::optional<double>> cues;
+};
+/**
+ * A started plan: when it ends after its start (infinity while a track repeats forever), when the plan as written
+ * would have, and when each cue is due after its start. Under Reduce Motion cue times scale with the alternate.
+ */
+struct Started { double end = 0, plannedEnd = 0; bool reduced = false; std::vector<double> cues; };
 const char *kindName(Spec::Kind kind);
 
 /** From `from` on, a property follows `track` (begun at `begin`), or holds `value` when there is none. */
@@ -137,6 +157,8 @@ struct Episode {
   State at(Property property, double time) const;
 };
 struct Settled { std::string id; bool finished; };
+/** How long Reduce Motion's fade takes, in seconds. */
+constexpr double kReducedFade = 0.2;
 
 struct Bake {
   double begin = 0, duration = 0;
@@ -155,6 +177,7 @@ double interpolate(const std::vector<double> &input, const std::vector<double> &
 
 class Engine {
 public:
+  /** The highest rate samples are baked at; the glue passes the display's rate (docs/motion.md#frame-rate-and-power). */
   static constexpr double kSampleRate = 120;
   static constexpr double kMaxLoop = 20;
 
@@ -173,7 +196,7 @@ public:
   void advance(double seconds);
 
   /** Validates the whole plan before any side effect. Touched views need re-baking. */
-  void run(const Plan &plan, double now, std::vector<Settled> &settled, std::vector<int64_t> &touched);
+  Started run(const Plan &plan, double now, std::vector<Settled> &settled, std::vector<int64_t> &touched);
   void set(int64_t view, const std::vector<std::pair<Property, double>> &values, double now, std::vector<Settled> &settled);
   void stop(int64_t view, const std::vector<Property> &properties, double now, std::vector<Settled> &settled);
   void stopBatch(const std::string &id, double now, std::vector<Settled> &settled, std::vector<int64_t> &touched);
@@ -181,15 +204,30 @@ public:
    * Layout and shared-element hand-off (docs/motion.md#layout-presence-and-shared-elements): each property jumps to
    * `from` (value and velocity) and runs `transition` to the value it was heading for (its animation's end, or its
    * value at rest). Animations it replaces settle unfinished. A property driven by a scroll link or repeating forever
-   * is left alone. Returns false when no property was handed off.
+   * is left alone. Returns false when no property was handed off. With `reduceMotion` (the user's setting) it plays the
+   * plan's Reduce Motion alternate (docs/motion.md#reduce-motion): the view is at its new place at once and fades in.
    */
-  bool handoff(int64_t view, const std::vector<std::pair<Property, State>> &from, const Spec &transition, double now, std::vector<Settled> &settled);
+  bool handoff(int64_t view, const std::vector<std::pair<Property, State>> &from, const Spec &transition, double now, std::vector<Settled> &settled, bool reduceMotion);
   /** The value a property settles at: its animation's end, or its value at rest; none while it repeats forever. */
   std::optional<double> target(int64_t view, Property property) const;
   /** Settles tracks that ended by `now`. */
   void sweep(double now, std::vector<Settled> &settled);
   std::optional<double> nextCompletion() const;
   bool pending(const std::string &id) const { return batches_.count(id) != 0; }
+
+  /**
+   * A hidden view's finite tracks of plans that do not pause jump to their end and settle finished; anything still
+   * animating pauses until it is shown again, when its tracks resume where they were. Operations on a hidden view
+   * apply the same rule to what they start. Returns the paused interval when showing (0 otherwise).
+   */
+  double setHidden(int64_t view, bool hidden, double now, std::vector<Settled> &settled);
+  bool hidden(int64_t view) const { return hidden_.count(view) != 0; }
+  bool paused(int64_t view) const { return pausedAt_.count(view) != 0; }
+  /**
+   * How far each view's tracks moved since the last call because a paused view resumed: when shown again, or while an
+   * operation (run, set, stop, stopBatch) ran on it. Whatever the caller times by those tracks (cues) moves with them.
+   */
+  std::unordered_map<int64_t, double> takeResumeShifts() { return std::exchange(resumed_, {}); }
 
   State state(int64_t view, Property property, double now) const;
   bool animating(int64_t view, Property property, double now) const;
@@ -201,7 +239,8 @@ public:
   const Episode *episode(int64_t view) const;
   /** Counts motion starts, interruptions and animations started during a motion, of every view; an episode's `event` is the count at its latest one. */
   uint64_t events() const { return events_; }
-  ChannelBake bake(int64_t view, Channel channel, double now) const;
+  /** Samples at `rate` per second (at most kSampleRate). A paused view bakes no animation: its model holds the paused values. */
+  ChannelBake bake(int64_t view, Channel channel, double now, double rate = kSampleRate) const;
 
   void link(int64_t view, Property property, bool linked);
   bool linked(int64_t view, Property property) const;
@@ -210,7 +249,7 @@ public:
 private:
   struct Slot { double model = 0; TrackPtr track; double begin = 0; std::string batch; bool linked = false; };
   using Slots = std::array<Slot, PropertyCount>;
-  struct Batch { int pending = 0; bool interrupted = false; };
+  struct Batch { int pending = 0; bool interrupted = false; bool pauseWhenHidden = false; };
   struct Snapshot { std::array<TrackPtr, PropertyCount> tracks; std::array<State, PropertyCount> states; std::array<bool, PropertyCount> animating{}; bool moving = false; };
   Snapshot snapshot(const Slots &slots, double now) const;
   /** Records what a mutation at `now` changed in the view's motion (docs/motion.md#motion-telemetry); `setting` for `set`. */
@@ -218,7 +257,19 @@ private:
   void release(Slot &slot, bool finished, std::vector<Settled> &settled);
   static State slotState(const Slot &slot, double now);
   Slots &slots(int64_t view);
+  /** The view's own time: frozen while it is paused. */
+  double timeOf(int64_t view, double now) const;
+  /** Hides: completes or pauses (see setHidden). */
+  void conceal(int64_t view, double now, std::vector<Settled> &settled);
+  /** Unpauses, shifting the view's tracks and telemetry by the paused interval, which it returns. */
+  double resume(int64_t view, double now);
+  Started start(const Plan &plan, double now, std::vector<Settled> &settled, std::vector<int64_t> &touched);
+  /** Runs `operation` on views with their time running, then hides the hidden ones again, also when it throws. */
+  template <typename Operation> void unpaused(const std::vector<int64_t> &views, double now, std::vector<Settled> &settled, Operation operation);
   std::unordered_map<int64_t, Slots> views_;
+  std::unordered_set<int64_t> hidden_;
+  std::unordered_map<int64_t, double> pausedAt_;
+  std::unordered_map<int64_t, double> resumed_;
   std::unordered_map<std::string, Batch> batches_;
   std::unordered_map<int64_t, Episode> episodes_;
   uint64_t events_ = 0;

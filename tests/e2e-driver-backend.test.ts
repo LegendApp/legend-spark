@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import { DriverError } from "../scripts/e2e/driver.ts";
+import { DriverError, type MotionState } from "../scripts/e2e/driver.ts";
 import { runFlows } from "../scripts/e2e/runner/executor.ts";
 import { DriverBackend } from "../scripts/e2e/runner/driver-backend.ts";
 import { COMMITS, COUNTERS, FakeApp, fakeMotion, fakeSamples, FRAME, FRAMES, STARTUP } from "./e2e-driver-fake.ts";
@@ -368,6 +368,11 @@ describe("motion and frames", () => {
     expect(late.result.failure?.message).toBe("the motion of box after the last input: it settled 300 ms after it was last interrupted, not within 200ms");
     const crossfade = await run("- launchApp\n- assertMotion: { target: { id: box }, kind: crossfade }", motionApp(fakeMotion({ properties: ["opacity"], kinds: { opacity: "timing" } })));
     expect(crossfade.result.status).toBe("passed");
+    // A Reduce Motion alternate: the transform changes at once while opacity fades.
+    const reduced = await run("- launchApp\n- assertMotion: { target: { id: box }, kind: crossfade }", motionApp(fakeMotion({ properties: ["opacity", "translateX"], kinds: { opacity: "timing", translateX: "jump" } })));
+    expect(reduced.result.status).toBe("passed");
+    const slid = await run("- launchApp\n- assertMotion: { target: { id: box }, kind: crossfade }", motionApp(fakeMotion({ properties: ["opacity", "translateX"], kinds: { opacity: "timing", translateX: "spring" } })));
+    expect(slid.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("it is not a crossfade: it moved opacity timing, translateX spring") });
     const still = await run("- launchApp\n- assertMotion: { target: { id: box }, overshoot: { min: 1px } }", motionApp(fakeMotion(), fakeSamples([0, 5, 0])));
     expect(still.result.failure).toMatchObject({ kind: "assertion", message: "the motion of box after the last input: overshoot is measured on a translation that travels; it moved translateX spring" });
   });
@@ -390,6 +395,29 @@ describe("motion and frames", () => {
     expect(motionLog(quiet)).toEqual(["motionState box"]);
     expect((await run("- launchApp\n- assertMotion: { target: { id: box }, kind: none }", motionApp())).result.failure).toMatchObject({ kind: "assertion", message: "box moved after the last input (translateX spring)" });
     expect((await run("- launchApp\n- assertMotion: { target: { id: box }, kind: none, settlesWithin: 1s }", motionApp())).result.failure).toMatchObject({ kind: "invalid" });
+  });
+
+  test("assertPaused hides the target's window, checks its animation holds still, and shows the window again", async () => {
+    const values = (rotate: number) => ({ opacity: 1, translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate });
+    const pausing = (states: Partial<MotionState>[]) => { const app = motionApp(); app.motions.box!.states = states; return app; };
+    const log = (app: FakeApp) => app.log.filter(line => /^(motionState|simulateOcclusion|advanceClock)/.test(line));
+    const passing = pausing([
+      { animating: ["rotate"], values: values(10) }, { animating: ["rotate"], paused: true, hidden: true, values: values(90) },
+      { animating: ["rotate"], paused: true, hidden: true, values: values(90) }, { animating: ["rotate"], values: values(91) },
+    ]);
+    const passed = (await run("- launchApp\n- assertPaused: { target: { id: box }, when: windowHidden }", passing)).result;
+    expect(passed.failure).toBeUndefined();
+    expect(log(passing)).toEqual(["motionState box", "simulateOcclusion box false", "motionState box", "advanceClock 250", "motionState box", "simulateOcclusion box true", "motionState box"]);
+    const finished = pausing([{ animating: ["translateX"] }, { hidden: true }, { hidden: true }, {}]);
+    const failure = (await run("- launchApp\n- assertPaused: { target: { id: box }, when: occluded }", finished)).result.failure;
+    expect(failure).toMatchObject({ kind: "assertion", message: "box with its window hidden: it finished instead of pausing; it did not resume when its window was shown again" });
+    expect(log(finished).at(-2)).toBe("simulateOcclusion box true");
+    const moving = pausing([{ animating: ["rotate"] }, { animating: ["rotate"], hidden: true, values: values(10) }, { animating: ["rotate"], hidden: true, values: values(40) }, { animating: ["rotate"] }]);
+    expect((await run("- launchApp\n- assertPaused: { target: { id: box }, when: windowHidden }", moving)).result.failure).toMatchObject({
+      kind: "assertion", message: "box with its window hidden: it kept animating while its window was hidden; it moved while hidden: rotate 10 → 40",
+    });
+    expect((await run("- launchApp\n- assertPaused: { target: { id: box }, when: windowHidden }", pausing([{}]))).result.failure).toMatchObject({ kind: "assertion", message: "box has no running animation to pause" });
+    expect((await run("- launchApp\n- assertPaused: { target: { id: box }, when: minimized }", motionApp())).result.failure).toMatchObject({ kind: "unsupported" });
   });
 
   test("assertMotion frames advances the virtual clock to each progress point and compares every capture with its golden", async () => {

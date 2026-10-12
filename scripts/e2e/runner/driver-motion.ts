@@ -1,5 +1,5 @@
 // Motion and frame commands of the driver backend (docs/e2e-flows.md#motion-and-frames): captureMotion, assertMotion,
-// interruptAt and assertFrames, on the motion telemetry and frame counters of the in-app driver
+// interruptAt, assertPaused and assertFrames, on the motion telemetry and frame counters of the in-app driver
 // (docs/motion.md#motion-telemetry, docs/test-driver.md#frame-timing). A metric the app cannot measure fails typed;
 // nothing is estimated on the runner side.
 import { writeFileSync } from "node:fs";
@@ -15,6 +15,8 @@ export type MotionClient = {
   motionState(testID: string): Promise<MotionState>;
   waitForMotion(testID: string, until: MotionUntil, timeoutMs?: number): Promise<MotionState>;
   sampleMotion(testID: string, range?: { fromMs?: number; toMs?: number; intervalMs?: number }): Promise<MotionSamples>;
+  simulateOcclusion(testID: string, visible: boolean): Promise<void>;
+  advanceClock(durationMs: number): Promise<unknown>;
   startFrames(): Promise<{ refreshRate: number }>;
   stopFrames(): Promise<FrameReport>;
 };
@@ -31,6 +33,8 @@ const DRIVER_FAILURES: Record<string, FailureKind> = {
   E_UNSUPPORTED_OPTION: "unsupported", E_UNKNOWN_COMMAND: "unsupported", E_UNAVAILABLE: "unsupported",
 };
 const FILE_NAME = /^[A-Za-z0-9_-]{1,100}$/;
+/** How long assertPaused keeps the window hidden before it compares the values again. */
+const PAUSE_CHECK_MS = 250;
 
 /** Driver failures as typed flow failures: `E_UNKNOWN_COMMAND` means the app does not link the motion module. */
 export async function driven<T>(what: string, call: () => Promise<T>): Promise<T> {
@@ -97,7 +101,7 @@ export function motionCommands(client: () => MotionClient): Record<string, Comma
       const toMs = Math.min(elapsed === undefined ? Infinity : motion.startMs + elapsed, motion.endMs ?? Infinity, state.timeMs);
       const recording = await driven("captureMotion", () => client().sampleMotion(id, { toMs }));
       const file = path.join(context.outputDir, `${name}.motion.json`);
-      writeFileSync(file, `${JSON.stringify({ testID: id, clock: state.clock, motion, ...recording }, null, 2)}\n`);
+      writeFileSync(file, `${JSON.stringify({ testID: id, clock: state.clock, motion, cues: state.cues, ...recording }, null, 2)}\n`);
       context.addArtifact({ kind: "output", path: file });
     },
 
@@ -122,7 +126,8 @@ export function motionCommands(client: () => MotionClient): Record<string, Comma
         problems.push(`it settled ${round(motion.endMs! - motion.latestMs)} ms after it ${motion.latestMs === motion.startMs ? "started" : "was last interrupted"}, not within ${args.settlesWithin}`);
       if (args.kind !== undefined) {
         const kind = args.kind as "spring" | "timing" | "crossfade", moved = motion.properties;
-        const matches = kind === "crossfade" ? moved.length > 0 && moved.every(property => property === "opacity")
+        // A crossfade animates only opacity; other properties may change at once (a Reduce Motion alternate's jumps).
+        const matches = kind === "crossfade" ? moved.includes("opacity") && moved.every(property => property === "opacity" || motion.kinds[property] === "jump")
           : moved.length > 0 && moved.every(property => (KINDS[kind] as readonly string[]).includes(motion.kinds[property] ?? ""));
         if (!matches) problems.push(`it is not a ${kind}: it moved ${describeMoves(motion)}`);
       }
@@ -148,6 +153,35 @@ export function motionCommands(client: () => MotionClient): Record<string, Comma
       const id = await target(args.target, context);
       await driven("interruptAt", () => client().waitForMotion(id, { progress: args.progress as number }, context.timeoutMs));
       await context.run([args.with as FlowCommand]);
+    },
+
+    /**
+     * Hides the target's window (simulated occlusion: windowHidden and occluded are the same state for motion), checks
+     * that its running animation paused where it was and stays there, then shows the window and checks it resumed.
+     */
+    assertPaused: async (args, context) => {
+      if (args.when !== "windowHidden" && args.when !== "occluded")
+        throw new Failure("unsupported", `backend driver simulates a hidden or occluded window (motion follows its occlusion state), not ${args.when}`);
+      const id = await target(args.target, context);
+      const state = () => driven("assertPaused", () => client().motionState(id));
+      const running = await state();
+      if (!running.animating.length) throw new Failure("assertion", `${id} has no running animation to pause`);
+      const problems: string[] = [];
+      await driven("assertPaused", () => client().simulateOcclusion(id, false));
+      try {
+        const hidden = await state();
+        if (running.clock === "virtual") await driven("assertPaused", () => client().advanceClock(PAUSE_CHECK_MS));
+        else await new Promise(resolve => setTimeout(resolve, PAUSE_CHECK_MS));
+        const later = await state();
+        if (!hidden.paused) problems.push(hidden.animating.length ? "it kept animating while its window was hidden" : "it finished instead of pausing");
+        const moved = (Object.keys(later.values) as MotionProperty[]).filter(property => Math.abs(later.values[property] - hidden.values[property]) > REST[property].delta);
+        if (moved.length) problems.push(`it moved while hidden: ${moved.map(property => `${property} ${round(hidden.values[property])} → ${round(later.values[property])}`).join(", ")}`);
+      } finally {
+        await driven("assertPaused", () => client().simulateOcclusion(id, true));
+      }
+      const shown = await state();
+      if (shown.paused || !shown.animating.length) problems.push("it did not resume when its window was shown again");
+      if (problems.length) throw new Failure("assertion", `${id} with its window hidden: ${problems.join("; ")}`);
     },
 
     /**

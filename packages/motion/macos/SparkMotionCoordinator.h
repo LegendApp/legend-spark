@@ -23,8 +23,9 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 
 /**
  * Main-thread owner of spark::motion::Engine on macOS. Bakes engine channels into
- * Core Animation keyframe animations, drives the virtual clock through layer timing,
- * settles completions with one-shot timers, and runs scroll links and frame telemetry.
+ * Core Animation keyframe animations at the display's frame rate, drives the virtual clock through layer timing,
+ * settles completions with one-shot timers, and runs scroll links and frame telemetry. It applies Reduce Motion,
+ * Low Power Mode and window visibility, cancels a closing window's motion, and plays cues on display frames.
  */
 @interface SparkMotionCoordinator : NSObject
 + (instancetype)shared;
@@ -47,6 +48,8 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 - (void)link:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)unlink:(NSString *)identifier resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)recordFrames:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
+/** Reduce Motion, Low Power Mode, and the frame rates and window visibility of `tag`'s view (0: the main display, no window). */
+- (void)environment:(NSInteger)tag resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 
 // The virtual clock and motion telemetry serve only the in-app test driver, and compile only with it
 // (SPARK_TEST_DRIVER, which the podspec sets; docs/test-driver.md#builds).
@@ -58,8 +61,17 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 // Motion telemetry for the in-app test driver (docs/motion.md#motion-telemetry). Replies are dictionaries.
 /** The registered MotionView that is `view` or its nearest ancestor. */
 - (nullable NSView<SparkMotionHost> *)hostForView:(NSView *)view;
-/** Starts recording each view's latest motion (the engine's telemetry is off by default); the driver calls it when it starts. */
+/**
+ * The driver calls it when it starts. Records each view's latest motion (the engine's telemetry is off by default) and
+ * every cue, which no longer plays (docs/motion.md#cues), stops following the real occlusion of windows the driver
+ * never shows (they count as visible unless simulateWindow:visible: hides them), and pins Reduce Motion and Low Power
+ * Mode off until simulate: changes them.
+ */
 - (void)recordTelemetry;
+/** Overrides what motion reads of the system: reduceMotion and lowPowerMode (simulateSystemEvent's fields) and maximumFramesPerSecond. */
+- (void)simulate:(NSDictionary *)values;
+/** Treats `window` as hidden or visible, as a change of its occlusion state would. */
+- (void)simulateWindow:(NSWindow *)window visible:(BOOL)visible;
 /** Marks a driver input (a click, key, deep link): waitForMotion waits for motion started or interrupted after it. */
 - (void)noteInput;
 /** Engine state now and the view's latest motion. */

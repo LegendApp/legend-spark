@@ -12,8 +12,8 @@ export const COMMITS: CommitReport = { commits: 3, relayouts: [], gaps: [], blan
 export const COUNTERS: Counters = { windows: 2, views: 400, fileDescriptors: 40, listeners: 12 };
 export const FRAMES: FrameReport = { frames: 61, droppedFrames: 0, maxFrameGapMs: 8.4, durationMs: 500, fps: 120, refreshRate: 120 };
 
-/** A scripted motion for a testID: the telemetry the driver reports once it has settled, its samples, and the motion clock. */
-export type FakeMotion = { motion: Motion; samples: MotionSample[]; clock?: "virtual" | "real" };
+/** A scripted motion for a testID: the telemetry the driver reports once it has settled, its samples, the motion clock, and the fields of successive replies. */
+export type FakeMotion = { motion: Motion; samples: MotionSample[]; clock?: "virtual" | "real"; states?: Partial<MotionState>[] };
 export const REST_VALUES = { opacity: 1, translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 };
 /** A settled motion from `startMs` to `endMs`; `overrides` replace any field. */
 export const fakeMotion = (overrides: Partial<Motion> = {}): Motion => ({
@@ -53,10 +53,14 @@ export class FakeDriver implements DriverClient {
   }
   async setClock(mode: "virtual" | "real") { this.log.push(`setClock ${mode}`); }
   async advanceClock(durationMs: number) { this.log.push(`advanceClock ${durationMs}`); }
+  async simulateOcclusion(testID: string, visible: boolean) { this.log.push(`simulateOcclusion ${testID} ${visible}`); }
   async simulateSystemEvent(event: SimulatedSystemEvent) { this.log.push(`simulateSystemEvent ${JSON.stringify(event)}`); }
   private motionOf(testID: string) {
     const scripted = this.motions()[testID];
-    const state: MotionState = { tag: 7, clock: scripted?.clock ?? "virtual", timeMs: scripted?.motion.endMs ?? 0, values: REST_VALUES, velocities: REST_VALUES, animating: [], motion: scripted?.motion ?? null };
+    const state: MotionState = {
+      tag: 7, clock: scripted?.clock ?? "virtual", timeMs: scripted?.motion.endMs ?? 0, values: REST_VALUES, velocities: REST_VALUES, animating: [], motion: scripted?.motion ?? null,
+      frameRate: 120, hidden: false, paused: false, cues: [], ...scripted?.states?.shift(),
+    };
     return { scripted, state };
   }
   async motionState(testID: string) { this.log.push(`motionState ${testID}`); return this.motionOf(testID).state; }

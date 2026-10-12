@@ -1,0 +1,63 @@
+appId: so.legend.spark.examples.kitchensink
+name: Motion follows Reduce Motion, Low Power Mode, the display's frame rate, a hidden window and unmounting
+intent: >
+  On Motion system > Accessibility, power and lifecycle, with the virtual clock, the driver simulates the system state
+  motion reads; the Mac's settings and displays are untouched. With one simulated 120 Hz display the environment
+  reports 120 Hz, in Low Power Mode 60 Hz, and with a 60 Hz display 60 Hz. The slide springs as written; with Reduce
+  Motion on it jumps and fades in within 250 ms, the shake becomes a dim pulse (opacity only) and the instant slide
+  changes at once without any motion. Starting the spinner and the 8 s slide and hiding the window pauses the spinner where it is (and it
+  resumes when shown) while the slide jumps to its end and reports finished true. The cued spring records its cues in
+  its motion capture. Unmounting the box during its 10 s slide reports finished false.
+checks: [MOT-POWER-01, MOT-REDUCE-01, MOT-HIDDEN-01, MOT-CUES-01, MOT-CANCEL-01]
+tags: [motion-system]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://motion-system/accessibility-power" }
+- extendedWaitUntil: { visible: { id: motion-system-accessibility-power-root }, timeout: 10s }
+- assertText: { id: motion-system-accessibility-power-availability, equals: '{"available":true}' }
+- setClock: virtual
+# Frame rate: the simulated primary display's refresh rate, capped at 60 Hz in Low Power Mode.
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- tapOn: { id: motion-system-accessibility-power-refresh }
+- assertText: { id: motion-system-accessibility-power-environment, equals: '{"reduceMotion":false,"lowPowerMode":false,"maximumFrameRate":120,"frameRate":120,"windowVisible":true}' }
+- simulateSystemEvent: { type: lowPowerChanged, lowPower: true }
+- assertText: { id: motion-system-accessibility-power-environment, equals: '{"reduceMotion":false,"lowPowerMode":true,"maximumFrameRate":120,"frameRate":60,"windowVisible":true}' }
+- simulateSystemEvent: { type: lowPowerChanged, lowPower: false }
+- simulateDisplays:
+    displays:
+      - { id: "902", persistentId: SIM-902, name: Studio Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 2560, height: 1440 }, workArea: { x: 0, y: 25, width: 2560, height: 1415 }, scaleFactor: 2, safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: Studio Display, gamut: p3 }, edrHeadroom: { current: 1, potential: 1, reference: null } }
+- tapOn: { id: motion-system-accessibility-power-refresh }
+- assertText: { id: motion-system-accessibility-power-environment, equals: '{"reduceMotion":false,"lowPowerMode":false,"maximumFrameRate":60,"frameRate":60,"windowVisible":true}' }
+# Reduce Motion: off, the slide springs; on, each animation plays its alternate.
+- tapOn: { id: motion-system-accessibility-power-slide }
+- assertMotion: { target: { id: motion-system-accessibility-power-card }, kind: spring }
+- simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: true }
+- assertText: { id: motion-system-accessibility-power-environment, equals: '{"reduceMotion":true,"lowPowerMode":false,"maximumFrameRate":60,"frameRate":60,"windowVisible":true}' }
+- tapOn: { id: motion-system-accessibility-power-slide }
+- assertMotion: { target: { id: motion-system-accessibility-power-card }, kind: crossfade, settlesWithin: 250ms }
+- assertText: { id: motion-system-accessibility-power-reduced-result, equals: '{"finished":true}' }
+- tapOn: { id: motion-system-accessibility-power-shake }
+- assertMotion: { target: { id: motion-system-accessibility-power-card }, kind: crossfade, settlesWithin: 350ms }
+# The instant alternate changes the value at once: no motion at all, and the animation finishes.
+- tapOn: { id: motion-system-accessibility-power-instant }
+- assertText: { id: motion-system-accessibility-power-reduced-result, equals: '{"finished":true}' }
+- assertMotion: { target: { id: motion-system-accessibility-power-card }, kind: none }
+- simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: false }
+# A hidden window: the repeating spinner pauses and resumes; the finite slide completes.
+- tapOn: { id: motion-system-accessibility-power-hidden-start }
+- captureMotion: { target: { id: motion-system-accessibility-power-spinner }, until: 300ms, name: spinner }
+- assertPaused: { target: { id: motion-system-accessibility-power-spinner }, when: windowHidden }
+- assertText: { id: motion-system-accessibility-power-hidden-result, equals: '{"finished":true}' }
+# Cues are recorded with the frames they were due on (output/cues.motion.json).
+- tapOn: { id: motion-system-accessibility-power-cues-play }
+- captureMotion: { target: { id: motion-system-accessibility-power-cued }, name: cues }
+- assertText: { id: motion-system-accessibility-power-cues-result, equals: '{"finished":true}' }
+# Unmounting during the 10 s slide cancels it.
+- tapOn: { id: motion-system-accessibility-power-long-start }
+- captureMotion: { target: { id: motion-system-accessibility-power-long }, until: 200ms, name: long }
+- tapOn: { id: motion-system-accessibility-power-long-mount }
+- assertText: { id: motion-system-accessibility-power-long-result, equals: '{"finished":false}' }
+- simulateDisplays: { restore: true }
+- setClock: real

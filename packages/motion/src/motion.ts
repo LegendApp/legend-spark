@@ -11,15 +11,54 @@ import { channels, invalid, isMotionSpec, MOTION_PROPERTIES, spring, type Motion
 /** A mounted `MotionView`, as received through its `ref`. */
 export type MotionTarget = ComponentRef<HostComponent<NativeProps>>;
 export type MotionAnimationValues = Partial<Record<MotionProperty, number | MotionSpec>>;
-export interface AnimateOptions { delayMs?: number }
+/**
+ * What a step without its own `reducedValues` plays while the user has Reduce Motion on (docs/motion.md#reduce-motion):
+ * `fade` (default) changes transforms at once and fades opacity (a view that only moves fades in where it lands),
+ * `instant` changes every value at once, `play` plays the animation as written (motion the user asked for, such as a drag).
+ */
+export type ReducedMotion = "fade" | "instant" | "play";
+/** macOS haptic patterns (NSHapticFeedbackPattern). */
+export type MotionHaptic = "generic" | "alignment" | "levelChange";
+/** A haptic and/or a system sound, played on the display frame that shows `at` (docs/motion.md#cues). */
+export interface MotionCue {
+  /** Milliseconds after the animation starts (at most its end), or `end`. Under Reduce Motion the time scales with the alternate. */
+  at: number | "end";
+  haptic?: MotionHaptic;
+  /** A system sound name, such as `Tink` (NSSound soundNamed:). */
+  sound?: string;
+}
+/** Options of one animation plan: `animate`, `stagger` and `timeline`. */
+export interface MotionPlanOptions {
+  reducedMotion?: ReducedMotion;
+  /** While the view's window is hidden or fully occluded: `complete` (default) jumps finite animations to their end; `pause` holds them. Infinite repeats always pause. */
+  whenHidden?: "complete" | "pause";
+  cues?: readonly MotionCue[];
+}
+export interface AnimateOptions extends MotionPlanOptions {
+  delayMs?: number;
+  /** The designed Reduce Motion alternate, played instead of `values` while Reduce Motion is on. */
+  reducedValues?: MotionAnimationValues;
+}
 export interface MotionAnimation {
   /** Resolves when every animated property settles, `{ finished: false }` if interrupted or unmounted. Rejects with a SparkError the engine raised. */
   readonly finished: Promise<{ finished: boolean }>;
   /** Freezes the animation's properties at their presented values. */
   stop(): Promise<void>;
 }
-export interface StaggerOptions { eachMs: number; from?: "first" | "last" | "center"; delayMs?: number }
-export interface TimelineStep { target: MotionTarget | null; values: MotionAnimationValues; after?: "start" | "previous"; offsetMs?: number }
+export interface StaggerOptions extends MotionPlanOptions { eachMs: number; from?: "first" | "last" | "center"; delayMs?: number; reducedValues?: MotionAnimationValues }
+export interface TimelineStep { target: MotionTarget | null; values: MotionAnimationValues; after?: "start" | "previous"; offsetMs?: number; reducedValues?: MotionAnimationValues }
+/** What motion follows of the system and of a view's window. */
+export interface MotionEnvironment {
+  /** The user's Reduce Motion setting; animations started while it is on play their alternate. */
+  reduceMotion: boolean;
+  lowPowerMode: boolean;
+  /** The refresh rate of the display showing the view's window (the main display without a view); null without a display. */
+  maximumFrameRate: number | null;
+  /** The rate motion samples and asks the compositor for: the display's, at most 120 Hz, at most 60 Hz in Low Power Mode. */
+  frameRate: number;
+  /** Whether the view's window is visible (not hidden, minimized or fully occluded); null without a view. */
+  windowVisible: boolean | null;
+}
 export interface MotionState {
   values: Record<MotionChannelProperty, number>;
   /** Units per second. */
@@ -51,7 +90,9 @@ export interface MotionFrameReport {
 }
 
 const CHANNELS = MOTION_PROPERTIES.filter((property): property is MotionChannelProperty => property !== "scale");
-type Group = { tag: number; after?: "start" | "previous"; offsetMs?: number; tracks: Record<string, MotionSpec> };
+type Group = { tag: number; after?: "start" | "previous"; offsetMs?: number; tracks: Record<string, MotionSpec>; reducedTracks?: Record<string, MotionSpec> };
+const HAPTICS: readonly MotionHaptic[] = ["generic", "alignment", "levelChange"];
+const PLAN_OPTIONS = ["reducedMotion", "whenHidden", "cues"] as const;
 let nextId = 0;
 
 export function getMotionAvailability(): Availability {
@@ -84,40 +125,66 @@ export function tracks(values: MotionAnimationValues): Record<string, MotionSpec
     return [property, value];
   }));
 }
-function start(native: Spec, groups: Group[]): MotionAnimation {
+function known(value: object, allowed: readonly string[], name: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) invalid(`${name} must be an object`);
+  const unknown = Object.keys(value).find(key => !allowed.includes(key));
+  if (unknown) invalid(`${name} has no option ${unknown}`);
+}
+function cue(value: MotionCue): MotionCue {
+  known(value, ["at", "haptic", "sound"], "A cue");
+  const { at, haptic, sound } = value;
+  if (at !== "end" && !(Number.isFinite(at) && at >= 0)) invalid("A cue's at is end or a non-negative finite number of milliseconds");
+  if (haptic !== undefined && !HAPTICS.includes(haptic)) invalid("haptic is generic, alignment or levelChange");
+  if (sound !== undefined && (typeof sound !== "string" || !sound)) invalid("sound is a non-empty system sound name");
+  if (haptic === undefined && sound === undefined) invalid("A cue needs a haptic or a sound");
+  return { at, ...(haptic === undefined ? {} : { haptic }), ...(sound === undefined ? {} : { sound }) };
+}
+/** The plan's options as the engine reads them; omitted ones keep its defaults. */
+function plan({ reducedMotion, whenHidden, cues }: MotionPlanOptions) {
+  if (reducedMotion !== undefined && reducedMotion !== "fade" && reducedMotion !== "instant" && reducedMotion !== "play") invalid("reducedMotion is fade, instant or play");
+  if (whenHidden !== undefined && whenHidden !== "complete" && whenHidden !== "pause") invalid("whenHidden is complete or pause");
+  if (cues !== undefined && !Array.isArray(cues)) invalid("cues must be an array");
+  return { ...(reducedMotion && { reducedMotion }), ...(whenHidden && { whenHidden }), ...(cues?.length ? { cues: cues.map(cue) } : {}) };
+}
+function start(native: Spec, groups: Group[], options: MotionPlanOptions): MotionAnimation {
   const id = `motion-${++nextId}`;
-  const finished = invokeNative(() => native.run(JSON.stringify({ id, groups })))
+  const request = JSON.stringify({ id, groups, ...plan(options) });
+  const finished = invokeNative(() => native.run(request))
     .then(json => parseNativeResult(json, (value): value is { finished: boolean } => !!value && typeof value === "object" && typeof (value as { finished?: unknown }).finished === "boolean"));
   return { finished, stop: () => invokeNative(() => native.stopAnimation(id)) };
 }
 
 /** Animates one MotionView. A bare number means `spring(value)` with the platform default preset. */
 export function animate(target: MotionTarget | null, values: MotionAnimationValues, options: AnimateOptions = {}): MotionAnimation {
-  return timeline([{ target, values, offsetMs: options.delayMs }]);
+  known(options, ["delayMs", "reducedValues", ...PLAN_OPTIONS], "animate options");
+  const { delayMs, reducedValues, ...rest } = options;
+  return timeline([{ target, values, offsetMs: delayMs, reducedValues }], rest);
 }
 
 /** One timeline: each step starts relative to the timeline start, or after the previous step's natively solved end. */
-export function timeline(steps: readonly TimelineStep[]): MotionAnimation {
+export function timeline(steps: readonly TimelineStep[], options: MotionPlanOptions = {}): MotionAnimation {
   const native = motionModule();
+  known(options, PLAN_OPTIONS, "timeline options");
   if (!Array.isArray(steps) || steps.length === 0) invalid("A timeline needs at least one step");
-  const groups = steps.map(({ target, values, after, offsetMs }, index): Group => {
+  const groups = steps.map(({ target, values, after, offsetMs, reducedValues }, index): Group => {
     if (after !== undefined && after !== "start" && after !== "previous") invalid("after is start or previous");
     if (after === "previous" && index === 0) invalid("The first timeline step has no previous step");
-    return { tag: tagOf(target), after, offsetMs: offset(offsetMs, "offsetMs"), tracks: tracks(values) };
+    return { tag: tagOf(target), after, offsetMs: offset(offsetMs, "offsetMs"), tracks: tracks(values), ...(reducedValues === undefined ? {} : { reducedTracks: tracks(reducedValues) }) };
   });
-  return start(native, groups);
+  return start(native, groups, options);
 }
 
 /** The same animation on several MotionViews, `eachMs` apart, in one native plan. */
 export function stagger(targets: readonly (MotionTarget | null)[], values: MotionAnimationValues, options: StaggerOptions): MotionAnimation {
   if (!Array.isArray(targets) || targets.length === 0) invalid("stagger needs at least one target");
-  const eachMs = offset(options?.eachMs, "eachMs") ?? invalid("stagger needs eachMs");
-  const delayMs = offset(options.delayMs, "delayMs") ?? 0;
-  const from = options.from ?? "first";
+  known(options, ["eachMs", "from", "delayMs", "reducedValues", ...PLAN_OPTIONS], "stagger options");
+  const { eachMs: each, from = "first", delayMs: delay, reducedValues, ...rest } = options;
+  const eachMs = offset(each, "eachMs") ?? invalid("stagger needs eachMs");
+  const delayMs = offset(delay, "delayMs") ?? 0;
   if (from !== "first" && from !== "last" && from !== "center") invalid("from is first, last or center");
   const last = targets.length - 1;
   const rank = (index: number) => from === "first" ? index : from === "last" ? last - index : Math.abs(index - last / 2);
-  return timeline(targets.map((target, index) => ({ target, values, offsetMs: delayMs + rank(index) * eachMs })));
+  return timeline(targets.map((target, index) => ({ target, values, reducedValues, offsetMs: delayMs + rank(index) * eachMs })), rest);
 }
 
 /** Sets values immediately, interrupting their animations (use while tracking a gesture). */
@@ -161,6 +228,20 @@ export function linkScroll(target: MotionTarget | null, options: ScrollLinkOptio
     const id = `motion-link-${++nextId}`;
     await native.link(JSON.stringify({ id, tag: tagOf(target), nativeID: source.nativeID, axis, clamp: extrapolate === "clamp", input, output: Object.fromEntries(outputs) }));
     return asyncRegistration(() => {}, () => invokeNative(() => native.unlink(id)));
+  });
+}
+
+/**
+ * Reduce Motion, Low Power Mode, the frame rate motion runs at, and whether the target's window is visible. Without a
+ * target it reads the main display. Read it when it matters: animations read the system themselves when they start.
+ */
+export function getMotionEnvironment(target?: MotionTarget | null): Promise<MotionEnvironment> {
+  return invokeNative(async () => {
+    const native = motionModule();
+    const json = await native.environment(target === undefined ? 0 : tagOf(target));
+    return parseNativeResult(json, (value): value is MotionEnvironment => isRecord(value) && typeof value.reduceMotion === "boolean" && typeof value.lowPowerMode === "boolean"
+      && (value.maximumFrameRate === null || typeof value.maximumFrameRate === "number") && typeof value.frameRate === "number"
+      && (value.windowVisible === null || typeof value.windowVisible === "boolean"));
   });
 }
 

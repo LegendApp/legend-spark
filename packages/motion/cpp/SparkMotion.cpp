@@ -65,6 +65,7 @@ void validate(const Spec &spec) {
       }
       break;
     case Spec::Kind::Sequence: require(!spec.steps.empty(), "A sequence needs at least one step"); break;
+    case Spec::Kind::Jump: break;
   }
 }
 
@@ -297,6 +298,8 @@ CurvePtr buildCurve(const Spec &spec, State start) {
       }
       return std::make_shared<DecayCurve>(start.value, velocity, k, rest);
     }
+    case Spec::Kind::Jump:
+      return std::make_shared<TimingCurve>(start.value, spec.to, 0, spec.easing, std::nullopt);
     case Spec::Kind::Sequence: {
       std::vector<CurvePtr> parts;
       State state{start.value, velocity};
@@ -383,6 +386,9 @@ void Engine::removeView(int64_t view, std::vector<Settled> &settled) {
   for (Slot &slot : found->second) release(slot, false, settled);
   views_.erase(found);
   episodes_.erase(view);
+  hidden_.erase(view);
+  pausedAt_.erase(view);
+  resumed_.erase(view);
 }
 Engine::Slots &Engine::slots(int64_t view) {
   auto found = views_.find(view);
@@ -405,18 +411,71 @@ void Engine::release(Slot &slot, bool finished, std::vector<Settled> &settled) {
   }
 }
 
+namespace {
+void shiftEpisode(Episode &episode, double shift) {
+  episode.start += shift; episode.end += shift; episode.latest += shift;
+  for (auto &segments : episode.segments) for (Segment &segment : segments) { segment.from += shift; segment.begin += shift; }
+  for (Interruption &interruption : episode.interruptions) interruption.time += shift;
+}
+}  // namespace
+
 double Engine::setVirtualClock(bool enabled, double realNow) {
   if (enabled == virtual_) return 0;
   virtual_ = enabled;
   if (enabled) { virtualTime_ = realNow; return 0; }
   const double shift = realNow - virtualTime_;
   for (auto &[view, slots] : views_) for (Slot &slot : slots) slot.begin += shift;
-  for (auto &[view, episode] : episodes_) {
-    episode.start += shift; episode.end += shift; episode.latest += shift;
-    for (auto &segments : episode.segments) for (Segment &segment : segments) { segment.from += shift; segment.begin += shift; }
-    for (Interruption &interruption : episode.interruptions) interruption.time += shift;
-  }
+  for (auto &[view, at] : pausedAt_) at += shift;
+  for (auto &[view, episode] : episodes_) shiftEpisode(episode, shift);
   return shift;
+}
+
+double Engine::timeOf(int64_t view, double now) const {
+  auto found = pausedAt_.find(view);
+  return found == pausedAt_.end() ? now : found->second;
+}
+double Engine::setHidden(int64_t view, bool hidden, double now, std::vector<Settled> &settled) {
+  slots(view);
+  if (hidden == (hidden_.count(view) != 0)) return 0;
+  if (!hidden) {
+    hidden_.erase(view);
+    return resume(view, now);
+  }
+  sweep(now, settled);
+  hidden_.insert(view);
+  conceal(view, now, settled);
+  return 0;
+}
+void Engine::conceal(int64_t view, double now, std::vector<Settled> &settled) {
+  Slots &target = views_.at(view);
+  const Snapshot before = snapshot(target, now);
+  bool moving = false;
+  for (Slot &slot : target) {
+    if (!slot.track) continue;
+    auto batch = batches_.find(slot.batch);
+    if (slot.track->infinite() || (batch != batches_.end() && batch->second.pauseWhenHidden)) { moving = true; continue; }
+    slot.model = slot.track->end().value;
+    release(slot, true, settled);
+  }
+  observe(view, before, now);
+  if (moving) pausedAt_[view] = now;
+}
+double Engine::resume(int64_t view, double now) {
+  auto found = pausedAt_.find(view);
+  if (found == pausedAt_.end()) return 0;
+  const double shift = now - found->second;
+  pausedAt_.erase(found);
+  resumed_[view] += shift;
+  for (Slot &slot : views_.at(view)) slot.begin += shift;
+  auto episode = episodes_.find(view);
+  if (episode != episodes_.end()) shiftEpisode(episode->second, shift);
+  return shift;
+}
+template <typename Operation> void Engine::unpaused(const std::vector<int64_t> &views, double now, std::vector<Settled> &settled, Operation operation) {
+  for (int64_t view : views) resume(view, now);
+  auto hide = [&] { for (int64_t view : views) if (hidden_.count(view) && !pausedAt_.count(view)) conceal(view, now, settled); };
+  try { operation(); } catch (...) { hide(); throw; }
+  hide();
 }
 void Engine::advance(double seconds) {
   if (!virtual_) throw Failure{"E_UNAVAILABLE", "Advancing the motion clock requires the virtual clock"};
@@ -439,42 +498,117 @@ int64_t loopMilliseconds(const std::array<TrackPtr, PropertyCount> &tracks, Chan
 }
 }  // namespace
 
-void Engine::run(const Plan &plan, double now, std::vector<Settled> &settled, std::vector<int64_t> &touched) {
+Started Engine::run(const Plan &plan, double now, std::vector<Settled> &settled, std::vector<int64_t> &touched) {
+  std::vector<int64_t> views;
+  for (const Group &group : plan.groups) views.push_back(group.view);
+  Started started;
+  unpaused(views, now, settled, [&] { started = start(plan, now, settled, touched); });
+  return started;
+}
+
+Started Engine::start(const Plan &plan, double now, std::vector<Settled> &settled, std::vector<int64_t> &touched) {
   require(!plan.id.empty(), "Missing animation id");
   if (batches_.count(plan.id)) throw invalid("Animation id is already running");
   require(!plan.groups.empty(), "An animation needs at least one step");
   for (const Group &group : plan.groups) {
     require(!group.tracks.empty(), "Each animation step needs at least one property");
+    require(!group.reduced || !group.reduced->empty(), "A Reduce Motion alternate needs at least one property");
     require(finite(group.offset), "offsetMs must be a finite number");
   }
+  // Reduce Motion (docs/motion.md#reduce-motion): a step plays its own alternate, or the plan's designed one.
+  const bool designed = plan.reduceMotion && plan.reduce != Reduce::Play;
+  const auto played = [&](const Group &group) -> const Tracks & { return plan.reduceMotion && group.reduced ? *group.reduced : group.tracks; };
+  std::unordered_set<int64_t> fading;  // views whose opacity the plan drives: the fade's own track would drive it twice
+  for (const Group &group : plan.groups)
+    for (const auto &[property, spec] : played(group)) if (property == Opacity) fading.insert(group.view);
+  const Easing easeInOut{0.42, 0, 0.58, 1};
   std::unordered_map<int64_t, Slots> staged;
-  double previousEnd = 0;
+  Started started;
+  double previousEnd = 0, previousPlanned = 0;
   for (const Group &group : plan.groups) {
     Slots &copy = staged.try_emplace(group.view, slots(group.view)).first->second;
-    if (std::isinf(previousEnd)) throw invalid("A timeline step cannot follow an infinitely repeating step");
+    if (std::isinf(previousPlanned)) throw invalid("A timeline step cannot follow an infinitely repeating step");
     const double start = (group.afterPrevious ? previousEnd : 0) + group.offset;
-    if (start < 0) throw invalid("A timeline step cannot start before the timeline");
-    double end = start;
-    for (const auto &[property, spec] : group.tracks) {
+    const double plannedStart = (group.afterPrevious ? previousPlanned : 0) + group.offset;
+    if (start < 0 || plannedStart < 0) throw invalid("A timeline step cannot start before the timeline");
+    const bool alternate = designed && !group.reduced;
+    double end = start, plannedEnd = plannedStart;
+    if (plan.reduceMotion) {
+      // The plan as written, for cue times (each property is driven once, so the live state is its start).
+      const Slots &live = slots(group.view);
+      for (const auto &[property, spec] : group.tracks) {
+        const double lead = plannedStart + spec.delay;
+        plannedEnd = std::max(plannedEnd, lead + makePlays(spec, spec.from.value_or(slotState(live[property], now + lead))).duration());
+      }
+    }
+    std::vector<std::shared_ptr<Track>> created, jumps;
+    bool fadesOut = false, moves = false;
+    double firstJump = kInfinity;
+    for (const auto &[property, spec] : played(group)) {
       Slot &slot = copy[property];
       if (slot.batch == plan.id) throw invalid(std::string("One animation drives ") + propertyName(property) + " of a view once; chain steps with a sequence");
       if (slot.linked) throw Failure{"E_BUSY", std::string(propertyName(property)) + " is driven by a scroll link"};
       auto track = std::make_shared<Track>();
       track->leadDuration = start + spec.delay;
       track->startValue = spec.from ? spec.from->value : slotState(slot, now).value;
-      if (slot.track && track->leadDuration > 0 && !spec.from) track->lead = std::make_shared<ContinueCurve>(slot.track, now - slot.begin, track->leadDuration);
-      track->plays = makePlays(spec, spec.from.value_or(slotState(slot, now + track->leadDuration)));
+      if (slot.track && track->leadDuration > 0 && !alternate && !spec.from) track->lead = std::make_shared<ContinueCurve>(slot.track, now - slot.begin, track->leadDuration);
+      const State from = spec.from.value_or(slotState(slot, alternate ? now : now + track->leadDuration));
+      track->plays = makePlays(spec, from);
       track->kind = spec.kind;
-      if (track->infinite()) {
+      if (alternate) {
+        // Nothing travels: transforms change at once, opacity fades without bounce. A loop holds where it is.
+        Spec reduced;
+        reduced.to = track->infinite() ? from.value : track->plays.end().value;
+        reduced.easing = easeInOut;
+        const bool fades = property == Opacity && plan.reduce == Reduce::Fade;
+        reduced.kind = fades ? Spec::Kind::Timing : Spec::Kind::Jump;
+        reduced.duration = fades ? kReducedFade : 0;
+        track->plays = makePlays(reduced, {from.value, 0});
+        track->kind = reduced.kind;
+        if (fades) fadesOut = reduced.to < from.value;
+        if (!fades) {
+          jumps.push_back(track);
+          firstJump = std::min(firstJump, track->leadDuration);
+          moves = moves || std::abs(reduced.to - from.value) > restThreshold(property).delta;
+        }
+      } else if (track->infinite()) {
         track->plays.cycle = std::ceil(track->plays.cycle * 1000 - 1e-6) / 1000;
         if (track->plays.cycle <= 0) throw invalid("An infinitely repeating animation needs a non-zero duration");
       }
       slot.track = track;
       slot.begin = now;
       slot.batch = plan.id;
-      end = std::max(end, track->duration());
+      created.push_back(track);
     }
+    if (alternate && plan.reduce == Reduce::Fade) {
+      // A view fading out keeps its place until it is gone; one that only moves fades in where it lands.
+      if (fadesOut) for (auto &jump : jumps) jump->leadDuration += kReducedFade;
+      Slot &opacity = copy[Opacity];
+      if (moves && !fading.count(group.view) && !opacity.linked) {
+        fading.insert(group.view);
+        const State current = slotState(opacity, now);
+        Spec fade;
+        fade.kind = Spec::Kind::Timing;
+        fade.to = opacity.track && !opacity.track->infinite() ? opacity.track->end().value : current.value;
+        fade.duration = kReducedFade;
+        fade.easing = easeInOut;
+        auto track = std::make_shared<Track>();
+        track->leadDuration = firstJump;
+        track->startValue = current.value;
+        track->plays = makePlays(fade, {0, 0});
+        track->kind = Spec::Kind::Timing;
+        opacity.track = track;
+        opacity.begin = now;
+        opacity.batch = plan.id;
+        created.push_back(track);
+      }
+    }
+    for (const auto &track : created) end = std::max(end, track->duration());
     previousEnd = end;
+    previousPlanned = plan.reduceMotion ? plannedEnd : end;
+    started.end = std::max(started.end, end);
+    started.plannedEnd = std::max(started.plannedEnd, previousPlanned);
+    started.reduced = started.reduced || (plan.reduceMotion && (alternate || group.reduced));
   }
   for (const auto &[view, copy] : staged) {
     std::array<TrackPtr, PropertyCount> tracks;
@@ -482,12 +616,23 @@ void Engine::run(const Plan &plan, double now, std::vector<Settled> &settled, st
     loopMilliseconds(tracks, Channel::Opacity);
     loopMilliseconds(tracks, Channel::Transform);
   }
+  const double scale = started.reduced && std::isfinite(started.plannedEnd) && started.plannedEnd > 0 ? started.end / started.plannedEnd : 1;
+  for (const std::optional<double> &cue : plan.cues) {
+    if (!cue) {
+      if (std::isinf(started.end)) throw Failure{"E_UNSUPPORTED_OPTION", "An end cue needs an animation that ends; this one repeats forever"};
+      started.cues.push_back(started.end);
+      continue;
+    }
+    require(finite(*cue) && *cue >= 0, "Cue times must be non-negative finite numbers");
+    if (*cue > started.plannedEnd + 1e-9) throw invalid("A cue cannot come after the animation ends");
+    started.cues.push_back(std::min(*cue * scale, started.end));
+  }
   // Valid: from here on nothing throws. Settle what finished by now, then replace only the plan's properties.
   sweep(now, settled);
   std::unordered_map<int64_t, Snapshot> before;
   for (const auto &[view, copy] : staged) before.emplace(view, snapshot(views_.at(view), now));
   int pending = 0;
-  batches_[plan.id] = {};
+  batches_[plan.id] = {0, false, plan.pauseWhenHidden};
   for (auto &[view, copy] : staged) {
     Slots &live = views_.at(view);
     for (int i = 0; i < PropertyCount; i++) {
@@ -500,50 +645,60 @@ void Engine::run(const Plan &plan, double now, std::vector<Settled> &settled, st
     observe(view, before.at(view), now);
   }
   batches_[plan.id].pending = pending;
+  return started;
 }
 
 void Engine::set(int64_t view, const std::vector<std::pair<Property, double>> &values, double now, std::vector<Settled> &settled) {
-  Slots &target = slots(view);
-  for (const auto &[property, value] : values) {
-    require(finite(value), "Motion values must be finite numbers");
-    if (target[property].linked) throw Failure{"E_BUSY", std::string(propertyName(property)) + " is driven by a scroll link"};
-  }
-  sweep(now, settled);
-  const Snapshot before = snapshot(target, now);
-  for (const auto &[property, value] : values) {
-    release(target[property], false, settled);
-    target[property].model = value;
-  }
-  observe(view, before, now, true);
+  unpaused({view}, now, settled, [&] {
+    Slots &target = slots(view);
+    for (const auto &[property, value] : values) {
+      require(finite(value), "Motion values must be finite numbers");
+      if (target[property].linked) throw Failure{"E_BUSY", std::string(propertyName(property)) + " is driven by a scroll link"};
+    }
+    sweep(now, settled);
+    const Snapshot before = snapshot(target, now);
+    for (const auto &[property, value] : values) {
+      release(target[property], false, settled);
+      target[property].model = value;
+    }
+    observe(view, before, now, true);
+  });
 }
 
 void Engine::stop(int64_t view, const std::vector<Property> &properties, double now, std::vector<Settled> &settled) {
-  Slots &target = slots(view);
-  sweep(now, settled);
-  const Snapshot before = snapshot(target, now);
-  for (Property property : properties) {
-    Slot &slot = target[property];
-    slot.model = slotState(slot, now).value;
-    release(slot, false, settled);
-  }
-  observe(view, before, now);
+  unpaused({view}, now, settled, [&] {
+    Slots &target = slots(view);
+    sweep(now, settled);
+    const Snapshot before = snapshot(target, now);
+    for (Property property : properties) {
+      Slot &slot = target[property];
+      slot.model = slotState(slot, now).value;
+      release(slot, false, settled);
+    }
+    observe(view, before, now);
+  });
 }
 
 void Engine::stopBatch(const std::string &id, double now, std::vector<Settled> &settled, std::vector<int64_t> &touched) {
-  sweep(now, settled);
-  for (auto &[view, slots] : views_) {
-    const Snapshot before = snapshot(slots, now);
-    bool changed = false;
-    for (Slot &slot : slots) {
-      if (!slot.track || slot.batch != id) continue;
-      slot.model = slotState(slot, now).value;
-      release(slot, false, settled);
-      changed = true;
+  std::vector<int64_t> views;
+  for (const auto &[view, slots] : views_)
+    if (std::any_of(slots.begin(), slots.end(), [&](const Slot &slot) { return slot.track && slot.batch == id; })) views.push_back(view);
+  unpaused(views, now, settled, [&] {
+    sweep(now, settled);
+    for (auto &[view, slots] : views_) {
+      const Snapshot before = snapshot(slots, now);
+      bool changed = false;
+      for (Slot &slot : slots) {
+        if (!slot.track || slot.batch != id) continue;
+        slot.model = slotState(slot, now).value;
+        release(slot, false, settled);
+        changed = true;
+      }
+      if (!changed) continue;
+      touched.push_back(view);
+      observe(view, before, now);
     }
-    if (!changed) continue;
-    touched.push_back(view);
-    observe(view, before, now);
-  }
+  });
 }
 
 std::optional<double> Engine::target(int64_t view, Property property) const {
@@ -555,8 +710,9 @@ std::optional<double> Engine::target(int64_t view, Property property) const {
   return slot.track->end().value;
 }
 
-bool Engine::handoff(int64_t view, const std::vector<std::pair<Property, State>> &from, const Spec &transition, double now, std::vector<Settled> &settled) {
+bool Engine::handoff(int64_t view, const std::vector<std::pair<Property, State>> &from, const Spec &transition, double now, std::vector<Settled> &settled, bool reduceMotion) {
   Plan plan{"spark.handoff." + std::to_string(++handoffs_), {Group{view, {}, false, 0}}};
+  plan.reduceMotion = reduceMotion;
   for (const auto &[property, state] : from) {
     const std::optional<double> to = target(view, property);
     if (!to || slots(view)[property].linked) continue;
@@ -577,7 +733,7 @@ bool Engine::handoff(int64_t view, const std::vector<std::pair<Property, State>>
 void Engine::sweep(double now, std::vector<Settled> &settled) {
   auto due = [now](const Slot &slot) { return slot.track && !slot.track->infinite() && slot.begin + slot.track->duration() <= now + 1e-9; };
   for (auto &[view, slots] : views_) {
-    if (std::none_of(slots.begin(), slots.end(), due)) continue;
+    if (pausedAt_.count(view) || std::none_of(slots.begin(), slots.end(), due)) continue;
     const Snapshot before = snapshot(slots, now);
     for (Slot &slot : slots)
       if (due(slot)) {
@@ -659,7 +815,7 @@ std::optional<double> Engine::nextCompletion() const {
   std::optional<double> next;
   for (const auto &[view, slots] : views_)
     for (const Slot &slot : slots)
-      if (slot.track && !slot.track->infinite()) {
+      if (slot.track && !slot.track->infinite() && !pausedAt_.count(view)) {
         const double end = slot.begin + slot.track->duration();
         next = next ? std::min(*next, end) : end;
       }
@@ -669,11 +825,12 @@ std::optional<double> Engine::nextCompletion() const {
 State Engine::state(int64_t view, Property property, double now) const {
   auto found = views_.find(view);
   if (found == views_.end()) throw unmounted(view);
-  return slotState(found->second[property], now);
+  return slotState(found->second[property], timeOf(view, now));
 }
 bool Engine::animating(int64_t view, Property property, double now) const {
   auto found = views_.find(view);
   if (found == views_.end()) return false;
+  now = timeOf(view, now);
   const Slot &slot = found->second[property];
   return slot.track && (slot.track->infinite() || now < slot.begin + slot.track->duration());
 }
@@ -694,11 +851,14 @@ const char *kindName(Spec::Kind kind) {
     case Spec::Kind::Keyframes: return "keyframes";
     case Spec::Kind::Decay: return "decay";
     case Spec::Kind::Sequence: return "sequence";
+    case Spec::Kind::Jump: return "jump";
   }
   return "unknown";
 }
 
-ChannelBake Engine::bake(int64_t view, Channel channel, double now) const {
+ChannelBake Engine::bake(int64_t view, Channel channel, double now, double rate) const {
+  require(positive(rate), "The bake rate must be positive");
+  rate = std::min(rate, kSampleRate);
   const Slots &target = views_.at(view);
   auto valuesAt = [&](double time) {
     Values values;
@@ -707,12 +867,13 @@ ChannelBake Engine::bake(int64_t view, Channel channel, double now) const {
   };
   auto sample = [&](double begin, double duration) {
     Bake bake{begin, duration, {}};
-    const int count = std::clamp(int(std::ceil(duration * kSampleRate)), 1, kMaxSamples) + 1;
+    const int count = std::clamp(int(std::ceil(duration * rate)), 1, kMaxSamples) + 1;
     bake.samples.reserve(count);
     for (int i = 0; i < count; i++) bake.samples.push_back(valuesAt(begin + duration * i / (count - 1)));
     return bake;
   };
   ChannelBake out;
+  if (pausedAt_.count(view)) { out.model = valuesAt(timeOf(view, now)); return out; }
   double finiteEnd = now;
   bool active = false;
   std::array<TrackPtr, PropertyCount> tracks;

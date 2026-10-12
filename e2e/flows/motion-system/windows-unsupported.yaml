@@ -25,3 +25,7 @@ platforms: [windows]
 - extendedWaitUntil: { visible: { id: motion-system-layout-root }, timeout: 10s }
 - assertText: { id: motion-system-layout-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
 - assertText: { id: motion-system-layout-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- launchApp: { stopApp: false, openUrl: "spark-ks://motion-system/accessibility-power" }
+- extendedWaitUntil: { visible: { id: motion-system-accessibility-power-root }, timeout: 10s }
+- assertText: { id: motion-system-accessibility-power-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: motion-system-accessibility-power-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }

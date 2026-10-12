@@ -422,7 +422,7 @@ int main() {
     CHECK(layout.target(9, TranslateX) == 10.0);
     // A resting view whose layout moved 40 pt right shows where it was: it starts at -30 (its 10 minus 40) and springs back to 10.
     std::vector<Settled> handed;
-    CHECK(layout.handoff(9, {{TranslateX, {-30, 0}}, {ScaleX, {0.5, 0}}}, springTo(0), 0, handed));
+    CHECK(layout.handoff(9, {{TranslateX, {-30, 0}}, {ScaleX, {0.5, 0}}}, springTo(0), 0, handed, false));
     CHECK(layout.state(9, TranslateX, 0).value == -30 && layout.state(9, ScaleX, 0).value == 0.5);
     CHECK(layout.target(9, TranslateX) == 10.0 && layout.target(9, ScaleX) == 1.0);
     CHECK(layout.animating(9, TranslateX, 0.1) && near(layout.state(9, TranslateX, 3).value, 10, 0.01));
@@ -431,18 +431,18 @@ int main() {
     // A second layout change mid-flight keeps the velocity it hands over and replaces only the properties it names.
     const State mid = layout.state(9, TranslateX, 0.1);
     CHECK(mid.velocity > 0);
-    CHECK(layout.handoff(9, {{TranslateX, {mid.value - 20, mid.velocity}}}, timingTo(0, 0.3), 0.1, handed));
+    CHECK(layout.handoff(9, {{TranslateX, {mid.value - 20, mid.velocity}}}, timingTo(0, 0.3), 0.1, handed, false));
     CHECK(handed.empty() && layout.animating(9, ScaleX, 0.1));
     CHECK(near(layout.state(9, TranslateX, 0.1).value, mid.value - 20, 1e-9) && near(layout.state(9, TranslateX, 0.1).velocity, mid.velocity, 1e-6));
     CHECK(near(layout.state(9, TranslateX, 0.4).value, 10, 1e-9));
     // A timing transition from rest plays its own easing (no inherited velocity term).
     layout.sweep(1, handed);
-    CHECK(layout.handoff(9, {{TranslateY, {-50, 0}}}, timingTo(0, 0.2, {0, 0, 1, 1}), 1, handed));
+    CHECK(layout.handoff(9, {{TranslateY, {-50, 0}}}, timingTo(0, 0.2, {0, 0, 1, 1}), 1, handed, false));
     CHECK(near(layout.state(9, TranslateY, 1.1).value, -25, 1e-9));
     // An animation's target survives a hand-off on its property: it ends where the animation was going.
     std::vector<int64_t> touched2;
     layout.run(plan("slide", 9, TranslateX, timingTo(100, 1)), 2, handed, touched2);
-    CHECK(layout.handoff(9, {{TranslateX, {layout.state(9, TranslateX, 2.5).value - 5, layout.state(9, TranslateX, 2.5).velocity}}}, springTo(0), 2.5, handed));
+    CHECK(layout.handoff(9, {{TranslateX, {layout.state(9, TranslateX, 2.5).value - 5, layout.state(9, TranslateX, 2.5).velocity}}}, springTo(0), 2.5, handed, false));
     CHECK(handed.back().id == "slide" && !handed.back().finished);
     CHECK(near(layout.state(9, TranslateX, 6).value, 100, 0.01));
     // Scroll-linked and forever-repeating properties keep their motion; with nothing to hand off, nothing runs.
@@ -451,13 +451,147 @@ int main() {
     forever.repeat = std::numeric_limits<double>::infinity();
     layout.run(plan("pulse", 9, ScaleY, forever), 7, handed, touched2);
     CHECK(!layout.target(9, ScaleY));
-    CHECK(!layout.handoff(9, {{Rotate, {5, 0}}, {ScaleY, {2, 0}}}, springTo(0), 7.1, handed));
+    CHECK(!layout.handoff(9, {{Rotate, {5, 0}}, {ScaleY, {2, 0}}}, springTo(0), 7.1, handed, false));
     CHECK(layout.state(9, Rotate, 7.1).value == 0 && layout.animating(9, ScaleY, 7.1));
+    // Under Reduce Motion the hand-off plays the plan's alternate: the view is where it was heading at once and fades in.
+    CHECK(layout.handoff(9, {{TranslateY, {-40, 0}}}, springTo(0), 7.2, handed, true));
+    CHECK(layout.state(9, TranslateY, 7.2).value == 0 && layout.track(9, TranslateY)->first->kind == Spec::Kind::Jump);
+    CHECK(layout.state(9, Opacity, 7.2).value == 0 && layout.state(9, Opacity, 7.2 + kReducedFade).value == 1);
     Spec bad = springTo(0);
     bad.from = State{std::nan(""), 0};
     bool rejected = false;
     try { layout.run(plan("bad from", 9, Opacity, bad), 8, handed, touched2); } catch (const Failure &failure) { rejected = failure.code == "E_INVALID_ARGUMENT"; }
     CHECK(rejected);
+  }
+
+  // Reduce Motion, fade (the default alternate): transforms change at once, opacity fades 200 ms without bounce, and a
+  // step that only moves fades in where it lands. The plan as written still reports its own end, for cue times.
+  {
+    Engine reduce;
+    std::vector<Settled> done;
+    std::vector<int64_t> views;
+    reduce.addView(1, kIdentity);
+    Plan slide = plan("slide", 1, TranslateX, springTo(100, 0.5, 0.3));
+    slide.reduceMotion = true;
+    const Started started = reduce.run(slide, 0, done, views);
+    CHECK(started.reduced && near(started.end, kReducedFade, 1e-9) && started.plannedEnd > 0.5);
+    CHECK(reduce.state(1, TranslateX, 0).value == 100 && reduce.state(1, Opacity, 0).value == 0);
+    CHECK(near(reduce.state(1, Opacity, kReducedFade / 2).value, 0.5, 1e-6) && reduce.state(1, Opacity, kReducedFade).value == 1);
+    CHECK(reduce.track(1, TranslateX)->first->kind == Spec::Kind::Jump && reduce.track(1, Opacity)->first->kind == Spec::Kind::Timing);
+    reduce.sweep(kReducedFade, done);
+    CHECK(done.size() == 1 && done[0].id == "slide" && done[0].finished);
+    // An entrance: opacity fades to its target with no overshoot; the transform is already there.
+    reduce.set(1, {{Opacity, 0}}, 1, done);
+    Plan entrance{"entrance", {{1, {{Opacity, springTo(0.4, 0.5, 0.3)}, {TranslateY, springTo(-20, 0.5, 0.3)}}, false, 0}}, true};
+    reduce.run(entrance, 1, done, views);
+    CHECK(reduce.state(1, TranslateY, 1).value == -20 && reduce.state(1, Opacity, 1 + kReducedFade).value == 0.4);
+    for (double t = 1; t <= 1 + kReducedFade; t += 0.01) CHECK(reduce.state(1, Opacity, t).value >= -1e-9 && reduce.state(1, Opacity, t).value <= 0.4 + 1e-9);
+    // An exit keeps its place until it has faded out.
+    Plan exit{"exit", {{1, {{Opacity, timingTo(0, 0.3)}, {TranslateY, timingTo(40, 0.3)}}, false, 0}}, true};
+    reduce.run(exit, 2, done, views);
+    CHECK(reduce.state(1, TranslateY, 2 + kReducedFade / 2).value == -20 && reduce.state(1, TranslateY, 2 + kReducedFade).value == 40);
+    // A loop holds where it is and settles; a step's own alternate replaces it; Play keeps the plan; Instant jumps.
+    Spec spin = timingTo(360, 1);
+    spin.repeat = INFINITY;
+    Plan loop = plan("loop", 1, Rotate, spin);
+    loop.reduceMotion = true;
+    CHECK(std::isfinite(reduce.run(loop, 3, done, views).end) && reduce.state(1, Rotate, 3.5).value == 0);
+    Plan own = plan("own", 1, TranslateX, springTo(0));
+    own.reduceMotion = true;
+    own.groups[0].reduced = Tracks{{Opacity, timingTo(0.5, 0.1)}};
+    reduce.run(own, 4, done, views);
+    CHECK(reduce.state(1, TranslateX, 4.5).value == 100 && reduce.state(1, Opacity, 4.1).value == 0.5);
+    Plan play = plan("play", 1, TranslateX, timingTo(0, 1));
+    play.reduceMotion = true;
+    play.reduce = Reduce::Play;
+    CHECK(!reduce.run(play, 5, done, views).reduced && near(reduce.state(1, TranslateX, 5.5).value, 50, 1e-6));
+    Plan instant{"instant", {{1, {{Opacity, timingTo(1, 1)}, {TranslateX, timingTo(30, 1)}}, false, 0.5}}, true, Reduce::Instant};
+    const Started jumped = reduce.run(instant, 7, done, views);
+    CHECK(near(jumped.end, 0.5, 1e-9) && near(jumped.plannedEnd, 1.5, 1e-9));
+    CHECK(reduce.state(1, Opacity, 7.4).value == 0.5 && reduce.state(1, Opacity, 7.5).value == 1 && reduce.state(1, TranslateX, 7.5).value == 30);
+    // Cues: at a time or at the end; under Reduce Motion their times scale with the alternate (here the 200 ms fade-in).
+    Plan cued = plan("cued", 1, TranslateX, timingTo(60, 1));
+    cued.cues = {0.5, std::nullopt};
+    Started timed = reduce.run(cued, 7.5, done, views);
+    CHECK(timed.cues.size() == 2 && timed.cues[0] == 0.5 && timed.cues[1] == 1);
+    cued.id = "cued reduced";
+    cued.reduceMotion = true;
+    timed = reduce.run(cued, 7.6, done, views);
+    CHECK(timed.reduced && timed.cues.size() == 2 && near(timed.cues[0], kReducedFade / 2, 1e-12) && near(timed.cues[1], kReducedFade, 1e-12));
+    Plan late = plan("late cue", 1, TranslateX, timingTo(0, 1));
+    late.cues = {1.5};
+    try { reduce.run(late, 7.7, done, views); CHECK(false); } catch (const Failure &failure) { CHECK(failure.code == "E_INVALID_ARGUMENT" && !reduce.pending("late cue")); }
+    Plan endless = plan("endless", 1, Rotate, spin);
+    endless.cues = {std::nullopt};
+    try { reduce.run(endless, 7.7, done, views); CHECK(false); } catch (const Failure &failure) { CHECK(failure.code == "E_UNSUPPORTED_OPTION" && !reduce.pending("endless")); }
+    // Without Reduce Motion the plan plays as written.
+    Plan written = plan("written", 1, TranslateX, timingTo(0, 1));
+    const Started normal = reduce.run(written, 8, done, views);
+    CHECK(!normal.reduced && normal.end == 1 && normal.plannedEnd == 1 && near(reduce.state(1, TranslateX, 8.5).value, 30, 1e-6));
+  }
+
+  // Hidden views: finite animations jump to their end and finish; loops (and plans that pause) freeze and resume
+  // exactly where they were; what starts while hidden follows the same rule.
+  {
+    Engine hide;
+    hide.setTelemetry(true);
+    std::vector<Settled> done;
+    std::vector<int64_t> views;
+    hide.addView(1, kIdentity);
+    hide.addView(2, kIdentity);
+    hide.run(plan("finite", 1, TranslateX, timingTo(100, 1)), 0, done, views);
+    Spec spin = timingTo(360, 1, {0, 0, 1, 1});
+    spin.repeat = INFINITY;
+    hide.run(plan("spin", 1, Rotate, spin), 0, done, views);
+    Plan held = plan("held", 2, TranslateY, timingTo(10, 1, {0, 0, 1, 1}));
+    held.pauseWhenHidden = true;
+    hide.run(held, 0, done, views);
+    done.clear();
+    hide.setHidden(1, true, 0.25, done);
+    hide.setHidden(2, true, 0.25, done);
+    CHECK(done.size() == 1 && done[0].id == "finite" && done[0].finished);
+    CHECK(hide.paused(1) && hide.paused(2) && hide.state(1, TranslateX, 0.25).value == 100);
+    CHECK(near(hide.state(1, Rotate, 5).value, 90, 1e-6) && near(hide.state(2, TranslateY, 5).value, 2.5, 1e-9));
+    CHECK(hide.animating(2, TranslateY, 5) && !hide.nextCompletion());
+    const ChannelBake frozen = hide.bake(1, Channel::Transform, 5);
+    CHECK(!frozen.lead && !frozen.loop && near(frozen.model[Rotate], 90, 1e-6));
+    done.clear();
+    hide.sweep(5.5, done);
+    CHECK(done.empty());
+    // Starting an animation on a hidden view: a finite one finishes at once, a loop starts paused.
+    hide.run(plan("while hidden", 1, Opacity, timingTo(0.2, 1)), 6, done, views);
+    CHECK(done.size() == 1 && done[0].id == "while hidden" && done[0].finished && near(hide.state(1, Opacity, 6).value, 0.2, 1e-12));
+    CHECK(hide.paused(1) && near(hide.state(1, Rotate, 6).value, 90, 1e-6));
+    // That operation resumed view 1 for its duration: its tracks moved by the 5.75 s it had been paused, and the caller
+    // learns it (cues timed by those tracks move with them). View 2 has not resumed.
+    const auto shifts = hide.takeResumeShifts();
+    CHECK(shifts.size() == 1 && near(shifts.at(1), 5.75, 1e-9) && hide.takeResumeShifts().empty());
+    // Shown again 10 s after hiding: the loop and the paused plan resume where they were. View 1 was last paused by the
+    // operation at 6 s, so its last paused interval is 4.25 s.
+    CHECK(near(hide.setHidden(1, false, 10.25, done), 4.25, 1e-9) && near(hide.setHidden(2, false, 10.25, done), 10, 1e-9));
+    CHECK(!hide.paused(1) && near(hide.state(1, Rotate, 10.5).value, 180, 1e-6) && near(hide.state(2, TranslateY, 10.5).value, 5, 1e-9));
+    const auto shown = hide.takeResumeShifts();
+    CHECK(shown.size() == 2 && near(shown.at(1), 4.25, 1e-9) && near(shown.at(2), 10, 1e-9));
+    CHECK(near(*hide.nextCompletion(), 11, 1e-9));
+    done.clear();
+    hide.sweep(11, done);
+    CHECK(done.size() == 1 && done[0].id == "held" && done[0].finished);
+    // A virtual clock shift keeps a paused view frozen at the same instant.
+    const double rotation = hide.state(1, Rotate, 11.2).value;
+    hide.setHidden(1, true, 11.2, done);
+    hide.setVirtualClock(true, 11.2);
+    hide.advance(5);
+    hide.setVirtualClock(false, 30);
+    CHECK(near(rotation, 72, 1e-6) && near(hide.state(1, Rotate, 40).value, rotation, 1e-9));
+    // stop() on a hidden view freezes its loop and leaves nothing paused.
+    hide.stop(1, {Rotate}, 41, done);
+    CHECK(!hide.paused(1) && !hide.animating(1, Rotate, 41) && near(hide.state(1, Rotate, 41).value, rotation, 1e-9));
+    // Bakes sample at the display's rate: 60 Hz gives half the samples of 120 Hz for the same duration.
+    hide.setHidden(1, false, 42, done);
+    hide.run(plan("rate", 1, TranslateX, timingTo(0, 1)), 42, done, views);
+    CHECK(hide.bake(1, Channel::Transform, 42, 60).lead->samples.size() == 61 && hide.bake(1, Channel::Transform, 42).lead->samples.size() == 121);
+    CHECK(hide.bake(1, Channel::Transform, 42, 240).lead->samples.size() == 121);
+    try { hide.setHidden(99, true, 0, done); CHECK(false); } catch (const Failure &failure) { CHECK(failure.code == "E_NOT_FOUND"); }
   }
 
   if (failures) { std::printf("%d motion engine checks failed\n", failures); return 1; }

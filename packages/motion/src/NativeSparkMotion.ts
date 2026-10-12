@@ -11,6 +11,8 @@ export interface Spec extends TurboModule {
   link(requestJson: string): Promise<void>;
   unlink(identifier: string): Promise<void>;
   recordFrames(requestJson: string): Promise<string>;
+  /** `tag` 0 reads the main display without a window. */
+  environment(tag: number): Promise<string>;
 }
 
 export default TurboModuleRegistry.get<Spec>("NativeSparkMotion");
