@@ -21,8 +21,11 @@ timeout: 120s
 - selectText: { in: { id: text-input-editing-text-services-writing-tools-default }, range: [0, 20] }
 - openContextMenu: { on: { id: text-input-editing-text-services-writing-tools-default } }
 - manualStep:
-    instruction: On a Mac with Apple Intelligence turned on, look at the context menu of the Default input, then repeat for the Complete and Limited inputs.
+    instruction: >-
+      Context menus and the Writing Tools panel are not in in-process captures, so check it live. On a Mac with Apple
+      Intelligence turned on, open Text input & editing > Text services in the Kitchen Sink, select text in the Default
+      input and open its context menu, then repeat for the Complete and Limited inputs.
     expect: Each shows Writing Tools; choosing Proofread opens inline suggestions for Complete and the Writing Tools panel for Limited. The None input never shows Writing Tools.
-    evidence: screenshot
+    evidence: none
     signoff: required
 - pressKey: Escape

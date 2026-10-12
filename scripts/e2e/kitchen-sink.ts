@@ -34,7 +34,7 @@ const PINNED_DEFAULTS: Readonly<Record<string, string>> = {
   AppleFontSmoothing: "2",
 };
 const PINNED = Object.entries(PINNED_DEFAULTS).flatMap(([key, value]) => [`-${key}`, value]);
-const plist = (app: string, key: string) =>
+export const plist = (app: string, key: string) =>
   execFileSync("plutil", ["-extract", key, "raw", "-o", "-", path.join(app, "Contents/Info.plist")], { encoding: "utf8" }).trim();
 /** An optional Info.plist string: undefined when the key is absent. */
 const plistValue = (app: string, key: string) => {

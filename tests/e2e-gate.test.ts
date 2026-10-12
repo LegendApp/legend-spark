@@ -1,17 +1,37 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { SdkSurface } from "../scripts/api-surface.ts";
-import { checkBudgets, checkGate, checkSignoffs, formatDiagnostic } from "../scripts/e2e/format/parser.ts";
+import { checkBudgets, checkFlow, checkGate, checkSignoffs, formatDiagnostic } from "../scripts/e2e/format/parser.ts";
 import { gateCommand, parseGateArgs, runGate, type GateEnv, type GateReport } from "../scripts/e2e/gate/gate.ts";
+import { flowHash } from "../scripts/e2e/gate/manual.ts";
 import { plan, type Host } from "../scripts/e2e/gate/plan.ts";
+import { mergeDecisions, signoffCommand, type SignoffEnv } from "../scripts/e2e/gate/signoff.ts";
+import { signOffProblem } from "../examples/kitchen-sink/sign-off-rule.ts";
+import type { Signoff, SignoffDecisions, SignoffSession } from "../scripts/e2e/format/signoff.ts";
 import type { Backend, CommandHandler } from "../scripts/e2e/runner/backend.ts";
 import { BACKENDS, NO_BACKENDS } from "../scripts/e2e/runner/run.ts";
-import { element, MemoryBackend, VirtualClock } from "./e2e-runner-backend.ts";
+import { element, MemoryBackend, VirtualClock, WINDOW } from "./e2e-runner-backend.ts";
+
+// The Kitchen Sink checklist service (screens/infra/sign-off.ts) runs against these: the app's launch arguments, and files on disk.
+const app = vi.hoisted(() => ({ args: [] as string[], quitGuards: [] as Array<() => boolean | Promise<boolean>>, writeError: undefined as string | undefined }));
+vi.mock("@legendapp/spark/app", () => ({
+  getAppContext: async () => ({ launchArguments: app.args }),
+  beforeQuit: async (handler: () => boolean | Promise<boolean>) => { app.quitGuards.push(handler); return { remove: async () => {} }; },
+}));
+vi.mock("@legendapp/spark/files", async () => {
+  const fs = await import("node:fs");
+  return { readText: async (file: string) => fs.readFileSync(file, "utf8"), writeText: async (file: string, text: string) => { if (app.writeError) throw new Error(app.writeError); fs.writeFileSync(file, text); }, exists: async (file: string) => fs.existsSync(file) };
+});
 
 const FIXTURE = "tests/fixtures/e2e-gate";
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
+/** SHA-256 of the fixture's manual flow: its sign-off in signoffs/release.yaml names it. */
+const IME = sha256(readFileSync(`${FIXTURE}/e2e/flows/app/ime.yaml`, "utf8"));
+const AT_IME = `commit 0123456789ab, flow ${IME.slice(0, 12)}`;
 const AIR: Host = { os: "macos-14", arch: "arm64", model: 'MacBookAir10,1', memoryGB: 8 };
 const SURFACE: SdkSurface = { "./app": { values: ["launch", "setTheme"], types: [], flags: {} } };
 const ELEMENTS = [element("catalog", { id: "catalog" }), element("toggle", { id: "theme-toggle" })];
@@ -38,7 +58,7 @@ function env(options: { coldMs?: number | null; elements?: typeof ELEMENTS; blac
     backends: {
       app: () => new MemoryBackend(clock, { name: "app", matrix: ["appearance"], elements: elements ?? ELEMENTS, commands: { launchApp, ...blackBox } }),
       driver: () => new MemoryBackend(clock, {
-        name: "driver", kind: "driver",
+        name: "driver", kind: "driver", screenshot: async file => { writeFileSync(file, "png"); return { frame: WINDOW.frame, scale: 2 }; },
         commands: { assertStartup: async (_args, context) => { if (coldMs !== null) context.metric("startup.coldMs", coldMs ?? 690); } },
       }),
     },
@@ -223,7 +243,7 @@ describe("release gate", () => {
   test("budgets apply only on their machine's target", async () => {
     const report = await gate(repo(), { host: { os: "macos-15", arch: "arm64", model: 'MacBookAir10,1', memoryGB: 8 }, coldMs: 5000 });
     expect([report.verdict, report.target, report.budgets]).toEqual(["FAIL", "macos-15/arm64", []]);
-    expect(reasons(report)).toEqual(["signoffs: flows/app/ime: no sign-off for macos-15/arm64 at commit 0123456789ab"]);
+    expect(reasons(report)).toEqual([`signoffs: flows/app/ime: no sign-off for macos-15/arm64 at ${AT_IME}; run bun run gate:signoff`]);
   });
 
   test("budget machines must match the targets", async () => {
@@ -232,24 +252,41 @@ describe("release gate", () => {
     expect(reasons(await gate(dir, { host: { os: "macos-15", arch: "arm64" } }))).toEqual([
       "manifest: target macos-14/arm64@air-m2 names machine air-m2, which budgets.yaml does not define",
       "manifest: budgets.yaml has baselines for air-m1, but no gate target runs on it, so they would never be checked",
-      "signoffs: flows/app/ime: no sign-off for macos-15/arm64 at commit 0123456789ab",
+      `signoffs: flows/app/ime: no sign-off for macos-15/arm64 at ${AT_IME}; run bun run gate:signoff`,
     ]);
   });
 
-  test("manual flows need a passing sign-off for this target and commit", async () => {
-    const signoff = (fields: string) => ({ "signoffs/release.yaml": `signoffs:\n  - { flow: flows/app/ime, target: macos-14/arm64@air-m1, by: QA, at: "2026-10-10T12:00:00Z", ${fields} }\n` });
+  test("manual flows need a passing sign-off for this target, commit and flow content; stale ones fail", async () => {
+    const signoff = (fields: string) => ({ "signoffs/release.yaml": `signoffs:\n  - { flow: flows/app/ime, target: macos-14/arm64@air-m1, by: QA <qa@example.com>, machine: qa-mac, at: "2026-10-10T12:00:00Z", ${fields} }\n` });
     const cases: Array<[Record<string, string>, string]> = [
-      [signoff(`commit: ${"f".repeat(40)}, verdict: pass`), "signoffs: flows/app/ime: no sign-off for macos-14/arm64@air-m1 at commit 0123456789ab"],
-      [signoff(`commit: ${COMMIT}, verdict: fail, note: candidates cover the caret`), "signoffs: flows/app/ime: signed off as failed by QA (2026-10-10T12:00:00Z): candidates cover the caret"],
-      [signoff(`commit: ${COMMIT}, verdict: pass, evidence: [signoffs/ime.png]`), "signoffs: flows/app/ime: evidence signoffs/ime.png does not exist"],
+      [signoff(`commit: ${"f".repeat(40)}, flowHash: ${IME}, verdict: pass`), `signoffs: flows/app/ime: stale sign-off: it is for commit ffffffffffff, flow ${IME.slice(0, 12)}, not this ${AT_IME}; run bun run gate:signoff`],
+      [signoff(`commit: ${COMMIT}, flowHash: ${"e".repeat(64)}, verdict: pass`), `signoffs: flows/app/ime: stale sign-off: it is for commit 0123456789ab, flow eeeeeeeeeeee, not this ${AT_IME} (the flow changed since); run bun run gate:signoff`],
+      [signoff(`commit: ${COMMIT}, flowHash: ${IME}, verdict: fail, note: candidates cover the caret`), "signoffs: flows/app/ime: signed off as failed by QA <qa@example.com> on qa-mac (2026-10-10T12:00:00Z): candidates cover the caret"],
+      [signoff(`commit: ${COMMIT}, flowHash: ${IME}, verdict: pass, evidence: [signoffs/ime.png]`), "signoffs: flows/app/ime: evidence signoffs/ime.png does not exist"],
+      [{ "signoffs/release.yaml": `signoffs:\n${[1, 2].map(n => `  - { flow: flows/app/ime, target: macos-14/arm64@air-m1, commit: ${COMMIT}, flowHash: ${IME}, verdict: pass, by: QA ${n}, machine: qa-mac, at: "2026-10-10T12:00:00Z" }\n`).join("")}` }, `signoffs: flows/app/ime: 2 sign-offs for macos-14/arm64@air-m1 at ${AT_IME}; keep one`],
       [{ "signoffs/release.yaml": "signoffs:\n  - { flow: flows/app/ime }\n" }, "signoffs: signoffs/release.yaml is invalid:"],
     ];
-    for (const [edits, message] of cases) expect(reasons(await gate(repo(edits))).join("\n")).toContain(message);
+    for (const [edits, message] of cases) {
+      const report = await gate(repo(edits));
+      expect(reasons(report).join("\n")).toContain(message);
+      expect(report.flows[0]!.status).toBe(message.includes("signed off as failed") ? "failed" : "unsigned");
+    }
     const missing = repo();
     edit(missing, "e2e/gate.yaml", "signoffs/release.yaml", "signoffs/none.yaml");
     const report = await gate(missing);
-    expect(reasons(report)).toEqual(["signoffs: signoffs/none.yaml does not exist; 1 manual flow run need a sign-off: flows/app/ime"]);
-    expect(report.flows[0]!.status).toBe("unsigned");
+    expect(reasons(report)).toEqual(["signoffs: signoffs/none.yaml does not exist; 1 manual flow run need a sign-off (run bun run gate:signoff): flows/app/ime"]);
+    expect(report.flows[0]).toMatchObject({ status: "unsigned", flowHash: IME, manualSteps: [{ instruction: 'Type "nihongo" with the Japanese Romaji input source.', evidence: "none", signoff: "required", location: expect.stringMatching(/ime\.yaml:7:3$/) }] });
+  });
+
+  test("editing a signed-off manual flow makes its sign-off stale, so the gate fails until it is signed off again", async () => {
+    const dir = repo();
+    expect((await gate(dir)).verdict).toBe("PASS");
+    edit(dir, "e2e/flows/app/ime.yaml", "overlaps no text.", "overlaps no text or caret.");
+    const edited = sha256(readFileSync(path.join(dir, "e2e/flows/app/ime.yaml"), "utf8"));
+    const report = await gate(dir);
+    expect(reasons(report)).toEqual([`signoffs: flows/app/ime: stale sign-off: it is for commit 0123456789ab, flow ${IME.slice(0, 12)}, not this commit 0123456789ab, flow ${edited.slice(0, 12)} (the flow changed since); run bun run gate:signoff`]);
+    expect(report.flows[0]).toMatchObject({ status: "unsigned", flowHash: edited });
+    expect(report.flows[0]!.signoff).toBeUndefined();
   });
 
   test("no gate flows for the target fails", async () => {
@@ -371,7 +408,7 @@ describe("--flow and --agent", () => {
     const report = await scopedGate(area, [path.join(area, "e2e/flows/app")]);
     expect(report.flows.map(flow => flow.id)).toEqual(["flows/app/ime", "flows/app/launch", "flows/app/theme[appearance=light]", "flows/app/theme[appearance=dark]"]);
     expect(report.excluded).toEqual([{ path: "flows/app/taskbar.yaml", reason: "platforms: windows" }]);
-    expect(reasons(report)).toEqual(["signoffs: signoffs/none.yaml does not exist; 1 manual flow run need a sign-off: flows/app/ime"]);
+    expect(reasons(report)).toEqual(["signoffs: signoffs/none.yaml does not exist; 1 manual flow run need a sign-off (run bun run gate:signoff): flows/app/ime"]);
   });
 
   test("--agent prints only JSON lines: flow events with the bundle path, then the verdict summary", async () => {
@@ -434,10 +471,17 @@ describe("Kitchen Sink gate files", () => {
   });
 
   test("sign-off and budgets files reject malformed entries", () => {
-    expect(checkSignoffs(`signoffs:\n  - { flow: flows/a, target: macos-15/arm64, commit: abc, verdict: ok, by: QA, at: yesterday }\n`).diagnostics.map(diagnostic => diagnostic.message)).toEqual([
+    expect(checkSignoffs(`signoffs:\n  - { flow: flows/a, target: macos-15/arm64, commit: abc, flowHash: abc, verdict: ok, by: QA, machine: qa-mac, at: yesterday }\n`).diagnostics.map(diagnostic => diagnostic.message)).toEqual([
       'signoffs.commit: "abc" is not a full 40-character commit SHA',
+      'signoffs.flowHash: "abc" is not a 64-character SHA-256 of the flow file (the gate report\'s flowHash)',
       'signoffs.verdict: must be one of "pass", "fail"',
       'signoffs.at: "yesterday" is not an ISO 8601 timestamp, such as 2026-10-10T12:00:00Z',
+    ]);
+    const entry = `flow: flows/a, target: macos-15/arm64, commit: ${COMMIT}, flowHash: ${IME}, by: QA, machine: qa-mac, at: "2026-10-10T12:00:00Z"`;
+    expect(checkSignoffs(`signoffs:\n  - { ${entry}, verdict: fail }\n`).diagnostics.map(diagnostic => diagnostic.message)).toEqual(['signoffs: missing required key "note"']);
+    expect(checkSignoffs(`signoffs:\n  - { ${entry}, verdict: pass }\n`).diagnostics).toEqual([]);
+    expect(checkSignoffs(`signoffs:\n  - { flow: flows/a, target: macos-15/arm64, commit: ${COMMIT}, verdict: pass, by: QA, at: "2026-10-10T12:00:00Z" }\n`).diagnostics.map(diagnostic => diagnostic.message)).toEqual([
+      'signoffs: missing required key "flowHash"', 'signoffs: missing required key "machine"',
     ]);
     expect(checkBudgets("machines:\n  air: { name: Air, model: 'MacBookAir10,1', memoryGB: 8 }\nbudgets:\n  - { metric: startup.coldMs, better: lower, tolerance: 10%, baselines: { pro: 1, air: soon } }\n").diagnostics.map(formatDiagnostic)).toEqual([
       'budgets.yaml:4:88: budgets.baselines.air: must be one of "not-measured" [schema]',
@@ -445,5 +489,382 @@ describe("Kitchen Sink gate files", () => {
     expect(checkBudgets("machines:\n  air: { name: Air, model: 'MacBookAir10,1', memoryGB: 8 }\nbudgets:\n  - { metric: startup.coldMs, better: lower, tolerance: 10%, baselines: { pro: 1 } }\n").diagnostics.map(formatDiagnostic)).toEqual([
       'budgets.yaml:4:75: startup.coldMs: baseline for unknown machine "pro" (machines: air) [schema]',
     ]);
+  });
+});
+
+/** A partial flow: launch and check the catalog, then a person looks at a screenshot, then the automated steps go on. */
+const MENU = {
+  "e2e/flows/app/menu.yaml": "appId: so.legend.kitchensink\nname: Menu marks are legible\nintent: A person checks the menu marks in a screenshot.\nchecks: [APP-THEME-01]\nmanual: partial\n---\n"
+    + "- launchApp\n- assertVisible: { id: catalog }\n- takeScreenshot: menu-open\n- manualStep: { instruction: Look at the open menu., expect: Mixed shows a dash., screenshot: menu-open }\n- tapOn: { id: theme-toggle }\n",
+};
+const MENU_HASH = sha256(MENU["e2e/flows/app/menu.yaml"]);
+const SIGNER = { name: "Jane Doe", email: "jane@example.com", machine: "qa-air (MacBookAir10,1)" };
+const BY = "Jane Doe <jane@example.com>";
+/** Points the fixture's sign-off of flows/app/ime at the flow's current content, as a fresh sign-off would. */
+const resign = (dir: string) => {
+  const file = path.join(dir, "e2e/flows/app/ime.yaml");
+  edit(dir, "signoffs/release.yaml", IME, flowHash(checkFlow(readFileSync(file, "utf8"), file).value!, file));
+};
+
+describe("manual sign-offs in the gate", () => {
+  test("a partial run's automated steps run, its manual step is captured in-process, and it then needs a sign-off", async () => {
+    const dir = repo(MENU);
+    const report = await gate(dir);
+    expect(reasons(report)).toEqual([`signoffs: flows/app/menu: no sign-off for macos-14/arm64@air-m1 at commit 0123456789ab, flow ${MENU_HASH.slice(0, 12)}; run bun run gate:signoff`]);
+    const menu = report.flows.find(flow => flow.id === "flows/app/menu")!;
+    expect(menu).toMatchObject({
+      status: "passed", manual: "partial", flowHash: MENU_HASH,
+      manualSteps: [{
+        instruction: "Look at the open menu.", expect: "Mixed shows a dash.", evidence: "screenshot", signoff: "required", location: expect.stringMatching(/menu\.yaml:10:3$/),
+        screenshot: "reports/gate/run/flows/app/menu/run/output/menu-open.png", capture: "menu-open (the main window)",
+      }],
+    });
+    expect(existsSync(path.join(dir, menu.manualSteps![0]!.screenshot!))).toBe(true);
+    expect(report.flows.find(flow => flow.id === "flows/app/launch")!.flowHash).toBeUndefined();
+  });
+
+  test("a partial run that fails before its manual step reports the failure, not a missing sign-off", async () => {
+    const report = await gate(repo(MENU), { elements: [element("toggle", { id: "theme-toggle" })] });
+    expect(reasons(report).filter(reason => reason.includes("flows/app/menu"))).toEqual([expect.stringMatching(/^flows: flows\/app\/menu: .*menu\.yaml:8:3: assertVisible: no element matches \{"id":"catalog"\}/)]);
+    expect(reasons(report).filter(reason => reason.startsWith("signoffs:"))).toEqual([]);
+    expect(report.flows.find(flow => flow.id === "flows/app/menu")!.manualSteps).toEqual([]);
+  });
+
+  test("manual: true steps are planned through runFlow files and when; a run that reaches no required step fails and is not-run", async () => {
+    const steps = "- runFlow: subflows/ime.yaml\n- manualStep: { instruction: Only on Windows., expect: Nothing here., when: { platform: windows } }\n";
+    const dir = repo({ "e2e/subflows/ime.yaml": "- manualStep: { instruction: Type nihongo., expect: Candidates under the caret. }\n" });
+    edit(dir, "e2e/flows/app/ime.yaml", /---\n[\s\S]*$/, `---\n${steps}`);
+    resign(dir);
+    const report = await gate(dir);
+    expect(report.verdict).toBe("PASS");
+    expect(report.flows[0]!.manualSteps).toEqual([{ instruction: "Type nihongo.", expect: "Candidates under the caret.", evidence: "none", signoff: "required", location: expect.stringMatching(/subflows\/ime\.yaml:1:3$/) }]);
+    const windowsOnly = repo();
+    edit(windowsOnly, "e2e/flows/app/ime.yaml", "    signoff: required", "    signoff: required\n    when: { platform: windows }");
+    const skipped = await gate(windowsOnly);
+    expect(reasons(skipped)).toEqual(["signoffs: flows/app/ime: manual: true, but it reaches no manualStep with signoff: required, so nothing verifies it"]);
+    expect(skipped.flows[0]!.status).toBe("not-run");
+  });
+
+  test("the flow hash covers the runFlow files a manual flow reaches: editing one makes its sign-off stale", async () => {
+    const dir = repo({ "e2e/subflows/ime.yaml": "- manualStep: { instruction: Type nihongo., expect: Candidates under the caret. }\n" });
+    edit(dir, "e2e/flows/app/ime.yaml", /---\n/, "---\n- runFlow: subflows/ime.yaml\n");
+    resign(dir);
+    const signed = await gate(dir);
+    expect([signed.verdict, reasons(signed)]).toEqual(["PASS", []]);
+    const before = signed.flows[0]!.flowHash!;
+    expect(before).not.toBe(sha256(readFileSync(path.join(dir, "e2e/flows/app/ime.yaml"), "utf8")));
+    edit(dir, "e2e/subflows/ime.yaml", "Candidates under the caret.", "Candidates sit under the caret.");
+    const stale = await gate(dir);
+    const after = stale.flows[0]!.flowHash!;
+    expect(after).not.toBe(before);
+    expect(reasons(stale)).toEqual([`signoffs: flows/app/ime: stale sign-off: it is for commit 0123456789ab, flow ${before.slice(0, 12)}, not this commit 0123456789ab, flow ${after.slice(0, 12)} (the flow changed since); run bun run gate:signoff`]);
+  });
+
+  test("a manual: partial run that passed without reaching a required step fails the gate", async () => {
+    const dir = repo({ "e2e/flows/app/menu.yaml": MENU["e2e/flows/app/menu.yaml"].replace("screenshot: menu-open }", "screenshot: menu-open, when: { platform: windows } }") });
+    const report = await gate(dir);
+    expect(report.flows.find(flow => flow.id === "flows/app/menu")).toMatchObject({ status: "passed", manualSteps: [] });
+    expect(reasons(report)).toEqual(["signoffs: flows/app/menu: manual: partial, but the run reached no manualStep with signoff: required, so no person verified it"]);
+  });
+
+  test("a scoped run (gate --flow --agent) of an unsigned manual flow fails closed", async () => {
+    const dir = repo();
+    edit(dir, "e2e/gate.yaml", "signoffs/release.yaml", "signoffs/none.yaml");
+    const { env: gateEnv, out } = env();
+    expect(await gateCommand(["--flow", path.join(dir, "e2e/flows/app/ime.yaml"), "--agent"], path.join(dir, "e2e"), gateEnv)).toBe(1);
+    const end = JSON.parse(out.at(-1)!);
+    expect(end).toMatchObject({ event: "gate-end", verdict: "FAIL", reasons: [{ check: "signoffs", message: "signoffs/none.yaml does not exist; 1 manual flow run need a sign-off (run bun run gate:signoff): flows/app/ime" }] });
+    expect(end.flows).toEqual([expect.objectContaining({ id: "flows/app/ime", status: "unsigned" })]);
+  });
+});
+
+/**
+ * `bun run gate:signoff` against a fixture repository. `launch` stands in for opening the app and `answer` for what the
+ * person types at the confirmation prompt: the test doubles for the human.
+ */
+function signoff(dir: string, options: { launch?: SignoffEnv["launch"]; answer?: string; interactive?: boolean; source?: { commit: string; dirty: boolean } } = {}) {
+  const { launch = async () => {}, answer = SIGNER.name, interactive = true, source = { commit: COMMIT, dirty: false } } = options;
+  const out: string[] = [], err: string[] = [], asked: string[] = [];
+  const env: SignoffEnv = {
+    host: () => AIR, source: () => source, stdout: line => out.push(line), stderr: line => err.push(line), signer: () => SIGNER, interactive,
+    ask: async question => { asked.push(question); return answer; }, launch,
+  };
+  return { run: (args: string[] = []) => signoffCommand(args, path.join(dir, "e2e"), env), out, err, asked };
+}
+/** The Kitchen Sink checklist service, freshly loaded as a launch with `--ks-signoff <session>` would load it. */
+async function checklist(session: string) {
+  app.args = ["KitchenSink", "--ks-signoff", session];
+  app.writeError = undefined;
+  vi.resetModules();
+  const service = await import("../examples/kitchen-sink/screens/infra/sign-off.ts");
+  await service.loadSignOff();
+  return service;
+}
+const SESSION_DIR = "signoffs/manual/0123456789ab";
+
+describe("gate:signoff", () => {
+  test("it refuses without a person at a terminal, before writing anything; --list works without one", async () => {
+    const dir = repo(MENU);
+    await gateCommand([], path.join(dir, "e2e"), env().env);
+    const agent = signoff(dir, { interactive: false, launch: async () => { throw new Error("never opens the app"); } });
+    expect(await agent.run()).toBe(1);
+    expect(agent.err).toEqual(["gate:signoff: a sign-off is a person's statement: run it yourself at a terminal. Agents never sign off; bun run gate:signoff --list shows what awaits a person"]);
+    expect(existsSync(path.join(dir, SESSION_DIR))).toBe(false);
+    const listed = signoff(dir, { interactive: false });
+    expect(await listed.run(["--list"])).toBe(0);
+    expect(listed.asked).toEqual([]);
+  });
+
+  test("it refuses a gate report for another commit, a changed flow, uncommitted changes, or no report", async () => {
+    const dir = repo(MENU);
+    const none = signoff(dir);
+    expect(await none.run()).toBe(1);
+    expect(none.err.join("\n")).toMatch(/^gate:signoff: no gate report at .*reports\/gate\/report\.json\. Run bun run gate first$/);
+    const scopedNone = signoff(dir);
+    expect(await scopedNone.run(["--scoped"])).toBe(1);
+    expect(scopedNone.err.join("\n")).toMatch(/^gate:signoff: no gate report at .*reports\/gate\/scoped\/report\.json\. Run bun run gate --flow <flow> first$/);
+    expect(await gateCommand([], path.join(dir, "e2e"), env().env)).toBe(1);
+    const head = signoff(dir, { source: { commit: "f".repeat(40), dirty: false } });
+    expect(await head.run()).toBe(1);
+    expect(head.err).toEqual(["gate:signoff: the last gate run tested commit 0123456789ab; HEAD is ffffffffffff. Run bun run gate again first"]);
+    const dirty = signoff(dir, { source: { commit: COMMIT, dirty: true } });
+    expect(await dirty.run()).toBe(1);
+    expect(dirty.err).toEqual(["gate:signoff: sign-offs certify a commit: commit or remove uncommitted changes, then run bun run gate"]);
+    edit(dir, "e2e/flows/app/menu.yaml", "Mixed shows a dash.", "Mixed shows a dash, not a check.");
+    const changed = signoff(dir);
+    expect(await changed.run()).toBe(1);
+    expect(changed.err).toEqual(["gate:signoff: flows/app/menu.yaml changed since the last gate run. Run bun run gate again first"]);
+    const usage = signoff(dir);
+    expect(await usage.run(["--frobnicate"])).toBe(2);
+    expect(usage.err[0]).toBe("unknown argument --frobnicate\nusage: bun run gate:signoff [--list] [--scoped]");
+  });
+
+  test("--list writes the session, with the run's screenshot copied next to it, and prints what awaits sign-off", async () => {
+    const dir = repo(MENU);
+    await gateCommand([], path.join(dir, "e2e"), env().env);
+    const listed = signoff(dir, { launch: async () => { throw new Error("--list never opens the app"); } });
+    expect(await listed.run(["--list"])).toBe(0);
+    const session: SignoffSession = JSON.parse(readFileSync(path.join(dir, SESSION_DIR, "session.json"), "utf8"));
+    expect(session).toMatchObject({ version: 1, target: "macos-14/arm64@air-m1", commit: COMMIT, by: BY, machine: SIGNER.machine, decisions: "decisions.json" });
+    expect(session.items).toEqual([
+      expect.objectContaining({ flow: "flows/app/ime", name: "IME candidate window tracks the caret", kind: "manual", flowHash: IME, ready: true, signoff: expect.objectContaining({ verdict: "pass", by: "Release Captain <captain@example.com>" }) }),
+      expect.objectContaining({ flow: "flows/app/menu", kind: "partial", flowHash: MENU_HASH, ready: true, steps: [expect.objectContaining({ screenshot: "evidence/flows-app-menu-1.png" })] }),
+    ]);
+    expect(readFileSync(path.join(dir, SESSION_DIR, "evidence/flows-app-menu-1.png"), "utf8")).toBe("png");
+    expect(listed.out).toEqual([
+      `Sign-off session for macos-14/arm64@air-m1 at commit 0123456789ab, as ${BY} on qa-air (MacBookAir10,1):`,
+      "  signed pass: flows/app/ime (manual)",
+      expect.stringMatching(/^    .*ime\.yaml:7:3: Type "nihongo" with the Japanese Romaji input source\. Expect: The candidate window sits directly under the caret and overlaps no text\. \[no screenshot: a pass needs a note\]$/),
+      "  pending: flows/app/menu (run + sign-off)",
+      expect.stringMatching(/^    .*menu\.yaml:10:3: Look at the open menu\. Expect: Mixed shows a dash\. \[evidence\/flows-app-menu-1\.png: menu-open \(the main window\)\]$/),
+    ]);
+  });
+
+  test("end to end: the checklist signs off each run, the person confirms, gate:signoff writes identity, time, commit and flow hash, and the gate passes; a failed sign-off fails it with the note", async () => {
+    const dir = repo(MENU);
+    expect(await gateCommand([], path.join(dir, "e2e"), env().env)).toBe(1);
+    const sessionFile = path.join(dir, SESSION_DIR, "session.json");
+    const problems: unknown[] = [];
+    const signing = signoff(dir, {
+      launch: async (artifact, session) => {
+        expect([artifact, session]).toEqual([path.join(dir, "build/macos-arm64/KitchenSink.app"), sessionFile]);
+        const service = await checklist(session);
+        expect(service.getSignOffState()).toMatchObject({ status: "ready", session: { commit: COMMIT, items: [{ flow: "flows/app/ime" }, { flow: "flows/app/menu" }] } });
+        problems.push(service.decide("flows/app/ime", "pass", ""), service.decide("flows/app/ime", "fail", " "));
+        problems.push(service.decide("flows/app/ime", "pass", "Candidates sit under the caret."), service.decide("flows/app/menu", "pass", ""));
+        await service.flushSignOff();
+      },
+    });
+    expect(await signing.run()).toBe(0);
+    expect(problems).toEqual(["evidence-needs-note", "fail-needs-note", undefined, undefined]);
+    expect(signing.asked).toEqual([`Sign 2 decisions as ${BY} on qa-air (MacBookAir10,1)? Type your name (Jane Doe) to confirm: `]);
+    expect(signing.out.slice(-3)).toEqual(["PASS flows/app/ime: Candidates sit under the caret.", "PASS flows/app/menu", "Wrote 2 sign-offs to signoffs/release.yaml. Run bun run gate to apply them."]);
+    const written = checkSignoffs(readFileSync(path.join(dir, "signoffs/release.yaml"), "utf8")).value!.signoffs;
+    expect(written).toEqual([
+      { flow: "flows/app/ime", target: "macos-14/arm64@air-m1", commit: COMMIT, flowHash: IME, verdict: "pass", by: BY, machine: SIGNER.machine, at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/), note: "Candidates sit under the caret." },
+      { flow: "flows/app/menu", target: "macos-14/arm64@air-m1", commit: COMMIT, flowHash: MENU_HASH, verdict: "pass", by: BY, machine: SIGNER.machine, at: expect.any(String), evidence: [`${SESSION_DIR}/evidence/flows-app-menu-1.png`] },
+    ]);
+    const passed = await gate(dir);
+    expect([passed.verdict, reasons(passed)]).toEqual(["PASS", []]);
+    expect(passed.flows.find(flow => flow.id === "flows/app/ime")).toMatchObject({ status: "signed-off", signoff: { by: BY, machine: SIGNER.machine, commit: COMMIT, flowHash: IME } });
+
+    // A relaunch in the same session shows the decisions already made; a failure needs its note and fails the gate with it.
+    const failing = signoff(dir, {
+      launch: async () => {
+        const service = await checklist(sessionFile);
+        const state = service.getSignOffState() as Extract<ReturnType<typeof service.getSignOffState>, { status: "ready" }>;
+        expect(state.session.items.map(item => item.signoff?.verdict)).toEqual(["pass", "pass"]);
+        expect(service.decide("flows/app/menu", "fail", "Starred sample shows no star.")).toBeUndefined();
+        await service.flushSignOff();
+        expect((await checklist(sessionFile)).getSignOffState()).toMatchObject({ decisions: { "flows/app/menu": { verdict: "fail" } } });
+      },
+    });
+    expect(await failing.run()).toBe(0);
+    expect(reasons(await gate(dir))).toEqual([`signoffs: flows/app/menu: signed off as failed by ${BY} on ${SIGNER.machine} (${checkSignoffs(readFileSync(path.join(dir, "signoffs/release.yaml"), "utf8")).value!.signoffs.at(-1)!.at}): Starred sample shows no star.`]);
+  });
+
+  test("without the person's typed confirmation nothing is written", async () => {
+    const dir = repo(MENU);
+    await gateCommand([], path.join(dir, "e2e"), env().env);
+    const before = readFileSync(path.join(dir, "signoffs/release.yaml"), "utf8");
+    const launch = async (_artifact: string, session: string) => {
+      const service = await checklist(session);
+      service.decide("flows/app/menu", "pass", "");
+      await service.flushSignOff();
+    };
+    for (const answer of ["", "y", "Release Captain"]) {
+      const declined = signoff(dir, { launch, answer });
+      expect(await declined.run()).toBe(1);
+      expect(declined.err).toEqual(['gate:signoff: not confirmed (expected "Jane Doe"): nothing was written to signoffs/release.yaml']);
+      expect(readFileSync(path.join(dir, "signoffs/release.yaml"), "utf8")).toBe(before);
+    }
+  });
+
+  test("decisions that do not belong to the session are not merged, and the sign-off file is left alone", async () => {
+    const dir = repo(MENU);
+    await gateCommand([], path.join(dir, "e2e"), env().env);
+    const before = readFileSync(path.join(dir, "signoffs/release.yaml"), "utf8");
+    const decision = { flow: "flows/app/menu", target: "macos-14/arm64@air-m1", commit: COMMIT, flowHash: "e".repeat(64), verdict: "pass", by: BY, machine: SIGNER.machine, at: "2026-10-11T10:00:00Z" };
+    const forged = signoff(dir, { launch: async () => { writeFileSync(path.join(dir, SESSION_DIR, "decisions.json"), JSON.stringify({ version: 1, signoffs: [decision] })); } });
+    expect(await forged.run()).toBe(1);
+    expect(forged.err.at(-1)).toMatch(/decisions\.json were not merged: the decision for flows\/app\/menu has flowHash "e{64}"; the session's is "[0-9a-f]{64}"$/);
+    expect(forged.asked).toEqual([]);
+    expect(readFileSync(path.join(dir, "signoffs/release.yaml"), "utf8")).toBe(before);
+    const impostor = signoff(dir, { launch: async () => { writeFileSync(path.join(dir, SESSION_DIR, "decisions.json"), JSON.stringify({ version: 1, signoffs: [{ ...decision, flowHash: MENU_HASH, by: "Agent <agent@example.com>" }] })); } });
+    expect(await impostor.run()).toBe(1);
+    expect(impostor.err.at(-1)).toMatch(/the decision for flows\/app\/menu has by "Agent <agent@example\.com>"; the session's is "Jane Doe <jane@example\.com>"$/);
+    const silent = signoff(dir);
+    expect(await silent.run()).toBe(1);
+    expect(silent.err.at(-1)).toBe("gate:signoff: the checklist recorded no sign-offs: nothing to write");
+    const session = JSON.parse(readFileSync(path.join(dir, SESSION_DIR, "session.json"), "utf8")) as SignoffSession;
+    const notReady: SignoffSession = { ...session, items: session.items.map(item => ({ ...item, ready: false })) };
+    const decisions: SignoffDecisions = { version: 1, signoffs: [{ ...decision, flowHash: MENU_HASH } as SignoffDecisions["signoffs"][number]] };
+    expect(() => mergeDecisions(notReady, path.join(dir, SESSION_DIR), dir, [], decisions)).toThrow("the decisions name flows/app/menu, which this session cannot sign off");
+  });
+
+  test("mergeDecisions checks the note rules and keeps evidence inside the session's evidence/ folder", async () => {
+    const dir = repo(MENU);
+    await gateCommand([], path.join(dir, "e2e"), env().env);
+    expect(await signoff(dir).run(["--list"])).toBe(0);
+    const sessionDir = path.join(dir, SESSION_DIR);
+    const session = JSON.parse(readFileSync(path.join(sessionDir, "session.json"), "utf8")) as SignoffSession;
+    const decision = (flow: string, fields: Partial<Signoff> = {}): SignoffDecisions => ({ version: 1, signoffs: [{
+      flow, target: session.target, commit: COMMIT, flowHash: session.items.find(item => item.flow === flow)!.flowHash, verdict: "pass", by: BY, machine: SIGNER.machine, at: "2026-10-11T10:00:00Z", ...fields,
+    }] });
+    const merge = (decisions: SignoffDecisions) => mergeDecisions(session, sessionDir, dir, [], decisions);
+    // flows/app/ime is manual: true, so it has no screenshot: a pass needs a note, here as in the checklist.
+    expect(() => merge(decision("flows/app/ime"))).toThrow("the decision for flows/app/ime is a pass without a note: a pass without a screenshot for every step needs a note");
+    expect(() => merge(decision("flows/app/menu", { verdict: "fail" }))).toThrow("the decision for flows/app/menu is a fail without a note: a failed sign-off needs a note");
+    expect(merge(decision("flows/app/ime", { note: "Under the caret." }))).toEqual([expect.objectContaining({ flow: "flows/app/ime", note: "Under the caret." })]);
+    expect(merge(decision("flows/app/menu", { evidence: ["evidence/flows-app-menu-1.png"] }))[0]!.evidence).toEqual([`${SESSION_DIR}/evidence/flows-app-menu-1.png`]);
+    symlinkSync(path.join(dir, "signoffs/release.yaml"), path.join(sessionDir, "evidence/escape.png"));
+    for (const [file, problem] of [
+      ["../../release.yaml", "which is not in the session's evidence/ folder"],
+      ["evidence/../../../release.yaml", "which is not in the session's evidence/ folder"],
+      ["evidence/escape.png", "which is not in the session's evidence/ folder"],
+      [path.join(dir, "signoffs/release.yaml"), "which is not in the session's evidence/ folder"],
+      ["evidence/missing.png", "which does not exist"],
+    ]) expect(() => merge(decision("flows/app/menu", { evidence: [file!] }))).toThrow(`the decision for flows/app/menu names evidence ${file}, ${problem}`);
+  });
+
+  test("the checklist's quit guard waits until every decision is written, and keeps the app open while writing fails", async () => {
+    const dir = repo(MENU);
+    await gateCommand([], path.join(dir, "e2e"), env().env);
+    const decisionsFile = path.join(dir, SESSION_DIR, "decisions.json");
+    let quitResult: boolean | undefined;
+    const quitting = signoff(dir, {
+      launch: async (_artifact, session) => {
+        app.quitGuards.length = 0;
+        const service = await checklist(session);
+        expect(app.quitGuards).toHaveLength(1);
+        expect(service.decide("flows/app/menu", "pass", "")).toBeUndefined();
+        expect(existsSync(decisionsFile)).toBe(false);
+        // Cmd-Q right after Pass: the guard approves the quit only once the decision is on disk.
+        quitResult = await app.quitGuards[0]!();
+        expect(existsSync(decisionsFile)).toBe(true);
+        // While the decisions cannot be written, the app stays open with the error; once a write works, it quits.
+        app.writeError = "disk full";
+        expect(service.decide("flows/app/ime", "pass", "Under the caret.")).toBeUndefined();
+        expect(await app.quitGuards[0]!()).toBe(false);
+        expect(service.getSignOffState()).toMatchObject({ saveError: "disk full" });
+        app.writeError = undefined;
+        expect(await app.quitGuards[0]!()).toBe(true);
+        expect(service.getSignOffState()).toMatchObject({ saveError: undefined });
+      },
+    });
+    expect([await quitting.run(), quitting.err]).toEqual([0, []]);
+    expect(quitResult).toBe(true);
+    expect(quitting.out.at(-1)).toBe("Wrote 2 sign-offs to signoffs/release.yaml. Run bun run gate to apply them.");
+  });
+
+  test("decisions of an interrupted session survive the next gate:signoff and are confirmed then; ones that no longer belong are dropped", async () => {
+    const dir = repo(MENU);
+    await gateCommand([], path.join(dir, "e2e"), env().env);
+    const sessionDir = path.join(dir, SESSION_DIR), decisionsFile = path.join(sessionDir, "decisions.json");
+    const before = readFileSync(path.join(dir, "signoffs/release.yaml"), "utf8");
+    // The person passes both runs, then the command is interrupted before they confirm (here: they do not confirm).
+    const interrupted = signoff(dir, {
+      answer: "",
+      launch: async (_artifact, session) => {
+        const service = await checklist(session);
+        service.decide("flows/app/ime", "pass", "Under the caret.");
+        service.decide("flows/app/menu", "pass", "");
+        await service.flushSignOff();
+      },
+    });
+    expect(await interrupted.run()).toBe(1);
+    expect(readFileSync(path.join(dir, "signoffs/release.yaml"), "utf8")).toBe(before);
+    const listed = signoff(dir);
+    expect(await listed.run(["--list"])).toBe(0);
+    expect(listed.out.filter(line => /^  \S/.test(line))).toEqual(["  decided pass, not confirmed yet: flows/app/ime (manual)", "  decided pass, not confirmed yet: flows/app/menu (run + sign-off)"]);
+    expect(listed.err).toEqual([]);
+
+    // A decision that is not this session's, or whose screenshot a later gate run replaced, is dropped and says why.
+    const decisions = JSON.parse(readFileSync(decisionsFile, "utf8")) as SignoffDecisions;
+    writeFileSync(decisionsFile, JSON.stringify({ version: 1, signoffs: [{ ...decisions.signoffs[0]!, by: "Agent <agent@example.com>" }, decisions.signoffs[1]] }));
+    writeFileSync(path.join(sessionDir, "evidence/flows-app-menu-1.png"), "an older capture");
+    const dropping = signoff(dir);
+    expect(await dropping.run(["--list"])).toBe(0);
+    expect(dropping.err).toEqual([
+      'gate:signoff: dropped an unconfirmed decision of an earlier session: the decision for flows/app/ime has by "Agent <agent@example.com>"; the session\'s is "Jane Doe <jane@example.com>"',
+      "gate:signoff: dropped an unconfirmed decision of an earlier session: the screenshot the decision for flows/app/menu names changed in a later gate run",
+    ]);
+    expect(existsSync(decisionsFile)).toBe(false);
+
+    // Kept decisions reopen in the checklist, and the person confirms them without deciding again.
+    writeFileSync(decisionsFile, JSON.stringify(decisions));
+    const resumed = signoff(dir, {
+      launch: async (_artifact, session) => {
+        expect((await checklist(session)).getSignOffState()).toMatchObject({ decisions: { "flows/app/ime": { verdict: "pass" }, "flows/app/menu": { verdict: "pass" } } });
+      },
+    });
+    expect(await resumed.run()).toBe(0);
+    expect(resumed.out.at(-1)).toBe("Wrote 2 sign-offs to signoffs/release.yaml. Run bun run gate to apply them.");
+    expect(reasons(await gate(dir))).toEqual([]);
+  });
+
+  test("--scoped signs off the last gate --flow run", async () => {
+    const dir = repo(MENU);
+    await gateCommand(["--flow", path.join(dir, "e2e/flows/app/menu.yaml")], path.join(dir, "e2e"), env().env);
+    const listed = signoff(dir);
+    expect(await listed.run(["--list", "--scoped"])).toBe(0);
+    expect(listed.out.slice(1)).toEqual(["  pending: flows/app/menu (run + sign-off)", expect.stringMatching(/menu\.yaml:10:3: Look at the open menu\./)]);
+  });
+
+  test("the checklist without a session, with an unreadable one, and for a run that is not ready", async () => {
+    app.args = ["KitchenSink"];
+    vi.resetModules();
+    const bare = await import("../examples/kitchen-sink/screens/infra/sign-off.ts");
+    await bare.loadSignOff();
+    expect(bare.getSignOffState()).toEqual({ status: "no-session" });
+    const dir = mkdtempSync(path.join(tmpdir(), "signoff-session-"));
+    writeFileSync(path.join(dir, "session.json"), JSON.stringify({ version: 2, items: [] }));
+    expect((await checklist(path.join(dir, "session.json"))).getSignOffState()).toEqual({ status: "error", error: `${path.join(dir, "session.json")} is not a sign-off session from bun run gate:signoff (version 1).` });
+    const fixture = await checklist(path.resolve("e2e/fixtures/signoff/session.json"));
+    const state = fixture.getSignOffState() as Extract<ReturnType<typeof fixture.getSignOffState>, { status: "ready" }>;
+    expect(state.session.items.map(item => [item.kind, item.ready, !!item.signoff])).toEqual([["partial", true, false], ["manual", true, false], ["partial", false, false], ["manual", true, true]]);
+    expect(signOffProblem(state.session.items[2]!, "pass", "looks fine")).toBe("not-ready");
+    expect(existsSync(fixture.resolvePath(state.dir, state.session.items[0]!.steps[0]!.screenshot!))).toBe(true);
+    expect(fixture.resolvePath("/a/b", "../c/./d.png")).toBe("/a/c/d.png");
   });
 });

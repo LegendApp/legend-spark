@@ -20,7 +20,7 @@ timeout: 10m
 - manualStep:
     instruction: 'In the Customize Toolbar sheet on Toolbar Child, drag Share out of the toolbar, choose Icon and Text under Show, then press Done. On the main window press Refresh state.'
     expect: 'The sheet lists Sidebar, View, Sort, New and Share. Afterwards the toolbar shows icons with labels and no Share button, and the state reads "display mode: iconAndLabel" and "items: sidebar, view, sort, new".'
-    evidence: screenshot
+    evidence: none
     signoff: required
 - tapOn: { id: windows-toolbar-close }
 - tapOn: { id: windows-toolbar-open }
@@ -28,7 +28,7 @@ timeout: 10m
 - manualStep:
     instruction: 'Look at Toolbar Child after it opened again and customization was turned on.'
     expect: 'The toolbar has icons with labels and no Share button, and the state reads "items: sidebar, view, sort, new".'
-    evidence: screenshot
+    evidence: none
     signoff: required
 - manualStep:
     instruction: 'Press the sidebar button at the leading end of Toolbar Child''s toolbar.'

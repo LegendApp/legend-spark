@@ -7248,7 +7248,7 @@
             }
           },
           "manualStep": {
-            "description": "A step a person performs and signs off.",
+            "description": "A step a person checks and signs off. The runner records it as awaiting sign-off and runs on; `bun run gate:signoff` collects the sign-off. `screenshot` names the earlier takeScreenshot that shows what to check (`evidence: screenshot` needs one); with no screenshot, a pass needs a note. Only in `manual: partial` or `manual: true` flows.",
             "if": {
               "type": "object"
             },
@@ -7269,6 +7269,11 @@
                     "recording",
                     "none"
                   ]
+                },
+                "screenshot": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,100}$",
+                  "description": "a file name of 1-100 letters, digits, _ and -"
                 },
                 "signoff": {
                   "enum": [

@@ -17,9 +17,12 @@ timeout: 120s
 - tapOn: { id: text-input-editing-text-services-look-up }
 - assertText: { id: text-input-editing-text-services-result, equals: "Result: ok" }
 - manualStep:
-    instruction: Look at the Look Up panel that opened over the note.
-    expect: It shows dictionary or other Look Up results for "Services", anchored at the word in the note.
-    evidence: screenshot
+    instruction: >-
+      The Look Up panel is a system window that in-process captures do not include, so check it live. In the Kitchen
+      Sink, open Text input & editing > Text services, select "Services" in the note and press Look up the note's
+      selection.
+    expect: A Look Up panel shows dictionary or other Look Up results for "Services", anchored at the word in the note.
+    evidence: none
     signoff: required
 - pressKey: Escape
 - openContextMenu: { on: { id: text-input-editing-text-services-note } }

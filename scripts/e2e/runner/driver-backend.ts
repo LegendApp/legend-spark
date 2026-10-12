@@ -330,9 +330,9 @@ export class DriverBackend implements Backend {
     });
   }
 
-  /** The main window, rendered in-process. Element frames are points from its top-left, so the capture's frame starts at 0,0. */
-  async screenshot(file: string): Promise<Capture> {
-    const capture = await this.client().capture("main", `capture-${++this.captures}`);
+  /** The window (the main window by default), rendered in-process. Element frames are points from its top-left, so the capture's frame starts at 0,0. */
+  async screenshot(file: string, window?: WindowInfo): Promise<Capture> {
+    const capture = await this.client().capture(window ? `id:${window.id}` : "main", `capture-${++this.captures}`);
     copyFileSync(capture.file, file);
     return { frame: { x: 0, y: 0, width: capture.width / capture.scale, height: capture.height / capture.scale }, scale: capture.scale };
   }

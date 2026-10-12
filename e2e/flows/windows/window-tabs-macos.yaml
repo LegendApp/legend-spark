@@ -22,15 +22,19 @@ matrix:
 - manualStep:
     instruction: Look at window-tabs-bar.
     expect: One window shows a tab bar with the tabs "Tab 1" and "Tab 2", "Tab 2" selected, and a + button at the trailing end.
-    evidence: screenshot
+    screenshot: window-tabs-bar
     signoff: required
 - shortcut: cmd+t
 - assertVisible: { id: windows-window-tabs-group-1-2-3-selected-3-bar-shown }
 - manualStep:
-    instruction: Click the + button at the end of the tab bar.
-    expect: A fourth tab "Tab 4" opens and is selected; the readout shows 1 2 3 [4].
-    evidence: screenshot
+    instruction: >-
+      A click on the + button needs a person, so check it live. In the Kitchen Sink, open Windows > Window tabs, press
+      Open window, then New tab in window 1, then click the + button at the end of the tab bar.
+    expect: A new tab of the same type opens and is selected, and the readout lists it as the selected tab.
+    evidence: none
     signoff: required
+# The run opens the fourth tab with Window > New Tab (⌘T); the + button is the live check above.
+- shortcut: cmd+t
 - assertVisible: { id: windows-window-tabs-group-1-2-3-4-selected-4-bar-shown }
 - selectMenu: Window > Move Tab to New Window
 - assertVisible: { id: windows-window-tabs-group-4-selected-4-bar-hidden }
@@ -42,10 +46,11 @@ matrix:
 - focusWindow: { title: Tab 1 }
 - selectMenu: View > Show Tab Bar
 - assertVisible: { id: windows-window-tabs-group-1-selected-1-bar-shown }
+- takeScreenshot: { name: window-tabs-single, window: { title: Tab 1 } }
 - manualStep:
-    instruction: Look at the window "Tab 1".
+    instruction: Look at the window "Tab 1" in window-tabs-single.
     expect: It shows a tab bar with its single tab, as View ▸ Show Tab Bar requested.
-    evidence: screenshot
+    screenshot: window-tabs-single
     signoff: required
 - focusWindow: { id: spark.main }
 - tapOn: { id: windows-window-tabs-close }

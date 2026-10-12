@@ -7,5 +7,5 @@ manual: true
 - manualStep:
     instruction: Type "nihongo" with the Japanese Romaji input source.
     expect: The candidate window sits directly under the caret and overlaps no text.
-    evidence: screenshot
+    evidence: none
     signoff: required

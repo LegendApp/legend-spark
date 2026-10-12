@@ -6,10 +6,12 @@ import { areaOf, checkCoverage } from "../coverage.ts";
 import { collect } from "../files.ts";
 import { checkFile } from "../format/lint.ts";
 import { checkSignoffs, FlowFormatError, formatDiagnostic, type Signoff } from "../format/parser.ts";
+import type { ManualStep } from "../format/signoff.ts";
 import type { BackendFactory } from "../runner/backend.ts";
 import { ms, realClock, type Clock, type FlowResult } from "../runner/executor.ts";
 import { failureText } from "../runner/report.ts";
 import { NO_BACKENDS, printer, runSuite } from "../runner/run.ts";
+import { at } from "./manual.ts";
 import { gateFlows, matchesAny, plan, repoPath, reportFiles, UsageError, type GatePlan, type Host, type PlannedBudget, type Reason } from "./plan.ts";
 import { planText, verdictText, writeGateReport } from "./report.ts";
 
@@ -29,7 +31,14 @@ export type GateEnv = {
 
 export type FlowStatus = "passed" | "failed" | "skipped" | "not-run" | "signed-off" | "unsigned";
 /** `bundle`: the failure bundle of a failed run, relative to the repository root. */
-export type GateFlowEntry = { id: string; path: string; blocking: boolean; manual: boolean | "partial"; status: FlowStatus; durationMs?: number; failure?: string; bundle?: string; signoff?: Signoff };
+export type GateFlowEntry = {
+  id: string; path: string; blocking: boolean; manual: boolean | "partial"; status: FlowStatus; durationMs?: number; failure?: string; bundle?: string;
+  /** Manual flows: the steps a person signs off. Screenshot paths are relative to the repository root. */
+  manualSteps?: ManualStep[];
+  /** Manual flows: SHA-256 of the flow file and the runFlow files it reaches. A sign-off for other content is stale. */
+  flowHash?: string;
+  signoff?: Signoff;
+};
 export type BudgetEntry = {
   metric: string; flow?: string; machine: string; better: "lower" | "higher"; baseline: number | "not-measured"; limit?: number; value?: number;
   blocking: boolean; status: "pass" | "fail";
@@ -63,7 +72,7 @@ export type GateReport = {
   run?: string;
 };
 
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+export const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 /** Every e2e file; a scoped run skips the flows outside its scope. */
 function lint(plan: GatePlan, reasons: Reason[]) {
@@ -91,16 +100,33 @@ function coverage(plan: GatePlan, env: GateEnv, reasons: Reason[]): GateReport["
   return { required: required.length, covered: required.length - uncovered.length, problems: problems.length };
 }
 
-/** One entry per planned run ID. A blocking failure, skip or missing result fails the gate; the runner never retries. */
+/**
+ * One entry per planned run ID. A blocking failure, skip or missing result fails the gate; the runner never retries.
+ * `manual: true` runs list their planned steps; `partial` runs list the steps the runner reached.
+ */
 function judgeFlows(plan: GatePlan, results: FlowResult[] | undefined, runDir: string | undefined, reasons: Reason[], warnings: string[]): GateFlowEntry[] {
   const entries: GateFlowEntry[] = [];
-  for (const flow of plan.flows) for (const id of flow.ids) {
-    const entry: GateFlowEntry = { id, path: flow.path, blocking: flow.blocking, manual: flow.manual, status: "not-run" };
+  for (const flow of plan.flows) for (const [index, id] of flow.ids.entries()) {
+    const entry: GateFlowEntry = { id, path: flow.path, blocking: flow.blocking, manual: flow.manual, status: "not-run", ...(flow.hash ? { flowHash: flow.hash } : {}) };
     entries.push(entry);
+    if (flow.manual === true) {
+      entry.manualSteps = flow.manualSteps?.[index] ?? [];
+      if (flow.manualSteps && !entry.manualSteps.some(step => step.signoff === "required")) reasons.push({ check: "signoffs", message: `${id}: manual: true, but it reaches no manualStep with signoff: required, so nothing verifies it` });
+    }
     if (flow.manual === true || !results) continue;
     const result = results.find(candidate => candidate.id === id);
     if (!result) { reasons.push({ check: "flows", message: `${id}: the runner reported no result` }); continue; }
     Object.assign(entry, { status: result.status, durationMs: result.durationMs }, result.bundle ? { bundle: path.relative(plan.repo, path.join(runDir!, result.bundle)) } : {});
+    if (flow.manual === "partial") {
+      entry.manualSteps = result.manual.map(step => ({
+        instruction: step.instruction, expect: step.expect, evidence: step.evidence, signoff: step.signoff, location: at(step.location),
+        ...(step.screenshot ? { screenshot: path.relative(plan.repo, path.resolve(runDir!, step.screenshot)), capture: step.capture } : {}),
+      }));
+      // e2e:lint asks for a required step in the file; a `when` condition can still skip it at run time.
+      if (result.status === "passed" && !entry.manualSteps.some(step => step.signoff === "required")) {
+        reasons.push({ check: "signoffs", message: `${id}: manual: partial, but the run reached no manualStep with signoff: required, so no person verified it` });
+      }
+    }
     const problem = result.status === "skipped" ? `skipped by the runner (${result.skipReason})` : result.failure ? failureText(result.failure).split("\n")[0] : undefined;
     if (!problem) continue;
     entry.failure = problem;
@@ -148,26 +174,41 @@ function judgeBudgets(plan: GatePlan, results: FlowResult[], reasons: Reason[], 
   return entries;
 }
 
-/** Manual flows need a passing sign-off for this target and commit, per run ID. */
+/**
+ * A manual run with a `signoff: required` step needs one passing sign-off for this target, commit and flow content. A run
+ * with only optional steps may have one. A failed sign-off fails the gate either way. Fails closed: a missing or invalid
+ * file, a stale sign-off (another commit or flow content) or a duplicate is a reason, never a pass.
+ */
 function judgeSignoffs(plan: GatePlan, commit: string, entries: GateFlowEntry[], reasons: Reason[]) {
-  const needed = entries.filter(entry => entry.manual);
-  if (!needed.length) return;
-  const file = path.join(plan.repo, plan.manifest.signoffs);
+  // A manual flow without a hash has a plan problem (a runFlow file it cannot read), which already fails the gate.
+  const manual = entries.filter(entry => entry.manual && entry.manualSteps && entry.flowHash);
+  const required = (entry: GateFlowEntry) => entry.manualSteps!.some(step => step.signoff === "required");
+  const unsigned = (entry: GateFlowEntry) => { if (entry.manual === true) entry.status = "unsigned"; };
+  const needed = manual.filter(required);
+  if (!manual.length) return;
+  const file = path.join(plan.repo, plan.manifest.signoffs), hint = "run bun run gate:signoff";
   if (!existsSync(file)) {
-    reasons.push({ check: "signoffs", message: `${plan.manifest.signoffs} does not exist; ${plural(needed.length, "manual flow run")} need a sign-off: ${needed.map(entry => entry.id).join(", ")}` });
-    for (const entry of needed) if (entry.manual === true) entry.status = "unsigned";
+    if (needed.length) reasons.push({ check: "signoffs", message: `${plan.manifest.signoffs} does not exist; ${plural(needed.length, "manual flow run")} need a sign-off (${hint}): ${needed.map(entry => entry.id).join(", ")}` });
+    needed.forEach(unsigned);
     return;
   }
   const checked = checkSignoffs(readFileSync(file, "utf8"), path.relative(process.cwd(), file));
-  if (!checked.value) { reasons.push({ check: "signoffs", message: `${plan.manifest.signoffs} is invalid:\n${checked.diagnostics.map(formatDiagnostic).join("\n")}` }); return; }
-  for (const entry of needed) {
-    const matches = checked.value.signoffs.filter(signoff => signoff.flow === entry.id && signoff.target === plan.target!.id && signoff.commit === commit);
-    const problem = !matches.length ? `no sign-off for ${plan.target!.id} at commit ${commit.slice(0, 12)}`
-      : matches.length > 1 ? `${matches.length} sign-offs for ${plan.target!.id} at commit ${commit.slice(0, 12)}; keep one`
-      : matches[0]!.verdict === "fail" ? `signed off as failed by ${matches[0]!.by} (${matches[0]!.at})${matches[0]!.note ? `: ${matches[0]!.note}` : ""}`
-      : matches[0]!.evidence?.filter(evidence => !existsSync(path.join(plan.repo, evidence))).map(evidence => `evidence ${evidence} does not exist`).join("; ") || undefined;
-    if (matches.length === 1) entry.signoff = matches[0];
-    if (entry.manual === true) entry.status = problem ? "unsigned" : "signed-off";
+  if (!checked.value) { reasons.push({ check: "signoffs", message: `${plan.manifest.signoffs} is invalid:\n${checked.diagnostics.map(formatDiagnostic).join("\n")}` }); needed.forEach(unsigned); return; }
+  const short = (hash: string) => hash.slice(0, 12);
+  for (const entry of manual) {
+    const here = `commit ${short(commit)}, flow ${short(entry.flowHash!)}`;
+    const signed = checked.value.signoffs.filter(signoff => signoff.flow === entry.id && signoff.target === plan.target!.id);
+    const current = signed.filter(signoff => signoff.commit === commit && signoff.flowHash === entry.flowHash), [only] = current;
+    const stale = signed.find(signoff => signoff.commit !== commit || signoff.flowHash !== entry.flowHash);
+    const problem = current.length > 1 ? `${current.length} sign-offs for ${plan.target!.id} at ${here}; keep one`
+      : only?.verdict === "fail" ? `signed off as failed by ${only.by} on ${only.machine} (${only.at}): ${only.note}`
+      : only ? only.evidence?.filter(evidence => !existsSync(path.join(plan.repo, evidence))).map(evidence => `evidence ${evidence} does not exist`).join("; ") || undefined
+      : !required(entry) ? undefined
+      : stale ? `stale sign-off: it is for commit ${short(stale.commit)}, flow ${short(stale.flowHash)}, not this ${here}${stale.flowHash !== entry.flowHash ? " (the flow changed since)" : ""}; ${hint}`
+      : `no sign-off for ${plan.target!.id} at ${here}; ${hint}`;
+    if (current.length === 1) entry.signoff = only;
+    // A manual: true run is signed off, failed by its sign-off, unsigned when it needs one, or never run.
+    if (entry.manual === true) entry.status = only?.verdict === "fail" ? "failed" : problem ? "unsigned" : only ? "signed-off" : "not-run";
     if (problem) reasons.push({ check: "signoffs", message: `${entry.id}: ${problem}` });
   }
 }

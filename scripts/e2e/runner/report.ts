@@ -11,7 +11,8 @@ export type RunReport = {
   platform: Platform;
   backends: Array<{ name: string; kind: Backend["kind"] }>;
   interrupted: boolean;
-  summary: { total: number; passed: number; failed: number; skipped: number };
+  /** `awaitingSignoff`: flow runs with manual steps that need a person's sign-off (`bun run gate:signoff`). */
+  summary: { total: number; passed: number; failed: number; skipped: number; awaitingSignoff: number };
   /** Artifact, golden and bundle paths are relative to the run directory (the directory holding report.json). */
   flows: FlowResult[];
 };
@@ -23,9 +24,10 @@ export function buildReport(results: FlowResult[], meta: { startedAt: Date; dura
   return {
     version: 1, startedAt: meta.startedAt.toISOString(), durationMs: Math.round(meta.durationMs), platform: meta.backends[0]!.platform,
     backends: meta.backends.map(({ name, kind }) => ({ name, kind })), interrupted: meta.interrupted,
-    summary: { total: results.length, passed: count("passed"), failed: count("failed"), skipped: count("skipped") },
+    summary: { total: results.length, passed: count("passed"), failed: count("failed"), skipped: count("skipped"), awaitingSignoff: results.filter(result => result.manual.length).length },
     flows: results.map(result => ({
       ...result, artifacts: relative(result.artifacts),
+      manual: result.manual.map(step => step.screenshot ? { ...step, screenshot: from(step.screenshot) } : step),
       goldens: result.goldens.map(({ golden, actual, diff, ...rest }) => ({ ...rest, golden: from(golden), actual: from(actual), ...(diff ? { diff: from(diff) } : {}) })),
       ...(result.failure ? { failure: { ...result.failure, artifacts: relative(result.failure.artifacts) } } : {}),
       ...(result.bundle ? { bundle: from(result.bundle) } : {}),
@@ -34,6 +36,8 @@ export function buildReport(results: FlowResult[], meta: { startedAt: Date; dura
 }
 
 const at = (failure: FailureReport) => `${failure.location.file}:${failure.location.line}:${failure.location.column}`;
+/** One line per manual step: what the person does and what they should see. */
+export const manualText = (flow: Pick<FlowResult, "manual">) => flow.manual.map(step => `awaiting sign-off (${step.location.file}:${step.location.line}): ${step.instruction} Expect: ${step.expect}`);
 const label = (flow: FlowResult) => flow.name ? `${flow.name}${Object.keys(flow.matrix).length ? ` [${flow.id.slice(flow.id.indexOf("[") + 1, -1)}]` : ""}` : flow.id;
 
 /** The failure as plain text: location, message, call sites, candidates, artifacts. Shared by JUnit and the console. */
@@ -58,7 +62,7 @@ export function junit(report: RunReport): string {
     const cases = flows.map(flow => {
       const body = flow.status === "skipped" ? `<skipped message="${escape(flow.skipReason ?? "")}"/>`
         : flow.failure ? `<failure type="${flow.failure.kind}" message="${escape(flow.failure.message.split("\n")[0]!)}">${escape(failureText(flow.failure))}</failure>` : "";
-      const out = [...flow.errors, ...flow.artifacts.map(artifact => `artifact ${artifact.kind}: ${artifact.path}`), ...(flow.bundle ? [`bundle: ${flow.bundle}`] : [])];
+      const out = [...manualText(flow), ...flow.errors, ...flow.artifacts.map(artifact => `artifact ${artifact.kind}: ${artifact.path}`), ...(flow.bundle ? [`bundle: ${flow.bundle}`] : [])];
       return `    <testcase classname="${escape(file)}" name="${escape(label(flow))}" time="${seconds(flow.durationMs)}">${body}${out.length ? `<system-out>${escape(out.join("\n"))}</system-out>` : ""}</testcase>`;
     });
     const n = (status: FlowResult["status"]) => flows.filter(flow => flow.status === status).length;
@@ -82,7 +86,7 @@ export function html(report: RunReport): string {
     const artifacts = [...failure?.artifacts ?? [], ...flow.artifacts];
     return `<details class="${flow.status}"${flow.status === "failed" ? " open" : ""}><summary><b>${flow.status.toUpperCase()}</b> ${escape(label(flow))} <span>${escape(flow.file)} · ${flow.durationMs}ms</span></summary>
 ${flow.intent ? `<p>${escape(flow.intent)}</p>` : ""}${flow.whiteBox.length ? `<p>White-box (driver, in-process): ${escape(flow.whiteBox.join(", "))}</p>` : ""}${flow.skipReason ? `<p>Skipped: ${escape(flow.skipReason)}</p>` : ""}
-${failure ? `<pre>${escape(failureText(failure, artifact => artifact.path))}</pre>` : ""}${flow.bundle ? `<p>Failure bundle: <a href="${escape(flow.bundle.split(path.sep).map(encodeURIComponent).join("/"))}">${escape(flow.bundle)}</a></p>` : ""}${flow.errors.length ? `<pre>${escape(flow.errors.join("\n"))}</pre>` : ""}
+${flow.manual.length ? `<pre>${escape(manualText(flow).join("\n"))}</pre>` : ""}${failure ? `<pre>${escape(failureText(failure, artifact => artifact.path))}</pre>` : ""}${flow.bundle ? `<p>Failure bundle: <a href="${escape(flow.bundle.split(path.sep).map(encodeURIComponent).join("/"))}">${escape(flow.bundle)}</a></p>` : ""}${flow.errors.length ? `<pre>${escape(flow.errors.join("\n"))}</pre>` : ""}
 ${artifacts.length ? `<ul class="artifacts">${artifacts.map(link).join("")}</ul>` : ""}${steps ? `<ol class="steps">${steps}</ol>` : ""}</details>`;
   }).join("\n");
   const { summary } = report;
@@ -93,12 +97,12 @@ body{font:14px/1.45 -apple-system,system-ui,sans-serif;margin:2em;color:#1d1d1f;
 @media (prefers-color-scheme:dark){body{color:#f5f5f7;background:#1d1d1f}pre{background:#2c2c2e!important}}
 details{border-left:4px solid #8e8e93;padding:.25em .75em;margin:.5em 0}details.passed{border-color:#34c759}details.failed{border-color:#ff3b30}
 summary{cursor:pointer}summary span,.steps span{opacity:.6;font-size:12px}pre{background:#f2f2f7;padding:.75em;overflow:auto;white-space:pre-wrap}
-.steps{font-family:ui-monospace,monospace;font-size:12px}.steps .failed{color:#ff3b30}.steps .skipped{opacity:.5}
+.steps{font-family:ui-monospace,monospace;font-size:12px}.steps .failed{color:#ff3b30}.steps .skipped{opacity:.5}.steps .awaiting-signoff{color:#ff9500}
 .artifacts{list-style:none;padding:0}figure{margin:.5em 0}img{max-width:min(100%,900px);border:1px solid #8e8e93}
 </style></head><body>
 <h1>E2E run</h1>
 <p>${escape(report.startedAt)} · ${report.platform} · backends ${report.backends.map(backend => `${escape(backend.name)} (${backend.kind})`).join(", ")} · ${report.durationMs}ms${report.interrupted ? " · <b>interrupted</b>" : ""}</p>
-<p><b>${summary.passed}</b> passed · <b>${summary.failed}</b> failed · <b>${summary.skipped}</b> skipped · ${summary.total} total</p>
+<p><b>${summary.passed}</b> passed · <b>${summary.failed}</b> failed · <b>${summary.skipped}</b> skipped · ${summary.total} total${summary.awaitingSignoff ? ` · <b>${summary.awaitingSignoff}</b> awaiting sign-off` : ""}</p>
 ${flows}
 </body></html>
 `;

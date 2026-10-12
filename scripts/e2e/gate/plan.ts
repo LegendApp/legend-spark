@@ -6,8 +6,10 @@ import {
   checkBudgets, checkFlow, checkGate, checkRegistry, formatDiagnostic, FlowFormatError,
   type Budget, type Budgets, type GateManifest, type GateTarget, type Machine,
 } from "../format/parser.ts";
+import type { ManualStep } from "../format/signoff.ts";
 import type { Platform } from "../runner/backend.ts";
 import { expandMatrix } from "../runner/executor.ts";
+import { flowHash, plannedManualSteps } from "./manual.ts";
 
 /** Why the gate fails. The verdict is PASS only when there are none. */
 export type GateCheck = "manifest" | "target" | "source" | "lint" | "coverage" | "build" | "backend" | "flows" | "time-budget" | "budgets" | "signoffs";
@@ -24,6 +26,12 @@ export type PlannedFlow = {
   blocking: boolean;
   /** `true`: signed off by a person, not run. `partial`: run, and signed off. */
   manual: boolean | "partial";
+  name?: string;
+  intent?: string;
+  /** Manual flows: SHA-256 of the flow file and the runFlow files it reaches (their sign-offs name it); unset when one cannot be read. */
+  hash?: string;
+  /** `manual: true`: the manualSteps each run ID would reach, in `ids` order. A `partial` flow's come from its run. */
+  manualSteps?: ManualStep[][];
 };
 export type PlannedBudget = Budget & { baseline: number | "not-measured" };
 export type GatePlan = {
@@ -160,15 +168,22 @@ export function plan(root: string, host: Host, { target: override, only, artifac
   const blocking = blockingChecks(root, manifest), flows: PlannedFlow[] = [], excluded: GatePlan["excluded"] = [];
   for (const { path: relative, file } of target ? all.filter(flow => !scope || scope.includes(flow.path)) : []) {
     const id = relative.replace(/\.ya?ml$/, "");
-    const header = checkFlow(readFileSync(file, "utf8"), file).value?.header;
+    const parsed = checkFlow(readFileSync(file, "utf8"), path.relative(process.cwd(), file)).value, header = parsed?.header;
     // An invalid flow still runs, so the runner reports it as a `format` failure; lint reports it too.
     if (!header) { flows.push({ path: relative, file, ids: [id], blocking: true, manual: false }); continue; }
     if (header.platforms && !header.platforms.includes(target!.platform)) { excluded.push({ path: relative, reason: `platforms: ${header.platforms.join(", ")}` }); continue; }
-    const suffixes = expandMatrix(header.matrix).map(matrix => Object.entries(matrix).map(([dimension, value]) => `${dimension}=${value}`).join(","));
+    const matrices = expandMatrix(header.matrix), suffixes = matrices.map(matrix => Object.entries(matrix).map(([dimension, value]) => `${dimension}=${value}`).join(","));
+    let manualSteps: ManualStep[][] | undefined, hash: string | undefined;
+    try {
+      if (header.manual) hash = flowHash(parsed!, file);
+      if (header.manual === true) manualSteps = matrices.map(matrix => plannedManualSteps(parsed!, file, matrix, target!.platform));
+    } catch (error) {
+      problems.push({ check: "signoffs", message: `${relative}: ${(error as Error).message}` });
+    }
     flows.push({
       path: relative, file, ids: suffixes.map(suffix => suffix ? `${id}[${suffix}]` : id),
       blocking: manifest.blocking.default || (header.tags ?? []).some(tag => manifest.blocking.tags.includes(tag)) || (header.checks ?? []).some(check => blocking.has(check)),
-      manual: header.manual ?? false,
+      manual: header.manual ?? false, ...(hash ? { hash } : {}), name: header.name, intent: header.intent, ...(manualSteps ? { manualSteps } : {}),
     });
   }
   const planned = machine ? (budgets?.budgets ?? []).flatMap(budget => machine.id in budget.baselines ? [{ ...budget, baseline: budget.baselines[machine.id]! }] : []) : [];

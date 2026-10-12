@@ -19,15 +19,19 @@ timeout: 120s
 - openContextMenu: { on: { id: text-input-editing-text-services-note } }
 - assertVisible: Services
 - manualStep:
-    instruction: In the open context menu choose Services > Convert Text to Traditional Chinese (enable it in System Settings > Keyboard > Keyboard Shortcuts > Services > Text if it is missing), or another service that returns text.
+    instruction: >-
+      Context menus are not in in-process captures, so check it live. In the Kitchen Sink, open Text input & editing >
+      Text services, select "Writing Tools" in the note, open its context menu and choose Services > Convert Text to
+      Traditional Chinese (enable it in System Settings > Keyboard > Keyboard Shortcuts > Services > Text if it is
+      missing), or another service that returns text.
     expect: The selected text in the note is replaced by the service's result, and the rest of the note is unchanged.
-    evidence: screenshot
+    evidence: none
     signoff: required
 - selectText: { in: { id: text-input-editing-text-services-spark-input }, range: [0, 8] }
 - openContextMenu: { on: { id: text-input-editing-text-services-spark-input } }
 - assertVisible: Services
 - manualStep:
-    instruction: In the open context menu choose the same text-returning service.
+    instruction: Select "Services" in the Spark text input, open its context menu and choose the same text-returning service.
     expect: The Spark text input shows the service's result in place of "Services".
-    evidence: screenshot
+    evidence: none
     signoff: required

@@ -33,3 +33,8 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "docs/test-driver.md Focus and window state; #246"
+  INFRA-SIGNOFF-01:
+    title: Launched with --ks-signoff and a sign-off session, the Kitchen Sink opens the sign-off checklist and lists each run with its state (pending with an in-process screenshot, pending without one, not ready, signed off)
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Manual sign-offs; #57"

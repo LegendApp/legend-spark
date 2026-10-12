@@ -1,0 +1,29 @@
+appId: so.legend.spark.examples.kitchensink
+name: The sign-off checklist lists a session's runs
+intent: >
+  Launched with --ks-signoff and the fixture session (e2e/fixtures/signoff/session.json), the Kitchen Sink opens
+  Gate infrastructure > Manual sign-off by itself and lists four runs: a partial run awaiting sign-off, with one step
+  showing the screenshot it names and what that capture shows and one step with no screenshot; a manual run awaiting
+  sign-off; a partial run that is not ready because its automated steps failed; and a manual run already signed off as
+  passed. Runs in light and dark, in English and Arabic.
+checks: [INFRA-SIGNOFF-01]
+tags: [infra]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { arguments: ["--ks-signoff", "${FIXTURES}/signoff/session.json"] }
+- assertVisible: { id: infra-sign-off-root }
+- assertVisible: { id: infra-sign-off-session }
+- assertVisible: { id: infra-sign-off-item-0-pending }
+- assertVisible: { id: infra-sign-off-item-0-screenshot-0 }
+- assertVisible: { id: infra-sign-off-item-0-capture-0, text: '/menus-audit \(the main window\)/' }
+- assertVisible: { id: infra-sign-off-item-0-no-screenshot-1 }
+- assertVisible: { id: infra-sign-off-item-1-pending }
+- assertNotVisible: { id: infra-sign-off-item-1-screenshot-0 }
+- assertVisible: { id: infra-sign-off-item-1-no-screenshot-0 }
+- assertVisible: { id: infra-sign-off-item-2-not-ready }
+- assertNotVisible: { id: infra-sign-off-item-2-pass }
+- assertVisible: { id: infra-sign-off-item-3-passed }
+- takeScreenshot: sign-off

@@ -20,7 +20,21 @@ export type Clock = { now(): number; sleep(ms: number): Promise<void> };
 export const realClock: Clock = { now: () => performance.now(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)) };
 
 /** `whiteBox`: a black-box command or visibility check that a driver backend answered in-process (no black-box backend was active). */
-export type StepResult = { command: string; location: SourceLocation; depth: number; status: "passed" | "failed" | "skipped"; durationMs: number; whiteBox?: true };
+export type StepResult = { command: string; location: SourceLocation; depth: number; status: "passed" | "failed" | "skipped" | "awaiting-signoff"; durationMs: number; whiteBox?: true };
+/** A manualStep the runner reached: recorded, never performed, so a person signs it off (docs/e2e-flows.md#manual-sign-offs). */
+export type ManualStepResult = {
+  instruction: string;
+  expect: string;
+  evidence: "screenshot" | "recording" | "none";
+  signoff: "required" | "optional";
+  location: SourceLocation;
+  /** The runFlow / repeat call sites that led to it. */
+  stack: SourceLocation[];
+  /** `evidence: screenshot`: the file of the earlier takeScreenshot the step names. */
+  screenshot?: string;
+  /** What that screenshot shows: its name and window. */
+  capture?: string;
+};
 export type FailureReport = {
   kind: FailureKind;
   message: string;
@@ -60,6 +74,8 @@ export type FlowResult = {
   metrics: Record<string, number[]>;
   /** Black-box commands this flow ran white-box on a driver backend (see StepResult.whiteBox), sorted. */
   whiteBox: string[];
+  /** manualSteps reached, in order: each awaits a person's sign-off. */
+  manual: ManualStepResult[];
 };
 export type RunEvent = { event: "flow-start"; id: string; file: string; name?: string; intent?: string; matrix: Matrix } | { event: "flow-end"; result: FlowResult };
 export type RunOptions = {
@@ -98,6 +114,9 @@ function interpolateArgs(command: FlowCommand, env: Env): Record<string, unknown
   return Object.fromEntries(Object.entries(command.args).map(([key, value]) => [key, NESTED.has(props[key]!) ? value : interpolate(value, env)]));
 }
 const selectorArgs = (args: Record<string, unknown>) => Object.fromEntries(Object.entries(args).filter(([key]) => key in SELECTOR_PROPS));
+
+/** A runFlow file: `./` and `../` are relative to the calling file, anything else to the flow's e2e root. */
+export const runFlowTarget = (file: string, caller: string, flowFile: string) => /^\.\.?\//.test(file) ? path.resolve(path.dirname(caller), file) : path.resolve(rootOf(flowFile), file);
 
 /** The e2e root of a flow: the parent of its nearest `flows` or `dev-flows` directory, else its own directory. */
 export function rootOf(file: string): string {
@@ -179,11 +198,13 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   const began = clock.now();
   const flowTimeout = flow.header.timeout === undefined ? DEFAULT_FLOW_TIMEOUT_MS : ms(flow.header.timeout);
   const deadline = began + flowTimeout;
-  const steps: StepResult[] = [], errors: string[] = [], outputs: Artifact[] = [], goldens: GoldenResult[] = [];
+  const steps: StepResult[] = [], errors: string[] = [], outputs: Artifact[] = [], goldens: GoldenResult[] = [], manual: ManualStepResult[] = [];
   const metrics: Record<string, number[]> = {};
+  /** takeScreenshot names this run captured, and what each shows; a manualStep's `screenshot` names one. */
+  const shots = new Map<string, string>();
   const restores: Array<{ label: string; undo: () => Promise<void> }> = [];
   const result = (status: FlowResult["status"], extra: Partial<FlowResult> = {}): FlowResult => ({
-    ...base, matrix, status, durationMs: Math.round(clock.now() - began), steps, errors, artifacts: outputs, goldens, metrics,
+    ...base, matrix, status, durationMs: Math.round(clock.now() - began), steps, errors, artifacts: outputs, goldens, metrics, manual,
     whiteBox: [...new Set(steps.filter(step => step.whiteBox).map(step => step.command))].sort(), ...extra,
   });
   if (flow.header.platforms && !flow.header.platforms.includes(platform)) return result("skipped", { skipReason: `platforms: ${flow.header.platforms.join(", ")} (running ${platform})` });
@@ -248,7 +269,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
     const env = { ...scope.env, ...(args.env as Env | undefined) };
     if (args.commands) return runAll(args.commands as FlowCommand[], child(scope, command, { env }));
     const file = String(args.file);
-    const target = /^\.\.?\//.test(file) ? path.resolve(path.dirname(scope.file), file) : path.resolve(rootOf(absolute), file);
+    const target = runFlowTarget(file, scope.file, absolute);
     if (scope.files.includes(target)) throw new Failure("invalid", `runFlow cycle: ${[...scope.files, target].map(item => path.relative(process.cwd(), item)).join(" -> ")}`);
     let source: string;
     try { source = readFileSync(target, "utf8"); } catch (error) { throw new Failure("invalid", `runFlow cannot read ${file}: ${message(error)}`); }
@@ -296,9 +317,29 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
         (metrics[name] ??= []).push(value);
       },
     };
-    if (command.name === "takeScreenshot") return takeScreenshot(backend, args, context);
+    if (command.name === "takeScreenshot") {
+      await takeScreenshot(backend, args, context);
+      shots.set(String(args.name), args.window === undefined ? "the main window" : `window ${describe(args.window)}`);
+      return;
+    }
     if (command.name === "assertScreenshot") return assertScreenshot(backend, args, context, { root: rootOf(absolute), dir, record: result => goldens.push(result) });
     await backend.commands[command.name]!(args, context);
+  }
+
+  /**
+   * Records a manualStep for sign-off and lets the flow run on. Its screenshot evidence is the capture an earlier
+   * takeScreenshot of this run made, so the flow says which window shows what the person checks.
+   */
+  function awaitSignoff(command: FlowCommand, args: Record<string, unknown>, scope: Scope) {
+    if (!flow.header.manual) throw new Failure("invalid", "manualStep needs `manual: partial` or `manual: true` in the flow header, so the gate asks for its sign-off");
+    const name = args.screenshot as string | undefined, evidence = (args.evidence as ManualStepResult["evidence"] | undefined) ?? (name ? "screenshot" : "none");
+    if (evidence === "recording") throw new Failure("unsupported", "manualStep evidence: recording: no backend records the screen");
+    const capture = name === undefined ? undefined : shots.get(name);
+    if (name !== undefined && !capture) throw new Failure("invalid", `manualStep screenshot: ${name}: no takeScreenshot named ${name} ran before it in this flow`);
+    manual.push({
+      instruction: String(args.instruction), expect: String(args.expect), evidence, signoff: (args.signoff as ManualStepResult["signoff"] | undefined) ?? "required",
+      location: command.location, stack: scope.stack, ...(name ? { screenshot: path.join(outputDir, `${name}.png`), capture: `${name} (${capture})` } : {}),
+    });
   }
 
   async function exec(command: FlowCommand, scope: Scope) {
@@ -310,6 +351,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
       live();
       if (command.when && (command.when.visible !== undefined || command.when.notVisible !== undefined) && observer().kind === "driver") step.whiteBox = true;
       if (command.when && !(await holds(interpolate(command.when, scope.env)))) step.status = "skipped";
+      else if (command.name === "manualStep") { awaitSignoff(command, args = interpolateArgs(command, scope.env), scope); step.status = "awaiting-signoff"; }
       else await dispatch(command, args = interpolateArgs(command, scope.env), scope, step);
     } catch (error) {
       step.status = "failed";
@@ -402,7 +444,7 @@ export async function runFlows(files: string[], options: RunOptions): Promise<Fl
     if (!checked.value) {
       const { file: at, line, column } = checked.diagnostics[0]!;
       const result: FlowResult = {
-        id: relative, file, checks: [], tags: [], matrix: {}, status: "failed", durationMs: 0, steps: [], errors: [], artifacts: [], goldens: [], metrics: {}, whiteBox: [],
+        id: relative, file, checks: [], tags: [], matrix: {}, status: "failed", durationMs: 0, steps: [], errors: [], artifacts: [], goldens: [], metrics: {}, whiteBox: [], manual: [],
         failure: { kind: "format", message: `${file} is not a valid flow`, location: { file: at, line, column }, stack: [], candidates: [], matches: [], artifacts: [], diagnostics: checked.diagnostics.map(formatDiagnostic) },
       };
       const { backends, app, host } = options;

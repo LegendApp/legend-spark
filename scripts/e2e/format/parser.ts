@@ -3,8 +3,10 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 import { isAlias, isMap, isScalar, isSeq, LineCounter, parseAllDocuments, type Document, type Node, type Pair, type YAMLMap } from "yaml";
 import { COMMANDS } from "./commands.ts";
 import { NESTED } from "./primitives.ts";
+import type { Signoff } from "./signoff.ts";
 import { ajv, formatProblem, validators } from "./schemas.ts";
 
+export type { Signoff };
 export type SourceLocation = { file: string; line: number; column: number };
 export type Diagnostic = SourceLocation & { rule: string; message: string };
 export type Condition = { platform?: "macos" | "windows"; visible?: unknown; notVisible?: unknown; matrix?: Record<string, string | boolean> };
@@ -175,6 +177,28 @@ function matrixDiagnostics(flow: FlowAst): Diagnostic[] {
   }));
 }
 
+/**
+ * A manualStep only reaches the gate's sign-offs in a `manual: partial` or `manual: true` flow, which needs a required one;
+ * screenshot evidence names the capture that shows what to check (docs/e2e-flows.md#manual-sign-offs).
+ */
+function manualDiagnostics(flow: FlowAst): Diagnostic[] {
+  const all = [...flow.header.onFlowStart ?? [], ...flow.commands, ...flow.header.onFlowComplete ?? []];
+  const steps = [...walk(all)].filter(command => command.name === "manualStep");
+  const at = (command: FlowCommand, message: string): Diagnostic => ({ ...command.location, rule: "schema", message });
+  if (!flow.header.manual) return steps.map(command => at(command, "manualStep needs `manual: partial` (the automated steps run, then a person signs off) or `manual: true` in the header"));
+  const problems = steps.flatMap(command => {
+    const { evidence, screenshot } = command.args;
+    if (evidence === "screenshot" && screenshot === undefined) return [at(command, "evidence: screenshot needs `screenshot`: the name of the earlier takeScreenshot that shows what to check (only that capture shows the right window)")];
+    if (screenshot !== undefined && evidence !== undefined && evidence !== "screenshot") return [at(command, `screenshot names a capture, but evidence is ${evidence}`)];
+    return [];
+  });
+  // Without a required step, a manual flow passes the gate with no person involved. Steps in runFlow files do not count here.
+  if (!steps.some(command => (command.args.signoff ?? "required") === "required")) {
+    problems.push({ file: flow.file, line: 1, column: 1, rule: "schema", message: `manual: ${flow.header.manual} needs a manualStep with signoff: required in this file: without one, no person verifies the flow` });
+  }
+  return problems;
+}
+
 /** A golden's path needs the appearance and locale it was rendered in (docs/e2e-flows.md#visual-goldens). */
 function goldenDiagnostics(flow: FlowAst): Diagnostic[] {
   const missing = ["appearance", "locale"].filter(dimension => !flow.header.matrix?.[dimension]);
@@ -199,7 +223,7 @@ export function checkFlow(source: string, file = "<flow>"): Checked<FlowAst> {
     else delete header[hook];
   }
   const flow: FlowAst = { file, header, commands: toCommands({ loaded, doc: commandDoc }, commandDoc.contents, commandDoc.toJS() as unknown[]) };
-  const semantic = [...matrixDiagnostics(flow), ...goldenDiagnostics(flow)];
+  const semantic = [...matrixDiagnostics(flow), ...goldenDiagnostics(flow), ...manualDiagnostics(flow)];
   return semantic.length ? { loaded, diagnostics: semantic } : { loaded, diagnostics: [], value: flow };
 }
 
@@ -238,7 +262,6 @@ export type Budget = {
   baselines: Record<string, number | "not-measured">;
 };
 export type Budgets = { machines: Record<string, Machine>; budgets: Budget[] };
-export type Signoff = { flow: string; target: string; commit: string; verdict: "pass" | "fail"; by: string; at: string; evidence?: string[]; note?: string };
 
 /** One YAML document validated against a schema. */
 function checkDocument<T>(source: string, file: string, validate: ValidateFunction, what: string): Checked<T> & { doc?: Document.Parsed } {

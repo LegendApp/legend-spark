@@ -20,8 +20,15 @@ timeout: 60s
 - takeScreenshot: { name: window-options-simple-fullscreen, window: { id: windows-window-options-child } }
 - manualStep:
     instruction: Look at the child window in window-options-simple-fullscreen.
-    expect: The child fills the whole display with no title bar or traffic lights, and no new fullscreen Space opened.
-    evidence: screenshot
+    expect: The capture is the size of the display and shows no title bar or traffic lights.
+    screenshot: window-options-simple-fullscreen
+    signoff: required
+- manualStep:
+    instruction: >-
+      The Dock, the menu bar and Spaces are outside in-process captures, so check them live. In the Kitchen Sink, open
+      Windows > Window options, press Open child window, then turn Simple fullscreen on.
+    expect: The child covers the display in the current Space, the Dock and menu bar hide, and no new fullscreen Space opens. Turning it off puts the child back at its windowed frame.
+    evidence: none
     signoff: required
 - tapOn: { id: windows-window-options-title-bar }
 - assertVisible: { text: "/E_BUSY/", within: { id: windows-window-options-title-bar-error } }
