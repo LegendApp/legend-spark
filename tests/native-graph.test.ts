@@ -211,6 +211,7 @@ test("single-platform native discovery respects explicit autolinking exclusions"
     const config = { expo: { name: "Probe", platforms: ["macos"], autolinking: { exclude: ["optional-native"] } } };
     writeFileSync(path.join(root, "app.json"), JSON.stringify(config));
     expect(nativePackages(root)).toEqual([]);
+    expect(nativePackages(root, { applyExcludes: false }).map(pkg => pkg.name)).toEqual(["optional-native"]);
     config.expo.autolinking.exclude = [];
     writeFileSync(path.join(root, "app.json"), JSON.stringify(config));
     expect(nativePackages(root).map(pkg => pkg.name)).toEqual(["optional-native"]);

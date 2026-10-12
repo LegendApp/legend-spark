@@ -42,9 +42,10 @@ import {
   type Runtime,
 } from "./project.ts";
 
-export async function analyze(root: string, packages = nativePackages(root)) {
+export async function analyze(root: string) {
   assertNativePatchPreflight(root);
   if (projectPlatform(root) === "windows") throw new Error("Windows production analysis is not implemented; use spark build --dev.");
+  const packages = nativePackages(root, { applyExcludes: false });
   prepareConfig(root);
   const dir = stateFile(root, "analysis");
   mkdirSync(dir, { recursive: true });
@@ -92,12 +93,17 @@ export async function analyze(root: string, packages = nativePackages(root)) {
   ) });
   await exportBundle({ SPARK_RUNTIME_SOURCES: runtimeSources });
   const map = readJson(path.join(dir, "app.map"));
+  const sourceFile = (source: string) => source.includes("\0") ? undefined
+    : [path.resolve(root, source), path.resolve(root, source.replace(/^\//, ""))].find(file => existsSync(file));
   const used = new Set<string>();
   for (const source of map.sources as string[]) {
+    const file = sourceFile(source);
+    const resolved = file ? realpathSync(file) : source;
     for (const pkg of packages) {
       // Metro's source map can contain absolute paths or project-relative node_modules paths.
       if (
         source.startsWith(pkg.root + "/") ||
+        resolved.startsWith(pkg.root + "/") ||
         source.includes(`/node_modules/${pkg.name}/`) ||
         source.startsWith(`node_modules/${pkg.name}/`)
       )
@@ -105,17 +111,52 @@ export async function analyze(root: string, packages = nativePackages(root)) {
     }
   }
   const config = readAppConfig(root);
+  const explicitExcluded: string[] = config.expo?.autolinking?.exclude ?? [];
+  const include: string[] = config.expo?.extra?.spark?.include ?? [];
   const result = selection(
     packages,
     used,
-    config.expo?.extra?.spark?.include ?? [],
+    include,
+    explicitExcluded,
   );
+  const violations = packages.filter(pkg => explicitExcluded.includes(pkg.name)).flatMap(pkg => {
+    const reasons: string[] = [];
+    if (used.has(pkg.name)) reasons.push("used by the production bundle");
+    if (include.includes(pkg.name)) reasons.push("explicit native include");
+    for (const included of result.included) {
+      if (included.requires.includes(pkg.name)) reasons.push(`required by included ${included.name} (spark.requires)`);
+      if (Object.hasOwn(included.json.dependencies ?? {}, pkg.name) && !Object.hasOwn(included.json.optionalDependencies ?? {}, pkg.name))
+        reasons.push(`required by included ${included.name} (dependencies)`);
+      if (Object.hasOwn(included.json.peerDependencies ?? {}, pkg.name) && !included.json.peerDependenciesMeta?.[pkg.name]?.optional)
+        reasons.push(`required by included ${included.name} (peerDependencies)`);
+    }
+    if (!reasons.length) return [];
+    const names = [pkg.name];
+    if (pkg.name.startsWith("@legendapp/spark-")) names.push(`@legendapp/spark/${pkg.name.slice("@legendapp/spark-".length).replace(/^desktop-/, "")}`);
+    const importedFrom = (map.sources as string[]).find(source => {
+      if (source.includes("/node_modules/") || source.startsWith("node_modules/")) return false;
+      const file = sourceFile(source);
+      return file !== undefined && names.some(name => readFileSync(file, "utf8").includes(name));
+    });
+    return [{ name: pkg.name, reasons, ...(importedFrom ? { importedFrom } : {}) }];
+  });
   writeJson(stateFile(root, "selection-report.json"), {
     included: result.included.map((p) => p.name),
     excluded: result.excluded.map((p) => p.name),
     reasons: result.reasons,
     sources: map.sources,
+    nativeCheck: { violations },
   });
+  if (violations.length) throw new Error([
+    `Release native-module check failed: ${violations.length} excluded native package${violations.length === 1 ? " is" : "s are"} required.`,
+    ...violations.flatMap(violation => [
+      `  ${violation.name}`,
+      ...violation.reasons.map(reason => `    ${reason}${reason === "used by the production bundle" && violation.importedFrom ? ` (e.g. ${violation.importedFrom})` : ""}`),
+      "    excluded by desktop.config.json expo.autolinking.exclude",
+    ]),
+    "Fix: stop excluding it, or remove the import. In legend-apps, add the package (or its @legendapp/spark/<subpath>) to apps/<app>/app.manifest.ts nativeModules.macos.",
+    "Details: .spark/selection-report.json (nativeCheck)",
+  ].join("\n"));
   return result;
 }
 
@@ -174,11 +215,10 @@ async function buildUnlocked(
     if (issues.length) throw new Error(`Build the Spark Runner from a generic SDK starter: ${issues.join("; ")}`);
   }
   await doctor(root);
-  const all = nativePackages(root);
   const productionGraph = mode === "release" || mode === "preview";
   const chosen = productionGraph
-    ? await analyze(root, all)
-    : { included: all, excluded: [] as NativePackage[] };
+    ? await analyze(root)
+    : { included: nativePackages(root), excluded: [] as NativePackage[] };
   validateBuildModules(mode, chosen.included);
   const runtime = runtimeFor(root, chosen.included, mode);
   const productionHash = productionGraph

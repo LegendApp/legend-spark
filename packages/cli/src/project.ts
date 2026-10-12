@@ -150,17 +150,28 @@ export function hashFiles(root: string, entries: string[], windows = false): str
   for (const entry of entries.sort()) visit(entry);
   return hash.digest("hex");
 }
-export function nativePackages(root: string): NativePackage[] {
+export function nativePackages(root: string, { applyExcludes = true } = {}): NativePackage[] {
   prepareNativePatches(root);
   const installed = installedPackages(root);
   if (projectPlatform(root) === "windows") return windowsNativePackages(root, installed);
+  const excluded: string[] = ["app.json", "desktop.config.json"].some(file => existsSync(path.join(root, file)))
+    ? readAppConfig(root).expo?.autolinking?.exclude ?? [] : [];
+  if (!applyExcludes) {
+    const appRequire = createRequire(path.join(root, "package.json"));
+    for (const name of excluded) {
+      if (installed.some(pkg => pkg.name === name)) continue;
+      const file = appRequire.resolve.paths(name)?.map(base => path.join(base, name, "package.json")).find(file => existsSync(file));
+      if (!file) continue;
+      const json = readJson(file);
+      installed.push({ name: json.name, root: realpathSync(path.dirname(file)), json });
+    }
+    installed.sort((a, b) => a.name.localeCompare(b.name));
+  }
   // Host/CNG code can change the native ABI without adding a TurboModule.
   // Fold it into the mandatory app module's compatibility signature for Go.
   const adapters = installed.filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
     .map(pkg => hashFiles(pkg.root, ["package.json", "AppDelegate.mm", ...readdirSync(pkg.root).filter(name => name.endsWith(".cjs"))])).join(":");
-  const excluded = ["app.json", "desktop.config.json"].some(file => existsSync(path.join(root, file)))
-    ? readAppConfig(root).expo?.autolinking?.exclude ?? [] : [];
-  return installed.filter(pkg => !excluded.includes(pkg.name))
+  return installed.filter(pkg => !applyExcludes || !excluded.includes(pkg.name))
     .filter(
       (pkg) =>
         pkg.json.codegenConfig ||
@@ -207,12 +218,13 @@ export function selection(
   packages: NativePackage[],
   used: Set<string>,
   include: string[] = [],
+  excluded: string[] = [],
 ) {
   const selected = new Set([
     ...packages.filter((p) => !p.sdk).map((p) => p.name),
     ...used,
     ...include,
-  ]);
+  ].filter(name => !excluded.includes(name)));
   const reasons: Record<string, string> = {};
   for (const pkg of packages)
     if (selected.has(pkg.name))
@@ -237,6 +249,7 @@ export function selection(
           throw new Error(
             `${pkg.name} requires missing native package ${name}`,
           );
+        if (excluded.includes(name)) continue;
         if (!selected.has(name)) {
           selected.add(name);
           reasons[name] = `native dependency of ${pkg.name}`;
