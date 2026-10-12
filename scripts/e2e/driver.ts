@@ -60,9 +60,15 @@ export type MotionInterruption = { timeMs: number; property: MotionProperty; bef
 /** A view's latest motion: from rest to rest. `endMs` is null while an animation repeats forever; `afterInput` once it started or was interrupted after the last driver input. */
 export type Motion = {
   startMs: number; endMs: number | null; latestMs: number; settled: boolean; progress: number | null; afterInput: boolean; startValues: MotionValues;
-  properties: MotionProperty[]; kinds: Partial<Record<MotionProperty, "spring" | "timing" | "keyframes" | "decay" | "sequence">>; interruptions: MotionInterruption[]; truncated: boolean;
+  properties: MotionProperty[]; kinds: Partial<Record<MotionProperty, "spring" | "timing" | "keyframes" | "decay" | "sequence" | "jump">>; interruptions: MotionInterruption[]; truncated: boolean;
 };
-export type MotionState = { tag: number; clock: "virtual" | "real"; timeMs: number; values: MotionValues; velocities: MotionValues; animating: MotionProperty[]; motion: Motion | null };
+/** A haptic or sound cue of the view's latest motion: played on the frame at `frameMs`, or pending (null). Driver runs record cues instead of playing them. */
+export type MotionCue = { animation: string; at: number | "end"; haptic: string | null; sound: string | null; timeMs: number; frameMs: number | null; played: false };
+/** `hidden`: the view's window counts as hidden (docs/motion.md#hidden-windows); `paused`: its animations are paused there. */
+export type MotionState = {
+  tag: number; clock: "virtual" | "real"; timeMs: number; values: MotionValues; velocities: MotionValues; animating: MotionProperty[]; motion: Motion | null;
+  frameRate: number; hidden: boolean; paused: boolean; cues: MotionCue[];
+};
 export type MotionSample = { tMs: number; values: MotionValues; velocities: MotionValues };
 export type MotionSamples = { fromMs: number; toMs: number; intervalMs: number; truncated: boolean; samples: MotionSample[] };
 /** What waitForMotion waits for, after motion of the view started or was interrupted after the last driver input. */
@@ -285,6 +291,8 @@ export class Driver {
   async sampleMotion(testID: string, range: { fromMs?: number; toMs?: number; intervalMs?: number } = {}) {
     return body<MotionSamples>(await this.request({ command: "sampleMotion", testID, ...range }, 30000));
   }
+  /** Counts the window of the MotionView with (or containing the view with) this testID as hidden or visible, as its occlusion state would (docs/motion.md#hidden-windows). */
+  async simulateOcclusion(testID: string, visible: boolean) { await this.request({ command: "simulateOcclusion", testID, visible }, 10000); }
   /** Starts counting main-thread display-link frames. */
   async startFrames() { return { refreshRate: (await this.request({ command: "startFrames" }, 10000)).refreshRate as number }; }
   /** Stops counting and reports frames, drops and the largest gap since startFrames. */
