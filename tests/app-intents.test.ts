@@ -106,3 +106,27 @@ test("donateAppIntent sends the id and parameters, and passes native failures th
   handlers.set("donate", fail("E_UNAVAILABLE"));
   await expect(intents.donateAppIntent("showRecipe")).rejects.toMatchObject({ code: "E_UNAVAILABLE" });
 });
+
+test("invocations that arrive before native confirms the registration wait for it, and are dropped when it is refused", async () => {
+  const received: string[] = [];
+  let settle!: (fail: boolean) => void;
+  handlers.set("register", () => new Promise((resolve, reject) => { settle = fail => fail ? reject(Object.assign(new Error("busy"), { code: "E_BUSY" })) : resolve(null); }));
+  // A second handler for an id another handler has: the other handler's invocations must never reach it.
+  const refused = intents.addAppIntentHandler("showRecipe", ({ parameters }) => { received.push(`refused ${String(parameters.recipe)}`); });
+  emit({ type: "appIntentInvoked", requestId: "r1", id: "showRecipe", parameters: { recipe: "Other" } });
+  await settle(true);
+  await expect(refused).rejects.toMatchObject({ code: "E_BUSY" });
+  await new Promise(resolve => setTimeout(resolve, 5));
+  expect(received).toEqual([]);
+  expect(calls.filter(call => call.method === "answer")).toEqual([]);
+  // A confirmed registration runs what arrived before the confirmation, in order, once it is confirmed.
+  const accepted = intents.addAppIntentHandler("showRecipe", ({ parameters }) => { received.push(String(parameters.recipe)); });
+  emit({ type: "appIntentInvoked", requestId: "r2", id: "showRecipe", parameters: { recipe: "Held" } });
+  emit({ type: "appIntentInvoked", requestId: "r3", id: "showRecipe", parameters: { recipe: "Next" } });
+  expect(received).toEqual([]);
+  settle(false);
+  const registration = await accepted;
+  await new Promise(resolve => setTimeout(resolve, 5));
+  expect(received).toEqual(["Held", "Next"]);
+  await registration.remove();
+});

@@ -62,7 +62,9 @@ function appIntentDeclarations(intents) {
   }));
 }
 
-const escape = value => value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
+// A Swift string literal's contents: backslashes and quotes escaped, every control character (below 0x20, and 0x7F) as \u{XX}.
+const escape = value => value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")
+  .replace(/[\u0000-\u001f\u007f]/g, character => `\\u{${character.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}}`);
 const literal = value => `"${escape(value)}"`;
 const phrase = value => `"${value.split(APPLICATION_NAME).map(escape).join("\\(.applicationName)")}"`;
 const structName = id => `SparkIntent_${id}`;

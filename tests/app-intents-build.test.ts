@@ -17,7 +17,7 @@ const INTENTS = [
     parameters: [{ name: "recipe", title: "Recipe", type: "string" }, { name: "servings", title: "Servings", type: "integer", optional: true }],
     shortcut: { phrases: ["Show a recipe in ${applicationName}", "${applicationName} recipe"], shortTitle: "Show Recipe", systemImage: "fork.knife" } },
   { id: "startTimer", title: "Start Timer", parameters: [{ name: "minutes", title: "Minutes", type: "number" }, { name: "loud", title: "Loud", type: "boolean", optional: true }] },
-  { id: "ping", title: "Ping \\ \"pong\"" },
+  { id: "ping", title: "Ping \\ \"pong\"\u0001\t\u007f" },
 ];
 
 describe("macos.appIntents", () => {
@@ -52,7 +52,7 @@ describe("macos.appIntents", () => {
         { name: "recipe", title: "Recipe", type: "string", optional: false }, { name: "servings", title: "Servings", type: "integer", optional: true }] },
       { id: "startTimer", title: "Start Timer", returnsText: false, parameters: [
         { name: "minutes", title: "Minutes", type: "number", optional: false }, { name: "loud", title: "Loud", type: "boolean", optional: true }] },
-      { id: "ping", title: "Ping \\ \"pong\"", returnsText: false, parameters: [] },
+      { id: "ping", title: "Ping \\ \"pong\"\u0001\t\u007f", returnsText: false, parameters: [] },
     ]);
   });
 
@@ -115,6 +115,9 @@ describe("macos.appIntents", () => {
       writeFileSync(path.join(modules, "module.modulemap"), "module RNDesktopAppIntents {\n  header \"SparkAppIntentsBridge.h\"\n  export *\n}\n");
       const source = path.join(directory, "SparkAppIntents.swift");
       writeFileSync(source, appIntentsSwift(INTENTS));
+      // Control characters become \u{XX} escapes, so every title compiles as one literal.
+      expect(appIntentsSwift(INTENTS)).toContain(String.raw`static let title: LocalizedStringResource = "Ping \\ \"pong\"\u{01}\u{09}\u{7F}"`);
+      expect(appIntentsSwift(INTENTS)).toContain(String.raw`IntentDescription("Shows a \"recipe\"\u{0A}with its steps")`);
       // The protocols Xcode asks the compiler to gather constant values for (Xcode's <target>_const_extract_protocols.json).
       writeFileSync(path.join(directory, "protocols.json"), JSON.stringify(["AppIntent", "EntityQuery", "AppEntity", "TransientEntity", "AppEnum", "AppShortcutProviding", "AppShortcutsProvider", "AnyResolverProviding", "AppIntentsPackage", "DynamicOptionsProvider", "_IntentValueRepresentable", "_AssistantIntentsProvider", "_GenerativeFunctionExtractable", "IntentValueQuery", "Resolver", "AppExtension", "ExtensionPointDefining"]));
       const sdk = (await runOk("xcrun", ["--sdk", "macosx", "--show-sdk-path"])).trim();
@@ -142,7 +145,7 @@ describe("macos.appIntents", () => {
       expect(recipe.parameters.map((parameter: { name: string; isOptional: boolean; title: { key: string } }) => [parameter.name, parameter.isOptional, parameter.title.key]))
         .toEqual([["recipe", false, "Recipe"], ["servings", true, "Servings"]]);
       expect(metadata.actions.SparkIntent_startTimer).toMatchObject({ title: { key: "Start Timer" }, openAppWhenRun: false });
-      expect(metadata.actions.SparkIntent_ping.title.key).toBe("Ping \\ \"pong\"");
+      expect(metadata.actions.SparkIntent_ping.title.key).toBe("Ping \\ \"pong\"\u0001\t\u007f");
       expect(metadata.autoShortcuts).toMatchObject([{ actionIdentifier: "SparkIntent_showRecipe", systemImageName: "fork.knife", shortTitle: { key: "Show Recipe" },
         phraseTemplates: [{ key: "Show a recipe in ${applicationName}" }, { key: "${applicationName} recipe" }] }]);
     } finally { rmSync(directory, { recursive: true, force: true }); }

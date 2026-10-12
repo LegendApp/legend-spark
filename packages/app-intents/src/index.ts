@@ -84,13 +84,22 @@ export async function addAppIntentHandler(id: string, handler: AppIntentHandler,
     }
     try { await call(spec, "answer", answer, isNull); } catch (cause) { if (!stopped) report(options, cause); }
   };
-  const subscription = onDesktopEvent(event => {
-    if (stopped) return;
+  const deliver = (event: Record<string, unknown>) => {
     if (!isText(event.requestId) || !isParameters(event.parameters)) { report(options, new SparkError("E_INVALID_DATA", "Malformed App Intent invocation")); return; }
     void run(event.requestId, event.parameters);
+  };
+  // Invocations of the id that arrive before native confirms this registration wait for it: when it is refused (for
+  // example E_BUSY, because another handler has the id) they belong to that other handler and are dropped.
+  let pending: Record<string, unknown>[] | undefined = [];
+  const subscription = onDesktopEvent(event => {
+    if (stopped) return;
+    if (pending) pending.push(event); else deliver(event);
   }, { types: ["appIntentInvoked"], target: { field: "id", value: id } });
   try { await call(spec, "register", { id }, isNull); }
-  catch (cause) { stopped = true; subscription.remove(); throw cause; }
+  catch (cause) { stopped = true; pending = undefined; subscription.remove(); throw cause; }
+  const waiting = pending;
+  pending = undefined;
+  waiting.forEach(deliver);
   return asyncRegistration(() => { stopped = true; subscription.remove(); }, async () => { await call(spec, "unregister", { id }, isNull); });
 }
 
