@@ -1,10 +1,12 @@
 appId: so.legend.spark.examples.kitchensink
-name: Video and speech are typed unsupported on Windows
+name: Video, speech and capture are typed unsupported on Windows
 intent: >
   On Windows the Video screen reports getVideoAvailability() as unsupported-platform and creating the player rejects
   SparkError:E_UNSUPPORTED_PLATFORM, which its status shows; the Speech screen reports getSpeechAvailability() as
-  unsupported-platform and speaking rejects the same. Not yet run on Windows. Windows media: #403.
-checks: [MEDIA-AVUNSUP-01]
+  unsupported-platform and speaking rejects the same; the Capture screen reports getCaptureAvailability() and
+  getScreenRecordingAvailability() as unsupported-platform, and reading devices, recording and starting the camera reject
+  SparkError:E_UNSUPPORTED_PLATFORM. Not yet run on Windows. Windows media: #403; Windows capture: #425.
+checks: [MEDIA-AVUNSUP-01, MEDIA-CAPUNSUP-01]
 tags: [media]
 platforms: [windows]
 ---
@@ -17,3 +19,12 @@ platforms: [windows]
 - assertText: { id: media-speech-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
 - tapOn: { id: media-speech-speak-normal }
 - assertText: { id: media-speech-spoken, equals: "normal: SparkError:E_UNSUPPORTED_PLATFORM" }
+- launchApp: { openUrl: "spark-ks://media/capture" }
+- extendedWaitUntil: { visible: { id: media-capture-root }, timeout: 10s }
+- assertText: { id: media-capture-availability, equals: "camera unsupported-platform · microphone unsupported-platform · screen unsupported-platform" }
+- assertText: { id: media-capture-screen-recording-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: media-capture-devices, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: media-capture-record }
+- assertText: { id: media-capture-audio, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: media-capture-start-camera }
+- assertText: { id: media-capture-camera, equals: SparkError:E_UNSUPPORTED_PLATFORM }

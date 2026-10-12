@@ -23,6 +23,7 @@ static SparkPermissions *Shared(void) {
   }
   return permissions;
 }
+SparkPermissions *SparkSharedPermissions(void) { return Shared(); }
 
 #if SPARK_TEST_DRIVER
 // Reachable only through an authenticated driver session: {"command": "simulatePermission", "kind", "authorization"?,

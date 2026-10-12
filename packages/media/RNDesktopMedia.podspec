@@ -3,14 +3,14 @@ package = JSON.parse(File.read(File.join(__dir__, "package.json")))
 Pod::Spec.new do |s|
   s.name = "RNDesktopMedia"
   s.version = package["version"]
-  s.summary = "Video playback with picture in picture and fullscreen, text to speech and speech recognition"
+  s.summary = "Video playback with picture in picture and fullscreen, text to speech and speech recognition, microphone, camera and screen capture"
   s.license = { :type => "MIT" }
   s.author = "Legend"
   s.homepage = "https://legendapp.com"
   s.source = { :path => "." }
   s.platforms = { :osx => "14.0" }
   s.source_files = "macos/**/*.{h,m,mm}"
-  s.frameworks = "AVFoundation", "AVKit", "CoreMedia", "Speech"
+  s.frameworks = "AVFoundation", "AVKit", "CoreMedia", "CoreVideo", "ImageIO", "ScreenCaptureKit", "Security", "Speech", "UniformTypeIdentifiers"
   # The in-app test driver compiles in Debug builds, and in other builds only for apps that set macos.testDriverInRelease
   # (the Spark config plugin exports SPARK_TEST_DRIVER_RELEASE to the Podfile; docs/test-driver.md#builds).
   s.pod_target_xcconfig = { "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/Headers/Private/Yoga\"", "SPARK_TEST_DRIVER" => ENV["SPARK_TEST_DRIVER_RELEASE"] == "1" ? "1" : "0",
@@ -19,4 +19,5 @@ Pod::Spec.new do |s|
   s.dependency "React-RCTFabric"
   s.dependency "ReactCodegen"
   s.dependency "RNDesktopApp"
+  s.dependency "RNDesktopPermissions"
 end

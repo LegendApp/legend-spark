@@ -6280,6 +6280,169 @@
               "type": "object"
             }
           },
+          "simulateCapture": {
+            "description": "[driver] Set the simulated capture devices @legendapp/spark/capture sees, in-process: whether the simulated camera and microphone are connected, and whether the build has the camera and microphone entitlements (cameraEntitled, microphoneEntitled; default the build's real state, missing in a hardened-runtime build without macos.capture). Disconnecting one ends its running session with E_UNAVAILABLE, as unplugging it would. Never opens a camera, microphone or ScreenCaptureKit, or reaches TCC.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "cameras": {
+                  "type": "boolean"
+                },
+                "microphones": {
+                  "type": "boolean"
+                },
+                "cameraEntitled": {
+                  "type": "boolean"
+                },
+                "microphoneEntitled": {
+                  "type": "boolean"
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "cameras"
+                  ]
+                },
+                {
+                  "required": [
+                    "microphones"
+                  ]
+                },
+                {
+                  "required": [
+                    "cameraEntitled"
+                  ]
+                },
+                {
+                  "required": [
+                    "microphoneEntitled"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
+          "assertSimulatedCapture": {
+            "description": "[driver] Assert the simulated capture state: which simulated devices are connected, which sessions run (an audio recording, the camera, a screen recording), how many photos, screenshots and finished recordings they produced, and at least how many synthetic camera or screen frames and microphone levels flowed.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "cameras": {
+                  "type": "boolean"
+                },
+                "microphones": {
+                  "type": "boolean"
+                },
+                "recordingAudio": {
+                  "type": "boolean"
+                },
+                "cameraRunning": {
+                  "type": "boolean"
+                },
+                "recordingScreen": {
+                  "type": "boolean"
+                },
+                "photos": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "screenshots": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "recordings": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "minFrames": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "minLevels": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "cameras"
+                  ]
+                },
+                {
+                  "required": [
+                    "microphones"
+                  ]
+                },
+                {
+                  "required": [
+                    "recordingAudio"
+                  ]
+                },
+                {
+                  "required": [
+                    "cameraRunning"
+                  ]
+                },
+                {
+                  "required": [
+                    "recordingScreen"
+                  ]
+                },
+                {
+                  "required": [
+                    "photos"
+                  ]
+                },
+                {
+                  "required": [
+                    "screenshots"
+                  ]
+                },
+                {
+                  "required": [
+                    "recordings"
+                  ]
+                },
+                {
+                  "required": [
+                    "minFrames"
+                  ]
+                },
+                {
+                  "required": [
+                    "minLevels"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "permission": {
             "description": "Grant, revoke or reset a privacy permission.",
             "if": {

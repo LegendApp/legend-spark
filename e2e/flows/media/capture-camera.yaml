@@ -1,0 +1,39 @@
+appId: so.legend.spark.examples.kitchensink
+name: The camera needs the permission, then previews synthetic frames, takes photos, stops and ends when unplugged (simulated)
+intent: >
+  Media > Capture, with the camera entitlement simulated: Start camera rejects SparkError:E_PERMISSION_DENIED with the camera permission undetermined, and no
+  prompt or camera session happens. With it granted, the simulated camera runs at 1280×720 and its synthetic frames flow
+  into the CameraView preview (the screenshot shows the color bars); Take photo writes a 1280×720 JPEG; Stop camera ends
+  it, after which no photo can be taken; unplugging the simulated camera ends a running one SparkError:E_UNAVAILABLE.
+  Driver simulation only: no camera or TCC prompt is reached.
+checks: [MEDIA-CAMERA-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://media/capture" }
+- simulateCapture: { cameraEntitled: true, microphoneEntitled: true }
+- tapOn: { id: media-capture-refresh }
+- assertText: { id: media-capture-availability, equals: "camera available · microphone available · screen available" }
+- tapOn: { id: media-capture-start-camera }
+- assertText: { id: media-capture-camera, equals: "SparkError:E_PERMISSION_DENIED" }
+- assertSimulatedPermission: { kind: camera, requests: 0, prompts: 0 }
+- assertSimulatedCapture: { cameraRunning: false }
+- simulatePermission: { kind: camera, authorization: authorized }
+- tapOn: { id: media-capture-start-camera }
+- assertText: { id: media-capture-camera, equals: "running · 1280×720" }
+- assertSimulatedCapture: { cameraRunning: true, minFrames: 10 }
+- takeScreenshot: capture-camera-preview
+- tapOn: { id: media-capture-take-photo }
+- assertText: { id: media-capture-photo, equals: "photo .jpg · 1280×720" }
+- assertSimulatedCapture: { photos: 1 }
+- tapOn: { id: media-capture-stop-camera }
+- assertText: { id: media-capture-camera, equals: stopped }
+- assertSimulatedCapture: { cameraRunning: false }
+- tapOn: { id: media-capture-take-photo }
+- assertText: { id: media-capture-photo, equals: no camera }
+- tapOn: { id: media-capture-start-camera }
+- assertText: { id: media-capture-camera, equals: "running · 1280×720" }
+- simulateCapture: { cameras: false }
+- assertText: { id: media-capture-camera, equals: "SparkError:E_UNAVAILABLE" }
+- assertSimulatedCapture: { cameras: false, cameraRunning: false, photos: 1 }
+- simulateCapture: { cameras: true }

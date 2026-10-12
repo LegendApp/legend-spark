@@ -102,3 +102,76 @@ checks:
     covers:
       - ./video#getVideoAvailability().available
       - ./speech#getSpeechAvailability().available
+  MEDIA-MIC-01:
+    title: "getCaptureAvailability reports the microphone and the screen available on macOS (entitlements simulated present) and getCaptureDevices lists the cameras and microphones; startAudioRecording rejects SparkError:E_PERMISSION_DENIED without prompting until the microphone permission is granted, then records with levels and stops with an .m4a file, cancels without one, and ends SparkError:E_UNAVAILABLE when the microphone goes away (driver simulation: no microphone or TCC)"
+    platforms: [macos]
+    blocking: true
+    spec: "#132 MEDIA.api-capture"
+    covers:
+      - ./capture
+      - ./capture#getCaptureAvailability
+      - ./capture#getCaptureAvailability(microphone).available
+      - ./capture#getCaptureAvailability(screen).available
+      - ./capture#getCaptureDevices
+      - ./capture#startAudioRecording
+  MEDIA-CAMERA-01:
+    title: "startCamera rejects SparkError:E_PERMISSION_DENIED without prompting until the camera permission is granted; then the CameraView previews its frames, takePhoto writes a JPEG at the camera's size, stop ends it, and a camera that goes away ends it SparkError:E_UNAVAILABLE (driver simulation: synthetic frames, no camera or TCC)"
+    platforms: [macos]
+    blocking: true
+    spec: "#132 MEDIA.api-capture"
+    covers:
+      - ./capture#startCamera
+      - ./capture#CameraView
+      - ./capture#getCaptureDevices
+      - ./capture#getCaptureAvailability(camera).available
+  MEDIA-CAPENT-01:
+    title: "Without the camera and microphone entitlements in a hardened-runtime build (simulated), getCaptureAvailability reports them missing-entitlement and startAudioRecording and startCamera reject SparkError:E_UNAVAILABLE before any device; the screen needs none"
+    platforms: [macos]
+    blocking: true
+    spec: "#132 MEDIA.api-capture"
+    covers:
+      - ./capture#getCaptureAvailability(camera).available
+      - ./capture#getCaptureAvailability(microphone).available
+      - ./capture#startAudioRecording
+      - ./capture#startCamera
+  MEDIA-SCREEN-01:
+    title: "getScreenRecordingAvailability reports whether this macOS records the screen; getScreenCaptureSources, captureScreenshot and startScreenRecording reject SparkError:E_PERMISSION_DENIED without prompting until the screenRecording permission is granted, then list the displays and windows, write a PNG at the display's size, and record a .mov (driver simulation: a synthetic display and window, no ScreenCaptureKit or TCC)"
+    platforms: [macos]
+    blocking: true
+    spec: "#132 MEDIA.api-capture"
+    covers:
+      - ./capture#getScreenRecordingAvailability
+      - ./capture#getScreenRecordingAvailability().available
+      - ./capture#getScreenCaptureSources
+      - ./capture#captureScreenshot
+      - ./capture#startScreenRecording
+  MEDIA-CAPREAL-01:
+    title: "Real capture: after the permissions are granted, the microphone records what is said with moving levels, the camera previews live and takes a photo, and the screen is listed, captured in a screenshot and recorded; before they are granted each rejects without a prompt"
+    platforms: [macos]
+    blocking: true
+    spec: "#132 MEDIA.api-capture"
+    covers:
+      - ./capture#startAudioRecording
+      - ./capture#startCamera
+      - ./capture#CameraView
+      - ./capture#captureScreenshot
+      - ./capture#startScreenRecording
+  MEDIA-CAPUNSUP-01:
+    title: "On Windows getCaptureAvailability (every kind) and getScreenRecordingAvailability report unsupported-platform, and getCaptureDevices, recording, the camera and screen capture reject SparkError:E_UNSUPPORTED_PLATFORM (Windows capture: #425)"
+    platforms: [windows]
+    blocking: true
+    spec: "#132 MEDIA.api-capture; Windows implementation #425"
+    covers:
+      - ./capture#getCaptureAvailability(camera).available
+      - ./capture#getCaptureAvailability(microphone).available
+      - ./capture#getCaptureAvailability(screen).available
+      - ./capture#getScreenRecordingAvailability().available
+      - ./capture#startAudioRecording
+      - ./capture#startCamera
+  MEDIA-CAPVISUAL-01:
+    title: "The Capture screen matches its golden in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#132 MEDIA.api-capture"
+    covers:
+      - ./capture#getCaptureAvailability(screen).available

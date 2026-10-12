@@ -1,0 +1,25 @@
+appId: so.legend.spark.examples.kitchensink
+name: A build without the camera and microphone entitlements reports missing-entitlement and opens neither (simulated)
+intent: >
+  A hardened-runtime build without macos.capture lacks com.apple.security.device.camera and device.audio-input. With
+  those entitlements simulated missing, Media > Capture reports the camera and microphone missing-entitlement (the
+  screen needs none), and with both permissions granted Record and Start camera reject SparkError:E_UNAVAILABLE without
+  a session starting. Simulating them present again makes both available. Driver simulation only: no device or TCC.
+checks: [MEDIA-CAPENT-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://media/capture" }
+- simulateCapture: { cameraEntitled: false, microphoneEntitled: false }
+- tapOn: { id: media-capture-refresh }
+- assertText: { id: media-capture-availability, equals: "camera missing-entitlement · microphone missing-entitlement · screen available" }
+- simulatePermission: { kind: microphone, authorization: authorized }
+- simulatePermission: { kind: camera, authorization: authorized }
+- tapOn: { id: media-capture-record }
+- assertText: { id: media-capture-audio, equals: "SparkError:E_UNAVAILABLE" }
+- tapOn: { id: media-capture-start-camera }
+- assertText: { id: media-capture-camera, equals: "SparkError:E_UNAVAILABLE" }
+- assertSimulatedCapture: { recordingAudio: false, cameraRunning: false, recordings: 0 }
+- simulateCapture: { cameraEntitled: true, microphoneEntitled: true }
+- tapOn: { id: media-capture-refresh }
+- assertText: { id: media-capture-availability, equals: "camera available · microphone available · screen available" }

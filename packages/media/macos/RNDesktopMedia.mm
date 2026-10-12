@@ -1,8 +1,10 @@
 #import "RNDesktopMedia.h"
+#import "SparkCapture.h"
 #import "SparkSpeech.h"
 #import "SparkVideo.h"
 #import <RNDesktopApp/SparkDesktop.h>
 #import <RNDesktopApp/SparkTestDriver.h>
+#import <RNDesktopPermissions/SparkPermissions.h>
 
 // One speech instance per process (main thread), shared by every runtime and the test driver. In driver mode it is
 // simulated: nothing is spoken and no microphone, recognizer or TCC is reached (docs/speech.md#testing).
@@ -14,14 +16,28 @@ static SparkSpeech *Speech(void) {
   }
   return speech;
 }
+// The same for capture: in driver mode a simulated camera, microphone and screen; no AVCaptureDevice, ScreenCaptureKit
+// or TCC is reached (docs/capture.md#testing).
+SparkCapture *SparkMediaCapture(void) {
+  static SparkCapture *capture;
+  if (!capture) {
+    capture = [[SparkCapture alloc] initWithSimulated:SparkTestDriverActive()];
+    capture.observer = ^(NSDictionary *event) { SparkEmit(event); };
+    // Simulated capture honors the simulated permissions natively, as real capture honors TCC.
+    if (capture.simulated) capture.permission = ^NSString *(NSString *kind) { return SparkSharedPermissions().snapshot[kind]; };
+  }
+  return capture;
+}
 static NSString *Code(NSError *error) {
   if ([error.domain isEqual:SparkSpeechErrorDomain]) return SparkSpeechErrorCode(error);
+  if ([error.domain isEqual:SparkCaptureErrorDomain]) return SparkCaptureErrorCode(error);
   return SparkVideoErrorCode(error);
 }
 
 #if SPARK_TEST_DRIVER
 // Reachable only through an authenticated driver session: {"command": "simulateSpeech", "wordMs"?, "recognizerAvailable"?,
-// "onDeviceSupported"?, "recognitionPartials"?, "recognitionTranscript"?} and {"command": "testSpeech"}.
+// "onDeviceSupported"?, "recognitionPartials"?, "recognitionTranscript"?} and {"command": "testSpeech"}; {"command":
+// "simulateCapture", "cameras"?, "microphones"?} and {"command": "testCapture"}.
 @interface SparkMediaDriver : NSObject
 @end
 @implementation SparkMediaDriver
@@ -37,6 +53,17 @@ static NSString *Code(NSError *error) {
     if (Speech().simulated) reply(@{ @"ok": @YES, @"speech": Speech().simulation });
     else reply(@{ @"ok": @NO, @"error": @{ @"code": @"E_UNAVAILABLE", @"message": @"Speech simulation needs the test driver" } });
   });
+  SparkTestDriverRegisterCommand(@"simulateCapture", ^(NSDictionary *request, SparkTestDriverReply reply) {
+    NSMutableDictionary *state = [request mutableCopy];
+    [state removeObjectsForKeys:@[@"command", @"id"]];
+    NSError *error = nil;
+    if ([SparkMediaCapture() simulate:state error:&error]) reply(@{ @"ok": @YES, @"capture": SparkMediaCapture().simulation });
+    else reply(@{ @"ok": @NO, @"error": @{ @"code": SparkCaptureErrorCode(error), @"message": error.localizedDescription } });
+  });
+  SparkTestDriverRegisterCommand(@"testCapture", ^(NSDictionary *, SparkTestDriverReply reply) {
+    if (SparkMediaCapture().simulated) reply(@{ @"ok": @YES, @"capture": SparkMediaCapture().simulation });
+    else reply(@{ @"ok": @NO, @"error": @{ @"code": @"E_UNAVAILABLE", @"message": @"Capture simulation needs the test driver" } });
+  });
 }
 @end
 #endif
@@ -45,6 +72,7 @@ static NSString *Code(NSError *error) {
   NSMutableDictionary<NSString *, SparkVideoPlayer *> *_players; // This runtime's players, removed when the bridge is invalidated.
   NSString *_recognition;                                         // This runtime's recognition, cancelled then.
   NSMutableSet<NSString *> *_utterances;                          // This runtime's utterances, stopped then.
+  NSMutableSet<NSString *> *_captures;                            // This runtime's captures, cancelled then.
   BOOL _invalidated;                                              // Completions after it reach no runtime.
 }
 RCT_EXPORT_MODULE(NativeDesktopMedia)
@@ -59,6 +87,8 @@ RCT_EXPORT_MODULE(NativeDesktopMedia)
     [self->_players removeAllObjects];
     if (self->_recognition) [Speech() cancelRecognition:self->_recognition];
     self->_recognition = nil;
+    for (NSString *capture in [self->_captures copy]) [SparkMediaCapture() cancel:capture];
+    [self->_captures removeAllObjects];
   };
   if (NSThread.isMainThread) release(); else dispatch_async(dispatch_get_main_queue(), release);
 }
@@ -78,7 +108,9 @@ RCT_EXPORT_MODULE(NativeDesktopMedia)
   };
   _players = _players ?: [NSMutableDictionary dictionary];
   _utterances = _utterances ?: [NSMutableSet set];
+  _captures = _captures ?: [NSMutableSet set];
   if ([method hasPrefix:@"video"]) return [self video:method identifier:identifier args:args answer:answer];
+  if ([method hasPrefix:@"capture"]) return [self capture:method identifier:identifier args:args answer:answer];
   SparkSpeech *speech = Speech();
   if ([method isEqual:@"voices"]) answer(speech.voices, nil);
   else if ([method isEqual:@"speak"]) {
@@ -158,6 +190,33 @@ RCT_EXPORT_MODULE(NativeDesktopMedia)
   else if ([method isEqual:@"videoFullscreen"]) { if ([args[@"active"] boolValue]) [player enterFullscreen:answer]; else [player exitFullscreen:answer]; }
   else if ([method isEqual:@"videoPictureInPicture"]) { if ([args[@"active"] boolValue]) [player startPictureInPicture:answer]; else [player stopPictureInPicture:answer]; }
   else answer(nil, SparkVideoError(@"E_INVALID_ARGUMENT", @"Unknown video operation"));
+}
+
+- (void)capture:(NSString *)method identifier:(NSString *)identifier args:(NSDictionary *)args answer:(SparkCaptureCompletion)answer
+{
+  SparkCapture *capture = SparkMediaCapture();
+  NSDictionary *options = [args[@"options"] isKindOfClass:NSDictionary.class] ? args[@"options"] : @{};
+  if ([method isEqual:@"captureAvailability"]) return answer(capture.availability, nil);
+  if ([method isEqual:@"captureDevices"]) { NSError *error = nil; NSArray *devices = [capture devices:args[@"kind"] error:&error]; return answer(devices, error); }
+  if ([method isEqual:@"captureScreenSources"]) return [capture screenSources:answer];
+  if ([method isEqual:@"captureScreenshot"]) return [capture screenshot:options completion:answer];
+  if (!identifier.length) return answer(nil, SparkCaptureError(@"E_INVALID_ARGUMENT", @"A capture needs an id"));
+  if ([method isEqual:@"captureStop"]) { [capture stop:identifier]; return answer(nil, nil); }
+  if ([method isEqual:@"captureCancel"]) { [capture cancel:identifier]; return answer(nil, nil); }
+  if ([method isEqual:@"capturePhoto"]) return [capture takePhoto:identifier options:options completion:answer];
+  if ([method isEqual:@"captureCameraStatus"]) { NSDictionary *status = [capture cameraStatus:identifier]; return answer(status, status ? nil : SparkCaptureError(@"E_CLOSED", @"The camera is not running")); }
+  // Sessions: the answer is how the capture ends; this runtime cancels it if it goes away first.
+  [_captures addObject:identifier];
+  __weak RNDesktopMedia *weakSelf = self;
+  SparkCaptureCompletion ended = ^(id result, NSError *error) {
+    RNDesktopMedia *strongSelf = weakSelf;
+    if (strongSelf) [strongSelf->_captures removeObject:identifier];
+    answer(result, error);
+  };
+  if ([method isEqual:@"captureRecordAudio"]) [capture recordAudio:options identifier:identifier completion:ended];
+  else if ([method isEqual:@"captureCamera"]) [capture startCamera:options identifier:identifier completion:ended];
+  else if ([method isEqual:@"captureRecordScreen"]) [capture recordScreen:options identifier:identifier completion:ended];
+  else ended(nil, SparkCaptureError(@"E_INVALID_ARGUMENT", @"Unknown capture operation"));
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params

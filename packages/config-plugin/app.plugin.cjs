@@ -25,7 +25,7 @@ module.exports = function withSparkDesktop(config) {
       : [];
     // Own the generated entitlements; the desktop template's sandbox defaults
     // are not the framework's direct-distribution policy.
-    mod.modResults = resolveEntitlements({ macos: { entitlements: declaredEntitlements, authentication: config.macos?.authentication } }, packages);
+    mod.modResults = resolveEntitlements({ macos: { entitlements: declaredEntitlements, authentication: config.macos?.authentication, capture: config.macos?.capture } }, packages);
     return mod;
   });
   config = require("./icons.cjs").withDesktopIcon(config, "macos");

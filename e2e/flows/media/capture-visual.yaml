@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: Capture screen matches its golden
+intent: >
+  Media > Capture opens from spark-ks://media/capture with the simulated initial state (the simulated camera and
+  microphone, both entitlements simulated present so a development and a hardened release build look alike, the microphone and camera permissions undetermined and screen recording not granted, the camera off) and no
+  results yet. The main window matches the approved golden for the appearance and locale (light and dark, English and
+  Arabic), with the shell sidebar masked.
+checks: [MEDIA-CAPVISUAL-01]
+tags: [media]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://media/capture" }
+- simulateCapture: { cameraEntitled: true, microphoneEntitled: true }
+- tapOn: { id: media-capture-refresh }
+- assertText: { id: media-capture-availability, equals: "camera available · microphone available · screen available" }
+- assertText: { id: media-capture-devices, equals: "cameras: Simulated Camera (default) · microphones: Simulated Microphone (default)" }
+- assertText: { id: media-capture-permissions, equals: "microphone undetermined · camera undetermined · screenRecording denied" }
+- assertText: { id: media-capture-screen-recording-availability, equals: '{"available":true}' }
+- assertScreenshot: { golden: media-capture, mask: [{ id: infra-shell-sidebar }] }

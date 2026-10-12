@@ -49,7 +49,9 @@ locales.
 `startSpeechRecognition(options?)` listens to the default microphone and resolves a session once audio flows. It never
 prompts: it rejects `E_PERMISSION_DENIED` unless the `speechRecognition` and `microphone` permissions
 (`@legendapp/spark/permissions`, [permissions.md](permissions.md)) are granted, so request them from a person's action
-first; the app's Info.plist needs `NSSpeechRecognitionUsageDescription` and `NSMicrophoneUsageDescription`. It rejects
+first; the app's Info.plist needs `NSSpeechRecognitionUsageDescription` and `NSMicrophoneUsageDescription`. Under the
+hardened runtime the microphone also needs `com.apple.security.device.audio-input`: set `macos.capture.microphone` in the
+app config ([capture.md](capture.md#entitlements)); without it recognition rejects `E_UNAVAILABLE` before listening. It rejects
 `E_UNAVAILABLE` for an unsupported or currently unavailable locale, or for `onDevice: true` where the locale has no
 on-device model (then audio never leaves the Mac), and `E_BUSY` while another recognition runs (one at a time per app).
 

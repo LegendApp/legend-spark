@@ -12,7 +12,7 @@ import { processLog, type ProcessLog } from "../../../packages/cli/src/process.t
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type SimulatedSpeech, type TestSpeech,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type SimulatedSpeech, type TestSpeech, type SimulatedCapture, type TestCapture,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
@@ -56,6 +56,8 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   testSpeech(): Promise<TestSpeech>;
   simulateAppIntents(request: SimulatedAppIntents): Promise<TestAppIntents>;
   testAppIntents(): Promise<TestAppIntents>;
+  simulateCapture(state: SimulatedCapture): Promise<TestCapture>;
+  testCapture(): Promise<TestCapture>;
   testDrag(request: TestDragRequest): Promise<TestDragReply>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
   tap(target: InputTarget, options?: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
@@ -139,6 +141,9 @@ export class DriverBackend implements Backend {
     // Simulated @legendapp/spark/app-intents: the driver declares and runs intents; nothing reaches the system (docs/app-intents.md#testing).
     simulateAppIntents: async args => { await this.client().simulateAppIntents(args as SimulatedAppIntents); },
     assertAppIntents: (args, context) => context.eventually(async () => assertAppIntents(await this.client().testAppIntents(), args)),
+    // Simulated @legendapp/spark/capture devices: synthetic frames and levels, never a device, ScreenCaptureKit or TCC (docs/capture.md#testing).
+    simulateCapture: async args => { await this.client().simulateCapture(args as SimulatedCapture); },
+    assertSimulatedCapture: (args, context) => context.eventually(async () => assertSimulatedCapture(await this.client().testCapture(), args)),
     // Startup phases and the state the app exposes (docs/e2e-flows.md#app-inspection).
     ...inspectCommands(() => this.client(), () => this.opened!),
     // Layout thrash, flicker, leak counters and memory (docs/e2e-flows.md#layout-flicker-and-leaks).
@@ -596,6 +601,12 @@ export function assertAppIntents(intents: TestAppIntents, args: Record<string, u
       if (!isDeepStrictEqual(actual, value)) fail(`the ${key === "lastInvocation" ? "last invocation" : "last donation"}'s ${field}`, actual, value);
     }
   }
+}
+export function assertSimulatedCapture(capture: TestCapture, args: Record<string, unknown>) {
+  for (const key of ["cameras", "microphones", "recordingAudio", "cameraRunning", "recordingScreen", "photos", "screenshots", "recordings"] as const)
+    if (args[key] !== undefined && capture[key] !== args[key]) throw new Failure("assertion", `capture ${key} is ${JSON.stringify(capture[key])}, expected ${JSON.stringify(args[key])}`);
+  for (const [key, field] of [["minFrames", "frames"], ["minLevels", "levels"]] as const)
+    if (args[key] !== undefined && capture[field] < (args[key] as number)) throw new Failure("assertion", `capture ${field} is ${capture[field]}, expected at least ${args[key]}`);
 }
 export function assertSimulatedPermission(permission: TestPermission, args: Record<string, unknown>) {
   for (const key of ["authorization", "requests", "prompts", "settingsOpened"] as const)

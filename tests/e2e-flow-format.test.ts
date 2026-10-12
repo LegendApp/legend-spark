@@ -221,7 +221,7 @@ describe("catalog", () => {
   test("driver-backed commands are marked", () => {
     expect(Object.keys(COMMANDS).filter(name => COMMANDS[name]!.driver).sort()).toEqual([
       "advanceClock", "assertAppIntents", "assertAppMenu", "assertCrashSymbol", "assertEnergy", "assertFrames", "assertIdleCpu", "assertMemory", "assertMotion", "assertNoDebugSurface", "assertNoFlicker", "assertNoLayoutThrash", "assertNoLeaks",
-      "assertPaused", "assertScreenshot", "assertSharing", "assertSimulatedAuthorization", "assertSimulatedBiometrics", "assertSimulatedPermission", "assertSimulatedSpeech", "assertStartup", "assertState", "captureMotion", "interruptAt", "measure", "preserveAppDefaults", "setAppAppearance", "setClock", "simulateAppIntents", "simulateAuthorization", "simulateBiometrics", "simulateDisplays", "simulateGlobalShortcut", "simulatePermission", "simulateSharing", "simulateSpeech", "simulateSystemEvent", "startTrace",
+      "assertPaused", "assertScreenshot", "assertSharing", "assertSimulatedAuthorization", "assertSimulatedBiometrics", "assertSimulatedCapture", "assertSimulatedPermission", "assertSimulatedSpeech", "assertStartup", "assertState", "captureMotion", "interruptAt", "measure", "preserveAppDefaults", "setAppAppearance", "setClock", "simulateAppIntents", "simulateAuthorization", "simulateBiometrics", "simulateCapture", "simulateDisplays", "simulateGlobalShortcut", "simulatePermission", "simulateSharing", "simulateSpeech", "simulateSystemEvent", "startTrace",
       "stopTrace", "takeScreenshot",
     ]);
     expect(COMMANDS.setAppearance!.driver).toBeUndefined();

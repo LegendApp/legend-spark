@@ -266,6 +266,9 @@ picture in picture only change their status ([video.md](video.md#testing)).
 The app-intents package takes the declared intents from the driver instead of Info.plist, runs them as the system would
 and records donations instead of reaching IntentDonationManager, and registers `simulateAppIntents` and `testAppIntents`
 ([app-intents.md](app-intents.md#testing)).
+picture in picture only change their status ([video.md](video.md#testing)). Its `@legendapp/spark/capture` devices are
+simulated too, with synthetic levels and frames, never opening a camera, microphone or ScreenCaptureKit, and it registers
+`simulateCapture` and `testCapture` ([capture.md](capture.md#testing)).
 The global-shortcuts package
 never registers a hotkey with the system in driver mode (registrations keep their conflict checks in the app) and
 registers `simulateGlobalShortcut` (`key`, `modifiers` as NSEventModifierFlags bits), which delivers a registered

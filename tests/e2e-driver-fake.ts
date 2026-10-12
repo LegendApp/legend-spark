@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type TestSpeech, type SimulatedSpeech } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type TestSpeech, type SimulatedSpeech, type TestCapture, type SimulatedCapture } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -147,6 +147,10 @@ export class FakeDriver implements DriverClient {
     return this.appIntents;
   }
   async testAppIntents() { this.log.push("testAppIntents"); return this.appIntents; }
+  /** The fake's simulated capture, as the app's simulateCapture and testCapture commands keep it. */
+  captureState: TestCapture = { cameras: true, microphones: true, cameraEntitled: true, microphoneEntitled: true, recordingAudio: false, cameraRunning: false, recordingScreen: false, frames: 0, levels: 0, photos: 0, screenshots: 0, recordings: 0 };
+  async simulateCapture(state: SimulatedCapture) { this.log.push(`simulateCapture ${JSON.stringify(state)}`); return this.captureState = { ...this.captureState, ...state }; }
+  async testCapture() { this.log.push("testCapture"); return this.captureState; }
   /** Spark drag sources (FakeApp.dragSources), as the app's testDrag command sees them. */
   dragSources: () => Record<string, DragSource> = () => ({});
   private dragging?: { promised: string[] };

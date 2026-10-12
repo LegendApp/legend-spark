@@ -75,4 +75,8 @@ typedef void (^SparkPermissionCompletion)(NSString *_Nullable authorization, NSE
 #endif
 @end
 
+@class SparkPermissions;
+// The process's instance (RNDesktopPermissions.mm; simulated in driver mode), for other Spark packages such as capture.
+FOUNDATION_EXPORT SparkPermissions *SparkSharedPermissions(void);
+
 NS_ASSUME_NONNULL_END

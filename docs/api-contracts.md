@@ -486,6 +486,25 @@ startSpeechRecognition(options?: { locale?; onDevice?; partialResults?; punctuat
 
 Video follows the audio player's ownership model: the factory resolves once the item can play, commands complete in order (a later command waits for an accepted seek), and `remove()` ends fullscreen and picture in picture and releases the player. Native observation runs only while a listener is added; listeners get typed events (`playingChange`, `timeUpdate`, `seek`, `rateChange`, `volumeChange`, `end`, `fullscreenChange`, `pictureInPictureChange`, `error`) derived from one status stream. `VideoView` is the React-only display: a player can play without one, but picture in picture needs one in a window. Expo Video's `useVideoPlayer`/`VideoView` split is the model; the readiness promise and typed errors are Spark's. `speak` resolves when its utterance ends (`finished: false` when stopped) and scopes its callbacks to that utterance. Speech recognition never prompts: it rejects `E_PERMISSION_DENIED` unless the `speechRecognition` and `microphone` permissions are granted (requested through `/permissions`), and `onDevice: true` rejects `E_UNAVAILABLE` where audio would leave the Mac. In the test driver utterances are recorded instead of spoken, recognition plays back a scripted transcript, and fullscreen and picture in picture change state without a window. macOS only for now; Windows reports `unsupported-platform` (#403). Details: [video](video.md), [speech](speech.md).
 
+### Capture
+
+```ts
+// /capture
+getCaptureAvailability(kind: "camera" | "microphone" | "screen"): Promise<Availability | { available: false; reason: "missing-entitlement" }>;
+getScreenRecordingAvailability(): Promise<Availability>; // host-restriction before macOS 15
+getCaptureDevices(kind: "camera" | "microphone"): Promise<{ id; name; kind; default }[]>;
+startAudioRecording(options?: { deviceId?; uri?; onLevel?; signal? }): Promise<CaptureRecordingSession>;
+startScreenRecording(options?: { display?; window?; showsCursor?; uri?; signal? }): Promise<CaptureRecordingSession>;
+// CaptureRecordingSession: result (recorded { uri, duration, size } | cancelled), stop(), cancel().
+startCamera(options?: { deviceId?; signal? }): Promise<CameraSession>;
+// CameraSession: ended, takePhoto({ uri? }): Promise<{ uri, width, height }>, getStatus(), stop().
+<CameraView session={camera} contentFit?="contain" | "cover" | "fill" />
+getScreenCaptureSources(): Promise<{ displays; windows }>;
+captureScreenshot(options?: { display?; window?; showsCursor?; uri? }): Promise<{ uri, width, height }>;
+```
+
+Capture follows speech recognition's session model: a start resolves once the device runs, and the session's `result` (`ended` for the camera) settles once, rejecting `E_UNAVAILABLE` when the device goes away. It never prompts: each call rejects `E_PERMISSION_DENIED` unless its permission (`microphone`, `camera` or `screenRecording`, requested through `/permissions`) is granted, before any device or ScreenCaptureKit is reached. The camera and microphone entitlements are opt-in (`macos.capture`); a hardened-runtime build without one reports `missing-entitlement` and rejects `E_UNAVAILABLE`. One session of each kind runs at a time (`E_BUSY`), and a runtime that reloads cancels its own. Output goes to a file (`uri`, else a new temporary file; an existing file is `E_ALREADY_EXISTS`), not to JavaScript buffers; `CameraView` is the React-only preview, like `VideoView`. Screen recording writes through `SCRecordingOutput`, so it needs macOS 15; screenshots need macOS 14. In the test driver every device is simulated with synthetic levels and frames written to real files. macOS only for now; Windows reports `unsupported-platform` (#425). Details: [capture](capture.md).
+
 ### Audio and auth
 
 ```ts

@@ -7,10 +7,10 @@ import { runOk } from "./subprocess.ts";
 const root = path.resolve(import.meta.dirname, "..");
 const macos = path.join(root, "packages/media/macos");
 const flags = ["-fobjc-arc", "-fblocks", "-std=c++20", "-Wall", "-Werror", "-mmacosx-version-min=14.0", "-I", macos];
-const frameworks = ["AppKit", "AVFoundation", "AVKit", "CoreMedia", "Speech"].flatMap(name => ["-framework", name]);
-const sources = ["SparkVideo.mm", "SparkSpeech.mm"].map(file => path.join(macos, file));
+const frameworks = ["AppKit", "AVFoundation", "AVKit", "CoreMedia", "CoreVideo", "ImageIO", "QuartzCore", "ScreenCaptureKit", "Security", "Speech", "UniformTypeIdentifiers"].flatMap(name => ["-framework", name]);
+const sources = ["SparkVideo.mm", "SparkSpeech.mm", "SparkCapture.mm"].map(file => path.join(macos, file));
 
-test.skipIf(process.platform !== "darwin")("video players play the silent clip, seek, report status and simulate fullscreen and picture in picture; speech validates, records and times utterances and scripts recognition; the cores build without the driver", async () => {
+test.skipIf(process.platform !== "darwin")("video players play the silent clip, seek, report status and simulate fullscreen and picture in picture; speech validates, records and times utterances and scripts recognition; capture validates and simulates recordings, the camera and screens; the cores build without the driver", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-media-native-"));
   try {
     const binary = path.join(directory, "test");
