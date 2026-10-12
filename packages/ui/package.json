@@ -51,11 +51,13 @@
         "SparkTable": "RNSparkTable",
         "SparkPopover": "RNSparkPopover",
         "SparkTabView": "RNSparkTabView",
-        "SparkTab": "RNSparkTab"
+        "SparkTab": "RNSparkTab",
+        "SparkPointerView": "RNSparkPointerView"
       },
       "modulesProvider": {
         "NativeSparkTextServices": "RNSparkTextServices",
-        "NativeSparkPanels": "RNSparkPanels"
+        "NativeSparkPanels": "RNSparkPanels",
+        "NativeSparkPointer": "RNSparkPointer"
       }
     },
     "windows": {
@@ -68,7 +70,8 @@
     "sdk": true,
     "nativeModules": [
       "NativeSparkTextServices",
-      "NativeSparkPanels"
+      "NativeSparkPanels",
+      "NativeSparkPointer"
     ],
     "pod": "RNSparkUI",
     "platforms": [

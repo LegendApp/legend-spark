@@ -68,6 +68,7 @@ Package: `@legendapp/spark@0.0.1-next.3`. This matrix is generated from `package
 | [`./printing`](../packages/desktop/printing.ts) | [printing/package.json](../packages/printing/package.json)<br>macos: `packages/printing/macos/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/printing.test.ts](../tests/printing.test.ts)<br>[tests/printing-native.test.ts](../tests/printing-native.test.ts)<br>No mapped shared runtime case |
 | [`./displays`](../packages/desktop/displays.ts) | [desktop-windows/package.json](../packages/desktop-windows/package.json)<br>macos: `packages/desktop-windows/macos/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/displays.test.ts](../tests/displays.test.ts)<br>[tests/displays-native.test.ts](../tests/displays-native.test.ts)<br>No mapped shared runtime case |
 | [`./logging`](../packages/desktop/logging.ts) | [logging/package.json](../packages/logging/package.json)<br>macos: `packages/logging/macos/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/logging.test.ts](../tests/logging.test.ts)<br>[tests/logging-native.test.ts](../tests/logging-native.test.ts)<br>No mapped shared runtime case |
+| [`./pointer`](../packages/desktop/pointer.ts) | [ui/package.json](../packages/ui/package.json)<br>macos: `packages/ui/macos/pointer/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/pointer.test.ts](../tests/pointer.test.ts)<br>[tests/pointer-native.test.ts](../tests/pointer-native.test.ts)<br>No mapped shared runtime case |
 
 ## Build and configuration exports
 
