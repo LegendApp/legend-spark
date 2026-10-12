@@ -418,7 +418,7 @@ async function buildUnlocked(
   );
   copyHelpers(root, destination, readAppConfig(root).expo?.extra?.spark?.helpers);
   if (mode === "release") {
-    removeLocalNetworking(destination);
+    await removeLocalNetworking(destination, args => run(root, ["plutil", ...args], { capture: true }));
     const sources = metroSourceFiles(path.resolve(root, entryFile(root)), readJson(stateFile(root, "analysis/app.map")).sources);
     const linked = (readJson(stateFile(root, "native-selection.json")).included as Array<{ root: string }>).map(pkg => pkg.root);
     const pods = podNotices(JSON.parse(await run(root, ["plutil", "-convert", "json", "-o", "-", acknowledgementsFile(nativeRoot)], { capture: true })));

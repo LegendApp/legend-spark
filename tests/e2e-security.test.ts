@@ -261,4 +261,4 @@ test.runIf(process.platform === "darwin")("audits a real ad-hoc signed app", () 
     "  Contents/MacOS/Real: weak dependency @rpath/libmissing.dylib is not in the bundle; a library planted on its search path would load",
   ]);
   expect(failure(() => assertEntitlements({ app, sandbox: false }, "macos")).message).toContain("Contents/MacOS/Real: com.apple.security.get-task-allow lets any process debug it");
-});
+}, 60_000); // Compiles, signs and inspects real binaries: well under a second locally, much slower on a loaded CI runner.

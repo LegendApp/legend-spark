@@ -13,8 +13,8 @@ vi.mock("../packages/cli/src/native-patch-preflight.ts", () => ({ assertNativePa
 let root: string;
 let moduleRoot: string;
 const write = (file: string, value = "") => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, value); };
-// The config plugin's App Transport Security key, which release builds drop (removeLocalNetworking).
-const INFO_PLIST = '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict></dict></plist>';
+// The config plugin's App Transport Security key, which release builds drop (removeLocalNetworking). JSON: plutil is mocked.
+const INFO_PLIST = JSON.stringify({ CFBundleIdentifier: "test.fixture", NSAppTransportSecurity: { NSAllowsLocalNetworking: true } });
 const framework = () => path.join(moduleRoot, "Fixture.xcframework");
 const commandCount = (name: string) => commands.run.mock.calls.filter(([, argv]) => argv[0] === name || argv.includes(name)).length;
 const configure = (release = false) => writeJson(path.join(root, "app.json"), { expo: {
@@ -52,6 +52,15 @@ beforeEach(() => {
     } else if (argv.includes("export:embed")) {
       write(argv[argv.indexOf("--bundle-output") + 1]!, "fixture bundle");
       write(argv[argv.indexOf("--sourcemap-output") + 1]!, JSON.stringify({ sources: ["/index.ts"] }));
+    } else if (argv[0] === "plutil" && argv[1] === "-extract") {
+      // Like plutil on a JSON plist: the value at a top-level key, or its error for a missing one.
+      const value = JSON.parse(readFileSync(argv.at(-1)!, "utf8"))[argv[2]!];
+      if (value === undefined) throw new Error(`plutil exited 1\nCould not extract value, error: No value at that key path or invalid key path: ${argv[2]}`);
+      return JSON.stringify(value);
+    } else if (argv[0] === "plutil" && argv[1] === "-remove") {
+      const file = argv.at(-1)!, info = JSON.parse(readFileSync(file, "utf8")), [key, nested] = argv[2]!.split(".");
+      if (nested) delete info[key!][nested]; else delete info[key!];
+      writeFileSync(file, JSON.stringify(info));
     } else if (argv[0] === "plutil" && argv.includes("json")) {
       return readFileSync(argv.at(-1)!, "utf8");
     } else if (argv[0] === "xcodebuild") {
