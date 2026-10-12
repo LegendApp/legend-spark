@@ -4,15 +4,16 @@ NS_ASSUME_NONNULL_BEGIN
 
 /**
  * A main-thread hang, delivered on the main queue once the main thread answers again:
- * { durationMs, thresholdMs, startedAt, stack: [{ address, image?, imageAddress?, imageOffset?, imageUUID?, symbol?, symbolOffset? }] }.
- * Addresses are hex strings; startedAt is wall-clock milliseconds since 1970.
+ * { durationMs, thresholdMs, startedAt, stack: [{ address, image?, imageAddress?, imageOffset?, imageUUID?, symbol?, symbolOffset? }], endedBeforeSampling }.
+ * Addresses are hex strings; startedAt is wall-clock milliseconds since 1970. endedBeforeSampling is YES, with an empty
+ * stack, when the hang was over before the watchdog thread looked (it woke late): the round trip still decides.
  */
 typedef void (^SparkHangHandler)(NSDictionary *report);
 
 /**
  * A watchdog thread pings the main queue. When a ping goes unanswered for the threshold, it suspends
- * the main thread just long enough to walk its frame pointers, then waits for the answer and reports
- * the hang with the time it took. It holds no lock the main thread takes, and exits after stop.
+ * the main thread just long enough to walk its frame pointers, then waits for the answer. Any ping answered
+ * a threshold or more after it was sent is reported once, with the time it took, however late this thread woke. It holds no lock the main thread takes, and exits after stop.
  */
 @interface SparkHangWatchdog : NSObject
 /** Starts the watchdog thread; call it on the main thread (it raises otherwise). `handler` runs on the main queue, never after stop. */

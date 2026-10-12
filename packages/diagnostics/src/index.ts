@@ -18,8 +18,17 @@ export interface HangReport {
   thresholdMs: number;
   /** Wall-clock time of the unanswered ping, in milliseconds since 1970 (as `Date.now()`). */
   startedAt: number;
-  /** The main thread's stack once the threshold had passed, innermost frame first. Empty when it could not be read. */
+  /**
+   * The main thread's stack once the threshold had passed, innermost frame first. Empty when it could not be read,
+   * or when the hang was over before the watchdog looked (`endedBeforeSampling`).
+   */
   stack: StackFrame[];
+  /**
+   * True when the hang had already ended by the time the watchdog thread looked (it can run late on a loaded Mac):
+   * the hang is still reported, from the ping's round trip, but `stack` is empty because a stack read then would
+   * not show the hang.
+   */
+  endedBeforeSampling: boolean;
 }
 export interface HangWatchdogOptions {
   /** A main thread that leaves a ping unanswered this long is hanging. Integer milliseconds, 50 to 60000. Default 250. */
@@ -45,10 +54,11 @@ const invalid = (message: string): never => { throw new SparkError("E_INVALID_AR
 const integer = (value: unknown, min: number, max: number): value is number => Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
 
 function hangReport(event: DesktopEvent): HangReport {
-  const { durationMs, thresholdMs, startedAt, stack } = event;
-  if (![durationMs, thresholdMs, startedAt].every(value => typeof value === "number" && Number.isFinite(value) && value >= 0) || !Array.isArray(stack) || !stack.every(isFrame))
+  const { durationMs, thresholdMs, startedAt, stack, endedBeforeSampling } = event;
+  if (![durationMs, thresholdMs, startedAt].every(value => typeof value === "number" && Number.isFinite(value) && value >= 0) || !Array.isArray(stack) || !stack.every(isFrame)
+    || typeof endedBeforeSampling !== "boolean" || (endedBeforeSampling && stack.length > 0))
     throw new SparkError("E_INVALID_DATA", "Native hang report does not match its contract");
-  return { durationMs: durationMs as number, thresholdMs: thresholdMs as number, startedAt: startedAt as number, stack };
+  return { durationMs: durationMs as number, thresholdMs: thresholdMs as number, startedAt: startedAt as number, stack, endedBeforeSampling };
 }
 
 let sequence = 0;

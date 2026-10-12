@@ -23,6 +23,12 @@ static size_t Backtrace(thread_t thread, uintptr_t *frames, size_t capacity, siz
 #endif
 }
 
+#ifdef SPARK_HANG_WATCHDOG_TEST_HOOKS
+// Defined by tests/hang-watchdog.native.mm, the only build with the hooks: runs on the watchdog thread
+// after each ping is sent and before it waits for the answer, so a test can make the thread wake late.
+extern "C" void SparkHangWatchdogTestPinged(void);
+#endif
+
 @implementation SparkHangWatchdog {
   NSUInteger _thresholdMs;
   SparkHangHandler _handler;
@@ -57,36 +63,47 @@ static size_t Backtrace(thread_t thread, uintptr_t *frames, size_t capacity, siz
   while (!atomic_load(&_stopped)) @autoreleasepool {
     // A fresh semaphore per ping, so a late answer to an earlier ping can never answer this one.
     dispatch_semaphore_t answered = dispatch_semaphore_create(0);
-    // Written by the main queue before it signals, read here only after the signal.
+    // Set by the main queue (0 until it answers), read here while the main thread is suspended and after the signal.
     __block uint64_t answeredAt = 0;
     uint64_t sent = clock_gettime_nsec_np(CLOCK_UPTIME_RAW), startedAt = clock_gettime_nsec_np(CLOCK_REALTIME);
     dispatch_async(dispatch_get_main_queue(), ^{
-      answeredAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+      __atomic_store_n(&answeredAt, clock_gettime_nsec_np(CLOCK_UPTIME_RAW), __ATOMIC_RELEASE);
 #ifdef SPARK_HANG_WATCHDOG_TEST_SIGNAL_DELAY_MS // tests/hang-watchdog.native.mm: the answer reaches the watchdog late.
       usleep(SPARK_HANG_WATCHDOG_TEST_SIGNAL_DELAY_MS * 1000);
 #endif
       dispatch_semaphore_signal(answered);
     });
+#ifdef SPARK_HANG_WATCHDOG_TEST_HOOKS
+    SparkHangWatchdogTestPinged();
+#endif
+    // Sampled while the hang is under way; nil when the hang was over before this thread looked (it can run late).
+    NSArray *stack = nil;
     if (dispatch_semaphore_wait(answered, dispatch_time(DISPATCH_TIME_NOW, threshold))) {
       uintptr_t frames[SparkMaxFrames];
       size_t count = 0, linkFrame = SIZE_MAX;
+      bool over = false;
       if (thread_suspend(_mainThread) == KERN_SUCCESS) {
-        count = Backtrace(_mainThread, frames, SparkMaxFrames, &linkFrame);
+        // Answered between the timeout and the suspension: the stack would show the main thread after the hang.
+        over = __atomic_load_n(&answeredAt, __ATOMIC_ACQUIRE) != 0;
+        if (!over) count = Backtrace(_mainThread, frames, SparkMaxFrames, &linkFrame);
         thread_resume(_mainThread);
       }
-      NSArray *stack = SparkSymbolicate(frames, count, linkFrame);
+      if (!over) stack = SparkSymbolicate(frames, count, linkFrame);
       while (dispatch_semaphore_wait(answered, dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC)))
         if (atomic_load(&_stopped)) return;
-      // Answered within the threshold, but its answer reached this thread late: not a hang.
-      if (answeredAt - sent >= (uint64_t)threshold) {
-        NSDictionary *report = @{
-          @"durationMs": @((double)(answeredAt - sent) / NSEC_PER_MSEC),
-          @"thresholdMs": @(_thresholdMs),
-          @"startedAt": @((double)startedAt / NSEC_PER_MSEC),
-          @"stack": stack,
-        };
-        dispatch_async(dispatch_get_main_queue(), ^{ if (!atomic_load(&self->_stopped)) self->_handler(report); });
-      }
+    }
+    // The round trip alone decides, however late the answer reached this thread or this thread woke:
+    // a ping answered within the threshold is not a hang, and one answered later is, once.
+    uint64_t roundTrip = __atomic_load_n(&answeredAt, __ATOMIC_ACQUIRE) - sent;
+    if (roundTrip >= (uint64_t)threshold) {
+      NSDictionary *report = @{
+        @"durationMs": @((double)roundTrip / NSEC_PER_MSEC),
+        @"thresholdMs": @(_thresholdMs),
+        @"startedAt": @((double)startedAt / NSEC_PER_MSEC),
+        @"stack": stack ?: @[],
+        @"endedBeforeSampling": @(stack == nil),
+      };
+      dispatch_async(dispatch_get_main_queue(), ^{ if (!atomic_load(&self->_stopped)) self->_handler(report); });
     }
     // Ping again after half the threshold: a hang longer than 1.5 x the threshold is normally caught
     // (the watchdog thread itself can be scheduled late on a loaded machine).
