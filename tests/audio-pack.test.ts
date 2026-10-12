@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import path from "node:path";
 import os from "node:os";
 import { packAudio } from "../scripts/prepare-audio.ts";
@@ -27,10 +27,10 @@ test("distributed audio archives apply the exact workspace delta and verify upst
     writeFileSync(path.join(root, "patches/workspace/upstream.json"), JSON.stringify({ "expo-audio": { version: "1.1.1", integrity: `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}` } }));
     writeFileSync(path.join(root, "patches/workspace/expo-audio@1.1.1.patch"), patch);
     const manifest = await packAudio(root, output); const packed = path.join(output, manifest["expo-audio"]);
-    const metadata = JSON.parse(execFileSync("tar", ["-xOf", packed, "package/package.json"], { encoding: "utf8" }));
+    const metadata = JSON.parse(await runOk("tar", ["-xOf", packed, "package/package.json"]));
     expect(metadata.spark).toMatchObject({ sdk: true, upstreamIntegrity: `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}`, patchHash: expect.stringMatching(/^[a-f0-9]{64}$/) });
     for (const [relative, value] of expected) {
-      const actual = execFileSync("tar", ["-xOf", packed, `package/${relative}`], { encoding: "utf8" });
+      const actual = await runOk("tar", ["-xOf", packed, `package/${relative}`]);
       if (relative === "package.json") { const actualPackage = JSON.parse(actual), expectedPackage = JSON.parse(value); delete actualPackage.spark; delete expectedPackage.spark; expect(actualPackage).toEqual(expectedPackage); }
       else expect(actual).toBe(value);
     }

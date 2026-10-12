@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-test.skipIf(process.platform !== "darwin")("AppKit menu publication binds semantic targets, rolls back failures and restores owners", () => {
+test.skipIf(process.platform !== "darwin")("AppKit menu publication binds semantic targets, rolls back failures and restores owners", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-menu-test-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
@@ -28,7 +28,7 @@ static NSDictionary *CapturedEvent;
 `;
     const input = path.join(directory, "Menu.mm"), output = path.join(directory, "test");
     writeFileSync(input, stubs + source + readFileSync(path.join(root, "tests/application-menu.native.mm"), "utf8"));
-    execFileSync("clang++", ["-fobjc-arc", "-fblocks", "-std=c++17", "-framework", "AppKit", input, "-o", output]);
-    expect(execFileSync(output, { encoding: "utf8", timeout: 15000 })).toContain("Application menu tests passed");
+    await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++17", "-framework", "AppKit", input, "-o", output]);
+    expect(await runOk(output, [], { timeout: 15000 })).toContain("Application menu tests passed");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 25000);

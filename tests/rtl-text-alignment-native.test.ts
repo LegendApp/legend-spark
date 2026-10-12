@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { createRequire } from "node:module";
 import { linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -37,7 +37,7 @@ test("RTL text alignment patch install checks the version and preserves package 
 });
 
 let directory: string, executable: string;
-beforeAll(() => {
+beforeAll(async () => {
   if (process.platform !== "darwin") return;
   directory = mkdtempSync(path.join(os.tmpdir(), "spark-rtl-text-test-"));
   const input = path.join(directory, "RTLText.mm");
@@ -49,10 +49,10 @@ beforeAll(() => {
     .replace("// ACTUAL_CONVERSION", conversion)
     .replace("// ACTUAL_PATCHED", after)
     .replace("// ACTUAL_UPSTREAM", before));
-  execFileSync("clang++", ["-fobjc-arc", "-std=c++20", "-framework", "AppKit", input, "-o", executable]);
+  await runOk("clang++", ["-fobjc-arc", "-std=c++20", "-framework", "AppKit", input, "-o", executable]);
 }, 30000);
 afterAll(() => { if (directory) rmSync(directory, { recursive: true, force: true }); });
 
-test.skipIf(process.platform !== "darwin").each(["upstream", "rtl-natural", "rtl-explicit", "ltr", "no-direction"])("AppKit RTL text alignment: %s", scenario => {
-  expect(execFileSync(executable, [scenario], { encoding: "utf8", timeout: 15000 })).toContain(`PASS ${scenario}`);
-});
+test.skipIf(process.platform !== "darwin").each(["upstream", "rtl-natural", "rtl-explicit", "ltr", "no-direction"])("AppKit RTL text alignment: %s", async scenario => {
+  expect(await runOk(executable, [scenario], { timeout: 15000 })).toContain(`PASS ${scenario}`);
+}, 20000);

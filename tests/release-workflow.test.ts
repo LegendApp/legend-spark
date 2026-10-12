@@ -1,5 +1,4 @@
 import { test, expect, vi } from "vitest";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -8,14 +7,15 @@ import { applyVersionEdits, nextVersion, publishPreflight, releaseWorkflow, sign
 import { alreadyPublished, releaseNotes } from "../scripts/npm-release.ts";
 import { credentials } from "../packages/cli/src/credentials.ts";
 import { loadReleaseEnv } from "../scripts/release-env.ts";
+import { run, runOk } from "./subprocess.ts";
 
 test("next preview version exceeds local and registry versions without using another series", () => {
   expect(nextVersion("0.0.1-next.2", ["0.0.1-next.4", "0.0.2-next.30", "0.0.1-next.bad"])).toBe("0.0.1-next.5");
   expect(() => nextVersion("0.0.1", [])).toThrow("Expected a next preview");
 });
 
-test("release environment loading works without process.loadEnvFile and preserves shell values", () => {
-  const f = fixture();
+test("release environment loading works without process.loadEnvFile and preserves shell values", async () => {
+  const f = await fixture();
   try {
     vi.stubEnv("SPARK_TEST_FROM_FILE", undefined);
     vi.stubEnv("SPARK_TEST_EXISTING", "shell");
@@ -26,15 +26,11 @@ test("release environment loading works without process.loadEnvFile and preserve
   } finally { vi.unstubAllEnvs(); f.cleanup(); }
 });
 
-function fixture() {
+async function fixture() {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-release-workflow-"));
-  const git = (...args: string[]) => {
-    const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
-    if (result.status) throw new Error(result.stderr);
-    return result.stdout.trim();
-  };
+  const git = async (...args: string[]) => (await runOk("git", args, { cwd: root })).trim();
   const write = (file: string, content: string) => { mkdirSync(path.dirname(path.join(root, file)), { recursive: true }); writeFileSync(path.join(root, file), content); };
-  git("init", "-b", "main"); git("config", "user.name", "Release test"); git("config", "user.email", "release@example.test");
+  await git("init", "-b", "main"); await git("config", "user.name", "Release test"); await git("config", "user.email", "release@example.test");
   write(".gitignore", ".spark/\nartifacts/\n");
   write("package.json", '{"version":"0.0.1-next.2","dependencies":{"@legendapp/spark":"0.0.1-next.2"}}\n');
   write("bun.lock", '{"lockfileVersion":1,"workspaces":{"":{"name":"spark-workspace","devDependencies":{"@legendapp/spark":"0.0.1-next.2"}}},}\n');
@@ -46,9 +42,9 @@ function fixture() {
   write("docs/release-support-matrix.json", JSON.stringify({ version: "0.0.1-next.2", entries: [] }, null, 2) + "\n");
   write("docs/release-support-matrix.md", "Package: `@legendapp/spark@0.0.1-next.2`.\n");
   write("e2e/gate.yaml", readFileSync("tests/fixtures/e2e-gate/e2e/gate.yaml", "utf8")); // release targets: macos-14/arm64@air-m1, macos-15/arm64
-  git("add", "."); git("commit", "-m", "Previous release"); git("tag", "v0.0.1-next.2");
-  write("feature.ts", "export const feature = true;\n"); git("add", "."); git("commit", "-m", "Fix a native lifecycle");
-  git("remote", "add", "origin", "https://github.com/LegendApp/legend-spark.git"); git("update-ref", "refs/remotes/origin/main", "HEAD");
+  await git("add", "."); await git("commit", "-m", "Previous release"); await git("tag", "v0.0.1-next.2");
+  write("feature.ts", "export const feature = true;\n"); await git("add", "."); await git("commit", "-m", "Fix a native lifecycle");
+  await git("remote", "add", "origin", "https://github.com/LegendApp/legend-spark.git"); await git("update-ref", "refs/remotes/origin/main", "HEAD");
   const commands: string[][] = [];
   const tags: Record<string, string> = { next: "0.0.1-next.2", latest: "0.0.1-next.2" };
   let failTest = false, pendingRunner = false, failPublish = false, harnessPasses = true;
@@ -58,19 +54,19 @@ function fixture() {
       write(`artifacts/harness/${revision}/${target.replace("/", "-")}/report.json`, JSON.stringify({ version: 1, verdict: "PASS", releasable: true, local: false, target, commit: revision, dirty: false, reasons: [], install: { app: "/tmp/KitchenSink.app", quarantine: "0081;00000000;;", sourceRevision: revision }, ...fields }));
     }
   };
-  const staged = () => {
+  const staged = async () => {
     const version = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version;
     const folder = `artifacts/releases/${version}`;
     write(`${folder}/spark.tgz`, "exact signed release archive"); write(`${folder}/runner-manifest.json`, "{}\n");
     const sha256 = Object.fromEntries(["spark.tgz", "runner-manifest.json"].map(name => [name, createHash("sha256").update(readFileSync(path.join(root, folder, name))).digest("hex")]));
-    write(`${folder}/release.json`, JSON.stringify({ version, revision: git("rev-parse", "HEAD"), npm: "spark.tgz", sha256 }));
-    if (harnessPasses) harness(git("rev-parse", "HEAD"));
+    write(`${folder}/release.json`, JSON.stringify({ version, revision: await git("rev-parse", "HEAD"), npm: "spark.tgz", sha256 }));
+    if (harnessPasses) harness(await git("rev-parse", "HEAD"));
   };
   const execute: Execute = async argv => {
     commands.push(argv);
     if (argv[0] === "git") {
       if (["fetch", "push"].includes(argv[1]!)) return { code: 0, output: "" };
-      const result = spawnSync("git", argv.slice(1), { cwd: root, encoding: "utf8" });
+      const result = await run("git", argv.slice(1), { cwd: root });
       return { code: result.status ?? 1, output: result.status ? result.stdout + result.stderr : result.stdout };
     }
     if (argv[0] === "gh") return { code: 0, output: argv.includes("visibility") ? '{"visibility":"PUBLIC"}' : "" };
@@ -78,9 +74,9 @@ function fixture() {
     if (argv.includes("dist-tags")) return { code: 0, output: JSON.stringify(tags) };
     if (argv[0] === "bun" && argv[2] === "test" && failTest) { failTest = false; return { code: 1, output: "Test failure" }; }
     if (argv.includes("release:runner")) {
-      write(".spark/runner/.spark/go-build.json", JSON.stringify({ runtime: { sourceRevision: git("rev-parse", "HEAD") } }));
+      write(".spark/runner/.spark/go-build.json", JSON.stringify({ runtime: { sourceRevision: await git("rev-parse", "HEAD") } }));
       if (pendingRunner) { pendingRunner = false; return { code: 2, output: "" }; }
-      staged();
+      await staged();
     }
     if (argv.includes("release:publish")) {
       tags.next = "0.0.1-next.3";
@@ -94,11 +90,11 @@ function fixture() {
 }
 
 test("failed checks, pending notarization and interrupted promotion resume one version, commit and archive", async () => {
-  const f = fixture();
+  const f = await fixture();
   try {
     f.setFailures(true, true, true);
     await expect(f.release(false, true)).rejects.toThrow("Test failure");
-    expect(f.git("log", "-1", "--format=%s")).toBe("Fix a native lifecycle");
+    expect(await f.git("log", "-1", "--format=%s")).toBe("Fix a native lifecycle");
     expect(JSON.parse(readFileSync(path.join(f.root, "package.json"), "utf8")).version).toBe("0.0.1-next.3");
     expect(readFileSync(path.join(f.root, "bun.lock"), "utf8")).toContain("0.0.1-next.3");
     expect(JSON.parse(readFileSync(path.join(f.root, "docs/release-support-matrix.json"), "utf8")).version).toBe("0.0.1-next.3");
@@ -108,16 +104,16 @@ test("failed checks, pending notarization and interrupted promotion resume one v
     expect(f.commands).toContainEqual(["bun", "run", "test"]);
     await expect(f.release()).rejects.toThrow("unfinished");
     expect(await f.release(true)).toBe(2);
-    const releaseRevision = f.git("rev-parse", "HEAD");
-    expect(f.git("log", "-1", "--format=%s")).toBe("release: prepare 0.0.1-next.3");
+    const releaseRevision = await f.git("rev-parse", "HEAD");
+    expect(await f.git("log", "-1", "--format=%s")).toBe("release: prepare 0.0.1-next.3");
     expect(readFileSync(path.join(f.root, "packages/cli/templates/blank-typescript/package.json"), "utf8")).toContain("0.0.1-next.3");
     expect(readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8")).toContain("- Fix a native lifecycle");
     expect(readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8")).toContain("## 0.0.1-next.2");
     await expect(f.release(true)).rejects.toThrow("Promotion interrupted");
     expect(f.commands.filter(args => args.includes("release:runner"))[1]).toEqual(["bun", "run", "release:runner", "--resume"]);
     expect(await f.release(true)).toBe(0);
-    expect(f.git("rev-parse", "HEAD")).toBe(releaseRevision);
-    expect(f.git("rev-parse", "v0.0.1-next.3")).toBe(releaseRevision);
+    expect(await f.git("rev-parse", "HEAD")).toBe(releaseRevision);
+    expect(await f.git("rev-parse", "v0.0.1-next.3")).toBe(releaseRevision);
     expect(f.commands).toContainEqual(["bun", "run", "release:publish", "--latest"]);
     expect(f.tags).toEqual({ next: "0.0.1-next.3", latest: "0.0.1-next.3" });
     expect(f.commands.filter(args => args.includes("release:runner"))).toHaveLength(2);
@@ -129,12 +125,12 @@ test("failed checks, pending notarization and interrupted promotion resume one v
 });
 
 test("the release refuses to tag, push or publish without a passing harness report for its revision, and resumes once there is one", async () => {
-  const f = fixture();
+  const f = await fixture();
   try {
     f.withoutHarness();
     await expect(f.release()).rejects.toThrow(/^Refusing to publish [0-9a-f]{40}: every release target needs a passing harness report for this build/);
-    const revision = f.git("rev-parse", "HEAD");
-    expect(f.git("log", "-1", "--format=%s")).toBe("release: prepare 0.0.1-next.3");
+    const revision = await f.git("rev-parse", "HEAD");
+    expect(await f.git("log", "-1", "--format=%s")).toBe("release: prepare 0.0.1-next.3");
     expect(f.commands.filter(args => (args[0] === "git" && ["tag", "push"].includes(args[1]!)) || args.includes("release:publish"))).toEqual([]);
     f.harness(revision, { local: true, releasable: false });
     await expect(f.release(true)).rejects.toThrow("is from a --local run, which is never releasable");
@@ -145,18 +141,18 @@ test("the release refuses to tag, push or publish without a passing harness repo
     await expect(f.release(true)).rejects.toThrow("no harness report at");
     f.harness(revision);
     expect(await f.release(true)).toBe(0);
-    expect(f.git("rev-parse", "v0.0.1-next.3")).toBe(revision);
+    expect(await f.git("rev-parse", "v0.0.1-next.3")).toBe(revision);
     expect(f.commands).toContainEqual(["bun", "run", "release:publish"]);
   } finally { f.cleanup(); }
 });
 
 test("release:publish checks the clean staged revision, its artifacts and the harness reports before GitHub or npm", async () => {
-  const f = fixture();
+  const f = await fixture();
   try {
     f.withoutHarness();
-    f.staged();
-    const git = async (...args: string[]) => f.git(...args);
-    const revision = f.git("rev-parse", "HEAD");
+    await f.staged();
+    const git = (...args: string[]) => f.git(...args);
+    const revision = await f.git("rev-parse", "HEAD");
     await expect(publishPreflight(f.root, "0.0.1-next.2", git)).rejects.toThrow(`Refusing to publish ${revision}`);
     f.harness(revision);
     expect(await publishPreflight(f.root, "0.0.1-next.2", git)).toBe(revision);
@@ -167,27 +163,27 @@ test("release:publish checks the clean staged revision, its artifacts and the ha
   } finally { f.cleanup(); }
 });
 
-test("release version edits preserve a real frozen Bun workspace lockfile", () => {
-  const f = fixture();
+test("release version edits preserve a real frozen Bun workspace lockfile", async () => {
+  const f = await fixture();
   try {
     f.write("package.json", JSON.stringify({ name: "spark-workspace", private: true, version: "0.0.1-next.2", workspaces: ["packages/*"], devDependencies: { "@legendapp/spark": "0.0.1-next.2" } }));
     f.write("packages/desktop/package.json", JSON.stringify({ name: "@legendapp/spark", version: "0.0.1-next.2" }));
     rmSync(path.join(f.root, "bun.lock"));
-    const install = (...extra: string[]) => {
-      const result = spawnSync("bun", ["install", "--lockfile-only", "--ignore-scripts", ...extra], { cwd: f.root, encoding: "utf8" });
+    const install = async (...extra: string[]) => {
+      const result = await run("bun", ["install", "--lockfile-only", "--ignore-scripts", ...extra], { cwd: f.root });
       expect(result.status, result.stdout + result.stderr).toBe(0);
     };
-    install();
+    await install();
     applyVersionEdits(f.root, versionEdits(f.root, ["package.json", "packages/desktop/package.json", "bun.lock", "packages/cli/src/project.ts"], "0.0.1-next.2", "0.0.1-next.3", ""));
     const lock = readFileSync(path.join(f.root, "bun.lock"), "utf8");
     expect(lock).toContain('"@legendapp/spark": "0.0.1-next.3"');
-    install("--frozen-lockfile");
+    await install("--frozen-lockfile");
     expect(readFileSync(path.join(f.root, "bun.lock"), "utf8")).toBe(lock);
   } finally { f.cleanup(); }
 });
 
 test("dirty source and missing signing credentials stop before versioning or publication", async () => {
-  const f = fixture();
+  const f = await fixture();
   try {
     f.write("draft.ts", "draft\n");
     await expect(f.release()).rejects.toThrow("clean checkout");
@@ -199,7 +195,7 @@ test("dirty source and missing signing credentials stop before versioning or pub
 });
 
 test("resume recovers a committed version checkpoint and refuses changed artifacts", async () => {
-  const f = fixture();
+  const f = await fixture();
   try {
     f.setFailures(false, true, false);
     expect(await f.release()).toBe(2);
@@ -214,8 +210,8 @@ test("resume recovers a committed version checkpoint and refuses changed artifac
   } finally { f.cleanup(); }
 });
 
-test("partial version writes converge and unrelated edits are preserved", () => {
-  const f = fixture();
+test("partial version writes converge and unrelated edits are preserved", async () => {
+  const f = await fixture();
   try {
     const edits = [{ file: "a.json", before: "old", after: "new" }, { file: "b.json", before: "old", after: "new" }];
     f.write("a.json", "new"); f.write("b.json", "old"); applyVersionEdits(f.root, edits); applyVersionEdits(f.root, edits);
@@ -228,25 +224,25 @@ test("partial version writes converge and unrelated edits are preserved", () => 
 });
 
 test("conflicting release tags stop before pushing or publishing", async () => {
-  const f = fixture();
+  const f = await fixture();
   try {
     f.setFailures(false, true, false);
     expect(await f.release()).toBe(2);
-    f.git("tag", "v0.0.1-next.3", "HEAD^");
+    await f.git("tag", "v0.0.1-next.3", "HEAD^");
     await expect(f.release(true)).rejects.toThrow("already points at another source revision");
     expect(f.commands.some(args => args[1] === "push" || args.includes("release:publish"))).toBe(false);
   } finally { f.cleanup(); }
 });
 
 test("resume refuses new source commits and preserves unrelated drafts", async () => {
-  const f = fixture();
+  const f = await fixture();
   try {
     f.setFailures(false, true, false);
     expect(await f.release()).toBe(2);
     f.write("unrelated.ts", "draft\n");
     await expect(f.release(true)).rejects.toThrow("clean checkout");
     expect(readFileSync(path.join(f.root, "unrelated.ts"), "utf8")).toBe("draft\n");
-    f.git("add", "unrelated.ts"); f.git("commit", "-m", "Another change");
+    await f.git("add", "unrelated.ts"); await f.git("commit", "-m", "Another change");
     await expect(f.release(true)).rejects.toThrow("Source revision changed");
     expect(f.commands.some(args => args.includes("release:publish"))).toBe(false);
   } finally { f.cleanup(); }
@@ -260,7 +256,7 @@ test("GitHub notes include only the selected release", () => {
 });
 
 test("signing preflight supplies the app configuration required by the shared credential helper", async () => {
-  const f = fixture();
+  const f = await fixture();
   try {
     for (const name of ["SPARK_SIGNING_KEYCHAIN", "SPARK_DEVELOPER_ID_APPLICATION", "SPARK_TEAM_ID", "SPARK_NOTARY_KEYCHAIN_PROFILE"]) vi.stubEnv(name, undefined);
     const project = signingProject(f.root);
@@ -273,7 +269,7 @@ test("signing preflight supplies the app configuration required by the shared cr
     });
     expect(result.hash).toBe(hash);
     expect(result.keychainProfile).toBe("release-test");
-    expect(f.git("status", "--porcelain")).toBe("");
+    expect(await f.git("status", "--porcelain")).toBe("");
   } finally { vi.unstubAllEnvs(); f.cleanup(); }
 });
 

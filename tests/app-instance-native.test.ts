@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,15 +9,15 @@ import path from "node:path";
 // actual packages/desktop-app/macos/SparkInstance.mm.
 const darwin = process.platform === "darwin";
 let directory = "", binary = "";
-beforeAll(() => {
+beforeAll(async () => {
   if (!darwin) return;
   directory = mkdtempSync(path.join(os.tmpdir(), "spark-instance-"));
   binary = path.join(directory, "instance-test");
   const root = path.resolve(import.meta.dirname, "..");
   const native = path.join(root, "packages/desktop-app/macos");
-  execFileSync("clang++", ["-fobjc-arc", "-std=c++20", "-framework", "Foundation", "-I", native,
+  await runOk("clang++", ["-fobjc-arc", "-std=c++20", "-framework", "Foundation", "-I", native,
     path.join(native, "SparkInstance.mm"), path.join(root, "tests/app-instance.native.mm"), "-o", binary]);
-});
+}, 30000);
 afterAll(() => { if (directory) rmSync(directory, { recursive: true, force: true }); });
 
 type Run = { child: ChildProcess; lines: string[]; done: Promise<number | null>; line(prefix: string): Promise<string> };

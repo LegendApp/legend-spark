@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { runOk } from "./subprocess.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -24,26 +24,26 @@ beforeEach(() => { platform.OS = "macos"; installed = true; calls.length = 0; ha
 
 const plist = (entries: Record<string, string | boolean>) => `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>${Object.entries(entries)
   .map(([key, value]) => `<key>${key}</key>${typeof value === "boolean" ? `<${value}/>` : `<string>${value}</string>`}`).join("")}</dict></plist>`;
-test.skipIf(process.platform !== "darwin")("native bookmarks, FDA, open-with, images, xattrs, quarantine, space and coordination", () => {
+test.skipIf(process.platform !== "darwin")("native bookmarks, FDA, open-with, images, xattrs, quarantine, space and coordination", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-file-integration-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
     const output = path.join(directory, "test");
     // A sandboxed process needs a bundle identifier; it names the reused container ~/Library/Containers/<id>.
     writeFileSync(path.join(directory, "Info.plist"), plist({ CFBundleIdentifier: "so.legend.spark.tests.file-integration", CFBundleName: "file-integration" }));
-    execFileSync("clang++", ["-std=c++17", "-fobjc-arc", "-fblocks", "-framework", "AppKit", "-framework", "Quartz", "-framework", "QuickLookThumbnailing", "-framework", "UniformTypeIdentifiers", "-framework", "CoreServices", "-framework", "Security",
+    await runOk("clang++", ["-std=c++17", "-fobjc-arc", "-fblocks", "-framework", "AppKit", "-framework", "Quartz", "-framework", "QuickLookThumbnailing", "-framework", "UniformTypeIdentifiers", "-framework", "CoreServices", "-framework", "Security",
       "-I", path.join(root, "packages/file-system/macos"), "-I", path.join(root, "packages/desktop-app/macos"), "-sectcreate", "__TEXT", "__info_plist", path.join(directory, "Info.plist"),
       path.join(root, "packages/file-system/macos/SparkFileIntegration.mm"), path.join(root, "tests/file-integration.native.mm"), "-o", output]);
-    expect(execFileSync(output, [directory], { encoding: "utf8" })).toContain("File integration tests passed");
+    expect(await runOk(output, [directory])).toContain("File integration tests passed");
     for (const [mode, entitlements] of [
       ["--sandboxed", { "com.apple.security.app-sandbox": true, "com.apple.security.files.bookmarks.app-scope": true }],
       ["--sandboxed-without-bookmarks", { "com.apple.security.app-sandbox": true }],
     ] as const) {
       const signed = `${output}${mode}`, plistPath = `${signed}.entitlements`;
       writeFileSync(plistPath, plist(entitlements));
-      execFileSync("cp", [output, signed]);
-      execFileSync("codesign", ["--force", "--sign", "-", "--entitlements", plistPath, signed], { stdio: "pipe" });
-      expect(execFileSync(signed, [mode], { encoding: "utf8" }), mode).toContain("Sandboxed file integration tests passed");
+      await runOk("cp", [output, signed]);
+      await runOk("codesign", ["--force", "--sign", "-", "--entitlements", plistPath, signed]);
+      expect(await runOk(signed, [mode]), mode).toContain("Sandboxed file integration tests passed");
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 60000);
