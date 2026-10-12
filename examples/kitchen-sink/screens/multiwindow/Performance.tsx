@@ -1,6 +1,5 @@
-import { Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { ActionButton } from "../../ActionButton";
-import { Panel, Status } from "../../Panel";
 import { FEATURES, availability, closeAllWindows, runStep, useWindowPerformance, type Paint } from "./window-performance";
 import { usePerformanceMessages, type PerformanceMessages } from "./performance-messages";
 
@@ -20,12 +19,14 @@ export function Performance() {
     [t.clock, clock ? t.clockState(clock.value, clock.renders, clock.shown) : t.none, `multiwindow-performance-clock-${clock ? (clock.shown ? "shown" : "hidden") : "closed"}`],
     [t.hiddenRenders, hiddenRenders === null ? t.none : String(hiddenRenders), `multiwindow-performance-hidden-renders-${hiddenRenders ?? "none"}`],
   ];
-  return <Panel title={t.title}>
-    <View className="w-full max-w-xl gap-1" testID="multiwindow-performance-availability">
-      <Text className="text-sm font-semibold text-foreground">{t.availability}</Text>
+  // Aligned to the leading edge, like the other screens' content.
+  return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-5 p-6">
+    <Text className="text-lg font-bold text-foreground" accessibilityRole="header">{t.title}</Text>
+    <View className="w-full max-w-3xl gap-1" testID="multiwindow-performance-availability">
+      <Text className="text-sm font-semibold text-foreground" accessibilityRole="header">{t.availability}</Text>
       {FEATURES.map(feature => <Text key={feature} className="text-sm text-foreground" testID={`multiwindow-performance-availability-${feature}-${availability(feature)}`}>{t.features[feature]}: {availability(feature)}</Text>)}
     </View>
-    <View className="w-full max-w-xl gap-1 rounded-md border border-border p-3" testID="multiwindow-performance-readout">
+    <View className="w-full max-w-3xl gap-1 rounded-md border border-border p-3" testID="multiwindow-performance-readout">
       {rows.map(([label, value, testID]) => <View key={testID.split("-").slice(0, 3).join("-") + label} className="flex-row gap-3">
         <Text className="w-44 text-sm font-semibold text-foreground">{label}</Text>
         <Text className="flex-1 text-sm text-foreground" testID={testID}>{value}</Text>
@@ -34,10 +35,10 @@ export function Performance() {
       {done !== null && <Text className="text-sm text-muted" testID={`multiwindow-performance-done-${done}`}>✓ {done}</Text>}
       {!!error && <Text className="text-sm text-danger" testID={`multiwindow-performance-error-${/^E_[A-Z_]+/.exec(error)?.[0] ?? "other"}`}>{error}</Text>}
     </View>
-    <Status testID="multiwindow-performance-note">{t.note}</Status>
-    <View className="flex-row flex-wrap justify-center gap-2">
+    <Text className="max-w-3xl text-sm text-muted" testID="multiwindow-performance-note">{t.note}</Text>
+    <View className="w-full max-w-3xl flex-row flex-wrap gap-2">
       {BUTTONS.map(step => <ActionButton key={step} testID={`multiwindow-performance-${step}-button`} onPress={() => runStep(step)}>{t.buttons[step]}</ActionButton>)}
       <ActionButton testID="multiwindow-performance-close-all" onPress={closeAllWindows}>{t.buttons["close-all"]}</ActionButton>
     </View>
-  </Panel>;
+  </ScrollView>;
 }
