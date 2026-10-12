@@ -163,7 +163,7 @@ Framework-owned capabilities are imported from `@legendapp/spark/<feature>`. Use
 | Application and windows | `app`, `windows`: identity, lifecycle, single-instance forwarding, secondary React roots, window styles, spark restoration, close/quit guards |
 | Files and persistence | `files`, `settings`, `secure-storage`: filesystem operations, bounded binary streaming and positional I/O, recursive watches, Trash/Recycle Bin, JSON settings, project-scoped Keychain values |
 | Desktop commands | `menus`, `context-menu`, `shortcuts`, `global-shortcuts`: menus, command handling, focused and system-wide shortcuts |
-| User interaction | `dialogs`, `message-dialog`, `clipboard`, `drag-drop`: file panels, alerts, clipboard formats, drag sources and drop targets |
+| User interaction | `dialogs`, `message-dialog`, `clipboard`, `drag-drop`: file panels, alerts, clipboard formats, drag sources and drop targets (promised files, spring loading, drag images: [guide](docs/drag-drop.md)) |
 | OS integration | `links`, `notifications`, `tray`, `system`: URLs/documents, local notifications, menu-bar items, Dock/startup/power integration |
 | Processes and distribution | `processes`, `updates`: child process I/O, timeouts and managed target-specific helper bundles, signed whole-app update integration |
 | Native controls and styling | `@legendapp/spark/ui`: native buttons, text inputs and selects; optional Uniwind bindings and system/light/dark themes |

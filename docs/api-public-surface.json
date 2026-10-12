@@ -247,14 +247,22 @@
     "getDisplayDetails"
   ],
   "./drag-drop": [
+    "ContextualDragOperations",
+    "DragDropFeature",
     "DragDropView",
     "DragDropViewProps",
     "DragEndEvent",
+    "DragImage",
     "DragOperation",
     "DragOptions",
     "DragOverEvent",
     "DragPayload",
+    "DragSource",
     "DropEvent",
+    "PromisedFile",
+    "PromisedFileWriteRequest",
+    "SpringLoadHighlight",
+    "SpringLoadHighlightEvent",
     "getDragDropAvailability"
   ],
   "./files": [
