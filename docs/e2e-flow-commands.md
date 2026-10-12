@@ -182,7 +182,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | `captureMotion` | — | `target`*, `until`, `name`* | driver | Record motion samples for a target. |
 | `assertMotion` | — | `target`*, `kind`, `velocityContinuous`, `overshoot`, `settlesWithin`, `frames` | driver | Assert motion of a target. |
 | `interruptAt` | — | `target`, `progress`*, `with`* | driver | Run a command when the running motion reaches a progress point. |
-| `assertFrames` | — | `during`*, `for`, `fps`, `dropped`; at least one of `fps`, `dropped` | driver | Assert frame rate and drops while a command runs, and for at least `for` from the start (real clock). |
+| `assertFrames` | — | `during`*, `for`, `fps`, `dropped`; at least one of `fps`, `dropped` | driver | Assert frame rate and drops while a command runs, and for at least `for` from the start (real clock); writes the frame timeline as a Chrome trace artifact. |
 | `assertPaused` | — | `target`*, `when`* | driver | Assert a target's animation pauses in a state. Its `when` is that state, so this command cannot take a condition; wrap it in runFlow { when, commands }. |
 | `assertNoLayoutThrash` | — | `during`* | driver | Assert no repeated layout passes while a command runs. |
 
@@ -254,7 +254,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 |---|---|---|---|---|
 | `assertEntitlements` | — | `app`*, `sandbox`*, `allow` | runner | Assert every process of the app is signed with only the entitlements `allow` names, each with its reason, and never get-task-allow; an `allow` entry no process carries fails. `sandbox`: whether this is the sandboxed variant, which sandboxes every process. |
 | `assertCodeSigning` | value → `app` | `app`* | runner | Assert every Mach-O file of the app is signed by the main executable's team (not ad-hoc), every process has the hardened runtime, and none disables library validation. |
-| `assertNoDebugSurface` | bare | `for` | driver | Relaunch the app pointed at a decoy development server (RCT_jsLocation and SPARK_BUNDLE_URL) and, once its first UI settles and `for` (default 2s) more, assert it never connected to it, holds no network socket and no bound Unix socket but the driver's (lsof), has no Developer menu or debug menu item (DevTools, inspector, debugger), hidden ones included, and that no JavaScript in the app contains the network inspector. For release builds. |
+| `assertNoDebugSurface` | bare | `for` | driver | Relaunch the app pointed at a decoy development server (RCT_jsLocation and SPARK_BUNDLE_URL) and, once its first UI settles and `for` (default 2s) more, assert it never connected to it, holds no network socket and no bound Unix socket but the driver's (lsof), has no Developer menu or debug menu item (DevTools, inspector, debugger, profiler), hidden ones included, and that no JavaScript in the app contains the network inspector or the profiler and no native code contains the profiler. For release builds. |
 | `assertLoadPaths` | value → `app` | `app`* | runner | Assert no load path lets a library from outside the bundle or the system into the app: LC_RPATH entries, dependencies (weak ones too) and LC_DYLD_ENVIRONMENT. On Windows: the DLL search order, not implemented yet (#51). |
 
 ## Build audits

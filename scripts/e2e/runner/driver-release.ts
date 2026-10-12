@@ -1,20 +1,21 @@
 // The release-safety probe of the driver backend (docs/e2e-flows.md#release-safety-probe, #274): what `assertNoDebugSurface`
 // judges in a running app. A driven release build listens on nothing but the driver's channel, holds no network socket,
-// never contacts the development server it is pointed at, has no Developer menu or other debug items in its menus, and
-// its JavaScript contains no network inspector.
+// never contacts the development server it is pointed at, has no Developer menu or other debug items in its menus, its
+// JavaScript contains no network inspector, and neither its JavaScript nor its native code contains the profiler.
 import { readFileSync } from "node:fs";
 import net from "node:net";
 import { NETWORK_INSPECTOR_MARKER } from "../../../packages/desktop-app/src/network-inspector/marker.ts";
-import { isScript, walk } from "../audit/bundle.ts";
+import { PROFILER_MARKER } from "../../../packages/desktop-app/src/profiler/marker.ts";
+import { isMachO, isScript, walk } from "../audit/bundle.ts";
 import { developerMenuMessages } from "../../../packages/native-menu/src/developer-menu-messages.ts";
 import type { DriverMenuItem, ProcessSocket } from "../driver.ts";
 
 /** The Developer menu's item titles in every language it has, and its item identifiers' prefix (packages/native-menu/src/developer-menu.ts). */
 const DEVELOPER_TITLES = new Set(["en", "ar"].map(developerMenuMessages).flatMap(messages =>
-  [messages.menu, messages.reload, messages.openDevTools, messages.toggleInspector, messages.togglePerfMonitor, messages.fastRefresh, messages.bundleInfo, messages.showMenu]));
+  [messages.menu, messages.reload, messages.openDevTools, messages.toggleInspector, messages.togglePerfMonitor, messages.fastRefresh, messages.startProfiling, messages.stopProfiling, messages.bundleInfo, messages.showMenu]));
 const DEVELOPER_ID = "spark-developer";
-/** Other debug tooling a menu could offer: DevTools, inspectors, debuggers, a dev menu. */
-const DEBUG_TITLE = /\b(dev ?tools|inspector|debug(ger|ging)?|dev(eloper)? menu)\b/i;
+/** Other debug tooling a menu could offer: DevTools, inspectors, debuggers, profilers, a dev menu. */
+const DEBUG_TITLE = /\b(dev ?tools|inspector|debug(ger|ging)?|profil(er|ing)|dev(eloper)? menu)\b/i;
 
 /** Every menu item, at any depth and hidden ones included, that is a Developer menu item or debug tooling, by title path. */
 export function debugMenuItems(menus: readonly DriverMenuItem[], parent = ""): string[] {
@@ -64,10 +65,18 @@ export async function decoyServer() {
 
 /**
  * Every JavaScript file of the app (bundles and scripts, by extension, at any depth) that contains the network inspector
- * (its marker, which Hermes bytecode keeps as a string). An app with no JavaScript to check is a finding too.
+ * or the profiler, and every Mach-O file that contains the profiler's native half (SparkProfiler.mm), by their markers,
+ * which Hermes bytecode and native code keep as strings. An app with no JavaScript or no native code to search is a
+ * finding too.
  */
-export function scriptProblems(app: string): string[] {
-  const scripts = walk(app).filter(isScript);
-  if (!scripts.length) return [`no JavaScript bundle found in ${app} to check for the network inspector`];
-  return scripts.filter(entry => readFileSync(entry.abs).includes(NETWORK_INSPECTOR_MARKER)).map(entry => `${entry.rel} contains the network inspector (${NETWORK_INSPECTOR_MARKER})`);
+export function codeProblems(app: string): string[] {
+  const entries = walk(app), scripts = entries.filter(isScript), binaries = entries.filter(isMachO);
+  const found = (files: typeof entries, markers: [marker: string, what: string][]) => files.flatMap(entry => {
+    const contents = readFileSync(entry.abs);
+    return markers.filter(([marker]) => contents.includes(marker)).map(([marker, what]) => `${entry.rel} contains the ${what} (${marker})`);
+  });
+  return [
+    ...scripts.length ? found(scripts, [[NETWORK_INSPECTOR_MARKER, "network inspector"], [PROFILER_MARKER, "profiler"]]) : [`no JavaScript bundle found in ${app} to check for the network inspector and the profiler`],
+    ...binaries.length ? found(binaries, [[PROFILER_MARKER, "profiler"]]) : [`no native code found in ${app} to check for the profiler`],
+  ];
 }
