@@ -23,6 +23,10 @@ type ControlMessages = {
   defaultButton: string;
   cancelButton: string;
   plainButton: string;
+  pressables: string;
+  pressable: string;
+  selectable: string;
+  disablePressables: string;
   /** Accessibility label for a sample: the row and its size. */
   label(row: string, size: string): string;
 };
@@ -46,6 +50,10 @@ const en: ControlMessages = {
   defaultButton: "Default",
   cancelButton: "Cancel",
   plainButton: "Plain",
+  pressables: "React Native Pressable",
+  pressable: "Pressable",
+  selectable: "Selectable",
+  disablePressables: "Disable Pressables",
   label: (row, size) => `${row}, ${size}`,
 };
 
@@ -68,6 +76,10 @@ const ar: ControlMessages = {
   defaultButton: "افتراضي",
   cancelButton: "إلغاء",
   plainButton: "عادي",
+  pressables: "Pressable في React Native",
+  pressable: "قابل للضغط",
+  selectable: "قابل للتحديد",
+  disablePressables: "تعطيل عناصر Pressable",
   label: (row, size) => `${row}، ${size}`,
 };
 

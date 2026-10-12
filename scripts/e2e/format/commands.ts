@@ -216,7 +216,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   assertPixelDiff: spec("visual", "Compare two captured screenshots.", { a: str, b: str, max: { type: ["string", "number"], pattern: "^\\d+(\\.\\d+)?%$", minimum: 0, description: "a pixel count or a percentage such as 0.5%" } }, { required: ["a", "b", "max"] }),
 
   // Accessibility
-  assertA11y: spec("a11y", "Assert the accessibility properties of an element.", { id: str, label: text, role: str, value: anyStr, hint: text }, { required: ["id"], rule: anyKey("label", "role", "value", "hint") }),
+  assertA11y: spec("a11y", "Assert the accessibility properties of an element.", { id: str, label: text, role: str, value: anyStr, hint: text, enabled: bool, selected: bool }, { required: ["id"], rule: anyKey("label", "role", "value", "hint", "enabled", "selected") }),
   auditAccessibility: spec("a11y", "Run the platform accessibility audit.", { scope, maxErrors: int() }),
   voiceOver: single("a11y", "Turn the screen reader on or off.", "enable", bool),
   screenReaderNext: spec("a11y", "Move the screen reader to the next element."),

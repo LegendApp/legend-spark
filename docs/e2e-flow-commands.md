@@ -194,7 +194,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 
 | Command | Short form | Keys | Backend | Summary |
 |---|---|---|---|---|
-| `assertA11y` | — | `id`*, `label`, `role`, `value`, `hint`; at least one of `label`, `role`, `value`, `hint` | black-box | Assert the accessibility properties of an element. |
+| `assertA11y` | — | `id`*, `label`, `role`, `value`, `hint`, `enabled`, `selected`; at least one of `label`, `role`, `value`, `hint`, `enabled`, `selected` | black-box | Assert the accessibility properties of an element. |
 | `auditAccessibility` | bare | `scope`, `maxErrors` | black-box | Run the platform accessibility audit. |
 | `voiceOver` | value → `enable` | `enable`* | black-box | Turn the screen reader on or off. |
 | `screenReaderNext` | bare | — | black-box | Move the screen reader to the next element. |

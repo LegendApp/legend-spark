@@ -3,7 +3,7 @@
 // Accessibility audit facts (docs/test-driver.md#accessibility-audit). The runner judges them
 // (scripts/e2e/runner/driver-audit.ts); this collects what only the process can see. For every accessibility element
 // of the audited windows: its role, label, title, placeholder, value and help as NSAccessibility reports them
-// in-process, whether it is editable, and whether it is inside a disabled AppKit control. For every view that draws text: the text, its declared colours (sRGB, in the view's
+// in-process, whether it is editable, and whether it is inside a disabled AppKit control or React Native view. For every view that draws text: the text, its declared colours (sRGB, in the view's
 // effective appearance) and fonts, the opacity of the view and its ancestors, and where it is in a render of its
 // window (sRGB). Text the window does not show is scrolled into view (scrollRectToVisible:, as pointer input does) and
 // rendered again, so long screens are audited whole; every scroll position is restored before the reply.
@@ -72,6 +72,15 @@ static NSDictionary *SparkAuditTextStyle(NSView *view, NSAttributedString *text)
 static BOOL SparkAuditFocusable(NSView *view) {
   return [view isKindOfClass:NSControl.class] ? !((NSControl *)view).refusesFirstResponder : view.acceptsFirstResponder;
 }
+// Whether a view says it is enabled: AppKit controls, and React Native views, whose isAccessibilityEnabled Spark's
+// accessibility state patch answers from accessibilityState.disabled (packages/config-plugin/accessibility-state.cjs).
+// Other views (NSTextView, NSScrollView) report isAccessibilityEnabled NO whether or not they are, so they are
+// enabled unless inside a disabled one.
+static BOOL SparkAuditEnabled(NSView *view) {
+  static Class reactView = NSClassFromString(@"RCTViewComponentView");
+  if ([view isKindOfClass:NSControl.class]) return ((NSControl *)view).isEnabled;
+  return [view isKindOfClass:reactView] ? view.isAccessibilityEnabled : YES;
+}
 // `inText`: inside a view that draws text, whose text views (a selectable React Native Text's NSTextView) draw the same text.
 // `inList`: inside a table, outline or collection view, whose items the arrow keys reach; `inSourceList`: inside a
 // source-list table.
@@ -85,9 +94,7 @@ static void SparkAuditCollect(NSView *view, NSString *windowID, NSMutableDiction
   NSString *testID = SparkAuditString(view.accessibilityIdentifier);
   within = testID ?: within;
   NSCell *cell = [view isKindOfClass:NSControl.class] ? ((NSControl *)view).cell : nil;
-  // Only AppKit controls say reliably whether they are enabled: React Native macOS views report accessibilityEnabled
-  // NO unless their accessibility traits changed, and do not map accessibilityState.disabled to it.
-  enabled = enabled && (![view isKindOfClass:NSControl.class] || ((NSControl *)view).isEnabled);
+  enabled = enabled && SparkAuditEnabled(view);
   NSAttributedString *drawn = inText ? nil : SparkAuditDrawnText(view);
   BOOL draws = drawn && !SparkAuditBlank(drawn.string);
   NSMutableDictionary *element = parent;

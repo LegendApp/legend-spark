@@ -359,7 +359,7 @@ export class DriverBackend implements Backend {
       if (text !== equals) throw new Failure("assertion", `the text of ${JSON.stringify({ id })} is ${JSON.stringify(text ?? null)}, not ${JSON.stringify(equals)}`);
     });
   }
-  /** `label`, `role` and `value` of the element as NSAccessibility reports them in-process; `label` matches like a selector's. */
+  /** `label`, `role`, `value`, `enabled` and `selected` of the element as NSAccessibility reports them in-process; `label` matches like a selector's. */
   private async assertA11y(args: Record<string, unknown>, context: CommandContext) {
     this.unsupported("assertA11y", args, ["hint"]);
     const id = String(args.id), label = args.label === undefined ? undefined : parseSelector({ label: args.label }, context.platform).atom.label!;
@@ -368,6 +368,8 @@ export class DriverBackend implements Backend {
       if (label && !matchesText(label, element.label)) throw new Failure("assertion", `the accessibility label of ${JSON.stringify({ id })} is ${JSON.stringify(element.label ?? null)}, not ${JSON.stringify(args.label)}`);
       if (args.role !== undefined && element.role !== args.role) throw new Failure("assertion", `the accessibility role of ${JSON.stringify({ id })} is ${JSON.stringify(element.role ?? null)}, not ${JSON.stringify(args.role)}`);
       if (args.value !== undefined && element.value !== args.value) throw new Failure("assertion", `the accessibility value of ${JSON.stringify({ id })} is ${JSON.stringify(element.value ?? null)}, not ${JSON.stringify(args.value)}`);
+      for (const state of ["enabled", "selected"] as const)
+        if (args[state] !== undefined && element[state] !== args[state]) throw new Failure("assertion", `${JSON.stringify({ id })} reports ${state} ${JSON.stringify(element[state] ?? null)}, not ${args[state]}`);
     });
   }
 
