@@ -76,6 +76,8 @@ module.exports = function withSparkDesktop(config) {
     if (!mod.modResults.contents.includes(autolinkMarker)) {
       mod.modResults.contents = `${autolinkMarker}\nENV['SPARK_DESKTOP_AUTOLINK'] = 'macos'\n${mod.modResults.contents}`;
     }
+    // The test driver's private event functions compile only on request (docs/test-driver.md#private-event-functions).
+    mod.modResults.contents = require("./private-events.cjs").privateEventsPodfile(mod.modResults.contents, config.macos?.testDriverPrivateEvents);
     const marker = "# spark: Fabric enabled";
     if (!mod.modResults.contents.includes(marker)) {
       mod.modResults.contents = `${marker}\nENV['RCT_NEW_ARCH_ENABLED'] = '1'\n${mod.modResults.contents}`;

@@ -657,6 +657,27 @@ int main(int argc, char **argv) { @autoreleasepool {
       finished = YES;
     });
   }
+  // Built without SPARK_TEST_DRIVER_PRIVATE_EVENTS, as an app that does not opt in: gestures and extra mouse buttons
+  // fail with a typed error, while the rest of the input still works.
+  else if ([mode isEqual:@"pointer-off"]) {
+    MakePointerWindow();
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+      for (NSDictionary *request in @[@{ @"command": @"gesture", @"testID": @"pointer-gestures", @"kind": @"smartMagnify" },
+                                      @{ @"command": @"tap", @"testID": @"pointer-gestures", @"button": @"back" }]) {
+        NSDictionary *reply = Request(fd, request);
+        Check([Code(reply) isEqual:@"E_UNSUPPORTED"] && [reply[@"error"][@"message"] containsString:@"SPARK_TEST_DRIVER_PRIVATE_EVENTS"],
+          [NSString stringWithFormat:@"%@ fails naming the missing build flag (%@)", request[@"command"], reply]);
+      }
+      Check([OnMain(^{ return @(gestures.count); }) integerValue] == 0, @"nothing reached the view");
+      Check([Request(fd, @{ @"command": @"tap", @"testID": @"pointer-gestures" })[@"ok"] boolValue] && [OnMain(^{ return [gestures copy]; }) isEqual:(@[@"down", @"up"])], @"left clicks still work");
+      Check([Request(fd, @{ @"command": @"cursor", @"testID": @"pointer-gestures" })[@"cursor"] isEqual:@"pointingHand"], @"cursor queries still work");
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
   else if ([mode isEqual:@"menu"]) {
     // A context menu would track the real pointer and keyboard: the driver closes it and fails the command.
     NSView *menuView = [[NSView alloc] initWithFrame:NSMakeRect(250, 20, 100, 60)];

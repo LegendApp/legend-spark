@@ -31,4 +31,6 @@ NSDictionary *SparkDriverCursorAt(NSWindow *window, NSPoint location);
 // button) makes at that mouse event's location (nil when AppKit's location is off, or this macOS lacks the private functions), and why `event`
 // is not the gesture with these private fields (HID type, phase, values) at `location`, or nil when it is.
 NSEvent *SparkDriverLocated(CGEventRef prototype, NSEvent *mouse);
+// Why this build has no gesture or extra mouse button synthesis (built without SPARK_TEST_DRIVER_PRIVATE_EVENTS), or nil.
+NSString *SparkDriverPrivateEventsMissing(void);
 NSString *SparkDriverCheckGesture(NSEvent *event, NSWindow *window, NSPoint location, int64_t hidType, NSEventPhase phase, NSDictionary<NSNumber *, NSNumber *> *values);

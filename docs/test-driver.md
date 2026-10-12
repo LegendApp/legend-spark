@@ -173,11 +173,11 @@ send one request at a time; each reply echoes `id`. Failures are
 | `elements` | | `windows` (`id`, `title`, `key`, `main`, `frame`), front to back, and `elements`: the in-process accessibility view of every window with an identifier. An element is a visible view with a testID, or an accessibility element (controls through their cells) with a role, label or text: `key`, `parent` (the key of the nearest enclosing element), `window`, `id`, `role` (the NSAccessibility role without `AX`: `button`, `staticText`, `radioButton`), `label`, `text` (the string value, else the title, else the displayed text of a view with attributed text, such as React Native `Text`), `value` (the accessibility value as a string, numbers included) and `frame` (as `waitFor`). A view inside an element with the same testID (the native control a React Native view hosts) refines that element. The components of an `NSPathControl` and the tab buttons of an `NSTabView` (accessibility elements that are not views) are elements too. A window's `frame` is its frame view, at 0,0. |
 | `setAppAppearance` | `appearance` (`light`/`dark`), `timeoutMs` (10000) | Waits for the first rendered UI to settle (an override set while the app is still launching did not last), then sets `NSApp.appearance` (an app override; the OS setting is untouched; per-window appearances still win). If the effective appearance changed, replies `changed: true` once a UI update has mounted and settled, else `E_TIMEOUT`. `timeoutMs` bounds each wait. |
 | `capture` | `window` (`main`, `key`, `id:<identifier>`, `title:<title>`), `name`, `timeoutMs` (5000) | `file`, `width`, `height` (pixels), `scale`, once mounted UI updates have settled. `E_NOT_SETTLED` if they never do. |
-| `tap` | target, `button` (`left`/`right`/`back`/`forward`), `clickCount` (1-3), `modifiers` | Moves the driver's pointer to the target, then presses and releases `clickCount` times. `back` and `forward` are mouse buttons 3 and 4 (other-mouse events). |
+| `tap` | target, `button` (`left`/`right`/`back`/`forward`), `clickCount` (1-3), `modifiers` | Moves the driver's pointer to the target, then presses and releases `clickCount` times. `back` and `forward` are mouse buttons 3 and 4 (other-mouse events; they need [private event functions](#private-event-functions)). |
 | `hover` | target | Moves the driver's pointer to the target. |
 | `drag` | `from`, `to` (targets in one window), `window`, `steps` (10, 1-500), `modifiers` | Presses at `from`, moves to `to` in `steps` dragged events, releases. |
 | `scroll` | target, `deltaX`, `deltaY`, `precise` (false), `modifiers` | One scroll wheel event over the target. Deltas are positive toward the end of the content (down, right): points when `precise`, else lines. |
-| `gesture` | target, `kind`, `modifiers`; `magnification` (`magnify`), `rotation` (`rotate`), `steps` (10, 1-100), `direction` (`swipe`), `stage` (`pressure`: 1 or 2, default 2) | A trackpad gesture over the target, after moving the driver's pointer there. `magnify` and `rotate` send a began event, `steps` changed events of equal parts of the total (`magnification` is a scale change greater than −1; `rotation` is AppKit's: degrees, counterclockwise positive), and an ended event. `swipe` (`left`, `right`, `up`, `down`) and `smartMagnify` are single events. `pressure` is a click whose pressure rises through stage 1 and, for stage 2, into a force click, then falls before the release. |
+| `gesture` | target, `kind`, `modifiers` (needs [private event functions](#private-event-functions)); `magnification` (`magnify`), `rotation` (`rotate`), `steps` (10, 1-100), `direction` (`swipe`), `stage` (`pressure`: 1 or 2, default 2) | A trackpad gesture over the target, after moving the driver's pointer there. `magnify` and `rotate` send a began event, `steps` changed events of equal parts of the total (`magnification` is a scale change greater than −1; `rotation` is AppKit's: degrees, counterclockwise positive), and an ended event. `swipe` (`left`, `right`, `up`, `down`) and `smartMagnify` are single events. `pressure` is a click whose pressure rises through stage 1 and, for stage 2, into a force click, then falls before the release. |
 | `cursor` | target (optional) | `cursor` and `hiddenUntilMoved`: the cursor AppKit would show over the target, else at the driver's pointer ([Cursor](#cursor)). The pointer does not move. |
 | `pressKey` | `key`, `modifiers`, `window` | One key press. `key` is one character: a character key, or AppKit's character for a function key (`"\r"` Return, `"\u001b"` Escape, `"\u007f"` Delete, `"\uf700"` Up arrow, `"\uf704"` F1). |
 | `typeText` | `text`, `window` | One key press per user-perceived character, any Unicode (no input method). A newline presses Return. |
@@ -258,6 +258,30 @@ What AppKit does with in-process events, measured in `tests/test-driver.native.m
 | `+[NSEvent mouseEventWithType:…]` numbers every other-mouse event button 2. | Back and forward presses are copies with `kCGMouseEventButtonNumber` 3 and 4, located as gestures are (below; macOS 26 moves a copy's location) and checked: a press AppKit does not place at the target fails `tap` with `E_UNSUPPORTED`. |
 | NSEvent has no factory for trackpad gestures. The window server sends them as gesture events (CGEvent type 29) whose HID type names the gesture, and `+[NSEvent eventWithCGEvent:]` makes the magnify, rotate, swipe, smart magnify or pressure NSEvent from it. The fields are private: HID type 110 (8 magnify, 5 rotate, 16 swipe, 22 smart magnify, 32 pressure), magnification 113, rotation 114, swipe direction 115 (IOHIDSwipeMask: up 1, down 2, left 4, right 8), phase 132 (1 began, 2 changed, 4 ended), stage 143, stage transition 147, pressure 148. | Gestures are retyped copies of a mouse move AppKit made at the point, with those fields, never posted. AppKit takes a gesture's `locationInWindow` from the event's window-local location (top-left origin), a private field that setting the global location clears, so the driver sets both from the mouse event (`CGEventSetLocation`, and the private `CGEventSetWindowLocation`). It then checks every event AppKit makes (type, window, location, phase and values); on a mismatch, or without those functions, `gesture` fails with `E_UNSUPPORTED` naming the macOS version, and nothing is delivered. Measured on macOS 27; CI runs `tests/test-driver.native.mm` (mode `pointer`) on its macOS. |
 | `-[NSApplication sendEvent:]` drops magnify, rotate, swipe and smart magnify events in an app without a key window; `-[NSWindow sendEvent:]` gives them to the view under the pointer. NSWindow drops a magnify or rotate change that no began event started. | The driver sends those gestures to the window, as it does keys, and starts every magnify and rotate with a began event. Pressure events go through the queue with their click and reach the view only with a gesture phase. |
+
+## Private event functions
+
+Gestures (`gesture`) and the back and forward buttons (`tap` with `button: back` or `forward`) need
+the private CoreGraphics functions `CGEventGetWindowLocation` and `CGEventSetWindowLocation` (see
+the table above). The driver ships in every Spark app (`RNDesktopApp` compiles
+`packages/desktop-app/macos`, release builds included). Mac App Store review flags
+private API names found in a binary, even when they are never called. So these
+functions compile only with the preprocessor flag `SPARK_TEST_DRIVER_PRIVATE_EVENTS=1`:
+
+- **Off (the default)**: the code and the functions' names are absent from the binary.
+  `gesture`, and `tap` with `back` or `forward`, fail with `E_UNSUPPORTED`: "The app was built
+  without SPARK_TEST_DRIVER_PRIVATE_EVENTS …". Every other command works.
+- **On**: an app sets `"macos": { "testDriverPrivateEvents": true }` in `desktop.config.json`.
+  The config plugin then exports `SPARK_TEST_DRIVER_PRIVATE_EVENTS=1` in the generated Podfile,
+  and the `RNDesktopApp` podspec adds the flag to its `GCC_PREPROCESSOR_DEFINITIONS`, in debug
+  and release builds. The Kitchen Sink, which the gate drives, opts in. Never turn it on for an
+  app you distribute.
+- The names are not hidden or built at run time; that would evade review.
+
+`tests/test-driver-native.test.ts` builds the driver both ways. It checks that the build without
+the flag does not contain the names and fails these commands typed, and that the opted-in build
+contains them. `tests/test-driver-private-events.test.ts` checks the configuration, the Podfile
+line and the podspec's build settings.
 
 ## Cursor
 

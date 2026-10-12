@@ -35,6 +35,11 @@ limits. AppKit content background materials are explicitly
 `window.macos.titleBar.trafficLights`. Private flat native transport fields are not
 accepted in public configuration.
 
+`macos.testDriverPrivateEvents: true` compiles the test driver's trackpad gesture and
+extra mouse button synthesis, which uses private CoreGraphics functions. It is off by
+default. Turn it on only for apps that are tested and never distributed, such as the
+Kitchen Sink ([test driver](test-driver.md#private-event-functions)).
+
 Spark owns project identity, initial window settings, document associations,
 update signing, helper bundles and desktop lifecycle policy. Expo owns its plugins
 and mobile/web settings: put those under `expo`, or `expoByPlatform.<target>`.

@@ -1,5 +1,7 @@
 #import "SparkTestDriverPrivate.h"
+#if SPARK_TEST_DRIVER_PRIVATE_EVENTS
 #include <dlfcn.h>
+#endif
 
 // In-process input for the test driver (docs/test-driver.md#input). The driver creates NSEvents and dispatches
 // them through -[NSApplication sendEvent:] to this app's own windows. Nothing is posted to the system event
@@ -142,7 +144,20 @@ enum : uint32_t { SparkGestureHIDType = 110, SparkGestureMagnification = 113, Sp
 // lands a constant offset away). So the event gets both locations of `mouse`, and when AppKit's location is off, the
 // offset is taken out of the window-local location, else out of the global one. nil when AppKit's location is still off,
 // or this macOS lacks the private functions.
+// The private functions compile only with SPARK_TEST_DRIVER_PRIVATE_EVENTS (an app's macos.testDriverPrivateEvents), so
+// other apps' binaries never name them: App Store review flags private API names (docs/test-driver.md#private-event-functions).
+NSString *SparkDriverPrivateEventsMissing(void) {
+#if SPARK_TEST_DRIVER_PRIVATE_EVENTS
+  return nil;
+#else
+  return [NSString stringWithFormat:@"The app was built without SPARK_TEST_DRIVER_PRIVATE_EVENTS (macos.testDriverPrivateEvents), so it has no gesture or extra mouse button synthesis (macOS %@)",
+    NSProcessInfo.processInfo.operatingSystemVersionString];
+#endif
+}
 NSEvent *SparkDriverLocated(CGEventRef prototype, NSEvent *mouse) {
+#if !SPARK_TEST_DRIVER_PRIVATE_EVENTS
+  return nil;
+#else
   static auto get = (CGPoint (*)(CGEventRef))dlsym(RTLD_DEFAULT, "CGEventGetWindowLocation");
   static auto set = (void (*)(CGEventRef, CGPoint))dlsym(RTLD_DEFAULT, "CGEventSetWindowLocation");
   if (!get || !set) return nil;
@@ -165,6 +180,7 @@ NSEvent *SparkDriverLocated(CGEventRef prototype, NSEvent *mouse) {
   if (!off(corrected)) return corrected;
   corrected = make(CGPointMake(global.x - dx, global.y + dy), inWindow);
   return off(corrected) ? nil : corrected;
+#endif
 }
 // A gesture NSEvent at `location` (window coordinates), checked against what was asked for: the fields are private and
 // AppKit's reading of them changes between macOS versions, so a mismatch is a failure, never an event for some other
@@ -542,6 +558,8 @@ void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverR
     NSInteger clicks;
     NSNumber *button = @{ @"left": @0, @"right": @1, @"back": @3, @"forward": @4 }[request[@"button"] ?: @"left"];
     if (!button) { invalid(@"button is left, right, back or forward"); return; }
+    NSString *missing = button.integerValue > 1 ? SparkDriverPrivateEventsMissing() : nil;
+    if (missing) { reply(SparkDriverFailure(@"E_UNSUPPORTED", missing)); return; }
     if (!SparkInteger(request[@"clickCount"], 1, 1, 3, &clicks)) { invalid(@"clickCount is 1, 2 or 3"); return; }
     if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkClick(window, location, button.integerValue, clicks, flags, &failure);
   } else if ([command isEqual:@"hover"]) {
@@ -567,6 +585,7 @@ void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverR
     NSString *kind = request[@"kind"];
     NSInteger steps, stage;
     if (![@[@"magnify", @"rotate", @"swipe", @"smartMagnify", @"pressure"] containsObject:kind ?: @""]) { invalid(@"kind is magnify, rotate, swipe, smartMagnify or pressure"); return; }
+    if (NSString *missing = SparkDriverPrivateEventsMissing()) { reply(SparkDriverFailure(@"E_UNSUPPORTED", missing)); return; }
     if (!SparkInteger(request[@"steps"], 10, 1, 100, &steps)) { invalid(@"steps is 1-100"); return; }
     id magnification = request[@"magnification"], rotation = request[@"rotation"];
     if ([kind isEqual:@"magnify"] && (!magnification || !SparkNumber(magnification) || [magnification doubleValue] <= -1 || [magnification doubleValue] == 0)) { invalid(@"magnification is a nonzero scale change greater than -1"); return; }

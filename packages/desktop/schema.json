@@ -188,6 +188,10 @@
         "infoPlist": {
           "type": "object"
         },
+        "testDriverPrivateEvents": {
+          "type": "boolean",
+          "description": "Compile the test driver's trackpad gesture and extra mouse button synthesis, which uses private CoreGraphics event functions. Test builds only: keep it off for apps you distribute (docs/test-driver.md#private-event-functions)."
+        },
         "lifecycle": {
           "type": "object",
           "additionalProperties": false,
