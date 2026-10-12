@@ -7,10 +7,13 @@
 #import <RNDesktopApp/SparkTestDriver.h>
 #import <React-RCTAppDelegate/RCTRootViewFactory.h>
 #import <React/RCTSurfaceHostingView.h>
+#import <React/RCTRootView.h>
+#import <mach/mach.h>
 
 static NSArray<NSWindow *> *TabWindows(NSWindow *window);
 static void SelectTab(NSWindow *window);
 static void DetachTab(NSWindow *window);
+static BOOL Park(NSWindow *window, NSString *key);
 // Driver mode records the window as shown instead of ordering it on screen (docs/test-driver.md).
 // Ordering a tab front selects it, so the driver records that too.
 static void Show(NSWindow *window, BOOL focus, NSWindow *sheetParent) {
@@ -59,6 +62,8 @@ static void SetTrafficLightPosition(NSWindow *window, id position);
 @property NSDictionary *tabState;
 @property BOOL observingTabs;
 @property NSDictionary *restoringTabs;
+// A window pool keeps this window: closing hides it and ends its instance instead (docs/api-window-contract.md#window-pools).
+@property BOOL parkOnClose;
 - (void)finishClose:(BOOL)closed;
 - (void)finishFullscreen:(BOOL)success;
 
@@ -104,6 +109,7 @@ static void Event(NSString *type, NSString *key) {
   } else if ([type isEqual:@"focus"] || [type isEqual:@"blur"]) { event[@"type"] = @"focusChanged"; event[@"focused"] = @([type isEqual:@"focus"]); }
   else if ([type isEqual:@"enterFullscreen"] || [type isEqual:@"leaveFullscreen"]) { event[@"type"] = @"fullscreenChanged"; event[@"fullscreen"] = @([type isEqual:@"enterFullscreen"]); }
   else if ([type isEqual:@"visibilityChanged"]) event[@"visible"] = @(Visible(window));
+  else if ([type isEqual:@"occlusionChanged"]) event[@"occluded"] = @((window.occlusionState & NSWindowOcclusionStateVisible) == 0);
   SparkEmit(event);
 }
 // Native window tabs (docs/api-window-contract.md#window-tabs). Only Spark windows have IDs, so a
@@ -247,7 +253,8 @@ static char TabObservation;
 }
 - (BOOL)windowShouldClose:(NSWindow *)sender {
   if (self.guarded && !self.allowingClose) { [self requestClose]; return NO; }
-  return [self.previousDelegate respondsToSelector:@selector(windowShouldClose:)] ? [self.previousDelegate windowShouldClose:sender] : YES;
+  BOOL allow = [self.previousDelegate respondsToSelector:@selector(windowShouldClose:)] ? [self.previousDelegate windowShouldClose:sender] : YES;
+  return allow && !Park(sender, self.windowID);
 }
 - (void)windowWillClose:(NSNotification *)note {
   [self finishClose:YES]; [self finishFullscreen:NO]; [self observeTabs:NO];
@@ -290,6 +297,8 @@ static char TabObservation;
 - (void)windowDidFailToExitFullScreen:(NSWindow *)window { [self finishFullscreen:NO]; }
 - (void)windowDidMiniaturize:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:_cmd]) [self.previousDelegate windowDidMiniaturize:note]; Event(@"visibilityChanged", self.windowID); }
 - (void)windowDidDeminiaturize:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:_cmd]) [self.previousDelegate windowDidDeminiaturize:note]; Event(@"visibilityChanged", self.windowID); }
+// AppKit reports occlusion only for windows on screen; driver mode never shows one, so it reports none.
+- (void)windowDidChangeOcclusionState:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:_cmd]) [self.previousDelegate windowDidChangeOcclusionState:note]; if (!SparkTestDriverActive()) Event(@"occlusionChanged", self.windowID); }
 - (void)windowDidBecomeKey:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidBecomeKey:)]) [self.previousDelegate windowDidBecomeKey:note]; Event(@"focus", self.windowID); }
 - (void)windowDidResignKey:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidResignKey:)]) [self.previousDelegate windowDidResignKey:note]; Event(@"blur", self.windowID); }
 @end
@@ -311,6 +320,22 @@ extern "C" void SparkRebindWindowDelegate(NSWindow *window, NSString *key, id<NS
   if (guard && guard.window == window) { guard.previousDelegate = delegate; window.delegate = guard; }
   else window.delegate = delegate;
 }
+// Parks a pooled window instead of closing it: the instance ends exactly as on close (waiters resolve closed, the closed
+// event goes to its listeners, guards and the new-tab handler go away), the window is hidden, and the next use gets a
+// new instance token. Fullscreen, minimized and sheet windows close for real.
+static BOOL Park(NSWindow *window, NSString *key) {
+  SparkWindowDelegate *delegate = delegates[key];
+  if (!delegate.parkOnClose || Terminating || (window.styleMask & NSWindowStyleMaskFullScreen) || InSimpleFullscreen(window) || window.miniaturized || window.sheetParent) return NO;
+  [delegate finishClose:YES]; [delegate finishFullscreen:NO];
+  Hide(window);
+  if (window.parentWindow) [window.parentWindow removeChildWindow:window];
+  window.documentEdited = NO;
+  Event(@"closed", key);
+  delegate.instanceId = NSUUID.UUID.UUIDString;
+  objc_setAssociatedObject(window, NSSelectorFromString(@"sparkWindowInstanceId"), delegate.instanceId, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  delegate.guarded = NO; delegate.guardId = nil; delegate.pending = NO; delegate.request++; delegate.tabHandlerId = nil;
+  return YES;
+}
 static void RequestClose(NSWindow *window, NSString *key) {
   SparkWindowDelegate *delegate = delegates[key];
   if (delegate.guarded && !delegate.allowingClose) { [delegate requestClose]; return; }
@@ -319,7 +344,7 @@ static void RequestClose(NSWindow *window, NSString *key) {
   if (window.sheetParent) [window.sheetParent endSheet:window];
   // AppKit removes a closing tab from its group before windowWillClose:, ordering the next tab on screen.
   if (SparkTestDriverActive()) DetachTab(window);
-  [window close];
+  if (!Park(window, key)) [window close];
 }
 static NSDictionary *Info(NSString *key, NSWindow *window) {
   InstallDelegate(window, key);
@@ -683,6 +708,12 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       if (self.displayObservers && --self.displayObservers == 0) { [self.displayObserver stop]; self.displayObserver = nil; }
       resolve(@"null"); return;
     }
+    // The process's physical footprint (what Activity Monitor shows), for window pool memory budgets.
+    if ([method isEqual:@"footprint"]) {
+      task_vm_info_data_t info; mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+      if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&info, &count) != KERN_SUCCESS) { reject(@"E_NATIVE", @"task_info failed", nil); return; }
+      resolve(SparkJSON(@{ @"bytes": @(info.phys_footprint) })); return;
+    }
     if ([method isEqual:@"cursorPoint"]) {
       resolve(SparkJSON(SparkPointer()));
       return;
@@ -708,6 +739,13 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
     if (args[@"instanceId"] && ![args[@"instanceId"] isEqual:delegate.instanceId]) { reject(@"E_NOT_FOUND", @"Window instance has closed", nil); return; }
     if ([method isEqual:@"info"] || [method isEqual:@"observe"]) { resolve(SparkJSON(Info(key, window))); return; }
     if ([method isEqual:@"tabGroup"]) { resolve(SparkJSON(TabGroup(window))); return; }
+    // Window pools: park on close instead of closing, and hand a warm window's React root its next props.
+    if ([method isEqual:@"pool"]) { delegate.parkOnClose = [args[@"enabled"] boolValue]; resolve(@"null"); return; }
+    if ([method isEqual:@"rootProps"]) {
+      RCTRootView *root = LegendWindowRegistry.sharedRegistry.rootViews[key];
+      if (![root respondsToSelector:@selector(setAppProperties:)] || ![args[@"props"] isKindOfClass:NSDictionary.class]) { reject(@"E_NOT_FOUND", @"Window has no React root", nil); return; }
+      root.appProperties = args[@"props"]; resolve(@"null"); return;
+    }
     if (InSimpleFullscreen(window) && [@[@"bounds", @"fullscreen", @"maximize", @"unmaximize", @"center"] containsObject:method]) { reject(@"E_BUSY", @"Leave simple fullscreen first", nil); return; }
     if ([method isEqual:@"completeOpen"]) {
       NSWindow *parent = args[@"parentId"] ? Window(args[@"parentId"]) : nil;

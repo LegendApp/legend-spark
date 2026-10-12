@@ -546,6 +546,72 @@ are present; opening an isolated entry without them rejects `E_MODULE_UNAVAILABL
 `E_UNSUPPORTED_PLATFORM`) before a native window exists. Upstream threaded surfaces are not part of
 Spark's validated Runtimes support yet.
 
+#### Window pools
+
+A pooled entry keeps hidden windows whose React root is already mounted, so opening one only hands
+it props and shows it. Pools need an entry without `id` in the shared runtime, and macOS for now:
+on Windows a `pool` or `throttle: true` registration throws `E_UNSUPPORTED_OPTION` and
+`getWindowPerformanceAvailability('pool' | 'throttle')` reports `unsupported-platform` (#414).
+
+```ts
+const windows = createWindowsNavigator({
+  editor: { component: Editor, pool: { prewarm: 1, max: 2, memoryBudgetMB: 64 }, throttle: true },
+});
+await windows.prewarm('editor');           // after launch settles; resolves the pool's state
+const editor = await windows.openInstance('editor', { props: { documentId } }); // a warm window
+windows.getPool('editor');                 // { warm, target, max, memoryBudgetMB, measuredWindowMB, memoryPressure, hits, misses, released }
+await windows.trimPool();                  // close every warm window for real
+```
+
+- **Prewarm.** Nothing is pooled until `prewarm(name, count?)` starts the entry's pool. It creates
+  warm windows one at a time up to `count` (default `pool.prewarm`, 1), each an ordinary hidden window
+  (`show: false`, the entry's options) whose root renders nothing. After every open the pool refills
+  to that target. `prewarm` rejects `E_MODULE_UNAVAILABLE` without the `@legendapp/spark-system`
+  native module, which reports memory pressure.
+- **Opening a warm window.** The root receives the open's props natively (the window keeps its
+  NSWindow and React surface), mounts fresh content and commits it; the window gets the entry's and
+  the open's appearance options, its creation title unless one is given, the open's `size` and
+  `position` or its creation size centered, and the entry's toolbar, and is shown only after the
+  content committed, so its first paint is the content. Opens that pass other options (`kind`,
+  `parentId`, `modal`, `tabbedWith`, `restoreBounds`, `macos`) or a saved ID (`restoreSession`) open
+  a new window; `getPool` counts them as misses. A warm window that does not render within 10
+  seconds is closed for real and the open rejects `E_TIMEOUT`.
+- **Pooling.** Once the pool has started, its windows park when they close (by `close()`, the
+  close button or `closeWindow`): close guards run as usual, then the instance ends exactly as on
+  close (`close()` resolves `{ closed: true }`, `closed` listeners run, guards and the new-tab
+  handler are removed), the window is hidden, its content unmounts and the next use gets a new
+  native instance. It is warm again while the pool is under `max` (0–8, default 2) and its memory
+  budget, else it closes for real. A window in fullscreen, minimized or attached as a sheet closes
+  for real. A pooled window is reset to its entry's options, the open's options and its creation
+  title and frame; other changes a use made with `setWindowOptions` stay, so do not pool entries
+  whose windows you restyle at run time. Warm windows are hidden windows: `listWindows()` reports
+  them, `navigator.list()` and sessions do not.
+- **Memory budgets.** `pool.memoryBudgetMB` (1–1024, default 64) bounds the memory an entry's warm
+  windows hold. Each warm window is measured as the growth of the process footprint
+  (`phys_footprint`, what Activity Monitor shows) from before it is created to its root's first
+  render; the pool keeps no more warm windows than fit the largest cost measured, releasing the
+  oldest. The Kitchen Sink's 480×320 note measured about 2 MB per warm window in driver mode (never
+  drawn, so no backing store) on an M4 Max; a window that has been on screen also holds its backing
+  store, about width × height × scale² × 4 bytes (1.2 MB for that note at 2x). The defaults (two
+  warm windows, 64 MB) are chosen to leave room for heavier windows on the reference machine, an
+  8 GB M1 MacBook Air; they have not been measured there. The budget covers warm windows only; open
+  windows are the app's. Memory pressure (warning or critical) closes every warm window of every pool and pauses
+  refilling until it returns to normal.
+- **Release.** Closing a warm window for real closes the NSWindow and stops its React surface.
+  `trimPool(name?)` does that for warm windows and stops refilling until the next `prewarm`;
+  `remove()` does it for all of them, and open pooled windows close for real from then on. After a
+  JavaScript reload, warm windows are released (call `prewarm` again); open pooled windows are
+  adopted like any other.
+
+#### Background render throttling
+
+`throttle: true` stops an entry's content from re-rendering while its window is hidden, minimized or
+fully covered (AppKit occlusion, also exposed as the `occlusionChanged` window event): its root
+suspends with the committed content kept, so state survives and pending updates render once, when
+the window is visible again. Effects keep running; pause timers with `visibilityChanged` and
+`occlusionChanged` listeners. Driver mode never puts a window on screen, so it reports no occlusion
+and only hidden windows are throttled there.
+
 #### Shared and scoped state
 
 In the shared runtime the same observable is live in every window: a document opened in two
@@ -708,7 +774,7 @@ isolated runtime when that matters.
 The navigator, state, undo, menu, hotkey, toolbar and error-boundary behavior is implemented in
 shared JavaScript and covered by unit tests against mocked native modules
 (`tests/windows-navigator.test.ts`, including the original navigator contract; `tests/windows-navigator-menuless.test.ts` without the menu module).
-Messages and sessions are covered the same way by `tests/windows-session.test.ts`;
+Messages and sessions are covered the same way by `tests/windows-session.test.ts`, pools and throttling by `tests/windows-pool.test.ts`;
 `tests/window.native.mm` checks that a window reopened at the bounds another window reported has the same
 bounds and frame in driver mode. The `multiwindow` session-restore, session-relaunch, duplicate and messages
 flows run on macOS with the in-app driver (`--backend driver`). The other `multiwindow` flows do not

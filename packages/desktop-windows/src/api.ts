@@ -127,16 +127,21 @@ export async function closeWindow(id: string): Promise<CloseResult> {
 export interface WindowListenerOptions { onError?: (error: SparkError) => void }
 function report(options: WindowListenerOptions, cause: unknown) { try { (options.onError ?? console.error)(nativeError(cause)); } catch (error) { console.error(error); } }
 const TAB_EVENTS: readonly string[] = ["tabGroupChanged", "tabSelectionChanged"];
+/** Window pools (`windows/pool.ts`): park on close, hand a warm root new props, close for real. Not public. */
+export async function windowPoolCommand(method: "pool" | "rootProps" | "discard", args: { id: string } & Record<string, unknown>): Promise<void> { await windowCommand(method, args); }
+/** The process's physical footprint in bytes. Not public. */
+export async function processFootprint(): Promise<number> { return (await windowCall("footprint", {}, (value): value is { bytes: number } => record(value) && Number.isSafeInteger(value.bytes) && (value.bytes as number) >= 0)).bytes; }
 /** Registration acknowledges the live native instance. Removal stops callbacks immediately. */
 export async function addWindowListener<K extends keyof WindowEventMap>(id: string, type: K, listener: (event: WindowEventMap[K]) => void, options: WindowListenerOptions = {}): Promise<AsyncRegistration> {
   windowId(id); object(options, "listener options"); keys(options, ["onError"]);
-  if (!["focusChanged", "boundsChanged", "visibilityChanged", "fullscreenChanged", "closed", ...TAB_EVENTS].includes(type) || typeof listener !== "function" || (options.onError !== undefined && typeof options.onError !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Invalid window listener");
+  if (!["focusChanged", "boundsChanged", "visibilityChanged", "fullscreenChanged", "occlusionChanged", "closed", ...TAB_EVENTS].includes(type) || typeof listener !== "function" || (options.onError !== undefined && typeof options.onError !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Invalid window listener");
   if (TAB_EVENTS.includes(type)) tabsSupported();
+  if (type === "occlusionChanged" && Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Window occlusion events require macOS");
   return subscribeToWindowInstance(id, event => {
     if (event.type !== type) return;
-    const valid = type === "closed" || (type === "boundsChanged" ? isBounds(event.bounds) : type === "tabGroupChanged" ? isTabGroup(event.tabGroup) : type === "tabSelectionChanged" ? nullableId(event.selectedWindowId) : typeof event[type === "focusChanged" ? "focused" : type === "visibilityChanged" ? "visible" : "fullscreen"] === "boolean");
+    const valid = type === "closed" || (type === "boundsChanged" ? isBounds(event.bounds) : type === "tabGroupChanged" ? isTabGroup(event.tabGroup) : type === "tabSelectionChanged" ? nullableId(event.selectedWindowId) : typeof event[type === "focusChanged" ? "focused" : type === "visibilityChanged" ? "visible" : type === "occlusionChanged" ? "occluded" : "fullscreen"] === "boolean");
     if (!valid) { report(options, new SparkError("E_INVALID_DATA", "Malformed window event")); return; }
-    const payload = { windowId: id, ...(type === "boundsChanged" ? { bounds: event.bounds } : type === "focusChanged" ? { focused: event.focused } : type === "visibilityChanged" ? { visible: event.visible } : type === "fullscreenChanged" ? { fullscreen: event.fullscreen } : type === "tabGroupChanged" ? { tabGroup: tabGroup(event.tabGroup as WindowTabGroup) } : type === "tabSelectionChanged" ? { selectedWindowId: event.selectedWindowId } : {}) };
+    const payload = { windowId: id, ...(type === "boundsChanged" ? { bounds: event.bounds } : type === "focusChanged" ? { focused: event.focused } : type === "visibilityChanged" ? { visible: event.visible } : type === "occlusionChanged" ? { occluded: event.occluded } : type === "fullscreenChanged" ? { fullscreen: event.fullscreen } : type === "tabGroupChanged" ? { tabGroup: tabGroup(event.tabGroup as WindowTabGroup) } : type === "tabSelectionChanged" ? { selectedWindowId: event.selectedWindowId } : {}) };
     try { listener(payload as WindowEventMap[K]); } catch (cause) { report(options, cause); }
   }, [type]);
 }

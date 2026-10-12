@@ -68,7 +68,50 @@ interface WindowServices {
   newTab?: (instance: WindowInstance) => NewWindowTabRequest | Promise<NewWindowTabRequest>;
   /** Skipped on Windows by definition. */
   macos?: WindowMacOS;
+  /**
+   * Keep hidden, already rendered windows of this entry ready, so `open` only hands them props and shows them.
+   * Needs an entry without `id` in the shared runtime. macOS only for now; see `getWindowPerformanceAvailability('pool')`.
+   */
+  pool?: WindowPoolOptions;
+  /**
+   * Background render throttling: while the window is hidden, minimized or fully covered, its content does not re-render;
+   * state is kept and pending updates render once when it is visible again. macOS only for now.
+   */
+  throttle?: boolean;
 }
+/** Per-entry window pool limits. Warm windows are created by `prewarm` and by closing pooled windows. */
+export interface WindowPoolOptions {
+  /** How many warm windows `prewarm` creates and the pool refills to after each open. 0–`max`; default 1. */
+  prewarm?: number;
+  /** The most warm windows kept. 0–8; default 2. */
+  max?: number;
+  /**
+   * The most memory this entry's warm windows may hold, in MB (1–1024; default 64). Each warm window's cost is the growth
+   * of the process footprint while it was created; the pool keeps no more warm windows than fit the largest cost measured.
+   */
+  memoryBudgetMB?: number;
+}
+/** What `getPool` reports. Counters run for the navigator's lifetime. */
+export interface WindowPoolState {
+  /** Warm windows ready now. */
+  warm: number;
+  /** What `prewarm` asked for; 0 before it and after `trimPool`. */
+  target: number;
+  max: number;
+  memoryBudgetMB: number;
+  /** The largest footprint growth measured for one warm window, in MB; null before the first. */
+  measuredWindowMB: number | null;
+  /** True between memory pressure (warning or critical) and its return to normal: no warm windows are kept. */
+  memoryPressure: boolean;
+  /** Opens served by a warm window. */
+  hits: number;
+  /** Opens that created a window: none was warm, or the open needed options a warm window cannot take. */
+  misses: number;
+  /** Warm windows closed for real: over `max` or the budget, trimmed, under memory pressure, or the navigator was removed. */
+  released: number;
+}
+/** `pool`: window pools (prewarm, reuse, memory budgets). `throttle`: background render throttling. */
+export type WindowPerformanceFeature = "pool" | "throttle";
 /** What `newTab` returns; `createWindowsNavigator` checks `name` and `props` against the configuration. */
 export interface NewWindowTabRequest { name: string; props?: unknown; options?: NavigatorWindowOptions }
 type OpenRequestFor<P> = {} extends P ? { props?: P; options?: NavigatorWindowOptions } : { props: P; options?: NavigatorWindowOptions };
