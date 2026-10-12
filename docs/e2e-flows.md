@@ -883,6 +883,9 @@ checks:
       - ./windows#setWindowBounds
 ```
 
+`audit: bundle` makes a check an [audit](#audits) check: the gate's bundle audit verifies it against the release
+artifact, and no flow lists it.
+
 The validator rejects a prefix or file name mismatch, a malformed ID, a missing
 `title`, duplicate IDs in a file, and a malformed or repeated `covers` entry.
 
@@ -911,7 +914,8 @@ surface, then reports:
 
 | Rule | Problem |
 |---|---|
-| `no-flow` | A registered check that no flow lists in `checks:`. |
+| `no-flow` | A registered check that no flow lists in `checks:` and no [audit](#audits) verifies. |
+| `audit-flow` | A check registered with `audit:` that a flow lists too. |
 | `unregistered-check` | A flow lists a check ID that no registry defines. |
 | `duplicate-check` | Two registries define the same check ID. |
 | `unknown-cover` | A `covers` entry that is not in the SDK surface (a typo, or a removed export). |
@@ -982,7 +986,7 @@ release target.
 | Key | Meaning |
 |---|---|
 | `suite`, `appId` | Names for the report. |
-| `build.macos` / `build.windows` | `artifact`: the release build to test, relative to the repository root. `${ARCH}` becomes `arm64` or `x64`. `--artifact <path>` replaces it for one run. `verifySignature: true` runs `codesign --verify --deep --strict` (macOS; Windows verification is not implemented, so asking for it fails). The flows get the artifact as `${APP_PATH}`. |
+| `build.macos` / `build.windows` | `artifact`: the release build to test, relative to the repository root. `${ARCH}` becomes `arm64` or `x64`. `--artifact <path>` replaces it for one run. `verifySignature: true` runs `codesign --verify --deep --strict` (macOS; Windows verification is not implemented, so asking for it fails). The flows get the artifact as `${APP_PATH}`. `sizeBudgetMB` and `symbols` (the build's dSYM folder, relative to the repository root, with `${ARCH}`) are for the [bundle audit](#audits). |
 | `targets` | `{ os, arch, machine? }`. `os` is `macos-<major>` or `windows-<10\|11>`; `arch` is `arm64` or `x64`, as Spark names them. `machine` names a reference machine from the budgets file: that target runs on that hardware and checks its budgets. |
 | `include` | Globs of gate flows, relative to `e2e/`. |
 | `blocking` | `{ tags, default }`. A flow blocks the release when it fails if it has one of `tags`, lists a check registered `blocking: true`, or `default` is true. A non-blocking failure is a warning. |
@@ -1008,13 +1012,14 @@ the run fails without running flows; use `--dry-run` to plan other targets.
 3. **Coverage:** `bun run e2e:coverage` over the registries and every gate flow (for
    all targets), with the required surface from `coverage`.
 4. **Build:** the target's artifact exists and, if asked, its signature verifies.
-5. **Flows:** the gate flows whose `platforms` include the target's platform, every
+5. **Audits:** the audit steps run against the artifact (see [Audits](#audits)). A scoped run has none.
+6. **Flows:** the gate flows whose `platforms` include the target's platform, every
    matrix combination, run through the runner with every registered backend for that
    platform. Flows with `manual: true` are not run; `manual: partial` flows are run, and
    their manual steps are recorded for sign-off. Any failed or skipped blocking run fails the gate.
-6. **Budgets** on a machine-bound target (see [Budgets](#budgets)).
-7. **Sign-offs** for every manual run (see [Manual sign-offs](#manual-sign-offs)).
-8. **Time budget** for the whole run.
+7. **Budgets** on a machine-bound target (see [Budgets](#budgets)).
+8. **Sign-offs** for every manual run (see [Manual sign-offs](#manual-sign-offs)).
+9. **Time budget** for the whole run.
 
 The gate runs every check even after one fails, so one report lists every reason.
 Flows don't run when there is no backend, no build, or this machine cannot be the
@@ -1031,9 +1036,40 @@ reason for FAIL), `warnings` (non-blocking failures), `suite`, `appId`, `started
 and `signoff`; `manualSteps` screenshot paths are relative to the repository root),
 `excluded` (flows for other platforms), `budgets` (one entry per measurement:
 `metric`, `flow`, `value`, `baseline`, `limit`, `status`) and `run` (the runner's report
-directory) and, for a [scoped run](#scoped-runs---flow), `scope`. `check` is one of `manifest`, `target`, `source`, `lint`, `coverage`,
+directory) and, for a [scoped run](#scoped-runs---flow), `scope`. `audits` (one entry per audit check: `check`, `audit`, `title`, `blocking`, `status` `passed`, `failed`,
+`unsupported` or `not-run`, and `details`, the findings or what a pass found). `check` is one of `manifest`, `target`, `source`, `lint`, `coverage`, `audit`,
 `build`, `backend`, `flows`, `time-budget`, `budgets` or `signoffs`. The HTML page shows
 the same and links to the runner's page.
+
+### Audits
+
+An audit is a gate step that checks the release artifact itself instead of driving the app. A check registered
+with `audit: <name>` is verified by that step, so no flow lists it (coverage reports `audit-flow` if one does). The
+gate runs each audit step once, after the build check, and judges every audit check for the target's platform: a
+`failed` or `unsupported` result, or no result, fails a blocking check. A scoped run (`--flow`) runs no audits.
+`bun run e2e:audit [--artifact <app>]` runs only the audits for this machine's target and prints each result.
+
+`bundle` (`scripts/e2e/audit/bundle.ts`, registered in `checks/packaging-distribution.yaml`) audits release bundle
+hygiene (#153):
+
+| Check | What it verifies |
+|---|---|
+| `DIST-HYG-01` | `Contents/Resources/main.jsbundle` exists, and it and every other script in the bundle are Hermes bytecode, so the release needs no Metro. |
+| `DIST-HYG-02` | No `.map` files and no `sourceMappingURL` in any script. |
+| `DIST-HYG-03` | No `.DS_Store`, `node_modules`, test fixtures, TypeScript, object files, headers or module maps, dSYMs, `*.debug.dylib`, `__preview.dylib`, sanitizer runtimes, project files, keys or certificates. |
+| `DIST-HYG-04` | Every Mach-O binary is stripped: no debug map (`nm -ap` stabs) and no `__DWARF` segment. |
+| `DIST-HYG-05` | Every Mach-O UUID in the app has a dSYM in `build.<platform>.symbols` (the build's `dSYMs/` folder next to the app). |
+| `DIST-HYG-06` | No file holds an absolute path of the build machine (`/Users/<name>/`, `/home/<name>/`, `/var/folders/`, `C:\Users\<name>\`). |
+| `DIST-HYG-07` | No file holds a credential: private keys, AWS, GitHub, Slack, Google, Stripe, npm or API secret keys. |
+| `DIST-HYG-08` | Info.plist: `CFBundleIdentifier` is the manifest's `appId`; package type `APPL`; name; an executable that exists; numeric versions; `LSMinimumSystemVersion` 14 or earlier; `NSPrincipalClass` `NSApplication`; no `NSAllowsArbitraryLoads` and no App Transport Security exception for localhost. |
+| `DIST-HYG-09` | The artifact's size is within `build.<platform>.sizeBudgetMB`. |
+| `DIST-HYG-10` | `Contents/Resources/ThirdPartyNotices.txt` lists packages, each with a license, including every embedded framework. |
+
+On Windows, 02, 03, 06, 07 and 09 run on the artifact's files; 01, 04, 05, 08 and 10 report `unsupported` until there
+is a Windows release build and PE/PDB tooling (#51). Uploading symbols to a crash service is not part of the audit:
+Spark has no symbol server; crash reports are symbolicated locally from the dSYMs ([diagnostics](diagnostics.md)). Notarization is checked by the
+[release harness](release-harness.md), not here. The in-app test driver ships in the Kitchen Sink release build on
+purpose (the gate drives it); keeping it out of consumer release builds is #340.
 
 ### Budgets
 

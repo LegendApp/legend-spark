@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import type { SdkSurface } from "../scripts/api-surface.ts";
+import type { AuditOptions, AuditResult } from "../scripts/e2e/audit/bundle.ts";
 import { checkBudgets, checkFlow, checkGate, checkSignoffs, formatDiagnostic } from "../scripts/e2e/format/parser.ts";
 import { gateCommand, parseGateArgs, runGate, type GateEnv, type GateReport } from "../scripts/e2e/gate/gate.ts";
 import { flowHash } from "../scripts/e2e/gate/manual.ts";
@@ -65,6 +66,7 @@ function env(options: { coldMs?: number | null; elements?: typeof ELEMENTS; blac
     host: () => host ?? AIR,
     source: () => ({ commit: COMMIT, dirty: false }),
     verifySignature: () => undefined,
+    audit: () => [],
     surface: () => SURFACE,
     stdout: line => out.push(line),
     stderr: line => err.push(line),
@@ -173,6 +175,26 @@ describe("release gate", () => {
     const report = await gate(repo(), { verifySignature: () => "a sealed resource is missing or invalid" });
     expect(reasons(report)).toEqual(["build: build/macos-arm64/KitchenSink.app: code signature does not verify: a sealed resource is missing or invalid"]);
     expect(report.build.signature).toBe("failed");
+  });
+
+  test("audit checks run once against the artifact and fail closed; a scoped run has none", async () => {
+    const registry = "area: dist\nprefix: DIST\nchecks:\n  DIST-HYG-01:\n    title: Hermes only\n    audit: bundle\n  DIST-HYG-02:\n    title: No maps\n    audit: bundle\n  DIST-HYG-03:\n    title: Windows only\n    platforms: [windows]\n    audit: bundle\n";
+    const dir = repo({ "e2e/checks/dist.yaml": registry });
+    const calls: unknown[] = [];
+    const results = (...list: AuditResult[]) => (_name: string, options: AuditOptions) => { calls.push(options); return list; };
+    const passed: AuditResult = { check: "DIST-HYG-01", status: "passed", details: ["Hermes bytecode"] };
+    const report = await gate(dir, { audit: results(passed, { check: "DIST-HYG-02", status: "failed", details: ["a.map: source map"] }) });
+    expect(calls).toEqual([{ app: path.join(dir, "build/macos-arm64/KitchenSink.app"), platform: "macos", appId: "so.legend.kitchensink" }]);
+    expect(reasons(report)).toEqual(["audit: DIST-HYG-02 (No maps): a.map: source map"]);
+    expect(report.audits.map(audit => [audit.check, audit.status, audit.details])).toEqual([["DIST-HYG-01", "passed", ["Hermes bytecode"]], ["DIST-HYG-02", "failed", ["a.map: source map"]]]);
+    expect(reasons(await gate(dir, { audit: results(passed, { check: "DIST-HYG-02", status: "unsupported", details: ["needs Windows"] }) }))).toEqual(["audit: DIST-HYG-02 (No maps): unsupported on macos: needs Windows"]);
+    expect(reasons(await gate(dir, { audit: results(passed) }))).toEqual(["audit: DIST-HYG-02 (No maps): the bundle audit has no result for it"]);
+    const missing = await gate(repo({ "e2e/checks/dist.yaml": registry }, { build: false }), { audit: results(passed) });
+    expect(missing.audits.map(audit => audit.status)).toEqual(["not-run", "not-run"]);
+    calls.length = 0;
+    const { env: scopedEnv } = env({ audit: results() });
+    const scoped = await runGate(plan(path.join(dir, "e2e"), AIR, { only: [path.join(dir, "e2e/flows/app/theme.yaml")] }), scopedEnv);
+    expect([scoped.audits, calls]).toEqual([[], []]);
   });
 
   test("uncommitted changes fail: the gate certifies a commit", async () => {

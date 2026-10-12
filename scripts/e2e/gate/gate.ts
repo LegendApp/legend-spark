@@ -5,7 +5,9 @@ import type { SdkSurface } from "../../api-surface.ts";
 import { areaOf, checkCoverage } from "../coverage.ts";
 import { collect } from "../files.ts";
 import { checkFile } from "../format/lint.ts";
+import type { AuditOptions, AuditResult } from "../audit/bundle.ts";
 import { checkSignoffs, FlowFormatError, formatDiagnostic, type Signoff } from "../format/parser.ts";
+import type { Audit } from "../format/primitives.ts";
 import type { ManualStep } from "../format/signoff.ts";
 import type { BackendFactory } from "../runner/backend.ts";
 import { ms, realClock, type Clock, type FlowResult } from "../runner/executor.ts";
@@ -22,6 +24,8 @@ export type GateEnv = {
   source(): { commit: string; dirty: boolean };
   /** Why the artifact's code signature does not verify, or undefined when it does. */
   verifySignature(artifact: string): string | undefined;
+  /** Runs a gate audit step against the artifact (scripts/e2e/audit/). */
+  audit(name: Audit, options: AuditOptions): AuditResult[];
   surface(): SdkSurface;
   stdout(line: string): void;
   stderr(line: string): void;
@@ -43,6 +47,8 @@ export type BudgetEntry = {
   metric: string; flow?: string; machine: string; better: "lower" | "higher"; baseline: number | "not-measured"; limit?: number; value?: number;
   blocking: boolean; status: "pass" | "fail";
 };
+/** One audit check: `not-run` when there was no artifact to audit. `details` are the findings, or what a pass found. */
+export type AuditEntry = { check: string; audit: Audit; title: string; blocking: boolean; status: AuditResult["status"] | "not-run"; details: string[] };
 export type GateReport = {
   version: 1;
   verdict: "PASS" | "FAIL";
@@ -65,6 +71,7 @@ export type GateReport = {
   /** Failures that do not block: non-blocking flows and budgets. */
   warnings: string[];
   coverage?: { required: number; covered: number; problems: number };
+  audits: AuditEntry[];
   flows: GateFlowEntry[];
   excluded: GatePlan["excluded"];
   budgets: BudgetEntry[];
@@ -134,6 +141,26 @@ function judgeFlows(plan: GatePlan, results: FlowResult[] | undefined, runDir: s
     else warnings.push(`non-blocking flow ${id}: ${problem}`);
   }
   return entries;
+}
+
+/**
+ * Runs each audit step its planned checks name, once, and judges every planned check by its result. Fails closed: an
+ * unsupported or missing result fails like a failed one.
+ */
+export function judgeAudits(plan: GatePlan, env: GateEnv, exists: boolean, reasons: Reason[], warnings: string[]): AuditEntry[] {
+  const build = plan.target && plan.manifest.build[plan.target.platform];
+  const results = exists && build ? [...new Set(plan.audits.map(audit => audit.audit))].flatMap(name => env.audit(name, {
+    app: plan.artifact!, platform: plan.target!.platform, appId: plan.manifest.appId, sizeBudgetMB: build.sizeBudgetMB, symbols: plan.symbols,
+  })) : undefined;
+  return plan.audits.map(({ check, audit, title, blocking }) => {
+    const result = results?.find(candidate => candidate.check === check);
+    const entry: AuditEntry = { check, audit, title, blocking, status: result?.status ?? "not-run", details: result?.details ?? [] };
+    const problem = !results ? undefined : !result ? `the ${audit} audit has no result for it`
+      : result.status === "failed" ? result.details.join("\n") : result.status === "unsupported" ? `unsupported on ${plan.target!.platform}: ${result.details.join("; ")}` : undefined;
+    if (problem && blocking) reasons.push({ check: "audit", message: `${check} (${title}): ${problem}` });
+    else if (problem) warnings.push(`non-blocking audit ${check}: ${problem}`);
+    return entry;
+  });
 }
 
 const percent = (value: string) => Number(value.slice(0, -1)) / 100;
@@ -242,6 +269,8 @@ export async function runGate(plan: GatePlan, env: GateEnv, { agent = false } = 
     signature = problem ? "failed" : "verified";
     if (problem) reasons.push({ check: "build", message: `${relative(plan.artifact!)}: code signature does not verify: ${problem}` });
   }
+  if (plan.audits.length) say("audit…");
+  const audits = judgeAudits(plan, env, exists, reasons, warnings);
 
   const names = Object.keys(env.backends);
   const backends = target ? names.map(name => env.backends[name]!({ app: plan.artifact, state: "exact" })).filter(backend => backend.platform === target.platform) : [];
@@ -276,7 +305,7 @@ export async function runGate(plan: GatePlan, env: GateEnv, { agent = false } = 
     host: plan.host, target: target?.id, machine: plan.machine?.id, commit, dirty, ...(plan.scope ? { scope: plan.scope } : {}),
     build: { artifact: plan.artifact && relative(plan.artifact), exists, signature }, backends: backends.map(backend => backend.name),
     reasons, warnings,
-    coverage: coverageSummary, flows, excluded: plan.excluded, budgets, run: runDir && relative(runDir),
+    coverage: coverageSummary, audits, flows, excluded: plan.excluded, budgets, run: runDir && relative(runDir),
   };
 }
 
@@ -330,4 +359,35 @@ export async function gateCommand(args: string[], root: string, env: GateEnv): P
   writeGateReport(report, files, gatePlan.repo);
   env.stdout(options.agent ? agentSummary(report, files, gatePlan.repo) : verdictText(report, files));
   return report.verdict === "PASS" ? 0 : 1;
+}
+
+/**
+ * `bun run e2e:audit`: only the gate's audit steps, for this machine's target, against the manifest's artifact or `--artifact`.
+ * Exit 0 when every audit check passes, 1 otherwise, 2 on a usage error.
+ */
+export function auditCommand(args: string[], root: string, env: GateEnv): number {
+  let artifact: string | undefined;
+  for (let index = 0; index < args.length; index++) {
+    const [flag, inline] = args[index]!.split(/=(.*)/s, 2) as [string, string | undefined];
+    const value = inline ?? args[++index];
+    if (flag !== "--artifact" || !value) { env.stderr("usage: bun run e2e:audit [--artifact <app>]"); return 2; }
+    artifact = path.resolve(value);
+  }
+  let gatePlan: GatePlan;
+  try { gatePlan = plan(root, env.host(), { artifact }); } catch (error) {
+    if (error instanceof UsageError || error instanceof FlowFormatError) { env.stderr(error.message); return error instanceof UsageError ? 2 : 1; }
+    throw error;
+  }
+  const reasons: Reason[] = [...gatePlan.problems], warnings: string[] = [];
+  if (!gatePlan.audits.length) reasons.push({ check: "audit", message: "no audit checks apply to this target" });
+  const exists = !!gatePlan.artifact && existsSync(gatePlan.artifact);
+  if (gatePlan.artifact && !exists) reasons.push({ check: "build", message: `the release build ${repoPath(gatePlan.repo, gatePlan.artifact)} does not exist` });
+  env.stdout(`Audit of ${gatePlan.artifact ? repoPath(gatePlan.repo, gatePlan.artifact) : "no artifact"} for ${gatePlan.target?.id ?? "no target"}`);
+  for (const entry of judgeAudits(gatePlan, env, exists, reasons, warnings)) {
+    env.stdout(`${entry.status.toUpperCase().padEnd(12)}${entry.check}  ${entry.title}${entry.blocking ? "" : " (non-blocking)"}`);
+    for (const detail of entry.details) env.stdout(`              ${detail}`);
+  }
+  for (const reason of reasons.filter(reason => reason.check !== "audit")) env.stdout(`[${reason.check}] ${reason.message}`);
+  env.stdout(`${reasons.length ? "FAIL" : "PASS"}: ${plural(reasons.length, "reason")}${warnings.length ? `, ${plural(warnings.length, "warning")}` : ""}`);
+  return reasons.length ? 1 : 0;
 }

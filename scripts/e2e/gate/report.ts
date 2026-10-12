@@ -21,6 +21,7 @@ export function planText(plan: GatePlan, backends: string[]): string {
     `  lint: every file under e2e/${scope ? " except flows outside the scope" : ""}`,
     scope ? "  coverage: problems in the scope's areas (the whole surface is not required)"
       : `  coverage: registries in ${manifest.coverage.checks}, every gate flow; required: ${[manifest.coverage.exports && "subpaths and exports", manifest.coverage.availability && "availability flags"].filter(Boolean).join(", ") || "none"}`,
+    ...(plan.audits.length ? [`  audits: ${plan.audits.map(audit => `${audit.check} (${audit.audit})`).join(", ")}`] : []),
     `  retries: ${manifest.retries}; whole-run time budget: ${manifest.timeBudget}`,
     `  sign-offs: ${manifest.signoffs}`,
     `  report: ${shown(files.json)}, ${shown(files.html)}`,
@@ -66,6 +67,10 @@ ${report.reasons.length ? report.reasons.map(reason => `<h3>${escape(reason.chec
 ${report.warnings.length ? `<h2>Warnings (${report.warnings.length})</h2>${pre(report.warnings.join("\n"))}` : ""}
 <h2>Coverage</h2>
 <p>${report.coverage ? `${report.coverage.covered} of ${report.coverage.required} required items covered; ${report.coverage.problems} problems` : "not run"}</p>
+<h2>Audits (${report.audits.length})</h2>
+${table(["Check", "Audit", "Blocking", "Status", "Details"], report.audits.map(audit => [
+    `${escape(audit.check)}<br>${escape(audit.title)}`, escape(audit.audit), audit.blocking ? "yes" : "no", `<b>${audit.status}</b>`, pre(audit.details.join("\n")),
+  ]))}
 <h2>Flows (${report.flows.length})</h2>
 ${table(["Run", "Kind", "Blocking", "Status", "Time", "Failure or sign-off"], report.flows.map(flow => [
     escape(flow.id), flowKind(flow.manual), flow.blocking ? "yes" : "no", `<b>${flow.status}</b>`, flow.durationMs === undefined ? "" : `${flow.durationMs}ms`,

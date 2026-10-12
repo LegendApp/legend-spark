@@ -55,6 +55,12 @@
             "minItems": 1,
             "uniqueItems": true,
             "description": "The @legendapp/spark surface this check verifies (see bun run e2e:coverage)."
+          },
+          "audit": {
+            "enum": [
+              "bundle"
+            ],
+            "description": "The gate audit step that verifies this check against the release build, instead of a flow (see docs/e2e-flows.md#audits)."
           }
         },
         "required": [

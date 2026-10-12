@@ -1,0 +1,65 @@
+area: packaging-distribution
+prefix: DIST
+checks:
+  # Release bundle hygiene (#153): the gate's bundle audit (scripts/e2e/audit/bundle.ts) runs these against the release
+  # artifact, before the flows. Windows parts need a Windows release build and PE/PDB tooling (#51) and report unsupported.
+  DIST-HYG-01:
+    title: The release runs without Metro; its embedded main.jsbundle and every other script in the bundle are Hermes bytecode
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#153"
+    audit: bundle
+  DIST-HYG-02:
+    title: The release has no source maps, as .map files or sourceMappingURL references in its scripts
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#153"
+    audit: bundle
+  DIST-HYG-03:
+    title: The release has no development, build or test leftovers (.DS_Store, node_modules, fixtures, TypeScript, object files, headers, dSYMs, debug or sanitizer dylibs, keys)
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#153"
+    audit: bundle
+  DIST-HYG-04:
+    title: Every release binary is stripped, with no debug map or DWARF
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#153"
+    audit: bundle
+  DIST-HYG-05:
+    title: Debug symbols ship separately; the build's symbols folder has a dSYM for every binary UUID in the release
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#153"
+    audit: bundle
+  DIST-HYG-06:
+    title: No file in the release contains an absolute path of the build machine (home folders, temporary folders)
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#153"
+    audit: bundle
+  DIST-HYG-07:
+    title: No file in the release contains a credential (private keys, cloud, GitHub, npm, Slack, Stripe or API secret keys)
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#153"
+    audit: bundle
+  DIST-HYG-08:
+    title: Info.plist has the release keys (identifier, package type, name, executable, versions, minimum macOS 14, principal class) and no App Transport Security exemptions for arbitrary loads or a development server
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#153"
+    audit: bundle
+  DIST-HYG-09:
+    title: The release fits its size budget (gate.yaml build.<platform>.sizeBudgetMB)
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#153"
+    audit: bundle
+  DIST-HYG-10:
+    title: The release has third-party license notices with a license for each package and every embedded framework
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#153"
+    audit: bundle

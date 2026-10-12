@@ -2,7 +2,7 @@ import path from "node:path";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import { isAlias, isMap, isScalar, isSeq, LineCounter, parseAllDocuments, type Document, type Node, type Pair, type YAMLMap } from "yaml";
 import { COMMANDS } from "./commands.ts";
-import { NESTED } from "./primitives.ts";
+import { NESTED, type Audit } from "./primitives.ts";
 import type { Signoff } from "./signoff.ts";
 import { ajv, formatProblem, validators } from "./schemas.ts";
 
@@ -17,7 +17,7 @@ export type FlowHeader = {
   env?: Record<string, string>; onFlowStart?: FlowCommand[]; onFlowComplete?: FlowCommand[];
 };
 export type FlowAst = { file: string; header: FlowHeader; commands: FlowCommand[] };
-export type CheckRegistry = { area: string; prefix: string; checks: Record<string, { title: string; platforms?: Array<"macos" | "windows">; blocking?: boolean; spec?: string; covers?: string[] }> };
+export type CheckRegistry = { area: string; prefix: string; checks: Record<string, { title: string; platforms?: Array<"macos" | "windows">; blocking?: boolean; spec?: string; covers?: string[]; audit?: Audit }> };
 
 export class FlowFormatError extends Error {
   constructor(readonly diagnostics: Diagnostic[]) {
@@ -252,7 +252,7 @@ export function checkRegistry(source: string, file = "<area>.yaml"): Checked<Che
 export type GateTarget = { os: string; arch: "arm64" | "x64"; machine?: string };
 export type GateManifest = {
   suite: string; appId: string;
-  build: Partial<Record<"macos" | "windows", { artifact: string; verifySignature?: boolean }>>;
+  build: Partial<Record<"macos" | "windows", { artifact: string; verifySignature?: boolean; sizeBudgetMB?: number; symbols?: string }>>;
   targets: GateTarget[]; include: string[]; blocking: { tags: string[]; default: boolean }; retries: 0; timeBudget: string | number;
   budgets: string; coverage: { checks: string; exports: boolean; availability: boolean }; signoffs: string; report: { json: string; html: string };
 };
