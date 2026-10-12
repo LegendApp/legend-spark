@@ -243,6 +243,28 @@ app or its state. Pass the artifact the gate tests as `app: "${APP_PATH}"`. The 
   backend ([#51](https://github.com/LegendApp/legend-spark/issues/51)), so it fails as
   `unsupported` until then.
 
+### App icon audit
+
+`assertAppIcon: { app, styles }` is a **runner** command too: it reads the app icon of the
+build on disk, with no backend. The gate's `e2e/flows/appearance-theming/app-icon-*.yaml`
+flows register their checks in `e2e/checks/appearance-theming.yaml`.
+
+- macOS: Info.plist names the asset catalog icon (`CFBundleIconName`) and the `.icns` file
+  (`CFBundleIconFile`). `assetutil --info`, which ships with macOS, lists the catalog: the
+  icon needs 32 to 1024 pixel renditions (16 to 512 points at 2x). The `.icns` file older
+  macOS uses is parsed and must be valid; without a catalog icon it needs those sizes too.
+  `styles` lists the macOS 26 Icon Composer styles the icon must carry: `default`, `dark`,
+  and `clear` and `tinted`, which both render the tintable image stack. Only an icon built
+  from an Icon Composer document has them ([App icons](configuration.md#app-icons)).
+- Windows: `app` is the executable, or the build directory holding one. The first icon
+  group (`RT_GROUP_ICON`), which Explorer and the taskbar draw, needs 16, 20, 24, 32, 40,
+  48, 64 and 256 pixel images. `styles` is macOS-only.
+
+The driver flow `app-icon-styles.yaml` renders the icon in each style in-process:
+`-AppleIconAppearanceTheme` (`RegularLight`, `RegularDark`, `ClearLight`, `ClearDark`,
+`TintedLight`, `TintedDark`) in the launch arguments sets the icon and widget style for
+the driven app only, and `getAppIcon()` draws the icon the way Finder and the Dock do.
+
 There is no `retry` and no sleep command. Every command waits for its target, and a
 flaky flow counts as a failed flow. Use `extendedWaitUntil` to wait for state, or
 `setClock: virtual` with `advanceClock` to step through animation.
@@ -445,7 +467,7 @@ name in `BACKENDS` in `scripts/e2e/runner/run.ts`.
   a TCC grant), `gate.yaml` will gain a per-tag `requireBlackBox` option.
 - `commands` is the dispatch table. If no eligible backend has a command, the flow fails
   with `unsupported`, naming the backend. The runner itself runs `runFlow`, `repeat`,
-  `extendedWaitUntil`, `assertVisible`, `assertNotVisible` and the [security audits](#security-audits).
+  `extendedWaitUntil`, `assertVisible`, `assertNotVisible`, the [security audits](#security-audits) and the [app icon audit](#app-icon-audit).
 - Selectors: implement `elements()` (every visible element, in screen coordinates, with
   `parent` keys) and the runner matches everything, lists candidates and dumps the tree.
   A backend that cannot list elements implements `query()` with the atom keys it

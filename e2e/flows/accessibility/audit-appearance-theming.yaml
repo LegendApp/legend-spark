@@ -1,7 +1,7 @@
 appId: so.legend.spark.examples.kitchensink
 name: Accessibility audit of the appearance-theming screens
 intent: >
-  Every appearance-theming screen of the Kitchen Sink catalog (Appearance preferences) opens from its spark-ks:// link in the
+  Every appearance-theming screen of the Kitchen Sink catalog (Appearance preferences and App icon) opens from its spark-ks:// link in the
   running app, its root renders, and the accessibility audit of the main window finds no errors: every control and
   image has a label or title, every control takes keyboard focus, and all enabled text meets the HIG contrast ratio
   against what is rendered behind it.
@@ -15,3 +15,7 @@ matrix:
 ---
 - launchApp
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: appearance-theming, SCREEN: preferences } }
+# App icon renders its icons asynchronously: wait for them so the audit covers the images.
+- launchApp: { openUrl: "spark-ks://appearance-theming/app-icon", stopApp: false }
+- extendedWaitUntil: { visible: { id: appearance-theming-app-icon-icons }, timeout: 10s }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: appearance-theming, SCREEN: app-icon } }

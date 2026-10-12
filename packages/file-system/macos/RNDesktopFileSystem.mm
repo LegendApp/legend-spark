@@ -129,6 +129,9 @@ RCT_EXPORT_MODULE(NativeDesktopFileSystem)
       if (url) { NSString *identifier = NSUUID.UUID.UUIDString; self.bookmarkAccess[identifier] = url; result = @{ @"id": identifier, @"path": url.path, @"stale": @(stale) }; }
     } else if ([method isEqual:@"closeBookmark"]) {
       [self.bookmarkAccess[args[@"id"]] stopAccessingSecurityScopedResource]; [self.bookmarkAccess removeObjectForKey:args[@"id"]];
+    } else if ([method isEqual:@"appIcon"]) {
+      if (!PositiveSize(args[@"size"])) { SparkInvalid(reject, @"Image size must be an integer from 1 to 1024"); return; }
+      result = SparkFileIconPNG(NSBundle.mainBundle.bundleURL, [args[@"size"] integerValue], &error);
     } else if ([method isEqual:@"fullDiskAccess"]) {
       result = SparkFullDiskAccessStatus(SparkFullDiskAccessProbes(), SparkIsSandboxed(), &error);
     } else if ([method isEqual:@"openFullDiskAccessSettings"]) {

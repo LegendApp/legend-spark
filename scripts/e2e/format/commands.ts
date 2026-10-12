@@ -8,7 +8,7 @@ export const GROUPS = {
   lifecycle: "Lifecycle", windows: "Windows / multiwindow", menus: "Menus", keyboard: "Keyboard & text", pointer: "Pointer / trackpad",
   drag: "Drag & drop", files: "Clipboard / files / dialogs", environment: "Environment / OS state", shell: "Notifications / Dock / taskbar / tray",
   motion: "Motion", visual: "Visual", a11y: "Accessibility", i18n: "i18n", performance: "Performance", network: "Network / processes / updates",
-  state: "State introspection", security: "Security audits", control: "Control flow", manual: "Manual steps",
+  state: "State introspection", security: "Security audits", build: "Build audits", control: "Control flow", manual: "Manual steps",
 } as const;
 
 export type CommandSpec = {
@@ -254,6 +254,9 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   assertEntitlements: spec("security", "Assert every process of the app is signed with only the entitlements `allow` names, each with its reason, and never get-task-allow; an `allow` entry no process carries fails. `sandbox`: whether this is the sandboxed variant, which sandboxes every process.", { app: str, sandbox: bool, allow: dict(str) }, { required: ["app", "sandbox"], runner: true }),
   assertCodeSigning: single("security", "Assert every Mach-O file of the app is signed by the main executable's team (not ad-hoc), every process has the hardened runtime, and none disables library validation.", "app", str, {}, { runner: true }),
   assertLoadPaths: single("security", "Assert no load path lets a library from outside the bundle or the system into the app: LC_RPATH entries, dependencies (weak ones too) and LC_DYLD_ENVIRONMENT. On Windows: the DLL search order, not implemented yet (#51).", "app", str, {}, { runner: true }),
+
+  // Build audits of the build on disk (docs/e2e-flows.md#app-icon-audit)
+  assertAppIcon: single("build", "Assert the app's icon has every size the platform draws: on macOS 32 to 1024 px asset catalog renditions and a valid .icns, on Windows the executable's 16, 20, 24, 32, 40, 48, 64 and 256 px icons. `styles`: the macOS 26 Icon Composer styles it must carry (default, dark, clear, tinted).", "app", str, { styles: list(oneOf("default", "dark", "clear", "tinted")) }, { runner: true }),
 
   // Control flow
   runFlow: spec("control", "Run a subflow file, or inline commands.", { file: str, env: dict(anyStr), commands }, { shorthand: "file", rule: oneKey("file", "commands"), maestro: true }),

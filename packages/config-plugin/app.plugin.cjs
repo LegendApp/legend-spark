@@ -26,6 +26,7 @@ module.exports = function withSparkDesktop(config) {
     mod.modResults = resolveEntitlements({ macos: { entitlements: declaredEntitlements } }, packages);
     return mod;
   });
+  config = require("./icons.cjs").withDesktopIcon(config, "macos");
   config = withAppDelegate(config, (mod) => {
     // Own this adapter; application customizations belong in configuration/plugins.
     mod.modResults.contents = fs.readFileSync(require.resolve("@legendapp/spark-desktop-host/AppDelegate.mm"), "utf8");

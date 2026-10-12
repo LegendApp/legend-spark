@@ -7219,6 +7219,47 @@
               "minLength": 1
             }
           },
+          "assertAppIcon": {
+            "description": "Assert the app's icon has every size the platform draws: on macOS 32 to 1024 px asset catalog renditions and a valid .icns, on Windows the executable's 16, 20, 24, 32, 40, 48, 64 and 256 px icons. `styles`: the macOS 26 Icon Composer styles it must carry (default, dark, clear, tinted).",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "app": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "styles": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "default",
+                      "dark",
+                      "clear",
+                      "tinted"
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "app"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "runFlow": {
             "description": "[maestro] Run a subflow file, or inline commands.",
             "if": {

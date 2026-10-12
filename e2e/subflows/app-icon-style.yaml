@@ -1,0 +1,12 @@
+# Appearance & theming > App icon in one icon and widget style: STYLE is an -AppleIconAppearanceTheme value
+# (RegularLight, RegularDark, ClearLight, ClearDark, TintedLight, TintedDark).
+- launchApp: { openUrl: "spark-ks://appearance-theming/app-icon", arguments: [-AppleIconAppearanceTheme, "${STYLE}"] }
+- extendedWaitUntil: { visible: { id: appearance-theming-app-icon-icons }, timeout: 10s }
+- assertText: { id: appearance-theming-app-icon-availability, equals: '{"available":true}' }
+- assertText: { id: appearance-theming-app-icon-size-16, equals: "16×16" }
+- assertText: { id: appearance-theming-app-icon-size-32, equals: "32×32" }
+- assertText: { id: appearance-theming-app-icon-size-64, equals: "64×64" }
+- assertText: { id: appearance-theming-app-icon-size-128, equals: "128×128" }
+- assertText: { id: appearance-theming-app-icon-size-256, equals: "256×256" }
+- assertText: { id: appearance-theming-app-icon-size-512, equals: "512×512" }
+- assertNotVisible: { id: appearance-theming-app-icon-error }

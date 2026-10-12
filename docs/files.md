@@ -44,6 +44,7 @@ These capabilities have their own availability queries. Each is synchronous, saf
 | Coordination | `getFileCoordinationAvailability()` | yes (`NSFileCoordinator`) | no: there is no coordination service |
 | Open with | `getOpenWithAvailability()` | yes | yes (registered handlers) |
 | File icons | `getFileIconAvailability()` | yes | yes (`IShellItemImageFactory`) |
+| The app's icon | `getAppIconAvailability()` | yes | not yet ([#353](https://github.com/LegendApp/legend-spark/issues/353)) |
 | Thumbnails | `getThumbnailAvailability()` | yes (Quick Look thumbnailing) | yes (`IShellItemImageFactory`) |
 | Quick Look | `getQuickLookAvailability()` | yes | no: needs a hosted preview handler ([#223](https://github.com/LegendApp/legend-spark/issues/223)) |
 | Extended attributes | `getExtendedAttributeAvailability()` | yes | no: alternate data streams have different semantics |
@@ -112,11 +113,12 @@ Without it, a sandboxed app's `createBookmark` and `accessBookmark` reject with 
 
 ```ts
 const icon = await getFileIcon(path, { size: 64 });       // PNG bytes, 64×64
+const appIcon = await getAppIcon({ size: 128 });          // this app's icon, 128×128
 const thumbnail = await getThumbnail(path, { size: 256 }); // PNG bytes within 256×256
 await showQuickLook([path]);
 ```
 
-`size` is the PNG's pixel width and height, an integer from 1 to 1024. `getFileIcon` returns the system icon for an existing item. `getThumbnail` returns a content thumbnail fitted within `size`. A file without one, such as unknown binary content, rejects with `E_UNAVAILABLE`; the icon is never substituted. Both encode PNG natively and return bytes, not base64.
+`size` is the PNG's pixel width and height, an integer from 1 to 1024. `getFileIcon` returns the system icon for an existing item. `getAppIcon` (macOS) returns the app's own icon as Finder and the Dock show it; on macOS 26 and later it is drawn in the user's icon and widget style (default, dark, clear or tinted). A launch argument such as `-AppleIconAppearanceTheme TintedDark` sets the style for that process only. How the app gets its icon: [App icons](configuration.md#app-icons). `getThumbnail` returns a content thumbnail fitted within `size`. A file without one, such as unknown binary content, rejects with `E_UNAVAILABLE`; the icon is never substituted. Both encode PNG natively and return bytes, not base64.
 
 `showQuickLook(paths)` (macOS) shows the shared Quick Look panel for existing items. It activates the app and needs a visible app window: without one it rejects with `E_UNAVAILABLE`. It resolves once the panel is visible, and the user dismisses it.
 

@@ -42,6 +42,7 @@ module.exports = config => {
     return mod;
   });
   const { withMod } = require('@expo/config-plugins');
+  config = require('./icons.cjs').withDesktopIcon(config, 'windows');
   config = withMod(config, { platform: 'windows', mod: 'vcxproj', action: mod => {
     unpackagedApp(mod.modResults);
     return mod;

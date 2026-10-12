@@ -3,6 +3,7 @@ import { macOSReleaseSettings } from "./macos-release.ts";
 import { projectPlatform, architecture, type DesktopPlatform } from "./platform.ts";
 import { resolveHelpers } from "./helpers.ts";
 import { readConfig as readAppConfig, prepareConfig, writeUpdates, statePath, isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
+import { iconDigest } from "@legendapp/spark-desktop-config/icons.cjs";
 export { readAppConfig, prepareConfig, writeUpdates, statePath, isUniversal };
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
@@ -277,8 +278,11 @@ function nativeSourceNames(root: string) {
     .flatMap(directory => readdirSync(path.join(root, directory), { recursive: true }).map(name => path.join(directory, String(name)))).sort();
 }
 export function nativePreparationInputs(root: string, packages: NativePackage[]) {
+  const config = readAppConfig(root);
   return {
-    config: readAppConfig(root),
+    config,
+    // The icon's contents: editing it in place keeps the same configuration.
+    icon: iconDigest(config.expo, root, config.expo.platforms[0]),
     packages: packages.map((p) => [
       p.name,
       // CocoaPods records physical source paths, even for identical packages.

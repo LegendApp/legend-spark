@@ -31,3 +31,35 @@ checks:
     spec: "#97 APPR.api"
     covers:
       - ./system#getSystemAvailability
+  APPR-ICONSIZE-01:
+    title: "The release build's app icon has every size macOS draws: Info.plist names the asset catalog icon and the .icns file, the catalog has 32 to 1024 pixel renditions (16 to 512 points at 2x) and the .icns file is valid (assertAppIcon)"
+    platforms: [macos]
+    blocking: true
+    spec: "#99 APPR.icons; macos.icon or expo.icon (docs/configuration.md#app-icons)"
+  APPR-ICONSTYLE-01:
+    title: "The release build's app icon carries the macOS 26 Icon Composer styles: image stacks for the default, dark and tintable appearances, which the clear and tinted styles render (assertAppIcon styles)"
+    platforms: [macos]
+    blocking: true
+    spec: "#99 APPR.icons; an Icon Composer .icon document in macos.icon"
+  APPR-ICONDRAW-01:
+    title: "getAppIcon() draws the app's icon as Finder and the Dock show it at 16 to 512 pixels, and in the default, dark, clear and tinted styles (light and dark) each rendering matches its golden; each style is set with -AppleIconAppearanceTheme for the driven process only, never the Mac's settings or Dock"
+    platforms: [macos]
+    blocking: true
+    spec: "#99 APPR.icons"
+    covers:
+      - ./files#getAppIcon
+      - ./files#getAppIconAvailability
+      - ./files#getAppIconAvailability().available
+  APPR-ICONWIN-01:
+    title: "The Windows build's executable icon (its first RT_GROUP_ICON, which Explorer, the taskbar, Start and the title bar draw) has 16, 20, 24, 32, 40, 48, 64 and 256 pixel images (assertAppIcon; first Windows run: #353)"
+    platforms: [windows]
+    blocking: true
+    spec: "#99 APPR.icons; expo.icon (docs/configuration.md#app-icons)"
+  APPR-ICONUNSUP-01:
+    title: "On Windows getAppIconAvailability() reports unsupported-platform and the App icon screen shows SparkError:E_UNSUPPORTED_PLATFORM from getAppIcon() (implementation: #353)"
+    platforms: [windows]
+    blocking: true
+    spec: "#99 APPR.icons"
+    covers:
+      - ./files#getAppIconAvailability
+      - ./files#getAppIconAvailability().available

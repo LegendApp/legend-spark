@@ -93,11 +93,19 @@ function imageSize(options: FileImageOptions, label: string) {
 }
 const png = (value: unknown) => isBuffer(value) && value.byteLength > 8 && new Uint8Array(value, 0, 4).join() === "137,80,78,71";
 export function getFileIconAvailability(): Availability { return featureAvailability("fileIcons"); }
+export function getAppIconAvailability(): Availability { return featureAvailability("appIcon"); }
 export function getThumbnailAvailability(): Availability { return featureAvailability("thumbnails"); }
 export function getQuickLookAvailability(): Availability { return featureAvailability("quickLook"); }
 /** The system icon for an existing file, as size×size PNG bytes (macOS NSWorkspace; Windows IShellItemImageFactory). */
 export async function getFileIcon(path: string, options: FileImageOptions): Promise<Uint8Array> {
   return nativeBytes(await featureCall<ArrayBuffer>("fileIcons", "File icons", "icon", { path: absolute(path), size: imageSize(options, "getFileIcon") }, png));
+}
+/**
+ * The app's own icon as Finder and the Dock show it, as size×size PNG bytes (macOS). On macOS 26 and later it is drawn
+ * in the user's icon and widget style: default, dark, clear or tinted.
+ */
+export async function getAppIcon(options: FileImageOptions): Promise<Uint8Array> {
+  return nativeBytes(await featureCall<ArrayBuffer>("appIcon", "The app icon", "appIcon", { size: imageSize(options, "getAppIcon") }, png));
 }
 /** A content thumbnail as PNG bytes, fitted within size. Rejects with E_UNAVAILABLE when the file has no thumbnail; it never substitutes the icon. */
 export async function getThumbnail(path: string, options: FileImageOptions): Promise<Uint8Array> {

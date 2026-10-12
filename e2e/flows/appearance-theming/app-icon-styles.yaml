@@ -1,0 +1,28 @@
+appId: so.legend.spark.examples.kitchensink
+name: The app icon renders in each macOS 26 icon style
+intent: >
+  Appearance & theming > App icon draws getAppIcon() at 16 to 512 pixels: the icon Finder and the Dock show. Each
+  launch sets the icon and widget style with -AppleIconAppearanceTheme in the app's argument domain, which applies to
+  the driven process only (docs/test-driver.md#pinned-host-settings), so the Mac's settings and its Dock are
+  untouched. The default and dark styles and the light and dark variants of the clear and tinted styles each match their golden
+  (the app's own appearance stays light; the shell sidebar is masked). Each PNG has the
+  requested pixel size.
+checks: [APPR-ICONDRAW-01]
+tags: [appearance-theming]
+platforms: [macos]
+matrix:
+  appearance: [light]
+  locale: [en]
+---
+- runFlow: { file: subflows/app-icon-style.yaml, env: { STYLE: RegularLight } }
+- assertScreenshot: { golden: appearance-theming-app-icon-default, mask: [{ id: infra-shell-sidebar }] }
+- runFlow: { file: subflows/app-icon-style.yaml, env: { STYLE: RegularDark } }
+- assertScreenshot: { golden: appearance-theming-app-icon-dark, mask: [{ id: infra-shell-sidebar }] }
+- runFlow: { file: subflows/app-icon-style.yaml, env: { STYLE: ClearLight } }
+- assertScreenshot: { golden: appearance-theming-app-icon-clear-light, mask: [{ id: infra-shell-sidebar }] }
+- runFlow: { file: subflows/app-icon-style.yaml, env: { STYLE: ClearDark } }
+- assertScreenshot: { golden: appearance-theming-app-icon-clear-dark, mask: [{ id: infra-shell-sidebar }] }
+- runFlow: { file: subflows/app-icon-style.yaml, env: { STYLE: TintedLight } }
+- assertScreenshot: { golden: appearance-theming-app-icon-tinted-light, mask: [{ id: infra-shell-sidebar }] }
+- runFlow: { file: subflows/app-icon-style.yaml, env: { STYLE: TintedDark } }
+- assertScreenshot: { golden: appearance-theming-app-icon-tinted-dark, mask: [{ id: infra-shell-sidebar }] }
