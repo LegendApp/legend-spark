@@ -30,12 +30,16 @@ export const playCues = (target: MotionTarget | null, forward: boolean, way: Way
 
 export const startLong = (target: MotionTarget | null, way: Way) => animate(target, { translateX: timing(way * TRACK, { durationMs: 10000, easing: "linear" }) }).finished;
 
-/** The motion environment of `target`'s window: `refresh` reads it, and Reduce Motion and Low Power Mode changes re-read it. */
-export function useMotionEnvironment(target: RefObject<MotionTarget | null>) {
+const ENVIRONMENT = ["reduceMotion", "lowPowerMode", "maximumFrameRate", "frameRate", "windowVisible"] as const;
+/**
+ * The motion environment of `target`'s window, or of the main display without a target (`keys` of it): `refresh` reads
+ * it, and Reduce Motion and Low Power Mode changes re-read it.
+ */
+export function useMotionEnvironment(target: RefObject<MotionTarget | null> | undefined, keys: readonly (typeof ENVIRONMENT)[number][] = ENVIRONMENT) {
   const [text, setText] = useState("");
   const report = useCallback((error: unknown) => setText(describeError(error)), []);
-  const refresh = useCallback(() => { getMotionEnvironment(target.current).then(({ reduceMotion, lowPowerMode, maximumFrameRate, frameRate, windowVisible }) =>
-    setText(JSON.stringify({ reduceMotion, lowPowerMode, maximumFrameRate, frameRate, windowVisible })), report); }, [target, report]);
+  const refresh = useCallback(() => { getMotionEnvironment(target ? target.current : undefined).then(environment =>
+    setText(JSON.stringify(Object.fromEntries(keys.map(key => [key, environment[key]])))), report); }, [target, keys, report]);
   useRegistrations(hold => { hold(onSystemEvent(refresh, { types: ["accessibilityDisplayChanged", "lowPowerChanged"] })); }, report, [refresh, report]);
   return { text, refresh };
 }

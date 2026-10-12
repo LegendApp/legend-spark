@@ -6,7 +6,9 @@ intent: >
   masked. Springs, Keyframes and timelines, and Accessibility, power and lifecycle are at rest; the last masks its
   environment readout, which reports the Mac's display. Scroll link and JS block starts a looping runner on mount,
   so the motion clock is switched to virtual before that screen opens: the runner mounts paused at its start. Layout,
-  presence and shared elements is at rest (its rows' enter animations start where they are).
+  presence and shared elements is at rest (its rows' enter animations start where they are). Visual effects is at rest.
+  Text and symbols opens on the virtual clock, which then advances 2 s so its typewriter has typed its first phrase; its
+  symbol availability readout, which depends on the Mac's macOS, is masked.
 checks: [MOT-VISUAL-01]
 tags: [motion-system]
 platforms: [macos]
@@ -29,6 +31,13 @@ matrix:
 - assertVisible: { id: motion-system-layout-root }
 - assertVisible: { id: motion-system-layout-thumb-3 }
 - assertScreenshot: { golden: motion-system-layout, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://motion-system/visual-effects", stopApp: false }
+- assertVisible: { id: motion-system-visual-effects-root }
+- assertScreenshot: { golden: motion-system-visual-effects, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://motion-system/text-and-symbols", stopApp: false }
+- assertVisible: { id: motion-system-text-and-symbols-root }
+- advanceClock: 2000ms
+- assertScreenshot: { golden: motion-system-text-and-symbols, mask: [{ id: infra-shell-sidebar }, { id: motion-system-text-and-symbols-symbol-availability }] }
 - launchApp: { openUrl: "spark-ks://motion-system/accessibility-power", stopApp: false }
 - assertVisible: { id: motion-system-accessibility-power-root }
 - assertScreenshot: { golden: motion-system-accessibility-power, mask: [{ id: infra-shell-sidebar }, { id: motion-system-accessibility-power-environment }] }

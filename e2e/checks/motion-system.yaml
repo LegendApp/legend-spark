@@ -115,7 +115,7 @@ checks:
     covers:
       - ./motion#MotionView
   MOT-VISUAL-01:
-    title: The Springs, Keyframes and timelines, Scroll link and JS block, Layout, presence and shared elements, and Accessibility, power and lifecycle screens match their approved goldens in light and dark, English and Arabic, with MotionViews at rest or paused by the virtual clock
+    title: The Springs, Keyframes and timelines, Scroll link and JS block, Layout, presence and shared elements, Visual effects, Text and symbols, and Accessibility, power and lifecycle screens match their approved goldens in light and dark, English and Arabic, with MotionViews at rest or paused by the virtual clock
     platforms: [macos]
     blocking: true
     spec: "docs/e2e-flows.md Visual goldens; #227"
@@ -164,3 +164,89 @@ checks:
     spec: "#177 MOT.a11y"
     covers:
       - ./motion#animate
+  MOT-COLOR-01:
+    title: A background color animates in OKLCH (halfway from blue to yellow the presented color is a saturated green, not gray), the hue takes the shorter way round, and the view settles at the target's OKLCH coordinates
+    platforms: [macos]
+    blocking: true
+    spec: "#176 MOT.effects"
+    covers:
+      - ./motion#animate
+      - ./motion#timing
+      - ./motion#getMotionState
+  MOT-EFFECTS-01:
+    title: Corner radius, shadow opacity, radius and offset spring together with scale from the values the view's style set, and a blur radius follows a timing curve, each on its own layer key path, settling at its target
+    platforms: [macos]
+    blocking: true
+    spec: "#176 MOT.effects"
+    covers:
+      - ./motion#animate
+      - ./motion#spring
+  MOT-3D-01:
+    title: rotateX and rotateY turn a view in perspective and settle at their targets
+    platforms: [macos]
+    blocking: true
+    spec: "#176 MOT.effects"
+    covers:
+      - ./motion#animate
+  MOT-MASK-01:
+    title: Mask insets wipe content out and back from its leading edge and an iris opens a circle from the centre, as the captures where it starts and ends show
+    platforms: [macos]
+    blocking: true
+    spec: "#176 MOT.effects"
+    covers:
+      - ./motion#setMotionValues
+      - ./motion#animate
+  MOT-FXREDUCE-01:
+    title: With Reduce Motion on (simulated), a 3D flip changes at once and fades in within 250 ms, and a color animation fades over 200 ms
+    platforms: [macos]
+    blocking: true
+    spec: "#176 MOT.effects, #177 MOT.a11y"
+    covers:
+      - ./motion#animate
+  MOT-PATH-01:
+    title: motionPath moves a view along an SVG path as keyframes the engine plays on the compositor, turned to the path's heading, and it settles at the path's end
+    platforms: [macos]
+    blocking: true
+    spec: "#176 MOT.effects"
+    covers:
+      - ./motion#motionPath
+      - ./motion#animate
+  MOT-NUMBER-01:
+    title: MotionNumber rolls only the digits that change, each with a spring on its own MotionView, and shows the formatted number
+    platforms: [macos]
+    blocking: true
+    spec: "#176 MOT.effects"
+    covers:
+      - ./motion#MotionNumber
+  MOT-TEXT-01:
+    title: MotionText crossfades changed characters in place and types new text one character after another, settling on the virtual clock
+    platforms: [macos]
+    blocking: true
+    spec: "#176 MOT.effects"
+    covers:
+      - ./motion#MotionText
+  MOT-SYMBOL-01:
+    title: Symbol effects (bounce, pulse, wiggle, rotate, breathe, draw off and on) play on a MotionSymbol and report what played, availability reports each effect truthfully, stopping removes them, and a name change replaces the symbol with a transition
+    platforms: [macos]
+    blocking: true
+    spec: "#176 MOT.effects"
+    covers:
+      - ./motion#MotionSymbol
+      - ./motion#playSymbolEffect
+      - ./motion#stopSymbolEffects
+      - ./motion#getSymbolEffectAvailability
+      - ./motion#getSymbolEffectAvailability(bounce).available
+      - ./motion#getSymbolEffectAvailability(pulse).available
+      - ./motion#getSymbolEffectAvailability(wiggle).available
+      - ./motion#getSymbolEffectAvailability(rotate).available
+      - ./motion#getSymbolEffectAvailability(breathe).available
+      - ./motion#getSymbolEffectAvailability(drawOn).available
+      - ./motion#getSymbolEffectAvailability(drawOff).available
+      - ./motion#getSymbolEffectAvailability(replace).available
+  MOT-SYMREDUCE-01:
+    title: With Reduce Motion on (simulated), a symbol bounce plays its pulse alternate and drawing a symbol off or on fades it
+    platforms: [macos]
+    blocking: true
+    spec: "#176 MOT.effects, #177 MOT.a11y"
+    covers:
+      - ./motion#playSymbolEffect

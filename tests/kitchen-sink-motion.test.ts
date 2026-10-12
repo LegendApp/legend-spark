@@ -11,6 +11,8 @@ const { state, native, tags, system } = vi.hoisted(() => ({
     stopAnimation: vi.fn(async (_id: string) => {}), set: vi.fn(async (_json: string) => {}), stop: vi.fn(async (_json: string) => {}),
     getState: vi.fn(async (_tag: number) => ""), link: vi.fn(async (_json: string) => {}), unlink: vi.fn(async (_id: string) => {}), recordFrames: vi.fn(async (_json: string) => ""),
     environment: vi.fn(async (_tag: number) => JSON.stringify({ reduceMotion: false, lowPowerMode: false, maximumFrameRate: 120, frameRate: 120, windowVisible: true })),
+    playSymbolEffect: vi.fn(async (json: string) => JSON.stringify({ played: JSON.parse(json).effect })), removeSymbolEffect: vi.fn(async (_json: string) => {}),
+    hasSymbol: vi.fn((_name: string) => true), supportsSymbolEffect: vi.fn((_name: string) => true),
   },
   tags: new WeakMap<object, number>(),
   system: { handler: undefined as undefined | (() => void), options: undefined as unknown, removed: 0 },
@@ -21,18 +23,25 @@ vi.mock("react-native", () => ({
   UIManager: { hasViewManagerConfig: () => true },
   TurboModuleRegistry: { get: () => native },
   findNodeHandle: (target: object) => tags.get(target) ?? null,
-  StyleSheet: { flatten: (style: unknown) => style },
+  StyleSheet: { flatten: (style: unknown) => style, absoluteFill: { position: "absolute" } },
 }));
-vi.mock("../packages/motion/src/motion-view-host", () => ({ getNativeMotionView: () => "SparkMotionView" }));
+vi.mock("../packages/motion/src/motion-view-host", () => ({ getNativeMotionView: () => "SparkMotionView", getNativeMotionSymbol: () => "SparkMotionSymbol" }));
 vi.mock("../examples/kitchen-sink/shell/app-controller", () => ({ useI18n: () => ({ locale: state.locale, rtl: state.locale === "ar" }) }));
 vi.mock("@legendapp/spark/ui", () => ({ Button: (props: object) => React.createElement("Button", props) }));
+vi.mock("uniwind", () => ({ useResolveClassNames: () => ({}) }));
 vi.mock("@legendapp/spark/system", () => ({
   onSystemEvent: async (handler: () => void, options: unknown) => { system.handler = handler; system.options = options; return { remove: async () => { system.removed++; } }; },
 }));
+import { VisualEffects } from "../examples/kitchen-sink/screens/motion-system/EffectsScreen";
 import { AccessibilityPower, ScrollAndFrames, Springs, Timelines } from "../examples/kitchen-sink/screens/motion-system/MotionScreens";
+import { TextAndSymbols } from "../examples/kitchen-sink/screens/motion-system/TextSymbolsScreen";
 
 let rendered: any, nextTag = 100;
-const state0 = (x: number, v: number) => JSON.stringify({ values: { opacity: 1, translateX: x, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 }, velocities: { opacity: 0, translateX: v, translateY: 0, scaleX: 0, scaleY: 0, rotate: 0 }, animating: v ? ["translateX"] : [] });
+/** Every engine property at rest (docs/motion.md#properties-and-units), with translateX at `x` moving at `v`. */
+const EFFECTS = ["rotateX", "rotateY", "perspective", "borderRadius", "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha", "shadowOpacity", "shadowRadius",
+  "shadowOffsetX", "shadowOffsetY", "blur", "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius"];
+const rest = Object.fromEntries(EFFECTS.map(property => [property, 0]));
+const state0 = (x: number, v: number) => JSON.stringify({ values: { ...rest, opacity: 1, translateX: x, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 }, velocities: { ...rest, opacity: 0, translateX: v, translateY: 0, scaleX: 0, scaleY: 0, rotate: 0 }, animating: v ? ["translateX"] : [] });
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   state.locale = "en"; state.os = "macos";
@@ -51,7 +60,7 @@ const plans = () => native.run.mock.calls.map(([json]) => JSON.parse(json));
 test("the motion screens are registered in the motion-system area", async () => {
   const { default: registered } = await import("../examples/kitchen-sink/screens/motion-system/index");
   expect(registered.area).toBe("motion-system");
-  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames", "layout", "accessibility-power"]);
+  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames", "layout", "visual-effects", "text-and-symbols", "accessibility-power"]);
 });
 
 test("springs: preset parameters, playing every preset, and moving with the reading direction", async () => {
@@ -160,9 +169,60 @@ test("accessibility, power and lifecycle: the environment follows system events,
   expect(system.removed).toBe(1);
 });
 
+test("visual effects: the swatch animates in OKLCH and reports its color, Lift springs the corners and shadow, Travel follows a path", async () => {
+  await mount(VisualEffects);
+  const id = (part: string) => `motion-system-visual-effects-${part}`;
+  // The card's background and corners come from its style; motion takes them over when Lift drives them.
+  expect(byID(id("card")).props.style).toMatchObject({ backgroundColor: "#0ea5e9", borderRadius: 4 });
+  native.getState.mockResolvedValue(JSON.stringify({ values: { ...JSON.parse(state0(0, 0)).values, backgroundColorL: 0.8606, backgroundColorC: 0.1731, backgroundColorH: 91.94, backgroundColorAlpha: 1 },
+    velocities: JSON.parse(state0(0, 0)).velocities, animating: [] }));
+  await press(id("color"));
+  expect(Object.keys(plans()[0].groups[0].tracks)).toEqual(["backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha"]);
+  expect(plans()[0].groups[0].tracks.backgroundColorL).toMatchObject({ type: "timing", durationMs: 1200 });
+  expect(text(id("color-result"))).toBe('{"finished":true,"color":"oklch(0.8606 0.1731 91.94 / 1)"}');
+  await press(id("lift"));
+  expect(Object.keys(plans()[1].groups[0].tracks)).toEqual(["borderRadius", "shadowOpacity", "shadowRadius", "shadowOffsetY", "scaleX", "scaleY"]);
+  await press(id("travel"));
+  const path = plans()[2].groups[0].tracks;
+  expect(path.translateX).toMatchObject({ type: "keyframes", durationMs: 900, easings: [[0, 0, 1, 1]] });
+  expect(path.translateX.values.at(-1)).toBeCloseTo(160, 9);
+  expect(path.rotate.values.at(-1)).toBeCloseTo(-38.42, 2);
+  await act(async () => rendered.unmount()); rendered = undefined;
+  // Right to left, the path runs the other way.
+  state.locale = "ar"; native.run.mockClear();
+  await mount(VisualEffects);
+  await press(id("travel"));
+  expect(plans()[0].groups[0].tracks.translateX.values.at(-1)).toBeCloseTo(-160, 9);
+});
+
+test("text and symbols: digits roll, text crossfades and types, and each symbol effect reports what played", async () => {
+  await mount(TextAndSymbols);
+  const id = (part: string) => `motion-system-text-and-symbols-${part}`;
+  expect(text(id("symbol-availability"))).toBe('{"bounce":true,"pulse":true,"wiggle":true,"rotate":true,"breathe":true,"drawOff":true,"drawOn":true,"replace":true}');
+  // The first phrase types itself at mount: one plan per character.
+  expect(plans()).toHaveLength("Hello there".length);
+  native.run.mockClear();
+  await press(id("add-one"));
+  expect(plans()).toEqual([expect.objectContaining({ groups: [expect.objectContaining({ tracks: { translateY: expect.objectContaining({ type: "spring" }) } })] })]);
+  expect(text(id("number-value"))).toBe('{"value":1235}');
+  native.run.mockClear();
+  await press(id("swap"));
+  expect(plans().length).toBeGreaterThan(0);
+  expect(plans().every(plan => plan.groups[0].tracks.opacity.type === "timing")).toBe(true);
+  for (const effect of ["bounce", "pulse", "wiggle", "rotate", "breathe", "drawOff", "drawOn"]) {
+    await press(id(effect));
+    expect(text(id("effect-result"))).toBe(JSON.stringify({ played: effect }));
+  }
+  expect(JSON.parse(native.playSymbolEffect.mock.calls[0]![0])).toMatchObject({ effect: "bounce", direction: "up" });
+  await press(id("stop"));
+  expect(text(id("effect-result"))).toBe('{"stopped":true}');
+  await press(id("replace"));
+  expect(byID(id("bell")).props).toMatchObject({ name: "bell.slash.fill", replaceTransition: "downUp" });
+});
+
 test("Windows shows the typed unsupported error where the motion views would be, and sends nothing", async () => {
   state.os = "windows";
-  for (const [screen, id] of [[Springs, "springs"], [Timelines, "timelines"], [ScrollAndFrames, "scroll-and-frames"], [AccessibilityPower, "accessibility-power"]] as const) {
+  for (const [screen, id] of [[Springs, "springs"], [Timelines, "timelines"], [ScrollAndFrames, "scroll-and-frames"], [VisualEffects, "visual-effects"], [TextAndSymbols, "text-and-symbols"], [AccessibilityPower, "accessibility-power"]] as const) {
     await mount(screen);
     expect(text(`motion-system-${id}-availability`)).toBe('{"available":false,"reason":"unsupported-platform"}');
     expect(text(`motion-system-${id}-error`)).toBe("SparkError:E_UNSUPPORTED_PLATFORM");
