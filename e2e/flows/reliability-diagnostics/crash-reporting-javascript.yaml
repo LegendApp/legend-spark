@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: A fatal JavaScript error is recorded with its stack
+intent: >
+  With consent, "JavaScript TypeError" throws a real TypeError from a named function and records it as
+  React Native's global handler would for a fatal error, synchronously, without passing it on, so the
+  app keeps running. The report keeps the error's name and the engine's stack, and getCrashReports
+  lists it.
+checks: [REL-CRASH-04]
+tags: [reliability-diagnostics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/crash-reporting" }
+- extendedWaitUntil: { visible: { text: "consent off", within: { id: reliability-diagnostics-crash-reporting-state } }, timeout: 10s }
+- tapOn: { id: reliability-diagnostics-crash-reporting-consent }
+- extendedWaitUntil: { visible: { text: "consent on", within: { id: reliability-diagnostics-crash-reporting-state } }, timeout: 5s }
+- tapOn: { id: reliability-diagnostics-crash-reporting-simulate-javascript }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-result, text: '{"kind":"javascript","report":"javascript","simulated":true,"name":"TypeError","hasStack":true,"listed":true}' }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-crash-reporting-count, equals: 1 report }
+- assertVisible: { id: reliability-diagnostics-crash-reporting-report-1 }
+- scroll: { on: { id: reliability-diagnostics-crash-reporting-root }, direction: down, amount: 2000, precise: true }
+- takeScreenshot: crash-javascript-report

@@ -1,0 +1,26 @@
+appId: so.legend.spark.examples.kitchensink
+name: Crash reports stay across a relaunch until deleted
+intent: >
+  With consent, a simulated bad memory access and a JavaScript TypeError leave two reports. A plain
+  relaunch lists both again, newest first. "Delete all reports" calls deleteCrashReports() and the list
+  is empty, also after another relaunch.
+checks: [REL-CRASH-05]
+tags: [reliability-diagnostics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/crash-reporting" }
+- extendedWaitUntil: { visible: { text: "consent off", within: { id: reliability-diagnostics-crash-reporting-state } }, timeout: 10s }
+- tapOn: { id: reliability-diagnostics-crash-reporting-consent }
+- extendedWaitUntil: { visible: { text: "consent on", within: { id: reliability-diagnostics-crash-reporting-state } }, timeout: 5s }
+- tapOn: { id: reliability-diagnostics-crash-reporting-simulate-badAccess }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-result, text: '{"kind":"badAccess","report":"native","simulated":true,"signal":"SIGSEGV","namesCrash":true,"framesLocated":true,"listed":true}' }, timeout: 40s }
+- tapOn: { id: reliability-diagnostics-crash-reporting-simulate-javascript }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-result, text: '{"kind":"javascript","report":"javascript","simulated":true,"name":"TypeError","hasStack":true,"listed":true}' }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-crash-reporting-count, equals: 2 reports }
+- launchApp: { openUrl: "spark-ks://reliability-diagnostics/crash-reporting" }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-count, text: "2 reports" }, timeout: 10s }
+- tapOn: { id: reliability-diagnostics-crash-reporting-delete }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-count, text: "0 reports" }, timeout: 5s }
+- launchApp: { openUrl: "spark-ks://reliability-diagnostics/crash-reporting" }
+- extendedWaitUntil: { visible: { text: "consent on", within: { id: reliability-diagnostics-crash-reporting-state } }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-crash-reporting-count, equals: 0 reports }

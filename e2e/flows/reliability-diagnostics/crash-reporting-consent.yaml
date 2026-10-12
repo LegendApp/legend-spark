@@ -1,0 +1,26 @@
+appId: so.legend.spark.examples.kitchensink
+name: Crash reporting is opt-in, and consent survives a relaunch
+intent: >
+  The Crash reporting screen shows getCrashReportingAvailability() as JSON: available on macOS. After
+  clearState consent is off, so simulateCrash rejects SparkError:E_PERMISSION_DENIED and nothing is
+  recorded. Allowing crash reporting turns consent on; a plain relaunch still finds it on, and turning
+  it off makes simulateCrash reject again.
+checks: [REL-CRASH-01]
+tags: [reliability-diagnostics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/crash-reporting" }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-root }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-crash-reporting-availability, equals: '{"available":true}' }
+- extendedWaitUntil: { visible: { text: "consent off", within: { id: reliability-diagnostics-crash-reporting-state } }, timeout: 5s }
+- tapOn: { id: reliability-diagnostics-crash-reporting-simulate-badAccess }
+- extendedWaitUntil: { visible: { text: "SparkError:E_PERMISSION_DENIED", within: { id: reliability-diagnostics-crash-reporting-result } }, timeout: 5s }
+- assertText: { id: reliability-diagnostics-crash-reporting-count, equals: 0 reports }
+- tapOn: { id: reliability-diagnostics-crash-reporting-consent }
+- extendedWaitUntil: { visible: { text: "consent on", within: { id: reliability-diagnostics-crash-reporting-state } }, timeout: 5s }
+- launchApp: { openUrl: "spark-ks://reliability-diagnostics/crash-reporting" }
+- extendedWaitUntil: { visible: { text: "consent on", within: { id: reliability-diagnostics-crash-reporting-state } }, timeout: 10s }
+- tapOn: { id: reliability-diagnostics-crash-reporting-consent }
+- extendedWaitUntil: { visible: { text: "consent off", within: { id: reliability-diagnostics-crash-reporting-state } }, timeout: 5s }
+- tapOn: { id: reliability-diagnostics-crash-reporting-simulate-abort }
+- extendedWaitUntil: { visible: { text: "SparkError:E_PERMISSION_DENIED", within: { id: reliability-diagnostics-crash-reporting-result } }, timeout: 5s }

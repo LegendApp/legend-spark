@@ -90,3 +90,53 @@ checks:
     spec: "#166 REL.api-hang; Windows implementation in #304"
     covers:
       - ./diagnostics#getHangWatchdogAvailability().available
+  REL-CRASH-01:
+    title: getCrashReportingAvailability reports crash reporting available on macOS; consent starts off, simulateCrash then rejects SparkError:E_PERMISSION_DENIED, and consent once given survives a relaunch
+    platforms: [macos]
+    blocking: true
+    spec: "#164 REL.api-crash"
+    covers:
+      - ./diagnostics#getCrashReportingAvailability
+      - ./diagnostics#getCrashReportingAvailability().available
+      - ./diagnostics#getCrashReportingConsent
+      - ./diagnostics#setCrashReportingConsent
+      - ./diagnostics#simulateCrash
+  REL-CRASH-02:
+    title: A bad memory access in a helper process is recorded by its signal handler and reported as SIGSEGV, with a stack that names SparkCrashNow and locates every frame by image, offset and UUID, and getCrashReports lists it
+    platforms: [macos]
+    blocking: true
+    spec: "#164 REL.api-crash"
+    covers:
+      - ./diagnostics#simulateCrash
+      - ./diagnostics#getCrashReports
+  REL-CRASH-03:
+    title: abort() and an uncaught NSException are reported as SIGABRT (the exception with its name), and a stack overflow as SIGSEGV whose stack names the recursion, recorded on the alternate signal stack
+    platforms: [macos]
+    blocking: true
+    spec: "#164 REL.api-crash"
+    covers:
+      - ./diagnostics#simulateCrash
+      - ./diagnostics#getCrashReports
+  REL-CRASH-04:
+    title: A fatal JavaScript TypeError is recorded synchronously through the JavaScript handler and reported with its name and the engine's stack
+    platforms: [macos]
+    blocking: true
+    spec: "#164 REL.api-crash"
+    covers:
+      - ./diagnostics#simulateCrash
+      - ./diagnostics#getCrashReports
+  REL-CRASH-05:
+    title: Reports stay on disk across a relaunch, and deleteCrashReports removes them all
+    platforms: [macos]
+    blocking: true
+    spec: "#164 REL.api-crash"
+    covers:
+      - ./diagnostics#getCrashReports
+      - ./diagnostics#deleteCrashReports
+  REL-CRASH-06:
+    title: On Windows crash reporting reports unsupported-platform, and reading consent and simulating a crash reject SparkError:E_UNSUPPORTED_PLATFORM
+    platforms: [windows]
+    blocking: true
+    spec: "#164 REL.api-crash; Windows implementation in #343"
+    covers:
+      - ./diagnostics#getCrashReportingAvailability().available

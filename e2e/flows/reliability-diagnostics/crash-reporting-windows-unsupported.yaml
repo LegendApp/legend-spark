@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Crash reporting is typed unsupported on Windows
+intent: >
+  On Windows the Crash reporting screen reports unsupported-platform. Reading consent fails with
+  SparkError:E_UNSUPPORTED_PLATFORM, and simulating a crash rejects the same way without starting
+  anything. Implementation: #343.
+checks: [REL-CRASH-06]
+tags: [reliability-diagnostics]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/crash-reporting" }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-root }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-crash-reporting-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: reliability-diagnostics-crash-reporting-state, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: reliability-diagnostics-crash-reporting-simulate-badAccess }
+- assertText: { id: reliability-diagnostics-crash-reporting-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
