@@ -55,3 +55,49 @@ checks:
     spec: "#123 SYS.api-dock"
     covers:
       - ./system#getSystemAvailability().available
+  SYS-STATEAVAIL-01:
+    title: "getSystemAvailability reports thermal state, network status, memory pressure, Low Power Mode changes and time zone changes available on macOS"
+    platforms: [macos]
+    blocking: true
+    spec: "#124 SYS.api-events"
+    covers:
+      - ./system
+      - ./system#getSystemAvailability
+      - ./system#getSystemAvailability().available
+  SYS-INFO-01:
+    title: "getSystemInfo reports the OS version, process architecture, Rosetta translation, locale, IANA time zone, appearance, idle time, power source, battery, Low Power Mode and thermal state of the Mac it runs on"
+    platforms: [macos]
+    blocking: true
+    spec: "#124 SYS.api-events"
+    covers:
+      - ./system#getSystemInfo
+  SYS-NET-01:
+    title: "getNetworkStatus reports the current network path (status, interface types, expensive, Low Data Mode) and system proxies"
+    platforms: [macos]
+    blocking: true
+    spec: "#124 SYS.api-events"
+    covers:
+      - ./system#getNetworkStatus
+  SYS-EVENTS-01:
+    title: "onSystemEvent delivers sleep, wake, lock, unlock, user switch (sessionInactive, sessionActive), locale, time zone, clock, proxy, appearance and display changes from the system module's native emitter (injected with simulateSystemEvent; the OS is untouched)"
+    platforms: [macos]
+    blocking: true
+    spec: "#124 SYS.api-events"
+    covers:
+      - ./system#onSystemEvent
+  SYS-EVENTS-02:
+    title: "Thermal, Low Power Mode, power source and network events re-read state that reports the injected thermal state, Low Power Mode, battery power and offline path; memoryPressure carries its level"
+    platforms: [macos]
+    blocking: true
+    spec: "#124 SYS.api-events"
+    covers:
+      - ./system#onSystemEvent
+      - ./system#getSystemInfo
+      - ./system#getNetworkStatus
+  SYS-STATEVISUAL-01:
+    title: "The System state screen matches its golden in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#124 SYS.api-events"
+    covers:
+      - ./system#getSystemAvailability().available

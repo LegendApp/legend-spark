@@ -7,7 +7,7 @@ import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
-import { DriverError, type Capture as DriverCapture, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo, type Frame, type InputTarget, type Modifier } from "../driver.ts";
+import { DriverError, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo, type Frame, type InputTarget, type Modifier } from "../driver.ts";
 import { ms } from "./executor.ts";
 import { matchesText, parseSelector } from "./selectors.ts";
 import {
@@ -23,6 +23,7 @@ export type DriverClient = {
   capture(window: DriverWindow, name: string): Promise<DriverCapture>;
   setClock(mode: "virtual" | "real"): Promise<unknown>;
   advanceClock(durationMs: number): Promise<unknown>;
+  simulateSystemEvent(event: SimulatedSystemEvent): Promise<void>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
   tap(target: InputTarget, options?: { button?: "left" | "right"; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
   hover(target: InputTarget): Promise<void>;
@@ -68,6 +69,8 @@ export class DriverBackend implements Backend {
     // The motion engine's virtual clock (docs/motion.md#virtual-clock-for-the-test-driver).
     setClock: async args => { await this.client().setClock(args.mode as "virtual" | "real"); },
     advanceClock: async args => { await this.client().advanceClock(ms(args.duration as string | number)); },
+    // The system module's injected events and state (docs/system.md#testing-system-events).
+    simulateSystemEvent: async args => { await this.client().simulateSystemEvent(args as SimulatedSystemEvent); },
     // Black-box commands, run here in-process (white-box) only when no black-box backend is active.
     tapOn: (args, context) => this.click(args, context, {}),
     doubleClickOn: (args, context) => this.click(args, context, { clickCount: 2 }),

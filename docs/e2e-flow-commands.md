@@ -142,6 +142,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | `simulatePower` | — | `source`, `lowPower`, `thermal` (at least one) | black-box | Simulate power source and thermal state. |
 | `setNetwork` | — | `offline`, `latency`, `bandwidth`, `proxy` (at least one) | black-box | Shape the network. |
 | `lockScreen` | — | `for`* | black-box | Lock the screen for a while. |
+| `simulateSystemEvent` | value → `type` | `type`*, `thermal`, `lowPower`, `source`, `network`, `level` | driver | Deliver a system event to the app's onSystemEvent registrations in-process; the OS is untouched (sleepSystem, lockScreen and simulatePower change it). thermal, lowPower, source and network go with their event type and override what getSystemInfo and getNetworkStatus report until the app quits; memoryPressure needs level. |
 | `permission` | — | `grant`, `revoke`, `reset` (exactly one) | black-box | Grant, revoke or reset a privacy permission. |
 | `setFocusMode` | value → `mode` | `mode`* | black-box | Set the OS Focus mode. |
 

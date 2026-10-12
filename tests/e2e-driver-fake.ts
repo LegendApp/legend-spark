@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type InputTarget } from "../scripts/e2e/driver.ts";
+import { DriverError, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type InputTarget, type SimulatedSystemEvent } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -31,6 +31,7 @@ export class FakeDriver implements DriverClient {
   }
   async setClock(mode: "virtual" | "real") { this.log.push(`setClock ${mode}`); }
   async advanceClock(durationMs: number) { this.log.push(`advanceClock ${durationMs}`); }
+  async simulateSystemEvent(event: SimulatedSystemEvent) { this.log.push(`simulateSystemEvent ${JSON.stringify(event)}`); }
   async elements() {
     this.log.push("elements");
     const calls = ++this.calls;

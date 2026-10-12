@@ -22,17 +22,57 @@ export interface TaskbarMenuOptions {
 }
 /** Determinate progress has a completed fraction from 0 to 1; paused and error tint the bar. */
 export type AppProgress = { state: "indeterminate" } | { state: "normal" | "paused" | "error"; value: number };
-export type SystemFeature = "appBadge" | "appProgress" | "attention" | "dockMenu" | "taskbarMenu";
-export interface SystemInfo { osVersion: string; architecture: string; locale: string; dark: boolean; idleSeconds: number; onBattery: boolean; batteryLevel: number | null }
-export type SystemEvent = { type: "sleep" | "wake" | "lock" | "unlock" | "powerChanged" | "appearanceChanged" | "displaysChanged" };
+export type ThermalState = "nominal" | "fair" | "serious" | "critical";
+export interface SystemInfo {
+  osVersion: string;
+  /** The process architecture. */
+  architecture: string;
+  /** The process runs under binary translation: Rosetta 2 on macOS, x64 emulation on Windows on Arm. */
+  translated: boolean;
+  locale: string;
+  /** IANA time zone identifier. */
+  timeZone: string;
+  dark: boolean;
+  idleSeconds: number;
+  onBattery: boolean;
+  batteryLevel: number | null;
+  /** Low Power Mode on macOS, battery saver on Windows. */
+  lowPowerMode: boolean;
+  /** null where the OS has no thermal state (Windows); see getSystemAvailability("thermalState"). */
+  thermalState: ThermalState | null;
+}
+export type NetworkInterfaceType = "wifi" | "wired" | "cellular" | "loopback" | "other";
+export interface NetworkStatus {
+  /** `requiresConnection`: reachable once a connection such as an on-demand VPN is established. */
+  status: "online" | "offline" | "requiresConnection";
+  /** Interface types the current path can use. */
+  interfaces: NetworkInterfaceType[];
+  /** Metered, such as cellular or a personal hotspot. */
+  expensive: boolean;
+  /** Low Data Mode. */
+  constrained: boolean;
+  /** System proxies as `host:port`, or the automatic configuration URL; null when off. */
+  proxies: { http: string | null; https: string | null; socks: string | null; autoConfigURL: string | null };
+}
+export type MemoryPressureLevel = "normal" | "warning" | "critical";
+/** Invalidations: query getSystemInfo() or getNetworkStatus() again for current values. */
+export type SystemEvent =
+  | { type: "sleep" | "wake" | "lock" | "unlock" | "sessionActive" | "sessionInactive" | "powerChanged" | "lowPowerChanged" | "thermalChanged"
+    | "networkChanged" | "proxyChanged" | "localeChanged" | "timeZoneChanged" | "clockChanged" | "appearanceChanged" | "displaysChanged" }
+  | { type: "memoryPressure"; level: MemoryPressureLevel };
+/** Capabilities that not every platform has. */
+export type SystemFeature = "appBadge" | "appProgress" | "attention" | "dockMenu" | "taskbarMenu" | "thermalState" | "networkStatus" | "memoryPressure" | "lowPowerChanges" | "timeZoneChanges";
 export type LoginItemStatus = "enabled" | "disabled" | "requiresApproval" | "notFound" | "unavailable";
 export interface AttentionOptions { kind?: "informational" | "critical" }
 export interface PreventSleepOptions { reason: string; kind?: "display" | "system" }
 let sequence = 0;
 const token = () => `system-${Date.now()}-${++sequence}`;
+// Windows has no public thermal-state API. Its network status, memory pressure, battery saver and time zone
+// notifications are not implemented yet.
 const FEATURES: Record<SystemFeature, readonly string[]> = {
   appBadge: ["macos", "windows"], appProgress: ["macos", "windows"], attention: ["macos", "windows"],
   dockMenu: ["macos"], taskbarMenu: ["windows"],
+  thermalState: ["macos"], networkStatus: ["macos"], memoryPressure: ["macos"], lowPowerChanges: ["macos"], timeZoneChanges: ["macos"],
 };
 /** Without a feature, whether the system module is usable at all. */
 export function getSystemAvailability(feature?: SystemFeature): Availability {
@@ -51,12 +91,32 @@ function options(value: object, keys: readonly string[]) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new SparkError("E_INVALID_ARGUMENT", "Expected options");
   for (const key of Object.keys(value)) if (!keys.includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unsupported system option: ${key}`);
 }
+const THERMAL_STATES: readonly unknown[] = ["nominal", "fair", "serious", "critical"];
+const INTERFACES: readonly unknown[] = ["wifi", "wired", "cellular", "loopback", "other"];
+const nullableString = (value: unknown) => value === null || (typeof value === "string" && value.length > 0);
 function isInfo(value: unknown): value is SystemInfo {
   if (!value || typeof value !== "object") return false;
   const info = value as SystemInfo;
-  return [info.osVersion, info.architecture, info.locale].every(value => typeof value === "string" && value.length > 0) && typeof info.dark === "boolean" && typeof info.onBattery === "boolean" && Number.isFinite(info.idleSeconds) && info.idleSeconds >= 0 && (info.batteryLevel === null || (typeof info.batteryLevel === "number" && Number.isFinite(info.batteryLevel) && info.batteryLevel >= 0 && info.batteryLevel <= 1));
+  return [info.osVersion, info.architecture, info.locale, info.timeZone].every(value => typeof value === "string" && value.length > 0)
+    && [info.translated, info.dark, info.onBattery, info.lowPowerMode].every(value => typeof value === "boolean")
+    && Number.isFinite(info.idleSeconds) && info.idleSeconds >= 0
+    && (info.batteryLevel === null || (typeof info.batteryLevel === "number" && Number.isFinite(info.batteryLevel) && info.batteryLevel >= 0 && info.batteryLevel <= 1))
+    && (info.thermalState === null || THERMAL_STATES.includes(info.thermalState));
+}
+function isNetworkStatus(value: unknown): value is NetworkStatus {
+  if (!value || typeof value !== "object") return false;
+  const network = value as NetworkStatus, proxies = network.proxies;
+  return ["online", "offline", "requiresConnection"].includes(network.status) && Array.isArray(network.interfaces) && network.interfaces.every(type => INTERFACES.includes(type))
+    && typeof network.expensive === "boolean" && typeof network.constrained === "boolean"
+    && !!proxies && typeof proxies === "object" && [proxies.http, proxies.https, proxies.socks, proxies.autoConfigURL].every(nullableString);
 }
 export function getSystemInfo(): Promise<SystemInfo> { return call("info", {}, isInfo); }
+/** The current network path and system proxies (macOS). */
+export async function getNetworkStatus(): Promise<NetworkStatus> {
+  const available = getSystemAvailability("networkStatus");
+  if (!available.available) throw new SparkError(available.reason === "missing-module" ? "E_MODULE_UNAVAILABLE" : "E_UNSUPPORTED_PLATFORM", "Network status is unavailable");
+  return call("network", {}, isNetworkStatus);
+}
 export function getLoginItemStatus(): Promise<LoginItemStatus> { return call("loginStatus", {}, (value): value is LoginItemStatus => typeof value === "string" && ["enabled", "disabled", "requiresApproval", "notFound", "unavailable"].includes(value)); }
 export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
   if (typeof enabled !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected enabled boolean");
@@ -117,11 +177,28 @@ async function createLauncherMenu(value: LauncherMenuOptions, platform: "macos" 
 }
 export function createDockMenu(options: DockMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "macos"); }
 export function createTaskbarMenu(options: TaskbarMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "windows"); }
-export async function onSystemEvent(handler: (event: SystemEvent) => void): Promise<AsyncRegistration> {
+const SYSTEM_EVENTS: readonly SystemEvent["type"][] = ["sleep", "wake", "lock", "unlock", "sessionActive", "sessionInactive", "powerChanged", "lowPowerChanged", "thermalChanged",
+  "networkChanged", "proxyChanged", "localeChanged", "timeZoneChanged", "clockChanged", "memoryPressure", "appearanceChanged", "displaysChanged"];
+export interface SystemEventOptions {
+  /** Event types to receive; omitted, every type. Network, proxy and memory pressure observers are installed only for subscriptions that include their events. */
+  types?: readonly SystemEvent["type"][];
+  /** Receives E_INVALID_DATA for a malformed native event. Without it, the error is rethrown asynchronously. */
+  onError?: (error: SparkError) => void;
+}
+export async function onSystemEvent(handler: (event: SystemEvent) => void, value: SystemEventOptions = {}): Promise<AsyncRegistration> {
   if (typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected system event handler");
-  const types: readonly SystemEvent["type"][] = ["sleep", "wake", "lock", "unlock", "powerChanged", "appearanceChanged", "displaysChanged"];
+  options(value, ["types", "onError"]);
+  const types = value.types ?? SYSTEM_EVENTS, onError = value.onError;
+  if (!Array.isArray(types) || !types.length || types.some(type => !SYSTEM_EVENTS.includes(type))) throw new SparkError("E_INVALID_ARGUMENT", "Expected a nonempty list of system event types");
+  if (onError !== undefined && typeof onError !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onError callback");
   const id = token(); let stopped = false;
-  const subscription = onDesktopEvent(event => { if (!stopped && types.includes(event.type as SystemEvent["type"])) handler({ type: event.type as SystemEvent["type"] }); }, { types });
-  try { await command("observe", { id }); } catch (error) { subscription.remove(); throw error; }
+  const subscription = onDesktopEvent(event => {
+    if (stopped) return;
+    if (event.type !== "memoryPressure") { handler({ type: event.type as Exclude<SystemEvent["type"], "memoryPressure"> }); return; }
+    if (event.level === "normal" || event.level === "warning" || event.level === "critical") { handler({ type: "memoryPressure", level: event.level }); return; }
+    const error = new SparkError("E_INVALID_DATA", "memoryPressure event without a valid level");
+    if (onError) onError(error); else setTimeout(() => { throw error; });
+  }, { types: [...new Set(types)] });
+  try { await command("observe", { id, types: [...new Set(types)] }); } catch (error) { subscription.remove(); throw error; }
   return asyncRegistration(() => { stopped = true; subscription.remove(); }, () => command("unobserve", { id }));
 }

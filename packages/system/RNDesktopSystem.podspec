@@ -9,7 +9,7 @@ Pod::Spec.new do |s|
   s.homepage = "https://legendapp.com"
   s.source = { :path => "." }
   s.platforms = { :osx => "14.0" }
-  s.frameworks = "AppKit", "ServiceManagement", "IOKit", "ApplicationServices"
+  s.frameworks = "AppKit", "ServiceManagement", "IOKit", "ApplicationServices", "CFNetwork", "Network", "SystemConfiguration"
   s.source_files = "macos/**/*.{h,m,mm}"
   s.dependency "React-Core"
   s.dependency "ReactCodegen"
