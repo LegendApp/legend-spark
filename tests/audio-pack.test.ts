@@ -36,4 +36,4 @@ test("distributed audio archives apply the exact workspace delta and verify upst
     }
     writeFileSync(archive, "invalid"); await expect(packAudio(root, output)).rejects.toThrow("Integrity mismatch");
   } finally { rmSync(root, { recursive: true, force: true }); }
-});
+}, 60_000); // Packs and extracts real archives with tar: under a second locally, up to 2.4 s on a loaded CI runner.

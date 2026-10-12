@@ -34,7 +34,7 @@ test("SDK production selection retains host and only the imported capability pod
   expect(result.excluded.map(pkg => pkg.name)).toContain("@op-engineering/op-sqlite");
   for (const name of ["desktop-windows", "desktop-links", "desktop-shortcuts", "file-dialog", "native-menu", "context-menu", "secure-storage", "file-system", "notifications", "tray", "updates", "processes", "system", "global-shortcuts", "message-dialog", "drag-drop"])
     expect(result.excluded.map(pkg => pkg.name)).toContain(name === "desktop" ? "@legendapp/spark" : `@legendapp/spark-${name}`);
-});
+}, 60_000); // Hashes the sources of every native package: under a second locally, up to 5.8 s on a loaded CI runner.
 test("test-only modules cannot leak into Go or distribution binaries", () => {
   const packages = [{ name: "@legendapp/spark-sdk-test-driver", json: { spark: { testOnly: true } } }] as any;
   expect(() => validateBuildModules("go", packages)).toThrow("test fixture");
@@ -45,4 +45,4 @@ test("test-only modules cannot leak into Go or distribution binaries", () => {
 test("filesystem consumers retain file helpers without linking native dialog UI", () => {
   const result = selection(nativePackages(root), new Set(["@legendapp/spark-file-system"]));
   expect(result.included.map(pkg => pkg.name)).not.toContain("@legendapp/spark-file-dialog");
-});
+}, 60_000); // Hashes the sources of every native package, as the selection test above does.

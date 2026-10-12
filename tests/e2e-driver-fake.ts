@@ -219,6 +219,9 @@ fs.unlinkSync(path.join(dir, "token"));
 fs.writeFileSync(path.join(dir, "launch.json"), JSON.stringify({ argv: process.argv.slice(2), extra: process.env.FAKE_EXTRA, home: process.env.CFFIXED_USER_HOME, suffix: process.env.DIRHELPER_USER_DIR_SUFFIX }));
 const server = net.createServer(socket => {
   let buffer = "", authenticated = false;
+  // As the real driver does, the session's end (quit, disconnect or failed authentication) quits the app, so a test that
+  // times out before closing its driver leaves no app behind holding the test step's output open.
+  socket.on("close", () => process.exit(0));
   const send = message => socket.write(JSON.stringify(message) + "\n");
   socket.on("data", chunk => {
     buffer += chunk;

@@ -12,6 +12,9 @@
 //   driver orders a window that is not on screen in: fully transparent, ignoring real mouse events, behind every
 //   other window, never activated. It orders it out again afterwards, because a window on screen that is not the
 //   key window ignores key equivalents (a default button's Return), while one that is not on screen does not.
+//   The window is ordered in before the command's events are made: AppKit locates an event made from a CGEvent
+//   (moves, gestures, extra buttons) by the window's position in the window server, which for a window that has not
+//   been on screen can still be the top-left of the display (measured on macOS 26 CI runners, #375).
 // - A driven app never activates, so it has no key window, and -[NSApplication sendEvent:] gives key events only to
 //   local monitors and menu key equivalents. The driver routes its key events the way AppKit routes them to a key
 //   window instead: the window's key equivalents, the main menu's (Command and Control keys only), then
@@ -553,6 +556,10 @@ void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverR
   NSPoint location, to;
   NSWindow *window = nil;
   auto invalid = ^(NSString *message) { reply(SparkDriverFailure(@"E_INVALID_ARGUMENT", message)); };
+  // A pointer command's window goes on screen before its events are made (see the top of this file).
+  BOOL press = [command isEqual:@"tap"] || [command isEqual:@"drag"] || [request[@"kind"] isEqual:@"pressure"];
+  __block dispatch_block_t restore = ^{};
+  auto present = ^(NSWindow *target, NSPoint at) { restore = SparkPresent(target, press ? &at : NULL); };
   if (!SparkParseModifiers(request[@"modifiers"], &flags)) { invalid(@"modifiers is a list of cmd, ctrl, option, shift and fn"); return; }
   if ([command isEqual:@"tap"]) {
     NSInteger clicks;
@@ -561,22 +568,23 @@ void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverR
     NSString *missing = button.integerValue > 1 ? SparkDriverPrivateEventsMissing() : nil;
     if (missing) { reply(SparkDriverFailure(@"E_UNSUPPORTED", missing)); return; }
     if (!SparkInteger(request[@"clickCount"], 1, 1, 3, &clicks)) { invalid(@"clickCount is 1, 2 or 3"); return; }
-    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkClick(window, location, button.integerValue, clicks, flags, &failure);
+    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) { present(window, location); events = SparkClick(window, location, button.integerValue, clicks, flags, &failure); }
   } else if ([command isEqual:@"hover"]) {
-    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkMove(window, location, NSEventTypeMouseMoved, flags);
+    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) { present(window, location); events = SparkMove(window, location, NSEventTypeMouseMoved, flags); }
   } else if ([command isEqual:@"drag"]) {
     NSInteger steps;
     if (!SparkInteger(request[@"steps"], 10, 1, 500, &steps)) { invalid(@"steps is 1-500"); return; }
     NSWindow *end = nil;
     if ((window = SparkTarget(request[@"from"], request[@"window"], YES, &location, &failure)) && (end = SparkTarget(request[@"to"], request[@"window"], NO, &to, &failure))) {
       if (end != window) failure = SparkDriverFailure(@"E_INVALID_ARGUMENT", @"from and to are in different windows");
-      else events = SparkDrag(window, location, to, steps, flags);
+      else { present(window, location); events = SparkDrag(window, location, to, steps, flags); }
     }
   } else if ([command isEqual:@"scroll"]) {
     id dx = request[@"deltaX"], dy = request[@"deltaY"], precise = request[@"precise"] ?: @NO;
     if (!SparkNumber(dx) || !SparkNumber(dy) || (!dx && !dy)) { invalid(@"scroll needs deltaX and/or deltaY in points (precise) or lines"); return; }
     if (precise != (id)kCFBooleanTrue && precise != (id)kCFBooleanFalse) { invalid(@"precise is a boolean"); return; }
     if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) {
+      present(window, location);
       NSMutableArray *move = [SparkMove(window, location, NSEventTypeMouseMoved, flags) mutableCopy];
       [move addObject:SparkScroll(window, location, flags, [dx doubleValue], [dy doubleValue], [precise boolValue])];
       events = move;
@@ -592,7 +600,7 @@ void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverR
     if ([kind isEqual:@"rotate"] && (!rotation || !SparkNumber(rotation) || [rotation doubleValue] == 0)) { invalid(@"rotation is nonzero degrees, counterclockwise positive"); return; }
     if ([kind isEqual:@"swipe"] && ![@[@"left", @"right", @"up", @"down"] containsObject:request[@"direction"] ?: @""]) { invalid(@"direction is left, right, up or down"); return; }
     if ([kind isEqual:@"pressure"] && !SparkInteger(request[@"stage"], 2, 1, 2, &stage)) { invalid(@"stage is 1 (click) or 2 (force click)"); return; }
-    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkGestureEvents(window, location, kind, request, steps, flags, &failure);
+    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) { present(window, location); events = SparkGestureEvents(window, location, kind, request, steps, flags, &failure); }
   } else if ([command isEqual:@"cursor"]) {
     BOOL targeted = request[@"testID"] || request[@"point"];
     window = targeted ? SparkTarget(request, request[@"window"], YES, &location, &failure) : SparkPointerWindow(&location, &failure);
@@ -617,10 +625,7 @@ void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverR
       events = typed;
     }
   }
-  if (!events) { reply(failure); return; }
-  BOOL keys = [command isEqual:@"pressKey"] || [command isEqual:@"typeText"];
-  BOOL press = [command isEqual:@"tap"] || [command isEqual:@"drag"] || [request[@"kind"] isEqual:@"pressure"];
-  dispatch_block_t restore = keys ? ^{} : SparkPresent(window, press ? &location : NULL);
+  if (!events) { restore(); reply(failure); return; }
   SparkDeliver(window, events, ^(NSString *menu) { reply(menu ? SparkDriverFailure(@"E_MENU", menu) : @{ @"ok": @YES }); });
   restore();
 }
