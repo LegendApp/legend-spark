@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: Concealed and transient clipboard data
+intent: >
+  Copying a password with concealed: true puts org.nspasteboard.ConcealedType beside the text, so clipboard managers
+  do not record it; transient: true puts org.nspasteboard.TransientType there, so they ignore it. Runs on the app's
+  private test pasteboard.
+checks: [CLIP-PRIV-01]
+tags: [clipboard]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://clipboard/data" }
+- extendedWaitUntil: { visible: { id: clipboard-data-root }, timeout: 10s }
+- tapOn: { id: clipboard-data-copy-concealed }
+- assertText: { id: clipboard-data-copy-concealed-result, equals: resolved }
+- assertClipboard: { types: [public.utf8-plain-text, org.nspasteboard.ConcealedType], text: correct-horse-battery }
+- tapOn: { id: clipboard-data-copy-transient }
+- assertText: { id: clipboard-data-copy-transient-result, equals: resolved }
+- assertClipboard: { types: [public.utf8-plain-text, org.nspasteboard.TransientType], text: intermediate }
+- tapOn: { id: clipboard-data-formats }
+- assertText: { id: clipboard-data-formats-result, equals: '["public.utf8-plain-text","org.nspasteboard.TransientType"]' }

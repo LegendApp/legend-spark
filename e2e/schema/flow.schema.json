@@ -3817,7 +3817,7 @@
             }
           },
           "setClipboard": {
-            "description": "Set the clipboard.",
+            "description": "Set the clipboard (on the driver backend, the app's private test pasteboard).",
             "if": {
               "type": "object"
             },
@@ -3860,7 +3860,7 @@
             }
           },
           "assertClipboard": {
-            "description": "Assert clipboard types and text.",
+            "description": "Assert clipboard types and text (on the driver backend, the app's private test pasteboard).",
             "if": {
               "type": "object"
             },

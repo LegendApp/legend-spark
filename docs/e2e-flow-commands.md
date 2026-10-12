@@ -118,8 +118,8 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 
 | Command | Short form | Keys | Backend | Summary |
 |---|---|---|---|---|
-| `setClipboard` | — | `html`, `text`, `concealed`; at least one of `html`, `text` | black-box | Set the clipboard. |
-| `assertClipboard` | — | `types`, `text` (at least one) | black-box | Assert clipboard types and text. |
+| `setClipboard` | — | `html`, `text`, `concealed`; at least one of `html`, `text` | black-box | Set the clipboard (on the driver backend, the app's private test pasteboard). |
+| `assertClipboard` | — | `types`, `text` (at least one) | black-box | Assert clipboard types and text (on the driver backend, the app's private test pasteboard). |
 | `createFixture` | — | `path`*, `contents`, `encoding` | black-box | Create a file for the flow. |
 | `modifyFileExternally` | — | `path`*, `append`, `contents`, `atomicSwap`; at least one of `append`, `contents` | black-box | Change a file behind the app's back. |
 | `assertFile` | — | `path`*, `exists`, `contains`, `encoding`, `unchanged` | black-box | Assert file state. |

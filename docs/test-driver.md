@@ -21,7 +21,7 @@ Never set `testDriverInRelease` for an app you distribute. How it works:
 
 - The config plugin writes `ENV['SPARK_TEST_DRIVER_RELEASE'] = '1'` into the generated Podfile when the
   option is set. Every Spark pod that includes `SparkTestDriver.h` (`RNDesktopApp`, `RNSparkUI`,
-  `RNSparkMotion`, `RNDesktopSystem`, `RNDesktopWindows`), and `RNDesktopDiagnostics`, sets the build setting
+  `RNSparkMotion`, `RNDesktopSystem`, `RNDesktopWindows`, `RNDesktopClipboard`), and `RNDesktopDiagnostics`, sets the build setting
   `SPARK_TEST_DRIVER` to 1 in the Debug configuration, and in other configurations to 1 with that variable or 0
   without it, and passes it to the preprocessor. `RNDesktopApp` also gives it to the app target, for the host's
   app delegate.
@@ -41,7 +41,7 @@ Never set `testDriverInRelease` for an app you distribute. How it works:
 - After every macOS release build, `spark build` reads the app's code (`Contents/MacOS` and
   `Contents/Frameworks`) for strings only driver code contains: the socket name `driver.sock`, the log
   prefix `Spark test driver:`, the commands `startCommits`, `accessibilityAudit`, `simulateSystemEvent`,
-  `simulateDisplays`, `advanceClock` and `waitForMotion`, the `driverListeners` request and `replyDriverState`
+  `simulateDisplays`, `setTestClipboard`, `advanceClock` and `waitForMotion`, the `driverListeners` request and `replyDriverState`
   operation, and `SPARK_SIMULATE_CRASH`. Without `testDriverInRelease` it fails if it finds any; with it, it
   fails unless it finds the socket name and log prefix (`packages/cli/src/release-driver.ts`).
 
@@ -245,7 +245,9 @@ package registers its virtual clock, `setClock` and `advanceClock`
 `waitForMotion` and `sampleMotion` ([motion.md](motion.md#motion-telemetry)). An app without
 that module answers them with `E_UNKNOWN_COMMAND`. The system package registers `simulateSystemEvent`
 ([system.md](system.md#testing-system-events)). The window package registers `simulateDisplays`, the
-display source of `@legendapp/spark/displays` ([displays.md](displays.md#simulated-displays)).
+display source of `@legendapp/spark/displays` ([displays.md](displays.md#simulated-displays)). The clipboard
+package moves `@legendapp/spark/clipboard` onto a private pasteboard when the driver starts, and registers
+`setTestClipboard` and `testClipboard` to write and read it as another app would ([clipboard.md](clipboard.md#testing)).
 
 Modules also get four hooks (`SparkTestDriver.h`, main thread): `SparkTestDriverFindView`
 finds a view by testID as `waitFor` does; `SparkTestDriverObserveStart` runs a block once the

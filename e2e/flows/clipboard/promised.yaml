@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: Promised clipboard data is provided on demand
+intent: >
+  Promise text, HTML and PNG offers the three types without producing any. Another app's paste of text (the driver's
+  assertClipboard reads the test pasteboard as one) makes the app provide the text and nothing else. Reading the
+  clipboard in the app then provides HTML and PNG once each; the text is not asked for again.
+checks: [CLIP-PROMISE-01]
+tags: [clipboard]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://clipboard/data" }
+- extendedWaitUntil: { visible: { id: clipboard-data-root }, timeout: 10s }
+- tapOn: { id: clipboard-data-promise }
+- assertText: { id: clipboard-data-promise-result, equals: resolved }
+- assertText: { id: clipboard-data-provided, equals: text 0 · html 0 · png 0 }
+- assertClipboard: { types: [public.utf8-plain-text, public.html, public.png], text: Spark clipboard text }
+- assertText: { id: clipboard-data-provided, equals: text 1 · html 0 · png 0 }
+- tapOn: { id: clipboard-data-read }
+- assertText: { id: clipboard-data-read-result, equals: '{"types":["html","image","text"],"text":"Spark clipboard text"}' }
+- assertText: { id: clipboard-data-provided, equals: text 1 · html 1 · png 1 }
+- assertText: { id: clipboard-data-provide-error, equals: — }

@@ -1,0 +1,15 @@
+appId: so.legend.spark.examples.kitchensink
+name: Clipboard availability on macOS
+intent: >
+  The Clipboard data screen lists each getRichClipboardAvailability query as JSON. On macOS the module, promised
+  data, change events and the concealed/transient markers report available.
+checks: [CLIP-AVAIL-01]
+tags: [clipboard]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://clipboard/data" }
+- extendedWaitUntil: { visible: { id: clipboard-data-root }, timeout: 10s }
+- assertText: { id: clipboard-data-availability-module, equals: 'module: {"available":true}' }
+- assertText: { id: clipboard-data-availability-promised-data, equals: 'promised-data: {"available":true}' }
+- assertText: { id: clipboard-data-availability-change-events, equals: 'change-events: {"available":true}' }
+- assertText: { id: clipboard-data-availability-privacy-markers, equals: 'privacy-markers: {"available":true}' }

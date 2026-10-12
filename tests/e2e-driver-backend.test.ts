@@ -113,6 +113,14 @@ describe("command mapping", () => {
     expect(calls).toEqual([[expect.objectContaining({ id: "7", persistentId: null, colorSpace: { name: null, gamut: "srgb" }, edrHeadroom: { current: 1, potential: 1, reference: null } })], null]);
   });
 
+  test("setClipboard writes the app's test pasteboard; assertClipboard checks its types and text", async () => {
+    const { result, app } = await run("- launchApp\n- setClipboard: { text: copied, html: \"<b>copied</b>\", concealed: true }\n- assertClipboard: { types: [public.html, org.nspasteboard.ConcealedType], text: copied }");
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => line.includes("Clipboard"))).toEqual(['setTestClipboard {"text":"copied","html":"<b>copied</b>","concealed":true}', "testClipboard"]);
+    const failed = await run("- launchApp\n- setClipboard: { text: copied }\n- assertClipboard: { types: [public.html], text: other }");
+    expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("clipboard lacks public.html; it has [public.utf8-plain-text]") });
+  });
+
   test("setAppAppearance maps to the driver; takeScreenshot captures the main window into the flow's output", async () => {
     const { result, app } = await run("- launchApp\n- setAppAppearance: dark\n- takeScreenshot: shot");
     expect(result.status).toBe("passed");

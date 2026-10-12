@@ -1,0 +1,24 @@
+appId: so.legend.spark.examples.kitchensink
+name: Clipboard extensions are typed unsupported on Windows
+intent: >
+  On Windows the Clipboard data screen reports the module available and promised data, change events and the
+  concealed/transient markers unsupported-platform. Promising data, watching changes, reading the change count and
+  copying a concealed password reject SparkError:E_UNSUPPORTED_PLATFORM. Implementation: #359.
+checks: [CLIP-UNSUP-01]
+tags: [clipboard]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://clipboard/data" }
+- extendedWaitUntil: { visible: { id: clipboard-data-root }, timeout: 10s }
+- assertText: { id: clipboard-data-availability-module, equals: 'module: {"available":true}' }
+- assertText: { id: clipboard-data-availability-promised-data, equals: 'promised-data: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: clipboard-data-availability-change-events, equals: 'change-events: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: clipboard-data-availability-privacy-markers, equals: 'privacy-markers: {"available":false,"reason":"unsupported-platform"}' }
+- tapOn: { id: clipboard-data-promise }
+- assertText: { id: clipboard-data-promise-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: clipboard-data-watch }
+- assertText: { id: clipboard-data-watch-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: clipboard-data-change-count }
+- assertText: { id: clipboard-data-change-count-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: clipboard-data-copy-concealed }
+- assertText: { id: clipboard-data-copy-concealed-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
