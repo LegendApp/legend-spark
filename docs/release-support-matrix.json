@@ -1107,7 +1107,9 @@
       ],
       "verification": {
         "unitTests": [
-          "tests/sdk-api.test.ts"
+          "tests/sdk-api.test.ts",
+          "tests/dock-tile-native.test.ts",
+          "tests/windows-taskbar-native.test.ts"
         ],
         "portableCommand": "bun run test",
         "platformAcceptance": {
