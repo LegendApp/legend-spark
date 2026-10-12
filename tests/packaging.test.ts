@@ -49,6 +49,18 @@ test("CNG entitlements use selected modules, reject conflicts, and exclude debug
   expect(() => distributionEntitlements({ groups: "$(AppIdentifierPrefix)app" })).toThrow("resolved values");
 });
 
+test("Sign in with Apple and passkey entitlements are added only when the app opts in to them", () => {
+  const { validateOwned } = createRequire(import.meta.url)("../packages/config-plugin/validation.cjs");
+  expect(resolveEntitlements({ macos: { authentication: {} } }, [])).toEqual({});
+  expect(resolveEntitlements({ macos: { authentication: { signInWithApple: false, passkeyDomains: [] } } }, [])).toEqual({});
+  expect(resolveEntitlements({ expo: { macos: { authentication: { signInWithApple: true, passkeyDomains: ["example.com", "dev.example.com?mode=developer"] }, entitlements: { "com.apple.developer.associated-domains": ["applinks:example.com"] } } } }, []))
+    .toEqual({ "com.apple.developer.applesignin": ["Default"], "com.apple.developer.associated-domains": ["webcredentials:example.com", "webcredentials:dev.example.com?mode=developer", "applinks:example.com"] });
+  const macos = (authentication: unknown) => ({ macos: { bundleIdentifier: "com.example.app", authentication } });
+  validateOwned(macos({ signInWithApple: true, passkeyDomains: ["example.com", "login.example.com?mode=managed"] }));
+  for (const invalid of [{ signInWithApple: "yes" }, { passkeyDomains: ["Example.com"] }, { passkeyDomains: ["https://example.com"] }, { passkeyDomains: ["a.com", "a.com"] }, { passkeys: true }, []])
+    expect(() => validateOwned(macos(invalid))).toThrow("macos.authentication");
+});
+
 test("packaging entitlements follow the release binary even when the last generated graph was a dev superset", () => {
   const root = temporary();
   try {

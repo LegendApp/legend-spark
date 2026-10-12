@@ -36,6 +36,13 @@ export type TestBiometrics = {
   biometryType: string; biometrics: string; password: string; answer: string | null; prompts: number; pending: number;
   lastPrompt: { operation: string; reason: string; fallback: string; cancelLabel?: string; fallbackLabel?: string } | null; secrets: Record<string, string>;
 };
+/** The simulated state of @legendapp/spark/apple-authentication and /passkeys (the `testAuthorization` driver command). */
+export type TestAuthorization = {
+  appleId: boolean; webCredentials: string[]; answer: string | null; credentialState: string | null; requests: number; pending: number;
+  lastRequest: { operation: string; window: string | null; scopes?: string[]; relyingPartyId?: string; userName?: string } | null;
+  passkeys: { relyingPartyId: string; credentialId: string; userName: string }[];
+};
+export type SimulatedAuthorization = { appleId?: boolean; webCredentials?: string[]; answer?: string | null; credentialState?: string | null };
 export type SimulatedBiometrics = { biometryType?: string; biometrics?: string; password?: string; answer?: string | null; enrollmentChanged?: true };
 /** What the @legendapp/spark/sharing simulation recorded (the `testSharing` driver command). */
 export type TestSharing = {
@@ -346,6 +353,10 @@ export class Driver {
   async simulateBiometrics(state: SimulatedBiometrics) { return body<{ biometrics: TestBiometrics }>(await this.request({ command: "simulateBiometrics", ...state }, 10000)).biometrics; }
   /** The simulated biometric state: sensor, policy states, answer, prompts shown and pending, the last prompt and stored secrets. */
   async testBiometrics() { return body<{ biometrics: TestBiometrics }>(await this.request({ command: "testBiometrics" }, 10000)).biometrics; }
+  /** Sets the simulated state of Sign in with Apple and passkeys (docs/authentication.md#testing); nothing is presented and nothing leaves the app. */
+  async simulateAuthorization(state: SimulatedAuthorization) { return body<{ authorization: TestAuthorization }>(await this.request({ command: "simulateAuthorization", ...state }, 10000)).authorization; }
+  /** The simulated authorization state: entitlements, answer, requests shown and pending, the last request and simulated passkeys. */
+  async testAuthorization() { return body<{ authorization: TestAuthorization }>(await this.request({ command: "testAuthorization" }, 10000)).authorization; }
   /** Drives the @legendapp/spark/sharing simulation (docs/sharing.md#testing); no picker, Spotlight index or pbs is reached. */
   async simulateSharing(request: SimulatedSharing) { return body<{ sharing: TestSharing }>(await this.request({ command: "simulateSharing", ...request }, 10000)).sharing; }
   /** What the sharing simulation recorded: shares, the simulated Spotlight index, declared and registered services, invocations. */

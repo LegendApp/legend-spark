@@ -12,7 +12,7 @@ import { processLog, type ProcessLog } from "../../../packages/cli/src/process.t
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type SimulatedSpeech, type TestSpeech,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type SimulatedSpeech, type TestSpeech,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
@@ -48,6 +48,8 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   testPermission(kind: string): Promise<TestPermission>;
   simulateBiometrics(state: SimulatedBiometrics): Promise<TestBiometrics>;
   testBiometrics(): Promise<TestBiometrics>;
+  simulateAuthorization(state: SimulatedAuthorization): Promise<TestAuthorization>;
+  testAuthorization(): Promise<TestAuthorization>;
   simulateSharing(request: SimulatedSharing): Promise<TestSharing>;
   testSharing(): Promise<TestSharing>;
   simulateSpeech(state: SimulatedSpeech): Promise<TestSpeech>;
@@ -125,6 +127,9 @@ export class DriverBackend implements Backend {
     // Simulated @legendapp/spark/biometrics state, never LocalAuthentication or a keychain (docs/biometrics.md#testing).
     simulateBiometrics: async args => { await this.client().simulateBiometrics(args as SimulatedBiometrics); },
     assertSimulatedBiometrics: (args, context) => context.eventually(async () => assertSimulatedBiometrics(await this.client().testBiometrics(), args)),
+    // Simulated Sign in with Apple and passkeys, never AuthenticationServices, Apple or a relying party (docs/authentication.md#testing).
+    simulateAuthorization: async args => { await this.client().simulateAuthorization(args as SimulatedAuthorization); },
+    assertSimulatedAuthorization: (args, context) => context.eventually(async () => assertSimulatedAuthorization(await this.client().testAuthorization(), args)),
     // Simulated @legendapp/spark/sharing: no picker, Spotlight index or pbs (docs/sharing.md#testing).
     simulateSharing: async args => { await this.client().simulateSharing(args as SimulatedSharing); },
     assertSharing: (args, context) => context.eventually(async () => assertSharing(await this.client().testSharing(), args)),
@@ -534,6 +539,12 @@ export function assertMenu(menus: readonly DriverMenuItem[], args: Record<string
     const expected = formatAccelerator(parseAccelerator(String(args.shortcut), "macos", { allowUnmodifiedCharacter: true, allowExtendedKeys: true }));
     if (actual !== expected) fail("shortcut", expected, actual);
   }
+}
+export function assertSimulatedAuthorization(authorization: TestAuthorization, args: Record<string, unknown>) {
+  const actual: Record<string, unknown> = { requests: authorization.requests, pending: authorization.pending, lastOperation: authorization.lastRequest?.operation ?? null,
+    lastWindow: authorization.lastRequest?.window ?? null, lastRelyingPartyId: authorization.lastRequest?.relyingPartyId ?? null, passkeys: authorization.passkeys.length };
+  for (const key of Object.keys(actual))
+    if (args[key] !== undefined && actual[key] !== args[key]) throw new Failure("assertion", `authorization ${key} is ${JSON.stringify(actual[key])}, expected ${JSON.stringify(args[key])}`);
 }
 export function assertSimulatedBiometrics(biometrics: TestBiometrics, args: Record<string, unknown>) {
   const actual: Record<string, unknown> = { prompts: biometrics.prompts, pending: biometrics.pending, lastOperation: biometrics.lastPrompt?.operation ?? null,

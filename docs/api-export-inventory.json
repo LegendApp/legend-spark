@@ -88,6 +88,8 @@
     "./plugins",
     "./video",
     "./speech",
-    "./app-intents"
+    "./app-intents",
+    "./apple-authentication",
+    "./passkeys"
   ]
 }

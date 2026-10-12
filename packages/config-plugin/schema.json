@@ -193,6 +193,26 @@
         "infoPlist": {
           "type": "object"
         },
+        "authentication": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Opt in to the restricted entitlements Sign in with Apple and passkeys need; both need a team-signed build with a provisioning profile (docs/authentication.md#entitlements).",
+          "properties": {
+            "signInWithApple": {
+              "type": "boolean",
+              "description": "Adds com.apple.developer.applesignin for @legendapp/spark/apple-authentication."
+            },
+            "passkeyDomains": {
+              "type": "array",
+              "uniqueItems": true,
+              "description": "Relying party domains for @legendapp/spark/passkeys, each added as webcredentials:<domain> to com.apple.developer.associated-domains. The domain must serve an apple-app-site-association file listing the app.",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+(?:\\?mode=(?:developer|managed|developer\\+managed))?$"
+              }
+            }
+          }
+        },
         "testDriverInRelease": {
           "type": "boolean",
           "description": "Compile the in-app test driver into release builds too; Debug builds always have it. For apps the release gate drives: keep it off for apps you distribute (docs/test-driver.md#builds)."

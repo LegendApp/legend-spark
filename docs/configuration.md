@@ -49,6 +49,13 @@ Kitchen Sink ([test driver](test-driver.md#private-event-functions)).
 compiles them into the app; JavaScript handles them with `@legendapp/spark/app-intents`
 ([App Intents](app-intents.md)).
 
+`macos.authentication` opts in to the restricted entitlements of Sign in with Apple
+(`"signInWithApple": true` adds `com.apple.developer.applesignin`) and passkeys
+(`"passkeyDomains": ["example.com"]` adds `webcredentials:example.com` to
+`com.apple.developer.associated-domains`). Nothing is added without it. Both need a build signed by
+your team with a provisioning profile that grants them; see
+[authentication](authentication.md#entitlements).
+
 `localizations` lists the languages the app is translated into, development
 language first. On macOS AppKit and Spark show native strings (menus, dialogs,
 panels) in the first of the user's languages listed there; see

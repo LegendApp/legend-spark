@@ -13,11 +13,21 @@ function mergeEntitlements(...sources) {
   return result;
 }
 
+// macos.authentication: the restricted entitlements Sign in with Apple and passkeys need, only when the app asks for them
+// (docs/authentication.md#entitlements). Both need a team-signed build with a provisioning profile.
+function authenticationEntitlements(authentication) {
+  const result = {};
+  if (authentication?.signInWithApple) result["com.apple.developer.applesignin"] = ["Default"];
+  if (authentication?.passkeyDomains?.length) result["com.apple.developer.associated-domains"] = authentication.passkeyDomains.map((domain) => `webcredentials:${domain}`);
+  return result;
+}
+
 function resolveEntitlements(config, packages) {
   const expo = config.expo ?? config;
   return mergeEntitlements(
     ...packages.map((pkg) => pkg.spark?.entitlements?.macos ?? {}),
+    authenticationEntitlements(expo.macos?.authentication),
     expo.macos?.entitlements ?? {},
   );
 }
-module.exports = { mergeEntitlements, resolveEntitlements };
+module.exports = { mergeEntitlements, resolveEntitlements, authenticationEntitlements };

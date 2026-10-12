@@ -30,6 +30,12 @@ export interface MacOSConfiguration {
    */
   testDriverPrivateEvents?: boolean;
   lifecycle?: MacOSLifecycle;
+  /**
+   * Opt in to the restricted entitlements of Sign in with Apple (`com.apple.developer.applesignin`) and passkeys
+   * (`webcredentials:<domain>` in `com.apple.developer.associated-domains`). Both need a team-signed build with a
+   * provisioning profile; without them the APIs report `missing-entitlement` (docs/authentication.md#entitlements).
+   */
+  authentication?: { signInWithApple?: boolean; passkeyDomains?: string[] };
   /** App Intents for Shortcuts, Spotlight and Siri, compiled into the app by spark build (docs/app-intents.md). */
   appIntents?: AppIntentConfiguration[];
 }
