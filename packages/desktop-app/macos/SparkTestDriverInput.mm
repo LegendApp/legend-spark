@@ -135,17 +135,35 @@ static NSEvent *SparkButton(BOOL down, NSInteger button, NSWindow *window, NSPoi
 // selects the NSEvent: 8 magnify, 5 rotate, 16 swipe, 22 smart magnify, 32 pressure.
 enum : uint32_t { SparkGestureHIDType = 110, SparkGestureMagnification = 113, SparkGestureRotation = 114, SparkGestureSwipe = 115,
   SparkGesturePhase = 132, SparkGestureStage = 143, SparkGestureStageTransition = 147, SparkGesturePressure = 148 };
-// A gesture event's location as AppKit reads it: the global location and, separately, the location in its window
-// (top-left origin), which CoreGraphics keeps in a private field and clears when the global location is set. Both are
-// copied from a mouse event AppKit made at the same point. Private, so looked up; NO when this macOS lacks them.
-BOOL SparkDriverSetGestureLocation(CGEventRef event, NSEvent *mouse) {
+// A gesture event at a point in its window, from `prototype` (a retyped copy of `mouse`, an AppKit mouse event there).
+// AppKit takes a gesture's locationInWindow from the event's window-local location (top-left origin), which CoreGraphics
+// keeps in a private field and clears when the global location is set, and macOS versions map them differently (macOS 26
+// lands a constant offset away). So the event gets both locations of `mouse`, and when AppKit's location is off, the
+// offset is taken out of the window-local location, else out of the global one. nil when AppKit's location is still off,
+// or this macOS lacks the private functions.
+NSEvent *SparkDriverLocatedGesture(CGEventRef prototype, NSEvent *mouse) {
   static auto get = (CGPoint (*)(CGEventRef))dlsym(RTLD_DEFAULT, "CGEventGetWindowLocation");
   static auto set = (void (*)(CGEventRef, CGPoint))dlsym(RTLD_DEFAULT, "CGEventSetWindowLocation");
-  if (!get || !set) return NO;
-  CGPoint inWindow = get(mouse.CGEvent);
-  CGEventSetLocation(event, CGEventGetLocation(mouse.CGEvent));
-  set(event, inWindow);
-  return YES;
+  if (!get || !set) return nil;
+  NSPoint wanted = mouse.locationInWindow;
+  auto make = ^NSEvent *(CGPoint global, CGPoint inWindow) {
+    CGEventRef event = CGEventCreateCopy(prototype);
+    CGEventSetLocation(event, global);
+    set(event, inWindow);
+    NSEvent *result = [NSEvent eventWithCGEvent:event];
+    CFRelease(event);
+    return result;
+  };
+  auto off = ^BOOL(NSEvent *event) { return !event || hypot(event.locationInWindow.x - wanted.x, event.locationInWindow.y - wanted.y) > 0.5; };
+  CGPoint global = CGEventGetLocation(mouse.CGEvent), inWindow = get(mouse.CGEvent);
+  NSEvent *event = make(global, inWindow);
+  if (!off(event)) return event;
+  // Both locations are y-down; locationInWindow is y-up.
+  CGFloat dx = event.locationInWindow.x - wanted.x, dy = event.locationInWindow.y - wanted.y;
+  NSEvent *corrected = make(global, CGPointMake(inWindow.x - dx, inWindow.y + dy));
+  if (!off(corrected)) return corrected;
+  corrected = make(CGPointMake(global.x - dx, global.y + dy), inWindow);
+  return off(corrected) ? nil : corrected;
 }
 // A gesture NSEvent at `location` (window coordinates), checked against what was asked for: the fields are private and
 // AppKit's reading of them changes between macOS versions, so a mismatch is a failure, never an event for some other
@@ -154,11 +172,6 @@ static NSEvent *SparkGesture(NSWindow *window, NSPoint location, NSEventModifier
   NSEvent *mouse = SparkMouse(NSEventTypeMouseMoved, window, location, flags, 0);
   CGEventRef event = CGEventCreateCopy(mouse.CGEvent);
   CGEventSetType(event, (CGEventType)29);
-  if (!SparkDriverSetGestureLocation(event, mouse)) {
-    CFRelease(event);
-    *failure = [NSString stringWithFormat:@"Gesture synthesis is unsupported on macOS %@: CoreGraphics has no CGEventSetWindowLocation", NSProcessInfo.processInfo.operatingSystemVersionString];
-    return nil;
-  }
   CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointer, window.windowNumber);
   CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent, window.windowNumber);
   CGEventSetIntegerValueField(event, (CGEventField)SparkGestureHIDType, hidType);
@@ -168,7 +181,8 @@ static NSEvent *SparkGesture(NSWindow *window, NSPoint location, NSEventModifier
     if (field.unsignedIntValue == SparkGestureSwipe || field.unsignedIntValue == SparkGestureStage) CGEventSetIntegerValueField(event, (CGEventField)field.unsignedIntValue, value.longLongValue);
     else CGEventSetDoubleValueField(event, (CGEventField)field.unsignedIntValue, value.doubleValue);
   }];
-  NSEvent *result = [NSEvent eventWithCGEvent:event];
+  // Without a located event (the check below reports why), the event AppKit makes from the copy as it is.
+  NSEvent *result = SparkDriverLocatedGesture(event, mouse) ?: [NSEvent eventWithCGEvent:event];
   CFRelease(event);
   NSString *problem = SparkDriverCheckGesture(result, window, location, hidType, phase, values);
   if (!problem) return result;

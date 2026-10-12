@@ -72,32 +72,42 @@ static void Check(BOOL condition, NSString *message) {
 - (void)otherMouseUp:(NSEvent *)event { [self.seen addObject:[NSString stringWithFormat:@"otherUp %ld", (long)event.buttonNumber]]; }
 @end
 
-// Gesture NSEvents as the window server sends them: CGEvent type 29 with the HID type and values in private fields
-// (the test driver makes them the same way; docs/test-driver.md#input). The location and window are set explicitly,
-// and the event AppKit makes is checked, because its reading of a copied event's location differs between macOS versions.
+// Gesture NSEvents as the window server sends them: CGEvent type 29 with the HID type and values in private fields,
+// made the way the test driver makes them (docs/test-driver.md#input). AppKit takes a gesture's locationInWindow from a
+// private window-local location that versions map differently, so the event gets both locations of an AppKit mouse
+// event at the point, corrected by the offset AppKit's first event shows, and every event made is checked.
 static NSEvent *Gesture(NSWindow *window, NSPoint location, int64_t hidType, int64_t phase, NSDictionary<NSNumber *, NSNumber *> *doubles, NSDictionary<NSNumber *, NSNumber *> *integers) {
-  NSEvent *base = [NSEvent mouseEventWithType:NSEventTypeMouseMoved location:location modifierFlags:0 timestamp:1 windowNumber:window.windowNumber context:nil eventNumber:0 clickCount:0 pressure:0];
-  CGEventRef event = CGEventCreateCopy(base.CGEvent);
-  CGEventSetType(event, (CGEventType)29);
-  // The global location, and the location in the window (top-left origin) that AppKit reads for gestures, from the
-  // mouse event AppKit made (CGEventSetWindowLocation is private, as the driver uses it).
   static auto getWindowLocation = (CGPoint (*)(CGEventRef))dlsym(RTLD_DEFAULT, "CGEventGetWindowLocation");
   static auto setWindowLocation = (void (*)(CGEventRef, CGPoint))dlsym(RTLD_DEFAULT, "CGEventSetWindowLocation");
   Check(getWindowLocation && setWindowLocation, @"CoreGraphics has CGEventGetWindowLocation and CGEventSetWindowLocation");
-  CGEventSetLocation(event, CGEventGetLocation(base.CGEvent));
-  setWindowLocation(event, getWindowLocation(base.CGEvent));
-  CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointer, window.windowNumber);
-  CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent, window.windowNumber);
-  CGEventSetIntegerValueField(event, (CGEventField)110, hidType);
-  CGEventSetIntegerValueField(event, (CGEventField)132, phase);
-  for (NSNumber *field in doubles) CGEventSetDoubleValueField(event, (CGEventField)field.intValue, doubles[field].doubleValue);
-  for (NSNumber *field in integers) CGEventSetIntegerValueField(event, (CGEventField)field.intValue, integers[field].longLongValue);
-  NSEvent *result = [NSEvent eventWithCGEvent:event];
-  CFRelease(event);
+  NSEvent *base = [NSEvent mouseEventWithType:NSEventTypeMouseMoved location:location modifierFlags:0 timestamp:1 windowNumber:window.windowNumber context:nil eventNumber:0 clickCount:0 pressure:0];
+  auto make = ^NSEvent *(CGPoint global, CGPoint inWindow) {
+    CGEventRef event = CGEventCreateCopy(base.CGEvent);
+    CGEventSetType(event, (CGEventType)29);
+    CGEventSetLocation(event, global);
+    setWindowLocation(event, inWindow);
+    CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointer, window.windowNumber);
+    CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent, window.windowNumber);
+    CGEventSetIntegerValueField(event, (CGEventField)110, hidType);
+    CGEventSetIntegerValueField(event, (CGEventField)132, phase);
+    for (NSNumber *field in doubles) CGEventSetDoubleValueField(event, (CGEventField)field.intValue, doubles[field].doubleValue);
+    for (NSNumber *field in integers) CGEventSetIntegerValueField(event, (CGEventField)field.intValue, integers[field].longLongValue);
+    NSEvent *result = [NSEvent eventWithCGEvent:event];
+    CFRelease(event);
+    return result;
+  };
+  auto off = ^BOOL(NSEvent *event) { return !event || hypot(event.locationInWindow.x - location.x, event.locationInWindow.y - location.y) > 0.5; };
+  CGPoint global = CGEventGetLocation(base.CGEvent), inWindow = getWindowLocation(base.CGEvent);
+  NSEvent *result = make(global, inWindow);
+  if (off(result) && result) {
+    CGFloat dx = result.locationInWindow.x - location.x, dy = result.locationInWindow.y - location.y;
+    NSEvent *corrected = make(global, CGPointMake(inWindow.x - dx, inWindow.y + dy));
+    result = off(corrected) ? make(CGPointMake(global.x - dx, global.y + dy), inWindow) : corrected;
+  }
   NSDictionary<NSNumber *, NSNumber *> *types = @{ @8: @(NSEventTypeMagnify), @5: @(NSEventTypeRotate), @16: @(NSEventTypeSwipe), @22: @(NSEventTypeSmartMagnify), @32: @(NSEventTypePressure) };
   NSDictionary<NSNumber *, NSNumber *> *phases = @{ @0: @(NSEventPhaseNone), @1: @(NSEventPhaseBegan), @2: @(NSEventPhaseChanged), @4: @(NSEventPhaseEnded) };
   Check(result && result.type == (NSEventType)types[@(hidType)].unsignedIntegerValue && result.windowNumber == window.windowNumber
-    && hypot(result.locationInWindow.x - location.x, result.locationInWindow.y - location.y) <= 0.5 && (phase == 0 || result.phase == (NSEventPhase)phases[@(phase)].unsignedIntegerValue),
+    && !off(result) && (phase == 0 || result.phase == (NSEventPhase)phases[@(phase)].unsignedIntegerValue),
     [NSString stringWithFormat:@"AppKit makes the gesture asked for on macOS %@ (type %lu, window %ld, location %@ for %@, phase %lu)", NSProcessInfo.processInfo.operatingSystemVersionString,
       (unsigned long)result.type, (long)result.windowNumber, NSStringFromPoint(result.locationInWindow), NSStringFromPoint(location), (unsigned long)result.phase]);
   return result;
