@@ -220,7 +220,7 @@ const SYSTEM_EVENTS: readonly SystemEvent["type"][] = ["sleep", "wake", "lock", 
 const EVENT_FEATURES: Partial<Record<SystemEvent["type"], SystemFeature>> = { systemColorsChanged: "appearancePreferences", accessibilityDisplayChanged: "appearancePreferences" };
 const eventAvailable = (type: SystemEvent["type"]) => { const feature = EVENT_FEATURES[type]; return !feature || FEATURES[feature].includes(Platform.OS); };
 export interface SystemEventOptions {
-  /** Event types to receive; omitted, every type this platform delivers. Network, proxy and memory pressure observers are installed only for subscriptions that include their events. */
+  /** Event types to receive; omitted, every type this platform delivers. Each OS observer is installed only for subscriptions that include its events. */
   types?: readonly SystemEvent["type"][];
   /** Receives E_INVALID_DATA for a malformed native event. Without it, the error is rethrown asynchronously. */
   onError?: (error: SparkError) => void;

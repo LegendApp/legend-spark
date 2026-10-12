@@ -23,48 +23,21 @@ static NSDictionary *Power(void) {
   }
   return @{ @"onBattery": @(battery), @"batteryLevel": level };
 }
-static void PowerChanged(void *context) { SparkEmit(@{ @"type": @"powerChanged" }); }
 @interface RNDesktopSystem ()
-@property NSMutableArray *observers;
 @property NSMutableDictionary<NSString *, NSSet<NSString *> *> *subscriptions;
 @property SparkSystemStateObserver *state;
 @property NSMutableSet *assertions;
 @property NSMutableSet *attention;
-@property CFRunLoopSourceRef powerSource;
-@property BOOL observing;
 @property NSString *dockOwner;
 @end
 @implementation RNDesktopSystem
 RCT_EXPORT_MODULE(NativeDesktopSystem)
 + (BOOL)requiresMainQueueSetup { return YES; }
-- (instancetype)init { if (self = [super init]) { _observers = [NSMutableArray new]; _subscriptions = [NSMutableDictionary new]; _state = [SparkSystemStateObserver new]; _assertions = [NSMutableSet new]; _attention = [NSMutableSet new]; } return self; }
+- (instancetype)init { if (self = [super init]) { _subscriptions = [NSMutableDictionary new]; _state = [SparkSystemStateObserver new]; _assertions = [NSMutableSet new]; _attention = [NSMutableSet new]; } return self; }
 static NSSet<NSString *> *ObservedTypes(NSDictionary<NSString *, NSSet<NSString *> *> *subscriptions) {
   NSMutableSet *types = [NSMutableSet new];
   for (NSSet *set in subscriptions.allValues) [types unionSet:set];
   return types;
-}
-- (void)observe {
-  if (self.observing) return; self.observing = YES;
-  NSArray *definitions = @[
-    @[NSWorkspace.sharedWorkspace.notificationCenter, NSWorkspaceWillSleepNotification, @"sleep"],
-    @[NSWorkspace.sharedWorkspace.notificationCenter, NSWorkspaceDidWakeNotification, @"wake"],
-    @[NSDistributedNotificationCenter.defaultCenter, @"com.apple.screenIsLocked", @"lock"],
-    @[NSDistributedNotificationCenter.defaultCenter, @"com.apple.screenIsUnlocked", @"unlock"],
-    @[NSDistributedNotificationCenter.defaultCenter, @"AppleInterfaceThemeChangedNotification", @"appearanceChanged"],
-    @[NSNotificationCenter.defaultCenter, NSApplicationDidChangeScreenParametersNotification, @"displaysChanged"]
-  ];
-  for (NSArray *definition in definitions) {
-    NSNotificationCenter *center = definition[0]; NSString *type = definition[2];
-    id observer = [center addObserverForName:definition[1] object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { SparkEmit(@{ @"type": type }); }];
-    [self.observers addObject:@[center, observer]];
-  }
-  self.powerSource = IOPSNotificationCreateRunLoopSource(PowerChanged, NULL);
-  if (self.powerSource) CFRunLoopAddSource(CFRunLoopGetMain(), self.powerSource, kCFRunLoopCommonModes);
-}
-- (void)stopObserving {
-  for (NSArray *entry in self.observers) [entry[0] removeObserver:entry[1]];
-  [self.observers removeAllObjects]; self.observing = NO;
-  if (self.powerSource) { CFRunLoopRemoveSource(CFRunLoopGetMain(), self.powerSource, kCFRunLoopCommonModes); CFRelease(self.powerSource); self.powerSource = NULL; }
 }
 - (NSMenu *)menu:(NSArray *)items {
   NSMenu *menu = [NSMenu new]; menu.autoenablesItems = NO;
@@ -115,12 +88,11 @@ static NSSet<NSString *> *ObservedTypes(NSDictionary<NSString *, NSSet<NSString 
       next[args[@"id"]] = [NSSet setWithArray:args[@"types"]];
       NSString *error;
       if (![self.state observeTypes:ObservedTypes(next) error:&error]) { reject(@"E_NATIVE", error, nil); return; }
-      self.subscriptions = next; [self observe];
+      self.subscriptions = next;
     }
     else if ([method isEqual:@"unobserve"]) {
       // Fewer types only removes sources, which cannot fail.
       [self.subscriptions removeObjectForKey:args[@"id"]]; [self.state observeTypes:ObservedTypes(self.subscriptions) error:nil];
-      if (!self.subscriptions.count) [self stopObserving];
     }
     else if ([method isEqual:@"loginStatus"] || [method isEqual:@"login"]) {
       BOOL available = [SparkContext()[@"runtime"][@"mode"] isEqual:@"release"];
@@ -160,7 +132,7 @@ static NSSet<NSString *> *ObservedTypes(NSDictionary<NSString *, NSSet<NSString 
   });
 }
 - (void)invalidate { dispatch_async(dispatch_get_main_queue(), ^{
-  [self stopObserving]; [self.state stop]; [self.subscriptions removeAllObjects];
+  [self.state stop]; [self.subscriptions removeAllObjects];
   for (NSNumber *value in self.assertions) IOPMAssertionRelease(value.unsignedIntValue); [self.assertions removeAllObjects];
   for (NSNumber *value in self.attention) [NSApp cancelUserAttentionRequest:value.integerValue]; [self.attention removeAllObjects];
   SparkDockMenu = nil; NSApp.dockTile.badgeLabel = nil; SparkSetDockProgress(NSApp.dockTile, nil);
