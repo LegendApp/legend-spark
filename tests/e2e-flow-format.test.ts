@@ -220,7 +220,7 @@ describe("flow structure", () => {
 describe("catalog", () => {
   test("driver-backed commands are marked", () => {
     expect(Object.keys(COMMANDS).filter(name => COMMANDS[name]!.driver).sort()).toEqual([
-      "advanceClock", "assertAppMenu", "assertEnergy", "assertFrames", "assertIdleCpu", "assertMemory", "assertMotion", "assertNoFlicker", "assertNoLayoutThrash", "assertNoLeaks",
+      "advanceClock", "assertAppMenu", "assertCrashSymbol", "assertEnergy", "assertFrames", "assertIdleCpu", "assertMemory", "assertMotion", "assertNoFlicker", "assertNoLayoutThrash", "assertNoLeaks",
       "assertPaused", "assertScreenshot", "assertStartup", "assertState", "captureMotion", "interruptAt", "measure", "preserveAppDefaults", "setAppAppearance", "setClock", "simulateDisplays", "simulateSystemEvent", "startTrace",
       "stopTrace", "takeScreenshot",
     ]);

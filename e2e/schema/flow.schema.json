@@ -7122,6 +7122,39 @@
               "type": "object"
             }
           },
+          "assertCrashSymbol": {
+            "description": "[driver] Assert the native crash report at state `path` has a frame named `symbol`. A dev build's report carries in-process names; a release build is stripped, so the report is symbolicated with the dSYMs in the `dSYMs` folder next to the app (as `spark symbolicate`), and a release build without them fails.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "symbol": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "path",
+                "symbol"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "assertEntitlements": {
             "description": "Assert every process of the app is signed with only the entitlements `allow` names, each with its reason, and never get-task-allow; an `allow` entry no process carries fails. `sandbox`: whether this is the sandboxed variant, which sandboxes every process.",
             "if": {

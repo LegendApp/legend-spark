@@ -91,15 +91,15 @@ export class KitchenSinkApp {
   /**
    * Resolves the app, bundles (first call per mode only) and serves the JavaScript a dev build loads (a release build
    * needs neither), then starts a driver session. `bundleId` is the app's; `launchedBundleId` is what the launched
-   * process registers as (the clone's identity in an isolated session).
+   * process registers as (the clone's identity in an isolated session). `release`: the app embeds its JavaScript.
    */
-  async open(options: { dev?: boolean; label?: string } = {}): Promise<{ app: string; bundleId: string; launchedBundleId: string }> {
+  async open(options: { dev?: boolean; label?: string } = {}): Promise<{ app: string; release: boolean; bundleId: string; launchedBundleId: string }> {
     const resolved = this.resolved ??= this.resolve();
     await this.serve(resolved, options.dev ?? false, options.label);
     this.state ??= this.mode === "exact"
       ? exactState(resolved.app, resolved, readManifest(path.join(KITCHEN_SINK, "../../e2e")).appId, this.host)
       : DriverState.create(resolved.app, resolved, this.host);
-    return { app: resolved.app, bundleId: resolved.bundleId, launchedBundleId: this.state.identity.bundleId };
+    return { app: resolved.app, release: resolved.embedded, bundleId: resolved.bundleId, launchedBundleId: this.state.identity.bundleId };
   }
 
   private async serve(resolved: Resolved, dev: boolean, label: string | undefined) {

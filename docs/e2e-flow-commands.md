@@ -239,6 +239,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | Command | Short form | Keys | Backend | Summary |
 |---|---|---|---|---|
 | `assertState` | — | `path`*, `equals`* | driver | Assert app state by path. |
+| `assertCrashSymbol` | — | `path`*, `symbol`* | driver | Assert the native crash report at state `path` has a frame named `symbol`. A dev build's report carries in-process names; a release build is stripped, so the report is symbolicated with the dSYMs in the `dSYMs` folder next to the app (as `spark symbolicate`), and a release build without them fails. |
 
 ## Security audits
 

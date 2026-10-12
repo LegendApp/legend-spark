@@ -4,10 +4,12 @@ intent: >
   With consent, each simulated crash starts the app's executable as a helper process that installs the
   crash handlers and crashes before the app starts (no window). Its signal handler writes a record and
   the helper exits; the app turns the record into a report symbolicated with its own symbol tables. The
-  screen compares each report with the crash it asked for: a bad memory access is SIGSEGV naming
-  SparkCrashNow; abort() is SIGABRT; an uncaught NSException is SIGABRT with the exception's name; a
-  stack overflow is SIGSEGV naming the recursion, recorded on the alternate signal stack. Every frame is
-  located by image, offset and UUID, and getCrashReports lists the report. The reports are captured.
+  screen compares each report with the crash it asked for: a bad memory access is SIGSEGV; abort() is
+  SIGABRT; an uncaught NSException is SIGABRT with the exception's name; a stack overflow is SIGSEGV,
+  recorded on the alternate signal stack. Every frame is located by image, offset and UUID, and
+  getCrashReports lists the report. Each report names the crashing frame, SparkCrashNow (the recursion,
+  SparkCrashRecurse, for a stack overflow): in-process on a dev build; a stripped release build names it
+  only once its report is symbolicated with the dSYMs next to the app. The reports are captured.
 checks: [REL-CRASH-02, REL-CRASH-03]
 tags: [reliability-diagnostics]
 platforms: [macos]
@@ -17,13 +19,17 @@ platforms: [macos]
 - tapOn: { id: reliability-diagnostics-crash-reporting-consent }
 - extendedWaitUntil: { visible: { text: "consent on", within: { id: reliability-diagnostics-crash-reporting-state } }, timeout: 5s }
 - tapOn: { id: reliability-diagnostics-crash-reporting-simulate-badAccess }
-- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-result, text: '{"kind":"badAccess","report":"native","simulated":true,"signal":"SIGSEGV","namesCrash":true,"framesLocated":true,"listed":true}' }, timeout: 40s }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-result, text: '{"kind":"badAccess","report":"native","simulated":true,"signal":"SIGSEGV","framesLocated":true,"listed":true}' }, timeout: 40s }
+- assertCrashSymbol: { path: crashReporting.lastReport, symbol: SparkCrashNow }
 - tapOn: { id: reliability-diagnostics-crash-reporting-simulate-abort }
-- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-result, text: '{"kind":"abort","report":"native","simulated":true,"signal":"SIGABRT","namesCrash":true,"framesLocated":true,"listed":true}' }, timeout: 40s }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-result, text: '{"kind":"abort","report":"native","simulated":true,"signal":"SIGABRT","framesLocated":true,"listed":true}' }, timeout: 40s }
+- assertCrashSymbol: { path: crashReporting.lastReport, symbol: SparkCrashNow }
 - tapOn: { id: reliability-diagnostics-crash-reporting-simulate-uncaughtException }
-- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-result, text: '{"kind":"uncaughtException","report":"native","simulated":true,"signal":"SIGABRT","exception":"SparkSimulatedException","namesCrash":true,"framesLocated":true,"listed":true}' }, timeout: 40s }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-result, text: '{"kind":"uncaughtException","report":"native","simulated":true,"signal":"SIGABRT","exception":"SparkSimulatedException","framesLocated":true,"listed":true}' }, timeout: 40s }
+- assertCrashSymbol: { path: crashReporting.lastReport, symbol: SparkCrashNow }
 - tapOn: { id: reliability-diagnostics-crash-reporting-simulate-stackOverflow }
-- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-result, text: '{"kind":"stackOverflow","report":"native","simulated":true,"signal":"SIGSEGV","namesCrash":true,"framesLocated":true,"listed":true}' }, timeout: 40s }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-crash-reporting-result, text: '{"kind":"stackOverflow","report":"native","simulated":true,"signal":"SIGSEGV","framesLocated":true,"listed":true}' }, timeout: 40s }
+- assertCrashSymbol: { path: crashReporting.lastReport, symbol: SparkCrashRecurse }
 - assertText: { id: reliability-diagnostics-crash-reporting-count, equals: 4 reports }
 - scroll: { on: { id: reliability-diagnostics-crash-reporting-root }, direction: down, amount: 2000, precise: true }
 - takeScreenshot: crash-native-reports

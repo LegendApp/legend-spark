@@ -143,7 +143,9 @@ export class FakeApp implements DriverApp {
 
   readonly reserved = { arguments: ["-RCT_jsLocation"], env: ["SPARK_TEST_DRIVER_DIR", "SPARK_BUNDLE_URL"], locale: ["-AppleLanguages", "-AppleLocale"] };
 
-  async open(options: { dev: boolean }) { this.log.push(options.dev ? "open dev" : "open"); return { app: "/Apps/KitchenSink.app", bundleId: this.bundleId, launchedBundleId: `${this.bundleId}.driver` }; }
+  /** The bundle `open` reports, and whether it is a release build. */
+  bundle = { app: "/Apps/KitchenSink.app", release: false };
+  async open(options: { dev: boolean }) { this.log.push(options.dev ? "open dev" : "open"); return { ...this.bundle, bundleId: this.bundleId, launchedBundleId: `${this.bundleId}.driver` }; }
   async clearState() { this.log.push("clearState"); return ["defaults:so.legend.spark.examples.kitchensink"]; }
   /** Set to make preserveDefaults refuse, as it does while the app runs. */
   refusePreserve?: string;
