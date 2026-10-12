@@ -50,6 +50,13 @@ export type TestSpeech = {
   recognitions: number; listening: boolean; lastRecognition: { locale: string; onDevice: boolean; partialResults: boolean; punctuation: boolean; contextualStrings: string[] } | null;
 };
 export type SimulatedSpeech = { wordMs?: number; recognizerAvailable?: boolean; onDeviceSupported?: boolean; recognitionPartials?: string[]; recognitionTranscript?: string | null };
+/** What the @legendapp/spark/app-intents simulation recorded (the `testAppIntents` driver command). */
+export type TestAppIntents = {
+  declared: string[]; registered: string[]; pending: number;
+  invocations: { id: string; parameters: Record<string, unknown>; text?: string; error?: { code: string; message: string } }[];
+  donations: { id: string; parameters: Record<string, unknown> }[];
+};
+export type SimulatedAppIntents = { intents?: Record<string, unknown>[]; invoke?: { id: string; parameters?: Record<string, unknown>; timeoutMs?: number } };
 /** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
 export type SimulatedSystemEvent = {
   type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string;
@@ -347,6 +354,10 @@ export class Driver {
   async simulateSpeech(state: SimulatedSpeech) { return body<{ speech: TestSpeech }>(await this.request({ command: "simulateSpeech", ...state }, 10000)).speech; }
   /** The simulated speech state: recorded utterances, speaking and paused, and recognitions. */
   async testSpeech() { return body<{ speech: TestSpeech }>(await this.request({ command: "testSpeech" }, 10000)).speech; }
+  /** Drives the @legendapp/spark/app-intents simulation (docs/app-intents.md#testing); nothing reaches the system. */
+  async simulateAppIntents(request: SimulatedAppIntents) { return body<{ appIntents: TestAppIntents }>(await this.request({ command: "simulateAppIntents", ...request }, 10000)).appIntents; }
+  /** What the App Intents simulation recorded: declared and handled intents, completed invocations, pending ones, donations. */
+  async testAppIntents() { return body<{ appIntents: TestAppIntents }>(await this.request({ command: "testAppIntents" }, 10000)).appIntents; }
   /** Startup phases of this launch, once its first rendered UI has settled; with `testID`, `ready` once that element first showed settled. */
   async startup(timeoutMs = 30000, testID?: string) {
     return (await this.request({ command: "startup", timeoutMs, ...(testID === undefined ? {} : { testID }) }, timeoutMs + 10000)).phases as StartupPhases;

@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: Donating an App Intent records it with its parameters (simulated)
+intent: >
+  Donate Show Recipe donates the Kitchen Sink's Show Recipe intent for Pancakes for 2. Before the simulation declares
+  the intent it rejects SparkError:E_NOT_FOUND; afterwards the simulation records the donation with its parameters. In
+  driver mode nothing is donated to the system (IntentDonationManager is never called).
+checks: [SYS-INTENTSDONATE-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/app-intents" }
+- tapOn: { id: system-integration-app-intents-donate }
+- assertText: { id: system-integration-app-intents-donation, equals: SparkError:E_NOT_FOUND }
+- assertAppIntents: { donations: 0 }
+- runFlow: { file: subflows/declare-app-intents.yaml }
+- tapOn: { id: system-integration-app-intents-donate }
+- assertText: { id: system-integration-app-intents-donation, equals: donated }
+- assertAppIntents: { donations: 1, lastDonation: { id: ksShowRecipe, parameters: { recipe: Pancakes, servings: 2 } } }
+- takeScreenshot: app-intents-donate
+- assertNotVisible: { id: system-integration-app-intents-error }

@@ -6,6 +6,8 @@ const {
   withPodfile,
   withInfoPlist,
   withEntitlementsPlist,
+  withXcodeProject,
+  MacOSConfig,
 } = require("expo-desktop-config-plugins");
 const { identity } = require("./identity.cjs");
 const { resolveEntitlements } = require("./entitlements.cjs");
@@ -27,6 +29,10 @@ module.exports = function withSparkDesktop(config) {
     return mod;
   });
   config = require("./icons.cjs").withDesktopIcon(config, "macos");
+  config = require("./app-intents.cjs").withAppIntents(config, { withInfoPlist, withXcodeProject, Xcodeproj: () => MacOSConfig.XcodeUtils, selection: root => {
+    const file = statePath(root, "native-selection.json", "macos");
+    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")).included.map(pkg => pkg.name) : undefined;
+  } });
   config = withAppDelegate(config, (mod) => {
     // Own this adapter; application customizations belong in configuration/plugins.
     mod.modResults.contents = fs.readFileSync(require.resolve("@legendapp/spark-desktop-host/AppDelegate.mm"), "utf8");

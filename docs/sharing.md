@@ -17,8 +17,7 @@ await deleteSpotlightItems({ domains: ['recipes'] });
 ```
 
 `getSharingAvailability(feature)` reports `share`, `services` and `spotlight` separately. App Intents and Shortcuts
-are not provided: the system only knows intents compiled into the app's App Intents metadata, which Spark's build
-cannot produce today (#393). The Quick Look panel is `showQuickLook` in [`@legendapp/spark/files`](files.md); the
+are in [`@legendapp/spark/app-intents`](app-intents.md). The Quick Look panel is `showQuickLook` in [`@legendapp/spark/files`](files.md); the
 default URL handler and universal links are in [`@legendapp/spark/links`](links-and-documents.md#default-url-handler).
 
 ## Share

@@ -12,7 +12,7 @@ import { processLog, type ProcessLog } from "../../../packages/cli/src/process.t
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type TestSharing, type SimulatedSharing, type SimulatedSpeech, type TestSpeech,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type SimulatedSpeech, type TestSpeech,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
@@ -52,6 +52,8 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   testSharing(): Promise<TestSharing>;
   simulateSpeech(state: SimulatedSpeech): Promise<TestSpeech>;
   testSpeech(): Promise<TestSpeech>;
+  simulateAppIntents(request: SimulatedAppIntents): Promise<TestAppIntents>;
+  testAppIntents(): Promise<TestAppIntents>;
   testDrag(request: TestDragRequest): Promise<TestDragReply>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
   tap(target: InputTarget, options?: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
@@ -129,6 +131,9 @@ export class DriverBackend implements Backend {
     // Simulated @legendapp/spark/speech state: recorded utterances and scripted recognition, never audio or TCC (docs/speech.md#testing).
     simulateSpeech: async args => { await this.client().simulateSpeech(args as SimulatedSpeech); },
     assertSimulatedSpeech: (args, context) => context.eventually(async () => assertSimulatedSpeech(await this.client().testSpeech(), args)),
+    // Simulated @legendapp/spark/app-intents: the driver declares and runs intents; nothing reaches the system (docs/app-intents.md#testing).
+    simulateAppIntents: async args => { await this.client().simulateAppIntents(args as SimulatedAppIntents); },
+    assertAppIntents: (args, context) => context.eventually(async () => assertAppIntents(await this.client().testAppIntents(), args)),
     // Startup phases and the state the app exposes (docs/e2e-flows.md#app-inspection).
     ...inspectCommands(() => this.client(), () => this.opened!),
     // Layout thrash, flicker, leak counters and memory (docs/e2e-flows.md#layout-flicker-and-leaks).
@@ -562,6 +567,23 @@ export function assertSimulatedSpeech(speech: TestSpeech, args: Record<string, u
   for (const key of Object.keys(actual)) {
     if (args[key] === undefined || JSON.stringify(actual[key]) === JSON.stringify(args[key])) continue;
     throw new Failure("assertion", `speech ${key} is ${JSON.stringify(actual[key])}, expected ${JSON.stringify(args[key])}`);
+  }
+}
+/** Each given field matches the App Intents simulation: lastInvocation and lastDonation compare the fields they list. */
+export function assertAppIntents(intents: TestAppIntents, args: Record<string, unknown>) {
+  const fail = (what: string, actual: unknown, expected: unknown) => { throw new Failure("assertion", `${what} is ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`); };
+  if (args.registered !== undefined && !isDeepStrictEqual(intents.registered, [...args.registered as string[]].sort())) fail("the intents with a handler", intents.registered, args.registered);
+  for (const key of ["invocations", "donations"] as const)
+    if (args[key] !== undefined && intents[key].length !== args[key]) fail(key, intents[key].length, args[key]);
+  if (args.pending !== undefined && intents.pending !== args.pending) fail("pending invocations", intents.pending, args.pending);
+  for (const [key, list] of [["lastInvocation", intents.invocations], ["lastDonation", intents.donations]] as const) {
+    if (args[key] === undefined) continue;
+    const last = list.at(-1) as Record<string, unknown> | undefined;
+    if (!last) fail(`the ${key === "lastInvocation" ? "last invocation" : "last donation"}`, null, args[key]);
+    for (const [field, value] of Object.entries(args[key] as Record<string, unknown>)) {
+      const actual = field === "error" ? (last!.error as { code: string } | undefined)?.code ?? null : last![field] ?? null;
+      if (!isDeepStrictEqual(actual, value)) fail(`the ${key === "lastInvocation" ? "last invocation" : "last donation"}'s ${field}`, actual, value);
+    }
   }
 }
 export function assertSimulatedPermission(permission: TestPermission, args: Record<string, unknown>) {

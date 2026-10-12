@@ -1,0 +1,39 @@
+appId: so.legend.spark.examples.kitchensink
+name: App Intent handlers answer invocations with text, nothing or their error (simulated)
+intent: >
+  System integration > App Intents & Shortcuts reports App Intents available: in driver mode @legendapp/spark/app-intents
+  simulates a build with compiled intents and never reaches Shortcuts, Spotlight or Siri. The Kitchen Sink declares no
+  intents, so getAppIntents lists none and both handlers reject SparkError:E_NOT_FOUND. Once the simulation declares
+  them, Listen again registers both. Show Recipe answers with its text; Start Timer fails over 60 minutes with the
+  handler's SparkError code, refuses parameters that do not match the declaration before the handler runs, and
+  completes with nothing otherwise.
+checks: [SYS-INTENTSAVAIL-01, SYS-INTENTS-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/app-intents" }
+- assertText: { id: system-integration-app-intents-availability, equals: '{"available":true}' }
+- assertText: { id: system-integration-app-intents-declared, equals: none }
+- assertText: { id: system-integration-app-intents-status-ksShowRecipe, equals: SparkError:E_NOT_FOUND }
+- assertText: { id: system-integration-app-intents-status-ksStartTimer, equals: SparkError:E_NOT_FOUND }
+- assertAppIntents: { registered: [] }
+- runFlow: { file: subflows/declare-app-intents.yaml }
+- tapOn: { id: system-integration-app-intents-listen }
+- assertText: { id: system-integration-app-intents-declared, equals: "ksShowRecipe, ksStartTimer" }
+- assertText: { id: system-integration-app-intents-status-ksShowRecipe, equals: listening }
+- assertText: { id: system-integration-app-intents-status-ksStartTimer, equals: listening }
+- assertAppIntents: { registered: [ksShowRecipe, ksStartTimer] }
+- simulateAppIntents: { invoke: { id: ksShowRecipe, parameters: { recipe: Gazpacho, servings: 4 } } }
+- assertText: { id: system-integration-app-intents-event-0, equals: "ksShowRecipe: Gazpacho for 4" }
+- assertAppIntents: { invocations: 1, pending: 0, lastInvocation: { id: ksShowRecipe, parameters: { recipe: Gazpacho, servings: 4 }, text: Gazpacho for 4, error: null } }
+- simulateAppIntents: { invoke: { id: ksStartTimer, parameters: { minutes: 90 } } }
+- assertText: { id: system-integration-app-intents-event-0, equals: "ksStartTimer: refused 90" }
+- assertAppIntents: { invocations: 2, lastInvocation: { id: ksStartTimer, error: E_INVALID_ARGUMENT } }
+- simulateAppIntents: { invoke: { id: ksStartTimer, parameters: { minutes: five } } }
+- assertAppIntents: { invocations: 3, lastInvocation: { id: ksStartTimer, error: E_INVALID_ARGUMENT } }
+- assertText: { id: system-integration-app-intents-event-0, equals: "ksStartTimer: refused 90" }
+- simulateAppIntents: { invoke: { id: ksStartTimer, parameters: { minutes: 5 } } }
+- assertText: { id: system-integration-app-intents-event-0, equals: "ksStartTimer: 5 min" }
+- assertAppIntents: { invocations: 4, lastInvocation: { id: ksStartTimer, text: null, error: null } }
+- takeScreenshot: app-intents-handlers
+- assertNotVisible: { id: system-integration-app-intents-error }

@@ -5870,6 +5870,258 @@
               "type": "object"
             }
           },
+          "simulateAppIntents": {
+            "description": "[driver] Drive the in-process simulation of @legendapp/spark/app-intents: the intents the app's macos.appIntents would declare (replacing the previous ones), and an invocation of one as Shortcuts, Spotlight or Siri would run it, with its parameters and how long it waits for an answer (default 30 s). Never reaches the system: nothing is donated or registered with Shortcuts.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "intents": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "returnsText": {
+                        "type": "boolean"
+                      },
+                      "parameters": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "title": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "type": {
+                              "enum": [
+                                "string",
+                                "number",
+                                "integer",
+                                "boolean"
+                              ]
+                            },
+                            "optional": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "title",
+                            "type",
+                            "optional"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 0
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "title",
+                      "returnsText",
+                      "parameters"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 0
+                },
+                "invoke": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      }
+                    },
+                    "timeoutMs": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "intents"
+                  ]
+                },
+                {
+                  "required": [
+                    "invoke"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
+          "assertAppIntents": {
+            "description": "[driver] Assert what the @legendapp/spark/app-intents simulation recorded: the intents with a handler (sorted), how many invocations completed and how many still wait, the last completed invocation (its id, parameters, the text it returned, or its error code; null for none), and the number of donations and the last one.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "registered": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 0
+                },
+                "invocations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "pending": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "lastInvocation": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      }
+                    },
+                    "text": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "minProperties": 1
+                },
+                "donations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "lastDonation": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "additionalProperties": false,
+                  "minProperties": 1
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "registered"
+                  ]
+                },
+                {
+                  "required": [
+                    "invocations"
+                  ]
+                },
+                {
+                  "required": [
+                    "pending"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastInvocation"
+                  ]
+                },
+                {
+                  "required": [
+                    "donations"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastDonation"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "permission": {
             "description": "Grant, revoke or reset a privacy permission.",
             "if": {

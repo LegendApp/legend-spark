@@ -75,6 +75,7 @@ Package: `@legendapp/spark@0.0.1-next.3`. This matrix is generated from `package
 | [`./plugins`](../packages/desktop/plugins.ts) | [plugins/package.json](../packages/plugins/package.json)<br>no platform-specific source file | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/plugins.test.ts](../tests/plugins.test.ts)<br>No mapped shared runtime case |
 | [`./video`](../packages/desktop/video.ts) | [media/package.json](../packages/media/package.json)<br>macos: `packages/media/macos/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/video.test.ts](../tests/video.test.ts)<br>[tests/media-native.test.ts](../tests/media-native.test.ts)<br>No mapped shared runtime case |
 | [`./speech`](../packages/desktop/speech.ts) | [media/package.json](../packages/media/package.json)<br>macos: `packages/media/macos/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/speech.test.ts](../tests/speech.test.ts)<br>[tests/media-native.test.ts](../tests/media-native.test.ts)<br>No mapped shared runtime case |
+| [`./app-intents`](../packages/desktop/app-intents.ts) | [app-intents/package.json](../packages/app-intents/package.json)<br>macos: `packages/app-intents/macos/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/app-intents.test.ts](../tests/app-intents.test.ts)<br>[tests/app-intents-native.test.ts](../tests/app-intents-native.test.ts)<br>[tests/app-intents-build.test.ts](../tests/app-intents-build.test.ts)<br>No mapped shared runtime case |
 
 ## Build and configuration exports
 

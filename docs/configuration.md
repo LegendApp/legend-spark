@@ -45,6 +45,10 @@ extra mouse button synthesis, which uses private CoreGraphics functions. It is o
 default. Turn it on only for apps that are tested and never distributed, such as the
 Kitchen Sink ([test driver](test-driver.md#private-event-functions)).
 
+`macos.appIntents` declares the actions the app offers to Shortcuts, Spotlight and Siri. `spark build`
+compiles them into the app; JavaScript handles them with `@legendapp/spark/app-intents`
+([App Intents](app-intents.md)).
+
 `localizations` lists the languages the app is translated into, development
 language first. On macOS AppKit and Spark show native strings (menus, dialogs,
 panels) in the first of the user's languages listed there; see

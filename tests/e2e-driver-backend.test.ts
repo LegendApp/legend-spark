@@ -169,6 +169,20 @@ describe("command mapping", () => {
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("speech utterances is 0, expected 1") });
   });
 
+  test("simulateAppIntents drives the App Intents simulation; assertAppIntents checks what it recorded", async () => {
+    const { result, app } = await run("- launchApp\n- simulateAppIntents: { intents: [{ id: show, title: Show, returnsText: true, parameters: [] }] }\n- simulateAppIntents: { invoke: { id: show, parameters: { n: 2 }, timeoutMs: 100 } }\n- assertAppIntents: { pending: 1, invocations: 0, registered: [] }");
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => line.includes("AppIntents"))).toEqual(['simulateAppIntents {"intents":[{"id":"show","title":"Show","returnsText":true,"parameters":[]}]}', 'simulateAppIntents {"invoke":{"id":"show","parameters":{"n":2},"timeoutMs":100}}', "testAppIntents"]);
+    const app2 = new FakeApp();
+    app2.appIntents.registered = ["b", "a"].sort();
+    app2.appIntents.invocations = [{ id: "show", parameters: { n: 2 }, text: "Two" }, { id: "timer", parameters: {}, error: { code: "E_TIMEOUT", message: "late" } }];
+    app2.appIntents.donations = [{ id: "show", parameters: { n: 1 } }];
+    const passed = await run("- launchApp\n- assertAppIntents: { registered: [b, a], invocations: 2, lastInvocation: { id: timer, error: E_TIMEOUT, text: null }, donations: 1, lastDonation: { id: show, parameters: { n: 1 } } }", app2);
+    expect(passed.result.status).toBe("passed");
+    const failed = await run("- launchApp\n- assertAppIntents: { lastInvocation: { error: null }, timeout: 200ms }", app2);
+    expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('the last invocation\'s error is "E_TIMEOUT", expected null') });
+  });
+
   test("dragAndDrop runs a Spark drag source's drag in process: begin, move, a hold for spring loading, drop", async () => {
     const app = new FakeApp({ source: 1, target: 1 });
     app.dragSources = { source: {} };

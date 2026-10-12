@@ -23,4 +23,6 @@
 - assertSharing: { shares: 1, lastShare: { items: [{ type: text, text: Hi }], anchored: true, service: Mail }, indexed: [recipe-1], registered: [Show], invocations: 1 }
 - simulateSpeech: { wordMs: 50, recognitionPartials: [hello], recognitionTranscript: hello world }   # driver; nothing is spoken or heard
 - assertSimulatedSpeech: { utterances: 1, lastText: Hello, lastRate: 1, listening: false }
+- simulateAppIntents: { intents: [{ id: show, title: Show, returnsText: true, parameters: [{ name: n, title: N, type: integer, optional: true }] }], invoke: { id: show, parameters: { n: 2 }, timeoutMs: 1000 } }   # driver; nothing reaches the system
+- assertAppIntents: { registered: [show], invocations: 1, pending: 0, lastInvocation: { id: show, parameters: { n: 2 }, text: Two, error: null }, donations: 1, lastDonation: { id: show, parameters: { n: 1 } } }
 - setFocusMode: doNotDisturb
