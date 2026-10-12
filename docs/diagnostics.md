@@ -26,6 +26,11 @@ registers and walk its frame pointers, resumes it, and then waits for the ping t
 the main thread answers, `onHang` gets one report for the hang. Reports are delivered after the
 hang, because events reach JavaScript through the main thread.
 
+What decides is the ping's round trip, measured on a monotonic clock: any ping the main thread
+answers `thresholdMs` or more after it was sent is reported, once, even if the watchdog thread itself
+ran late and found the ping already answered. The hang is over by then, so that report has an empty
+`stack` and `endedBeforeSampling: true` rather than a stack that would not show the hang.
+
 - **Threshold.** Integer milliseconds from 50 to 60000; the default is 250 (the duration from which
   Apple's tools count a hang). The next ping goes out half a threshold after the last answer, so a hang
   shorter than `thresholdMs` is never reported (not even when the watchdog thread runs late) and one longer than 1.5 x `thresholdMs` normally is
@@ -52,6 +57,7 @@ interface HangReport {
   thresholdMs: number;   // the watchdog's threshold
   startedAt: number;     // wall-clock ms since 1970 of the unanswered ping, like Date.now()
   stack: StackFrame[];   // innermost first, sampled once the threshold passed; [] if it could not be read
+  endedBeforeSampling: boolean; // the hang was over before the watchdog looked; stack is then []
 }
 interface StackFrame {
   address: string;       // hex: the program counter, then return addresses
@@ -263,6 +269,8 @@ A native report that does not match the contract rejects `E_INVALID_DATA`.
   `SparkHangWatchdog` (unoptimized and `-O2`) and hangs its main thread: a 600 ms hang is reported
   once with its duration and a stack from `__semwait_signal` down to `main`; a 30 ms stall is not;
   back-to-back hangs are reported separately; after `stop` nothing is reported and the thread
-  exits; two watchdogs keep their own thresholds.
+  exits; two watchdogs keep their own thresholds. A build whose answers reach the watchdog thread
+  late reports no short pings; a build that holds the watchdog thread between a ping and its wait
+  until a 600 ms hang is over still reports that hang once, with `endedBeforeSampling` and no stack.
 - Kitchen Sink: Reliability & diagnostics → Hang watchdog and Crash reporting, and the `REL-HANG-*`
   and `REL-CRASH-*` flows in `e2e/flows/reliability-diagnostics/`.

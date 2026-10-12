@@ -56,7 +56,63 @@ static void Spin(NSTimeInterval seconds, BOOL (^until)(void)) {
   return NO;
 }
 
-#ifdef SPARK_HANG_WATCHDOG_TEST_SIGNAL_DELAY_MS
+#ifdef SPARK_HANG_WATCHDOG_TEST_HOOKS
+// Built with a hook on the watchdog thread between sending a ping and waiting for it, which holds the thread
+// while the main thread hangs and recovers: the thread wakes late to find the ping answered after more
+// than the threshold. That is a hang, reported once, with no stack since the hang was over before it looked.
+// 0: the hook does nothing. 1: armed, the next ping parks the thread until `go`. 2: parked. 3: the next ping
+// holds the thread until the hang is over and answered.
+static atomic_int phase;
+static dispatch_semaphore_t go = dispatch_semaphore_create(0), hangOver = dispatch_semaphore_create(0);
+extern "C" void SparkHangWatchdogTestPinged(void) {
+  int armed = 1;
+  if (atomic_compare_exchange_strong(&phase, &armed, 2)) {
+    dispatch_semaphore_wait(go, DISPATCH_TIME_FOREVER);
+    atomic_store(&phase, 3);
+  } else if (atomic_load(&phase) == 3) {
+    dispatch_semaphore_wait(hangOver, DISPATCH_TIME_FOREVER);
+    usleep(200 * 1000); // The main thread answers meanwhile.
+    atomic_store(&phase, 0);
+  }
+}
+int main(void) {
+  @autoreleasepool {
+    NSMutableArray<NSDictionary *> *reports = [NSMutableArray new];
+    SparkHangWatchdog *watchdog = [[SparkHangWatchdog alloc] initWithThreshold:100 handler:^(NSDictionary *report) { [reports addObject:Received(report)]; }];
+    Spin(0.3, nil);
+    // Park the watchdog thread, then answer the ping it sent: no ping is outstanding when the hang starts.
+    atomic_store(&phase, 1);
+    Spin(5, ^{ return (BOOL)(atomic_load(&phase) == 2); });
+    CHECK(atomic_load(&phase) == 2);
+    Spin(0.2, nil);
+    CHECK(reports.count == 0);
+    // Released, the thread sends its next ping during the hang and is held until the hang is over.
+    dispatch_semaphore_signal(go);
+    double before = NSDate.date.timeIntervalSince1970 * 1000;
+    SparkTestBlockMainThread(600);
+    double after = NSDate.date.timeIntervalSince1970 * 1000;
+    dispatch_semaphore_signal(hangOver);
+    Spin(5, ^{ return (BOOL)(reports.count > 0); });
+    Spin(1, nil);
+    CHECK(atomic_load(&phase) == 0);
+    CHECK(reports.count == 1);
+    NSDictionary *late = reports.firstObject;
+    CHECK([late[@"endedBeforeSampling"] isEqual:@YES] && [late[@"stack"] isEqual:@[]]);
+    // The ping went out during the hang and was answered once it ended.
+    double duration = [late[@"durationMs"] doubleValue], startedAt = [late[@"startedAt"] doubleValue];
+    CHECK(duration >= 100 && startedAt >= before - 20 && startedAt <= after - 100 && startedAt + duration >= after - 20);
+
+    // With the hook idle, a hang under way when the watchdog looks is reported once, with its stack.
+    SparkTestBlockMainThread(600);
+    Spin(5, ^{ return (BOOL)(reports.count > 1); });
+    Spin(1, nil);
+    CHECK(reports.count == 2);
+    CHECK([reports.lastObject[@"endedBeforeSampling"] isEqual:@NO] && HasSymbol(reports.lastObject[@"stack"], @"SparkSimulateHang"));
+    [watchdog stop];
+  }
+  return Finish("Hang watchdog delayed-thread tests passed");
+}
+#elif defined(SPARK_HANG_WATCHDOG_TEST_SIGNAL_DELAY_MS)
 // Built with every answer reaching the watchdog thread long after the threshold (it wakes late):
 // pings the main thread answered in time are not hangs, and a real hang is still reported once.
 int main(void) {
@@ -107,6 +163,7 @@ int main(void) {
       CHECK(startedAt + duration >= after - 20 && startedAt + duration <= after + 1000);
       CHECK(duration >= 100);
       CHECK([report[@"thresholdMs"] isEqual:@100]);
+      CHECK([report[@"endedBeforeSampling"] isEqual:@NO]);
       NSArray<NSDictionary *> *stack = report[@"stack"];
       CHECK(stack.count >= 4);
       for (NSDictionary *frame in stack) {

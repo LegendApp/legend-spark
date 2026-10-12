@@ -29,7 +29,7 @@ const diagnostics = await import("../packages/diagnostics/src/index.ts");
 beforeEach(() => { mocks.platform.OS = "macos"; mocks.calls.length = 0; mocks.fail = undefined; });
 
 const frame = { address: "0x1868f4308", image: "/usr/lib/system/libsystem_kernel.dylib", imageAddress: "0x1868f0000", imageOffset: 17160, imageUUID: "2B3A1D7E-0F0C-3C8E-9D5B-6A7E8F9A0B1C", symbol: "__semwait_signal", symbolOffset: 8 };
-const report = { durationMs: 612.5, thresholdMs: 250, startedAt: 1760000000000, stack: [frame, { address: "0x1000" }] };
+const report = { durationMs: 612.5, thresholdMs: 250, startedAt: 1760000000000, stack: [frame, { address: "0x1000" }], endedBeforeSampling: false };
 
 test("startHangWatchdog starts one native watchdog per owner and routes only its reports to onHang", async () => {
   const first = vi.fn(), second = vi.fn();
@@ -59,9 +59,10 @@ test("a native report outside the contract fails loudly instead of reaching onHa
   const watchdog = await diagnostics.startHangWatchdog({ onHang });
   const owner = mocks.calls[0]!.args.owner;
   try {
-    for (const bad of [{ ...report, durationMs: "1" }, { ...report, stack: [{ image: "x" }] }, { ...report, stack: [{ ...frame, imageOffset: "1" }] }, { ...report, stack: undefined }]) mocks.receive!({ type: "hang", owner, ...bad });
+    for (const bad of [{ ...report, durationMs: "1" }, { ...report, stack: [{ image: "x" }] }, { ...report, stack: [{ ...frame, imageOffset: "1" }] }, { ...report, stack: undefined },
+      { ...report, endedBeforeSampling: undefined }, { ...report, endedBeforeSampling: 1 }, { ...report, endedBeforeSampling: true }]) mocks.receive!({ type: "hang", owner, ...bad });
     expect(onHang).not.toHaveBeenCalled();
-    expect(errors).toHaveBeenCalledTimes(4);
+    expect(errors).toHaveBeenCalledTimes(7);
     expect(errors.mock.calls[0]![0].cause).toMatchObject({ name: "SparkError", code: "E_INVALID_DATA" });
   } finally { errors.mockRestore(); await watchdog.remove(); }
 });

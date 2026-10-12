@@ -16,8 +16,9 @@ async function build(binary: string, flags: string[]) {
 // Real main-thread hangs in a test process: reports, durations, symbolicated stacks, stop and thread exit.
 // Each build also runs optimized, where tail calls could otherwise drop frames from the stack.
 // The late-wake build delays every answer by 300 ms on its way to the watchdog thread (which then wakes late):
-// pings the main thread answered within the threshold are not reported.
-test.skipIf(process.platform !== "darwin")("hang watchdog core: real hangs reported with duration and stack; short stalls, late wakes and stopped watchdogs report nothing", async () => {
+// pings the main thread answered within the threshold are not reported. The delayed-thread build holds the watchdog
+// thread between a ping and its wait until a hang is over: the ping, answered late, is still reported once, without a stack.
+test.skipIf(process.platform !== "darwin")("hang watchdog core: real hangs reported with duration and stack; short stalls, late answers and stopped watchdogs report nothing; late wakes still report", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-hang-watchdog-native-"));
   try {
     for (const optimization of ["-O0", "-O2"]) {
@@ -28,5 +29,8 @@ test.skipIf(process.platform !== "darwin")("hang watchdog core: real hangs repor
     const lateWake = path.join(directory, "test-late-wake");
     await build(lateWake, ["-O2", "-DSPARK_HANG_WATCHDOG_TEST_SIGNAL_DELAY_MS=300"]);
     expect(await runOk(lateWake, [], { timeout: 60_000 })).toContain("Hang watchdog late-wake tests passed");
+    const delayedThread = path.join(directory, "test-delayed-thread");
+    await build(delayedThread, ["-O2", "-DSPARK_HANG_WATCHDOG_TEST_HOOKS"]);
+    expect(await runOk(delayedThread, [], { timeout: 60_000 })).toContain("Hang watchdog delayed-thread tests passed");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 500_000);
