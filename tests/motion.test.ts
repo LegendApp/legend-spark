@@ -10,6 +10,7 @@ const { platform, registered, native, tags } = vi.hoisted(() => ({
     run: vi.fn(async (_json: string) => JSON.stringify({ finished: true })),
     stopAnimation: vi.fn(async () => {}), set: vi.fn(async () => {}), stop: vi.fn(async () => {}),
     getState: vi.fn(async () => ""), link: vi.fn(async () => {}), unlink: vi.fn(async () => {}), recordFrames: vi.fn(async () => ""),
+    environment: vi.fn(async (_tag: number) => ""),
   },
   tags: new Map<object, number>(),
 }));
@@ -22,7 +23,7 @@ vi.mock("react-native", () => ({
 }));
 vi.mock("../packages/motion/src/motion-view-host", () => ({ getNativeMotionView: () => "SparkMotionView" }));
 import * as motion from "../packages/motion/src/index";
-import { spring, timing, keyframes, decay, sequence, animate, stagger, timeline, setMotionValues, stopMotion, getMotionState, linkScroll, recordMotionFrames, getMotionAvailability, MotionView } from "../packages/motion/src/index";
+import { spring, timing, keyframes, decay, sequence, animate, stagger, timeline, setMotionValues, stopMotion, getMotionState, linkScroll, recordMotionFrames, getMotionAvailability, getMotionEnvironment, MotionView } from "../packages/motion/src/index";
 
 const a = {} as any, b = {} as any, c = {} as any;
 const sent = (mock: { mock: { calls: unknown[][] } }, call = -1) => JSON.parse(mock.mock.calls.at(call)![0] as string);
@@ -37,7 +38,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 test("the public entry exports the imperative API, builders, MotionView and MotionPresence, and no hooks", () => {
-  expect(Object.keys(motion).sort()).toEqual(["MotionPresence", "MotionView", "animate", "decay", "getMotionAvailability", "getMotionState", "keyframes", "linkScroll", "recordMotionFrames", "sequence", "setMotionValues", "spring", "stagger", "stopMotion", "timeline", "timing"]);
+  expect(Object.keys(motion).sort()).toEqual(["MotionPresence", "MotionView", "animate", "decay", "getMotionAvailability", "getMotionEnvironment", "getMotionState", "keyframes", "linkScroll", "recordMotionFrames", "sequence", "setMotionValues", "spring", "stagger", "stopMotion", "timeline", "timing"]);
 });
 
 test("springs: macOS presets and SwiftUI's response/bounce conversion, or physical parameters", () => {
@@ -132,6 +133,46 @@ test("stagger and timeline resolve their start times in one native plan", async 
   expect(code(() => timeline([]))).toBe("E_INVALID_ARGUMENT");
 });
 
+test("plans carry the Reduce Motion alternate, the hidden-window rule and cues, validated before native code", async () => {
+  await animate(a, { translateX: 100 }, { reducedValues: { opacity: timing(0.5) }, reducedMotion: "instant", whenHidden: "pause", cues: [{ at: 0, haptic: "alignment" }, { at: "end", sound: "Tink", haptic: "levelChange" }] }).finished;
+  const plan = sent(native.run);
+  expect(plan).toMatchObject({ reducedMotion: "instant", whenHidden: "pause", cues: [{ at: 0, haptic: "alignment" }, { at: "end", haptic: "levelChange", sound: "Tink" }] });
+  expect(plan.groups).toEqual([{ tag: 11, tracks: { translateX: spring(100) }, reducedTracks: { opacity: timing(0.5) } }]);
+  // Omitted options keep the engine's defaults (fade, complete, no cues) and add nothing to the plan.
+  await animate(a, { opacity: 1 }, { cues: [] }).finished;
+  expect(Object.keys(sent(native.run)).sort()).toEqual(["groups", "id"]);
+  await stagger([a, b], { opacity: 0 }, { eachMs: 10, reducedValues: { opacity: timing(0) }, reducedMotion: "play" }).finished;
+  expect(sent(native.run)).toMatchObject({ reducedMotion: "play", groups: [{ reducedTracks: { opacity: timing(0) } }, { reducedTracks: { opacity: timing(0) } }] });
+  await timeline([{ target: a, values: { opacity: 1 }, reducedValues: { opacity: timing(1, { durationMs: 0 }) } }, { target: b, values: { scale: 1.1 } }], { whenHidden: "complete" }).finished;
+  expect(sent(native.run)).toMatchObject({ whenHidden: "complete", groups: [{ reducedTracks: { opacity: timing(1, { durationMs: 0 }) } }, { tracks: { scaleX: spring(1.1) } }] });
+  expect(sent(native.run).groups[1].reducedTracks).toBeUndefined();
+
+  native.run.mockClear();
+  for (const bad of [{ reducedMotion: "slow" }, { whenHidden: "stop" }, { cues: {} }, { cues: [{ at: 0 }] }, { cues: [{ at: -1, haptic: "generic" }] }, { cues: [{ at: "start", haptic: "generic" }] },
+    { cues: [{ at: 0, haptic: "thud" }] }, { cues: [{ at: 0, sound: "" }] }, { cues: [{ at: 0, haptic: "generic", volume: 1 }] }, { reducedValues: {} }, { reducedValues: { width: 1 } }, { speed: 2 }])
+    expect(code(() => animate(a, { opacity: 1 }, bad as never)), JSON.stringify(bad)).toBe("E_INVALID_ARGUMENT");
+  expect(code(() => timeline([{ target: a, values: { opacity: 1 } }], { delayMs: 1 } as never))).toBe("E_INVALID_ARGUMENT");
+  expect(code(() => stagger([a], { opacity: 1 }, { eachMs: 1, cues: [{ at: 0 }] } as never))).toBe("E_INVALID_ARGUMENT");
+  expect(native.run).not.toHaveBeenCalled();
+});
+
+test("getMotionEnvironment reads Reduce Motion, power, frame rate and window visibility, and validates the reply", async () => {
+  const environment = { reduceMotion: true, lowPowerMode: false, maximumFrameRate: 120, frameRate: 120, windowVisible: true };
+  native.environment.mockResolvedValueOnce(JSON.stringify(environment));
+  await expect(getMotionEnvironment(a)).resolves.toEqual(environment);
+  expect(native.environment).toHaveBeenLastCalledWith(11);
+  const display = { ...environment, maximumFrameRate: null, frameRate: 60, windowVisible: null };
+  native.environment.mockResolvedValueOnce(JSON.stringify(display));
+  await expect(getMotionEnvironment()).resolves.toEqual(display);
+  expect(native.environment).toHaveBeenLastCalledWith(0);
+  native.environment.mockResolvedValueOnce(JSON.stringify({ ...environment, frameRate: "120" }));
+  await expect(getMotionEnvironment(a)).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  native.environment.mockRejectedValueOnce(Object.assign(new Error("not mounted"), { code: "E_NOT_FOUND" }));
+  await expect(getMotionEnvironment(a)).rejects.toMatchObject({ name: "SparkError", code: "E_NOT_FOUND" });
+  await expect(getMotionEnvironment(null)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(getMotionEnvironment({} as never)).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+});
+
 test("set, stop, state, scroll links and frame reports validate input and native results", async () => {
   await setMotionValues(a, { scale: 2, translateX: -4 });
   expect(sent(native.set)).toEqual({ tag: 11, values: { scaleX: 2, scaleY: 2, translateX: -4 } });
@@ -180,6 +221,7 @@ test("availability is truthful; unavailable targets throw typed errors and rende
     await expect(getMotionState(a)).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
     await expect(setMotionValues(a, { opacity: 1 })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
     await expect(linkScroll(a, { source: { nativeID: "x" }, input: [0, 1], output: { opacity: [0, 1] } })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+    await expect(getMotionEnvironment()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
     expect(code(() => MotionView({ children: null }))).toBe("E_UNSUPPORTED_PLATFORM");
   }
   expect(Object.values(native).every(fn => fn.mock.calls.length === 0)).toBe(true);
