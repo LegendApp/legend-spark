@@ -84,3 +84,8 @@
 - serveAppcast: appcast/valid.xml
 - killProcess: sidecar
 - runScript: { file: scripts/make-fixtures.js, env: { COUNT: "3" } }
+- assertEntitlements: { app: "${APP_PATH}", sandbox: false, allow: { com.apple.security.device.camera: The camera screen records video. } }
+- assertCodeSigning: "${APP_PATH}"
+- assertCodeSigning: { app: "${APP_PATH}" }
+- assertLoadPaths: "${APP_PATH}"
+- assertLoadPaths: { app: "${APP_PATH}" }

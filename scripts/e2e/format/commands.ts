@@ -8,7 +8,7 @@ export const GROUPS = {
   lifecycle: "Lifecycle", windows: "Windows / multiwindow", menus: "Menus", keyboard: "Keyboard & text", pointer: "Pointer / trackpad",
   drag: "Drag & drop", files: "Clipboard / files / dialogs", environment: "Environment / OS state", shell: "Notifications / Dock / taskbar / tray",
   motion: "Motion", visual: "Visual", a11y: "Accessibility", i18n: "i18n", performance: "Performance", network: "Network / processes / updates",
-  state: "State introspection", control: "Control flow", manual: "Manual steps",
+  state: "State introspection", security: "Security audits", control: "Control flow", manual: "Manual steps",
 } as const;
 
 export type CommandSpec = {
@@ -25,6 +25,8 @@ export type CommandSpec = {
   driver?: true;
   /** Maestro core vocabulary with Maestro semantics. */
   maestro?: true;
+  /** The runner runs it over the build on disk (`app`), with no backend (scripts/e2e/runner/security.ts). */
+  runner?: true;
 };
 
 type Options = Omit<CommandSpec, "group" | "summary" | "props">;
@@ -247,6 +249,11 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
 
   // State introspection (discouraged; prefer black-box)
   assertState: spec("state", "Assert app state by path.", { path: str, equals: anyValue }, { required: ["path", "equals"], driver: true }),
+
+  // Security audits of the build on disk (docs/e2e-flows.md#security-audits)
+  assertEntitlements: spec("security", "Assert every process of the app is signed with only the entitlements `allow` names, each with its reason, and never get-task-allow; an `allow` entry no process carries fails. `sandbox`: whether this is the sandboxed variant, which sandboxes every process.", { app: str, sandbox: bool, allow: dict(str) }, { required: ["app", "sandbox"], runner: true }),
+  assertCodeSigning: single("security", "Assert every Mach-O file of the app is signed by the main executable's team (not ad-hoc), every process has the hardened runtime, and none disables library validation.", "app", str, {}, { runner: true }),
+  assertLoadPaths: single("security", "Assert no load path lets a library from outside the bundle or the system into the app: LC_RPATH entries, dependencies (weak ones too) and LC_DYLD_ENVIRONMENT. On Windows: the DLL search order, not implemented yet (#51).", "app", str, {}, { runner: true }),
 
   // Control flow
   runFlow: spec("control", "Run a subflow file, or inline commands.", { file: str, env: dict(anyStr), commands }, { shorthand: "file", rule: oneKey("file", "commands"), maestro: true }),

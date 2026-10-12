@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: Release build has no dylib hijack path
+intent: >
+  Parses the load commands of every Mach-O file in the release build on disk. Every LC_RPATH is inside the bundle or a
+  system location, every dependency, weak ones included, resolves inside the bundle or to a system library, and no
+  LC_DYLD_ENVIRONMENT is set.
+checks: [SEC-DYLD-01]
+tags: [security]
+platforms: [macos]
+---
+- assertLoadPaths: "${APP_PATH}"

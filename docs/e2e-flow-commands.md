@@ -6,6 +6,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 - **Short form**: `bare` means the command can stand alone (`- launchApp`); `value → key` means `- cmd: value` is `- cmd: { key: value }`.
 - **Keys**: `*` = required. `any selector` = the selector keys (`id`, `role`, `label`, `text`, `within`, `index`, `window`, `below`, `above`, `leftOf`, `rightOf`, `point`); a bare string is visible text.
 - **driver**: needs the Spark in-app driver (white-box). Everything else is black-box (OS input + accessibility tree).
+- **runner**: the runner runs it over the build on disk, with no backend.
 - **maestro**: Maestro core command; keeps Maestro semantics.
 
 ## Lifecycle
@@ -238,6 +239,14 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | Command | Short form | Keys | Backend | Summary |
 |---|---|---|---|---|
 | `assertState` | — | `path`*, `equals`* | driver | Assert app state by path. |
+
+## Security audits
+
+| Command | Short form | Keys | Backend | Summary |
+|---|---|---|---|---|
+| `assertEntitlements` | — | `app`*, `sandbox`*, `allow` | runner | Assert every process of the app is signed with only the entitlements `allow` names, each with its reason, and never get-task-allow; an `allow` entry no process carries fails. `sandbox`: whether this is the sandboxed variant, which sandboxes every process. |
+| `assertCodeSigning` | value → `app` | `app`* | runner | Assert every Mach-O file of the app is signed by the main executable's team (not ad-hoc), every process has the hardened runtime, and none disables library validation. |
+| `assertLoadPaths` | value → `app` | `app`* | runner | Assert no load path lets a library from outside the bundle or the system into the app: LC_RPATH entries, dependencies (weak ones too) and LC_DYLD_ENVIRONMENT. On Windows: the DLL search order, not implemented yet (#51). |
 
 ## Control flow
 

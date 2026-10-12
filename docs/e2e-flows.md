@@ -207,6 +207,42 @@ gestures and others), `assertCursor`, `assertText` and `assertA11y` in-process (
 events the app dispatches to itself and the views of its own windows, not what a user sees
 or does. The runner labels those steps white-box in reports.
 
+### Security audits
+
+Commands marked **runner** in the reference read the build on disk, not the running
+app. The runner runs them itself, so they need no backend. A flow made only of them
+(no `onFlowStart`, `onFlowComplete` or `when`) starts no backend, so it never opens the
+app or its state. Pass the artifact the gate tests as `app: "${APP_PATH}"`. The gate's
+`e2e/flows/security/` flows register their checks in `e2e/checks/security.yaml`:
+
+- `assertEntitlements: { app, sandbox, allow }` reads the signed entitlements of every
+  Mach-O file. A process may carry only the entitlements in `allow`, which maps each
+  entitlement to the reason the release needs it. `get-task-allow` always fails. An
+  `allow` entry that no process carries also fails, so the list stays minimal. The
+  hardened runtime exceptions (`disable-library-validation`,
+  `allow-dyld-environment-variables`, `allow-unsigned-executable-memory`,
+  `disable-executable-page-protection`, `allow-jit`, `debugger`) are named when they
+  show up. `sandbox: false` is the direct-distribution build, where no process is
+  sandboxed. `sandbox: true` is the Mac App Store variant
+  ([#154](https://github.com/LegendApp/legend-spark/issues/154)), where every process is.
+- `assertCodeSigning: <app>` checks that every Mach-O file is signed by the main
+  executable's team, that every process has the hardened runtime, and that no process
+  turns off library validation. Ad-hoc signing fails. With the hardened runtime, library
+  validation refuses a library from another team, and an ad-hoc signature has no team.
+  That is why `bun run build` stays ad-hoc without the hardened runtime: only
+  `spark package` signs with a Developer ID ([packaging](packaging.md)). Run this check
+  through the [release harness](release-harness.md) on the packaged artifact.
+- `assertLoadPaths: <app>` parses the load commands of every Mach-O file itself
+  (`otool` is not on release-harness machines). Every `LC_RPATH` has to be
+  `@executable_path`/`@loader_path` inside the bundle, or in `/System/` or `/usr/lib/`
+  (protected by System Integrity Protection). Every dependency, weak ones included, has
+  to resolve to a file inside the bundle or to a system library. `LC_DYLD_ENVIRONMENT`
+  fails. A library resolves `@executable_path` against the main executable. A library's
+  `@rpath` lookups also use the main executable's run paths, as dyld does. On Windows
+  this audits the DLL search order. That part needs Windows hardware and the Windows
+  backend ([#51](https://github.com/LegendApp/legend-spark/issues/51)), so it fails as
+  `unsupported` until then.
+
 There is no `retry` and no sleep command. Every command waits for its target, and a
 flaky flow counts as a failed flow. Use `extendedWaitUntil` to wait for state, or
 `setClock: virtual` with `advanceClock` to step through animation.
@@ -409,7 +445,7 @@ name in `BACKENDS` in `scripts/e2e/runner/run.ts`.
   a TCC grant), `gate.yaml` will gain a per-tag `requireBlackBox` option.
 - `commands` is the dispatch table. If no eligible backend has a command, the flow fails
   with `unsupported`, naming the backend. The runner itself runs `runFlow`, `repeat`,
-  `extendedWaitUntil`, `assertVisible` and `assertNotVisible`.
+  `extendedWaitUntil`, `assertVisible`, `assertNotVisible` and the [security audits](#security-audits).
 - Selectors: implement `elements()` (every visible element, in screen coordinates, with
   `parent` keys) and the runner matches everything, lists candidates and dumps the tree.
   A backend that cannot list elements implements `query()` with the atom keys it
