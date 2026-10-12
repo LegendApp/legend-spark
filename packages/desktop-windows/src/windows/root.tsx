@@ -12,7 +12,7 @@ type Props = Record<string, unknown>;
 export interface WindowRootProps { props?: Props; sparkWindow: { id: string } }
 export interface RootHost {
   /** Idempotent: the live instance, or one recreated for a root restarted after a reload. */
-  adopt(window: { id: string; name: string }): WindowInstance;
+  adopt(window: { id: string; name: string; props: Props }): WindowInstance;
   report(event: WindowErrorEvent): void;
   fallback: ComponentType<ErrorFallbackProps>;
 }
@@ -61,7 +61,7 @@ export function createWindowRoot(host: RootHost, content: RootContent, name: str
     const wrapped = rootProps as Partial<WindowRootProps>;
     const props = fixedId ? rootProps : wrapped.props ?? {};
     // Adopt once per mount, so a late re-render can never pick up a later window reusing the ID.
-    const [instance] = useState(() => host.adopt({ id: fixedId ?? wrapped.sparkWindow?.id ?? "", name }));
+    const [instance] = useState(() => host.adopt({ id: fixedId ?? wrapped.sparkWindow?.id ?? "", name, props }));
     const Content = content.resolved();
     const body = runtime
       ? <runtime.module.Threaded component={Content as ThreadedComponent<Props>} props={props} runtimeName={runtime.isolated} style={styles.fill} surfaceKey={instance.id} testID={`spark-window-surface-${instance.id}`} />

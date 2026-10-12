@@ -1,4 +1,8 @@
-export { createWindowsNavigator, getIsolatedRuntimeAvailability, type WindowsNavigator, type NavigatorOpenOptions } from "./createWindowsNavigator";
+export { createWindowsNavigator, getIsolatedRuntimeAvailability, getWindowSessionAvailability, type WindowsNavigator, type NavigatorOpenOptions } from "./createWindowsNavigator";
+export {
+  createWindowMessages, type WindowMessages, type WindowRequests, type WindowBroadcasts, type WindowRequestPayload, type WindowRequestResult,
+  type WindowRequestHandler, type WindowBroadcastListener, type WindowRequestOptions, type WindowBroadcastOptions, type WindowBroadcastListenerOptions,
+} from "./messages";
 export { createWindowState, type WindowState, type WindowStateOptions } from "./state";
 export { useWindowInstance, useUndoState, useWindowState } from "./hooks";
 export { DefaultErrorFallback } from "./root";

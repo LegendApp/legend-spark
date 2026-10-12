@@ -2,13 +2,14 @@ import { AppRegistry, NativeModules, Platform, UIManager } from "react-native";
 import { SparkError, asyncRegistration, nativeError, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import type { Menu, MenuAction, MenuRootItem } from "@legendapp/spark-native-menu";
 import type { RoutedHotkeyHandlers } from "@legendapp/spark-commands/src/router";
-import { addWindowListener, closeWindow, getWindow, getWindowAvailability, handleWindowNewTab, openWindow, setWindowOptions, showWindow } from "../api";
+import { addWindowListener, closeWindow, getDisplays, getWindow, getWindowAvailability, handleWindowNewTab, listWindowTabGroups, openWindow, selectWindowTab, setWindowOptions, showWindow } from "../api";
 import { addMacOSWindowListener } from "../macos";
-import type { CloseResult, WindowInfo, WindowOpenOptions } from "../types";
-import { keys, object, validateOptions, windowId as validWindowId } from "../validation";
+import type { CloseResult, DisplayInfo, WindowBounds, WindowInfo, WindowOpenOptions } from "../types";
+import { bounds as validBounds, keys, object, validateOptions, windowId as validWindowId } from "../validation";
+import { instanceRecord, jsonCopy, registerInstance, restorableStates, windowStates, type InstanceRecord } from "./instances";
 import { DefaultErrorFallback, createWindowRoot, type RootContent, type RootHost, type WindowRootProps } from "./root";
 import { createUndoStack } from "./undo";
-import type { IsolatedRuntime, NavigatorWindowOptions, NewWindowTab, NewWindowTabRequest, UndoMenuLabels, WindowComponentProps, WindowConfigEntry, WindowErrorEvent, WindowInstance, WindowsConfig, WindowsNavigatorOptions } from "./types";
+import type { DuplicateWindowOptions, IsolatedRuntime, NavigatorWindowOptions, NewWindowTab, NewWindowTabRequest, SavedWindow, UndoMenuLabels, WindowComponentProps, WindowConfigEntry, WindowErrorEvent, WindowInstance, WindowSession, WindowSessionFeature, WindowsConfig, WindowsNavigatorOptions } from "./types";
 
 export type NavigatorOpenOptions<P> = { props: P; options?: NavigatorWindowOptions };
 type OpenArguments<P> = {} extends P ? [options?: { props?: P; options?: NavigatorWindowOptions }] : [options: NavigatorOpenOptions<P>];
@@ -36,11 +37,41 @@ export interface WindowsNavigator<T extends WindowsConfig> extends AsyncRegistra
   getKeyWindowId(): string | null;
   /** Notifies when windows open or close, or the key window changes. */
   subscribe(listener: () => void): { remove(): void };
+  /**
+   * A JSON snapshot of the open windows, in opening order: entry, ID, props, title, visibility, frame,
+   * restorable window state (`createWindowState` with `restorationKey`), macOS tab groups and the key
+   * window. Rejects `E_INVALID_DATA` when a restorable value is not JSON.
+   */
+  getSession(): Promise<WindowSession>;
+  /**
+   * Opens a saved session's windows with their IDs, props, titles, frames and restorable state, rejoins
+   * their tab groups and selected tabs, and focuses the saved key window. A frame on a display that is
+   * no longer connected moves to the primary display, fitted into its work area. Validates the whole
+   * session first: unknown entries, malformed data and IDs that are already open reject before any
+   * window opens. If a window then fails to open, the windows it already opened are closed and it
+   * rejects with that failure. Resolves the windows in the session's order.
+   */
+  restoreSession(session: WindowSession): Promise<WindowInstance[]>;
+  /**
+   * New Window: opens another window of the source's entry with its props and title, cascaded from its
+   * frame. Its window states start attached to the source's app-scoped values and with copies of its
+   * restorable private values; `detached` copies attached restorable values too, so nothing is shared.
+   * Singleton (`id`) entries reject `E_INVALID_ARGUMENT`.
+   */
+  duplicate(source: WindowInstance, options?: DuplicateWindowOptions): Promise<WindowInstance>;
+  /**
+   * Notifies, at most once per tick, when the session may have changed: a window opened, closed, moved,
+   * resized or was retabbed, the key window changed, or a restorable value changed. Save
+   * `getSession()` from here to survive a crash. Frames are observed only while a listener exists.
+   */
+  subscribeToSession(listener: () => void): { remove(): void };
 }
 
-interface WindowRecord {
+interface WindowRecord extends InstanceRecord {
   instance: WindowInstance;
   entry: WindowConfigEntry;
+  /** The props the window opened with (root props after a reload). */
+  props: Record<string, unknown> | undefined;
   /** Native window confirmed, per-window services installed, not yet closed. */
   open: boolean;
   disposed: boolean;
@@ -50,6 +81,8 @@ interface WindowRecord {
   runtime?: IsolatedRuntime;
   registrations: AsyncRegistration[];
   subscriptions: { remove(): void }[];
+  /** Frame and tab listeners, installed while `subscribeToSession` has listeners. */
+  observing?: Promise<AsyncRegistration[]>;
 }
 
 const namePattern = /^[a-zA-Z0-9_-]{1,48}$/;
@@ -61,15 +94,7 @@ const reservedModules = new Set<string>();
 // Isolated runtimes are counted across navigators: one is destroyed only when no window, or window
 // being opened, of any navigator uses it.
 const runtimeUsers = new Map<string, number>(), runtimeDestroys = new Map<string, Promise<void>>();
-const instanceRecords = new WeakMap<WindowInstance, WindowRecord>();
 let sequence = 0, navigators = 0;
-
-/** Internal: true once a navigator window has closed. Rejects values that are not navigator windows. */
-export function isClosedWindow(window: WindowInstance): boolean {
-  const record = instanceRecords.get(window);
-  if (!record) throw new SparkError("E_INVALID_ARGUMENT", "Expected a window instance from createWindowsNavigator");
-  return record.disposed;
-}
 
 function isComponent(value: unknown) {
   return typeof value === "function" || (!!value && typeof value === "object" && [Symbol.for("react.memo"), Symbol.for("react.forward_ref"), Symbol.for("react.lazy")].includes((value as { $$typeof?: symbol }).$$typeof!));
@@ -93,6 +118,30 @@ export function getIsolatedRuntimeAvailability(): Availability {
   const surface = (UIManager as { hasViewManagerConfig?: (name: string) => boolean }).hasViewManagerConfig?.("ThreadedRuntimeSurface") === true;
   return NativeModules.ThreadedRuntime && surface ? { available: true } : { available: false, reason: "missing-module" };
 }
+
+/**
+ * Sessions work wherever windows do. `tabs` (tab groups in sessions, `duplicate` with `tab`) needs
+ * native window tabs: macOS only for now; Windows rejects them `E_UNSUPPORTED_OPTION`.
+ */
+export function getWindowSessionAvailability(feature?: WindowSessionFeature): Availability {
+  if (feature !== undefined && feature !== "tabs") throw new SparkError("E_INVALID_ARGUMENT", "Unknown window session feature");
+  return getWindowAvailability(feature === "tabs" ? "tabbing" : undefined);
+}
+const tabsSupported = () => getWindowAvailability("tabbing").available;
+
+/** The saved display, else the primary display with the frame fitted into its work area. */
+function placement(saved: SavedWindow["bounds"], displays: DisplayInfo[]): WindowBounds {
+  const display = displays.find(item => saved.persistentDisplayId !== null ? item.persistentId === saved.persistentDisplayId : item.id === saved.displayId);
+  if (display) return { displayId: display.id, x: saved.x, y: saved.y, width: saved.width, height: saved.height };
+  return fit(saved, displays.find(item => item.primary)!);
+}
+function fit(frame: Omit<WindowBounds, "displayId">, display: DisplayInfo): WindowBounds {
+  const area = display.workArea, width = Math.min(frame.width, area.width), height = Math.min(frame.height, area.height);
+  const clamp = (value: number, min: number, size: number, extent: number) => Math.min(Math.max(value, min), min + extent - size);
+  return { displayId: display.id, x: clamp(frame.x, area.x, width, area.width), y: clamp(frame.y, area.y, height, area.height), width, height };
+}
+/** macOS New Window cascades by about a title bar. */
+const CASCADE = 24;
 
 const moduleName = (name: string, entry: WindowConfigEntry) => `spark.window.${entry.id ?? name}`;
 function validateEntry(name: string, entry: WindowConfigEntry, options: WindowsNavigatorOptions, modules: Set<string>) {
@@ -165,14 +214,22 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
 
   const records = new Map<string, WindowRecord>();
   const contents = new Map(entries.map(([name, entry]) => [name, contentOf(entry)]));
-  const listeners = new Set<() => void>();
+  const listeners = new Set<() => void>(), sessionListeners = new Set<() => void>();
+  let sessionQueued = false;
   let keyWindowId: string | null = null, published: string | null = null, removed = false;
   let menu: Promise<Menu> | undefined, publishing: Promise<void> | undefined;
 
   const report = (event: WindowErrorEvent) => {
     try { (options.onError ?? console.error)(event); } catch (error) { console.error(error); }
   };
-  const emit = () => { for (const listener of [...listeners]) { try { listener(); } catch (error) { console.error(error); } } };
+  const notify = (set: Set<() => void>) => { for (const listener of [...set]) { try { listener(); } catch (error) { console.error(error); } } };
+  // Coalesced: a burst of moves, resizes and edits notifies once.
+  const sessionChanged = () => {
+    if (!sessionListeners.size || sessionQueued || removed) return;
+    sessionQueued = true;
+    void Promise.resolve().then(() => { sessionQueued = false; if (!removed) notify(sessionListeners); });
+  };
+  const emit = () => { notify(listeners); sessionChanged(); };
   const live = () => { if (removed) throw new SparkError("E_CLOSED", "The windows navigator was removed"); };
   const entryOf = (name: unknown) => {
     if (typeof name !== "string" || !Object.hasOwn(config, name)) throw new SparkError("E_NOT_FOUND", `Unknown window: ${String(name)}`);
@@ -255,8 +312,29 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
       .finally(() => { if (runtimeDestroys.get(name) === destroy) runtimeDestroys.delete(name); });
     runtimeDestroys.set(name, destroy);
   };
+  /** Frame and tab-group listeners for `subscribeToSession`; native observation only while it has listeners. */
+  const observe = (record: WindowRecord) => {
+    if (record.observing || !record.open || !sessionListeners.size) return;
+    const { id, name } = record.instance, fail = (error: unknown) => report({ windowId: id, name, phase: "runtime", error });
+    const types = tabsSupported() ? ["boundsChanged", "tabGroupChanged"] as const : ["boundsChanged"] as const;
+    record.observing = Promise.allSettled(types.map(type => addWindowListener(id, type, sessionChanged, { onError: fail }))).then(results => {
+      for (const result of results) if (result.status === "rejected" && nativeError(result.reason).code !== "E_NOT_FOUND") fail(result.reason);
+      return results.flatMap(result => result.status === "fulfilled" ? [result.value] : []);
+    });
+  };
+  const unobserve = (record: WindowRecord) => {
+    const observing = record.observing;
+    record.observing = undefined;
+    return observing?.then(async registrations => {
+      const results = await Promise.allSettled(registrations.map(registration => registration.remove()));
+      for (const result of results) if (result.status === "rejected" && nativeError(result.reason).code !== "E_NOT_FOUND") report({ windowId: record.instance.id, name: record.instance.name, phase: "cleanup", error: result.reason });
+    });
+  };
   const cleanup = async (record: WindowRecord) => {
     const { registrations, subscriptions, instance } = record;
+    for (const listener of [...record.closeListeners]) { try { listener(); } catch (error) { console.error(error); } }
+    record.closeListeners.clear();
+    void unobserve(record);
     for (const subscription of subscriptions.splice(0)) subscription.remove();
     const results = await Promise.allSettled(registrations.splice(0).map(registration => registration.remove()));
     for (const result of results) if (result.status === "rejected" && nativeError(result.reason).code !== "E_NOT_FOUND") report({ windowId: instance.id, name: instance.name, phase: "cleanup", error: result.reason });
@@ -320,7 +398,7 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     if (record.disposed) throw closedError();
   };
 
-  const createRecord = (id: string, name: string, entry: WindowConfigEntry): WindowRecord => {
+  const createRecord = (id: string, name: string, entry: WindowConfigEntry, props: WindowRecord["props"], seeds?: Pick<WindowRecord, "seeds" | "restored">): WindowRecord => {
     const runtime = isolated(entry);
     const ensureLive = () => { if (record.disposed) throw closedError(); };
     const instance: WindowInstance = {
@@ -340,8 +418,11 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
         await setWindowOptions(id, { macos: { toolbar: entry.macos.toolbar(instance) } });
       },
     };
-    const record: WindowRecord = { instance, entry, open: false, disposed: false, registrations: [], subscriptions: [] };
-    instanceRecords.set(instance, record);
+    const record: WindowRecord = {
+      instance, entry, props, open: false, disposed: false, registrations: [], subscriptions: [],
+      closeListeners: new Set(), seeds: seeds?.seeds ?? new Map(), restored: seeds?.restored ?? new Map(), sessionChanged,
+    };
+    registerInstance(instance, record);
     if (runtime) { record.runtime = runtime; runtimeUsers.set(runtime.isolated, (runtimeUsers.get(runtime.isolated) ?? 0) + 1); }
     return record;
   };
@@ -353,13 +434,13 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
   };
 
   const host: RootHost = {
-    adopt({ id, name }) {
+    adopt({ id, name, props }) {
       validWindowId(id);
       const existing = records.get(id);
       if (existing) return existing.instance;
       // A root restarted by native after a JavaScript reload: rebuild its record from root props.
       if (removed) throw new SparkError("E_CLOSED", "The windows navigator was removed");
-      const record = createRecord(id, name, entryOf(name));
+      const record = createRecord(id, name, entryOf(name), props);
       records.set(id, record);
       void track(record, (async () => {
         let focused = false;
@@ -372,7 +453,7 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
           }
           dispose(record); return;
         }
-        record.open = true; emit();
+        record.open = true; observe(record); emit();
         if (focused) setKey(id);
       })());
       return record.instance;
@@ -396,15 +477,16 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     validateOptions({ ...entry.options, ...request.options, id: "request", component: "request", props: request.props } as WindowOpenOptions, Platform.OS, true);
     return { name: name as string, entry, request };
   };
-  const openNew = (name: string, entry: WindowConfigEntry, request: OpenRequest): Promise<Opened> => {
+  /** `restore` opens with a saved ID and starts the window states from saved or duplicated values. */
+  const openNew = (name: string, entry: WindowConfigEntry, request: OpenRequest, restore?: { id?: string } & Pick<WindowRecord, "seeds" | "restored">): Promise<Opened> => {
     const runtime = isolated(entry);
     if (runtime) {
       const availability = getIsolatedRuntimeAvailability();
       if (!availability.available) return Promise.reject(new SparkError(availability.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : "E_MODULE_UNAVAILABLE", "Isolated window runtimes are unavailable"));
     }
-    const id = entry.id ?? `${name}-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
+    const id = entry.id ?? restore?.id ?? `${name}-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
     // Registered and holding its runtime before the first await, so concurrent opens and closes see it.
-    const record = createRecord(id, name, entry);
+    const record = createRecord(id, name, entry, request.props as WindowRecord["props"], restore);
     records.set(id, record);
     let info!: WindowInfo;
     return track(record, (async () => {
@@ -423,7 +505,7 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
       } catch (error) { dispose(record); throw error; }
       try {
         await installServices(record);
-        record.open = true; emit();
+        record.open = true; observe(record); emit();
       } catch (error) {
         // No partially configured windows: close it, then report the original failure.
         if (!record.disposed) {
@@ -473,8 +555,153 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     return (await openNew(name, entry, request)).instance;
   };
 
+  /** The record of a live window this navigator owns. */
+  const ownRecord = (window: WindowInstance) => {
+    if (instanceRecord(window).disposed) throw closedError();
+    const record = records.get(window.id);
+    if (record?.instance !== window || !record.open) throw new SparkError("E_INVALID_ARGUMENT", `Window ${window.id} belongs to another navigator`);
+    return record;
+  };
+  /** Restorable values by key: registered states, plus saved values whose state does not exist yet. */
+  const savedState = (record: WindowRecord) => {
+    const state: Record<string, unknown> = Object.fromEntries(record.restored);
+    for (const [key, internals] of restorableStates) {
+      const value = internals.snapshot(record.instance);
+      if (value !== undefined) state[key] = value;
+    }
+    return jsonCopy(state, "Restorable window state") as Record<string, unknown>;
+  };
+  const getSession = async (): Promise<WindowSession> => {
+    live();
+    const open = [...records.values()].filter(record => record.open);
+    const [infos, displays, groups] = await Promise.all([
+      Promise.all(open.map(record => getWindow(record.instance.id).catch(error => {
+        if (nativeError(error).code === "E_NOT_FOUND") return null; // Closed natively; its closed event is on the way.
+        throw error;
+      }))),
+      getDisplays(),
+      tabsSupported() ? listWindowTabGroups() : Promise.resolve([]),
+    ]);
+    const windows: SavedWindow[] = [];
+    open.forEach((record, index) => {
+      const info = infos[index];
+      if (!info) return;
+      const { id, name } = record.instance;
+      windows.push({
+        id, name, props: record.props === undefined ? null : jsonCopy(record.props, "Window props") as Record<string, unknown>,
+        title: info.title, visible: info.visible,
+        bounds: { ...info.bounds, persistentDisplayId: displays.find(display => display.id === info.bounds.displayId)?.persistentId ?? null },
+        state: savedState(record),
+      });
+    });
+    const saved = new Set(windows.map(window => window.id));
+    // AppKit reports a group's background tabs as not visible: a tab is shown with its group. A group with no
+    // visible window is saved as hidden windows, since a hidden window cannot open as a tab.
+    const tabGroups = groups.map(group => ({ windowIds: group.windowIds.filter(id => saved.has(id)), selectedWindowId: group.selectedWindowId !== null && saved.has(group.selectedWindowId) ? group.selectedWindowId : null }))
+      .filter(group => group.windowIds.length > 1 && windows.some(window => window.visible && group.windowIds.includes(window.id)));
+    for (const window of windows) if (tabGroups.some(group => group.windowIds.includes(window.id))) window.visible = true;
+    return { version: 1, windows, tabGroups, keyWindowId: keyWindowId !== null && saved.has(keyWindowId) ? keyWindowId : null };
+  };
+  const invalid = (message: string) => new SparkError("E_INVALID_DATA", `Invalid window session: ${message}`);
+  const validSession = (session: WindowSession) => {
+    object(session, "window session"); keys(session, ["version", "windows", "tabGroups", "keyWindowId"]);
+    if (session.version !== 1) throw invalid("unknown version");
+    if (!Array.isArray(session.windows) || !Array.isArray(session.tabGroups)) throw invalid("windows and tabGroups must be arrays");
+    const ids = new Set<string>();
+    for (const saved of session.windows) {
+      object(saved, "saved window"); keys(saved, ["id", "name", "props", "title", "visible", "bounds", "state"]);
+      validWindowId(saved.id);
+      if (ids.has(saved.id)) throw invalid(`window ${saved.id} appears twice`);
+      ids.add(saved.id);
+      const entry = entryOf(saved.name);
+      if (entry.id !== undefined && entry.id !== saved.id) throw invalid(`${saved.name} opens as ${entry.id}, not ${saved.id}`);
+      if (saved.props !== null) { object(saved.props, "saved props"); jsonCopy(saved.props, "Saved props"); }
+      if (typeof saved.title !== "string" || typeof saved.visible !== "boolean") throw invalid(`window ${saved.id} needs a title and visibility`);
+      object(saved.bounds, "saved bounds");
+      const { persistentDisplayId, ...frame } = saved.bounds;
+      validBounds(frame);
+      if (persistentDisplayId !== null && typeof persistentDisplayId !== "string") throw invalid("persistentDisplayId must be a string or null");
+      object(saved.state, "saved state"); jsonCopy(saved.state, "Saved window state");
+    }
+    const grouped = new Set<string>();
+    for (const group of session.tabGroups) {
+      object(group, "tab group"); keys(group, ["windowIds", "selectedWindowId"]);
+      if (!Array.isArray(group.windowIds) || group.windowIds.length < 2) throw invalid("a tab group needs two or more windows");
+      for (const id of group.windowIds) {
+        if (!ids.has(id) || grouped.has(id)) throw invalid(`tab group window ${String(id)} is unknown or in two groups`);
+        grouped.add(id);
+      }
+      if (group.selectedWindowId !== null && !group.windowIds.includes(group.selectedWindowId)) throw invalid("a tab group's selected window must be one of its windows");
+    }
+    if (session.keyWindowId !== null && !ids.has(session.keyWindowId)) throw invalid("the key window must be one of the session's windows");
+    if (session.tabGroups.length && !tabsSupported()) throw new SparkError("E_UNSUPPORTED_OPTION", `${Platform.OS === "windows" ? "Windows" : Platform.OS} does not support window tab groups yet`);
+    for (const saved of session.windows) {
+      if (records.has(saved.id)) throw new SparkError("E_ALREADY_EXISTS", `Window is already open: ${saved.id}`);
+      if (!saved.visible && grouped.has(saved.id)) throw invalid(`hidden window ${saved.id} cannot be in a tab group`);
+    }
+  };
+  const restoreSession = async (session: WindowSession): Promise<WindowInstance[]> => {
+    live(); validSession(session);
+    const displays = await getDisplays();
+    const groupOf = new Map(session.tabGroups.flatMap(group => group.windowIds.map(id => [id, group] as const)));
+    const byId = new Map(session.windows.map(saved => [saved.id, saved]));
+    // A tab group opens together, in tab order: each window after the first joins as the group's last tab.
+    const order: SavedWindow[] = [], placed = new Set<string>();
+    for (const saved of session.windows) for (const id of groupOf.get(saved.id)?.windowIds ?? [saved.id]) {
+      if (!placed.has(id)) { placed.add(id); order.push(byId.get(id)!); }
+    }
+    const opened = new Map<string, WindowInstance>();
+    try {
+      for (const saved of order) {
+        const first = groupOf.get(saved.id)?.windowIds[0];
+        const frame = placement(saved.bounds, displays);
+        const options: NavigatorWindowOptions = {
+          title: saved.title, show: saved.visible, size: { width: frame.width, height: frame.height },
+          ...(first !== undefined && first !== saved.id ? { tabbedWith: first } : { position: { displayId: frame.displayId, x: frame.x, y: frame.y } }),
+        };
+        const { instance } = await openNew(saved.name, entryOf(saved.name), { props: saved.props ?? undefined, options }, { id: saved.id, seeds: new Map(), restored: new Map(Object.entries(saved.state)) });
+        opened.set(saved.id, instance);
+      }
+      for (const group of session.tabGroups) if (group.selectedWindowId !== null) await selectWindowTab(group.selectedWindowId);
+      if (session.keyWindowId !== null) await opened.get(session.keyWindowId)!.focus();
+    } catch (error) {
+      await Promise.allSettled([...opened.values()].map(instance => instance.isOpen() ? instance.close() : undefined));
+      throw error;
+    }
+    return session.windows.map(saved => opened.get(saved.id)!);
+  };
+  const duplicate = async (source: WindowInstance, request: DuplicateWindowOptions = {}): Promise<WindowInstance> => {
+    live();
+    const record = ownRecord(source);
+    object(request, "duplicate options"); keys(request, ["props", "options", "detached", "tab"]);
+    if (record.entry.id !== undefined) throw new SparkError("E_INVALID_ARGUMENT", `${source.name} is a single window and cannot be duplicated`);
+    for (const flag of ["detached", "tab"] as const) if (request[flag] !== undefined && typeof request[flag] !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", `${flag} must be boolean`);
+    if (request.props !== undefined) object(request.props, "duplicate props");
+    noIdentity(request.options, "duplicate options");
+    if (request.tab && !tabsSupported()) throw new SparkError("E_UNSUPPORTED_OPTION", `${Platform.OS === "windows" ? "Windows" : Platform.OS} does not support window tabs yet`);
+    const detached = request.detached === true;
+    const seeds: WindowRecord["seeds"] = new Map();
+    for (const state of windowStates) {
+      const seed = state.duplicate(source, detached);
+      if (seed) seeds.set(state, seed);
+    }
+    // Saved values whose state does not exist yet travel too.
+    const restored = new Map([...record.restored].filter(([key]) => !restorableStates.has(key)).map(([key, value]) => [key, jsonCopy(value, "Restorable window state")]));
+    const [info, displays] = await Promise.all([getWindow(source.id), getDisplays()]);
+    const display = displays.find(item => item.id === info.bounds.displayId) ?? displays.find(item => item.primary)!;
+    const frame = fit({ x: info.bounds.x + CASCADE, y: info.bounds.y + CASCADE, width: info.bounds.width, height: info.bounds.height }, display);
+    const options: NavigatorWindowOptions = {
+      title: info.title,
+      ...(request.tab ? { tabbedWith: source.id } : { position: { displayId: frame.displayId, x: frame.x, y: frame.y }, size: { width: frame.width, height: frame.height } }),
+      ...request.options,
+    };
+    const props = record.props === undefined && request.props === undefined ? undefined : { ...record.props, ...request.props };
+    const { name, entry } = validRequest(source.name, { props, options });
+    return (await openNew(name, entry, { props, options }, { seeds, restored })).instance;
+  };
+
   const registration = asyncRegistration(() => {
-    removed = true; listeners.clear();
+    removed = true; listeners.clear(); sessionListeners.clear();
     for (const module of modules) reservedModules.delete(module);
   }, async () => {
     // Windows stay open and keep their runtimes; the navigator only stops observing them.
@@ -511,6 +738,19 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
       listeners.add(listener); return { remove() { listeners.delete(listener); } };
     },
     async prefetch(name) { live(); entryOf(name); await contents.get(name as string)!.load(); },
+    getSession,
+    restoreSession,
+    duplicate,
+    subscribeToSession(listener) {
+      live();
+      if (typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a listener");
+      sessionListeners.add(listener);
+      if (sessionListeners.size === 1) for (const record of records.values()) observe(record);
+      return { remove() {
+        if (!sessionListeners.delete(listener) || sessionListeners.size) return;
+        for (const record of records.values()) void unobserve(record);
+      } };
+    },
     remove: registration.remove,
   };
 }
