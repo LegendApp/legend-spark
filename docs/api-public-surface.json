@@ -132,20 +132,31 @@
     "validateRedirect"
   ],
   "./clipboard": [
+    "ClipboardChangeEvent",
+    "ClipboardChangeOptions",
     "ClipboardContent",
+    "ClipboardData",
+    "ClipboardDataType",
     "ClipboardImage",
     "ClipboardWriteContent",
+    "ClipboardWriteOptions",
     "GetStringOptions",
+    "PromisedClipboardContent",
+    "PromisedClipboardOptions",
+    "RichClipboardFeature",
     "SetStringOptions",
     "StringFormat",
     "clearClipboard",
+    "getClipboardChangeCount",
     "getClipboardFormats",
     "getRichClipboardAvailability",
     "getStringAsync",
     "hasStringAsync",
+    "onClipboardChange",
     "readClipboard",
     "setStringAsync",
-    "writeClipboard"
+    "writeClipboard",
+    "writePromisedClipboard"
   ],
   "./context-menu": [
     "ContextMenuOptions",

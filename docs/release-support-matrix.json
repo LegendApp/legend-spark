@@ -501,7 +501,9 @@
       ],
       "verification": {
         "unitTests": [
-          "tests/sdk-api.test.ts"
+          "tests/sdk-api.test.ts",
+          "tests/clipboard.test.ts",
+          "tests/clipboard-native.test.ts"
         ],
         "portableCommand": "bun run test",
         "platformAcceptance": {

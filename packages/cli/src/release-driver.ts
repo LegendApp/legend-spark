@@ -7,7 +7,7 @@ import path from "node:path";
 // only with macos.testDriverInRelease, so the CLI checks every macOS release build for them.
 const CORE = ["driver.sock", "Spark test driver:"];
 const MARKERS = [...CORE, "startCommits", "accessibilityAudit", "driverListeners", "replyDriverState", "simulateSystemEvent",
-  "simulateDisplays", "advanceClock", "waitForMotion", "SPARK_SIMULATE_CRASH"];
+  "simulateDisplays", "setTestClipboard", "advanceClock", "waitForMotion", "SPARK_SIMULATE_CRASH"];
 
 /** The test driver markers in the app's code: every file under Contents/MacOS and Contents/Frameworks. */
 export function testDriverMarkers(app: string): string[] {

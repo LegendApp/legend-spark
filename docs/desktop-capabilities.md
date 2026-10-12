@@ -13,6 +13,7 @@ packages separately or link parallel native modules for these capabilities.
 | Routed commands and persisted bindings | `@legendapp/spark/shortcuts/commands` |
 | Keyboard events | `@legendapp/spark/shortcuts/keyboard` |
 | Custom cursors, trackpad gestures, Force Touch pressure, back/forward buttons and haptics (macOS) | `@legendapp/spark/pointer` |
+| Promised (lazy) clipboard data, clipboard change monitoring, concealed and transient clipboard markers (macOS) | `@legendapp/spark/clipboard` |
 | Glass, symbols, swipe actions, select/segmented controls, search, tables and outlines, popovers, tab views | `@legendapp/spark/ui/glass`, `ui/symbol`, `ui`, `ui/search`, `ui/swipe`, `ui/table`, `ui/popover`, `ui/tab-view` |
 | File scanning (macOS) and invalidation watches | `@legendapp/spark/files` |
 | Settings window and observable preferences | `@legendapp/spark/settings/window`, `settings/observable` |
