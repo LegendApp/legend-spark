@@ -15,6 +15,8 @@ export type Capture = { file: string; width: number; height: number; scale: numb
  */
 export type InputTarget = { testID: string; offset?: { x: number; y: number } } | { point: { x: number; y: number }; window?: DriverWindow };
 export type Modifier = "cmd" | "ctrl" | "option" | "shift" | "fn";
+/** The app's private test pasteboard: its types, its plain text (null without any) and its change count. */
+export type TestClipboard = { types: string[]; text: string | null; changeCount: number };
 /** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
 export type SimulatedSystemEvent = {
   type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string;
@@ -221,6 +223,15 @@ export class Driver {
     const state = { thermalState: thermal, lowPowerMode: lowPower, onBattery: source === undefined ? undefined : source === "battery", network, level, appearance, automaticAppearance,
       accentColor, highlightColor, increaseContrast, reduceTransparency, reduceMotion, differentiateWithoutColor, invertColors };
     await this.request({ command: "simulateSystemEvent", type, ...Object.fromEntries(Object.entries(state).filter(([, value]) => value !== undefined)) }, 10000);
+  }
+  /** Writes the app's private test pasteboard as another app would (docs/clipboard.md#testing); the user's clipboard is untouched. */
+  async setTestClipboard(content: { text?: string; html?: string; concealed?: boolean }) {
+    await this.request({ command: "setTestClipboard", ...content }, 10000);
+  }
+  /** Reads the app's private test pasteboard as another app's paste would, so the app provides promised data. */
+  async testClipboard(timeoutMs = 40000): Promise<TestClipboard> {
+    const reply = await this.request({ command: "testClipboard" }, timeoutMs);
+    return { types: reply.types as string[], text: reply.text as string | null, changeCount: reply.changeCount as number };
   }
   /** Engine state of the MotionView with (or containing the view with) this testID, and its latest motion. */
   async motionState(testID: string) { return body<MotionState>(await this.request({ command: "motionState", testID }, 10000)); }

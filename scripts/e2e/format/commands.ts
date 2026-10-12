@@ -146,8 +146,8 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   cancelDrag: spec("drag", "Start a drag, cancel it, and assert the fly-back.", { from: selector, via: via("escape", "dropOutside") }, { required: ["from"] }),
 
   // Clipboard / files / dialogs
-  setClipboard: spec("files", "Set the clipboard.", { html: str, text: anyStr, concealed: bool }, { rule: anyKey("html", "text") }),
-  assertClipboard: spec("files", "Assert clipboard types and text.", { types: list(str), text: anyStr }, { rule: anyKey("types", "text") }),
+  setClipboard: spec("files", "Set the clipboard (on the driver backend, the app's private test pasteboard).", { html: str, text: anyStr, concealed: bool }, { rule: anyKey("html", "text") }),
+  assertClipboard: spec("files", "Assert clipboard types and text (on the driver backend, the app's private test pasteboard).", { types: list(str), text: anyStr }, { rule: anyKey("types", "text") }),
   createFixture: spec("files", "Create a file for the flow.", { path: str, contents: anyStr, encoding: oneOf("utf-8", "utf-16le", "utf-16be", "latin1") }, { required: ["path"] }),
   modifyFileExternally: spec("files", "Change a file behind the app's back.", { path: str, append: anyStr, contents: anyStr, atomicSwap: bool }, { required: ["path"], rule: anyKey("append", "contents") }),
   assertFile: spec("files", "Assert file state.", { path: str, exists: bool, contains: anyStr, encoding: oneOf("utf-8", "utf-16le", "utf-16be", "latin1"), unchanged: bool }, { required: ["path"] }),

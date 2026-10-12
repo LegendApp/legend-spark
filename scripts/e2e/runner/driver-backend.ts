@@ -9,7 +9,7 @@ import { processLog, type ProcessLog } from "../../../packages/cli/src/process.t
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type TestClipboard,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
@@ -33,6 +33,8 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   advanceClock(durationMs: number): Promise<unknown>;
   simulateSystemEvent(event: SimulatedSystemEvent): Promise<void>;
   simulateDisplays(displays: readonly object[] | null): Promise<void>;
+  setTestClipboard(content: { text?: string; html?: string; concealed?: boolean }): Promise<void>;
+  testClipboard(): Promise<TestClipboard>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
   tap(target: InputTarget, options?: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
   gesture(target: InputTarget, gesture: Gesture, modifiers?: Modifier[]): Promise<void>;
@@ -89,6 +91,9 @@ export class DriverBackend implements Backend {
     ...motionCommands(() => this.client()),
     // The display source of @legendapp/spark/displays (docs/displays.md#simulated-displays).
     simulateDisplays: async args => { await this.client().simulateDisplays(args.restore ? null : args.displays as object[]); },
+    // The app's private test pasteboard, never the user's clipboard (docs/clipboard.md#testing).
+    setClipboard: async args => { await this.client().setTestClipboard(args as { text?: string; html?: string; concealed?: boolean }); },
+    assertClipboard: (args, context) => context.eventually(async () => assertClipboard(await this.client().testClipboard(), args)),
     // Startup phases and the state the app exposes (docs/e2e-flows.md#app-inspection).
     ...inspectCommands(() => this.client()),
     // Layout thrash, flicker, leak counters and memory (docs/e2e-flows.md#layout-flicker-and-leaks).
@@ -412,4 +417,10 @@ export function assertMenu(menus: readonly DriverMenuItem[], args: Record<string
     const expected = formatAccelerator(parseAccelerator(String(args.shortcut), "macos", { allowUnmodifiedCharacter: true, allowExtendedKeys: true }));
     if (actual !== expected) fail("shortcut", expected, actual);
   }
+}
+/** Every listed type is on the test pasteboard (others may be too), and its plain text is exactly `text`. */
+export function assertClipboard(clipboard: TestClipboard, args: Record<string, unknown>) {
+  const missing = ((args.types as string[] | undefined) ?? []).filter(type => !clipboard.types.includes(type));
+  if (missing.length) throw new Failure("assertion", `clipboard lacks ${missing.join(", ")}; it has [${clipboard.types.join(", ")}]`);
+  if (args.text !== undefined && clipboard.text !== args.text) throw new Failure("assertion", `clipboard text is ${JSON.stringify(clipboard.text)}, expected ${JSON.stringify(args.text)}`);
 }

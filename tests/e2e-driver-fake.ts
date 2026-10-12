@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -78,6 +78,14 @@ export class FakeDriver implements DriverClient {
     return frames;
   }
   async simulateDisplays(displays: readonly object[] | null) { this.log.push(`simulateDisplays ${JSON.stringify(displays)}`); }
+  /** The fake's test pasteboard: setTestClipboard replaces it, as the app's driver command does. */
+  clipboard: TestClipboard = { types: [], text: null, changeCount: 0 };
+  async setTestClipboard(content: { text?: string; html?: string; concealed?: boolean }) {
+    this.log.push(`setTestClipboard ${JSON.stringify(content)}`);
+    const types = [...(content.text === undefined ? [] : ["public.utf8-plain-text"]), ...(content.html === undefined ? [] : ["public.html"]), ...(content.concealed ? ["org.nspasteboard.ConcealedType"] : [])];
+    this.clipboard = { types, text: content.text ?? null, changeCount: this.clipboard.changeCount + 1 };
+  }
+  async testClipboard() { this.log.push("testClipboard"); return this.clipboard; }
   async startup(timeoutMs?: number, testID?: string) {
     this.log.push(`startup ${timeoutMs}${testID === undefined ? "" : ` ${testID}`}`);
     const startup = this.inspected().startup;
