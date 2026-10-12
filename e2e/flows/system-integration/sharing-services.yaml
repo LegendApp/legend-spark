@@ -1,0 +1,26 @@
+appId: so.legend.spark.examples.kitchensink
+name: A Services listener registers a declared service and receives its invocations (simulated)
+intent: >
+  The Kitchen Sink declares no Services, so the screen's listener for "Kitchen Sink: Show Text" rejects
+  SparkError:E_UNAVAILABLE when it opens. In driver mode the simulation, not Info.plist, declares services and the
+  Services provider is never set, so nothing reaches pbs or the Services menu. Once the flow declares the service,
+  Listen again registers it, and a simulated Services menu invocation delivers the selected text to the listener.
+checks: [SYS-SERVICES-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/sharing" }
+- assertText: { id: system-integration-sharing-service-status, equals: SparkError:E_UNAVAILABLE }
+- assertSharing: { registered: [] }
+- simulateSharing: { services: ["Kitchen Sink: Show Text"] }
+- tapOn: { id: system-integration-sharing-listen }
+- assertText: { id: system-integration-sharing-service-status, equals: listening }
+- assertSharing: { registered: ["Kitchen Sink: Show Text"], invocations: 0 }
+- simulateSharing: { invokeService: { name: "Kitchen Sink: Show Text", text: "Selected words" } }
+- assertText: { id: system-integration-sharing-event-0, equals: "service: Selected words" }
+- assertSharing: { invocations: 1 }
+- tapOn: { id: system-integration-sharing-listen }
+- assertText: { id: system-integration-sharing-service-status, equals: listening }
+- assertSharing: { registered: ["Kitchen Sink: Show Text"] }
+- takeScreenshot: sharing-services
+- assertNotVisible: { id: system-integration-sharing-error }

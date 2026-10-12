@@ -1,0 +1,31 @@
+appId: so.legend.spark.examples.kitchensink
+name: Share sends text, a link and a file and resolves the chosen service (simulated)
+intent: >
+  System integration > Sharing & Spotlight reports share, services, spotlight and the default URL handler available
+  on macOS. In driver mode @legendapp/spark/sharing never shows the picker: the simulation records each share and
+  answers with the service the flow sets. Without an answer a share rejects SparkError:E_UNAVAILABLE (and is still
+  recorded). With one, Share text, Share a link and Share a file send their item from the button row (the anchor
+  view) and show the chosen service, or dismissed when the picker is dismissed.
+checks: [SYS-SHAREAVAIL-01, SYS-SHARE-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/sharing" }
+- assertText: { id: system-integration-sharing-availability, equals: '{"share":{"available":true},"services":{"available":true},"spotlight":{"available":true},"defaultURLHandler":{"available":true}}' }
+- tapOn: { id: system-integration-sharing-share-text }
+- assertText: { id: system-integration-sharing-share-result, equals: SparkError:E_UNAVAILABLE }
+- assertSharing: { shares: 1, lastShare: { anchored: true, service: null } }
+- simulateSharing: { shareAnswer: Mail }
+- tapOn: { id: system-integration-sharing-share-text }
+- assertText: { id: system-integration-sharing-share-result, equals: Mail }
+- assertSharing: { shares: 2, lastShare: { items: [{ type: text, text: "Pancakes: flour, milk, eggs." }], anchored: true, service: Mail } }
+- simulateSharing: { shareAnswer: AirDrop }
+- tapOn: { id: system-integration-sharing-share-link }
+- assertText: { id: system-integration-sharing-share-result, equals: AirDrop }
+- assertSharing: { shares: 3, lastShare: { items: [{ type: url, url: "https://legendapp.com/spark" }], service: AirDrop } }
+- simulateSharing: { shareAnswer: dismiss }
+- tapOn: { id: system-integration-sharing-share-file }
+- assertText: { id: system-integration-sharing-share-result, equals: dismissed }
+- assertSharing: { shares: 4, lastShare: { anchored: true, service: null } }
+- takeScreenshot: sharing-share
+- assertNotVisible: { id: system-integration-sharing-error }

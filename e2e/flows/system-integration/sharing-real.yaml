@@ -1,0 +1,46 @@
+appId: so.legend.spark.examples.kitchensink
+name: Real share picker, Spotlight results and default spark-ks handler
+intent: >
+  The real system paths of @legendapp/spark/sharing and the default URL handler of /links, which no automated run may
+  reach: the share picker hands content to other apps, indexing writes this Mac's Spotlight index, and Make default
+  changes LaunchServices. manual: true keeps the gate from running it. Run it by hand in a development build (spark
+  dev) on a Mac where that is acceptable. The Services menu is not part of it: the Kitchen Sink declares no Services,
+  so it never adds an item to every app's Services menu (tests/sharing.native.mm runs a real provider in-process on a
+  private pasteboard). Universal links need an associated domain and a provisioning profile, which the Kitchen Sink
+  does not have.
+checks: [SYS-SHAREREAL-01]
+tags: [system-integration]
+platforms: [macos]
+manual: true
+---
+- launchApp: { openUrl: "spark-ks://system-integration/sharing" }
+- extendedWaitUntil: { visible: { id: system-integration-sharing-content }, timeout: 10s }
+- manualStep:
+    instruction: >-
+      Press Share text, then press Escape to dismiss the picker. Press Share a link and choose a service that only
+      opens a draft (for example Notes or Reminders), then cancel the draft. Press Share a file and choose a service.
+    expect: >-
+      Each press shows the share picker below the button row with services for that kind of item. The result shows
+      dismissed after Escape, and the chosen service's title (as macOS shows it) after a choice, as soon as you
+      choose, before the draft closes.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Index recipes, then search Spotlight (Command-Space) for Gazpacho and open the Kitchen Sink result.
+      Then press Delete recipes and search for Gazpacho again.
+    expect: >-
+      The result shows indexed 3; Spotlight lists Gazpacho from the Kitchen Sink, and opening it brings the app
+      forward with spotlight: ks-recipe-2 at the top of Received. After Delete recipes the result shows deleted and
+      Spotlight no longer lists it.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Note the default handler status, press Make default, then open spark-ks://system-integration/sharing from
+      Safari's address bar.
+    expect: >-
+      The status reads not default (or default if this build already is), then the result shows set and the status
+      reads default; the link opens this Kitchen Sink build at Sharing & Spotlight.
+    evidence: none
+    signoff: required

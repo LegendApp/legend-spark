@@ -1,0 +1,18 @@
+appId: so.legend.spark.examples.kitchensink
+name: Sharing & Spotlight screen matches its golden
+intent: >
+  System integration > Sharing & Spotlight opens from spark-ks://system-integration/sharing with every feature
+  available, its Services listener rejected (the Kitchen Sink declares no Services) and the app not the default
+  spark-ks handler (simulated). The main window matches the approved golden for the appearance and locale (light and
+  dark, English and Arabic), with the shell sidebar masked.
+checks: [SYS-SHAREVISUAL-01]
+tags: [system-integration]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/sharing" }
+- assertText: { id: system-integration-sharing-service-status, equals: SparkError:E_UNAVAILABLE }
+- assertText: { id: system-integration-sharing-default-status, equals: not default }
+- assertScreenshot: { golden: system-integration-sharing, mask: [{ id: infra-shell-sidebar }] }

@@ -1,0 +1,19 @@
+appId: so.legend.spark.examples.kitchensink
+name: Sharing, Spotlight and the default URL handler are typed unsupported on Windows
+intent: >
+  On Windows the Sharing & Spotlight screen reports every feature unsupported-platform. The Services listener and the
+  default handler read reject SparkError:E_UNSUPPORTED_PLATFORM, which the screen shows, and so does the Spotlight
+  listener, which the screen shows as its error; Share text rejects the same way. Not yet run on Windows.
+  Implementation: #392.
+checks: [SYS-SHAREUNSUP-01]
+tags: [system-integration]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/sharing" }
+- extendedWaitUntil: { visible: { id: system-integration-sharing-root }, timeout: 10s }
+- assertText: { id: system-integration-sharing-availability, equals: '{"share":{"available":false,"reason":"unsupported-platform"},"services":{"available":false,"reason":"unsupported-platform"},"spotlight":{"available":false,"reason":"unsupported-platform"},"defaultURLHandler":{"available":false,"reason":"unsupported-platform"}}' }
+- assertText: { id: system-integration-sharing-service-status, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: system-integration-sharing-default-status, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- extendedWaitUntil: { visible: { id: system-integration-sharing-error }, timeout: 10s }
+- tapOn: { id: system-integration-sharing-share-text }
+- assertText: { id: system-integration-sharing-share-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
