@@ -839,6 +839,7 @@ bun run gate                      # run the gate for this machine's target
 bun run gate --dry-run            # plan only: the target, checks, flows and budgets
 bun run gate --target macos-14/arm64@macbook-air-m1-8gb --dry-run   # plan another target
 bun run gate --flow e2e/flows/menus --agent   # only these gate flows, JSON lines (see Scoped runs)
+bun run gate --artifact /path/to/Applications/KitchenSink.app        # test another copy of the build
 ```
 
 The gate certifies one target per run: the machine it runs on. The verdict is PASS
@@ -850,8 +851,12 @@ backend, build, flow, baseline, measurement or sign-off is a failure with its ow
 **It fails today.** The only backend is the in-app driver, so a flow that needs a
 black-box command the driver cannot run in-process fails as `unsupported` until #50 (the
 others pass white-box, labelled in the report); coverage is incomplete, and the
-budgets are not measured. The release scripts do not run it yet; that is
-[#55](https://github.com/LegendApp/legend-spark/issues/55).
+budgets are not measured.
+
+For a release, the [release harness](release-harness.md) (`bun run harness`) runs the
+gate against the app installed from the signed distributable, and `bun run release`
+refuses to publish without a passing harness report for its revision on every
+release target.
 
 ### Manifest
 
@@ -861,7 +866,7 @@ budgets are not measured. The release scripts do not run it yet; that is
 | Key | Meaning |
 |---|---|
 | `suite`, `appId` | Names for the report. |
-| `build.macos` / `build.windows` | `artifact`: the release build to test, relative to the repository root. `${ARCH}` becomes `arm64` or `x64`. `verifySignature: true` runs `codesign --verify --deep --strict` (macOS; Windows verification is not implemented, so asking for it fails). The flows get the artifact as `${APP_PATH}`. |
+| `build.macos` / `build.windows` | `artifact`: the release build to test, relative to the repository root. `${ARCH}` becomes `arm64` or `x64`. `--artifact <path>` replaces it for one run. `verifySignature: true` runs `codesign --verify --deep --strict` (macOS; Windows verification is not implemented, so asking for it fails). The flows get the artifact as `${APP_PATH}`. |
 | `targets` | `{ os, arch, machine? }`. `os` is `macos-<major>` or `windows-<10\|11>`; `arch` is `arm64` or `x64`, as Spark names them. `machine` names a reference machine from the budgets file: that target runs on that hardware and checks its budgets. |
 | `include` | Globs of gate flows, relative to `e2e/`. |
 | `blocking` | `{ tags, default }`. A flow blocks the release when it fails if it has one of `tags`, lists a check registered `blocking: true`, or `default` is true. A non-blocking failure is a warning. |

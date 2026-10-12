@@ -10,7 +10,7 @@ import type { BackendFactory } from "../runner/backend.ts";
 import { ms, realClock, type Clock, type FlowResult } from "../runner/executor.ts";
 import { failureText } from "../runner/report.ts";
 import { NO_BACKENDS, printer, runSuite } from "../runner/run.ts";
-import { gateFlows, matchesAny, plan, reportFiles, UsageError, type GatePlan, type Host, type PlannedBudget, type Reason } from "./plan.ts";
+import { gateFlows, matchesAny, plan, repoPath, reportFiles, UsageError, type GatePlan, type Host, type PlannedBudget, type Reason } from "./plan.ts";
 import { planText, verdictText, writeGateReport } from "./report.ts";
 
 /** Everything the gate reads from the machine. Tests pass doubles; `host.ts` has the real one. */
@@ -181,7 +181,7 @@ export async function runGate(plan: GatePlan, env: GateEnv, { agent = false } = 
   const timeBudgetMs = ms(plan.manifest.timeBudget);
   const reasons: Reason[] = [...plan.problems], warnings: string[] = [];
   const { target, manifest } = plan;
-  const relative = (file: string) => path.relative(plan.repo, file);
+  const relative = (file: string) => repoPath(plan.repo, file);
 
   const say = agent ? () => {} : env.stdout;
   const { commit, dirty } = env.source();
@@ -239,19 +239,20 @@ export async function runGate(plan: GatePlan, env: GateEnv, { agent = false } = 
   };
 }
 
-const USAGE = "usage: bun run gate [--target <os>/<arch>[@machine]] [--flow <flow|dir>]… [--agent] [--dry-run]";
+const USAGE = "usage: bun run gate [--target <os>/<arch>[@machine]] [--flow <flow|dir>]… [--artifact <app>] [--agent] [--dry-run]";
 
-/** `bun run gate` arguments. Throws UsageError. `--flow` paths are resolved from the working directory. */
+/** `bun run gate` arguments. Throws UsageError. `--flow` and `--artifact` paths are resolved from the working directory. */
 export function parseGateArgs(args: string[]) {
-  const options = { target: undefined as string | undefined, flows: [] as string[], agent: false, dryRun: false };
+  const options = { target: undefined as string | undefined, flows: [] as string[], artifact: undefined as string | undefined, agent: false, dryRun: false };
   for (let index = 0; index < args.length; index++) {
     const [flag, inline] = args[index]!.split(/=(.*)/s, 2) as [string, string | undefined];
     if ((flag === "--dry-run" || flag === "--agent") && inline === undefined) { options[flag === "--agent" ? "agent" : "dryRun"] = true; continue; }
-    if (flag !== "--target" && flag !== "--flow") throw new UsageError(`unknown argument ${args[index]}`);
+    if (flag !== "--target" && flag !== "--flow" && flag !== "--artifact") throw new UsageError(`unknown argument ${args[index]}`);
     const value = inline ?? args[index + 1];
     if (!value || value.startsWith("--")) throw new UsageError(`${flag} needs a value`);
     if (inline === undefined) index++;
     if (flag === "--flow") options.flows.push(path.resolve(value));
+    else if (flag === "--artifact") options.artifact = path.resolve(value);
     else options.target = value;
   }
   return options;
@@ -272,7 +273,7 @@ export async function gateCommand(args: string[], root: string, env: GateEnv): P
   let options: ReturnType<typeof parseGateArgs>, gatePlan: GatePlan;
   try {
     options = parseGateArgs(args);
-    gatePlan = plan(root, env.host(), options.target, options.flows.length ? options.flows : undefined);
+    gatePlan = plan(root, env.host(), { target: options.target, only: options.flows.length ? options.flows : undefined, artifact: options.artifact });
   } catch (error) {
     if (error instanceof UsageError) { env.stderr(`${error.message}\n${USAGE}`); return 2; }
     if (error instanceof FlowFormatError) { env.stderr(`gate.yaml is invalid:\n${error.message}`); return 1; }

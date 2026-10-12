@@ -42,6 +42,9 @@ name. A missing profile returns to the setup choices before any build begins.
 It runs `bun install --frozen-lockfile`, typechecking, and portable tests before committing the version
 change. It then builds/signs/notarizes the Runner, assembles immutable artifacts,
 and runs the packed-consumer integration against the **exact staged npm archive**.
+It then requires a passing [harness report](release-harness.md#the-publish-guard)
+for the release commit on every macOS Apple Silicon gate target; the first run
+stops there, so run the harness against the release commit and resume.
 After successful checks it atomically pushes `main` and the matching release tag,
 publishes the GitHub prerelease and npm `next`, and assigns npm `latest` when
 `--latest` was supplied. Omit `--latest` to publish only through `next`.
@@ -83,10 +86,14 @@ remain pending. Promoting npm `latest` does not change that support scope.
   native builds or runtime behavior.
 - Complete the dossier for the exact source and archive. Resolve platform gates
   for every platform advertised by the candidate.
-- Run the Kitchen Sink release gate, `bun run gate`, on each target in
-  `e2e/gate.yaml` (see [Release gate](e2e-flows.md#release-gate)). It fails today:
-  no e2e backend exists yet and coverage is incomplete. `bun run release` does not
-  run it yet ([#55](https://github.com/LegendApp/legend-spark/issues/55)).
+- Run the [release harness](release-harness.md), `bun run harness --artifact <signed zip>`,
+  on every macOS Apple Silicon target in `e2e/gate.yaml`. It installs the signed
+  artifact as a download, verifies its signature and notarization, and runs the
+  [release gate](e2e-flows.md#release-gate) against the installed app. The gate
+  fails today: no black-box e2e backend exists yet and coverage is incomplete.
+  `bun run release` and `bun run release:publish` refuse to publish without a
+  passing, non-`--local` harness report for the release revision on each of those
+  targets.
 - Verify the configured GitHub repository visibility and npm identity before
   publishing; do not change either as an implicit release step.
 - For signed production Runner distribution, configure the authorized Developer
@@ -153,7 +160,9 @@ requires the remote tag to resolve to the staged revision. Then run:
 bun run release:publish
 ```
 
-The publisher verifies staged checksums and repository visibility, creates a
+The publisher verifies staged checksums, the
+[harness reports](release-harness.md#the-publish-guard) for the staged revision and
+repository visibility, creates a
 draft prerelease, uploads and verifies assets, publishes the GitHub release,
 and publishes the exact assembled npm archive under `next`. It does not replace
 existing assets or move tags. Run interactively if npm needs browser

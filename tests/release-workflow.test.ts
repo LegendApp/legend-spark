@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { applyVersionEdits, nextVersion, releaseWorkflow, signingProject, verifyReleaseArchive, versionEdits, type Execute } from "../scripts/release-workflow.ts";
+import { applyVersionEdits, nextVersion, publishPreflight, releaseWorkflow, signingProject, verifyReleaseArchive, versionEdits, type Execute } from "../scripts/release-workflow.ts";
 import { alreadyPublished, releaseNotes } from "../scripts/npm-release.ts";
 import { credentials } from "../packages/cli/src/credentials.ts";
 import { loadReleaseEnv } from "../scripts/release-env.ts";
@@ -45,18 +45,26 @@ function fixture() {
   write("docs/releases.md", "Legend Spark currently identifies itself as `0.0.1-next.2`.\n");
   write("docs/release-support-matrix.json", JSON.stringify({ version: "0.0.1-next.2", entries: [] }, null, 2) + "\n");
   write("docs/release-support-matrix.md", "Package: `@legendapp/spark@0.0.1-next.2`.\n");
+  write("e2e/gate.yaml", readFileSync("tests/fixtures/e2e-gate/e2e/gate.yaml", "utf8")); // release targets: macos-14/arm64@air-m1, macos-15/arm64
   git("add", "."); git("commit", "-m", "Previous release"); git("tag", "v0.0.1-next.2");
   write("feature.ts", "export const feature = true;\n"); git("add", "."); git("commit", "-m", "Fix a native lifecycle");
   git("remote", "add", "origin", "https://github.com/LegendApp/legend-spark.git"); git("update-ref", "refs/remotes/origin/main", "HEAD");
   const commands: string[][] = [];
   const tags: Record<string, string> = { next: "0.0.1-next.2", latest: "0.0.1-next.2" };
-  let failTest = false, pendingRunner = false, failPublish = false;
+  let failTest = false, pendingRunner = false, failPublish = false, harnessPasses = true;
+  /** The harness reports `bun run harness` writes for `revision` on both release targets. */
+  const harness = (revision: string, fields: Record<string, unknown> = {}) => {
+    for (const target of ["macos-14/arm64@air-m1", "macos-15/arm64"]) {
+      write(`artifacts/harness/${revision}/${target.replace("/", "-")}/report.json`, JSON.stringify({ version: 1, verdict: "PASS", releasable: true, local: false, target, commit: revision, dirty: false, reasons: [], install: { app: "/tmp/KitchenSink.app", quarantine: "0081;00000000;;", sourceRevision: revision }, ...fields }));
+    }
+  };
   const staged = () => {
     const version = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version;
     const folder = `artifacts/releases/${version}`;
     write(`${folder}/spark.tgz`, "exact signed release archive"); write(`${folder}/runner-manifest.json`, "{}\n");
     const sha256 = Object.fromEntries(["spark.tgz", "runner-manifest.json"].map(name => [name, createHash("sha256").update(readFileSync(path.join(root, folder, name))).digest("hex")]));
     write(`${folder}/release.json`, JSON.stringify({ version, revision: git("rev-parse", "HEAD"), npm: "spark.tgz", sha256 }));
+    if (harnessPasses) harness(git("rev-parse", "HEAD"));
   };
   const execute: Execute = async argv => {
     commands.push(argv);
@@ -82,7 +90,7 @@ function fixture() {
     return { code: 0, output: "" };
   };
   const release = (resume = false, latest = false, preflight = async () => {}) => releaseWorkflow(root, { resume, latest }, execute, preflight, () => path.join(root, ".spark/runner"));
-  return { root, git, write, commands, tags, release, setFailures: (test: boolean, runner: boolean, publish: boolean) => { failTest = test; pendingRunner = runner; failPublish = publish; }, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, git, write, commands, tags, release, staged, harness, withoutHarness: () => { harnessPasses = false; }, setFailures: (test: boolean, runner: boolean, publish: boolean) => { failTest = test; pendingRunner = runner; failPublish = publish; }, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 test("failed checks, pending notarization and interrupted promotion resume one version, commit and archive", async () => {
@@ -117,6 +125,45 @@ test("failed checks, pending notarization and interrupted promotion resume one v
     expect(f.commands.find(args => args.includes("tests/packed-consumer.integration.ts"))).toEqual([process.execPath, "tests/packed-consumer.integration.ts", "--archive", path.join(f.root, "artifacts/releases/0.0.1-next.3/spark.tgz")]);
     expect(await f.release(true)).toBe(0);
     expect(f.commands.filter(args => args.includes("release:publish"))).toHaveLength(2);
+  } finally { f.cleanup(); }
+});
+
+test("the release refuses to tag, push or publish without a passing harness report for its revision, and resumes once there is one", async () => {
+  const f = fixture();
+  try {
+    f.withoutHarness();
+    await expect(f.release()).rejects.toThrow(/^Refusing to publish [0-9a-f]{40}: every release target needs a passing harness report for this build/);
+    const revision = f.git("rev-parse", "HEAD");
+    expect(f.git("log", "-1", "--format=%s")).toBe("release: prepare 0.0.1-next.3");
+    expect(f.commands.filter(args => (args[0] === "git" && ["tag", "push"].includes(args[1]!)) || args.includes("release:publish"))).toEqual([]);
+    f.harness(revision, { local: true, releasable: false });
+    await expect(f.release(true)).rejects.toThrow("is from a --local run, which is never releasable");
+    f.harness(revision, { verdict: "FAIL", releasable: false, reasons: [{ check: "notarization", message: "Gatekeeper rejected the app" }] });
+    await expect(f.release(true)).rejects.toThrow("the harness did not pass: [notarization] Gatekeeper rejected the app");
+    rmSync(path.join(f.root, "artifacts/harness", revision), { recursive: true });
+    f.harness("f".repeat(40)); // Reports for another build do not count.
+    await expect(f.release(true)).rejects.toThrow("no harness report at");
+    f.harness(revision);
+    expect(await f.release(true)).toBe(0);
+    expect(f.git("rev-parse", "v0.0.1-next.3")).toBe(revision);
+    expect(f.commands).toContainEqual(["bun", "run", "release:publish"]);
+  } finally { f.cleanup(); }
+});
+
+test("release:publish checks the clean staged revision, its artifacts and the harness reports before GitHub or npm", async () => {
+  const f = fixture();
+  try {
+    f.withoutHarness();
+    f.staged();
+    const git = async (...args: string[]) => f.git(...args);
+    const revision = f.git("rev-parse", "HEAD");
+    await expect(publishPreflight(f.root, "0.0.1-next.2", git)).rejects.toThrow(`Refusing to publish ${revision}`);
+    f.harness(revision);
+    expect(await publishPreflight(f.root, "0.0.1-next.2", git)).toBe(revision);
+    f.write("artifacts/releases/0.0.1-next.2/spark.tgz", "different bytes");
+    await expect(publishPreflight(f.root, "0.0.1-next.2", git)).rejects.toThrow("Release artifact changed: spark.tgz");
+    f.write("feature.ts", "export const feature = false;\n");
+    await expect(publishPreflight(f.root, "0.0.1-next.2", git)).rejects.toThrow("Publishing requires the clean source revision");
   } finally { f.cleanup(); }
 });
 
