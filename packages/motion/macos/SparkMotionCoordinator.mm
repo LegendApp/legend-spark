@@ -224,7 +224,7 @@ static NSString *SparkJSONString(id object)
   NSMutableSet<SparkMotionFrameRecorder *> *_recorders;
   NSMutableArray<dispatch_block_t> *_awaitingMount;
   NSMapTable<NSView *, SparkMotionLayoutMark *> *_layoutMarks;
-  NSMutableDictionary<NSString *, SparkMotionSharedMark *> *_sharedMarks;
+  NSMutableDictionary<NSString *, SparkMotionSharedMark *> *_sharedMarks;  // only the latest transaction's
   NSHashTable<NSView *> *_mounting;  // registered, not yet past their first mounting transaction
   NSUInteger _sweepGeneration;
   uint64_t _inputEvent;
@@ -659,6 +659,10 @@ static NSRect SparkLayoutRect(NSView *view, NSView *reference)
       mark->box[i] = i < 2 ? layout[i] + states[i].value : layout[i] * states[i].value;
       mark->velocity[i] = i < 2 ? states[i].velocity : layout[i] * states[i].velocity;
     }
+    // A destination only matches marks of its own transaction, and transactions mount one after another, so marks of
+    // an earlier transaction are dropped: the dictionary holds at most the shared elements of one transaction.
+    SparkMotionSharedMark *any = _sharedMarks.allValues.firstObject;
+    if (any && (any.surface != surface || any.transaction != transaction)) [_sharedMarks removeAllObjects];
     _sharedMarks[sharedId] = mark;
   }
 }

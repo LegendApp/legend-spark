@@ -29,7 +29,8 @@ export function usePresenceMotion(ref: Ref<MotionTarget> | undefined, enter: Mot
   const presence = useContext(PresenceContext);
   if (enter !== undefined) tracks(enter);
   if (exit !== undefined) {
-    tracks(exit);
+    // The presence unmounts the child once exit settles; an exit that repeats forever never would.
+    if (Object.values(tracks(exit)).some(spec => "repeat" in spec && spec.repeat === "infinite")) invalid("exit cannot repeat forever: MotionPresence unmounts the child once it settles");
     if (!presence) invalid("exit needs a MotionPresence ancestor, which keeps the view mounted while it plays");
   }
   const target = useRef<MotionTarget | null>(null);

@@ -316,6 +316,14 @@ int main()
     // One that mounts in a later transaction has no source.
     TestHost *late2 = mounted(32, NSMakeRect(0, 0, 10, 10), nil, @"photo");
     CHECK(value(32, @"translateX") == 0);
+    // Shared marks keep only the latest transaction's: each distinct id does not stay behind.
+    NSDictionary *marks = [motion valueForKey:@"sharedMarks"];
+    CHECK(marks.count == 1 && marks[@"photo"]);
+    late2.motionSharedId = @"other";
+    [motion hostWillMount:late2 surface:1 transaction:108];
+    [motion hostDidMount:late2 surface:1 transaction:108];
+    marks = [motion valueForKey:@"sharedMarks"];
+    CHECK(marks.count == 1 && marks[@"other"] && !marks[@"photo"]);
     for (NSInteger tag : {20, 21, 22, 31, 32}) [motion unregisterTag:tag];
     (void)late2;
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });

@@ -1,5 +1,5 @@
 import { useI18n } from "../../shell/app-controller";
-import type { Locale } from "../../shell/i18n";
+import { MESSAGES, type Locale } from "../../shell/i18n";
 
 // Strings for the Layout, presence and shared elements screen (kept apart from motion-messages.ts).
 type LayoutMessages = {
@@ -34,20 +34,20 @@ const en: LayoutMessages = {
   close: "Close",
 };
 
-const arabicDigits = (value: number) => String(value).replace(/\d/g, digit => "٠١٢٣٤٥٦٧٨٩"[Number(digit)]!);
+const n = MESSAGES.ar.number;
 const ar: LayoutMessages = {
   presence: "الظهور وإعادة التدفق",
   presenceHint: "يشغّل الصف المحذوف حركة خروجه ويبقى حتى تستقر، ثم تنزلق الصفوف التي تحته إلى الأعلى. تدخل الصفوف المضافة. نقل الصف الأخير إلى الأعلى يعيد ترتيب كل الصفوف.",
   add: "إضافة صف",
   removeFirst: "حذف الأول",
   lastToTop: "نقل الأخير إلى الأعلى",
-  item: id => `العنصر ${arabicDigits(id)}`,
+  item: id => `العنصر ${n(id)}`,
   frame: "إطار التخطيط",
   frameHint: "يتغير عرض المربع؛ فيتحجّم من إطاره السابق إلى الجديد.",
   toggleSize: "تبديل الحجم",
   shared: "عنصر مشترك",
   sharedHint: "يؤدي فتح صورة إلى إزالة صورتها المصغرة؛ فيتحرك عرض التفاصيل الذي يحمل المعرّف المشترك نفسه منها.",
-  open: id => `فتح ${arabicDigits(id)}`,
+  open: id => `فتح ${n(id)}`,
   close: "إغلاق",
 };
 

@@ -94,7 +94,8 @@ are no hooks.
   presence keeps rendering it in its place, its `MotionView`s play `exit`, and it unmounts once
   they all settle; a child without `exit` unmounts at once. Siblings with `layout` then reflow
   smoothly. A child added back while it exits stays and plays `enter`, which interrupts `exit`.
-  A `MotionView` with `exit` outside a presence throws `E_INVALID_ARGUMENT`.
+  A `MotionView` with `exit` outside a presence, or with an `exit` that repeats forever (it would never
+  unmount), throws `E_INVALID_ARGUMENT`.
 * **Shared elements** (`sharedId`). A `MotionView` that mounts with an id animates from the box
   (position, size and velocity, including its running motion) where another `MotionView` with the
   same id showed when the mounting transaction began, in the same window: translation from the

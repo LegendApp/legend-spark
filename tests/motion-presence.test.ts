@@ -88,7 +88,9 @@ test("enter plays at mount from initial; exit needs a MotionPresence; both valid
   await render(h(MotionView, { testID: "card", ref, initial: { opacity: 0 }, enter: { opacity: timing(1, { durationMs: 150 }), translateY: 0 } }));
   expect(ref.current).toBe(nodes.get("card"));
   expect(plans()).toEqual([{ id: expect.any(String), groups: [{ tag: tagOf("card"), tracks: { opacity: timing(1, { durationMs: 150 }), translateY: spring(0) } }] }]);
-  for (const element of [h(MotionView, { exit: { opacity: 0 } }), h(MotionView, { enter: { width: 1 } as never }), h(MotionPresence, null, h(MotionView, { exit: { opacity: Number.NaN } }))])
+  for (const element of [h(MotionView, { exit: { opacity: 0 } }), h(MotionView, { enter: { width: 1 } as never }), h(MotionPresence, null, h(MotionView, { exit: { opacity: Number.NaN } })),
+    h(MotionPresence, null, h(MotionView, { exit: { opacity: timing(0, { durationMs: 200, repeat: Infinity }) } })),
+    h(MotionPresence, null, h(MotionView, { exit: { scale: spring(0.9, { repeat: Infinity, reverse: true }) } }))])
     await expect(act(async () => { create(element); })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   await act(async () => { rendered.unmount(); rendered = undefined; });
   expect(ref.current).toBeNull();
