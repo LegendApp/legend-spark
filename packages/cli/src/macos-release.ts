@@ -1,6 +1,6 @@
 import { chmodSync, closeSync, cpSync, existsSync, openSync, readdirSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 // Shared by the compiler invocation and runtime cache fingerprint.
 export const macOSReleaseSettings = [
@@ -40,6 +40,23 @@ export function relativeHermesCompiler(nativeRoot: string, file: string): string
   writeFileSync(file, `#!/bin/bash\nset -e\ninput="\${@: -1}"\ncd "$(dirname "$input")"\nexec ${JSON.stringify(hermesc)} "\${@:1:$#-1}" "$(basename "$input")"\n`);
   chmodSync(file, 0o755);
   return file;
+}
+
+/**
+ * Removes App Transport Security's local networking exemption (NSAllowsLocalNetworking, which the Spark config plugin
+ * sets for the development server) from a release app's Info.plist, and the NSAppTransportSecurity dictionary when that
+ * was its only key. Release builds load their embedded JavaScript and reach no development server.
+ */
+export function removeLocalNetworking(app: string) {
+  const plist = path.join(app, "Contents/Info.plist");
+  const extracted = spawnSync("plutil", ["-extract", "NSAppTransportSecurity", "json", "-o", "-", plist], { encoding: "utf8" });
+  if (extracted.status !== 0) {
+    if (extracted.stderr.includes("No value at that key path")) return;
+    throw new Error(`plutil could not read NSAppTransportSecurity from ${plist}: ${extracted.stderr.trim()}`);
+  }
+  const ats = JSON.parse(extracted.stdout) as Record<string, unknown>;
+  if (!("NSAllowsLocalNetworking" in ats)) return;
+  execFileSync("plutil", ["-remove", Object.keys(ats).length === 1 ? "NSAppTransportSecurity" : "NSAppTransportSecurity.NSAllowsLocalNetworking", plist]);
 }
 
 const MACH_O = new Set([0xfeedfacf, 0xcffaedfe, 0xcafebabe, 0xbebafeca]);

@@ -46,7 +46,7 @@ checks:
     spec: "#153"
     audit: bundle
   DIST-HYG-08:
-    title: Info.plist has the release keys (identifier, package type, name, executable, versions, minimum macOS 14, principal class) and no App Transport Security exemptions for arbitrary loads or a development server
+    title: Info.plist has the release keys (identifier, package type, name, executable, versions, minimum macOS 14, principal class) and no App Transport Security exemptions for arbitrary loads or a development server (localhost exceptions, NSAllowsLocalNetworking)
     platforms: [macos, windows]
     blocking: true
     spec: "#153"

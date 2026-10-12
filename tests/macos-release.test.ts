@@ -1,8 +1,9 @@
 import { expect, test } from "vitest";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { macOSReleasePathSettings, macOSReleaseSettings, sourceRoot } from "../packages/cli/src/macos-release.ts";
+import { macOSReleasePathSettings, macOSReleaseSettings, removeLocalNetworking, sourceRoot } from "../packages/cli/src/macos-release.ts";
 import { collectNotices, formatNotices, isFirstParty, npmNotice } from "../packages/cli/src/notices.ts";
 import { noticesFindings } from "../scripts/e2e/audit/bundle.ts";
 import { runtimeFor, writeJson } from "../packages/cli/src/project.ts";
@@ -84,4 +85,23 @@ test("notices leave out first-party packages: private ones and workspace package
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// The config plugin allows local networking for the development server; release builds lose it (#274).
+test.skipIf(process.platform !== "darwin")("release builds drop NSAllowsLocalNetworking from Info.plist and keep every other App Transport Security key", () => {
+  const app = mkdtempSync(path.join(os.tmpdir(), "spark-ats-")), plist = path.join(app, "Contents/Info.plist");
+  const write = (value: object) => { mkdirSync(path.dirname(plist), { recursive: true }); writeFileSync(plist, JSON.stringify(value)); execFileSync("plutil", ["-convert", "xml1", plist]); };
+  const read = () => JSON.parse(execFileSync("plutil", ["-convert", "json", "-o", "-", plist], { encoding: "utf8" }));
+  try {
+    write({ CFBundleIdentifier: "com.example.app", NSAppTransportSecurity: { NSAllowsLocalNetworking: true } });
+    removeLocalNetworking(app);
+    expect(read()).toEqual({ CFBundleIdentifier: "com.example.app" });
+    write({ CFBundleIdentifier: "com.example.app", NSAppTransportSecurity: { NSAllowsLocalNetworking: true, NSExceptionDomains: { "example.com": { NSIncludesSubdomains: true } } } });
+    removeLocalNetworking(app);
+    expect(read()).toEqual({ CFBundleIdentifier: "com.example.app", NSAppTransportSecurity: { NSExceptionDomains: { "example.com": { NSIncludesSubdomains: true } } } });
+    removeLocalNetworking(app);
+    write({ CFBundleIdentifier: "com.example.app" });
+    removeLocalNetworking(app);
+    expect(read()).toEqual({ CFBundleIdentifier: "com.example.app" });
+  } finally { rmSync(app, { recursive: true, force: true }); }
 });

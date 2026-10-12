@@ -1,7 +1,7 @@
 import { restoreNativeMetadata } from "./native-metadata.ts";
 import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 import { missingNativeFrameworks, preparationChanges, preserveMacOSPods, type NativePreparation } from "./native-preparation.ts";
-import { collectDsyms, macOSReleasePathSettings, macOSReleaseSettings, relativeHermesCompiler } from "./macos-release.ts";
+import { collectDsyms, macOSReleasePathSettings, macOSReleaseSettings, relativeHermesCompiler, removeLocalNetworking } from "./macos-release.ts";
 import { checkReleaseTestDriver } from "./release-driver.ts";
 import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
@@ -418,6 +418,7 @@ async function buildUnlocked(
   );
   copyHelpers(root, destination, readAppConfig(root).expo?.extra?.spark?.helpers);
   if (mode === "release") {
+    removeLocalNetworking(destination);
     const sources = metroSourceFiles(path.resolve(root, entryFile(root)), readJson(stateFile(root, "analysis/app.map")).sources);
     const linked = (readJson(stateFile(root, "native-selection.json")).included as Array<{ root: string }>).map(pkg => pkg.root);
     const pods = podNotices(JSON.parse(await run(root, ["plutil", "-convert", "json", "-o", "-", acknowledgementsFile(nativeRoot)], { capture: true })));
