@@ -215,6 +215,8 @@ export class DriverState implements AppState {
       const plist = path.join(state.app, "Contents/Info.plist");
       execFileSync("plutil", ["-replace", "CFBundleIdentifier", "-string", bundleId, plist]);
       execFileSync("plutil", ["-replace", "SparkProjectIdentifier", "-string", state.identity.projectId, plist]);
+      // LaunchServices registers the clone when it launches; it must not offer the app's intents to Shortcuts, Spotlight or Siri.
+      removeAppIntentsMetadata(state.app);
       execFileSync("codesign", ["--force", "--sign", "-", "--preserve-metadata=entitlements,flags", state.app], { stdio: ["ignore", "ignore", "pipe"] });
       execFileSync("xattr", ["-dr", "com.apple.quarantine", state.app]);
       mkdirSync(state.home, { mode: 0o700 });
@@ -278,6 +280,18 @@ export class DriverState implements AppState {
       return found;
     });
   }
+}
+
+/**
+ * Deletes the App Intents metadata in a bundle (its own and its frameworks': `*.appintents`) and the App Shortcuts
+ * phrases (`AppShortcuts.strings` in each `.lproj`), so the system finds no intents or App Shortcuts in it. Returns them.
+ */
+export function removeAppIntentsMetadata(app: string): string[] {
+  const found = (readdirSync(app, { recursive: true, encoding: "utf8" }) as string[])
+    .filter(file => /\.appintents$/.test(file) || /\.lproj\/AppShortcuts\.strings$/.test(file))
+    .map(file => path.join(app, file));
+  for (const file of found) rmSync(file, { recursive: true, force: true });
+  return found;
 }
 
 const lockFor = (host: Pick<StateHost, "temp">, bundleId: string) => path.join(host.temp, `spark-driver-${bundleId}.lock`);

@@ -30,6 +30,21 @@ export interface MacOSConfiguration {
    */
   testDriverPrivateEvents?: boolean;
   lifecycle?: MacOSLifecycle;
+  /** App Intents for Shortcuts, Spotlight and Siri, compiled into the app by spark build (docs/app-intents.md). */
+  appIntents?: AppIntentConfiguration[];
+}
+export interface AppIntentConfiguration {
+  /** Letters and digits; the intent's identity, so shortcuts that use it break when it changes. */
+  id: string;
+  title: string;
+  description?: string;
+  parameters?: { name: string; title: string; type: "string" | "number" | "integer" | "boolean"; optional?: boolean }[];
+  /** The handler returns text, which the system shows and passes to the next action. Default false. */
+  returnsText?: boolean;
+  /** Bring the app to the front when the intent runs. Default false. */
+  openApp?: boolean;
+  /** An App Shortcut, available without setup. Each phrase names the app once as `${applicationName}`. */
+  shortcut?: { phrases: string[]; shortTitle: string; systemImage: string };
 }
 export interface SigningConfiguration {
   macos?: { identity?: string; teamId?: string; entitlementsByPath?: Record<string, Record<string, JsonValue>> };

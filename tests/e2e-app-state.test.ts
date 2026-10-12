@@ -157,6 +157,18 @@ describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)"
     expect(calls).toEqual([`running ${DRIVER.bundleId}`, `defaults delete ${DRIVER.bundleId}`]);
   });
 
+  test("the clone carries no App Intents metadata or App Shortcuts phrases, so the system never learns its intents", () => {
+    const { host: fake } = host();
+    const app = bundle();
+    const metadata = ["Contents/Resources/Metadata.appintents/extract.actionsdata", "Contents/Resources/Kit/Kit.appintents/version.json", "Contents/Resources/en.lproj/AppShortcuts.strings"];
+    for (const file of metadata) touch(path.join(app, file));
+    touch(path.join(app, "Contents/Resources/en.lproj/Localizable.strings"));
+    const state = create(app, fake);
+    for (const file of metadata) expect([existsSync(path.join(app, file)), existsSync(path.join(state.app, file))], file).toEqual([true, false]);
+    expect(existsSync(path.join(state.app, "Contents/Resources/en.lproj/Localizable.strings"))).toBe(true);
+    execFileSync("codesign", ["--verify", "--strict", state.app]);
+  });
+
   test("starts clean: earlier sessions' roots are unregistered and deleted, and the clone's state outside a root is deleted", () => {
     const { host: fake, calls } = host();
     const stale = mkdtempSync(path.join(fake.roots, `spark-driver-state-${DRIVER.bundleId}-`));

@@ -21,7 +21,7 @@ Never set `testDriverInRelease` for an app you distribute. How it works:
 
 - The config plugin writes `ENV['SPARK_TEST_DRIVER_RELEASE'] = '1'` into the generated Podfile when the
   option is set. Every Spark pod that includes `SparkTestDriver.h` (`RNDesktopApp`, `RNSparkUI`,
-  `RNSparkMotion`, `RNDesktopSystem`, `RNDesktopWindows`, `RNDesktopClipboard`, `RNDesktopDrag`, `RNDesktopPermissions`, `RNDesktopBiometrics`, `RNDesktopSharing`, `RNDesktopLinks`, `RNDesktopGlobalShortcuts`, `RNDesktopMedia`), and `RNDesktopDiagnostics`, sets the build setting
+  `RNSparkMotion`, `RNDesktopSystem`, `RNDesktopWindows`, `RNDesktopClipboard`, `RNDesktopDrag`, `RNDesktopPermissions`, `RNDesktopBiometrics`, `RNDesktopSharing`, `RNDesktopLinks`, `RNDesktopGlobalShortcuts`, `RNDesktopMedia`, `RNDesktopAppIntents`), and `RNDesktopDiagnostics`, sets the build setting
   `SPARK_TEST_DRIVER` to 1 in the Debug configuration, and in other configurations to 1 with that variable or 0
   without it, and passes it to the preprocessor. `RNDesktopApp` also gives it to the app target, for the host's
   app delegate.
@@ -261,6 +261,9 @@ keeps default URL handlers in memory instead of LaunchServices ([links-and-docum
 them and plays back scripted speech recognition, never reaching the microphone, a recognizer or TCC, and registers
 `simulateSpeech` and `testSpeech` ([speech.md](speech.md#testing)); its video players play for real, but fullscreen and
 picture in picture only change their status ([video.md](video.md#testing)).
+The app-intents package takes the declared intents from the driver instead of Info.plist, runs them as the system would
+and records donations instead of reaching IntentDonationManager, and registers `simulateAppIntents` and `testAppIntents`
+([app-intents.md](app-intents.md#testing)).
 The global-shortcuts package
 never registers a hotkey with the system in driver mode (registrations keep their conflict checks in the app) and
 registers `simulateGlobalShortcut` (`key`, `modifiers` as NSEventModifierFlags bits), which delivers a registered

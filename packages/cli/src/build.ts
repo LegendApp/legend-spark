@@ -5,6 +5,7 @@ import { collectDsyms, macOSReleasePathSettings, macOSReleaseSettings, relativeH
 import { checkReleaseTestDriver } from "./release-driver.ts";
 import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
+import { checkAppIntentsMetadata } from "@legendapp/spark-desktop-config/app-intents.cjs";
 import { buildWindows } from "./windows.ts";
 import { copyHelpers } from "./helpers.ts";
 import { publishDirectory } from "./publish-directory.ts";
@@ -405,6 +406,7 @@ async function buildUnlocked(
   )
     throw new Error("Standalone build is missing its JavaScript bundle.");
   if (mode === "release") checkReleaseTestDriver(app, nativeConfig.macos?.testDriverInRelease === true);
+  checkAppIntentsMetadata(app, nativeConfig.macos?.appIntents);
   const result = {
     app: destination,
     // Older receipts may record a stale bundle selected from DerivedData.

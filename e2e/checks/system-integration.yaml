@@ -231,3 +231,61 @@ checks:
     spec: "#125 SYS.api-services"
     covers:
       - ./sharing#getSharingAvailability(share).available
+  SYS-INTENTSAVAIL-01:
+    title: "getAppIntentsAvailability reports App Intents available (the driver simulates the build's compiled intents), and getAppIntents lists only the intents the app declares: none until the simulation declares the Kitchen Sink's two"
+    platforms: [macos]
+    blocking: true
+    spec: "#393 SYS.api-app-intents"
+    covers:
+      - ./app-intents
+      - ./app-intents#getAppIntentsAvailability
+      - ./app-intents#getAppIntentsAvailability().available
+      - ./app-intents#getAppIntents
+  SYS-INTENTS-01:
+    title: "addAppIntentHandler rejects SparkError:E_NOT_FOUND for an undeclared intent, registers declared ones, answers an invocation with its text, fails one with the handler's SparkError code, refuses parameters that do not match the declaration before the handler runs, and completes an intent that returns nothing (driver simulation; nothing reaches the system)"
+    platforms: [macos]
+    blocking: true
+    spec: "#393 SYS.api-app-intents"
+    covers:
+      - ./app-intents#addAppIntentHandler
+  SYS-INTENTSHELD-01:
+    title: "An invocation that arrives before its handler (as when an intent launches the app) waits and reaches the handler once it registers; one nobody handles ends SparkError:E_TIMEOUT (driver simulation)"
+    platforms: [macos]
+    blocking: true
+    spec: "#393 SYS.api-app-intents"
+    covers:
+      - ./app-intents#addAppIntentHandler
+  SYS-INTENTSDONATE-01:
+    title: "donateAppIntent rejects SparkError:E_NOT_FOUND for an undeclared intent and donates a declared one with its parameters (driver simulation; nothing is donated to the system)"
+    platforms: [macos]
+    blocking: true
+    spec: "#393 SYS.api-app-intents"
+    covers:
+      - ./app-intents#donateAppIntent
+  SYS-INTENTSREAL-01:
+    title: "Real system paths in a build that declares the Kitchen Sink's intents: Shortcuts lists them, runs Show Recipe with its parameters and shows the text the handler returned, shows the handler's error for Start Timer, launches the quit app to run one, offers the App Shortcut in Spotlight, and a donation succeeds"
+    platforms: [macos]
+    blocking: true
+    spec: "#393 SYS.api-app-intents"
+    covers:
+      - ./app-intents#getAppIntentsAvailability().available
+      - ./app-intents#getAppIntents
+      - ./app-intents#addAppIntentHandler
+      - ./app-intents#donateAppIntent
+  SYS-INTENTSUNSUP-01:
+    title: "On Windows getAppIntentsAvailability reports unsupported-platform and the App Intents calls reject SparkError:E_UNSUPPORTED_PLATFORM"
+    platforms: [windows]
+    blocking: true
+    spec: "#393 SYS.api-app-intents"
+    covers:
+      - ./app-intents#getAppIntentsAvailability().available
+      - ./app-intents#getAppIntents
+      - ./app-intents#addAppIntentHandler
+      - ./app-intents#donateAppIntent
+  SYS-INTENTSVISUAL-01:
+    title: "The App Intents & Shortcuts screen matches its golden in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#393 SYS.api-app-intents"
+    covers:
+      - ./app-intents#getAppIntentsAvailability().available

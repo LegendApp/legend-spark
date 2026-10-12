@@ -87,6 +87,7 @@
     "./sharing",
     "./plugins",
     "./video",
-    "./speech"
+    "./speech",
+    "./app-intents"
   ]
 }

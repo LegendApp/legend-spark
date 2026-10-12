@@ -52,6 +52,22 @@
     "relaunch",
     "setAppLanguage"
   ],
+  "./app-intents": [
+    "AppIntent",
+    "AppIntentHandler",
+    "AppIntentHandlerOptions",
+    "AppIntentInvocation",
+    "AppIntentParameter",
+    "AppIntentParameterType",
+    "AppIntentParameters",
+    "AppIntentValue",
+    "AsyncRegistration",
+    "Availability",
+    "addAppIntentHandler",
+    "donateAppIntent",
+    "getAppIntents",
+    "getAppIntentsAvailability"
+  ],
   "./app/documents": [
     "AsyncRegistration",
     "DocumentAppController",

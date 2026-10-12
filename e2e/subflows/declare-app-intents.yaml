@@ -1,0 +1,7 @@
+# System integration > App Intents & Shortcuts: declares the Kitchen Sink's two intents in the App Intents simulation, as
+# the Info.plist of a build with macos.appIntents set to KS_APP_INTENTS (screens/system-integration/app-intents-demo.ts)
+# lists them (tests/app-intents-build.test.ts keeps the two equal). The Kitchen Sink itself declares none.
+- simulateAppIntents:
+    intents:
+      - { id: ksShowRecipe, title: Show Kitchen Sink Recipe, returnsText: true, parameters: [{ name: recipe, title: Recipe, type: string, optional: false }, { name: servings, title: Servings, type: integer, optional: true }] }
+      - { id: ksStartTimer, title: Start Kitchen Sink Timer, returnsText: false, parameters: [{ name: minutes, title: Minutes, type: number, optional: false }] }

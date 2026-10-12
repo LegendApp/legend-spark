@@ -433,7 +433,19 @@ isDefaultURLHandler(scheme: string): Promise<boolean>;
 setDefaultURLHandler(scheme: string): Promise<void>;
 ```
 
-`share` resolves when the person picks a service (its localized title) or dismisses the picker (`null`); it does not wait for the service, whose outcome macOS does not report for every service, so neither Expo Sharing's `shareAsync` (one file) nor React Native's `Share` (resolves after completion) is borrowed. Services are declared in Info.plist (`NSMessage` `sparkService`, `NSUserData` the name) and receive only: a service with `NSReturnTypes` rejects `E_UNSUPPORTED_OPTION`, because AppKit needs its result synchronously. Spotlight openings and universal links arrive through the host's `application:continueUserActivity:`; universal links become ordinary `url` events. Default URL handlers accept only schemes the app declares. In the test driver nothing reaches the picker, pbs, the Spotlight index or LaunchServices. App Intents and Shortcuts have no API: their metadata must be compiled into the app (#393). macOS only for now; Windows reports `unsupported-platform` (#392). Details: [sharing](sharing.md), [links](links-and-documents.md#default-url-handler).
+`share` resolves when the person picks a service (its localized title) or dismisses the picker (`null`); it does not wait for the service, whose outcome macOS does not report for every service, so neither Expo Sharing's `shareAsync` (one file) nor React Native's `Share` (resolves after completion) is borrowed. Services are declared in Info.plist (`NSMessage` `sparkService`, `NSUserData` the name) and receive only: a service with `NSReturnTypes` rejects `E_UNSUPPORTED_OPTION`, because AppKit needs its result synchronously. Spotlight openings and universal links arrive through the host's `application:continueUserActivity:`; universal links become ordinary `url` events. Default URL handlers accept only schemes the app declares. In the test driver nothing reaches the picker, pbs, the Spotlight index or LaunchServices. App Intents and Shortcuts are `/app-intents`, below. macOS only for now; Windows reports `unsupported-platform` (#392). Details: [sharing](sharing.md), [links](links-and-documents.md#default-url-handler).
+
+### App Intents and Shortcuts
+
+```ts
+// /app-intents
+getAppIntentsAvailability(): Availability;
+getAppIntents(): Promise<{ id; title; parameters: { name; title; type; optional }[]; returnsText }[]>;
+addAppIntentHandler(id: string, handler: (invocation: { id; parameters }) => string | void | Promise<string | void>, options?: { onError? }): Promise<AsyncRegistration>;
+donateAppIntent(id: string, parameters?: Record<string, string | number | boolean | null>): Promise<void>;
+```
+
+Intents are declared in `macos.appIntents`: the system only runs intents whose metadata Xcode extracted from Swift in the app, so the config plugin generates that Swift into the app target and JavaScript cannot add intents at run time. The Spark Runner carries no app's intents and reports `host-restriction`; the calls then reject `E_UNAVAILABLE`. An undeclared id is `E_NOT_FOUND`, a second handler `E_BUSY`. Each invocation completes once: with the handler's text (intents with `returnsText`) or nothing, with the error the handler threw (its `SparkError` code and message reach the system), `E_INVALID_DATA` for a result that does not match the declaration, `E_CLOSED` when the handler is removed first, or `E_TIMEOUT` 30 seconds after it started, including the time it waited for a handler to register. In the test driver the driver declares and runs intents and donations are recorded; nothing reaches Shortcuts, Spotlight or Siri. macOS only for now; Windows reports `unsupported-platform` (#415). Details: [App Intents](app-intents.md).
 
 ### Video and speech
 

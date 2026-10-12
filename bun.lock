@@ -8,6 +8,7 @@
         "@expo/ui": "0.2.0-beta.9",
         "@legendapp/list": "3.4.0",
         "@legendapp/spark": "0.0.1-next.3",
+        "@legendapp/spark-app-intents": "0.0.1-next.3",
         "@legendapp/spark-audio": "0.0.1-next.3",
         "@legendapp/spark-auth-session": "0.0.1-next.3",
         "@legendapp/spark-biometrics": "0.0.1-next.3",
@@ -139,6 +140,17 @@
       "dependencies": {
         "@legendapp/spark-desktop-app": "0.0.1-next.3",
         "@legendapp/spark-processes": "0.0.1-next.3",
+      },
+      "peerDependencies": {
+        "react": "19.1.4",
+        "react-native": "0.81.6",
+      },
+    },
+    "packages/app-intents": {
+      "name": "@legendapp/spark-app-intents",
+      "version": "0.0.1-next.3",
+      "dependencies": {
+        "@legendapp/spark-desktop-app": "0.0.1-next.3",
       },
       "peerDependencies": {
         "react": "19.1.4",
@@ -277,6 +289,7 @@
       },
       "dependencies": {
         "@legendapp/spark-ai": "0.0.1-next.3",
+        "@legendapp/spark-app-intents": "0.0.1-next.3",
         "@legendapp/spark-audio": "0.0.1-next.3",
         "@legendapp/spark-auth-session": "0.0.1-next.3",
         "@legendapp/spark-biometrics": "0.0.1-next.3",
@@ -1019,6 +1032,8 @@
     "@legendapp/spark": ["@legendapp/spark@workspace:packages/desktop"],
 
     "@legendapp/spark-ai": ["@legendapp/spark-ai@workspace:packages/ai"],
+
+    "@legendapp/spark-app-intents": ["@legendapp/spark-app-intents@workspace:packages/app-intents"],
 
     "@legendapp/spark-audio": ["@legendapp/spark-audio@workspace:packages/audio"],
 

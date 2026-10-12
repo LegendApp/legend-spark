@@ -1,0 +1,61 @@
+appId: so.legend.spark.examples.kitchensink
+name: Real App Intents in Shortcuts, Spotlight and Siri
+intent: >
+  The real system paths of @legendapp/spark/app-intents, which no automated run may reach: a build with intents adds
+  actions to Shortcuts, Spotlight and Siri on the Mac that runs it, and donations feed Siri suggestions. The Kitchen
+  Sink therefore declares no intents. manual: true keeps the gate from running this flow. Run it by hand on a Mac where
+  that is acceptable: add the macos.appIntents block from docs/app-intents.md#kitchen-sink (KS_APP_INTENTS in
+  screens/system-integration/app-intents-demo.ts) to examples/kitchen-sink/desktop.config.json, rebuild the development
+  app (bun run rebuild:macos in examples/kitchen-sink) and launch it with spark dev; remove the block and rebuild
+  afterwards. Automated coverage of the same paths: tests/app-intents-build.test.ts checks the metadata Xcode extracts
+  from the generated Swift, tests/app-intents.native.mm the native invocation path, and the driver flows the handlers.
+checks: [SYS-INTENTSREAL-01]
+tags: [system-integration]
+platforms: [macos]
+manual: true
+---
+- launchApp: { openUrl: "spark-ks://system-integration/app-intents" }
+- extendedWaitUntil: { visible: { id: system-integration-app-intents-content }, timeout: 10s }
+- manualStep:
+    instruction: >-
+      Check Availability, Declared intents and the two handler statuses on the screen.
+    expect: >-
+      Availability reads {"available":true}, Declared intents reads ksShowRecipe, ksStartTimer, and both handlers read
+      listening. (A build without the block reads host-restriction, none and SparkError:E_UNAVAILABLE.)
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Open the Shortcuts app, create a shortcut, and search the actions for KitchenSink. Add Show Kitchen Sink Recipe
+      with Recipe Soup and Servings 3, then Show Result, and run the shortcut. Then replace it with Start Kitchen Sink
+      Timer for 90 minutes and run it again, and once more for 5 minutes.
+    expect: >-
+      Both actions are listed under KitchenSink. The first run shows Soup for 3, and ksShowRecipe: Soup for 3 appears at
+      the top of Received. The 90-minute run fails with "A timer runs at most 60 minutes"; the 5-minute run finishes
+      without a result and ksStartTimer: 5 min appears in Received.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Quit the Kitchen Sink (Command-Q), then run the Show Kitchen Sink Recipe shortcut again from Shortcuts.
+    expect: >-
+      macOS launches the Kitchen Sink, the shortcut shows Soup for 3 within 30 seconds, and the app opens its main
+      window. Note whether it comes to the front (the intent does not set openApp).
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Open Spotlight (Command-Space) and type Show a recipe in KitchenSink; also look for Show Recipe under KitchenSink
+      in the Shortcuts app's App Shortcuts. Then press Donate Show Recipe on the screen.
+    expect: >-
+      Spotlight and Shortcuts offer the Show Recipe App Shortcut with the fork and knife symbol, and running it asks for
+      the recipe. Donate Show Recipe shows donated.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Delete the test shortcut, remove the macos.appIntents block from desktop.config.json and rebuild.
+    expect: >-
+      After the rebuild Availability reads host-restriction again and Shortcuts no longer lists KitchenSink's actions.
+    evidence: none
+    signoff: required

@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type TestSharing, type SimulatedSharing, type TestSpeech, type SimulatedSpeech } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type TestSpeech, type SimulatedSpeech } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -131,6 +131,15 @@ export class FakeDriver implements DriverClient {
   speech: TestSpeech = { wordMs: 20, recognizerAvailable: true, onDeviceSupported: true, recognitionPartials: [], recognitionTranscript: null, utterances: [], speaking: false, paused: false, recognitions: 0, listening: false, lastRecognition: null };
   async simulateSpeech(state: SimulatedSpeech) { this.log.push(`simulateSpeech ${JSON.stringify(state)}`); return this.speech = { ...this.speech, ...state }; }
   async testSpeech() { this.log.push("testSpeech"); return this.speech; }
+  /** The App Intents simulation (FakeApp.appIntents), as the app's simulateAppIntents and testAppIntents commands keep it. */
+  appIntents: TestAppIntents = { declared: [], registered: [], pending: 0, invocations: [], donations: [] };
+  async simulateAppIntents(request: SimulatedAppIntents) {
+    this.log.push(`simulateAppIntents ${JSON.stringify(request)}`);
+    if (request.intents) this.appIntents.declared = request.intents.map(intent => String(intent.id));
+    if (request.invoke) this.appIntents.pending++;
+    return this.appIntents;
+  }
+  async testAppIntents() { this.log.push("testAppIntents"); return this.appIntents; }
   /** Spark drag sources (FakeApp.dragSources), as the app's testDrag command sees them. */
   dragSources: () => Record<string, DragSource> = () => ({});
   private dragging?: { promised: string[] };
@@ -206,6 +215,8 @@ export class FakeApp implements DriverApp {
   biometrics?: TestBiometrics;
   /** The app's sharing simulation; every launch's driver reads and changes it. */
   sharing: TestSharing = { shares: [], indexed: {}, services: [], registered: [], invocations: 0, answer: null };
+  /** The app's App Intents simulation; every launch's driver reads and changes it. */
+  appIntents: TestAppIntents = { declared: [], registered: [], pending: 0, invocations: [], donations: [] };
   /** Extra elements of the in-process accessibility view; tests may change them while a flow runs. */
   elements: DriverElement[] = [];
   /** Scripted motion telemetry by testID, and the next frame report (or driver failure). */
@@ -251,6 +262,7 @@ export class FakeApp implements DriverApp {
     driver.dragSources = () => this.dragSources;
     if (this.biometrics) driver.biometrics = this.biometrics;
     driver.sharing = this.sharing;
+    driver.appIntents = this.appIntents;
     this.drivers.push(driver);
     return driver;
   }
