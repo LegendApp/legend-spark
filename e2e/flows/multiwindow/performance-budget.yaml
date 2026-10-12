@@ -1,0 +1,26 @@
+appId: so.legend.spark.examples.kitchensink
+name: Pool memory budgets and memory pressure
+intent: >
+  A pool with a 1 MB budget measures its first warm window (the process footprint's growth while it was created) and
+  closes it for real, since not even one window fits: no warm window, 1 released. The pooled note entry (64 MB) keeps
+  its prewarmed window. Simulated memory pressure (delivered in-process; the OS is untouched) closes every warm window
+  and reports the pressure; prewarming under pressure creates none. Back to normal, the pool refills to one.
+checks: [MW-PERF-04]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/performance" }
+- assertVisible: { id: multiwindow-performance-root }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=tight,prewarm", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-1-steps-2 }
+- assertVisible: { id: multiwindow-performance-tight-warm-0-hits-0-misses-0-released-1 }
+- assertVisible: { id: multiwindow-performance-pooled-warm-1-hits-0-misses-0-released-0 }
+- simulateSystemEvent: { type: memoryPressure, level: warning }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=keep,settle,prewarm", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-2-steps-3 }
+- assertVisible: { id: multiwindow-performance-pooled-warm-0-hits-0-misses-0-released-1-pressure }
+- simulateSystemEvent: { type: memoryPressure, level: normal }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=keep,prewarm", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-3-steps-2 }
+- assertVisible: { id: multiwindow-performance-pooled-warm-1-hits-0-misses-0-released-1 }

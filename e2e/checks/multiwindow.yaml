@@ -206,3 +206,54 @@ checks:
     spec: "docs/api-window-contract.md §Special window types"
     covers:
       - ./windows#getSpecialWindowAvailability
+  MW-PERF-01:
+    title: getWindowPerformanceAvailability reports window pools and background render throttling available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window pools"
+    covers:
+      - ./windows#getWindowPerformanceAvailability
+      - ./windows#getWindowPerformanceAvailability(pool).available
+      - ./windows#getWindowPerformanceAvailability(throttle).available
+  MW-PERF-02:
+    title: prewarm creates a hidden warm window whose root renders nothing; opening the pooled entry takes it, renders the open's props and shows it in under 100 ms from the open call to the content's first commit, and the pool refills
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window pools"
+    covers:
+      - ./windows#createWindowsNavigator
+  MW-PERF-03:
+    title: A closed pooled window parks and is reused with fresh content; past max it closes for real; trimPool closes warm windows for real; repeated open, park, trim and prewarm cycles leave no windows, views or listeners behind
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window pools"
+    covers:
+      - ./windows#createWindowsNavigator
+  MW-PERF-04:
+    title: A pool keeps no more warm windows than fit its memory budget at the measured cost per window (a 1 MB budget keeps none); memory pressure closes every warm window and stops refilling, and its return to normal refills
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window pools"
+    covers:
+      - ./windows#createWindowsNavigator
+  MW-PERF-05:
+    title: A throttled window renders none of five shared-state changes while it is hidden, keeps its content state, and renders the latest value once it is shown again
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Background render throttling"
+    covers:
+      - ./windows#createWindowsNavigator
+  MW-PERF-06:
+    title: On screen, a warm window shows its content in its first frame (no blank window), and a throttled window fully covered by another window stops rendering and catches up when uncovered
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window pools; §Background render throttling"
+    covers:
+      - ./windows#createWindowsNavigator
+  MW-PERF-07:
+    title: "On Windows, getWindowPerformanceAvailability reports unsupported-platform for pools and throttling, and a navigator with a pool rejects E_UNSUPPORTED_OPTION (implementation: #414)"
+    platforms: [windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window pools"
+    covers:
+      - ./windows#getWindowPerformanceAvailability

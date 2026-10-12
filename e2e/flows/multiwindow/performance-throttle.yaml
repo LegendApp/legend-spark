@@ -1,0 +1,25 @@
+appId: so.legend.spark.examples.kitchensink
+name: Background render throttling
+intent: >
+  The throttled clock window renders the shared clock value. Hidden, it renders none of five value changes a frame
+  apart; shown again, it renders the latest value (10) once. Driver mode never shows windows, so hiding is what
+  throttles here; occlusion is checked by hand (performance-manual).
+checks: [MW-PERF-05]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/performance" }
+- assertVisible: { id: multiwindow-performance-root }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=clock,clock-tick", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-1-steps-2 }
+- assertVisible: { id: multiwindow-performance-clock-shown }
+- assertVisible: { id: multiwindow-performance-clock-value-5, window: { title: "Throttled clock" } }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=keep,clock-hide,clock-tick", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-2-steps-3 }
+- assertVisible: { id: multiwindow-performance-clock-hidden }
+- assertVisible: { id: multiwindow-performance-hidden-renders-0 }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=keep,clock-show", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-3-steps-2 }
+- assertVisible: { id: multiwindow-performance-clock-shown }
+- assertVisible: { id: multiwindow-performance-clock-value-10, window: { title: "Throttled clock" } }

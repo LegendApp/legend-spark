@@ -1,0 +1,43 @@
+appId: so.legend.spark.examples.kitchensink
+name: Prewarmed and pooled windows
+intent: >
+  Both window performance features report available. prewarm creates a hidden warm note window; opening the pooled
+  entry takes it, renders the open's props in it and shows it in under 100 ms from the open call to the content's first
+  commit, and the pool refills to one warm window (1 hit). A note opened without a pool is timed for comparison. Closing
+  the pooled note parks its window (two warm), and the next two opens reuse both warm windows, each with fresh content
+  for that open (3 hits, no misses). With both notes closed again the pool would hold three: the third closes for real
+  (1 released), and trimming closes the two warm windows for real.
+checks: [MW-PERF-01, MW-PERF-02, MW-PERF-03]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/performance" }
+- assertVisible: { id: multiwindow-performance-root }
+- assertVisible: { id: multiwindow-performance-availability-pool-available }
+- assertVisible: { id: multiwindow-performance-availability-throttle-available }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=prewarm,warm,prewarm", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-1-steps-3 }
+- assertVisible: { id: multiwindow-performance-warm-paint-fast }
+- assertVisible: { id: multiwindow-performance-pooled-warm-1-hits-1-misses-0-released-0 }
+- assertVisible: { id: multiwindow-performance-note-open-1, window: { title: "Pooled 1" } }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=keep,cold", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-2-steps-2 }
+- assertVisible: { id: multiwindow-performance-note-open-2, window: { title: "Cold 2" } }
+- assertNotVisible: { id: multiwindow-performance-cold-paint-none }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=keep,close,close,prewarm", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-3-steps-4 }
+- assertVisible: { id: multiwindow-performance-pooled-warm-2-hits-1-misses-0-released-0 }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=keep,warm,warm,prewarm", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-4-steps-4 }
+- assertVisible: { id: multiwindow-performance-warm-paint-fast }
+- assertVisible: { id: multiwindow-performance-pooled-warm-1-hits-3-misses-0-released-0 }
+- assertVisible: { id: multiwindow-performance-note-open-3, window: { title: "Pooled 3" } }
+- assertVisible: { id: multiwindow-performance-note-open-4, window: { title: "Pooled 4" } }
+- assertNotVisible: { id: multiwindow-performance-note-open-1, window: { title: "Pooled 4" } }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=keep,close,close,prewarm", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-5-steps-4 }
+- assertVisible: { id: multiwindow-performance-pooled-warm-2-hits-3-misses-0-released-1 }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=keep,trim", stopApp: false }
+- assertVisible: { id: multiwindow-performance-run-6-steps-2 }
+- assertVisible: { id: multiwindow-performance-pooled-warm-0-hits-3-misses-0-released-3 }
