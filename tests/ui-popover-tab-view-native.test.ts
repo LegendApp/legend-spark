@@ -20,13 +20,13 @@ afterAll(() => { if (directory) rmSync(directory, { recursive: true, force: true
 
 test.skipIf(process.platform !== "darwin")("popover hosts React content, anchors, counts events, reconciles open and retries when its window comes on screen, without showing a window", async () => {
   expect(await runOk(executable, ["popover"], { timeout: 15000 })).toContain("PASS popover");
-});
+}, 30_000); // The AppKit test binary has 15 s; the popover run takes over 4 s on a loaded CI runner.
 // The right-to-left app is forced through the argument domain for this process only.
 test.skipIf(process.platform !== "darwin").each([[[]], [["-AppleTextDirection", "YES", "-NSForceRightToLeftWritingDirection", "YES"]]])("tab view hosts tabs in React order with acknowledged selection (%j)", async args => {
   const output = await runOk(executable, ["tab-view", ...args], { timeout: 15000 });
   expect(output).toContain(args.length ? "PASS tab-view (right-to-left app)" : "PASS tab-view");
-});
+}, 30_000); // The AppKit test binary has 15 s; the popover run takes over 4 s on a loaded CI runner.
 test.skipIf(process.platform !== "darwin")("the popover content view renders in-process in light, dark and right to left", async () => {
   expect(await runOk(executable, ["capture", directory], { timeout: 15000 })).toContain("PASS capture");
   for (const name of ["light", "dark", "light-ar", "dark-ar"]) expect(readFileSync(path.join(directory, `popover-content-${name}.png`)).subarray(1, 4).toString()).toBe("PNG");
-});
+}, 30_000); // The AppKit test binary has 15 s; the popover run takes over 4 s on a loaded CI runner.
