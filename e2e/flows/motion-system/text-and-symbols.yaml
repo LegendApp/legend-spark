@@ -1,0 +1,72 @@
+appId: so.legend.spark.examples.kitchensink
+name: Rolling digits, per-character text transitions and SF Symbol effects
+intent: >
+  On Motion system > Text and symbols, with the virtual clock frozen. +1 rolls only the units digit of 1,234 to 5 with a
+  spring, and +100 rolls only the hundreds digit; the number reads 1,335. Swap status crossfades the changed
+  characters of the status word, and Type types the new phrase one character after another. Each symbol effect plays
+  on the bell and reports what played (the screen offers only the effects this app and macOS have: wiggle, rotate and
+  breathe need macOS 15, drawing on and off macOS 26, each with its SDK); Replace swaps it for the slashed bell with a down-up transition. The window is
+  captured once the digits and text have settled, before any symbol effect: AppKit plays those on the real clock. With Reduce Motion on (simulated), a bounce plays its pulse alternate, the
+  instant alternate plays nothing, and drawing the symbol off and on fades it.
+checks: [MOT-NUMBER-01, MOT-TEXT-01, MOT-SYMBOL-01, MOT-SYMREDUCE-01, MOT-CLOCK-01]
+tags: [motion-system]
+platforms: [macos]
+matrix:
+  appearance: [light]
+  locale: [en]
+---
+- launchApp: { openUrl: "spark-ks://motion-system/text-and-symbols" }
+- extendedWaitUntil: { visible: { id: motion-system-text-and-symbols-root }, timeout: 10s }
+- assertText: { id: motion-system-text-and-symbols-availability, equals: '{"available":true}' }
+- assertText: { id: motion-system-text-and-symbols-environment, equals: '{"reduceMotion":false}' }
+- setClock: virtual
+# Rolling digits: only the changed column moves.
+- tapOn: { id: motion-system-text-and-symbols-add-one }
+- assertMotion: { target: { id: motion-system-text-and-symbols-number-digit-1 }, kind: spring, settlesWithin: 1000ms }
+- assertMotion: { target: { id: motion-system-text-and-symbols-number-digit-2 }, kind: none }
+- tapOn: { id: motion-system-text-and-symbols-add-hundred }
+- assertMotion: { target: { id: motion-system-text-and-symbols-number-digit-3 }, kind: spring, settlesWithin: 1000ms }
+- assertMotion: { target: { id: motion-system-text-and-symbols-number-digit-1 }, kind: none }
+- assertText: { id: motion-system-text-and-symbols-number-value, equals: '{"value":1335}' }
+# Text transitions: the first changed character crossfades; the last character of the new phrase fades in last.
+- tapOn: { id: motion-system-text-and-symbols-swap }
+- assertA11y: { id: motion-system-text-and-symbols-status, label: Saved }
+- assertMotion: { target: { id: motion-system-text-and-symbols-status-char-0 }, kind: timing, settlesWithin: 250ms }
+- tapOn: { id: motion-system-text-and-symbols-type }
+- assertA11y: { id: motion-system-text-and-symbols-typed, label: Motion types this line }
+- assertMotion: { target: { id: motion-system-text-and-symbols-typed-char-21 }, kind: timing, settlesWithin: 1200ms }
+# The digits and text at rest, before any symbol effect (AppKit plays those on the real clock).
+- assertScreenshot: { golden: motion-text-symbols-settled, mask: [{ id: infra-shell-sidebar }, { id: motion-system-text-and-symbols-symbol-availability }] }
+# Symbol effects, as written.
+- tapOn: { id: motion-system-text-and-symbols-bounce }
+- assertText: { id: motion-system-text-and-symbols-effect-result, equals: '{"played":"bounce"}' }
+- tapOn: { id: motion-system-text-and-symbols-pulse }
+- assertText: { id: motion-system-text-and-symbols-effect-result, equals: '{"played":"pulse"}' }
+- tapOn: { id: motion-system-text-and-symbols-wiggle, when: { visible: { id: motion-system-text-and-symbols-wiggle } } }
+- assertText: { id: motion-system-text-and-symbols-effect-result, equals: '{"played":"wiggle"}', when: { visible: { id: motion-system-text-and-symbols-wiggle } } }
+- tapOn: { id: motion-system-text-and-symbols-rotate, when: { visible: { id: motion-system-text-and-symbols-rotate } } }
+- assertText: { id: motion-system-text-and-symbols-effect-result, equals: '{"played":"rotate"}', when: { visible: { id: motion-system-text-and-symbols-rotate } } }
+- tapOn: { id: motion-system-text-and-symbols-breathe, when: { visible: { id: motion-system-text-and-symbols-breathe } } }
+- assertText: { id: motion-system-text-and-symbols-effect-result, equals: '{"played":"breathe"}', when: { visible: { id: motion-system-text-and-symbols-breathe } } }
+- tapOn: { id: motion-system-text-and-symbols-drawOff, when: { visible: { id: motion-system-text-and-symbols-drawOff } } }
+- assertText: { id: motion-system-text-and-symbols-effect-result, equals: '{"played":"drawOff"}', when: { visible: { id: motion-system-text-and-symbols-drawOff } } }
+- tapOn: { id: motion-system-text-and-symbols-drawOn, when: { visible: { id: motion-system-text-and-symbols-drawOn } } }
+- assertText: { id: motion-system-text-and-symbols-effect-result, equals: '{"played":"drawOn"}', when: { visible: { id: motion-system-text-and-symbols-drawOn } } }
+- tapOn: { id: motion-system-text-and-symbols-stop }
+- assertText: { id: motion-system-text-and-symbols-effect-result, equals: '{"stopped":true}' }
+- tapOn: { id: motion-system-text-and-symbols-replace }
+- assertText: { id: motion-system-text-and-symbols-symbol-name, equals: bell.slash.fill }
+# Reduce Motion alternates.
+- simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: true }
+- assertText: { id: motion-system-text-and-symbols-environment, equals: '{"reduceMotion":true}' }
+- tapOn: { id: motion-system-text-and-symbols-bounce }
+- assertText: { id: motion-system-text-and-symbols-effect-result, equals: '{"played":"pulse"}' }
+- runFlow:
+    when: { visible: { id: motion-system-text-and-symbols-drawOff } }
+    commands:
+      - tapOn: { id: motion-system-text-and-symbols-drawOff }
+      - assertText: { id: motion-system-text-and-symbols-effect-result, equals: '{"played":"fade"}' }
+      - tapOn: { id: motion-system-text-and-symbols-drawOn }
+      - assertText: { id: motion-system-text-and-symbols-effect-result, equals: '{"played":"fade"}' }
+- simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: false }
+- setClock: real

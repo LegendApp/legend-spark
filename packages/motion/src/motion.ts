@@ -3,14 +3,19 @@ import { findNodeHandle, Platform, UIManager, type HostComponent } from "react-n
 import { asyncRegistration, invokeNative, parseNativeResult, SparkError, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import NativeSparkMotion, { type Spec } from "./NativeSparkMotion";
 import type { NativeProps } from "./SparkMotionViewNativeComponent";
-import { channels, invalid, isMotionSpec, MOTION_PROPERTIES, spring, type MotionChannelProperty, type MotionProperty, type MotionSpec, type MotionValues } from "./specs";
+import { COLOR_COMPONENTS, colorStops, colorValues, formatColor, parseColor, type MotionColor } from "./colors";
+import {
+  animatesColor, channels, colorTracks, invalid, isMotionSpec, MOTION_PROPERTIES, spring,
+  type MotionChannelProperty, type MotionColorProperty, type MotionNumberProperty, type MotionProperty, type MotionSpec, type MotionValues,
+} from "./specs";
 
 // Imperative motion API. One call sends one validated JSON plan; the native engine solves,
 // schedules and bakes it onto the compositor and resolves `finished` when it settles.
 
 /** A mounted `MotionView`, as received through its `ref`. */
 export type MotionTarget = ComponentRef<HostComponent<NativeProps>>;
-export type MotionAnimationValues = Partial<Record<MotionProperty, number | MotionSpec>>;
+/** A number or spec per number property; a color or color spec for `backgroundColor`. A bare value means a default spring to it. */
+export type MotionAnimationValues = Partial<Record<MotionNumberProperty, number | MotionSpec> & Record<MotionColorProperty, MotionColor | MotionSpec<MotionColor>>>;
 /**
  * What a step without its own `reducedValues` plays while the user has Reduce Motion on (docs/motion.md#reduce-motion):
  * `fade` (default) changes transforms at once and fades opacity (a view that only moves fades in where it lands),
@@ -64,6 +69,8 @@ export interface MotionState {
   /** Units per second. */
   velocities: Record<MotionChannelProperty, number>;
   animating: MotionChannelProperty[];
+  /** Color properties as they show now, as CSS `oklch(L C H / A)`. */
+  colors: Record<MotionColorProperty, MotionColor>;
 }
 export interface ScrollLinkOptions {
   /** The React Native ScrollView whose `nativeID` matches, in the target's window. */
@@ -71,8 +78,8 @@ export interface ScrollLinkOptions {
   axis?: "x" | "y";
   /** Scroll offsets in points, strictly increasing. */
   input: readonly number[];
-  /** One output per input stop, for each linked property. */
-  output: Partial<Record<MotionProperty, readonly number[]>>;
+  /** One output per input stop, for each linked property: numbers, or colors for `backgroundColor` (interpolated in OKLCH). */
+  output: Partial<Record<MotionNumberProperty, readonly number[]> & Record<MotionColorProperty, readonly MotionColor[]>>;
   /** Beyond the first and last stop: hold the end values (`clamp`, default) or continue the end segments (`extend`). */
   extrapolate?: "clamp" | "extend";
 }
@@ -89,7 +96,7 @@ export interface MotionFrameReport {
   durationMs: number;
 }
 
-const CHANNELS = MOTION_PROPERTIES.filter((property): property is MotionChannelProperty => property !== "scale");
+const CHANNELS: readonly MotionChannelProperty[] = [...MOTION_PROPERTIES.filter((property): property is Exclude<MotionNumberProperty, "scale"> => property !== "scale" && property !== "backgroundColor"), ...COLOR_COMPONENTS];
 type Group = { tag: number; after?: "start" | "previous"; offsetMs?: number; tracks: Record<string, MotionSpec>; reducedTracks?: Record<string, MotionSpec> };
 const HAPTICS: readonly MotionHaptic[] = ["generic", "alignment", "levelChange"];
 const PLAN_OPTIONS = ["reducedMotion", "whenHidden", "cues"] as const;
@@ -117,12 +124,21 @@ function offset(value: number | undefined, name: string) {
   if (value !== undefined && !(Number.isFinite(value) && value >= 0)) invalid(`${name} must be a non-negative finite number`);
   return value;
 }
-/** Validates animation values: numbers become default springs. */
+/** Validates animation values: bare values become default springs; colors become one animation per OKLCH component. */
 export function tracks(values: MotionAnimationValues): Record<string, MotionSpec> {
-  return Object.fromEntries(channels(values, "Animation values").map(([property, value]) => {
-    if (typeof value === "number") return [property, spring(value)];
-    if (!isMotionSpec(value)) invalid(`${property} takes a number or a spec from spring(), timing(), keyframes(), decay() or sequence()`);
-    return [property, value];
+  return Object.fromEntries(channels(values, "Animation values").flatMap(([property, value]): [string, MotionSpec][] => {
+    const color = property === "backgroundColor";
+    const spec = typeof value === "number" || typeof value === "string" ? spring(value as never) : value;
+    if (!isMotionSpec(spec)) invalid(`${property} takes a ${color ? "color" : "number"} or a spec from spring(), timing(), keyframes(), ${color ? "" : "decay() "}or sequence()`);
+    if (animatesColor(spec) !== color) invalid(color ? `${property} animates to colors` : `${property} animates to numbers, not colors`);
+    return color ? colorTracks(spec) : [[property, spec as MotionSpec]];
+  }));
+}
+/** Values to set at once: numbers, and every OKLCH component of a color. */
+export function motionValues(values: MotionValues, name: string): Record<string, number> {
+  return Object.fromEntries(channels(values, name).flatMap(([property, value]): [string, number][] => {
+    if (property === "backgroundColor") return Object.entries(colorValues(value, `${name}.${property}`));
+    return [[property, Number.isFinite(value) ? value as number : invalid(`${name}.${property} must be a finite number`)]];
   }));
 }
 function known(value: object, allowed: readonly string[], name: string) {
@@ -190,16 +206,16 @@ export function stagger(targets: readonly (MotionTarget | null)[], values: Motio
 /** Sets values immediately, interrupting their animations (use while tracking a gesture). */
 export function setMotionValues(target: MotionTarget | null, values: MotionValues): Promise<void> {
   return invokeNative(() => {
-    const entries = channels(values, "Motion values").map(([property, value]) => [property, Number.isFinite(value) ? value : invalid(`${property} must be a finite number`)]);
-    return motionModule().set(JSON.stringify({ tag: tagOf(target), values: Object.fromEntries(entries) }));
+    return motionModule().set(JSON.stringify({ tag: tagOf(target), values: motionValues(values, "Motion values") }));
   });
 }
 
 /** Freezes the given properties (all by default) at their presented values. */
-export function stopMotion(target: MotionTarget | null, properties: readonly MotionProperty[] = CHANNELS): Promise<void> {
+export function stopMotion(target: MotionTarget | null, properties: readonly MotionProperty[] = MOTION_PROPERTIES.filter(property => property !== "scale")): Promise<void> {
   return invokeNative(() => {
     if (!Array.isArray(properties)) invalid("properties must be an array");
-    const names = channels(Object.fromEntries(properties.map(property => [property, true])), "properties").map(([property]) => property);
+    const names = channels(Object.fromEntries(properties.map(property => [property, true])), "properties")
+      .flatMap(([property]): readonly MotionChannelProperty[] => property === "backgroundColor" ? COLOR_COMPONENTS : [property]);
     return motionModule().stop(JSON.stringify({ tag: tagOf(target), properties: [...new Set(names)] }));
   });
 }
@@ -208,8 +224,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> => !!value &
 const isValues = (value: unknown) => isRecord(value) && CHANNELS.every(property => typeof value[property] === "number");
 /** The presented value and velocity of every property, evaluated analytically now. */
 export function getMotionState(target: MotionTarget | null): Promise<MotionState> {
-  return invokeNative(async () => parseNativeResult(await motionModule().getState(tagOf(target)), (value): value is MotionState =>
-    isRecord(value) && isValues(value.values) && isValues(value.velocities) && Array.isArray(value.animating) && value.animating.every(item => CHANNELS.includes(item))));
+  return invokeNative(async () => {
+    const state = parseNativeResult(await motionModule().getState(tagOf(target)), (value): value is Omit<MotionState, "colors"> =>
+      isRecord(value) && isValues(value.values) && isValues(value.velocities) && Array.isArray(value.animating) && value.animating.every(item => CHANNELS.includes(item)));
+    return { ...state, colors: { backgroundColor: formatColor(COLOR_COMPONENTS.map(component => state.values[component])) } };
+  });
 }
 
 /** Drives properties from a scroll offset on the native main thread; no JavaScript runs per scroll event. Linked properties reject animate/set with E_BUSY until removed. */
@@ -221,9 +240,11 @@ export function linkScroll(target: MotionTarget | null, options: ScrollLinkOptio
     if (axis !== "x" && axis !== "y") invalid("axis is x or y");
     if (extrapolate !== "clamp" && extrapolate !== "extend") invalid("extrapolate is clamp or extend");
     if (!Array.isArray(input) || input.length < 2 || !input.every(Number.isFinite) || input.some((stop, index) => index > 0 && stop <= input[index - 1]!)) invalid("input needs at least two strictly increasing finite stops");
-    const outputs = channels(output, "output").map(([property, values]) => {
-      if (!Array.isArray(values) || values.length !== input.length || !values.every(Number.isFinite)) invalid(`output.${property} needs one finite value per input stop`);
-      return [property, values];
+    const outputs = channels(output, "output").flatMap(([property, values]): [string, readonly number[]][] => {
+      if (!Array.isArray(values) || values.length !== input.length) invalid(`output.${property} needs one value per input stop`);
+      if (property !== "backgroundColor") return values.every(Number.isFinite) ? [[property, values as number[]]] : invalid(`output.${property} needs finite numbers`);
+      const components = colorStops(values.map(value => parseColor(value, `output.${property}`)));
+      return COLOR_COMPONENTS.flatMap(name => components[name] ? [[name, components[name]]] : []);
     });
     const id = `motion-link-${++nextId}`;
     await native.link(JSON.stringify({ id, tag: tagOf(target), nativeID: source.nativeID, axis, clamp: extrapolate === "clamp", input, output: Object.fromEntries(outputs) }));

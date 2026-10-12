@@ -3,11 +3,24 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/** A view whose own layer Spark animates. Its model values survive AppKit and Fabric layer resets. */
+/**
+ * A view whose own layer Spark animates. Its model values survive AppKit and Fabric layer resets: the host applies its
+ * transform and SparkMotionApplyLayer for the rest.
+ */
 @protocol SparkMotionHost <NSObject>
 @property (nonatomic, readonly) NSInteger motionTag;
 @property (nonatomic, readonly) spark::motion::Values motionModel;
 - (void)applyMotionModel:(const spark::motion::Values &)values;
+/**
+ * SparkMotionChannelBit of the background color, corner radius and shadow channels motion drives. Until motion first
+ * drives one (initial, animate, setMotionValues or a scroll link), the view's style sets it (docs/motion.md#visual-effects).
+ */
+@property (nonatomic) uint32_t motionOwnedChannels;
+/**
+ * SparkMotionChannelBit of the channels React Native draws for this view's style on other layers, which motion cannot
+ * drive: the background color and corner radius when it draws borders itself, the mask when it clips with a mask.
+ */
+@property (nonatomic, readonly) uint32_t motionStyleChannels;
 /** `position` or `frame` when layout changes animate (docs/motion.md#layout-presence-and-shared-elements), else nil. */
 @property (nonatomic, readonly, nullable) NSString *motionLayout;
 /** Shared-element id: a host mounting with it animates from where another host with it was. */
@@ -16,6 +29,12 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly, nullable) NSDictionary *motionTransition;
 /** Right-to-left layout: `position` keeps the top-right corner instead of the top-left one. */
 @property (nonatomic, readonly) BOOL motionRightToLeft;
+@end
+
+/** A MotionSymbol: an SF Symbol image view that plays symbol effects (docs/motion.md#symbol-effects). */
+@protocol SparkMotionSymbolHost <NSObject>
+@property (nonatomic, readonly) NSInteger motionTag;
+@property (nonatomic, readonly) NSImageView *symbolImageView;
 @end
 
 typedef void (^SparkMotionResolve)(id _Nullable result);
@@ -34,6 +53,11 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 - (void)unregisterTag:(NSInteger)tag;
 - (void)hostDidResize:(NSView<SparkMotionHost> *)host;
 /**
+ * `model` with the background color, corner radius and shadow the host's style just put on its layer, for the channels
+ * motion does not own yet; the engine takes them too, so an animation starts from what the view shows.
+ */
+- (spark::motion::Values)styledModel:(NSView<SparkMotionHost> *)host model:(const spark::motion::Values &)model;
+/**
  * Mounting-transaction hooks for hosts with a layout mode or shared id, before a transaction's first mutation and after
  * its last (a host mounted by the transaction gets only the second). `surface` and `transaction` identify it.
  */
@@ -48,6 +72,18 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 - (void)link:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)unlink:(NSString *)identifier resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)recordFrames:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
+/** The user's Reduce Motion setting (a driver run's simulated one). */
+@property (nonatomic, readonly) BOOL reduceMotion;
+
+- (void)registerSymbol:(NSView<SparkMotionSymbolHost> *)host;
+- (void)unregisterSymbolTag:(NSInteger)tag;
+/** Plays a symbol effect on a MotionSymbol, or its Reduce Motion alternate; resolves `{ played }`. */
+- (void)playSymbolEffect:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
+/** Removes one effect type (`effect`) or all of them from a MotionSymbol. */
+- (void)removeSymbolEffect:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
+/** Shows `image` with a replace content transition (`replace`, `downUp`, `upUp`, `offUp`), a cross-fade under Reduce Motion, or at once without one. */
+- (void)replaceSymbol:(NSView<SparkMotionSymbolHost> *)host image:(nullable NSImage *)image transition:(nullable NSString *)transition;
+
 /** Reduce Motion, Low Power Mode, and the frame rates and window visibility of `tag`'s view (0: the main display, no window). */
 - (void)environment:(NSInteger)tag resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 
@@ -88,7 +124,20 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 #endif
 @end
 
-/** Composed `translate · rotate · scale` about the view centre, matching React Native's transform order. */
+/**
+ * The composed transform about the view centre, in React Native's order `translate · perspective · rotateX · rotateY ·
+ * rotate · scale` (scale applies first).
+ */
 CATransform3D SparkMotionTransform(const spark::motion::Values &values);
+/** Whether this app (its SDK) and this macOS have a symbol effect (`bounce`, `pulse`, `wiggle`, `rotate`, `breathe`, `drawOn`, `drawOff`) or the `replace` transition. */
+BOOL SparkSymbolEffectSupported(NSString *name);
+/** A channel's bit in motionOwnedChannels. */
+inline uint32_t SparkMotionChannelBit(spark::motion::Channel channel) { return 1u << static_cast<int>(channel); }
+/**
+ * Applies every motion value except the transform to the host's layer: opacity, the OKLCH background color, corner
+ * radius and shadow of the channels it owns, and the blur filter and mask while the coordinator has them installed.
+ * Hosts call it from applyMotionModel: and after React Native re-applies their style to the layer.
+ */
+void SparkMotionApplyLayer(NSView<SparkMotionHost> *host, const spark::motion::Values &values);
 
 NS_ASSUME_NONNULL_END

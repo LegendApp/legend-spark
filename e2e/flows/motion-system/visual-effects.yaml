@@ -1,0 +1,82 @@
+appId: so.legend.spark.examples.kitchensink
+name: Visual effects animate on the compositor, colors in OKLCH, with Reduce Motion alternates
+intent: >
+  On Motion system > Visual effects, with the virtual clock frozen. The swatch animates from blue to yellow in OKLCH:
+  halfway through, the color it presents is a saturated green (an sRGB blend would be gray) and it settles at yellow's
+  OKLCH coordinates; on the way back to blue the window is captured where it starts and where it ends. Lift springs the card's corner radius,
+  shadow and scale from what its style set and settles at their targets, Blur animates its blur radius, Flip and Tilt
+  turn the orange card about its y and x axes in perspective, Wipe hides and shows the content from its leading edge,
+  Iris opens a circle from the centre (captured where it starts and ends), and Travel moves the arrow along an SVG path
+  to its end, turned to the path's heading. Goldens are captured at rest only. Captures render in-process, so they show
+  colors, corners, masks and 2D transforms but not shadows, blur or 3D perspective (docs/motion.md#visual-effects);
+  those are checked by the values the engine reports. With Reduce Motion on (simulated), Flip changes the rotation at
+  once and fades the card in within 250 ms, and the color fades to yellow in 200 ms.
+checks: [MOT-COLOR-01, MOT-EFFECTS-01, MOT-3D-01, MOT-MASK-01, MOT-PATH-01, MOT-FXREDUCE-01, MOT-CLOCK-01]
+tags: [motion-system]
+platforms: [macos]
+matrix:
+  appearance: [light]
+  locale: [en]
+---
+- launchApp: { openUrl: "spark-ks://motion-system/visual-effects" }
+- extendedWaitUntil: { visible: { id: motion-system-visual-effects-root }, timeout: 10s }
+- assertText: { id: motion-system-visual-effects-availability, equals: '{"available":true}' }
+- assertText: { id: motion-system-visual-effects-environment, equals: '{"reduceMotion":false}' }
+- setClock: virtual
+# OKLCH: blue, a saturated green halfway (read while the clock holds it there), yellow.
+- tapOn: { id: motion-system-visual-effects-color }
+- interruptAt: { target: { id: motion-system-visual-effects-swatch }, progress: 0.5, with: { tapOn: { id: motion-system-visual-effects-color-read } } }
+- assertText: { id: motion-system-visual-effects-color-now, equals: '{"color":"oklch(0.7034 0.1942 177.41 / 1)"}' }
+- advanceClock: 700ms
+- assertText: { id: motion-system-visual-effects-color-result, equals: '{"finished":true,"color":"oklch(0.8606 0.1731 91.94 / 1)"}' }
+# Back to blue: captured where it starts (yellow) and where it ends (blue).
+- tapOn: { id: motion-system-visual-effects-color }
+- assertMotion: { target: { id: motion-system-visual-effects-swatch }, kind: timing, settlesWithin: 1250ms, frames: { at: [0, 100], golden: effects-color, mask: [{ id: infra-shell-sidebar }, { id: motion-system-visual-effects-color-result }, { id: motion-system-visual-effects-color-now }] } }
+- captureMotion: { target: { id: motion-system-visual-effects-swatch }, name: color }
+- assertText: { id: motion-system-visual-effects-color-result, equals: '{"finished":true,"color":"oklch(0.5461 0.2152 262.88 / 1)"}' }
+# Corners, shadow and scale spring together from the style's values; the blur radius follows a timing curve.
+- tapOn: { id: motion-system-visual-effects-lift }
+- assertMotion: { target: { id: motion-system-visual-effects-card }, kind: spring, settlesWithin: 1500ms }
+- captureMotion: { target: { id: motion-system-visual-effects-card }, name: lift }
+- assertText: { id: motion-system-visual-effects-surface-result, equals: '{"finished":true,"borderRadius":20,"shadowOpacity":0.4,"shadowRadius":14,"shadowOffsetY":8,"scaleX":1.05}' }
+- tapOn: { id: motion-system-visual-effects-blur }
+- assertMotion: { target: { id: motion-system-visual-effects-card }, kind: timing, settlesWithin: 450ms }
+- assertText: { id: motion-system-visual-effects-surface-result, equals: '{"finished":true,"blur":6}' }
+- tapOn: { id: motion-system-visual-effects-blur }
+- assertMotion: { target: { id: motion-system-visual-effects-card }, kind: timing, settlesWithin: 450ms }
+- assertText: { id: motion-system-visual-effects-surface-result, equals: '{"finished":true,"blur":0}' }
+# 3D: rotations about y and x, in perspective.
+- tapOn: { id: motion-system-visual-effects-flip }
+- assertMotion: { target: { id: motion-system-visual-effects-turn }, kind: spring, settlesWithin: 1500ms }
+- captureMotion: { target: { id: motion-system-visual-effects-turn }, name: flip }
+- assertText: { id: motion-system-visual-effects-depth-result, equals: '{"finished":true,"rotateY":180,"perspective":500}' }
+- tapOn: { id: motion-system-visual-effects-tilt }
+- assertMotion: { target: { id: motion-system-visual-effects-turn }, kind: spring, settlesWithin: 1500ms }
+- assertText: { id: motion-system-visual-effects-depth-result, equals: '{"finished":true,"rotateX":35}' }
+# Masks: a wipe from the leading edge, then an iris from the centre.
+- tapOn: { id: motion-system-visual-effects-wipe }
+- assertMotion: { target: { id: motion-system-visual-effects-reveal }, kind: timing, settlesWithin: 650ms }
+- assertText: { id: motion-system-visual-effects-mask-result, equals: '{"finished":true,"maskInsetEnd":200}' }
+- tapOn: { id: motion-system-visual-effects-wipe }
+- assertMotion: { target: { id: motion-system-visual-effects-reveal }, kind: timing, settlesWithin: 650ms }
+- assertText: { id: motion-system-visual-effects-mask-result, equals: '{"finished":true,"maskInsetEnd":0}' }
+- tapOn: { id: motion-system-visual-effects-iris }
+- assertMotion: { target: { id: motion-system-visual-effects-reveal }, kind: timing, settlesWithin: 750ms, frames: { at: [0, 100], golden: effects-iris, mask: [{ id: infra-shell-sidebar }, { id: motion-system-visual-effects-mask-result }] } }
+- assertText: { id: motion-system-visual-effects-mask-result, equals: '{"finished":true,"maskInsetTop":0,"maskInsetStart":0,"maskRadius":12}' }
+# A path: keyframes of translateX, translateY and rotate, played on the compositor.
+- tapOn: { id: motion-system-visual-effects-travel }
+- assertMotion: { target: { id: motion-system-visual-effects-arrow }, kind: timing, settlesWithin: 950ms }
+- captureMotion: { target: { id: motion-system-visual-effects-arrow }, name: path }
+- assertText: { id: motion-system-visual-effects-path-result, equals: '{"finished":true,"translateX":160,"translateY":0,"rotate":-38.42}' }
+- takeScreenshot: effects-path-end
+# Reduce Motion: the flip changes at once and fades in; the color fades without travelling.
+- simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: true }
+- assertText: { id: motion-system-visual-effects-environment, equals: '{"reduceMotion":true}' }
+- tapOn: { id: motion-system-visual-effects-flip }
+- assertMotion: { target: { id: motion-system-visual-effects-turn }, kind: crossfade, settlesWithin: 250ms }
+- assertText: { id: motion-system-visual-effects-depth-result, equals: '{"finished":true,"rotateY":0,"perspective":500}' }
+- tapOn: { id: motion-system-visual-effects-color }
+- assertMotion: { target: { id: motion-system-visual-effects-swatch }, kind: timing, settlesWithin: 250ms }
+- assertText: { id: motion-system-visual-effects-color-result, equals: '{"finished":true,"color":"oklch(0.8606 0.1731 91.94 / 1)"}' }
+- simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: false }
+- setClock: real

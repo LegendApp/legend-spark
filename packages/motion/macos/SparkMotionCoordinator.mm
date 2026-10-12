@@ -1,21 +1,106 @@
 #import "SparkMotionCoordinator.h"
+#import <CoreImage/CoreImage.h>
 #import <QuartzCore/QuartzCore.h>
+#import <Symbols/Symbols.h>
 #include <algorithm>
 #include <cmath>
 #include <exception>
 #include <vector>
 using namespace spark::motion;
 
-static NSString *const kTransformLead = @"spark.motion.transform";
-static NSString *const kTransformLoop = @"spark.motion.transform.loop";
-static NSString *const kOpacityLead = @"spark.motion.opacity";
-static NSString *const kOpacityLoop = @"spark.motion.opacity.loop";
+/** The blur filter's name in key paths (`filters.sparkBlur.inputRadius`), and where a host layer keeps its installed mask. */
+static NSString *const kBlurFilter = @"sparkBlur";
+static NSString *const kMaskKey = @"sparkMotionMask";
 
 CATransform3D SparkMotionTransform(const Values &values)
 {
-  CATransform3D transform = CATransform3DMakeTranslation(values[TranslateX], values[TranslateY], 0);
-  transform = CATransform3DRotate(transform, values[Rotate] * M_PI / 180, 0, 0, 1);
-  return CATransform3DScale(transform, values[ScaleX], values[ScaleY], 1);
+  // Row vectors: scale, then rotate about z, y and x, then the perspective projection, then the translation.
+  CATransform3D transform = CATransform3DMakeScale(values[ScaleX], values[ScaleY], 1);
+  transform = CATransform3DConcat(transform, CATransform3DMakeRotation(values[Rotate] * M_PI / 180, 0, 0, 1));
+  transform = CATransform3DConcat(transform, CATransform3DMakeRotation(values[RotateY] * M_PI / 180, 0, 1, 0));
+  transform = CATransform3DConcat(transform, CATransform3DMakeRotation(values[RotateX] * M_PI / 180, 1, 0, 0));
+  if (values[Perspective] >= 1) {
+    CATransform3D perspective = CATransform3DIdentity;
+    perspective.m34 = -1 / values[Perspective];
+    transform = CATransform3DConcat(transform, perspective);
+  }
+  return CATransform3DConcat(transform, CATransform3DMakeTranslation(values[TranslateX], values[TranslateY], 0));
+}
+
+/** The background color of OKLCH values as an extended sRGB CGColor (out-of-gamut components survive for wide-gamut displays). */
+static id SparkMotionColor(const Values &values)
+{
+  static CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceExtendedSRGB);
+  const Rgba color = oklchToSrgb(values[BackgroundColorL], values[BackgroundColorC], values[BackgroundColorH], values[BackgroundColorAlpha]);
+  const CGFloat components[] = {color.red, color.green, color.blue, color.alpha};
+  return CFBridgingRelease(CGColorCreate(space, components));
+}
+static CALayer *SparkMotionMask(NSView *view) { return [view.layer valueForKey:kMaskKey]; }
+static BOOL SparkMotionMasks(const Values &values) { return values[MaskInsetTop] || values[MaskInsetBottom] || values[MaskInsetStart] || values[MaskInsetEnd] || values[MaskRadius]; }
+static BOOL SparkMotionBlurred(NSView *view)
+{
+  for (CIFilter *filter in view.layer.filters) if ([filter.name isEqual:kBlurFilter]) return YES;
+  return NO;
+}
+/** The mask's frame in layer coordinates: the view's bounds inset by the mask insets; start and end follow the layout direction. */
+static CGRect SparkMotionMaskRect(NSView *view, const Values &values, BOOL rightToLeft)
+{
+  const NSRect bounds = view.bounds;
+  const double left = rightToLeft ? values[MaskInsetEnd] : values[MaskInsetStart], right = rightToLeft ? values[MaskInsetStart] : values[MaskInsetEnd];
+  const double width = MAX(0, NSWidth(bounds) - left - right), height = MAX(0, NSHeight(bounds) - values[MaskInsetTop] - values[MaskInsetBottom]);
+  const double y = view.isFlipped ? values[MaskInsetTop] : values[MaskInsetBottom];
+  return [view convertRectToLayer:NSMakeRect(NSMinX(bounds) + left, NSMinY(bounds) + y, width, height)];
+}
+
+void SparkMotionApplyLayer(NSView<SparkMotionHost> *host, const Values &values)
+{
+  CALayer *layer = host.layer;
+  const uint32_t owned = host.motionOwnedChannels;
+  layer.opacity = values[Opacity];
+  if (owned & SparkMotionChannelBit(Channel::BackgroundColor)) layer.backgroundColor = (__bridge CGColorRef)SparkMotionColor(values);
+  if (owned & SparkMotionChannelBit(Channel::BorderRadius)) layer.cornerRadius = MAX(0, values[BorderRadius]);
+  if (owned & SparkMotionChannelBit(Channel::Shadow)) {
+    layer.shadowOpacity = std::clamp(values[ShadowOpacity], 0.0, 1.0);
+    layer.shadowRadius = MAX(0, values[ShadowRadius]);
+    layer.shadowOffset = CGSizeMake(values[ShadowOffsetX], values[ShadowOffsetY]);
+  }
+  // React Native builds a shadow path from the style's radii; the shadow follows the animated corners and shape instead.
+  if (owned & (SparkMotionChannelBit(Channel::BorderRadius) | SparkMotionChannelBit(Channel::Shadow))) layer.shadowPath = nil;
+  if (SparkMotionBlurred(host)) [layer setValue:@(MAX(0, values[Blur])) forKeyPath:@"filters.sparkBlur.inputRadius"];
+  if (CALayer *mask = SparkMotionMask(host)) {
+    mask.frame = SparkMotionMaskRect(host, values, host.motionRightToLeft);
+    mask.cornerRadius = MAX(0, values[MaskRadius]);
+    layer.mask = mask;  // React Native clears a view's mask when it invalidates its layer
+  }
+}
+
+/** Installs or removes the blur filter and the mask layer; SparkMotionApplyLayer then keeps them in step with the model. */
+static void SparkMotionInstallEffects(NSView *view, BOOL blur, BOOL mask)
+{
+  CALayer *layer = view.layer;
+  if (blur != SparkMotionBlurred(view)) {
+    NSMutableArray *filters = [NSMutableArray new];
+    for (CIFilter *filter in layer.filters) if (![filter.name isEqual:kBlurFilter]) [filters addObject:filter];
+    if (blur) {
+      view.layerUsesCoreImageFilters = YES;  // AppKit ignores layer filters otherwise
+      CIFilter *filter = [CIFilter filterWithName:@"CIGaussianBlur"];
+      filter.name = kBlurFilter;
+      [filter setValue:@0 forKey:kCIInputRadiusKey];
+      [filters addObject:filter];
+    }
+    layer.filters = filters.count ? filters : nil;
+    if (!filters.count) view.layerUsesCoreImageFilters = NO;
+  }
+  CALayer *installed = SparkMotionMask(view);
+  if (mask && !installed) {
+    CALayer *shape = [CALayer layer];
+    shape.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
+    [layer setValue:shape forKey:kMaskKey];
+    layer.mask = shape;
+  } else if (!mask && installed) {
+    if (layer.mask == installed) layer.mask = nil;
+    [layer setValue:nil forKey:kMaskKey];
+  }
 }
 
 /** AppKit pins layer anchors at {0,0}; rotate and scale about the centre like React Native's transform3D. */
@@ -242,6 +327,7 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   NSMutableDictionary<NSString *, SparkMotionLink *> *_links;
   NSMutableSet<SparkMotionFrameRecorder *> *_recorders;
   NSMutableArray<dispatch_block_t> *_awaitingMount;
+  NSMapTable<NSNumber *, NSView<SparkMotionSymbolHost> *> *_symbols;
   NSMapTable<NSView *, SparkMotionLayoutMark *> *_layoutMarks;
   NSMutableDictionary<NSString *, SparkMotionSharedMark *> *_sharedMarks;  // only the latest transaction's
   NSHashTable<NSView *> *_mounting;  // registered, not yet past their first mounting transaction
@@ -275,6 +361,7 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     _links = [NSMutableDictionary new];
     _recorders = [NSMutableSet new];
     _awaitingMount = [NSMutableArray new];
+    _symbols = [NSMapTable strongToWeakObjectsMapTable];
     _layoutMarks = [NSMapTable weakToStrongObjectsMapTable];
     _sharedMarks = [NSMutableDictionary new];
     _mounting = [NSHashTable weakObjectsHashTable];
@@ -465,6 +552,7 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   [self observeSystem:YES];
   _engine.addView(host.motionTag, initial);
   [_hosts setObject:host forKey:@(host.motionTag)];
+  SparkMotionInstallEffects(host, initial[Blur] > 0, SparkMotionMasks(initial));
   [host applyMotionModel:initial];
   [_mounting addObject:host];
   if (_engine.virtualClock()) {
@@ -472,6 +560,12 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     layer.timeOffset = [layer convertTime:CACurrentMediaTime() fromLayer:nil];
     layer.speed = 0;
   }
+  [self retryAwaitingMount];
+}
+
+/** Retries the operations that named a view before its mount transaction registered it. */
+- (void)retryAwaitingMount
+{
   NSArray<dispatch_block_t> *waiting = [_awaitingMount copy];
   [_awaitingMount removeAllObjects];
   for (dispatch_block_t retry in waiting) retry();
@@ -495,11 +589,59 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
 - (void)hostDidResize:(NSView<SparkMotionHost> *)host
 {
   if ([_hosts objectForKey:@(host.motionTag)] != host) return;
-  for (int i = 0; i < PropertyCount; i++)
-    if (channelOf(Property(i)) == Channel::Transform && _engine.animating(host.motionTag, Property(i), self.now)) {
-      [self apply:host.motionTag channel:Channel::Transform];
-      return;
-    }
+  // Transforms are about the centre and the mask is inset from the bounds: both follow the new size.
+  std::vector<Channel> channels;
+  if (SparkMotionAnimating(_engine, host.motionTag, Channel::Transform, self.now)) channels.push_back(Channel::Transform);
+  if (SparkMotionMask(host)) channels.push_back(Channel::Mask);
+  if (!channels.empty()) [self apply:host.motionTag channels:channels];
+}
+
+- (Values)styledModel:(NSView<SparkMotionHost> *)host model:(const Values &)model
+{
+  Values styled = model;
+  const NSInteger tag = host.motionTag;
+  if ([_hosts objectForKey:@(tag)] != host) return styled;
+  const uint32_t owned = host.motionOwnedChannels;
+  CALayer *layer = host.layer;
+  std::vector<std::pair<Property, double>> values;
+  if (!(owned & SparkMotionChannelBit(Channel::BackgroundColor))) {
+    static CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceExtendedSRGB);
+    CGColorRef converted = layer.backgroundColor ? CGColorCreateCopyByMatchingToColorSpace(space, kCGRenderingIntentDefault, layer.backgroundColor, NULL) : NULL;
+    const CGFloat *rgba = converted ? CGColorGetComponents(converted) : NULL;
+    const Oklch color = rgba ? srgbToOklch({rgba[0], rgba[1], rgba[2], rgba[3]}) : Oklch{0, 0, 0, 0};
+    if (converted) CGColorRelease(converted);
+    values.insert(values.end(), {{BackgroundColorL, color.lightness}, {BackgroundColorC, color.chroma}, {BackgroundColorH, color.hue}, {BackgroundColorAlpha, color.alpha}});
+  }
+  if (!(owned & SparkMotionChannelBit(Channel::BorderRadius))) values.emplace_back(BorderRadius, layer.cornerRadius);
+  if (!(owned & SparkMotionChannelBit(Channel::Shadow)))
+    values.insert(values.end(), {{ShadowOpacity, layer.shadowOpacity}, {ShadowRadius, layer.shadowRadius}, {ShadowOffsetX, layer.shadowOffset.width}, {ShadowOffsetY, layer.shadowOffset.height}});
+  for (const auto &[property, value] : values) {
+    _engine.setModel(tag, property, value);
+    styled[property] = value;
+  }
+  return styled;
+}
+
+/** Throws E_UNSUPPORTED_OPTION for a property whose channel React Native draws for the view's style on another layer. */
+- (void)checkOwnable:(NSInteger)tag properties:(const std::vector<Property> &)properties
+{
+  NSView<SparkMotionHost> *host = [_hosts objectForKey:@(tag)];
+  if (!host) return;  // the engine reports an unmounted view
+  const uint32_t style = host.motionStyleChannels;
+  for (Property property : properties) {
+    const Channel channel = channelOf(property);
+    if (!(style & SparkMotionChannelBit(channel))) continue;
+    throw Failure{"E_UNSUPPORTED_OPTION", std::string(propertyName(property)) + (channel == Channel::Mask
+      ? ": the view's style clips its content with a mask (overflow hidden with per-corner radii), which a motion mask would replace"
+      : ": the view's style draws its border and background on their own layer (a visible border without overflow hidden, or per-side border colors, widths or styles, or per-corner radii)")};
+  }
+}
+
+/** Motion drives these properties from now on: their channels stop following the view's style. */
+- (void)own:(NSInteger)tag properties:(const std::vector<Property> &)properties
+{
+  NSView<SparkMotionHost> *host = [_hosts objectForKey:@(tag)];
+  for (Property property : properties) host.motionOwnedChannels |= SparkMotionChannelBit(channelOf(property));
 }
 
 - (BOOL)isAnimating:(NSInteger)tag
@@ -510,12 +652,50 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
 
 #pragma mark - Baking
 
-- (CAKeyframeAnimation *)animation:(const Bake &)bake channel:(Channel)channel host:(NSView *)host begin:(double)begin rate:(double)rate
+/** The layer key paths a channel's animations drive; the mask channel's are its mask layer's. */
+static NSArray<NSString *> *SparkMotionKeyPaths(Channel channel)
 {
-  CAKeyframeAnimation *animation = [CAKeyframeAnimation animationWithKeyPath:channel == Channel::Transform ? @"transform" : @"opacity"];
+  switch (channel) {
+    case Channel::Opacity: return @[@"opacity"];
+    case Channel::Transform: return @[@"transform"];
+    case Channel::BackgroundColor: return @[@"backgroundColor"];
+    case Channel::BorderRadius: return @[@"cornerRadius"];
+    case Channel::Shadow: return @[@"shadowOpacity", @"shadowRadius", @"shadowOffset"];
+    case Channel::Blur: return @[@"filters.sparkBlur.inputRadius"];
+    case Channel::Mask: return @[@"bounds", @"position", @"cornerRadius"];
+    case Channel::Count: break;
+  }
+  return @[];
+}
+
+/** The value of a channel's `index`th key path in one sample. */
+static id SparkMotionSample(Channel channel, NSUInteger index, const Values &sample, NSView<SparkMotionHost> *host)
+{
+  switch (channel) {
+    case Channel::Opacity: return @(sample[Opacity]);
+    case Channel::Transform: return [NSValue valueWithCATransform3D:SparkMotionCentered(SparkMotionTransform(sample), host)];
+    case Channel::BackgroundColor: return SparkMotionColor(sample);
+    case Channel::BorderRadius: return @(MAX(0, sample[BorderRadius]));
+    case Channel::Shadow:
+      if (index == 0) return @(std::clamp(sample[ShadowOpacity], 0.0, 1.0));
+      if (index == 1) return @(MAX(0, sample[ShadowRadius]));
+      return [NSValue valueWithSize:NSMakeSize(sample[ShadowOffsetX], sample[ShadowOffsetY])];
+    case Channel::Blur: return @(MAX(0, sample[Blur]));
+    case Channel::Mask: {
+      if (index == 2) return @(MAX(0, sample[MaskRadius]));
+      const CGRect rect = SparkMotionMaskRect(host, sample, host.motionRightToLeft);
+      return index == 0 ? [NSValue valueWithRect:NSMakeRect(0, 0, rect.size.width, rect.size.height)] : [NSValue valueWithPoint:NSMakePoint(CGRectGetMidX(rect), CGRectGetMidY(rect))];
+    }
+    case Channel::Count: break;
+  }
+  return nil;
+}
+
+- (CAKeyframeAnimation *)animation:(const Bake &)bake channel:(Channel)channel index:(NSUInteger)index host:(NSView<SparkMotionHost> *)host begin:(double)begin rate:(double)rate
+{
+  CAKeyframeAnimation *animation = [CAKeyframeAnimation animationWithKeyPath:SparkMotionKeyPaths(channel)[index]];
   NSMutableArray *values = [NSMutableArray arrayWithCapacity:bake.samples.size()];
-  for (const Values &sample : bake.samples)
-    [values addObject:channel == Channel::Transform ? [NSValue valueWithCATransform3D:SparkMotionCentered(SparkMotionTransform(sample), host)] : @(sample[Opacity])];
+  for (const Values &sample : bake.samples) [values addObject:SparkMotionSample(channel, index, sample, host)];
   animation.values = values;
   animation.duration = bake.duration;
   animation.beginTime = begin;
@@ -525,42 +705,67 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   return animation;
 }
 
-/** Replaces one channel's compositor animations with a bake from now. */
-- (void)apply:(NSInteger)tag channel:(Channel)channel
+static BOOL SparkMotionAnimating(Engine &engine, NSInteger tag, Channel channel, double now)
+{
+  for (int i = 0; i < PropertyCount; i++) if (channelOf(Property(i)) == channel && engine.animating(tag, Property(i), now)) return YES;
+  return NO;
+}
+
+/** Replaces the channels' compositor animations with a bake from now, and applies the model they end at. */
+- (void)apply:(NSInteger)tag channels:(const std::vector<Channel> &)channels
 {
   NSView<SparkMotionHost> *host = [_hosts objectForKey:@(tag)];
   if (!host) return;
   const double now = self.now, rate = [self frameRate:host];
-  const ChannelBake bake = _engine.bake(tag, channel, now, rate);
-  const BOOL transform = channel == Channel::Transform;
   CALayer *layer = host.layer;
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
-  [layer removeAnimationForKey:transform ? kTransformLead : kOpacityLead];
-  [layer removeAnimationForKey:transform ? kTransformLoop : kOpacityLoop];
   Values model = host.motionModel;
-  for (int i = 0; i < PropertyCount; i++) if (channelOf(Property(i)) == channel) model[i] = bake.model[i];
-  [host applyMotionModel:model];
-  const double local = [layer convertTime:CACurrentMediaTime() fromLayer:nil];
-  if (bake.loop) {
-    CAKeyframeAnimation *loop = [self animation:*bake.loop channel:channel host:host begin:local + bake.loop->begin - now rate:rate];
-    loop.repeatCount = HUGE_VALF;
-    [layer addAnimation:loop forKey:transform ? kTransformLoop : kOpacityLoop];
+  std::vector<std::pair<Channel, ChannelBake>> bakes;
+  for (Channel channel : channels) {
+    bakes.emplace_back(channel, _engine.bake(tag, channel, now, rate));
+    for (int i = 0; i < PropertyCount; i++) if (channelOf(Property(i)) == channel) model[i] = bakes.back().second.model[i];
   }
-  // Added last so it wins over the loop until the loop's begin time.
-  if (bake.lead) [layer addAnimation:[self animation:*bake.lead channel:channel host:host begin:local + bake.lead->begin - now rate:rate] forKey:transform ? kTransformLead : kOpacityLead];
-  auto rotates = [](const std::optional<Bake> &part) {
-    if (part) for (const Values &sample : part->samples) if (sample[Rotate] != 0) return true;
+  // The blur filter and the mask exist while they show something or animate (docs/motion.md#visual-effects).
+  BOOL blur = SparkMotionBlurred(host), mask = SparkMotionMask(host) != nil;
+  for (const auto &[channel, bake] : bakes) {
+    const BOOL animated = bake.lead || bake.loop;
+    if (channel == Channel::Blur) blur = animated || model[Blur] > 0;
+    if (channel == Channel::Mask) mask = animated || SparkMotionMasks(model);
+  }
+  SparkMotionInstallEffects(host, blur, mask);
+  const double local = [layer convertTime:CACurrentMediaTime() fromLayer:nil];
+  for (const auto &[channel, bake] : bakes) {
+    CALayer *target = channel == Channel::Mask ? SparkMotionMask(host) : layer;
+    NSArray<NSString *> *keyPaths = SparkMotionKeyPaths(channel);
+    for (NSUInteger index = 0; index < keyPaths.count; index++) {
+      NSString *lead = [@"spark.motion." stringByAppendingString:keyPaths[index]], *loop = [lead stringByAppendingString:@".loop"];
+      [target removeAnimationForKey:lead];
+      [target removeAnimationForKey:loop];
+      if (bake.loop) {
+        CAKeyframeAnimation *animation = [self animation:*bake.loop channel:channel index:index host:host begin:local + bake.loop->begin - now rate:rate];
+        animation.repeatCount = HUGE_VALF;
+        [target addAnimation:animation forKey:loop];
+      }
+      // Added last so it wins over the loop until the loop's begin time.
+      if (bake.lead) [target addAnimation:[self animation:*bake.lead channel:channel index:index host:host begin:local + bake.lead->begin - now rate:rate] forKey:lead];
+    }
+  }
+  [host applyMotionModel:model];
+  auto turns = [](const std::optional<Bake> &part) {
+    if (part) for (const Values &sample : part->samples) if (sample[Rotate] != 0 || sample[RotateX] != 0 || sample[RotateY] != 0) return true;
     return false;
   };
-  if (transform && (model[Rotate] != 0 || rotates(bake.lead) || rotates(bake.loop))) layer.allowsEdgeAntialiasing = YES;
+  for (const auto &[channel, bake] : bakes)
+    if (channel == Channel::Transform && (model[Rotate] != 0 || model[RotateX] != 0 || model[RotateY] != 0 || turns(bake.lead) || turns(bake.loop))) layer.allowsEdgeAntialiasing = YES;
   [CATransaction commit];
 }
 
 - (void)applyAll:(NSInteger)tag
 {
-  [self apply:tag channel:Channel::Opacity];
-  [self apply:tag channel:Channel::Transform];
+  std::vector<Channel> all;
+  for (int channel = 0; channel < int(Channel::Count); channel++) all.push_back(Channel(channel));
+  [self apply:tag channels:all];
 }
 
 #pragma mark - Completion
@@ -597,6 +802,11 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
 {
   std::vector<Settled> settled;
   _engine.sweep(self.now, settled);
+  // A blur or mask that animated back to nothing is removed once it settles: an idle filter or mask still costs a pass.
+  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects])
+    if ((SparkMotionBlurred(host) && host.motionModel[Blur] <= 0 && !SparkMotionAnimating(_engine, host.motionTag, Channel::Blur, self.now)) ||
+        (SparkMotionMask(host) && !SparkMotionMasks(host.motionModel) && !SparkMotionAnimating(_engine, host.motionTag, Channel::Mask, self.now)))
+      [self apply:host.motionTag channels:{Channel::Blur, Channel::Mask}];
   [self settle:settled];
   [self scheduleSweep];
 }
@@ -703,7 +913,16 @@ static SparkMotionCue *SparkCue(id value)
     std::vector<Settled> settled;
     std::vector<int64_t> touched;
     const double now = self.now;
+    // The tracks that play: a step's own Reduce Motion alternate replaces its tracks while Reduce Motion is on.
+    std::vector<std::pair<int64_t, std::vector<Property>>> played;
+    for (const Group &group : plan.groups) {
+      std::vector<Property> properties;
+      for (const auto &[property, spec] : plan.reduceMotion && group.reduced ? *group.reduced : group.tracks) properties.push_back(property);
+      [self checkOwnable:group.view properties:properties];
+      played.emplace_back(group.view, std::move(properties));
+    }
     const Started started = self->_engine.run(plan, now, settled, touched);
+    for (const auto &[view, properties] : played) [self own:view properties:properties];
     [self moveResumedCues];  // before this plan's cues, which are timed from now
     self->_completions[identifier] = resolve;
     for (NSUInteger i = 0; i < cues.count; i++) {
@@ -741,9 +960,13 @@ static SparkMotionCue *SparkCue(id value)
     std::vector<std::pair<Property, double>> values;
     NSDictionary *input = SparkObject(request[@"values"], @"values");
     for (id name in input) values.emplace_back(SparkProperty(name), SparkNumberValue(input[name], name));
+    std::vector<Property> properties;
+    for (const auto &[property, value] : values) properties.push_back(property);
+    [self checkOwnable:tag properties:properties];
     [self syncHidden:tag];
     std::vector<Settled> settled;
     self->_engine.set(tag, values, self.now, settled);
+    [self own:tag properties:properties];
     [self applyAll:tag];
     [self settle:settled];
     [self scheduleSweep];
@@ -893,6 +1116,7 @@ static NSScrollView *SparkFindScrollView(NSView *view)
     if (!host) throw SparkMotionUnmounted(tag);
     for (Property property : properties)
       if (self->_engine.linked(tag, property)) throw Failure{"E_BUSY", std::string(propertyName(property)) + " already has a scroll link"};
+    [self checkOwnable:tag properties:properties];
     if (!host.window) throw Failure{"E_NOT_FOUND", "The MotionView is not in a window"};
     NSView *source = SparkFindNativeID(host.window.contentView, nativeID);
     NSScrollView *scrollView = source ? SparkFindScrollView(source) : nil;
@@ -901,6 +1125,7 @@ static NSScrollView *SparkFindScrollView(NSView *view)
     std::vector<Settled> settled;
     self->_engine.stop(tag, properties, self.now, settled);
     for (Property property : properties) self->_engine.link(tag, property, true);
+    [self own:tag properties:properties];
     scrollView.contentView.postsBoundsChangedNotifications = YES;
     __weak SparkMotionCoordinator *weakSelf = self;
     __weak SparkMotionLink *weakLink = link;
@@ -921,13 +1146,12 @@ static NSScrollView *SparkFindScrollView(NSView *view)
   NSClipView *clip = link.clip;
   if (!clip) return;
   const double offset = link.horizontal ? clip.bounds.origin.x : clip.bounds.origin.y;
-  BOOL transform = NO, opacity = NO;
+  std::vector<Channel> channels;
   for (const auto &[property, values] : link->outputs) {
     _engine.setModel(link.tag, property, interpolate(link->input, values, offset, link.clamp));
-    (channelOf(property) == Channel::Transform ? transform : opacity) = YES;
+    if (std::find(channels.begin(), channels.end(), channelOf(property)) == channels.end()) channels.push_back(channelOf(property));
   }
-  if (opacity) [self apply:link.tag channel:Channel::Opacity];
-  if (transform) [self apply:link.tag channel:Channel::Transform];
+  [self apply:link.tag channels:channels];
 }
 
 - (void)removeLink:(NSString *)identifier
@@ -1065,6 +1289,156 @@ static NSRect SparkLayoutRect(NSView *view, NSView *reference)
     // JavaScript validated the transition; only a malformed native prop gets here, and no caller awaits a hand-off.
     NSLog(@"Spark motion: layout transition rejected: %s", failure.message.c_str());
   }
+}
+
+#pragma mark - Symbol effects
+
+- (void)registerSymbol:(NSView<SparkMotionSymbolHost> *)host
+{
+  [_symbols setObject:host forKey:@(host.motionTag)];
+  [self retryAwaitingMount];
+}
+
+- (void)unregisterSymbolTag:(NSInteger)tag { [_symbols removeObjectForKey:@(tag)]; }
+
+// Effects newer than macOS 14 need both the SDK the app was built with and the macOS it runs on.
+#define SPARK_SDK_15 (__MAC_OS_X_VERSION_MAX_ALLOWED >= 150000)
+#define SPARK_SDK_26 (__MAC_OS_X_VERSION_MAX_ALLOWED >= 260000)
+
+BOOL SparkSymbolEffectSupported(NSString *name)
+{
+  if ([name isEqual:@"bounce"] || [name isEqual:@"pulse"] || [name isEqual:@"replace"]) return YES;
+#if SPARK_SDK_15
+  if ([name isEqual:@"wiggle"] || [name isEqual:@"rotate"] || [name isEqual:@"breathe"]) { if (@available(macOS 15.0, *)) return YES; }
+#endif
+#if SPARK_SDK_26
+  if ([name isEqual:@"drawOn"] || [name isEqual:@"drawOff"]) { if (@available(macOS 26.0, *)) return YES; }
+#endif
+  return NO;
+}
+
+/** The NSSymbolEffect for a request; E_UNAVAILABLE when this app or macOS does not have it (docs/motion.md#symbol-effects). */
+static NSSymbolEffect *SparkSymbolEffect(NSString *name, NSString *direction, BOOL byLayer)
+{
+  auto layered = [byLayer](id effect) -> NSSymbolEffect * { return byLayer ? [effect effectWithByLayer] : [effect effectWithWholeSymbol]; };
+  auto check = [&](NSArray<NSString *> *directions) {
+    if (direction && ![directions containsObject:direction])
+      throw SparkMotionInvalid([NSString stringWithFormat:@"The %@ effect's direction is %@", name, directions.count ? [directions componentsJoinedByString:@", "] : @"not set"]);
+  };
+  const BOOL known = [@[@"bounce", @"pulse", @"wiggle", @"rotate", @"breathe", @"drawOn", @"drawOff"] containsObject:name];
+  if (!known) throw SparkMotionInvalid([NSString stringWithFormat:@"Unknown symbol effect %@", name]);
+  if (!SparkSymbolEffectSupported(name)) throw Failure{"E_UNAVAILABLE", [NSString stringWithFormat:@"The %@ symbol effect is not available in this app on this macOS", name].UTF8String};
+  if ([name isEqual:@"bounce"]) {
+    check(@[@"up", @"down"]);
+    return layered([direction isEqual:@"up"] ? NSSymbolBounceEffect.bounceUpEffect : [direction isEqual:@"down"] ? NSSymbolBounceEffect.bounceDownEffect : NSSymbolBounceEffect.effect);
+  }
+  if ([name isEqual:@"pulse"]) { check(@[]); return layered(NSSymbolPulseEffect.effect); }
+#if SPARK_SDK_15
+  if (@available(macOS 15.0, *)) {
+    if ([name isEqual:@"breathe"]) { check(@[]); return layered(NSSymbolBreatheEffect.effect); }
+    if ([name isEqual:@"rotate"]) {
+      check(@[@"clockwise", @"counterClockwise"]);
+      return layered([direction isEqual:@"clockwise"] ? NSSymbolRotateEffect.rotateClockwiseEffect : [direction isEqual:@"counterClockwise"] ? NSSymbolRotateEffect.rotateCounterClockwiseEffect : NSSymbolRotateEffect.effect);
+    }
+    if ([name isEqual:@"wiggle"]) {
+      NSDictionary<NSString *, NSSymbolWiggleEffect *> *wiggles = @{
+        @"up": NSSymbolWiggleEffect.wiggleUpEffect, @"down": NSSymbolWiggleEffect.wiggleDownEffect, @"left": NSSymbolWiggleEffect.wiggleLeftEffect,
+        @"right": NSSymbolWiggleEffect.wiggleRightEffect, @"forward": NSSymbolWiggleEffect.wiggleForwardEffect, @"backward": NSSymbolWiggleEffect.wiggleBackwardEffect,
+        @"clockwise": NSSymbolWiggleEffect.wiggleClockwiseEffect, @"counterClockwise": NSSymbolWiggleEffect.wiggleCounterClockwiseEffect };
+      check(wiggles.allKeys);
+      return layered(direction ? wiggles[direction] : NSSymbolWiggleEffect.effect);
+    }
+  }
+#endif
+#if SPARK_SDK_26
+  if (@available(macOS 26.0, *)) {
+    check(@[]);
+    return layered([name isEqual:@"drawOn"] ? (id)NSSymbolDrawOnEffect.effect : (id)NSSymbolDrawOffEffect.effect);
+  }
+#endif
+  throw Failure{"E_UNAVAILABLE", "Unreachable: SparkSymbolEffectSupported admitted an effect this build cannot create"};
+}
+
+/** `repeat` extra plays (infinity: until removed) at `speed`. */
+static NSSymbolEffectOptions *SparkSymbolOptions(double repeat, double speed)
+{
+  NSSymbolEffectOptions *options = [NSSymbolEffectOptions optionsWithSpeed:speed];
+  if (repeat == 0) return [options optionsWithNonRepeating];
+#if SPARK_SDK_15
+  if (@available(macOS 15.0, *))
+    return [options optionsWithRepeatBehavior:std::isinf(repeat) ? NSSymbolEffectOptionsRepeatBehavior.behaviorPeriodic : [NSSymbolEffectOptionsRepeatBehavior behaviorPeriodicWithCount:(NSInteger)repeat + 1]];
+#endif
+  return std::isinf(repeat) ? [options optionsWithRepeating] : [options optionsWithRepeatCount:(NSInteger)repeat + 1];
+}
+
+- (NSView<SparkMotionSymbolHost> *)symbolHost:(NSDictionary *)request
+{
+  const NSInteger tag = SparkTag(request);
+  NSView<SparkMotionSymbolHost> *host = [_symbols objectForKey:@(tag)];
+  if (!host) throw Failure{"E_NOT_FOUND", "No mounted MotionSymbol has tag " + std::to_string(tag), true};
+  return host;
+}
+
+- (void)playSymbolEffect:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
+{
+  [self perform:^{
+    NSView<SparkMotionSymbolHost> *host = [self symbolHost:request];
+    NSString *name = SparkString(request, @"effect");
+    id direction = request[@"direction"];
+    if (direction && ![direction isKindOfClass:NSString.class]) throw SparkMotionInvalid(@"direction must be a string");
+    const double repeat = [request[@"repeat"] isEqual:@"infinite"] ? INFINITY : SparkNumber(request, @"repeat", 0);
+    const double speed = SparkNumber(request, @"speed", 1);
+    if (!(repeat >= 0 && (std::isinf(repeat) || repeat == std::floor(repeat)))) throw SparkMotionInvalid(@"repeat must be a non-negative integer or Infinity");
+    if (!(speed > 0 && std::isfinite(speed))) throw SparkMotionInvalid(@"speed must be a positive finite number");
+    const BOOL draw = [name isEqual:@"drawOn"] || [name isEqual:@"drawOff"];
+    if (draw && repeat != 0) throw Failure{"E_UNSUPPORTED_OPTION", "Drawing a symbol on or off plays once; it cannot repeat"};
+    NSSymbolEffect *effect = SparkSymbolEffect(name, direction, SparkBool(request, @"byLayer", NO));
+    NSString *reduce = SparkOneOf(request, @"reducedMotion", @[@"fade", @"instant", @"play"]);
+    // Reduce Motion (docs/motion.md#symbol-effects): nothing travels. `fade` pulses instead (opacity only) and fades
+    // drawing on or off; `instant` plays nothing and shows or hides a drawn symbol at once; `play` plays as written.
+    NSString *played = !self.reduceMotion || [reduce isEqual:@"play"] ? name : [reduce isEqual:@"instant"] ? @"none" : draw ? @"fade" : @"pulse";
+    NSImageView *image = host.symbolImageView;
+    if (draw && ![played isEqual:name]) {
+      const CGFloat alpha = [name isEqual:@"drawOn"] ? 1 : 0;
+      if ([played isEqual:@"fade"]) [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) { context.duration = kReducedFade; image.animator.alphaValue = alpha; }];
+      else image.alphaValue = alpha;
+    } else if (![played isEqual:@"none"]) {
+      if ([name isEqual:@"drawOn"]) image.alphaValue = 1;  // shown again after a faded or instant drawOff
+      [image addSymbolEffect:[played isEqual:name] ? effect : NSSymbolPulseEffect.effect options:SparkSymbolOptions(repeat, speed) animated:YES];
+    }
+    resolve(SparkJSONString(@{ @"played": played }));
+  } reject:reject];
+}
+
+- (void)removeSymbolEffect:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
+{
+  [self perform:^{
+    NSImageView *image = [self symbolHost:request].symbolImageView;
+    if (request[@"effect"]) [image removeSymbolEffectOfType:SparkSymbolEffect(SparkString(request, @"effect"), nil, NO)];
+    else [image removeAllSymbolEffects];
+    resolve(nil);
+  } reject:reject];
+}
+
+- (void)replaceSymbol:(NSView<SparkMotionSymbolHost> *)host image:(NSImage *)image transition:(nullable NSString *)transition
+{
+  NSImageView *view = host.symbolImageView;
+  if (!transition.length || !view.image || !image) { view.image = image; return; }
+  if (self.reduceMotion) {
+    // Nothing travels: the symbols cross-fade (docs/motion.md#symbol-effects).
+    CATransition *fade = [CATransition animation];
+    fade.type = kCATransitionFade;
+    fade.duration = kReducedFade;
+    [view.layer addAnimation:fade forKey:kCATransition];  // Core Animation keeps a transition under this key whatever the key
+    view.image = image;
+    return;
+  }
+  NSDictionary<NSString *, NSSymbolReplaceContentTransition *> *transitions = @{
+    @"replace": NSSymbolReplaceContentTransition.transition, @"downUp": NSSymbolReplaceContentTransition.replaceDownUpTransition,
+    @"upUp": NSSymbolReplaceContentTransition.replaceUpUpTransition, @"offUp": NSSymbolReplaceContentTransition.replaceOffUpTransition };
+  // JavaScript validates the transition; a malformed prop sets the image without one.
+  if (NSSymbolReplaceContentTransition *replace = transitions[transition]) [view setSymbolImage:image withContentTransition:replace];
+  else view.image = image;
 }
 
 #if SPARK_TEST_DRIVER

@@ -14,19 +14,32 @@
 
 namespace spark::motion {
 
-enum Property : int { Opacity, TranslateX, TranslateY, ScaleX, ScaleY, Rotate, PropertyCount };
+/**
+ * Every property is one scalar track. `backgroundColor` is four of them, its OKLCH components (docs/motion.md#colors):
+ * lightness 0-1, chroma, hue in degrees (unbounded: the engine keeps the path it travels) and alpha 0-1.
+ */
+enum Property : int {
+  Opacity, TranslateX, TranslateY, ScaleX, ScaleY, Rotate, RotateX, RotateY, Perspective,
+  BorderRadius, BackgroundColorL, BackgroundColorC, BackgroundColorH, BackgroundColorAlpha,
+  ShadowOpacity, ShadowRadius, ShadowOffsetX, ShadowOffsetY, Blur,
+  MaskInsetTop, MaskInsetBottom, MaskInsetStart, MaskInsetEnd, MaskRadius,
+  PropertyCount
+};
 using Values = std::array<double, PropertyCount>;
-constexpr Values kIdentity = {1, 0, 0, 1, 1, 0};
+/** At rest: opaque, untransformed, square corners, a transparent background, no shadow, blur or mask. */
+constexpr Values kIdentity = {1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 const char *propertyName(Property property);
 std::optional<Property> propertyFromName(const std::string &name);
 
-/** One property's channel on the compositor. Transform properties bake together. */
-enum class Channel { Opacity, Transform };
+/** One property's channel on the compositor: the properties of a channel bake together into its layer animations. */
+enum class Channel { Opacity, Transform, BackgroundColor, BorderRadius, Shadow, Blur, Mask, Count };
 Channel channelOf(Property property);
+/** Whether a property moves something on screen (transforms and mask edges): the Reduce Motion `fade` alternate changes it at once. */
+bool travels(Property property);
 
 /** When a spring or decay counts as settled: displacement below `delta`, speed below `speed` (units per second). */
 struct Rest { double delta, speed; };
-/** Per-property defaults: points and degrees settle at 0.01, opacity and scale at 0.0005. */
+/** Per-property defaults: points and degrees settle at 0.01; opacity, scale, color lightness, chroma and alpha, and shadow opacity at 0.0005. */
 Rest restThreshold(Property property);
 
 struct State { double value = 0, velocity = 0; };
@@ -169,6 +182,14 @@ struct ChannelBake {
   std::optional<Bake> loop;  // repeats forever after `lead`
   Values model{};           // value the compositor model holds after the lead
 };
+
+/** Gamma-encoded extended sRGB: components outside 0-1 are outside the sRGB gamut (wide-gamut displays show them). */
+struct Rgba { double red, green, blue, alpha; };
+/** An OKLCH color (lightness clamped to 0-1, chroma to at least 0, hue in degrees) in extended sRGB; alpha is clamped to 0-1. */
+Rgba oklchToSrgb(double lightness, double chroma, double hue, double alpha);
+struct Oklch { double lightness, chroma, hue, alpha; };
+/** Extended sRGB in OKLCH (hue 0-360, and 0 for a gray, whose hue does not show); alpha is clamped to 0-1. */
+Oklch srgbToOklch(const Rgba &color);
 
 /** Throws Failure unless `input` has at least two strictly increasing finite stops and `output` matches it. */
 void validateRange(const std::vector<double> &input, const std::vector<double> &output);

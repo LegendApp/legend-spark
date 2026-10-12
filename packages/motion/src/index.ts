@@ -1,6 +1,9 @@
 export { spring, timing, keyframes, decay, sequence } from "./specs";
+export { motionPath } from "./path";
+export type { MotionPathOptions, MotionPathValues } from "./path";
+export type { MotionColor } from "./colors";
 export type {
-  MotionProperty, MotionChannelProperty, MotionValues, CubicBezier, Easing, SpringPreset, AnimationOptions, SpringOptions, TimingOptions,
+  MotionProperty, MotionNumberProperty, MotionColorProperty, MotionValue, MotionChannelProperty, MotionValues, CubicBezier, Easing, SpringPreset, AnimationOptions, SpringOptions, TimingOptions,
   KeyframesOptions, DecayOptions, SequenceOptions, MotionSpec, SpringSpec, TimingSpec, KeyframesSpec, DecaySpec, SequenceSpec, MotionTransition,
 } from "./specs";
 export { getMotionAvailability, animate, timeline, stagger, setMotionValues, stopMotion, getMotionState, linkScroll, recordMotionFrames, getMotionEnvironment } from "./motion";
@@ -11,3 +14,11 @@ export { MotionView } from "./MotionView";
 export type { MotionViewProps } from "./MotionView";
 export { MotionPresence } from "./MotionPresence";
 export type { MotionPresenceProps } from "./MotionPresence";
+export { MotionNumber } from "./MotionNumber";
+export type { MotionNumberProps } from "./MotionNumber";
+export { MotionText } from "./MotionText";
+export type { MotionTextProps, MotionTextTransition } from "./MotionText";
+export { MotionSymbol } from "./MotionSymbol";
+export type { MotionSymbolProps } from "./MotionSymbol";
+export { getSymbolEffectAvailability, playSymbolEffect, stopSymbolEffects } from "./symbols";
+export type { MotionSymbolTarget, SymbolEffect, SymbolEffectDirection, SymbolEffectOptions, SymbolEffectPlayback, SymbolReplaceTransition } from "./symbols";

@@ -17,15 +17,23 @@ static int failures = 0;
 @property (nonatomic, strong) NSString *motionSharedId;
 @property (nonatomic, strong) NSDictionary *motionTransition;
 @property (nonatomic) BOOL motionRightToLeft;
+@property (nonatomic) uint32_t motionOwnedChannels;
+@property (nonatomic) uint32_t motionStyleChannels;
 @end
 @implementation TestHost
 - (void)applyMotionModel:(const Values &)values
 {
   _motionModel = values;
   self.layer.transform = SparkMotionTransform(values);
-  self.layer.opacity = values[Opacity];
+  SparkMotionApplyLayer(self, values);
 }
 @end
+
+@interface TestSymbol : NSView <SparkMotionSymbolHost>
+@property (nonatomic) NSInteger motionTag;
+@property (nonatomic, strong) NSImageView *symbolImageView;
+@end
+@implementation TestSymbol @end
 
 /** Stands in for a React Native view with `nativeID`. */
 @interface NativeIDView : NSView
@@ -449,6 +457,158 @@ int main()
     CHECK(lifecycleCard.layer.animationKeys.count == 0);
     [motion unregisterTag:9];
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
+
+    // Visual effects (docs/motion.md#visual-effects), on the virtual clock: each channel bakes onto its own layer key paths,
+    // the blur filter and the mask exist while they show something or animate, and the mask's edges follow the direction.
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"virtual" resolve:resolve reject:reject]; });
+    TestHost *effects = [[TestHost alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];
+    effects.wantsLayer = YES;
+    effects.motionTag = 12;
+    [window.contentView addSubview:effects];
+    Values start = kIdentity;
+    start[BackgroundColorL] = 1; start[BackgroundColorAlpha] = 1; start[BorderRadius] = 4;  // white, rounded
+    effects.motionOwnedChannels = SparkMotionChannelBit(Channel::BackgroundColor) | SparkMotionChannelBit(Channel::BorderRadius);  // `initial` sets them
+    [motion registerHost:effects initial:start];
+    const CGFloat *white = CGColorGetComponents(effects.layer.backgroundColor);
+    CHECK(std::abs(white[0] - 1) < 1e-4 && std::abs(white[2] - 1) < 1e-4 && white[3] == 1 && effects.layer.cornerRadius == 4);
+    CHECK(effects.layer.filters.count == 0 && effects.layer.mask == nil);
+    NSDictionary *lift = @{ @"backgroundColorL": Timing(0.627955, 400), @"backgroundColorC": Timing(0.257683, 400), @"backgroundColorH": Timing(29.2339, 400),
+      @"borderRadius": Timing(20, 400), @"shadowOpacity": Timing(0.5, 400), @"shadowRadius": Timing(10, 400), @"shadowOffsetY": Timing(6, 400),
+      @"blur": Timing(4, 400), @"rotateY": Timing(180, 400), @"perspective": Timing(500, 400), @"maskInsetEnd": Timing(30, 400), @"maskRadius": Timing(8, 400) };
+    Outcome *lifted = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"lift", 12, lift) resolve:resolve reject:reject]; });
+    CHECK(!lifted->code);
+    for (NSString *key in @[@"spark.motion.backgroundColor", @"spark.motion.cornerRadius", @"spark.motion.shadowOpacity", @"spark.motion.shadowRadius",
+                            @"spark.motion.shadowOffset", @"spark.motion.filters.sparkBlur.inputRadius", @"spark.motion.transform"])
+      CHECK([effects.layer animationForKey:key] != nil);
+    CALayer *mask = effects.layer.mask;
+    CHECK(mask && [mask animationForKey:@"spark.motion.bounds"] && [mask animationForKey:@"spark.motion.position"] && [mask animationForKey:@"spark.motion.cornerRadius"]);
+    CHECK(effects.layer.filters.count == 1 && [[effects.layer.filters.firstObject name] isEqual:@"sparkBlur"] && effects.layerUsesCoreImageFilters);
+    // The model holds the final values: red, round corners, a shadow, the blur, the mask inset from the trailing (right) edge.
+    const CGFloat *red = CGColorGetComponents(effects.layer.backgroundColor);
+    CHECK(std::abs(red[0] - 1) < 1e-3 && std::abs(red[1]) < 1e-3 && std::abs(red[2]) < 1e-3);
+    CHECK(effects.layer.cornerRadius == 20 && std::abs(effects.layer.shadowOpacity - 0.5) < 1e-6 && effects.layer.shadowRadius == 10 && effects.layer.shadowOffset.height == 6);
+    CHECK([[effects.layer valueForKeyPath:@"filters.sparkBlur.inputRadius"] doubleValue] == 4);
+    CHECK(NSEqualRects(NSRectFromCGRect(mask.frame), [effects convertRectToLayer:NSMakeRect(0, 0, 70, 40)]) && mask.cornerRadius == 8);
+    CHECK(std::abs(effects.layer.transform.m11 - -1) < 1e-9 && effects.layer.transform.m34 != 0);  // turned 180° about y, in perspective
+    // Halfway, a capture shows the presented color: the OKLCH midpoint of white and red, not their sRGB average.
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    __block NSArray<NSNumber *> *presentedColor = nil;
+    [motion presenting:^{ const CGFloat *c = CGColorGetComponents(effects.layer.backgroundColor); presentedColor = @[@(c[0]), @(c[1]), @(c[2])]; }];
+    const double halfway[3] = {presentedColor[0].doubleValue, presentedColor[1].doubleValue, presentedColor[2].doubleValue};
+    const Rgba expected = oklchToSrgb((1 + 0.627955) / 2, 0.257683 / 2, 29.2339, 1);
+    CHECK(std::abs(halfway[0] - expected.red) < 1e-6 && std::abs(halfway[1] - expected.green) < 1e-6 && std::abs(halfway[2] - expected.blue) < 1e-6);
+    CHECK(std::abs(halfway[1] - 0.5) > 0.05);  // an sRGB blend would be (1, 0.5, 0.5)
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    CHECK(lifted->resolved && [JSON(lifted->value)[@"finished"] isEqual:@YES] && effects.layer.filters.count == 1 && effects.layer.mask == mask);
+    // Animating the blur and the mask back to nothing removes them once that settles; while it runs they stay.
+    effects.motionRightToLeft = YES;
+    Outcome *clear = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) {
+      [motion run:Request(@"clear", 12, @{ @"blur": Timing(0, 100), @"maskInsetEnd": Timing(0, 100), @"maskRadius": Timing(0, 100), @"maskInsetStart": Timing(10, 50) }) resolve:resolve reject:reject];
+    });
+    CHECK(effects.layer.filters.count == 1 && effects.layer.mask == mask);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:50 resolve:resolve reject:reject]; });
+    // Right to left, the start edge is the right one.
+    [motion presenting:^{
+      const NSRect frame = NSRectFromCGRect(effects.layer.mask.frame), expected = [effects convertRectToLayer:NSMakeRect(15, 0, 75, 40)];
+      CHECK(std::abs(NSMinX(frame) - NSMinX(expected)) < 1e-6 && std::abs(NSWidth(frame) - NSWidth(expected)) < 1e-6 && NSHeight(frame) == 40);
+    }];
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:50 resolve:resolve reject:reject]; });
+    CHECK(clear->resolved && effects.layer.filters.count == 0 && !effects.layerUsesCoreImageFilters && effects.layer.mask == mask);  // insetStart 10 still masks
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @12, @"values": @{ @"maskInsetStart": @0 } } resolve:resolve reject:reject]; });
+    CHECK(effects.layer.mask == nil);
+    [motion unregisterTag:12];
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
+
+    // Until motion drives them, the background, corners and shadow follow the view's style: the engine takes what the
+    // style put on the layer, so an animation starts from it, and motion leaves the layer alone until it owns the channel.
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"virtual" resolve:resolve reject:reject]; });
+    TestHost *styled = [[TestHost alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];
+    styled.wantsLayer = YES;
+    styled.motionTag = 13;
+    [window.contentView addSubview:styled];
+    [motion registerHost:styled initial:kIdentity];
+    styled.layer.backgroundColor = CGColorGetConstantColor(kCGColorWhite);  // as React Native applies a style
+    styled.layer.cornerRadius = 6;
+    styled.layer.shadowOpacity = 0.3f;
+    [styled applyMotionModel:[motion styledModel:styled model:styled.motionModel]];
+    CHECK(styled.motionOwnedChannels == 0 && styled.layer.cornerRadius == 6 && CGColorEqualToColor(styled.layer.backgroundColor, CGColorGetConstantColor(kCGColorWhite)));
+    Outcome *styledState = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion state:13 resolve:resolve reject:reject]; });
+    NSDictionary *styledValues = JSON(styledState->value)[@"values"];
+    CHECK(std::abs([styledValues[@"backgroundColorL"] doubleValue] - 1) < 1e-4 && [styledValues[@"backgroundColorAlpha"] doubleValue] == 1);
+    CHECK([styledValues[@"borderRadius"] doubleValue] == 6 && std::abs([styledValues[@"shadowOpacity"] doubleValue] - 0.3) < 1e-6);
+    const Oklch roundTrip = srgbToOklch(oklchToSrgb(0.7, 0.12, 250, 0.5));
+    CHECK(std::abs(roundTrip.lightness - 0.7) < 1e-6 && std::abs(roundTrip.chroma - 0.12) < 1e-6 && std::abs(roundTrip.hue - 250) < 1e-4 && roundTrip.alpha == 0.5);
+    // Animating the corner radius takes that channel only: it animates from 6, and the style's background stays.
+    Outcome *round = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"round", 13, @{ @"borderRadius": Timing(20, 100) }) resolve:resolve reject:reject]; });
+    CHECK(!round->code && styled.motionOwnedChannels == SparkMotionChannelBit(Channel::BorderRadius));
+    CHECK([styled.layer animationForKey:@"spark.motion.cornerRadius"] && ![styled.layer animationForKey:@"spark.motion.backgroundColor"]);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:50 resolve:resolve reject:reject]; });
+    Outcome *rounding = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion state:13 resolve:resolve reject:reject]; });
+    CHECK(std::abs([JSON(rounding->value)[@"values"][@"borderRadius"] doubleValue] - 13) < 1e-6);
+    styled.layer.cornerRadius = 2;  // a later style change of an owned channel: motion keeps its value
+    [styled applyMotionModel:[motion styledModel:styled model:styled.motionModel]];
+    CHECK(styled.layer.cornerRadius == 20 && CGColorEqualToColor(styled.layer.backgroundColor, CGColorGetConstantColor(kCGColorWhite)));
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:50 resolve:resolve reject:reject]; });
+    CHECK(round->resolved);
+    // React Native's shadow path follows the style's radii: motion's corners and shadow drop it.
+    styled.layer.shadowPath = CGPathCreateWithRect(CGRectMake(0, 0, 10, 10), NULL);
+    [styled applyMotionModel:styled.motionModel];
+    CHECK(styled.layer.shadowPath == NULL);
+    // A channel React Native draws for the style on another layer is E_UNSUPPORTED_OPTION, before anything changes.
+    styled.motionStyleChannels = SparkMotionChannelBit(Channel::BackgroundColor) | SparkMotionChannelBit(Channel::Mask);
+    Outcome *refused = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"tint", 13, @{ @"backgroundColorL": Timing(0.5, 100), @"opacity": Timing(0.5, 100) }) resolve:resolve reject:reject]; });
+    CHECK([refused->code isEqual:@"E_UNSUPPORTED_OPTION"] && styled.layer.opacity == 1);
+    Outcome *refusedSet = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @13, @"values": @{ @"maskRadius": @4 } } resolve:resolve reject:reject]; });
+    CHECK([refusedSet->code isEqual:@"E_UNSUPPORTED_OPTION"] && styled.layer.mask == nil);
+    styled.motionStyleChannels = 0;
+    // Under Reduce Motion a step's own alternate plays instead of its tracks: only what plays is taken.
+    [motion simulate:@{ @"reduceMotion": @YES }];
+    Outcome *alternate = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) {
+      [motion run:@{ @"id": @"alt", @"groups": @[@{ @"tag": @13, @"tracks": @{ @"shadowRadius": Timing(8, 100) }, @"reducedTracks": @{ @"opacity": Timing(0.9, 100) } }] } resolve:resolve reject:reject];
+    });
+    CHECK(!alternate->code && !(styled.motionOwnedChannels & SparkMotionChannelBit(Channel::Shadow)));
+    [motion simulate:@{ @"reduceMotion": @NO }];
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:100 resolve:resolve reject:reject]; });
+    // Stopping every property takes nothing.
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion stop:@{ @"tag": @13, @"properties": @[@"backgroundColorL", @"shadowOpacity"] } resolve:resolve reject:reject]; });
+    CHECK(!(styled.motionOwnedChannels & (SparkMotionChannelBit(Channel::BackgroundColor) | SparkMotionChannelBit(Channel::Shadow))) && CGColorEqualToColor(styled.layer.backgroundColor, CGColorGetConstantColor(kCGColorWhite)));
+    [motion unregisterTag:13];
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
+
+    // Symbol effects (docs/motion.md#symbol-effects): the effect plays on the image view, or its Reduce Motion alternate.
+    TestSymbol *bell = [[TestSymbol alloc] initWithFrame:NSMakeRect(0, 0, 32, 32)];
+    bell.motionTag = 14;
+    bell.wantsLayer = YES;
+    bell.symbolImageView = [NSImageView imageViewWithImage:[NSImage imageWithSystemSymbolName:@"bell.fill" accessibilityDescription:nil]];
+    bell.symbolImageView.wantsLayer = YES;
+    [bell addSubview:bell.symbolImageView];
+    [window.contentView addSubview:bell];
+    [motion registerSymbol:bell];
+    auto play = [&](NSDictionary *request) { return Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion playSymbolEffect:request resolve:resolve reject:reject]; }); };
+    CHECK([JSON(play(@{ @"tag": @14, @"effect": @"bounce", @"direction": @"up" })->value)[@"played"] isEqual:@"bounce"]);
+    CHECK([play(@{ @"tag": @14, @"effect": @"spin" })->code isEqual:@"E_INVALID_ARGUMENT"]);
+    CHECK([play(@{ @"tag": @14, @"effect": @"bounce", @"direction": @"left" })->code isEqual:@"E_INVALID_ARGUMENT"]);
+    CHECK([play(@{ @"tag": @14, @"effect": @"pulse", @"repeat": @-1 })->code isEqual:@"E_INVALID_ARGUMENT"]);
+    CHECK(SparkSymbolEffectSupported(@"pulse") && !SparkSymbolEffectSupported(@"spin"));
+    if (SparkSymbolEffectSupported(@"drawOff")) CHECK([play(@{ @"tag": @14, @"effect": @"drawOff", @"repeat": @1 })->code isEqual:@"E_UNSUPPORTED_OPTION"]);
+    else CHECK([play(@{ @"tag": @14, @"effect": @"drawOff" })->code isEqual:@"E_UNAVAILABLE"]);
+    [motion simulate:@{ @"reduceMotion": @YES }];
+    CHECK([JSON(play(@{ @"tag": @14, @"effect": @"bounce", @"repeat": @"infinite" })->value)[@"played"] isEqual:@"pulse"]);
+    CHECK([JSON(play(@{ @"tag": @14, @"effect": @"bounce", @"reducedMotion": @"instant" })->value)[@"played"] isEqual:@"none"]);
+    CHECK([JSON(play(@{ @"tag": @14, @"effect": @"bounce", @"reducedMotion": @"play" })->value)[@"played"] isEqual:@"bounce"]);
+    if (SparkSymbolEffectSupported(@"drawOff")) {
+      CHECK([JSON(play(@{ @"tag": @14, @"effect": @"drawOff", @"reducedMotion": @"instant" })->value)[@"played"] isEqual:@"none"] && bell.symbolImageView.alphaValue == 0);
+      CHECK([JSON(play(@{ @"tag": @14, @"effect": @"drawOn", @"reducedMotion": @"instant" })->value)[@"played"] isEqual:@"none"] && bell.symbolImageView.alphaValue == 1);
+    }
+    [motion simulate:@{ @"reduceMotion": @NO }];
+    Outcome *removed = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion removeSymbolEffect:@{ @"tag": @14 } resolve:resolve reject:reject]; });
+    CHECK(removed->resolved);
+    // A name change with a transition while Reduce Motion is on cross-fades instead.
+    [motion simulate:@{ @"reduceMotion": @YES }];
+    [motion replaceSymbol:bell image:[NSImage imageWithSystemSymbolName:@"bell.slash.fill" accessibilityDescription:nil] transition:@"downUp"];
+    CHECK([[bell.symbolImageView.layer animationForKey:kCATransition] isKindOfClass:CATransition.class]);
+    [motion simulate:@{ @"reduceMotion": @NO }];
+    [motion unregisterSymbolTag:14];
 
     // Outside a driver run, visibility is the window's occlusion state, read when needed: a window that is not on screen
     // (never shown here) is hidden from the first view that mounts in it, with no notification.

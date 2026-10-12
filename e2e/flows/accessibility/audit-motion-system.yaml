@@ -1,7 +1,7 @@
 appId: so.legend.spark.examples.kitchensink
 name: Accessibility audit of the motion-system screens
 intent: >
-  Every motion-system screen of the Kitchen Sink catalog (Springs and interruption, Keyframes and timelines, Scroll link and JS block, Layout, presence and shared elements, Accessibility, power and lifecycle) opens from its spark-ks:// link in the
+  Every motion-system screen of the Kitchen Sink catalog (Springs and interruption, Keyframes and timelines, Scroll link and JS block, Layout, presence and shared elements, Visual effects, Text and symbols, Accessibility, power and lifecycle) opens from its spark-ks:// link in the
   running app, its root renders, and the accessibility audit of the main window finds no errors: every control and
   image has a label or title, every control takes keyboard focus, and all enabled text meets the HIG contrast ratio
   against what is rendered behind it.
@@ -18,4 +18,6 @@ matrix:
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: motion-system, SCREEN: timelines } }
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: motion-system, SCREEN: scroll-and-frames } }
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: motion-system, SCREEN: layout } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: motion-system, SCREEN: visual-effects } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: motion-system, SCREEN: text-and-symbols } }
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: motion-system, SCREEN: accessibility-power } }

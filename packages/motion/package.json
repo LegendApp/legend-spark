@@ -24,7 +24,8 @@
         "NativeSparkMotion": "RNSparkMotion"
       },
       "componentProvider": {
-        "SparkMotionView": "RNSparkMotionView"
+        "SparkMotionView": "RNSparkMotionView",
+        "SparkMotionSymbol": "RNSparkMotionSymbol"
       }
     }
   },

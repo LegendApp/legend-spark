@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import { DriverError, type MotionState } from "../scripts/e2e/driver.ts";
 import { runFlows } from "../scripts/e2e/runner/executor.ts";
 import { DriverBackend } from "../scripts/e2e/runner/driver-backend.ts";
-import { COMMITS, COUNTERS, FakeApp, fakeMotion, fakeSamples, FRAME, FRAMES, STARTUP } from "./e2e-driver-fake.ts";
+import { COMMITS, COUNTERS, FakeApp, fakeMotion, fakeSamples, FRAME, FRAMES, REST_VALUES, STARTUP } from "./e2e-driver-fake.ts";
 import { VirtualClock } from "./e2e-runner-backend.ts";
 
 const HEADER = "appId: so.legend.spark.examples.kitchensink\nname: Driver flow\nintent: The test intent.\n";
@@ -428,7 +428,7 @@ describe("motion and frames", () => {
   });
 
   test("assertPaused hides the target's window, checks its animation holds still, and shows the window again", async () => {
-    const values = (rotate: number) => ({ opacity: 1, translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate });
+    const values = (rotate: number) => ({ ...REST_VALUES, rotate });
     const pausing = (states: Partial<MotionState>[]) => { const app = motionApp(); app.motions.box!.states = states; return app; };
     const log = (app: FakeApp) => app.log.filter(line => /^(motionState|simulateOcclusion|advanceClock)/.test(line));
     const passing = pausing([

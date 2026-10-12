@@ -227,6 +227,18 @@ public:
   State at(double t) const override { return track_->at(offset_ + t); }
 };
 
+/** The first value a spec animates to: its target, its first keyframe, or its first step's. */
+double firstTarget(const Spec &spec) {
+  if (spec.kind == Spec::Kind::Keyframes && !spec.values.empty()) return spec.values[0];
+  if (spec.kind == Spec::Kind::Sequence && !spec.steps.empty()) return firstTarget(spec.steps[0]);
+  return spec.to;
+}
+void shiftTargets(Spec &spec, double by) {
+  spec.to += by;
+  for (double &value : spec.values) value += by;
+  for (Spec &step : spec.steps) shiftTargets(step, by);
+}
+
 /** A sequence step: its delay holds the previous step's end value, then it plays. */
 CurvePtr played(const Spec &spec, State start) {
   if (std::isinf(spec.repeat)) throw invalid("A sequence step cannot repeat forever");
@@ -239,17 +251,32 @@ CurvePtr played(const Spec &spec, State start) {
 }  // namespace
 
 const char *propertyName(Property property) {
-  static const char *names[] = {"opacity", "translateX", "translateY", "scaleX", "scaleY", "rotate"};
+  static const char *names[] = {"opacity", "translateX", "translateY", "scaleX", "scaleY", "rotate", "rotateX", "rotateY", "perspective",
+    "borderRadius", "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha",
+    "shadowOpacity", "shadowRadius", "shadowOffsetX", "shadowOffsetY", "blur",
+    "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius"};
+  static_assert(sizeof(names) / sizeof(names[0]) == PropertyCount);
   return names[property];
 }
 std::optional<Property> propertyFromName(const std::string &name) {
   for (int i = 0; i < PropertyCount; i++) if (name == propertyName(Property(i))) return Property(i);
   return std::nullopt;
 }
-Channel channelOf(Property property) { return property == Opacity ? Channel::Opacity : Channel::Transform; }
+Channel channelOf(Property property) {
+  switch (property) {
+    case Opacity: return Channel::Opacity;
+    case BorderRadius: return Channel::BorderRadius;
+    case BackgroundColorL: case BackgroundColorC: case BackgroundColorH: case BackgroundColorAlpha: return Channel::BackgroundColor;
+    case ShadowOpacity: case ShadowRadius: case ShadowOffsetX: case ShadowOffsetY: return Channel::Shadow;
+    case Blur: return Channel::Blur;
+    case MaskInsetTop: case MaskInsetBottom: case MaskInsetStart: case MaskInsetEnd: case MaskRadius: return Channel::Mask;
+    default: return Channel::Transform;
+  }
+}
+bool travels(Property property) { return channelOf(property) == Channel::Transform || channelOf(property) == Channel::Mask; }
 Rest restThreshold(Property property) {
   switch (property) {
-    case Opacity: case ScaleX: case ScaleY: return {0.0005, 0.005};
+    case Opacity: case ScaleX: case ScaleY: case BackgroundColorL: case BackgroundColorC: case BackgroundColorAlpha: case ShadowOpacity: return {0.0005, 0.005};
     default: return {0.01, 0.1};
   }
 }
@@ -355,6 +382,37 @@ State Plays::at(double t) const {
 State Track::at(double t) const {
   if (t < leadDuration) return lead ? lead->at(t) : State{startValue, 0};
   return plays.at(t - leadDuration);
+}
+
+Rgba oklchToSrgb(double lightness, double chroma, double hue, double alpha) {
+  // Björn Ottosson's OKLab: Lab to LMS (cube roots), cubed, then to linear sRGB, then the sRGB transfer, sign-preserving.
+  const double l0 = std::clamp(lightness, 0.0, 1.0), c = std::max(chroma, 0.0), h = hue * M_PI / 180;
+  const double a = c * std::cos(h), b = c * std::sin(h);
+  const double l = std::pow(l0 + 0.3963377774 * a + 0.2158037573 * b, 3);
+  const double m = std::pow(l0 - 0.1055613458 * a - 0.0638541728 * b, 3);
+  const double s = std::pow(l0 - 0.0894841775 * a - 1.2914855480 * b, 3);
+  const auto encode = [](double x) {
+    const double v = std::abs(x);
+    return std::copysign(v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1 / 2.4) - 0.055, x);
+  };
+  return {encode(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s), encode(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+          encode(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s), std::clamp(alpha, 0.0, 1.0)};
+}
+
+Oklch srgbToOklch(const Rgba &color) {
+  // The inverse of oklchToSrgb: linearize (sign-preserving), linear sRGB to LMS, cube roots, then OKLab.
+  const auto linear = [](double x) {
+    const double v = std::abs(x);
+    return std::copysign(v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4), x);
+  };
+  const double r = linear(color.red), g = linear(color.green), b = linear(color.blue);
+  const double l = std::cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const double m = std::cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const double s = std::cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  const double a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s, bb = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+  const double chroma = std::hypot(a, bb);
+  const double hue = chroma < restThreshold(BackgroundColorC).delta ? 0 : std::fmod(std::atan2(bb, a) * 180 / M_PI + 360, 360);
+  return {0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, chroma, hue, std::clamp(color.alpha, 0.0, 1.0)};
 }
 
 void validateRange(const std::vector<double> &input, const std::vector<double> &output) {
@@ -515,17 +573,33 @@ Started Engine::start(const Plan &plan, double now, std::vector<Settled> &settle
     require(!group.reduced || !group.reduced->empty(), "A Reduce Motion alternate needs at least one property");
     require(finite(group.offset), "offsetMs must be a finite number");
   }
+  // Colors (docs/motion.md#colors): the hue takes the shorter way round from where it is, and a component that cannot be
+  // seen (the hue of a gray, every component of a transparent color) starts at its target instead of travelling there.
+  std::vector<Group> groups = plan.groups;
+  const auto prepareColor = [&](Tracks &tracks, const Slots &live) {
+    const double alpha = slotState(live[BackgroundColorAlpha], now).value, chroma = slotState(live[BackgroundColorC], now).value;
+    const double invisible = restThreshold(BackgroundColorAlpha).delta;
+    for (auto &[property, spec] : tracks) {
+      if (property < BackgroundColorL || property > BackgroundColorH || spec.kind == Spec::Kind::Decay || spec.from) continue;
+      if (property == BackgroundColorH) shiftTargets(spec, 360 * std::round((slotState(live[property], now).value - firstTarget(spec)) / 360));
+      if (alpha < invisible || (property == BackgroundColorH && chroma < invisible)) spec.from = State{firstTarget(spec), 0};
+    }
+  };
+  for (Group &group : groups) {
+    prepareColor(group.tracks, slots(group.view));
+    if (group.reduced) prepareColor(*group.reduced, slots(group.view));
+  }
   // Reduce Motion (docs/motion.md#reduce-motion): a step plays its own alternate, or the plan's designed one.
   const bool designed = plan.reduceMotion && plan.reduce != Reduce::Play;
   const auto played = [&](const Group &group) -> const Tracks & { return plan.reduceMotion && group.reduced ? *group.reduced : group.tracks; };
   std::unordered_set<int64_t> fading;  // views whose opacity the plan drives: the fade's own track would drive it twice
-  for (const Group &group : plan.groups)
+  for (const Group &group : groups)
     for (const auto &[property, spec] : played(group)) if (property == Opacity) fading.insert(group.view);
   const Easing easeInOut{0.42, 0, 0.58, 1};
   std::unordered_map<int64_t, Slots> staged;
   Started started;
   double previousEnd = 0, previousPlanned = 0;
-  for (const Group &group : plan.groups) {
+  for (const Group &group : groups) {
     Slots &copy = staged.try_emplace(group.view, slots(group.view)).first->second;
     if (std::isinf(previousPlanned)) throw invalid("A timeline step cannot follow an infinitely repeating step");
     const double start = (group.afterPrevious ? previousEnd : 0) + group.offset;
@@ -556,16 +630,17 @@ Started Engine::start(const Plan &plan, double now, std::vector<Settled> &settle
       track->plays = makePlays(spec, from);
       track->kind = spec.kind;
       if (alternate) {
-        // Nothing travels: transforms change at once, opacity fades without bounce. A loop holds where it is.
+        // Nothing travels: transforms and mask edges change at once; opacity, colors, corners, shadows and blur fade
+        // without bounce. A loop holds where it is.
         Spec reduced;
         reduced.to = track->infinite() ? from.value : track->plays.end().value;
         reduced.easing = easeInOut;
-        const bool fades = property == Opacity && plan.reduce == Reduce::Fade;
+        const bool fades = !travels(property) && plan.reduce == Reduce::Fade;
         reduced.kind = fades ? Spec::Kind::Timing : Spec::Kind::Jump;
         reduced.duration = fades ? kReducedFade : 0;
         track->plays = makePlays(reduced, {from.value, 0});
         track->kind = reduced.kind;
-        if (fades) fadesOut = reduced.to < from.value;
+        if (fades && property == Opacity) fadesOut = reduced.to < from.value;
         if (!fades) {
           jumps.push_back(track);
           firstJump = std::min(firstJump, track->leadDuration);
@@ -613,8 +688,7 @@ Started Engine::start(const Plan &plan, double now, std::vector<Settled> &settle
   for (const auto &[view, copy] : staged) {
     std::array<TrackPtr, PropertyCount> tracks;
     for (int i = 0; i < PropertyCount; i++) tracks[i] = copy[i].track;
-    loopMilliseconds(tracks, Channel::Opacity);
-    loopMilliseconds(tracks, Channel::Transform);
+    for (int channel = 0; channel < int(Channel::Count); channel++) loopMilliseconds(tracks, Channel(channel));
   }
   const double scale = started.reduced && std::isfinite(started.plannedEnd) && started.plannedEnd > 0 ? started.end / started.plannedEnd : 1;
   for (const std::optional<double> &cue : plan.cues) {
@@ -860,9 +934,10 @@ ChannelBake Engine::bake(int64_t view, Channel channel, double now, double rate)
   require(positive(rate), "The bake rate must be positive");
   rate = std::min(rate, kSampleRate);
   const Slots &target = views_.at(view);
+  // Only the channel's own properties are evaluated; the others keep their model values.
   auto valuesAt = [&](double time) {
     Values values;
-    for (int i = 0; i < PropertyCount; i++) values[i] = slotState(target[i], time).value;
+    for (int i = 0; i < PropertyCount; i++) values[i] = channelOf(Property(i)) == channel ? slotState(target[i], time).value : target[i].model;
     return values;
   };
   auto sample = [&](double begin, double duration) {

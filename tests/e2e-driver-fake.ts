@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type TestSharing, type SimulatedSharing } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type TestSharing, type SimulatedSharing } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -14,7 +14,12 @@ export const FRAMES: FrameReport = { frames: 61, droppedFrames: 0, maxFrameGapMs
 
 /** A scripted motion for a testID: the telemetry the driver reports once it has settled, its samples, the motion clock, and the fields of successive replies. */
 export type FakeMotion = { motion: Motion; samples: MotionSample[]; clock?: "virtual" | "real"; states?: Partial<MotionState>[] };
-export const REST_VALUES = { opacity: 1, translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 };
+/** Every motion property at rest: opaque and unscaled; everything else (transforms, colors, effects) 0. */
+export const REST_VALUES: MotionValues = {
+  opacity: 1, translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0, rotateX: 0, rotateY: 0, perspective: 0, borderRadius: 0,
+  backgroundColorL: 0, backgroundColorC: 0, backgroundColorH: 0, backgroundColorAlpha: 0, shadowOpacity: 0, shadowRadius: 0, shadowOffsetX: 0, shadowOffsetY: 0,
+  blur: 0, maskInsetTop: 0, maskInsetBottom: 0, maskInsetStart: 0, maskInsetEnd: 0, maskRadius: 0,
+};
 /** A settled motion from `startMs` to `endMs`; `overrides` replace any field. */
 export const fakeMotion = (overrides: Partial<Motion> = {}): Motion => ({
   startMs: 1000, endMs: 1400, latestMs: 1000, settled: true, progress: 1, afterInput: true, startValues: REST_VALUES,

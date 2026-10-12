@@ -1,13 +1,23 @@
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
+import { COLOR_COMPONENTS, colorStops, parseColor, type ColorComponent, type MotionColor, type Oklch } from "./colors";
 
 // Animation descriptions. Builders validate their arguments and return frozen, normalized
 // specs: exactly the JSON the native engine receives. Native code validates the same rules
 // again (packages/motion/cpp), so malformed transport input can never crash the engine.
 
-export type MotionProperty = "opacity" | "translateX" | "translateY" | "scale" | "scaleX" | "scaleY" | "rotate";
-/** Properties as the engine stores them: `scale` drives `scaleX` and `scaleY`. */
-export type MotionChannelProperty = Exclude<MotionProperty, "scale">;
-export type MotionValues = Partial<Record<MotionProperty, number>>;
+/** Properties that take numbers (docs/motion.md#properties-and-units). */
+export type MotionNumberProperty =
+  | "opacity" | "translateX" | "translateY" | "scale" | "scaleX" | "scaleY" | "rotate" | "rotateX" | "rotateY" | "perspective"
+  | "borderRadius" | "shadowOpacity" | "shadowRadius" | "shadowOffsetX" | "shadowOffsetY" | "blur"
+  | "maskInsetTop" | "maskInsetBottom" | "maskInsetStart" | "maskInsetEnd" | "maskRadius";
+/** Properties that take colors, animated in OKLCH. */
+export type MotionColorProperty = "backgroundColor";
+export type MotionProperty = MotionNumberProperty | MotionColorProperty;
+/** Properties as the engine stores them: `scale` drives `scaleX` and `scaleY`, `backgroundColor` its OKLCH components. */
+export type MotionChannelProperty = Exclude<MotionNumberProperty, "scale"> | ColorComponent;
+export type MotionValues = Partial<Record<MotionNumberProperty, number> & Record<MotionColorProperty, MotionColor>>;
+/** What an animation of a property animates to: a number, or a color for `backgroundColor`. */
+export type MotionValue = number | MotionColor;
 export type CubicBezier = readonly [x1: number, y1: number, x2: number, y2: number];
 export type Easing = "linear" | "easeIn" | "easeOut" | "easeInOut" | "standard" | CubicBezier;
 export type SpringPreset = "default" | "smooth" | "snappy" | "bouncy" | "interactive";
@@ -53,14 +63,19 @@ export type SequenceOptions = AnimationOptions;
 
 type Common = { velocity?: number; delayMs?: number; repeat?: number | "infinite"; reverse?: boolean; restDelta?: number; restSpeed?: number };
 type SpringParameters = { mass: number; stiffness: number; damping: number };
-export type SpringSpec = Readonly<Common & SpringParameters & { type: "spring"; to: number }>;
-export type TimingSpec = Readonly<Common & { type: "timing"; to: number; durationMs: number; easing: CubicBezier }>;
-export type KeyframesSpec = Readonly<Common & { type: "keyframes"; durationMs: number; values: readonly number[]; offsets: readonly number[]; easings: readonly CubicBezier[] }>;
+export type SpringSpec<V extends MotionValue = number> = Readonly<Common & SpringParameters & { type: "spring"; to: V }>;
+export type TimingSpec<V extends MotionValue = number> = Readonly<Common & { type: "timing"; to: V; durationMs: number; easing: CubicBezier }>;
+export type KeyframesSpec<V extends MotionValue = number> = Readonly<Common & { type: "keyframes"; durationMs: number; values: readonly V[]; offsets: readonly number[]; easings: readonly CubicBezier[] }>;
 export type DecaySpec = Readonly<Omit<Common, "repeat" | "reverse"> & { type: "decay"; deceleration: number; clamp?: readonly [number, number]; bounce?: SpringParameters }>;
-export type SequenceSpec = Readonly<Common & { type: "sequence"; steps: readonly MotionSpec[] }>;
-export type MotionSpec = SpringSpec | TimingSpec | KeyframesSpec | DecaySpec | SequenceSpec;
+export type SequenceSpec<V extends MotionValue = number> = Readonly<Common & { type: "sequence"; steps: readonly MotionSpec<V>[] }>;
+/** An animation of numbers, or of colors (`V` is MotionColor): colors cannot decay. */
+export type MotionSpec<V extends MotionValue = number> = SpringSpec<V> | TimingSpec<V> | KeyframesSpec<V> | SequenceSpec<V> | (V extends number ? DecaySpec : never);
 
-export const MOTION_PROPERTIES: readonly MotionProperty[] = ["opacity", "translateX", "translateY", "scale", "scaleX", "scaleY", "rotate"];
+export const MOTION_PROPERTIES: readonly MotionProperty[] = [
+  "opacity", "translateX", "translateY", "scale", "scaleX", "scaleY", "rotate", "rotateX", "rotateY", "perspective",
+  "borderRadius", "backgroundColor", "shadowOpacity", "shadowRadius", "shadowOffsetX", "shadowOffsetY", "blur",
+  "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius",
+];
 const EASINGS: Record<Exclude<Easing, CubicBezier>, CubicBezier> = {
   linear: [0, 0, 1, 1], easeIn: [0.42, 0, 1, 1], easeOut: [0, 0, 0.58, 1], easeInOut: [0.42, 0, 0.58, 1], standard: [0.4, 0, 0.2, 1],
 };
@@ -102,11 +117,29 @@ function common(value: AnimationOptions, repeatable = true): Common {
   }
   return out;
 }
-function seal<T extends MotionSpec>(spec: T): T {
+function seal<T extends MotionSpec<MotionValue>>(spec: T): T {
   created.add(Object.freeze(spec));
   return spec;
 }
-export function isMotionSpec(value: unknown): value is MotionSpec { return typeof value === "object" && value !== null && created.has(value); }
+export function isMotionSpec(value: unknown): value is MotionSpec<MotionValue> { return typeof value === "object" && value !== null && created.has(value); }
+
+/** A target is a finite number or a color; a color animation takes no velocity or rest thresholds (each component has its own). */
+function target<V extends MotionValue>(value: V, name: string, settings: AnimationOptions): V {
+  if (typeof value === "string") {
+    parseColor(value, name);
+    const own = (["velocity", "restDelta", "restSpeed"] as const).find(key => settings[key] !== undefined);
+    if (own) throw new SparkError("E_UNSUPPORTED_OPTION", `A color animation has no ${own}: each OKLCH component has its own`);
+    return value;
+  }
+  return number(value, name) as V;
+}
+/** Whether a spec animates colors; every step and keyframe of one spec is of one kind. */
+export function animatesColor(spec: MotionSpec<MotionValue>): boolean {
+  if (spec.type === "spring" || spec.type === "timing") return typeof spec.to === "string";
+  if (spec.type === "keyframes") return typeof spec.values[0] === "string";
+  if (spec.type === "sequence") return animatesColor(spec.steps[0]!);
+  return false;
+}
 
 export function easing(value: Easing): CubicBezier {
   if (typeof value === "string") return Object.hasOwn(EASINGS, value) ? EASINGS[value as keyof typeof EASINGS] : invalid(`Unknown easing ${value}`);
@@ -134,21 +167,31 @@ function springParameters(value: Omit<SpringOptions, keyof AnimationOptions>): S
 }
 const SPRING = ["preset", "responseMs", "bounce", "mass", "stiffness", "damping"] as const;
 
-export function spring(to: number, springOptions?: SpringOptions): SpringSpec {
+/** A spring to a number, or to a color (in OKLCH). */
+export function spring(to: number, springOptions?: SpringOptions): SpringSpec;
+export function spring(to: MotionColor, springOptions?: SpringOptions): SpringSpec<MotionColor>;
+export function spring(to: MotionValue, springOptions?: SpringOptions): SpringSpec<MotionValue> {
   const value = options(springOptions, [...COMMON, ...SPRING], "spring");
-  return seal({ type: "spring", to: number(to, "A spring target"), ...springParameters(value), ...common(value) });
+  return seal({ type: "spring", to: target(to, "A spring target", value), ...springParameters(value), ...common(value) });
 }
 
-export function timing(to: number, timingOptions?: TimingOptions): TimingSpec {
+/** An eased transition to a number, or to a color (in OKLCH). */
+export function timing(to: number, timingOptions?: TimingOptions): TimingSpec;
+export function timing(to: MotionColor, timingOptions?: TimingOptions): TimingSpec<MotionColor>;
+export function timing(to: MotionValue, timingOptions?: TimingOptions): TimingSpec<MotionValue> {
   const value = options(timingOptions, [...COMMON, "durationMs", "easing"], "timing");
   const durationMs = number(value.durationMs ?? 250, "durationMs", v => v >= 0, "a non-negative finite number");
-  return seal({ type: "timing", to: number(to, "A timing target"), durationMs, easing: easing(value.easing ?? "easeInOut"), ...common(value) });
+  return seal({ type: "timing", to: target(to, "A timing target", value), durationMs, easing: easing(value.easing ?? "easeInOut"), ...common(value) });
 }
 
-export function keyframes(values: readonly number[], keyframeOptions: KeyframesOptions): KeyframesSpec {
+/** Passes through numbers, or colors (in OKLCH), at their offsets. */
+export function keyframes(values: readonly number[], keyframeOptions: KeyframesOptions): KeyframesSpec;
+export function keyframes(values: readonly MotionColor[], keyframeOptions: KeyframesOptions): KeyframesSpec<MotionColor>;
+export function keyframes(values: readonly MotionValue[], keyframeOptions: KeyframesOptions): KeyframesSpec<MotionValue> {
   const value = options(keyframeOptions, [...COMMON, "durationMs", "offsets", "easing"], "keyframes");
   if (!Array.isArray(values) || values.length === 0) invalid("Keyframes need at least one value");
-  values.forEach(item => number(item, "Keyframe values"));
+  if (values.some(item => typeof item !== typeof values[0])) invalid("Keyframe values are all numbers or all colors");
+  values.forEach(item => target(item, "Keyframe values", value));
   const durationMs = number(value.durationMs, "durationMs", v => v >= 0, "a non-negative finite number");
   const offsets = value.offsets ?? values.map((_, index) => (index + 1) / values.length);
   if (!Array.isArray(offsets) || offsets.length !== values.length) invalid("Keyframes need one offset per value");
@@ -173,16 +216,43 @@ export function decay(decayOptions?: DecayOptions): DecaySpec {
   return seal(spec);
 }
 
-const hasDecay = (spec: MotionSpec): boolean => spec.type === "decay" || (spec.type === "sequence" && spec.steps.some(hasDecay));
-/** A per-property chain: each step starts from the previous step's end value and velocity. */
-export function sequence(steps: readonly MotionSpec[], sequenceOptions?: SequenceOptions): SequenceSpec {
+const hasDecay = (spec: MotionSpec<MotionValue>): boolean => spec.type === "decay" || (spec.type === "sequence" && spec.steps.some(hasDecay));
+/** A per-property chain: each step starts from the previous step's end value and velocity. Steps are all numbers or all colors. */
+export function sequence<V extends MotionValue = number>(steps: readonly MotionSpec<V>[], sequenceOptions?: SequenceOptions): SequenceSpec<V> {
   const value = options(sequenceOptions, COMMON, "sequence");
   if (!Array.isArray(steps) || steps.length === 0) invalid("A sequence needs at least one step");
   for (const step of steps) {
     if (!isMotionSpec(step)) invalid("Sequence steps are specs from spring(), timing(), keyframes(), decay() or sequence()");
     if (step.type !== "decay" && step.repeat === "infinite") invalid("A sequence step cannot repeat forever");
   }
-  return seal({ type: "sequence", steps: [...steps], ...common(value, !steps.some(hasDecay)) });
+  if (steps.some(step => animatesColor(step) !== animatesColor(steps[0]!))) invalid("Sequence steps are all numbers or all colors");
+  if (animatesColor(steps[0]!) && value.velocity !== undefined) throw new SparkError("E_UNSUPPORTED_OPTION", "A color animation has no velocity: each OKLCH component has its own");
+  return seal({ type: "sequence", steps: [...steps], ...common(value, !steps.some(hasDecay)) }) as SequenceSpec<V>;
+}
+
+/** Every color a spec passes through, in order. */
+function stops(spec: MotionSpec<MotionValue>): MotionColor[] {
+  if (spec.type === "spring" || spec.type === "timing") return [spec.to as MotionColor];
+  if (spec.type === "keyframes") return spec.values as MotionColor[];
+  return spec.type === "sequence" ? spec.steps.flatMap(stops) : [];
+}
+/** The spec with its colors replaced, in order, by one component's values. */
+function component(spec: MotionSpec<MotionValue>, next: () => number): MotionSpec {
+  if (spec.type === "spring" || spec.type === "timing") return { ...spec, to: next() } as MotionSpec;
+  if (spec.type === "keyframes") return { ...spec, values: spec.values.map(next) };
+  if (spec.type === "sequence") return { ...spec, steps: spec.steps.map(step => component(step, next)) };
+  return spec;
+}
+/** A color animation as the engine runs it: one animation per OKLCH component, leaving out components that never show (colors.ts). */
+export function colorTracks(spec: MotionSpec<MotionValue>): [ColorComponent, MotionSpec][] {
+  const parsed: Oklch[] = stops(spec).map(stop => parseColor(stop));
+  const components = colorStops(parsed);
+  return COLOR_COMPONENTS.flatMap(name => {
+    const values = components[name];
+    if (!values) return [];
+    let index = 0;
+    return [[name, component(spec, () => values[index++]!)]];
+  });
 }
 
 /**
@@ -204,13 +274,14 @@ export function transitionSpec(value: MotionTransition = { preset: "smooth" }): 
   return spec;
 }
 
-/** Expands `scale` and validates property names, keeping caller order. */
-export function channels<T>(values: Partial<Record<MotionProperty, T>>, name: string): [MotionChannelProperty, T][] {
+/** Expands `scale` and validates property names, keeping caller order. `backgroundColor` stays whole: callers expand colors. */
+export function channels<V extends Partial<Record<MotionProperty, unknown>>>(values: V, name: string): [Exclude<MotionProperty, "scale">, V[keyof V]][] {
+  type T = V[keyof V];
   if (!values || typeof values !== "object" || Array.isArray(values)) invalid(`${name} must be an object of motion properties`);
   const entries = Object.entries(values) as [MotionProperty, T][];
   if (entries.length === 0) invalid(`${name} needs at least one property`);
   if ("scale" in values && ("scaleX" in values || "scaleY" in values)) invalid("scale cannot be combined with scaleX or scaleY");
-  return entries.flatMap(([property, value]): [MotionChannelProperty, T][] => {
+  return entries.flatMap(([property, value]): [Exclude<MotionProperty, "scale">, T][] => {
     if (!MOTION_PROPERTIES.includes(property)) invalid(`Unknown motion property ${property}`);
     return property === "scale" ? [["scaleX", value], ["scaleY", value]] : [[property, value]];
   });

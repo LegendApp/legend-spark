@@ -34,7 +34,19 @@ struct SidebarSplitViewProps : Props {
   double sidebarMinWidth = 0, sidebarTitlebarOverlayOpacity = 0, sidebarWidth = 0;
   bool hasList = false, sidebarCollapsed = false;
 };
-struct SparkMotionViewProps : Props { std::string initialValues, layout, sharedId, transition; };
+// What RNSparkMotionView reads of a view's style to find the channels React Native draws on other layers: no border, no clip.
+struct SharedColor { explicit operator bool() const { return false; } };
+struct ColorComponents { float alpha = 1; };
+inline ColorComponents colorComponentsFromColor(SharedColor) { return {}; }
+enum class BorderStyle { Solid, Dotted, Dashed };
+template <class T> struct Cascaded { T left{}; bool isUniform() const { return true; } };
+struct BorderMetrics { Cascaded<SharedColor> borderColors; Cascaded<Float> borderWidths; Cascaded<BorderStyle> borderStyles; Cascaded<Float> borderRadii; };
+struct ViewProps : Props {
+  BorderMetrics resolveBorderMetrics(const LayoutMetrics &) const { return {}; }
+  bool getClipsContentToBounds() const { return false; }
+};
+struct ReactNativeFeatureFlags { static bool enableIOSViewClipToPaddingBox() { return false; } };
+struct SparkMotionViewProps : ViewProps { std::string initialValues, layout, sharedId, transition; };
 struct DesktopDragViewProps : Props { std::string sourceJson, optionsJson; bool disabled = false; };
 struct EventEmitter { using Shared = std::shared_ptr<EventEmitter const>; virtual ~EventEmitter() = default; };
 struct SidebarSplitViewEventEmitter : EventEmitter {
