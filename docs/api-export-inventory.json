@@ -81,6 +81,7 @@
     "./ui/tab-view",
     "./displays",
     "./logging",
-    "./pointer"
+    "./pointer",
+    "./permissions"
   ]
 }

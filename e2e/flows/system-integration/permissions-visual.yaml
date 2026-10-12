@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: Privacy permissions screen matches its golden
+intent: >
+  System integration > Privacy permissions opens from spark-ks://system-integration/permissions with every kind's
+  simulated initial state, listening for changes. The main window matches the approved golden for the appearance and
+  locale (light and dark, English and Arabic), with the shell sidebar masked.
+checks: [SYS-PERMVISUAL-01]
+tags: [system-integration]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/permissions" }
+- assertVisible: { id: system-integration-permissions-listening }
+- assertText: { id: system-integration-permissions-location-status, equals: "undetermined (notDetermined)" }
+- assertScreenshot: { golden: system-integration-permissions, mask: [{ id: infra-shell-sidebar }] }

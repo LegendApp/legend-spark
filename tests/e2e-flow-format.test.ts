@@ -221,7 +221,7 @@ describe("catalog", () => {
   test("driver-backed commands are marked", () => {
     expect(Object.keys(COMMANDS).filter(name => COMMANDS[name]!.driver).sort()).toEqual([
       "advanceClock", "assertAppMenu", "assertCrashSymbol", "assertEnergy", "assertFrames", "assertIdleCpu", "assertMemory", "assertMotion", "assertNoDebugSurface", "assertNoFlicker", "assertNoLayoutThrash", "assertNoLeaks",
-      "assertPaused", "assertScreenshot", "assertStartup", "assertState", "captureMotion", "interruptAt", "measure", "preserveAppDefaults", "setAppAppearance", "setClock", "simulateDisplays", "simulateSystemEvent", "startTrace",
+      "assertPaused", "assertScreenshot", "assertSimulatedPermission", "assertStartup", "assertState", "captureMotion", "interruptAt", "measure", "preserveAppDefaults", "setAppAppearance", "setClock", "simulateDisplays", "simulatePermission", "simulateSystemEvent", "startTrace",
       "stopTrace", "takeScreenshot",
     ]);
     expect(COMMANDS.setAppearance!.driver).toBeUndefined();

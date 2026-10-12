@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Privacy permissions are typed unsupported on Windows
+intent: >
+  On Windows the Privacy permissions screen reports getPermissionAvailability() as unsupported-platform; every status
+  read rejects SparkError:E_UNSUPPORTED_PLATFORM, which each row shows, and so does the listener, which the screen
+  shows as its error. Not yet run on Windows. Implementation: #378.
+checks: [SYS-PERMUNSUP-01]
+tags: [system-integration]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/permissions" }
+- extendedWaitUntil: { visible: { id: system-integration-permissions-root }, timeout: 10s }
+- assertText: { id: system-integration-permissions-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: system-integration-permissions-camera-status, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: system-integration-permissions-automation-status, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- extendedWaitUntil: { visible: { id: system-integration-permissions-error }, timeout: 10s }

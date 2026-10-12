@@ -51,6 +51,9 @@ const simulatedDisplay = fields({
   refreshRate: fields({ minimum: num, maximum: num, variable: bool }), colorSpace: fields({ name: nullable("string"), gamut: oneOf("srgb", "p3") }),
   edrHeadroom: fields({ current: num, potential: num, reference: nullable("number") }),
 });
+/** @legendapp/spark/permissions kinds and their macOS authorizations (docs/permissions.md). */
+const permissionKind = oneOf("camera", "microphone", "screenRecording", "accessibility", "inputMonitoring", "automation", "contacts", "calendar", "photos", "location");
+const permissionAuthorization = oneOf("notDetermined", "restricted", "denied", "authorized", "writeOnly", "notGranted", "unknown");
 /** Regions a golden comparison ignores: elements, or rectangles in points from the image's top-left. */
 const masks = { mask: list(selector), maskRects: list(obj({ x: num, y: num, w: num, h: num }, ["x", "y", "w", "h"])) };
 
@@ -176,6 +179,8 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
     { thermal: oneOf("nominal", "fair", "serious", "critical"), lowPower: bool, source: oneOf("battery", "ac"), network: oneOf("online", "offline"), level: oneOf("normal", "warning", "critical"),
       appearance: oneOf("light", "dark"), automaticAppearance: bool, accentColor: hexColor, highlightColor: hexColor,
       increaseContrast: bool, reduceTransparency: bool, reduceMotion: bool, differentiateWithoutColor: bool, invertColors: bool }, { driver: true }),
+  simulatePermission: spec("environment", "Set the simulated state @legendapp/spark/permissions reports for a kind, in-process: its macOS authorization and the answer its simulated prompt gets (ignore: it never answers; null clears the answer). Never reaches TCC; the permission command changes the OS.", { kind: permissionKind, authorization: permissionAuthorization, answer: { enum: ["allow", "deny", "ignore", null] } }, { required: ["kind"], rule: anyKey("authorization", "answer"), driver: true }),
+  assertSimulatedPermission: spec("environment", "Assert a kind's simulated permission state: its authorization, and how many requests reached it, prompts it showed and times its System Settings pane was opened (never really opened).", { kind: permissionKind, authorization: permissionAuthorization, requests: int(), prompts: int(), settingsOpened: int() }, { required: ["kind"], rule: anyKey("authorization", "requests", "prompts", "settingsOpened"), driver: true }),
   permission: spec("environment", "Grant, revoke or reset a privacy permission.", Object.fromEntries(["grant", "revoke", "reset"].map(key => [key, oneOf("camera", "microphone", "notifications", "location", "contacts", "calendars", "reminders", "photos", "accessibility", "screenRecording", "inputMonitoring", "fullDiskAccess", "automation")])), { rule: oneKey("grant", "revoke", "reset") }),
   setFocusMode: single("environment", "Set the OS Focus mode.", "mode", oneOf("off", "doNotDisturb", "sleep", "work", "personal")),
 

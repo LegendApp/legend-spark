@@ -5108,6 +5108,158 @@
               ]
             }
           },
+          "simulatePermission": {
+            "description": "[driver] Set the simulated state @legendapp/spark/permissions reports for a kind, in-process: its macOS authorization and the answer its simulated prompt gets (ignore: it never answers; null clears the answer). Never reaches TCC; the permission command changes the OS.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "camera",
+                    "microphone",
+                    "screenRecording",
+                    "accessibility",
+                    "inputMonitoring",
+                    "automation",
+                    "contacts",
+                    "calendar",
+                    "photos",
+                    "location"
+                  ]
+                },
+                "authorization": {
+                  "enum": [
+                    "notDetermined",
+                    "restricted",
+                    "denied",
+                    "authorized",
+                    "writeOnly",
+                    "notGranted",
+                    "unknown"
+                  ]
+                },
+                "answer": {
+                  "enum": [
+                    "allow",
+                    "deny",
+                    "ignore",
+                    null
+                  ]
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "authorization"
+                  ]
+                },
+                {
+                  "required": [
+                    "answer"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
+          "assertSimulatedPermission": {
+            "description": "[driver] Assert a kind's simulated permission state: its authorization, and how many requests reached it, prompts it showed and times its System Settings pane was opened (never really opened).",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "camera",
+                    "microphone",
+                    "screenRecording",
+                    "accessibility",
+                    "inputMonitoring",
+                    "automation",
+                    "contacts",
+                    "calendar",
+                    "photos",
+                    "location"
+                  ]
+                },
+                "authorization": {
+                  "enum": [
+                    "notDetermined",
+                    "restricted",
+                    "denied",
+                    "authorized",
+                    "writeOnly",
+                    "notGranted",
+                    "unknown"
+                  ]
+                },
+                "requests": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "prompts": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "settingsOpened": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "authorization"
+                  ]
+                },
+                {
+                  "required": [
+                    "requests"
+                  ]
+                },
+                {
+                  "required": [
+                    "prompts"
+                  ]
+                },
+                {
+                  "required": [
+                    "settingsOpened"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "permission": {
             "description": "Grant, revoke or reset a privacy permission.",
             "if": {

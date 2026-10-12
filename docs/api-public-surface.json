@@ -475,6 +475,21 @@
     "scheduleNotification",
     "showNotification"
   ],
+  "./permissions": [
+    "AsyncRegistration",
+    "Availability",
+    "MacOSPermissionAuthorization",
+    "PermissionChangeEvent",
+    "PermissionKind",
+    "PermissionListenerOptions",
+    "PermissionOptions",
+    "PermissionResponse",
+    "addPermissionListener",
+    "getPermissionAvailability",
+    "getPermissionStatus",
+    "openPermissionSettings",
+    "requestPermission"
+  ],
   "./pointer": [
     "CustomCursor",
     "GesturePhase",
