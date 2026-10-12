@@ -1239,7 +1239,9 @@
       ],
       "verification": {
         "unitTests": [
-          "tests/drag-drop-component.test.ts"
+          "tests/drag-drop-component.test.ts",
+          "tests/drag-drop.test.ts",
+          "tests/drag-drop-native.test.ts"
         ],
         "portableCommand": "bun run test",
         "platformAcceptance": {

@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: Custom drag images
+intent: >
+  A source dragging with a snapshot of its tile, and one dragging with a 64 × 64 image file, each drop their text on
+  the target. A source whose image file does not exist starts no drag and reports SparkError:E_NOT_FOUND. The images
+  themselves are checked by the native tests (tests/drag-drop-native.test.ts); how the window server shows them under
+  the pointer needs the black-box backend (#118).
+checks: [DND-IMAGE-01]
+tags: [drag-drop]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://drag-drop/features" }
+- extendedWaitUntil: { visible: { id: drag-drop-features-root }, timeout: 10s }
+- dragAndDrop: { from: { id: drag-drop-features-image-view }, to: { id: drag-drop-features-ops-target } }
+- assertText: { id: drag-drop-features-end-image-view, equals: copy }
+- assertText: { id: drag-drop-features-ops-dropped, equals: "copy · allowed copy" }
+- dragAndDrop: { from: { id: drag-drop-features-image-file }, to: { id: drag-drop-features-spring-target } }
+- assertText: { id: drag-drop-features-spring-dropped, equals: copy · Spark drag }
+- assertText: { id: drag-drop-features-last-error, equals: — }
+- dragAndDrop: { from: { id: drag-drop-features-image-missing }, to: { id: drag-drop-features-spring-target } }
+- assertText: { id: drag-drop-features-last-error, equals: "image-missing: SparkError:E_NOT_FOUND" }

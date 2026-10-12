@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -87,6 +87,27 @@ export class FakeDriver implements DriverClient {
     this.clipboard = { types, text: content.text ?? null, changeCount: this.clipboard.changeCount + 1 };
   }
   async testClipboard() { this.log.push("testClipboard"); return this.clipboard; }
+  /** Spark drag sources (FakeApp.dragSources), as the app's testDrag command sees them. */
+  dragSources: () => Record<string, DragSource> = () => ({});
+  private dragging?: { promised: string[] };
+  async testDrag(request: TestDragRequest) {
+    this.log.push(`testDrag ${JSON.stringify(request)}`);
+    if (request.phase === "begin") {
+      const source = this.dragSources()[request.from];
+      if (!source) throw new DriverError("E_NOT_DRAG_SOURCE", `No enabled Spark drag source contains ${request.from}`);
+      if (source.refuse) return { started: false };
+      this.dragging = { promised: source.promised ?? [] };
+      return { started: true };
+    }
+    if (!this.dragging) throw new DriverError("E_INVALID_ARGUMENT", "No test drag: begin one first");
+    if (request.phase === "move") return { operation: request.to ? "copy" : "none" };
+    const { promised } = this.dragging;
+    this.dragging = undefined;
+    if (request.phase !== "dropInFolder") return { operation: request.phase === "drop" ? "copy" : "none" };
+    if (!promised.length) throw new DriverError("E_INVALID_ARGUMENT", "The drag has no promised files");
+    for (const name of promised) writeFileSync(path.join(request.folder, name), `promised ${name}`);
+    return { files: promised.map(name => path.join(request.folder, name)) };
+  }
   async startup(timeoutMs?: number, testID?: string) {
     this.log.push(`startup ${timeoutMs}${testID === undefined ? "" : ` ${testID}`}`);
     const startup = this.inspected().startup;
@@ -129,10 +150,14 @@ export class FakeDriver implements DriverClient {
   async close() { this.log.push("close"); this.running = false; }
 }
 
+/** A Spark drag source of the fake app: it may refuse to start (reporting through onError), and promise files. */
+export type DragSource = { refuse?: boolean; promised?: string[] };
 /** The app under test. Each launch returns a new FakeDriver sharing `log`, `views` and `elements`. */
 export class FakeApp implements DriverApp {
   readonly log: string[] = [];
   readonly drivers: FakeDriver[] = [];
+  /** Spark drag sources by testID, and the promised files a drop in a folder writes. */
+  dragSources: Record<string, DragSource> = {};
   /** Extra elements of the in-process accessibility view; tests may change them while a flow runs. */
   elements: DriverElement[] = [];
   /** Scripted motion telemetry by testID, and the next frame report (or driver failure). */
@@ -175,6 +200,7 @@ export class FakeApp implements DriverApp {
     await this.onLaunch?.(options);
     const driver: FakeDriver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar, () => this.motions, () => this.frames, () => this.cursor,
       () => ({ startup: this.startup, state: this.state }), () => ({ commits: this.commits, counters: this.counters, memoryMB: this.memoryMB }), () => this.audit, () => this.sockets(driver));
+    driver.dragSources = () => this.dragSources;
     this.drivers.push(driver);
     return driver;
   }

@@ -53,6 +53,10 @@ struct DesktopDragViewEventEmitter : EventEmitter {
   void onDragLeave(Event event) const {}
   void onDrop(Event event) const {}
   void onDragEnd(Event event) const {}
+  void onError(Event event) const {}
+  void onPromisedFileWrite(Event event) const {}
+  void onSpringLoad(Event event) const {}
+  void onSpringLoadHighlight(Event event) const {}
 };
 struct SidebarSplitViewComponentDescriptor {};
 struct SparkMotionViewComponentDescriptor {};
@@ -108,6 +112,11 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
 @interface RNSidebarSplitViewComponent : RCTViewComponentView @end
 @interface RNSparkMotionView : RCTViewComponentView @end
 @interface RNDesktopDragView : RCTViewComponentView <NSDraggingSource> @end
+@protocol RCTDesktopDragViewViewProtocol <NSObject>
+- (void)completePromisedFile:(NSInteger)requestId error:(NSString *)error;
+@end
+static void RCTDesktopDragViewHandleCommand(id view, const NSString *name, const NSArray *args) {}
+static BOOL SparkTestDriverActive(void) { return NO; }
 // ACTUAL_IMPLEMENTATION
 @interface RNSidebarSplitViewComponent (Testing)
 - (BOOL)applyEstimatedSplitViewLayoutForBounds:(CGRect)bounds layoutReady:(BOOL)layoutReady;

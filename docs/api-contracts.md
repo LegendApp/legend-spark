@@ -409,7 +409,7 @@ Auth keeps success/cancel/dismiss/timeout outcomes and a prepared state/redirect
 
 ### Drag/drop and UI
 
-One `/drag-drop` component handles files/text/URLs/custom MIME payloads. Use consumer-facing event payloads consistently, explicit operations/coordinates, and `onError`/availability behavior instead of hard-coded English fallback UI. Remove the competing `/drag-drop/views` component and move music-specific track models out of the framework.
+One `/drag-drop` component handles files/text/URLs/custom MIME payloads. Use consumer-facing event payloads consistently, explicit operations/coordinates, and `onError`/availability behavior instead of hard-coded English fallback UI. Remove the competing `/drag-drop/views` component and move music-specific track models out of the framework. On macOS the same view offers promised files (`source.promisedFiles` + `onPromisedFileWrite`), spring loading (`springLoading`, `onSpringLoad`, `onSpringLoadHighlight`), `dragImage`, and operations by modifier key and context (`sourceOperations: { withinApp, outsideApp }`, `ignoreModifierKeys`, `allowedOperations`); `getDragDropAvailability(feature?)` reports each, and Windows throws a typed `E_UNSUPPORTED_PLATFORM` (#365). See [drag and drop](drag-drop.md).
 
 `/ui` owns the small common controls. `Button`, `TextInput`, `Select` share disabled/accessibility/testID/style/ref conventions; input-specific `onChangeText` and value-specific `onValueChange` remain recognizable. Controlled and uncontrolled input modes are explicitly typed. `NativeSelect` should not be a second ordinary selector with `enabled/onChange` vocabulary. Keep segmented control as a distinct control.
 

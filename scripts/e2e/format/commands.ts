@@ -139,9 +139,9 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   assertTooltip: spec("pointer", "Hover a target and assert its tooltip.", { on: selector, text, within: duration }, { required: ["on", "text"] }),
 
   // Drag & drop
-  dragAndDrop: spec("drag", "Drag from one target to another.", { from: selector, to: selector, modifiers: list(modifier), holdAt: duration, steps: int(1) }, { required: ["from", "to"] }),
+  dragAndDrop: spec("drag", "Drag from one target to another (on the driver backend, a Spark drag source drags in process; `holdAt` waits over `to`).", { from: selector, to: selector, modifiers: list(modifier), holdAt: duration, steps: int(1) }, { required: ["from", "to"] }),
   dragFromFinder: spec("drag", "Drag files from the file manager onto a target.", { files: list(str), to: selector }, { required: ["files", "to"] }),
-  dragToFinder: spec("drag", "Drag a target to the file manager and expect a file.", { from: selector, expectFile: str }, { required: ["from", "expectFile"] }),
+  dragToFinder: spec("drag", "Drag a target to the file manager and expect a file (on the driver backend, a Spark drag source dropped in a private temporary folder).", { from: selector, expectFile: str }, { required: ["from", "expectFile"] }),
   dragToDock: spec("drag", "Drag files onto the Dock icon.", { files: list(str) }, { required: ["files"] }),
   cancelDrag: spec("drag", "Start a drag, cancel it, and assert the fly-back.", { from: selector, via: via("escape", "dropOutside") }, { required: ["from"] }),
 

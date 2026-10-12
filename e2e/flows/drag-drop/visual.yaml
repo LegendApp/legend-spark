@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: Drag & drop features screen matches its golden
+intent: >
+  Drag & drop > Drag features opens from spark-ks://drag-drop/features in the running
+  Kitchen Sink, its root renders, and the main window matches the approved golden for the appearance and locale
+  (light and dark, English and Arabic), with the shell sidebar masked. Nothing is dragged, so every readout shows its
+  initial state.
+checks: [DND-VISUAL-01]
+tags: [drag-drop]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://drag-drop/features" }
+- assertVisible: { id: drag-drop-features-root }
+- assertScreenshot: { golden: drag-drop-features, mask: [{ id: infra-shell-sidebar }] }

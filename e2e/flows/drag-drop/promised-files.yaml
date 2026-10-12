@@ -1,0 +1,18 @@
+appId: so.legend.spark.examples.kitchensink
+name: Promised files are written when a folder accepts the drop
+intent: >
+  The Spark Notes.txt source promises a file and writes nothing while it sits there. Dropping it in a folder, as in
+  Finder, makes the app write Spark Notes.txt at the path the folder gives, and the drag ends accepted as a copy. The
+  driver backend drops it in a private temporary folder it creates and removes; no user folder is written. A drop in
+  the real Finder needs the black-box backend (#118).
+checks: [DND-PROMISE-01]
+tags: [drag-drop]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://drag-drop/features" }
+- extendedWaitUntil: { visible: { id: drag-drop-features-root }, timeout: 10s }
+- assertText: { id: drag-drop-features-written, equals: — }
+- dragToFinder: { from: { id: drag-drop-features-promised }, expectFile: Spark Notes.txt }
+- assertText: { id: drag-drop-features-written, equals: 1 · Spark Notes.txt }
+- assertText: { id: drag-drop-features-end-promised, equals: copy }
+- assertText: { id: drag-drop-features-last-error, equals: — }
