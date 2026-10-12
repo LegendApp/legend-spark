@@ -24,6 +24,22 @@ export type DriverWindowInfo = { id: string; title: string; key: boolean; main: 
 export type DriverMenuItem =
   | { separator: true }
   | { separator?: undefined; title: string; id?: string; enabled: boolean; hidden: boolean; state: "on" | "off" | "mixed"; shortcut?: { key: string; modifiers: number }; toolTip?: string; alternate?: boolean; items?: DriverMenuItem[] };
+/** Motion telemetry (docs/motion.md#motion-telemetry). Times are engine milliseconds; values are points, degrees, opacity and scale. */
+export type MotionProperty = "opacity" | "translateX" | "translateY" | "scaleX" | "scaleY" | "rotate";
+export type MotionValues = Record<MotionProperty, number>;
+export type MotionInterruption = { timeMs: number; property: MotionProperty; before: { value: number; velocity: number }; after: { value: number; velocity: number } };
+/** A view's latest motion: from rest to rest. `endMs` is null while an animation repeats forever; `afterInput` once it started or was interrupted after the last driver input. */
+export type Motion = {
+  startMs: number; endMs: number | null; latestMs: number; settled: boolean; progress: number | null; afterInput: boolean; startValues: MotionValues;
+  properties: MotionProperty[]; kinds: Partial<Record<MotionProperty, "spring" | "timing" | "keyframes" | "decay" | "sequence">>; interruptions: MotionInterruption[]; truncated: boolean;
+};
+export type MotionState = { tag: number; clock: "virtual" | "real"; timeMs: number; values: MotionValues; velocities: MotionValues; animating: MotionProperty[]; motion: Motion | null };
+export type MotionSample = { tMs: number; values: MotionValues; velocities: MotionValues };
+export type MotionSamples = { fromMs: number; toMs: number; intervalMs: number; truncated: boolean; samples: MotionSample[] };
+/** What waitForMotion waits for, after motion of the view started or was interrupted after the last driver input. */
+export type MotionUntil = { progress: number } | { elapsedMs: number } | { settled: true };
+/** Main-thread display-link cadence between startFrames and stopFrames (docs/test-driver.md#frame-timing). */
+export type FrameReport = { frames: number; droppedFrames: number; maxFrameGapMs: number; durationMs: number; fps: number; refreshRate: number };
 export type LaunchOptions = { executable: string; args?: string[]; env?: Record<string, string>; log?: ProcessLog; startTimeoutMs?: number };
 type Reply = { id?: unknown; ok: boolean; error?: { code: string; message: string }; [key: string]: unknown };
 
@@ -74,6 +90,7 @@ function socketReady(socket: string, app: ManagedProcess, timeoutMs: number) {
 }
 
 const clock = (reply: Reply) => ({ mode: reply.mode as "virtual" | "real", timeMs: reply.timeMs as number });
+const body = <T>({ id: _id, ok: _ok, ...rest }: Reply) => rest as T;
 
 /** One authenticated session; requests run one at a time. Quitting or disconnecting quits the app. */
 export class Driver {
@@ -160,6 +177,23 @@ export class Driver {
     const state = { thermalState: thermal, lowPowerMode: lowPower, onBattery: source === undefined ? undefined : source === "battery", network, level };
     await this.request({ command: "simulateSystemEvent", type, ...Object.fromEntries(Object.entries(state).filter(([, value]) => value !== undefined)) }, 10000);
   }
+  /** Engine state of the MotionView with (or containing the view with) this testID, and its latest motion. */
+  async motionState(testID: string) { return body<MotionState>(await this.request({ command: "motionState", testID }, 10000)); }
+  /**
+   * Waits up to `timeoutMs` for motion of the view started or interrupted after the last driver input, then until it
+   * reaches `until`. On the virtual clock it advances the clock exactly there.
+   */
+  async waitForMotion(testID: string, until: MotionUntil, timeoutMs = 10000) {
+    return body<MotionState>(await this.request({ command: "waitForMotion", testID, ...until, timeoutMs }, timeoutMs + 10000));
+  }
+  /** Values and velocities of the view's latest motion, evaluated from its history, every `intervalMs` from `fromMs` to `toMs`. */
+  async sampleMotion(testID: string, range: { fromMs?: number; toMs?: number; intervalMs?: number } = {}) {
+    return body<MotionSamples>(await this.request({ command: "sampleMotion", testID, ...range }, 30000));
+  }
+  /** Starts counting main-thread display-link frames. */
+  async startFrames() { return { refreshRate: (await this.request({ command: "startFrames" }, 10000)).refreshRate as number }; }
+  /** Stops counting and reports frames, drops and the largest gap since startFrames. */
+  async stopFrames() { return body<FrameReport>(await this.request({ command: "stopFrames" }, 10000)); }
   /** Clicks a target in-process (docs/test-driver.md#input): `clickCount` 1-3, left or right button. */
   async tap(target: InputTarget, options: { button?: "left" | "right"; clickCount?: number; modifiers?: Modifier[] } = {}) {
     await this.request({ command: "tap", ...target, ...options }, 10000);

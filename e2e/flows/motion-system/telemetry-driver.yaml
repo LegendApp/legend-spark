@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: Motion telemetry and frames at progress points through the in-app driver
+intent: >
+  On Motion system > Springs and interruption, with the virtual clock frozen, Play presets springs the five
+  boxes along their tracks. The driver waits for the bouncy box's motion, captures the window at 0, 25, 50 and
+  100 percent of it (each frame shows the boxes where the engine has them at that instant: at the start, on the
+  way, past the end for bouncy, at rest), checks it is a spring that overshoots and settles within 1.5 s, and
+  records its samples.
+checks: [MOT-TELEMETRY-01, MOT-CLOCK-01]
+tags: [motion-system]
+platforms: [macos]
+matrix:
+  appearance: [light]
+  locale: [en]
+---
+- launchApp: { openUrl: "spark-ks://motion-system/springs" }
+- extendedWaitUntil: { visible: { id: motion-system-springs-root }, timeout: 10s }
+- setClock: virtual
+- tapOn: { id: motion-system-springs-play }
+- assertMotion: { target: { id: motion-system-springs-bouncy }, kind: spring, settlesWithin: 1500ms, overshoot: { min: 2px }, frames: { at: [0, 25, 50, 100], golden: springs-bouncy } }
+- captureMotion: { target: { id: motion-system-springs-bouncy }, name: springs-bouncy }

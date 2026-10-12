@@ -171,7 +171,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | `captureMotion` | — | `target`*, `until`, `name`* | driver | Record motion samples for a target. |
 | `assertMotion` | — | `target`*, `kind`, `velocityContinuous`, `overshoot`, `settlesWithin`, `frames` | driver | Assert motion of a target. |
 | `interruptAt` | — | `target`, `progress`*, `with`* | driver | Run a command when the running motion reaches a progress point. |
-| `assertFrames` | — | `during`*, `fps`, `dropped`; at least one of `fps`, `dropped` | driver | Assert frame rate and drops while a command runs (real clock). |
+| `assertFrames` | — | `during`*, `for`, `fps`, `dropped`; at least one of `fps`, `dropped` | driver | Assert frame rate and drops while a command runs, and for at least `for` from the start (real clock). |
 | `assertPaused` | — | `target`*, `when`* | driver | Assert a target's animation pauses in a state. Its `when` is that state, so this command cannot take a condition; wrap it in runFlow { when, commands }. |
 | `assertNoLayoutThrash` | — | `during`* | driver | Assert no repeated layout passes while a command runs. |
 

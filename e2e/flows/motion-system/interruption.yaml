@@ -19,7 +19,8 @@ platforms: [macos]
 - assertText: { id: motion-system-springs-interruption-result, equals: "…" }
 - advanceClock: 1s
 - tapOn: { id: motion-system-springs-interrupt }
-- advanceClock: 3s
+# Waits for the interruption the press causes, checks it kept value and velocity, and advances the clock until it settles.
+- assertMotion: { target: { id: motion-system-springs-slider }, kind: spring, velocityContinuous: true }
 - assertText: { id: motion-system-springs-interruption-result, equals: '{"before":{"value":60,"velocity":60},"after":{"value":60,"velocity":60},"finished":true}' }
 - tapOn: { id: motion-system-springs-release }
 - assertMotion: { target: { id: motion-system-springs-slider }, kind: spring, overshoot: { min: 5px } }

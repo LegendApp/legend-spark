@@ -381,6 +381,7 @@ void Engine::removeView(int64_t view, std::vector<Settled> &settled) {
   if (found == views_.end()) return;
   for (Slot &slot : found->second) release(slot, false, settled);
   views_.erase(found);
+  episodes_.erase(view);
 }
 Engine::Slots &Engine::slots(int64_t view) {
   auto found = views_.find(view);
@@ -409,6 +410,11 @@ double Engine::setVirtualClock(bool enabled, double realNow) {
   if (enabled) { virtualTime_ = realNow; return 0; }
   const double shift = realNow - virtualTime_;
   for (auto &[view, slots] : views_) for (Slot &slot : slots) slot.begin += shift;
+  for (auto &[view, episode] : episodes_) {
+    episode.start += shift; episode.end += shift; episode.latest += shift;
+    for (auto &segments : episode.segments) for (Segment &segment : segments) { segment.from += shift; segment.begin += shift; }
+    for (Interruption &interruption : episode.interruptions) interruption.time += shift;
+  }
   return shift;
 }
 void Engine::advance(double seconds) {
@@ -457,6 +463,7 @@ void Engine::run(const Plan &plan, double now, std::vector<Settled> &settled, st
       track->startValue = slotState(slot, now).value;
       if (slot.track && track->leadDuration > 0) track->lead = std::make_shared<ContinueCurve>(slot.track, now - slot.begin, track->leadDuration);
       track->plays = makePlays(spec, slotState(slot, now + track->leadDuration));
+      track->kind = spec.kind;
       if (track->infinite()) {
         track->plays.cycle = std::ceil(track->plays.cycle * 1000 - 1e-6) / 1000;
         if (track->plays.cycle <= 0) throw invalid("An infinitely repeating animation needs a non-zero duration");
@@ -476,6 +483,8 @@ void Engine::run(const Plan &plan, double now, std::vector<Settled> &settled, st
   }
   // Valid: from here on nothing throws. Settle what finished by now, then replace only the plan's properties.
   sweep(now, settled);
+  std::unordered_map<int64_t, Snapshot> before;
+  for (const auto &[view, copy] : staged) before.emplace(view, snapshot(views_.at(view), now));
   int pending = 0;
   batches_[plan.id] = {};
   for (auto &[view, copy] : staged) {
@@ -487,6 +496,7 @@ void Engine::run(const Plan &plan, double now, std::vector<Settled> &settled, st
       live[i] = copy[i];
     }
     touched.push_back(view);
+    observe(view, before.at(view), now);
   }
   batches_[plan.id].pending = pending;
 }
@@ -498,25 +508,30 @@ void Engine::set(int64_t view, const std::vector<std::pair<Property, double>> &v
     if (target[property].linked) throw Failure{"E_BUSY", std::string(propertyName(property)) + " is driven by a scroll link"};
   }
   sweep(now, settled);
+  const Snapshot before = snapshot(target, now);
   for (const auto &[property, value] : values) {
     release(target[property], false, settled);
     target[property].model = value;
   }
+  observe(view, before, now, true);
 }
 
 void Engine::stop(int64_t view, const std::vector<Property> &properties, double now, std::vector<Settled> &settled) {
   Slots &target = slots(view);
   sweep(now, settled);
+  const Snapshot before = snapshot(target, now);
   for (Property property : properties) {
     Slot &slot = target[property];
     slot.model = slotState(slot, now).value;
     release(slot, false, settled);
   }
+  observe(view, before, now);
 }
 
 void Engine::stopBatch(const std::string &id, double now, std::vector<Settled> &settled, std::vector<int64_t> &touched) {
   sweep(now, settled);
   for (auto &[view, slots] : views_) {
+    const Snapshot before = snapshot(slots, now);
     bool changed = false;
     for (Slot &slot : slots) {
       if (!slot.track || slot.batch != id) continue;
@@ -524,17 +539,91 @@ void Engine::stopBatch(const std::string &id, double now, std::vector<Settled> &
       release(slot, false, settled);
       changed = true;
     }
-    if (changed) touched.push_back(view);
+    if (!changed) continue;
+    touched.push_back(view);
+    observe(view, before, now);
   }
 }
 
 void Engine::sweep(double now, std::vector<Settled> &settled) {
-  for (auto &[view, slots] : views_)
+  auto due = [now](const Slot &slot) { return slot.track && !slot.track->infinite() && slot.begin + slot.track->duration() <= now + 1e-9; };
+  for (auto &[view, slots] : views_) {
+    if (std::none_of(slots.begin(), slots.end(), due)) continue;
+    const Snapshot before = snapshot(slots, now);
     for (Slot &slot : slots)
-      if (slot.track && !slot.track->infinite() && slot.begin + slot.track->duration() <= now + 1e-9) {
+      if (due(slot)) {
         slot.model = slot.track->end().value;
         release(slot, true, settled);
       }
+    observe(view, before, now);
+  }
+}
+
+Engine::Snapshot Engine::snapshot(const Slots &slots, double now) const {
+  Snapshot out;
+  if (!telemetry_) return out;  // observe records nothing
+  for (int i = 0; i < PropertyCount; i++) {
+    const Slot &slot = slots[i];
+    out.tracks[i] = slot.track;
+    out.states[i] = slotState(slot, now);
+    out.animating[i] = slot.track && (slot.track->infinite() || now < slot.begin + slot.track->duration());
+    out.moving = out.moving || out.animating[i];
+  }
+  return out;
+}
+
+void Engine::observe(int64_t view, const Snapshot &before, double now, bool setting) {
+  if (!telemetry_) return;
+  const Slots &slots = views_.at(view);
+  const Snapshot after = snapshot(slots, now);
+  if (!before.moving && !after.moving) return;
+  auto segment = [&](int i) { return Segment{now, after.tracks[i], slots[i].begin, after.states[i].value}; };
+  Episode *episode;
+  // A view already moving when telemetry was turned on starts its episode here.
+  if (!before.moving || !episodes_.count(view)) {
+    episode = &(episodes_[view] = Episode{});
+    episode->start = episode->latest = now;
+    episode->event = ++events_;
+    for (int i = 0; i < PropertyCount; i++) {
+      episode->startValues[i] = before.states[i].value;
+      episode->segments[i].push_back(segment(i));
+      if (after.tracks[i]) episode->kinds[i] = after.tracks[i]->kind;
+    }
+  } else {
+    episode = &episodes_.at(view);
+    for (int i = 0; i < PropertyCount; i++) {
+      const bool replaced = before.tracks[i] != after.tracks[i];
+      const bool jumped = before.states[i].value != after.states[i].value || before.states[i].velocity != after.states[i].velocity;
+      if (!replaced && !jumped) continue;
+      if (episode->segments[i].size() < Episode::kMaxSegments) episode->segments[i].push_back(segment(i));
+      else episode->truncated = true;
+      if (after.tracks[i]) episode->kinds[i] = after.tracks[i]->kind;
+      // A moving property replaced, stopped or set, or a resting one set to another value, is interrupted. A resting
+      // property that starts an animation is not, whatever velocity the animation starts with; either way the
+      // motion has a new latest event.
+      const bool interrupted = (before.animating[i] && (replaced || jumped)) || (setting && before.states[i].value != after.states[i].value);
+      if (interrupted) {
+        if (episode->interruptions.size() < Episode::kMaxInterruptions) episode->interruptions.push_back({now, Property(i), before.states[i], after.states[i]});
+        else episode->truncated = true;
+      }
+      if (interrupted || (replaced && after.tracks[i])) {
+        episode->latest = now;
+        episode->event = ++events_;
+      }
+    }
+  }
+  episode->end = now;
+  for (int i = 0; i < PropertyCount; i++)
+    if (after.animating[i]) episode->end = std::max(episode->end, slots[i].track->infinite() ? kInfinity : slots[i].begin + slots[i].track->duration());
+}
+
+State Episode::at(Property property, double time) const {
+  const std::vector<Segment> &history = segments[property];
+  auto next = std::upper_bound(history.begin(), history.end(), time, [](double t, const Segment &segment) { return t < segment.from; });
+  const Segment &segment = next == history.begin() ? history.front() : *std::prev(next);
+  if (!segment.track) return {segment.value, 0};
+  const double t = std::max(0.0, time - segment.begin);
+  return !segment.track->infinite() && t >= segment.track->duration() ? segment.track->end() : segment.track->at(t);
 }
 
 std::optional<double> Engine::nextCompletion() const {
@@ -558,6 +647,26 @@ bool Engine::animating(int64_t view, Property property, double now) const {
   if (found == views_.end()) return false;
   const Slot &slot = found->second[property];
   return slot.track && (slot.track->infinite() || now < slot.begin + slot.track->duration());
+}
+
+std::optional<std::pair<TrackPtr, double>> Engine::track(int64_t view, Property property) const {
+  auto found = views_.find(view);
+  if (found == views_.end() || !found->second[property].track) return std::nullopt;
+  return std::make_pair(found->second[property].track, found->second[property].begin);
+}
+const Episode *Engine::episode(int64_t view) const {
+  auto found = episodes_.find(view);
+  return found == episodes_.end() ? nullptr : &found->second;
+}
+const char *kindName(Spec::Kind kind) {
+  switch (kind) {
+    case Spec::Kind::Spring: return "spring";
+    case Spec::Kind::Timing: return "timing";
+    case Spec::Kind::Keyframes: return "keyframes";
+    case Spec::Kind::Decay: return "decay";
+    case Spec::Kind::Sequence: return "sequence";
+  }
+  return "unknown";
 }
 
 ChannelBake Engine::bake(int64_t view, Channel channel, double now) const {

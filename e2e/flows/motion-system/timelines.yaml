@@ -40,13 +40,18 @@ matrix:
 - assertText: { id: motion-system-timelines-timeline-result, equals: '{"finished":true}' }
 - tapOn: { id: motion-system-timelines-decay-run }
 - assertText: { id: motion-system-timelines-decay-result, equals: "…" }
+# Still in flight 200 ms into the fling: the virtual clock makes this exact.
+- advanceClock: 200ms
+- assertText: { id: motion-system-timelines-decay-result, equals: "…" }
 - advanceClock: 4s
 - assertText: { id: motion-system-timelines-decay-result, equals: '{"finished":true}' }
 - tapOn: { id: motion-system-timelines-decay-back }
+- assertText: { id: motion-system-timelines-decay-result, equals: "…" }
+- advanceClock: 200ms
+- assertText: { id: motion-system-timelines-decay-result, equals: "…" }
 - advanceClock: 4s
 - assertText: { id: motion-system-timelines-decay-result, equals: '{"finished":true}' }
 - setClock: real
 - tapOn: { id: motion-system-timelines-decay-run }
-- assertText: { id: motion-system-timelines-decay-result, equals: "…" }
 - assertMotion: { target: { id: motion-system-timelines-decay }, settlesWithin: 3s }
 - takeScreenshot: timelines-settled

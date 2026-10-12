@@ -450,8 +450,43 @@ fails with `invalid`.
 | `setAppAppearance` | `setAppAppearance`; lasts until the app quits |
 | `assertAppMenu` | `menus`: the menu bar as AppKit holds it, validated as when a user opens it. `path` matches titles; `exists: false` passes when any segment is missing. Polled like other checks. |
 | `setClock`, `advanceClock` | The motion engine's `setClock` and `advanceClock` driver commands ([motion.md](motion.md#virtual-clock-for-the-test-driver)); `advanceClock` sends `duration` in milliseconds |
+| `captureMotion`, `assertMotion`, `interruptAt` | Motion telemetry: `motionState`, `waitForMotion` and `sampleMotion` ([Motion and frames](#motion-and-frames)). The target needs a testID. |
+| `assertFrames` | `startFrames`, the `during` command, `stopFrames` ([Motion and frames](#motion-and-frames)) |
 | `takeScreenshot`, `assertScreenshot`, failure screenshot | `capture` of the main window. Element frames are points from the window's top-left, the capture's origin, so masks line up. The `window` key is `unsupported` (the driver cannot list windows). |
 | failure evidence | Each launch's app log, and a capture of the main window while the app runs |
+
+#### Motion and frames
+
+Motion commands read the engine's telemetry ([motion.md](motion.md#motion-telemetry)), not
+pixels: what the engine solved for the `MotionView` with the target's testID (or the
+`MotionView` containing it). They all address **the target's motion after the last input**:
+the motion it started, an interruption of a running one, or an animation it added to a running one, after the latest driver input
+(`tapOn`, `pressKey`, `typeText`, `scroll`, `dragAndDrop`, `openUrl`, …). Each waits for that
+motion up to the command's `timeout` (default 5 s) and fails with `timeout` when none starts,
+so a command right after the input that triggers the motion is race-free. A motion runs from
+rest to rest; a later interruption extends it.
+
+| Command | What it does |
+|---|---|
+| `captureMotion: { target, until, name }` | Waits until the motion settles (`until: settled`, the default) or until `until` (a duration) from its start, then writes `output/<name>.motion.json`: the motion (`startMs`, `endMs`, `kinds`, `interruptions`, `startValues`) and its value and velocity of every property at 120 Hz from its start, evaluated from the engine's history, so nothing is missed between driver round trips. |
+| `assertMotion: { target, kind, settlesWithin, overshoot, velocityContinuous, frames }` | Waits until the motion settles, then checks it. `kind`: `spring` (every property it moved ended with a spring), `timing` (timing or keyframes), `crossfade` (only opacity moved), or `none`, which checks at once that the target has not moved since the last input. `settlesWithin`: from its start, or its last interruption, to its settle time. `overshoot: { min, max }`: how far a translation went past its final value in the direction of travel, in points (`px`). `velocityContinuous: true`: the motion was interrupted, and every interruption kept each property's value and velocity (within the engine's rest thresholds); `false` asserts a jump. `frames: { at: [percents], golden }` first captures the window at each percent of the motion (its start to its planned end) and compares it with golden `<golden>-<percent>` (`12.5` becomes `12_5`) like `assertScreenshot`; this needs `setClock: virtual` before the motion starts, so every frame is exact, and a flow matrix with `appearance` and `locale`. |
+| `interruptAt: { target, progress, with }` | Waits until the motion reaches `progress` (0-1 of its start to its planned end), then runs `with`. On the virtual clock the clock advances exactly there; on the real clock `with` runs once it got there, a driver round trip late at most. `target` is required. |
+| `assertFrames: { during, for, fps, dropped }` | Counts the main thread's display-link frames while `during` runs, and until `for` (a duration) from the start, and records the `frames.fps` and `frames.dropped` [metrics](#metrics). `dropped` is the most missed refresh intervals allowed; `fps: { min, max }` bounds the frames per second. This is the app's main-thread cadence, not what the window server composited. A display link that delivers fewer than two frames fails `unsupported`. Commands return as soon as their input is dispatched, so cover the work with `for`: after `during` the runner sends the app nothing until then. A wait in `during` (a `runFlow` with an `extendedWaitUntil`) works too, but each of its polls walks the view tree on the main thread (about 8 ms in the Kitchen Sink, measured), which can itself drop frames at 120 Hz. |
+
+On the virtual clock, waiting for a settled motion (or a progress point) advances the clock to
+it: `assertMotion` after a tap needs no `advanceClock`. Captures (`takeScreenshot`,
+`assertScreenshot`, `frames`) render running motion at its presented values, so a capture after
+`advanceClock` shows that instant. A typical flow:
+
+```yaml
+- setClock: virtual
+- tapOn: { id: sheet-open }
+- assertMotion: { target: { id: sheet }, kind: spring, settlesWithin: 600ms, frames: { at: [0, 25, 50, 100], golden: sheet-open } }
+- tapOn: { id: slider-start }
+- interruptAt: { target: { id: slider }, progress: 0.25, with: { tapOn: { id: slider-interrupt } } }
+- assertMotion: { target: { id: slider }, kind: spring, velocityContinuous: true }
+- captureMotion: { target: { id: slider }, name: slider-interrupted }
+```
 
 #### clearState
 
@@ -503,9 +538,9 @@ input opens is closed at once and the command fails.
 
 Everything else is `unsupported`, never skipped: other black-box commands (menus, windows,
 OS state) need [#50](https://github.com/LegendApp/legend-spark/issues/50), and the other
-driver commands (motion assertions such as `assertMotion` and `assertFrames`,
-`assertStartup` and other performance commands, `assertState`) are not in the driver
-protocol yet.
+driver commands (`assertPaused`, `assertNoLayoutThrash`, `assertNoFlicker`, `assertStartup`
+and the other performance commands, `assertState`) are not in the driver protocol yet
+([#52](https://github.com/LegendApp/legend-spark/issues/52)).
 `tests/e2e-driver-backend.test.ts` covers the mapping with a fake driver
 (`tests/e2e-driver-fake.ts`), `tests/test-driver.native.mm` the driver's input on real
 AppKit controls, and `tests/e2e-app-state.test.ts` covers clearState;

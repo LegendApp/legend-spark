@@ -169,6 +169,7 @@ int main() {
   validateRange({0, 50, 100}, {0, 10, 0});
 
   Engine engine;
+  engine.setTelemetry(true);
   std::vector<Settled> settled;
   std::vector<int64_t> touched;
   engine.addView(1, kIdentity);
@@ -204,14 +205,27 @@ int main() {
   CHECK(settled.back().id == "e" && !settled.back().finished);
   CHECK(engine.state(1, TranslateX, 11).value == frozen && !engine.animating(1, TranslateX, 11));
 
+  CHECK(!engine.track(1, TranslateX) && !engine.track(99, TranslateX));
+
   // Completion: a sweep settles finished animations exactly once, at nextCompletion().
   settled.clear();
   engine.run(plan("f", 1, Opacity, timingTo(0, 0.25)), 20, settled, touched);
+  // Telemetry reads the driving track: begin, duration, kind; the track identity changes when it is replaced.
+  const auto fading = engine.track(1, Opacity);
+  CHECK(fading && fading->second == 20 && near(fading->first->duration(), 0.25, 1e-12) && fading->first->kind == Spec::Kind::Timing && std::string(kindName(fading->first->kind)) == "timing");
   CHECK(engine.nextCompletion() && near(*engine.nextCompletion(), 20.25, 1e-9));
   engine.sweep(20.2, settled);
   CHECK(settled.empty());
   engine.sweep(20.25, settled);
   CHECK(settled.size() == 1 && settled[0].finished && engine.state(1, Opacity, 21).value == 0);
+  CHECK(!engine.track(1, Opacity));  // swept
+  engine.run(plan("f2", 2, Opacity, timingTo(0, 0.25)), 20, settled, touched);
+  const auto replaced = engine.track(2, Opacity);
+  engine.run(plan("f3", 2, Opacity, springTo(1)), 20.1, settled, touched);
+  CHECK(engine.track(2, Opacity)->first != replaced->first && engine.track(2, Opacity)->first->kind == Spec::Kind::Spring && engine.track(2, Opacity)->second == 20.1);
+  engine.stop(2, {Opacity}, 20.1, settled);
+  CHECK(!engine.track(2, Opacity));
+  settled.clear();
 
   // Repeat and reverse.
   Spec pulse = timingTo(2, 0.5, {0, 0, 1, 1});
@@ -222,6 +236,7 @@ int main() {
   CHECK(engine.state(1, ScaleX, 31.5).value == 2);
   pulse.repeat = 1;
   engine.run(plan("h", 1, ScaleY, pulse), 30, settled, touched);
+  CHECK(!engine.track(1, ScaleX)->first->infinite() && engine.track(1, ScaleY)->first->kind == Spec::Kind::Timing);
   CHECK(engine.state(1, ScaleY, 31.5).value == 1);
 
   // Timelines: a step after the previous one starts at its natively solved end; staggers offset from the start.
@@ -274,6 +289,7 @@ int main() {
 
   // Baking: a finite lead plus a loop at the least common multiple of infinite cycles.
   engine.run(plan("j", 1, Rotate, spin), 60, settled, touched);
+  CHECK(engine.track(1, Rotate)->first->infinite() && std::isinf(engine.episode(1)->end));
   Spec wobble = timingTo(1.2, 0.75, {0, 0, 1, 1});
   wobble.repeat = std::numeric_limits<double>::infinity();
   wobble.reverse = true;
@@ -321,8 +337,79 @@ int main() {
   CHECK(near(engine.state(2, TranslateY, engine.time(999)).value, 25, 1e-6));  // from 10 to 40
   CHECK(engine.setVirtualClock(false, 200) == 99.75);
   CHECK(near(engine.state(2, TranslateY, 200).value, 25, 1e-6) && near(*engine.nextCompletion(), 200.25, 1e-9));
+  CHECK(near(engine.episode(2)->start, 100 + 99.75, 1e-9) && near(engine.episode(2)->end, 200.25, 1e-9));  // episodes shift with the clock
   engine.removeView(2, settled);
-  CHECK(!engine.hasView(2) && settled.size() == 1 && !settled[0].finished);
+  CHECK(!engine.hasView(2) && settled.size() == 1 && !settled[0].finished && !engine.episode(2));
+
+  // Episodes: a motion from rest to rest, with its history evaluable after the fact.
+  Engine telemetry;
+  telemetry.setTelemetry(true);
+  telemetry.addView(5, kIdentity);
+  CHECK(!telemetry.episode(5));
+  telemetry.set(5, {{TranslateX, 10}}, 1, settled);  // at rest: no motion
+  CHECK(!telemetry.episode(5));
+  telemetry.run(plan("slide", 5, TranslateX, timingTo(110, 4, {0, 0, 1, 1})), 2, settled, touched);
+  const Episode *slide = telemetry.episode(5);
+  CHECK(slide && slide->start == 2 && slide->end == 6 && slide->startValues[TranslateX] == 10 && slide->kinds[TranslateX] == Spec::Kind::Timing && !slide->kinds[Opacity]);
+  // An interruption at 25% inherits value and velocity: recorded with both states, and the planned end moves.
+  telemetry.run(plan("spring", 5, TranslateX, springTo(60)), 3, settled, touched);
+  CHECK(slide->interruptions.size() == 1 && slide->latest == 3 && slide->kinds[TranslateX] == Spec::Kind::Spring && slide->event == telemetry.events() && slide->event == 2);
+  const Interruption &handoff = slide->interruptions[0];
+  CHECK(handoff.property == TranslateX && near(handoff.before.value, 35, 1e-9) && near(handoff.before.velocity, 25, 1e-9));
+  CHECK(near(handoff.after.value, handoff.before.value, 1e-9) && near(handoff.after.velocity, handoff.before.velocity, 1e-6));
+  const double settles = slide->end;
+  CHECK(settles > 3 && settles < 6);
+  // The history answers for any instant: the slide before the interruption, the spring after it.
+  CHECK(near(slide->at(TranslateX, 2.5).value, 22.5, 1e-9) && near(slide->at(TranslateX, 2.5).velocity, 25, 1e-9));
+  CHECK(near(slide->at(TranslateX, 3).value, 35, 1e-9) && slide->at(TranslateX, settles + 1).value == 60 && slide->at(Opacity, 2.5).value == 1);
+  // A second property starting mid-motion is not an interruption; ending naturally keeps the planned end.
+  telemetry.run(plan("fade", 5, Opacity, timingTo(0, 0.1)), 3.05, settled, touched);
+  CHECK(slide->interruptions.size() == 1 && near(slide->at(Opacity, 3.1).value, 0.5, 1e-9));
+  telemetry.sweep(settles + 0.01, settled);
+  CHECK(telemetry.episode(5) == slide && slide->end == settles && slide->at(Opacity, 10).value == 0);
+  // Stopping a moving property is an interruption that ends the motion now (velocity drops to zero).
+  telemetry.run(plan("again", 5, TranslateY, springTo(100)), 20, settled, touched);
+  const Episode *stopped = telemetry.episode(5);
+  CHECK(stopped->start == 20 && stopped->interruptions.empty());
+  telemetry.stop(5, {TranslateY}, 20.1, settled);
+  CHECK(stopped->end == 20.1 && stopped->interruptions.size() == 1 && stopped->interruptions[0].after.velocity == 0 && stopped->interruptions[0].before.velocity > 0);
+  // Setting a value during a motion is a jump.
+  telemetry.run(plan("jump", 5, Rotate, timingTo(90, 1)), 30, settled, touched);
+  telemetry.set(5, {{Rotate, 0}}, 30.5, settled);
+  CHECK(telemetry.episode(5)->interruptions.size() == 1 && telemetry.episode(5)->end == 30.5);
+
+
+  // An animation that starts on a resting property while another moves is the motion's latest event (waitForMotion
+  // sees it), and not an interruption, whether it starts at rest (a spring) or at full speed (linear).
+  telemetry.run(plan("carrier", 5, TranslateX, timingTo(0, 10)), 40, settled, touched);
+  const Episode *carried = telemetry.episode(5);
+  const uint64_t started = carried->event;
+  telemetry.run(plan("late spring", 5, ScaleX, springTo(2)), 41, settled, touched);
+  CHECK(carried->event > started && carried->event == telemetry.events() && carried->latest == 41 && carried->interruptions.empty());
+  CHECK(carried->kinds[ScaleX] == Spec::Kind::Spring && carried->segments[ScaleX].size() == 2);
+  telemetry.run(plan("late linear", 5, ScaleY, timingTo(3, 1, {0, 0, 1, 1})), 42, settled, touched);
+  CHECK(carried->event == telemetry.events() && carried->latest == 42 && carried->interruptions.empty());
+  // Setting a resting property to another value during the motion is an interruption; setting it to its value is not.
+  telemetry.set(5, {{Opacity, 0.5}}, 43, settled);
+  CHECK(carried->interruptions.size() == 1 && carried->interruptions[0].property == Opacity && carried->interruptions[0].after.value == 0.5);
+  telemetry.set(5, {{Opacity, 0.5}}, 43.5, settled);
+  CHECK(carried->interruptions.size() == 1);
+  // A sweep that settles a finished animation is neither.
+  const uint64_t beforeSweep = telemetry.events();
+  telemetry.sweep(43.6, settled);
+  CHECK(telemetry.events() == beforeSweep);
+  // Interruptions are capped; the episode says it is truncated.
+  CHECK(!carried->truncated);
+  for (size_t index = 0; index <= Episode::kMaxInterruptions; index++) telemetry.set(5, {{Rotate, double(index % 2 ? 0 : 1)}}, 44 + index * 1e-6, settled);
+  CHECK(carried->interruptions.size() == Episode::kMaxInterruptions && carried->truncated);
+
+  // Telemetry is off by default and records nothing; turning it off forgets every episode.
+  Engine quiet;
+  quiet.addView(1, kIdentity);
+  quiet.run(plan("unrecorded", 1, Opacity, springTo(0)), 0, settled, touched);
+  CHECK(!quiet.episode(1) && quiet.events() == 0);
+  telemetry.setTelemetry(false);
+  CHECK(!telemetry.episode(5));
 
   if (failures) { std::printf("%d motion engine checks failed\n", failures); return 1; }
   std::puts("Motion engine tests passed");

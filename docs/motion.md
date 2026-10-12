@@ -210,7 +210,8 @@ registration's `remove()`. Unmounting the target removes its links.
 target's presentation layer on its display link and reports `frames`,
 `animatedFrames`, `droppedFrames` (missed display-link intervals), `stalledFrames`
 (animated frames whose presented value did not change), `maxFrameGapMs`,
-`refreshRate` and `durationMs`. It shows that the main thread kept its display-link
+`refreshRate` and `durationMs`. A window that is not on screen (the test driver never shows
+windows) has no display link of its own, so its views are sampled on the main screen's. It shows that the main thread kept its display-link
 cadence and that the compositor animation advanced on every frame. It is not a
 measurement of the window server's own frame delivery, which needs out-of-process
 instrumentation.
@@ -231,11 +232,50 @@ JavaScript API.
 | `setClock` | `mode`: `virtual` or `real` | `virtual` freezes engine time and pauses every `MotionView` layer (`speed = 0`) at the current instant; views mounted later start paused. `real` shifts all scheduled work by the paused interval, resumes the layers and re-bakes them. |
 | `advanceClock` | `durationMs` (> 0) | Moves engine time and every motion layer's `timeOffset` forward together, then resolves completions due by the new time. `E_UNAVAILABLE` on the real clock. |
 
-Both reply `{ ok: true, mode, timeMs }`. With the virtual clock the window renders the
-exact frame for that instant, so captures and state reads are deterministic; the flow
-commands `setClock` and `advanceClock` map onto them. A paused layer also pauses its
-subviews' own Core Animation, such as a spinner inside a `MotionView`.
+Both reply `{ ok: true, mode, timeMs }`. With the virtual clock the window server shows the
+exact frame for that instant, and driver captures render each `MotionView` at the engine's
+value for it ([Motion telemetry](#motion-telemetry)), so captures and state reads are
+deterministic; the flow commands `setClock` and `advanceClock` map onto them. A paused layer
+also pauses its subviews' own Core Animation, such as a spinner inside a `MotionView`.
 `recordMotionFrames` rejects with `E_UNAVAILABLE` on the virtual clock.
+
+## Motion telemetry
+
+In driver mode (the in-app test driver turns it on when it starts; it is off otherwise, so
+apps record nothing) the engine records every view's latest **motion**: from the instant it
+starts moving from rest until it settles (`spark::motion::Episode`). Every mutation (start, interruption, `set`,
+`stop`, completion) appends to each property's history the track that drives it from then on,
+so the value and velocity of any property at any time of the motion can be evaluated after
+the fact, with the same solver that drove the compositor. An **interruption** is a property
+that was animating and whose animation was replaced or stopped, or whose value or velocity
+jumped, or a resting property that `set` gave another value: it is recorded with the state
+just before and just after. A property that starts an animation from rest while others move
+is not an interruption, whatever velocity it starts with, but like an interruption it is the
+motion's latest event (`latestMs`), which `waitForMotion` sees. A motion keeps at most 1,024
+interruptions. A motion's `end` is when its last track ends (infinity while one repeats
+forever), or the instant it was stopped.
+
+The motion package registers three driver commands. They address a view by `testID`: the
+`MotionView` with it, or the `MotionView` containing the view with it (`E_NOT_FOUND`
+otherwise). Times are engine milliseconds (media time on the real clock).
+
+| Command | Fields | Reply |
+| --- | --- | --- |
+| `motionState` | `testID` | `values`, `velocities`, `animating` now, `clock`, `timeMs`, and `motion`: `startMs`, `endMs` (null while repeating forever), `latestMs` (start, last interruption, or last animation started during the motion), `settled`, `progress` (0-1, null while repeating forever), `afterInput`, `startValues`, `properties` (moved), `kinds` (each property's latest animation: `spring`, `timing`, `keyframes`, `decay`, `sequence`), `interruptions` (`timeMs`, `property`, `before`, `after`), `truncated` (a property passed 4,096 history entries, or the motion 1,024 interruptions). `motion` is null before the view first moves. |
+| `waitForMotion` | `testID`, one of `progress` (0-1), `elapsedMs` (from the motion's start) or `settled: true`; `timeoutMs` (10000) | Waits until the view's motion started, was interrupted or started another property's animation after the last driver input (`SparkTestDriverObserveInput`: input commands, `navigate`, `openFile`), then until it gets there, and replies like `motionState`. On the virtual clock it advances the clock exactly there (`E_PASSED` if the progress point is already behind); on the real clock it checks every 2 ms. `E_PASSED` when the motion settles before the progress point; `E_UNSUPPORTED_OPTION` for `progress` or `settled` of a motion that repeats forever; `E_TIMEOUT`. |
+| `sampleMotion` | `testID`, `fromMs` (the motion's start), `toMs` (its end, or now), `intervalMs` (1000/120) | `samples`: `tMs`, `values`, `velocities` every `intervalMs` from `fromMs`, plus `toMs`; at most 20,000. `toMs` cannot be in the future. |
+
+A capture (the driver's `capture`) renders views in-process with `cacheDisplayInRect:`, which
+draws model layer values and ignores Core Animation animations. The motion package wraps every
+capture render: each `MotionView` gets its presented values (the engine's state now) while it
+renders, then its model back, in one Core Animation transaction, so the window server never
+sees the swap. A capture mid-motion therefore shows the motion at that instant.
+
+The runner's `captureMotion`, `assertMotion` and `interruptAt` are built on these
+([e2e-flows.md](e2e-flows.md#motion-and-frames)).
+`tests/motion-engine.native.cpp` checks the history (interruptions, values after the fact, the
+planned end, clock shifts); `tests/motion-coordinator.native.mm` checks waiting, exact virtual
+progress points, real-clock waits, sampling and presented renders.
 
 ## Windows
 

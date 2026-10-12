@@ -289,7 +289,10 @@ int main(int argc, char **argv) { @autoreleasepool {
   Delegate *delegate = [Delegate new]; NSApp.delegate = delegate;
   if ([mode isEqual:@"inert"]) {
     unsetenv("SPARK_TEST_DRIVER_DIR");
+    __block BOOL observed = NO;
+    SparkTestDriverObserveStart(^{ observed = YES; });
     Check(!SparkTestDriverStart() && !SparkTestDriverActive(), @"driver starts without the runner");
+    Check(!observed, @"start observers never run outside driver mode");
     puts("inert passed"); return 0;
   }
   if ([mode isEqual:@"refuse-directory"]) { PrepareDirectory(argv[2], 0755, 0600); SparkTestDriverStart(); return 0; }
@@ -297,7 +300,13 @@ int main(int argc, char **argv) { @autoreleasepool {
   PrepareDirectory(argv[2], 0700, 0600);
   NSWindow *window = MakeWindow();
   MakeMenu();
+  // Modules register before the driver starts (from +load); a late registration runs at once.
+  __block int early = 0, late = 0;
+  SparkTestDriverObserveStart(^{ early += SparkTestDriverActive() ? 1 : 100; });
+  Check(early == 0, @"start observers wait for the driver");
   Check(SparkTestDriverStart() && SparkTestDriverActive(), @"driver start");
+  SparkTestDriverObserveStart(^{ late++; });
+  Check(early == 1 && late == 1, @"start observers run once, with the driver active");
   // Optional modules add commands; built-in and duplicate names are refused.
   SparkTestDriverRegisterCommand(@"echo", ^(NSDictionary *request, SparkTestDriverReply reply) { reply(@{ @"ok": @YES, @"echo": request[@"value"] ?: NSNull.null }); });
   for (NSString *taken in @[@"ping", @"openFile", @"tap", @"echo"]) {
@@ -544,6 +553,67 @@ int main(int argc, char **argv) { @autoreleasepool {
       finished = YES;
     });
   }
+  else if ([mode isEqual:@"hooks"]) {
+    // Module hooks: input observers run before input and deep links; render wrappers run around every capture.
+    static std::atomic<int> inputs{0};
+    SparkTestDriverObserveInput(^{ inputs++; });
+    NSView *probe = SparkTestDriverFindView(@"probe-layer");
+    Check(probe && SparkTestDriverFindView(@"missing") == nil, @"modules find views by testID");
+    SparkTestDriverWrapRender(^(dispatch_block_t render) {
+      probe.layer.backgroundColor = NSColor.blueColor.CGColor;  // what a module presents only while rendering
+      render();
+      probe.layer.backgroundColor = NSColor.redColor.CGColor;
+    });
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+      Check([Request(fd, @{ @"command": @"ping" })[@"ok"] boolValue] && inputs == 0, @"ping is not input");
+      Check([Request(fd, @{ @"command": @"navigate", @"url": @"spark-ks://hooks" })[@"ok"] boolValue] && inputs == 1, @"navigate is input");
+      Check([Request(fd, @{ @"command": @"capture", @"window": @"main", @"name": @"wrapped" })[@"ok"] boolValue], @"capture");
+      Check(Near(OnMain(^{ return [NSColor colorWithCGColor:probe.layer.backgroundColor]; }), 1, 0, 0), @"the wrapper restored the view after rendering");
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
+  else if ([mode isEqual:@"frames"]) {
+    // Frame counting: the display link counts frames; a blocked main thread drops them. It needs a display whose link
+    // ticks; without one the commands fail E_UNAVAILABLE, and this mode says why it skipped.
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+      Check([Code(Request(fd, @{ @"command": @"stopFrames" })) isEqual:@"E_INVALID_STATE"], @"stopFrames needs startFrames");
+      NSDictionary *started = Request(fd, @{ @"command": @"startFrames" });
+      NSDictionary *idle = nil;
+      if ([started[@"ok"] boolValue]) {
+        Check([started[@"refreshRate"] intValue] >= 30, [NSString stringWithFormat:@"startFrames %@", started]);
+        Check([Code(Request(fd, @{ @"command": @"startFrames" })) isEqual:@"E_BUSY"], @"one frame count at a time");
+        usleep(500000);
+        idle = Request(fd, @{ @"command": @"stopFrames" });
+      }
+      NSDictionary *unavailable = [Code(started) isEqual:@"E_UNAVAILABLE"] ? started : [Code(idle) isEqual:@"E_UNAVAILABLE"] ? idle : nil;
+      if (unavailable) {
+        printf("frames skipped: %s\n", [unavailable[@"error"][@"message"] UTF8String]);
+        Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+        finished = YES;
+        return;
+      }
+      // Loose on purpose: a loaded machine delivers fewer callbacks than the display's rate.
+      const double expected = 0.5 * [started[@"refreshRate"] doubleValue];
+      Check([idle[@"ok"] boolValue] && [idle[@"frames"] doubleValue] > expected * 0.25 && [idle[@"fps"] doubleValue] > [started[@"refreshRate"] doubleValue] * 0.25,
+        [NSString stringWithFormat:@"an idle main thread keeps roughly the display's cadence: %@", idle]);
+      Request(fd, @{ @"command": @"startFrames" });
+      usleep(100000);
+      dispatch_async(dispatch_get_main_queue(), ^{ usleep(250000); });
+      usleep(400000);
+      NSDictionary *blocked = Request(fd, @{ @"command": @"stopFrames" });
+      Check([blocked[@"ok"] boolValue] && [blocked[@"droppedFrames"] doubleValue] >= 0.2 * [started[@"refreshRate"] doubleValue] && [blocked[@"maxFrameGapMs"] doubleValue] >= 240,
+        [NSString stringWithFormat:@"a blocked main thread drops frames: %@", blocked]);
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
   else Check(NO, [@"unknown mode " stringByAppendingString:mode]);
 
   Pump(^{ return (BOOL)(finished && terminateRequested); }, 20);
@@ -566,6 +636,7 @@ int main(int argc, char **argv) { @autoreleasepool {
     NSColor *vibrancy = Sample(@"cache.png", NSMakeRect(300, 200, 100, 100), window);
     printf("behind-window vibrancy renders as %s\n", Describe(vibrancy).UTF8String);
   }
+  if ([mode isEqual:@"hooks"]) Check(Near(Sample(@"wrapped.png", NSMakeRect(0, 200, 100, 100), window), 0, 0, 1), @"capture renders inside the render wrappers");
   [NSFileManager.defaultManager removeItemAtPath:directory error:nil];
   printf("%s passed\n", mode.UTF8String);
   return 0;
