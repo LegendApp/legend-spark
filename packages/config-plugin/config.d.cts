@@ -27,6 +27,12 @@ export interface SigningConfiguration {
 export interface SparkSettings {
   projectId: string;
   window?: WindowConfiguration;
+  /**
+   * The languages the app is localized in, development language first. macOS lists them as the bundle's
+   * localizations: AppKit and Spark show native strings in the first of the user's languages listed here,
+   * and System Settings offers a per-app language when there are several. Windows does not use them yet.
+   */
+  localizations?: string[];
   documentTypes?: DocumentType[];
   menuBarOnly?: boolean;
   updates?: UpdateConfiguration;

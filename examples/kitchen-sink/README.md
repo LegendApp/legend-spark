@@ -108,9 +108,12 @@ The shell, the Document menu and the unsaved-changes prompt are localized in
 `shell/i18n.ts` (English and Arabic). The locale comes from the system
 (`getSystemInfo().locale`); other languages use English. Arabic lays the shell out
 right to left, including the breadcrumb separator. Screen titles, summaries and
-contents belong to each area. On macOS the app declares `en` and `ar`
-localizations, so it follows the system language or a launch override such as
-`-AppleLanguages "(ar)" -AppleLocale ar_EG`.
+contents belong to each area. The app declares `en`, `ar` and `fr` in `localizations`,
+so on macOS its menus, dialogs and AppKit panels follow the system language, the
+per-app language (Internationalization > Native strings) or a launch override such as
+`-AppleLanguages "(ar)" -AppleLocale ar_EG`. French is there to verify Spark's and
+AppKit's native strings in a second language; the Kitchen Sink's own strings are
+English in French.
 
 ## Screenshots for verification
 
@@ -126,7 +129,7 @@ See [the in-app test driver](../../docs/test-driver.md) for options and what a c
 ## Install or rebuild the native runtime
 
 JavaScript dependencies do not include a native executable. The `spark-ks://`
-URL scheme and the macOS localizations need an app-specific runtime, so the
+URL scheme and the declared localizations need an app-specific runtime, so the
 shared Spark Runner cannot serve this app. Build one **once** with the platform's
 native toolchain installed, and again after native changes:
 

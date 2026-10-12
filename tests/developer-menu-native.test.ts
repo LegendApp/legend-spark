@@ -11,7 +11,7 @@ test.skipIf(process.platform !== "darwin")("the Developer menu targets the key w
   try {
     const root = path.resolve(import.meta.dirname, "..");
     const strip = (file: string) => readFileSync(path.join(root, file), "utf8").split("\n")
-      .filter(line => !/^#import (<React\/|"RNNativeMenu\.h"|"SparkDeveloperMenu\.h")/.test(line) && !line.startsWith("- (std::shared_ptr")).join("\n");
+      .filter(line => !/^#import (<React\/|<RNDesktopApp\/|"RNNativeMenu\.h"|"SparkDeveloperMenu\.h")/.test(line) && !line.startsWith("- (std::shared_ptr")).join("\n");
     const stubs = `#import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #define RCT_DEV 1
@@ -19,6 +19,8 @@ test.skipIf(process.platform !== "darwin")("the Developer menu targets the key w
 typedef void (^RCTPromiseResolveBlock)(id);
 typedef void (^RCTPromiseRejectBlock)(NSString *, NSString *, NSError *);
 static void RCTExecuteOnMainQueue(void (^operation)(void)) { operation(); }
+static NSString *SparkLocalizedString(NSString *key) { return key; }
+static NSDictionary *SparkContext(void) { return @{ @"name": @"Probe" }; }
 static NSString *ReloadReason;
 static void RCTTriggerReloadCommandListeners(NSString *reason) { ReloadReason = reason; }
 static NSMutableArray<NSDictionary *> *Events;

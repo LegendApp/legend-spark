@@ -136,7 +136,7 @@ const result = await showMessage({ title: "Save changes?", windowId: "main",
 The native result uses the selected button ID; a host dismissal returns `buttonId: null`. `checked` is present only when `checkbox` was supplied.
 
 Omit windowId for an application-modal dialog. Kinds are info/warning/error.
-Concurrent message dialogs reject E_BUSY. `confirm(message, { title, confirmLabel, cancelLabel })` resolves true only for the confirm button; its labels default to English "Continue" and "Cancel", so localized apps pass their own.
+Concurrent message dialogs reject E_BUSY. `confirm(message, { title, confirmLabel, cancelLabel })` resolves true only for the confirm button; its title and labels default to Spark's Confirm, Continue and Cancel in the app's language ([Languages](app.md#languages)).
 
 ### "Don't ask again"
 
@@ -163,7 +163,7 @@ const name = await showPrompt({ title: "Rename document", defaultValue: "Untitle
 if (!name.canceled) rename(name.value); // value may be ""
 ```
 
-A prompt is a message dialog with one text field (`secure: true` uses NSSecureTextField). The default value is selected when it opens; Return confirms and Escape cancels. Cancel, Escape and dismissal all resolve `{ canceled: true }`, distinct from confirming an empty value. Labels default to English "OK" and "Cancel". macOS only.
+A prompt is a message dialog with one text field (`secure: true` uses NSSecureTextField). The default value is selected when it opens; Return confirms and Escape cancels. Cancel, Escape and dismissal all resolve `{ canceled: true }`, distinct from confirming an empty value. Labels default to Spark's OK and Cancel in the app's language. macOS only.
 
 ### Accessory controls
 

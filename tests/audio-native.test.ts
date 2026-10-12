@@ -8,7 +8,7 @@ test.skipIf(process.platform !== "darwin")("native audio status reads are pure a
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-audio-native-"));
   try {
     const implementation = readFileSync(path.resolve(import.meta.dirname, "../packages/audio/macos/RNSparkAudio.mm"), "utf8")
-      .split("\n").filter(line => !line.startsWith('#import "') && !line.startsWith("- (std::shared_ptr")).join("\n");
+      .split("\n").filter(line => !line.startsWith('#import "') && !line.startsWith("#import <RNDesktopApp/") && !line.startsWith("- (std::shared_ptr")).join("\n");
     const input = path.join(directory, "Audio.mm"), executable = path.join(directory, "audio");
     const wav = Buffer.alloc(44 + 16000);
     wav.write("RIFF", 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8); wav.writeUInt32LE(16, 16);
@@ -21,6 +21,7 @@ test.skipIf(process.platform !== "darwin")("native audio status reads are pure a
 #import <MediaPlayer/MediaPlayer.h>
 #include <cassert>
 #define RCT_EXPORT_MODULE(name)
+static NSString *SparkLocalizedString(NSString *key) { return key; }
 typedef void (^RCTPromiseResolveBlock)(id);
 typedef void (^RCTPromiseRejectBlock)(NSString *, NSString *, NSError *);
 @interface RCTEventEmitter : NSObject

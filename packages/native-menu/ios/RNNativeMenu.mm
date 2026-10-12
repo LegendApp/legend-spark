@@ -1,6 +1,8 @@
 #import "RNNativeMenu.h"
 #import "SparkDeveloperMenu.h"
 #import <React/RCTUtils.h>
+#import <RNDesktopApp/SparkDesktop.h>
+#import <RNDesktopApp/SparkLocalization.h>
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 
@@ -12,6 +14,15 @@ static NSDictionary<NSString *, NSString *> *RoleSelectors(void) {
     // Window tabs: AppKit adds these to the Window and View menus while windows can tab; newTab is the tab bar's + button.
     @"newTab": @"newWindowForTab:", @"toggleTabBar": @"toggleTabBar:", @"showAllTabs": @"toggleTabOverview:", @"selectPreviousTab": @"selectPreviousTab:",
     @"selectNextTab": @"selectNextTab:", @"moveTabToNewWindow": @"moveTabToNewWindow:", @"mergeAllWindows": @"mergeAllWindows:" };
+}
+// A role item published without a label gets its standard title, in the app's language.
+static NSString *RoleTitle(NSString *role) {
+  NSDictionary<NSString *, NSString *> *keys = @{ @"new": @"New", @"open": @"Open…", @"save": @"Save…", @"saveAs": @"Save As…", @"clearRecentDocuments": @"Clear Menu",
+    @"about": @"About %@", @"settings": @"Settings…", @"services": @"Services", @"hide": @"Hide %@", @"hideOthers": @"Hide Others", @"showAll": @"Show All", @"quit": @"Quit %@",
+    @"undo": @"Undo", @"redo": @"Redo", @"cut": @"Cut", @"copy": @"Copy", @"paste": @"Paste", @"selectAll": @"Select All", @"minimize": @"Minimize", @"zoom": @"Zoom", @"close": @"Close", @"toggleFullscreen": @"Enter Full Screen",
+    @"newTab": @"New Tab", @"toggleTabBar": @"Show Tab Bar", @"showAllTabs": @"Show All Tabs", @"selectPreviousTab": @"Show Previous Tab", @"selectNextTab": @"Show Next Tab", @"moveTabToNewWindow": @"Move Tab to New Window", @"mergeAllWindows": @"Merge All Windows" };
+  NSString *title = SparkLocalizedString(keys[role]);
+  return [title containsString:@"%@"] ? [NSString stringWithFormat:title, SparkContext()[@"name"]] : title;
 }
 static NSString *Role(NSMenuItem *item) {
   NSString *role = objc_getAssociatedObject(item, &RoleKey);
@@ -155,7 +166,7 @@ RCT_EXPORT_MODULE(NativeMenu)
     if (target && !existing && !(root && target[@"menu"])) Fail(@"E_NOT_FOUND", @"Menu target was not found");
     if (existing) [self save:item];
     else {
-      NSString *label = config[@"title"] ?: config[@"role"];
+      NSString *label = config[@"title"] ?: RoleTitle(config[@"role"]);
       item = [[NSMenuItem alloc] initWithTitle:label action:nil keyEquivalent:@""];
       item.identifier = config[@"id"];
       if (root && target[@"menu"]) objc_setAssociatedObject(item, &LocationKey, target[@"menu"], OBJC_ASSOCIATION_COPY_NONATOMIC);

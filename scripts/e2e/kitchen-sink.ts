@@ -9,7 +9,7 @@ import path from "node:path";
 import { binary, run } from "../../packages/cli/src/commands.ts";
 import type { ProcessLog } from "../../packages/cli/src/process.ts";
 import { entryFile, prepareConfig, readJson, stateFile } from "../../packages/cli/src/project.ts";
-import { DriverState, exactState, macHost, STATE_ENV, type AppIdentity, type AppState, type StateHost, type StateMode } from "./app-state.ts";
+import { DriverState, exactState, macHost, preserveDefaults, STATE_ENV, type AppIdentity, type AppState, type StateHost, type StateMode } from "./app-state.ts";
 import { DRIVER_ENV, launchDriver, type Driver } from "./driver.ts";
 import { readManifest } from "./gate/plan.ts";
 
@@ -140,6 +140,15 @@ export class KitchenSinkApp {
   async clearState(): Promise<string[]> {
     if (!this.state) throw new Error("KitchenSinkApp.open() must run before clearState()");
     return this.state.clear();
+  }
+
+  /**
+   * `preserveDefaults` for the domain the launched app uses: the isolated session's `<id>.driver` copy, or in exact
+   * mode the app's own identifier. Only the gate manifest's app (or its copy) is allowed.
+   */
+  async preserveDefaults(keys: readonly string[]): Promise<() => void> {
+    if (!this.state) throw new Error("KitchenSinkApp.open() must run before preserveDefaults()");
+    return preserveDefaults(this.state.identity.bundleId, keys, readManifest(path.join(KITCHEN_SINK, "../../e2e")).appId);
   }
 
   /** What `launch` sets itself; a flow's own arguments and environment may not repeat it. `locale` only applies with a locale. */

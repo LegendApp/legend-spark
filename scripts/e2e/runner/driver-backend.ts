@@ -50,6 +50,8 @@ export type DriverApp = {
   readonly reserved: { readonly arguments: readonly string[]; readonly env: readonly string[]; readonly locale: readonly string[] };
   /** Deletes the state of the driver session (docs/e2e-flows.md#app-state) while the app is not running; returns what existed. */
   clearState(): Promise<string[]>;
+  /** Snapshots `keys` of the defaults domain the app runs under, refusing while it runs; the result restores them (docs/e2e-flows.md#preserveappdefaults). */
+  preserveDefaults(keys: readonly string[]): Promise<() => void>;
   launch(options: { locale?: string; arguments: readonly string[]; env: Readonly<Record<string, string>>; log: ProcessLog }): Promise<DriverClient>;
   close(): Promise<void>;
 };
@@ -72,6 +74,7 @@ export class DriverBackend implements Backend {
   readonly commands: Readonly<Record<string, CommandHandler>> = {
     launchApp: args => this.launchApp(args),
     stopApp: () => this.quit(),
+    preserveAppDefaults: (args, context) => this.preserveAppDefaults(args, context),
     setAppAppearance: async args => { await this.client().setAppAppearance(args.appearance as "light" | "dark"); },
     // The motion engine's virtual clock (docs/motion.md#virtual-clock-for-the-test-driver).
     setClock: async args => { await this.client().setClock(args.mode as "virtual" | "real"); },
@@ -191,6 +194,18 @@ export class DriverBackend implements Backend {
     }
     if (args.openUrl !== undefined) await this.driver!.navigate(String(args.openUrl));
     if (file !== undefined) await this.driver!.openFile(file);
+  }
+
+  /**
+   * Registers a runner restore, which runs after onFlowComplete and outside the flow's timeout: it quits the app (so it
+   * cannot write the values back) and then writes the snapshot back, even when quitting failed.
+   */
+  private async preserveAppDefaults(args: Record<string, unknown>, context: CommandContext) {
+    const keys = (Array.isArray(args.keys) ? args.keys : [args.keys]).map(String);
+    if (this.driver?.running) throw new Failure("invalid", "preserveAppDefaults runs before launchApp: the app is running");
+    let restore: () => void;
+    try { restore = await this.app.preserveDefaults(keys); } catch (error) { throw new Failure("invalid", (error as Error).message); }
+    context.onRestore(`app defaults ${keys.join(", ")}`, async () => { try { await this.quit(); } finally { restore(); } });
   }
 
   /** Quits the app through its normal termination path, if it runs, and ends the session. */

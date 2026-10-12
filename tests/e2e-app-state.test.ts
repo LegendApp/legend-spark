@@ -3,7 +3,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { clearAppState, DriverState, driverIdentity, exactState, sparkNamespace, statePaths, type AppIdentity, type StateHost } from "../scripts/e2e/app-state.ts";
+import { clearAppState, DriverState, driverIdentity, exactState, preserveDefaults, sparkNamespace, statePaths, type AppIdentity, type DefaultsHost, type StateHost } from "../scripts/e2e/app-state.ts";
 
 const BUNDLE_ID = "so.legend.spark.examples.kitchensink";
 const KITCHEN_SINK: AppIdentity = { bundleId: BUNDLE_ID, projectId: "c0bdf12f-0f35-4b71-8363-b83097388d7b", sandboxed: false };
@@ -296,5 +296,40 @@ describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)"
     expect(existsSync(state.app)).toBe(true);
     delete processes[DRIVER.bundleId];
     cleanup.push(state.root);
+  });
+});
+
+describe("preserveDefaults", () => {
+  const APP = "so.legend.spark.examples.kitchensink";
+  function host(values: Record<string, string>, running: string[] = []) {
+    const calls: string[] = [];
+    const fake: DefaultsHost = {
+      running: id => { calls.push(`running ${id}`); return running; },
+      read: (domain, key) => values[`${domain} ${key}`],
+      write: (domain, key, value) => { calls.push(`write ${domain} ${key} ${value}`); },
+      remove: (domain, key) => { calls.push(`remove ${domain} ${key}`); },
+    };
+    return { fake, calls };
+  }
+
+  test("the restore writes previous values back and deletes keys that were absent", () => {
+    const { fake, calls } = host({ [`${APP} AppleLanguages`]: "<array><string>fr</string></array>" });
+    const restore = preserveDefaults(APP, ["AppleLanguages", "AppleLocale"], APP, fake);
+    expect(calls).toEqual([`running ${APP}`]);
+    restore();
+    expect(calls.slice(1)).toEqual([`write ${APP} AppleLanguages <array><string>fr</string></array>`, `remove ${APP} AppleLocale`]);
+  });
+
+  test("an isolated session's .driver domain composes; other domains and a running app are refused before any read", () => {
+    const { fake, calls } = host({});
+    preserveDefaults(`${APP}.driver`, ["AppleLanguages"], APP, fake)();
+    expect(calls).toEqual([`running ${APP}.driver`, `remove ${APP}.driver AppleLanguages`]);
+    expect(() => preserveDefaults("com.example.other", ["AppleLanguages"], APP, fake)).toThrow("only the flow's app");
+    expect(() => preserveDefaults("com.apple.finder", ["AppleLanguages"], "com.apple.finder", fake)).toThrow("reverse-DNS");
+    expect(() => preserveDefaults(APP, [], APP, fake)).toThrow("needs defaults keys");
+    expect(() => preserveDefaults(APP, ["a b"], APP, fake)).toThrow("needs defaults keys");
+    const busy = host({}, ["ASN:0x0-0x1:"]);
+    expect(() => preserveDefaults(APP, ["AppleLanguages"], APP, busy.fake)).toThrow(`needs ${APP} to be quit first`);
+    expect(busy.calls).toEqual([`running ${APP}`]);
   });
 });

@@ -25,6 +25,7 @@ extern double LegendMainWindowReactRootAttachedTimeMs;
 #import <AppKit/AppKit.h>
 #if __has_include(<RNDesktopApp/SparkDesktop.h>)
 #import <RNDesktopApp/SparkDesktop.h>
+#import <RNDesktopApp/SparkLocalization.h>
 #import <RNDesktopApp/SparkTestDriver.h>
 // Safe-mode launches skip saved windows and frames (docs/app.md).
 static BOOL LegendSafeMode(void) { return SparkSafeMode(); }
@@ -1477,7 +1478,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 - (NSImage *)toolbarSearchImageWithLabel:(NSString *)label
 {
   if (@available(macOS 11.0, *)) {
-    return [NSImage imageWithSystemSymbolName:@"magnifyingglass" accessibilityDescription:label ?: @"Search"];
+    return [NSImage imageWithSystemSymbolName:@"magnifyingglass" accessibilityDescription:label ?: SparkLocalizedString(@"Search")];
   }
   return [NSImage imageNamed:NSImageNameTouchBarSearchTemplate];
 }
@@ -1719,7 +1720,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
   if ([type isEqualToString:@"search"]) {
     NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
     NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
-    NSString *placeholder = [config[@"placeholder"] isKindOfClass:NSString.class] ? config[@"placeholder"] : @"Search";
+    NSString *placeholder = [config[@"placeholder"] isKindOfClass:NSString.class] ? config[@"placeholder"] : SparkLocalizedString(@"Search");
     NSString *value = [config[@"value"] isKindOfClass:NSString.class] ? config[@"value"] : @"";
     NSNumber *widthNumber = [config[@"width"] isKindOfClass:NSNumber.class] ? config[@"width"] : nil;
     CGFloat width = widthNumber ? widthNumber.doubleValue : 240;
@@ -2393,7 +2394,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
 
     NSString *title = [options[@"title"] isKindOfClass:NSString.class] ? options[@"title"] : nil;
-    title = title ?: moduleName ?: @"New Window";
+    title = title ?: moduleName ?: SparkLocalizedString(@"New Window");
     BOOL hasRepresentedURL = LegendDictionaryHasKey(options, @"representedURL");
     id representedURLValue = hasRepresentedURL ? options[@"representedURL"] : nil;
 

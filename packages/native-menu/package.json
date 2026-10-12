@@ -37,7 +37,9 @@
     "platforms": [
       "macos"
     ],
-    "requires": []
+    "requires": [
+      "@legendapp/spark-desktop-app"
+    ]
   },
   "private": true,
   "dependencies": {

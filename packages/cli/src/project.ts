@@ -378,6 +378,7 @@ export function goConfigurationIssues(config: any): string[] {
   const issues: string[] = [];
   if (expo.scheme || expo.extra?.spark?.documentTypes?.length)
     issues.push("URL schemes and document associations require a custom runtime");
+  if (expo.extra?.spark?.localizations) issues.push("Declared localizations require a custom runtime");
   if (expo.extra?.spark?.menuBarOnly) issues.push("Menu-bar-only activation requires a custom runtime");
   if (expo.extra?.spark?.updates) issues.push("Update feed configuration requires a custom runtime");
   if (Object.keys(expo.extra?.spark?.helpers ?? {}).length) issues.push("Bundled helpers require a custom runtime");

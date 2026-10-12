@@ -291,6 +291,16 @@
         }
       ]
     },
+    "localizations": {
+      "description": "Languages the app is localized in, development language first. macOS lists them as the bundle's localizations: AppKit and Spark show native strings in the first of the user's languages listed here, and System Settings offers a per-app language when there are several.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z]{2,3}([-_][A-Za-z0-9]+)*$"
+      }
+    },
     "documentTypes": {
       "type": "array",
       "items": {

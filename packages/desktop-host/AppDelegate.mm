@@ -1,6 +1,7 @@
 #import "AppDelegate.h"
 #import <RNDesktopApp/SparkDesktop.h>
 #import <RNDesktopApp/SparkDevTools.h>
+#import <RNDesktopApp/SparkLocalization.h>
 #import <RNDesktopApp/SparkTestDriver.h>
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTUIKit.h>
@@ -36,21 +37,7 @@
   [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(sparkWindowDidBecomeKey:)
     name:NSWindowDidBecomeKeyNotification object:nil];
 }
-- (void)sparkPrepareMainMenu {
-  NSString *name = SparkContext()[@"name"];
-  NSMenuItem *applicationItem = NSApp.mainMenu.itemArray.firstObject;
-  applicationItem.title = name;
-  NSMenu *menu = applicationItem.submenu;
-  menu.title = name;
-  for (NSMenuItem *item in menu.itemArray) {
-    if (item.isAlternate) continue;
-    if (item.action == @selector(orderFrontStandardAboutPanel:)) item.title = [@"About " stringByAppendingString:name];
-    else if (item.action == @selector(hide:)) item.title = [@"Hide " stringByAppendingString:name];
-    else if (item.action == @selector(terminate:)) item.title = [@"Quit " stringByAppendingString:name];
-  }
-  for (NSMenuItem *item in NSApp.helpMenu.itemArray)
-    if (item.action == @selector(showHelp:)) item.title = [name stringByAppendingString:@" Help"];
-}
+- (void)sparkPrepareMainMenu { SparkLocalizeMainMenu(SparkContext()[@"name"]); }
 - (void)sparkWindowDidBecomeKey:(NSNotification *)note {
   NSWindow *window = note.object;
   if (window != self.window && ![window isKindOfClass:NSPanel.class] && !window.sheet) self.sparkLastFocusedWindow = window;

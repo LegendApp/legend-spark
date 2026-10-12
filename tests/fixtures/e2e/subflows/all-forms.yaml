@@ -3,6 +3,8 @@
 - launchSecondInstance
 - assertSingleInstance: { timeout: 2s }
 - stopApp: { when: { platform: macos } }
+- preserveAppDefaults: [AppleLanguages]
+- preserveAppDefaults: { keys: [AppleLanguages, AppleLocale] }
 - killApp: { when: { platform: windows } }
 - quitApp
 - crashApp: js

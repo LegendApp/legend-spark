@@ -16,6 +16,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | `launchSecondInstance` | bare | `arguments`, `env`, `openFile`, `openUrl` | black-box | Launch a second instance; pair with assertSingleInstance. |
 | `assertSingleInstance` | bare | — | black-box | Assert exactly one app process is running. |
 | `stopApp` | bare | — | black-box, maestro | Stop the app. |
+| `preserveAppDefaults` | value → `keys` | `keys`* | driver | Before launchApp: snapshot these keys of the app's defaults and restore them when the flow ends, even after a failure or timeout. Refuses while the app runs. |
 | `killApp` | bare | — | black-box, maestro | Kill the app process. |
 | `quitApp` | bare | `via` | black-box | Quit the app the way a user would. |
 | `crashApp` | value → `kind` | `kind`* | black-box | Crash the app. |

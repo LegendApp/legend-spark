@@ -32,3 +32,10 @@ test("menu-bar-only apps hide the Dock and require a custom runtime", () => {
   expect(goConfigurationIssues(config)).toContain("Menu-bar-only activation requires a custom runtime");
   expect(() => identity({ ...config, extra: { spark: { menuBarOnly: "yes" } } })).toThrow("boolean");
 });
+
+test("declared localizations become the bundle's languages, development language first, and require a custom runtime", () => {
+  const config = { macos: { bundleIdentifier: "test.app" }, extra: { spark: { localizations: ["en", "ar", "pt-BR"] } } };
+  expect(identity(config)).toMatchObject({ CFBundleLocalizations: ["en", "ar", "pt-BR"], CFBundleDevelopmentRegion: "en" });
+  expect(identity({ macos: { bundleIdentifier: "test.app" } })).not.toHaveProperty("CFBundleLocalizations");
+  expect(goConfigurationIssues(config)).toContain("Declared localizations require a custom runtime");
+});

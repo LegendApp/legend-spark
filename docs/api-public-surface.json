@@ -30,6 +30,8 @@
     "AppContext",
     "AppEvent",
     "AppEventMap",
+    "AppFeature",
+    "AppLanguages",
     "AppLaunch",
     "AppRuntime",
     "AsyncRegistration",
@@ -43,9 +45,11 @@
     "finishWindowRestoration",
     "getAppAvailability",
     "getAppContext",
+    "getAppLanguages",
     "hide",
     "quit",
-    "relaunch"
+    "relaunch",
+    "setAppLanguage"
   ],
   "./app/documents": [
     "AsyncRegistration",

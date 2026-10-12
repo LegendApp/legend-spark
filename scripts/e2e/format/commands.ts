@@ -58,6 +58,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   launchSecondInstance: spec("lifecycle", "Launch a second instance; pair with assertSingleInstance.", launch),
   assertSingleInstance: spec("lifecycle", "Assert exactly one app process is running."),
   stopApp: spec("lifecycle", "Stop the app.", {}, { maestro: true }),
+  preserveAppDefaults: spec("lifecycle", "Before launchApp: snapshot these keys of the app's defaults and restore them when the flow ends, even after a failure or timeout. Refuses while the app runs.", { keys: list(str) }, { required: ["keys"], shorthand: "keys", driver: true }),
   killApp: spec("lifecycle", "Kill the app process.", {}, { maestro: true }),
   quitApp: spec("lifecycle", "Quit the app the way a user would.", { via: via("menu", "shortcut", "dock", "sigterm", "logout", "shutdown") }),
   crashApp: single("lifecycle", "Crash the app.", "kind", oneOf("native", "js")),

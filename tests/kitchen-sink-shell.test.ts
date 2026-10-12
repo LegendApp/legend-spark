@@ -184,10 +184,10 @@ test("held registrations are removed, including ones that resolve after removal"
   expect(errors.at(-1)).toEqual(new Error("setup failed"));
 });
 
-test("Kitchen Sink declares Arabic and uses the shipping apps' build and package commands", () => {
+test("Kitchen Sink declares Arabic and French and uses the shipping apps' build and package commands", () => {
   const root = path.join(import.meta.dirname, "..");
   const config = JSON.parse(readFileSync(path.join(root, "examples/kitchen-sink/desktop.config.json"), "utf8"));
-  expect(config.macos.infoPlist.CFBundleLocalizations).toEqual(["en", "ar"]);
+  expect(config.localizations).toEqual(["en", "ar", "fr"]);
   const scripts = JSON.parse(readFileSync(path.join(root, "examples/kitchen-sink/package.json"), "utf8")).scripts;
   const shipping = JSON.parse(readFileSync(path.join(root, "packages/cli/templates/blank-typescript/package.json"), "utf8")).scripts;
   for (const name of ["build", "package"]) expect(scripts[name].replace("bun ../../scripts/spark.mjs", "spark")).toBe(shipping[name]);

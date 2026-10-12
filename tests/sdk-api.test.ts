@@ -50,6 +50,8 @@ const context = await import("../packages/context-menu/src/index.ts");
 const dialogs = await import("../packages/file-dialog/src/index.ts");
 beforeEach(() => {
   platform.OS = "macos"; calls.length = 0; handlers.clear(); subscriptions.clear();
+  // Spark's own labels for omitted dialog titles and buttons (desktop-app framework strings).
+  handlers.set("NativeDesktopApp.strings", ({ keys }) => Object.fromEntries(keys.map((key: string) => [key, key])));
   // Clearing native subscriptions models a new event host, including its identity.
   moduleObjects.delete("NativeDesktopApp");
 });

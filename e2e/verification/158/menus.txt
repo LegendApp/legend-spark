@@ -1,0 +1,174 @@
+===== en
+KitchenSink
+KitchenSink > About KitchenSink
+KitchenSink > Settings…
+KitchenSink > Services
+KitchenSink > Hide KitchenSink
+KitchenSink > Hide Others
+KitchenSink > Show All
+KitchenSink > Quit KitchenSink
+File
+File > New
+File > Open…
+File > Open Recent
+File > Close
+File > Close All
+File > Save…
+File > Save As…
+File > Revert to Saved
+File > Page Setup…
+File > Print…
+Edit
+Edit > Undo
+Edit > Redo
+Edit > Cut
+Edit > Copy
+Edit > Paste
+Edit > Paste and Match Style
+Edit > Delete
+Edit > Select All
+Edit > Find
+Edit > Spelling and Grammar
+Edit > Substitutions
+Edit > Transformations
+Edit > Speech
+Edit > AutoFill
+Edit > Start Dictation
+Edit > Start Dictation
+Edit > Emoji & Symbols
+Edit > Emoji & Symbols
+Edit > Emoji & Symbols
+Format
+Format > Font
+Format > Text
+View
+View > Show Toolbar
+View > Customize Toolbar…
+View > Show Sidebar
+View > Enter Full Screen
+View > Enter Full Screen
+Window
+Window > Minimize
+Window > Zoom
+Window > Bring All to Front
+Help
+Help > KitchenSink Help
+Document
+Document > Open…
+Document > Save…
+===== ar
+KitchenSink
+KitchenSink > حول KitchenSink
+KitchenSink > الإعدادات…
+KitchenSink > خدمات
+KitchenSink > إخفاء KitchenSink‎
+KitchenSink > إخفاء الأخرى
+KitchenSink > إظهار الكل
+KitchenSink > إنهاء KitchenSink‎
+ملف
+ملف > جديد
+ملف > فتح…
+ملف > فتح العناصر الأخيرة
+ملف > إغلاق
+ملف > إغلاق الكل
+ملف > حفظ…
+ملف > حفظ باسم…
+ملف > الرجوع إلى آخر نسخة محفوظة
+ملف > إعداد الصفحة…
+ملف > طباعة…
+تعديل
+تعديل > تراجع
+تعديل > إعادة
+تعديل > قص
+تعديل > نسخ
+تعديل > لصق
+تعديل > لصق ومطابقة النمط
+تعديل > حذف
+تعديل > تحديد الكل
+تعديل > بحث
+تعديل > التدقيق الإملائي والنحوي
+تعديل > بدائل
+تعديل > تحولات
+تعديل > التكلم
+تعديل > التعبئة التلقائية
+تعديل > بدء الإملاء
+تعديل > بدء الإملاء
+تعديل > إيموجي والرموز
+تعديل > إيموجي والرموز
+تعديل > إيموجي والرموز
+التنسيق
+التنسيق > الخط
+التنسيق > نص
+عرض
+عرض > إظهار شريط الأدوات
+عرض > تخصيص شريط الأدوات…
+عرض > إظهار الشريط الجانبي
+عرض > الدخول إلى وضع ملء الشاشة
+عرض > الدخول إلى وضع ملء الشاشة
+نافذة
+نافذة > تصغير
+نافذة > تكبير
+نافذة > إحضار الكل إلى الأمام
+مساعدة
+مساعدة > مساعدة KitchenSink
+المستند
+المستند > فتح…
+المستند > حفظ…
+===== fr
+KitchenSink
+KitchenSink > À propos de KitchenSink
+KitchenSink > Réglages…
+KitchenSink > Services
+KitchenSink > Masquer KitchenSink
+KitchenSink > Masquer les autres
+KitchenSink > Tout afficher
+KitchenSink > Quitter KitchenSink
+Fichier
+Fichier > Nouveau
+Fichier > Ouvrir…
+Fichier > Ouvrir l’élément récent
+Fichier > Fermer
+Fichier > Tout fermer
+Fichier > Enregistrer…
+Fichier > Enregistrer sous…
+Fichier > Revenir à la version enregistrée
+Fichier > Format d’impression…
+Fichier > Imprimer…
+Édition
+Édition > Annuler
+Édition > Rétablir
+Édition > Couper
+Édition > Copier
+Édition > Coller
+Édition > Coller et adapter le style
+Édition > Supprimer
+Édition > Tout sélectionner
+Édition > Rechercher
+Édition > Orthographe et grammaire
+Édition > Substitutions
+Édition > Transformations
+Édition > Parole
+Édition > Remplir
+Édition > Démarrer Dictée
+Édition > Démarrer Dictée
+Édition > Emoji et symboles
+Édition > Emoji et symboles
+Édition > Emoji et symboles
+Format
+Format > Police
+Format > Texte
+Présentation
+Présentation > Afficher la barre d’outils
+Présentation > Personnaliser la barre d’outils…
+Présentation > Afficher la barre latérale
+Présentation > Activer le mode plein écran
+Présentation > Activer le mode plein écran
+Fenêtre
+Fenêtre > Minimiser
+Fenêtre > Réduire/agrandir
+Fenêtre > Tout ramener au premier plan
+Aide
+Aide > Aide KitchenSink
+Document
+Document > Open…
+Document > Save…

@@ -11,6 +11,8 @@ function identity(config) {
     if (document.role && !["Editor", "Viewer"].includes(document.role)) throw new Error("Document role must be Editor or Viewer");
     return { CFBundleTypeName: document.name, CFBundleTypeRole: document.role ?? "Editor", LSItemContentTypes: document.contentTypes, LSHandlerRank: "Alternate" };
   });
+  // The first language is the development language: the app uses it when it lists none of the user's.
+  const languages = config.extra?.spark?.localizations;
   if (config.extra?.spark?.menuBarOnly !== undefined && typeof config.extra.spark.menuBarOnly !== "boolean") throw new Error("menuBarOnly must be a boolean");
   return {
     LSUIElement: config.extra?.spark?.menuBarOnly === true,
@@ -22,6 +24,7 @@ function identity(config) {
     // The app may need JS to save edits before accepting a quit request.
     NSSupportsAutomaticTermination: false,
     NSSupportsSuddenTermination: false,
+    ...(languages ? { CFBundleLocalizations: languages, CFBundleDevelopmentRegion: languages[0] } : {}),
     ...(schemes.length ? { CFBundleURLTypes: [{ CFBundleURLName: projectId, CFBundleURLSchemes: [...new Set(schemes)] }] } : {}),
     ...(types.length ? { CFBundleDocumentTypes: types } : {}),
   };

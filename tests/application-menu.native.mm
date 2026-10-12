@@ -49,6 +49,13 @@ int main() { @autoreleasepool {
   Check(!Publish(module, @[roleRoot]), @"Native role binding failed");
   Check(copy.action == @selector(copy:) && copy.target == nil, @"Role lost native responder action");
   Check(!Publish(module, @[]), @"Role removal failed");
+  // A new role item without a label gets its standard title, with the app name where it has one.
+  NSArray *unlabeled = @[@{ @"id": @"select-all", @"role": @"selectAll", @"enabled": @YES, @"_sparkOwner": @"owner" }, @{ @"id": @"quit", @"role": @"quit", @"enabled": @YES, @"_sparkOwner": @"owner" }];
+  Check(!Publish(module, @[@{ @"id": @"roles", @"title": @"Roles", @"items": unlabeled, @"enabled": @YES, @"_sparkOwner": @"owner" }]), @"Unlabeled role items failed");
+  NSMenu *roles = Find(main, @{ @"id": @"roles" }, NO).submenu;
+  Check([roles.itemArray[0].title isEqual:@"Select All"] && [roles.itemArray[1].title isEqual:@"Quit Probe"], @"Unlabeled role items did not get standard titles");
+  Check(roles.itemArray[0].action == @selector(selectAll:) && roles.itemArray[1].action == @selector(terminate:), @"Unlabeled role items lost their actions");
+  Check(!Publish(module, @[]), @"Unlabeled role removal failed");
   NSDictionary *base = @{ @"id": @"tools", @"title": @"Tools", @"items": @[@{ @"id": @"run", @"title": @"Run", @"enabled": @YES, @"_sparkOwner": @"base" }], @"_sparkOwner": @"base" };
   NSDictionary *override = @{ @"id": @"tools", @"title": @"Tools", @"items": @[@{ @"id": @"run", @"title": @"Run other", @"enabled": @YES, @"_sparkOwner": @"other" }], @"_sparkOwner": @"other" };
   Check(!Publish(module, @[base, override]), @"ID contribution failed");

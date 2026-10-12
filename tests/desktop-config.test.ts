@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync, symlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -66,4 +66,18 @@ test("both shipped schemas share canonical window fields and require macOS only 
   expect(() => toExpo({ ...base, macos: { ...base.macos, typo: true } })).toThrow("Unknown macos");
   expect(() => toExpo({ ...base, documentTypes: [{ name: "Doc", contentTypes: ["public.text"], typo: true }] })).toThrow("Unknown documentType");
   expect(() => toExpo({ ...base, signing: { macos: { teamID: "typo" } } })).toThrow("Unknown signing");
+});
+
+test("localizations list unique language identifiers and own the bundle's languages", () => {
+  expect(toExpo({ ...base, localizations: ["en", "ar", "zh-Hans"] }).expo.extra.spark.localizations).toEqual(["en", "ar", "zh-Hans"]);
+  for (const localizations of [[], ["en", "en"], ["english"], ["en", 1], "en"]) expect(() => toExpo({ ...base, localizations })).toThrow("localizations must list unique language identifiers");
+  expect(() => toExpo({ ...base, localizations: ["en"], macos: { ...base.macos, infoPlist: { CFBundleLocalizations: ["en"] } } })).toThrow("not macos.infoPlist");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    toExpo({ ...base, localizations: ["en", "ar-EG", "fr_CA"] });
+    expect(warn).not.toHaveBeenCalled();
+    toExpo({ ...base, localizations: ["en", "de", "ja"] });
+    toExpo({ ...base, localizations: ["en", "de"] });
+    expect(warn.mock.calls).toEqual([[expect.stringContaining("localizations lists de, ja, which Spark's own native strings")]]);
+  } finally { warn.mockRestore(); }
 });

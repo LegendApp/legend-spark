@@ -40,6 +40,11 @@ extra mouse button synthesis, which uses private CoreGraphics functions. It is o
 default. Turn it on only for apps that are tested and never distributed, such as the
 Kitchen Sink ([test driver](test-driver.md#private-event-functions)).
 
+`localizations` lists the languages the app is translated into, development
+language first. On macOS AppKit and Spark show native strings (menus, dialogs,
+panels) in the first of the user's languages listed there; see
+[Languages](app.md#languages).
+
 Spark owns project identity, initial window settings, document associations,
 update signing, helper bundles and desktop lifecycle policy. Expo owns its plugins
 and mobile/web settings: put those under `expo`, or `expoByPlatform.<target>`.

@@ -6,3 +6,44 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "docs/e2e-flows.md Visual goldens; #227"
+  I18N-VISUAL-02:
+    title: The Native strings screen matches its approved golden in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #158"
+  I18N-NATIVE-01:
+    title: "The standard main menu is in the launch language: Spark's Arabic and French titles for File, Edit, Format, View, Window and Help items and the app menu's About and Quit with the app name, English in English"
+    platforms: [macos]
+    blocking: true
+    spec: "#158 I18N.api"
+  I18N-NATIVE-02:
+    title: "Menu items AppKit provides itself follow the same launch language: Settings… (AppKit's name for the template's Preferences…) and Emoji & Symbols in English, Arabic and French"
+    platforms: [macos]
+    blocking: true
+    spec: "#158 I18N.api"
+  I18N-DIALOG-01:
+    title: "confirm() without a title or labels shows Spark's Confirm, Cancel and Continue in the launch language (English, Arabic, French), and Cancel resolves false"
+    platforms: [macos]
+    blocking: true
+    spec: "#158 I18N.api"
+  I18N-NATIVE-03:
+    title: "The standard About panel's AppKit strings follow the launch language: Version and the app icon's accessibility label in English, Arabic and French"
+    platforms: [macos]
+    blocking: true
+    spec: "#158 I18N.api"
+  I18N-LANG-01:
+    title: getAppAvailability(languages) reports available, and getAppLanguages() reports the languages the app lists (en, ar, fr), Spark's translated languages and the language each launch chose
+    platforms: [macos]
+    blocking: true
+    spec: "#158 I18N.api"
+    covers:
+      - ./app#getAppAvailability
+      - ./app#getAppLanguages
+  I18N-LANG-02:
+    title: "setAppLanguage() stores a per-app language: the next launch without a language argument is Arabic (menus and getAppLanguages().current), and following the system again restores English"
+    platforms: [macos]
+    blocking: true
+    spec: "#158 I18N.api"
+    covers:
+      - ./app#setAppLanguage
+      - ./app#getAppLanguages

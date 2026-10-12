@@ -1,12 +1,14 @@
 import { Platform } from "react-native";
 import { SparkError, parseNativeResult, invokeNative, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
+import { frameworkStrings } from "@legendapp/spark-desktop-app/src/framework-strings";
 import Native from "./NativeDesktopMessageDialog";
 export interface MessageDialogButton { id: string; label: string }
 export interface MessageDialogOptions {
   title: string;
   message?: string;
   kind?: "info" | "warning" | "error";
+  /** Defaults to one "ok" button labelled OK in the app's language. */
   buttons?: readonly MessageDialogButton[];
   defaultButtonId?: string;
   cancelButtonId?: string;
@@ -21,11 +23,12 @@ export interface MessageDialogResult {
   checked?: boolean;
 }
 export interface ConfirmOptions {
+  /** Defaults to Confirm in the app's language. */
   title?: string;
   windowId?: string;
-  /** Defaults to "Continue"; pass a localized label for localized apps. */
+  /** Defaults to Continue in the app's language. */
   confirmLabel?: string;
-  /** Defaults to "Cancel"; pass a localized label for localized apps. */
+  /** Defaults to Cancel in the app's language. */
   cancelLabel?: string;
 }
 export interface PromptOptions {
@@ -36,9 +39,9 @@ export interface PromptOptions {
   defaultValue?: string;
   /** Masks the text and keeps it out of the clipboard (NSSecureTextField). */
   secure?: boolean;
-  /** Defaults to "OK"; pass a localized label for localized apps. */
+  /** Defaults to OK in the app's language. */
   confirmLabel?: string;
-  /** Defaults to "Cancel"; pass a localized label for localized apps. */
+  /** Defaults to Cancel in the app's language. */
   cancelLabel?: string;
   windowId?: string;
 }
@@ -87,6 +90,13 @@ function validWindowId(windowId: unknown) {
   if (windowId !== undefined && (typeof windowId !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(windowId))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid owner window ID");
 }
 
+/** The caller's labels, with Spark's own label in the app's language for each one omitted. */
+async function withDefaults(...labels: readonly [string | undefined, "OK" | "Cancel" | "Continue" | "Confirm"][]): Promise<string[]> {
+  const missing = labels.filter(([label]) => label === undefined).map(([, key]) => key);
+  const strings: Partial<Record<string, string>> = missing.length ? await frameworkStrings(missing) : {};
+  return labels.map(([label, key]) => label ?? strings[key]!);
+}
+
 type NativeAlertResult = { button: number; checked: boolean; value?: string };
 async function showAlert(wire: Record<string, unknown>, buttonCount: number, input: boolean): Promise<NativeAlertResult> {
   return parseNativeResult(await invokeNative(() => Native!.call("show", JSON.stringify(wire))), (value): value is NativeAlertResult => {
@@ -109,13 +119,16 @@ export async function showMessage(options: MessageDialogOptions): Promise<Messag
   if (options.checkbox !== undefined && (!options.checkbox || typeof options.checkbox !== "object" || Object.keys(options.checkbox).some(key => key !== "label" && key !== "checked") || !validString(options.checkbox.label) || (options.checkbox.checked !== undefined && typeof options.checkbox.checked !== "boolean"))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid checkbox options");
   requireAvailable(options.checkbox ? "checkbox" : undefined);
   const { defaultButtonId, cancelButtonId, ...rest } = options;
-  const result = await showAlert({ ...rest, buttons: buttons.map(button => button.label), defaultButton: defaultButtonId === undefined ? 0 : ids.indexOf(defaultButtonId), cancelButton: cancelButtonId === undefined ? undefined : ids.indexOf(cancelButtonId) }, buttons.length, false);
+  const labels = options.buttons ? buttons.map(button => button.label) : await withDefaults([undefined, "OK"]);
+  const result = await showAlert({ ...rest, buttons: labels, defaultButton: defaultButtonId === undefined ? 0 : ids.indexOf(defaultButtonId), cancelButton: cancelButtonId === undefined ? undefined : ids.indexOf(cancelButtonId) }, buttons.length, false);
   return { buttonId: result.button === -1 ? null : ids[result.button]!, ...(options.checkbox ? { checked: result.checked } : {}) };
 }
 
 export async function confirm(message: string, options: ConfirmOptions = {}): Promise<boolean> {
   knownKeys(options, ["title", "windowId", "confirmLabel", "cancelLabel"], "confirmation");
-  const result = await showMessage({ title: options.title ?? "Confirm", message, windowId: options.windowId, buttons: [{ id: "cancel", label: options.cancelLabel ?? "Cancel" }, { id: "continue", label: options.confirmLabel ?? "Continue" }], defaultButtonId: "continue", cancelButtonId: "cancel" });
+  requireAvailable();
+  const [title, cancel, confirmLabel] = await withDefaults([options.title, "Confirm"], [options.cancelLabel, "Cancel"], [options.confirmLabel, "Continue"]);
+  const result = await showMessage({ title: title!, message, windowId: options.windowId, buttons: [{ id: "cancel", label: cancel! }, { id: "continue", label: confirmLabel! }], defaultButtonId: "continue", cancelButtonId: "cancel" });
   return result.buttonId === "continue";
 }
 
@@ -128,9 +141,10 @@ export async function showPrompt(options: PromptOptions): Promise<PromptResult> 
   if (options.secure !== undefined && typeof options.secure !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "secure must be boolean");
   validWindowId(options.windowId);
   requireAvailable("prompt");
+  const buttons = await withDefaults([options.confirmLabel, "OK"], [options.cancelLabel, "Cancel"]);
   const result = await showAlert({
     title: options.title, message: options.message, windowId: options.windowId,
-    buttons: [options.confirmLabel ?? "OK", options.cancelLabel ?? "Cancel"], defaultButton: 0, cancelButton: 1,
+    buttons, defaultButton: 0, cancelButton: 1,
     input: { placeholder: options.placeholder, defaultValue: options.defaultValue ?? "", secure: options.secure ?? false },
   }, 2, true);
   return result.button === 0 ? { canceled: false, value: result.value! } : { canceled: true };
