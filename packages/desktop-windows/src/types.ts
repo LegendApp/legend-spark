@@ -76,6 +76,8 @@ export type WindowOpenOptions = WindowKind & WindowAppearanceOptions & {
 };
 /** Options whose availability differs by platform; see `getWindowAvailability(option)`. */
 export type WindowOption = "aspectRatio" | "opacity" | "contentProtection" | "ignoreMouseEvents" | "tabbing" | "spaces" | "simpleFullscreen" | "documentEdited" | "backgroundMaterial" | "subtitle" | "trafficLightPosition";
+/** Toolbar capabilities beyond items and style; see `getToolbarAvailability(feature)`. */
+export type ToolbarFeature = "customization" | "displayMode" | "overflow" | "shown" | "sidebarToggle";
 export interface WindowUpdateOptions extends WindowAppearanceOptions { macos?: MacOSWindowUpdateOptions }
 export interface WindowInfo {
   id: WindowId;
@@ -141,11 +143,42 @@ export type MacOSToolbarItem =
   | (ToolbarEntry & { type: "menu"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string; width?: number; items: readonly ToolbarMenuItem[] })
   | (ToolbarEntry & { type: "label"; text: string; width?: number })
   | (ToolbarEntry & { type: "search"; disabled?: boolean; collapses?: boolean; placeholder?: string; value?: string; width?: number })
-  | (ToolbarEntry & { type: "segmented"; segments: readonly MacOSToolbarSegment[]; value: string | null });
+  | (ToolbarEntry & { type: "segmented"; segments: readonly MacOSToolbarSegment[]; value: string | null })
+  /** The standard sidebar button, with AppKit's symbol, localized label and tooltip. Pressing it sends `toolbarAction` with this ID; the app toggles its sidebar. At most one per toolbar. */
+  | (Omit<ToolbarEntry, "label"> & { type: "sidebarToggle" });
+export type MacOSToolbarDisplayMode = "icon" | "label" | "iconAndLabel";
 export interface MacOSToolbarOptions {
+  /** Attaches (`true`) or removes (`false`) the toolbar. Setting `items`, `shown`, `displayMode` or `customization` also attaches one. */
   visible?: boolean;
   style?: "automatic" | "expanded" | "preference" | "unified" | "unifiedCompact";
   items?: readonly MacOSToolbarItem[];
+  /** Shows or hides an attached toolbar like View › Show/Hide Toolbar; the toolbar keeps its items. Default `true`. */
+  shown?: boolean;
+  /**
+   * How items render. Default `icon`. AppKit shows labels only (`label`) when every item responds to a click,
+   * so a toolbar with a `label` item rejects it with `E_UNSUPPORTED_OPTION`.
+   */
+  displayMode?: MacOSToolbarDisplayMode;
+  /**
+   * Lets the user rearrange, add and remove items (Customize Toolbar… in the toolbar's context menu, or
+   * `showToolbarCustomizationPalette`) and change the display mode and shown state. Spark saves the user's
+   * layout in the app's user defaults under `id` and restores it whenever a window opens with the same `id`
+   * (the latest change wins; open windows do not mirror each other). Until the user customizes it, the toolbar
+   * shows `items`. Later item updates keep the user's arrangement: new items appear in the palette, removed
+   * items leave the toolbar. `displayMode` and `shown` passed with customization apply and are saved; omit them
+   * to keep the user's choice. `null` turns customization off and shows `items` again.
+   */
+  customization?: { id: string } | null;
+}
+export interface MacOSToolbarState {
+  shown: boolean;
+  displayMode: MacOSToolbarDisplayMode;
+  /** The customization ID, or null when the user cannot customize this toolbar. */
+  customizationId: string | null;
+  /** Item IDs in toolbar order, after any user customization. */
+  itemIds: string[];
+  /** Items that do not fit the window's width and are in the toolbar's overflow menu (»). Empty while the toolbar is hidden. */
+  overflowItemIds: string[];
 }
 export interface MacOSStartupSplitViewOptions {
   sidebarWidth: number;

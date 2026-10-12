@@ -88,6 +88,12 @@ bar. Its readout lists the tab groups and window 1's tab events, with test IDs t
 start (steps in `screens/windows/window-tabs.ts`). See
 [the window contract](../../docs/api-window-contract.md#window-tabs).
 
+`windows/toolbar` opens a child window with a toolbar (sidebar item, segmented control,
+menu, buttons) and changes its display mode, shown state, width (a narrow window moves
+items into the overflow menu) and customization one row at a time. After each change it
+shows `getToolbarState` and the last toolbar event, and lists `getToolbarAvailability(feature)`.
+See [the window contract](../../docs/api-window-contract.md#toolbar-customization-display-modes-overflow-and-visibility).
+
 ## App-wide behavior
 
 `shell/app-controller.ts` starts once from `index.ts` and lives for the process:

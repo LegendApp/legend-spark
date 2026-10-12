@@ -494,6 +494,8 @@ static char LegendContentLayoutModeKey;
 static char LegendTitlebarControlMetadataKey;
 static char LegendToolbarControlMetadataKey;
 static char LegendToolbarWindowIdentifierKey;
+static char LegendToolbarLayoutKey;
+static char LegendToolbarMenuControlKey;
 static char LegendToolbarSearchFieldKey;
 static char LegendToolbarSearchItemKey;
 static char LegendToolbarSearchWidthKey;
@@ -514,6 +516,106 @@ static NSToolbar *LegendCreateToolbar(NSString *windowIdentifier)
   toolbar.displayMode = NSToolbarDisplayModeIconOnly;
   toolbar.showsBaselineSeparator = NO;
   return toolbar;
+}
+
+// A customizable toolbar's layout (items, display mode, shown state) persists in user
+// defaults under its customization ID. Each part is saved only when the user changes it, so
+// the app's items keep applying until the user adds or removes one. Spark saves and restores it rather than using
+// AppKit's autosave, which works through toolbar families: toolbars sharing an identifier
+// mirror every change into each other, including a closed window's toolbar that is not yet
+// released, and AppKit throws when their items differ.
+@interface LegendToolbarLayout : NSObject
+@property (nonatomic, readonly, copy) NSString *customizationId;
+// Programmatic changes (restoring, item updates) are not user customizations.
+@property (nonatomic) NSInteger suspended;
+- (instancetype)initWithToolbar:(NSToolbar *)toolbar customizationId:(NSString *)customizationId;
+- (NSDictionary *)saved;
+- (void)saveItems;
+- (void)stop;
+@end
+
+@implementation LegendToolbarLayout {
+  __weak NSToolbar *_toolbar;
+  id _added;
+  id _removed;
+  BOOL _observing;
+}
+
+- (instancetype)initWithToolbar:(NSToolbar *)toolbar customizationId:(NSString *)customizationId
+{
+  if ((self = [super init])) {
+    _toolbar = toolbar;
+    _customizationId = [customizationId copy];
+    __weak LegendToolbarLayout *weakSelf = self;
+    // An added item joins toolbar.items after this notification.
+    _added = [NSNotificationCenter.defaultCenter addObserverForName:NSToolbarWillAddItemNotification object:toolbar queue:nil
+      usingBlock:^(NSNotification *note) {
+        if (weakSelf.suspended == 0) dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf saveItems]; });
+      }];
+    _removed = [NSNotificationCenter.defaultCenter addObserverForName:NSToolbarDidRemoveItemNotification object:toolbar queue:nil
+      usingBlock:^(NSNotification *note) { [weakSelf saveItems]; }];
+    [toolbar addObserver:self forKeyPath:@"displayMode" options:0 context:NULL];
+    [toolbar addObserver:self forKeyPath:@"visible" options:0 context:NULL];
+    _observing = YES;
+  }
+  return self;
+}
+
+- (NSString *)defaultsKey
+{
+  return [NSString stringWithFormat:@"%@.toolbarLayout.%@", SparkNamespace(), _customizationId];
+}
+
+- (NSDictionary *)saved
+{
+  return [NSUserDefaults.standardUserDefaults dictionaryForKey:[self defaultsKey]];
+}
+
+- (void)save:(NSString *)part value:(id (^)(NSToolbar *toolbar))value
+{
+  NSToolbar *toolbar = _toolbar;
+  if (!toolbar || !_observing || self.suspended > 0) return;
+  NSMutableDictionary *layout = [self.saved mutableCopy] ?: [NSMutableDictionary new];
+  layout[part] = value(toolbar);
+  [NSUserDefaults.standardUserDefaults setObject:layout forKey:[self defaultsKey]];
+}
+
+- (void)saveItems
+{
+  [self save:@"items" value:^id(NSToolbar *toolbar) { return [toolbar.items valueForKey:@"itemIdentifier"]; }];
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
+{
+  if ([keyPath isEqualToString:@"displayMode"]) [self save:@"displayMode" value:^id(NSToolbar *toolbar) { return @(toolbar.displayMode); }];
+  else [self save:@"shown" value:^id(NSToolbar *toolbar) { return @(toolbar.visible); }];
+}
+
+- (void)stop
+{
+  if (!_observing) return;
+  _observing = NO;
+  [NSNotificationCenter.defaultCenter removeObserver:_added];
+  [NSNotificationCenter.defaultCenter removeObserver:_removed];
+  [_toolbar removeObserver:self forKeyPath:@"displayMode"];
+  [_toolbar removeObserver:self forKeyPath:@"visible"];
+}
+
+- (void)dealloc
+{
+  [NSNotificationCenter.defaultCenter removeObserver:_added];
+  [NSNotificationCenter.defaultCenter removeObserver:_removed];
+}
+@end
+
+static LegendToolbarLayout *LegendToolbarLayoutFor(NSToolbar *toolbar)
+{
+  return toolbar ? objc_getAssociatedObject(toolbar, &LegendToolbarLayoutKey) : nil;
+}
+
+static NSString *LegendToolbarCustomizationId(NSToolbar *toolbar)
+{
+  return LegendToolbarLayoutFor(toolbar).customizationId;
 }
 
 static NSString *LegendToolbarWindowIdentifier(NSToolbar *toolbar)
@@ -819,7 +921,7 @@ extern "C" void LegendPrecreateRestorableWindows(void)
 
 @interface RNWindowManager ()
 #if TARGET_OS_OSX
-<NSWindowDelegate, NSSearchFieldDelegate, NSToolbarDelegate>
+<NSWindowDelegate, NSSearchFieldDelegate, NSToolbarDelegate, NSMenuDelegate>
 #endif
 @property (nonatomic, strong) NSMutableDictionary<NSString *, id> *windows;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, RCTUIView *> *rootViews;
@@ -1214,35 +1316,107 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   return identifiers;
 }
 
-- (NSToolbar *)ensureToolbarForWindow:(NSWindow *)window identifier:(NSString *)identifier
+// Replaces the toolbar's items with the given identifiers that the toolbar allows.
+- (void)setItemIdentifiers:(NSArray *)identifiers forToolbar:(NSToolbar *)toolbar
 {
-  NSToolbar *toolbar = window.toolbar;
-  if (!toolbar || !objc_getAssociatedObject(toolbar, &LegendToolbarWindowIdentifierKey)) {
-    toolbar = LegendCreateToolbar(identifier);
-    window.toolbar = toolbar;
+  NSArray<NSToolbarItemIdentifier> *allowed = [self toolbarAllowedItemIdentifiers:toolbar];
+  LegendToolbarLayout *layout = LegendToolbarLayoutFor(toolbar);
+  layout.suspended++;
+  while (toolbar.items.count > 0) {
+    [toolbar removeItemAtIndex:toolbar.items.count - 1];
   }
-  toolbar.delegate = self;
-  toolbar.allowsUserCustomization = NO;
-  toolbar.autosavesConfiguration = NO;
-  return toolbar;
+  for (id itemIdentifier in identifiers) {
+    if ([allowed containsObject:itemIdentifier]) [toolbar insertItemWithItemIdentifier:itemIdentifier atIndex:toolbar.items.count];
+  }
+  layout.suspended--;
 }
 
-- (void)applyToolbarItemsFromOptions:(NSDictionary *)options toWindow:(NSWindow *)window identifier:(NSString *)identifier
+// Attaches a toolbar when the window has none of ours, stores the item configurations and
+// starts or stops customization. Returns whether the items are already laid out: a newly
+// attached toolbar loads the default items, and turning customization on or off lays out
+// the saved layout or the app's items.
+- (BOOL)prepareToolbarForWindow:(NSWindow *)window identifier:(NSString *)identifier
+                  customization:(id)customization configs:(NSArray<NSDictionary *> *)configs
+{
+  NSToolbar *toolbar = window.toolbar;
+  BOOL attach = !toolbar || !objc_getAssociatedObject(toolbar, &LegendToolbarWindowIdentifierKey);
+  if (attach) toolbar = LegendCreateToolbar(identifier);
+  // An update can attach the toolbar without naming the window (LegendApplyWindowOptions).
+  else objc_setAssociatedObject(toolbar, &LegendToolbarWindowIdentifierKey, identifier ?: @"", OBJC_ASSOCIATION_COPY_NONATOMIC);
+  toolbar.delegate = self;
+  if (configs || attach) self.toolbarItemConfigs[toolbar.identifier] = configs ?: @[];
+  if (attach) window.toolbar = toolbar;
+
+  LegendToolbarLayout *layout = LegendToolbarLayoutFor(toolbar);
+  NSString *customizationId = customization == nil ? layout.customizationId
+    : ([customization isKindOfClass:NSString.class] ? customization : nil);
+  if ([(customizationId ?: @"") isEqualToString:layout.customizationId ?: @""]) return attach;
+  [layout stop];
+  toolbar.allowsUserCustomization = customizationId != nil;
+  if (!customizationId) {
+    objc_setAssociatedObject(toolbar, &LegendToolbarLayoutKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    // Without customization the toolbar shows the app's items again.
+    [self setItemIdentifiers:[self toolbarDefaultItemIdentifiers:toolbar] forToolbar:toolbar];
+    return YES;
+  }
+  layout = [[LegendToolbarLayout alloc] initWithToolbar:toolbar customizationId:customizationId];
+  objc_setAssociatedObject(toolbar, &LegendToolbarLayoutKey, layout, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  NSDictionary *saved = layout.saved;
+  layout.suspended++;
+  // Until the user customizes it, the toolbar shows the app's items.
+  [self setItemIdentifiers:[saved[@"items"] isKindOfClass:NSArray.class] ? saved[@"items"] : [self toolbarDefaultItemIdentifiers:toolbar] forToolbar:toolbar];
+  NSInteger mode = [saved[@"displayMode"] isKindOfClass:NSNumber.class] ? [saved[@"displayMode"] integerValue] : -1;
+  if (mode == NSToolbarDisplayModeIconOnly || mode == NSToolbarDisplayModeIconAndLabel || mode == NSToolbarDisplayModeLabelOnly) toolbar.displayMode = (NSToolbarDisplayMode)mode;
+  if ([saved[@"shown"] isKindOfClass:NSNumber.class]) toolbar.visible = [saved[@"shown"] boolValue];
+  layout.suspended--;
+  return YES;
+}
+
+// Returns an error message when AppKit refuses the requested display mode.
+- (NSString *)applyToolbarItemsFromOptions:(NSDictionary *)options toWindow:(NSWindow *)window identifier:(NSString *)identifier
 {
   NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
-  if (!LegendDictionaryHasKey(windowStyle, @"toolbarItems")) {
-    return;
+  BOOL hasItems = LegendDictionaryHasKey(windowStyle, @"toolbarItems");
+  BOOL hasCustomization = LegendDictionaryHasKey(windowStyle, @"toolbarCustomization");
+  NSString *displayMode = [windowStyle[@"toolbarDisplayMode"] isKindOfClass:NSString.class] ? windowStyle[@"toolbarDisplayMode"] : nil;
+  NSNumber *shown = [windowStyle[@"toolbarShown"] isKindOfClass:NSNumber.class] ? windowStyle[@"toolbarShown"] : nil;
+  if (!hasItems && !hasCustomization && !displayMode && !shown) {
+    return nil;
   }
 
-  NSArray *toolbarItems = [windowStyle[@"toolbarItems"] isKindOfClass:NSArray.class] ? windowStyle[@"toolbarItems"] : @[];
-  NSToolbar *toolbar = [self ensureToolbarForWindow:window identifier:identifier];
-  NSMutableArray<NSDictionary *> *configs = [NSMutableArray new];
-  for (id item in toolbarItems) {
-    if ([item isKindOfClass:NSDictionary.class]) {
-      NSMutableDictionary *config = [item mutableCopy]; config[@"instanceId"] = objc_getAssociatedObject(window, NSSelectorFromString(@"sparkWindowInstanceId")) ?: @""; [configs addObject:config];
+  NSMutableArray<NSDictionary *> *configs = nil;
+  if (hasItems) {
+    configs = [NSMutableArray new];
+    NSArray *toolbarItems = [windowStyle[@"toolbarItems"] isKindOfClass:NSArray.class] ? windowStyle[@"toolbarItems"] : @[];
+    for (id item in toolbarItems) {
+      if ([item isKindOfClass:NSDictionary.class]) {
+        NSMutableDictionary *config = [item mutableCopy]; config[@"instanceId"] = objc_getAssociatedObject(window, NSSelectorFromString(@"sparkWindowInstanceId")) ?: @""; [configs addObject:config];
+      }
     }
   }
-  NSArray<NSDictionary *> *previousConfigs = self.toolbarItemConfigs[toolbar.identifier];
+  NSArray<NSDictionary *> *previousConfigs = window.toolbar ? self.toolbarItemConfigs[window.toolbar.identifier] : nil;
+  BOOL attached = [self prepareToolbarForWindow:window identifier:identifier
+                                  customization:hasCustomization ? (windowStyle[@"toolbarCustomization"] ?: NSNull.null) : nil
+                                        configs:configs];
+  NSToolbar *toolbar = window.toolbar;
+  // The app's changes are not customizations: only the user's are saved.
+  LegendToolbarLayout *layout = LegendToolbarLayoutFor(toolbar);
+  layout.suspended++;
+  if (hasItems && !attached) [self updateToolbar:toolbar configs:configs previousConfigs:previousConfigs];
+  if (shown) toolbar.visible = shown.boolValue;
+  // Inserting items can change the display mode, so it applies after them. AppKit keeps
+  // its current mode instead of showing labels only while an item has nothing to click
+  // (a label item has no action, control or menu).
+  NSToolbarDisplayMode mode = [displayMode isEqualToString:@"label"] ? NSToolbarDisplayModeLabelOnly
+    : [displayMode isEqualToString:@"iconAndLabel"] ? NSToolbarDisplayModeIconAndLabel : NSToolbarDisplayModeIconOnly;
+  if (displayMode) toolbar.displayMode = mode;
+  layout.suspended--;
+  if (displayMode && toolbar.displayMode != mode) return @"AppKit shows labels only when every toolbar item responds to a click; label items do not";
+  return nil;
+}
+
+- (void)updateToolbar:(NSToolbar *)toolbar configs:(NSArray<NSDictionary *> *)configs previousConfigs:(NSArray<NSDictionary *> *)previousConfigs
+{
   BOOL menuUpdate = previousConfigs != nil && previousConfigs.count == configs.count;
   for (NSUInteger index = 0; menuUpdate && index < configs.count; index++) {
     NSMutableDictionary *previous = [previousConfigs[index] mutableCopy];
@@ -1253,7 +1427,6 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
     menuUpdate = [previous isEqualToDictionary:next];
   }
-  self.toolbarItemConfigs[toolbar.identifier] = configs;
   if (menuUpdate) {
     for (NSDictionary *config in configs) {
       if (![config[@"type"] isEqual:@"menuButton"]) continue;
@@ -1270,16 +1443,18 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       NSMutableDictionary *nextMetadata = [metadata mutableCopy];
       nextMetadata[@"menuItems"] = config[@"menuItems"] ?: @[];
       objc_setAssociatedObject(control, &LegendToolbarControlMetadataKey, nextMetadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      if (item.view) item.menuFormRepresentation = [self toolbarMenuFormWithTitle:item.label control:(NSControl *)item.view];
     }
     if (menuUpdate) return;
   }
 
-  while (toolbar.items.count > 0) {
-    [toolbar removeItemAtIndex:toolbar.items.count - 1];
-  }
-  for (NSToolbarItemIdentifier itemIdentifier in [self toolbarDefaultItemIdentifiers:toolbar]) {
-    [toolbar insertItemWithItemIdentifier:itemIdentifier atIndex:toolbar.items.count];
-  }
+  // Once the user has added or removed an item the toolbar keeps their arrangement: items the
+  // update removed leave it, and new items appear only in the customization palette, as in any
+  // AppKit app. Until then (a saved display mode or shown state alone doesn't count) it shows
+  // the app's items.
+  BOOL customized = [LegendToolbarLayoutFor(toolbar).saved[@"items"] isKindOfClass:NSArray.class];
+  [self setItemIdentifiers:customized ? [toolbar.items valueForKey:@"itemIdentifier"] : [self toolbarDefaultItemIdentifiers:toolbar]
+                forToolbar:toolbar];
 }
 
 - (NSArray<NSToolbarItemIdentifier> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
@@ -1426,6 +1601,31 @@ willBeInsertedIntoToolbar:(BOOL)flag
   }
 
   NSString *type = [config[@"type"] isKindOfClass:NSString.class] ? config[@"type"] : nil;
+  if ([type isEqualToString:@"sidebarToggle"]) {
+    // AppKit's own sidebar item always sends toggleSidebar: through the responder chain and
+    // ignores a target, while Spark sidebars are React state. This item takes the standard
+    // item's localized label, tooltip and symbol (read once), and reports a toolbarAction for its ID.
+    static NSToolbarItem *standardItem;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+      NSToolbar *standard = [[NSToolbar alloc] initWithIdentifier:@"LegendToolbar.Sidebar"];
+      [standard insertItemWithItemIdentifier:NSToolbarToggleSidebarItemIdentifier atIndex:0];
+      standardItem = standard.items.firstObject;
+    });
+    NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+    toolbarItem.label = standardItem.label;
+    toolbarItem.paletteLabel = standardItem.paletteLabel;
+    toolbarItem.toolTip = standardItem.toolTip;
+    toolbarItem.image = standardItem.image;
+    if (@available(macOS 11.0, *)) toolbarItem.navigational = YES;
+    toolbarItem.target = self;
+    toolbarItem.action = @selector(toolbarButtonItemPressed:);
+    objc_setAssociatedObject(toolbarItem, &LegendToolbarControlMetadataKey, @{
+      @"itemId": config[@"id"], @"value": @"", @"menuItems": @[],
+      @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar), @"instanceId": config[@"instanceId"] ?: @"",
+    }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return toolbarItem;
+  }
   if ([type isEqualToString:@"button"] || [type isEqualToString:@"menuButton"]) {
     NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
     NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
@@ -1483,6 +1683,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       button.frame = NSMakeRect(0, 0, buttonWidth, MAX(28, button.fittingSize.height));
       objc_setAssociatedObject(button, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
       toolbarItem.view = button;
+      toolbarItem.menuFormRepresentation = [self toolbarMenuFormWithTitle:label control:button];
     } else {
       toolbarItem.image = image;
       toolbarItem.target = self;
@@ -1689,7 +1890,65 @@ willBeInsertedIntoToolbar:(BOOL)flag
   toolbarItem.view = control;
   toolbarItem.label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
   toolbarItem.paletteLabel = toolbarItem.label;
+  toolbarItem.menuFormRepresentation = [self toolbarMenuFormWithTitle:toolbarItem.label control:control];
   return toolbarItem;
+}
+
+// Items that do not fit the window's width move to the toolbar's overflow menu (»), and
+// the label-only display mode shows labels; both use an item's menu form. AppKit's
+// default form for a view item only clicks the hidden view, so menu buttons and segmented
+// controls get a submenu, rebuilt from the control's current state each time it opens,
+// and a menu button without entries gets an entry that presses it.
+- (NSMenuItem *)toolbarMenuFormWithTitle:(NSString *)title control:(NSControl *)control
+{
+  NSDictionary *metadata = objc_getAssociatedObject(control, &LegendToolbarControlMetadataKey);
+  if ([control isKindOfClass:NSButton.class] && [metadata[@"menuItems"] count] == 0) {
+    NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(toolbarMenuFormPressed:) keyEquivalent:@""];
+    item.target = self;
+    item.representedObject = control;
+    return item;
+  }
+  NSMenu *submenu = [[NSMenu alloc] initWithTitle:title];
+  submenu.delegate = self;
+  objc_setAssociatedObject(submenu, &LegendToolbarMenuControlKey, control, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
+  item.submenu = submenu;
+  return item;
+}
+
+- (void)menuNeedsUpdate:(NSMenu *)menu
+{
+  id control = objc_getAssociatedObject(menu, &LegendToolbarMenuControlKey);
+  if (!control) return;
+  [menu removeAllItems];
+  if (![control isKindOfClass:NSSegmentedControl.class]) {
+    id metadata = objc_getAssociatedObject(control, &LegendToolbarControlMetadataKey);
+    [self fillToolbarMenu:menu metadata:[metadata isKindOfClass:NSDictionary.class] ? metadata : @{}];
+    return;
+  }
+  NSSegmentedControl *segmented = control;
+  for (NSInteger index = 0; index < segmented.segmentCount; index++) {
+    NSString *title = [segmented labelForSegment:index].length > 0 ? [segmented labelForSegment:index] : [segmented toolTipForSegment:index] ?: @"";
+    NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(toolbarSegmentMenuItemSelected:) keyEquivalent:@""];
+    item.target = self;
+    item.tag = index;
+    item.image = [segmented imageForSegment:index];
+    item.state = segmented.selectedSegment == index ? NSControlStateValueOn : NSControlStateValueOff;
+    item.representedObject = segmented;
+    [menu addItem:item];
+  }
+}
+
+- (void)toolbarMenuFormPressed:(NSMenuItem *)sender
+{
+  [self toolbarButtonItemPressed:sender.representedObject];
+}
+
+- (void)toolbarSegmentMenuItemSelected:(NSMenuItem *)sender
+{
+  NSSegmentedControl *control = sender.representedObject;
+  control.selectedSegment = sender.tag;
+  [self toolbarSegmentedControlChanged:control];
 }
 
 - (void)toolbarMenuSliderChanged:(NSSlider *)sender
@@ -1739,6 +1998,84 @@ willBeInsertedIntoToolbar:(BOOL)flag
   [self expandToolbarSearchItem:toolbarItem value:nil focus:YES sendChange:YES animated:YES];
 }
 
+// Builds a toolbar menu button's items from its metadata, for the popup and for the
+// overflow and label-only menu form (menuNeedsUpdate:), so both reflect the latest update.
+- (void)fillToolbarMenu:(NSMenu *)menu metadata:(NSDictionary *)representedObject
+{
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSString *itemId = [representedObject[@"itemId"] isKindOfClass:NSString.class]
+    ? representedObject[@"itemId"]
+    : @"";
+  NSArray *menuItems = [representedObject[@"menuItems"] isKindOfClass:NSArray.class]
+    ? representedObject[@"menuItems"]
+    : @[];
+  menu.autoenablesItems = NO;
+  for (id itemCandidate in menuItems) {
+    if (![itemCandidate isKindOfClass:NSDictionary.class]) {
+      continue;
+    }
+    NSDictionary *itemConfig = (NSDictionary *)itemCandidate;
+    if (LegendDictionaryHasKey(itemConfig, @"separator") && [itemConfig[@"separator"] boolValue]) {
+      [menu addItem:NSMenuItem.separatorItem];
+      continue;
+    }
+    NSString *itemLabel = [itemConfig[@"title"] isKindOfClass:NSString.class] ? itemConfig[@"title"] : @"";
+    NSString *itemValue = [itemConfig[@"id"] isKindOfClass:NSString.class] ? itemConfig[@"id"] : @"";
+    if (itemLabel.length == 0 || itemValue.length == 0) {
+      continue;
+    }
+    NSDictionary *sliderConfig = [itemConfig[@"slider"] isKindOfClass:NSDictionary.class] ? itemConfig[@"slider"] : nil;
+    if (sliderConfig) {
+      double minimum = [sliderConfig[@"min"] doubleValue];
+      double maximum = [sliderConfig[@"max"] doubleValue];
+      double initial = [sliderConfig[@"value"] doubleValue];
+      if (!isfinite(minimum) || !isfinite(maximum) || !isfinite(initial) || maximum <= minimum) continue;
+      NSString *suffix = [sliderConfig[@"suffix"] isKindOfClass:NSString.class] ? sliderConfig[@"suffix"] : @"";
+      NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 280, 68)];
+      NSTextField *label = [NSTextField labelWithString:itemLabel];
+      label.frame = NSMakeRect(16, 42, 190, 18);
+      [container addSubview:label];
+      NSTextField *readout = [NSTextField labelWithString:@""];
+      readout.tag = 731;
+      readout.alignment = NSTextAlignmentRight;
+      readout.frame = NSMakeRect(210, 42, 54, 18);
+      [container addSubview:readout];
+      NSSlider *slider = [NSSlider sliderWithValue:MAX(minimum, MIN(maximum, initial)) minValue:minimum maxValue:maximum target:self action:@selector(toolbarMenuSliderChanged:)];
+      slider.frame = NSMakeRect(16, 12, 248, 24);
+      slider.continuous = YES;
+      slider.accessibilityLabel = itemLabel;
+      slider.enabled = LegendDictionaryHasKey(itemConfig, @"enabled") ? [itemConfig[@"enabled"] boolValue] : YES;
+      readout.stringValue = [NSString stringWithFormat:@"%g%@", slider.doubleValue, suffix];
+      objc_setAssociatedObject(slider, &LegendToolbarControlMetadataKey, @{
+        @"windowIdentifier": identifier, @"instanceId": representedObject[@"instanceId"] ?: @"", @"itemId": itemId, @"value": itemValue, @"suffix": suffix,
+      }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      [container addSubview:slider];
+      NSMenuItem *sliderItem = [NSMenuItem new];
+      sliderItem.view = container;
+      [menu addItem:sliderItem];
+      continue;
+    }
+    NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:itemLabel action:@selector(toolbarMenuItemSelected:) keyEquivalent:@""];
+    item.target = self;
+    item.enabled = LegendDictionaryHasKey(itemConfig, @"enabled") ? [itemConfig[@"enabled"] boolValue] : YES;
+    item.state = LegendDictionaryHasKey(itemConfig, @"checked") && [itemConfig[@"checked"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+    NSString *itemSystemImageName = [itemConfig[@"systemImageName"] isKindOfClass:NSString.class] ? itemConfig[@"systemImageName"] : nil;
+    if (itemSystemImageName.length > 0) {
+      if (@available(macOS 11.0, *)) {
+        item.image = [NSImage imageWithSystemSymbolName:itemSystemImageName accessibilityDescription:itemLabel];
+      }
+    }
+    item.representedObject = @{
+      @"itemId": itemId,
+      @"value": itemValue,
+      @"windowIdentifier": identifier, @"instanceId": representedObject[@"instanceId"] ?: @"",
+    };
+    [menu addItem:item];
+  }
+}
+
 - (void)toolbarButtonItemPressed:(id)sender
 {
   id metadata = objc_getAssociatedObject(sender, &LegendToolbarControlMetadataKey);
@@ -1760,69 +2097,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
   if (menuItems.count > 0) {
     NSMenu *menu = [NSMenu new];
-    menu.autoenablesItems = NO;
-    for (id itemCandidate in menuItems) {
-      if (![itemCandidate isKindOfClass:NSDictionary.class]) {
-        continue;
-      }
-      NSDictionary *itemConfig = (NSDictionary *)itemCandidate;
-      if (LegendDictionaryHasKey(itemConfig, @"separator") && [itemConfig[@"separator"] boolValue]) {
-        [menu addItem:NSMenuItem.separatorItem];
-        continue;
-      }
-      NSString *itemLabel = [itemConfig[@"title"] isKindOfClass:NSString.class] ? itemConfig[@"title"] : @"";
-      NSString *itemValue = [itemConfig[@"id"] isKindOfClass:NSString.class] ? itemConfig[@"id"] : @"";
-      if (itemLabel.length == 0 || itemValue.length == 0) {
-        continue;
-      }
-      NSDictionary *sliderConfig = [itemConfig[@"slider"] isKindOfClass:NSDictionary.class] ? itemConfig[@"slider"] : nil;
-      if (sliderConfig) {
-        double minimum = [sliderConfig[@"min"] doubleValue];
-        double maximum = [sliderConfig[@"max"] doubleValue];
-        double initial = [sliderConfig[@"value"] doubleValue];
-        if (!isfinite(minimum) || !isfinite(maximum) || !isfinite(initial) || maximum <= minimum) continue;
-        NSString *suffix = [sliderConfig[@"suffix"] isKindOfClass:NSString.class] ? sliderConfig[@"suffix"] : @"";
-        NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 280, 68)];
-        NSTextField *label = [NSTextField labelWithString:itemLabel];
-        label.frame = NSMakeRect(16, 42, 190, 18);
-        [container addSubview:label];
-        NSTextField *readout = [NSTextField labelWithString:@""];
-        readout.tag = 731;
-        readout.alignment = NSTextAlignmentRight;
-        readout.frame = NSMakeRect(210, 42, 54, 18);
-        [container addSubview:readout];
-        NSSlider *slider = [NSSlider sliderWithValue:MAX(minimum, MIN(maximum, initial)) minValue:minimum maxValue:maximum target:self action:@selector(toolbarMenuSliderChanged:)];
-        slider.frame = NSMakeRect(16, 12, 248, 24);
-        slider.continuous = YES;
-        slider.accessibilityLabel = itemLabel;
-        slider.enabled = LegendDictionaryHasKey(itemConfig, @"enabled") ? [itemConfig[@"enabled"] boolValue] : YES;
-        readout.stringValue = [NSString stringWithFormat:@"%g%@", slider.doubleValue, suffix];
-        objc_setAssociatedObject(slider, &LegendToolbarControlMetadataKey, @{
-          @"windowIdentifier": identifier, @"instanceId": representedObject[@"instanceId"] ?: @"", @"itemId": itemId, @"value": itemValue, @"suffix": suffix,
-        }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [container addSubview:slider];
-        NSMenuItem *sliderItem = [NSMenuItem new];
-        sliderItem.view = container;
-        [menu addItem:sliderItem];
-        continue;
-      }
-      NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:itemLabel action:@selector(toolbarMenuItemSelected:) keyEquivalent:@""];
-      item.target = self;
-      item.enabled = LegendDictionaryHasKey(itemConfig, @"enabled") ? [itemConfig[@"enabled"] boolValue] : YES;
-      item.state = LegendDictionaryHasKey(itemConfig, @"checked") && [itemConfig[@"checked"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
-      NSString *itemSystemImageName = [itemConfig[@"systemImageName"] isKindOfClass:NSString.class] ? itemConfig[@"systemImageName"] : nil;
-      if (itemSystemImageName.length > 0) {
-        if (@available(macOS 11.0, *)) {
-          item.image = [NSImage imageWithSystemSymbolName:itemSystemImageName accessibilityDescription:itemLabel];
-        }
-      }
-      item.representedObject = @{
-        @"itemId": itemId,
-        @"value": itemValue,
-        @"windowIdentifier": identifier, @"instanceId": representedObject[@"instanceId"] ?: @"",
-      };
-      [menu addItem:item];
-    }
+    [self fillToolbarMenu:menu metadata:representedObject];
 
     if (menu.numberOfItems > 0) {
       if ([sender isKindOfClass:NSView.class]) {
@@ -2225,6 +2500,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     LegendApplyToolbarStyle(window, toolbarStyle);
     LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
     [self applyTitlebarControlsFromOptions:options toWindow:window identifier:identifier];
+    // JavaScript re-applies the toolbar with setWindowOptions after opening, which reports a refused display mode.
     [self applyToolbarItemsFromOptions:options toWindow:window identifier:identifier];
     [self applyTitlebarMaterialFromOptions:options toWindow:window identifier:identifier];
     LegendApplyWindowBackgroundColor(window, backgroundColor);
@@ -2507,6 +2783,93 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #endif
 }
 
+#if TARGET_OS_OSX
+- (NSWindow *)toolbarWindowForIdentifier:(NSString *)identifier reject:(RCTPromiseRejectBlock)reject
+{
+  NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+  NSWindow *window = [targetIdentifier isEqualToString:@"main"]
+    ? [RNWindowManager getMainWindow]
+    : (NSWindow *)self.windows[targetIdentifier];
+  if (!window) {
+    reject(@"E_NOT_FOUND", @"Window not found", nil);
+    return nil;
+  }
+  if (!window.toolbar) {
+    reject(@"E_NOT_FOUND", @"The window has no toolbar", nil);
+    return nil;
+  }
+  return window;
+}
+
+// The JavaScript item ID for a toolbar item, or nil for AppKit spaces.
+- (NSString *)toolbarItemIdForItem:(NSToolbarItem *)item toolbar:(NSToolbar *)toolbar
+{
+  NSDictionary *config = [self toolbarItemConfigForIdentifier:item.itemIdentifier toolbar:toolbar];
+  return [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : nil;
+}
+#endif
+
+- (void)getWindowToolbarState:(NSString *)identifier
+                      resolve:(RCTPromiseResolveBlock)resolve
+                       reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSWindow *window = [self toolbarWindowForIdentifier:identifier reject:reject];
+    if (!window) return;
+    NSToolbar *toolbar = window.toolbar;
+    // Overflow follows layout; a window the test driver never shows still lays out its title bar.
+    [window.contentView.superview layoutSubtreeIfNeeded];
+    NSArray<NSToolbarItem *> *visibleItems = toolbar.visible ? (toolbar.visibleItems ?: @[]) : toolbar.items;
+    NSMutableArray<NSString *> *itemIds = [NSMutableArray new];
+    NSMutableArray<NSString *> *overflowItemIds = [NSMutableArray new];
+    for (NSToolbarItem *item in toolbar.items) {
+      NSString *itemId = [self toolbarItemIdForItem:item toolbar:toolbar];
+      if (!itemId) continue;
+      [itemIds addObject:itemId];
+      if (![visibleItems containsObject:item]) [overflowItemIds addObject:itemId];
+    }
+    NSString *displayMode = toolbar.displayMode == NSToolbarDisplayModeIconOnly ? @"icon"
+      : toolbar.displayMode == NSToolbarDisplayModeLabelOnly ? @"label" : @"iconAndLabel";
+    resolve([self jsonStringFromObject:@{
+      @"shown": @(toolbar.visible),
+      @"displayMode": displayMode,
+      @"customizationId": LegendToolbarCustomizationId(toolbar) ?: NSNull.null,
+      @"itemIds": itemIds,
+      @"overflowItemIds": overflowItemIds,
+    }]);
+  });
+#else
+  reject(@"E_UNSUPPORTED_PLATFORM", @"WindowManager is only available on macOS", nil);
+#endif
+}
+
+- (void)runWindowToolbarCustomizationPalette:(NSString *)identifier
+                                     resolve:(RCTPromiseResolveBlock)resolve
+                                      reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSWindow *window = [self toolbarWindowForIdentifier:identifier reject:reject];
+    if (!window) return;
+    NSToolbar *toolbar = window.toolbar;
+    if (!toolbar.allowsUserCustomization) {
+      reject(@"E_UNAVAILABLE", @"Toolbar customization is off for this window", nil);
+      return;
+    }
+    // The palette is a sheet; driver mode never puts windows on screen.
+    if (LegendTestDriverActive()) {
+      reject(@"E_UNAVAILABLE", @"The test driver does not show the customization palette", nil);
+      return;
+    }
+    [toolbar runCustomizationPalette:nil];
+    resolve([self successJson]);
+  });
+#else
+  reject(@"E_UNSUPPORTED_PLATFORM", @"WindowManager is only available on macOS", nil);
+#endif
+}
+
 - (void)focusToolbarSearchItem:(NSString *)identifier
                         itemId:(NSString *)itemId
                          value:(NSString *)value
@@ -2691,8 +3054,12 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
     LegendApplyWindowOptions(mainWindow, options);
     [self applyTitlebarControlsFromOptions:options toWindow:mainWindow identifier:@"main"];
-    [self applyToolbarItemsFromOptions:options toWindow:mainWindow identifier:@"main"];
+    NSString *toolbarError = [self applyToolbarItemsFromOptions:options toWindow:mainWindow identifier:@"main"];
     [self applyTitlebarMaterialFromOptions:options toWindow:mainWindow identifier:@"main"];
+    if (toolbarError) {
+      reject(@"E_UNSUPPORTED_OPTION", toolbarError, nil);
+      return;
+    }
     resolve([self successJson]);
   });
 #else
@@ -2719,10 +3086,14 @@ willBeInsertedIntoToolbar:(BOOL)flag
                    moduleName:self.moduleNames[targetIdentifier] ?: @""];
     LegendApplyWindowOptions(window, options);
     [self applyTitlebarControlsFromOptions:options toWindow:window identifier:targetIdentifier];
-    [self applyToolbarItemsFromOptions:options toWindow:window identifier:targetIdentifier];
+    NSString *toolbarError = [self applyToolbarItemsFromOptions:options toWindow:window identifier:targetIdentifier];
     [self applyTitlebarMaterialFromOptions:options toWindow:window identifier:targetIdentifier];
     RCTUIView *rootView = self.rootViews[targetIdentifier];
     LegendSizeRootViewToWindow(rootView, window);
+    if (toolbarError) {
+      reject(@"E_UNSUPPORTED_OPTION", toolbarError, nil);
+      return;
+    }
     resolve([self successJson]);
   });
 #else
@@ -3081,9 +3452,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
     [self removeTitlebarControlsForIdentifier:identifier fromWindow:window];
     NSToolbar *toolbar = window.toolbar;
     if (toolbar) {
-      if (toolbar.identifier) {
-        [self.toolbarItemConfigs removeObjectForKey:toolbar.identifier];
-      }
+      [self.toolbarItemConfigs removeObjectForKey:toolbar.identifier];
+      // Closing is not a customization: stop saving before the items go.
+      [LegendToolbarLayoutFor(toolbar) stop];
       toolbar.delegate = nil;
       while (toolbar.items.count > 0) {
         [toolbar removeItemAtIndex:toolbar.items.count - 1];

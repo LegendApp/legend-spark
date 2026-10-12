@@ -21,6 +21,8 @@ export interface Spec extends TurboModule {
   setWindowToolbarItemText(identifier: string, itemId: string, text: string): Promise<string>;
   setPreventDisplaySleep(enabled: boolean): Promise<string>;
   focusToolbarSearchItem(identifier: string, itemId: string, value: string | null): Promise<string>;
+  getWindowToolbarState(identifier: string): Promise<string>;
+  runWindowToolbarCustomizationPalette(identifier: string): Promise<string>;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 }
