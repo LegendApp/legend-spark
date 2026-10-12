@@ -8,7 +8,7 @@ import {
   type ExportPDFResult, type PageSetup, type PrintContent,
 } from "@legendapp/spark/printing";
 import { settings } from "@legendapp/spark/settings";
-import type { Locale } from "../../shell/i18n";
+import { numberFormat, type Locale } from "../../shell/i18n";
 import type { PrintingMessages } from "./printing-messages";
 
 export type ExportKind = "report" | "window" | "card";
@@ -33,8 +33,8 @@ const escape = (value: string) => value.replace(/[&<>"]/g, char => ({ "&": "&amp
 export function reportHTML(t: PrintingMessages, locale: Locale) {
   const { report } = t;
   // Grouped, in the locale's digits like every other number in the Kitchen Sink (shell/i18n.ts).
-  const group = new Intl.NumberFormat(locale);
-  const rows = report.regions.map((region, index) => `<tr><td>${escape(region)}</td><td>${group.format(1200 + index * 317)}</td><td>$${group.format(48000 + index * 9125)}</td></tr>`).join("");
+  const group = numberFormat(locale, {});
+  const rows = report.regions.map((region, index) => `<tr><td>${escape(region)}</td><td>${group(1200 + index * 317)}</td><td>$${group(48000 + index * 9125)}</td></tr>`).join("");
   return `<html dir="${locale === "ar" ? "rtl" : "ltr"}" lang="${locale}"><body style="font-family: -apple-system, Helvetica; font-size: 12pt; color: #1d1d1f">
 <h1>${escape(report.title)}</h1><p style="color: #6e6e73">${escape(report.intro)}</p>
 <h2>${escape(report.tableHeading)}</h2>

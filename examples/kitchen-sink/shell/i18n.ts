@@ -34,10 +34,11 @@ export type Messages = {
 
 const SCHEME_HINT = "spark-ks://<area>/<screen>";
 // Human-facing numbers go through the catalog's number(), so the shell and every screen use one digit system per
-// locale: what Intl.NumberFormat gives for it under Hermes. On macOS that is Western digits for "ar" (and Hermes ignores
-// a -u-nu-arab extension), so Arabic text uses Western digits too. Grouping stays off, as before.
-const numberFormat = (locale: string) => {
-  const format = new Intl.NumberFormat(locale, { useGrouping: false });
+// locale: Western digits, which is what Hermes gives for "ar" on macOS (it ignores a -u-nu-arab extension). The
+// numbering system is pinned because other ICU builds (Node on Linux) default "ar" to Arabic-Indic digits. Grouping
+// stays off, as before.
+export const numberFormat = (locale: string, options: Intl.NumberFormatOptions = { useGrouping: false }) => {
+  const format = new Intl.NumberFormat(locale, { numberingSystem: "latn", ...options });
   return (value: number) => format.format(value);
 };
 const enNumber = numberFormat("en");
