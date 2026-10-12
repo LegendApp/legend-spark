@@ -3,6 +3,7 @@ import { useValue } from "@legendapp/state/react";
 import { getIsolatedRuntimeAvailability } from "@legendapp/spark/windows";
 import { ActionButton } from "../../ActionButton";
 import { Panel } from "../../Panel";
+import { Sessions } from "./Sessions";
 import { document$, errors$ } from "./state";
 import { openNote, useOpenWindows, windows } from "./windows";
 
@@ -24,5 +25,6 @@ export function Multiwindow() {
       {open.map(window => <Text key={window.id} className="text-sm text-muted">{window.id} · {window.name} · {window.runtime}</Text>)}
       {errors.map((line, index) => <Text key={`${index}-${line}`} className="text-sm text-danger" testID="multiwindow-windows-error">{line}</Text>)}
     </View>
+    <Sessions />
   </Panel>;
 }

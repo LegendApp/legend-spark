@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window session tab groups are typed unsupported on Windows
+intent: >
+  On Windows, Multiwindow reports tab groups in sessions as unsupported-platform, and New Window as a tab of note 1
+  shows the E_UNSUPPORTED_OPTION rejection; no second note window opens. Windows window tabs are tracked in #295.
+checks: [MW-RESTORE-04]
+tags: [multiwindow]
+platforms: [windows]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/windows" }
+- assertVisible: { id: multiwindow-windows-session-tabs-unsupported-platform }
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=open,tab-1", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-2 }
+- assertVisible: { id: multiwindow-windows-session-error-E_UNSUPPORTED_OPTION }
+- assertVisible: { id: multiwindow-windows-session-count-1 }

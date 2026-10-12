@@ -65,3 +65,61 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "docs/e2e-flows.md Visual goldens; #227"
+  MW-MSG-01:
+    title: A typed request from the main window reaches one note window's handler and resolves with that window's summary
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Messages between windows"
+    covers:
+      - ./windows#createWindowMessages
+  MW-MSG-02:
+    title: A broadcast reaches every listening window and the main window except its sender, and reports how many listeners it reached
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Messages between windows"
+    covers:
+      - ./windows#createWindowMessages
+  MW-RESTORE-01:
+    title: A saved window session restores each note window's frame, route, scroll offset, selected item and sidebar width after its windows close
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window sessions"
+    covers:
+      - ./windows#createWindowsNavigator
+      - ./windows#createWindowState
+  MW-RESTORE-02:
+    title: A session saved to Spark settings restores the same windows and per-window state after the app quits and relaunches
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window sessions"
+    covers:
+      - ./windows#createWindowsNavigator
+  MW-RESTORE-03:
+    title: getWindowSessionAvailability('tabs') reports available, and a restored session rejoins its tab groups in tab order with the saved tab selected
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window sessions"
+    covers:
+      - ./windows#getWindowSessionAvailability().available
+  MW-RESTORE-04:
+    title: On Windows, getWindowSessionAvailability('tabs') reports unsupported-platform and New Window as a tab rejects E_UNSUPPORTED_OPTION
+    platforms: [windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window sessions"
+    covers:
+      - ./windows#getWindowSessionAvailability
+  MW-DUP-01:
+    title: New Window opens a cascaded copy of a note with its route, scroll offset, selection and sidebar width; the copy's view is its own, and app-scoped values stay shared
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window sessions"
+    covers:
+      - ./windows#createWindowsNavigator
+      - ./windows#createWindowState
+  MW-DUP-02:
+    title: A detached New Window shares nothing with its source (it copies the restorable view and starts other window state fresh instead of attaching to the source's app-scoped stars); New Window as a tab joins the source's tab group as its selected tab
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window sessions"
+    covers:
+      - ./windows#createWindowsNavigator

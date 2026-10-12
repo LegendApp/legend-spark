@@ -3,11 +3,12 @@ import { Text, TextInput, View } from "react-native";
 import { useValue } from "@legendapp/state/react";
 import { useUndoState, useWindowInstance, useWindowState } from "@legendapp/spark/windows";
 import { Button } from "../../Controls";
+import { NoteView } from "./NoteView";
 import { PINNED, addStar, document$, settings$, stars } from "./state";
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 
-/** A note window: the shared document (app scope) and its own stars (window scope, promotable). */
+/** A note window: the shared document (app scope), its own stars (window scope, promotable) and a restorable view. */
 export function NoteWindow({ title }: { title: string }) {
   const window = useWindowInstance();
   const count = useValue(useWindowState(stars).count);
@@ -17,8 +18,7 @@ export function NoteWindow({ title }: { title: string }) {
   const binding = stars.getBinding(window);
   const [error, setError] = useState("");
   const attempt = (action: () => void) => { try { action(); setError(""); } catch (cause) { setError(errorText(cause)); } };
-  return <View className="flex-1 gap-3 bg-background p-5">
-    <Text className="text-xl font-bold text-foreground" testID="multiwindow-note-title">{title}</Text>
+  return <NoteView title={title} document={<>
     <Text className="text-muted" testID="multiwindow-note-identity">{window.id}</Text>
     <Text className="font-semibold text-foreground">Shared document</Text>
     <TextInput testID="multiwindow-note-document" accessibilityLabel="Shared document" className="rounded-md border border-border bg-surface p-2 text-foreground" value={uppercase ? text.toUpperCase() : text} onChangeText={value => document$.text.set(value)} />
@@ -30,7 +30,7 @@ export function NoteWindow({ title }: { title: string }) {
       <Button testID="multiwindow-note-attach" disabled={binding === PINNED} onPress={() => attempt(() => stars.attach(window, PINNED))}>Use promoted stars</Button>
     </View>
     {!!error && <Text className="text-danger" testID="multiwindow-note-error">{error}</Text>}
-  </View>;
+  </>} />;
 }
 
 export function SettingsWindow() {

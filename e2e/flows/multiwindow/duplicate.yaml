@@ -1,0 +1,37 @@
+appId: so.legend.spark.examples.kitchensink
+name: New Window duplicates a note's view; detached and tab copies
+intent: >
+  Note 1 gets the details route, a scroll offset, a selected item, a sidebar width, a frame and one star promoted to app
+  scope. New Window (note 2) opens 24 points down and right with a copy of note 1's view and attached to the same
+  promoted stars; changing note 2's selection leaves note 1's alone. A detached New Window (note 3) copies the view but
+  starts its stars in its own scope. New Window as a tab (note 4) joins note 1's tab group as the selected tab.
+checks: [MW-DUP-01, MW-DUP-02]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 180s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/windows" }
+- assertVisible: { id: multiwindow-windows-root }
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=open,route-1-details,scroll-1-200,select-1-4,split-1-180,frame-1-100-100-680-480,star-1,promote-1,duplicate-1", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-9 }
+- assertVisible: { id: multiwindow-windows-session-2-details-scroll-200-item-4-split-180 }
+- assertVisible: { id: multiwindow-windows-frame-2-124-124-680-480 }
+- assertVisible: { id: multiwindow-note-scroll-200, window: { title: "Note 2" } }
+- assertVisible: { id: multiwindow-note-split-180, window: { title: "Note 2" } }
+# The copy's view is its own; the promoted stars stay shared.
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=select-2-1,route-2-document,star-2", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-3 }
+- assertVisible: { id: multiwindow-windows-session-1-details-scroll-200-item-4-split-180 }
+- assertVisible: { id: multiwindow-windows-session-2-document-scroll-200-item-1-split-180 }
+- assertVisible: { text: "Stars: 2 · app scope (pinned-stars)", window: { title: "Note 2" } }
+# Detached: the view is copied, the stars are not shared.
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=detach-1,route-3-document", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-2 }
+- assertVisible: { id: multiwindow-windows-session-3-document-scroll-200-item-4-split-180 }
+- assertVisible: { text: "Stars: 0 · this window", window: { title: "Note 3" } }
+# As a tab of note 1.
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=tab-1", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-1 }
+- assertVisible: { id: multiwindow-windows-tabs-1-4-selected-4 }
+- assertVisible: { id: multiwindow-windows-session-4-details-scroll-200-item-4-split-180 }
+- assertNotVisible: { id: multiwindow-windows-session-error-E_UNSUPPORTED_OPTION }

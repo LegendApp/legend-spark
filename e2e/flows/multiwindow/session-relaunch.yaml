@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: A saved window session survives quitting and relaunching
+intent: >
+  A note window with the details route, a scroll offset, a selected item, a sidebar width and an explicit frame is saved
+  as a window session to Spark settings. The app quits and relaunches (keeping its state): no note window is open, and
+  restoring the saved session reopens the note with its frame and view, which the note window reports.
+checks: [MW-RESTORE-02]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 180s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/windows" }
+- assertVisible: { id: multiwindow-windows-root }
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=open,route-1-details,scroll-1-160,select-1-2,split-1-200,frame-1-200-120-700-480,save", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-7 }
+- assertVisible: { id: multiwindow-windows-saved-1 }
+# Quit and relaunch without clearing state.
+- launchApp: { openUrl: "spark-ks://multiwindow/windows" }
+- assertVisible: { id: multiwindow-windows-root }
+- assertVisible: { id: multiwindow-windows-session-count-0 }
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=restore", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-1 }
+- assertVisible: { id: multiwindow-windows-session-1-details-scroll-160-item-2-split-200 }
+- assertVisible: { id: multiwindow-windows-frame-1-200-120-700-480 }
+- assertVisible: { id: multiwindow-note-scroll-160, window: { title: "Note 1" } }
+- assertVisible: { id: multiwindow-note-selected-2, window: { title: "Note 1" } }
+- assertVisible: { id: multiwindow-note-split-200, window: { title: "Note 1" } }
