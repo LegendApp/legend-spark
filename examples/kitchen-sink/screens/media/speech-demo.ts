@@ -45,6 +45,12 @@ export function useSpeechDemo() {
     getVoices().then(list => `${list.length} voices`, describeFailure).then(setVoices);
     void refreshSpeaking(); void refreshPermissions(); void refreshRecognizer();
   }, [refreshSpeaking, refreshPermissions, refreshRecognizer]);
+  // Leaving the screen ends what it started: the microphone stops and speech goes quiet.
+  useEffect(() => () => {
+    void session.current?.cancel().catch(console.error);
+    session.current = undefined;
+    void stopSpeaking().catch(console.error);
+  }, []);
 
   const say = useCallback(async (style: SpeakStyle) => {
     setSpoken(undefined);

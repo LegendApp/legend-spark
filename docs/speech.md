@@ -37,7 +37,8 @@ queued. Options:
 
 `stopSpeaking()` stops at once and drops the queue; `pauseSpeaking({ boundary })` pauses at once (`immediate`, the
 default) or after the current word (`word`); `resumeSpeaking()` continues; `getSpeakingStatus()` returns
-`{ speaking, paused }`.
+`{ speaking, paused }`. When a JavaScript runtime reloads or closes, its utterances stop (other runtimes' keep their place; one
+that was speaking starts over) and its recognition is cancelled.
 
 ## Speech recognition
 
@@ -65,7 +66,8 @@ on-device model (then audio never leaves the Mac), and `E_BUSY` while another re
 The session's `result` settles once: `recognized` with the `transcript` and `segments` (`substring`, `timestamp`,
 `duration` in seconds, `confidence` 0–1), `noSpeech`, or `cancelled`; a recognition failure rejects it `E_NATIVE`.
 `stop()` stops listening and resolves the final result; `cancel()` discards it. macOS also ends a recognition by itself
-(after about a minute, or on an error); `result` reports that.
+(after about a minute, or on an error); `result` reports that. If the audio input changes while listening (a microphone unplugged, the default
+input switched), the recognition ends and `result` rejects `E_UNAVAILABLE`; start it again.
 
 ## Testing
 

@@ -65,7 +65,9 @@ unavailable throws `E_UNSUPPORTED_PLATFORM` or `E_MODULE_UNAVAILABLE`.
 
 `enterFullscreen()` shows the video in its own window, made fullscreen on the screen of the key window, and resolves
 once macOS finished the transition. Escape, the window's green button or Mission Control end it as `exitFullscreen()`
-does; either way `fullscreenChange` reports it. A change while another is in progress rejects `E_BUSY`.
+does; so does closing the fullscreen window. Either way `fullscreenChange` reports it. A change while another is in
+progress rejects `E_BUSY`. macOS gets five seconds for each transition: entering that takes longer rejects `E_TIMEOUT`,
+and leaving that takes longer closes the window.
 
 `startPictureInPicture()` floats the video of the `VideoView` that showed the player last
 (`AVPictureInPictureController`), and resolves once the floating window shows. It rejects `E_UNAVAILABLE` when
@@ -76,8 +78,10 @@ the view it came from.
 
 ## Testing
 
-In driver mode (the in-app test driver, [test-driver.md](test-driver.md)) players play for real, but fullscreen and
-picture in picture only change the status and report their events: no window opens and nothing takes focus.
+In driver mode (the in-app test driver, [test-driver.md](test-driver.md)) players play for real but always muted
+(the status still reports the volume and mute you set), only local files load (`http` and `https` sources reject
+`E_UNAVAILABLE`), and fullscreen and picture in picture only change the status and report their events: no window
+opens and nothing takes focus.
 Availability stays truthful: `getPictureInPictureAvailability()` asks AVKit, and picture in picture still needs a
 `VideoView`. The Kitchen Sink plays a three-second 160×90 clip without an audio track (generated with ffmpeg's `testsrc2`,
 `tests/fixtures/media/test-clip.mp4`), so automated runs are silent and need no network. `tests/media.native.mm` checks

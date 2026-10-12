@@ -75,6 +75,10 @@ int main(int argc, const char *argv[]) { @autoreleasepool {
   status = player.status;
   CHECK([status[@"rate"] doubleValue] == 2 && [status[@"volume"] doubleValue] == 0.5 && [status[@"muted"] boolValue]);
   CHECK([events.lastObject[@"type"] isEqual:@"status"] && [events.lastObject[@"status"][@"muted"] boolValue]);
+  // A simulated player stays muted underneath whatever is requested; the status reports the request.
+  [player setMuted:NO];
+  CHECK(player.player.muted && ![player.status[@"muted"] boolValue]);
+  [player setMuted:YES];
 
   // Seeking resolves with the status at the exact position, after a "seeked" event; a later seek aborts an earlier one.
   Box *first = [Box new], *second = [Box new], *invalid = [Box new];
@@ -215,6 +219,17 @@ int main(int argc, const char *argv[]) { @autoreleasepool {
   [speech stopSpeaking];
   CHECK(held.calls == 1 && [held.result isEqual:@{ @"finished": @NO }] && queued.calls == 1 && [queued.result isEqual:@{ @"finished": @NO }]);
   CHECK(![speech.speakingStatus[@"speaking"] boolValue] && [speech.simulation[@"utterances"] count] == 3);
+
+  // Stopping some utterances (a runtime going away) settles them unfinished and leaves the others speaking.
+  Box *mine = [Box new], *mineQueued = [Box new], *theirs = [Box new];
+  [speech speak:@"mine first" options:@{} identifier:@"m1" completion:Record(mine)];
+  [speech speak:@"theirs" options:@{} identifier:@"t1" completion:Record(theirs)];
+  [speech speak:@"mine later" options:@{} identifier:@"m2" completion:Record(mineQueued)];
+  [speech stopUtterances:[NSSet setWithObjects:@"m1", @"m2", @"unknown", nil]];
+  CHECK(mine.calls == 1 && [mine.result isEqual:@{ @"finished": @NO }] && mineQueued.calls == 1 && [mineQueued.result isEqual:@{ @"finished": @NO }]);
+  CHECK(theirs.calls == 0 && [speech.speakingStatus[@"speaking"] boolValue]);
+  Wait(^{ return (BOOL)(theirs.calls == 1); }, 2);
+  CHECK([theirs.result isEqual:@{ @"finished": @YES }]);
 
   // Simulated recognition: partial results while listening, the final transcript once finished, one at a time.
   [heard removeAllObjects];

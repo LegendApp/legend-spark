@@ -80,6 +80,7 @@ static NSArray *Segments(SFTranscription *transcription) {
 @property (nonatomic) SFSpeechAudioBufferRecognitionRequest *request;
 @property (nonatomic) SFSpeechRecognitionTask *task;
 @property (nonatomic) SFSpeechRecognizer *recognizer;
+@property (nonatomic) id configurationObserver; // AVAudioEngineConfigurationChangeNotification, while listening.
 @end
 @implementation SparkRecognition
 @end
@@ -90,6 +91,7 @@ static NSArray *Segments(SFTranscription *transcription) {
 @implementation SparkSpeech {
   AVSpeechSynthesizer *_synthesizer;
   NSMapTable<AVSpeechUtterance *, SparkUtterance *> *_speaking;
+  NSMutableArray<AVSpeechUtterance *> *_order; // _speaking's utterances in the synthesizer's order.
   SparkRecognition *_recognition;
 #if SPARK_TEST_DRIVER
   NSMutableDictionary *_simulation;
@@ -116,6 +118,7 @@ static NSArray *Segments(SFTranscription *transcription) {
     NSAssert(!simulated, @"Simulated speech exists only in builds with the test driver");
 #endif
     _speaking = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsObjectPointerPersonality | NSPointerFunctionsStrongMemory valueOptions:NSPointerFunctionsStrongMemory];
+    _order = [NSMutableArray array];
   }
   return self;
 }
@@ -181,7 +184,13 @@ static AVSpeechUtterance *Utterance(NSString *text, NSDictionary *options, NSErr
     _synthesizer = [AVSpeechSynthesizer new];
     _synthesizer.delegate = self;
   }
+  [self enqueue:utterance entry:entry];
+}
+
+- (void)enqueue:(AVSpeechUtterance *)utterance entry:(SparkUtterance *)entry
+{
   [_speaking setObject:entry forKey:utterance];
+  [_order addObject:utterance];
   [_synthesizer speakUtterance:utterance];
 }
 
@@ -201,7 +210,41 @@ static AVSpeechUtterance *Utterance(NSString *text, NSDictionary *options, NSErr
   // macOS reports a cancel for the utterance speaking, not for the queued ones it drops: settle them all now.
   NSArray *stopped = _speaking.objectEnumerator.allObjects;
   [_speaking removeAllObjects];
+  [_order removeAllObjects];
   for (SparkUtterance *entry in stopped) entry.completion(@{ @"finished": @NO }, nil);
+}
+
+- (void)stopUtterances:(NSSet<NSString *> *)identifiers
+{
+  BOOL (^listed)(SparkUtterance *) = ^BOOL(SparkUtterance *entry) { return [identifiers containsObject:entry.identifier]; };
+#if SPARK_TEST_DRIVER
+  if (_simulated) {
+    NSIndexSet *indexes = [_queue indexesOfObjectsPassingTest:^BOOL(SparkUtterance *entry, NSUInteger, BOOL *) { return listed(entry); }];
+    if (!indexes.count) return;
+    BOOL current = [indexes containsIndex:0];
+    NSArray *stopped = [_queue objectsAtIndexes:indexes];
+    [_queue removeObjectsAtIndexes:indexes];
+    for (SparkUtterance *entry in stopped) entry.completion(@{ @"finished": @NO }, nil);
+    if (current) { _generation++; _paused = NO; [self simulateStart]; }
+    return;
+  }
+#endif
+  NSMutableArray<AVSpeechUtterance *> *kept = [NSMutableArray array];
+  NSMutableArray<SparkUtterance *> *stopped = [NSMutableArray array];
+  for (AVSpeechUtterance *utterance in _order) {
+    SparkUtterance *entry = [_speaking objectForKey:utterance];
+    if (listed(entry)) [stopped addObject:entry]; else [kept addObject:utterance];
+  }
+  if (!stopped.count) return;
+  // AVSpeechSynthesizer cannot drop one queued utterance: stop them all, then queue the others again (copies: an
+  // utterance is spoken once). The one speaking, if kept, starts over.
+  NSMutableArray<SparkUtterance *> *entries = [NSMutableArray array];
+  for (AVSpeechUtterance *utterance in kept) [entries addObject:[_speaking objectForKey:utterance]];
+  [_speaking removeAllObjects];
+  [_order removeAllObjects];
+  [_synthesizer stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+  for (SparkUtterance *entry in stopped) entry.completion(@{ @"finished": @NO }, nil);
+  [kept enumerateObjectsUsingBlock:^(AVSpeechUtterance *utterance, NSUInteger index, BOOL *) { [self enqueue:[utterance copy] entry:entries[index]]; }];
 }
 
 - (void)pauseSpeaking:(NSString *)boundary
@@ -268,6 +311,7 @@ static AVSpeechUtterance *Utterance(NSString *text, NSDictionary *options, NSErr
     SparkUtterance *entry = [self->_speaking objectForKey:utterance];
     if (!entry) return;
     [self->_speaking removeObjectForKey:utterance];
+    [self->_order removeObjectIdenticalTo:utterance];
     entry.completion(@{ @"finished": @(finished) }, nil);
   }];
 }
@@ -323,7 +367,7 @@ static NSError *ValidRecognition(NSDictionary *options) {
   __weak SparkSpeech *weakSelf = self;
   recognition.completion = ^(id result, NSError *error) {
     SparkSpeech *strongSelf = weakSelf;
-    if (strongSelf && [strongSelf->_recognition.identifier isEqual:identifier]) { [strongSelf stopAudio]; strongSelf->_recognition = nil; }
+    if (strongSelf && [strongSelf->_recognition.identifier isEqual:identifier]) [strongSelf endRecognition];
     done(result, error);
   };
 #if SPARK_TEST_DRIVER
@@ -360,9 +404,24 @@ static NSError *ValidRecognition(NSDictionary *options) {
   recognition.recognizer = recognizer;
   _recognition = recognition;
   [input installTapOnBus:0 bufferSize:1024 format:format block:^(AVAudioPCMBuffer *buffer, AVAudioTime *) { [request appendAudioPCMBuffer:buffer]; }];
+  // Weak: the recognition owns the task, which owns this handler.
+  __weak SparkRecognition *weakRecognition = recognition;
   recognition.task = [recognizer recognitionTaskWithRequest:request resultHandler:^(SFSpeechRecognitionResult *result, NSError *error) {
-    dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf recognition:recognition result:result error:error]; });
+    dispatch_async(dispatch_get_main_queue(), ^{
+      SparkRecognition *current = weakRecognition;
+      if (current) [weakSelf recognition:current result:result error:error];
+    });
   }];
+  // The input changed under the engine (a microphone unplugged, the default device switched): the tap stopped, so the
+  // recognition cannot go on.
+  recognition.configurationObserver = [NSNotificationCenter.defaultCenter addObserverForName:AVAudioEngineConfigurationChangeNotification object:engine
+    queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *) {
+      SparkSpeech *strongSelf = weakSelf;
+      SparkRecognition *current = weakRecognition;
+      if (!strongSelf || !current || strongSelf->_recognition != current) return;
+      [current.task cancel];
+      current.completion(nil, Failure(@"E_UNAVAILABLE", @"The microphone changed while listening; start the recognition again"));
+    }];
   [engine prepare];
   NSError *audioError = nil;
   if (![engine startAndReturnError:&audioError]) {
@@ -383,6 +442,18 @@ static NSError *ValidRecognition(NSDictionary *options) {
   }
   if (SparkRecognitionNoSpeech(error)) return recognition.completion(@{ @"status": @"noSpeech" }, nil);
   recognition.completion(nil, Failure(@"E_NATIVE", [NSString stringWithFormat:@"Speech recognition failed: %@ %ld %@", error.domain, (long)error.code, error.localizedDescription]));
+}
+
+// Releases the running recognition: audio, the configuration observer, and the task and request it owns.
+- (void)endRecognition
+{
+  [self stopAudio];
+  if (_recognition.configurationObserver) [NSNotificationCenter.defaultCenter removeObserver:_recognition.configurationObserver];
+  _recognition.configurationObserver = nil;
+  _recognition.task = nil;
+  _recognition.request = nil;
+  _recognition.recognizer = nil;
+  _recognition = nil;
 }
 
 - (void)stopAudio

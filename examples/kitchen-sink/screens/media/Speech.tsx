@@ -38,9 +38,9 @@ export function Speech() {
         <Button testID={`${ID}-resume`} onPress={() => void control("resume")}>{t.resume}</Button>
         <Button testID={`${ID}-stop`} onPress={() => void control("stop")}>{t.stop}</Button>
       </View>
-      {mono("spoken", spoken, t.noResult)}
+      {mono("spoken", spoken, t.notSpoken)}
       {mono("speaking", speaking, t.reading)}
-      {mono("word", word, t.noResult)}
+      {mono("word", word, t.noWord)}
     </Section>
     <Section title={t.recognition} id="recognition">
       <View className="flex-row flex-wrap gap-2">
@@ -52,8 +52,8 @@ export function Speech() {
       </View>
       {mono("permissions", permissions, t.reading)}
       {mono("recognizer", recognizer, t.reading)}
-      {mono("partial", partial, t.noResult)}
-      {mono("outcome", outcome, t.noResult)}
+      {mono("partial", partial, t.noPartial)}
+      {mono("outcome", outcome, t.noOutcome)}
       <Text className="text-xs text-muted">{t.driver}</Text>
     </Section>
     <Section title={t.events} id="events">

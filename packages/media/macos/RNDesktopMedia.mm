@@ -44,12 +44,17 @@ static NSString *Code(NSError *error) {
 @implementation RNDesktopMedia {
   NSMutableDictionary<NSString *, SparkVideoPlayer *> *_players; // This runtime's players, removed when the bridge is invalidated.
   NSString *_recognition;                                         // This runtime's recognition, cancelled then.
+  NSMutableSet<NSString *> *_utterances;                          // This runtime's utterances, stopped then.
+  BOOL _invalidated;                                              // Completions after it reach no runtime.
 }
 RCT_EXPORT_MODULE(NativeDesktopMedia)
 
 - (void)invalidate
 {
   dispatch_block_t release = ^{
+    self->_invalidated = YES;
+    if (self->_utterances.count) [Speech() stopUtterances:[self->_utterances copy]];
+    [self->_utterances removeAllObjects];
     for (SparkVideoPlayer *player in self->_players.allValues) [player remove];
     [self->_players removeAllObjects];
     if (self->_recognition) [Speech() cancelRecognition:self->_recognition];
@@ -64,17 +69,26 @@ RCT_EXPORT_MODULE(NativeDesktopMedia)
 {
   NSDictionary *args = SparkArgs(json);
   NSString *identifier = [args[@"id"] isKindOfClass:NSString.class] ? args[@"id"] : nil;
+  __weak RNDesktopMedia *weakSelf = self;
   SparkVideoCompletion answer = ^(id result, NSError *error) {
+    RNDesktopMedia *strongSelf = weakSelf;
+    if (!strongSelf || strongSelf->_invalidated) return; // The runtime is gone.
     if (error) reject(Code(error), error.localizedDescription, error);
     else resolve(SparkJSON(result ?: NSNull.null));
   };
   _players = _players ?: [NSMutableDictionary dictionary];
+  _utterances = _utterances ?: [NSMutableSet set];
   if ([method hasPrefix:@"video"]) return [self video:method identifier:identifier args:args answer:answer];
   SparkSpeech *speech = Speech();
   if ([method isEqual:@"voices"]) answer(speech.voices, nil);
   else if ([method isEqual:@"speak"]) {
     if (!identifier) return SparkInvalid(reject, @"An utterance needs an id");
-    [speech speak:args[@"text"] options:[args[@"options"] isKindOfClass:NSDictionary.class] ? args[@"options"] : @{} identifier:identifier completion:answer];
+    [_utterances addObject:identifier];
+    [speech speak:args[@"text"] options:[args[@"options"] isKindOfClass:NSDictionary.class] ? args[@"options"] : @{} identifier:identifier completion:^(id result, NSError *error) {
+      RNDesktopMedia *strongSelf = weakSelf;
+      if (strongSelf) [strongSelf->_utterances removeObject:identifier];
+      answer(result, error);
+    }];
   }
   else if ([method isEqual:@"stopSpeaking"]) { [speech stopSpeaking]; answer(nil, nil); }
   else if ([method isEqual:@"pauseSpeaking"]) { [speech pauseSpeaking:args[@"boundary"]]; answer(nil, nil); }
@@ -86,7 +100,6 @@ RCT_EXPORT_MODULE(NativeDesktopMedia)
     if (!identifier) return SparkInvalid(reject, @"A recognition needs an id");
     NSMutableDictionary *options = [args mutableCopy];
     [options removeObjectForKey:@"id"];
-    __weak RNDesktopMedia *weakSelf = self;
     _recognition = identifier; // Before recognize:, whose completion may run at once and clears it.
     [speech recognize:options identifier:identifier completion:^(id result, NSError *error) {
       RNDesktopMedia *strongSelf = weakSelf;
@@ -108,6 +121,8 @@ RCT_EXPORT_MODULE(NativeDesktopMedia)
     NSError *error = nil;
     NSURL *url = SparkVideoURL(args[@"uri"], &error);
     if (!url) return answer(nil, error);
+    // A test run never reaches the network: simulated players play local files only.
+    if (SparkTestDriverActive() && !url.isFileURL) return answer(nil, SparkVideoError(@"E_UNAVAILABLE", @"In a test-driver run, video plays local files only"));
     SparkVideoPlayer *player = [[SparkVideoPlayer alloc] initWithIdentifier:identifier url:url simulated:SparkTestDriverActive()];
     player.loop = [args[@"loop"] boolValue];
     if (args[@"muted"]) [player setMuted:[args[@"muted"] boolValue]];

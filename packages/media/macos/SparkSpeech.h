@@ -50,6 +50,9 @@ typedef void (^SparkSpeechCompletion)(id _Nullable result, NSError *_Nullable er
 - (void)speak:(NSString *)text options:(NSDictionary *)options identifier:(NSString *)identifier completion:(SparkSpeechCompletion)completion;
 // Stops the utterance speaking and every queued one; each completes { finished: NO }.
 - (void)stopSpeaking;
+// Stops the utterances with these identifiers, speaking or queued; each completes { finished: NO }. Others keep their
+// place in the queue (the one speaking, if any, starts over).
+- (void)stopUtterances:(NSSet<NSString *> *)identifiers;
 // boundary: immediate or word.
 - (void)pauseSpeaking:(NSString *)boundary;
 - (void)continueSpeaking;

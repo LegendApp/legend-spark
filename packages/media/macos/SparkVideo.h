@@ -22,7 +22,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSErrorDomain const SparkVideoErrorDomain;
-// The Spark error code (E_INVALID_ARGUMENT, E_NOT_FOUND, E_ALREADY_EXISTS, E_UNAVAILABLE, E_BUSY, E_ABORTED, E_CLOSED, E_NATIVE) of an error from this file.
+// The Spark error code (E_INVALID_ARGUMENT, E_NOT_FOUND, E_ALREADY_EXISTS, E_UNAVAILABLE, E_BUSY, E_ABORTED, E_CLOSED, E_TIMEOUT, E_NATIVE) of an error from this file.
 FOUNDATION_EXPORT NSString *SparkVideoErrorCode(NSError *error);
 FOUNDATION_EXPORT NSError *SparkVideoError(NSString *code, NSString *message);
 // Posted on the main thread when a player is created or removed; RNDesktopVideoView looks its player up again.

@@ -40,12 +40,13 @@ static SparkVideoCompletion Once(SparkVideoCompletion completion) {
 static double Seconds(CMTime time) { double seconds = CMTimeGetSeconds(time); return isfinite(seconds) && seconds > 0 ? seconds : 0; }
 
 // The fullscreen window: Escape leaves fullscreen, as in QuickTime Player.
-// It is its own delegate: entering fullscreen can fail only through windowDidFailToEnterFullScreen:.
+// It is its own delegate: entering or leaving fullscreen fails only through windowDidFailTo{Enter,Exit}FullScreen:.
 @interface SparkVideoFullscreenWindow : NSWindow <NSWindowDelegate>
-@property (nonatomic, copy) dispatch_block_t failed;
+@property (nonatomic, copy) void (^failed)(BOOL entering);
 @end
 @implementation SparkVideoFullscreenWindow
-- (void)windowDidFailToEnterFullScreen:(NSWindow *)window { if (_failed) _failed(); }
+- (void)windowDidFailToEnterFullScreen:(NSWindow *)window { if (_failed) _failed(YES); }
+- (void)windowDidFailToExitFullScreen:(NSWindow *)window { if (_failed) _failed(NO); }
 - (BOOL)canBecomeKeyWindow { return YES; }
 - (void)cancelOperation:(id)sender { if (self.styleMask & NSWindowStyleMaskFullScreen) [self toggleFullScreen:nil]; }
 @end
@@ -76,6 +77,10 @@ static void *PossibleContext = &PossibleContext;
   SparkVideoFullscreenWindow *_window;
   NSMutableArray<id> *_windowObservers;
   SparkVideoCompletion _fullscreenChange;
+  BOOL _entering;                  // What _fullscreenChange waits for: entering (YES) or leaving fullscreen.
+  NSUInteger _fullscreenGeneration; // Matches a transition's timeout to it.
+  BOOL _muted;                     // As requested; a simulated player's AVPlayer stays muted.
+  double _volume;
   AVPictureInPictureController *_pip;
   SparkVideoCompletion _pipChange;
   BOOL _watchingPossible;
@@ -92,8 +97,11 @@ static void *PossibleContext = &PossibleContext;
     _layers = [NSHashTable weakObjectsHashTable];
     _ready = [NSMutableArray array];
     _windowObservers = [NSMutableArray array];
+    _volume = 1;
 #if SPARK_TEST_DRIVER
     _simulated = simulated;
+    // Nothing a test run plays reaches the speakers, whatever the clip; status reports the requested volume and mute.
+    if (simulated) _player.muted = YES;
 #else
     NSAssert(!simulated, @"Simulated video exists only in builds with the test driver");
 #endif
@@ -120,7 +128,7 @@ static void *PossibleContext = &PossibleContext;
   return @{
     @"playing": @(_player.timeControlStatus != AVPlayerTimeControlStatusPaused),
     @"currentTime": @(Seconds(_player.currentTime)), @"duration": @(Seconds(item.duration)),
-    @"rate": @(_player.defaultRate), @"volume": @(_player.volume), @"muted": @(_player.muted), @"ended": @(_ended),
+    @"rate": @(_player.defaultRate), @"volume": @(_volume), @"muted": @(_muted), @"ended": @(_ended),
     @"width": @(size.width), @"height": @(size.height),
     @"fullscreen": @(_fullscreen), @"pictureInPicture": @(_pictureInPicture),
     @"error": error.localizedDescription ?: NSNull.null,
@@ -253,12 +261,18 @@ static void *PossibleContext = &PossibleContext;
 - (NSError *)setVolume:(double)volume
 {
   if (!isfinite(volume) || volume < 0 || volume > 1) return SparkVideoError(@"E_INVALID_ARGUMENT", @"A volume is 0–1");
+  _volume = volume;
   _player.volume = volume;
   [self report];
   return nil;
 }
 
-- (void)setMuted:(BOOL)muted { _player.muted = muted; [self report]; }
+- (void)setMuted:(BOOL)muted
+{
+  _muted = muted;
+  _player.muted = muted || _simulated;
+  [self report];
+}
 
 #pragma mark Views
 
@@ -318,7 +332,7 @@ static void *PossibleContext = &PossibleContext;
   layer.frame = content.bounds;
   [window setFrame:screen.frame display:NO];
   _window = window;
-  _fullscreenChange = done;
+  [self beginFullscreenChange:done entering:YES];
   __weak SparkVideoPlayer *weakSelf = self;
   NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
   [_windowObservers addObject:[center addObserverForName:NSWindowDidEnterFullScreenNotification object:window queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *) {
@@ -328,11 +342,19 @@ static void *PossibleContext = &PossibleContext;
     [strongSelf settleFullscreen:nil];
   }]];
   window.delegate = window;
-  window.failed = ^{
+  window.failed = ^(BOOL entering) {
     SparkVideoPlayer *strongSelf = weakSelf;
-    [strongSelf closeFullscreenWindow];
-    [strongSelf settleFullscreen:SparkVideoError(@"E_NATIVE", @"macOS did not enter fullscreen")];
+    if (entering) [strongSelf closeFullscreenWindow]; // Leaving failed: the video stays fullscreen.
+    [strongSelf settleFullscreen:SparkVideoError(@"E_NATIVE", entering ? @"macOS did not enter fullscreen" : @"macOS did not leave fullscreen")];
   };
+  // Closing the window (its close button, or the app closing windows) ends fullscreen too.
+  [_windowObservers addObject:[center addObserverForName:NSWindowWillCloseNotification object:window queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *) {
+    SparkVideoPlayer *strongSelf = weakSelf;
+    if (!strongSelf) return;
+    BOOL entering = strongSelf->_fullscreenChange && strongSelf->_entering;
+    [strongSelf releaseFullscreenWindow:NO]; // It is closing already.
+    [strongSelf settleFullscreen:entering ? SparkVideoError(@"E_CLOSED", @"The fullscreen window closed before it was fullscreen") : nil];
+  }]];
   // The person leaving fullscreen (Escape, the green button, Mission Control) ends it as exitFullscreen does.
   [_windowObservers addObject:[center addObserverForName:NSWindowDidExitFullScreenNotification object:window queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *) {
     SparkVideoPlayer *strongSelf = weakSelf;
@@ -343,6 +365,22 @@ static void *PossibleContext = &PossibleContext;
   [window toggleFullScreen:nil];
 }
 
+// A transition macOS never finishes would leave every later change E_BUSY: after five seconds entering gives up
+// (E_TIMEOUT) and leaving closes the window.
+- (void)beginFullscreenChange:(SparkVideoCompletion)done entering:(BOOL)entering
+{
+  _fullscreenChange = done;
+  _entering = entering;
+  NSUInteger generation = ++_fullscreenGeneration;
+  __weak SparkVideoPlayer *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    SparkVideoPlayer *strongSelf = weakSelf;
+    if (!strongSelf || !strongSelf->_fullscreenChange || strongSelf->_fullscreenGeneration != generation) return;
+    if (strongSelf->_window) [strongSelf closeFullscreenWindow];
+    [strongSelf settleFullscreen:entering ? SparkVideoError(@"E_TIMEOUT", @"macOS did not enter fullscreen within five seconds") : nil];
+  });
+}
+
 - (void)settleFullscreen:(NSError *)error
 {
   SparkVideoCompletion change = _fullscreenChange;
@@ -350,14 +388,15 @@ static void *PossibleContext = &PossibleContext;
   if (change) change(error ? nil : NSNull.null, error);
 }
 
-- (void)closeFullscreenWindow
+- (void)closeFullscreenWindow { [self releaseFullscreenWindow:YES]; }
+
+- (void)releaseFullscreenWindow:(BOOL)close
 {
   for (id observer in _windowObservers) [NSNotificationCenter.defaultCenter removeObserver:observer];
   [_windowObservers removeAllObjects];
   for (CALayer *layer in _window.contentView.layer.sublayers) if ([layer isKindOfClass:AVPlayerLayer.class]) ((AVPlayerLayer *)layer).player = nil;
   _window.failed = nil;
-  [_window orderOut:nil];
-  [_window close];
+  if (close) { [_window orderOut:nil]; [_window close]; }
   _window = nil;
   [self setFullscreen:NO];
 }
@@ -370,7 +409,7 @@ static void *PossibleContext = &PossibleContext;
 #if SPARK_TEST_DRIVER
   if (_simulated) { [self setFullscreen:NO]; return done(NSNull.null, nil); }
 #endif
-  _fullscreenChange = done;
+  [self beginFullscreenChange:done entering:NO];
   [_window toggleFullScreen:nil];
 }
 

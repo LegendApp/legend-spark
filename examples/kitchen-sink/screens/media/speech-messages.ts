@@ -7,7 +7,7 @@ export type SpeechMessages = {
   title: string; intro: string; availability: string; synthesis: string; recognition: string; events: string;
   speak: string; speakFast: string; pause: string; resume: string; stop: string;
   request: string; listen: string; listenOnDevice: string; finish: string; cancel: string;
-  reading: string; noResult: string; noEvents: string; driver: string;
+  reading: string; notSpoken: string; noWord: string; noPartial: string; noOutcome: string; noEvents: string; driver: string;
 };
 
 const en: SpeechMessages = {
@@ -16,7 +16,7 @@ const en: SpeechMessages = {
   availability: "Availability", synthesis: "Text to speech", recognition: "Speech recognition", events: "Utterance events",
   speak: "Speak", speakFast: "Speak fast, high, quiet", pause: "Pause after word", resume: "Resume", stop: "Stop",
   request: "Request permissions", listen: "Listen", listenOnDevice: "Listen on device", finish: "Stop listening", cancel: "Cancel",
-  reading: "Reading…", noResult: "No result yet.", noEvents: "None yet.",
+  reading: "Reading…", notSpoken: "Nothing spoken yet.", noWord: "No word yet.", noPartial: "No partial transcript yet.", noOutcome: "No recognition yet.", noEvents: "None yet.",
   driver: "In a test-driver run speech is simulated: utterances are recorded, never spoken, and recognition plays back a scripted transcript without the microphone.",
 };
 
@@ -26,7 +26,7 @@ const ar: SpeechMessages = {
   availability: "التوفر", synthesis: "تحويل النص إلى كلام", recognition: "التعرف على الكلام", events: "أحداث النطق",
   speak: "انطق", speakFast: "سريع وعالٍ وهادئ", pause: "إيقاف بعد الكلمة", resume: "متابعة", stop: "إيقاف",
   request: "طلب الأذونات", listen: "استمع", listenOnDevice: "استمع على الجهاز", finish: "إنهاء الاستماع", cancel: "إلغاء",
-  reading: "جارٍ القراءة…", noResult: "لا نتيجة بعد.", noEvents: "لا شيء بعد.",
+  reading: "جارٍ القراءة…", notSpoken: "لم يُنطق شيء بعد.", noWord: "لا كلمة بعد.", noPartial: "لا نص جزئي بعد.", noOutcome: "لا نتيجة تعرّف بعد.", noEvents: "لا شيء بعد.",
   driver: "في تشغيل برنامج الاختبار يكون الكلام محاكاة: تُسجَّل العبارات ولا تُنطق، ويعيد التعرف نصًا معدًّا مسبقًا دون الميكروفون.",
 };
 
