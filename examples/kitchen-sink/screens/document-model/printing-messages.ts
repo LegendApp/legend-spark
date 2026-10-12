@@ -1,6 +1,6 @@
 import type { PageSetup } from "@legendapp/spark/printing";
 import { useI18n } from "../../shell/app-controller";
-import type { Locale } from "../../shell/i18n";
+import { MESSAGES, type Locale } from "../../shell/i18n";
 
 // Strings for the Printing screen and the report it prints. Results and availability are JSON from
 // the API, so flows can assert them in any locale; they are not translated.
@@ -24,8 +24,9 @@ export type PrintingMessages = {
 
 const PAPERS: [width: number, height: number, en: string, ar: string][] = [[612, 792, "US Letter", "خطاب أمريكي"], [612, 1008, "US Legal", "قانوني أمريكي"], [595.28, 841.89, "A4", "A4"], [841.89, 1190.55, "A3", "A3"], [419.53, 595.28, "A5", "A5"]];
 const paperName = (setup: PageSetup, locale: Locale) => {
+  const { number } = MESSAGES[locale];
   const known = PAPERS.find(([width, height]) => Math.abs(width - setup.paperSize.width) < 1 && Math.abs(height - setup.paperSize.height) < 1);
-  return known ? known[locale === "ar" ? 3 : 2] : `${Math.round(setup.paperSize.width)} × ${Math.round(setup.paperSize.height)} pt`;
+  return known ? known[locale === "ar" ? 3 : 2] : `${number(Math.round(setup.paperSize.width))} × ${number(Math.round(setup.paperSize.height))} pt`;
 };
 
 const SECTIONS_EN = [
@@ -67,9 +68,10 @@ const en: PrintingMessages = {
   },
 };
 
+const n = MESSAGES.ar.number;
 const ar: PrintingMessages = {
   sections: { availability: "التوفر", pageSetup: "إعداد الصفحة", print: "الطباعة", export: "تصدير PDF" },
-  paper: setup => `${paperName(setup, "ar")} · ${setup.orientation === "landscape" ? "أفقي" : "عمودي"} · الهوامش ${setup.margins.top}/${setup.margins.right}/${setup.margins.bottom}/${setup.margins.left} نقطة`,
+  paper: setup => `${paperName(setup, "ar")} · ${setup.orientation === "landscape" ? "أفقي" : "عمودي"} · الهوامش ${n(setup.margins.top)}/${n(setup.margins.right)}/${n(setup.margins.bottom)}/${n(setup.margins.left)} نقطة`,
   pageSetupHint: "يُحفظ في إعدادات هذا التطبيق ويُستخدم في كل طباعة وتصدير أدناه.",
   showPageSetup: "إعداد الصفحة…",
   systemDefault: "استخدام إعداد النظام",
@@ -78,10 +80,10 @@ const ar: PrintingMessages = {
   printCard: "طباعة بطاقة الإيصال…",
   exportPDF: "تصدير التقرير بصيغة PDF…",
   kinds: { report: "التقرير", window: "النافذة", card: "بطاقة الإيصال" },
-  exported: (kind, pages, width, height) => `${kind}: ${pages} ${pages === 1 ? "صفحة" : "صفحات"}، ${width} × ${height} نقطة`,
+  exported: (kind, pages, width, height) => `${kind}: ${n(pages)} ${pages === 1 ? "صفحة" : "صفحات"}، ${n(width)} × ${n(height)} نقطة`,
   saveTitle: "التقرير الربعي.pdf",
   noResult: "—",
-  card: { title: "إيصال رقم ١٠٤٢", lines: [["دفتر", "١٢٫٠٠ $"], ["قلم حبر", "٤٨٫٠٠ $"], ["حبر أزرق", "٩٫٥٠ $"]], total: ["الإجمالي", "٦٩٫٥٠ $"] },
+  card: { title: "إيصال رقم 1042", lines: [["دفتر", "12.00 $"], ["قلم حبر", "48.00 $"], ["حبر أزرق", "9.50 $"]], total: ["الإجمالي", "69.50 $"] },
   report: {
     title: "التقرير الربعي",
     intro: "أُعدّ لفريق القيادة. الأرقام أولية حتى يكتمل التدقيق.",

@@ -1,5 +1,5 @@
 import { useI18n } from "../../shell/app-controller";
-import type { Locale } from "../../shell/i18n";
+import { MESSAGES, type Locale } from "../../shell/i18n";
 import type { ShownField } from "./displays-demo";
 
 // Strings for the Displays screen. Values are JSON from the API, so flows can assert them in any locale;
@@ -28,13 +28,14 @@ const en: DisplaysMessages = {
   changed: "Changed",
 };
 
+const n = MESSAGES.ar.number;
 const ar: DisplaysMessages = {
   sections: { availability: "التوفر", displays: "الشاشات", changes: "التغييرات" },
   fields: { persistentId: "المعرّف الدائم", origin: "نقطة الأصل", size: "الحجم", workArea: "مساحة العمل", scaleFactor: "التكبير", safeArea: "المنطقة الآمنة", refreshRate: "معدل التحديث (هرتز)", colorSpace: "فضاء الألوان", edrHeadroom: "هامش EDR" },
   primary: "رئيسية",
   loading: "جارٍ قراءة الشاشات…",
   noChanges: "لا تغييرات منذ فتح هذه الشاشة. صِل شاشة أو رتّبها، أو غيّر دقتها أو معدل تحديثها أو ملف ألوانها.",
-  change: number => `التغيير ${number.toLocaleString("ar-EG")}`,
+  change: number => `التغيير ${n(number)}`,
   added: "أُضيفت",
   removed: "أُزيلت",
   changed: "تغيّرت",

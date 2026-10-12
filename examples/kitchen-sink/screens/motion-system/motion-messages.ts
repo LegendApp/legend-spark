@@ -1,6 +1,6 @@
 import type { SpringPreset } from "@legendapp/spark/motion";
 import { useI18n } from "../../shell/app-controller";
-import type { Locale } from "../../shell/i18n";
+import { MESSAGES, type Locale } from "../../shell/i18n";
 
 // Strings for the motion screens. Readouts are JSON from the API, so they are not translated.
 type MotionMessages = {
@@ -63,7 +63,7 @@ const en: MotionMessages = {
   blockJs: "Block JS for 500 ms",
 };
 
-const arabicDigits = (value: number) => String(value).replace(/\d/g, digit => "٠١٢٣٤٥٦٧٨٩"[Number(digit)]!);
+const n = MESSAGES.ar.number;
 const ar: MotionMessages = {
   availability: "التوفر",
   presets: "إعدادات النابض المسبقة",
@@ -73,7 +73,7 @@ const ar: MotionMessages = {
   interruptionHint: "تقرأ المقاطعة الحالة، وتستبدل الانزلاق البطيء بنابض يرث سرعته، ثم تقرؤها مجددًا.",
   start: "بدء انزلاق بطيء",
   interrupt: "مقاطعة بنابض",
-  release: "إفلات بسرعة ٢٤٠٠ نقطة/ث",
+  release: "إفلات بسرعة 2400 نقطة/ث",
   stop: "إيقاف",
   reset: "إعادة تعيين",
   keyframes: "الإطارات المفتاحية",
@@ -88,10 +88,10 @@ const ar: MotionMessages = {
   link: "ربط بالتمرير",
   unlink: "إلغاء الربط",
   readBadge: "قراءة حالة الشارة",
-  row: index => `الصف ${arabicDigits(index)}`,
+  row: index => `الصف ${n(index)}`,
   frames: "حظر JavaScript",
-  framesHint: "يتحرك العدّاء على المُركِّب منذ التحميل. يحظر الزر خيط JavaScript لمدة ٥٠٠ مللي ثانية أثناء تسجيل ١٫٥ ثانية من إطاراته.",
-  blockJs: "حظر JS لمدة ٥٠٠ مللي ثانية",
+  framesHint: "يتحرك العدّاء على المُركِّب منذ التحميل. يحظر الزر خيط JavaScript لمدة 500 مللي ثانية أثناء تسجيل 1.5 ثانية من إطاراته.",
+  blockJs: "حظر JS لمدة 500 مللي ثانية",
 };
 
 export const MOTION_MESSAGES: Record<Locale, MotionMessages> = { en, ar };

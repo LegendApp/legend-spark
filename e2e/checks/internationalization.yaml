@@ -47,3 +47,8 @@ checks:
     covers:
       - ./app#setAppLanguage
       - ./app#getAppLanguages
+  I18N-DIGITS-01:
+    title: "One digit system per locale: the catalog summary, sidebar counts and screen text (Scroll direction, Motion, Printing, Hang watchdog) use the digits Intl.NumberFormat gives for the locale under Hermes, which on macOS are Western digits in Arabic as in English"
+    platforms: [macos]
+    blocking: true
+    spec: "#328"

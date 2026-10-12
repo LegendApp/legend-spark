@@ -155,11 +155,12 @@ test("system locales map to a catalog, Arabic is right-to-left, and every area h
     for (const area of AREAS) expect(messages.areas[area.id]).toMatch(/\S/);
 });
 
-test("Arabic counts use Arabic plural forms and digits", () => {
+test("Arabic counts use Arabic plural forms and Western digits", () => {
   const { ar, en } = MESSAGES;
-  expect([0, 1, 2, 3, 10, 11, 99, 100, 103].map(ar.screens)).toEqual(["لا توجد شاشات", "شاشة واحدة", "شاشتان", "٣ شاشات", "١٠ شاشات", "١١ شاشة", "٩٩ شاشة", "١٠٠ شاشة", "١٠٣ شاشات"]);
+  expect([0, 1, 2, 3, 10, 11, 99, 100, 103].map(ar.screens)).toEqual(["لا توجد شاشات", "شاشة واحدة", "شاشتان", "3 شاشات", "10 شاشات", "11 شاشة", "99 شاشة", "100 شاشة", "103 شاشات"]);
   expect([1, 2].map(en.screens)).toEqual(["1 screen", "2 screens"]);
-  expect(ar.number(37)).toBe("٣٧");
+  expect(ar.number(37)).toBe("37");
+  expect(ar.number(1234.5)).toBe("1234.5");
 });
 
 test("held registrations are removed, including ones that resolve after removal", async () => {

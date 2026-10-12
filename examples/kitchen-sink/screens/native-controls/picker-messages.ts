@@ -37,13 +37,13 @@ const en: PickerMessages = {
 
 const ar: PickerMessages = {
   rows: {
-    date: "التاريخ", time: "الوقت", "date-time": "التاريخ والوقت", "text-field": "حقل نصي (بلا عدّاد)", bounded: "مارس ٢٠٢٦ فقط",
+    date: "التاريخ", time: "الوقت", "date-time": "التاريخ والوقت", "text-field": "حقل نصي (بلا عدّاد)", bounded: "مارس 2026 فقط",
     calendar: "التقويم", clock: "الساعة", "umm-al-qura": "أم القرى (ar-SA)", japanese: "التقويم الياباني",
     well: "حاوية لون", "well-minimal": "حاوية لون مصغّرة", "well-expanded": "حاوية لون موسّعة", "well-alpha": "حاوية لون بالشفافية",
   },
   sections: { dates: "منتقيات التاريخ والوقت", colors: "حاويات الألوان", panels: "لوحات النظام" },
   disable: "تعطيل عناصر التحكم",
-  zoneNote: "تستخدم كل المنتقيات التوقيت العالمي؛ القراءات بالمللي ثانية منذ ١٩٧٠ وبصيغة ISO 8601.",
+  zoneNote: "تستخدم كل المنتقيات التوقيت العالمي؛ القراءات بالمللي ثانية منذ 1970 وبصيغة ISO 8601.",
   showColorPanel: "إظهار لوحة الألوان",
   sampleColor: "التقاط لون من الشاشة",
   showFontPanel: "إظهار لوحة الخطوط",

@@ -51,7 +51,7 @@ function NavRow({ title, count, selected, onPress, testID }: { title: string; co
   return <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={count === undefined ? title : t.navLabel(title, count)}
     onPress={onPress} className={`mx-2 flex-row items-center gap-2 rounded-md px-3 py-1.5 ${selected ? "bg-highlight" : ""}`}>
     <Text numberOfLines={1} className={`flex-1 text-sm ${count === 0 ? "text-muted" : "text-foreground"}`}>{title}</Text>
-    {count !== undefined && <Text className="text-xs text-muted">{t.number(count)}</Text>}
+    {count !== undefined && <Text className="text-xs text-muted" testID={`${testID}-count`}>{t.number(count)}</Text>}
   </Pressable>;
 }
 
@@ -97,7 +97,7 @@ function Home() {
   const { t } = useI18n();
   const populated = catalog.areas.filter(area => area.screens.length);
   return <ScrollView contentContainerClassName="gap-6 p-6" testID="infra-shell-home">
-    <Text className="text-sm text-muted">{t.home(populated.length, catalog.areas.length)}</Text>
+    <Text className="text-sm text-muted" testID="infra-shell-summary">{t.home(populated.length, catalog.areas.length)}</Text>
     {populated.map(area => <View key={area.id} className="gap-2">
       <Text className="text-lg font-semibold text-foreground" accessibilityRole="header">{t.areas[area.id]}</Text>
       {area.screens.map(screen => <ScreenRow key={screen.id} area={area} screen={screen} />)}

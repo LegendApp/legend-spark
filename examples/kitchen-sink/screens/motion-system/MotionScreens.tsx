@@ -130,7 +130,7 @@ export function ScrollAndFrames() {
     <Section title={t.scrollLink} hint={t.scrollHint}>
       <View className="flex-row items-start gap-6">
         <ScrollView nativeID={SCROLL_SOURCE} testID="motion-system-scroll-and-frames-list" className="h-40 w-56 rounded-md border border-border bg-background">
-          {Array.from({ length: 20 }, (_, index) => <Text key={index} className="border-b border-border px-3 py-2 text-sm text-foreground">{t.row(index + 1)}</Text>)}
+          {Array.from({ length: 20 }, (_, index) => <Text key={index} className="border-b border-border px-3 py-2 text-sm text-foreground" testID={`motion-system-scroll-and-frames-row-${index + 1}`}>{t.row(index + 1)}</Text>)}
         </ScrollView>
         <MotionView ref={badge} testID="motion-system-scroll-and-frames-badge" style={{ width: 64, height: 64 }}>
           <View className="flex-1 rounded-xl bg-success" />

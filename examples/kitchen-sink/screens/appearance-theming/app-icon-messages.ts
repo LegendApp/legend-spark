@@ -1,5 +1,5 @@
 import { useI18n } from "../../shell/app-controller";
-import type { Locale } from "../../shell/i18n";
+import { MESSAGES, type Locale } from "../../shell/i18n";
 
 // Strings for the App icon screen. Pixel dimensions are what the PNGs report, so flows assert them in any locale.
 export type AppIconMessages = { title: string; intro: string; availability: string; rendered: string; loading: string; styles: string; size: (pixels: number) => string; image: (pixels: number) => string };
@@ -15,6 +15,7 @@ const en: AppIconMessages = {
   image: pixels => `App icon, ${pixels} px`,
 };
 
+const n = MESSAGES.ar.number;
 const ar: AppIconMessages = {
   title: "أيقونة التطبيق",
   intro: "يرسم getAppIcon() أيقونة هذا التطبيق كما يرسمها Finder وDock، بكل حجم يستخدمانه. في macOS 26 وما بعده يتبع نمط الأيقونات والأدوات: افتراضي أو داكن أو شفاف أو ملوّن.",
@@ -22,8 +23,8 @@ const ar: AppIconMessages = {
   rendered: "الأيقونات المرسومة",
   loading: "جارٍ رسم أيقونة التطبيق…",
   styles: "ترسم التدفقات الأنماط الداكنة والشفافة والملوّنة بالتشغيل مع -AppleIconAppearanceTheme، الذي يسري على هذه العملية وحدها: لا تتغير إعدادات جهاز Mac ولا Dock. ويتحقق تدقيق البناء من أحجام الأيقونة وأنماطها في حزمة التطبيق.",
-  size: pixels => `${pixels} بكسل`,
-  image: pixels => `أيقونة التطبيق، ${pixels} بكسل`,
+  size: pixels => `${n(pixels)} بكسل`,
+  image: pixels => `أيقونة التطبيق، ${n(pixels)} بكسل`,
 };
 
 export const APP_ICON_MESSAGES: Record<Locale, AppIconMessages> = { en, ar };
