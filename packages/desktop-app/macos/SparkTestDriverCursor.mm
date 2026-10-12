@@ -2,32 +2,32 @@
 #import <objc/runtime.h>
 
 // The cursor in driver mode (docs/test-driver.md#cursor). A driven app must never change the cursor of the person using
-// this Mac, so +[NSCursor setHiddenUntilMouseMoves:] (which text views call on every typed key) is recorded instead of
-// applied, and the driver's pointer moves end it as real moves would. The `cursor` command reports the cursor AppKit
+// this Mac, so nothing it does reaches the real cursor: -[NSCursor set] and -push are recorded, -pop, +hide and +unhide
+// do nothing, and +[NSCursor setHiddenUntilMouseMoves:] (which text views call on every typed key) is recorded, and the
+// driver's pointer moves end it as real moves would. The `cursor` command reports the cursor AppKit
 // would show at a point: the cursor rect (-[NSView addCursorRect:cursor:]) of the innermost view there that has one,
 // else the cursor its cursor update sets (-[NSCursor set] from -cursorUpdate:), else the arrow. The driver records
 // them while it asks each view and applies neither.
 
 static BOOL hiddenUntilMoved = NO;
 static NSMutableArray<NSArray *> *recorded; // [rect in window coordinates, cursor] while asking for cursor rects; nil otherwise.
-static BOOL updating = NO; // Asking for a cursor update: -[NSCursor set] is recorded in `updated`.
-static NSCursor *updated;
-static IMP addCursorRect, setCursor;
+static NSCursor *updated; // The last cursor the app set.
+static IMP addCursorRect;
 
 static void SparkSetHidden(id, SEL, BOOL flag) { hiddenUntilMoved = flag; }
 static void SparkAddCursorRect(NSView *self, SEL selector, NSRect rect, NSCursor *cursor) {
   if (!recorded) { ((void (*)(id, SEL, NSRect, NSCursor *))addCursorRect)(self, selector, rect, cursor); return; }
   if (cursor) [recorded addObject:@[[NSValue valueWithRect:[self convertRect:rect toView:nil]], cursor]];
 }
-static void SparkSetCursor(NSCursor *self, SEL selector) {
-  if (updating) updated = self;
-  else ((void (*)(id, SEL))setCursor)(self, selector);
-}
+static void SparkSetCursor(NSCursor *self, SEL) { updated = self; }
+static void SparkIgnore(id, SEL) {}
 
 void SparkDriverCursorStart(void) {
   method_setImplementation(class_getClassMethod(NSCursor.class, @selector(setHiddenUntilMouseMoves:)), (IMP)SparkSetHidden);
   addCursorRect = method_setImplementation(class_getInstanceMethod(NSView.class, @selector(addCursorRect:cursor:)), (IMP)SparkAddCursorRect);
-  setCursor = method_setImplementation(class_getInstanceMethod(NSCursor.class, @selector(set)), (IMP)SparkSetCursor);
+  for (NSString *name in @[@"set", @"push"]) method_setImplementation(class_getInstanceMethod(NSCursor.class, NSSelectorFromString(name)), (IMP)SparkSetCursor);
+  method_setImplementation(class_getInstanceMethod(NSCursor.class, @selector(pop)), (IMP)SparkIgnore);
+  for (NSString *name in @[@"hide", @"unhide", @"pop"]) method_setImplementation(class_getClassMethod(NSCursor.class, NSSelectorFromString(name)), (IMP)SparkIgnore);
 }
 void SparkDriverCursorMoved(void) { hiddenUntilMoved = NO; }
 
@@ -75,12 +75,9 @@ NSDictionary *SparkDriverCursorAt(NSWindow *window, NSPoint location) {
       if (!(area.options & NSTrackingCursorUpdate) || !NSPointInRect([view convertPoint:location fromView:nil], rect)) continue;
       NSEvent *update = [NSEvent enterExitEventWithType:NSEventTypeCursorUpdate location:location modifierFlags:0 timestamp:NSProcessInfo.processInfo.systemUptime
         windowNumber:window.windowNumber context:nil eventNumber:0 trackingNumber:(NSInteger)(__bridge void *)area userData:NULL];
-      updating = YES;
       updated = nil;
       [(NSResponder *)area.owner cursorUpdate:update];
-      updating = NO;
       found = updated;
-      updated = nil;
       if (found) break;
     }
     if (found) break;

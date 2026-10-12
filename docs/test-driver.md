@@ -256,14 +256,15 @@ What AppKit does with in-process events, measured in `tests/test-driver.native.m
 | Tracking areas get `mouseEntered:`/`mouseExited:` from the window server. | Pointer moves send entered and exited events for the tracking areas the driver's pointer enters and leaves. An `NSTrackingInVisibleRect` area covers its view's `visibleRect`, which since macOS 14 extends past the bounds of views that do not clip. |
 | `NSScrollView` flings phased (trackpad gesture) scroll events delivered in a burst. | `scroll` sends one event without gesture or momentum phases; `precise` gives pixel deltas. |
 | `+[NSEvent mouseEventWithType:…]` numbers every other-mouse event button 2. | Back and forward presses are copies with `kCGMouseEventButtonNumber` 3 and 4. |
-| NSEvent has no factory for trackpad gestures. The window server sends them as gesture events (CGEvent type 29) whose HID type names the gesture, and `+[NSEvent eventWithCGEvent:]` makes the magnify, rotate, swipe, smart magnify or pressure NSEvent from it. The fields are private: HID type 110 (8 magnify, 5 rotate, 16 swipe, 22 smart magnify, 32 pressure), magnification 113, rotation 114, swipe direction 115 (IOHIDSwipeMask: up 1, down 2, left 4, right 8), phase 132 (1 began, 2 changed, 4 ended), stage 143, stage transition 147, pressure 148. | Gestures are retyped copies of a mouse move with those fields, never posted. Measured on macOS 27; `tests/test-driver.native.mm` (mode `pointer`) fails if AppKit stops reading them. |
+| NSEvent has no factory for trackpad gestures. The window server sends them as gesture events (CGEvent type 29) whose HID type names the gesture, and `+[NSEvent eventWithCGEvent:]` makes the magnify, rotate, swipe, smart magnify or pressure NSEvent from it. The fields are private: HID type 110 (8 magnify, 5 rotate, 16 swipe, 22 smart magnify, 32 pressure), magnification 113, rotation 114, swipe direction 115 (IOHIDSwipeMask: up 1, down 2, left 4, right 8), phase 132 (1 began, 2 changed, 4 ended), stage 143, stage transition 147, pressure 148. | Gestures are retyped copies of a mouse move AppKit made at the point, with those fields, never posted. AppKit takes a gesture's `locationInWindow` from the event's window-local location (top-left origin), a private field that setting the global location clears, so the driver sets both from the mouse event (`CGEventSetLocation`, and the private `CGEventSetWindowLocation`). It then checks every event AppKit makes (type, window, location, phase and values); on a mismatch, or without those functions, `gesture` fails with `E_UNSUPPORTED` naming the macOS version, and nothing is delivered. Measured on macOS 27; CI runs `tests/test-driver.native.mm` (mode `pointer`) on its macOS. |
 | `-[NSApplication sendEvent:]` drops magnify, rotate, swipe and smart magnify events in an app without a key window; `-[NSWindow sendEvent:]` gives them to the view under the pointer. NSWindow drops a magnify or rotate change that no began event started. | The driver sends those gestures to the window, as it does keys, and starts every magnify and rotate with a began event. Pressure events go through the queue with their click and reach the view only with a gesture phase. |
 
 ## Cursor
 
 A driven app must never change the cursor of the person using the Mac. In driver mode
-(`SparkTestDriverCursor.mm`), `+[NSCursor setHiddenUntilMouseMoves:]` is recorded instead
-of applied. AppKit text views call it on every typed key, and so does Spark's
+(`SparkTestDriverCursor.mm`) nothing the app does reaches the real cursor: `-[NSCursor set]`
+and `-push` are recorded, `-pop`, `+pop`, `+hide` and `+unhide` do nothing, and
+`+[NSCursor setHiddenUntilMouseMoves:]` is recorded instead of applied. AppKit text views call it on every typed key, and so does Spark's
 `hideCursorUntilMoved` ([pointer.md](pointer.md)). The next pointer move of the driver ends it, as a
 real move would. The real cursor is never hidden, moved or set by the driver.
 
@@ -272,7 +273,7 @@ asks each view under the point, innermost first, for its cursor rects
 (`-resetCursorRects`, which React Native's `cursor` style and Spark's `PointerView` custom
 cursor use) and records them instead of installing them. Then it rebuilds the views'
 real cursor rects. If no rect covers the point, it sends the views' cursor-update tracking
-areas a `cursorUpdate:` and records the `-[NSCursor set]` call. Otherwise it reports the
+areas a `cursorUpdate:` and takes the cursor it sets. Otherwise it reports the
 arrow. AppKit's shared cursors are reported by name (`arrow`, `IBeam`, `IBeamVertical`,
 `pointingHand`, `crosshair`, `openHand`, `closedHand`, `operationNotAllowed`, `dragLink`,
 `dragCopy`, `contextualMenu`, `disappearingItem`, `resizeLeftRight`, `resizeUpDown`,

@@ -35,7 +35,7 @@ A `PointerView`'s `customCursor` covers the view, except descendants with their 
 | `{ type: "symbol", name, pointSize?, hotSpot? }` | An SF Symbol at `pointSize` (16) | Its center unless given |
 | `{ type: "image", path, hotSpot }` | An image file (absolute path), at its size in points | Required |
 
-A hot spot is in points from the image's top-left and must lie in the image. A cursor that
+A hot spot is in points from the image's top-left and must lie in the image: from 0 up to, not including, its width and height. A cursor that
 cannot be loaded (an unknown symbol, an unreadable file) reports `E_INVALID_ARGUMENT` to
 `onError` and the view shows no custom cursor. Setting both `customCursor` and the `cursor`
 style throws `E_INVALID_ARGUMENT`; so do invalid values, and unknown keys throw

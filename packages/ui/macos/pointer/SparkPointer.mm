@@ -23,7 +23,7 @@ NSCursor *SparkPointerCursor(NSString *type, NSString *name, CGFloat pointSize, 
     return nil;
   }
   NSPoint spot = hasHotSpot ? hotSpot : NSMakePoint(image.size.width / 2, image.size.height / 2);
-  if (spot.x < 0 || spot.y < 0 || spot.x > image.size.width || spot.y > image.size.height) {
+  if (spot.x < 0 || spot.y < 0 || spot.x >= image.size.width || spot.y >= image.size.height) {
     *error = [NSString stringWithFormat:@"The hot spot %@ is outside the %@ cursor image", NSStringFromPoint(spot), NSStringFromSize(image.size)];
     return nil;
   }

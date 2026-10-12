@@ -1,4 +1,5 @@
 #import "SparkTestDriverPrivate.h"
+#include <dlfcn.h>
 
 // In-process input for the test driver (docs/test-driver.md#input). The driver creates NSEvents and dispatches
 // them through -[NSApplication sendEvent:] to this app's own windows. Nothing is posted to the system event
@@ -134,9 +135,32 @@ static NSEvent *SparkButton(BOOL down, NSInteger button, NSWindow *window, NSPoi
 // selects the NSEvent: 8 magnify, 5 rotate, 16 swipe, 22 smart magnify, 32 pressure.
 enum : uint32_t { SparkGestureHIDType = 110, SparkGestureMagnification = 113, SparkGestureRotation = 114, SparkGestureSwipe = 115,
   SparkGesturePhase = 132, SparkGestureStage = 143, SparkGestureStageTransition = 147, SparkGesturePressure = 148 };
-static NSEvent *SparkGesture(NSWindow *window, NSPoint location, NSEventModifierFlags flags, int64_t hidType, NSEventPhase phase, NSDictionary<NSNumber *, NSNumber *> *values) {
-  CGEventRef event = CGEventCreateCopy(SparkMouse(NSEventTypeMouseMoved, window, location, flags, 0).CGEvent);
+// A gesture event's location as AppKit reads it: the global location and, separately, the location in its window
+// (top-left origin), which CoreGraphics keeps in a private field and clears when the global location is set. Both are
+// copied from a mouse event AppKit made at the same point. Private, so looked up; NO when this macOS lacks them.
+BOOL SparkDriverSetGestureLocation(CGEventRef event, NSEvent *mouse) {
+  static auto get = (CGPoint (*)(CGEventRef))dlsym(RTLD_DEFAULT, "CGEventGetWindowLocation");
+  static auto set = (void (*)(CGEventRef, CGPoint))dlsym(RTLD_DEFAULT, "CGEventSetWindowLocation");
+  if (!get || !set) return NO;
+  CGPoint inWindow = get(mouse.CGEvent);
+  CGEventSetLocation(event, CGEventGetLocation(mouse.CGEvent));
+  set(event, inWindow);
+  return YES;
+}
+// A gesture NSEvent at `location` (window coordinates), checked against what was asked for: the fields are private and
+// AppKit's reading of them changes between macOS versions, so a mismatch is a failure, never an event for some other
+// view. nil, with `failure` set, on a mismatch.
+static NSEvent *SparkGesture(NSWindow *window, NSPoint location, NSEventModifierFlags flags, int64_t hidType, NSEventPhase phase, NSDictionary<NSNumber *, NSNumber *> *values, NSString **failure) {
+  NSEvent *mouse = SparkMouse(NSEventTypeMouseMoved, window, location, flags, 0);
+  CGEventRef event = CGEventCreateCopy(mouse.CGEvent);
   CGEventSetType(event, (CGEventType)29);
+  if (!SparkDriverSetGestureLocation(event, mouse)) {
+    CFRelease(event);
+    *failure = [NSString stringWithFormat:@"Gesture synthesis is unsupported on macOS %@: CoreGraphics has no CGEventSetWindowLocation", NSProcessInfo.processInfo.operatingSystemVersionString];
+    return nil;
+  }
+  CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointer, window.windowNumber);
+  CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent, window.windowNumber);
   CGEventSetIntegerValueField(event, (CGEventField)SparkGestureHIDType, hidType);
   // The window server's phases are 1 began, 2 changed and 4 ended; AppKit maps them to NSEventPhase.
   CGEventSetIntegerValueField(event, (CGEventField)SparkGesturePhase, phase == NSEventPhaseBegan ? 1 : phase == NSEventPhaseChanged ? 2 : phase == NSEventPhaseEnded ? 4 : 0);
@@ -146,7 +170,28 @@ static NSEvent *SparkGesture(NSWindow *window, NSPoint location, NSEventModifier
   }];
   NSEvent *result = [NSEvent eventWithCGEvent:event];
   CFRelease(event);
-  return result;
+  NSString *problem = SparkDriverCheckGesture(result, window, location, hidType, phase, values);
+  if (!problem) return result;
+  *failure = [NSString stringWithFormat:@"Gesture synthesis is unsupported on macOS %@: %@", NSProcessInfo.processInfo.operatingSystemVersionString, problem];
+  return nil;
+}
+// Why `event` is not the gesture asked for, or nil when it is.
+NSString *SparkDriverCheckGesture(NSEvent *event, NSWindow *window, NSPoint location, int64_t hidType, NSEventPhase phase, NSDictionary<NSNumber *, NSNumber *> *values) {
+  NSDictionary<NSNumber *, NSNumber *> *types = @{ @8: @(NSEventTypeMagnify), @5: @(NSEventTypeRotate), @16: @(NSEventTypeSwipe), @22: @(NSEventTypeSmartMagnify), @32: @(NSEventTypePressure) };
+  if (!event) return @"AppKit made no event";
+  if (event.type != (NSEventType)types[@(hidType)].unsignedIntegerValue) return [NSString stringWithFormat:@"event type %lu, not %@", (unsigned long)event.type, types[@(hidType)]];
+  if (event.windowNumber != window.windowNumber) return [NSString stringWithFormat:@"window %ld, not %ld", (long)event.windowNumber, (long)window.windowNumber];
+  if (hypot(event.locationInWindow.x - location.x, event.locationInWindow.y - location.y) > 0.5)
+    return [NSString stringWithFormat:@"location %@, not %@", NSStringFromPoint(event.locationInWindow), NSStringFromPoint(location)];
+  if (phase != NSEventPhaseNone && event.phase != phase) return [NSString stringWithFormat:@"phase %lu, not %lu", (unsigned long)event.phase, (unsigned long)phase];
+  auto near = ^BOOL(double actual, NSNumber *expected) { return !expected || fabs(actual - expected.doubleValue) < 1e-4; };
+  NSInteger swipe = [values[@(SparkGestureSwipe)] integerValue];
+  BOOL valuesMatch = hidType == 8 ? near(event.magnification, values[@(SparkGestureMagnification)])
+    : hidType == 5 ? near(event.rotation, values[@(SparkGestureRotation)])
+    : hidType == 16 ? event.deltaX == (swipe == 4 ? 1 : swipe == 8 ? -1 : 0) && event.deltaY == (swipe == 1 ? 1 : swipe == 2 ? -1 : 0)
+    : hidType == 32 ? event.stage == [values[@(SparkGestureStage)] integerValue] && near(event.pressure, values[@(SparkGesturePressure)]) && near(event.stageTransition, values[@(SparkGestureStageTransition)])
+    : YES;
+  return valuesMatch ? nil : @"its values differ from the fields set";
 }
 static NSEvent *SparkKey(NSEventType type, NSWindow *window, NSString *characters, NSString *ignoring, unsigned short code, NSEventModifierFlags flags) {
   return [NSEvent keyEventWithType:type location:NSZeroPoint modifierFlags:flags timestamp:SparkEventTime() windowNumber:window.windowNumber
@@ -402,9 +447,13 @@ static NSArray<NSEvent *> *SparkClick(NSWindow *window, NSPoint location, NSInte
 // A trackpad gesture over `location`, after moving the driver's pointer there. Magnify and rotate begin, change in
 // `steps` equal parts of the total, and end. A pressure gesture is a click whose pressure rises through stage 1 (a
 // click) and, for `stage` 2, into stage 2 (a force click), then falls before the release.
-static NSArray<NSEvent *> *SparkGestureEvents(NSWindow *window, NSPoint location, NSString *kind, NSDictionary *request, NSInteger steps, NSEventModifierFlags flags) {
+static NSArray<NSEvent *> *SparkGestureEvents(NSWindow *window, NSPoint location, NSString *kind, NSDictionary *request, NSInteger steps, NSEventModifierFlags flags, NSDictionary **failure) {
   NSMutableArray<NSEvent *> *events = [SparkMove(window, location, NSEventTypeMouseMoved, flags) mutableCopy];
-  auto gesture = ^(int64_t type, NSEventPhase phase, NSDictionary *values) { [events addObject:SparkGesture(window, location, flags, type, phase, values)]; };
+  __block NSString *problem = nil;
+  auto gesture = ^(int64_t type, NSEventPhase phase, NSDictionary *values) {
+    NSEvent *event = problem ? nil : SparkGesture(window, location, flags, type, phase, values, &problem);
+    if (event) [events addObject:event];
+  };
   if ([kind isEqual:@"magnify"] || [kind isEqual:@"rotate"]) {
     BOOL magnify = [kind isEqual:@"magnify"];
     NSNumber *field = @(magnify ? SparkGestureMagnification : SparkGestureRotation);
@@ -430,7 +479,9 @@ static NSArray<NSEvent *> *SparkGestureEvents(NSWindow *window, NSPoint location
     pressure(0, 0, 0, NSEventPhaseEnded);
     [events addObject:SparkButton(NO, 0, window, location, flags, 1)];
   }
-  return events;
+  if (!problem) return events;
+  *failure = SparkDriverFailure(@"E_UNSUPPORTED", problem);
+  return nil;
 }
 // The driver's pointer: its window and location there, after a pointer command.
 static NSWindow *SparkPointerWindow(NSPoint *location, NSDictionary **failure) {
@@ -502,7 +553,7 @@ void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverR
     if ([kind isEqual:@"rotate"] && (!rotation || !SparkNumber(rotation) || [rotation doubleValue] == 0)) { invalid(@"rotation is nonzero degrees, counterclockwise positive"); return; }
     if ([kind isEqual:@"swipe"] && ![@[@"left", @"right", @"up", @"down"] containsObject:request[@"direction"] ?: @""]) { invalid(@"direction is left, right, up or down"); return; }
     if ([kind isEqual:@"pressure"] && !SparkInteger(request[@"stage"], 2, 1, 2, &stage)) { invalid(@"stage is 1 (click) or 2 (force click)"); return; }
-    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkGestureEvents(window, location, kind, request, steps, flags);
+    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkGestureEvents(window, location, kind, request, steps, flags, &failure);
   } else if ([command isEqual:@"cursor"]) {
     BOOL targeted = request[@"testID"] || request[@"point"];
     window = targeted ? SparkTarget(request, request[@"window"], YES, &location, &failure) : SparkPointerWindow(&location, &failure);

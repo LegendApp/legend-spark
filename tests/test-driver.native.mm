@@ -264,6 +264,7 @@ static NSWindow *MakeInputWindow(void) {
 }
 // Gesture and cursor targets (mode "pointer").
 static NSMutableArray<NSString *> *gestures;
+static NSMutableSet<NSValue *> *gestureLocations; // locationInWindow of every gesture and pressure event.
 @interface GestureRecorder : NSView
 @end
 @implementation GestureRecorder
@@ -272,11 +273,11 @@ static NSMutableArray<NSString *> *gestures;
 - (void)mouseUp:(NSEvent *)event { [gestures addObject:@"up"]; }
 - (void)otherMouseDown:(NSEvent *)event { [gestures addObject:[NSString stringWithFormat:@"otherDown %ld", (long)event.buttonNumber]]; }
 - (void)otherMouseUp:(NSEvent *)event { [gestures addObject:[NSString stringWithFormat:@"otherUp %ld", (long)event.buttonNumber]]; }
-- (void)magnifyWithEvent:(NSEvent *)event { [gestures addObject:[NSString stringWithFormat:@"magnify %g %lu", event.magnification, (unsigned long)event.phase]]; }
-- (void)rotateWithEvent:(NSEvent *)event { [gestures addObject:[NSString stringWithFormat:@"rotate %g %lu", event.rotation, (unsigned long)event.phase]]; }
-- (void)swipeWithEvent:(NSEvent *)event { [gestures addObject:[NSString stringWithFormat:@"swipe %g %g", event.deltaX, event.deltaY]]; }
-- (void)smartMagnifyWithEvent:(NSEvent *)event { [gestures addObject:@"smartMagnify"]; }
-- (void)pressureChangeWithEvent:(NSEvent *)event { [gestures addObject:[NSString stringWithFormat:@"pressure %ld %g %g", (long)event.stage, event.pressure, event.stageTransition]]; }
+- (void)magnifyWithEvent:(NSEvent *)event { [gestureLocations addObject:[NSValue valueWithPoint:event.locationInWindow]]; [gestures addObject:[NSString stringWithFormat:@"magnify %g %lu", event.magnification, (unsigned long)event.phase]]; }
+- (void)rotateWithEvent:(NSEvent *)event { [gestureLocations addObject:[NSValue valueWithPoint:event.locationInWindow]]; [gestures addObject:[NSString stringWithFormat:@"rotate %g %lu", event.rotation, (unsigned long)event.phase]]; }
+- (void)swipeWithEvent:(NSEvent *)event { [gestureLocations addObject:[NSValue valueWithPoint:event.locationInWindow]]; [gestures addObject:[NSString stringWithFormat:@"swipe %g %g", event.deltaX, event.deltaY]]; }
+- (void)smartMagnifyWithEvent:(NSEvent *)event { [gestureLocations addObject:[NSValue valueWithPoint:event.locationInWindow]]; [gestures addObject:@"smartMagnify"]; }
+- (void)pressureChangeWithEvent:(NSEvent *)event { [gestureLocations addObject:[NSValue valueWithPoint:event.locationInWindow]]; [gestures addObject:[NSString stringWithFormat:@"pressure %ld %g %g", (long)event.stage, event.pressure, event.stageTransition]]; }
 - (void)resetCursorRects { [self addCursorRect:self.bounds cursor:NSCursor.pointingHandCursor]; }
 @end
 // Sets its cursor from -cursorUpdate:, as views with an NSTrackingCursorUpdate area do.
@@ -290,7 +291,7 @@ static NSMutableArray<NSString *> *gestures;
 - (void)cursorUpdate:(NSEvent *)event { [NSCursor.crosshairCursor set]; }
 @end
 static NSWindow *MakePointerWindow(void) {
-  gestures = [NSMutableArray new];
+  gestures = [NSMutableArray new]; gestureLocations = [NSMutableSet new];
   NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
   window.identifier = @"pointer"; window.releasedWhenClosed = NO;
   auto add = ^(NSView *view, NSString *testID, NSRect frame) { view.frame = frame; view.accessibilityIdentifier = testID; [window.contentView addSubview:view]; };
@@ -630,6 +631,9 @@ int main(int argc, char **argv) { @autoreleasepool {
       expect(@[@"down", @"pressure 1 0.25 0", @"pressure 1 0.5 0", @"pressure 1 1 0.5", @"pressure 2 0.5 0", @"pressure 0 0 0", @"up"], @"a force click: pressure rises through stage 1 into stage 2 between press and release");
       gesture(@{ @"kind": @"pressure", @"stage": @1 });
       expect(@[@"down", @"pressure 1 0.25 0", @"pressure 1 0.5 0", @"pressure 1 1 0", @"pressure 0 0 0", @"up"], @"a stage 1 pressure click never reaches stage 2");
+      NSValue *center = OnMain(^{ NSView *view = SparkDriverFindView(@"pointer-gestures"); return [NSValue valueWithPoint:[view convertPoint:NSMakePoint(NSMidX(view.bounds), NSMidY(view.bounds)) toView:nil]]; });
+      NSSet *locations = OnMain(^{ return [gestureLocations copy]; });
+      Check([locations isEqual:[NSSet setWithObject:center]], [NSString stringWithFormat:@"every gesture arrives at the target's center in window coordinates (%@ at %@)", locations, center]);
       ok(@{ @"command": @"tap", @"testID": @"pointer-gestures", @"button": @"back" });
       ok(@{ @"command": @"tap", @"testID": @"pointer-gestures", @"button": @"forward" });
       expect(@[@"otherDown 3", @"otherUp 3", @"otherDown 4", @"otherUp 4"], @"back and forward are mouse buttons 3 and 4");
