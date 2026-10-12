@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: Spring-loaded targets
+intent: >
+  A drag dropped on the spring-loaded target at once copies its text without spring loading: the highlight goes
+  standard while it hovers and back to none. A drag held over it for two seconds, longer than the system's springing
+  delay, spring-loads it once: the highlight goes standard, then emphasized as it activates, then back to none. The driver backend times the delay in process; the window server's timing and the
+  force-click activation need the black-box backend (#118).
+checks: [DND-SPRING-01]
+tags: [drag-drop]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://drag-drop/features" }
+- extendedWaitUntil: { visible: { id: drag-drop-features-root }, timeout: 10s }
+- dragAndDrop: { from: { id: drag-drop-features-ops-source }, to: { id: drag-drop-features-spring-target } }
+- assertText: { id: drag-drop-features-spring-dropped, equals: copy · Spark drag }
+- assertText: { id: drag-drop-features-springs, equals: "0" }
+- assertText: { id: drag-drop-features-highlights, equals: standard → none }
+- dragAndDrop: { from: { id: drag-drop-features-ops-source }, to: { id: drag-drop-features-spring-target }, holdAt: 2s }
+- assertText: { id: drag-drop-features-springs, equals: "1" }
+- assertText: { id: drag-drop-features-highlights, equals: standard → none → standard → emphasized → none }
+- assertText: { id: drag-drop-features-spring-dropped, equals: copy · Spark drag }

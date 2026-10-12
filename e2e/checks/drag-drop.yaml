@@ -1,0 +1,52 @@
+area: drag-drop
+prefix: DND
+checks:
+  DND-AVAIL-01:
+    title: getDragDropAvailability reports drag and drop and its promisedFiles, springLoading, dragImage and operationMasks features as available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#117 DND.api"
+    covers:
+      - ./drag-drop#getDragDropAvailability
+      - ./drag-drop#getDragDropAvailability().available
+  DND-UNSUP-01:
+    title: On Windows the promisedFiles, springLoading, dragImage and operationMasks features report unsupported-platform, and a DragDropView requesting one throws SparkError E_UNSUPPORTED_PLATFORM (Windows implementation #365)
+    platforms: [windows]
+    blocking: true
+    spec: "#117 DND.api; #365"
+    covers:
+      - ./drag-drop#getDragDropAvailability
+      - ./drag-drop#DragDropView
+  DND-PROMISE-01:
+    title: A source with promisedFiles writes each file only when a folder accepts the drop, at the path the folder gives onPromisedFileWrite, and its drag ends accepted as copy
+    platforms: [macos]
+    blocking: true
+    spec: "#117 DND.api"
+    covers:
+      - ./drag-drop#DragDropView
+  DND-IMAGE-01:
+    title: Sources with dragImage "view" and an image file drag and drop their payload; an image file that does not exist starts no drag and reports SparkError E_NOT_FOUND through onError
+    platforms: [macos]
+    blocking: true
+    spec: "#117 DND.api"
+    covers:
+      - ./drag-drop#DragDropView
+  DND-MOD-01:
+    title: Modifier keys select the operation a destination accepting move, copy and link performs (none moves, Option copies, Command moves, Control links) and narrow allowedOperations; a source with ignoreModifierKeys keeps every operation
+    platforms: [macos]
+    blocking: true
+    spec: "#117 DND.api"
+    covers:
+      - ./drag-drop#DragDropView
+  DND-SPRING-01:
+    title: A drag held over a springLoading destination past the springing delay reports onSpringLoad once, with the standard and emphasized highlights before the highlight returns to none; a drop without holding does not spring-load
+    platforms: [macos]
+    blocking: true
+    spec: "#117 DND.api"
+    covers:
+      - ./drag-drop#DragDropView
+  DND-VISUAL-01:
+    title: The Drag & drop features screen matches its approved golden in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#117 DND.api"

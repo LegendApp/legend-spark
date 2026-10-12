@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: Modifier keys choose the drag operation
+intent: >
+  The source allows copy, move and link within the app; the target accepts move, copy and link in that order. With
+  no key the drop moves. Option copies, Command moves and Control links, and the target sees only that operation
+  allowed. The source that ignores modifier keys still moves with Option, every operation allowed. The driver backend
+  narrows the source's operations as AppKit documents for the window server; the real window server's narrowing
+  needs the black-box backend (#118).
+checks: [DND-MOD-01]
+tags: [drag-drop]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://drag-drop/features" }
+- extendedWaitUntil: { visible: { id: drag-drop-features-root }, timeout: 10s }
+- dragAndDrop: { from: { id: drag-drop-features-ops-source }, to: { id: drag-drop-features-ops-target } }
+- assertText: { id: drag-drop-features-ops-dropped, equals: "move · allowed copy,move,link" }
+- assertText: { id: drag-drop-features-end-ops-source, equals: move }
+- dragAndDrop: { from: { id: drag-drop-features-ops-source }, to: { id: drag-drop-features-ops-target }, modifiers: [option] }
+- assertText: { id: drag-drop-features-ops-dropped, equals: "copy · allowed copy" }
+- assertText: { id: drag-drop-features-end-ops-source, equals: copy }
+- dragAndDrop: { from: { id: drag-drop-features-ops-source }, to: { id: drag-drop-features-ops-target }, modifiers: [cmd] }
+- assertText: { id: drag-drop-features-ops-dropped, equals: "move · allowed move" }
+- dragAndDrop: { from: { id: drag-drop-features-ops-source }, to: { id: drag-drop-features-ops-target }, modifiers: [ctrl] }
+- assertText: { id: drag-drop-features-ops-dropped, equals: "link · allowed link" }
+- assertText: { id: drag-drop-features-end-ops-source, equals: link }
+- dragAndDrop: { from: { id: drag-drop-features-ops-fixed }, to: { id: drag-drop-features-ops-target }, modifiers: [option] }
+- assertText: { id: drag-drop-features-ops-dropped, equals: "move · allowed copy,move,link" }
