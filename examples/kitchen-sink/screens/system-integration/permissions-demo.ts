@@ -7,7 +7,7 @@ import {
 import { useRegistrations } from "../../shell/registrations";
 import { describeError } from "../app-lifecycle/useAppLifecycle";
 
-export const PERMISSION_KINDS: readonly PermissionKind[] = ["camera", "microphone", "screenRecording", "accessibility", "inputMonitoring", "automation", "contacts", "calendar", "photos", "location"];
+export const PERMISSION_KINDS: readonly PermissionKind[] = ["camera", "microphone", "screenRecording", "accessibility", "inputMonitoring", "automation", "contacts", "calendar", "photos", "location", "speechRecognition"];
 /** Automation is per target app; the screen asks about Finder, which is always running. */
 export const AUTOMATION_TARGET = "com.apple.finder";
 const options = (kind: PermissionKind): PermissionOptions => kind === "automation" ? { target: AUTOMATION_TARGET } : {};

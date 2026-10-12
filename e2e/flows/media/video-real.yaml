@@ -1,0 +1,30 @@
+appId: so.legend.spark.examples.kitchensink
+name: Real fullscreen and picture in picture
+intent: >
+  The real fullscreen window and AVPictureInPictureController paths of @legendapp/spark/video, which no automated run
+  may reach: they open windows and take the screen. manual: true keeps the gate from running it. Run it by hand on a
+  Mac; the clip is silent.
+checks: [MEDIA-VIDEOREAL-01]
+tags: [media]
+platforms: [macos]
+manual: true
+---
+- launchApp: { openUrl: "spark-ks://media/video" }
+- extendedWaitUntil: { visible: { id: media-video-view }, timeout: 10s }
+- manualStep:
+    instruction: >-
+      Open Media > Video. Press Play, then Fullscreen. Wait for the clip to fill the screen, then press Escape.
+    expect: >-
+      The clip plays in a black fullscreen space and Escape returns to the Kitchen Sink. The events show
+      fullscreenChange true, then fullscreenChange false, and the status says fullscreen off.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Picture in picture. Move the floating window, then close it with its close button. Press Picture in picture
+      again, then Stop picture in picture.
+    expect: >-
+      The clip floats in a picture-in-picture window above other apps and keeps playing. Closing it and Stop picture in
+      picture each end it; the events show pictureInPictureChange true and false each time.
+    evidence: none
+    signoff: required

@@ -1,0 +1,33 @@
+appId: so.legend.spark.examples.kitchensink
+name: Speech recognition rejects typed errors when it cannot run (simulated)
+intent: >
+  With both permissions granted (simulated), Media > Speech reports the en-US recognizer's status. When on-device
+  recognition is unavailable, Listen on device rejects SparkError:E_UNAVAILABLE while Listen still runs, and a second
+  Listen while one runs rejects SparkError:E_BUSY. When the recognizer is unavailable, Listen rejects
+  SparkError:E_UNAVAILABLE. Driver simulation only: no microphone or recognizer is reached.
+checks: [MEDIA-STTAVAIL-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://media/speech" }
+# The reads the screen makes on open have settled, so the layout no longer moves under the first tap.
+- assertText: { id: media-speech-recognizer, equals: "en-US · supported true · available true · on device true · listed true" }
+- assertText: { id: media-speech-speaking, equals: "speaking false · paused false" }
+- simulatePermission: { kind: speechRecognition, authorization: authorized }
+- simulatePermission: { kind: microphone, authorization: authorized }
+- simulateSpeech: { onDeviceSupported: false }
+- tapOn: { id: media-speech-listen-on-device }
+- assertText: { id: media-speech-outcome, equals: "SparkError:E_UNAVAILABLE" }
+- assertText: { id: media-speech-recognizer, equals: "en-US · supported true · available true · on device false · listed true" }
+- assertSimulatedSpeech: { recognitions: 0 }
+- tapOn: { id: media-speech-listen }
+- assertText: { id: media-speech-outcome, equals: listening }
+- tapOn: { id: media-speech-listen }
+- assertText: { id: media-speech-outcome, equals: "SparkError:E_BUSY" }
+- tapOn: { id: media-speech-cancel }
+- assertText: { id: media-speech-outcome, equals: cancelled }
+- simulateSpeech: { recognizerAvailable: false }
+- tapOn: { id: media-speech-listen }
+- assertText: { id: media-speech-outcome, equals: "SparkError:E_UNAVAILABLE" }
+- assertText: { id: media-speech-recognizer, equals: "en-US · supported true · available false · on device false · listed true" }
+- assertSimulatedSpeech: { recognitions: 1, listening: false }

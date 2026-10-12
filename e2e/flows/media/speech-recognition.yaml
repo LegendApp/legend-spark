@@ -1,0 +1,46 @@
+appId: so.legend.spark.examples.kitchensink
+name: Speech recognition needs both permissions, then reports partial results and its outcome (simulated)
+intent: >
+  Media > Speech reads the speechRecognition and microphone permissions (simulated, undetermined) and the en-US
+  recognizer's status without prompting. Listen rejects SparkError:E_PERMISSION_DENIED and no prompt or recognition
+  happens. Request permissions asks for both (simulated prompts, allowed). Then Listen reports the scripted partial
+  transcripts and Stop listening the final transcript with its segments; with no final transcript the outcome is
+  noSpeech, and Cancel ends it cancelled. Listen on device asks for on-device recognition. Driver simulation only: no
+  microphone, recognizer or TCC prompt is reached.
+checks: [MEDIA-STT-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://media/speech" }
+- assertText: { id: media-speech-permissions, equals: "speechRecognition undetermined · microphone undetermined" }
+- assertText: { id: media-speech-recognizer, equals: "en-US · supported true · available true · on device true · listed true" }
+- tapOn: { id: media-speech-listen }
+- assertText: { id: media-speech-outcome, equals: "SparkError:E_PERMISSION_DENIED" }
+- assertSimulatedPermission: { kind: speechRecognition, requests: 0, prompts: 0 }
+- assertSimulatedSpeech: { recognitions: 0, listening: false }
+- simulatePermission: { kind: speechRecognition, answer: allow }
+- simulatePermission: { kind: microphone, answer: allow }
+- tapOn: { id: media-speech-request }
+- assertText: { id: media-speech-permissions, equals: "speechRecognition granted · microphone granted" }
+- assertSimulatedPermission: { kind: speechRecognition, authorization: authorized, prompts: 1 }
+- assertSimulatedPermission: { kind: microphone, authorization: authorized, prompts: 1 }
+- simulateSpeech: { wordMs: 100, recognitionPartials: [hello, hello spark], recognitionTranscript: hello spark world }
+- tapOn: { id: media-speech-listen }
+- assertText: { id: media-speech-outcome, equals: listening }
+- assertText: { id: media-speech-partial, equals: hello spark }
+- assertSimulatedSpeech: { listening: true, recognitions: 1, lastLocale: en-US, lastOnDevice: false }
+- tapOn: { id: media-speech-finish }
+- assertText: { id: media-speech-outcome, equals: "recognized: hello spark world (3 segments)" }
+- assertSimulatedSpeech: { listening: false }
+- simulateSpeech: { recognitionPartials: [], recognitionTranscript: null }
+- tapOn: { id: media-speech-listen }
+- assertText: { id: media-speech-outcome, equals: listening }
+- tapOn: { id: media-speech-finish }
+- assertText: { id: media-speech-outcome, equals: noSpeech }
+- tapOn: { id: media-speech-listen-on-device }
+- assertText: { id: media-speech-outcome, equals: listening }
+- assertSimulatedSpeech: { listening: true, recognitions: 3, lastOnDevice: true }
+- tapOn: { id: media-speech-cancel }
+- assertText: { id: media-speech-outcome, equals: cancelled }
+- assertSimulatedSpeech: { listening: false }
+- takeScreenshot: speech-recognition

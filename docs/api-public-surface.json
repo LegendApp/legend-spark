@@ -791,6 +791,31 @@
     "getKeyboardAvailability",
     "hasModifier"
   ],
+  "./speech": [
+    "Availability",
+    "PauseSpeakingOptions",
+    "SpeakOptions",
+    "SpeakResult",
+    "SpeakingStatus",
+    "SpeechRecognitionOptions",
+    "SpeechRecognitionOutcome",
+    "SpeechRecognitionSegment",
+    "SpeechRecognitionSession",
+    "SpeechRecognizerStatus",
+    "SpeechTranscript",
+    "SpeechVoice",
+    "SpeechWord",
+    "getSpeakingStatus",
+    "getSpeechAvailability",
+    "getSpeechRecognitionLocales",
+    "getSpeechRecognizerStatus",
+    "getVoices",
+    "pauseSpeaking",
+    "resumeSpeaking",
+    "speak",
+    "startSpeechRecognition",
+    "stopSpeaking"
+  ],
   "./sqlite": [
     "Database",
     "DatabaseOptions",
@@ -1044,6 +1069,21 @@
     "getUpdateStatus",
     "onUpdateEvent",
     "startUpdates"
+  ],
+  "./video": [
+    "Availability",
+    "Subscription",
+    "VideoContentFit",
+    "VideoPlayer",
+    "VideoPlayerEvent",
+    "VideoPlayerOptions",
+    "VideoSource",
+    "VideoStatus",
+    "VideoView",
+    "VideoViewProps",
+    "createVideoPlayer",
+    "getPictureInPictureAvailability",
+    "getVideoAvailability"
   ],
   "./webview": [
     "WebView",

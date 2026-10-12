@@ -6,7 +6,7 @@ import { runOk } from "./subprocess.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const macos = path.join(root, "packages/permissions/macos");
-const frameworks = ["AppKit", "ApplicationServices", "AVFoundation", "Contacts", "CoreGraphics", "CoreLocation", "EventKit", "IOKit", "Photos"].flatMap(name => ["-framework", name]);
+const frameworks = ["AppKit", "ApplicationServices", "AVFoundation", "Contacts", "CoreGraphics", "CoreLocation", "EventKit", "IOKit", "Photos", "Speech"].flatMap(name => ["-framework", name]);
 
 test.skipIf(process.platform !== "darwin")("permission states map explicitly, validation fails before TCC, the simulation prompts once per answer, unanswered prompts are bounded, and the core builds without the driver", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-permissions-native-"));

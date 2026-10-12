@@ -1,0 +1,104 @@
+area: media
+prefix: MEDIA
+checks:
+  MEDIA-VIDEO-01:
+    title: "getVideoAvailability reports video available on macOS; createVideoPlayer loads the silent local test clip paused (3 s, 160x90) and the VideoView shows it"
+    platforms: [macos]
+    blocking: true
+    spec: "#133 MEDIA.api-av"
+    covers:
+      - ./video
+      - ./video#getVideoAvailability
+      - ./video#getVideoAvailability().available
+      - ./video#createVideoPlayer
+      - ./video#VideoView
+  MEDIA-VIDEOPLAY-01:
+    title: "Video play and pause report playingChange; seekTo resolves at the exact position with a seek event; setRate reports rateChange; setVolume and setMuted report volumeChange; playing to the end reports end"
+    platforms: [macos]
+    blocking: true
+    spec: "#133 MEDIA.api-av"
+    covers:
+      - ./video#createVideoPlayer
+  MEDIA-VIDEOWIN-01:
+    title: "getPictureInPictureAvailability reports what AVKit supports; enterFullscreen and exitFullscreen report fullscreenChange; startPictureInPicture and stopPictureInPicture report pictureInPictureChange for the player shown in a VideoView (driver simulation: no window opens)"
+    platforms: [macos]
+    blocking: true
+    spec: "#133 MEDIA.api-av"
+    covers:
+      - ./video#getPictureInPictureAvailability
+      - ./video#getPictureInPictureAvailability().available
+      - ./video#createVideoPlayer
+      - ./video#VideoView
+  MEDIA-VIDEOREAL-01:
+    title: "Real fullscreen and picture in picture: the clip fills the screen until Escape, and floats in the picture-in-picture window until it is closed, each reported as a status change"
+    platforms: [macos]
+    blocking: true
+    spec: "#133 MEDIA.api-av"
+    covers:
+      - ./video#createVideoPlayer
+      - ./video#VideoView
+  MEDIA-TTS-01:
+    title: "getSpeechAvailability reports speech available on macOS; getVoices lists installed voices; speak resolves finished after start and word events, with the requested rate, pitch and volume (driver simulation: recorded, never spoken)"
+    platforms: [macos]
+    blocking: true
+    spec: "#133 MEDIA.api-av"
+    covers:
+      - ./speech
+      - ./speech#getSpeechAvailability
+      - ./speech#getSpeechAvailability().available
+      - ./speech#getVoices
+      - ./speech#speak
+      - ./speech#getSpeakingStatus
+  MEDIA-TTSCTRL-01:
+    title: "pauseSpeaking pauses after the current word and resumeSpeaking continues, each reported to the utterance; stopSpeaking ends it unfinished (driver simulation)"
+    platforms: [macos]
+    blocking: true
+    spec: "#133 MEDIA.api-av"
+    covers:
+      - ./speech#pauseSpeaking
+      - ./speech#resumeSpeaking
+      - ./speech#stopSpeaking
+      - ./speech#getSpeakingStatus
+  MEDIA-STT-01:
+    title: "startSpeechRecognition rejects SparkError:E_PERMISSION_DENIED without prompting until the speechRecognition and microphone permissions are granted; then it reports partial results and stops with the final transcript, noSpeech when nobody spoke, and cancelled on cancel (driver simulation: no microphone or recognizer)"
+    platforms: [macos]
+    blocking: true
+    spec: "#133 MEDIA.api-av"
+    covers:
+      - ./speech#startSpeechRecognition
+      - ./speech#getSpeechRecognizerStatus
+      - ./speech#getSpeechRecognitionLocales
+  MEDIA-STTAVAIL-01:
+    title: "getSpeechRecognizerStatus reports whether en-US is supported, available now and on device; startSpeechRecognition rejects SparkError:E_UNAVAILABLE when the recognizer is unavailable, or on-device recognition is required where there is none (driver simulation)"
+    platforms: [macos]
+    blocking: true
+    spec: "#133 MEDIA.api-av"
+    covers:
+      - ./speech#getSpeechRecognizerStatus
+      - ./speech#startSpeechRecognition
+  MEDIA-SPEECHREAL-01:
+    title: "Real speech: the phrase is spoken aloud with word events and can be paused, resumed and stopped; after the permissions are granted, Listen transcribes what the person says with partial results"
+    platforms: [macos]
+    blocking: true
+    spec: "#133 MEDIA.api-av"
+    covers:
+      - ./speech#speak
+      - ./speech#startSpeechRecognition
+  MEDIA-AVUNSUP-01:
+    title: "On Windows getVideoAvailability and getSpeechAvailability report unsupported-platform, and creating a player, speaking and recognizing reject SparkError:E_UNSUPPORTED_PLATFORM (Windows media: #403)"
+    platforms: [windows]
+    blocking: true
+    spec: "#133 MEDIA.api-av; Windows implementation #403"
+    covers:
+      - ./video#getVideoAvailability().available
+      - ./video#createVideoPlayer
+      - ./speech#getSpeechAvailability().available
+      - ./speech#speak
+  MEDIA-VISUAL-01:
+    title: "The Video and Speech screens match their goldens in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#133 MEDIA.api-av"
+    covers:
+      - ./video#getVideoAvailability().available
+      - ./speech#getSpeechAvailability().available

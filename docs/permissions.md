@@ -18,6 +18,9 @@ await registration.remove();
 
 ## Kinds and states
 
+`PermissionKind` gained `speechRecognition` (for `@legendapp/spark/speech`, [speech.md](speech.md)). Code that switches
+exhaustively over `PermissionKind`, or keeps a `Record<PermissionKind, …>`, needs a case for it.
+
 Each call resolves a `PermissionResponse`: `status` (`granted`, `denied`, `undetermined` or `unknown`),
 `granted`, `canAskAgain` (whether `requestPermission` can still show the system prompt; `null` when macOS
 does not say) and `macos.authorization`, the native state.
@@ -34,6 +37,7 @@ does not say) and `macos.authorization`, the native state.
 | `calendar` | `EKEventStore authorizationStatusForEntityType:` (events) | `requestFullAccessToEventsWithCompletion:` | notDetermined, restricted, denied, authorized (full access), writeOnly | `NSCalendarsFullAccessUsageDescription` |
 | `photos` | `PHPhotoLibrary authorizationStatusForAccessLevel:` (read/write) | `requestAuthorizationForAccessLevel:handler:` | notDetermined, restricted, denied, authorized | `NSPhotoLibraryUsageDescription` |
 | `location` | `CLLocationManager.authorizationStatus` | `requestWhenInUseAuthorization`, answered through the delegate | notDetermined, restricted, denied, authorized | `NSLocationWhenInUseUsageDescription` (the key `requestWhenInUseAuthorization` documents; the Kitchen Sink also sets the older macOS key `NSLocationUsageDescription`) |
+| `speechRecognition` | `SFSpeechRecognizer authorizationStatus` | `requestAuthorization:` | notDetermined, restricted, denied, authorized | `NSSpeechRecognitionUsageDescription` |
 
 Mapping to `status`: authorized is `granted`; notDetermined is `undetermined`; restricted (parental
 controls or a device management profile), denied, writeOnly and notGranted are `denied`. A raw value this

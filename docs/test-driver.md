@@ -21,7 +21,7 @@ Never set `testDriverInRelease` for an app you distribute. How it works:
 
 - The config plugin writes `ENV['SPARK_TEST_DRIVER_RELEASE'] = '1'` into the generated Podfile when the
   option is set. Every Spark pod that includes `SparkTestDriver.h` (`RNDesktopApp`, `RNSparkUI`,
-  `RNSparkMotion`, `RNDesktopSystem`, `RNDesktopWindows`, `RNDesktopClipboard`, `RNDesktopDrag`, `RNDesktopPermissions`, `RNDesktopBiometrics`, `RNDesktopSharing`, `RNDesktopLinks`, `RNDesktopGlobalShortcuts`), and `RNDesktopDiagnostics`, sets the build setting
+  `RNSparkMotion`, `RNDesktopSystem`, `RNDesktopWindows`, `RNDesktopClipboard`, `RNDesktopDrag`, `RNDesktopPermissions`, `RNDesktopBiometrics`, `RNDesktopSharing`, `RNDesktopLinks`, `RNDesktopGlobalShortcuts`, `RNDesktopMedia`), and `RNDesktopDiagnostics`, sets the build setting
   `SPARK_TEST_DRIVER` to 1 in the Debug configuration, and in other configurations to 1 with that variable or 0
   without it, and passes it to the preprocessor. `RNDesktopApp` also gives it to the app target, for the host's
   app delegate.
@@ -257,7 +257,10 @@ never showing a Touch ID prompt or touching a keychain, and registers `simulateB
 ([biometrics.md](biometrics.md#testing)). The sharing package
 records what `@legendapp/spark/sharing` would share and index in driver mode, never showing a picker, writing the Spotlight index or
 setting the Services provider, and registers `simulateSharing` and `testSharing` ([sharing.md](sharing.md#testing)); the links package
-keeps default URL handlers in memory instead of LaunchServices ([links-and-documents.md](links-and-documents.md#default-url-handler)).
+keeps default URL handlers in memory instead of LaunchServices ([links-and-documents.md](links-and-documents.md#default-url-handler)). The media package records `@legendapp/spark/speech` utterances instead of speaking
+them and plays back scripted speech recognition, never reaching the microphone, a recognizer or TCC, and registers
+`simulateSpeech` and `testSpeech` ([speech.md](speech.md#testing)); its video players play for real, but fullscreen and
+picture in picture only change their status ([video.md](video.md#testing)).
 The global-shortcuts package
 never registers a hotkey with the system in driver mode (registrations keep their conflict checks in the app) and
 registers `simulateGlobalShortcut` (`key`, `modifiers` as NSEventModifierFlags bits), which delivers a registered

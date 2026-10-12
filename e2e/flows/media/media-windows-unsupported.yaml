@@ -1,0 +1,19 @@
+appId: so.legend.spark.examples.kitchensink
+name: Video and speech are typed unsupported on Windows
+intent: >
+  On Windows the Video screen reports getVideoAvailability() as unsupported-platform and creating the player rejects
+  SparkError:E_UNSUPPORTED_PLATFORM, which its status shows; the Speech screen reports getSpeechAvailability() as
+  unsupported-platform and speaking rejects the same. Not yet run on Windows. Windows media: #403.
+checks: [MEDIA-AVUNSUP-01]
+tags: [media]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://media/video" }
+- extendedWaitUntil: { visible: { id: media-video-root }, timeout: 10s }
+- assertText: { id: media-video-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: media-video-status, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- launchApp: { openUrl: "spark-ks://media/speech" }
+- extendedWaitUntil: { visible: { id: media-speech-root }, timeout: 10s }
+- assertText: { id: media-speech-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- tapOn: { id: media-speech-speak-normal }
+- assertText: { id: media-speech-spoken, equals: "normal: SparkError:E_UNSUPPORTED_PLATFORM" }

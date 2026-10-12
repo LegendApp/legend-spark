@@ -159,6 +159,16 @@ describe("command mapping", () => {
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('the last share\'s service is "Mail", expected null') });
   });
 
+  test("simulateSpeech sets the simulated speech state; assertSimulatedSpeech checks utterances and recognitions", async () => {
+    const app = new FakeApp();
+    const { result } = await run("- launchApp\n- simulateSpeech: { wordMs: 500, recognitionPartials: [hello], recognitionTranscript: hello world }\n- assertSimulatedSpeech: { utterances: 0, speaking: false, listening: false, recognitions: 0 }", app);
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => line.includes("Speech"))).toEqual(['simulateSpeech {"wordMs":500,"recognitionPartials":["hello"],"recognitionTranscript":"hello world"}', "testSpeech"]);
+    expect(app.drivers[0]!.speech).toMatchObject({ wordMs: 500, recognitionTranscript: "hello world" });
+    const failed = await run("- launchApp\n- assertSimulatedSpeech: { utterances: 1, timeout: 200ms }");
+    expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("speech utterances is 0, expected 1") });
+  });
+
   test("dragAndDrop runs a Spark drag source's drag in process: begin, move, a hold for spring loading, drop", async () => {
     const app = new FakeApp({ source: 1, target: 1 });
     app.dragSources = { source: {} };

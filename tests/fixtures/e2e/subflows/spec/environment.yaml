@@ -21,4 +21,6 @@
 - assertSimulatedBiometrics: { prompts: 1, lastFallback: password, secrets: { vault: biometryCurrentSet } }
 - simulateSharing: { shareAnswer: Mail, services: [Show], invokeService: { name: Show, text: hi }, openSpotlightItem: recipe-1, openUniversalLink: "https://example.com/a" }   # driver; no picker, index or pbs
 - assertSharing: { shares: 1, lastShare: { items: [{ type: text, text: Hi }], anchored: true, service: Mail }, indexed: [recipe-1], registered: [Show], invocations: 1 }
+- simulateSpeech: { wordMs: 50, recognitionPartials: [hello], recognitionTranscript: hello world }   # driver; nothing is spoken or heard
+- assertSimulatedSpeech: { utterances: 1, lastText: Hello, lastRate: 1, listening: false }
 - setFocusMode: doNotDisturb

@@ -85,6 +85,8 @@
     "./permissions",
     "./biometrics",
     "./sharing",
-    "./plugins"
+    "./plugins",
+    "./video",
+    "./speech"
   ]
 }

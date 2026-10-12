@@ -4542,6 +4542,126 @@
         "android": [],
         "web": []
       }
+    },
+    {
+      "path": "./video",
+      "sourceTarget": "./video.ts",
+      "kind": "runtime-api",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-media",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/video.test.ts",
+          "tests/media-native.test.ts"
+        ],
+        "portableCommand": "bun run test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "Typed unsupported: getVideoAvailability() reports unsupported-platform, getPictureInPictureAvailability() resolves it, and createVideoPlayer and VideoView reject or throw E_UNSUPPORTED_PLATFORM; Windows playback tracked in #403."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "Typed unsupported: getVideoAvailability() reports unsupported-platform, getPictureInPictureAvailability() resolves it, and createVideoPlayer and VideoView reject or throw E_UNSUPPORTED_PLATFORM; Windows playback tracked in #403."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/media/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/media/macos/"
+        ],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
+      "path": "./speech",
+      "sourceTarget": "./speech.ts",
+      "kind": "runtime-api",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-media",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/speech.test.ts",
+          "tests/media-native.test.ts"
+        ],
+        "portableCommand": "bun run test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "Typed unsupported: getSpeechAvailability() reports unsupported-platform and speech synthesis and recognition functions reject E_UNSUPPORTED_PLATFORM; Windows speech tracked in #403."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "Typed unsupported: getSpeechAvailability() reports unsupported-platform and speech synthesis and recognition functions reject E_UNSUPPORTED_PLATFORM; Windows speech tracked in #403."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/media/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/media/macos/"
+        ],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
     }
   ]
 }

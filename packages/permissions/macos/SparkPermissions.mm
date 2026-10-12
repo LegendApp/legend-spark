@@ -7,6 +7,7 @@
 #import <EventKit/EventKit.h>
 #import <IOKit/hidsystem/IOHIDLib.h>
 #import <Photos/Photos.h>
+#import <Speech/Speech.h>
 
 NSErrorDomain const SparkPermissionErrorDomain = @"so.legend.spark.permissions";
 static NSError *Failure(NSString *code, NSString *message) {
@@ -18,7 +19,7 @@ NSString *SparkPermissionErrorCode(NSError *error) {
 }
 
 NSArray<NSString *> *SparkPermissionKinds(void) {
-  return @[@"camera", @"microphone", @"screenRecording", @"accessibility", @"inputMonitoring", @"automation", @"contacts", @"calendar", @"photos", @"location"];
+  return @[@"camera", @"microphone", @"screenRecording", @"accessibility", @"inputMonitoring", @"automation", @"contacts", @"calendar", @"photos", @"location", @"speechRecognition"];
 }
 NSArray<NSString *> *SparkPermissionAuthorizations(NSString *kind) {
   static NSDictionary<NSString *, NSArray<NSString *> *> *names;
@@ -29,14 +30,14 @@ NSArray<NSString *> *SparkPermissionAuthorizations(NSString *kind) {
     NSArray *asked = @[@"notDetermined", @"denied", @"authorized", @"unknown"];
     names = @{ @"camera": media, @"microphone": media, @"screenRecording": binary, @"accessibility": binary, @"inputMonitoring": asked,
       @"automation": @[@"notDetermined", @"denied", @"authorized"], @"contacts": media,
-      @"calendar": @[@"notDetermined", @"restricted", @"denied", @"authorized", @"writeOnly", @"unknown"], @"photos": media, @"location": media };
+      @"calendar": @[@"notDetermined", @"restricted", @"denied", @"authorized", @"writeOnly", @"unknown"], @"photos": media, @"location": media, @"speechRecognition": media };
   });
   return names[kind] ?: @[];
 }
 NSURL *SparkPermissionSettingsURL(NSString *kind) {
   NSDictionary *anchors = @{ @"camera": @"Privacy_Camera", @"microphone": @"Privacy_Microphone", @"screenRecording": @"Privacy_ScreenCapture",
     @"accessibility": @"Privacy_Accessibility", @"inputMonitoring": @"Privacy_ListenEvent", @"automation": @"Privacy_Automation",
-    @"contacts": @"Privacy_Contacts", @"calendar": @"Privacy_Calendars", @"photos": @"Privacy_Photos", @"location": @"Privacy_LocationServices" };
+    @"contacts": @"Privacy_Contacts", @"calendar": @"Privacy_Calendars", @"photos": @"Privacy_Photos", @"location": @"Privacy_LocationServices", @"speechRecognition": @"Privacy_SpeechRecognition" };
   NSString *anchor = anchors[kind];
   return anchor ? [NSURL URLWithString:[@"x-apple.systempreferences:com.apple.preference.security?" stringByAppendingString:anchor]] : nil;
 }
@@ -44,7 +45,7 @@ NSArray<NSString *> *SparkPermissionUsageKeys(NSString *kind) {
   NSDictionary *keys = @{ @"camera": @[@"NSCameraUsageDescription"], @"microphone": @[@"NSMicrophoneUsageDescription"],
     @"automation": @[@"NSAppleEventsUsageDescription"], @"contacts": @[@"NSContactsUsageDescription"],
     @"calendar": @[@"NSCalendarsFullAccessUsageDescription"], @"photos": @[@"NSPhotoLibraryUsageDescription"],
-    @"location": @[@"NSLocationWhenInUseUsageDescription"] };
+    @"location": @[@"NSLocationWhenInUseUsageDescription"], @"speechRecognition": @[@"NSSpeechRecognitionUsageDescription"] };
   return keys[kind] ?: @[];
 }
 
@@ -56,6 +57,7 @@ NSString *SparkCalendarAuthorization(NSInteger status) { return Named(status, @[
 NSString *SparkPhotosAuthorization(NSInteger status) { return Named(status, @[@"notDetermined", @"restricted", @"denied", @"authorized"]); }
 // kCLAuthorizationStatusAuthorized (3) is macOS's grant; AuthorizedWhenInUse (4) is unavailable on macOS.
 NSString *SparkLocationAuthorization(NSInteger status) { return Named(status, @[@"notDetermined", @"restricted", @"denied", @"authorized"]); }
+NSString *SparkSpeechRecognitionAuthorization(NSInteger status) { return Named(status, @[@"notDetermined", @"denied", @"restricted", @"authorized"]); }
 NSString *SparkInputMonitoringAuthorization(NSInteger access) {
   switch (access) {
     case kIOHIDAccessTypeGranted: return @"authorized";
@@ -191,6 +193,7 @@ static OSStatus AutomationStatus(NSString *target, BOOL ask) {
   if ([kind isEqual:@"contacts"]) return SparkContactsAuthorization([CNContactStore authorizationStatusForEntityType:CNEntityTypeContacts]);
   if ([kind isEqual:@"calendar"]) return SparkCalendarAuthorization([EKEventStore authorizationStatusForEntityType:EKEntityTypeEvent]);
   if ([kind isEqual:@"photos"]) return SparkPhotosAuthorization([PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite]);
+  if ([kind isEqual:@"speechRecognition"]) return SparkSpeechRecognitionAuthorization(SFSpeechRecognizer.authorizationStatus);
   return SparkLocationAuthorization(self.locationManager.authorizationStatus);
 }
 
@@ -289,6 +292,8 @@ static OSStatus AutomationStatus(NSString *target, BOOL ask) {
     }];
   } else if ([kind isEqual:@"photos"]) {
     [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite handler:^(PHAuthorizationStatus status) { settle(SparkPhotosAuthorization(status), nil); }];
+  } else if ([kind isEqual:@"speechRecognition"]) {
+    [SFSpeechRecognizer requestAuthorization:^(SFSpeechRecognizerAuthorizationStatus status) { settle(SparkSpeechRecognitionAuthorization(status), nil); }];
   } else if ([kind isEqual:@"location"]) {
     // +locationServicesEnabled can block, so it is read off the main thread; the manager lives on the main thread.
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{

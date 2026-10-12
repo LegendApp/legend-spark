@@ -42,6 +42,13 @@ export type TestSharing = {
   indexed: Record<string, Record<string, unknown>>; services: string[]; registered: string[]; invocations: number; answer: string | null;
 };
 export type SimulatedSharing = { shareAnswer?: string | null; services?: string[]; invokeService?: { name: string; text: string }; openSpotlightItem?: string; openUniversalLink?: string };
+/** The simulated state of @legendapp/spark/speech (the `testSpeech` driver command). */
+export type TestSpeech = {
+  wordMs: number; recognizerAvailable: boolean; onDeviceSupported: boolean; recognitionPartials: string[]; recognitionTranscript: string | null;
+  utterances: { text: string; voice: string | null; language: string | null; rate: number; pitch: number; volume: number }[]; speaking: boolean; paused: boolean;
+  recognitions: number; listening: boolean; lastRecognition: { locale: string; onDevice: boolean; partialResults: boolean; punctuation: boolean; contextualStrings: string[] } | null;
+};
+export type SimulatedSpeech = { wordMs?: number; recognizerAvailable?: boolean; onDeviceSupported?: boolean; recognitionPartials?: string[]; recognitionTranscript?: string | null };
 /** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
 export type SimulatedSystemEvent = {
   type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string;
@@ -332,6 +339,10 @@ export class Driver {
   async simulateSharing(request: SimulatedSharing) { return body<{ sharing: TestSharing }>(await this.request({ command: "simulateSharing", ...request }, 10000)).sharing; }
   /** What the sharing simulation recorded: shares, the simulated Spotlight index, declared and registered services, invocations. */
   async testSharing() { return body<{ sharing: TestSharing }>(await this.request({ command: "testSharing" }, 10000)).sharing; }
+  /** Sets the simulated state @legendapp/spark/speech reports (docs/speech.md#testing); nothing is spoken or heard. */
+  async simulateSpeech(state: SimulatedSpeech) { return body<{ speech: TestSpeech }>(await this.request({ command: "simulateSpeech", ...state }, 10000)).speech; }
+  /** The simulated speech state: recorded utterances, speaking and paused, and recognitions. */
+  async testSpeech() { return body<{ speech: TestSpeech }>(await this.request({ command: "testSpeech" }, 10000)).speech; }
   /** Startup phases of this launch, once its first rendered UI has settled; with `testID`, `ready` once that element first showed settled. */
   async startup(timeoutMs = 30000, testID?: string) {
     return (await this.request({ command: "startup", timeoutMs, ...(testID === undefined ? {} : { testID }) }, timeoutMs + 10000)).phases as StartupPhases;

@@ -1,0 +1,34 @@
+appId: so.legend.spark.examples.kitchensink
+name: Real speech synthesis and recognition
+intent: >
+  The real AVSpeechSynthesizer and SFSpeechRecognizer paths of @legendapp/spark/speech, which no automated run may reach:
+  they play sound, show TCC prompts and listen to the microphone. manual: true keeps the gate from running it. Run it by
+  hand on a Mac with speakers and a microphone; reset the permissions afterwards if needed
+  (tccutil reset SpeechRecognition so.legend.spark.examples.kitchensink, and Microphone).
+checks: [MEDIA-SPEECHREAL-01]
+tags: [media]
+platforms: [macos]
+manual: true
+---
+- launchApp: { openUrl: "spark-ks://media/speech" }
+- extendedWaitUntil: { visible: { id: media-speech-root }, timeout: 10s }
+- manualStep:
+    instruction: >-
+      Open Media > Speech. Press Speak. Then press Speak fast, high, quiet; press Pause after word mid-sentence, then
+      Resume, then Stop.
+    expect: >-
+      "Spark speaks every word" is heard and the word line follows each word; the result is normal: finished. The fast
+      utterance is faster, higher and quieter, pauses after a word, resumes, and stops: fast: stopped.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Listen before granting anything. Then press Request permissions and allow both prompts. Press Listen, say
+      "hello spark world", and press Stop listening. Then press Listen on device, say something, and press Cancel.
+    expect: >-
+      The first Listen shows SparkError:E_PERMISSION_DENIED without any prompt. Request permissions shows the speech
+      recognition and microphone prompts; the permissions line then says granted for both. Listen shows partial
+      transcripts while you speak and ends with recognized: hello spark world. Listen on device shows listening (or
+      SparkError:E_UNAVAILABLE when this Mac has no on-device model for en-US) and Cancel ends it cancelled.
+    evidence: none
+    signoff: required

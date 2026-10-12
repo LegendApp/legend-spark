@@ -435,6 +435,30 @@ setDefaultURLHandler(scheme: string): Promise<void>;
 
 `share` resolves when the person picks a service (its localized title) or dismisses the picker (`null`); it does not wait for the service, whose outcome macOS does not report for every service, so neither Expo Sharing's `shareAsync` (one file) nor React Native's `Share` (resolves after completion) is borrowed. Services are declared in Info.plist (`NSMessage` `sparkService`, `NSUserData` the name) and receive only: a service with `NSReturnTypes` rejects `E_UNSUPPORTED_OPTION`, because AppKit needs its result synchronously. Spotlight openings and universal links arrive through the host's `application:continueUserActivity:`; universal links become ordinary `url` events. Default URL handlers accept only schemes the app declares. In the test driver nothing reaches the picker, pbs, the Spotlight index or LaunchServices. App Intents and Shortcuts have no API: their metadata must be compiled into the app (#393). macOS only for now; Windows reports `unsupported-platform` (#392). Details: [sharing](sharing.md), [links](links-and-documents.md#default-url-handler).
 
+### Video and speech
+
+```ts
+// /video
+getVideoAvailability(): Availability;
+getPictureInPictureAvailability(): Promise<Availability>; // host-restriction: macOS does not support it here
+createVideoPlayer(source: { uri }, options?: { loop?; muted?; volume?; rate?; loadTimeoutMs?; signal? }): Promise<VideoPlayer>;
+// VideoPlayer: play, pause, seekTo, setRate, setVolume, setMuted, setLoop, getStatus, enterFullscreen, exitFullscreen,
+// startPictureInPicture, stopPictureInPicture, addListener(listener): Subscription, remove().
+<VideoView player={player} contentFit?="contain" | "cover" | "fill" />
+
+// /speech
+getSpeechAvailability(): Availability;
+getVoices(): Promise<SpeechVoice[]>;
+speak(text: string, options?: { voice?; language?; rate?; pitch?; volume?; onStart?; onWord?; onPause?; onResume? }): Promise<{ finished: boolean }>;
+stopSpeaking(): Promise<void>; pauseSpeaking(options?: { boundary? }): Promise<void>; resumeSpeaking(): Promise<void>; getSpeakingStatus(): Promise<SpeakingStatus>;
+getSpeechRecognizerStatus(options?: { locale? }): Promise<{ locale; supported; available; onDevice }>;
+getSpeechRecognitionLocales(): Promise<string[]>;
+startSpeechRecognition(options?: { locale?; onDevice?; partialResults?; punctuation?; contextualStrings?; onPartialResult?; signal? }): Promise<SpeechRecognitionSession>;
+// SpeechRecognitionSession: result (recognized | noSpeech | cancelled), stop(), cancel().
+```
+
+Video follows the audio player's ownership model: the factory resolves once the item can play, commands complete in order (a later command waits for an accepted seek), and `remove()` ends fullscreen and picture in picture and releases the player. Native observation runs only while a listener is added; listeners get typed events (`playingChange`, `timeUpdate`, `seek`, `rateChange`, `volumeChange`, `end`, `fullscreenChange`, `pictureInPictureChange`, `error`) derived from one status stream. `VideoView` is the React-only display: a player can play without one, but picture in picture needs one in a window. Expo Video's `useVideoPlayer`/`VideoView` split is the model; the readiness promise and typed errors are Spark's. `speak` resolves when its utterance ends (`finished: false` when stopped) and scopes its callbacks to that utterance. Speech recognition never prompts: it rejects `E_PERMISSION_DENIED` unless the `speechRecognition` and `microphone` permissions are granted (requested through `/permissions`), and `onDevice: true` rejects `E_UNAVAILABLE` where audio would leave the Mac. In the test driver utterances are recorded instead of spoken, recognition plays back a scripted transcript, and fullscreen and picture in picture change state without a window. macOS only for now; Windows reports `unsupported-platform` (#403). Details: [video](video.md), [speech](speech.md).
+
 ### Audio and auth
 
 ```ts

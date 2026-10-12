@@ -29,6 +29,9 @@ int main() { @autoreleasepool {
   CHECK([SparkPhotosAuthorization(4) isEqual:@"unknown"]);    // Limited is iOS only.
   CHECK([SparkLocationAuthorization(3) isEqual:@"authorized"] && [SparkLocationAuthorization(4) isEqual:@"unknown"]);
   CHECK([SparkContactsAuthorization(4) isEqual:@"unknown"]);
+  // SFSpeechRecognizerAuthorizationStatus orders denied before restricted.
+  CHECK([SparkSpeechRecognitionAuthorization(0) isEqual:@"notDetermined"] && [SparkSpeechRecognitionAuthorization(1) isEqual:@"denied"]);
+  CHECK([SparkSpeechRecognitionAuthorization(2) isEqual:@"restricted"] && [SparkSpeechRecognitionAuthorization(3) isEqual:@"authorized"] && [SparkSpeechRecognitionAuthorization(4) isEqual:@"unknown"]);
   CHECK([SparkInputMonitoringAuthorization(0) isEqual:@"authorized"] && [SparkInputMonitoringAuthorization(1) isEqual:@"denied"]);
   CHECK([SparkInputMonitoringAuthorization(2) isEqual:@"notDetermined"] && [SparkInputMonitoringAuthorization(3) isEqual:@"unknown"]);
   NSError *error = nil;
@@ -48,6 +51,7 @@ int main() { @autoreleasepool {
   CHECK([SparkPermissionSettingsURL(@"inputMonitoring").absoluteString hasSuffix:@"Privacy_ListenEvent"]);
   CHECK(!SparkPermissionSettingsURL(@"bluetooth") && SparkPermissionAuthorizations(@"bluetooth").count == 0);
   CHECK(SparkPermissionUsageKeys(@"screenRecording").count == 0 && [SparkPermissionUsageKeys(@"location") isEqual:@[@"NSLocationWhenInUseUsageDescription"]]);
+  CHECK([SparkPermissionSettingsURL(@"speechRecognition").absoluteString hasSuffix:@"Privacy_SpeechRecognition"] && [SparkPermissionUsageKeys(@"speechRecognition") isEqual:@[@"NSSpeechRecognitionUsageDescription"]]);
 
   // A real instance: requests without their usage description, bad kinds and targets fail before any TCC call.
   SparkPermissions *real = [[SparkPermissions alloc] initWithInfo:@{} simulated:NO];
@@ -70,7 +74,7 @@ int main() { @autoreleasepool {
   __block int changes = 0;
   simulated.changeHandler = ^{ changes++; };
   NSDictionary *snapshot = simulated.snapshot;
-  CHECK(snapshot.count == 9 && !snapshot[@"automation"]);
+  CHECK(snapshot.count == 10 && !snapshot[@"automation"] && [snapshot[@"speechRecognition"] isEqual:@"notDetermined"]);
   CHECK([snapshot[@"camera"] isEqual:@"notDetermined"] && [snapshot[@"screenRecording"] isEqual:@"notGranted"] && [snapshot[@"accessibility"] isEqual:@"notGranted"]);
   Outcome status = {};
   [simulated status:@"automation" target:@"com.apple.finder" completion:Record(&status)];
@@ -127,7 +131,7 @@ int main() { @autoreleasepool {
 
   // A prompt that never answers (macOS dropping a location request) settles with the current status after the timeout
   // and clears its pending entry, so the next request is not joined to it; activation with the status decided settles it early.
-  simulated.answerTimeout = 0.3;
+  simulated.answerTimeout = 2; // Generous, so a slow runner drains the requests and the activation below before it fires.
   CHECK([simulated simulate:@"location" authorization:nil answer:@"ignore" error:&error]);
   Outcome dropped = {}, joined = {};
   [simulated request:@"location" target:nil completion:Record(&dropped)];
@@ -135,7 +139,7 @@ int main() { @autoreleasepool {
   Drain();
   [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidBecomeActiveNotification object:NSApp]; Drain(); // Still undetermined.
   CHECK(dropped.calls == 0 && joined.calls == 0);
-  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.4]];
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:2.1]];
   CHECK(dropped.calls == 1 && joined.calls == 1 && [dropped.authorization isEqual:@"notDetermined"] && !dropped.code);
   CHECK([simulated simulate:@"location" authorization:nil answer:@"allow" error:&error]);
   Outcome fresh = {};
@@ -149,7 +153,7 @@ int main() { @autoreleasepool {
   CHECK([simulated simulate:@"contacts" authorization:@"denied" answer:nil error:&error]); // Changed in System Settings meanwhile.
   [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidBecomeActiveNotification object:NSApp]; Drain();
   CHECK(activated.calls == 1 && [activated.authorization isEqual:@"denied"]);
-  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.4]]; // The timer finds nothing left to settle.
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:2.1]]; // The timer finds nothing left to settle.
   CHECK(activated.calls == 1 && fresh.calls == 1);
 
   // Settings are recorded, never opened.
