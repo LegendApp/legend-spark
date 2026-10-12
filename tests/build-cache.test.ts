@@ -9,6 +9,11 @@ import { preserveMacOSPods } from "../packages/cli/src/native-preparation.ts";
 const commands = vi.hoisted(() => ({ run: vi.fn(), restore: true }));
 vi.mock("../packages/cli/src/commands.ts", () => ({ doctor: vi.fn(), binary: (_root: string, name: string) => name, run: commands.run }));
 vi.mock("../packages/cli/src/native-patch-preflight.ts", () => ({ assertNativePatchPreflight: vi.fn() }));
+// The real atomic swap compiles a helper; tests/publish-directory.test.ts covers it. Here a staged product just replaces the old one.
+vi.mock("../packages/cli/src/publish-directory.ts", async () => {
+  const { renameSync, rmSync } = await import("node:fs");
+  return { publishDirectory: (staged: string, target: string) => { rmSync(target, { recursive: true, force: true }); renameSync(staged, target); } };
+});
 
 let root: string;
 let moduleRoot: string;

@@ -452,7 +452,7 @@ async function buildUnlocked(
     ["codesign", "--force", "--deep", "--sign", localSigningIdentity(root, mode), app],
     { capture: true },
   );
-  publishDirectory(staging, output);
+  publishDirectory(staging, output, stateFile(root, "tools"));
   writeJson(resultFile, result);
   console.log(`Built ${destination}`);
   return result;

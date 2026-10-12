@@ -1,10 +1,14 @@
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "vitest";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { publishDirectory } from "../packages/cli/src/publish-directory.ts";
 
+// One compiled swap helper for the file; compiling it can take seconds on a cold CI runner.
+let tools: string;
+beforeAll(() => { tools = mkdtempSync(path.join(os.tmpdir(), "spark-publish-tools-")); });
+afterAll(() => rmSync(tools, { recursive: true, force: true }));
 let root: string;
 beforeEach(() => { root = mkdtempSync(path.join(os.tmpdir(), "spark-publish-")); });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -24,16 +28,24 @@ function stage(generation: number) {
 
 test("publishes into a missing target and replaces an existing one, keeping symlinks and removing the old copy", () => {
   const target = path.join(root, "release");
-  publishDirectory(stage(1), target);
-  publishDirectory(stage(2), target);
+  publishDirectory(stage(1), target, tools);
+  publishDirectory(stage(2), target, tools);
   expect(files.map(file => readFileSync(path.join(target, file), "utf8"))).toEqual(files.map(() => marker(2)));
   expect(readlinkSync(path.join(target, "App.app/link"))).toBe("Contents/MacOS/App");
   expect(existsSync(path.join(root, "release.staging"))).toBe(false);
-});
+}, 60_000);
+
+test("a failed swap leaves the old product in place", () => {
+  const target = path.join(root, "release");
+  publishDirectory(stage(1), target, tools);
+  // Swapping with a missing staging directory fails the way an unsupported volume does: an error, no change.
+  expect(() => publishDirectory(path.join(root, "missing"), target, tools)).toThrow(/Cannot swap .* No such file or directory/);
+  expect(readFileSync(path.join(target, files[0]!), "utf8")).toBe(marker(1));
+}, 60_000);
 
 test("a reader polling during repeated rebuilds always finds the whole product", async () => {
   const target = path.join(root, "release");
-  publishDirectory(stage(0), target);
+  publishDirectory(stage(0), target, tools);
   const stop = path.join(root, "stop");
   // Polls from another process because publishing blocks this one. Every file must exist and hold one full marker.
   const reader = spawn(process.execPath, ["-e", `
@@ -55,7 +67,7 @@ test("a reader polling during repeated rebuilds always finds the whole product",
   let output = "";
   reader.stdout.on("data", chunk => { output += chunk; });
   await new Promise<void>(resolve => reader.stdout.once("data", () => resolve()));
-  for (let generation = 1; generation <= 20; generation++) publishDirectory(stage(generation), target);
+  for (let generation = 1; generation <= 20; generation++) publishDirectory(stage(generation), target, tools);
   writeFileSync(stop, "");
   await new Promise(resolve => reader.once("exit", resolve));
   const { reads, failures } = JSON.parse(output.trim().split("\n").at(-1)!);
