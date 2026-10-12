@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <vector>
 namespace facebook::react {
 struct Props { using Shared = std::shared_ptr<Props const>; virtual ~Props() = default; };
 // Codegen defaults: empty strings, zero numbers, false booleans.
@@ -22,15 +23,19 @@ struct SidebarItemProps : Props {
 struct EventEmitter { using Shared = std::shared_ptr<EventEmitter const>; virtual ~EventEmitter() = default; };
 struct SidebarEventEmitter : EventEmitter {
   struct OnSidebarLayout { double height, width; };
+  struct OnSidebarRowLayout { double width; };
   struct OnSidebarSelectionChange { std::string id; };
+  mutable std::vector<double> rowWidths;
   void onSidebarLayout(OnSidebarLayout event) const {}
+  void onSidebarRowLayout(OnSidebarRowLayout event) const { rowWidths.push_back(event.width); }
   void onSidebarSelectionChange(OnSidebarSelectionChange event) const {}
 };
 struct SidebarItemEventEmitter : EventEmitter {
   struct OnRightClick { bool altKey; double button; bool ctrlKey, metaKey; double pageX, pageY; bool shiftKey; double x, y; };
   void onRightClick(OnRightClick event) const {}
 };
-struct LayoutMetrics { CGRect frame; };
+enum class LayoutDirection { Undefined, LeftToRight, RightToLeft };
+struct LayoutMetrics { CGRect frame; LayoutDirection layoutDirection = LayoutDirection::LeftToRight; };
 struct SidebarComponentDescriptor {};
 struct SidebarItemComponentDescriptor {};
 using ComponentDescriptorProvider = int;
@@ -89,6 +94,29 @@ static NSString *Title(RNSidebar *sidebar, NSInteger row) {
   return cell.textField.stringValue;
 }
 static LayoutMetrics Height(CGFloat height) { return LayoutMetrics{CGRectMake(0, 0, 220, height)}; }
+// A Sidebar laid out at 320x210 in a window that is never shown, as the Kitchen Sink screens size it.
+static std::shared_ptr<SidebarEventEmitter> Lay(RNSidebar *sidebar, NSWindow *window, LayoutDirection direction) {
+  auto emitter = std::make_shared<SidebarEventEmitter>();
+  sidebar->_eventEmitter = emitter;
+  [window.contentView addSubview:sidebar];
+  [sidebar updateLayoutMetrics:LayoutMetrics{CGRectMake(0, 0, 320, 210), direction} oldLayoutMetrics:LayoutMetrics{}];
+  [window layoutIfNeeded];
+  return emitter;
+}
+// Every row, its cell and the cell's content lie inside the clip view's visible width.
+static bool RowsFit(RNSidebar *sidebar) {
+  NSTableView *table = Table(sidebar);
+  CGFloat visible = NSWidth(table.enclosingScrollView.contentView.bounds);
+  if (NSWidth(table.frame) > visible + 0.5) { std::printf("table %.1f wider than clip %.1f\n", NSWidth(table.frame), visible); return false; }
+  for (NSInteger row = 0; row < table.numberOfRows; row++) {
+    NSView *cell = [table viewAtColumn:0 row:row makeIfNecessary:YES];
+    NSRect inTable = [cell convertRect:cell.bounds toView:table];
+    if (NSMinX(inTable) < 0 || NSMaxX(inTable) > visible + 0.5) { std::printf("row %ld cell %s outside %.1f\n", (long)row, NSStringFromRect(inTable).UTF8String, visible); return false; }
+    for (NSView *content in cell.subviews)
+      if (NSMinX(content.frame) < 0 || NSMaxX(content.frame) > NSWidth(cell.bounds) + 0.5) { std::printf("row %ld content %s outside cell %s\n", (long)row, NSStringFromRect(content.frame).UTF8String, NSStringFromRect(cell.bounds).UTF8String); return false; }
+  }
+  return true;
+}
 static RNSidebarItem *Item(RNSidebar *sidebar, NSInteger index, const char *itemId, bool selectable, double rowHeight, bool autoHeight, CGFloat measured) {
   RNSidebarItem *item = [RNSidebarItem new];
   auto props = std::make_shared<SidebarItemProps>();
@@ -158,6 +186,69 @@ int main() { @autoreleasepool {
   [view updateProps:changedRows oldProps:height];
   CHECK(view.parses == 2 && view.reloads == 3 && Table(view).numberOfRows == 0);
 
+  // Row geometry: the source-list table adds row insets to its column, so the column must fit the clip
+  // view rather than match the Sidebar's width, or rows run past the trailing edge.
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
+  window.contentView.wantsLayer = YES;
+  auto five = std::make_shared<SidebarProps>();
+  five->itemsJson = R"([{"id":"library","title":"Library"},{"id":"playlists","title":"Playlists"},{"id":"artists","title":"Artists"},{"id":"downloads","title":"Downloads"},{"id":"disabled","title":"Disabled Row","selectable":false}])";
+  five->selectedId = "library"; five->defaultRowHeight = 30;
+  RNSidebar *ltr = [RNSidebar new];
+  [ltr updateProps:five oldProps:nullptr];
+  auto ltrEvents = Lay(ltr, window, LayoutDirection::LeftToRight);
+  NSTableView *ltrTable = Table(ltr);
+  CHECK(RowsFit(ltr));
+  CHECK(NSWidth(ltrTable.frame) == 320 && NSWidth([ltrTable rectOfRow:0]) == 320);
+  // The reported row width is the column (the cell), not the Sidebar: React rows are laid out at it.
+  NSTableColumn *column = ltrTable.tableColumns.firstObject;
+  CHECK(!ltrEvents->rowWidths.empty() && ltrEvents->rowWidths.back() == column.width && column.width < 320);
+  NSTableCellView *ltrCell = [ltrTable viewAtColumn:0 row:0 makeIfNecessary:YES];
+  CHECK(ltrTable.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionLeftToRight && ltrCell.textField.alignment == NSTextAlignmentLeft);
+  CHECK(fabs(NSMidY(ltrCell.textField.frame) - NSMidY(ltrCell.bounds)) <= 1);
+
+  // Right to left (the React layout direction, independent of the application's): the table and data
+  // titles mirror; rows still fit.
+  RNSidebar *rtl = [RNSidebar new];
+  [rtl updateProps:five oldProps:nullptr];
+  Lay(rtl, window, LayoutDirection::RightToLeft);
+  NSTableView *rtlTable = Table(rtl);
+  CHECK(RowsFit(rtl));
+  CHECK(rtlTable.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft);
+  NSTableCellView *rtlCell = [rtlTable viewAtColumn:0 row:0 makeIfNecessary:YES];
+  CHECK(rtlCell.textField.alignment == NSTextAlignmentRight && [rtlCell.textField.stringValue isEqual:@"Library"]);
+  CHECK(NSEqualRects(rtlCell.textField.frame, ltrCell.textField.frame));
+  // Back to left to right: recycled cells realign.
+  [rtl updateLayoutMetrics:LayoutMetrics{CGRectMake(0, 0, 320, 210), LayoutDirection::LeftToRight} oldLayoutMetrics:LayoutMetrics{}];
+  CHECK([[rtlTable viewAtColumn:0 row:0 makeIfNecessary:YES] textField].alignment == NSTextAlignmentLeft);
+
+  // A legacy (space-taking) scroller narrows the clip view: the column follows and the new width is reported.
+  RNSidebar *scrolling = [RNSidebar new];
+  auto many = std::make_shared<SidebarProps>(*five);
+  std::string json = "[";
+  for (int index = 0; index < 20; index++) json += (index ? "," : "") + std::string(R"({"id":"row)") + std::to_string(index) + R"(","title":"Row"})";
+  many->itemsJson = json + "]"; many->selectedId = "row0";
+  [scrolling updateProps:many oldProps:nullptr];
+  NSScrollView *scrollView = [scrolling valueForKey:@"scrollView"];
+  scrollView.scrollerStyle = NSScrollerStyleLegacy;
+  auto scrollingEvents = Lay(scrolling, window, LayoutDirection::LeftToRight);
+  [scrolling layoutSubviews];
+  NSTableView *scrollingTable = Table(scrolling);
+  CHECK(!scrollView.verticalScroller.isHidden && NSWidth(scrollView.contentView.bounds) < 320);
+  CHECK(RowsFit(scrolling));
+  CHECK(!scrollingEvents->rowWidths.empty() && scrollingEvents->rowWidths.back() == scrollingTable.tableColumns.firstObject.width &&
+    scrollingEvents->rowWidths.back() < column.width);
+
+  // React rows fill their cells: with the reported width applied by Yoga, content ends at the cell's edge.
+  RNSidebar *react = [RNSidebar new];
+  [react updateProps:std::make_shared<SidebarProps>() oldProps:nullptr];
+  auto reactEvents = Lay(react, window, LayoutDirection::RightToLeft);
+  RNSidebarItem *albums = Item(react, 0, "albums", true, 44, false, 44);
+  [window layoutIfNeeded];
+  NSView *firstCell = [Table(react) viewAtColumn:0 row:0 makeIfNecessary:YES];
+  CHECK(albums.superview == firstCell && NSEqualRects(albums.frame, firstCell.bounds));
+  CHECK(!reactEvents->rowWidths.empty() && NSWidth(firstCell.bounds) == reactEvents->rowWidths.back());
+  CHECK(RowsFit(react));
+
   if (failures) return 1;
-  std::puts("Sidebar mount and selective updates passed");
+  std::puts("Sidebar mount, selective updates and row geometry passed");
 } }

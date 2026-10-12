@@ -283,6 +283,7 @@ Measured in `tests/test-driver.native.mm`, a window that was never shown:
 | Native controls and labels (`NSButton`, `NSTextField`) | Yes |
 | Title bar and traffic lights | Yes, in the inactive style |
 | Behind-window vibrancy (`NSVisualEffectView`, `BehindWindow`) | No: a flat material gray, because the blur comes from the window server |
+| Selected source-list rows (the unemphasized selection material; driver windows are never key) | Substituted: the selection is a black layer the window server tints with a vibrant compositing filter (a sublayer of an `NSVisualEffectView` on macOS 27, the selection view's own layer on macOS 26), so `capture` hides it under `unemphasizedSelectedContentBackgroundColor` for the row's appearance and restores it afterwards |
 | Window shadow and rounded corners | No: outside the frame view |
 
 `cacheDisplayInRect:` renders a layer's model `transform` and `opacity`, but not Core
