@@ -1,4 +1,6 @@
 #import "RNSparkPrimitive.h"
+#import "SparkColor.h"
+#import <RNDesktopApp/SparkTestDriver.h>
 #import <react/renderer/components/RNSparkUISpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSparkUISpec/EventEmitters.h>
 #import <react/renderer/components/RNSparkUISpec/Props.h>
@@ -39,12 +41,54 @@ using namespace facebook::react;
 }
 @end
 
+// Lets go of the shared color panel when showColorPanel or another well takes it.
+@interface RNSparkColorWell : NSColorWell
+// Activation that cannot show the color panel, reported instead of ignored.
+@property (copy) void (^unavailable)(NSString *message);
+@end
+@implementation RNSparkColorWell
+- (instancetype)initWithFrame:(NSRect)frame {
+  if (self = [super initWithFrame:frame]) [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(ownerWillChange:) name:SparkColorPanelOwnerWillChange object:nil];
+  return self;
+}
+- (void)ownerWillChange:(NSNotification *)notification { if (notification.object != self && self.isActive) [self deactivate]; }
+- (void)activate:(BOOL)exclusive {
+  // Driver-mode apps never put windows on screen (docs/test-driver.md); the panel would.
+  if (SparkTestDriverActive()) { if (self.unavailable) self.unavailable(@"The color panel needs the screen; test driver mode never shows windows"); return; }
+  [NSNotificationCenter.defaultCenter postNotificationName:SparkColorPanelOwnerWillChange object:self];
+  [super activate:exclusive];
+}
+@end
+
+static NSLocale *SparkDatePickerLocale(NSDictionary *payload) {
+  return [payload[@"locale"] length] ? [NSLocale localeWithLocaleIdentifier:payload[@"locale"]] : NSLocale.autoupdatingCurrentLocale;
+}
+static NSTimeZone *SparkDatePickerTimeZone(NSDictionary *payload) {
+  return [payload[@"timeZone"] length] ? [NSTimeZone timeZoneWithName:payload[@"timeZone"]] : NSTimeZone.localTimeZone;
+}
+// Omitted calendar: the locale's own, so ar-SA gets its Islamic calendar and en-US the Gregorian one.
+static NSCalendar *SparkDatePickerCalendar(NSDictionary *payload) {
+  NSLocale *locale = SparkDatePickerLocale(payload);
+  NSCalendar *calendar = [payload[@"calendar"] length] ? [NSCalendar calendarWithIdentifier:payload[@"calendar"]] : [[locale objectForKey:NSLocaleCalendar] copy];
+  calendar.locale = locale; calendar.timeZone = SparkDatePickerTimeZone(payload) ?: NSTimeZone.localTimeZone;
+  return calendar;
+}
+// JS checks the shapes; only Foundation knows which locales, calendars and zones exist.
+static NSString *SparkDatePickerProblem(NSDictionary *payload) {
+  NSString *language = SparkDatePickerLocale(payload).languageCode;
+  if ([payload[@"locale"] length] && ![NSLocale.ISOLanguageCodes containsObject:language ?: @""]) return [NSString stringWithFormat:@"Unknown locale: %@", payload[@"locale"]];
+  if (!SparkDatePickerTimeZone(payload)) return [NSString stringWithFormat:@"Unknown time zone: %@", payload[@"timeZone"]];
+  if ([payload[@"calendar"] length] && ![NSCalendar calendarWithIdentifier:payload[@"calendar"]]) return [NSString stringWithFormat:@"Unknown calendar: %@", payload[@"calendar"]];
+  return nil;
+}
+static NSDate *SparkDate(id milliseconds) { return [milliseconds isKindOfClass:NSNumber.class] ? [NSDate dateWithTimeIntervalSince1970:[milliseconds doubleValue] / 1000] : nil; }
+
 @implementation RNSparkPrimitive {
   NSView *_control;
   NSString *_kind;
   NSDictionary *_payload;
   NSString *_lastJSON;
-  NSString *_pendingError;
+  NSString *_pendingError, *_pendingErrorCode;
   // Events this view has emitted, and the latest count JS has echoed back through props.
   int _eventCount;
   int _acknowledged;
@@ -63,6 +107,7 @@ using namespace facebook::react;
     [(NSTextField *)_control setDelegate:nil];
   }
   if ([_control isKindOfClass:NSProgressIndicator.class]) [(NSProgressIndicator *)_control stopAnimation:nil];
+  if ([_control isKindOfClass:NSColorWell.class]) [(NSColorWell *)_control deactivate];
   if ([self.window.firstResponder isKindOfClass:NSView.class] && [(NSView *)self.window.firstResponder isDescendantOf:_control]) [self.window makeFirstResponder:nil];
   [_control removeFromSuperview];
   _control = nil;
@@ -96,19 +141,27 @@ using namespace facebook::react;
     _control = [NSProgressIndicator new];
   } else if ([kind isEqual:@"level-indicator"]) {
     NSLevelIndicator *level = [NSLevelIndicator new]; level.levelIndicatorStyle = NSLevelIndicatorStyleContinuousCapacity; _control = level;
+  } else if ([kind isEqual:@"date-picker"]) {
+    NSDatePicker *picker = [NSDatePicker new]; picker.target = self; picker.action = @selector(changed:); _control = picker;
+  } else if ([kind isEqual:@"color-well"]) {
+    RNSparkColorWell *well = [RNSparkColorWell new]; well.target = self; well.action = @selector(changed:);
+    __weak RNSparkPrimitive *weakSelf = self;
+    well.unavailable = ^(NSString *message) { [weakSelf reportError:message code:@"E_UNAVAILABLE"]; };
+    _control = well;
   }
   if (_control) [self addSubview:_control];
 }
-- (void)reportError:(NSString *)message {
+- (void)reportError:(NSString *)message { [self reportError:message code:@"E_INVALID_DATA"]; }
+- (void)reportError:(NSString *)message code:(NSString *)code {
   const auto emitter = std::static_pointer_cast<const SparkPrimitiveEventEmitter>(_eventEmitter);
-  if (emitter) emitter->onNativeError({ .message = message.UTF8String, .eventCount = _eventCount });
-  else _pendingError = message;
+  if (emitter) emitter->onNativeError({ .message = message.UTF8String, .code = code.UTF8String, .eventCount = _eventCount });
+  else { _pendingError = message; _pendingErrorCode = code; }
 }
 - (void)updateEventEmitter:(EventEmitter::Shared const &)eventEmitter {
   [super updateEventEmitter:eventEmitter];
-  NSString *pending = _pendingError;
-  _pendingError = nil;
-  if (pending) [self reportError:pending];
+  NSString *pending = _pendingError, *code = _pendingErrorCode;
+  _pendingError = nil; _pendingErrorCode = nil;
+  if (pending) [self reportError:pending code:code];
 }
 // Every emitted value or failure is counted, so a value JS never accepts is restored once JS echoes the count.
 - (void)emitValue:(id)value {
@@ -142,6 +195,12 @@ using namespace facebook::react;
     NSPathControl *path = (NSPathControl *)_control;
     NSURL *url = path.clickedPathItem.URL ?: path.URL;
     [self emitValue:url.absoluteString];
+  } else if ([_kind isEqual:@"date-picker"]) {
+    [self emitValue:@(llround([(NSDatePicker *)sender dateValue].timeIntervalSince1970 * 1000))];
+  } else if ([_kind isEqual:@"color-well"]) {
+    NSString *hex = SparkHexFromColor([(NSColorWell *)sender color], [_payload[@"alpha"] boolValue]);
+    if (hex) [self emitValue:hex];
+    else { ++_eventCount; [self reportError:@"The chosen color has no sRGB form"]; }
   }
 }
 - (void)controlTextDidChange:(NSNotification *)notification {
@@ -162,10 +221,14 @@ using namespace facebook::react;
   id parsed = [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] ?: NSData.data options:0 error:&error];
   NSDictionary *payload = [parsed isKindOfClass:NSDictionary.class] ? parsed : nil;
   BOOL recreated = ![_kind isEqual:kind] || !_control;
+  // Malformed JSON is a broken bridge (E_INVALID_DATA); a name Foundation does not know is the caller's argument.
+  NSString *problem = !payload ? [NSString stringWithFormat:@"Invalid %@ configuration JSON: %@", kind, error.localizedDescription ?: @"expected an object"] :
+    [kind isEqual:@"date-picker"] ? SparkDatePickerProblem(payload) : nil;
   // Keep the last valid configuration on screen rather than blanking the control.
-  if (!payload) {
-    [self reportError:[NSString stringWithFormat:@"Invalid %@ configuration JSON: %@", kind, error.localizedDescription ?: @"expected an object"]];
-    if (!recreated) { payload = _payload; json = _lastJSON; }
+  if (problem) {
+    [self reportError:problem code:payload ? @"E_INVALID_ARGUMENT" : @"E_INVALID_DATA"];
+    payload = nil;
+    if (!recreated && _payload) { payload = _payload; json = _lastJSON; }
   }
   _updating = YES;
   if (recreated) [self createControl:kind];
@@ -239,6 +302,21 @@ using namespace facebook::react;
   } else if ([kind isEqual:@"level-indicator"]) {
     NSLevelIndicator *level = (NSLevelIndicator *)_control;
     level.minValue = [payload[@"min"] doubleValue]; level.maxValue = [payload[@"max"] doubleValue]; level.doubleValue = [payload[@"value"] doubleValue];
+  } else if ([kind isEqual:@"date-picker"]) {
+    NSDatePicker *picker = (NSDatePicker *)_control;
+    NSString *variant = payload[@"variant"], *mode = payload[@"mode"];
+    picker.datePickerStyle = [variant isEqual:@"clock-calendar"] ? NSDatePickerStyleClockAndCalendar : [variant isEqual:@"text-field"] ? NSDatePickerStyleTextField : NSDatePickerStyleTextFieldAndStepper;
+    picker.datePickerElements = ([mode isEqual:@"time"] ? 0 : NSDatePickerElementFlagYearMonthDay) | ([mode isEqual:@"date"] ? 0 : NSDatePickerElementFlagHourMinute);
+    picker.locale = SparkDatePickerLocale(payload); picker.timeZone = SparkDatePickerTimeZone(payload); picker.calendar = SparkDatePickerCalendar(payload);
+    picker.minDate = SparkDate(payload[@"min"]); picker.maxDate = SparkDate(payload[@"max"]);
+    NSDate *date = SparkDate(payload[@"value"]);
+    if (reconcile && ![picker.dateValue isEqualToDate:date]) picker.dateValue = date;
+  } else if ([kind isEqual:@"color-well"]) {
+    NSColorWell *well = (NSColorWell *)_control;
+    well.colorWellStyle = [payload[@"variant"] isEqual:@"minimal"] ? NSColorWellStyleMinimal : [payload[@"variant"] isEqual:@"expanded"] ? NSColorWellStyleExpanded : NSColorWellStyleDefault;
+    well.supportsAlpha = [payload[@"alpha"] boolValue];
+    if (_disabled && well.isActive) [well deactivate];
+    if (reconcile && ![SparkHexFromColor(well.color, well.supportsAlpha) isEqual:payload[@"value"]]) well.color = SparkColorFromHex(payload[@"value"]);
   }
   _updating = NO;
   [super updateProps:props oldProps:oldProps];
@@ -253,7 +331,7 @@ using namespace facebook::react;
     button.alignment = _rtl ? NSTextAlignmentRight : NSTextAlignmentLeft;
     button.imagePosition = _rtl ? NSImageRight : NSImageLeft;
   }
-  if ([_control isKindOfClass:NSSwitch.class] || [_control isKindOfClass:NSStepper.class] || [_kind isEqual:@"disclosure-triangle"] ||
+  if ([_control isKindOfClass:NSSwitch.class] || [_control isKindOfClass:NSStepper.class] || [_kind isEqual:@"disclosure-triangle"] || [_kind isEqual:@"date-picker"] ||
       ([_control isKindOfClass:NSProgressIndicator.class] && [(NSProgressIndicator *)_control style] == NSProgressIndicatorStyleSpinning)) {
     [(id)_control sizeToFit];
     NSSize size = _control.frame.size;
@@ -277,7 +355,7 @@ using namespace facebook::react;
 }
 - (void)prepareForRecycle {
   _updating = YES; [self discardControl];
-  _kind = nil; _payload = nil; _lastJSON = nil; _pendingError = nil; _eventCount = 0; _acknowledged = 0; _disabled = NO; _updating = NO;
+  _kind = nil; _payload = nil; _lastJSON = nil; _pendingError = nil; _pendingErrorCode = nil; _eventCount = 0; _acknowledged = 0; _disabled = NO; _updating = NO;
   [super prepareForRecycle];
 }
 + (ComponentDescriptorProvider)componentDescriptorProvider { return concreteComponentDescriptorProvider<SparkPrimitiveComponentDescriptor>(); }

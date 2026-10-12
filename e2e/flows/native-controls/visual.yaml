@@ -2,17 +2,17 @@ appId: so.legend.spark.examples.kitchensink
 name: Native controls screens match their goldens
 intent: >
   Native controls screens open from their spark-ks:// deep links in the running Kitchen Sink and their roots render.
-  Split view, SF Symbols, Search field, Glass and the four size grids (Toggles, Value inputs, Indicators, Button styles)
-  match the approved golden for the appearance (light and dark) and locale, with the shell sidebar masked: SF Symbols,
-  Glass and the size grids in English and Arabic, Split view and Search field in English only until they mirror in
-  right-to-left layouts. The animated progress indicators are masked. The three Sidebar screens mount without crashing
-  (#252) but are not compared until their rows fit (#264) and the selected row captures correctly (#265). Popover and
-  Tab view match their goldens in English and Arabic. Driver-mode windows are never on screen, so the popover cannot
+  Split view, SF Symbols, Search field, Glass, Pickers and the four size grids (Toggles, Value inputs, Indicators, Button
+  styles) match the approved golden for the appearance (light and dark) and locale, with the shell sidebar masked: SF
+  Symbols, Glass, Pickers and the size grids in English and Arabic, Split view and Search field in English only until they
+  mirror in right-to-left layouts. The animated progress indicators are masked. The three Sidebar screens mount without
+  crashing (#252) but are not compared until their rows fit (#264) and the selected row captures correctly (#265). Popover
+  and Tab view match their goldens in English and Arabic. Driver-mode windows are never on screen, so the popover cannot
   open: the flow checks that its native host mounts beside its anchor and that its closed content is not in the main
   window (popover-black-box.yaml opens it on the black-box backend). The tab view shows only the selected tab's
   content. In-process captures draw AppKit's tab row without the selected label in light and as a blank white bar in
   dark (docs/ui.md, Tab view), so these goldens cannot check the tab labels.
-checks: [CTRL-VISUAL-01, CTRL-SIDEBAR-01, CTRL-POPOVER-02, CTRL-TABVIEW-02]
+checks: [CTRL-VISUAL-01, CTRL-SIDEBAR-01, CTRL-VISUAL-02, CTRL-POPOVER-02, CTRL-TABVIEW-02]
 tags: [native-controls]
 platforms: [macos]
 matrix:
@@ -33,6 +33,9 @@ matrix:
 - launchApp: { openUrl: "spark-ks://native-controls/glass", stopApp: false }
 - assertVisible: { id: native-controls-glass-root }
 - assertScreenshot: { golden: native-controls-glass, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/pickers", stopApp: false }
+- assertVisible: { id: native-controls-pickers-root }
+- assertScreenshot: { golden: native-controls-pickers, mask: [{ id: infra-shell-sidebar }] }
 - launchApp: { openUrl: "spark-ks://native-controls/toggles", stopApp: false }
 - assertVisible: { id: native-controls-toggles-root }
 - assertScreenshot: { golden: native-controls-toggles, mask: [{ id: infra-shell-sidebar }] }

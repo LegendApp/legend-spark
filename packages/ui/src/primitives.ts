@@ -1,8 +1,8 @@
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { selectionIndex } from "./select";
-import type { PrimitiveKind, PrimitivePropsByKind } from "./primitives.types";
+import type { DatePickerCalendar, PrimitiveKind, PrimitivePropsByKind } from "./primitives.types";
 
-export const primitiveKinds: readonly PrimitiveKind[] = ["checkbox", "radio-group", "switch", "slider", "stepper", "combo-box", "token-field", "path-control", "progress", "level-indicator", "disclosure-triangle"];
+export const primitiveKinds: readonly PrimitiveKind[] = ["checkbox", "radio-group", "switch", "slider", "stepper", "combo-box", "token-field", "path-control", "progress", "level-indicator", "disclosure-triangle", "date-picker", "color-well"];
 export function isPrimitiveKind(value: string): value is PrimitiveKind { return primitiveKinds.includes(value as PrimitiveKind); }
 const commonProps = new Set(["size", "disabled", "accessibilityLabel", "style", "testID", "ref", "onError"]);
 const kindProps: Record<PrimitiveKind, readonly string[]> = {
@@ -17,7 +17,20 @@ const kindProps: Record<PrimitiveKind, readonly string[]> = {
   progress: ["value", "mode"],
   "level-indicator": ["value", "min", "max"],
   "disclosure-triangle": ["value", "onValueChange", "label"],
+  "date-picker": ["value", "onValueChange", "mode", "variant", "min", "max", "locale", "calendar", "timeZone"],
+  "color-well": ["value", "onValueChange", "alpha", "variant"],
 };
+// Foundation spells two Unicode calendar identifiers differently.
+const calendars: Record<DatePickerCalendar, string> = {
+  gregory: "gregorian", buddhist: "buddhist", chinese: "chinese", coptic: "coptic", ethioaa: "ethiopic-amete-alem", ethiopic: "ethiopic", hebrew: "hebrew", indian: "indian",
+  islamic: "islamic", "islamic-civil": "islamic-civil", "islamic-tbla": "islamic-tbla", "islamic-umalqura": "islamic-umalqura", iso8601: "iso8601", japanese: "japanese", persian: "persian", roc: "roc",
+};
+const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
+/** An sRGB hex color: `#rrggbb`, or `#rrggbbaa` when alpha is allowed (`exact`: required). Returns it lowercase. */
+export function hexColor(value: unknown, alpha: boolean, exact = false): string {
+  if (typeof value !== "string" || !HEX.test(value) || (!alpha && value.length === 9) || (exact && alpha && value.length !== 9)) invalid(alpha ? "Expected a #rrggbb or #rrggbbaa color" : "Expected a #rrggbb color");
+  return value.toLowerCase();
+}
 function invalid(message: string): never { throw new SparkError("E_INVALID_ARGUMENT", message); }
 function isFileURL(value: unknown): value is string {
   if (typeof value !== "string") return false;
@@ -74,6 +87,21 @@ export function primitivePayload<K extends PrimitiveKind>(kind: K, props: Primit
       if (mode === "determinate" ? (!Number.isFinite(p.value) || p.value! < 0 || p.value! > 1) : p.value !== undefined) invalid("Determinate progress requires a value from zero to one; animated progress has no value");
       return JSON.stringify({ value: p.value ?? 0, mode });
     }
+    case "date-picker": {
+      const p = props as PrimitivePropsByKind["date-picker"], { mode = "date", variant = "text-field-stepper" } = p;
+      const min = p.min ?? null, max = p.max ?? null;
+      if (![p.value, min ?? 0, max ?? 0].every(Number.isFinite) || (min !== null && p.value < min) || (max !== null && p.value > max)) invalid("DatePicker requires a finite Unix timestamp in milliseconds within min/max");
+      if (!["date", "time", "date-time"].includes(mode) || !["text-field-stepper", "text-field", "clock-calendar"].includes(variant)) invalid("Invalid date picker mode or variant");
+      if (p.locale !== undefined && (typeof p.locale !== "string" || !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(p.locale))) invalid("Expected a BCP 47 locale");
+      if (p.calendar !== undefined && !Object.hasOwn(calendars, p.calendar)) invalid("Unknown calendar");
+      if (p.timeZone !== undefined && (typeof p.timeZone !== "string" || !p.timeZone.length || p.timeZone.includes("\0"))) invalid("Expected an IANA time zone");
+      return JSON.stringify({ value: p.value, mode, variant, min, max, locale: p.locale ?? "", calendar: p.calendar ? calendars[p.calendar] : "", timeZone: p.timeZone ?? "" });
+    }
+    case "color-well": {
+      const p = props as PrimitivePropsByKind["color-well"], { alpha = false, variant = "default" } = p;
+      if (typeof alpha !== "boolean" || !["default", "minimal", "expanded"].includes(variant)) invalid("Invalid color well alpha or variant");
+      return JSON.stringify({ value: hexColor(p.value, alpha), alpha, variant });
+    }
     default: return invalid("Unknown control kind");
   }
 }
@@ -83,6 +111,7 @@ export function primitiveEventValue<K extends PrimitiveKind>(kind: K, props: Pri
     if (typeof json !== "string" || kind === "progress" || kind === "level-indicator") throw new Error("Unexpected native value");
     const value: unknown = JSON.parse(json);
     primitivePayload(kind, { ...props, value } as PrimitivePropsByKind[K]);
+    if (kind === "color-well") hexColor(value, (props as PrimitivePropsByKind["color-well"]).alpha ?? false, true);
     return value;
   } catch (cause) { throw new SparkError("E_INVALID_DATA", "Invalid native control value", { cause }); }
 }

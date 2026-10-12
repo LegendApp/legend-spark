@@ -31,7 +31,7 @@ const count = (rows: { children?: readonly unknown[] }[]): number => rows.reduce
 
 test("Table and Outline are registered native-controls screens", async () => {
   vi.doMock("../examples/kitchen-sink/screens/native-controls/ControlPrimitives", () => ({ Buttons: () => null, Indicators: () => null, Inputs: () => null, Toggles: () => null, Boundary: () => null, describe: String }));
-  for (const [file, names] of Object.entries({ Glass: ["Glass"], Search: ["Search"], SFSymbols: ["SFSymbols"], Sidebar: ["SidebarDataItems", "SidebarDynamicHeights", "SidebarReactRows"], SplitView: ["SplitView"], PopoverScreen: ["PopoverScreen"], TabViewScreen: ["TabViewScreen"] })) {
+  for (const [file, names] of Object.entries({ Glass: ["Glass"], Pickers: ["Pickers"], Search: ["Search"], SFSymbols: ["SFSymbols"], Sidebar: ["SidebarDataItems", "SidebarDynamicHeights", "SidebarReactRows"], SplitView: ["SplitView"], PopoverScreen: ["PopoverScreen"], TabViewScreen: ["TabViewScreen"] })) {
     vi.doMock(`../examples/kitchen-sink/screens/native-controls/${file}`, () => Object.fromEntries(names.map(name => [name, () => null])));
   }
   const { default: registered } = await import("../examples/kitchen-sink/screens/native-controls/index");

@@ -11,6 +11,6 @@ export interface NativeProps extends ViewProps {
   disabled?: WithDefault<boolean, false>;
   onValueChange?: DirectEventHandler<Readonly<{ valueJson: string; eventCount: Int32 }>>;
   /** A native value or configuration that could not cross the JSON boundary. */
-  onNativeError?: DirectEventHandler<Readonly<{ message: string; eventCount: Int32 }>>;
+  onNativeError?: DirectEventHandler<Readonly<{ message: string; code: string; eventCount: Int32 }>>;
 }
 export default codegenNativeComponent<NativeProps>("SparkPrimitive") as HostComponent<NativeProps>;

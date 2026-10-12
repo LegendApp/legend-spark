@@ -23,8 +23,10 @@ const examples: { [K in PrimitiveKind]: PrimitivePropsByKind[K] } = {
   progress: { mode: "determinate", value: 0.5 },
   "level-indicator": { value: 50 },
   "disclosure-triangle": { value: true, onValueChange: vi.fn() },
+  "date-picker": { value: Date.UTC(2026, 2, 14, 9, 30), mode: "date-time", timeZone: "UTC", onValueChange: vi.fn() },
+  "color-well": { value: "#3366cc", onValueChange: vi.fn() },
 };
-const components = { checkbox: controls.Checkbox, "radio-group": controls.RadioGroup, switch: controls.Switch, slider: controls.Slider, stepper: controls.Stepper, "combo-box": controls.ComboBox, "token-field": controls.TokenField, "path-control": controls.PathControl, progress: controls.Progress, "level-indicator": controls.LevelIndicator, "disclosure-triangle": controls.DisclosureTriangle };
+const components = { checkbox: controls.Checkbox, "radio-group": controls.RadioGroup, switch: controls.Switch, slider: controls.Slider, stepper: controls.Stepper, "combo-box": controls.ComboBox, "token-field": controls.TokenField, "path-control": controls.PathControl, progress: controls.Progress, "level-indicator": controls.LevelIndicator, "disclosure-triangle": controls.DisclosureTriangle, "date-picker": controls.DatePicker, "color-well": controls.ColorWell };
 let rendered: any;
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -112,6 +114,14 @@ test("native serialization and configuration failures report E_INVALID_DATA and 
   expect(onValueChange).not.toHaveBeenCalled();
 });
 
+test("native E_UNAVAILABLE and E_INVALID_ARGUMENT pass through; any other native code is E_INVALID_DATA", async () => {
+  const onError = vi.fn();
+  await mount("color-well", { ...examples["color-well"], onError });
+  const fail = (code: unknown) => act(async () => rendered.root.findByType("SparkPrimitive").props.onNativeError({ nativeEvent: { message: "Native failure", code, eventCount: 0 } }));
+  await fail("E_UNAVAILABLE"); await fail("E_INVALID_ARGUMENT"); await fail("E_INVALID_DATA"); await fail("E_PERMISSION_DENIED"); await fail(undefined);
+  expect(onError.mock.calls.map(([error]) => error.code)).toEqual(["E_UNAVAILABLE", "E_INVALID_ARGUMENT", "E_INVALID_DATA", "E_INVALID_DATA", "E_INVALID_DATA"]);
+});
+
 test("malformed native edits report E_INVALID_DATA and restore controlled value without callbacks", async () => {
   const onError = vi.fn(), onValueChange = vi.fn();
   await mount("slider", { ...examples.slider, onError, onValueChange });
@@ -152,6 +162,7 @@ test("unknown primitive props reject even undefined and options never leak betwe
 test.each([
   ["checkbox", true], ["radio-group", "b"], ["switch", true], ["slider", 6], ["stepper", 6],
   ["combo-box", "typed text"], ["token-field", ["new", "tokens"]], ["path-control", "file:///"], ["disclosure-triangle", false],
+  ["date-picker", Date.UTC(2026, 2, 15, 9, 30)], ["color-well", "#ff8000"],
 ] as const)("%s delivers its public value shape and acknowledges a parent-vetoed change", async (kind, next) => {
   const onValueChange = vi.fn();
   await mount(kind, { ...examples[kind], onValueChange });
@@ -160,4 +171,43 @@ test.each([
   expect(onValueChange).toHaveBeenCalledExactlyOnceWith(next);
   expect(JSON.parse(native.valueJson).value).toEqual(examples[kind].value);
   expect(native.eventCount).toBe(1);
+});
+
+test("DatePicker: Unix-millisecond values within min/max, typed mode/variant, locale, calendar and time zone", () => {
+  const base = examples["date-picker"];
+  expect(JSON.parse(primitivePayload("date-picker", { value: 0, onValueChange: vi.fn() }))).toEqual({ value: 0, mode: "date", variant: "text-field-stepper", min: null, max: null, locale: "", calendar: "", timeZone: "" });
+  // Foundation spells gregory and ethioaa differently; the rest pass through.
+  expect(JSON.parse(primitivePayload("date-picker", { ...base, variant: "clock-calendar", locale: "ar-SA", calendar: "gregory", min: 0, max: base.value })))
+    .toMatchObject({ variant: "clock-calendar", locale: "ar-SA", calendar: "gregorian", timeZone: "UTC", min: 0, max: base.value });
+  expect(JSON.parse(primitivePayload("date-picker", { ...base, calendar: "ethioaa" })).calendar).toBe("ethiopic-amete-alem");
+  expect(JSON.parse(primitivePayload("date-picker", { ...base, calendar: "islamic-umalqura" })).calendar).toBe("islamic-umalqura");
+  for (const patch of [{ value: NaN }, { value: "2026-03-14" }, { min: base.value + 1 }, { max: base.value - 1 }, { mode: "month" }, { variant: "wheel" },
+    { locale: "not a locale" }, { locale: 7 }, { calendar: "gregorian" }, { timeZone: "" }, { timeZone: "UTC\0" }]) {
+    expect(() => primitivePayload("date-picker", { ...base, ...patch } as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  }
+  expect(primitiveEventValue("date-picker", { ...base, max: base.value + 1000 }, String(base.value + 1000))).toBe(base.value + 1000);
+  expect(() => primitiveEventValue("date-picker", { ...base, max: base.value }, String(base.value + 1))).toThrow(expect.objectContaining({ code: "E_INVALID_DATA" }));
+});
+
+test("ColorWell: sRGB hex in, lowercase hex out, and an alpha well always reports the alpha byte", () => {
+  const base = examples["color-well"];
+  expect(JSON.parse(primitivePayload("color-well", { ...base, value: "#AABBCC" }))).toEqual({ value: "#aabbcc", alpha: false, variant: "default" });
+  expect(JSON.parse(primitivePayload("color-well", { ...base, value: "#AABBCC80", alpha: true, variant: "expanded" }))).toEqual({ value: "#aabbcc80", alpha: true, variant: "expanded" });
+  for (const patch of [{ value: "red" }, { value: "#abc" }, { value: "#aabbcc80" }, { alpha: 1 }, { variant: "round" }]) {
+    expect(() => primitivePayload("color-well", { ...base, ...patch } as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  }
+  expect(primitiveEventValue("color-well", { ...base, alpha: true }, '"#11223344"')).toBe("#11223344");
+  for (const [alpha, json] of [[true, '"#112233"'], [false, '"#11223344"']] as const) {
+    expect(() => primitiveEventValue("color-well", { ...base, alpha }, json)).toThrow(expect.objectContaining({ code: "E_INVALID_DATA" }));
+  }
+});
+
+test("pickers size their default frames: graphical date pickers fit calendar and clock, wells stay small", async () => {
+  const style = () => Object.assign({}, ...[rendered.root.findByType("SparkPrimitive").props.style].flat(2).filter(Boolean));
+  await mount("date-picker", { ...examples["date-picker"], variant: "clock-calendar" });
+  expect(style()).toEqual({ width: 300, height: 160 });
+  await mount("date-picker", { ...examples["date-picker"], mode: "date", variant: "clock-calendar" });
+  expect(style()).toEqual({ width: 150, height: 160 });
+  await mount("color-well", { ...examples["color-well"], size: "small" });
+  expect(style()).toEqual({ width: 52, height: 24 });
 });

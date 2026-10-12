@@ -63,6 +63,8 @@ provided.
 | `Progress` / `progress` | `{mode?: 'determinate', value: number}` with value in `[0, 1]`, or `{mode: 'indeterminate' \| 'spinner'}` without a value. Read-only. |
 | `LevelIndicator` / `level-indicator` | Read-only numeric `value`, `min=0`, `max=100`. |
 | `DisclosureTriangle` / `disclosure-triangle` | Boolean expanded `value`; optional `label` supplies accessibility text (the native triangle has no visible title). Default frame is square, one control height wide. The application owns the disclosed content and its visible heading. |
+| `DatePicker` / `date-picker` | `value`: Unix timestamp in milliseconds. `mode='date' \| 'time' \| 'date-time'` (default `date`; time shows hours and minutes), `variant='text-field-stepper' \| 'text-field' \| 'clock-calendar'` (`clock-calendar` is a calendar for dates and an analog clock for times, side by side for `date-time`), optional `min`/`max` (milliseconds; the picker never proposes a value outside them), `locale` (BCP 47; default the system locale), `calendar` (a Unicode calendar name such as `gregory`, `islamic-umalqura` or `japanese`; default the locale's calendar) and `timeZone` (IANA; default the system zone). A locale, calendar or zone Foundation does not know is reported through `onError` as `E_INVALID_ARGUMENT` and the last valid configuration stays. Native text and graphical pickers are sized to fit at the leading edge. |
+| `ColorWell` / `color-well` | `value`: sRGB hex `#rrggbb`, or `#rrggbbaa` with `alpha`. `alpha` (default false) lets the user choose opacity; then every reported value carries the alpha byte. `variant='default' \| 'minimal' \| 'expanded'`: `default` opens the system color panel, `minimal` and `expanded` the system popover. Colors from other color spaces (Display P3, catalog colors) report their sRGB form; a pattern color, which has none, is reported through `onError` as `E_INVALID_DATA`. Reported values are lowercase. In test driver mode, activating a well reports `E_UNAVAILABLE` through `onError` instead of showing the panel. |
 
 Numeric ranges require finite values, `min < max`, positive `step`, and a value
 inside the range. Radio options reuse the ordinary Select validation contract.
@@ -142,3 +144,57 @@ such as selectable `Text`. All three operations reject with `E_INVALID_ARGUMENT`
 without a text view (a single-line `TextInput`), with `E_NOT_FOUND` for an unmounted target,
 and with `E_UNSUPPORTED_PLATFORM` off macOS. Windows support is tracked in
 [#293](https://github.com/LegendApp/legend-spark/issues/293).
+
+## Color and font panels
+
+The system color and font panels are app-wide singletons, so each `show` call returns a
+session that owns its panel until it ends. These are plain functions; no component needs to
+be mounted.
+
+```ts
+import { getColorPanelAvailability, sampleScreenColor, showColorPanel, showFontPanel } from '@legendapp/spark/ui';
+
+const colors = await showColorPanel({ color: '#3366cc', alpha: true, mode: 'wheel', onChange: ({ color }) => apply(color), onClose: ({ reason }) => {} });
+await colors.close();
+
+if (getColorPanelAvailability('sampler').available) {
+  const picked = await sampleScreenColor(); // { canceled: true } | { canceled: false, color: '#rrggbb' }
+}
+
+const fonts = await showFontPanel({ font: { family: 'Helvetica Neue', size: 14, weight: 700 }, onChange: ({ font }) => use(font) });
+fonts.font; // { family, postScriptName, size, weight, italic }: the installed font the panel opened with
+```
+
+- `showColorPanel({ color?, alpha?, mode?, onChange, onClose? })` shows the panel and
+  resolves once it is configured. Omitted `color` and `mode` keep the panel's own. `mode` is
+  `wheel`, `rgb`, `hsb`, `cmyk`, `gray`, `palettes`, `image` or `pencils`. Every change is
+  `onChange({ color })` in the same hex form as `ColorWell`.
+- `showFontPanel({ font, onChange, onClose? })` takes a `FontDescriptor` (`family`, `size` in
+  points, `weight` 100 to 900 in steps of 100, default 400, `italic`). The nearest installed
+  weight and style are used; a family that is not installed rejects with `E_NOT_FOUND`, never
+  a substitute. Each change is `onChange({ font })` with a `ResolvedFont`.
+- A session ends with `onClose({ reason: 'dismissed' })` when the user closes the panel, or
+  `'replaced'` when a newer session or an activated `ColorWell` takes the panel. `close()`
+  stops callbacks at once, hides the panel if this session still owns it, and is idempotent;
+  after a native failure it can be retried. A session that has already ended closes nothing.
+  While a font session is open, font changes go to it rather than to the focused text view:
+  the panel's own, and the Format › Font menu actions (Bold, Italic, Bigger, Smaller), which
+  the shared font manager routes to the same target. Text views get them again once it ends.
+- When JavaScript reloads, open sessions end without `onClose` and their panels are hidden.
+- `sampleScreenColor()` shows the system eyedropper (`NSColorSampler`). The user picks one
+  on-screen color (opaque `#rrggbb`) or presses Escape (`{ canceled: true }`). Apple documents
+  it as needing no Screen Recording permission: the app receives only the chosen color. A
+  second call while the user is still sampling rejects with `E_BUSY`, also after a JavaScript
+  reload, which rejects the earlier call with `E_CLOSED`: AppKit cannot dismiss a sampler.
+- In test driver mode ([docs/test-driver.md](../../docs/test-driver.md)) nothing may reach the
+  screen, so `showColorPanel`, `showFontPanel` and `sampleScreenColor` reject with
+  `E_UNAVAILABLE` after validating their arguments. Availability still reports the app's
+  capability.
+- `getColorPanelAvailability(feature?: 'sampler')` and `getFontPanelAvailability()` are
+  synchronous. Calls reject with `E_UNSUPPORTED_PLATFORM` off macOS and `E_MODULE_UNAVAILABLE`
+  when the native module is absent. Unknown option keys reject with `E_UNSUPPORTED_OPTION`.
+
+Windows is typed unsupported for the pickers and panels: WinUI has `CalendarDatePicker`,
+`TimePicker` and `ColorPicker`, but no shared color or font panel and no eyedropper.
+[#298](https://github.com/LegendApp/legend-spark/issues/298) tracks the mapping and
+implementation.

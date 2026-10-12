@@ -54,7 +54,8 @@
         "SparkTab": "RNSparkTab"
       },
       "modulesProvider": {
-        "NativeSparkTextServices": "RNSparkTextServices"
+        "NativeSparkTextServices": "RNSparkTextServices",
+        "NativeSparkPanels": "RNSparkPanels"
       }
     },
     "windows": {
@@ -66,12 +67,16 @@
   "spark": {
     "sdk": true,
     "nativeModules": [
-      "NativeSparkTextServices"
+      "NativeSparkTextServices",
+      "NativeSparkPanels"
     ],
     "pod": "RNSparkUI",
     "platforms": [
       "macos",
       "windows"
+    ],
+    "requires": [
+      "@legendapp/spark-desktop-app"
     ]
   },
   "private": true,
