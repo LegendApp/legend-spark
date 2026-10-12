@@ -20,7 +20,7 @@ vi.mock("@legendapp/spark/ui", async () => {
   };
 });
 // The area index also registers screens owned by other tasks; they are not under test here.
-for (const [file, names] of Object.entries({ Glass: ["Glass"], Search: ["Search"], SFSymbols: ["SFSymbols"], Sidebar: ["SidebarDataItems", "SidebarDynamicHeights", "SidebarReactRows"], SplitView: ["SplitView"], Table: ["TableScreen", "OutlineScreen"] })) {
+for (const [file, names] of Object.entries({ Glass: ["Glass"], Search: ["Search"], SFSymbols: ["SFSymbols"], Sidebar: ["SidebarDataItems", "SidebarDynamicHeights", "SidebarReactRows"], SplitView: ["SplitView"], Table: ["TableScreen", "OutlineScreen"], PopoverScreen: ["PopoverScreen"], TabViewScreen: ["TabViewScreen"] })) {
   vi.doMock(`../examples/kitchen-sink/screens/native-controls/${file}`, () => Object.fromEntries(names.map(name => [name, () => null])));
 }
 import { Buttons, Indicators, Inputs, Toggles } from "../examples/kitchen-sink/screens/native-controls/ControlPrimitives";

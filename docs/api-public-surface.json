@@ -657,6 +657,15 @@
     "GlassViewProps",
     "getGlassAvailability"
   ],
+  "./ui/popover": [
+    "Popover",
+    "PopoverAnchor",
+    "PopoverBehavior",
+    "PopoverEdge",
+    "PopoverProps",
+    "PopoverRect",
+    "getPopoverAvailability"
+  ],
   "./ui/search": [
     "TextInputSearch",
     "TextInputSearchProps",
@@ -698,6 +707,16 @@
     "SFSymbolProps",
     "SFSymbolScale",
     "getSFSymbolAvailability"
+  ],
+  "./ui/tab-view": [
+    "Tab",
+    "TabBorder",
+    "TabPosition",
+    "TabProps",
+    "TabView",
+    "TabViewProps",
+    "TabViewSelectionEvent",
+    "getTabViewAvailability"
   ],
   "./ui/table": [
     "Outline",

@@ -76,6 +76,8 @@
     "./motion",
     "./printing",
     "./ui/text-services",
-    "./ui/table"
+    "./ui/table",
+    "./ui/popover",
+    "./ui/tab-view"
   ]
 }

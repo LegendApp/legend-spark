@@ -1,0 +1,69 @@
+appId: so.legend.spark.examples.kitchensink
+name: Popover anchors, behaviors, focus, detaching and events
+intent: >
+  On Native controls > Popover, Show popover opens an AppKit popover below the button with its React
+  content (title, body, note field, Close) laid out top-down, and focus in the note field. Each behavior
+  closes as AppKit defines it: transient on a click elsewhere in the window, semi-transient on a click in
+  the window, application-defined only through Close. The window-rect anchor opens at the measured
+  button frame, at each preferred edge. Dragging a detachable popover detaches it into its own window.
+  The events readout lists shown, closed and detached in order. Black-box only: AppKit shows a popover
+  only from a window on screen, and driver-mode windows never are (popover.yaml covers the driver).
+checks: [CTRL-POPOVER-01]
+tags: [native-controls, black-box]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/popover" }
+- extendedWaitUntil: { visible: { id: native-controls-popover-root }, timeout: 10s }
+- assertText: { id: native-controls-popover-availability, equals: '{"available":true}' }
+# transient (default): content top-down, focus in the note field, a click outside closes it
+- tapOn: { id: native-controls-popover-show }
+- extendedWaitUntil: { visible: { id: native-controls-popover-content }, timeout: 5s }
+- assertText: { id: native-controls-popover-events, equals: '["shown"]' }
+- assertFocused: { id: native-controls-popover-note }
+- inputText: { text: "typed in the popover", into: { id: native-controls-popover-note } }
+- assertText: { id: native-controls-popover-note, equals: "typed in the popover" }
+- tapOn: { id: native-controls-popover-open }
+- extendedWaitUntil: { notVisible: { id: native-controls-popover-content }, timeout: 5s }
+- assertText: { id: native-controls-popover-events, equals: '["shown","closed"]' }
+- assertText: { id: native-controls-popover-open, equals: '{"open":false,"anchor":"view"}' }
+# semi-transient: a click in the anchor's window closes it
+- tapOn: { id: native-controls-popover-behavior.semi-transient }
+- tapOn: { id: native-controls-popover-show }
+- extendedWaitUntil: { visible: { id: native-controls-popover-content }, timeout: 5s }
+- tapOn: { id: native-controls-popover-events }
+- extendedWaitUntil: { notVisible: { id: native-controls-popover-content }, timeout: 5s }
+# application-defined: outside clicks keep it open; Close closes it
+- tapOn: { id: native-controls-popover-behavior.application-defined }
+- tapOn: { id: native-controls-popover-show }
+- extendedWaitUntil: { visible: { id: native-controls-popover-content }, timeout: 5s }
+- tapOn: { id: native-controls-popover-events }
+- assertVisible: { id: native-controls-popover-content }
+- tapOn: { id: native-controls-popover-close }
+- extendedWaitUntil: { notVisible: { id: native-controls-popover-content }, timeout: 5s }
+- assertText: { id: native-controls-popover-events, equals: '["closed","shown","closed","shown","closed"]' }
+# window-rect anchor at each preferred edge
+- tapOn: { id: native-controls-popover-anchor-mode.rect }
+- assertText: { id: native-controls-popover-open, equals: '{"open":false,"anchor":"rect"}' }
+- tapOn: { id: native-controls-popover-edge.top }
+- tapOn: { id: native-controls-popover-show }
+- extendedWaitUntil: { visible: { id: native-controls-popover-content }, timeout: 5s }
+- assertScreenshot: { golden: native-controls-popover-rect-top }
+- tapOn: { id: native-controls-popover-close }
+- tapOn: { id: native-controls-popover-edge.trailing }
+- tapOn: { id: native-controls-popover-show }
+- extendedWaitUntil: { visible: { id: native-controls-popover-content }, timeout: 5s }
+- assertScreenshot: { golden: native-controls-popover-rect-trailing }
+- tapOn: { id: native-controls-popover-close }
+# detaching
+- tapOn: { id: native-controls-popover-anchor-mode.view }
+- assertText: { id: native-controls-popover-open, equals: '{"open":false,"anchor":"view"}' }
+- tapOn: { id: native-controls-popover-detachable }
+- tapOn: { id: native-controls-popover-show }
+- extendedWaitUntil: { visible: { id: native-controls-popover-content }, timeout: 5s }
+- dragAndDrop: { from: { point: "50%,4%", within: { id: native-controls-popover-content } }, to: { id: native-controls-popover-availability }, steps: 20 }
+- assertVisible: { id: native-controls-popover-events, text: "/\"detached\"\\]$/" }
+- tapOn: { id: native-controls-popover-close }
+- extendedWaitUntil: { notVisible: { id: native-controls-popover-content }, timeout: 5s }

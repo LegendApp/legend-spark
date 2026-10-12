@@ -245,21 +245,34 @@ static NSDictionary *SparkFrame(NSView *view) {
   return @{ @"x": @(frame.origin.x), @"y": @(frame.origin.y), @"width": @(frame.size.width), @"height": @(frame.size.height) };
 }
 static NSString *SparkNonEmpty(id value) { return [value isKindOfClass:NSString.class] && [value length] ? value : nil; }
-// The components of an NSPathControl, accessibility elements that are not views, as an AX client sees them: role,
-// label and text as for views, and the frame converted from screen coordinates. (Walking every control's
-// accessibility children this way made `elements` take seconds in the Kitchen Sink.)
+// An NSTabView's tab buttons (NSTabViewItem) implement only the legacy accessibility attribute protocol. In process,
+// their AXPosition and AXSize are a screen rect, as accessibilityFrame is.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+static id SparkPart(id part, SEL modern, NSString *attribute) {
+  if ([part respondsToSelector:modern]) return ((id (*)(id, SEL))[part methodForSelector:modern])(part, modern);
+  return [part accessibilityAttributeValue:attribute];
+}
+static NSRect SparkPartFrame(id part) {
+  if ([part respondsToSelector:@selector(accessibilityFrame)]) return [part accessibilityFrame];
+  return (NSRect){ [[part accessibilityAttributeValue:NSAccessibilityPositionAttribute] pointValue], [[part accessibilityAttributeValue:NSAccessibilitySizeAttribute] sizeValue] };
+}
+#pragma clang diagnostic pop
+// The components of an NSPathControl and the tab buttons of an NSTabView, accessibility elements that are not views,
+// as an AX client sees them: role, label and text as for views, and the frame converted from screen coordinates.
+// (Walking every control's accessibility children this way made `elements` take seconds in the Kitchen Sink.)
 static void SparkCollectParts(id parent, NSWindow *window, NSString *windowID, NSMutableDictionary *owner, NSMutableArray *elements, int depth) {
   if (!depth) return;
-  for (id child in [parent accessibilityChildren]) {
+  for (id child in SparkPart(parent, @selector(accessibilityChildren), NSAccessibilityChildrenAttribute)) {
     if ([child isKindOfClass:NSView.class]) continue;
-    NSString *role = SparkNonEmpty([child accessibilityRole]), *label = SparkNonEmpty([child accessibilityLabel]);
+    NSString *role = SparkNonEmpty(SparkPart(child, @selector(accessibilityRole), NSAccessibilityRoleAttribute)), *label = SparkNonEmpty(SparkPart(child, @selector(accessibilityLabel), NSAccessibilityDescriptionAttribute));
     if ([role isEqual:NSAccessibilityUnknownRole]) role = nil;
     if ([role hasPrefix:@"AX"] && role.length > 2) role = [[[role substringWithRange:NSMakeRange(2, 1)] lowercaseString] stringByAppendingString:[role substringFromIndex:3]];
-    NSString *text = SparkNonEmpty([child accessibilityValue]) ?: SparkNonEmpty([child accessibilityTitle]);
+    NSString *text = SparkNonEmpty(SparkPart(child, @selector(accessibilityValue), NSAccessibilityValueAttribute)) ?: SparkNonEmpty(SparkPart(child, @selector(accessibilityTitle), NSAccessibilityTitleAttribute));
     NSMutableDictionary *element = owner;
     if (role || label || text) {
       NSView *root = SparkDriverFrameView(window);
-      NSRect frame = [window convertRectFromScreen:[child accessibilityFrame]];
+      NSRect frame = [window convertRectFromScreen:SparkPartFrame(child)];
       if (!root.isFlipped) frame.origin.y = NSHeight(root.bounds) - NSMaxY(frame);
       element = [@{ @"key": [NSString stringWithFormat:@"%lu", (unsigned long)elements.count], @"window": windowID,
         @"frame": @{ @"x": @(frame.origin.x), @"y": @(frame.origin.y), @"width": @(frame.size.width), @"height": @(frame.size.height) } } mutableCopy];
@@ -300,7 +313,7 @@ static void SparkCollectElements(NSView *view, NSString *window, NSMutableDictio
       [elements addObject:element];
     }
   }
-  if ([view isKindOfClass:NSPathControl.class]) SparkCollectParts(view, view.window, window, element, elements, 2);
+  if ([view isKindOfClass:NSPathControl.class] || [view isKindOfClass:NSTabView.class]) SparkCollectParts(view, view.window, window, element, elements, 2);
   for (NSView *child in view.subviews) SparkCollectElements(child, window, element, elements);
 }
 static void SparkElements(SparkDriverReply reply) {

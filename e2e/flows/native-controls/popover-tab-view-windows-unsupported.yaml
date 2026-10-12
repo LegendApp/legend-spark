@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: Popover and tab view are typed unsupported on Windows
+intent: >
+  On Windows, getPopoverAvailability and getTabViewAvailability report unsupported-platform, and the
+  Popover and Tab view screens show SparkError:E_UNSUPPORTED_PLATFORM where the native view would be,
+  with no substitute. WinUI implementations are tracked in #299.
+checks: [CTRL-UNSUP-02]
+tags: [native-controls]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/popover" }
+- extendedWaitUntil: { visible: { id: native-controls-popover-root }, timeout: 10s }
+- assertText: { id: native-controls-popover-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-popover-host-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertNotVisible: { id: native-controls-popover-content }
+- launchApp: { stopApp: false, openUrl: "spark-ks://native-controls/tab-view" }
+- extendedWaitUntil: { visible: { id: native-controls-tab-view-root }, timeout: 10s }
+- assertText: { id: native-controls-tab-view-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-tab-view-tabs-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertNotVisible: { id: native-controls-tab-view-content-general }
