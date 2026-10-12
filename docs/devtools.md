@@ -153,15 +153,20 @@ profiles, traces and snapshots the heap of the one runtime it is attached to.
 - From code, `startProfiling()` and `stopProfiling()`:
 
 ```ts
-import { getProfilerAvailability, startProfiling, stopProfiling } from "@legendapp/spark/devtools";
+import { addProfilingListener, getProfilerAvailability, isProfiling, startProfiling, stopProfiling } from "@legendapp/spark/devtools";
 
 getProfilerAvailability();                     // { available: true } | { available: false, reason }
 await startProfiling({ samplesPerSecond: 1000 });
 // ... the work to profile
 const result = await stopProfiling({ directory: "/Users/me/Profiles" }); // default: a new temporary directory
-result.trace;    // .../spark-profiler-20261012-143000.trace.json
+result.trace;    // .../spark-profiler-20261012-143000-123.trace.json
 result.profiles; // [{ runtime: "shared", path: ".../spark-profiler-…-shared.cpuprofile", samples, sourceMaps: "applied" }, …]
+result.missing;  // [] or [{ runtime: { isolated: "plugins" }, code: "E_TIMEOUT", message }]
 result.frames;   // { frames, droppedFrames, maxFrameGapMs, durationMs, fps, refreshRate }
+
+await isProfiling();                                 // whichever runtime or the Developer menu started it
+const subscription = addProfilingListener(recording => console.log(recording));
+subscription.remove();
 ```
 
 `getProfilerAvailability()` reports `unsupported-platform` outside macOS, `development-only` without `__DEV__`, and
@@ -176,25 +181,41 @@ started it. `startProfiling` and `stopProfiling` reject:
 | `E_BUSY` | `startProfiling` while a recording runs |
 | `E_UNAVAILABLE` | `startProfiling` without a display: the frame timeline needs one |
 | `E_NOT_FOUND` | `stopProfiling` with nothing recording, or a `directory` that is not an existing directory; the recording keeps running |
-| `E_TIMEOUT` | A runtime's JavaScript thread did not hand over its samples within 10 s |
-| `E_ALREADY_EXISTS` | A file of that name is already in `directory`; nothing is replaced |
+| `E_ALREADY_EXISTS` | Files of those names are already in `directory`, even after trying 19 other names; nothing is replaced |
+
+A runtime whose samples cannot be collected does not fail the recording: the other runtimes' profiles are written, and
+`missing` lists it with `E_TIMEOUT` (its JavaScript thread did not hand over its samples within 10 s), `E_UNAVAILABLE`
+(it is not Hermes) or `E_INVALID_DATA` (Hermes's profile was unreadable). `isProfiling()` and
+`addProfilingListener(listener)` follow the app's one recording, so a screen can show a recording the Developer menu or
+another runtime started. Writing happens on a background queue, never on the main thread.
 
 `stopProfiling` writes, into `directory`:
 
-- `spark-profiler-<time>.trace.json`: a Chrome trace (Trace Event Format) for Chrome DevTools' Performance panel,
+- `spark-profiler-<time>.trace.json` (`<time>` is local time to the millisecond; when those names are taken it adds
+  `-2`, `-3`… rather than lose the recording): a Chrome trace (Trace Event Format) for Chrome DevTools' Performance panel,
   React Native DevTools or [Perfetto](https://ui.perfetto.dev). It has a track for the main thread's frames, a
   compositor track with each MotionView's animation, and a track per JavaScript runtime with its sampled stacks, all
   on one clock.
-- `spark-profiler-<time>-shared.cpuprofile` and `spark-profiler-<time>-isolated-<name>.cpuprofile`: each runtime's
-  samples in the DevTools `Profiler.Profile` format, which Chrome DevTools and speedscope open.
+- `spark-profiler-<time>-shared.cpuprofile` and `spark-profiler-<time>-isolated-<name>.cpuprofile` (characters other
+  than letters, digits, `_` and `-` become `-`, and names that then collide get `-2`, `-3`…): each runtime's samples in the DevTools `Profiler.Profile` format, which Chrome DevTools and speedscope open.
 
 Stacks are source-mapped: each frame names its source file and line, through the development server's `/symbolicate`
-endpoint (Metro's, which LogBox uses). A profile reports `sourceMaps: "unavailable"` with the `reason` when the server
-does not answer, and keeps its frames' bundle positions.
+endpoint (Metro's, which LogBox uses). A profile reports `sourceMaps: "applied"` only when at least one frame was
+mapped; otherwise `"unavailable"` with the `reason` (no server, an error, a profile with no bundle frames, or source maps
+that cover none of them), and its frames keep their bundle positions.
 
-Hermes has one sampling profiler per process, which React Native DevTools' JavaScript profiler and Performance panel
-use too, and the profiler cannot tell whether DevTools is recording: do not record with both at once
-([#409](https://github.com/LegendApp/legend-spark/issues/409)).
+#### With React Native DevTools
+
+Hermes has one sampling profiler per process, and React Native DevTools' JavaScript profiler and Performance panel
+drive the same one. They do not tell each other:
+
+- Hermes ignores a second start while sampling runs, so `startProfiling` during a DevTools recording resolves but
+  shares DevTools' sampling rate, and DevTools started during a Spark recording shares Spark's.
+- Either side's stop turns sampling off for both, so whichever stops second has no samples after the first stop.
+- `isProfiling()` and the Developer menu reflect only Spark's recordings.
+
+Record with one at a time. Detecting a DevTools recording and rejecting `E_BUSY` is
+[#409](https://github.com/LegendApp/legend-spark/issues/409).
 
 ### Frame timeline
 
@@ -208,7 +229,8 @@ timestamps of its first 72,000 frames (10 minutes at 120 Hz) and its first 10,00
 every frame; `truncated` says it dropped some.
 
 The release gate's frame budgets use the same telemetry: `assertFrames`
-([e2e-flows.md](e2e-flows.md#motion-and-frames)) asks `stopFrames` for the timeline and writes it with the same trace
+([e2e-flows.md](e2e-flows.md#motion-and-frames)) counts frames on this recorder, and with `trace: true` records the
+timeline too and writes it with the same trace
 builder (`packages/desktop-app/src/profiler/trace.ts`) as the artifact `frames-<n>.trace.json`, so a failed frame
 budget opens in the same tools as a developer's profile
 ([#163](https://github.com/LegendApp/legend-spark/issues/163)).

@@ -6441,7 +6441,7 @@
             }
           },
           "assertFrames": {
-            "description": "[driver] Assert frame rate and drops while a command runs, and for at least `for` from the start (real clock); writes the frame timeline as a Chrome trace artifact.",
+            "description": "[driver] Assert frame rate and drops while a command runs, and for at least `for` from the start (real clock). `trace: true` also records the frame timeline (frames and MotionView animations) and writes it as a Chrome trace artifact.",
             "if": {
               "type": "object"
             },
@@ -6470,6 +6470,9 @@
                 "dropped": {
                   "type": "integer",
                   "minimum": 0
+                },
+                "trace": {
+                  "type": "boolean"
                 },
                 "when": {
                   "$ref": "#/definitions/condition"

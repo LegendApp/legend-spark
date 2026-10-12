@@ -9,7 +9,8 @@ vi.mock("react-native/Libraries/Core/Devtools/getDevServer", () => ({ default: (
 vi.mock("../packages/desktop-app/src/transport", () => ({
   callAppNative: async (method: string, validate: (value: unknown) => boolean, args: object) => {
     mocks.calls.push([method, args]);
-    const answer = mocks.answers.get(method);
+    const stored = mocks.answers.get(method);
+    const answer = typeof stored === "function" ? (stored as (args: object) => unknown)(args) : stored;
     if (!validate(answer)) throw new Error(`${method}: invalid answer`);
     return answer;
   },
@@ -82,11 +83,13 @@ describe("symbolicate", () => {
     expect(lines(short)).toEqual([0, 9, 19, 29, 0]);
   });
 
-  test("a profile with no bundle frames needs no server", async () => {
+  test("a profile with no bundle frames, or none the source maps cover, is not reported as mapped", async () => {
     const post = vi.fn<Post>();
     const idle: CpuProfile = { ...profile(), nodes: [{ id: 1, callFrame: frame("[root]", "[root]", 0, 0) }], samples: [1], timeDeltas: [0] };
-    expect(await symbolicate(idle, undefined, post)).toMatchObject({ sourceMaps: "applied" });
+    expect(await symbolicate(idle, "http://s/", post)).toMatchObject({ sourceMaps: "unavailable", reason: "the profile has no frames from a bundle" });
     expect(post).not.toHaveBeenCalled();
+    const uncovered: Post = async (_url, body) => ({ ok: true, status: 200, json: async () => ({ stack: JSON.parse(body).stack.map((item: { file: string }) => ({ file: item.file, lineNumber: null, column: null })) }) });
+    expect(await symbolicate(profile(), "http://s/", uncovered)).toMatchObject({ sourceMaps: "unavailable", reason: "the source maps cover none of the profile's 3 bundle frames" });
   });
 });
 
@@ -97,9 +100,17 @@ describe("public API", () => {
     const api = await import("../packages/desktop-app/src/profiler");
     expect(api.getProfilerAvailability()).toEqual({ available: false, reason: "missing-module" });
     await expect(api.startProfiling()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
-    const start = vi.fn(async () => {}), stop = vi.fn(async () => ({}) as never);
-    api.registerProfiler({ start, stop });
-    expect(() => api.registerProfiler({ start, stop })).toThrow(expect.objectContaining({ code: "E_ALREADY_EXISTS" }));
+    const start = vi.fn(async () => {}), stop = vi.fn(async () => ({}) as never), recording = vi.fn(async () => true);
+    const listeners: ((recording: boolean) => void)[] = [];
+    const observe = vi.fn((listener: (recording: boolean) => void) => { listeners.push(listener); return { remove() {} }; });
+    api.registerProfiler({ start, stop, recording, observe });
+    expect(() => api.registerProfiler({ start, stop, recording, observe })).toThrow(expect.objectContaining({ code: "E_ALREADY_EXISTS" }));
+    expect(await api.isProfiling()).toBe(true);
+    const seen: boolean[] = [];
+    api.addProfilingListener(value => seen.push(value));
+    listeners.forEach(listener => listener(false));
+    expect(seen).toEqual([false]);
+    expect(() => api.addProfilingListener(null as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
     expect(api.getProfilerAvailability()).toEqual({ available: true });
     await api.startProfiling();
     await api.startProfiling({ samplesPerSecond: 250 });
@@ -117,6 +128,8 @@ describe("public API", () => {
     mocks.platform.OS = "windows";
     expect(api.getProfilerAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
     await expect(api.startProfiling()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+    await expect(api.isProfiling()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+    expect(() => api.addProfilingListener(() => {})).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
     globals.__DEV__ = true; mocks.platform.OS = "macos";
   });
 
@@ -124,10 +137,18 @@ describe("public API", () => {
     vi.resetModules();
     mocks.calls.length = 0;
     const frames = { frames: 4, droppedFrames: 3, maxFrameGapMs: 33.3, durationMs: 50, fps: 60, refreshRate: 120 };
-    const runtimes = [{ runtime: "ks-devtools", startUs: 1_000_000, profile: JSON.stringify(profile()) }, { runtime: "shared", startUs: 1_000_000, profile: JSON.stringify(profile()) }];
+    const runtimes = [
+      { runtime: "ks-devtools", startUs: 1_000_000, profile: JSON.stringify(profile()) }, { runtime: "shared", startUs: 1_000_000, profile: JSON.stringify(profile()) },
+      { runtime: "stuck", error: { code: "E_TIMEOUT", message: "The JavaScript thread did not hand over its samples within 10 s" } }, { runtime: "broken", startUs: 0, profile: "{" },
+    ];
     mocks.answers.set("startProfiling", null);
     mocks.answers.set("stopProfiling", { process: "KitchenSink", timeline, frames, runtimes });
-    mocks.answers.set("writeProfile", { directory: "/tmp/p", paths: ["/tmp/p/a.trace.json", "/tmp/p/b.cpuprofile", "/tmp/p/c.cpuprofile"] });
+    // The first names are taken: writing tries the next ones instead of losing the recording.
+    let writes = 0;
+    mocks.answers.set("writeProfile", () => {
+      if (++writes === 1) throw Object.assign(new Error("exists"), { code: "E_ALREADY_EXISTS" });
+      return { directory: "/tmp/p", paths: ["/tmp/p/a.trace.json", "/tmp/p/b.cpuprofile", "/tmp/p/c.cpuprofile"] };
+    });
     const post = vi.fn(async (_url: string, body: string) => new Response(JSON.stringify({ stack: JSON.parse(body).stack.map((item: { methodName: string }) => ({ file: `/src/${item.methodName}.ts`, lineNumber: 1, column: 0 })) })));
     vi.stubGlobal("fetch", (url: string, init: { body: string }) => post(url, init.body));
     const { installProfiler } = await import("../packages/desktop-app/src/profiler/install");
@@ -136,15 +157,17 @@ describe("public API", () => {
     await api.startProfiling({ samplesPerSecond: 100 });
     const result = await api.stopProfiling({ directory: "/tmp/p" });
     vi.unstubAllGlobals();
-    expect(mocks.calls.map(([method]) => method)).toEqual(["startProfiling", "stopProfiling", "writeProfile"]);
+    expect(mocks.calls.map(([method]) => method)).toEqual(["startProfiling", "stopProfiling", "writeProfile", "writeProfile"]);
     expect(mocks.calls[0]![1]).toEqual({ samplesPerSecond: 100 });
     expect(mocks.calls[1]![1]).toEqual({ directory: "/tmp/p" });
-    const { directory, files } = mocks.calls[2]![1] as { directory: string; files: { name: string; contents: string }[] };
+    const names = (call: number) => (mocks.calls[call]![1] as { files: { name: string }[] }).files.map(file => file.name);
+    const { directory, files } = mocks.calls[3]![1] as { directory: string; files: { name: string; contents: string }[] };
     expect(directory).toBe("/tmp/p");
-    // The shared runtime first; every name starts with the marker the release-safety probe looks for.
-    expect(files.map(file => file.name)).toEqual([
-      expect.stringMatching(/^spark-profiler-\d{8}-\d{6}\.trace\.json$/), expect.stringMatching(/^spark-profiler-\d{8}-\d{6}-shared\.cpuprofile$/), expect.stringMatching(/^spark-profiler-\d{8}-\d{6}-isolated-ks-devtools\.cpuprofile$/),
+    // The shared runtime first; names to the millisecond, each starting with the marker the release-safety probe looks for.
+    expect(names(2)).toEqual([
+      expect.stringMatching(/^spark-profiler-\d{8}-\d{6}-\d{3}\.trace\.json$/), expect.stringMatching(/^spark-profiler-\d{8}-\d{6}-\d{3}-shared\.cpuprofile$/), expect.stringMatching(/^spark-profiler-\d{8}-\d{6}-\d{3}-isolated-ks-devtools\.cpuprofile$/),
     ]);
+    expect(names(3)).toEqual(names(2).map(name => name.replace(/^(spark-profiler-\d{8}-\d{6}-\d{3})/, "$1-2")));
     expect(post).toHaveBeenCalledTimes(2);
     expect(JSON.parse(files[1]!.contents).nodes[3].callFrame).toMatchObject({ url: "/src/fib.ts", lineNumber: 0 });
     expect(JSON.parse(files[0]!.contents).traceEvents.filter((event: { name: string }) => event.name === "thread_name").map((event: { args: { name: string } }) => event.args.name))
@@ -152,6 +175,16 @@ describe("public API", () => {
     expect(result).toEqual({
       directory: "/tmp/p", trace: "/tmp/p/a.trace.json", frames, motions: 1, truncated: false,
       profiles: [{ runtime: "shared", path: "/tmp/p/b.cpuprofile", samples: 4, sourceMaps: "applied" }, { runtime: { isolated: "ks-devtools" }, path: "/tmp/p/c.cpuprofile", samples: 4, sourceMaps: "applied" }],
+      missing: [
+        { runtime: { isolated: "broken" }, code: "E_INVALID_DATA", message: expect.stringMatching(/^Hermes's profile is not JSON: /) },
+        { runtime: { isolated: "stuck" }, code: "E_TIMEOUT", message: "The JavaScript thread did not hand over its samples within 10 s" },
+      ],
     });
+  });
+
+  test("runtime file names stay distinct once their names are made plain", async () => {
+    const { runtimeFileNames, stamp } = await import("../packages/desktop-app/src/profiler/install");
+    expect(runtimeFileNames(["shared", "a b", "a-b", "a/b", "ks"])).toEqual(["shared", "isolated-a-b", "isolated-a-b-2", "isolated-a-b-3", "isolated-ks"]);
+    expect(stamp(new Date(2026, 9, 12, 14, 30, 5, 7))).toBe("20261012-143005-007");
   });
 });

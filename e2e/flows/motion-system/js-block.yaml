@@ -4,9 +4,8 @@ intent: >
   On Motion system > Scroll link and JS block, the runner loops on the compositor from mount. Block JS
   for 500 ms busy-waits the JavaScript thread while recording 1.5 s of the runner's frames; the display
   link keeps an idle main thread's cadence (at most 6 dropped frames, see below) and the presented
-  transform changes on every animated frame (no stalled frames). Real clock only. assertFrames writes the frame
-  timeline it measured as a Chrome trace artifact (frames-1.trace.json), as the development profiler does.
-checks: [MOT-JSBLOCK-01, DEVT-PROF-06]
+  transform changes on every animated frame (no stalled frames). Real clock only.
+checks: [MOT-JSBLOCK-01]
 tags: [motion-system, performance]
 platforms: [macos]
 ---

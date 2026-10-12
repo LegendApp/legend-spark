@@ -103,7 +103,8 @@ function isTarget(value: unknown): value is DeveloperRuntimeTarget {
 
 function profileWritten(result: ProfilingResult) {
   const runtimes = result.profiles.map(profile => `${profile.path} (${profile.samples} samples${profile.sourceMaps === "applied" ? "" : `, no source maps: ${profile.reason}`})`);
-  console.info(`Profile saved. Trace: ${result.trace}\n${runtimes.join("\n")}`);
+  const missing = result.missing.map(item => `${item.runtime === "shared" ? "shared" : item.runtime.isolated}: not profiled (${item.code}: ${item.message})`);
+  console.info(`Profile saved. Trace: ${result.trace}\n${[...runtimes, ...missing].join("\n")}`);
 }
 
 let installation: Promise<void> | undefined;

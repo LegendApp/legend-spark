@@ -153,7 +153,7 @@ checks:
     covers:
       - ./devtools
   DEVT-PROF-01:
-    title: startProfiling and stopProfiling sample every JavaScript runtime (shared and isolated) with Hermes and write a .cpuprofile per runtime, its stacks source-mapped through the development server to source files and lines, and one Chrome trace with a track per runtime's sampled stacks, the main thread's display-link frames and each MotionView's animation
+    title: startProfiling and stopProfiling sample every JavaScript runtime (shared and isolated) with Hermes and write a .cpuprofile per runtime (a runtime that does not answer is reported in missing and the others are kept), its stacks source-mapped through the development server to source files and lines, and one Chrome trace with a track per runtime's sampled stacks, the main thread's display-link frames and each MotionView's animation
     platforms: [macos]
     blocking: true
     spec: "docs/devtools.md Profiling; #272"
@@ -176,7 +176,7 @@ checks:
     covers:
       - ./devtools
   DEVT-PROF-04:
-    title: With a development bundle on macOS getProfilerAvailability reports available; the Profiling screen starts and stops a recording and reports the files it saved, and the Developer menu's Start Profiling and Stop Profiling… items follow the recording whatever window is key
+    title: With a development bundle on macOS getProfilerAvailability reports available; the Profiling screen starts and stops a recording and reports the files it saved, the screen and the Developer menu's Start Profiling and Stop Profiling… items follow the recording whoever started it (isProfiling, addProfilingListener), whatever window is key
     platforms: [macos]
     blocking: true
     spec: "docs/devtools.md Profiling; docs/menus.md Developer menu; #272"
@@ -185,6 +185,8 @@ checks:
       - ./devtools#getProfilerAvailability().available
       - ./devtools#startProfiling
       - ./devtools#stopProfiling
+      - ./devtools#isProfiling
+      - ./devtools#addProfilingListener
   DEVT-PROF-05:
     title: Without a development bundle (release builds included) getProfilerAvailability reports development-only and the Profiling screen offers no recording
     platforms: [macos]
@@ -194,7 +196,7 @@ checks:
       - ./devtools#getProfilerAvailability
       - ./devtools#getProfilerAvailability().available
   DEVT-PROF-06:
-    title: assertFrames, the gate's frame budget, writes the same frame timeline (frames, drops and MotionView animations) as a Chrome trace artifact
+    title: "assertFrames, the gate's frame budget, records on the same frame timeline: with trace: true it writes the frames, drops and MotionView animations as a Chrome trace artifact, and without it polls no motion"
     platforms: [macos]
     blocking: true
     spec: "docs/devtools.md Frame timeline; #163, #272"

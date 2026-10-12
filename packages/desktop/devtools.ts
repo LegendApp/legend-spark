@@ -4,6 +4,6 @@ export {
   type NetworkBody, type NetworkCallFrame, type NetworkEntry, type NetworkFrame, type NetworkInspectorOptions, type NetworkSource,
 } from "@legendapp/spark-desktop-app/src/network-inspector";
 export {
-  getProfilerAvailability, startProfiling, stopProfiling,
-  type ProfiledRuntime, type ProfilingFrames, type ProfilingResult, type StartProfilingOptions, type StopProfilingOptions,
+  addProfilingListener, getProfilerAvailability, isProfiling, startProfiling, stopProfiling,
+  type MissingRuntime, type ProfiledRuntime, type ProfilingFrames, type ProfilingResult, type StartProfilingOptions, type StopProfilingOptions,
 } from "@legendapp/spark-desktop-app/src/profiler";

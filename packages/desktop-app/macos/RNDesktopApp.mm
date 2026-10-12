@@ -25,7 +25,16 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
 }
 - (void)event:(NSNotification *)note { [self sendEventWithName:@"desktop" body:note.userInfo]; }
 - (void)invalidate { [self stopObserving]; dispatch_async(dispatch_get_main_queue(), ^{ for (NSString *identifier in self->_guardIds) SparkSetQuitGuard(identifier, NO); [self->_guardIds removeAllObjects]; }); [super invalidate]; }
+#if RCT_DEV
+static SparkProfilerCompletion SparkProfilerSettle(RCTPromiseResolveBlock resolve, RCTPromiseRejectBlock reject) {
+  return ^(NSString *json, NSString *code, NSString *message) { if (code) reject(code, message, nil); else resolve(json); };
+}
+#endif
 - (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+#if RCT_DEV
+  // The profile's files are megabytes: parsed and written on the profiler's queue, never on the main thread.
+  if ([method isEqual:@"writeProfile"]) { SparkProfilerWrite(json, SparkProfilerSettle(resolve, reject)); return; }
+#endif
   dispatch_async(dispatch_get_main_queue(), ^{
     NSDictionary *args = SparkArgs(json);
     if ([method isEqual:@"context"]) { NSMutableDictionary *context = [SparkContext() mutableCopy]; context[@"launch"] = SparkLaunchState(); resolve(SparkJSON(context)); }
@@ -78,15 +87,14 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
     else if ([method isEqual:@"startProfiling"]) {
       id rate = args[@"samplesPerSecond"];
       if (![rate isKindOfClass:NSNumber.class] || [rate doubleValue] < 1 || [rate doubleValue] > 10000) { SparkInvalid(reject, @"Expected samplesPerSecond from 1 to 10000"); return; }
-      SparkProfilerStart([rate doubleValue], ^(NSDictionary *result, NSString *code, NSString *message) { if (code) reject(code, message, nil); else resolve(@"null"); });
+      SparkProfilerStart([rate doubleValue], SparkProfilerSettle(resolve, reject));
     }
-    else if ([method isEqual:@"stopProfiling"] || [method isEqual:@"writeProfile"]) {
+    else if ([method isEqual:@"stopProfiling"]) {
       id directory = args[@"directory"];
       if (directory && ![directory isKindOfClass:NSString.class]) { SparkInvalid(reject, @"Expected a directory path"); return; }
-      SparkProfilerCompletion done = ^(NSDictionary *result, NSString *code, NSString *message) { if (code) reject(code, message, nil); else resolve(SparkJSON(result)); };
-      if ([method isEqual:@"stopProfiling"]) SparkProfilerStop(directory, done);
-      else SparkProfilerWrite(directory, args[@"files"], done);
+      SparkProfilerStop(directory, SparkProfilerSettle(resolve, reject));
     }
+    else if ([method isEqual:@"isProfiling"]) resolve(SparkProfilerRecording() ? @"true" : @"false");
 #endif
     else SparkInvalid(reject, @"Unknown app operation");
   });

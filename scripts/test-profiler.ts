@@ -112,7 +112,11 @@ try {
   assert.deepEqual(await cdp.settle("ksProfiling.start({ samplesPerSecond: 0 })"), { error: "E_INVALID_ARGUMENT" });
   assert.deepEqual(await cdp.settle("ksProfiling.start({ interval: 1 })"), { error: "E_UNSUPPORTED_OPTION" });
   assert.deepEqual(await cdp.settle("ksProfiling.stop()"), { error: "E_NOT_FOUND" });
+  assert.deepEqual(await cdp.settle("ksProfiling.recording()"), { value: false });
   assert.deepEqual(await cdp.settle("ksProfiling.start()"), {});
+  assert.deepEqual(await cdp.settle("ksProfiling.recording()"), { value: true });
+  // The screen follows the recording it did not start.
+  await driver.waitFor("devtools-profiling-recording-recording", 10000);
   assert.deepEqual(await cdp.settle("ksProfiling.start()"), { error: "E_BUSY" });
   await cdp.evaluate("ksProfiling.workload(300)");
   await driver.tap({ testID: "devtools-profiling-worker-workload" });
@@ -127,7 +131,10 @@ try {
   assert.ok([result.trace, ...result.profiles.map(item => item.path)].every(file => path.dirname(file) === output), "every file is in the directory asked for");
   pass(`invalid options reject (E_INVALID_ARGUMENT, E_UNSUPPORTED_OPTION), stop without a recording E_NOT_FOUND, a second start E_BUSY, a missing directory E_NOT_FOUND (still recording); stop wrote ${readdirSync(output).length} files, all in ${output}`);
 
+  assert.deepEqual(await cdp.settle("ksProfiling.recording()"), { value: false });
+  await driver.waitFor("devtools-profiling-recording-idle", 10000);
   assert.deepEqual(result.profiles.map(item => item.runtime), ["shared", { isolated: "ks-devtools" }]);
+  assert.deepEqual(result.missing, []);
   for (const item of result.profiles) {
     assert.equal(item.sourceMaps, "applied", `${JSON.stringify(item.runtime)}: ${"reason" in item ? item.reason : ""}`);
     const written = JSON.parse(readFileSync(item.path, "utf8")) as CpuProfile;

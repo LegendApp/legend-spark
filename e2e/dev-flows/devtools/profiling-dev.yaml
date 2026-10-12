@@ -31,6 +31,6 @@ timeout: 120s
 - tapOn: { id: devtools-profiling-workload }
 - tapOn: { id: devtools-profiling-stop }
 - assertVisible: { id: devtools-profiling-recording-saved, timeout: 30s }
-- assertVisible: { id: devtools-profiling-result, text: '/spark-profiler-\d{8}-\d{6}\.trace\.json\n.*spark-profiler-\d{8}-\d{6}-shared\.cpuprofile\n/' }
+- assertVisible: { id: devtools-profiling-result, text: '/spark-profiler-\d{8}-\d{6}-\d{3}\.trace\.json\n.*spark-profiler-\d{8}-\d{6}-\d{3}-shared\.cpuprofile\n(.*\n)*shared: \d+ samples, source maps unavailable\n/' }
 - assertAppMenu: { path: "Developer > Start Profiling", enabled: true }
 - assertAppMenu: { path: "Developer > Stop Profiling…", enabled: false }

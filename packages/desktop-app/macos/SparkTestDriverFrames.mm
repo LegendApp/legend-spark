@@ -2,8 +2,9 @@
 #import "SparkFrameTimeline.h"
 
 // Frame counting (docs/test-driver.md#frame-timing) on the frame timeline (SparkFrameTimeline.mm), which the development
-// profiler records too: startFrames starts it; stopFrames reports its frame counts and, with `timeline: true`, the
-// timeline itself (each frame and the MotionViews animating), which the runner's assertFrames writes as a Chrome trace.
+// profiler records too: startFrames starts it, and with `timeline: true` also keeps each frame and the MotionViews
+// animating in it; stopFrames reports its frame counts and that timeline, which the runner's assertFrames writes as a
+// Chrome trace when the flow asks for one. A plain frame budget polls no motion.
 static SparkFrameTimeline *recording;
 
 NSArray<NSString *> *SparkDriverFrameCommandNames(void) {
@@ -15,7 +16,7 @@ void SparkDriverFrames(NSString *command, NSDictionary *request, SparkTestDriver
   if ([command isEqual:@"startFrames"]) {
     if (recording) { reply(SparkDriverFailure(@"E_BUSY", @"Frame counting has already started; stopFrames first")); return; }
     NSString *error;
-    recording = [SparkFrameTimeline startWithError:&error];
+    recording = [SparkFrameTimeline startWithMotion:[request[@"timeline"] isEqual:@YES] error:&error];
     if (!recording) { reply(SparkDriverFailure(@"E_UNAVAILABLE", error)); return; }
     reply(@{ @"ok": @YES, @"refreshRate": @(recording.refreshRate) });
     return;
@@ -27,7 +28,6 @@ void SparkDriverFrames(NSString *command, NSDictionary *request, SparkTestDriver
     reply(SparkDriverFailure(@"E_UNAVAILABLE", [NSString stringWithFormat:@"The display link delivered %@ frames, so frame timing could not be measured", report[@"frames"]]));
     return;
   }
-  if (![request[@"timeline"] isEqual:@YES]) [report removeObjectForKey:@"timeline"];
   report[@"ok"] = @YES;
   reply(report);
 }

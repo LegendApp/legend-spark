@@ -20,9 +20,9 @@ export function Profiling() {
   const t = useProfilingMessages();
   const demo = useProfilingDemo();
   const { availability, worker, recording } = demo;
-  return <ScrollView className="flex-1 bg-background" contentContainerClassName="items-center gap-5 p-6">
+  return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-5 p-6">
     <Text className="text-lg font-bold text-foreground" accessibilityRole="header">{t.title}</Text>
-    <Text className="max-w-3xl text-center text-sm text-muted">{t.intro}</Text>
+    <Text className="max-w-3xl text-sm text-muted">{t.intro}</Text>
     <Section title={t.sections.availability}>
       <Text selectable className="font-mono text-xs text-muted" testID={`${ID}-availability`}>{JSON.stringify(availability)}</Text>
       <Text className="text-sm text-foreground" testID={availability.available ? `${ID}-available` : `${ID}-unavailable`}>{availability.available ? t.available : t.unavailable}</Text>

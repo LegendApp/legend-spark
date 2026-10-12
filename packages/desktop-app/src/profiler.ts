@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import { SparkError } from "./contracts";
+import { SparkError, type Subscription } from "./contracts";
 import type { DevToolsAvailability, DevToolsRuntime } from "./devtools";
 
 // The profiler's public surface. Release-safe: the profiler itself (native recording, symbolication, trace files) lives
@@ -21,12 +21,20 @@ export interface ProfilingFrames { frames: number; droppedFrames: number; maxFra
  * the development server mapped its frames to source files and lines, else `unavailable` with the `reason`.
  */
 export type ProfiledRuntime = { runtime: DevToolsRuntime; path: string; samples: number } & ({ sourceMaps: "applied" } | { sourceMaps: "unavailable"; reason: string });
+/**
+ * A runtime that was running but whose samples are not in the profile: `E_TIMEOUT` when its JavaScript thread did not
+ * hand them over within 10 s, `E_UNAVAILABLE` when it is not Hermes, `E_INVALID_DATA` when Hermes's profile was not
+ * readable. The other runtimes' profiles are written all the same.
+ */
+export interface MissingRuntime { runtime: DevToolsRuntime; code: "E_TIMEOUT" | "E_UNAVAILABLE" | "E_INVALID_DATA"; message: string }
 export interface ProfilingResult {
   /** Where the files are. */
   directory: string;
   /** The Chrome trace (Trace Event Format) for Chrome DevTools, React Native DevTools or Perfetto: frames, motion and every runtime's samples. */
   trace: string;
   profiles: ProfiledRuntime[];
+  /** Runtimes that were running whose samples could not be collected; empty when every runtime answered. */
+  missing: MissingRuntime[];
   frames: ProfilingFrames;
   /** MotionView animations on the trace's compositor track. */
   motions: number;
@@ -38,6 +46,8 @@ export interface ProfilingResult {
 export interface Profiler {
   start(samplesPerSecond: number): Promise<void>;
   stop(directory: string | undefined): Promise<ProfilingResult>;
+  recording(): Promise<boolean>;
+  observe(listener: (recording: boolean) => void): Subscription;
 }
 let profiler: Profiler | undefined;
 /** Internal, development bundles only: one profiler per JavaScript runtime. */
@@ -86,4 +96,18 @@ export async function stopProfiling(stopOptions: StopProfilingOptions = {}): Pro
   const { directory } = options(stopOptions, ["directory"]);
   if (directory !== undefined && (typeof directory !== "string" || !directory.startsWith("/"))) throw new SparkError("E_INVALID_ARGUMENT", "directory must be an absolute path");
   return available().stop(directory);
+}
+
+/** Whether a recording runs in this app, whichever runtime or the Developer menu started it. */
+export async function isProfiling(): Promise<boolean> {
+  return available().recording();
+}
+
+/**
+ * Calls `listener` with `true` when a recording starts and `false` when it stops, whichever runtime or the Developer
+ * menu started or stopped it.
+ */
+export function addProfilingListener(listener: (recording: boolean) => void): Subscription {
+  if (typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a listener function");
+  return available().observe(listener);
 }

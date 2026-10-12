@@ -216,7 +216,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
     frames: obj({ at: list({ type: "number", minimum: 0, maximum: 100 }), golden: str, ...masks }, ["at", "golden"]),
   }, { required: ["target"], driver: true }),
   interruptAt: spec("motion", "Run a command when the running motion reaches a progress point.", { target: selector, progress: fraction, with: command }, { required: ["progress", "with"], driver: true }),
-  assertFrames: spec("motion", "Assert frame rate and drops while a command runs, and for at least `for` from the start (real clock); writes the frame timeline as a Chrome trace artifact.", { during: command, for: duration, fps: bound(num), dropped: int() }, { required: ["during"], rule: anyKey("fps", "dropped"), driver: true }),
+  assertFrames: spec("motion", "Assert frame rate and drops while a command runs, and for at least `for` from the start (real clock). `trace: true` also records the frame timeline (frames and MotionView animations) and writes it as a Chrome trace artifact.", { during: command, for: duration, fps: bound(num), dropped: int(), trace: bool }, { required: ["during"], rule: anyKey("fps", "dropped"), driver: true }),
   assertPaused: spec("motion", "Assert a target's animation pauses in a state. Its `when` is that state, so this command cannot take a condition; wrap it in runFlow { when, commands }.", { target: selector, when: oneOf("windowHidden", "appHidden", "minimized", "occluded", "inactive") }, { required: ["target", "when"], driver: true }),
   assertNoLayoutThrash: spec("motion", "Assert no repeated layout passes while a command runs.", { during: command }, { required: ["during"], driver: true }),
 

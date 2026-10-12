@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { useAppState, useI18n } from "./app-controller";
 import { catalog } from "./catalog";
 import { navigate, useLocation } from "./navigation";
-import type { CatalogArea, CatalogScreen } from "./registry";
+import { screenTitle, type CatalogArea, type CatalogScreen } from "./registry";
 import { routeURL, type Location, type Route } from "./routes";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -56,18 +56,19 @@ function NavRow({ title, count, selected, onPress, testID }: { title: string; co
 }
 
 function Breadcrumb({ location }: { location: Location }) {
-  const { t, rtl } = useI18n();
+  const { t, rtl, locale } = useI18n();
   const area = location.kind === "area" || location.kind === "screen" ? catalog.area(location.area) : undefined;
   const screen = location.kind === "screen" ? catalog.screen(location.area, location.screen) : undefined;
   // "›" is bidi-mirrored: with an explicit right-to-left writing direction it draws as "‹", along the reading direction.
   const separator = <Text className="text-muted" style={{ writingDirection: rtl ? "rtl" : "ltr" }} testID="infra-shell-breadcrumb-separator">›</Text>;
-  const path = [t.allScreens, area && t.areas[area.id], screen?.title].filter(Boolean).join(" › ");
+  const title = screen && screenTitle(screen, locale);
+  const path = [t.allScreens, area && t.areas[area.id], title].filter(Boolean).join(" › ");
   // Crumbs truncate instead of running under the theme toggle; the tooltip and label keep the full path.
   // `tooltip` is a react-native-macos/-windows View prop that the react-native types lack.
   return <View className="flex-1 flex-row items-center gap-2 overflow-hidden" testID="infra-shell-breadcrumb" accessibilityLabel={path} {...{ tooltip: path }}>
     <Crumb shrink={area ? 0 : 1} onPress={location.kind === "catalog" ? undefined : () => navigate({ kind: "catalog" })}>{t.allScreens}</Crumb>
     {area && <>{separator}<Crumb shrink={screen ? MIDDLE_SHRINK : 1} onPress={location.kind === "screen" ? () => navigate({ kind: "area", area: area.id }) : undefined}>{t.areas[area.id]}</Crumb></>}
-    {screen && <>{separator}<Crumb shrink={1}>{screen.title}</Crumb></>}
+    {screen && <>{separator}<Crumb shrink={1}>{title}</Crumb></>}
   </View>;
 }
 // Yoga splits overflow by flexShrink × width, so a middle crumb absorbs it (down to room for an ellipsis)
@@ -118,9 +119,10 @@ function AreaScreens({ area }: { area: CatalogArea }) {
 
 function ScreenRow({ area, screen }: { area: CatalogArea; screen: CatalogScreen }) {
   const route: Route = { kind: "screen", area: area.id, screen: screen.id };
-  return <Pressable testID={`infra-shell-screen-${area.id}-${screen.id}`} accessibilityRole="button" accessibilityLabel={screen.title} accessibilityHint={screen.summary}
+  const title = screenTitle(screen, useI18n().locale);
+  return <Pressable testID={`infra-shell-screen-${area.id}-${screen.id}`} accessibilityRole="button" accessibilityLabel={title} accessibilityHint={screen.summary}
     onPress={() => navigate(route)} className="gap-1 rounded-lg border border-border bg-surface p-4">
-    <Text className="font-semibold text-foreground">{screen.title}</Text>
+    <Text className="font-semibold text-foreground">{title}</Text>
     <Text className="text-sm text-muted">{screen.summary}</Text>
     <Text className="text-xs text-muted">{routeURL(route)}</Text>
   </Pressable>;

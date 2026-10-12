@@ -4,8 +4,9 @@
 #import <React/RCTBridgeModule.h>
 #import <React/RCTCallInvoker.h>
 #import <React/RCTCallInvokerModule.h>
-#import "SparkRuntimeHosts.h"
+#import "SparkDesktop.h"
 #import "SparkFrameTimeline.h"
+#import "SparkRuntimeHosts.h"
 #include <chrono>
 #include <hermes/hermes.h>
 #include <sstream>
@@ -14,9 +15,6 @@
 using facebook::react::CallInvoker;
 namespace jsi = facebook::jsi;
 
-// Every file the profiler writes starts with this (PROFILER_MARKER in src/profiler/marker.ts); the release-safety probe
-// (DEVT-REL-05) fails a release build whose native code or JavaScript contains it.
-static NSString *const SparkProfilerMarker = @"spark-profiler";
 static const double SparkProfilerCollectSeconds = 10;
 
 // An RCTHost (bridgeless); declared locally so this pod needs no React-RuntimeApple headers.
@@ -54,29 +52,27 @@ BOOL SparkProfilerRecording(void) { return timeline != nil; }
 void SparkProfilerStart(double samplesPerSecond, SparkProfilerCompletion completion) {
   if (timeline) { completion(nil, @"E_BUSY", @"Profiling has already started; stop it first"); return; }
   NSString *error;
-  SparkFrameTimeline *started = [SparkFrameTimeline startWithError:&error];
+  SparkFrameTimeline *started = [SparkFrameTimeline startWithMotion:YES error:&error];
   if (!started) { completion(nil, @"E_UNAVAILABLE", error); return; }
   timeline = started;
   startUs = SparkSteadyMicroseconds() - (CACurrentMediaTime() - started.start) * 1e6;
   // Samples every runtime registered for profiling: React Native's Hermes runtimes are (HermesInstance).
   SparkHermesRoot()->enableSamplingProfiler(samplesPerSecond);
-  completion(@{}, nil, nil);
+  SparkEmit(@{ @"type": @"profiling", @"recording": @YES });
+  completion(@"null", nil, nil);
 }
+
+static NSDictionary *SparkRuntimeError(NSString *code, NSString *message) { return @{ @"error": @{ @"code": code, @"message": message } }; }
 
 /** On the runtime's JS thread: its samples, or why it has none. */
 static NSDictionary *SparkCollect(jsi::Runtime &runtime) {
   auto *hermes = jsi::castInterface<facebook::hermes::IHermes>(&runtime);
-  if (!hermes) return @{ @"error": @"The JavaScript runtime is not Hermes" };
+  if (!hermes) return SparkRuntimeError(@"E_UNAVAILABLE", @"The JavaScript runtime is not Hermes");
   std::ostringstream stream;
   hermes->sampledTraceToStreamInDevToolsFormat(stream);
-  return @{ @"profile": [NSString stringWithUTF8String:stream.str().c_str()] ?: @"" };
-}
-
-/** Why `directory` cannot take the profile (it is not an existing directory), or nil. */
-static NSString *SparkProfilerDirectoryProblem(NSString *directory) {
-  BOOL isDirectory = NO;
-  if (!directory || ([directory isAbsolutePath] && [NSFileManager.defaultManager fileExistsAtPath:directory isDirectory:&isDirectory] && isDirectory)) return nil;
-  return [NSString stringWithFormat:@"%@ is not an existing directory", directory];
+  const std::string text = stream.str();
+  NSString *profile = [[NSString alloc] initWithBytes:text.data() length:text.size() encoding:NSUTF8StringEncoding];
+  return profile ? @{ @"profile": profile } : SparkRuntimeError(@"E_INVALID_DATA", @"Hermes's sampling profile is not valid UTF-8");
 }
 
 void SparkProfilerStop(NSString *directory, SparkProfilerCompletion completion) {
@@ -86,67 +82,41 @@ void SparkProfilerStop(NSString *directory, SparkProfilerCompletion completion) 
   SparkHermesRoot()->disableSamplingProfiler();
   NSDictionary *frames = [timeline stop];
   timeline = nil;
+  SparkEmit(@{ @"type": @"profiling", @"recording": @NO });
   const auto live = SparkProfiledRuntimes();
-  NSMutableArray<NSDictionary *> *collected = [NSMutableArray new];
-  __block BOOL finished = NO;
+  NSMutableArray<NSString *> *names = [NSMutableArray new];
+  NSMutableDictionary<NSString *, NSDictionary *> *answers = [NSMutableDictionary new];
   NSMutableDictionary *counts = [frames mutableCopy];
   [counts removeObjectForKey:@"timeline"];
-  NSDictionary *result = @{ @"process": NSProcessInfo.processInfo.processName, @"frames": counts, @"timeline": frames[@"timeline"], @"runtimes": collected };
-  const double start = startUs;
-  void (^finish)(NSString *, NSString *) = ^(NSString *code, NSString *message) {
+  __block BOOL finished = NO;
+  // Main thread. Every runtime that answered keeps its samples; one that did not gets its own E_TIMEOUT entry.
+  void (^finish)(void) = ^{
     if (finished) return;
     finished = YES;
-    for (NSDictionary *item in collected) if (item[@"error"]) { completion(nil, @"E_UNAVAILABLE", item[@"error"]); return; }
-    if (code) completion(nil, code, message); else completion(result, nil, nil);
-  };
-  if (live.empty()) { finish(nil, nil); return; }
-  const NSUInteger expected = live.size();
-  for (const auto &[name, invoker] : live) {
-    invoker->invokeAsync([name, start, expected, collected, finish](jsi::Runtime &runtime) {
-      NSMutableDictionary *item = [SparkCollect(runtime) mutableCopy];
+    NSMutableArray *runtimes = [NSMutableArray new];
+    for (NSString *name in names) {
+      NSMutableDictionary *item = [(answers[name] ?: SparkRuntimeError(@"E_TIMEOUT", [NSString stringWithFormat:@"The JavaScript thread did not hand over its samples within %.0f s", SparkProfilerCollectSeconds])) mutableCopy];
       item[@"runtime"] = name;
-      item[@"startUs"] = @(start);
+      [runtimes addObject:item];
+    }
+    NSDictionary *result = @{ @"process": NSProcessInfo.processInfo.processName, @"frames": counts, @"timeline": frames[@"timeline"], @"runtimes": runtimes };
+    // Each profile can be megabytes: encode off the main thread.
+    dispatch_async(SparkProfilerQueue(), ^{ completion(SparkJSON(result), nil, nil); });
+  };
+  for (const auto &entry : live) [names addObject:entry.first];
+  if (live.empty()) { finish(); return; }
+  const double start = startUs;
+  for (const auto &entry : live) {
+    NSString *name = entry.first;
+    entry.second->invokeAsync([name, start, answers, names, finish](jsi::Runtime &runtime) {
+      NSMutableDictionary *item = [SparkCollect(runtime) mutableCopy];
+      if (item[@"profile"]) item[@"startUs"] = @(start);
       dispatch_async(dispatch_get_main_queue(), ^{
-        [collected addObject:item];
-        if (collected.count == expected) finish(nil, nil);
+        answers[name] = item;
+        if (answers.count == names.count) finish();
       });
     });
   }
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SparkProfilerCollectSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-    finish(@"E_TIMEOUT", [NSString stringWithFormat:@"%lu of %lu JavaScript runtimes did not hand over their samples within %.0f s", (unsigned long)(expected - collected.count), (unsigned long)expected, SparkProfilerCollectSeconds]);
-  });
-}
-
-void SparkProfilerWrite(NSString *directory, NSArray *files, SparkProfilerCompletion completion) {
-  NSFileManager *manager = NSFileManager.defaultManager;
-  NSRegularExpression *names = [NSRegularExpression regularExpressionWithPattern:@"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,199}$" options:0 error:nil];
-  if (![files isKindOfClass:NSArray.class] || !files.count) { completion(nil, @"E_INVALID_ARGUMENT", @"Expected files to write"); return; }
-  for (NSDictionary *file in files) {
-    NSString *name = [file isKindOfClass:NSDictionary.class] ? file[@"name"] : nil;
-    if (![name isKindOfClass:NSString.class] || ![names firstMatchInString:name options:0 range:NSMakeRange(0, name.length)] || ![file[@"contents"] isKindOfClass:NSString.class]) {
-      completion(nil, @"E_INVALID_ARGUMENT", @"Expected files as {name, contents} with plain file names"); return;
-    }
-  }
-  if (NSString *problem = SparkProfilerDirectoryProblem(directory)) { completion(nil, @"E_NOT_FOUND", problem); return; }
-  if (!directory) {
-    NSString *pattern = [NSTemporaryDirectory() stringByAppendingPathComponent:[SparkProfilerMarker stringByAppendingString:@"-XXXXXX"]];
-    // fileSystemRepresentation returns a new buffer on each call: read it once.
-    const char *representation = pattern.fileSystemRepresentation;
-    std::vector<char> path(representation, representation + strlen(representation) + 1);
-    if (!mkdtemp(path.data())) { completion(nil, @"E_NATIVE", [NSString stringWithFormat:@"Could not create a temporary directory: %s", strerror(errno)]); return; }
-    directory = [manager stringWithFileSystemRepresentation:path.data() length:strlen(path.data())];
-  }
-  NSMutableArray<NSString *> *paths = [NSMutableArray new];
-  for (NSDictionary *file in files) {
-    NSString *path = [directory stringByAppendingPathComponent:file[@"name"]];
-    NSError *error;
-    if (![[file[@"contents"] dataUsingEncoding:NSUTF8StringEncoding] writeToFile:path options:NSDataWritingWithoutOverwriting error:&error]) {
-      BOOL exists = [error.domain isEqual:NSCocoaErrorDomain] && error.code == NSFileWriteFileExistsError;
-      completion(nil, exists ? @"E_ALREADY_EXISTS" : @"E_NATIVE", [NSString stringWithFormat:@"Could not write %@: %@", path, error.localizedDescription]);
-      return;
-    }
-    [paths addObject:path];
-  }
-  completion(@{ @"directory": directory, @"paths": paths }, nil, nil);
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SparkProfilerCollectSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), finish);
 }
 #endif

@@ -4,8 +4,8 @@ import type { CallFrame, CpuProfile } from "./trace";
 
 export type Post = (url: string, body: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 /**
- * `applied`: every bundle frame went through the server's source maps (a position they do not cover, such as a module
- * wrapper, keeps its place in the bundle). `unavailable`: none did, and `reason` says why.
+ * `applied`: the server's source maps mapped at least one frame (a position they do not cover, such as a module wrapper,
+ * keeps its place in the bundle). `unavailable`: none was mapped, and `reason` says why.
  */
 export type SourceMaps = { sourceMaps: "applied" } | { sourceMaps: "unavailable"; reason: string };
 type Frame = { file: string; lineNumber: number; column: number; methodName: string };
@@ -37,7 +37,7 @@ export async function symbolicate(profile: CpuProfile, server: string | undefine
     stack.push({ file: callFrame.url, lineNumber: callFrame.lineNumber, column: Math.max(0, callFrame.columnNumber - 1), methodName: callFrame.functionName });
   }
   const unmapped = (reason: string) => ({ profile: withFrames(profile, fromHermes), sourceMaps: "unavailable" as const, reason });
-  if (!stack.length) return { profile: withFrames(profile, fromHermes), sourceMaps: "applied" };
+  if (!stack.length) return unmapped("the profile has no frames from a bundle");
   if (!server) return unmapped("the JavaScript did not come from a development server");
   let mapped: unknown;
   try {
@@ -49,6 +49,7 @@ export async function symbolicate(profile: CpuProfile, server: string | undefine
   }
   if (!Array.isArray(mapped) || mapped.length !== stack.length || !mapped.every(isFrame)) return unmapped(`${server}symbolicate answered with another stack`);
   const frames = mapped as Mapped[];
+  if (!frames.some(frame => typeof frame.lineNumber === "number")) return unmapped(`the source maps cover none of the profile's ${frames.length} bundle frames`);
   return {
     profile: withFrames(profile, frame => {
       const index = keys.get(key(frame));

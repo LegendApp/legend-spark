@@ -75,9 +75,9 @@ export class FakeDriver implements DriverClient {
     const { scripted } = this.motionOf(testID);
     return { fromMs: scripted!.motion.startMs, toMs: range.toMs ?? scripted!.motion.endMs!, intervalMs: 100, truncated: false, samples: scripted!.samples };
   }
-  async startFrames() { this.log.push("startFrames"); return { refreshRate: 120 }; }
-  async stopFrames(options: { timeline?: boolean } = {}) {
-    this.log.push(options.timeline ? `stopFrames ${JSON.stringify(options)}` : "stopFrames");
+  async startFrames(options: { timeline?: boolean } = {}) { this.log.push(options.timeline ? `startFrames ${JSON.stringify(options)}` : "startFrames"); return { refreshRate: 120 }; }
+  async stopFrames() {
+    this.log.push("stopFrames");
     const frames = this.frames();
     if (frames instanceof DriverError) throw frames;
     return frames;

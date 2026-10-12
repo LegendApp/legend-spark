@@ -17,15 +17,17 @@ FOUNDATION_EXPORT void SparkFrameTimelineSetMotion(SparkFrameTimelineMotion _Nul
 
 @interface SparkFrameTimeline : NSObject
 // Main thread. Adds a display link for the main screen (a driven app's windows are never on screen, so the link belongs to
-// the screen) at the display's maximum rate, in the common run loop modes. Nil with `error` when no display is connected.
-+ (nullable instancetype)startWithError:(NSString *_Nullable *_Nonnull)error;
+// the screen) at the display's maximum rate, in the common run loop modes. With `motion`, it keeps each frame's
+// timestamp and asks which MotionViews animate in it, for `timeline`; without, it only counts frames, so a frame budget
+// measures nothing else. Nil with `error` when no display is connected.
++ (nullable instancetype)startWithMotion:(BOOL)motion error:(NSString *_Nullable *_Nonnull)error;
 // CACurrentMediaTime when it started: timeline times are milliseconds from it.
 @property (nonatomic, readonly) CFTimeInterval start;
 // The display's maximum frames per second.
 @property (nonatomic, readonly) NSInteger refreshRate;
 // Main thread. Stops and reports `frames`, `droppedFrames`, `maxFrameGapMs`, `durationMs`, `fps` and `refreshRate`, as
-// the driver's stopFrames does, and `timeline`: `timestamps` (each frame), `intervalMs`, `motion` ({view, startMs, endMs})
-// and `truncated`.
+// the driver's stopFrames does, and when started with `motion`, `timeline`: `timestamps` (each frame), `intervalMs`,
+// `motion` ({view, startMs, endMs}) and `truncated`.
 - (NSDictionary *)stop;
 @end
 

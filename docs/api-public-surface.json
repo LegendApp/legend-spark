@@ -199,6 +199,7 @@
   "./devtools": [
     "DevToolsAvailability",
     "DevToolsRuntime",
+    "MissingRuntime",
     "NetworkBody",
     "NetworkCallFrame",
     "NetworkEntry",
@@ -212,11 +213,13 @@
     "StartProfilingOptions",
     "StopProfilingOptions",
     "addNetworkListener",
+    "addProfilingListener",
     "configureNetworkInspector",
     "getDevToolsAvailability",
     "getNetworkInspectorAvailability",
     "getNetworkLog",
     "getProfilerAvailability",
+    "isProfiling",
     "openDevTools",
     "startProfiling",
     "stopProfiling"

@@ -24,10 +24,10 @@ static const NSUInteger SparkTimelineMotionLimit = 10000;
   std::vector<double> _timestamps;
   NSMutableDictionary<NSString *, NSNumber *> *_moving;  // view → its slice's start, while it animates
   NSMutableArray<NSDictionary *> *_motion;
-  BOOL _truncated;
+  BOOL _truncated, _recordsTimeline;
 }
 
-+ (instancetype)startWithError:(NSString **)error
++ (instancetype)startWithMotion:(BOOL)motion error:(NSString **)error
 {
   NSScreen *screen = NSScreen.mainScreen ?: NSScreen.screens.firstObject;
   if (!screen) { *error = @"No display is connected, so frame timing cannot be measured"; return nil; }
@@ -36,6 +36,7 @@ static const NSUInteger SparkTimelineMotionLimit = 10000;
   timeline->_start = CACurrentMediaTime();
   timeline->_moving = [NSMutableDictionary new];
   timeline->_motion = [NSMutableArray new];
+  timeline->_recordsTimeline = motion;
   timeline.link = [screen displayLinkWithTarget:timeline selector:@selector(tick:)];
   const float rate = (float)screen.maximumFramesPerSecond;
   timeline.link.preferredFrameRateRange = CAFrameRateRangeMake(rate, rate, rate);
@@ -59,6 +60,7 @@ static const NSUInteger SparkTimelineMotionLimit = 10000;
   }
   _frames++;
   _last = timestamp;
+  if (!_recordsTimeline) return;
   if (_timestamps.size() < SparkTimelineFrameLimit) _timestamps.push_back([self ms:timestamp]);
   else _truncated = YES;
   if (!motionSource) return;
@@ -78,15 +80,17 @@ static const NSUInteger SparkTimelineMotionLimit = 10000;
 {
   [_link invalidate];
   _link = nil;
+  const CFTimeInterval duration = _frames > 1 ? _last - _first : 0;
+  NSMutableDictionary *report = [@{
+    @"frames": @(_frames), @"droppedFrames": @(_dropped), @"maxFrameGapMs": @(_maxGap * 1000), @"durationMs": @(duration * 1000),
+    @"fps": @(duration > 0 ? (_frames - 1) / duration : 0), @"refreshRate": @(_refreshRate),
+  } mutableCopy];
+  if (!_recordsTimeline) return report;
   for (NSString *view in _moving.allKeys) [self endMotion:view at:[self ms:_last]];
   NSMutableArray<NSNumber *> *timestamps = [NSMutableArray arrayWithCapacity:_timestamps.size()];
   for (double timestamp : _timestamps) [timestamps addObject:@(timestamp)];
-  const CFTimeInterval duration = _frames > 1 ? _last - _first : 0;
-  return @{
-    @"frames": @(_frames), @"droppedFrames": @(_dropped), @"maxFrameGapMs": @(_maxGap * 1000), @"durationMs": @(duration * 1000),
-    @"fps": @(duration > 0 ? (_frames - 1) / duration : 0), @"refreshRate": @(_refreshRate),
-    @"timeline": @{ @"timestamps": timestamps, @"intervalMs": @(_interval > 0 ? _interval * 1000 : 1000.0 / MAX(_refreshRate, 1)), @"motion": [_motion copy], @"truncated": @(_truncated) },
-  };
+  report[@"timeline"] = @{ @"timestamps": timestamps, @"intervalMs": @(_interval > 0 ? _interval * 1000 : 1000.0 / MAX(_refreshRate, 1)), @"motion": [_motion copy], @"truncated": @(_truncated) };
+  return report;
 }
 @end
 #endif

@@ -76,10 +76,10 @@ test("Start Profiling is disabled with a tooltip without the profiler; with it, 
   vi.resetModules();
   state.listeners.clear();
   const { registerProfiler } = await import("../packages/desktop-app/src/profiler");
-  const result = { directory: "/tmp/p", trace: "/tmp/p/a.trace.json", frames: {} as never, motions: 0, truncated: false,
+  const result = { directory: "/tmp/p", trace: "/tmp/p/a.trace.json", frames: {} as never, motions: 0, truncated: false, missing: [],
     profiles: [{ runtime: "shared" as const, path: "/tmp/p/b.cpuprofile", samples: 3, sourceMaps: "unavailable" as const, reason: "no server" }] };
   const start = vi.fn(async () => {}), stop = vi.fn(async () => result);
-  registerProfiler({ start, stop });
+  registerProfiler({ start, stop, recording: async () => false, observe: () => ({ remove() {} }) });
   await (await import("../packages/native-menu/src/developer-menu")).installDeveloperMenu();
   expect(item("spark-developer-start-profiling")!._sparkDev).toEqual({ action: "startProfiling", available: true });
   const info = vi.spyOn(console, "info").mockImplementation(() => {});
