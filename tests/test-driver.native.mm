@@ -523,10 +523,18 @@ int main(int argc, char **argv) { @autoreleasepool {
       double value = [OnMain(^{ return @(slider.doubleValue); }) doubleValue];
       Check(fabs(value - 75) < 4, [NSString stringWithFormat:@"a tap at 75%% of the slider sets it near 75 (%.1f)", value]);
       Check([OnMain(^{ return @(!input.isVisible && input.alphaValue == 1 && !input.ignoresMouseEvents); }) boolValue], @"the window is off screen again after pointer input");
+      // AppKit gives a window ordered in without a first responder its first key view, on every order-in (#371); the
+      // driver must not. A click on an AppKit control in a window that is not key takes no focus either.
+      auto unfocused = ^{
+        NSString *focused = OnMain(^{ return input.firstResponder == input ? @"window" : NSStringFromClass(input.firstResponder.class); });
+        Check([focused isEqual:@"window"], [NSString stringWithFormat:@"ordering a window in for pointer input gives no view keyboard focus (%@)", focused]);
+      };
+      unfocused();
       NSDictionary *twoFrame = two[@"frame"];
       ok(@{ @"command": @"tap", @"window": @"id:input", @"point": @{ @"x": @([twoFrame[@"x"] doubleValue] + [twoFrame[@"width"] doubleValue] / 2), @"y": @([twoFrame[@"y"] doubleValue] + [twoFrame[@"height"] doubleValue] / 2) } });
       NSString *selectedTab = OnMain(^{ return [((NSTabView *)SparkDriverFindView(@"input-tabs")).selectedTabViewItem.identifier description]; });
       Check([selectedTab isEqual:@"Two"], [NSString stringWithFormat:@"a tap on a tab button at its elements frame selects the tab (%@)", selectedTab]);
+      unfocused();
       ok(@{ @"command": @"tap", @"testID": @"input-button" });
       Check(buttonPresses == 1, @"a tap presses an NSButton (its tracking loop takes the queued mouseUp)");
       int before = sliderActions;

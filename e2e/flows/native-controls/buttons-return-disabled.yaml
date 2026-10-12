@@ -1,0 +1,28 @@
+appId: so.legend.spark.examples.kitchensink
+name: Return and Space with the default button disabled stay on Button styles
+intent: >
+  On Native controls > Button styles, straight after launch, the Disable controls checkbox disables the
+  variant="default" button. Return and Space then press nothing: the screen stays and the default button's count stays
+  0, because no view has keyboard focus. Before #371 the driver's first click ordered the window in and AppKit gave
+  focus to its first key view, the sidebar's All screens row, a React Native Pressable that presses on Return and
+  Space, so Return navigated to the catalog. Once the checkbox enables the controls again, Return presses the default button.
+checks: [CTRL-BUTTON-02, CTRL-DISABLED-01]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  appearance: [light]
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/buttons" }
+- extendedWaitUntil: { visible: { id: native-controls-buttons-root }, timeout: 10s }
+- tapOn: { id: native-controls-buttons-disabled }
+- assertA11y: { id: native-controls-buttons-keyboard-default, enabled: false }
+- pressKey: Enter
+- pressKey: Space
+# The key events reach JavaScript asynchronously: the next tap finds the checkbox only if they did not navigate.
+- tapOn: { id: native-controls-buttons-disabled }
+- assertA11y: { id: native-controls-buttons-keyboard-default, enabled: true }
+- assertText: { id: native-controls-buttons-keyboard-default-value, equals: '0' }
+- pressKey: Enter
+- assertText: { id: native-controls-buttons-keyboard-default-value, equals: '1' }
+- assertVisible: { id: native-controls-buttons-root }

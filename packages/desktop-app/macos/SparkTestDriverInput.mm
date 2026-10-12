@@ -317,7 +317,12 @@ static dispatch_block_t SparkPresent(NSWindow *window, const NSPoint *press) {
   if (shown) {
     window.alphaValue = 0;
     window.ignoresMouseEvents = YES;
+    // A window ordered in without a first responder gives focus to its first key view: in a React Native window, the
+    // first focusable Pressable, which then takes Return and Space (#371). A shown app's window stays on screen and was
+    // shown with its startup placeholder, so nothing takes focus that way; ordering in for a command must not either.
+    NSResponder *responder = window.firstResponder;
     [window orderBack:nil];
+    if (window.firstResponder != responder) [window makeFirstResponder:responder];
   }
   return ^{
     for (NSView *view in accepting) [view setValue:@NO forKey:@"acceptsFirstMouse"];
