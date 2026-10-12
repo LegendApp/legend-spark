@@ -30,3 +30,9 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run test
+        # A full run takes up to about 8.5 minutes on macOS runners; a hung run fails here instead of at the 6-hour job limit.
+        timeout-minutes: 20
+      # A test step that hangs after its tests finish is usually held open by a process a test left behind.
+      - name: Processes left running
+        if: failure()
+        run: ps -U "$(id -u)" -o pid,ppid,etime,pcpu,command
