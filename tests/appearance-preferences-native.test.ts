@@ -16,7 +16,7 @@ test.skipIf(process.platform !== "darwin")("appearance preferences read the user
   const directory = await mkdtemp(path.join(os.tmpdir(), "spark-appearance-native-"));
   try {
     const binary = path.join(directory, "test");
-    await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-Wall", "-Werror", "-mmacosx-version-min=14.0", "-I", macos, "-framework", "AppKit",
+    await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-Wall", "-Werror", "-mmacosx-version-min=14.0", "-DSPARK_TEST_DRIVER=1", "-I", macos, "-framework", "AppKit",
       path.join(root, "tests/appearance-preferences.native.mm"), path.join(macos, "SparkAppearancePreferences.mm"), "-o", binary], { timeout: 60000 });
     const read = async (args: string[]) => (await runOk(binary, args, { timeout: 30000 })).trim().split("\n").map(line => JSON.parse(line));
     const [pinned, simulated] = await read(PINNED);

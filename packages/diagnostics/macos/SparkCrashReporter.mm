@@ -20,7 +20,11 @@ NSString *const SparkCrashCodeKey = @"SparkCode";
 static const int kSignals[] = { SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGSEGV, SIGSYS, SIGTRAP };
 static const size_t kMaxImages = 4096;
 static const size_t kAltStackBytes = 128 * 1024;
+#if SPARK_TEST_DRIVER
+// A simulateCrash helper is this executable started with these variables. Builds without the test driver (consumer
+// release builds) have neither the variables nor native simulated crashes (docs/diagnostics.md#checking-your-reporting).
 static const char *const kSimulateKind = "SPARK_SIMULATE_CRASH", *const kSimulateDirectory = "SPARK_SIMULATE_CRASH_DIRECTORY";
+#endif
 static const char *const kRecordExtension = ".sparkcrash";
 
 // Everything the signal handler reads is prepared here beforehand: it allocates nothing and takes no lock.
@@ -448,6 +452,10 @@ NSString *SparkRecordJavaScriptCrash(NSString *directory, NSDictionary *error, N
 }
 
 NSDictionary *SparkSimulateCrash(NSString *directory, NSString *kind, NSError **error) {
+#if !SPARK_TEST_DRIVER
+  if (error) *error = CrashError(@"E_UNAVAILABLE", @"Native simulated crashes exist only in Debug builds and builds with the test driver (macos.testDriverInRelease)");
+  return nil;
+#else
   NSString *executable = NSBundle.mainBundle.executablePath;
   if (!executable) { if (error) *error = CrashError(@"E_UNAVAILABLE", @"This process has no executable to start as a helper"); return nil; }
   NSMutableArray<NSString *> *environment = [NSMutableArray new];
@@ -491,6 +499,7 @@ NSDictionary *SparkSimulateCrash(NSString *directory, NSString *kind, NSError **
   dispatch_sync(Queue(), ^{ report = ProcessRecords(directory, pid).allValues.firstObject; });
   if (!report && error) *error = CrashError(@"E_NATIVE", [NSString stringWithFormat:@"The crash helper exited without a crash record (status %d)", status]);
   return report;
+#endif
 }
 
 static volatile int *volatile gNowhere = NULL;
@@ -510,12 +519,13 @@ __attribute__((noinline, disable_tail_calls)) void SparkCrashNow(const char *kin
   else if (!strcmp(kind, "trap")) __builtin_trap();
 }
 
-// Installs at launch: a simulateCrash helper crashes before the app starts; otherwise the handlers are
+// Installs at launch: a simulateCrash helper (SPARK_TEST_DRIVER builds) crashes before the app starts; otherwise the handlers are
 // installed when the user has consented, and records left by earlier launches become reports.
 @interface SparkCrashReporterLaunch : NSObject
 @end
 @implementation SparkCrashReporterLaunch
 + (void)load {
+#if SPARK_TEST_DRIVER
   const char *kind = getenv(kSimulateKind), *directory = getenv(kSimulateDirectory);
   if (kind && directory) {
     gSimulated = true;
@@ -524,6 +534,7 @@ __attribute__((noinline, disable_tail_calls)) void SparkCrashNow(const char *kin
     SparkCrashNow(kind);
     _exit(70); // An unknown kind: the parent reports that no crash was recorded.
   }
+#endif
   if (!SparkCrashConsent()) return;
   NSString *crashes = SparkDefaultCrashDirectory();
   SparkInstallCrashHandlers(crashes);

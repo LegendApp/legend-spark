@@ -21,28 +21,36 @@ Never set `testDriverInRelease` for an app you distribute. How it works:
 
 - The config plugin writes `ENV['SPARK_TEST_DRIVER_RELEASE'] = '1'` into the generated Podfile when the
   option is set. Every Spark pod that includes `SparkTestDriver.h` (`RNDesktopApp`, `RNSparkUI`,
-  `RNSparkMotion`, `RNDesktopSystem`, `RNDesktopWindows`) sets the build setting `SPARK_TEST_DRIVER` to 1 in
-  the Debug configuration, and in other configurations to 1 with that variable or 0 without it, and passes
-  it to the preprocessor. `RNDesktopApp` also gives it to the app target, for the host's app delegate.
-- At 0, `RNDesktopApp` excludes `SparkTestDriver*.mm` from the build (`EXCLUDED_SOURCE_FILE_NAMES`), and
+  `RNSparkMotion`, `RNDesktopSystem`, `RNDesktopWindows`), and `RNDesktopDiagnostics`, sets the build setting
+  `SPARK_TEST_DRIVER` to 1 in the Debug configuration, and in other configurations to 1 with that variable or 0
+  without it, and passes it to the preprocessor. `RNDesktopApp` also gives it to the app target, for the host's
+  app delegate.
+- At 0, `RNDesktopApp` excludes `SparkTestDriver*.mm` from the build (`EXCLUDED_SOURCE_FILE_NAMES`): the
+  driver, its commit watching and accessibility audit, and the `state` and `listeners` commands.
   `SparkTestDriver.h` declares `SparkTestDriverStart`, `Active`, `DidMount` and `Ending` as inline no-ops and
   leaves the hooks for other modules undeclared. Code that registers driver commands
   (`SparkTestDriverRegisterCommand` and the other hooks) sits inside `#if SPARK_TEST_DRIVER`; outside it, the
-  build fails to compile. So does code that serves only the driver, such as motion's virtual clock and
-  telemetry. A file that includes the header without the setting gets the driver
-  declarations, so a release build without the driver fails to link rather than ship driver code.
+  build fails to compile. So does code that serves only the driver: motion's virtual clock and telemetry,
+  `simulateSystemEvent`'s appearance overrides, the host's `replyDriverState` operation (the `exposeTestState`
+  answer), and diagnostics' native simulated crashes (the `SPARK_SIMULATE_CRASH` launch hook; `simulateCrash`
+  rejects native kinds with `E_UNAVAILABLE` without it). A file that includes the header without the setting
+  gets the driver declarations, so a release build without the driver fails to link rather than ship driver
+  code.
 - A build without the driver that is launched with `SPARK_TEST_DRIVER_DIR` logs
   `Spark: this build has no test driver; SPARK_TEST_DRIVER_DIR is ignored` and starts normally.
 - After every macOS release build, `spark build` reads the app's code (`Contents/MacOS` and
   `Contents/Frameworks`) for strings only driver code contains: the socket name `driver.sock`, the log
-  prefix `Spark test driver:`, and the commands `simulateSystemEvent`, `simulateDisplays`, `advanceClock` and
-  `waitForMotion`. Without `testDriverInRelease` it fails if it finds any; with it, it fails unless it finds
-  the socket name and log prefix (`packages/cli/src/release-driver.ts`).
+  prefix `Spark test driver:`, the commands `startCommits`, `accessibilityAudit`, `simulateSystemEvent`,
+  `simulateDisplays`, `advanceClock` and `waitForMotion`, the `driverListeners` request and `replyDriverState`
+  operation, and `SPARK_SIMULATE_CRASH`. Without `testDriverInRelease` it fails if it finds any; with it, it
+  fails unless it finds the socket name and log prefix (`packages/cli/src/release-driver.ts`).
 
 `tests/test-driver-builds.test.ts` checks the configuration, the Podfile lines and every podspec's build
 settings. It also compiles a stripped, dead-stripped binary each way and runs the release check on both:
-the one without the driver has no driver strings or `SparkTestDriver` symbols, and logs and starts normally
-with `SPARK_TEST_DRIVER_DIR` set.
+the one without the driver has no driver strings or `SparkTestDriver` symbols, logs and starts normally
+with `SPARK_TEST_DRIVER_DIR` set, ignores `SPARK_SIMULATE_CRASH`, and has `SparkSimulateCrash` fail
+`E_UNAVAILABLE`. It also checks that every `SparkTestDriverRegisterCommand` call outside the excluded
+sources sits after `#if SPARK_TEST_DRIVER`.
 
 ## Kitchen Sink screenshots
 

@@ -8,8 +8,19 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
 + (BOOL)requiresMainQueueSetup { return YES; }
 - (dispatch_queue_t)methodQueue { return dispatch_get_main_queue(); }
 - (NSArray<NSString *> *)supportedEvents { return @[@"desktop"]; }
-- (void)startObserving { if (!_observing) SparkSetDesktopObserved(_observing = YES); [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(event:) name:SparkDesktopEvent object:nil]; }
-- (void)stopObserving { if (_observing) SparkSetDesktopObserved(_observing = NO); [NSNotificationCenter.defaultCenter removeObserver:self]; }
+// The test driver's `listeners` leak counter asks the JavaScript only while it observes desktop events.
+- (void)startObserving {
+#if SPARK_TEST_DRIVER
+  if (!_observing) SparkSetDesktopObserved(_observing = YES);
+#endif
+  [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(event:) name:SparkDesktopEvent object:nil];
+}
+- (void)stopObserving {
+#if SPARK_TEST_DRIVER
+  if (_observing) SparkSetDesktopObserved(_observing = NO);
+#endif
+  [NSNotificationCenter.defaultCenter removeObserver:self];
+}
 - (void)event:(NSNotification *)note { [self sendEventWithName:@"desktop" body:note.userInfo]; }
 - (void)invalidate { [self stopObserving]; dispatch_async(dispatch_get_main_queue(), ^{ for (NSString *identifier in self->_guardIds) SparkSetQuitGuard(identifier, NO); [self->_guardIds removeAllObjects]; }); [super invalidate]; }
 - (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
@@ -51,7 +62,9 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
       @catch (NSException *exception) { SparkInvalid(reject, exception.reason); return; }
       resolve(SparkJSON(strings));
     }
+#if SPARK_TEST_DRIVER
     else if ([method isEqual:@"replyDriverState"]) { SparkReplyDriverState(args); resolve(@"null"); }
+#endif
     else if ([method isEqual:@"hide"]) { [NSApp hide:nil]; resolve(@"null"); }
     else if ([method isEqual:@"activate"]) { [NSApp activateIgnoringOtherApps:YES]; resolve(@"null"); }
 #if RCT_DEV

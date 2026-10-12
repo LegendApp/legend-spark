@@ -2,10 +2,12 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 // Strings only the in-app test driver's code contains (docs/test-driver.md#builds): the driver's socket name and log
-// prefix, and commands that other packages register with it. A release build has the driver only with
-// macos.testDriverInRelease, so the CLI checks every macOS release build for them.
+// prefix, commands of its own sources (commit watching, accessibility audit, exposed state), commands other packages
+// register with it, the host's exposed-state reply, and diagnostics' simulated crash hook. A release build has them
+// only with macos.testDriverInRelease, so the CLI checks every macOS release build for them.
 const CORE = ["driver.sock", "Spark test driver:"];
-const MARKERS = [...CORE, "simulateSystemEvent", "simulateDisplays", "advanceClock", "waitForMotion"];
+const MARKERS = [...CORE, "startCommits", "accessibilityAudit", "driverListeners", "replyDriverState", "simulateSystemEvent",
+  "simulateDisplays", "advanceClock", "waitForMotion", "SPARK_SIMULATE_CRASH"];
 
 /** The test driver markers in the app's code: every file under Contents/MacOS and Contents/Frameworks. */
 export function testDriverMarkers(app: string): string[] {

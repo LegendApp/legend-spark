@@ -225,8 +225,11 @@ the app. `badAccess` (SIGSEGV), `abort` (SIGABRT), `uncaughtException` (an NSExc
 `trap` (SIGTRAP on Apple silicon, SIGILL on Intel) and `stackOverflow` (SIGSEGV) start the app's own
 executable as a helper process with no window, which installs the handlers and crashes before the
 app would start; its handler exits once the record is written, so the system crash reporter does not
-see it. The promise resolves with the helper's report (rejects `E_TIMEOUT` after 30 s). `javascript`
-throws a real TypeError and records it as the handler would for a fatal error, without passing it on.
+see it. The promise resolves with the helper's report (rejects `E_TIMEOUT` after 30 s). The native kinds
+exist only in Debug builds and builds with the test driver (`macos.testDriverInRelease`,
+[test driver](test-driver.md#builds)): a release build you distribute has no `SPARK_SIMULATE_CRASH` launch
+hook, and they reject `E_UNAVAILABLE` there. `javascript` works in every build: it throws a real TypeError
+and records it as the handler would for a fatal error, without passing it on.
 
 ### Availability and errors
 

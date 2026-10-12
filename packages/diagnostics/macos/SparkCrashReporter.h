@@ -43,7 +43,7 @@ FOUNDATION_EXPORT NSString *_Nullable SparkRecordJavaScriptCrash(NSString *direc
  * Starts this app's executable as a helper process that installs the handlers into `directory` and
  * crashes in the given way ("badAccess", "abort", "uncaughtException", "trap" or "stackOverflow"); its handler exits
  * after writing the record, so the system crash reporter does not see it. Waits up to 30 s, then returns
- * the helper's report.
+ * the helper's report. Only with SPARK_TEST_DRIVER (Debug, or macos.testDriverInRelease); otherwise E_UNAVAILABLE.
  */
 FOUNDATION_EXPORT NSDictionary *_Nullable SparkSimulateCrash(NSString *directory, NSString *kind, NSError **error);
 

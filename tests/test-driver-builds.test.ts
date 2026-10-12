@@ -55,9 +55,10 @@ const podspecSettings = (podspec: string, environment: Record<string, string>) =
     { cwd: path.dirname(path.join(root, podspec)), env, encoding: "utf8" })) as { pod: Record<string, string>; user: Record<string, string> | null };
 };
 const DRIVER_DEFINITION = "$(inherited) SPARK_TEST_DRIVER=$(SPARK_TEST_DRIVER)";
-// Every pod that includes SparkTestDriver.h. A pod without the setting would get the driver declarations, and fail
-// to link in a release build without the driver.
-const DRIVER_PODS = ["packages/ui/RNSparkUI.podspec", "packages/motion/RNSparkMotion.podspec", "packages/system/RNDesktopSystem.podspec", "packages/desktop-windows/RNDesktopWindows.podspec"];
+// Every pod that includes SparkTestDriver.h (a pod without the setting would get the driver declarations, and fail
+// to link in a release build without the driver), and diagnostics, whose simulated crashes need the driver.
+const DRIVER_PODS = ["packages/ui/RNSparkUI.podspec", "packages/motion/RNSparkMotion.podspec", "packages/system/RNDesktopSystem.podspec",
+  "packages/desktop-windows/RNDesktopWindows.podspec", "packages/diagnostics/RNDesktopDiagnostics.podspec"];
 
 test("every Spark source that includes SparkTestDriver.h belongs to a pod that sets SPARK_TEST_DRIVER", () => {
   const sources = (directory: string): string[] => readdirSync(directory, { withFileTypes: true }).flatMap(entry =>
@@ -66,6 +67,20 @@ test("every Spark source that includes SparkTestDriver.h belongs to a pod that s
     .filter(file => /SparkTestDriver\.h|SparkTestDriverPrivate\.h/.test(readFileSync(file, "utf8")))
     .map(file => path.relative(path.join(root, "packages"), file).split(path.sep)[0]));
   expect([...including].sort()).toEqual(["desktop-app", "desktop-host", "desktop-windows", "motion", "system", "ui"]);
+});
+
+test("driver command registrations sit in the driver's excluded sources or inside #if SPARK_TEST_DRIVER", () => {
+  const sources = (directory: string): string[] => readdirSync(directory, { withFileTypes: true }).flatMap(entry =>
+    entry.isDirectory() ? (entry.name === "node_modules" ? [] : sources(path.join(directory, entry.name))) : entry.name.endsWith(".mm") ? [path.join(directory, entry.name)] : []);
+  const registering = readdirSync(path.join(root, "packages")).flatMap(name => sources(path.join(root, "packages", name)))
+    .filter(file => readFileSync(file, "utf8").includes("SparkTestDriverRegisterCommand("));
+  expect(registering.length).toBeGreaterThan(0);
+  for (const file of registering) {
+    if (path.dirname(file) === path.join(root, "packages/desktop-app/macos") && /^SparkTestDriver.*\.mm$/.test(path.basename(file))) continue;
+    const text = readFileSync(file, "utf8"), guard = text.indexOf("#if SPARK_TEST_DRIVER\n");
+    expect(guard, path.relative(root, file)).toBeGreaterThanOrEqual(0);
+    expect(guard, path.relative(root, file)).toBeLessThan(text.indexOf("SparkTestDriverRegisterCommand("));
+  }
 });
 
 test.skipIf(!hasRuby)("Spark pods compile the driver in Debug, and in other configurations only with SPARK_TEST_DRIVER_RELEASE", () => {
@@ -90,7 +105,8 @@ test.skipIf(!hasRuby)("RNDesktopApp excludes the driver's sources without it, gi
   expect(podspecSettings(podspec, { SPARK_TEST_DRIVER_PRIVATE_EVENTS: "1" }).pod).toEqual(pod("0", `${DRIVER_DEFINITION} SPARK_TEST_DRIVER_PRIVATE_EVENTS=1`));
   // Only the driver's own sources match the exclusion.
   const excluded = readdirSync(path.join(root, "packages/desktop-app/macos")).filter(name => /^SparkTestDriver.*\.mm$/.test(name));
-  expect(excluded.sort()).toEqual(["SparkTestDriver.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm", "SparkTestDriverInput.mm"]);
+  expect(excluded.sort()).toEqual(["SparkTestDriver.mm", "SparkTestDriverAudit.mm", "SparkTestDriverCommits.mm", "SparkTestDriverCursor.mm",
+    "SparkTestDriverFrames.mm", "SparkTestDriverInput.mm", "SparkTestDriverState.mm"]);
 }, 60_000);
 
 test("the Kitchen Sink, which the gate drives as a release build, opts in", () => {
@@ -100,14 +116,22 @@ test("the Kitchen Sink, which the gate drives as a release build, opts in", () =
 
 // A release-style binary built without the driver and one built with it, checked the way `spark build` checks every
 // macOS release build.
-const native = path.join(root, "packages/desktop-app/macos");
-const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm"].map(file => path.join(native, file));
+// Both include the crash reporter, whose native simulated crashes need the driver.
+const native = path.join(root, "packages/desktop-app/macos"), diagnostics = path.join(root, "packages/diagnostics/macos");
+const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm", "SparkTestDriverCommits.mm",
+  "SparkTestDriverAudit.mm"].map(file => path.join(native, file));
+const crashSources = ["SparkCrashReporter.mm", "SparkStack.mm"].map(file => path.join(diagnostics, file));
 const host = `#import "SparkTestDriver.h"
+#import "SparkCrashReporter.h"
 int main(void) {
   @autoreleasepool {
     BOOL driven = SparkTestDriverStart();
     SparkTestDriverDidMount();
     printf("started %d active %d ending %d\\n", driven, SparkTestDriverActive(), SparkTestDriverEnding());
+#if !SPARK_TEST_DRIVER
+    NSError *error;
+    printf("simulateCrash %s\\n", SparkSimulateCrash(@"/tmp", @"abort", &error) ? "ran" : [error.userInfo[SparkCrashCodeKey] UTF8String]);
+#endif
   }
   return 0;
 }
@@ -121,7 +145,7 @@ beforeAll(async () => {
   const compile = (name: string, sources: string[], flags: string[]) => {
     mkdirSync(path.join(app(name), "Contents/MacOS"), { recursive: true });
     return runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-Oz", "-Wl,-dead_strip", "-framework", "AppKit", "-framework", "QuartzCore",
-      ...flags, "-I", native, path.join(directory, "host.mm"), ...sources, "-o", path.join(app(name), "Contents/MacOS", name)], { timeout: 120_000 });
+      ...flags, "-I", native, "-I", diagnostics, path.join(directory, "host.mm"), ...sources, ...crashSources, "-o", path.join(app(name), "Contents/MacOS", name)], { timeout: 120_000 });
   };
   await Promise.all([compile("Consumer", [], ["-DSPARK_TEST_DRIVER=0"]), compile("Gate", driverSources, ["-DSPARK_TEST_DRIVER=1"])]);
   await runOk("strip", ["-x", path.join(app("Consumer"), "Contents/MacOS/Consumer")]);
@@ -129,20 +153,20 @@ beforeAll(async () => {
 }, 240_000);
 afterAll(() => { if (directory) rmSync(directory, { recursive: true, force: true }); });
 
-test.skipIf(!darwin)("a build without the driver has none of its code, ignores SPARK_TEST_DRIVER_DIR with a log line, and passes the release check", async () => {
+test.skipIf(!darwin)("a build without the driver has none of its code, ignores SPARK_TEST_DRIVER_DIR and SPARK_SIMULATE_CRASH, and passes the release check", async () => {
   const binary = path.join(app("Consumer"), "Contents/MacOS/Consumer");
   expect(testDriverMarkers(app("Consumer"))).toEqual([]);
   expect(execFileSync("nm", [binary], { encoding: "utf8" })).not.toContain("SparkTestDriver");
   expect(() => checkReleaseTestDriver(app("Consumer"), false)).not.toThrow();
   expect(() => checkReleaseTestDriver(app("Consumer"), true)).toThrow("macos.testDriverInRelease is set, but the release build lacks the test driver (driver.sock, Spark test driver:");
-  const result = await run(binary, [], { env: { ...process.env, SPARK_TEST_DRIVER_DIR: "/nonexistent" }, timeout: 30_000 });
+  const result = await run(binary, [], { env: { ...process.env, SPARK_TEST_DRIVER_DIR: "/nonexistent", SPARK_SIMULATE_CRASH: "abort", SPARK_SIMULATE_CRASH_DIRECTORY: directory }, timeout: 30_000 });
   expect(result.status, outcome(result)).toBe(0);
-  expect(result.stdout).toBe("started 0 active 0 ending 0\n");
+  expect(result.stdout).toBe("started 0 active 0 ending 0\nsimulateCrash E_UNAVAILABLE\n");
   expect(result.stderr).toContain("Spark: this build has no test driver; SPARK_TEST_DRIVER_DIR is ignored");
 }, 60_000);
 
 test.skipIf(!darwin)("a build with the driver has it, which the release check requires with macos.testDriverInRelease and refuses without", () => {
-  expect(testDriverMarkers(app("Gate"))).toEqual(expect.arrayContaining(["driver.sock", "Spark test driver:"]));
+  expect(testDriverMarkers(app("Gate"))).toEqual(expect.arrayContaining(["driver.sock", "Spark test driver:", "startCommits", "accessibilityAudit", "SPARK_SIMULATE_CRASH"]));
   expect(() => checkReleaseTestDriver(app("Gate"), true)).not.toThrow();
   expect(() => checkReleaseTestDriver(app("Gate"), false)).toThrow("The release build contains test driver code (driver.sock, Spark test driver:");
 });
