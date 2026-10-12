@@ -436,6 +436,7 @@ fails with `invalid`.
 | Flow | Driver |
 |---|---|
 | `launchApp` | Quits a running app, deletes the session's state for `clearState: true` ([App state](#app-state)), then launches in driver mode with the flow's `arguments` (after the driver's own, including the [pinned host settings](test-driver.md#pinned-host-settings), which a flow may override) and `env`. Then it delivers `openUrl` with `navigate` and `openFile` with `openFile`, both through `application:openURLs:` once the first render settles. With `stopApp: false` and the app running, it only delivers `openUrl` and `openFile`; `clearState`, `arguments` and `env` there are `invalid`. `openFile` must be an absolute path to an existing file (`invalid` otherwise). The driver reserves `SPARK_TEST_DRIVER_DIR`, `SPARK_BUNDLE_URL`, `CFFIXED_USER_HOME` and `DIRHELPER_USER_DIR_SUFFIX` in `env`, `-RCT_jsLocation` in `arguments`, and `-AppleLanguages`/`-AppleLocale` when the matrix sets `locale`; a flow that sets one is `invalid`. `appId` and `from` are `unsupported`. |
+| `preserveAppDefaults` | Before `launchApp`: snapshots `keys` of the app's `defaults` domain and registers a restore ([preserveAppDefaults](#preserveappdefaults)). `invalid` while the app runs. |
 | `stopApp`, end of flow | `quit`: the app's normal termination path |
 | Selectors (visibility checks, targets, mask selectors), window selectors | `elements`, one snapshot per poll: the in-process accessibility view (testIDs, roles, labels, text, frames, parents) of every window with an identifier. The runner matches every selector key against it. |
 | `tapOn`, `doubleClickOn`, `tripleClickOn`, `rightClickOn` (with `modifiers`), `hoverOn` | `tap` (`clickCount` 1-3, `button`) and `hover`. A target with an id is addressed by testID and offset: the driver scrolls it into view and fails when another view would receive the click. Others are addressed by point in their window. `hoverOn` `duration` is `unsupported`. |
@@ -490,6 +491,17 @@ it: `assertMotion` after a tap needs no `advanceClock`. Captures (`takeScreensho
 - assertMotion: { target: { id: slider }, kind: spring, velocityContinuous: true }
 - captureMotion: { target: { id: slider }, name: slider-interrupted }
 ```
+
+#### preserveAppDefaults
+
+`preserveAppDefaults: [AppleLanguages]` (`preserveDefaults` in `scripts/e2e/app-state.ts`) is for a flow
+that changes the app's own `defaults` through the app, such as a per-app language. Put it before
+`launchApp`. It reads each key of the domain the launched app uses (an isolated session's `<bundle id>.driver`
+copy, or in exact mode the app's own identifier), or notes that it is absent, and registers a runner restore. Restores
+run after `onFlowComplete`, outside the flow and run time limits, so a failed, timed-out or interrupted
+flow still runs them: the restore quits the app, then `defaults write`s each previous value or
+`defaults delete`s a key that was absent. It refuses (`invalid`) while any process with that bundle
+identifier runs, a copy someone is using included, and for any domain but the flow's app or its `.driver` copy.
 
 #### App state
 

@@ -5,16 +5,14 @@ intent: >
   "Use ar" on Internationalization > Native strings stores Arabic as the app's own language. The next launch,
   still without a language argument, is Arabic: getAppLanguages() reports current ar and override ar, and the
   Edit menu reads تعديل > تراجع. "Follow the system" removes the choice, and the launch after that is English
-  again. onFlowComplete removes the choice even when the flow fails, so the app's defaults end as they began.
+  again. preserveAppDefaults snapshots the app's AppleLanguages first (refusing while a copy of the app runs) and the
+  runner writes it back when the flow ends, even after a failure or timeout.
 checks: [I18N-LANG-02]
 tags: [internationalization]
 platforms: [macos]
 timeout: 120s
-onFlowComplete:
-  - launchApp: { openUrl: "spark-ks://internationalization/native-strings" }
-  - tapOn: { id: internationalization-native-strings-follow-system }
-  - assertVisible: { id: internationalization-native-strings-status }
 ---
+- preserveAppDefaults: [AppleLanguages]
 - launchApp: { openUrl: "spark-ks://internationalization/native-strings" }
 - assertText: { id: internationalization-native-strings-current, equals: en }
 - assertText: { id: internationalization-native-strings-override, equals: "None: follows the system" }

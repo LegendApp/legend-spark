@@ -108,6 +108,13 @@ export class FakeApp implements DriverApp {
 
   async open(options: { dev: boolean }) { this.log.push(options.dev ? "open dev" : "open"); return { app: "/Apps/KitchenSink.app", bundleId: this.bundleId, launchedBundleId: `${this.bundleId}.driver` }; }
   async clearState() { this.log.push("clearState"); return ["defaults:so.legend.spark.examples.kitchensink"]; }
+  /** Set to make preserveDefaults refuse, as it does while the app runs. */
+  refusePreserve?: string;
+  async preserveDefaults(keys: readonly string[]) {
+    if (this.refusePreserve) throw new Error(this.refusePreserve);
+    this.log.push(`preserve ${keys.join(",")}`);
+    return () => { this.log.push(`restore ${keys.join(",")}`); };
+  }
   async launch(options: { locale?: string; arguments: readonly string[]; env: Readonly<Record<string, string>>; log: ProcessLog }) {
     const extra = [...(options.arguments.length ? [`args=${options.arguments.join(" ")}`] : []), ...(Object.keys(options.env).length ? [`env=${JSON.stringify(options.env)}`] : [])];
     this.log.push([`launch locale=${options.locale ?? "-"}`, ...extra, `log=${path.basename(options.log.file)}`].join(" "));

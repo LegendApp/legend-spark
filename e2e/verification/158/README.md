@@ -15,3 +15,12 @@ against a Kitchen Sink dev build of this branch (`ks-lock native bun run rebuild
 (the template menu, About, Hide, Quit, Help with the app name) and AppKit's own (Settings…, Close All,
 AutoFill, Start Dictation, Emoji & Symbols). The Kitchen Sink's Document menu follows its own catalog
 (English and Arabic only).
+
+| Image | How | What it shows |
+|---|---|---|
+| confirm-dialog-ar.png | Launch with `-AppleLanguages (ar)`, tap `internationalization-native-strings-confirm`, then the driver's `capture` of the alert window (`id:_NS:…`) | `confirm()` with only a message: Spark's title تأكيد and buttons إلغاء / متابعة. |
+| confirm-dialog-fr.png | The same with `(fr)` | Confirmer, Annuler, Continuer; the message is the Kitchen Sink's own (English: no French catalog). |
+| about-panel-ar.png | `(ar)`, tap `dialogs-panels-about`, capture its window | AppKit's About panel: الإصدار 0.1.0 (1). In French AppKit's word is also "Version", so that capture shows nothing different and isn't included. |
+
+The menus themselves can't be imaged in-process: an NSMenu has a window only while it tracks the real
+pointer, and the driver closes any menu input opens (`E_MENU`). `menus.txt` is the evidence for them.

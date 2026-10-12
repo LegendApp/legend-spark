@@ -319,6 +319,43 @@
               "type": "null"
             }
           },
+          "preserveAppDefaults": {
+            "description": "[driver] Before launchApp: snapshot these keys of the app's defaults and restore them when the flow ends, even after a failure or timeout. Refuses while the app runs.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "keys": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 1
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "keys"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1
+            }
+          },
           "killApp": {
             "description": "[maestro] Kill the app process.",
             "if": {

@@ -25,6 +25,8 @@ const en = table("en");
 
 test("Spark's strings exist in English, Arabic and French with identical keys", () => {
   expect(languages).toEqual(["ar", "en", "fr"]);
+  // The config plugin warns about other languages (packages/config-plugin/validation.cjs).
+  expect(createRequire(import.meta.url)("../packages/config-plugin/validation.cjs").FRAMEWORK_LANGUAGES).toEqual(languages);
   for (const [key, value] of en) expect(value, key).toBe(key);
   for (const language of languages) {
     const strings = table(language);

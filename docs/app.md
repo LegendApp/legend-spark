@@ -2,7 +2,7 @@
 
 Import from `@legendapp/spark/app`. Spark owns this desktop lifecycle contract; document history and file/URL launch requests live in `/app/documents`.
 
-`getAppAvailability()` reports unsupported platforms and missing optional native modules without throwing during import. Operations reject with `SparkError` when unavailable. Every feature on this page except [languages](#languages), including the single-instance lock, `relaunch()` and safe mode, is implemented on both macOS and Windows, so this one result covers them. Languages report their own availability. `getAppContext()` returns project identity (`projectId`, `name`, `version`), runtime mode/module versions, the initial process arguments and `launch`:
+`getAppAvailability()` reports unsupported platforms and missing optional native modules without throwing during import. Operations reject with `SparkError` when unavailable. Every feature on this page except [languages](#languages), including the single-instance lock, `relaunch()` and safe mode, is implemented on both macOS and Windows, so this one result covers them. Languages report theirs as `getAppAvailability('languages')`. `getAppContext()` returns project identity (`projectId`, `name`, `version`), runtime mode/module versions, the initial process arguments and `launch`:
 
 | `launch` field | Values |
 | --- | --- |
@@ -107,6 +107,6 @@ await relaunch();
 
 `setAppLanguage(language)` stores the app's language in its own defaults (`AppleLanguages`, the key System Settings writes); `null` removes it. It applies at the next launch: AppKit chooses a bundle's language once. A language the app does not list rejects with `E_INVALID_ARGUMENT`, as does a value that is not a language identifier or `null`.
 
-`getAppLanguageAvailability()` is available on macOS. On Windows it reports `unsupported-platform` and the functions reject with `E_UNSUPPORTED_PLATFORM`: an unpackaged Win32 app has no per-app language for Spark to set, and Spark's Windows host shows its own strings, including the dialog defaults, in English ([#329](https://github.com/LegendApp/legend-spark/issues/329)).
+`getAppAvailability('languages')` is available on macOS. On Windows it reports `unsupported-platform` and the functions reject with `E_UNSUPPORTED_PLATFORM`: an unpackaged Win32 app has no per-app language for Spark to set, and Spark's Windows host shows its own strings, including the dialog defaults, in English ([#329](https://github.com/LegendApp/legend-spark/issues/329)).
 
 Validation: `tests/framework-strings.test.ts` checks that every title in the template's main menu, every role title and every string native code or JavaScript asks for exists, with the same keys and placeholders in every language. `tests/app-languages.test.ts` and `tests/dialog-features.test.ts` cover the JavaScript contract and the dialog defaults against a mocked bridge. The Kitchen Sink's Internationalization › Native strings screen and `e2e/flows/internationalization/native-strings.yaml` and `app-language.yaml` check the menus and languages in the running app.

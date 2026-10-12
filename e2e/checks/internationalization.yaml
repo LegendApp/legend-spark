@@ -32,12 +32,12 @@ checks:
     blocking: true
     spec: "#158 I18N.api"
   I18N-LANG-01:
-    title: getAppLanguageAvailability() reports available, and getAppLanguages() reports the languages the app lists (en, ar, fr), Spark's translated languages and the language each launch chose
+    title: getAppAvailability(languages) reports available, and getAppLanguages() reports the languages the app lists (en, ar, fr), Spark's translated languages and the language each launch chose
     platforms: [macos]
     blocking: true
     spec: "#158 I18N.api"
     covers:
-      - ./app#getAppLanguageAvailability().available
+      - ./app#getAppAvailability
       - ./app#getAppLanguages
   I18N-LANG-02:
     title: "setAppLanguage() stores a per-app language: the next launch without a language argument is Arabic (menus and getAppLanguages().current), and following the system again restores English"

@@ -1,6 +1,6 @@
-import { Platform, TurboModuleRegistry } from "react-native";
 import { callAppNative } from "./transport";
-import { SparkError, type Availability } from "./contracts";
+import { getAppAvailability } from "./api";
+import { SparkError } from "./contracts";
 
 /** The languages of the app's native strings: menus, dialogs and the panels AppKit provides. */
 export interface AppLanguages {
@@ -19,13 +19,8 @@ export interface AppLanguages {
 
 const LANGUAGE = /^[A-Za-z]{2,3}([-_][A-Za-z0-9]+)*$/;
 
-/** macOS only. Windows has no per-app language for Spark's unpackaged host. */
-export function getAppLanguageAvailability(): Availability {
-  if (Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };
-  return TurboModuleRegistry.get("NativeDesktopApp") ? { available: true } : { available: false, reason: "missing-module" };
-}
 function requireAvailable() {
-  const availability = getAppLanguageAvailability();
+  const availability = getAppAvailability("languages");
   if (!availability.available) throw new SparkError(availability.reason === "missing-module" ? "E_MODULE_UNAVAILABLE" : "E_UNSUPPORTED_PLATFORM", "App languages require macOS with NativeDesktopApp installed");
 }
 const languages = (value: unknown): value is string[] => Array.isArray(value) && value.every(item => typeof item === "string" && item.length > 0);

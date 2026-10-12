@@ -31,8 +31,14 @@ export type AppEventMap = {
 };
 export type AppEvent = AppEventMap[keyof AppEventMap];
 export interface BeforeQuitOptions { onError?: (error: Error) => void }
-export function getAppAvailability(): Availability {
+/** App features that differ by platform, for `getAppAvailability(feature)`. `languages`: getAppLanguages and setAppLanguage, macOS only. */
+export type AppFeature = "languages";
+/** Without a feature, reports every app API on this page except `languages`. */
+export function getAppAvailability(feature?: AppFeature): Availability {
+  if (feature !== undefined && feature !== "languages") throw new SparkError("E_INVALID_ARGUMENT", "Unknown app feature");
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
+  // An unpackaged Win32 app has no per-app language for Spark to set.
+  if (feature === "languages" && Platform.OS === "windows") return { available: false, reason: "unsupported-platform" };
   return TurboModuleRegistry.get("NativeDesktopApp") ? { available: true } : { available: false, reason: "missing-module" };
 }
 function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === "object" && !Array.isArray(value); }

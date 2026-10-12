@@ -140,6 +140,41 @@ describe("command mapping", () => {
   });
 });
 
+describe("preserveAppDefaults", () => {
+  test("a timed-out flow still restores the snapshot, after quitting the app, though onFlowComplete cannot run", async () => {
+    const { result, app } = await run(
+      "- preserveAppDefaults: [AppleLanguages]\n- launchApp\n- assertVisible: { id: missing, timeout: 5s }",
+      new FakeApp(), "timeout: 1s\nonFlowComplete:\n  - launchApp\n",
+    );
+    expect(result.failure).toMatchObject({ kind: "timeout", message: "the flow exceeded its 1000ms timeout" });
+    expect(result.errors.join("\n")).toContain("onFlowComplete");
+    // Polling (elements) and the failure capture aside.
+    expect(app.log.filter(entry => entry !== "elements" && !entry.startsWith("capture "))).toEqual(["open", "preserve AppleLanguages", "launch locale=- log=app-1.log", "quit", "close", "restore AppleLanguages", "app close"]);
+  });
+
+  test("an interrupted run restores the snapshot too", async () => {
+    const app = new FakeApp(), controller = new AbortController();
+    const dir = mkdtempSync(path.join(tmpdir(), "e2e-driver-"));
+    mkdirSync(path.join(dir, "flows/area"), { recursive: true });
+    writeFileSync(path.join(dir, "flows/area/test.yaml"), `${HEADER}---\n- preserveAppDefaults: { keys: [AppleLanguages, AppleLocale] }\n- launchApp\n- assertVisible: { id: missing, timeout: 5s }`);
+    const clock = new VirtualClock(), sleep = clock.sleep.bind(clock);
+    clock.sleep = async (ms: number) => { if (clock.now() > 500) controller.abort(); return sleep(ms); };
+    const [result] = await runFlows([path.join(dir, "flows/area/test.yaml")], { backends: [new DriverBackend(app)], runDir: path.join(dir, "run"), clock, signal: controller.signal });
+    expect(result!.failure).toMatchObject({ kind: "interrupted" });
+    expect(app.log.slice(-2)).toEqual(["restore AppleLanguages,AppleLocale", "app close"]);
+  });
+
+  test("it refuses while the app runs, and changes nothing", async () => {
+    const app = new FakeApp();
+    app.refusePreserve = "preserveAppDefaults needs so.legend.spark.examples.kitchensink to be quit first";
+    const refused = await run("- preserveAppDefaults: [AppleLanguages]\n- launchApp", app);
+    expect(refused.result.failure).toMatchObject({ kind: "invalid", message: app.refusePreserve });
+    expect(app.log).toEqual(["open", "app close"]);
+    const late = await run("- launchApp\n- preserveAppDefaults: [AppleLanguages]");
+    expect(late.result.failure).toMatchObject({ kind: "invalid", message: "preserveAppDefaults runs before launchApp: the app is running" });
+  });
+});
+
 describe("white-box input (no black-box backend active)", () => {
   // FRAME is { x: 10, y: 20, width: 100, height: 40 }: its center is 60,40 in the main window.
   test.each([

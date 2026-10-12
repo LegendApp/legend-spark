@@ -22,5 +22,5 @@ export function useAppLanguages() {
     try { setConfirmed(await confirm(message)); }
     catch (cause) { setStatus({ error: describeError(cause) }); }
   }, []);
-  return { availability: app.getAppLanguageAvailability(), languages, error, status, choose, relaunch, confirmed, confirmWithDefaults };
+  return { availability: app.getAppAvailability("languages"), languages, error, status, choose, relaunch, confirmed, confirmWithDefaults };
 }

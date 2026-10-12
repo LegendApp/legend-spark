@@ -38,14 +38,18 @@ test("setAppLanguage stores a language or null and validates before the native c
 });
 
 test("availability is truthful and unsupported hosts reject typed before any native call", async () => {
-  expect(app.getAppLanguageAvailability()).toEqual({ available: true });
+  expect((app as Record<string, unknown>).getAppLanguageAvailability).toBeUndefined();
+  expect(app.getAppAvailability("languages")).toEqual({ available: true });
+  expect(() => app.getAppAvailability("dock" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
   installed = false;
-  expect(app.getAppLanguageAvailability()).toEqual({ available: false, reason: "missing-module" });
+  expect(app.getAppAvailability("languages")).toEqual({ available: false, reason: "missing-module" });
   await expect(app.getAppLanguages()).rejects.toMatchObject({ code: "E_MODULE_UNAVAILABLE" });
   installed = true;
   for (const os of ["windows", "ios", "web"]) {
     platform.OS = os;
-    expect(app.getAppLanguageAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
+    expect(app.getAppAvailability("languages")).toEqual({ available: false, reason: "unsupported-platform" });
+    // The rest of the app API is available on Windows.
+    expect(app.getAppAvailability()).toEqual(os === "windows" ? { available: true } : { available: false, reason: "unsupported-platform" });
     await expect(app.getAppLanguages()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
     await expect(app.setAppLanguage("ar")).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
   }

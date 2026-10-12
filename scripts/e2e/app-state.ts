@@ -323,3 +323,56 @@ export function macHost(): StateHost {
     },
   };
 }
+
+/** The `defaults` operations `preserveDefaults` needs; values are XML property lists. */
+export type DefaultsHost = {
+  running(bundleId: string): string[];
+  /** The key's value, or undefined when the domain does not hold it. */
+  read(domain: string, key: string): string | undefined;
+  write(domain: string, key: string, value: string): void;
+  /** Deletes the key; a key that is already absent is not an error. */
+  remove(domain: string, key: string): void;
+};
+
+/**
+ * `preserveAppDefaults` (docs/e2e-flows.md#preserveappdefaults): reads `keys` of the app's `defaults` domain and returns a
+ * restore that writes each previous value back, or deletes a key that was absent. `domain` is the bundle identifier the
+ * flow's app really runs under. Refuses while a process with that identifier runs, so the snapshot is what the next
+ * launch would read, and so a flow never changes the defaults of an app someone is using.
+ */
+export function preserveDefaults(domain: string, keys: readonly string[], expected: string, host: DefaultsHost = macDefaultsHost()): () => void {
+  if (!BUNDLE_ID.test(domain) || domain.startsWith("com.apple.")) throw new Error(`preserveAppDefaults refuses domain "${domain}": not an app's reverse-DNS identifier`);
+  if (domain !== expected && domain !== `${expected}.driver`) throw new Error(`preserveAppDefaults refuses ${domain}: only the flow's app ${expected} (or its isolated ${expected}.driver copy) may be changed`);
+  if (!keys.length || keys.some(key => !/^[A-Za-z0-9_.-]+$/.test(key))) throw new Error("preserveAppDefaults needs defaults keys such as AppleLanguages");
+  const running = host.running(domain);
+  if (running.length) throw new Error(`preserveAppDefaults needs ${domain} to be quit first, so the flow cannot change the defaults of a running copy; running: ${running.join(", ")}`);
+  const saved = keys.map(key => ({ key, value: host.read(domain, key) }));
+  return () => { for (const { key, value } of saved) value === undefined ? host.remove(domain, key) : host.write(domain, key, value); };
+}
+
+function macDefaultsHost(): DefaultsHost {
+  const run = (command: string, args: string[], input?: string) => {
+    const result = spawnSync(command, args, { encoding: "utf8", input });
+    if (result.error) throw result.error;
+    return result;
+  };
+  return {
+    running: macHost().running,
+    read(domain, key) {
+      const exported = run("defaults", ["export", domain, "-"]);
+      if (exported.status !== 0) throw new Error(`defaults export ${domain} failed (${exported.status}): ${exported.stderr.trim()}`);
+      const value = run("plutil", ["-extract", key, "xml1", "-o", "-", "-"], exported.stdout);
+      if (value.status === 0) return value.stdout;
+      if (value.stderr.includes("No value at that key path")) return undefined;
+      throw new Error(`plutil -extract ${key} failed (${value.status}): ${value.stderr.trim()}`);
+    },
+    write(domain, key, value) {
+      const result = run("defaults", ["write", domain, key, value]);
+      if (result.status !== 0) throw new Error(`defaults write ${domain} ${key} failed (${result.status}): ${result.stderr.trim()}`);
+    },
+    remove(domain, key) {
+      const result = run("defaults", ["delete", domain, key]);
+      if (result.status !== 0 && !/not found|Could not find key/.test(result.stderr)) throw new Error(`defaults delete ${domain} ${key} failed (${result.status}): ${result.stderr.trim()}`);
+    },
+  };
+}
