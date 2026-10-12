@@ -92,7 +92,8 @@ export interface Backend {
 /** Where a screenshot came from: the captured area in the coordinate space of element frames, and its pixels per point. */
 export type Capture = { frame: Rect; scale: number };
 
-export type BackendFactory = (options: { app?: string }) => Backend;
+/** `app`: the app bundle to drive. `state`: an isolated clone (the default) or the exact app with its real state (the release gate). */
+export type BackendFactory = (options: { app?: string; state?: "isolated" | "exact" }) => Backend;
 
 export type FailureKind =
   | "assertion" | "not-found" | "ambiguous" | "unsupported" | "invalid" | "timeout" | "interrupted" | "restore" | "format" | "error";

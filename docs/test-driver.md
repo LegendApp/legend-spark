@@ -86,6 +86,15 @@ Not pinned this way:
 No capture needs a mask for host settings: every difference measured is pinned above.
 `tests/e2e-kitchen-sink-launch.test.ts` launches a fake app and checks its arguments.
 
+## App state
+
+`e2e:run`, `ks:capture` and `scripts/test-devtools.ts` never launch the app itself: each driver session (one flow,
+one `ks:capture`) launches a clone with its own bundle and project identifiers (`<bundle id>.driver`, which is also
+the app id the clone reports to React Native DevTools), home, and temporary directories, deleted when the session
+ends. These runs, `clearState` included, work while a developer runs the same app and never touch that instance's
+data. The release gate drives the release artifact itself with its real state, and refuses while another instance
+of the app runs ([docs/e2e-flows.md](e2e-flows.md#app-state)).
+
 ## Launch contract and security
 
 - `SPARK_TEST_DRIVER_DIR` names a run directory the runner created: absolute, mode

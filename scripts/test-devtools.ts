@@ -26,10 +26,6 @@ chmodSync(chrome, 0o755);
 const port = await availablePort();
 const base = `http://127.0.0.1:${port}`;
 const app = new KitchenSinkApp(undefined, new URL(base));
-const { app: bundle, bundleId } = await app.open();
-const name = readFileSync(path.join(bundle, "Contents/Info.plist"), "utf8").match(/<key>CFBundleName<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
-assert.ok(name, "CFBundleName");
-const SHARED = `${name} (shared runtime)`, WORKER = `${name} (isolated runtime: ks-devtools)`;
 const probeSource = readFileSync(path.join(KITCHEN_SINK, "screens/devtools/probe.ts"), "utf8");
 // Fast Refresh edits a module that is its own refresh boundary, so the screen keeps its worker runtime.
 const markerFile = path.join(KITCHEN_SINK, "screens/devtools/FastRefreshMarker.tsx");
@@ -41,8 +37,13 @@ const session = spawnProcess([process.execPath, path.join(root, "scripts/spark.m
 let driver: Driver | undefined;
 let debuggerEvents: Message[] = [];
 const sockets: WebSocket[] = [];
-// Interrupted: stop the session too (the driven app quits when its driver connection closes).
-for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => { session.kill("SIGTERM"); void session.exited.then(() => process.exit(130)); });
+// Interrupted: stop the session and end the driver session too (the driven app quits when its driver connection closes).
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => {
+  session.kill("SIGTERM");
+  void Promise.allSettled([session.exited, driver?.close(), app.close()]).then(() => process.exit(130));
+});
+// The debug targets of the launched app: in an isolated driver session, the clone registers as its own bundle identifier.
+let launchedBundleId = "", SHARED = "", WORKER = "";
 
 async function until<T>(check: () => Promise<T | undefined | false>, label: string, timeout = 60000): Promise<T> {
   const deadline = Date.now() + timeout;
@@ -54,7 +55,7 @@ async function until<T>(check: () => Promise<T | undefined | false>, label: stri
   }
   throw new Error(`Timed out: ${label}`);
 }
-const targets = async () => (await (await fetch(`${base}/json/list`)).json() as Target[]).filter(target => target.appId === bundleId);
+const targets = async () => (await (await fetch(`${base}/json/list`)).json() as Target[]).filter(target => target.appId === launchedBundleId);
 const target = (title: string) => until(async () => (await targets()).find(item => item.title === title), `debug target "${title}" at /json/list`);
 const pass = (message: string) => console.log(`PASS ${message}`);
 
@@ -127,6 +128,11 @@ function sourceMap(map: { sources: string[]; mappings: string }) {
 }
 
 try {
+  const launched = await app.open();
+  launchedBundleId = launched.launchedBundleId;
+  const name = readFileSync(path.join(launched.app, "Contents/Info.plist"), "utf8").match(/<key>CFBundleName<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
+  assert.ok(name, "CFBundleName");
+  SHARED = `${name} (shared runtime)`; WORKER = `${name} (isolated runtime: ks-devtools)`;
   await until(async () => existsSync(stateFile(KITCHEN_SINK, "session.json")) && readJson(stateFile(KITCHEN_SINK, "session.json")).port === port && (await fetch(`${base}/status`)).ok, "spark dev ready", 120000);
   const sessionState = readJson(stateFile(KITCHEN_SINK, "session.json"));
   assert.equal(sessionState.compatible, true, `The dev build is not compatible with this session: ${sessionState.reason}`);
@@ -141,7 +147,7 @@ try {
   const worker = await target(WORKER);
   const listed = (await targets()).map(item => item.title).sort();
   assert.deepEqual(listed, [SHARED, WORKER].sort());
-  pass(`/json/list lists ${JSON.stringify(listed)} for ${bundleId}`);
+  pass(`/json/list lists ${JSON.stringify(listed)} for ${launchedBundleId}`);
 
   // 2. Console, evaluation and sources with source maps on the shared runtime.
   let main = await connect(shared);
