@@ -131,7 +131,7 @@ int main() { @autoreleasepool {
 
   // A prompt that never answers (macOS dropping a location request) settles with the current status after the timeout
   // and clears its pending entry, so the next request is not joined to it; activation with the status decided settles it early.
-  simulated.answerTimeout = 0.3;
+  simulated.answerTimeout = 2; // Generous, so a slow runner drains the requests and the activation below before it fires.
   CHECK([simulated simulate:@"location" authorization:nil answer:@"ignore" error:&error]);
   Outcome dropped = {}, joined = {};
   [simulated request:@"location" target:nil completion:Record(&dropped)];
@@ -139,7 +139,7 @@ int main() { @autoreleasepool {
   Drain();
   [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidBecomeActiveNotification object:NSApp]; Drain(); // Still undetermined.
   CHECK(dropped.calls == 0 && joined.calls == 0);
-  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.4]];
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:2.1]];
   CHECK(dropped.calls == 1 && joined.calls == 1 && [dropped.authorization isEqual:@"notDetermined"] && !dropped.code);
   CHECK([simulated simulate:@"location" authorization:nil answer:@"allow" error:&error]);
   Outcome fresh = {};
@@ -153,7 +153,7 @@ int main() { @autoreleasepool {
   CHECK([simulated simulate:@"contacts" authorization:@"denied" answer:nil error:&error]); // Changed in System Settings meanwhile.
   [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidBecomeActiveNotification object:NSApp]; Drain();
   CHECK(activated.calls == 1 && [activated.authorization isEqual:@"denied"]);
-  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.4]]; // The timer finds nothing left to settle.
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:2.1]]; // The timer finds nothing left to settle.
   CHECK(activated.calls == 1 && fresh.calls == 1);
 
   // Settings are recorded, never opened.
