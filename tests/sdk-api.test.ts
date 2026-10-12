@@ -941,7 +941,7 @@ test("system feature availability is per platform and rejects unknown features",
 test("system events cover session, power, thermal, network, locale, clock and memory pressure; a pressure event without a valid level is E_INVALID_DATA", async () => {
   const events: unknown[] = [], errors: unknown[] = [];
   const subscription = await system.onSystemEvent(event => events.push(event), { onError: error => errors.push(error) });
-  expect(calls.at(-1)!.args.types).toHaveLength(17);
+  expect(calls.at(-1)!.args.types).toHaveLength(19);
   const types = ["sessionActive", "sessionInactive", "lowPowerChanged", "thermalChanged", "networkChanged", "proxyChanged", "localeChanged", "timeZoneChanged", "clockChanged"];
   for (const type of types) emit("NativeDesktopApp", "desktop", { type });
   emit("NativeDesktopApp", "desktop", { type: "memoryPressure", level: "critical", extra: 1 });
@@ -961,6 +961,33 @@ test("system event subscriptions name the types native observers are installed f
   await subscription.remove(); calls.length = 0;
   for (const options of [{ types: [] }, { types: ["bluetooth"] }, { types: "sleep" }, { onError: 1 }, { typo: true }]) await expect(system.onSystemEvent(() => {}, options as never)).rejects.toMatchObject({ code: expect.stringMatching(/E_INVALID_ARGUMENT|E_UNSUPPORTED_OPTION/) });
   expect(calls).toHaveLength(0);
+});
+const PREFERENCES = { appearance: "dark", automaticAppearance: true, accentColor: "#007aff", highlightColor: "#b3d7ff", increaseContrast: false, reduceTransparency: true,
+  reduceMotion: false, differentiateWithoutColor: false, invertColors: false, keyboardNavigation: true };
+test("appearance preferences are validated on macOS and typed unsupported on Windows before any native call", async () => {
+  handlers.set("NativeDesktopSystem.preferences", () => PREFERENCES);
+  expect(await system.getAppearancePreferences()).toEqual(PREFERENCES);
+  expect(calls.at(-1)).toMatchObject({ method: "preferences", args: {} });
+  for (const bad of [{ appearance: "auto" }, { accentColor: "#007AFF" }, { highlightColor: "blue" }, { reduceMotion: 1 }, { keyboardNavigation: undefined }]) {
+    handlers.set("NativeDesktopSystem.preferences", () => ({ ...PREFERENCES, ...bad }));
+    await expect(system.getAppearancePreferences()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  expect(system.getSystemAvailability("appearancePreferences")).toEqual({ available: true });
+  const events: unknown[] = [];
+  const subscription = await system.onSystemEvent(event => events.push(event), { types: ["systemColorsChanged", "accessibilityDisplayChanged"] });
+  expect(calls.at(-1)).toMatchObject({ method: "observe", args: { types: ["systemColorsChanged", "accessibilityDisplayChanged"] } });
+  emit("NativeDesktopApp", "desktop", { type: "appearanceChanged" }); emit("NativeDesktopApp", "desktop", { type: "systemColorsChanged" }); emit("NativeDesktopApp", "desktop", { type: "accessibilityDisplayChanged" });
+  expect(events).toEqual([{ type: "systemColorsChanged" }, { type: "accessibilityDisplayChanged" }]);
+  await subscription.remove();
+  platform.OS = "windows"; calls.length = 0;
+  expect(system.getSystemAvailability("appearancePreferences")).toEqual({ available: false, reason: "unsupported-platform" });
+  await expect(system.getAppearancePreferences()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  await expect(system.onSystemEvent(() => {}, { types: ["appearanceChanged", "accessibilityDisplayChanged"] })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  expect(calls).toHaveLength(0);
+  const all = await system.onSystemEvent(() => {});
+  expect(calls.at(-1)!.args.types).toHaveLength(17);
+  expect(calls.at(-1)!.args.types).not.toContain("systemColorsChanged");
+  await all.remove();
 });
 test("a failed native observe rejects and leaves no listener", async () => {
   handlers.set("NativeDesktopSystem.observe", () => { throw nativeError("E_NATIVE"); });

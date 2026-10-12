@@ -1,0 +1,41 @@
+appId: so.legend.spark.examples.kitchensink
+name: Appearance and accessibility events update the reported preferences
+intent: >
+  With the Appearance preferences screen subscribed to appearanceChanged, systemColorsChanged and
+  accessibilityDisplayChanged, each simulateSystemEvent delivers its event through the system module's native
+  emitter and sets the values it carries; the screen logs the event, re-reads getAppearancePreferences and shows
+  them. An event without values only invalidates. The Mac's appearance and accessibility settings are untouched.
+checks: [APPR-EVENTS-01]
+tags: [appearance-theming]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://appearance-theming/preferences" }
+- extendedWaitUntil: { visible: { id: appearance-theming-preferences-listening }, timeout: 10s }
+- assertVisible: { id: appearance-theming-preferences-no-events }
+- simulateSystemEvent: { type: appearanceChanged, appearance: dark, automaticAppearance: false }
+- assertText: { id: appearance-theming-preferences-event-0, equals: appearanceChanged }
+- assertText: { id: appearance-theming-preferences-appearance, equals: dark }
+- assertText: { id: appearance-theming-preferences-automaticAppearance, equals: "false" }
+- simulateSystemEvent: { type: systemColorsChanged, accentColor: "#ff2d55", highlightColor: "#ffd60a" }
+- assertText: { id: appearance-theming-preferences-event-0, equals: systemColorsChanged }
+- assertText: { id: appearance-theming-preferences-accentColor, equals: "#ff2d55" }
+- assertText: { id: appearance-theming-preferences-highlightColor, equals: "#ffd60a" }
+- simulateSystemEvent: { type: accessibilityDisplayChanged, increaseContrast: true, reduceTransparency: true, reduceMotion: true, differentiateWithoutColor: true, invertColors: true }
+- assertText: { id: appearance-theming-preferences-event-0, equals: accessibilityDisplayChanged }
+- assertText: { id: appearance-theming-preferences-increaseContrast, equals: "true" }
+- assertText: { id: appearance-theming-preferences-reduceTransparency, equals: "true" }
+- assertText: { id: appearance-theming-preferences-reduceMotion, equals: "true" }
+- assertText: { id: appearance-theming-preferences-differentiateWithoutColor, equals: "true" }
+- assertText: { id: appearance-theming-preferences-invertColors, equals: "true" }
+- simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: false }
+- assertText: { id: appearance-theming-preferences-reduceMotion, equals: "false" }
+- assertText: { id: appearance-theming-preferences-increaseContrast, equals: "true" }
+- simulateSystemEvent: appearanceChanged
+- assertText: { id: appearance-theming-preferences-event-0, equals: appearanceChanged }
+- assertText: { id: appearance-theming-preferences-event-1, equals: accessibilityDisplayChanged }
+- assertText: { id: appearance-theming-preferences-event-3, equals: systemColorsChanged }
+- assertText: { id: appearance-theming-preferences-event-4, equals: appearanceChanged }
+- assertText: { id: appearance-theming-preferences-appearance, equals: dark }
+- takeScreenshot: appearance-preferences-injected
+- assertNotVisible: { id: appearance-theming-preferences-no-events }
+- assertNotVisible: { id: appearance-theming-preferences-error }

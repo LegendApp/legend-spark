@@ -55,24 +55,45 @@ export interface NetworkStatus {
   proxies: { http: string | null; https: string | null; socks: string | null; autoConfigURL: string | null };
 }
 export type MemoryPressureLevel = "normal" | "warning" | "critical";
-/** Invalidations: query getSystemInfo() or getNetworkStatus() again for current values. */
+/** The user's appearance and accessibility display settings (macOS). Colors are sRGB `#rrggbb`. */
+export interface AppearancePreferences {
+  /** System Settings > Appearance. The app can still render otherwise: see getSystemInfo().dark for its effective appearance. */
+  appearance: "light" | "dark";
+  /** Appearance is Auto: it follows the time of day. */
+  automaticAppearance: boolean;
+  /** The accent color controls use, in the app's effective appearance. */
+  accentColor: string;
+  /** The text selection (highlight) color, in the app's effective appearance. */
+  highlightColor: string;
+  increaseContrast: boolean;
+  reduceTransparency: boolean;
+  reduceMotion: boolean;
+  differentiateWithoutColor: boolean;
+  invertColors: boolean;
+  /** Keyboard navigation (System Settings > Keyboard), which moves focus between all controls. It has no change event. */
+  keyboardNavigation: boolean;
+}
+/** Invalidations: query getSystemInfo(), getNetworkStatus() or getAppearancePreferences() again for current values. */
 export type SystemEvent =
   | { type: "sleep" | "wake" | "lock" | "unlock" | "sessionActive" | "sessionInactive" | "powerChanged" | "lowPowerChanged" | "thermalChanged"
-    | "networkChanged" | "proxyChanged" | "localeChanged" | "timeZoneChanged" | "clockChanged" | "appearanceChanged" | "displaysChanged" }
+    | "networkChanged" | "proxyChanged" | "localeChanged" | "timeZoneChanged" | "clockChanged" | "appearanceChanged" | "displaysChanged"
+    | "systemColorsChanged" | "accessibilityDisplayChanged" }
   | { type: "memoryPressure"; level: MemoryPressureLevel };
 /** Capabilities that not every platform has. */
-export type SystemFeature = "appBadge" | "appProgress" | "attention" | "dockMenu" | "taskbarMenu" | "thermalState" | "networkStatus" | "memoryPressure" | "lowPowerChanges" | "timeZoneChanges";
+export type SystemFeature = "appBadge" | "appProgress" | "attention" | "dockMenu" | "taskbarMenu" | "thermalState" | "networkStatus" | "memoryPressure" | "lowPowerChanges" | "timeZoneChanges"
+  | "appearancePreferences";
 export type LoginItemStatus = "enabled" | "disabled" | "requiresApproval" | "notFound" | "unavailable";
 export interface AttentionOptions { kind?: "informational" | "critical" }
 export interface PreventSleepOptions { reason: string; kind?: "display" | "system" }
 let sequence = 0;
 const token = () => `system-${Date.now()}-${++sequence}`;
 // Windows has no public thermal-state API. Its network status, memory pressure, battery saver and time zone
-// notifications are not implemented yet.
+// notifications, and its appearance preferences (#342), are not implemented yet.
 const FEATURES: Record<SystemFeature, readonly string[]> = {
   appBadge: ["macos", "windows"], appProgress: ["macos", "windows"], attention: ["macos", "windows"],
   dockMenu: ["macos"], taskbarMenu: ["windows"],
   thermalState: ["macos"], networkStatus: ["macos"], memoryPressure: ["macos"], lowPowerChanges: ["macos"], timeZoneChanges: ["macos"],
+  appearancePreferences: ["macos"],
 };
 /** Without a feature, whether the system module is usable at all. */
 export function getSystemAvailability(feature?: SystemFeature): Availability {
@@ -113,9 +134,25 @@ function isNetworkStatus(value: unknown): value is NetworkStatus {
 export function getSystemInfo(): Promise<SystemInfo> { return call("info", {}, isInfo); }
 /** The current network path and system proxies (macOS). */
 export async function getNetworkStatus(): Promise<NetworkStatus> {
-  const available = getSystemAvailability("networkStatus");
-  if (!available.available) throw new SparkError(available.reason === "missing-module" ? "E_MODULE_UNAVAILABLE" : "E_UNSUPPORTED_PLATFORM", "Network status is unavailable");
+  requireFeature("networkStatus", "Network status");
   return call("network", {}, isNetworkStatus);
+}
+const HEX = /^#[0-9a-f]{6}$/;
+const PREFERENCE_FLAGS = ["automaticAppearance", "increaseContrast", "reduceTransparency", "reduceMotion", "differentiateWithoutColor", "invertColors", "keyboardNavigation"] as const;
+function isPreferences(value: unknown): value is AppearancePreferences {
+  if (!value || typeof value !== "object") return false;
+  const preferences = value as AppearancePreferences;
+  return (preferences.appearance === "light" || preferences.appearance === "dark") && HEX.test(preferences.accentColor) && HEX.test(preferences.highlightColor)
+    && PREFERENCE_FLAGS.every(key => typeof preferences[key] === "boolean");
+}
+function requireFeature(feature: SystemFeature, name: string) {
+  const available = getSystemAvailability(feature);
+  if (!available.available) throw new SparkError(available.reason === "missing-module" ? "E_MODULE_UNAVAILABLE" : "E_UNSUPPORTED_PLATFORM", `${name} is unavailable`);
+}
+/** The user's appearance and accessibility display settings (macOS). `systemColorsChanged`, `accessibilityDisplayChanged` and `appearanceChanged` invalidate them. */
+export async function getAppearancePreferences(): Promise<AppearancePreferences> {
+  requireFeature("appearancePreferences", "Appearance preferences");
+  return call("preferences", {}, isPreferences);
 }
 export function getLoginItemStatus(): Promise<LoginItemStatus> { return call("loginStatus", {}, (value): value is LoginItemStatus => typeof value === "string" && ["enabled", "disabled", "requiresApproval", "notFound", "unavailable"].includes(value)); }
 export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
@@ -178,9 +215,12 @@ async function createLauncherMenu(value: LauncherMenuOptions, platform: "macos" 
 export function createDockMenu(options: DockMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "macos"); }
 export function createTaskbarMenu(options: TaskbarMenuOptions): Promise<AsyncRegistration> { return createLauncherMenu(options, "windows"); }
 const SYSTEM_EVENTS: readonly SystemEvent["type"][] = ["sleep", "wake", "lock", "unlock", "sessionActive", "sessionInactive", "powerChanged", "lowPowerChanged", "thermalChanged",
-  "networkChanged", "proxyChanged", "localeChanged", "timeZoneChanged", "clockChanged", "memoryPressure", "appearanceChanged", "displaysChanged"];
+  "networkChanged", "proxyChanged", "localeChanged", "timeZoneChanged", "clockChanged", "memoryPressure", "appearanceChanged", "displaysChanged", "systemColorsChanged", "accessibilityDisplayChanged"];
+// Events whose platform support is narrower than the module's. Requesting one where it is unsupported rejects; omitted `types` leave it out.
+const EVENT_FEATURES: Partial<Record<SystemEvent["type"], SystemFeature>> = { systemColorsChanged: "appearancePreferences", accessibilityDisplayChanged: "appearancePreferences" };
+const eventAvailable = (type: SystemEvent["type"]) => { const feature = EVENT_FEATURES[type]; return !feature || FEATURES[feature].includes(Platform.OS); };
 export interface SystemEventOptions {
-  /** Event types to receive; omitted, every type. Network, proxy and memory pressure observers are installed only for subscriptions that include their events. */
+  /** Event types to receive; omitted, every type this platform delivers. Network, proxy and memory pressure observers are installed only for subscriptions that include their events. */
   types?: readonly SystemEvent["type"][];
   /** Receives E_INVALID_DATA for a malformed native event. Without it, the error is rethrown asynchronously. */
   onError?: (error: SparkError) => void;
@@ -188,8 +228,10 @@ export interface SystemEventOptions {
 export async function onSystemEvent(handler: (event: SystemEvent) => void, value: SystemEventOptions = {}): Promise<AsyncRegistration> {
   if (typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected system event handler");
   options(value, ["types", "onError"]);
-  const types = value.types ?? SYSTEM_EVENTS, onError = value.onError;
+  const types = value.types ?? SYSTEM_EVENTS.filter(eventAvailable), onError = value.onError;
   if (!Array.isArray(types) || !types.length || types.some(type => !SYSTEM_EVENTS.includes(type))) throw new SparkError("E_INVALID_ARGUMENT", "Expected a nonempty list of system event types");
+  const unsupported = types.find(type => !eventAvailable(type));
+  if (unsupported) throw new SparkError("E_UNSUPPORTED_PLATFORM", `${unsupported} events are not available on this platform`);
   if (onError !== undefined && typeof onError !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected onError callback");
   const id = token(); let stopped = false;
   const subscription = onDesktopEvent(event => {

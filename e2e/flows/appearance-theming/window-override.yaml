@@ -1,0 +1,28 @@
+appId: so.legend.spark.examples.kitchensink
+name: One window's appearance overrides the app's
+intent: >
+  The Appearance preferences screen calls setWindowOptions(windowId, { appearance }) on its own window: dark,
+  then light, then system (follow the app). Each resolves and the screen shows the applied value; the
+  semantic color swatches on the screen resolve in the window's appearance, so the dark capture shows dark
+  AppKit colors in an otherwise light app. Leaving the screen restores the window to the app's appearance.
+checks: [APPR-WINDOW-01]
+tags: [appearance-theming]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://appearance-theming/preferences" }
+- extendedWaitUntil: { visible: { id: appearance-theming-preferences-window-dark }, timeout: 10s }
+- assertText: { id: appearance-theming-preferences-window-applied, equals: system }
+- tapOn: { id: appearance-theming-preferences-window-dark }
+- assertText: { id: appearance-theming-preferences-window-applied, equals: dark }
+- scroll: { on: { id: appearance-theming-preferences-content }, direction: down, amount: 2000 }
+- takeScreenshot: appearance-window-dark
+- scroll: { on: { id: appearance-theming-preferences-content }, direction: up, amount: 2000 }
+- tapOn: { id: appearance-theming-preferences-window-light }
+- assertText: { id: appearance-theming-preferences-window-applied, equals: light }
+- tapOn: { id: appearance-theming-preferences-window-dark }
+- assertText: { id: appearance-theming-preferences-window-applied, equals: dark }
+- tapOn: { id: appearance-theming-preferences-window-system }
+- assertText: { id: appearance-theming-preferences-window-applied, equals: system }
+- scroll: { on: { id: appearance-theming-preferences-content }, direction: down, amount: 2000 }
+- takeScreenshot: appearance-window-system
+- assertNotVisible: { id: appearance-theming-preferences-error }

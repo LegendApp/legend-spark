@@ -637,6 +637,7 @@
   ],
   "./system": [
     "AppProgress",
+    "AppearancePreferences",
     "AsyncRegistration",
     "AttentionOptions",
     "DockMenuItem",
@@ -655,6 +656,7 @@
     "ThermalState",
     "createDockMenu",
     "createTaskbarMenu",
+    "getAppearancePreferences",
     "getLoginItemStatus",
     "getNetworkStatus",
     "getSystemAvailability",

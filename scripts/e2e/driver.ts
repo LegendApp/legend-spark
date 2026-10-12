@@ -16,7 +16,11 @@ export type Capture = { file: string; width: number; height: number; scale: numb
 export type InputTarget = { testID: string; offset?: { x: number; y: number } } | { point: { x: number; y: number }; window?: DriverWindow };
 export type Modifier = "cmd" | "ctrl" | "option" | "shift" | "fn";
 /** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
-export type SimulatedSystemEvent = { type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string };
+export type SimulatedSystemEvent = {
+  type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string;
+  appearance?: "light" | "dark"; automaticAppearance?: boolean; accentColor?: string; highlightColor?: string;
+  increaseContrast?: boolean; reduceTransparency?: boolean; reduceMotion?: boolean; differentiateWithoutColor?: boolean; invertColors?: boolean;
+};
 export type MouseButton = "left" | "right" | "back" | "forward";
 /** A trackpad gesture (docs/test-driver.md#input). `rotation` is AppKit's: degrees, counterclockwise positive. */
 export type Gesture =
@@ -194,8 +198,10 @@ export class Driver {
   /** Advances the virtual motion clock and every motion layer together. */
   async advanceClock(durationMs: number) { return clock(await this.request({ command: "advanceClock", durationMs }, 10000)); }
   /** Delivers a system event through the system module (docs/system.md#testing-system-events), with the state it implies. */
-  async simulateSystemEvent({ type, thermal, lowPower, source, network, level }: SimulatedSystemEvent) {
-    const state = { thermalState: thermal, lowPowerMode: lowPower, onBattery: source === undefined ? undefined : source === "battery", network, level };
+  async simulateSystemEvent({ type, thermal, lowPower, source, network, level, appearance, automaticAppearance, accentColor, highlightColor,
+    increaseContrast, reduceTransparency, reduceMotion, differentiateWithoutColor, invertColors }: SimulatedSystemEvent) {
+    const state = { thermalState: thermal, lowPowerMode: lowPower, onBattery: source === undefined ? undefined : source === "battery", network, level, appearance, automaticAppearance,
+      accentColor, highlightColor, increaseContrast, reduceTransparency, reduceMotion, differentiateWithoutColor, invertColors };
     await this.request({ command: "simulateSystemEvent", type, ...Object.fromEntries(Object.entries(state).filter(([, value]) => value !== undefined)) }, 10000);
   }
   /** Engine state of the MotionView with (or containing the view with) this testID, and its latest motion. */

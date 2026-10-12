@@ -1,4 +1,5 @@
 #import "SparkSystemState.h"
+#import "SparkAppearancePreferences.h"
 #import <AppKit/AppKit.h>
 #import <CFNetwork/CFNetwork.h>
 #import <Network/Network.h>
@@ -180,6 +181,8 @@ static void ProxiesChanged(SCDynamicStoreRef, CFArrayRef, void *) { SparkEmit(@{
     @"localeChanged": @[local, NSCurrentLocaleDidChangeNotification],
     @"timeZoneChanged": @[local, NSSystemTimeZoneDidChangeNotification],
     @"clockChanged": @[local, NSSystemClockDidChangeNotification],
+    @"systemColorsChanged": @[local, NSSystemColorsDidChangeNotification],
+    @"accessibilityDisplayChanged": @[workspace, NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification],
   };
   [definitions enumerateKeysAndObjectsUsingBlock:^(NSString *type, NSArray *definition, BOOL *) {
     NSArray *entry = self->_notifications[type];
@@ -201,38 +204,51 @@ static void ProxiesChanged(SCDynamicStoreRef, CFArrayRef, void *) { SparkEmit(@{
 
 // Test driver: {"command": "simulateSystemEvent", "type", ...} delivers a system event through the same
 // emitter as the OS observers, so a flow can exercise events it must not cause (sleep, lock, thermal
-// pressure). `thermalState`, `lowPowerMode`, `onBattery` and `network` (online/offline) go with their event
-// type and override what getSystemInfo and getNetworkStatus report until the app quits; memoryPressure takes
+// pressure, accessibility settings). The state fields listed for an event type go with it and override what
+// getSystemInfo, getNetworkStatus and getAppearancePreferences report until the app quits; memoryPressure needs
 // `level`. The OS is untouched. Reachable only through an authenticated driver session.
 static NSDictionary *DriverFailure(NSString *code, NSString *message) { return @{ @"ok": @NO, @"error": @{ @"code": code, @"message": message } }; }
 static BOOL IsBool(id value) { return [value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID(); }
+static BOOL IsHex(id value) {
+  return [value isKindOfClass:NSString.class] && [value rangeOfString:@"^#[0-9a-f]{6}$" options:NSRegularExpressionSearch].location != NSNotFound;
+}
 @interface SparkSystemStateDriver : NSObject
 @end
 @implementation SparkSystemStateDriver
 + (void)load {
   SparkTestDriverRegisterCommand(@"simulateSystemEvent", ^(NSDictionary *request, SparkTestDriverReply reply) {
     NSArray *plain = @[@"sleep", @"wake", @"lock", @"unlock", @"sessionActive", @"sessionInactive", @"proxyChanged", @"localeChanged",
-      @"timeZoneChanged", @"clockChanged", @"appearanceChanged", @"displaysChanged"];
-    // Event type -> its state field and the values that field accepts (none listed: a boolean).
-    NSDictionary *stateful = @{ @"thermalChanged": @[@"thermalState", @[@"nominal", @"fair", @"serious", @"critical"]], @"lowPowerChanged": @[@"lowPowerMode"],
-      @"powerChanged": @[@"onBattery"], @"networkChanged": @[@"network", @[@"online", @"offline"]], @"memoryPressure": @[@"level", @[@"normal", @"warning", @"critical"]] };
+      @"timeZoneChanged", @"clockChanged", @"displaysChanged"];
+    // Event type -> its state fields -> the values each accepts: a list, @"bool" or @"hex" (#rrggbb).
+    NSDictionary<NSString *, NSDictionary *> *stateful = @{
+      @"thermalChanged": @{ @"thermalState": @[@"nominal", @"fair", @"serious", @"critical"] }, @"lowPowerChanged": @{ @"lowPowerMode": @"bool" },
+      @"powerChanged": @{ @"onBattery": @"bool" }, @"networkChanged": @{ @"network": @[@"online", @"offline"] },
+      @"memoryPressure": @{ @"level": @[@"normal", @"warning", @"critical"] },
+      @"appearanceChanged": @{ @"appearance": @[@"light", @"dark"], @"automaticAppearance": @"bool" },
+      @"systemColorsChanged": @{ @"accentColor": @"hex", @"highlightColor": @"hex" },
+      @"accessibilityDisplayChanged": @{ @"increaseContrast": @"bool", @"reduceTransparency": @"bool", @"reduceMotion": @"bool",
+        @"differentiateWithoutColor": @"bool", @"invertColors": @"bool" },
+    };
     NSString *type = request[@"type"];
     if (![type isKindOfClass:NSString.class] || (![plain containsObject:type] && !stateful[type])) { reply(DriverFailure(@"E_INVALID_ARGUMENT", @"simulateSystemEvent expects a system event type")); return; }
-    NSString *field = [stateful[type] firstObject];
-    id value = field ? request[field] : nil;
-    for (NSString *key in @[@"thermalState", @"lowPowerMode", @"onBattery", @"network", @"level"])
-      if (request[key] && ![key isEqual:field]) { reply(DriverFailure(@"E_INVALID_ARGUMENT", [NSString stringWithFormat:@"%@ does not apply to %@", key, type])); return; }
-    NSArray *allowed = [stateful[type] count] > 1 ? stateful[type][1] : nil;
-    if ([type isEqual:@"memoryPressure"] && !value) { reply(DriverFailure(@"E_INVALID_ARGUMENT", @"memoryPressure needs a level")); return; }
-    if (value && (allowed ? ![allowed containsObject:value] : !IsBool(value))) { reply(DriverFailure(@"E_INVALID_ARGUMENT", [NSString stringWithFormat:@"Invalid %@", field])); return; }
+    NSDictionary *fields = stateful[type] ?: @{};
+    NSMutableDictionary *values = [NSMutableDictionary new];
+    for (NSString *key in request) {
+      if ([@[@"command", @"type", @"id"] containsObject:key]) continue;
+      id accepts = fields[key], value = request[key];
+      if (!accepts) { reply(DriverFailure(@"E_INVALID_ARGUMENT", [NSString stringWithFormat:@"%@ does not apply to %@", key, type])); return; }
+      BOOL valid = [accepts isEqual:@"bool"] ? IsBool(value) : [accepts isEqual:@"hex"] ? IsHex(value) : [accepts containsObject:value];
+      if (!valid) { reply(DriverFailure(@"E_INVALID_ARGUMENT", [NSString stringWithFormat:@"Invalid %@", key])); return; }
+      values[key] = value;
+    }
+    if ([type isEqual:@"memoryPressure"] && !values[@"level"]) { reply(DriverFailure(@"E_INVALID_ARGUMENT", @"memoryPressure needs a level")); return; }
     BOOL observed = NO;
     for (SparkSystemStateObserver *observer in LiveObservers()) observed = observed || [observer observes:type];
     if (!observed) { reply(DriverFailure(@"E_NO_OBSERVER", [NSString stringWithFormat:@"No onSystemEvent registration receives %@", type])); return; }
-    if ([type isEqual:@"memoryPressure"]) SparkEmit(@{ @"type": type, @"level": value });
-    else {
-      if (value) { if (!overrides) overrides = [NSMutableDictionary new]; overrides[field] = value; }
-      SparkEmit(@{ @"type": type });
-    }
+    if ([type isEqual:@"memoryPressure"]) { SparkEmit(@{ @"type": type, @"level": values[@"level"] }); reply(@{ @"ok": @YES }); return; }
+    if ([@[@"appearanceChanged", @"systemColorsChanged", @"accessibilityDisplayChanged"] containsObject:type]) SparkSimulateAppearancePreferences(values);
+    else if (values.count) { if (!overrides) overrides = [NSMutableDictionary new]; [overrides addEntriesFromDictionary:values]; }
+    SparkEmit(@{ @"type": type });
     reply(@{ @"ok": @YES });
   });
 }
