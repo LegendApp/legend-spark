@@ -4,8 +4,8 @@ intent: >
   Every native-controls screen of the Kitchen Sink catalog (Sidebar: data items, Sidebar: dynamic heights, Sidebar: React rows, Split view, Glass, SF Symbols, Search field, Toggles, Value inputs, Indicators, Button styles, Table, Outline, Pickers, Popover, Tab view) opens from its spark-ks:// link in the
   running app, its root renders, and the accessibility audit of the main window finds no errors: every control and
   image has a label or title, every control takes keyboard focus, and all enabled text meets the HIG contrast ratio
-  against what is rendered behind it. On Button styles it audits again with the React Native Pressables disabled: their
-  dimmed text is exempt, as a disabled AppKit control's is.
+  against what is rendered behind it. On Button styles it audits again with the page's controls disabled: the React
+  Native Pressables' dimmed text is exempt, as a disabled AppKit control's is.
   Runs in light and dark, in English and Arabic (right to left).
 checks: [A11Y-AUDIT-01]
 tags: [accessibility]
@@ -26,8 +26,8 @@ matrix:
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: inputs } }
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: indicators } }
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: buttons } }
-# Disabled React Native Pressables, whose dimmed text the audit exempts from contrast as it does a disabled AppKit control's (#350)
-- tapOn: { id: native-controls-buttons-pressable-disable }
+# Disabled controls and React Native Pressables, whose dimmed text the audit exempts from contrast as it does a disabled AppKit control's (#350)
+- tapOn: { id: native-controls-buttons-disabled }
 - assertA11y: { id: native-controls-buttons-pressable, enabled: false }
 - auditAccessibility: { maxErrors: 0 }
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: table } }

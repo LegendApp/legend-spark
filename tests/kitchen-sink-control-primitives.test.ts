@@ -77,7 +77,7 @@ test("buttons: plain rows omit the variant; the keyboard section has one default
   expect(text("native-controls-buttons-keyboard-default-value")).toBe("1");
 });
 
-test("buttons: the React Native Pressables follow the page's and their own disabled state, and the selectable one toggles its selected state", async () => {
+test("buttons: the React Native Pressables follow the page's disabled state, and the selectable one toggles its selected state", async () => {
   await mount(Buttons);
   const pressable = "native-controls-buttons-pressable", selectable = `${pressable}-selectable`;
   expect(byID(pressable).props).toMatchObject({ accessibilityRole: "button", accessibilityLabel: "Pressable", disabled: false });
@@ -86,14 +86,10 @@ test("buttons: the React Native Pressables follow the page's and their own disab
   expect(byID(selectable).props.accessibilityState).toEqual({ selected: false });
   await act(async () => byID(selectable).props.onPress());
   expect(byID(selectable).props.accessibilityState).toEqual({ selected: true });
-  await act(async () => byID(`${pressable}-disable`).props.onPress());
-  expect(byID(`${pressable}-disable`).props.accessibilityState).toEqual({ checked: true });
-  expect(byID(pressable).props.disabled).toBe(true);
-  expect(byID(selectable).props.disabled).toBe(true);
-  await act(async () => byID(`${pressable}-disable`).props.onPress());
-  expect(byID(pressable).props.disabled).toBe(false);
   await act(async () => byID("native-controls-buttons-disabled").props.onValueChange(true));
-  for (const each of [pressable, selectable, `${pressable}-disable`]) expect(byID(each).props.disabled).toBe(true);
+  for (const each of [pressable, selectable]) expect(byID(each).props.disabled).toBe(true);
+  await act(async () => byID("native-controls-buttons-disabled").props.onValueChange(false));
+  for (const each of [pressable, selectable]) expect(byID(each).props.disabled).toBe(false);
 });
 
 test("unsupported platforms show the typed error in place of each control, never a substitute", async () => {

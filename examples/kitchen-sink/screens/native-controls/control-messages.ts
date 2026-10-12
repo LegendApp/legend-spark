@@ -26,7 +26,6 @@ type ControlMessages = {
   pressables: string;
   pressable: string;
   selectable: string;
-  disablePressables: string;
   /** Accessibility label for a sample: the row and its size. */
   label(row: string, size: string): string;
 };
@@ -53,7 +52,6 @@ const en: ControlMessages = {
   pressables: "React Native Pressable",
   pressable: "Pressable",
   selectable: "Selectable",
-  disablePressables: "Disable Pressables",
   label: (row, size) => `${row}, ${size}`,
 };
 
@@ -79,7 +77,6 @@ const ar: ControlMessages = {
   pressables: "Pressable في React Native",
   pressable: "قابل للضغط",
   selectable: "قابل للتحديد",
-  disablePressables: "تعطيل عناصر Pressable",
   label: (row, size) => `${row}، ${size}`,
 };
 

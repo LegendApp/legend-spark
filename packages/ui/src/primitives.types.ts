@@ -4,6 +4,7 @@ export type ControlSize = "mini" | "small" | "regular" | "large";
 export type PrimitiveKind = "checkbox" | "radio-group" | "switch" | "slider" | "stepper" | "combo-box" | "token-field" | "path-control" | "progress" | "level-indicator" | "disclosure-triangle" | "date-picker" | "color-well";
 export interface PrimitiveControlProps extends ControlProps { size?: ControlSize }
 export type CheckboxValue = boolean | "mixed";
+/** On macOS the checkbox sits at the leading edge of its frame at its own size and takes clicks on its box and label only, as an AppKit checkbox does. */
 export interface CheckboxProps extends PrimitiveControlProps { value: CheckboxValue; onValueChange: (value: CheckboxValue) => void; label?: string }
 export interface RadioGroupProps extends PrimitiveControlProps { value: string; options: readonly SelectOption[]; onValueChange: (value: string) => void }
 export interface SwitchProps extends PrimitiveControlProps { value: boolean; onValueChange: (value: boolean) => void; label?: string }

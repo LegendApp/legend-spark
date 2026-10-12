@@ -119,6 +119,7 @@ static NSDate *SparkDate(id milliseconds) { return [milliseconds isKindOfClass:N
   if ([kind isEqual:@"checkbox"] || [kind isEqual:@"disclosure-triangle"]) {
     NSButton *button = [NSButton buttonWithTitle:@"" target:self action:@selector(changed:)];
     button.buttonType = [kind isEqual:@"checkbox"] ? NSButtonTypeSwitch : NSButtonTypePushOnPushOff;
+    button.lineBreakMode = NSLineBreakByTruncatingTail;
     // AppKit's disclosure triangle is image-only: the bezel leaves no room for a title, so its label is accessibility text.
     if ([kind isEqual:@"disclosure-triangle"]) { button.bezelStyle = NSBezelStyleDisclosure; button.imagePosition = NSImageOnly; }
     _control = button;
@@ -332,10 +333,14 @@ static NSDate *SparkDate(id milliseconds) { return [milliseconds isKindOfClass:N
     button.alignment = RNSparkLeadingTextAlignment(_control.userInterfaceLayoutDirection);
     button.imagePosition = _rtl ? NSImageRight : NSImageLeft;
   }
-  if ([_control isKindOfClass:NSSwitch.class] || [_control isKindOfClass:NSStepper.class] || [_kind isEqual:@"disclosure-triangle"] || [_kind isEqual:@"date-picker"] ||
+  // Controls that draw smaller than their host take its leading edge at their own size, so they take clicks only
+  // where they draw. A checkbox's cell answers clicks only on its box and title, as in any AppKit window.
+  if ([_control isKindOfClass:NSSwitch.class] || [_control isKindOfClass:NSStepper.class] || [_kind isEqual:@"checkbox"] || [_kind isEqual:@"disclosure-triangle"] || [_kind isEqual:@"date-picker"] ||
       ([_control isKindOfClass:NSProgressIndicator.class] && [(NSProgressIndicator *)_control style] == NSProgressIndicatorStyleSpinning)) {
     [(id)_control sizeToFit];
     NSSize size = _control.frame.size;
+    // A title wider than the host truncates inside it.
+    if ([_kind isEqual:@"checkbox"]) size.width = MIN(size.width, NSWidth(self.bounds));
     _control.frame = NSMakeRect(_rtl ? NSWidth(self.bounds) - size.width : 0, (NSHeight(self.bounds) - size.height) / 2, size.width, size.height);
   }
   if ([_kind isEqual:@"radio-group"]) {
