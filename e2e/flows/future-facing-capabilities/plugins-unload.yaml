@@ -9,7 +9,8 @@ platforms: [macos]
 ---
 - launchApp: { clearState: true, openUrl: "spark-ks://future-facing-capabilities/plugins" }
 - tapOn: { id: future-facing-capabilities-plugins-hello-load }
-- assertText: { id: future-facing-capabilities-plugins-hello-state, equals: loaded }
+# The first plugin load in a driver session bundles the Runtimes worker entry (scripts/e2e/kitchen-sink.ts).
+- assertText: { id: future-facing-capabilities-plugins-hello-state, equals: loaded, timeout: 60s }
 - tapOn: { id: future-facing-capabilities-plugins-command-hello-greet }
 - assertText: { id: future-facing-capabilities-plugins-output, equals: '{"greeting":"Hello","runtime":"spark-plugin.so.legend.ks.hello","main":false,"hostGlobalVisible":false,"greetings":1}' }
 - tapOn: { id: future-facing-capabilities-plugins-command-hello-greet }
