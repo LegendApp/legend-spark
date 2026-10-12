@@ -9,7 +9,7 @@ import path from "node:path";
 import { binary, run } from "../../packages/cli/src/commands.ts";
 import type { ProcessLog } from "../../packages/cli/src/process.ts";
 import { entryFile, prepareConfig, readJson, stateFile } from "../../packages/cli/src/project.ts";
-import { DriverState, exactState, STATE_ENV, type AppIdentity, type AppState, type StateMode } from "./app-state.ts";
+import { DriverState, exactState, macHost, STATE_ENV, type AppIdentity, type AppState, type StateHost, type StateMode } from "./app-state.ts";
 import { DRIVER_ENV, launchDriver, type Driver } from "./driver.ts";
 import { readManifest } from "./gate/plan.ts";
 
@@ -64,8 +64,11 @@ export class KitchenSinkApp {
   private server?: Server;
   private state?: AppState;
 
-  /** `app` is a `.app` bundle; without it, the last dev build (`cd examples/kitchen-sink && bun run rebuild:macos`). It is resolved by `open()`. */
-  constructor(private readonly appPath?: string, private readonly devServer?: URL, private readonly mode: StateMode = "isolated") {}
+  /**
+   * `app` is a `.app` bundle; without it, the last dev build (`cd examples/kitchen-sink && bun run rebuild:macos`). It is
+   * resolved by `open()`. `host` is where the session keeps its state (tests pass scratch directories).
+   */
+  constructor(private readonly appPath?: string, private readonly devServer?: URL, private readonly mode: StateMode = "isolated", private readonly host: StateHost = macHost()) {}
 
   private resolve(): Resolved {
     let app = this.appPath;
@@ -94,8 +97,8 @@ export class KitchenSinkApp {
     const resolved = this.resolved ??= this.resolve();
     await this.serve(resolved, options.dev ?? false, options.label);
     this.state ??= this.mode === "exact"
-      ? exactState(resolved.app, resolved, readManifest(path.join(KITCHEN_SINK, "../../e2e")).appId)
-      : DriverState.create(resolved.app, resolved);
+      ? exactState(resolved.app, resolved, readManifest(path.join(KITCHEN_SINK, "../../e2e")).appId, this.host)
+      : DriverState.create(resolved.app, resolved, this.host);
     return { app: resolved.app, bundleId: resolved.bundleId, launchedBundleId: this.state.identity.bundleId };
   }
 

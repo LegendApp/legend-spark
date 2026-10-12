@@ -4,11 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { processLog } from "../packages/cli/src/process.ts";
+import { macHost, type StateHost } from "../scripts/e2e/app-state.ts";
 import { KitchenSinkApp } from "../scripts/e2e/kitchen-sink.ts";
 import { FAKE_DRIVER_APP } from "./e2e-driver-fake.ts";
 
 // A release-shaped app bundle (embedded JavaScript, so nothing is bundled or served) whose executable is the fake driver app.
-let directory = "", bundle = "";
+// Sessions keep their home, temporary, cache and root directories under `directory`, never in the real temp directory.
+let directory = "", bundle = "", host: StateHost;
 beforeAll(() => {
   if (process.platform !== "darwin") return;
   directory = mkdtempSync(path.join(os.tmpdir(), "spark-ks-launch-"));
@@ -19,6 +21,9 @@ beforeAll(() => {
   writeFileSync(path.join(directory, "fake-app.cjs"), FAKE_DRIVER_APP);
   writeFileSync(path.join(bundle, "Contents/MacOS/Fake"), `#!/bin/sh\nexec "${process.execPath}" "${path.join(directory, "fake-app.cjs")}" "$@"\n`);
   chmodSync(path.join(bundle, "Contents/MacOS/Fake"), 0o755);
+  const [home, temp, cache, roots] = ["home", "T", "C", "roots"].map(name => path.join(directory, name));
+  for (const dir of [temp, roots]) mkdirSync(dir);
+  host = { ...macHost(), home, temp, cache, roots };
   const plist = path.join(bundle, "Contents/Info.plist");
   execFileSync("plutil", ["-create", "xml1", plist]);
   execFileSync("plutil", ["-insert", "CFBundleIdentifier", "-string", "so.legend.spark.examples.fake", plist]);
@@ -29,7 +34,7 @@ afterAll(() => { if (directory) rmSync(directory, { recursive: true, force: true
 const plist = (app: string, key: string) => execFileSync("plutil", ["-extract", key, "raw", "-o", "-", path.join(app, "Contents/Info.plist")], { encoding: "utf8" }).trim();
 
 test.skipIf(process.platform !== "darwin")("driver launches run a clone of the app with its own identity and state, deleted by close", async () => {
-  const app = new KitchenSinkApp(bundle);
+  const app = new KitchenSinkApp(bundle, undefined, "isolated", host);
   await app.open();
   const first = await app.launch({ log: processLog(path.join(directory, "app.log")) });
   let launch: { home: string; suffix: string };
@@ -56,7 +61,7 @@ test.skipIf(process.platform !== "darwin")("driver launches run a clone of the a
 });
 
 test.skipIf(process.platform !== "darwin")("every driver launch pins the host rendering settings before the locale and the flow's arguments", async () => {
-  const app = new KitchenSinkApp(bundle);
+  const app = new KitchenSinkApp(bundle, undefined, "isolated", host);
   await app.open();
   const driver = await app.launch({ locale: "ar", arguments: ["-AppleShowScrollBars", "Always"], log: processLog(path.join(directory, "app.log")) });
   try {
