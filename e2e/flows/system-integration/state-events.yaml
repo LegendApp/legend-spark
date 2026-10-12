@@ -4,7 +4,9 @@ intent: >
   Each simulateSystemEvent here sets the state its event implies (thermal state serious, Low Power Mode on,
   battery power, an offline network path) in the system module; the System state screen receives the
   event, re-reads getSystemInfo and getNetworkStatus, and shows the new state. memoryPressure arrives with
-  its level. The Mac's real power, thermal and network state are untouched.
+  its level. The Mac's real power, thermal and network state are untouched, but its real events still arrive
+  (a network path update can land between two simulated events), so the flow finds each simulated event in the
+  list by its type rather than by its position.
 checks: [SYS-EVENTS-02]
 tags: [system-integration]
 platforms: [macos]
@@ -13,22 +15,22 @@ platforms: [macos]
 - assertVisible: { id: system-integration-state-listening }
 - assertVisible: { id: system-integration-state-thermal }
 - simulateSystemEvent: { type: thermalChanged, thermal: serious }
-- assertText: { id: system-integration-state-event-0, equals: thermalChanged }
+- assertVisible: { text: thermalChanged, within: { id: system-integration-state-events } }
 - assertText: { id: system-integration-state-thermal, equals: serious }
 - simulateSystemEvent: { type: lowPowerChanged, lowPower: true }
-- assertText: { id: system-integration-state-event-0, equals: lowPowerChanged }
+- assertVisible: { text: lowPowerChanged, within: { id: system-integration-state-events } }
 - assertText: { id: system-integration-state-low-power, equals: "Yes" }
 - simulateSystemEvent: { type: powerChanged, source: battery }
-- assertText: { id: system-integration-state-event-0, equals: powerChanged }
+- assertVisible: { text: powerChanged, within: { id: system-integration-state-events } }
 - assertText: { id: system-integration-state-power-source, equals: Battery }
 - simulateSystemEvent: { type: networkChanged, network: offline }
-- assertText: { id: system-integration-state-event-0, equals: networkChanged }
+- assertVisible: { text: networkChanged, within: { id: system-integration-state-events } }
 - assertText: { id: system-integration-state-network-status, equals: offline }
 - assertText: { id: system-integration-state-network-interfaces, equals: None }
 - simulateSystemEvent: { type: memoryPressure, level: critical }
-- assertText: { id: system-integration-state-event-0, equals: "memoryPressure: critical" }
+- assertVisible: { text: "memoryPressure: critical", within: { id: system-integration-state-events } }
 - simulateSystemEvent: { type: memoryPressure, level: normal }
-- assertText: { id: system-integration-state-event-0, equals: "memoryPressure: normal" }
+- assertVisible: { text: "memoryPressure: normal", within: { id: system-integration-state-events } }
 - takeScreenshot: system-state-injected
 - scroll: { on: { id: system-integration-state-content }, direction: down, amount: 2000 }
 - takeScreenshot: system-state-injected-state
