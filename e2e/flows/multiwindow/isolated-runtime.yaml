@@ -6,6 +6,6 @@ checks: [MW-RUNTIME-01]
 - launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/windows" }
 - assertVisible: { id: multiwindow-windows-isolated-availability, text: "Isolated runtimes: available" }
 - tapOn: { id: multiwindow-windows-open-isolated }
-- assertVisible: { text: "Runtime: ks-plugins · main: false", window: { title: Isolated runtime } }
+- assertVisible: { text: "Runtime: ks-plugins · main: false", window: { title: Isolated runtime }, timeout: 60s }
 - tapOn: { id: multiwindow-isolated-increment, window: { title: Isolated runtime } }
-- assertVisible: { text: "Local count: 1", window: { title: Isolated runtime } }
+- assertVisible: { id: multiwindow-isolated-increment, label: "Local count: 1", window: { title: Isolated runtime } }

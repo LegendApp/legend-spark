@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import * as Runtimes from "@react-native-runtimes/core";
 import { createWindowsNavigator } from "@legendapp/spark/windows";
-import { IsolatedPanel } from "./IsolatedPanel";
+import { IsolatedPanel } from "../../multiwindow-tasks";
 import { addStar, adoptNote, nextNoteTitle, reportWindowError } from "./state";
 import { CrashWindow, NoteWindow, SettingsWindow } from "./WindowContents";
 

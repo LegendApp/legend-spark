@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Pressable, Text, View, useColorScheme } from "react-native";
 import { getCurrentRuntime, threadedComponent } from "@react-native-runtimes/core";
 
-// Renders in the isolated "ks-plugins" runtime; module state here lives in that runtime's heap.
+// Renders in the isolated "ks-plugins" runtime; module state here lives in that runtime's heap. Development runtime
+// discovery scans top-level files, so the multiwindow screen's threaded component lives here.
 let mounts = 0;
 function IsolatedPanelContent({ label }: { label?: string }) {
   const [count, setCount] = useState(0);
