@@ -22,7 +22,11 @@ typedef void (^SparkHangHandler)(NSDictionary *report);
 - (void)stop;
 @end
 
-/** Blocks the calling thread for `milliseconds` (the module calls it on the main thread to test reporting). */
-FOUNDATION_EXPORT void SparkSimulateHang(NSUInteger milliseconds);
+/**
+ * Blocks the calling thread for `milliseconds` (the module calls it on the main thread to test reporting) and returns YES.
+ * Only with SPARK_TEST_DRIVER (Debug, or macos.testDriverInRelease): otherwise it returns NO at once and the module
+ * rejects E_UNAVAILABLE, so a release build you distribute cannot be made to hang on purpose.
+ */
+FOUNDATION_EXPORT BOOL SparkSimulateHang(NSUInteger milliseconds);
 
 NS_ASSUME_NONNULL_END

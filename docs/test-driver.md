@@ -33,7 +33,8 @@ Never set `testDriverInRelease` for an app you distribute. How it works:
   build fails to compile. So does code that serves only the driver: motion's virtual clock and telemetry,
   `simulateSystemEvent`'s appearance overrides, the host's `replyDriverState` operation (the `exposeTestState`
   answer), and diagnostics' native simulated crashes (the `SPARK_SIMULATE_CRASH` launch hook; `simulateCrash`
-  rejects native kinds with `E_UNAVAILABLE` without it). A file that includes the header without the setting
+  rejects native kinds with `E_UNAVAILABLE` without it) and simulated hangs (`simulateHang` rejects `E_UNAVAILABLE`
+  without it). A file that includes the header without the setting
   gets the driver declarations, so a release build without the driver fails to link rather than ship driver
   code.
 - A build without the driver that is launched with `SPARK_TEST_DRIVER_DIR` logs
@@ -48,8 +49,8 @@ Never set `testDriverInRelease` for an app you distribute. How it works:
 `tests/test-driver-builds.test.ts` checks the configuration, the Podfile lines and every podspec's build
 settings. It also compiles a stripped, dead-stripped binary each way and runs the release check on both:
 the one without the driver has no driver strings or `SparkTestDriver` symbols, logs and starts normally
-with `SPARK_TEST_DRIVER_DIR` set, ignores `SPARK_SIMULATE_CRASH`, and has `SparkSimulateCrash` fail
-`E_UNAVAILABLE`. It also checks that every `SparkTestDriverRegisterCommand` call outside the excluded
+with `SPARK_TEST_DRIVER_DIR` set, ignores `SPARK_SIMULATE_CRASH`, has `SparkSimulateCrash` fail
+`E_UNAVAILABLE` and `SparkSimulateHang` return without blocking; the one with the driver blocks. It also checks that every `SparkTestDriverRegisterCommand` call outside the excluded
 sources sits after `#if SPARK_TEST_DRIVER`.
 
 ## Kitchen Sink screenshots

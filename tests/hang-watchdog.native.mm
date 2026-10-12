@@ -10,7 +10,7 @@ static int failures = 0;
 
 // Keeps a visible frame between main and the hang in the stack.
 extern "C" __attribute__((noinline)) void SparkTestBlockMainThread(NSUInteger milliseconds) {
-  SparkSimulateHang(milliseconds);
+  CHECK(SparkSimulateHang(milliseconds));
   __asm__ volatile("");
 }
 

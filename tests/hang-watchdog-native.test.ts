@@ -7,8 +7,9 @@ import { runOk } from "./subprocess";
 const root = path.resolve(import.meta.dirname, "..");
 const macos = path.join(root, "packages/diagnostics/macos");
 
+// SPARK_TEST_DRIVER=1, as in Debug builds: without the test driver SparkSimulateHang does not block (tests/test-driver-builds.test.ts).
 async function build(binary: string, flags: string[]) {
-  await runOk("clang++", [...flags, "-fobjc-arc", "-fblocks", "-std=c++20", "-Wall", "-Werror", "-mmacosx-version-min=14.0", "-I", macos, "-framework", "Foundation",
+  await runOk("clang++", [...flags, "-DSPARK_TEST_DRIVER=1", "-fobjc-arc", "-fblocks", "-std=c++20", "-Wall", "-Werror", "-mmacosx-version-min=14.0", "-I", macos, "-framework", "Foundation",
     path.join(root, "tests/hang-watchdog.native.mm"), path.join(macos, "SparkHangWatchdog.mm"), path.join(macos, "SparkStack.mm"), "-o", binary], { timeout: 120_000 });
 }
 

@@ -96,4 +96,11 @@ static size_t Backtrace(thread_t thread, uintptr_t *frames, size_t capacity, siz
 @end
 
 // Kept out of tail position so the simulated hang names itself in the reported stack.
-__attribute__((disable_tail_calls)) void SparkSimulateHang(NSUInteger milliseconds) { usleep((useconds_t)milliseconds * 1000); }
+__attribute__((disable_tail_calls)) BOOL SparkSimulateHang(NSUInteger milliseconds) {
+#if SPARK_TEST_DRIVER
+  usleep((useconds_t)milliseconds * 1000);
+  return YES;
+#else
+  return NO;
+#endif
+}
