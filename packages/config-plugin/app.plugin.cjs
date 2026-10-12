@@ -47,6 +47,7 @@ module.exports = function withSparkDesktop(config) {
     require("./keyboard-events.cjs").installKeyboardEventsPatch(mod.modRequest.projectRoot);
     require("./rtl-scroll-view.cjs").installRTLScrollViewPatch(mod.modRequest.projectRoot);
     require("./rtl-text-alignment.cjs").installRTLTextAlignmentPatch(mod.modRequest.projectRoot);
+    require("./rtl-text-input-alignment.cjs").installRTLTextInputAlignmentPatch(mod.modRequest.projectRoot);
     require("./devtools-targets.cjs").installDevToolsTargetsPatch(mod.modRequest.projectRoot);
     require("./text-services.cjs").installTextServicesPatch(mod.modRequest.projectRoot);
     require("./text-input-accessibility.cjs").installTextInputAccessibilityPatch(mod.modRequest.projectRoot);
