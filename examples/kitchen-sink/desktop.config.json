@@ -22,7 +22,8 @@
       "NSContactsUsageDescription": "The Privacy permissions screen requests contacts access to show the prompt.",
       "NSCalendarsFullAccessUsageDescription": "The Privacy permissions screen requests calendar access to show the prompt.",
       "NSPhotoLibraryUsageDescription": "The Privacy permissions screen requests photo library access to show the prompt.",
-      "NSLocationUsageDescription": "The Privacy permissions screen requests location access to show the prompt."
+      "NSLocationUsageDescription": "The Privacy permissions screen requests location access to show the prompt.",
+      "NSLocationWhenInUseUsageDescription": "The Privacy permissions screen requests location access to show the prompt."
     }
   },
   "localizations": [

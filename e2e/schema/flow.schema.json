@@ -5109,7 +5109,7 @@
             }
           },
           "simulatePermission": {
-            "description": "[driver] Set the simulated state @legendapp/spark/permissions reports for a kind, in-process: its macOS authorization and the answer its simulated prompt gets (answer: null clears it). Never reaches TCC; the permission command changes the OS.",
+            "description": "[driver] Set the simulated state @legendapp/spark/permissions reports for a kind, in-process: its macOS authorization and the answer its simulated prompt gets (ignore: it never answers; null clears the answer). Never reaches TCC; the permission command changes the OS.",
             "if": {
               "type": "object"
             },
@@ -5145,6 +5145,7 @@
                   "enum": [
                     "allow",
                     "deny",
+                    "ignore",
                     null
                   ]
                 },

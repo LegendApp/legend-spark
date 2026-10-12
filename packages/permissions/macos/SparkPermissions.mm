@@ -44,7 +44,7 @@ NSArray<NSString *> *SparkPermissionUsageKeys(NSString *kind) {
   NSDictionary *keys = @{ @"camera": @[@"NSCameraUsageDescription"], @"microphone": @[@"NSMicrophoneUsageDescription"],
     @"automation": @[@"NSAppleEventsUsageDescription"], @"contacts": @[@"NSContactsUsageDescription"],
     @"calendar": @[@"NSCalendarsFullAccessUsageDescription"], @"photos": @[@"NSPhotoLibraryUsageDescription"],
-    @"location": @[@"NSLocationUsageDescription", @"NSLocationWhenInUseUsageDescription"] };
+    @"location": @[@"NSLocationWhenInUseUsageDescription"] };
   return keys[kind] ?: @[];
 }
 
@@ -120,6 +120,7 @@ static OSStatus AutomationStatus(NSString *target, BOOL ask) {
   if ((self = [super init])) {
     _info = [info copy];
     _pending = [NSMutableDictionary dictionary];
+    _answerTimeout = 120;
 #if SPARK_TEST_DRIVER
     _simulated = simulated;
     if (simulated) {
@@ -172,7 +173,7 @@ static OSStatus AutomationStatus(NSString *target, BOOL ask) {
 - (void)locationManagerDidChangeAuthorization:(CLLocationManager *)manager
 {
   NSString *authorization = SparkLocationAuthorization(manager.authorizationStatus);
-  if (![authorization isEqual:@"notDetermined"]) [self finish:@"location" authorization:authorization error:nil];
+  if (![authorization isEqual:@"notDetermined"]) [self finish:@"location" waiting:nil authorization:authorization error:nil];
   [self changed];
 }
 
@@ -217,9 +218,29 @@ static OSStatus AutomationStatus(NSString *target, BOOL ask) {
   });
 }
 
-- (void)finish:(NSString *)key authorization:(NSString *)authorization error:(NSError *)error
+// For a prompt whose answer has no callback of its own: settles once the status is decided when the app becomes
+// active again, or with the current status after answerTimeout, so a dropped request never blocks later ones.
+- (void)awaitAnswer:(NSString *)kind settle:(SparkPermissionCompletion)settle
+{
+  __weak SparkPermissions *weakSelf = self;
+  __block id observer;
+  SparkPermissionCompletion finish = ^(NSString *authorization, NSError *error) {
+    if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
+    observer = nil;
+    settle(authorization, error);
+  };
+  observer = [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidBecomeActiveNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *) {
+    NSString *authorization = [weakSelf authorization:kind];
+    if (authorization && ![authorization isEqual:@"notDetermined"]) finish(authorization, nil);
+  }];
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(_answerTimeout * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ finish(nil, nil); });
+}
+
+// Settles the requests waiting under `key`, if `waiting` is still that entry (nil: whichever is there).
+- (void)finish:(NSString *)key waiting:(NSArray *)expected authorization:(NSString *)authorization error:(NSError *)error
 {
   NSArray<SparkPermissionCompletion> *waiting = _pending[key];
+  if (!waiting || (expected && waiting != expected)) return;
   [_pending removeObjectForKey:key];
   for (SparkPermissionCompletion completion in waiting) completion(authorization, error);
 }
@@ -235,7 +256,8 @@ static OSStatus AutomationStatus(NSString *target, BOOL ask) {
   if (!described) return done(nil, Failure(@"E_UNAVAILABLE", [NSString stringWithFormat:@"Requesting %@ permission needs %@ in the app's Info.plist", kind, [keys componentsJoinedByString:@" or "]]));
   NSString *key = target ? [NSString stringWithFormat:@"%@:%@", kind, target] : kind;
   if (_pending[key]) { [_pending[key] addObject:done]; return; }
-  _pending[key] = [NSMutableArray arrayWithObject:done];
+  NSMutableArray *entry = [NSMutableArray arrayWithObject:done];
+  _pending[key] = entry;
   __weak SparkPermissions *weakSelf = self;
   // Every system callback lands here once; Once() puts it on the main thread, where the status is read again.
   SparkPermissionCompletion settle = Once(^(NSString *authorization, NSError *error) {
@@ -244,11 +266,11 @@ static OSStatus AutomationStatus(NSString *target, BOOL ask) {
     // Contacts and calendar report a refusal as an error too: only an error that left the status undetermined fails.
     if (error && ![error.domain isEqual:SparkPermissionErrorDomain])
       error = [[strongSelf authorization:kind] isEqual:@"notDetermined"] ? Failure(@"E_NATIVE", [NSString stringWithFormat:@"Requesting %@ permission failed: %@", kind, error.localizedDescription]) : nil;
-    [strongSelf finish:key authorization:error ? nil : (authorization ?: [strongSelf authorization:kind]) error:error];
+    [strongSelf finish:key waiting:entry authorization:error ? nil : (authorization ?: [strongSelf authorization:kind]) error:error];
     [strongSelf changed];
   });
 #if SPARK_TEST_DRIVER
-  if (_simulated) return [self simulateRequest:kind completion:settle];
+  if (_simulated) return [self simulateRequest:kind key:key completion:settle];
 #endif
   if ([kind isEqual:@"camera"] || [kind isEqual:@"microphone"]) {
     // Any thread; the handler runs on an arbitrary queue.
@@ -277,8 +299,10 @@ static OSStatus AutomationStatus(NSString *target, BOOL ask) {
         if (!enabled) return settle(nil, Failure(@"E_UNAVAILABLE", @"Location Services are turned off for this Mac"));
         CLLocationManager *manager = strongSelf.locationManager;
         if (manager.authorizationStatus != kCLAuthorizationStatusNotDetermined) return settle(nil, nil);
-        // locationManagerDidChangeAuthorization: settles the request once the person answers.
+        // locationManagerDidChangeAuthorization: settles the request once the person answers. macOS can also drop the
+        // request without a callback (a missing entitlement under the hardened runtime), so it is bounded too.
         [manager requestWhenInUseAuthorization];
+        [strongSelf awaitAnswer:kind settle:settle];
       });
     });
   } else if ([kind isEqual:@"screenRecording"]) {
@@ -322,7 +346,7 @@ static OSStatus AutomationStatus(NSString *target, BOOL ask) {
 #if SPARK_TEST_DRIVER
 // A simulated prompt appears whenever macOS could show one: undetermined, write-only calendar access, or screen
 // recording and accessibility not granted. Its answer is the one set with simulate:; without one the request fails.
-- (void)simulateRequest:(NSString *)kind completion:(SparkPermissionCompletion)settle
+- (void)simulateRequest:(NSString *)kind key:(NSString *)key completion:(SparkPermissionCompletion)settle
 {
   NSMutableDictionary *state = _simulation[kind];
   state[@"requests"] = @([state[@"requests"] integerValue] + 1);
@@ -339,6 +363,8 @@ static OSStatus AutomationStatus(NSString *target, BOOL ask) {
     return;
   }
   state[@"prompts"] = @([state[@"prompts"] integerValue] + 1);
+  // "ignore": the prompt never answers, as when macOS drops a request without a callback.
+  if ([answer isEqual:@"ignore"]) return [self awaitAnswer:kind settle:settle];
   BOOL binary = [kind isEqual:@"screenRecording"] || [kind isEqual:@"accessibility"];
   state[@"authorization"] = [answer isEqual:@"allow"] ? @"authorized" : binary ? @"notGranted" : @"denied";
   NSString *result = state[@"authorization"];
@@ -352,7 +378,7 @@ static OSStatus AutomationStatus(NSString *target, BOOL ask) {
   else if (![SparkPermissionKinds() containsObject:kind]) failure = Failure(@"E_INVALID_ARGUMENT", [NSString stringWithFormat:@"Unknown permission: %@", kind]);
   else if (authorization && ![SparkPermissionAuthorizations(kind) containsObject:authorization])
     failure = Failure(@"E_INVALID_ARGUMENT", [NSString stringWithFormat:@"%@ authorization is one of %@", kind, [SparkPermissionAuthorizations(kind) componentsJoinedByString:@", "]]);
-  else if (answer && answer != NSNull.null && ![@[@"allow", @"deny"] containsObject:answer]) failure = Failure(@"E_INVALID_ARGUMENT", @"A simulated answer is allow or deny");
+  else if (answer && answer != NSNull.null && ![@[@"allow", @"deny", @"ignore"] containsObject:answer]) failure = Failure(@"E_INVALID_ARGUMENT", @"A simulated answer is allow, deny or ignore");
   if (failure) { if (error) *error = failure; return NO; }
   if (answer) _simulation[kind][@"answer"] = answer;
   if (authorization && ![authorization isEqual:_simulation[kind][@"authorization"]]) {

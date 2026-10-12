@@ -89,7 +89,7 @@ export class FakeDriver implements DriverClient {
   async testClipboard() { this.log.push("testClipboard"); return this.clipboard; }
   /** The fake's simulated permissions, as the app's simulatePermission and testPermission commands keep them. */
   permissions: Record<string, TestPermission> = {};
-  async simulatePermission({ kind, authorization, answer }: { kind: string; authorization?: string; answer?: "allow" | "deny" | null }) {
+  async simulatePermission({ kind, authorization, answer }: { kind: string; authorization?: string; answer?: "allow" | "deny" | "ignore" | null }) {
     this.log.push(`simulatePermission ${JSON.stringify({ kind, authorization, answer })}`);
     const current = this.permissions[kind] ?? { authorization: "notDetermined", answer: null, requests: 0, prompts: 0, settingsOpened: 0 };
     return this.permissions[kind] = { ...current, ...(authorization === undefined ? {} : { authorization }), ...(answer === undefined ? {} : { answer }) };

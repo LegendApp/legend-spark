@@ -4,9 +4,9 @@
 // Privacy (TCC) permission status, requests and System Settings links for @legendapp/spark/permissions
 // (docs/permissions.md). No React: tests/permissions.native.mm drives it directly.
 //
-// An authorization is the native state's name: notDetermined, restricted, denied, authorized, limited (photos),
-// writeOnly (calendar), authorizedWhenInUse (location), notGranted (screen recording and accessibility, which
-// macOS reports only as granted or not), or unknown (a value this SDK does not know, from a newer macOS).
+// An authorization is the native state's name: notDetermined, restricted, denied, authorized, writeOnly (calendar),
+// notGranted (screen recording and accessibility, which macOS reports only as granted or not), or unknown (a value
+// this SDK does not know, from a newer macOS).
 //
 // SPARK_TEST_DRIVER builds (docs/test-driver.md#builds) add a simulated mode for the in-app test driver: it keeps
 // the state in memory and never calls a TCC API, opens System Settings or shows a prompt.
@@ -53,6 +53,9 @@ typedef void (^SparkPermissionCompletion)(NSString *_Nullable authorization, NSE
 @property (nonatomic, copy, nullable) dispatch_block_t changeHandler;
 // Watches app activation while YES. Off by default.
 @property (nonatomic) BOOL observing;
+// How long a location request (or a simulated prompt answered "ignore") waits for an answer before it settles with the
+// current status; it also settles when the app becomes active with the status decided. Default 120 seconds.
+@property (nonatomic) NSTimeInterval answerTimeout;
 // `target` is the bundle identifier for automation and nil for every other kind.
 - (void)status:(NSString *)kind target:(nullable NSString *)target completion:(SparkPermissionCompletion)completion;
 // Shows the system prompt when macOS can; resolves with the authorization after the person answers.
@@ -62,7 +65,8 @@ typedef void (^SparkPermissionCompletion)(NSString *_Nullable authorization, NSE
 // The authorization of every kind except automation, which is per target app.
 - (NSDictionary<NSString *, NSString *> *)snapshot;
 #if SPARK_TEST_DRIVER
-// Simulated instances only. Sets the authorization and the answer a simulated prompt gets ("allow" or "deny");
+// Simulated instances only. Sets the authorization and the answer a simulated prompt gets ("allow", "deny", or
+// "ignore": the prompt never answers, as when macOS drops a request);
 // NSNull clears the answer, nil leaves either unchanged.
 - (BOOL)simulate:(NSString *)kind authorization:(nullable NSString *)authorization answer:(nullable id)answer error:(NSError **)error;
 // { authorization, answer (NSNull when unset), requests, prompts, settingsOpened } for a kind, or nil for an unknown kind.

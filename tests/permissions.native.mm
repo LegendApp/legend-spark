@@ -47,7 +47,7 @@ int main() { @autoreleasepool {
   CHECK([SparkPermissionSettingsURL(@"camera").absoluteString isEqual:@"x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"]);
   CHECK([SparkPermissionSettingsURL(@"inputMonitoring").absoluteString hasSuffix:@"Privacy_ListenEvent"]);
   CHECK(!SparkPermissionSettingsURL(@"bluetooth") && SparkPermissionAuthorizations(@"bluetooth").count == 0);
-  CHECK(SparkPermissionUsageKeys(@"screenRecording").count == 0 && [SparkPermissionUsageKeys(@"location") containsObject:@"NSLocationUsageDescription"]);
+  CHECK(SparkPermissionUsageKeys(@"screenRecording").count == 0 && [SparkPermissionUsageKeys(@"location") isEqual:@[@"NSLocationWhenInUseUsageDescription"]]);
 
   // A real instance: requests without their usage description, bad kinds and targets fail before any TCC call.
   SparkPermissions *real = [[SparkPermissions alloc] initWithInfo:@{} simulated:NO];
@@ -64,7 +64,8 @@ int main() { @autoreleasepool {
   CHECK(![real simulate:@"camera" authorization:@"authorized" answer:nil error:&error] && [SparkPermissionErrorCode(error) isEqual:@"E_UNAVAILABLE"]);
 
   // The simulated instance: initial state, snapshot without automation, status reads.
-  NSDictionary *info = @{ @"NSCameraUsageDescription": @"Video calls", @"NSCalendarsFullAccessUsageDescription": @"Agenda" };
+  NSDictionary *info = @{ @"NSCameraUsageDescription": @"Video calls", @"NSCalendarsFullAccessUsageDescription": @"Agenda",
+    @"NSLocationWhenInUseUsageDescription": @"Nearby", @"NSContactsUsageDescription": @"People" };
   SparkPermissions *simulated = [[SparkPermissions alloc] initWithInfo:info simulated:YES];
   __block int changes = 0;
   simulated.changeHandler = ^{ changes++; };
@@ -123,6 +124,33 @@ int main() { @autoreleasepool {
   CHECK([simulated simulation:@"camera"][@"answer"] == NSNull.null);
   CHECK([simulated simulate:@"photos" authorization:@"unknown" answer:nil error:&error] && changes == before + 1);
   CHECK([simulated.snapshot[@"photos"] isEqual:@"unknown"]);
+
+  // A prompt that never answers (macOS dropping a location request) settles with the current status after the timeout
+  // and clears its pending entry, so the next request is not joined to it; activation with the status decided settles it early.
+  simulated.answerTimeout = 0.3;
+  CHECK([simulated simulate:@"location" authorization:nil answer:@"ignore" error:&error]);
+  Outcome dropped = {}, joined = {};
+  [simulated request:@"location" target:nil completion:Record(&dropped)];
+  [simulated request:@"location" target:nil completion:Record(&joined)];
+  Drain();
+  [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidBecomeActiveNotification object:NSApp]; Drain(); // Still undetermined.
+  CHECK(dropped.calls == 0 && joined.calls == 0);
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.4]];
+  CHECK(dropped.calls == 1 && joined.calls == 1 && [dropped.authorization isEqual:@"notDetermined"] && !dropped.code);
+  CHECK([simulated simulate:@"location" authorization:nil answer:@"allow" error:&error]);
+  Outcome fresh = {};
+  [simulated request:@"location" target:nil completion:Record(&fresh)];
+  Drain();
+  CHECK(fresh.calls == 1 && [fresh.authorization isEqual:@"authorized"]);
+  CHECK([simulated simulate:@"contacts" authorization:@"notDetermined" answer:@"ignore" error:&error]);
+  Outcome activated = {};
+  [simulated request:@"contacts" target:nil completion:Record(&activated)];
+  Drain();
+  CHECK([simulated simulate:@"contacts" authorization:@"denied" answer:nil error:&error]); // Changed in System Settings meanwhile.
+  [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidBecomeActiveNotification object:NSApp]; Drain();
+  CHECK(activated.calls == 1 && [activated.authorization isEqual:@"denied"]);
+  [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.4]]; // The timer finds nothing left to settle.
+  CHECK(activated.calls == 1 && fresh.calls == 1);
 
   // Settings are recorded, never opened.
   CHECK([simulated openSettings:@"location" error:&error] && [[simulated simulation:@"location"][@"settingsOpened"] isEqual:@1]);

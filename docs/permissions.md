@@ -33,7 +33,7 @@ does not say) and `macos.authorization`, the native state.
 | `contacts` | `CNContactStore authorizationStatusForEntityType:` | `requestAccessForEntityType:` | notDetermined, restricted, denied, authorized | `NSContactsUsageDescription` |
 | `calendar` | `EKEventStore authorizationStatusForEntityType:` (events) | `requestFullAccessToEventsWithCompletion:` | notDetermined, restricted, denied, authorized (full access), writeOnly | `NSCalendarsFullAccessUsageDescription` |
 | `photos` | `PHPhotoLibrary authorizationStatusForAccessLevel:` (read/write) | `requestAuthorizationForAccessLevel:handler:` | notDetermined, restricted, denied, authorized | `NSPhotoLibraryUsageDescription` |
-| `location` | `CLLocationManager.authorizationStatus` | `requestWhenInUseAuthorization`, answered through the delegate | notDetermined, restricted, denied, authorized | `NSLocationUsageDescription` or `NSLocationWhenInUseUsageDescription` |
+| `location` | `CLLocationManager.authorizationStatus` | `requestWhenInUseAuthorization`, answered through the delegate | notDetermined, restricted, denied, authorized | `NSLocationWhenInUseUsageDescription` (the key `requestWhenInUseAuthorization` documents; the Kitchen Sink also sets the older macOS key `NSLocationUsageDescription`) |
 
 Mapping to `status`: authorized is `granted`; notDetermined is `undetermined`; restricted (parental
 controls or a device management profile), denied, writeOnly and notGranted are `denied`. A raw value this
@@ -55,6 +55,10 @@ without a prompt. Concurrent requests for the same kind (and target) share one p
 - A request without the usage description macOS requires rejects `E_UNAVAILABLE` naming the key. macOS
   would end the app (camera, microphone, contacts, photos) or ignore the request (the others).
 - A location request while Location Services are off rejects `E_UNAVAILABLE`.
+- Core Location answers a location request only through its delegate, and macOS can drop the request without one
+  (a missing entitlement under the hardened runtime). So a location request also settles when the app becomes
+  active with the status decided, or after 120 seconds with the current status (`undetermined` if nobody
+  answered); a later request then starts afresh.
 - An app signed with the hardened runtime also needs the matching entitlement
   (`com.apple.security.device.camera`, `device.audio-input`, `personal-information.addressbook`,
   `personal-information.calendars`, `personal-information.photos-library`, `personal-information.location`,
@@ -89,10 +93,11 @@ state kept in the app's memory: no TCC API is called, no prompt appears and Syst
 Each kind starts at notDetermined (notGranted for screen recording and accessibility). Two driver commands,
 built only with the driver:
 
-- `{"command": "simulatePermission", "kind", "authorization"?, "answer"?: "allow" | "deny" | null}` sets a
+- `{"command": "simulatePermission", "kind", "authorization"?, "answer"?: "allow" | "deny" | "ignore" | null}` sets a
   kind's authorization (any authorization of that kind, `unknown` included) and the answer its simulated
   prompt gets. A simulated prompt appears whenever macOS could show one (notDetermined, writeOnly,
-  notGranted); without an answer the request rejects `E_UNAVAILABLE`. Changing the authorization reports a
+  notGranted); without an answer the request rejects `E_UNAVAILABLE`. `ignore` is a prompt that never answers, as when
+  macOS drops a request: the request settles as a real location request does, on activation or after the timeout. Changing the authorization reports a
   change to listeners.
 - `{"command": "testPermission", "kind"}` replies `permission`: `authorization`, `answer`, and the counts of
   `requests`, `prompts` shown and `settingsOpened`.

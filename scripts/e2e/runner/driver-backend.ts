@@ -42,7 +42,7 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   simulateDisplays(displays: readonly object[] | null): Promise<void>;
   setTestClipboard(content: { text?: string; html?: string; concealed?: boolean }): Promise<void>;
   testClipboard(): Promise<TestClipboard>;
-  simulatePermission(state: { kind: string; authorization?: string; answer?: "allow" | "deny" | null }): Promise<TestPermission>;
+  simulatePermission(state: { kind: string; authorization?: string; answer?: "allow" | "deny" | "ignore" | null }): Promise<TestPermission>;
   testPermission(kind: string): Promise<TestPermission>;
   testDrag(request: TestDragRequest): Promise<TestDragReply>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
@@ -110,7 +110,7 @@ export class DriverBackend implements Backend {
     setClipboard: async args => { await this.client().setTestClipboard(args as { text?: string; html?: string; concealed?: boolean }); },
     assertClipboard: (args, context) => context.eventually(async () => assertClipboard(await this.client().testClipboard(), args)),
     // Simulated @legendapp/spark/permissions state, never TCC (docs/permissions.md#testing).
-    simulatePermission: async args => { await this.client().simulatePermission(args as { kind: string; authorization?: string; answer?: "allow" | "deny" | null }); },
+    simulatePermission: async args => { await this.client().simulatePermission(args as { kind: string; authorization?: string; answer?: "allow" | "deny" | "ignore" | null }); },
     assertSimulatedPermission: (args, context) => context.eventually(async () => assertSimulatedPermission(await this.client().testPermission(args.kind as string), args)),
     // Startup phases and the state the app exposes (docs/e2e-flows.md#app-inspection).
     ...inspectCommands(() => this.client(), () => this.opened!),

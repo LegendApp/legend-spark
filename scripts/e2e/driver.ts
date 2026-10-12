@@ -29,7 +29,7 @@ export type TestDragReply = { started?: boolean; operation?: string; files?: str
 /** The app's private test pasteboard: its types, its plain text (null without any) and its change count. */
 export type TestClipboard = { types: string[]; text: string | null; changeCount: number };
 /** The simulated state of one @legendapp/spark/permissions kind (the `testPermission` driver command). */
-export type TestPermission = { authorization: string; answer: "allow" | "deny" | null; requests: number; prompts: number; settingsOpened: number };
+export type TestPermission = { authorization: string; answer: "allow" | "deny" | "ignore" | null; requests: number; prompts: number; settingsOpened: number };
 /** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
 export type SimulatedSystemEvent = {
   type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string;
@@ -292,7 +292,7 @@ export class Driver {
   /** Reports `displays` (DisplayDetails) through @legendapp/spark/displays instead of the real ones; null restores them (docs/displays.md#simulated-displays). */
   async simulateDisplays(displays: readonly object[] | null) { await this.request({ command: "simulateDisplays", displays }, 10000); }
   /** Sets the simulated state @legendapp/spark/permissions reports for a kind (docs/permissions.md#testing); TCC is untouched. */
-  async simulatePermission(state: { kind: string; authorization?: string; answer?: "allow" | "deny" | null }) {
+  async simulatePermission(state: { kind: string; authorization?: string; answer?: "allow" | "deny" | "ignore" | null }) {
     return body<{ permission: TestPermission }>(await this.request({ command: "simulatePermission", ...state }, 10000)).permission;
   }
   /** A kind's simulated permission state: authorization, answer, and counts of requests, prompts and System Settings openings. */
