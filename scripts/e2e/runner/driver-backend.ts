@@ -41,6 +41,7 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   advanceClock(durationMs: number): Promise<unknown>;
   simulateSystemEvent(event: SimulatedSystemEvent): Promise<void>;
   simulateDisplays(displays: readonly object[] | null): Promise<void>;
+  simulateGlobalShortcut(key: string, modifiers: number): Promise<void>;
   setTestClipboard(content: { text?: string; html?: string; concealed?: boolean }): Promise<void>;
   testClipboard(): Promise<TestClipboard>;
   simulatePermission(state: { kind: string; authorization?: string; answer?: "allow" | "deny" | "ignore" | null }): Promise<TestPermission>;
@@ -158,6 +159,8 @@ export class DriverBackend implements Backend {
     typeText: (args, context) => this.type(args, context),
     pressKey: async args => this.press(String(args.key)),
     shortcut: async args => this.press(String(args.keys)),
+    // A registered global shortcut's press; driven apps never register hotkeys with the system (docs/test-driver.md).
+    simulateGlobalShortcut: async args => { const { key, modifiers } = parseAccelerator(String(args.keys)); await this.client().simulateGlobalShortcut(key, modifiers); },
     scroll: (args, context) => this.scroll(args, context),
     swipe: (args, context) => this.swipe(args, context),
     // A Spark drag source drags in process as the window server would (docs/drag-drop.md#testing); other views get pointer input.

@@ -145,7 +145,7 @@ test("macOS toolbar-only updates bypass portable window geometry", async () => {
 });
 
 test("option availability is truthful per platform and rejects unknown options", () => {
-  const options = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "tabbing", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "subtitle", "trafficLightPosition"] as const;
+  const options = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "tabbing", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "subtitle", "trafficLightPosition", "fullScreenAuxiliary", "stationary", "ignoresCycle", "cornerSnapping"] as const;
   platform.OS = "macos";
   for (const option of options) expect(windows.getWindowAvailability(option)).toEqual({ available: true });
   platform.OS = "windows";
@@ -169,6 +169,25 @@ test("macOS option updates go only to the module that owns each field", async ()
   await windows.setWindowOptions("editor", { macos: { level: "floating" } });
   expect(sent()).toHaveLength(2);
   expect(managed.setWindowOptions).toHaveBeenCalledTimes(2);
+});
+test("special window options: collection behaviors and corner snapping go to the window module, the HUD panel and desktop level to AppKit", async () => {
+  platform.OS = "macos";
+  managed.getConstantsJson = () => JSON.stringify({ WINDOW_LEVEL_STATUS: 25, WINDOW_LEVEL_FLOATING: 3, WINDOW_LEVEL_DESKTOP: -2147483622 });
+  const sent = () => call.mock.calls.filter(([method]) => method === "options").map(([, args]) => JSON.parse(args).options);
+  await windows.setWindowOptions("editor", { macos: { fullScreenAuxiliary: true, stationary: true, ignoresCycle: true, cornerSnapping: { margin: 12 } } });
+  expect(sent()).toEqual([{ macos: { fullScreenAuxiliary: true, stationary: true, ignoresCycle: true, cornerSnapping: { margin: 12 } } }]);
+  expect(managed.setWindowOptions).not.toHaveBeenCalled();
+  await windows.setWindowOptions("editor", { macos: { cornerSnapping: null, level: "desktop" } });
+  expect(sent()[1]).toEqual({ macos: { cornerSnapping: null, level: "desktop" } });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls[0][1])).toMatchObject({ level: -2147483622 });
+  await windows.openWindow({ id: "preview", component: "Preview", macos: { panelStyle: "hud" } });
+  expect(JSON.parse(managed.openWindow.mock.calls.at(-1)![0])).toMatchObject({ windowStyle: { panelStyle: "hud" } });
+  for (const macos of [{ cornerSnapping: { margin: 501 } }, { cornerSnapping: { margin: 4, corner: "topLeft" } }, { stationary: "yes" }, { level: "wallpaper" }, { panelStyle: "sheet" }]) {
+    await expect(windows.openWindow({ id: "bad", component: "Bad", macos } as never)).rejects.toMatchObject({ code: expect.stringMatching(/^E_(INVALID_ARGUMENT|UNSUPPORTED_OPTION)$/) });
+  }
+  await expect(windows.setWindowOptions("editor", { macos: { panelStyle: "hud" } } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  platform.OS = "windows";
+  await expect(windows.setWindowOptions("editor", { macos: { stationary: true } })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
 });
 test("macOS opening applies options with the window and enters simple fullscreen last", async () => {
   platform.OS = "macos";

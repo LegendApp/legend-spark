@@ -14,6 +14,13 @@ static NSMutableArray *events;
 static void SparkEmit(NSDictionary *event) { [events addObject:event]; }
 static NSDictionary *SparkArgs(NSString *json) { return [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil]; }
 static void SparkInvalid(RCTPromiseRejectBlock reject, NSString *message) { reject(@"E_INVALID_ARGUMENT", message, nil); }
+static NSString *SparkJSON(id value) { return [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:value options:0 error:nil] encoding:NSUTF8StringEncoding]; }
+// The status item's window in the menu bar: a frame on a screen (no real status item reaches the menu bar).
+@interface FixtureTrayWindow : NSObject
+@property NSRect frame;
+@property NSScreen *screen;
+@end
+@implementation FixtureTrayWindow @end
 @interface FixtureTrayButton : NSObject
 @property NSString *title;
 @property NSImage *image;
@@ -22,6 +29,7 @@ static void SparkInvalid(RCTPromiseRejectBlock reject, NSString *message) { reje
 @property id target;
 @property SEL action;
 @property NSString *accessibilityIdentifier;
+@property FixtureTrayWindow *window;
 @end
 @implementation FixtureTrayButton @end
 @interface FixtureStatusItem : NSObject
@@ -63,5 +71,22 @@ int main() { @autoreleasepool {
   [api call:@"update" args:@"{\"id\":\"tray\",\"instanceId\":\"new\",\"menu\":[]}" resolve:^(id) { completed = YES; } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
   for (int n=0; n<20 && !completed; n++) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
   assert(completed); assert(status.menu == nil); assert(status.button.image == image);
+  // Bounds: the item's window frame in display-relative logical units, top-left origin.
+  __block NSString *bounds = nil; failure = nil;
+  [api call:@"bounds" args:@"{\"id\":\"tray\",\"instanceId\":\"new\"}" resolve:^(id value) { bounds = value; } reject:^(NSString *code, NSString *, NSError *) { failure = code; }];
+  for (int n=0; n<20 && !failure; n++) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+  assert([failure isEqual:@"E_UNAVAILABLE"]);
+  NSScreen *screen = NSScreen.screens.firstObject; NSRect display = screen.frame;
+  FixtureTrayWindow *window = [FixtureTrayWindow new]; window.screen = screen;
+  window.frame = NSMakeRect(NSMinX(display) + 900, NSMaxY(display) - 24, 32, 24); status.button.window = window;
+  [api call:@"bounds" args:@"{\"id\":\"tray\",\"instanceId\":\"new\"}" resolve:^(id value) { bounds = value; } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  for (int n=0; n<20 && !bounds; n++) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+  NSDictionary *value = [NSJSONSerialization JSONObjectWithData:[bounds dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+  assert([value[@"displayId"] isEqual:[screen.deviceDescription[@"NSScreenNumber"] stringValue]]);
+  assert([value[@"x"] doubleValue] == 900 && [value[@"y"] doubleValue] == 0 && [value[@"width"] doubleValue] == 32 && [value[@"height"] doubleValue] == 24);
+  failure = nil;
+  [api call:@"bounds" args:@"{\"id\":\"missing\",\"instanceId\":\"new\"}" resolve:^(id) { assert(false); } reject:^(NSString *code, NSString *, NSError *) { failure = code; }];
+  for (int n=0; n<20 && !failure; n++) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+  assert([failure isEqual:@"E_NOT_FOUND"]);
   puts("Tray ownership passed");
 } }

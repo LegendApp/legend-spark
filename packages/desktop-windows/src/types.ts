@@ -75,7 +75,8 @@ export type WindowOpenOptions = WindowKind & WindowAppearanceOptions & {
   macos?: MacOSWindowOptions;
 };
 /** Options whose availability differs by platform; see `getWindowAvailability(option)`. */
-export type WindowOption = "aspectRatio" | "opacity" | "contentProtection" | "ignoreMouseEvents" | "tabbing" | "spaces" | "simpleFullscreen" | "documentEdited" | "backgroundMaterial" | "subtitle" | "trafficLightPosition";
+export type WindowOption = "aspectRatio" | "opacity" | "contentProtection" | "ignoreMouseEvents" | "tabbing" | "spaces" | "simpleFullscreen" | "documentEdited" | "backgroundMaterial" | "subtitle" | "trafficLightPosition"
+  | "fullScreenAuxiliary" | "stationary" | "ignoresCycle" | "cornerSnapping";
 /** Toolbar capabilities beyond items and style; see `getToolbarAvailability(feature)`. */
 export type ToolbarFeature = "customization" | "displayMode" | "overflow" | "shown" | "sidebarToggle";
 export interface WindowUpdateOptions extends WindowAppearanceOptions { macos?: MacOSWindowUpdateOptions }
@@ -191,9 +192,11 @@ export interface MacOSStartupSplitViewOptions {
   contentTitlebarHeight?: number;
 }
 export interface MacOSWindowOptions {
-  panelStyle?: "utility" | "documentModal" | "nonactivating";
+  /** An NSPanel. `nonactivating` takes key focus without activating the app; `hud` is a titled utility panel with AppKit's dark HUD chrome. */
+  panelStyle?: "utility" | "documentModal" | "nonactivating" | "hud";
   representedUri?: string | null;
-  level?: "normal" | "floating" | "modalPanel" | "mainMenu" | "status" | "screenSaver";
+  /** `desktop` is above the desktop picture and below the desktop icons and every app window (desktop widgets). */
+  level?: "normal" | "floating" | "modalPanel" | "mainMenu" | "status" | "screenSaver" | "desktop";
   titleBar?: MacOSTitleBarOptions;
   toolbar?: MacOSToolbarOptions;
   startupSplitView?: MacOSStartupSplitViewOptions | null;
@@ -206,6 +209,14 @@ export interface MacOSWindowOptions {
   documentEdited?: boolean;
   /** Behind-window vibrancy under the React content; `none` removes it. */
   backgroundMaterial?: "none" | "sidebar" | "windowBackground" | "hudWindow" | "popover";
+  /** Shows in another app's fullscreen Space instead of switching away from it (with `spaces: "all"`: above fullscreen apps). */
+  fullScreenAuxiliary?: boolean;
+  /** Stays put when Mission Control and Show Desktop move the other windows aside. */
+  stationary?: boolean;
+  /** Left out of the ⌘` window cycle. */
+  ignoresCycle?: boolean;
+  /** From the next move on, every move ends at the nearest corner of the display's work area, inset by `margin` (0–500); a drag snaps on mouse-up. Null turns it off. */
+  cornerSnapping?: { margin: number } | null;
 }
 /** Panel class and startup shell are fixed when the native window is created. */
 export type MacOSWindowUpdateOptions = Omit<MacOSWindowOptions, "panelStyle">;

@@ -38,6 +38,15 @@ RCT_EXPORT_MODULE(NativeDesktopTray)
     if (![key isKindOfClass:NSString.class] || !key.length) { SparkInvalid(reject, @"Tray needs an id"); return; }
     SparkTrayItem *owner = self.items[key];
     if (owner && ![owner.instanceId isEqual:args[@"instanceId"]]) { if ([method isEqual:@"remove"]) resolve(@"null"); else reject([method isEqual:@"create"] ? @"E_ALREADY_EXISTS" : @"E_NOT_FOUND", @"Tray belongs to a different instance", nil); return; }
+    if ([method isEqual:@"bounds"]) {
+      // The status item's button on screen, in the window API's display-relative logical units (top-left origin).
+      if (!owner) { reject(@"E_NOT_FOUND", @"Tray was removed", nil); return; }
+      NSWindow *window = owner.item.button.window; NSScreen *screen = window.screen;
+      if (!window || !screen) { reject(@"E_UNAVAILABLE", @"The tray item is not on screen", nil); return; }
+      NSRect frame = window.frame, display = screen.frame;
+      resolve(SparkJSON(@{ @"displayId": [screen.deviceDescription[@"NSScreenNumber"] stringValue], @"x": @(NSMinX(frame) - NSMinX(display)), @"y": @(NSMaxY(display) - NSMaxY(frame)), @"width": @(NSWidth(frame)), @"height": @(NSHeight(frame)) }));
+      return;
+    }
     if ([method isEqual:@"remove"]) { if (owner) [NSStatusBar.systemStatusBar removeStatusItem:owner.item]; [self.items removeObjectForKey:key]; resolve(@"null"); return; }
     if (![method isEqual:@"create"] && ![method isEqual:@"update"]) { SparkInvalid(reject, @"Unknown tray operation"); return; }
     if ([method isEqual:@"create"] && owner) { reject(@"E_ALREADY_EXISTS", @"Tray id already exists", nil); return; }

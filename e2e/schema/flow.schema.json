@@ -1683,6 +1683,37 @@
               "format": "accelerator"
             }
           },
+          "simulateGlobalShortcut": {
+            "description": "[driver] Press a global shortcut the app registered with @legendapp/spark/global-shortcuts, such as cmd+shift+space, in-process: its handler runs as for a real press. A driven app never registers hotkeys with the system. Fails when nothing is registered for those keys.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "keys": {
+                  "type": "string",
+                  "minLength": 1,
+                  "format": "accelerator"
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "keys"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "string",
+              "minLength": 1,
+              "format": "accelerator"
+            }
+          },
           "inputText": {
             "description": "[maestro] Insert text in one step (Maestro inputText).",
             "if": {

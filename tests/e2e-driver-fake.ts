@@ -83,6 +83,7 @@ export class FakeDriver implements DriverClient {
     return frames;
   }
   async simulateDisplays(displays: readonly object[] | null) { this.log.push(`simulateDisplays ${JSON.stringify(displays)}`); }
+  async simulateGlobalShortcut(key: string, modifiers: number) { this.log.push(`simulateGlobalShortcut ${JSON.stringify({ key, modifiers })}`); }
   /** The fake's test pasteboard: setTestClipboard replaces it, as the app's driver command does. */
   clipboard: TestClipboard = { types: [], text: null, changeCount: 0 };
   async setTestClipboard(content: { text?: string; html?: string; concealed?: boolean }) {

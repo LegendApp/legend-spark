@@ -781,9 +781,14 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
   if (options[@"level"]) window.level = [options[@"level"] integerValue];
   if (windowStyle[@"trafficLights"]) for (NSNumber *button in @[@(NSWindowCloseButton), @(NSWindowMiniaturizeButton), @(NSWindowZoomButton)]) [window standardWindowButton:(NSWindowButton)button.integerValue].hidden = ![windowStyle[@"trafficLights"] boolValue];
   if (windowStyle[@"panelStyle"]) {
-    NSWindowStyleMask mask = window.styleMask & ~(NSWindowStyleMaskUtilityWindow | NSWindowStyleMaskDocModalWindow | NSWindowStyleMaskNonactivatingPanel);
+    NSWindowStyleMask mask = window.styleMask & ~(NSWindowStyleMaskUtilityWindow | NSWindowStyleMaskDocModalWindow | NSWindowStyleMaskNonactivatingPanel | NSWindowStyleMaskHUDWindow);
     NSString *panel = windowStyle[@"panelStyle"];
-    window.styleMask = mask | ([panel isEqual:@"utility"] ? NSWindowStyleMaskUtilityWindow : [panel isEqual:@"documentModal"] ? NSWindowStyleMaskDocModalWindow : NSWindowStyleMaskNonactivatingPanel);
+    // A HUD panel is a titled utility panel with AppKit's dark translucent HUD chrome (Quick Look-style previews).
+    window.styleMask = mask | ([panel isEqual:@"utility"] ? NSWindowStyleMaskUtilityWindow : [panel isEqual:@"documentModal"] ? NSWindowStyleMaskDocModalWindow
+      : [panel isEqual:@"hud"] ? NSWindowStyleMaskHUDWindow | NSWindowStyleMaskUtilityWindow | NSWindowStyleMaskTitled : NSWindowStyleMaskNonactivatingPanel);
+    // A non-activating panel is used while another app is active (a command bar, picture in picture), so it stays
+    // on screen when this app is inactive; NSPanel hides on deactivation by default.
+    if ([panel isEqual:@"nonactivating"] && [window isKindOfClass:NSPanel.class]) ((NSPanel *)window).hidesOnDeactivate = NO;
   }
   LegendApplyContentLayoutModeOption(window, contentLayoutMode);
   LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
@@ -2237,6 +2242,8 @@ willBeInsertedIntoToolbar:(BOOL)flag
     @"WINDOW_LEVEL_MAIN_MENU": @(NSMainMenuWindowLevel),
     @"WINDOW_LEVEL_STATUS": @(NSStatusWindowLevel),
     @"WINDOW_LEVEL_SCREEN_SAVER": @(NSScreenSaverWindowLevel),
+    // Above the desktop picture, below the desktop icons and every app window: the desktop widget layer.
+    @"WINDOW_LEVEL_DESKTOP": @(CGWindowLevelForKey(kCGDesktopWindowLevelKey) + 1),
   }];
 #else
   return @"{}";

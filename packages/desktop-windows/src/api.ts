@@ -10,7 +10,7 @@ import { getNativeDisplays, isBounds, isInfo, record, subscribeToWindowInstance,
 import type { CenterWindowOptions, CloseResult, CursorPoint, DisplayInfo, SetWindowBoundsOptions, ShowWindowOptions, ToolbarFeature, WindowBounds, WindowEventMap, WindowInfo, WindowNewTabEvent, WindowOpenOptions, WindowOption, WindowTabGroup, WindowUpdateOptions } from "./types";
 export type * from "./types";
 
-const WINDOW_OPTIONS: readonly WindowOption[] = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "tabbing", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "subtitle", "trafficLightPosition"];
+const WINDOW_OPTIONS: readonly WindowOption[] = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "tabbing", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "subtitle", "trafficLightPosition", "fullScreenAuxiliary", "stationary", "ignoresCycle", "cornerSnapping"];
 /** With an option, reports whether this platform implements it. Every listed option is macOS-only today; unlisted options work wherever windows do. */
 export function getWindowAvailability(option?: WindowOption): Availability {
   if (option !== undefined && !WINDOW_OPTIONS.includes(option)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown window option");

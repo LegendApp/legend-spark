@@ -23,7 +23,14 @@ export interface TrayUpdate {
   macos?: { symbol?: string | null };
 }
 export interface TrayOptions extends TrayUpdate { id: string; onAction?: (action: TrayAction) => void }
-export interface Tray extends AsyncRegistration { readonly id: string; update(changes: TrayUpdate): Promise<void> }
+/** The tray item on screen, in logical units from its display's top-left corner (the window API's coordinates). */
+export interface TrayBounds { displayId: string; x: number; y: number; width: number; height: number }
+export interface Tray extends AsyncRegistration {
+  readonly id: string;
+  update(changes: TrayUpdate): Promise<void>;
+  /** Where the item is in the menu bar, to anchor a popover below it. macOS only for now (Windows rejects E_UNSUPPORTED_PLATFORM, #394); E_UNAVAILABLE while the menu bar does not show the item. */
+  getBounds(): Promise<TrayBounds>;
+}
 interface Wire { id: string; instanceId: string; imagePath: string; title: string; tooltip?: string; symbol: string; menu: MenuWireItem[] }
 export function getTrayAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
@@ -62,6 +69,8 @@ function presentation(options: Wire) {
   if (options.imagePath && options.symbol) throw new SparkError("E_INVALID_ARGUMENT", "Choose a tray image or macOS symbol");
   if (!options.title.trim() && !options.symbol && !options.imagePath) throw new SparkError("E_INVALID_ARGUMENT", "Tray needs a title, image or macOS symbol");
 }
+const isTrayBounds = (value: unknown): value is TrayBounds => !!value && typeof value === "object" && typeof (value as TrayBounds).displayId === "string" && !!(value as TrayBounds).displayId
+  && (["x", "y", "width", "height"] as const).every(key => Number.isFinite((value as TrayBounds)[key])) && (value as TrayBounds).width > 0 && (value as TrayBounds).height > 0;
 let sequence = 0;
 export async function createTray(options: TrayOptions): Promise<Tray> {
   const changes = validate(options, true);
@@ -97,6 +106,11 @@ export async function createTray(options: TrayOptions): Promise<Tray> {
       });
       queue = next.catch(() => {});
       await next;
+    },
+    async getBounds() {
+      if (stopped) throw new SparkError("E_CLOSED", "Tray was removed");
+      if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Tray bounds require macOS");
+      return parseNativeResult(await invokeNative(() => Native!.call("bounds", JSON.stringify({ id, instanceId }))), isTrayBounds);
     },
     remove: registration.remove,
   };

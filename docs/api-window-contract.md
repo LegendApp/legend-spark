@@ -244,7 +244,8 @@ column is from reading that code, not from running it. Windows work is tracked i
 
 `getWindowAvailability(option)` reports, for `WindowOption` (`aspectRatio`, `opacity`,
 `contentProtection`, `ignoreMouseEvents`, `tabbing`, `spaces`, `simpleFullscreen`, `documentEdited`,
-`backgroundMaterial`, `subtitle`, `trafficLightPosition`), whether the current platform
+`backgroundMaterial`, `subtitle`, `trafficLightPosition`, and the special window options
+`fullScreenAuxiliary`, `stationary`, `ignoresCycle` and `cornerSnapping`), whether the current platform
 implements it: all of them on macOS, none on Windows (`unsupported-platform`). An unknown option
 throws `E_INVALID_ARGUMENT`. Options not in the list work wherever windows do, except where the
 table says otherwise. On Windows the four portable additions reject with
@@ -289,6 +290,64 @@ title bars, and `tests/window-manager.native.mm`) assert each option's `NSWindow
 opening and after an update. The host configuration for the main window
 (`window` in `desktop.config.json`) does not take the added options yet; set them on the main
 window at run time with `setWindowOptions('main', …)`.
+
+### Special window types
+
+`@legendapp/spark/windows` builds the special window types (#190) out of ordinary Spark windows: each
+factory opens a window with a registered root component and JSON props (`id`, `component`, `props`,
+`title`, `appearance`, as `openWindow` takes them), AppKit panel styles, levels and collection
+behaviors, then places and drives it. They are implemented on macOS. On Windows
+`getSpecialWindowAvailability(type)` reports `unsupported-platform` and every factory rejects
+`E_UNSUPPORTED_PLATFORM` before any native call; Windows work is #394. An unknown type throws
+`E_INVALID_ARGUMENT`; unknown option keys reject `E_UNSUPPORTED_OPTION` and invalid values
+`E_INVALID_ARGUMENT`, before anything opens. Positions are logical units from a display's top-left
+corner (`DisplayRect` is `{ displayId, x, y, width, height }`). A controller serializes its commands and
+rejects them with `E_CLOSED` once its window has closed, however it closed.
+
+| Type | Factory | Window | Placement and behavior |
+|---|---|---|---|
+| Spotlight-style command bar | `createCommandBar({ size, hotkey?, material?, onError? })` → `CommandBar` (`show`, `hide`, `toggle`, `shown`, `remove`) | Non-activating panel, hidden title bar, floating level, every Space and over fullscreen apps, out of the ⌘` cycle, behind-window blur (`material`, default `popover`) | Hidden until shown. `show({ displayId? })` centers it horizontally on the display under the pointer (or `displayId`) with its top a fifth of the way down the work area, and gives it key focus without activating the app. It hides when it loses key focus. `hotkey` registers a global shortcut (`@legendapp/spark/global-shortcuts`) that toggles it; `remove()` unregisters it and closes the window. Failures in the hotkey or blur paths go to `onError` (default `console.error`) |
+| HUD overlay | `createHUD({ size, material? })` → `HUD` (`show({ displayId?, durationMs? })`, `hide`, `shown`, `remove`) | Overlay kind: borderless, click-through, never key, status level, every Space and over fullscreen apps, HUD vibrancy | Each show centers it horizontally on the display (default primary), two thirds of the way down the work area, without focus, and hides it after `durationMs` (0–60000, default 1500; 0 keeps it). Showing again restarts the time |
+| Quick Look-style preview | `openPreviewWindow({ size, from?, displayId? })` → `PreviewWindow` (`close`) | `macos.panelStyle: "hud"` (titled utility panel with the dark HUD chrome), floating level | Centered on the display of `from` (else `displayId`, else primary); with `from` (a thumbnail) it grows from it in 200 ms when it opens and shrinks back into it before it closes |
+| Picture in picture | `openPictureInPicture({ size, corner?, displayId?, margin? })` → `PictureInPicture` (`snapTo(corner, { displayId? })`, `close`) | Non-activating panel, hidden title bar, floating level, every Space and over fullscreen apps, keeps `size`'s aspect ratio | Opens at `corner` (default `bottomRight`) of the work area, inset by `margin` (0–500, default 16), without focus. `macos.cornerSnapping` snaps every later move to the nearest corner (a drag snaps on mouse-up) |
+| Menu bar, tray and notch popover | `openPopover({ size, anchor, dismissOnBlur?, material? })` → `Popover` (`close`) | Non-activating panel, hidden title bar, floating level, popover vibrancy | Centered 4 points below `anchor` and kept inside the display: `{ type: "rect", rect }` (a tray item's `Tray.getBounds()`), or `{ type: "notch", displayId? }`, the menu bar's center (the first display with a notch, else the primary display). Takes key focus; closes when it loses it unless `dismissOnBlur: false` |
+| Above fullscreen apps and on all Spaces | `macos.spaces: "all"` with `macos.fullScreenAuxiliary: true` on any window | Collection behaviors | The command bar, HUD, picture in picture, popover, edge drawer, overlay and desktop widget all set them |
+| Edge drawer | `createEdgeDrawer({ edge, thickness, length?, displayId?, material? })` → `EdgeDrawer` (`open`, `close`, `toggle`, `isOpen`, `remove`) | Non-activating panel, hidden title bar, floating level, every Space, sidebar vibrancy | Hidden past `edge` of the work area until opened; `open()` shows it there with focus and slides it in over 200 ms; `close()` slides it out and hides it. `thickness` and `length` (centered along the edge, default the whole edge) are 100–20000 |
+| Transparent click-through overlay | `openOverlay({ rect?, clickThrough? })` → `WindowInfo` | Overlay kind (as the HUD), transparent and shadowless | Covers `rect` (default the whole primary display, menu bar included); mouse events pass through unless `clickThrough: false`. Close it with `closeWindow` |
+| Desktop widget layer | `openDesktopWidget({ size, position, material? })` → `WindowInfo` | Borderless transparent non-activating panel at `macos.level: "desktop"` (above the desktop picture, below the desktop icons and every app window), every Space, `stationary` (left in place by Mission Control and Show Desktop), out of the ⌘` cycle | At `position`. Close it with `closeWindow` |
+| Presenter mode | `startPresenterMode({ audience, controller, audienceDisplayId?, controllerDisplayId?, onEnd? })` → `PresenterMode` (`swapDisplays`, `stop`, `audienceDisplayId`, `controllerDisplayId`) | Audience: borderless, status level, filling its display above the menu bar. Controller: an ordinary window | Needs two displays (`E_UNAVAILABLE` with one) and two window IDs. The audience defaults to the first display that is not primary and the controller to the primary one; the controller is centered at `controller.size` (default 1000 × 700, fitted to the work area). `swapDisplays()` exchanges them. Presenter mode ends, closing both windows and calling `onEnd` once with `stopped`, `displayRemoved` or `windowClosed`, on `stop()`, when either display disconnects or when either window closes |
+
+The window options the types use are public and work on any window (macOS; Windows rejects
+`E_UNSUPPORTED_OPTION`):
+
+- `macos.panelStyle: "hud"`: a titled utility panel with AppKit's HUD chrome. A `nonactivating`
+  panel takes key focus when shown with focus without activating the app, and stays on screen while
+  the app is inactive (`hidesOnDeactivate` off). Borderless panels cannot become key and are only
+  ordered front.
+- `macos.level: "desktop"`: one above the desktop picture level, below the desktop icon level.
+- `macos.fullScreenAuxiliary`, `macos.stationary`, `macos.ignoresCycle`: the matching
+  `NSWindowCollectionBehavior` flags (auxiliary clears fullscreen-primary, which AppKit refuses to
+  combine with it).
+- `macos.cornerSnapping: { margin } | null`: from the next move on, every move, by the user or by
+  `setWindowBounds`, ends at the nearest corner of the owning display's work area, inset by
+  `margin` (0–500), animated on screen; a drag snaps when the mouse button comes up.
+- `setWindowBounds(id, bounds, { macos: { durationMs } })` moves a window that is not on screen at
+  once (AppKit animates only on-screen frames).
+- `Tray.getBounds()` (`@legendapp/spark/tray`) returns the item's `DisplayRect` in the menu bar, for a
+  popover anchor; `E_UNAVAILABLE` while the menu bar does not show it, `E_CLOSED` after `remove()`,
+  `E_UNSUPPORTED_PLATFORM` on Windows (#394).
+
+Testing: driven apps never show windows ([test driver](test-driver.md#focus-and-window-state)), so
+the flows read each window's state and bounds back through the window API. Two in-app driver
+commands make the types testable off screen: `simulateGlobalShortcut` presses a registered global
+shortcut (driven apps never register hotkeys with the system), and `simulateDisplays` gives window
+geometry simulated displays, so presenter mode runs on two displays the Mac does not have
+([displays](displays.md#simulated-displays)). A driven window is never key, so blur dismissal (command
+bar, popover) is covered by `tests/special-windows.test.ts`, not by a flow. The Kitchen Sink screen is
+`multiwindow/special-windows`; its flows are `e2e/flows/multiwindow/special-*.yaml`. Native tests:
+`tests/window.native.mm` (collection behaviors, simulated-display geometry, corner snapping),
+`tests/window-manager.native.mm` (HUD panel, desktop level, non-activating panels),
+`tests/tray.native.mm` (tray bounds) and `tests/global-shortcuts.native.mm` (driver hotkeys).
 
 ### Window tabs
 

@@ -17,7 +17,12 @@ static void Show(NSWindow *window, BOOL focus, NSWindow *sheetParent) {
   if (SparkTestDriverActive()) { SparkSetDriverShown(window, YES); if (TabWindows(window).count > 1) SelectTab(window); return; }
   if (sheetParent) [sheetParent beginSheet:window completionHandler:nil];
   else if (!focus) [window orderFront:nil];
-  else if ([window isKindOfClass:NSPanel.class] && (window.styleMask & NSWindowStyleMaskNonactivatingPanel)) [window orderFrontRegardless];
+  else if ([window isKindOfClass:NSPanel.class] && (window.styleMask & NSWindowStyleMaskNonactivatingPanel)) {
+    // A non-activating panel takes key focus without activating the app (a command bar over another app's window).
+    // Borderless panels cannot become key; they are only ordered front.
+    [window orderFrontRegardless];
+    if (window.canBecomeKeyWindow) [window makeKeyWindow];
+  }
   else [window makeKeyAndOrderFront:nil];
 }
 static void Hide(NSWindow *window) {
@@ -30,7 +35,8 @@ static void Hide(NSWindow *window) {
 // Driver mode reports what the app did (docs/test-driver.md): a driven app runs with no presence, which AppKit
 // reports as hidden.
 static BOOL Visible(NSWindow *window) { return SparkTestDriverActive() ? SparkDriverShown(window) : window.visible && !NSApp.hidden; }
-static char SimpleFullscreenKey, TrafficLightKey, MaterialKey;
+static char SimpleFullscreenKey, TrafficLightKey, MaterialKey, CornerSnapKey;
+static void SnapToCorner(NSWindow *window);
 static BOOL InSimpleFullscreen(NSWindow *window) { return objc_getAssociatedObject(window, &SimpleFullscreenKey) != nil; }
 static void SetSimpleFullscreen(NSWindow *window, BOOL enabled);
 static void SetTrafficLightPosition(NSWindow *window, id position);
@@ -81,7 +87,7 @@ static void SaveState(NSString *key) {
   NSMutableDictionary *record = [[NSUserDefaults.standardUserDefaults dictionaryForKey:SavedStateKey(key)] mutableCopy];
   if (![record[@"version"] isEqual:@1]) record = [@{ @"version": @1 } mutableCopy];
   if (!window.miniaturized && !(window.styleMask & NSWindowStyleMaskFullScreen) && !InSimpleFullscreen(window)) {
-    record[@"bounds"] = SparkBoundsForWindow(window); record[@"persistentId"] = SparkPersistentScreenId(SparkOwningScreen(window.frame)) ?: @"";
+    record[@"bounds"] = SparkWindowBounds(window); record[@"persistentId"] = SparkOwning(window.frame).persistentId ?: @"";
   }
   if (!record[@"bounds"]) return;
   NSArray *tabs = delegate.tabState[@"windowIds"];
@@ -93,7 +99,7 @@ static void Event(NSString *type, NSString *key) {
   NSWindow *window = Window(key);
   NSMutableDictionary *event = [@{ @"type": type, @"windowId": key, @"instanceId": delegates[key].instanceId ?: @"" } mutableCopy];
   if ([type isEqual:@"move"] || [type isEqual:@"resize"] || [type isEqual:@"screenChanged"]) {
-    event[@"type"] = @"boundsChanged"; event[@"bounds"] = SparkBoundsForWindow(window);
+    event[@"type"] = @"boundsChanged"; event[@"bounds"] = SparkWindowBounds(window);
     SaveState(key);
   } else if ([type isEqual:@"focus"] || [type isEqual:@"blur"]) { event[@"type"] = @"focusChanged"; event[@"focused"] = @([type isEqual:@"focus"]); }
   else if ([type isEqual:@"enterFullscreen"] || [type isEqual:@"leaveFullscreen"]) { event[@"type"] = @"fullscreenChanged"; event[@"fullscreen"] = @([type isEqual:@"enterFullscreen"]); }
@@ -275,7 +281,7 @@ static char TabObservation;
     });
   }
 }
-- (void)windowDidMove:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidMove:)]) [self.previousDelegate windowDidMove:note]; Event(@"move", self.windowID); }
+- (void)windowDidMove:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidMove:)]) [self.previousDelegate windowDidMove:note]; Event(@"move", self.windowID); SnapToCorner(self.window); }
 - (void)windowDidResize:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidResize:)]) [self.previousDelegate windowDidResize:note]; Event(@"resize", self.windowID); }
 - (void)windowDidChangeScreen:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidChangeScreen:)]) [self.previousDelegate windowDidChangeScreen:note]; Event(@"screenChanged", self.windowID); }
 - (void)windowDidEnterFullScreen:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidEnterFullScreen:)]) [self.previousDelegate windowDidEnterFullScreen:note]; Event(@"enterFullscreen", self.windowID); [self finishFullscreen:YES]; }
@@ -323,7 +329,7 @@ static NSDictionary *Info(NSString *key, NSWindow *window) {
   for (NSString *candidate in windows) if (windows[candidate] == parent) { parentId = candidate; break; }
   return @{ @"id": key, @"instanceId": delegates[key].instanceId, @"kind": opening[@"kind"] ?: @"window",
     @"title": window.title, @"parentId": parentId ?: NSNull.null, @"modal": @([opening[@"modal"] boolValue]), @"visible": @(Visible(window)), @"focused": @(window.keyWindow),
-    @"minimized": @(window.miniaturized), @"maximized": @(window.zoomed), @"fullscreen": @((window.styleMask & NSWindowStyleMaskFullScreen) != 0), @"bounds": SparkBoundsForWindow(window) };
+    @"minimized": @(window.miniaturized), @"maximized": @(window.zoomed), @"fullscreen": @((window.styleMask & NSWindowStyleMaskFullScreen) != 0), @"bounds": SparkWindowBounds(window) };
 }
 static const NSWindowButton TrafficLights[] = { NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton };
 // Holds a requested traffic-light position and puts the buttons back whenever AppKit lays the
@@ -415,6 +421,60 @@ static void SetBackgroundMaterial(NSWindow *window, NSString *name) {
   // Below the React surface, so transparent React content shows the material.
   if (view.superview != window.contentView) { view.frame = window.contentView.bounds; [window.contentView addSubview:view positioned:NSWindowBelow relativeTo:nil]; }
   view.material = (NSVisualEffectMaterial)material.integerValue;
+}
+// macos.cornerSnapping (picture in picture): every move (windowDidMove:, and setWindowBounds) ends at the nearest
+// corner of the owning display's work area, inset by the margin. A move the user drags snaps when the mouse button comes up: AppKit reports the
+// moves of a drag as they happen, so a one-shot mouse-up monitor (local, and global for a server-side title-bar
+// drag) waits for the release. Main thread only. The snap object belongs to the window (associated object);
+// its blocks hold it and the window weakly, and it removes its monitors when the window releases it.
+@interface SparkCornerSnap : NSObject
+@property (nonatomic, weak) NSWindow *window;
+@property (nonatomic) CGFloat margin;
+@property (nonatomic) BOOL snapping;
+@property (nonatomic) id localMonitor, globalMonitor;
+@end
+@implementation SparkCornerSnap
+- (void)stopWaiting {
+  if (self.localMonitor) [NSEvent removeMonitor:self.localMonitor];
+  if (self.globalMonitor) [NSEvent removeMonitor:self.globalMonitor];
+  self.localMonitor = nil; self.globalMonitor = nil;
+}
+- (void)waitForMouseUp {
+  if (self.localMonitor) return;
+  __weak SparkCornerSnap *weak = self;
+  void (^released)(void) = ^{ dispatch_async(dispatch_get_main_queue(), ^{ SparkCornerSnap *snap = weak; [snap stopWaiting]; if (snap.window) SnapToCorner(snap.window); }); };
+  self.localMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseUp handler:^NSEvent *(NSEvent *event) { released(); return event; }];
+  self.globalMonitor = [NSEvent addGlobalMonitorForEventsMatchingMask:NSEventMaskLeftMouseUp handler:^(NSEvent *event) { released(); }];
+}
+- (void)dealloc { [self stopWaiting]; }
+@end
+// The nearest corner of the owning display's work area, inset by `margin`.
+static NSRect CornerFrame(NSRect frame, CGFloat margin) {
+  NSRect area = SparkOwning(frame).visibleFrame;
+  frame.origin.x = NSMidX(frame) < NSMidX(area) ? NSMinX(area) + margin : NSMaxX(area) - margin - NSWidth(frame);
+  frame.origin.y = NSMidY(frame) < NSMidY(area) ? NSMinY(area) + margin : NSMaxY(area) - margin - NSHeight(frame);
+  return frame;
+}
+static void SnapToCorner(NSWindow *window) {
+  SparkCornerSnap *snap = objc_getAssociatedObject(window, &CornerSnapKey);
+  if (!snap || snap.snapping) return;
+  // The driver's pointer never presses the real mouse button, and a person's button must not decide a driven run.
+  if (!SparkTestDriverActive() && (NSEvent.pressedMouseButtons & 1)) { [snap waitForMouseUp]; return; }
+  NSRect target = CornerFrame(window.frame, snap.margin);
+  if (NSEqualRects(target, window.frame)) return;
+  // AppKit animates a frame only on screen (driver mode never is): elsewhere the window moves at once.
+  if (!window.visible) { snap.snapping = YES; [window setFrame:target display:NO]; snap.snapping = NO; return; }
+  snap.snapping = YES;
+  __weak SparkCornerSnap *weak = snap;
+  [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) { context.duration = 0.2; [[window animator] setFrame:target display:YES]; }
+    completionHandler:^{ weak.snapping = NO; }];
+}
+static void SetCornerSnapping(NSWindow *window, id options) {
+  if (options == NSNull.null) { objc_setAssociatedObject(window, &CornerSnapKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC); return; }
+  SparkCornerSnap *snap = objc_getAssociatedObject(window, &CornerSnapKey);
+  if (!snap) { snap = [SparkCornerSnap new]; snap.window = window; objc_setAssociatedObject(window, &CornerSnapKey, snap, OBJC_ASSOCIATION_RETAIN_NONATOMIC); }
+  // From the next move on: opening places the window after the options apply.
+  snap.margin = [options[@"margin"] doubleValue];
 }
 static NSInteger SimpleFullscreenWindows;
 static NSApplicationPresentationOptions PresentationBeforeSimpleFullscreen;
@@ -525,6 +585,15 @@ static BOOL ApplyCommon(NSWindow *window, NSDictionary *options, RCTPromiseRejec
     window.collectionBehavior = (window.collectionBehavior & ~(NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorMoveToActiveSpace))
       | ([spaces isEqual:@"all"] ? NSWindowCollectionBehaviorCanJoinAllSpaces : [spaces isEqual:@"active"] ? NSWindowCollectionBehaviorMoveToActiveSpace : 0);
   }
+  // Collection behaviors for special windows (docs/api-window-contract.md#special-window-types). AppKit rejects a
+  // window that is both a fullscreen primary and auxiliary window, so auxiliary clears primary.
+  if (macos[@"fullScreenAuxiliary"]) {
+    NSWindowCollectionBehavior behavior = window.collectionBehavior & ~(NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorFullScreenPrimary);
+    window.collectionBehavior = [macos[@"fullScreenAuxiliary"] boolValue] ? behavior | NSWindowCollectionBehaviorFullScreenAuxiliary : behavior;
+  }
+  if (macos[@"stationary"]) window.collectionBehavior = [macos[@"stationary"] boolValue] ? window.collectionBehavior | NSWindowCollectionBehaviorStationary : window.collectionBehavior & ~NSWindowCollectionBehaviorStationary;
+  if (macos[@"ignoresCycle"]) window.collectionBehavior = [macos[@"ignoresCycle"] boolValue] ? (window.collectionBehavior | NSWindowCollectionBehaviorIgnoresCycle) & ~NSWindowCollectionBehaviorParticipatesInCycle : window.collectionBehavior & ~NSWindowCollectionBehaviorIgnoresCycle;
+  if (macos[@"cornerSnapping"]) SetCornerSnapping(window, macos[@"cornerSnapping"]);
   NSDictionary *tabbing = options[@"tabbing"];
   if (tabbing[@"mode"]) window.tabbingMode = [tabbing[@"mode"] isEqual:@"preferred"] ? NSWindowTabbingModePreferred : [tabbing[@"mode"] isEqual:@"disallowed"] ? NSWindowTabbingModeDisallowed : NSWindowTabbingModeAutomatic;
   if (tabbing[@"identifier"]) window.tabbingIdentifier = tabbing[@"identifier"];
@@ -543,12 +612,14 @@ static BOOL ApplyCommon(NSWindow *window, NSDictionary *options, RCTPromiseRejec
   return YES;
 }
 static BOOL SetBounds(NSWindow *window, NSDictionary *bounds, double durationMs, RCTPromiseResolveBlock resolve, RCTPromiseRejectBlock reject) {
-  NSScreen *screen = SparkScreenWithId(bounds[@"displayId"]);
+  SparkScreen *screen = SparkScreenForId(bounds[@"displayId"]);
   if (!screen) { reject(@"E_NOT_FOUND", @"Display is disconnected", nil); return NO; }
   NSRect frame = SparkAppKitFrame(bounds, screen.frame);
   if (frame.size.width < window.minSize.width || frame.size.height < window.minSize.height || frame.size.width > window.maxSize.width || frame.size.height > window.maxSize.height) { reject(@"E_INVALID_ARGUMENT", @"Bounds are outside window constraints", nil); return NO; }
-  if (durationMs > 0) [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) { context.duration = durationMs / 1000.0; [[window animator] setFrame:frame display:YES]; } completionHandler:^{ resolve(@"null"); }];
-  else { [window setFrame:frame display:YES]; resolve(@"null"); }
+  // AppKit reports moves of a window that is not on screen late or not at all, so a commanded move snaps here.
+  // AppKit animates a frame only on screen (driver mode never is): elsewhere the window moves at once.
+  if (durationMs > 0 && window.visible) [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) { context.duration = durationMs / 1000.0; [[window animator] setFrame:frame display:YES]; } completionHandler:^{ resolve(@"null"); SnapToCorner(window); }];
+  else { [window setFrame:frame display:YES]; resolve(@"null"); SnapToCorner(window); }
   return YES;
 }
 // One sequence for every runtime, so a listener can drop events older than its snapshot. Not /system's
@@ -564,9 +635,7 @@ static void EmitDisplays(void) { SparkEmit(@{ @"type": @"displayDetailsChanged",
 + (void)load {
   SparkTestDriverRegisterCommand(@"simulateDisplays", ^(NSDictionary *request, SparkTestDriverReply reply) {
     id displays = request[@"displays"];
-    BOOL valid = displays == NSNull.null || ([displays isKindOfClass:NSArray.class] && [displays count] > 0 && [NSJSONSerialization isValidJSONObject:displays]);
-    for (id display in valid && displays != NSNull.null ? displays : @[]) valid = valid && [display isKindOfClass:NSDictionary.class];
-    if (!valid) { reply(@{ @"ok": @NO, @"error": @{ @"code": @"E_INVALID_ARGUMENT", @"message": @"simulateDisplays expects a non-empty list of displays, or null" } }); return; }
+    if (displays != NSNull.null && !SparkValidSimulatedDisplays(displays)) { reply(@{ @"ok": @NO, @"error": @{ @"code": @"E_INVALID_ARGUMENT", @"message": @"simulateDisplays expects displays with unique IDs, exactly one primary, an origin, size, work area and scale factor; or null" } }); return; }
     SparkSimulateDisplays(displays == NSNull.null ? nil : displays);
     // Motion's frame rate follows the simulated primary display's refresh rate (docs/motion.md#frame-rate-and-power).
     id primary = nil;
@@ -603,7 +672,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
     NSString *key = [args[@"id"] isKindOfClass:NSString.class] ? args[@"id"] : @"main";
     NSWindow *main = Window(@"main");
     if (main) InstallDelegate(main, @"main");
-    if ([method isEqual:@"displays"]) { resolve(SparkJSON(SparkDisplayInfo())); return; }
+    if ([method isEqual:@"displays"]) { resolve(SparkJSON(SparkWindowDisplays())); return; }
     if ([method isEqual:@"displayDetails"]) { resolve(SparkJSON(SparkDisplayDetails())); return; }
     // Observation runs only while a listener in this runtime holds it.
     if ([method isEqual:@"observeDisplays"]) {
@@ -615,7 +684,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       resolve(@"null"); return;
     }
     if ([method isEqual:@"cursorPoint"]) {
-      resolve(SparkJSON(SparkCursorPoint()));
+      resolve(SparkJSON(SparkPointer()));
       return;
     }
     if ([method isEqual:@"list"]) {
@@ -661,13 +730,13 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       if (![saved[@"version"] isEqual:@1]) saved = nil;
       BOOL restoredShell = [objc_getAssociatedObject(window, NSSelectorFromString(@"sparkRestoredShell")) boolValue];
       if (!saved && restoredShell) {
-        NSScreen *restoredScreen = SparkOwningScreen(window.frame);
-        saved = @{ @"bounds": SparkLogicalBounds(window.frame, restoredScreen.frame, SparkScreenId(restoredScreen)), @"persistentId": SparkPersistentScreenId(restoredScreen) ?: @"" };
+        SparkScreen *restoredScreen = SparkOwning(window.frame);
+        saved = @{ @"bounds": SparkLogicalBounds(window.frame, restoredScreen.frame, restoredScreen.identifier), @"persistentId": restoredScreen.persistentId ?: @"" };
       }
-      NSScreen *screen = args[@"position"] ? SparkScreenWithId(args[@"position"][@"displayId"]) : nil;
+      SparkScreen *screen = args[@"position"] ? SparkScreenForId(args[@"position"][@"displayId"]) : nil;
       if (args[@"position"] && !screen) { reject(@"E_NOT_FOUND", @"Display is disconnected", nil); return; }
-      if (!screen && saved) for (NSScreen *candidate in NSScreen.screens) if ([SparkPersistentScreenId(candidate) isEqual:saved[@"persistentId"]]) { screen = candidate; break; }
-      if (!screen) screen = parent ? SparkOwningScreen(parent.frame) : SparkPrimaryScreen();
+      if (!screen && saved) for (SparkScreen *candidate in SparkScreens()) if ([candidate.persistentId isEqual:saved[@"persistentId"]]) { screen = candidate; break; }
+      if (!screen) screen = parent ? SparkOwning(parent.frame) : SparkPrimary();
       NSDictionary *size = args[@"size"] ?: saved[@"bounds"];
       CGFloat width = size ? [size[@"width"] doubleValue] : 640, height = size ? [size[@"height"] doubleValue] : 480;
       width = MIN(MAX(width, window.minSize.width), window.maxSize.width); height = MIN(MAX(height, window.minSize.height), window.maxSize.height);
@@ -675,7 +744,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       if (args[@"position"] || saved) {
         NSMutableDictionary *bounds = [(args[@"position"] ?: saved[@"bounds"]) mutableCopy]; bounds[@"width"] = @(width); bounds[@"height"] = @(height);
         frame = SparkAppKitFrame(bounds, screen.frame);
-        if (!args[@"position"]) frame = [window constrainFrameRect:frame toScreen:screen];
+        if (!args[@"position"] && screen.screen) frame = [window constrainFrameRect:frame toScreen:screen.screen];
       }
       [window setFrame:frame display:NO]; delegate.restoreBounds = restoreBounds;
       if (parent && ![args[@"modal"] boolValue]) [parent addChildWindow:window ordered:NSWindowAbove];
@@ -746,7 +815,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
     else if ([method isEqual:@"maximize"]) { if (!window.zoomed) [window zoom:nil]; }
     else if ([method isEqual:@"unmaximize"]) { if (window.zoomed) [window zoom:nil]; }
     else if ([method isEqual:@"center"]) {
-      NSScreen *screen = args[@"displayId"] ? SparkScreenWithId(args[@"displayId"]) : SparkOwningScreen(window.frame);
+      SparkScreen *screen = args[@"displayId"] ? SparkScreenForId(args[@"displayId"]) : SparkOwning(window.frame);
       if (!screen) { reject(@"E_NOT_FOUND", @"Display is disconnected", nil); return; }
       NSRect frame = window.frame; frame.origin = NSMakePoint(NSMidX(screen.visibleFrame) - NSWidth(frame)/2, NSMidY(screen.visibleFrame) - NSHeight(frame)/2); [window setFrame:frame display:YES];
     } else if ([method isEqual:@"hide"]) {

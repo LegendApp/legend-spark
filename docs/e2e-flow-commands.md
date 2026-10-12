@@ -69,6 +69,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 |---|---|---|---|---|
 | `pressKey` | value → `key` | `key`* | black-box, maestro | Press a key, such as Escape, Enter or F5. |
 | `shortcut` | value → `keys` | `keys`* | black-box | Press a keyboard shortcut, such as cmd+shift+s. |
+| `simulateGlobalShortcut` | value → `keys` | `keys`* | driver | Press a global shortcut the app registered with @legendapp/spark/global-shortcuts, such as cmd+shift+space, in-process: its handler runs as for a real press. A driven app never registers hotkeys with the system. Fails when nothing is registered for those keys. |
 | `inputText` | value → `text` | `text`*, `into` | black-box, maestro | Insert text in one step (Maestro inputText). |
 | `typeText` | value → `text` | `text`*, `into` | black-box | Type text as per-key events. |
 | `imeCompose` | — | `layout`*, `keys`*, `commit` | black-box | Compose text through an input method and commit a candidate. |
