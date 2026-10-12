@@ -2,6 +2,7 @@
 #import <RNDesktopApp/SparkDesktop.h>
 #import "SparkDockTile.h"
 #import "SparkSystemState.h"
+#import "SparkAppearancePreferences.h"
 #import <ServiceManagement/ServiceManagement.h>
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <IOKit/ps/IOPowerSources.h>
@@ -99,6 +100,11 @@ static NSSet<NSString *> *ObservedTypes(NSDictionary<NSString *, NSSet<NSString 
       if (!state) { reject(@"E_NATIVE", error, nil); return; }
       [value addEntriesFromDictionary:state];
       resolve(SparkJSON(value)); return;
+    }
+    if ([method isEqual:@"preferences"]) {
+      NSString *error; NSDictionary *preferences = SparkAppearancePreferences(&error);
+      if (preferences) resolve(SparkJSON(preferences)); else reject(@"E_NATIVE", error, nil);
+      return;
     }
     if ([method isEqual:@"network"]) {
       SparkSystemNetworkStatus(5, ^(NSDictionary *status, NSString *code, NSString *error) { if (status) resolve(SparkJSON(status)); else reject(code, error, nil); });

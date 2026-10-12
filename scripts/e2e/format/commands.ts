@@ -1,5 +1,5 @@
 import {
-  accelerator, anyKey, anyStr, anyValue, bool, bound, command, commands, condition, dict, duration, fileName, fraction, int, list, menuPath, modifier,
+  accelerator, anyKey, anyStr, anyValue, bool, bound, command, commands, condition, dict, duration, fileName, fraction, hexColor, int, list, menuPath, modifier,
   num, obj, oneKey, oneOf, percent, pixels, point, scope, selector, SELECTOR_PROPS, size, str, TARGET_KEYS, text, windowSelector, WINDOW_PROPS,
   type Schema,
 } from "./primitives.ts";
@@ -168,9 +168,11 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   simulatePower: spec("environment", "Simulate power source and thermal state.", { source: oneOf("battery", "ac"), lowPower: bool, thermal: oneOf("nominal", "fair", "serious", "critical") }, { rule: anyKey("source", "lowPower", "thermal") }),
   setNetwork: spec("environment", "Shape the network.", { offline: bool, latency: duration, bandwidth: { type: "string", pattern: "^\\d+(\\.\\d+)?(kbps|mbps|gbps)$", description: "a bandwidth such as 1.5mbps" }, proxy: str }, { rule: anyKey("offline", "latency", "bandwidth", "proxy") }),
   lockScreen: spec("environment", "Lock the screen for a while.", { for: duration }, { required: ["for"] }),
-  simulateSystemEvent: single("environment", "Deliver a system event to the app's onSystemEvent registrations in-process; the OS is untouched (sleepSystem, lockScreen and simulatePower change it). thermal, lowPower, source and network go with their event type and override what getSystemInfo and getNetworkStatus report until the app quits; memoryPressure needs level.", "type",
-    oneOf("sleep", "wake", "lock", "unlock", "sessionActive", "sessionInactive", "powerChanged", "lowPowerChanged", "thermalChanged", "networkChanged", "proxyChanged", "localeChanged", "timeZoneChanged", "clockChanged", "memoryPressure", "appearanceChanged", "displaysChanged"),
-    { thermal: oneOf("nominal", "fair", "serious", "critical"), lowPower: bool, source: oneOf("battery", "ac"), network: oneOf("online", "offline"), level: oneOf("normal", "warning", "critical") }, { driver: true }),
+  simulateSystemEvent: single("environment", "Deliver a system event to the app's onSystemEvent registrations in-process; the OS is untouched (sleepSystem, lockScreen and simulatePower change it). State fields go with their event type and override what getSystemInfo, getNetworkStatus and getAppearancePreferences report until the app quits: thermal (thermalChanged), lowPower (lowPowerChanged), source (powerChanged), network (networkChanged), appearance and automaticAppearance (appearanceChanged), accentColor and highlightColor (systemColorsChanged), increaseContrast, reduceTransparency, reduceMotion, differentiateWithoutColor and invertColors (accessibilityDisplayChanged); memoryPressure needs level.", "type",
+    oneOf("sleep", "wake", "lock", "unlock", "sessionActive", "sessionInactive", "powerChanged", "lowPowerChanged", "thermalChanged", "networkChanged", "proxyChanged", "localeChanged", "timeZoneChanged", "clockChanged", "memoryPressure", "appearanceChanged", "displaysChanged", "systemColorsChanged", "accessibilityDisplayChanged"),
+    { thermal: oneOf("nominal", "fair", "serious", "critical"), lowPower: bool, source: oneOf("battery", "ac"), network: oneOf("online", "offline"), level: oneOf("normal", "warning", "critical"),
+      appearance: oneOf("light", "dark"), automaticAppearance: bool, accentColor: hexColor, highlightColor: hexColor,
+      increaseContrast: bool, reduceTransparency: bool, reduceMotion: bool, differentiateWithoutColor: bool, invertColors: bool }, { driver: true }),
   permission: spec("environment", "Grant, revoke or reset a privacy permission.", Object.fromEntries(["grant", "revoke", "reset"].map(key => [key, oneOf("camera", "microphone", "notifications", "location", "contacts", "calendars", "reminders", "photos", "accessibility", "screenRecording", "inputMonitoring", "fullDiskAccess", "automation")])), { rule: oneKey("grant", "revoke", "reset") }),
   setFocusMode: single("environment", "Set the OS Focus mode.", "mode", oneOf("off", "doNotDisturb", "sleep", "work", "personal")),
 

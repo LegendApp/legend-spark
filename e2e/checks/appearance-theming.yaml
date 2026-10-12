@@ -1,0 +1,33 @@
+area: appearance-theming
+prefix: APPR
+checks:
+  APPR-PREFS-01:
+    title: "getSystemAvailability(\"appearancePreferences\") is available on macOS and getAppearancePreferences reports the system appearance and Auto, accent and highlight colors, increase contrast, reduce transparency, reduce motion and differentiate without color as AppKit reads them (settings given as launch arguments; the Mac's settings are untouched)"
+    platforms: [macos]
+    blocking: true
+    spec: "#97 APPR.api"
+    covers:
+      - ./system#getAppearancePreferences
+      - ./system#getSystemAvailability
+  APPR-EVENTS-01:
+    title: "onSystemEvent delivers appearanceChanged, systemColorsChanged and accessibilityDisplayChanged, and getAppearancePreferences then reports the appearance, accent and highlight colors, contrast, transparency, motion, differentiate-without-color and invert-colors values each event carried (injected with simulateSystemEvent; the OS is untouched)"
+    platforms: [macos]
+    blocking: true
+    spec: "#97 APPR.api"
+    covers:
+      - ./system#onSystemEvent
+      - ./system#getAppearancePreferences
+  APPR-WINDOW-01:
+    title: "setWindowOptions(windowId, { appearance }) overrides one window's appearance to dark or light and back to the app's, and leaving the screen restores it"
+    platforms: [macos]
+    blocking: true
+    spec: "#97 APPR.api"
+    covers:
+      - ./windows#setWindowOptions
+  APPR-UNSUP-01:
+    title: "On Windows getSystemAvailability(\"appearancePreferences\") reports unsupported-platform and the preferences screen shows SparkError:E_UNSUPPORTED_PLATFORM (implementation: #342)"
+    platforms: [windows]
+    blocking: true
+    spec: "#97 APPR.api"
+    covers:
+      - ./system#getSystemAvailability

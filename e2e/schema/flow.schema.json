@@ -4936,7 +4936,7 @@
             }
           },
           "simulateSystemEvent": {
-            "description": "[driver] Deliver a system event to the app's onSystemEvent registrations in-process; the OS is untouched (sleepSystem, lockScreen and simulatePower change it). thermal, lowPower, source and network go with their event type and override what getSystemInfo and getNetworkStatus report until the app quits; memoryPressure needs level.",
+            "description": "[driver] Deliver a system event to the app's onSystemEvent registrations in-process; the OS is untouched (sleepSystem, lockScreen and simulatePower change it). State fields go with their event type and override what getSystemInfo, getNetworkStatus and getAppearancePreferences report until the app quits: thermal (thermalChanged), lowPower (lowPowerChanged), source (powerChanged), network (networkChanged), appearance and automaticAppearance (appearanceChanged), accentColor and highlightColor (systemColorsChanged), increaseContrast, reduceTransparency, reduceMotion, differentiateWithoutColor and invertColors (accessibilityDisplayChanged); memoryPressure needs level.",
             "if": {
               "type": "object"
             },
@@ -4961,7 +4961,9 @@
                     "clockChanged",
                     "memoryPressure",
                     "appearanceChanged",
-                    "displaysChanged"
+                    "displaysChanged",
+                    "systemColorsChanged",
+                    "accessibilityDisplayChanged"
                   ]
                 },
                 "thermal": {
@@ -4994,6 +4996,40 @@
                     "critical"
                   ]
                 },
+                "appearance": {
+                  "enum": [
+                    "light",
+                    "dark"
+                  ]
+                },
+                "automaticAppearance": {
+                  "type": "boolean"
+                },
+                "accentColor": {
+                  "type": "string",
+                  "pattern": "^#[0-9a-f]{6}$",
+                  "description": "an sRGB color such as #007aff (lowercase)"
+                },
+                "highlightColor": {
+                  "type": "string",
+                  "pattern": "^#[0-9a-f]{6}$",
+                  "description": "an sRGB color such as #007aff (lowercase)"
+                },
+                "increaseContrast": {
+                  "type": "boolean"
+                },
+                "reduceTransparency": {
+                  "type": "boolean"
+                },
+                "reduceMotion": {
+                  "type": "boolean"
+                },
+                "differentiateWithoutColor": {
+                  "type": "boolean"
+                },
+                "invertColors": {
+                  "type": "boolean"
+                },
                 "when": {
                   "$ref": "#/definitions/condition"
                 },
@@ -5024,7 +5060,9 @@
                 "clockChanged",
                 "memoryPressure",
                 "appearanceChanged",
-                "displaysChanged"
+                "displaysChanged",
+                "systemColorsChanged",
+                "accessibilityDisplayChanged"
               ]
             }
           },

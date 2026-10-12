@@ -1,6 +1,6 @@
 # System integration
 
-`@legendapp/spark/system` owns OS information, events, login startup, app badges and progress, attention, power requests and launcher menus. `getSystemAvailability()` does not require an installed native module; `getSystemAvailability(feature)` reports one of `appBadge`, `appProgress`, `attention`, `dockMenu` and `taskbarMenu` for the running platform. Commands return `Promise<void>` and reject shared `SparkError` codes; query results are validated.
+`@legendapp/spark/system` owns OS information, events, login startup, app badges and progress, attention, power requests and launcher menus. `getSystemAvailability()` does not require an installed native module; `getSystemAvailability(feature)` reports one of `appBadge`, `appProgress`, `attention`, `dockMenu`, `taskbarMenu` and the platform-limited features listed under [System events](#system-events) and [Appearance preferences](#appearance-preferences) for the running platform. Commands return `Promise<void>` and reject shared `SparkError` codes; query results are validated.
 
 ```ts
 const blocker = await preventSleep({ reason: 'Exporting video', kind: 'display' });
@@ -55,9 +55,34 @@ On Windows `normal`, `paused` and `error` map to `TBPF_NORMAL`, `TBPF_PAUSED` (y
 | `clockChanged` | `NSSystemClockDidChange` | `WM_TIMECHANGE` |
 | `memoryPressure` | `DISPATCH_SOURCE_TYPE_MEMORYPRESSURE` | not implemented |
 | `appearanceChanged`, `displaysChanged` | `AppleInterfaceThemeChanged`, screen parameters | `WM_SETTINGCHANGE`/`WM_THEMECHANGED`, `WM_DISPLAYCHANGE` |
+| `systemColorsChanged` (accent, highlight) | `NSSystemColorsDidChange` | unsupported ([#342](https://github.com/LegendApp/legend-spark/issues/342)) |
+| `accessibilityDisplayChanged` (contrast, transparency, motion, differentiate without color, invert colors) | `NSWorkspaceAccessibilityDisplayOptionsDidChange` | unsupported ([#342](https://github.com/LegendApp/legend-spark/issues/342)) |
 
-Idle time has no event: read `idleSeconds` when needed rather than polling for a threshold. `getSystemAvailability(feature)` reports the platform-limited parts: `thermalState`, `networkStatus` (`getNetworkStatus`, `networkChanged`, `proxyChanged`), `memoryPressure`, `lowPowerChanges` and `timeZoneChanges` are macOS-only; `getNetworkStatus()` rejects `E_UNSUPPORTED_PLATFORM` on Windows.
+Idle time has no event: read `idleSeconds` when needed rather than polling for a threshold. `getSystemAvailability(feature)` reports the platform-limited parts: `thermalState`, `networkStatus` (`getNetworkStatus`, `networkChanged`, `proxyChanged`), `memoryPressure`, `lowPowerChanges` and `timeZoneChanges` are macOS-only; `getNetworkStatus()` rejects `E_UNSUPPORTED_PLATFORM` on Windows. `systemColorsChanged` and `accessibilityDisplayChanged` belong to `appearancePreferences`: where it is unavailable, a registration whose `types` lists either rejects `E_UNSUPPORTED_PLATFORM`, and a registration without `types` leaves them out.
+
+## Appearance preferences
+
+```ts
+const preferences = await getAppearancePreferences();
+// { appearance: 'dark', automaticAppearance: true, accentColor: '#007aff', highlightColor: '#b3d7ff',
+//   increaseContrast: false, reduceTransparency: false, reduceMotion: true, differentiateWithoutColor: false,
+//   invertColors: false, keyboardNavigation: true }
+const events = await onSystemEvent(() => refresh(), { types: ['appearanceChanged', 'systemColorsChanged', 'accessibilityDisplayChanged'] });
+```
+
+`getAppearancePreferences()` (macOS; `getSystemAvailability('appearancePreferences')`) reads the user's settings when called:
+
+| Field | macOS source | Invalidated by |
+| --- | --- | --- |
+| `appearance` (`light`/`dark`), `automaticAppearance` | System Settings > Appearance (`AppleInterfaceStyle`, `AppleInterfaceStyleSwitchesAutomatically`) | `appearanceChanged` |
+| `accentColor`, `highlightColor` | `NSColor.controlAccentColor`, `selectedTextBackgroundColor` as sRGB `#rrggbb`, resolved in the app's effective appearance | `systemColorsChanged` |
+| `increaseContrast`, `reduceTransparency`, `reduceMotion`, `differentiateWithoutColor`, `invertColors` | `NSWorkspace.accessibilityDisplayShould…` | `accessibilityDisplayChanged` |
+| `keyboardNavigation` | `NSApp.fullKeyboardAccessEnabled`: System Settings > Keyboard > Keyboard navigation, not the separate Accessibility > Full Keyboard Access | none: macOS posts no change notification, so read it when needed |
+
+`appearance` is the system setting. The app can render otherwise: an app appearance override, a per-window override, or `NSRequiresAquaSystemAppearance` (which the test driver pins). `getSystemInfo().dark` is the app's effective appearance. A system color without an sRGB form rejects `E_NATIVE`; a malformed native value rejects `E_INVALID_DATA`. macOS has no system-wide text size setting with a public API, so there is no text scale field. Windows (accent, high contrast, transparency, animations and text scaling) is [#342](https://github.com/LegendApp/legend-spark/issues/342): `getAppearancePreferences()` rejects `E_UNSUPPORTED_PLATFORM` there.
+
+Per-window appearance is a window option ([window contract](api-window-contract.md)): `openWindow({ appearance })` and `setWindowOptions(windowId, { appearance: 'system' | 'light' | 'dark' })`; `system` follows the app. Semantic system colors come from react-native-macos: `PlatformColor('controlAccentColor')`, `PlatformColor('labelColor')` and the other `NSColor` names resolve in each view's effective appearance, so they follow app and window overrides. The Kitchen Sink's Appearance & theming > Appearance preferences screen shows all three.
 
 ### Testing system events
 
-Sleep, locking, user switching and thermal pressure cannot be caused by a test without changing the machine. In a [test-driver](test-driver.md) run, the system module registers the driver command `simulateSystemEvent` (flow command `simulateSystemEvent`, [e2e-flow-commands.md](e2e-flow-commands.md)). It delivers an event through the same native emitter as the OS observers, so registrations, routing and the app's handling are exercised; it fails with `E_NO_OBSERVER` when no `onSystemEvent` registration receives that event type. `thermalChanged` with `thermalState`, `lowPowerChanged` with `lowPowerMode`, `powerChanged` with `onBattery` and `networkChanged` with `network` (`online`/`offline`; an offline override reports no interfaces and neither expensive nor constrained) also override what `getSystemInfo()` and `getNetworkStatus()` report until the app quits; `memoryPressure` needs `level`. The OS observers themselves are installed but not triggered by these runs.
+Sleep, locking, user switching and thermal pressure cannot be caused by a test without changing the machine. In a [test-driver](test-driver.md) run, the system module registers the driver command `simulateSystemEvent` (flow command `simulateSystemEvent`, [e2e-flow-commands.md](e2e-flow-commands.md)). It delivers an event through the same native emitter as the OS observers, so registrations, routing and the app's handling are exercised; it fails with `E_NO_OBSERVER` when no `onSystemEvent` registration receives that event type. `thermalChanged` with `thermalState`, `lowPowerChanged` with `lowPowerMode`, `powerChanged` with `onBattery` and `networkChanged` with `network` (`online`/`offline`; an offline override reports no interfaces and neither expensive nor constrained) also override what `getSystemInfo()` and `getNetworkStatus()` report until the app quits; `memoryPressure` needs `level`. `appearanceChanged` with `appearance` (`light`/`dark`) and `automaticAppearance`, `systemColorsChanged` with `accentColor` and `highlightColor` (`#rrggbb`), and `accessibilityDisplayChanged` with any of `increaseContrast`, `reduceTransparency`, `reduceMotion`, `differentiateWithoutColor` and `invertColors` override those fields of `getAppearancePreferences()` the same way; omitted fields keep reporting the real setting, and a field that does not belong to the event type rejects `E_INVALID_ARGUMENT`. The app's rendering does not change. The OS observers themselves are installed but not triggered by these runs. To read real preferences with known values, a flow can instead pass the settings as launch `arguments` (for example `-AppleAccentColor 0 -reduceMotion YES`): they reach only the driven process ([pinned host settings](test-driver.md#pinned-host-settings)).
