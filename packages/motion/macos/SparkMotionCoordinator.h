@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import "SparkMotionMaterial.h"
 #include "SparkMotion.hpp"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -29,6 +30,11 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly, nullable) NSDictionary *motionTransition;
 /** Right-to-left layout: `position` keeps the top-right corner instead of the top-left one. */
 @property (nonatomic, readonly) BOOL motionRightToLeft;
+@optional
+/** A MotionMaterial's backdrop material stack (docs/motion.md#backdrop-materials); nil for other MotionViews. */
+@property (nonatomic, readonly, nullable) SparkMotionMaterialStack *motionMaterial;
+/** The validated crossfade transition (`spring` or `timing` JSON from JavaScript) of a MotionMaterial's material changes. */
+@property (nonatomic, readonly, nullable) NSDictionary *motionCrossfade;
 @end
 
 /** A MotionSymbol: an SF Symbol image view that plays symbol effects (docs/motion.md#symbol-effects). */
@@ -74,6 +80,8 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 - (void)recordFrames:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 /** The user's Reduce Motion setting (a driver run's simulated one). */
 @property (nonatomic, readonly) BOOL reduceMotion;
+/** The user's Reduce Transparency setting (a driver run's simulated one). */
+@property (nonatomic, readonly) BOOL reduceTransparency;
 
 - (void)registerSymbol:(NSView<SparkMotionSymbolHost> *)host;
 - (void)unregisterSymbolTag:(NSInteger)tag;
@@ -84,7 +92,13 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 /** Shows `image` with a replace content transition (`replace`, `downUp`, `upUp`, `offUp`), a cross-fade under Reduce Motion, or at once without one. */
 - (void)replaceSymbol:(NSView<SparkMotionSymbolHost> *)host image:(nullable NSImage *)image transition:(nullable NSString *)transition;
 
-/** Reduce Motion, Low Power Mode, and the frame rates and window visibility of `tag`'s view (0: the main display, no window). */
+/**
+ * A registered MotionMaterial's material changed to `material`: it crossfades in over the one showing (the engine drives
+ * `materialCrossfade` with the host's crossfade transition, or the Reduce Motion fade), which is removed once covered.
+ */
+- (void)host:(NSView<SparkMotionHost> *)host crossfadeTo:(NSView *)material;
+
+/** Reduce Motion, Reduce Transparency, Low Power Mode, and the frame rates and window visibility of `tag`'s view (0: the main display, no window). */
 - (void)environment:(NSInteger)tag resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 
 /** Main thread. The MotionViews animating now, by testID, else `MotionView <tag>`: the frame timeline's compositor track (SparkMotionTimeline.mm). */
@@ -107,7 +121,7 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
  * Mode off until simulate: changes them.
  */
 - (void)recordTelemetry;
-/** Overrides what motion reads of the system: reduceMotion and lowPowerMode (simulateSystemEvent's fields) and maximumFramesPerSecond. */
+/** Overrides what motion reads of the system: reduceMotion, reduceTransparency and lowPowerMode (simulateSystemEvent's fields) and maximumFramesPerSecond. */
 - (void)simulate:(NSDictionary *)values;
 /** Treats `window` as hidden or visible, as a change of its occlusion state would. */
 - (void)simulateWindow:(NSWindow *)window visible:(BOOL)visible;
@@ -138,7 +152,8 @@ BOOL SparkSymbolEffectSupported(NSString *name);
 inline uint32_t SparkMotionChannelBit(spark::motion::Channel channel) { return 1u << static_cast<int>(channel); }
 /**
  * Applies every motion value except the transform to the host's layer: opacity, the OKLCH background color, corner
- * radius and shadow of the channels it owns, and the blur filter and mask while the coordinator has them installed.
+ * radius and shadow of the channels it owns, the blur filter and mask while the coordinator has them installed, and a
+ * MotionMaterial's intensity, tint opacity and crossfade.
  * Hosts call it from applyMotionModel: and after React Native re-applies their style to the layer.
  */
 void SparkMotionApplyLayer(NSView<SparkMotionHost> *host, const spark::motion::Values &values);

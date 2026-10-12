@@ -46,7 +46,7 @@ struct ViewProps : Props {
   bool getClipsContentToBounds() const { return false; }
 };
 struct ReactNativeFeatureFlags { static bool enableIOSViewClipToPaddingBox() { return false; } };
-struct SparkMotionViewProps : ViewProps { std::string initialValues, layout, sharedId, transition; };
+struct SparkMotionViewProps : ViewProps { std::string initialValues, layout, sharedId, transition, material, tintColor, crossfade; };
 struct DesktopDragViewProps : Props { std::string sourceJson, optionsJson; bool disabled = false; };
 struct EventEmitter { using Shared = std::shared_ptr<EventEmitter const>; virtual ~EventEmitter() = default; };
 struct SidebarSplitViewEventEmitter : EventEmitter {
@@ -232,6 +232,17 @@ int main() { @autoreleasepool {
   CHECK(motion.layer.opacity == 0.25f);
   CHECK([[motion valueForKey:@"motionLayout"] isEqual:@"frame"] && [[motion valueForKey:@"motionSharedId"] isEqual:@"photo"]);
   CHECK([[motion valueForKey:@"motionTransition"] isEqual:(@{ @"type": @"timing", @"durationMs": @200 })]);
+  // A MotionMaterial: its material, tint and crossfade are applied at mount, under the `initial` intensity.
+  RNSparkMotionView *material = [[RNSparkMotionView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];
+  material.reactTag = @43;
+  auto materialProps = std::make_shared<SparkMotionViewProps>(); materialProps->initialValues = R"({"materialIntensity":0.5})";
+  materialProps->material = R"({"material":"hudWindow","blendingMode":"withinWindow"})"; materialProps->tintColor = "[0.5,0,0,0.5]";
+  materialProps->crossfade = R"({"type":"timing","durationMs":200,"easing":[0,0,1,1]})";
+  [material updateProps:materialProps oldProps:nullptr];
+  SparkMotionMaterialStack *stack = [material valueForKey:@"motionMaterial"];
+  NSVisualEffectView *effect = (NSVisualEffectView *)stack.incomingLayer.delegate;
+  CHECK(stack.materialCount == 1 && [effect isKindOfClass:NSVisualEffectView.class] && effect.blendingMode == NSVisualEffectBlendingModeWithinWindow);
+  CHECK(std::abs(stack.materialsLayer.opacity - 0.5) < 1e-6 && stack.tintLayer.backgroundColor && [[material valueForKey:@"motionCrossfade"][@"durationMs"] isEqual:@200]);
 
   // Drag view: drag source, accepted types and enabled state come from the mount.
   RNDesktopDragView *drag = [[RNDesktopDragView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];

@@ -79,6 +79,7 @@ RCT_EXPORT_MODULE(NativeSparkMotion)
   return exists;
 }
 - (NSNumber *)supportsSymbolEffect:(NSString *)name { return @(SparkSymbolEffectSupported(name)); }
+- (NSNumber *)supportsMaterial:(NSString *)name { return @(SparkMotionMaterialSupported(name)); }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params
 {

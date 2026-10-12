@@ -1,5 +1,5 @@
 import { useCallback, useState, type RefObject } from "react";
-import { animate, getMotionEnvironment, keyframes, sequence, setMotionValues, spring, timing, type MotionTarget, type ReducedMotion } from "@legendapp/spark/motion";
+import { animate, getMotionEnvironment, keyframes, sequence, setMotionValues, spring, timing, type MotionEnvironment, type MotionTarget, type ReducedMotion } from "@legendapp/spark/motion";
 import { onSystemEvent } from "@legendapp/spark/system";
 import { useRegistrations } from "../../shell/registrations";
 import { describeError, TRACK, type Way } from "./motion-demo";
@@ -30,12 +30,12 @@ export const playCues = (target: MotionTarget | null, forward: boolean, way: Way
 
 export const startLong = (target: MotionTarget | null, way: Way) => animate(target, { translateX: timing(way * TRACK, { durationMs: 10000, easing: "linear" }) }).finished;
 
-const ENVIRONMENT = ["reduceMotion", "lowPowerMode", "maximumFrameRate", "frameRate", "windowVisible"] as const;
+const ENVIRONMENT: readonly (keyof MotionEnvironment)[] = ["reduceMotion", "lowPowerMode", "maximumFrameRate", "frameRate", "windowVisible"];
 /**
  * The motion environment of `target`'s window, or of the main display without a target (`keys` of it): `refresh` reads
  * it, and Reduce Motion and Low Power Mode changes re-read it.
  */
-export function useMotionEnvironment(target: RefObject<MotionTarget | null> | undefined, keys: readonly (typeof ENVIRONMENT)[number][] = ENVIRONMENT) {
+export function useMotionEnvironment(target: RefObject<MotionTarget | null> | undefined, keys: readonly (keyof MotionEnvironment)[] = ENVIRONMENT) {
   const [text, setText] = useState("");
   const report = useCallback((error: unknown) => setText(describeError(error)), []);
   const refresh = useCallback(() => { getMotionEnvironment(target ? target.current : undefined).then(environment =>

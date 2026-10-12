@@ -29,6 +29,15 @@ static int failures = 0;
 }
 @end
 
+/** A MotionMaterial: a host with a backdrop material stack. */
+@interface MaterialHost : TestHost
+@property (nonatomic, strong) SparkMotionMaterialStack *motionMaterial;
+@property (nonatomic, strong) NSDictionary *motionCrossfade;
+@end
+@implementation MaterialHost
+@synthesize motionMaterial = _motionMaterial, motionCrossfade = _motionCrossfade;
+@end
+
 @interface TestSymbol : NSView <SparkMotionSymbolHost>
 @property (nonatomic) NSInteger motionTag;
 @property (nonatomic, strong) NSImageView *symbolImageView;
@@ -523,6 +532,99 @@ int main()
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @12, @"values": @{ @"maskInsetStart": @0 } } resolve:resolve reject:reject]; });
     CHECK(effects.layer.mask == nil);
     [motion unregisterTag:12];
+
+    // Backdrop materials (docs/motion.md#backdrop-materials): intensity, tint opacity and the crossfade bake onto the
+    // stack's, the tint's and the incoming material's layers; a material change crossfades in over the one showing, which
+    // is removed once covered; plain MotionViews reject the material properties.
+    NSString *materialError = nil;
+    CHECK(SparkMotionMaterialSupported(@"hudWindow") && !SparkMotionMaterialSupported(@"frosted"));
+    CHECK(![SparkMotionMaterialStack materialView:@{ @"material": @"frosted" } error:&materialError] && [materialError containsString:@"Unknown material"]);
+    NSDictionary *badBlending = @{ @"material": @"sidebar", @"blendingMode": @"over" };
+    CHECK(![SparkMotionMaterialStack materialView:badBlending error:&materialError]);
+    NSVisualEffectView *sidebar = (NSVisualEffectView *)[SparkMotionMaterialStack materialView:@{ @"material": @"sidebar", @"blendingMode": @"withinWindow", @"state": @"active" } error:&materialError];
+    CHECK([sidebar isKindOfClass:NSVisualEffectView.class] && sidebar.material == NSVisualEffectMaterialSidebar && sidebar.blendingMode == NSVisualEffectBlendingModeWithinWindow && sidebar.state == NSVisualEffectStateActive);
+    if (SparkMotionMaterialSupported(@"glass")) CHECK([[SparkMotionMaterialStack materialView:@{ @"material": @"glass" } error:&materialError] isKindOfClass:NSClassFromString(@"NSGlassEffectView")]);
+    else CHECK(![SparkMotionMaterialStack materialView:@{ @"material": @"glass" } error:&materialError] && [materialError containsString:@"macOS 26"]);
+    MaterialHost *panel = [[MaterialHost alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];
+    panel.wantsLayer = YES;
+    panel.motionTag = 15;
+    panel.motionMaterial = [[SparkMotionMaterialStack alloc] initWithFrame:panel.bounds];
+    [panel addSubview:panel.motionMaterial];
+    [window.contentView addSubview:panel];
+    [motion host:panel crossfadeTo:sidebar];  // before it registers: shown at once
+    Values faint = kIdentity;
+    faint[MaterialIntensity] = 0.25;
+    [motion registerHost:panel initial:faint];
+    SparkMotionMaterialStack *stack = panel.motionMaterial;
+    CHECK(stack.materialCount == 1 && stack.incomingLayer == sidebar.layer && std::abs(stack.materialsLayer.opacity - 0.25) < 1e-6 && stack.layer.opacity == 1 && stack.tintLayer.opacity == 1 && sidebar.layer.opacity == 1);
+    Outcome *intensity = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"intensity", 15, @{ @"materialIntensity": Timing(1, 200), @"materialTintOpacity": Timing(0, 200) }) resolve:resolve reject:reject]; });
+    CHECK(!intensity->code && [stack.materialsLayer animationForKey:@"spark.motion.opacity"] && ![stack.layer animationForKey:@"spark.motion.opacity"] && [stack.tintLayer animationForKey:@"spark.motion.opacity"] && ![panel.layer animationForKey:@"spark.motion.opacity"]);
+    CHECK(stack.materialsLayer.opacity == 1 && stack.tintLayer.opacity == 0);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    CHECK(intensity->resolved && [JSON(intensity->value)[@"finished"] isEqual:@YES]);
+    // Intensity fades only the material: at intensity 0 the tint still shows, over what is behind the view.
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @15, @"values": @{ @"materialIntensity": @0, @"materialTintOpacity": @1 } } resolve:resolve reject:reject]; });
+    CHECK(stack.materialsLayer.opacity == 0 && stack.tintLayer.opacity == 1 && stack.layer.opacity == 1);
+    NSView *tintView = (NSView *)stack.tintLayer.delegate, *materialsView = (NSView *)stack.materialsLayer.delegate;
+    CHECK(tintView.superview == stack && materialsView.superview == stack && [stack.subviews indexOfObject:tintView] > [stack.subviews indexOfObject:materialsView]);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @15, @"values": @{ @"materialIntensity": @1, @"materialTintOpacity": @0 } } resolve:resolve reject:reject]; });
+    // A crossfade, interrupted halfway by another: the first stays as far as it got under the second until that covers it.
+    NSView *hud = [SparkMotionMaterialStack materialView:@{ @"material": @"hudWindow" } error:&materialError];
+    panel.motionCrossfade = @{ @"type": @"timing", @"durationMs": @400, @"easing": @[@0, @0, @1, @1] };
+    [motion host:panel crossfadeTo:hud];
+    CHECK(stack.materialCount == 2 && stack.incomingLayer == hud.layer && [hud.layer animationForKey:@"spark.motion.opacity"] && sidebar.layer.opacity == 1);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    __block float halfwayCrossfade = 0;
+    [motion presenting:^{ halfwayCrossfade = hud.layer.opacity; }];
+    CHECK(std::abs(halfwayCrossfade - 0.5) < 1e-6);
+    NSView *popover = [SparkMotionMaterialStack materialView:@{ @"material": @"popover" } error:&materialError];
+    [motion host:panel crossfadeTo:popover];
+    CHECK(stack.materialCount == 3 && std::abs(hud.layer.opacity - 0.5) < 1e-6 && ![hud.layer animationForKey:@"spark.motion.opacity"] && [popover.layer animationForKey:@"spark.motion.opacity"]);
+    auto panelTelemetry = [&]() { return JSON0(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion telemetry:15 resolve:resolve reject:reject]; })->value); };
+    NSDictionary *crossfading = panelTelemetry();
+    CHECK([crossfading[@"animating"] containsObject:@"materialCrossfade"] && [crossfading[@"values"][@"materialCrossfade"] doubleValue] == 0);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:400 resolve:resolve reject:reject]; });
+    CHECK(stack.materialCount == 1 && stack.incomingLayer == popover.layer && popover.superview.superview == stack && !hud.superview && !sidebar.superview);
+    // Rapid changes keep at most three materials: the oldest, under the partly faded ones, is dropped.
+    NSMutableArray<NSView *> *rapid = [NSMutableArray new];
+    for (NSString *name in @[@"sidebar", @"menu", @"sheet", @"toolTip", @"titlebar", @"hudWindow"]) {
+      NSView *next = [SparkMotionMaterialStack materialView:@{ @"material": name } error:&materialError];
+      [rapid addObject:next];
+      [motion host:panel crossfadeTo:next];
+      CHECK(stack.materialCount <= kSparkMotionMaterialLimit && stack.incomingLayer == next.layer);
+      Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:50 resolve:resolve reject:reject]; });
+    }
+    CHECK(stack.materialCount == 3 && rapid[3].superview && rapid[4].superview && rapid[5].superview && !rapid[2].superview && !popover.superview);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:400 resolve:resolve reject:reject]; });
+    CHECK(stack.materialCount == 1 && stack.incomingLayer == rapid[5].layer);
+    // Under Reduce Motion a crossfade is the 200 ms fade, without overshoot.
+    [motion simulate:@{ @"reduceMotion": @YES }];
+    panel.motionCrossfade = @{ @"type": @"spring", @"mass": @1, @"stiffness": @100, @"damping": @5 };
+    [motion host:panel crossfadeTo:[SparkMotionMaterialStack materialView:@{ @"material": @"menu" } error:&materialError]];
+    CHECK([panelTelemetry()[@"motion"][@"kinds"][@"materialCrossfade"] isEqual:@"timing"]);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    CHECK(stack.materialCount == 1);
+    [motion simulate:@{ @"reduceMotion": @NO }];
+    // Only material changes drive the crossfade; a view without a material has no material properties.
+    Outcome *driven = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"crossfade", 15, @{ @"materialCrossfade": Timing(0, 100) }) resolve:resolve reject:reject]; });
+    CHECK([driven->code isEqual:@"E_INVALID_ARGUMENT"]);
+    TestHost *plain = [[TestHost alloc] initWithFrame:NSMakeRect(0, 0, 40, 40)];
+    plain.wantsLayer = YES;
+    plain.motionTag = 16;
+    [window.contentView addSubview:plain];
+    [motion registerHost:plain initial:kIdentity];
+    Outcome *unmaterial = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"plain", 16, @{ @"materialIntensity": Timing(0, 100) }) resolve:resolve reject:reject]; });
+    CHECK([unmaterial->code isEqual:@"E_UNSUPPORTED_OPTION"]);
+    Outcome *unmaterialSet = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @16, @"values": @{ @"materialTintOpacity": @0 } } resolve:resolve reject:reject]; });
+    CHECK([unmaterialSet->code isEqual:@"E_UNSUPPORTED_OPTION"]);
+    // Reduce Transparency is reported (a driver run pins it off until simulated).
+    auto transparency = [&]() { return JSON(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion environment:15 resolve:resolve reject:reject]; })->value)[@"reduceTransparency"]; };
+    CHECK([transparency() isEqual:@NO]);
+    [motion simulate:@{ @"reduceTransparency": @YES }];
+    CHECK([transparency() isEqual:@YES]);
+    [motion simulate:@{ @"reduceTransparency": @NO }];
+    [motion unregisterTag:15];
+    [motion unregisterTag:16];
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
 
     // Until motion drives them, the background, corners and shadow follow the view's style: the engine takes what the

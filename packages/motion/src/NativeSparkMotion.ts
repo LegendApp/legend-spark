@@ -20,6 +20,8 @@ export interface Spec extends TurboModule {
   hasSymbol(name: string): boolean;
   /** Whether this app's SDK and this macOS have a symbol effect, or `replace`. */
   supportsSymbolEffect(name: string): boolean;
+  /** Whether this app's SDK and this macOS have a backdrop material. */
+  supportsMaterial(name: string): boolean;
 }
 
 export default TurboModuleRegistry.get<Spec>("NativeSparkMotion");

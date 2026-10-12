@@ -9,7 +9,9 @@ import { COLOR_COMPONENTS, colorStops, parseColor, type ColorComponent, type Mot
 export type MotionNumberProperty =
   | "opacity" | "translateX" | "translateY" | "scale" | "scaleX" | "scaleY" | "rotate" | "rotateX" | "rotateY" | "perspective"
   | "borderRadius" | "shadowOpacity" | "shadowRadius" | "shadowOffsetX" | "shadowOffsetY" | "blur"
-  | "maskInsetTop" | "maskInsetBottom" | "maskInsetStart" | "maskInsetEnd" | "maskRadius";
+  | "maskInsetTop" | "maskInsetBottom" | "maskInsetStart" | "maskInsetEnd" | "maskRadius"
+  /** A MotionMaterial's material opacity and its tint's opacity, 0-1 (docs/motion.md#backdrop-materials). */
+  | "materialIntensity" | "materialTintOpacity";
 /** Properties that take colors, animated in OKLCH. */
 export type MotionColorProperty = "backgroundColor";
 export type MotionProperty = MotionNumberProperty | MotionColorProperty;
@@ -74,7 +76,7 @@ export type MotionSpec<V extends MotionValue = number> = SpringSpec<V> | TimingS
 export const MOTION_PROPERTIES: readonly MotionProperty[] = [
   "opacity", "translateX", "translateY", "scale", "scaleX", "scaleY", "rotate", "rotateX", "rotateY", "perspective",
   "borderRadius", "backgroundColor", "shadowOpacity", "shadowRadius", "shadowOffsetX", "shadowOffsetY", "blur",
-  "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius",
+  "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius", "materialIntensity", "materialTintOpacity",
 ];
 const EASINGS: Record<Exclude<Easing, CubicBezier>, CubicBezier> = {
   linear: [0, 0, 1, 1], easeIn: [0.42, 0, 1, 1], easeOut: [0, 0, 0.58, 1], easeInOut: [0.42, 0, 0.58, 1], standard: [0.4, 0, 0.2, 1],

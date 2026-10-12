@@ -11,6 +11,7 @@ const { platform, registered, native, tags } = vi.hoisted(() => ({
     stopAnimation: vi.fn(async () => {}), set: vi.fn(async () => {}), stop: vi.fn(async () => {}),
     getState: vi.fn(async () => ""), link: vi.fn(async () => {}), unlink: vi.fn(async () => {}), recordFrames: vi.fn(async () => ""),
     environment: vi.fn(async (_tag: number) => ""),
+    supportsMaterial: vi.fn((_name: string) => true),
   },
   tags: new Map<object, number>(),
 }));
@@ -23,13 +24,14 @@ vi.mock("react-native", () => ({
 }));
 vi.mock("../packages/motion/src/motion-view-host", () => ({ getNativeMotionView: () => "SparkMotionView" }));
 import * as motion from "../packages/motion/src/index";
-import { spring, timing, keyframes, decay, sequence, animate, stagger, timeline, setMotionValues, stopMotion, getMotionState, linkScroll, recordMotionFrames, getMotionAvailability, getMotionEnvironment, MotionView } from "../packages/motion/src/index";
+import { spring, timing, keyframes, decay, sequence, animate, stagger, timeline, setMotionValues, stopMotion, getMotionState, linkScroll, recordMotionFrames, getMotionAvailability, getMotionEnvironment, MotionView,
+  MotionMaterial, getMaterialAvailability } from "../packages/motion/src/index";
 
 const a = {} as any, b = {} as any, c = {} as any;
 const sent = (mock: { mock: { calls: unknown[][] } }, call = -1) => JSON.parse(mock.mock.calls.at(call)![0] as string);
 const code = (run: () => unknown) => { try { run(); } catch (error) { return (error as { code?: string }).code; } return "none"; };
 const CHANNELS = ["opacity", "translateX", "translateY", "scaleX", "scaleY", "rotate", "rotateX", "rotateY", "perspective", "borderRadius", "shadowOpacity", "shadowRadius",
-  "shadowOffsetX", "shadowOffsetY", "blur", "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius",
+  "shadowOffsetX", "shadowOffsetY", "blur", "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius", "materialIntensity", "materialTintOpacity",
   "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha"];
 const values = (value: number) => Object.fromEntries(CHANNELS.map(property => [property, value]));
 
@@ -41,7 +43,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 test("the public entry exports the imperative API, builders, the components, and no hooks", () => {
-  expect(Object.keys(motion).sort()).toEqual(["MotionNumber", "MotionPresence", "MotionSymbol", "MotionText", "MotionView", "animate", "decay", "getMotionAvailability", "getMotionEnvironment", "getMotionState",
+  expect(Object.keys(motion).sort()).toEqual(["MotionMaterial", "MotionNumber", "MotionPresence", "MotionSymbol", "MotionText", "MotionView", "animate", "decay", "getMaterialAvailability", "getMotionAvailability", "getMotionEnvironment", "getMotionState",
     "getSymbolEffectAvailability", "keyframes", "linkScroll", "motionPath", "playSymbolEffect", "recordMotionFrames", "sequence", "setMotionValues", "spring", "stagger", "stopMotion", "stopSymbolEffects", "timeline", "timing"]);
 });
 
@@ -161,7 +163,7 @@ test("plans carry the Reduce Motion alternate, the hidden-window rule and cues, 
 });
 
 test("getMotionEnvironment reads Reduce Motion, power, frame rate and window visibility, and validates the reply", async () => {
-  const environment = { reduceMotion: true, lowPowerMode: false, maximumFrameRate: 120, frameRate: 120, windowVisible: true };
+  const environment = { reduceMotion: true, reduceTransparency: false, lowPowerMode: false, maximumFrameRate: 120, frameRate: 120, windowVisible: true };
   native.environment.mockResolvedValueOnce(JSON.stringify(environment));
   await expect(getMotionEnvironment(a)).resolves.toEqual(environment);
   expect(native.environment).toHaveBeenLastCalledWith(11);
@@ -229,6 +231,8 @@ test("availability is truthful; unavailable targets throw typed errors and rende
     await expect(linkScroll(a, { source: { nativeID: "x" }, input: [0, 1], output: { opacity: [0, 1] } })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
     await expect(getMotionEnvironment()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
     expect(code(() => MotionView({ children: null }))).toBe("E_UNSUPPORTED_PLATFORM");
+    expect(getMaterialAvailability("hudWindow")).toEqual({ available: false, reason: "unsupported-platform" });
+    expect(code(() => MotionMaterial({ material: "hudWindow" }))).toBe("E_UNSUPPORTED_PLATFORM");
   }
   expect(Object.values(native).every(fn => fn.mock.calls.length === 0)).toBe(true);
 });
@@ -301,4 +305,41 @@ test("MotionView passes validated initial values once, refuses style opacity or 
   for (const [initial, style] of [[{ backgroundColor: "#fff" }, { borderWidth: 1, borderColor: "#000" }], [{ borderRadius: 4 }, { borderTopColor: "red" }],
     [{ backgroundColor: "#fff" }, { borderStyle: "dashed" }], [{ maskRadius: 2 }, { overflow: "hidden", borderTopLeftRadius: 8 }]] as const)
     expect(code(() => MotionView({ initial, style } as never)), JSON.stringify(style)).toBe("E_UNSUPPORTED_OPTION");
+});
+
+test("MotionMaterial: truthful availability, validated material props, a crossfade transition, and material properties only on a material", async () => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  expect(getMaterialAvailability("hudWindow")).toEqual({ available: true });
+  expect(native.supportsMaterial).toHaveBeenLastCalledWith("hudWindow");
+  native.supportsMaterial.mockImplementation(name => name !== "glass");
+  expect(getMaterialAvailability("glass")).toEqual({ available: false, reason: "host-restriction" });
+  expect(code(() => MotionMaterial({ material: "glass" }))).toBe("E_UNAVAILABLE");
+  native.supportsMaterial.mockImplementation(() => true);
+  expect(code(() => getMaterialAvailability("frosted" as never))).toBe("E_INVALID_ARGUMENT");
+  let rendered: any;
+  await act(async () => { rendered = create(React.createElement(MotionMaterial, { material: "sidebar", blendingMode: "withinWindow", tintColor: "#2563eb80", initial: { materialIntensity: 0 }, testID: "panel" })); });
+  const props = rendered.root.findByType("SparkMotionView").props;
+  expect(props.testID).toBe("panel");
+  expect(JSON.parse(props.material)).toEqual({ material: "sidebar", blendingMode: "withinWindow" });
+  expect(JSON.parse(props.tintColor)).toHaveLength(4);
+  expect(JSON.parse(props.tintColor)[3]).toBeCloseTo(128 / 255, 6);
+  expect(JSON.parse(props.crossfade)).toEqual({ type: "timing", durationMs: 250, easing: [0.42, 0, 0.58, 1] });
+  expect(JSON.parse(props.initialValues)).toEqual({ materialIntensity: 0 });
+  await act(async () => rendered.unmount());
+  await act(async () => { rendered = create(React.createElement(MotionMaterial, { material: "glass", crossfade: { preset: "snappy" } })); });
+  expect(JSON.parse(rendered.root.findByType("SparkMotionView").props.crossfade)).toMatchObject({ type: "spring" });
+  await act(async () => rendered.unmount());
+  expect(code(() => MotionMaterial({ material: "frosted" as never }))).toBe("E_INVALID_ARGUMENT");
+  expect(code(() => MotionMaterial({ material: "menu", blendingMode: "over" as never }))).toBe("E_INVALID_ARGUMENT");
+  expect(code(() => MotionMaterial({ material: "menu", state: "on" as never }))).toBe("E_INVALID_ARGUMENT");
+  expect(code(() => MotionMaterial({ material: "menu", emphasized: 1 as never }))).toBe("E_INVALID_ARGUMENT");
+  expect(code(() => MotionMaterial({ material: "menu", tintColor: "blue" }))).toBe("E_INVALID_ARGUMENT");
+  expect(code(() => MotionMaterial({ material: "menu", crossfade: { type: "timing", velocity: 2 } as never }))).toBe("E_UNSUPPORTED_OPTION");
+  expect(code(() => MotionMaterial({ material: "glass", blendingMode: "withinWindow" }))).toBe("E_UNSUPPORTED_OPTION");
+  expect(code(() => MotionMaterial({ material: "menu", children: "text" } as never))).toBe("E_INVALID_ARGUMENT");
+  // The material properties animate like any property; a MotionView without a material cannot start with them.
+  await animate(a, { materialIntensity: timing(0.5), materialTintOpacity: spring(0) }).finished;
+  expect(Object.keys(sent(native.run).groups[0].tracks)).toEqual(["materialIntensity", "materialTintOpacity"]);
+  expect(code(() => MotionView({ initial: { materialTintOpacity: 0 } }))).toBe("E_UNSUPPORTED_OPTION");
+  expect(code(() => animate(a, { materialCrossfade: 0 } as never))).toBe("E_INVALID_ARGUMENT");
 });

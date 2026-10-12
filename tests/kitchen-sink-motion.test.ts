@@ -10,9 +10,9 @@ const { state, native, tags, system } = vi.hoisted(() => ({
     run: vi.fn(async (_json: string) => JSON.stringify({ finished: true })),
     stopAnimation: vi.fn(async (_id: string) => {}), set: vi.fn(async (_json: string) => {}), stop: vi.fn(async (_json: string) => {}),
     getState: vi.fn(async (_tag: number) => ""), link: vi.fn(async (_json: string) => {}), unlink: vi.fn(async (_id: string) => {}), recordFrames: vi.fn(async (_json: string) => ""),
-    environment: vi.fn(async (_tag: number) => JSON.stringify({ reduceMotion: false, lowPowerMode: false, maximumFrameRate: 120, frameRate: 120, windowVisible: true })),
+    environment: vi.fn(async (_tag: number) => JSON.stringify({ reduceMotion: false, reduceTransparency: false, lowPowerMode: false, maximumFrameRate: 120, frameRate: 120, windowVisible: true })),
     playSymbolEffect: vi.fn(async (json: string) => JSON.stringify({ played: JSON.parse(json).effect })), removeSymbolEffect: vi.fn(async (_json: string) => {}),
-    hasSymbol: vi.fn((_name: string) => true), supportsSymbolEffect: vi.fn((_name: string) => true),
+    hasSymbol: vi.fn((_name: string) => true), supportsSymbolEffect: vi.fn((_name: string) => true), supportsMaterial: vi.fn((_name: string) => true),
   },
   tags: new WeakMap<object, number>(),
   system: { handler: undefined as undefined | (() => void), options: undefined as unknown, removed: 0 },
@@ -35,11 +35,13 @@ vi.mock("@legendapp/spark/system", () => ({
 import { VisualEffects } from "../examples/kitchen-sink/screens/motion-system/EffectsScreen";
 import { AccessibilityPower, ScrollAndFrames, Springs, Timelines } from "../examples/kitchen-sink/screens/motion-system/MotionScreens";
 import { TextAndSymbols } from "../examples/kitchen-sink/screens/motion-system/TextSymbolsScreen";
+import { Materials } from "../examples/kitchen-sink/screens/motion-system/MaterialsScreen";
+import motionScreens from "../examples/kitchen-sink/screens/motion-system/index";
 
 let rendered: any, nextTag = 100;
 /** Every engine property at rest (docs/motion.md#properties-and-units), with translateX at `x` moving at `v`. */
 const EFFECTS = ["rotateX", "rotateY", "perspective", "borderRadius", "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha", "shadowOpacity", "shadowRadius",
-  "shadowOffsetX", "shadowOffsetY", "blur", "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius"];
+  "shadowOffsetX", "shadowOffsetY", "blur", "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius", "materialIntensity", "materialTintOpacity"];
 const rest = Object.fromEntries(EFFECTS.map(property => [property, 0]));
 const state0 = (x: number, v: number) => JSON.stringify({ values: { ...rest, opacity: 1, translateX: x, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 }, velocities: { ...rest, opacity: 0, translateX: v, translateY: 0, scaleX: 0, scaleY: 0, rotate: 0 }, animating: v ? ["translateX"] : [] });
 beforeEach(() => {
@@ -60,7 +62,7 @@ const plans = () => native.run.mock.calls.map(([json]) => JSON.parse(json));
 test("the motion screens are registered in the motion-system area", async () => {
   const { default: registered } = await import("../examples/kitchen-sink/screens/motion-system/index");
   expect(registered.area).toBe("motion-system");
-  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames", "layout", "visual-effects", "text-and-symbols", "accessibility-power"]);
+  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames", "layout", "visual-effects", "materials", "text-and-symbols", "accessibility-power"]);
 });
 
 test("springs: preset parameters, playing every preset, and moving with the reading direction", async () => {
@@ -131,7 +133,7 @@ test("accessibility, power and lifecycle: the environment follows system events,
   expect(text(id("environment"))).toBe('{"reduceMotion":false,"lowPowerMode":false,"maximumFrameRate":120,"frameRate":120,"windowVisible":true}');
   expect(native.environment.mock.calls[0]![0]).toBeGreaterThan(100);  // the card's MotionView, not the main display (0)
   expect(system.options).toEqual({ types: ["accessibilityDisplayChanged", "lowPowerChanged"] });
-  native.environment.mockResolvedValueOnce(JSON.stringify({ reduceMotion: true, lowPowerMode: true, maximumFrameRate: 120, frameRate: 60, windowVisible: true }));
+  native.environment.mockResolvedValueOnce(JSON.stringify({ reduceMotion: true, reduceTransparency: false, lowPowerMode: true, maximumFrameRate: 120, frameRate: 60, windowVisible: true }));
   await act(async () => { system.handler!(); });
   expect(text(id("environment"))).toBe('{"reduceMotion":true,"lowPowerMode":true,"maximumFrameRate":120,"frameRate":60,"windowVisible":true}');
 
@@ -195,6 +197,43 @@ test("visual effects: the swatch animates in OKLCH and reports its color, Lift s
   expect(plans()[0].groups[0].tracks.translateX.values.at(-1)).toBeCloseTo(-160, 9);
 });
 
+test("backdrop materials: Next and Glass crossfade the panel's material, Fade and Tint animate its intensity and tint, and the title is localized", async () => {
+  const screen = motionScreens.screens.find(entry => entry.id === "materials")!;
+  expect(screen.titles?.ar).toBe("المواد الخلفية");
+  await mount(Materials);
+  const id = (part: string) => `motion-system-materials-${part}`;
+  const visualEffects = '{"titlebar":true,"selection":true,"menu":true,"popover":true,"sidebar":true,"headerView":true,"sheet":true,"windowBackground":true,"hudWindow":true,"fullScreenUI":true,"toolTip":true,"contentBackground":true,"underWindowBackground":true,"underPageBackground":true}';
+  expect(text(id("material-availability"))).toBe(visualEffects);
+  expect(text(id("glass-availability"))).toBe('{"glass":true,"clearGlass":true}');
+  const panel = () => byID(id("panel")).props;
+  expect(JSON.parse(panel().material)).toEqual({ material: "hudWindow", blendingMode: "withinWindow" });
+  expect(JSON.parse(panel().initialValues)).toEqual({ materialTintOpacity: 0 });
+  expect(JSON.parse(panel().crossfade)).toMatchObject({ type: "spring" });
+  await press(id("next"));
+  expect(JSON.parse(panel().material)).toEqual({ material: "popover", blendingMode: "withinWindow" });
+  expect(text(id("material"))).toBe('{"material":"popover"}');
+  await press(id("glass"));
+  expect(JSON.parse(panel().material)).toEqual({ material: "glass" });
+  expect(text(id("glass-result"))).toBe('{"glass":true}');
+  native.getState.mockResolvedValue(JSON.stringify({ values: { ...JSON.parse(state0(0, 0)).values, materialIntensity: 0, materialTintOpacity: 1 }, velocities: JSON.parse(state0(0, 0)).velocities, animating: [] }));
+  await press(id("fade"));
+  expect(plans()[0].groups[0].tracks).toEqual({ materialIntensity: expect.objectContaining({ type: "timing", to: 0, durationMs: 400 }) });
+  expect(text(id("fade-result"))).toBe('{"finished":true,"materialIntensity":0}');
+  await press(id("tint"));
+  expect(plans()[1].groups[0].tracks).toEqual({ materialTintOpacity: expect.objectContaining({ type: "spring", to: 1 }) });
+  expect(text(id("tint-result"))).toBe('{"finished":true,"materialTintOpacity":1}');
+  await act(async () => rendered.unmount()); rendered = undefined;
+  // Without Liquid Glass (an older macOS or SDK), Glass reports why and the material stays.
+  native.supportsMaterial.mockImplementation(name => !name.toLowerCase().includes("glass"));
+  await mount(Materials);
+  expect(text(id("material-availability"))).toBe(visualEffects);
+  expect(text(id("glass-availability"))).toBe('{"glass":false,"clearGlass":false}');
+  await press(id("glass"));
+  expect(text(id("glass-result"))).toBe("SparkError:E_UNAVAILABLE");
+  expect(JSON.parse(panel().material)).toEqual({ material: "hudWindow", blendingMode: "withinWindow" });
+  native.supportsMaterial.mockImplementation(() => true);
+});
+
 test("text and symbols: digits roll, text crossfades and types, and each symbol effect reports what played", async () => {
   await mount(TextAndSymbols);
   const id = (part: string) => `motion-system-text-and-symbols-${part}`;
@@ -222,7 +261,7 @@ test("text and symbols: digits roll, text crossfades and types, and each symbol 
 
 test("Windows shows the typed unsupported error where the motion views would be, and sends nothing", async () => {
   state.os = "windows";
-  for (const [screen, id] of [[Springs, "springs"], [Timelines, "timelines"], [ScrollAndFrames, "scroll-and-frames"], [VisualEffects, "visual-effects"], [TextAndSymbols, "text-and-symbols"], [AccessibilityPower, "accessibility-power"]] as const) {
+  for (const [screen, id] of [[Springs, "springs"], [Timelines, "timelines"], [ScrollAndFrames, "scroll-and-frames"], [VisualEffects, "visual-effects"], [Materials, "materials"], [TextAndSymbols, "text-and-symbols"], [AccessibilityPower, "accessibility-power"]] as const) {
     await mount(screen);
     expect(text(`motion-system-${id}-availability`)).toBe('{"available":false,"reason":"unsupported-platform"}');
     expect(text(`motion-system-${id}-error`)).toBe("SparkError:E_UNSUPPORTED_PLATFORM");

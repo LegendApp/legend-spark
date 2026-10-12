@@ -44,7 +44,7 @@ when rendered. There is no JavaScript-driven fallback.
 | `getMotionState(target)` | Presented values, velocities, animating properties | `Promise<MotionState>` |
 | `linkScroll(target, options)` | Native scroll link | `Promise<AsyncRegistration>` |
 | `recordMotionFrames(target, { durationMs })` | Frame telemetry | `Promise<MotionFrameReport>` |
-| `getMotionEnvironment(target?)` | Reduce Motion, Low Power Mode, frame rate, window visibility | `Promise<MotionEnvironment>` |
+| `getMotionEnvironment(target?)` | Reduce Motion, Reduce Transparency, Low Power Mode, frame rate, window visibility | `Promise<MotionEnvironment>` |
 | `getMotionAvailability()` | | `Availability` |
 | `motionPath(d, options)` | Path keyframes (pure) | `{ translateX, translateY, rotate? }` keyframes |
 | `MotionView` | Component: `initial`, `enter`, `exit`, `layout`, `sharedId`, `transition` | |
@@ -55,6 +55,8 @@ when rendered. There is no JavaScript-driven fallback.
 | `playSymbolEffect(target, effect, options)` | Plays an SF Symbol effect | `Promise<SymbolEffectPlayback>` |
 | `stopSymbolEffects(target)` | Removes a symbol's effects | `Promise<void>` |
 | `getSymbolEffectAvailability(effect)` | | `Availability` |
+| `MotionMaterial` | Component: a MotionView showing a backdrop material that crossfades and fades | |
+| `getMaterialAvailability(material)` | | `Availability` |
 
 A target is a mounted `MotionView`, as received through its `ref`. `animate`,
 `stagger` and `timeline` validate synchronously and throw `SparkError`
@@ -72,8 +74,8 @@ not settle within 60 s, infinite loops whose shared cycle exceeds 20 s
 `E_INVALID_ARGUMENT`.
 
 The API is imperative and works from any code holding a `MotionView` (or `MotionSymbol`) ref.
-`MotionView`, `MotionPresence`, `MotionNumber`, `MotionText` and `MotionSymbol` are the only
-React-specific exports (components). There are no hooks.
+`MotionView`, `MotionPresence`, `MotionNumber`, `MotionText`, `MotionSymbol` and `MotionMaterial` are the
+only React-specific exports (components). There are no hooks.
 
 ## Layout, presence and shared elements
 
@@ -164,8 +166,9 @@ JS: validate and normalize  ── one JSON plan ──▶  RNSparkMotion (Turbo
 `opacity`, `translateX`, `translateY` (points), `scale`, `scaleX`, `scaleY`,
 `rotate` (degrees, clockwise), and the [visual effects](#visual-effects): `rotateX`, `rotateY`
 (degrees), `perspective` (points), `backgroundColor` (a color), `borderRadius`, `shadowOpacity`,
-`shadowRadius`, `shadowOffsetX`, `shadowOffsetY`, `blur` (points), and the mask's `maskInsetTop`,
-`maskInsetBottom`, `maskInsetStart`, `maskInsetEnd` and `maskRadius` (points). `scale` drives both
+`shadowRadius`, `shadowOffsetX`, `shadowOffsetY`, `blur` (points), the mask's `maskInsetTop`,
+`maskInsetBottom`, `maskInsetStart`, `maskInsetEnd` and `maskRadius` (points), and a
+[`MotionMaterial`](#backdrop-materials)'s `materialIntensity` and `materialTintOpacity` (0-1). `scale` drives both
 axes and cannot be combined with `scaleX`/`scaleY`. Velocities are units per second (multiply React Native
 gesture velocities, which are per millisecond, by 1000). Durations and delays are
 milliseconds. A bare number in `animate()` means `spring(value)` with the platform
@@ -291,6 +294,75 @@ when the easing has covered that share of the length, so the view moves along th
 easing's pace. Spread the result into `animate`; the engine plays it like any keyframes. Arcs
 (`A`) and easings whose control points leave [0, 1] are `E_UNSUPPORTED_OPTION`. The path is not
 mirrored in right-to-left layouts.
+
+## Backdrop materials
+
+```tsx
+const panel = useRef<MotionTarget>(null);
+<View style={styles.card}>
+  <MotionMaterial ref={panel} material="hudWindow" tintColor="#2563eb40" initial={{ materialIntensity: 0 }} style={StyleSheet.absoluteFill} />
+  <Text>…</Text>
+</View>
+
+animate(panel.current, { materialIntensity: timing(1, { durationMs: 300 }) });   // fade the material in
+animate(panel.current, { materialTintOpacity: spring(0) });                         // and its tint out
+setMaterial('popover');                                                              // a re-render crossfades to it
+```
+
+`MotionMaterial` is a `MotionView` (every `MotionView` prop, `ref` and operation applies) whose content is a
+backdrop material: an `NSVisualEffectView`, or Liquid Glass (`NSGlassEffectView`). It has no children (they are
+`E_INVALID_ARGUMENT`); put it behind content, usually with `StyleSheet.absoluteFill`, and round it with
+`borderRadius` and `overflow: 'hidden'`. It is the animatable counterpart of two static surfaces: a window's
+behind-window vibrancy (`macos.backgroundMaterial`, [windows](api-window-contract.md)) and `GlassView`
+(`@legendapp/spark/ui/glass`), Liquid Glass that hosts its children.
+
+| Prop | Values |
+| --- | --- |
+| `material` | `titlebar`, `selection`, `menu`, `popover`, `sidebar`, `headerView`, `sheet`, `windowBackground`, `hudWindow`, `fullScreenUI`, `toolTip`, `contentBackground`, `underWindowBackground`, `underPageBackground` (AppKit's `NSVisualEffectMaterial`), `glass` and `clearGlass` (Liquid Glass) |
+| `blendingMode` | `behindWindow` (default: the desktop and windows behind the window) or `withinWindow` (the window's own content behind the view) |
+| `state` | `followsWindowActiveState` (default), `active`, `inactive` |
+| `emphasized` | The emphasized look of `selection` |
+| `tintColor` | A [color](#colors) drawn over the material at `materialTintOpacity` |
+| `crossfade` | How a change of material crossfades: a [`MotionTransition`](#layout-presence-and-shared-elements) (default: 250 ms, ease-in-out) |
+
+Liquid Glass has no `blendingMode`, `state` or `emphasized` (`E_UNSUPPORTED_OPTION`), takes the view's corner radius: a
+`borderRadius` animation reshapes the glass to its target radius at once, when the animation starts (the glass draws
+its own shape, which Core Animation cannot animate), and needs macOS 26 and an app built with the macOS
+26 SDK. `getMaterialAvailability(material)` asks the native side, so it is `{ available: true }` only when both have
+the material (`host-restriction` otherwise; `unsupported-platform` or `missing-module` like motion); rendering an
+unavailable material throws `E_UNAVAILABLE`.
+
+**Why a crossfade.** Material, blending mode and state are not animatable layer properties, and driving the
+window server's backdrop blur radius needs private Core Animation filters, which Spark does not use. So:
+
+* `materialIntensity` (default 1) is the opacity of the material views, under the tint, which it does not fade: 0
+  shows what is behind the view unblurred (with the tint over it), 1 the material. `materialTintOpacity` (default 1) is the opacity of `tintColor`. Both are engine
+  properties: springs, timing, keyframes, interruption, telemetry, scroll links and captures work on them, baked into
+  Core Animation keyframe animations on the material's and the tint's layers.
+* A change of `material` (or `blendingMode`, `state`, `emphasized`) adds the new material over the one showing and
+  the engine fades it in with `crossfade`; the old one is removed once it is covered. Overlapping crossfades keep at most three materials (the one showing, an
+interrupted one and the incoming one): a fourth change drops the oldest, which lies under the partly faded ones. A change during a crossfade
+  leaves the material it interrupted as far as it got and fades the newest in over it, so nothing jumps. The
+  crossfade is the engine property `materialCrossfade` (0 to 1): telemetry reports it and `waitForMotion` waits for
+  it, but only material changes drive it (`animate` and `setMotionValues` reject it with `E_INVALID_ARGUMENT`). A
+  `tintColor` change applies at once.
+* `materialIntensity` and `materialTintOpacity` on a `MotionView` that is not a `MotionMaterial` (in `initial`,
+  `animate`, `stagger`, `timeline`, `setMotionValues` or a scroll link) are `E_UNSUPPORTED_OPTION`: it has no
+  material to drive.
+
+**Reduce Motion.** Intensity, tint and crossfade are fades: under the `fade` alternate they fade over 200 ms without
+overshoot, and a crossfade under Reduce Motion is that 200 ms fade whatever its `crossfade` transition.
+
+**Reduce Transparency.** AppKit draws every material opaque while the user's Reduce Transparency setting is on, and
+motion leaves that to it: a crossfade then fades between two opaque fills (the old one stays opaque until the new one
+covers it). `materialIntensity` below 1 is the app's explicit choice to show what is behind the view, and applies as
+set. `getMotionEnvironment()` reports `reduceTransparency` for apps that choose different content, such as an opaque
+panel instead of a faded-in material.
+
+**Captures.** Driver captures render in-process, where the window server's backdrop blur does not exist: every
+material draws as the same flat fill, whatever its blending mode. Kitchen Sink goldens use `withinWindow` materials and
+are captured at rest (the material faded out, and tinted); flows check materials, intensity, tint and crossfades
+through the values the engine reports.
 
 ## Text transitions
 
@@ -576,8 +648,9 @@ flow never makes a sound.
 
 The driver never changes the Mac's settings. A driver run pins Reduce Motion and Low Power Mode
 off for motion, like the driver's other [pinned host settings](test-driver.md#pinned-host-settings),
-so flows and goldens do not depend on the Mac's settings. Motion follows the simulated state other driver
-commands set: `simulateSystemEvent`'s `reduceMotion` (`accessibilityDisplayChanged`) and
+so flows and goldens do not depend on the Mac's settings; Reduce Transparency is pinned off for
+`getMotionEnvironment` too. Motion follows the simulated state other driver commands set:
+`simulateSystemEvent`'s `reduceMotion` and `reduceTransparency` (`accessibilityDisplayChanged`) and
 `lowPowerMode` (`lowPowerChanged`), and `simulateDisplays`' primary display's
 `refreshRate.maximum` (`restore` stops simulating it). They reach motion through
 `SparkTestDriverDidSimulateState`. A driven app's windows are never on screen, so motion ignores
@@ -618,7 +691,11 @@ side carries over unchanged; the Windows glue maps `backgroundColor` onto a `Col
 of a `CompositionColorBrush` (converting each sample, as on macOS), `borderRadius` and the mask onto
 a `CompositionRoundedRectangleGeometry` clip, the shadow onto a `DropShadow`, `blur` onto a
 `GaussianBlurEffect` brush, and `rotateX`/`rotateY`/`perspective` onto `TransformMatrix`. SF Symbols do
-not exist on Windows; symbol effects there need their own design (#237).
+not exist on Windows; symbol effects there need their own design (#237). `MotionMaterial` throws
+`E_UNSUPPORTED_PLATFORM` and `getMaterialAvailability` reports `unsupported-platform` until Composition backdrop
+brushes are wired: the intended glue maps `withinWindow` onto `CreateBackdropBrush` and `behindWindow` onto
+`CreateHostBackdropBrush` (with Acrylic-style blur and tint effects), `materialIntensity` and `materialTintOpacity` onto
+the brush visual's and the tint's `Opacity`, and the crossfade onto two brush visuals (#237).
 
 `MotionPresence` and `MotionView`'s layout, presence and shared-element props are typed
 unsupported the same way: both components throw `E_UNSUPPORTED_PLATFORM` when rendered.
@@ -637,7 +714,8 @@ boxes around each mounting transaction (#376).
   presentation.
 * Layout boxes are layout geometry: transforms of ancestors (other than a layout-animated
   ancestor `MotionView`) are not part of them.
-* Shader effects (ripple, dissolve, distortion, glass specular) and particles (#405), shape
-  morphing and stroke drawing (#406), and animated vibrancy (#407) are not part of motion yet.
+* Shader effects (ripple, dissolve, distortion, glass specular) and particles (#405), and shape
+  morphing and stroke drawing (#406), are not part of motion yet. Backdrop materials crossfade and fade; their
+  blur radius does not animate ([Backdrop materials](#backdrop-materials)).
 * Reduce Motion, the hidden-window rule and cues apply per plan; a plan with several views
   plays its cues by its first view's state.

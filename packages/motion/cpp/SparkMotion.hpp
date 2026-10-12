@@ -23,23 +23,28 @@ enum Property : int {
   BorderRadius, BackgroundColorL, BackgroundColorC, BackgroundColorH, BackgroundColorAlpha,
   ShadowOpacity, ShadowRadius, ShadowOffsetX, ShadowOffsetY, Blur,
   MaskInsetTop, MaskInsetBottom, MaskInsetStart, MaskInsetEnd, MaskRadius,
+  MaterialIntensity, MaterialTintOpacity, MaterialCrossfade,
   PropertyCount
 };
 using Values = std::array<double, PropertyCount>;
-/** At rest: opaque, untransformed, square corners, a transparent background, no shadow, blur or mask. */
-constexpr Values kIdentity = {1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+/**
+ * At rest: opaque, untransformed, square corners, a transparent background, no shadow, blur or mask, and a backdrop
+ * material (docs/motion.md#backdrop-materials) at full intensity, its tint shown, and no crossfade in progress.
+ * `materialCrossfade` is the opacity of the material a MotionMaterial crossfades to; only the glue drives it.
+ */
+constexpr Values kIdentity = {1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1};
 const char *propertyName(Property property);
 std::optional<Property> propertyFromName(const std::string &name);
 
 /** One property's channel on the compositor: the properties of a channel bake together into its layer animations. */
-enum class Channel { Opacity, Transform, BackgroundColor, BorderRadius, Shadow, Blur, Mask, Count };
+enum class Channel { Opacity, Transform, BackgroundColor, BorderRadius, Shadow, Blur, Mask, Material, Count };
 Channel channelOf(Property property);
 /** Whether a property moves something on screen (transforms and mask edges): the Reduce Motion `fade` alternate changes it at once. */
 bool travels(Property property);
 
 /** When a spring or decay counts as settled: displacement below `delta`, speed below `speed` (units per second). */
 struct Rest { double delta, speed; };
-/** Per-property defaults: points and degrees settle at 0.01; opacity, scale, color lightness, chroma and alpha, and shadow opacity at 0.0005. */
+/** Per-property defaults: points and degrees settle at 0.01; opacity, scale, color lightness, chroma and alpha, shadow opacity and the material's opacities at 0.0005. */
 Rest restThreshold(Property property);
 
 struct State { double value = 0, velocity = 0; };

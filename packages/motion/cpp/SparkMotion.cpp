@@ -254,7 +254,8 @@ const char *propertyName(Property property) {
   static const char *names[] = {"opacity", "translateX", "translateY", "scaleX", "scaleY", "rotate", "rotateX", "rotateY", "perspective",
     "borderRadius", "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha",
     "shadowOpacity", "shadowRadius", "shadowOffsetX", "shadowOffsetY", "blur",
-    "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius"};
+    "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius",
+    "materialIntensity", "materialTintOpacity", "materialCrossfade"};
   static_assert(sizeof(names) / sizeof(names[0]) == PropertyCount);
   return names[property];
 }
@@ -270,13 +271,15 @@ Channel channelOf(Property property) {
     case ShadowOpacity: case ShadowRadius: case ShadowOffsetX: case ShadowOffsetY: return Channel::Shadow;
     case Blur: return Channel::Blur;
     case MaskInsetTop: case MaskInsetBottom: case MaskInsetStart: case MaskInsetEnd: case MaskRadius: return Channel::Mask;
+    case MaterialIntensity: case MaterialTintOpacity: case MaterialCrossfade: return Channel::Material;
     default: return Channel::Transform;
   }
 }
 bool travels(Property property) { return channelOf(property) == Channel::Transform || channelOf(property) == Channel::Mask; }
 Rest restThreshold(Property property) {
   switch (property) {
-    case Opacity: case ScaleX: case ScaleY: case BackgroundColorL: case BackgroundColorC: case BackgroundColorAlpha: case ShadowOpacity: return {0.0005, 0.005};
+    case Opacity: case ScaleX: case ScaleY: case BackgroundColorL: case BackgroundColorC: case BackgroundColorAlpha: case ShadowOpacity:
+    case MaterialIntensity: case MaterialTintOpacity: case MaterialCrossfade: return {0.0005, 0.005};
     default: return {0.01, 0.1};
   }
 }
