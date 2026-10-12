@@ -85,3 +85,11 @@ test("settings options keep initial props outside window options and row emphasi
   await mount(React.createElement(SettingsRow, { title: "Setting", muted: true, control: "Control" }));
   expect(rendered.root.findAllByType("View")[0].props.className).toContain("opacity-60");
 });
+test("windows that mount together all reach the mocked windows API", async () => {
+  const onError = vi.fn();
+  await mount(React.createElement(StrictMode, null, React.createElement(SettingsWindow, { pages, windowId: "a", onError }), React.createElement(SettingsWindow, { pages, windowId: "b", onError })));
+  await vi.waitFor(() => expect(setWindowOptions.mock.calls.length + onError.mock.calls.length).toBe(2));
+  expect(onError).not.toHaveBeenCalled();
+  expect(setWindowOptions).toHaveBeenCalledWith("a", { title: "General", appearance: "system" });
+  expect(setWindowOptions).toHaveBeenCalledWith("b", { title: "General", appearance: "system" });
+});
