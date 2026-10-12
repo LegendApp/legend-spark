@@ -121,7 +121,8 @@
     "@legendapp/spark-motion": "0.0.1-next.3",
     "@legendapp/spark-printing": "0.0.1-next.3",
     "@legendapp/spark-logging": "0.0.1-next.3",
-    "@legendapp/spark-diagnostics": "0.0.1-next.3"
+    "@legendapp/spark-diagnostics": "0.0.1-next.3",
+    "@legendapp/spark-permissions": "0.0.1-next.3"
   },
   "overrides": {
     "@expo/cli": "54.0.27",

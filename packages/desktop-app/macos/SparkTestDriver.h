@@ -4,7 +4,7 @@
 // gate runner launches the app with SPARK_TEST_DRIVER_DIR naming a private run
 // directory that holds a one-time token. Main-thread confined.
 //
-// The RNDesktopApp, RNSparkUI, RNSparkMotion, RNDesktopSystem, RNDesktopWindows, RNDesktopClipboard and RNDesktopDrag podspecs set SPARK_TEST_DRIVER: 1 in
+// The RNDesktopApp, RNSparkUI, RNSparkMotion, RNDesktopSystem, RNDesktopWindows, RNDesktopClipboard, RNDesktopDrag and RNDesktopPermissions podspecs set SPARK_TEST_DRIVER: 1 in
 // Debug builds, and in other builds only for apps that set macos.testDriverInRelease (docs/test-driver.md#builds).
 // At 0 the driver's sources are not compiled, these functions are inline no-ops, and the hooks below are undeclared,
 // so code that registers driver commands must sit inside #if SPARK_TEST_DRIVER. A file compiled without the setting

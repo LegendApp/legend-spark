@@ -171,6 +171,7 @@ Framework-owned capabilities are imported from `@legendapp/spark/<feature>`. Use
 | Printing | `@legendapp/spark/printing`: print panel with preview for text, HTML, PDFs, windows and views; page setup; headless PDF export ([guide](docs/printing.md)) |
 | Displays | `@legendapp/spark/displays`: arrangement, safe area (notch), refresh rate (fixed or variable), color space and EDR headroom per display; change events ([guide](docs/displays.md)) |
 | Pointer | `@legendapp/spark/pointer`: custom cursors, hide the cursor until it moves, trackpad gestures (pinch, rotate, swipe, smart zoom), Force Touch pressure, back/forward mouse buttons, haptic feedback ([guide](docs/pointer.md)) |
+| Privacy permissions | `@legendapp/spark/permissions`: status, requests and change events for camera, microphone, screen recording, accessibility, input monitoring, automation, contacts, calendar, photos and location; links to their System Settings panes ([guide](docs/permissions.md)) |
 | Clipboard | `@legendapp/spark/clipboard`: Expo's text subset, rich reads and writes, promised (lazy) data, change monitoring, concealed and transient markers ([guide](docs/clipboard.md)) |
 | Motion | `@legendapp/spark/motion`: compositor-run springs, timing, keyframes, sequences, staggers, decay and scroll links with velocity-preserving interruption ([guide](docs/motion.md)) |
 | Logging | `@legendapp/spark/logging`: structured entries to the unified log (os_log) and rotating JSON-lines files; a one-call diagnostics zip written locally ([guide](docs/logging.md)) |

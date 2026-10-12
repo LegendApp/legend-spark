@@ -1,0 +1,44 @@
+{
+  "name": "@legendapp/spark-permissions",
+  "version": "0.0.1-next.3",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "src",
+    "macos",
+    "*.podspec",
+    "react-native.config.js"
+  ],
+  "peerDependencies": {
+    "react": "19.1.4",
+    "react-native": "0.81.6"
+  },
+  "codegenConfig": {
+    "name": "RNDesktopPermissionsSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "ios": {
+      "modulesProvider": {
+        "NativeDesktopPermissions": "RNDesktopPermissions"
+      }
+    }
+  },
+  "spark": {
+    "sdk": true,
+    "nativeModules": [
+      "NativeDesktopPermissions"
+    ],
+    "pod": "RNDesktopPermissions",
+    "platforms": [
+      "macos"
+    ],
+    "requires": [
+      "@legendapp/spark-desktop-app"
+    ]
+  },
+  "dependencies": {
+    "@legendapp/spark-desktop-app": "0.0.1-next.3"
+  },
+  "private": true
+}

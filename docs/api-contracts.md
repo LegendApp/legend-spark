@@ -388,6 +388,21 @@ getLoggingAvailability(feature?: "systemLog" | "files" | "diagnostics"): Availab
 
 Logging is application-wide, so there is no hook. An entry call returns at once and never waits for native; entries below the level stay in JavaScript (a new level applies from the next call, and a rejected configuration restores the old one), and the rest reach one native serial queue in call order, which also orders configuration, flushes and exports. Over 10,000 waiting entries, new ones are dropped and counted. Each entry goes to the unified log (os_log: the bundle identifier as subsystem, the logger's category; message and fields private unless the logger asks for public messages) and, while files are on (the default), as one JSON line to `app.log`, rotated to `app.1.log` and on before an entry would pass `maxFileBytes`. Files hold every message and field in full. A file write failure is never thrown from the entry call nor dropped silently: it is logged once to the unified log, reported to error listeners with a count of entries lost, and rejected by the next `flushLogs`. `exportDiagnostics` zips `diagnostics.json` and the log files to a local path, replacing only a regular file, and sends nothing anywhere. macOS only for now; Windows (ETW) reports `unsupported-platform` (#319). Details: [logging](logging.md).
 
+### Privacy permissions
+
+```ts
+// /permissions
+getPermissionAvailability(): Availability;
+getPermissionStatus(kind: PermissionKind, options?: { target?: string }): Promise<PermissionResponse>; // target: automation's bundle identifier
+requestPermission(kind: PermissionKind, options?: { target?: string }): Promise<PermissionResponse>;
+openPermissionSettings(kind: PermissionKind): Promise<void>;
+addPermissionListener(listener: (event: { kind; permission; previous }) => void, options?: { kinds?; onError? }): Promise<AsyncRegistration>;
+// PermissionKind: camera | microphone | screenRecording | accessibility | inputMonitoring | automation | contacts | calendar | photos | location.
+// PermissionResponse: { kind, status: granted | denied | undetermined | unknown, granted, canAskAgain: boolean | null, macos: { authorization } }.
+```
+
+Permissions borrow Expo's `status`/`granted`/`canAskAgain` vocabulary, like notification permissions, and keep the native state as `macos.authorization`, so restricted, write-only calendar access and an unknown future state are never folded away. Screen recording and accessibility report only granted or not (`notGranted`, `canAskAgain: null`). A request without the Info.plist usage description macOS requires rejects `E_UNAVAILABLE` instead of ending the app; automation of an app that is not running rejects `E_NOT_FOUND`. Change events come from request completion, app activation and location authorization callbacks, observed only while a listener holds them; automation has none because it is per target app. In the test driver every call goes to simulated state and never reaches TCC or System Settings. macOS only for now; Windows reports `unsupported-platform` (#378). Details: [permissions](permissions.md).
+
 ### Audio and auth
 
 ```ts
