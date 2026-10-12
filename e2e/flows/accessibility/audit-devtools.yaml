@@ -1,7 +1,7 @@
 appId: so.legend.spark.examples.kitchensink
 name: Accessibility audit of the devtools screens
 intent: >
-  Every devtools screen of the Kitchen Sink catalog (React Native DevTools, Network inspector, Profiling, Developer menu) opens from its spark-ks:// link in the
+  Every devtools screen of the Kitchen Sink catalog (React Native DevTools, Network inspector, Profiling, Developer menu, React DevTools) opens from its spark-ks:// link in the
   running app, its root renders, and the accessibility audit of the main window finds no errors: every control and
   image has a label or title, every control takes keyboard focus, and all enabled text meets the HIG contrast ratio
   against what is rendered behind it.
@@ -18,3 +18,4 @@ matrix:
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: devtools, SCREEN: network } }
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: devtools, SCREEN: profiling } }
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: devtools, SCREEN: dev-menu } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: devtools, SCREEN: react-devtools } }

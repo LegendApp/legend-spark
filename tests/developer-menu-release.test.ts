@@ -13,6 +13,7 @@ const DEVELOPER_MENU = "@legendapp/spark-native-menu/src/developer-menu";
 const DEVTOOLS_OPENER = "@legendapp/spark-desktop-app/src/devtools-opener";
 const NETWORK_INSPECTOR = "@legendapp/spark-desktop-app/src/network-inspector/install";
 const PROFILER = "@legendapp/spark-desktop-app/src/profiler/install";
+const REACT_DEVTOOLS = "@legendapp/spark-desktop-app/src/react-devtools/install";
 
 /** The module's dependencies as Metro's transform worker collects them: inline __DEV__ (and fold constants when not dev) first. */
 function dependencies(file: string, dev: boolean): string[] {
@@ -24,8 +25,8 @@ function dependencies(file: string, dev: boolean): string[] {
     .dependencies.map((dependency: { name: string }) => dependency.name);
 }
 
-test("Metro drops the Developer menu, the network inspector and the profiler from the release bundle at compile time", () => {
-  expect(dependencies(BOOTSTRAP, true)).toEqual(["@legendapp/spark-cli/dist/runtime-entry.cjs", NETWORK_INSPECTOR, PROFILER, DEVTOOLS_OPENER, DEVELOPER_MENU]);
+test("Metro drops the Developer menu, the network inspector, the profiler and React DevTools' Select element fix from the release bundle at compile time", () => {
+  expect(dependencies(BOOTSTRAP, true)).toEqual(["@legendapp/spark-cli/dist/runtime-entry.cjs", NETWORK_INSPECTOR, PROFILER, DEVTOOLS_OPENER, DEVELOPER_MENU, REACT_DEVTOOLS]);
   expect(dependencies(BOOTSTRAP, false)).toEqual(["@legendapp/spark-cli/dist/runtime-entry.cjs"]);
 });
 
@@ -41,7 +42,7 @@ test("only the __DEV__ branch of the bootstrap reaches the Developer menu module
   expect(importers.sort()).toEqual(["packages/desktop-app/src/devtools-opener.ts", BOOTSTRAP, "packages/native-menu/src/developer-menu.ts"]);
 });
 
-test.each([["network inspector", "network-inspector"], ["profiler", "profiler"]])("only the __DEV__ branch of the bootstrap reaches the %s", (_, directory) => {
+test.each([["network inspector", "network-inspector"], ["profiler", "profiler"], ["React DevTools fix", "react-devtools"]])("only the __DEV__ branch of the bootstrap reaches the %s", (_, directory) => {
   // <directory>.ts is the public, release-safe surface; the tool itself is <directory>/.
   const sources = readdirSync("packages", { recursive: true, withFileTypes: true }).concat(readdirSync("examples/kitchen-sink", { recursive: true, withFileTypes: true }))
     .filter(entry => entry.isFile() && /\.(tsx?|cjs|js)$/.test(entry.name) && !entry.parentPath.includes("node_modules"))

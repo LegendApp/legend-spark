@@ -15,3 +15,5 @@ if (__DEV__ && !globalThis.__THREADED_RUNTIME_ENV__) {
   require("@legendapp/spark-desktop-app/src/devtools-opener").installDevToolsOpener();
   require("@legendapp/spark-native-menu/src/developer-menu").installDeveloperMenu();
 }
+// React DevTools' Select element covers every window of the runtime and ends in all of them (docs/devtools.md#react-devtools).
+if (__DEV__ && require("react-native").Platform.OS === "macos") require("@legendapp/spark-desktop-app/src/react-devtools/install").installReactDevTools();

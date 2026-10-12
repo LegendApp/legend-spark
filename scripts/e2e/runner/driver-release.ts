@@ -1,11 +1,13 @@
 // The release-safety probe of the driver backend (docs/e2e-flows.md#release-safety-probe, #274): what `assertNoDebugSurface`
 // judges in a running app. A driven release build listens on nothing but the driver's channel, holds no network socket,
 // never contacts the development server it is pointed at, has no Developer menu or other debug items in its menus, its
-// JavaScript contains no network inspector, and neither its JavaScript nor its native code contains the profiler.
+// JavaScript contains no network inspector or React DevTools backend, and neither its JavaScript nor its native code
+// contains the profiler.
 import { readFileSync } from "node:fs";
 import net from "node:net";
 import { NETWORK_INSPECTOR_MARKER } from "../../../packages/desktop-app/src/network-inspector/marker.ts";
 import { PROFILER_MARKER } from "../../../packages/desktop-app/src/profiler/marker.ts";
+import { REACT_DEVTOOLS_MARKER } from "../../../packages/desktop-app/src/react-devtools/marker.ts";
 import { isMachO, isScript, walk } from "../audit/bundle.ts";
 import { developerMenuMessages } from "../../../packages/native-menu/src/developer-menu-messages.ts";
 import type { DriverMenuItem, ProcessSocket } from "../driver.ts";
@@ -63,20 +65,40 @@ export async function decoyServer() {
   };
 }
 
+/** A string only a debug tool puts in an app's code, which Hermes bytecode and native code keep, and what that tool is. */
+export type CodeMarker = { marker: string; label: string };
 /**
- * Every JavaScript file of the app (bundles and scripts, by extension, at any depth) that contains the network inspector
- * or the profiler, and every Mach-O file that contains the profiler's native half (SparkProfiler.mm), by their markers,
- * which Hermes bytecode and native code keep as strings. An app with no JavaScript or no native code to search is a
- * finding too.
+ * What no release build's JavaScript may contain: Spark's network inspector and profiler, and React DevTools' backend
+ * (React Native's dispatcher for the DevTools frontend, react-devtools-core's entry point it connects through, and
+ * Spark's Select element fix), all only in development bundles.
  */
-export function codeProblems(app: string): string[] {
-  const entries = walk(app), scripts = entries.filter(isScript), binaries = entries.filter(isMachO);
-  const found = (files: typeof entries, markers: [marker: string, what: string][]) => files.flatMap(entry => {
+export const SCRIPT_MARKERS: readonly CodeMarker[] = [
+  { marker: NETWORK_INSPECTOR_MARKER, label: "network inspector" },
+  { marker: PROFILER_MARKER, label: "profiler" },
+  { marker: "__FUSEBOX_REACT_DEVTOOLS_DISPATCHER__", label: "React DevTools backend" },
+  { marker: "connectWithCustomMessagingProtocol", label: "React DevTools backend" },
+  { marker: REACT_DEVTOOLS_MARKER, label: "React DevTools Select element fix" },
+];
+/** What no release build's native code may contain: the profiler's native half (SparkProfiler.mm). */
+export const NATIVE_MARKERS: readonly CodeMarker[] = [{ marker: PROFILER_MARKER, label: "profiler" }];
+
+/**
+ * Every JavaScript file of the app (bundles and scripts, by extension, at any depth) that contains a `scripts` marker and
+ * every Mach-O file that contains a `natives` marker. The app is walked once. An app with no JavaScript or no native
+ * code to search is a finding too.
+ */
+export function codeProblems(app: string, scripts: readonly CodeMarker[] = SCRIPT_MARKERS, natives: readonly CodeMarker[] = NATIVE_MARKERS): string[] {
+  const entries = walk(app), scriptFiles = entries.filter(isScript), binaries = entries.filter(isMachO);
+  const found = (files: typeof entries, markers: readonly CodeMarker[]) => files.flatMap(entry => {
     const contents = readFileSync(entry.abs);
-    return markers.filter(([marker]) => contents.includes(marker)).map(([marker, what]) => `${entry.rel} contains the ${what} (${marker})`);
+    return markers.filter(({ marker }) => contents.includes(marker)).map(({ marker, label }) => `${entry.rel} contains the ${label} (${marker})`);
   });
+  const labels = (markers: readonly CodeMarker[]) => {
+    const names = [...new Set(markers.map(({ label }) => `the ${label}`))];
+    return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names.join("");
+  };
   return [
-    ...scripts.length ? found(scripts, [[NETWORK_INSPECTOR_MARKER, "network inspector"], [PROFILER_MARKER, "profiler"]]) : [`no JavaScript bundle found in ${app} to check for the network inspector and the profiler`],
-    ...binaries.length ? found(binaries, [[PROFILER_MARKER, "profiler"]]) : [`no native code found in ${app} to check for the profiler`],
+    ...scriptFiles.length ? found(scriptFiles, scripts) : [`no JavaScript bundle found in ${app} to check for ${labels(scripts)}`],
+    ...binaries.length ? found(binaries, natives) : [`no native code found in ${app} to check for ${labels(natives)}`],
   ];
 }

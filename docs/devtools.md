@@ -78,6 +78,44 @@ DevTools in the build) the menu's Open DevTools item stays disabled with a toolt
 - `SparkInstallDevTools(bundleURL)`: called once by the app delegate. It installs ⌥⌘I and records where the main
   runtime's JavaScript comes from; that server hosts the targets.
 
+## React DevTools
+
+React Native DevTools includes React DevTools: the **Components** panel (the component tree, props, state and hooks,
+which you can edit, Select element, highlight updates) and the **Profiler** (commit timings, and why each component
+rendered). They work per debug target, so open DevTools for the runtime you want ([Open DevTools](#open-devtools)) and
+choose Components or Profiler. There is no other API: `getDevToolsAvailability()` and `openDevTools()` cover it.
+
+- **Roots:** each window is its own React root in its runtime, so the shared runtime's tree lists the main window's
+  root and one per other window (`spark.window.<name>(RootComponent)`). An isolated runtime's target lists only its
+  own roots: an isolated-runtime window is `ThreadedRuntimeHost(RootComponent)`.
+- **Select element:** pressing it covers every window of the runtime; a click in a window selects the component under
+  it, within that window's root. React Native ends inspecting only in the window that was clicked, so in development
+  bundles `@legendapp/spark/runtime-entry` installs `packages/desktop-app/src/react-devtools/install.ts`, which ends
+  it in every window. To select in an isolated-runtime window, open DevTools for that runtime.
+- **Highlight updates** (Components settings) outline the views that re-rendered, through React Native's debugging
+  overlay in each window.
+- **Editing hooks:** React DevTools numbers a `useSyncExternalStore` as one hook where React has two, so editing the
+  state of a hook that comes after one (in the same component) changes the wrong hook and can break the component
+  ([#417](https://github.com/LegendApp/legend-spark/issues/417)). Props and hooks before it edit correctly.
+
+React Native's `setUpReactDevTools` connects the backend (`react-devtools-core`) in every development runtime. React
+Native DevTools' frontend reaches it through `__FUSEBOX_REACT_DEVTOOLS_DISPATCHER__`: it adds the dispatcher's CDP
+binding, initializes the `react-devtools` domain, and exchanges the React DevTools bridge's messages over CDP. React
+Native also tries the standalone `react-devtools` app on port 8097; Spark does not check that path.
+
+Release bundles contain none of it: React Native's setup and Spark's module are inside `__DEV__` branches that Metro
+removes (`tests/developer-menu-release.test.ts`, `tests/react-devtools.test.ts`), and the release gate's
+[release-safety probe](e2e-flows.md#release-safety-probe) (`DEVT-REL-06`) fails a release build whose JavaScript
+contains `__FUSEBOX_REACT_DEVTOOLS_DISPATCHER__`, `connectWithCustomMessagingProtocol` or the Select element fix's marker
+(`spark-react-devtools`, `packages/desktop-app/src/react-devtools/marker.ts`).
+
+`bun scripts/test-react-devtools.ts` checks it headlessly in a development session like `scripts/test-devtools.ts`, as
+a frontend speaking the bridge over CDP (`scripts/testing/react-devtools-client.ts`): it lists the shared runtime's
+roots, reads and edits the Kitchen Sink's `ReactDevToolsSample` (DevTools › React DevTools,
+`spark-ks://devtools/react-devtools`), turns on highlight updates and looks for their outlines in a capture of the
+window, records a profile, selects elements by clicking in the main window and a note window (and checks that the main
+window takes clicks again), and does the same in an isolated-runtime window's target.
+
 ## Network inspector
 
 In development bundles on macOS, React Native DevTools' **Network** panel lists the JavaScript runtime's `fetch`,
