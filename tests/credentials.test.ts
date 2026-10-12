@@ -67,10 +67,46 @@ test("certificate selection determines the default name of an explicitly created
 });
 
 test("empty answers never select profile creation", async () => {
-  mocks.question.mockResolvedValue("");
-  await expect(credentials(root, false, execute)).rejects.toThrow("select the create option");
+  mocks.question.mockResolvedValueOnce("").mockResolvedValueOnce("").mockResolvedValueOnce("")
+    .mockResolvedValueOnce("1").mockResolvedValueOnce("working");
+  expect((await credentials(root, false, execute)).keychainProfile).toBe("working");
+  expect(console.error).toHaveBeenCalledWith(expect.stringContaining("select the create option"));
   expect(mocks.spawn).not.toHaveBeenCalled();
-  expect(existsSync(stateFile(root, "signing.json"))).toBe(false);
+});
+
+test("invalid menu choices reprompt without discarding the certificate or creating credentials", async () => {
+  mocks.profiles.mockResolvedValue(["working"]);
+  mocks.question.mockResolvedValueOnce("bad").mockResolvedValueOnce("0").mockResolvedValueOnce("1")
+    .mockResolvedValueOnce("9").mockResolvedValueOnce("1");
+  const result = await credentials(root, false, execute);
+  expect(result.hash).toBe(identity.hash);
+  expect(result.keychainProfile).toBe("working");
+  expect(console.error).toHaveBeenCalledWith("Choose a number from 1 to 1.");
+  expect(console.error).toHaveBeenCalledWith("Choose a number from 1 to 3.");
+  expect(mocks.spawn).not.toHaveBeenCalled();
+});
+
+test("offline notarization validation can retry the selected profile without creating credentials", async () => {
+  mocks.profiles.mockResolvedValue(["working"]);
+  mocks.question.mockResolvedValueOnce("").mockResolvedValueOnce("").mockResolvedValueOnce("");
+  execute.mockResolvedValueOnce(`1) ${identity.hash} "${identity.name}"`)
+    .mockRejectedValueOnce(new Error('NSURLErrorDomain Code=-1009 "The Internet connection appears to be offline."'));
+  expect((await credentials(root, false, execute)).keychainProfile).toBe("working");
+  expect(execute.mock.calls[1]?.[1]).toEqual(execute.mock.calls[2]?.[1]);
+  expect(mocks.profiles).toHaveBeenCalledTimes(1);
+  expect(mocks.spawn).not.toHaveBeenCalled();
+});
+
+test("declining an offline validation retry preserves existing credentials", async () => {
+  const saved = { ...identity, keychainProfile: "working" };
+  writeJson(stateFile(root, "signing.json"), saved);
+  mocks.profiles.mockResolvedValue(["working"]);
+  mocks.question.mockResolvedValueOnce("").mockResolvedValueOnce("").mockResolvedValueOnce("n");
+  const offline = new Error("NSURLErrorDomain Code=-1009");
+  execute.mockResolvedValueOnce(`1) ${identity.hash} "${identity.name}"`).mockRejectedValueOnce(offline);
+  await expect(credentials(root, false, execute)).rejects.toBe(offline);
+  expect(readJson(stateFile(root, "signing.json"))).toEqual(saved);
+  expect(mocks.spawn).not.toHaveBeenCalled();
 });
 
 test("remembered certificates remain the default without hiding other available certificates", async () => {

@@ -1,3 +1,4 @@
+import { releaseCommand } from "../packages/cli/src/errors.ts";
 import { packAudio } from "./prepare-audio.ts";
 import { packArchive } from "../packages/cli/src/pack-archive.ts";
 import { packSpark } from "./pack-spark.ts";
@@ -54,6 +55,8 @@ export async function packLocal(root: string, output: string) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = path.resolve(import.meta.dirname, "..");
-  const { createNpm } = await packLocal(root, path.join(root, "artifacts/packages"));
-  console.log(`Local SDK packages registered. Create an app with spark create MyApp.\nCreator archive: ${createNpm}`);
+  await releaseCommand(root, async () => {
+    const { createNpm } = await packLocal(root, path.join(root, "artifacts/packages"));
+    console.log(`Local SDK packages registered. Create an app with spark create MyApp.\nCreator archive: ${createNpm}`);
+  });
 }

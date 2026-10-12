@@ -22,6 +22,7 @@ import { findFramework, findProject, sparkHome, creationManifest, packageManifes
 import { readJson, stateFile, VERSION, writeJson } from "./project.ts";
 import { devCommand } from "./dev-command.ts";
 import { printDependencyPins, upgradeDependencyPins } from "./dependency-pins.ts";
+import { reportError } from "./errors.ts";
 
 async function main() {
   const argv = process.argv.slice(2);
@@ -230,6 +231,6 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
 try {
   await main();
 } catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
+  reportError(process.cwd(), error, "Spark");
   process.exitCode = 1;
 }

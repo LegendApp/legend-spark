@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   tags: {} as Record<string, Record<string, string>>,
 }));
 vi.mock("../scripts/release-env.ts", () => ({ loadReleaseEnv: vi.fn() }));
+vi.mock("../packages/cli/src/errors.ts", () => ({ releaseCommand: (_root: string, action: () => Promise<void>) => action() }));
 vi.mock("../packages/cli/src/project.ts", () => ({ VERSION: "0.0.1-next.3", readJson: () => state.release }));
 vi.mock("node:fs", async importOriginal => {
   const original = await importOriginal<typeof import("node:fs")>();
@@ -20,6 +21,15 @@ vi.mock("../scripts/npm-release.ts", async importOriginal => ({
     const count = state.checks.get(name) ?? 0;
     state.checks.set(name, count + 1);
     return count === 0 ? state.retry : state.visible || name === "@legendapp/spark";
+  },
+  publishAndWait: async (_root: string, release: { name: string; published: boolean }, _execute: unknown, publish: () => Promise<void>) => {
+    if (!release.published) await publish();
+    state.checks.set(release.name, (state.checks.get(release.name) ?? 0) + 1);
+    if (!state.visible && release.name === "@legendapp/create-spark") throw new Error("not visible yet");
+  },
+  waitForReleaseTags: async (version: string, latest: boolean, _execute: unknown, _wait: unknown, name: string) => {
+    expect(state.tags[name]!.next).toBe(version);
+    if (latest) expect(state.tags[name]!.latest).toBe(version);
   },
 }));
 vi.mock("../packages/cli/src/process.ts", () => ({ spawnProcess: (argv: string[]) => {

@@ -51,6 +51,7 @@ function fixture() {
   git("remote", "add", "origin", "https://github.com/LegendApp/legend-spark.git"); git("update-ref", "refs/remotes/origin/main", "HEAD");
   const commands: string[][] = [];
   const tags: Record<string, string> = { next: "0.0.1-next.2", latest: "0.0.1-next.2" };
+  const createTags = { ...tags };
   let failTest = false, pendingRunner = false, failPublish = false;
   const staged = () => {
     const version = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version;
@@ -66,9 +67,29 @@ function fixture() {
       const result = spawnSync("git", argv.slice(1), { cwd: root, encoding: "utf8" });
       return { code: result.status ?? 1, output: result.status ? result.stdout + result.stderr : result.stdout };
     }
-    if (argv[0] === "gh") return { code: 0, output: argv.includes("visibility") ? '{"visibility":"PUBLIC"}' : "" };
+    if (argv[0] === "gh") {
+      if (argv.includes("visibility")) return { code: 0, output: '{"visibility":"PUBLIC"}' };
+      if (argv[1] === "api") {
+        const state = JSON.parse(readFileSync(path.join(root, ".spark/release-workflow.json"), "utf8"));
+        if (argv[2]!.includes("/git/ref/tags/")) return { code: 0, output: JSON.stringify({ object: { type: "commit", sha: state.revision } }) };
+        const manifest = JSON.parse(readFileSync(path.join(root, `artifacts/releases/${state.version}/release.json`), "utf8"));
+        return { code: 0, output: JSON.stringify({ draft: false, tag_name: `v${state.version}`, assets: Object.entries(manifest.sha256).map(([name, hash]) => ({ name, digest: `sha256:${hash}` })) }) };
+      }
+      return { code: 0, output: "" };
+    }
     if (argv.includes("versions")) return { code: 0, output: '["0.0.1-next.2"]' };
-    if (argv.includes("dist-tags")) return { code: 0, output: JSON.stringify(tags) };
+    if (argv.includes("dist-tags")) return { code: 0, output: JSON.stringify(argv[2] === "@legendapp/create-spark" ? createTags : tags) };
+    if (argv[0] === "npm" && argv[1] === "view" && argv.includes("dist.integrity")) {
+      const version = argv[2]!.slice(argv[2]!.lastIndexOf("@") + 1);
+      const creator = argv[2]!.startsWith("@legendapp/create-spark@");
+      if ((creator ? createTags : tags).next !== version) return { code: 1, output: "npm error E404" };
+      const integrity = `sha512-${createHash("sha512").update(readFileSync(path.join(root, `artifacts/releases/${version}/${creator ? "create-spark" : "spark"}.tgz`))).digest("base64")}`;
+      return { code: 0, output: JSON.stringify({ version, "dist.integrity": integrity }) };
+    }
+    if (argv[0] === "npm" && argv[1] === "dist-tag" && argv[2] === "add") {
+      const target = argv[3]!.startsWith("@legendapp/create-spark@") ? createTags : tags;
+      target[argv[4]!] = argv[3]!.slice(argv[3]!.lastIndexOf("@") + 1);
+    }
     if (argv[0] === "bun" && argv[2] === "test" && failTest) { failTest = false; return { code: 1, output: "Test failure" }; }
     if (argv.includes("release:runner")) {
       write(".spark/runner/.spark/go-build.json", JSON.stringify({ runtime: { sourceRevision: git("rev-parse", "HEAD") } }));
@@ -76,14 +97,15 @@ function fixture() {
       staged();
     }
     if (argv.includes("release:publish")) {
-      tags.next = "0.0.1-next.3";
+      tags.next = createTags.next = "0.0.1-next.3";
       if (failPublish) { failPublish = false; return { code: 1, output: "Promotion interrupted" }; }
-      if (argv.includes("--latest")) tags.latest = tags.next;
+      if (argv.includes("--latest")) { tags.latest = tags.next; createTags.latest = createTags.next; }
     }
     return { code: 0, output: "" };
   };
   const release = (resume = false, latest = false, preflight = async () => {}) => releaseWorkflow(root, { resume, latest }, execute, preflight, () => path.join(root, ".spark/runner"));
-  return { root, git, write, commands, tags, release, setFailures: (test: boolean, runner: boolean, publish: boolean) => { failTest = test; pendingRunner = runner; failPublish = publish; }, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  const finish = (runner: Execute = execute, latest = false) => releaseWorkflow(root, { resume: false, latest, finish: true }, runner, async () => { throw new Error("Signing must not run"); }, () => { throw new Error("Runner must not be consulted"); });
+  return { root, git, write, commands, tags, createTags, release, finish, execute, setFailures: (test: boolean, runner: boolean, publish: boolean) => { failTest = test; pendingRunner = runner; failPublish = publish; }, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 test("failed checks, pending notarization and interrupted promotion resume one version, commit and archive", async () => {
@@ -99,8 +121,7 @@ test("failed checks, pending notarization and interrupted promotion resume one v
     expect(f.commands).toContainEqual(["bun", "install", "--frozen-lockfile"]);
     expect(f.commands).toContainEqual(["bun", "run", "typecheck"]);
     expect(f.commands).toContainEqual(["bun", "run", "test"]);
-    await expect(f.release()).rejects.toThrow("unfinished");
-    expect(await f.release(true)).toBe(2);
+    expect(await f.release()).toBe(2);
     const releaseRevision = f.git("rev-parse", "HEAD");
     expect(f.git("log", "-1", "--format=%s")).toBe("release: prepare 0.0.1-next.3");
     expect(readFileSync(path.join(f.root, "packages/cli/templates/blank-typescript/package.json"), "utf8")).toContain("0.0.1-next.3");
@@ -108,11 +129,13 @@ test("failed checks, pending notarization and interrupted promotion resume one v
     expect(readFileSync(path.join(f.root, "CHANGELOG.md"), "utf8")).toContain("## 0.0.1-next.2");
     await expect(f.release(true)).rejects.toThrow("Promotion interrupted");
     expect(f.commands.filter(args => args.includes("release:runner"))[1]).toEqual(["bun", "run", "release:runner", "--resume"]);
-    expect(await f.release(true)).toBe(0);
+    const verificationCount = f.commands.filter(args => args[2] === "test" || args[2] === "typecheck" || args.includes("tests/packed-consumer.integration.ts")).length;
+    expect(await f.release(true, false, async () => { throw new Error("Must not ask for signing again"); })).toBe(0);
+    expect(f.commands.filter(args => args[2] === "test" || args[2] === "typecheck" || args.includes("tests/packed-consumer.integration.ts"))).toHaveLength(verificationCount);
     expect(f.git("rev-parse", "HEAD")).toBe(releaseRevision);
     expect(f.git("rev-parse", "v0.0.1-next.3")).toBe(releaseRevision);
     expect(f.commands).toContainEqual(["bun", "run", "release:publish", "--latest"]);
-    expect(f.commands).toContainEqual(["npm", "view", "@legendapp/create-spark", "dist-tags", "--json"]);
+    expect(f.commands).toContainEqual(["npm", "view", "@legendapp/create-spark", "dist-tags", "--json", "--prefer-online", "--fetch-retries=0", "--fetch-timeout=15000"]);
     expect(JSON.parse(readFileSync(path.join(f.root, "packages/create-spark/package.json"), "utf8")).version).toBe("0.0.1-next.3");
     expect(f.tags).toEqual({ next: "0.0.1-next.3", latest: "0.0.1-next.3" });
     expect(f.commands.filter(args => args.includes("release:runner"))).toHaveLength(2);
@@ -120,6 +143,79 @@ test("failed checks, pending notarization and interrupted promotion resume one v
     expect(f.commands.find(args => args.includes("tests/packed-consumer.integration.ts"))).toEqual([process.execPath, "tests/packed-consumer.integration.ts", "--archive", path.join(f.root, "artifacts/releases/0.0.1-next.3/spark.tgz")]);
     expect(await f.release(true)).toBe(0);
     expect(f.commands.filter(args => args.includes("release:publish"))).toHaveLength(2);
+  } finally { f.cleanup(); }
+});
+
+test("finish recovers an old checkpoint using published artifacts while preserving newer source and drafts", async () => {
+  const f = fixture();
+  try {
+    f.setFailures(false, false, true);
+    await expect(f.release(false, true)).rejects.toThrow("Promotion interrupted");
+    const stateFile = path.join(f.root, ".spark/release-workflow.json");
+    const old = JSON.parse(readFileSync(stateFile, "utf8")); delete old.publicationReady; writeFileSync(stateFile, JSON.stringify(old));
+    f.write("new-feature.ts", "new source\n"); f.git("add", "new-feature.ts"); f.git("commit", "-m", "New work");
+    f.write("draft.ts", "preserve this\n");
+    f.write("package.json", '{"version":"0.0.1-next.99"}\n');
+    const revision = f.git("rev-parse", "HEAD");
+    const before = f.commands.length;
+    expect(await f.finish()).toBe(0);
+    const finishing = f.commands.slice(before);
+    expect(finishing.filter(args => args[0] === "git")).toEqual([["git", "remote", "get-url", "origin"]]);
+    expect(finishing.some(args => args[0] === "bun" || args[1] === "publish" || args.includes("upload"))).toBe(false);
+    expect(finishing).toContainEqual(["npm", "dist-tag", "add", "@legendapp/spark@0.0.1-next.3", "latest"]);
+    expect(finishing).toContainEqual(["npm", "dist-tag", "add", "@legendapp/create-spark@0.0.1-next.3", "latest"]);
+    expect(finishing.filter(args => args[1] === "dist-tag")).toHaveLength(2);
+    expect(f.tags).toEqual({ next: "0.0.1-next.3", latest: "0.0.1-next.3" });
+    expect(JSON.parse(readFileSync(stateFile, "utf8")).complete).toBe(true);
+    expect(f.git("rev-parse", "HEAD")).toBe(revision);
+    expect(readFileSync(path.join(f.root, "draft.ts"), "utf8")).toBe("preserve this\n");
+    expect(readFileSync(path.join(f.root, "package.json"), "utf8")).toContain("next.99");
+    const after = f.commands.length;
+    expect(await f.finish()).toBe(0);
+    expect(f.commands.slice(after).some(args => args[1] === "dist-tag")).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+test.each(["local archive", "remote tag", "remote asset", "draft", "npm archive", "not submitted", "creator npm archive", "creator not submitted"])("finish refuses %s problems before promoting tags", async problem => {
+  const f = fixture();
+  try {
+    f.setFailures(false, false, true);
+    await expect(f.release(false, true)).rejects.toThrow();
+    if (problem === "local archive") f.write("artifacts/releases/0.0.1-next.3/spark.tgz", "tampered");
+    const before = f.commands.length;
+    await expect(f.finish(async (argv, capture) => {
+      const result = await f.execute(argv, capture);
+      if (problem === "remote tag" && argv[2]?.includes("/git/ref/tags/")) result.output = JSON.stringify({ object: { type: "commit", sha: "different" } });
+      if (argv[2]?.includes("/releases/tags/")) {
+        const uploaded = JSON.parse(result.output);
+        if (problem === "draft") uploaded.draft = true;
+        if (problem === "remote asset") uploaded.assets[0].digest = "sha256:wrong";
+        result.output = JSON.stringify(uploaded);
+      }
+      if (argv.includes("dist.integrity")) {
+        const creator = argv[2]!.startsWith("@legendapp/create-spark@");
+        if (problem === "npm archive" || (creator && problem === "creator npm archive")) result.output = JSON.stringify({ version: "0.0.1-next.3", "dist.integrity": "wrong" });
+        if (problem === "not submitted" || (creator && problem === "creator not submitted")) return { code: 1, output: "npm error E404" };
+      }
+      return result;
+    })).rejects.toThrow();
+    expect(f.commands.slice(before).some(args => args[1] === "dist-tag" || args[1] === "publish")).toBe(false);
+    expect(JSON.parse(readFileSync(path.join(f.root, ".spark/release-workflow.json"), "utf8")).complete).not.toBe(true);
+  } finally { f.cleanup(); }
+});
+
+test("finish requires a committed candidate and retains its saved channels", async () => {
+  const f = fixture();
+  try {
+    await expect(f.finish()).rejects.toThrow("No release to finish");
+    f.setFailures(true, false, false);
+    await expect(f.release()).rejects.toThrow();
+    await expect(f.finish()).rejects.toThrow("no committed candidate");
+    f.setFailures(false, false, true);
+    await expect(f.release(true)).rejects.toThrow();
+    await expect(f.finish(f.execute, true)).rejects.toThrow("without --latest");
+    expect(await f.finish()).toBe(0);
+    expect(f.tags.latest).toBe("0.0.1-next.2");
   } finally { f.cleanup(); }
 });
 
@@ -139,6 +235,18 @@ test("release version edits preserve a real frozen Bun workspace lockfile", () =
     expect(lock).toContain('"@legendapp/spark": "0.0.1-next.3"');
     install("--frozen-lockfile");
     expect(readFileSync(path.join(f.root, "bun.lock"), "utf8")).toBe(lock);
+  } finally { f.cleanup(); }
+});
+
+test("automatic continuation preserves a next-only channel selection", async () => {
+  const f = fixture();
+  try {
+    f.setFailures(false, true, false);
+    expect(await f.release()).toBe(2);
+    await expect(f.release(false, true)).rejects.toThrow("Retry without --latest");
+    expect(await f.release()).toBe(0);
+    expect(f.tags).toEqual({ next: "0.0.1-next.3", latest: "0.0.1-next.2" });
+    expect(f.commands.filter(args => args[0] === "git" && args[1] === "commit")).toHaveLength(1);
   } finally { f.cleanup(); }
 });
 
@@ -243,7 +351,7 @@ test("npm retries accept exactly the published tarball and distinguish missing v
       return { code: 0, output: JSON.stringify(metadata) };
     }, "@legendapp/create-spark")).toBe(true);
     expect(await alreadyPublished(metadata.version, archive, async () => ({ code: 1, output: "npm error E404" }))).toBe(false);
-    await expect(alreadyPublished(metadata.version, archive, async () => ({ code: 1, output: "E401 Unauthorized" }))).rejects.toThrow("Could not check");
+    await expect(alreadyPublished(metadata.version, archive, async () => ({ code: 1, output: "E401 Unauthorized" }))).rejects.toThrow("E401 Unauthorized");
     writeFileSync(archive, "different bytes");
     await expect(alreadyPublished(metadata.version, archive, async () => ({ code: 0, output: JSON.stringify(metadata) }))).rejects.toThrow("different bytes");
   } finally { rmSync(root, { recursive: true, force: true }); }

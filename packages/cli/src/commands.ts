@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { statePath as stateFile } from "@legendapp/spark-desktop-config/config.cjs";
+import { CommandError } from "./errors.ts";
 
 const running = new Map<string, Set<ReturnType<typeof spawnProcess>>>();
 const secretFlags = new Set(["--password", "--apple-id-password", "--token", "--secret", "--api-key", "-P"]);
@@ -87,9 +88,7 @@ export async function run(
     if (!options.capture) process.stdout.write(redact(output));
   }
   if (code)
-    throw new Error(
-      `${argv.map(redact).join(" ")} exited ${code}. See ${log}\n${redact(output).slice(-1800)}`,
-    );
+    throw new CommandError(argv.map(redact), code, redact(output), log);
   if (options.label) console.log(`${options.label} finished (${((Date.now() - started) / 1000).toFixed(1)}s).`);
   return output;
 }

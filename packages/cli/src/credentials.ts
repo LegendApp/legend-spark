@@ -5,6 +5,7 @@ import { createInterface } from "node:readline/promises";
 import { run } from "./commands.ts";
 import { readJson, stateFile, writeJson } from "./project.ts";
 import { listNotaryProfiles } from "./notary-profiles.ts";
+import { isNetworkError } from "./errors.ts";
 
 export type SigningIdentity = { hash: string; name: string; teamId: string };
 export type SigningCredentials = SigningIdentity & { keychainProfile: string; keychain?: string };
@@ -31,6 +32,16 @@ async function ask(question: string) {
   finally { input.close(); }
 }
 
+async function choose(question: string, defaultChoice: number, count: number) {
+  let choice: number | undefined;
+  while (choice === undefined) {
+    const answer = Number(await ask(`${question} [${defaultChoice}]: `) || String(defaultChoice));
+    if (Number.isInteger(answer) && answer >= 1 && answer <= count) choice = answer;
+    else console.error(`Choose a number from 1 to ${count}.`);
+  }
+  return choice;
+}
+
 export async function credentials(root: string, reset = false, execute: Runner = run): Promise<SigningCredentials> {
   const file = stateFile(root, "signing.json");
   const saved = !reset && existsSync(file) ? readJson(file) : {};
@@ -45,8 +56,7 @@ export async function credentials(root: string, reset = false, execute: Runner =
   if (process.stdin.isTTY) {
     console.log("Available Developer ID signing certificates:");
     console.log(matches.map((item, index) => `${index + 1}. ${item.name} [${item.hash}]`).join("\n"));
-    const choice = Number(await ask(`Signing certificate [${defaultChoice}]: `) || String(defaultChoice));
-    if (!Number.isInteger(choice) || choice < 1 || choice > matches.length) throw new Error("Invalid signing identity selection.");
+    const choice = await choose("Signing certificate", defaultChoice, matches.length);
     selected = matches[choice - 1]!;
   } else if (matches.length > 1) {
     throw new Error("Multiple signing identities are available. Set SPARK_DEVELOPER_ID_APPLICATION or run spark credentials interactively.");
@@ -67,12 +77,12 @@ export async function credentials(root: string, reset = false, execute: Runner =
       console.log(`Available saved notarization Keychain profiles${keychain ? ` in ${keychain}` : ""}:`);
       console.log(profiles.length ? profiles.map((profile, index) => `${index + 1}. ${profile}`).join("\n") : "No saved notarization profiles found.");
       console.log(`${manualChoice}. Enter an existing profile name\n${createChoice}. Create a notarization Keychain profile`);
-      const choice = Number(await ask(`Notarization profile [${defaultProfileChoice}]: `) || String(defaultProfileChoice));
+      const choice = await choose("Notarization profile", defaultProfileChoice, createChoice);
       if (Number.isInteger(choice) && choice >= 1 && choice <= profiles.length) {
         keychainProfile = profiles[choice - 1]!;
       } else if (choice === manualChoice) {
         keychainProfile = await ask("Existing notarization Keychain profile: ");
-        if (!keychainProfile) throw new Error("Enter an existing profile name or select the create option.");
+        if (!keychainProfile) console.error("Enter an existing profile name or select the create option.");
       } else if (choice === createChoice) {
         keychainProfile = await ask(`New notarization Keychain profile [${suggestedProfile}]: `) || suggestedProfile;
         console.log(`Apple’s tool will store and validate notarization credentials in Keychain as ${keychainProfile}. Secret input is handled by notarytool and is not recorded by spark.`);
@@ -80,26 +90,30 @@ export async function credentials(root: string, reset = false, execute: Runner =
           stdin: "inherit", stdout: "inherit", stderr: "inherit",
         });
         if (await child.exited) throw new Error("Notarization credential setup failed. Run spark credentials to retry.");
-      } else {
-        throw new Error("Invalid notarization setup selection.");
       }
-      needsSelection = false;
+      needsSelection = !keychainProfile;
     }
-    result = { ...selected, keychainProfile, ...(keychain ? { keychain } : {}) };
-    // Validate the Keychain profile before native compilation or signing.
-    try {
-      await execute(root, ["xcrun", "notarytool", "history", ...notaryAuth(result), "--output-format", "json"], { capture: true });
-      validated = true;
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("No Keychain password item found for profile:")) {
-        const message = `Notarization Keychain profile ${JSON.stringify(keychainProfile)} was not found${keychain ? ` in ${JSON.stringify(keychain)}` : ""}. A signing certificate name does not create a notarization profile.`;
-        if (!process.stdin.isTTY) throw new Error(`${message} Run spark credentials interactively to select an existing profile or explicitly create one.`, { cause: error });
-        console.error(message);
-        suggestedProfile = keychainProfile;
-        keychainProfile = undefined;
-        needsSelection = true;
-      } else {
-        throw error;
+    if (keychainProfile) {
+      result = { ...selected, keychainProfile, ...(keychain ? { keychain } : {}) };
+      // Validate the Keychain profile before native compilation or signing.
+      try {
+        await execute(root, ["xcrun", "notarytool", "history", ...notaryAuth(result), "--output-format", "json"], { capture: true });
+        validated = true;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("No Keychain password item found for profile:")) {
+          const message = `Notarization Keychain profile ${JSON.stringify(keychainProfile)} was not found${keychain ? ` in ${JSON.stringify(keychain)}` : ""}. A signing certificate name does not create a notarization profile.`;
+          if (!process.stdin.isTTY) throw new Error(`${message} Run spark credentials interactively to select an existing profile or explicitly create one.`, { cause: error });
+          console.error(message);
+          suggestedProfile = keychainProfile;
+          keychainProfile = undefined;
+          needsSelection = true;
+        } else if (process.stdin.isTTY && isNetworkError(error)) {
+          console.error("Could not reach Apple’s notarization service. Check your internet connection or VPN.");
+          const retry = await ask("Retry validation with the same profile? [Y/n]: ");
+          if (retry && !/^y(?:es)?$/i.test(retry)) throw error;
+        } else {
+          throw error;
+        }
       }
     }
   }

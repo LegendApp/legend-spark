@@ -46,7 +46,8 @@ After successful checks it atomically pushes `main` and the matching release tag
 publishes the GitHub prerelease and npm `next`, and assigns npm `latest` when
 `--latest` was supplied. Omit `--latest` to publish only through `next`.
 
-If notarization is pending or a later step fails, run:
+If notarization is pending or a later step fails, retry the same release command
+to continue the unfinished release automatically, or run:
 
 ```sh
 bun run release --resume
@@ -54,12 +55,45 @@ bun run release --resume
 
 Resume retains the original version and channel choice, reuses a matching Runner
 build and staged artifacts, and verifies an already published npm version has the
-same archive integrity before finishing tag promotion. It refuses changed source,
+same archive integrity before finishing tag promotion. Once artifact verification
+and the source/tag push have succeeded, its checkpoint skips installation, tests,
+Runner packaging and signing setup on subsequent resumes. It refuses changed source,
 changed archives, conflicting tags, and unrelated working-tree edits. A failed
 check can leave the script's version edits uncommitted; preserve them for resume.
 The ignored `.spark/release-workflow.json` records the selected inputs, and a PID
 lock prevents two local release runs. Do not remove the checkpoint to restart an
 unresolved notarization submission.
+
+If npm already accepted the archive and only tag promotion/completion remains,
+including a release started with older scripts, run:
+
+```sh
+bun run release --finish
+```
+
+This uses the saved version and channels, verifies local artifact checksums, the
+remote release tag, published GitHub asset digests and npm archive integrity, then
+promotes only missing tags and marks the checkpoint complete. It never builds,
+signs, uploads or runs `npm publish`. It can preserve newer commits and drafts in
+the checkout because it uses the original candidate's artifacts and revision.
+If npm is still processing, a saved successful-submission record lets it wait.
+
+Failures show a short explanation, a recovery step when available, and a diagnostic
+log path instead of a stack trace. Set `SPARK_DEBUG=1` to also print the full details.
+Signing menus reprompt on invalid choices. When Apple’s notarization service is
+unreachable, interactive setup offers to retry validation with the same profile;
+creating a profile always requires choosing the explicit create option.
+
+Both the SDK and creator package publish under `staging` first. The publisher
+checks each archive’s availability every 15 seconds
+while npm processes it. It verifies the exact archive integrity before promoting
+the requested `next`/`latest` tags, then waits for those tags to become visible
+before marking the release complete. There is no timeout for the processing delay;
+Ctrl+C pauses the release. The ignored `.spark/npm-publications/<version>.json`
+records the SDK submission; a separate `legendapp-create-spark-<version>.json`
+records the creator submission. Resume waits instead of publishing either again.
+The requested tags move only after both archives verify.
+Authentication failures or changed archive bytes still stop the release.
 
 The workflow checks disk space before commands and every 30 seconds while they
 run, preserves a 50 GB reserve, and requires an additional 10 GB of headroom before
