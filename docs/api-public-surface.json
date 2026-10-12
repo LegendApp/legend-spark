@@ -206,12 +206,20 @@
     "NetworkInspectorOptions",
     "NetworkSource",
     "OpenDevToolsOptions",
+    "ProfiledRuntime",
+    "ProfilingFrames",
+    "ProfilingResult",
+    "StartProfilingOptions",
+    "StopProfilingOptions",
     "addNetworkListener",
     "configureNetworkInspector",
     "getDevToolsAvailability",
     "getNetworkInspectorAvailability",
     "getNetworkLog",
-    "openDevTools"
+    "getProfilerAvailability",
+    "openDevTools",
+    "startProfiling",
+    "stopProfiling"
   ],
   "./diagnostics": [
     "CrashReport",

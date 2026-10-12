@@ -25,9 +25,11 @@ const en: DeveloperMenuMessages = {
     ["Toggle Element Inspector", "Inspects the elements of the key window's runtime."],
     ["Toggle Performance Monitor", "Frame rates and memory for the key window's runtime."],
     ["Fast Refresh", "Checked when Fast Refresh is on for the key window's runtime."],
+    ["Start Profiling", "Samples every JavaScript runtime and records the frame timeline, whatever window is key."],
+    ["Stop Profiling…", "Asks for a folder and saves a Chrome trace and a source-mapped .cpuprofile per runtime there."],
     ["Show Bundle Info", "Bundle URL, runtime, mode, JavaScript engine, React Native and Spark versions."],
   ] },
-  targeting: "Items other than Reload act on the key window: its shared runtime, or the isolated runtime of an isolated window. They are disabled while no window with a React Native surface is key.",
+  targeting: "Items other than Reload and profiling act on the key window: its shared runtime, or the isolated runtime of an isolated window. They are disabled while no window with a React Native surface is key.",
 };
 
 const ar: DeveloperMenuMessages = {
@@ -45,9 +47,11 @@ const ar: DeveloperMenuMessages = {
     ["تبديل فاحص العناصر", "يفحص عناصر بيئة تشغيل النافذة النشطة."],
     ["تبديل مراقب الأداء", "معدّل الإطارات والذاكرة لبيئة تشغيل النافذة النشطة."],
     ["التحديث السريع", "محدَّد عندما يكون التحديث السريع مفعّلًا لبيئة تشغيل النافذة النشطة."],
+    ["بدء تحليل الأداء", "يأخذ عيّنات من كل بيئات تشغيل JavaScript ويسجّل الخط الزمني للإطارات، أيًّا كانت النافذة النشطة."],
+    ["إيقاف تحليل الأداء…", "يطلب مجلدًا ويحفظ فيه ملف تتبّع Chrome وملف ‎.cpuprofile مربوطًا بالمصادر لكل بيئة تشغيل."],
     ["عرض معلومات الحزمة", "عنوان الحزمة وبيئة التشغيل والوضع ومحرّك JavaScript وإصدارا React Native وSpark."],
   ] },
-  targeting: "تعمل العناصر عدا «إعادة التحميل» على النافذة النشطة: بيئة تشغيلها المشتركة، أو بيئة التشغيل المعزولة لنافذة معزولة. وتكون معطّلة ما دامت لا توجد نافذة نشطة فيها واجهة React Native.",
+  targeting: "تعمل العناصر عدا «إعادة التحميل» وتحليل الأداء على النافذة النشطة: بيئة تشغيلها المشتركة، أو بيئة التشغيل المعزولة لنافذة معزولة. وتكون معطّلة ما دامت لا توجد نافذة نشطة فيها واجهة React Native.",
 };
 
 const MESSAGES: Record<Locale, DeveloperMenuMessages> = { en, ar };

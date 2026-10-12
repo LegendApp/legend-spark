@@ -15,7 +15,8 @@ FOUNDATION_EXPORT NSDictionary *_Nullable SparkDeveloperTarget(NSWindow *_Nullab
 FOUNDATION_EXPORT void SparkDeveloperConfigure(NSMenuItem *item, NSDictionary *instruction);
 // Menu validation against the key window's runtime: whether the item is enabled, and its checkmark.
 FOUNDATION_EXPORT BOOL SparkDeveloperValidate(NSMenuItem *item, NSDictionary *instruction);
-// Runs the item. Open DevTools has no native implementation here: `emit` hands it to JavaScript with its target.
+// Runs the item. Open DevTools and profiling have no native implementation here: `emit` hands them to JavaScript, Open
+// DevTools with its target and Stop Profiling with the folder the developer chose.
 FOUNDATION_EXPORT void SparkDeveloperPerform(NSMenuItem *item, NSDictionary *instruction, SparkDeveloperEmit emit);
 
 NS_ASSUME_NONNULL_END

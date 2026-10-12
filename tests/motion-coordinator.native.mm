@@ -184,8 +184,14 @@ int main()
     NSDictionary *snapshot = JSON(state->value);
     CHECK(std::abs([snapshot[@"values"][@"translateX"] doubleValue] - 50) < 1e-6 && std::abs([snapshot[@"velocities"][@"translateX"] doubleValue] - 500) < 1e-6);
     CHECK([snapshot[@"animating"] containsObject:@"translateX"] && !slide->resolved);
+    // The frame timeline's compositor track names animating views by testID, else by tag.
+    CHECK([[motion animatingViews] isEqual:@[@"MotionView 7"]]);
+    host.accessibilityIdentifier = @"slider";
+    CHECK([[motion animatingViews] isEqual:@[@"slider"]]);
+    host.accessibilityIdentifier = nil;
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:100 resolve:resolve reject:reject]; });
     CHECK(slide->resolved && [JSON(slide->value)[@"finished"] isEqual:@YES]);
+    CHECK([motion animatingViews].count == 0);
 
     // Interruption resolves the replaced animation unfinished; ids are released for reuse.
     Outcome *first = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"again", 7, @{ @"translateX": Timing(0, 400) }) resolve:resolve reject:reject]; });

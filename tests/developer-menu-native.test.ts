@@ -4,14 +4,15 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Compiles the real RNNativeMenu.mm and SparkDeveloperMenu.mm as a development build (RCT_DEV 1), replacing only
-// React Native: hosts, module registries, DevSettings, the perf monitor and @react-native-runtimes/core classes.
+// Compiles the real RNNativeMenu.mm, SparkDeveloperMenu.mm and SparkRuntimeHosts.mm as a development build (RCT_DEV 1),
+// replacing only React Native (hosts, module registries, DevSettings, the perf monitor), @react-native-runtimes/core
+// classes and whether the profiler records (SparkProfiler.mm).
 test.skipIf(process.platform !== "darwin")("the Developer menu targets the key window's runtime and validates against it", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-developer-menu-test-"));
   try {
     const root = path.resolve(import.meta.dirname, "..");
     const strip = (file: string) => readFileSync(path.join(root, file), "utf8").split("\n")
-      .filter(line => !/^#import (<React\/|<RNDesktopApp\/|"RNNativeMenu\.h"|"SparkDeveloperMenu\.h")/.test(line) && !line.startsWith("- (std::shared_ptr")).join("\n");
+      .filter(line => !/^#import (<React\/|<RNDesktopApp\/|"RNNativeMenu\.h"|"SparkDeveloperMenu\.h"|"SparkRuntimeHosts\.h")/.test(line) && !line.startsWith("- (std::shared_ptr")).join("\n");
     const stubs = `#import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #define RCT_DEV 1
@@ -24,6 +25,8 @@ static NSDictionary *SparkContext(void) { return @{ @"name": @"Probe" }; }
 static NSString *ReloadReason;
 static void RCTTriggerReloadCommandListeners(NSString *reason) { ReloadReason = reason; }
 static NSMutableArray<NSDictionary *> *Events;
+static BOOL ProfilerRecording;
+static BOOL SparkProfilerRecording(void) { return ProfilerRecording; }
 @interface RCTEventEmitter : NSObject
 - (void)sendEventWithName:(NSString *)name body:(id)body;
 - (void)invalidate;
@@ -62,7 +65,7 @@ static NSMutableArray<NSDictionary *> *Events;
 @end
 `;
     const input = path.join(directory, "DeveloperMenu.mm"), output = path.join(directory, "test");
-    writeFileSync(input, [stubs, strip("packages/native-menu/ios/SparkDeveloperMenu.h"), strip("packages/native-menu/ios/RNNativeMenu.mm"),
+    writeFileSync(input, [stubs, strip("packages/desktop-app/macos/SparkRuntimeHosts.mm"), strip("packages/native-menu/ios/SparkDeveloperMenu.h"), strip("packages/native-menu/ios/RNNativeMenu.mm"),
       strip("packages/native-menu/ios/SparkDeveloperMenu.mm"), readFileSync(path.join(root, "tests/developer-menu.native.mm"), "utf8")].join("\n"));
     await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++17", "-framework", "AppKit", input, "-o", output]);
     expect(await runOk(output, [], { timeout: 15000 })).toContain("Developer menu tests passed");

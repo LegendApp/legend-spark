@@ -123,11 +123,13 @@ language (English and Arabic; other languages use English).
 | Toggle Element Inspector | The key window's runtime. |
 | Toggle Performance Monitor | The key window's runtime (its own frame rates and memory). |
 | Fast Refresh | The key window's runtime; checked while Fast Refresh is on there. |
+| Start Profiling | The app: every JavaScript runtime and the frame timeline ([devtools.md](devtools.md#profiling)). Enabled while nothing records. |
+| Stop Profiling… | The app: asks for a folder and saves the profile there. Enabled while a recording runs. |
 | Show Bundle Info | Bundle URL and runtime of the key window, mode, JavaScript engine, React Native and Spark versions, with Copy. |
 
 The key window's runtime is the isolated runtime of a navigator window with
 `runtime: { isolated }`, and the shared runtime for any other window with a React Native
-surface. Items other than Reload are disabled while no such window is key (always the case in
+surface. Items other than Reload and the profiling items are disabled while no such window is key (always the case in
 a driven app). Enablement and the Fast Refresh check are computed when the menu is validated,
 so they always describe the window that is key at that moment.
 
@@ -155,5 +157,5 @@ Windows reports `unsupported-platform`: it has no native half yet.
 Release builds contain none of it. The bootstrap requires the menu inside `if (__DEV__)`, which
 Metro folds away before collecting dependencies, so the menu modules never enter a release
 bundle; the native half (`packages/native-menu/ios/SparkDeveloperMenu.mm` and its hooks in
-`RNNativeMenu.mm`) compiles only when `RCT_DEV`. `tests/developer-menu-release.test.ts` checks
+`RNNativeMenu.mm`, and the profiler's `SparkProfiler.mm`) compiles only when `RCT_DEV`. `tests/developer-menu-release.test.ts` checks
 both, and in a release bundle `getDeveloperMenuState()` reports `release-build`.

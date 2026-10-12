@@ -8,6 +8,12 @@ export interface DeveloperMenuMessages {
   togglePerfMonitor: string;
   fastRefresh: string;
   bundleInfo: string;
+  startProfiling: string;
+  stopProfiling: string;
+  profilerUnavailable: string;
+  /** The Stop Profiling folder panel's button and message. */
+  saveProfile: string;
+  saveProfileMessage: string;
   showMenu: string;
   bundleInfoTitle: string;
   bundleURL: string;
@@ -35,6 +41,11 @@ const en: DeveloperMenuMessages = {
   togglePerfMonitor: "Toggle Performance Monitor",
   fastRefresh: "Fast Refresh",
   bundleInfo: "Show Bundle Info",
+  startProfiling: "Start Profiling",
+  stopProfiling: "Stop Profiling…",
+  profilerUnavailable: "The profiler is not available in this build.",
+  saveProfile: "Save Profile Here",
+  saveProfileMessage: "Choose a folder for the profile: a Chrome trace and a .cpuprofile for each JavaScript runtime.",
   showMenu: "Show Developer Menu",
   bundleInfoTitle: "Bundle Info",
   bundleURL: "Bundle URL",
@@ -61,6 +72,11 @@ const ar: DeveloperMenuMessages = {
   togglePerfMonitor: "تبديل مراقب الأداء",
   fastRefresh: "التحديث السريع",
   bundleInfo: "عرض معلومات الحزمة",
+  startProfiling: "بدء تحليل الأداء",
+  stopProfiling: "إيقاف تحليل الأداء…",
+  profilerUnavailable: "محلّل الأداء غير متاح في هذا الإصدار.",
+  saveProfile: "حفظ التحليل هنا",
+  saveProfileMessage: "اختر مجلدًا للتحليل: ملف تتبّع Chrome وملف ‎.cpuprofile لكل بيئة تشغيل JavaScript.",
   showMenu: "عرض قائمة المطوّر",
   bundleInfoTitle: "معلومات الحزمة",
   bundleURL: "عنوان الحزمة",

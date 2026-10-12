@@ -2,7 +2,7 @@ area: devtools
 prefix: DEVT
 checks:
   DEVT-MENU-01:
-    title: A development bundle publishes the Developer menu before Window, composed with the app's own menus, with Reload, Open DevTools, Toggle Element Inspector, Toggle Performance Monitor, Fast Refresh and Show Bundle Info, and reports it ready
+    title: A development bundle publishes the Developer menu before Window, composed with the app's own menus, with Reload, Open DevTools, Toggle Element Inspector, Toggle Performance Monitor, Fast Refresh, Start Profiling, Stop Profiling… and Show Bundle Info, and reports it ready
     platforms: [macos]
     blocking: true
     spec: "docs/menus.md Developer menu; #270"
@@ -19,7 +19,7 @@ checks:
       - ./menus#getDeveloperMenuState
       - ./shortcuts/commands#getReservedShortcuts
   DEVT-MENU-03:
-    title: Developer menu items follow the key window's runtime; with no key window Reload stays enabled and every per-window item is disabled; Open DevTools is disabled with a tooltip only when no DevTools opener is registered (React Native DevTools registers one in development bundles)
+    title: Developer menu items follow the key window's runtime; with no key window Reload stays enabled and every per-window item is disabled while Start Profiling, which acts on the whole app, stays enabled; Open DevTools is disabled with a tooltip only when no DevTools opener is registered (React Native DevTools registers one in development bundles)
     platforms: [macos]
     blocking: true
     spec: "docs/menus.md Developer menu; #270"
@@ -152,11 +152,73 @@ checks:
     spec: "#271"
     covers:
       - ./devtools
+  DEVT-PROF-01:
+    title: startProfiling and stopProfiling sample every JavaScript runtime (shared and isolated) with Hermes and write a .cpuprofile per runtime, its stacks source-mapped through the development server to source files and lines, and one Chrome trace with a track per runtime's sampled stacks, the main thread's display-link frames and each MotionView's animation
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Profiling; #272"
+    covers:
+      - ./devtools#startProfiling
+      - ./devtools#stopProfiling
+  DEVT-PROF-02:
+    title: startProfiling rejects samplesPerSecond outside 1-10000 (E_INVALID_ARGUMENT), unknown options (E_UNSUPPORTED_OPTION) and a second recording (E_BUSY); stopProfiling rejects with nothing recording and for a directory that does not exist (E_NOT_FOUND, still recording) or is relative (E_INVALID_ARGUMENT), writes only into the directory it is given, and without one into a new temporary directory
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Profiling; #272"
+    covers:
+      - ./devtools#startProfiling
+      - ./devtools#stopProfiling
+  DEVT-PROF-03:
+    title: React Native DevTools profiles each runtime's target (Profiler and the Performance panel's Tracing, source-mapped) and its Memory panel takes heap snapshots, allocation timelines and allocation samples scoped to that runtime; a snapshot holds its own runtime's objects and not another's
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Heap snapshots and allocation timelines; #272"
+    covers:
+      - ./devtools
+  DEVT-PROF-04:
+    title: With a development bundle on macOS getProfilerAvailability reports available; the Profiling screen starts and stops a recording and reports the files it saved, and the Developer menu's Start Profiling and Stop Profiling… items follow the recording whatever window is key
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Profiling; docs/menus.md Developer menu; #272"
+    covers:
+      - ./devtools#getProfilerAvailability
+      - ./devtools#getProfilerAvailability().available
+      - ./devtools#startProfiling
+      - ./devtools#stopProfiling
+  DEVT-PROF-05:
+    title: Without a development bundle (release builds included) getProfilerAvailability reports development-only and the Profiling screen offers no recording
+    platforms: [macos]
+    blocking: true
+    spec: "#272"
+    covers:
+      - ./devtools#getProfilerAvailability
+      - ./devtools#getProfilerAvailability().available
+  DEVT-PROF-06:
+    title: assertFrames, the gate's frame budget, writes the same frame timeline (frames, drops and MotionView animations) as a Chrome trace artifact
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Frame timeline; #163, #272"
+    covers:
+      - ./devtools
+  DEVT-UNSUP-03:
+    title: On Windows getProfilerAvailability reports unsupported-platform and startProfiling and stopProfiling reject E_UNSUPPORTED_PLATFORM
+    platforms: [windows]
+    blocking: true
+    spec: "#272"
+    covers:
+      - ./devtools#getProfilerAvailability
+  DEVT-VISUAL-03:
+    title: The Profiling screen matches its goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#272"
+    covers:
+      - ./devtools
   # Release safety (#274): a running release build has no debug surface. The driver backend's release-safety probe
   # (assertNoDebugSurface, docs/e2e-flows.md#release-safety-probe) checks the gate's artifact, which the release harness
   # installs (bun run harness runs the gate with --artifact <installed app>).
   DEVT-REL-01:
-    title: A running release build has no Developer menu and no debug menu item (Reload, Open DevTools, Toggle Element Inspector, Toggle Performance Monitor, Fast Refresh, Show Bundle Info, or another DevTools, inspector or debugger item), hidden items included
+    title: A running release build has no Developer menu and no debug menu item (Reload, Open DevTools, Toggle Element Inspector, Toggle Performance Monitor, Fast Refresh, Start Profiling, Stop Profiling…, Show Bundle Info, or another DevTools, inspector, debugger or profiler item), hidden items included
     platforms: [macos]
     blocking: true
     spec: "#274"
@@ -181,5 +243,12 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "#271, #274"
+    covers:
+      - ./devtools
+  DEVT-REL-05:
+    title: A release build contains no profiler, in its JavaScript (Hermes bundles and scripts) or its native code (every Mach-O file)
+    platforms: [macos]
+    blocking: true
+    spec: "#272, #274"
     covers:
       - ./devtools

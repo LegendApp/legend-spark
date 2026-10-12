@@ -6,6 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { spawnProcess, type ManagedProcess, type ProcessLog } from "../../packages/cli/src/process.ts";
+import type { FrameTimeline } from "../../packages/desktop-app/src/profiler/trace.ts";
 
 export type DriverWindow = "main" | "key" | `id:${string}` | `title:${string}`;
 export type Frame = { x: number; y: number; width: number; height: number };
@@ -103,8 +104,11 @@ export type AuditElement = {
 /** An sRGB render of a window that audit samples refer to; `file` is in the run directory. */
 export type AuditCapture = { file: string; window: string; width: number; height: number; scale: number };
 export type AuditFacts = { windows: Array<{ id: string; title: string }>; captures: AuditCapture[]; elements: AuditElement[] };
-/** Main-thread display-link cadence between startFrames and stopFrames (docs/test-driver.md#frame-timing). */
-export type FrameReport = { frames: number; droppedFrames: number; maxFrameGapMs: number; durationMs: number; fps: number; refreshRate: number };
+/**
+ * Main-thread display-link cadence between startFrames and stopFrames (docs/test-driver.md#frame-timing), and with
+ * `timeline: true` the frame timeline itself: each frame and the MotionViews animating (docs/devtools.md#frame-timeline).
+ */
+export type FrameReport = { frames: number; droppedFrames: number; maxFrameGapMs: number; durationMs: number; fps: number; refreshRate: number; timeline?: FrameTimeline };
 /** Startup phases in milliseconds since the kernel started the process (docs/test-driver.md#startup-phases); a phase the app never reached is absent. */
 export type StartupPhases = { willFinishLaunching?: number; didFinishLaunching?: number; bundleLoaded?: number; firstMount: number; settled: number; ready?: number };
 /** What the driver saw between startCommits and stopCommits (docs/test-driver.md#layout-thrash-and-flicker). */
@@ -308,7 +312,7 @@ export class Driver {
   /** Starts counting main-thread display-link frames. */
   async startFrames() { return { refreshRate: (await this.request({ command: "startFrames" }, 10000)).refreshRate as number }; }
   /** Stops counting and reports frames, drops and the largest gap since startFrames. */
-  async stopFrames() { return body<FrameReport>(await this.request({ command: "stopFrames" }, 10000)); }
+  async stopFrames(options: { timeline?: boolean } = {}) { return body<FrameReport>(await this.request({ command: "stopFrames", ...(options.timeline ? { timeline: true } : {}) }, 10000)); }
   /** Reports `displays` (DisplayDetails) through @legendapp/spark/displays instead of the real ones; null restores them (docs/displays.md#simulated-displays). */
   async simulateDisplays(displays: readonly object[] | null) { await this.request({ command: "simulateDisplays", displays }, 10000); }
   /** Presses a registered @legendapp/spark/global-shortcuts shortcut in-process (docs/test-driver.md); `modifiers` are NSEventModifierFlags bits. */

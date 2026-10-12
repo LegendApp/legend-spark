@@ -96,6 +96,7 @@ int main() { @autoreleasepool {
   NSDictionary *info = @{ @"action": @"bundleInfo", @"title": @"Bundle Info", @"ok": @"OK", @"copy": @"Copy", @"labels": @{ @"bundleURL": @"Bundle URL", @"runtime": @"Runtime" }, @"runtimes": @{ @"shared": @"Shared runtime", @"isolated": @"Isolated runtime “{name}”" }, @"lines": @[@"Spark: test"] };
   NSArray *items = @[leaf(@"reload", @{ @"action": @"reload" }), leaf(@"devtools", @{ @"action": @"openDevTools", @"available": @NO, @"toolTip": @"Unavailable" }),
     leaf(@"inspector", @{ @"action": @"toggleInspector" }), leaf(@"perf", @{ @"action": @"togglePerfMonitor" }), leaf(@"fast-refresh", @{ @"action": @"toggleFastRefresh" }),
+    leaf(@"start-profiling", @{ @"action": @"startProfiling", @"available": @YES }), leaf(@"stop-profiling", @{ @"action": @"stopProfiling", @"prompt": @"Save Profile Here", @"message": @"Choose a folder" }),
     leaf(@"info", info), @{ @"id": @"show", @"title": @"Show", @"enabled": @YES, @"hidden": @YES, @"_sparkOwner": owner, @"shortcut": @{ @"key": @"z", @"modifiers": @(NSEventModifierFlagControl | NSEventModifierFlagCommand) }, @"_sparkDev": @{ @"action": @"showMenu" } }];
   NSDictionary *root = @{ @"id": @"spark-developer", @"title": @"Developer", @"enabled": @YES, @"_sparkOwner": owner, @"placement": @{ @"before": @{ @"menu": @"window" } }, @"items": items };
   NSString *failure = Publish(module, @[root]);
@@ -112,6 +113,12 @@ int main() { @autoreleasepool {
   Check([module validateMenuItem:reload] && [module validateMenuItem:show], @"Reload or the trigger was disabled");
   for (NSMenuItem *item in @[devtools, inspector, perf, fast, Item(main, @"info")]) Check(![module validateMenuItem:item], [NSString stringWithFormat:@"%@ was enabled without a key window", item.identifier]);
   [module selected:reload]; Check([ReloadReason isEqual:@"Spark Developer menu"], @"Reload did not trigger a React Native reload");
+  // Profiling acts on the whole app, whatever window is key: Start while nothing records, Stop while something does.
+  NSMenuItem *startProfiling = Item(main, @"start-profiling"), *stopProfiling = Item(main, @"stop-profiling");
+  Check([module validateMenuItem:startProfiling] && ![module validateMenuItem:stopProfiling], @"Start Profiling was disabled or Stop Profiling enabled while idle without a key window");
+  ProfilerRecording = YES;
+  Check(![module validateMenuItem:startProfiling] && [module validateMenuItem:stopProfiling], @"Start Profiling was enabled or Stop Profiling disabled while recording");
+  ProfilerRecording = NO;
 
   // Shared key window: its runtime's settings, checkmark and monitor.
   KeyWindow = shared;
@@ -143,7 +150,15 @@ int main() { @autoreleasepool {
   [module selected:devtools]; Check(Events.count == 0, @"An unobserved Developer menu event was sent");
   [module startObserving]; [module selected:devtools];
   Check([Events.lastObject[@"name"] isEqual:@"NativeDeveloperMenu"] && [Events.lastObject[@"body"] isEqual:(@{ @"action": @"openDevTools", @"target": @{ @"runtime": @"isolated", @"name": @"ks-plugins" } })], @"Open DevTools did not carry the isolated target");
+  [module selected:Item(main, @"start-profiling")];
+  Check([Events.lastObject[@"body"] isEqual:(@{ @"action": @"startProfiling" })], @"Start Profiling was not handed to JavaScript");
   for (NSDictionary *event in Events) Check(![event[@"name"] isEqual:@"NativeMenuAction"], @"A Developer menu item was delivered as an app menu action");
+  // Without the profiler in the bundle, Start Profiling stays disabled.
+  NSMutableArray *withoutProfiler = [availableItems mutableCopy];
+  withoutProfiler[5] = leaf(@"start-profiling", @{ @"action": @"startProfiling", @"available": @NO, @"toolTip": @"No profiler" });
+  available[@"items"] = withoutProfiler;
+  Check(!Publish(module, @[available]), @"Republishing without the profiler failed");
+  Check(![module validateMenuItem:Item(main, @"start-profiling")] && [Item(main, @"start-profiling").toolTip isEqual:@"No profiler"], @"Start Profiling was enabled without the profiler");
 
   Check(!Publish(module, @[]), @"The Developer menu did not unpublish");
   Check(main.numberOfItems == 2 && !Item(main, @"show"), @"Removal left Developer menu items behind");

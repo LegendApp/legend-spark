@@ -4,6 +4,8 @@
 #import <React/RCTBundleManager.h>
 #import <React/RCTDevSettings.h>
 #import <React/RCTReloadCommand.h>
+#import <RNDesktopApp/SparkRuntimeHosts.h>
+#import <RNDesktopApp/SparkProfiler.h>
 #import <objc/message.h>
 
 // An RCTHost (bridgeless); declared locally so this pod needs no React-RuntimeApple headers.
@@ -35,20 +37,8 @@ NSDictionary *SparkDeveloperTarget(NSWindow *window) {
 }
 
 static id<SparkDeveloperHost> SparkDeveloperHostFor(NSDictionary *target) {
-  id host = nil;
-  if ([target[@"runtime"] isEqual:@"shared"]) {
-    // RCTAppDelegate (the Spark host's AppDelegate) owns the main runtime's host.
-    @try { host = [(NSObject *)NSApp.delegate valueForKeyPath:@"rootViewFactory.reactHost"]; } @catch (NSException *) { return nil; }
-  } else if ([target[@"runtime"] isEqual:@"isolated"]) {
-    Class runtimes = NSClassFromString(@"ThreadedRuntime");
-    SEL names = NSSelectorFromString(@"runtimeNames"), lookup = NSSelectorFromString(@"ensureHostWithRuntimeName:");
-    if (![runtimes respondsToSelector:names] || ![runtimes respondsToSelector:lookup]) return nil;
-    // ensureHostWithRuntimeName: (pinned @react-native-runtimes/core) creates a host for an unknown name, so ask
-    // only for a runtime that is running; for one, it returns the existing host.
-    if (![((NSArray *(*)(id, SEL))objc_msgSend)(runtimes, names) containsObject:target[@"name"]]) return nil;
-    host = ((id (*)(id, SEL, NSString *))objc_msgSend)(runtimes, lookup, target[@"name"]);
-  }
-  return [host respondsToSelector:@selector(moduleRegistry)] ? host : nil;
+  if ([target[@"runtime"] isEqual:@"shared"]) return SparkRuntimeHost(nil);
+  return [target[@"runtime"] isEqual:@"isolated"] ? SparkRuntimeHost(target[@"name"]) : nil;
 }
 
 static RCTDevSettings *SparkDeveloperSettings(id<SparkDeveloperHost> host) {
@@ -68,6 +58,9 @@ BOOL SparkDeveloperValidate(NSMenuItem *item, NSDictionary *instruction) {
   // Reloading the shared runtime restarts every runtime: the host destroys isolated runtimes on reload.
   if ([action isEqual:@"reload"]) return SparkDeveloperHostFor(@{ @"runtime": @"shared" }) != nil;
   if ([action isEqual:@"openDevTools"] && ![instruction[@"available"] boolValue]) return NO;
+  // Profiling records the whole app, whatever window is key.
+  if ([action isEqual:@"startProfiling"]) return [instruction[@"available"] boolValue] && !SparkProfilerRecording();
+  if ([action isEqual:@"stopProfiling"]) return SparkProfilerRecording();
   NSDictionary *target = SparkDeveloperTarget(NSApp.keyWindow);
   id<SparkDeveloperHost> host = target ? SparkDeveloperHostFor(target) : nil;
   if (!host) return NO;
@@ -111,6 +104,22 @@ void SparkDeveloperPerform(NSMenuItem *item, NSDictionary *instruction, SparkDev
     return;
   }
   if ([action isEqual:@"reload"]) { RCTTriggerReloadCommandListeners(@"Spark Developer menu"); return; }
+  if ([action isEqual:@"startProfiling"]) { emit(@{ @"action": action }); return; }
+  if ([action isEqual:@"stopProfiling"]) {
+    // The profile goes where the developer chooses; cancelling keeps recording.
+    NSOpenPanel *panel = [NSOpenPanel openPanel];
+    panel.canChooseDirectories = YES;
+    panel.canChooseFiles = NO;
+    panel.canCreateDirectories = YES;
+    panel.prompt = instruction[@"prompt"];
+    panel.message = instruction[@"message"];
+    void (^chosen)(NSModalResponse) = ^(NSModalResponse response) {
+      if (response == NSModalResponseOK && panel.URL.path) emit(@{ @"action": action, @"directory": panel.URL.path });
+    };
+    if (NSApp.keyWindow) [panel beginSheetModalForWindow:NSApp.keyWindow completionHandler:chosen];
+    else chosen([panel runModal]);
+    return;
+  }
   // Validation enabled the item for the key window; it cannot change while the menu is open.
   NSDictionary *target = SparkDeveloperTarget(NSApp.keyWindow);
   id<SparkDeveloperHost> host = target ? SparkDeveloperHostFor(target) : nil;

@@ -38,6 +38,10 @@ export interface MenuWireItem {
 export type MenuDeveloperWire =
   | { action: "reload" | "toggleInspector" | "togglePerfMonitor" | "toggleFastRefresh" | "showMenu" }
   | { action: "openDevTools"; available: boolean; toolTip?: string }
+  /** Profiling is app-wide, not per window: Start is enabled while nothing records, Stop while something does. */
+  | { action: "startProfiling"; available: boolean; toolTip?: string }
+  /** The adapter asks for a folder (`prompt` is the panel's button) before it hands Stop to JavaScript with it. */
+  | { action: "stopProfiling"; prompt: string; message: string }
   /** The adapter adds the bundle URL and runtime of the target, then `lines`. `runtimes.isolated` contains `{name}`. */
   | { action: "bundleInfo"; title: string; ok: string; copy: string; labels: { bundleURL: string; runtime: string }; runtimes: { shared: string; isolated: string }; lines: string[] };
 export interface MenuSupport { types: readonly MenuItem["type"][]; shortcuts?: boolean; icons?: readonly MenuIcon["type"][]; targeting?: boolean; alternates?: boolean; mixedState?: boolean }

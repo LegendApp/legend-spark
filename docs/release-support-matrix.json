@@ -3721,13 +3721,14 @@
           "tests/devtools.test.ts",
           "tests/devtools-targets.test.ts",
           "tests/network-inspector.test.ts",
+          "tests/profiler.test.ts",
           "tests/developer-menu-release.test.ts"
         ],
         "portableCommand": "bun run test",
         "platformAcceptance": {
           "macos-arm64": {
             "status": "not-tested",
-            "acceptanceCommand": "bun run test:platform --platform macos; bun scripts/test-devtools.ts; bun scripts/test-network-inspector.ts"
+            "acceptanceCommand": "bun run test:platform --platform macos; bun scripts/test-devtools.ts; bun scripts/test-network-inspector.ts; bun scripts/test-profiler.ts"
           },
           "macos-x64": {
             "status": "not-tested",
@@ -3735,11 +3736,11 @@
           },
           "windows-x64": {
             "status": "not-applicable",
-            "reason": "Typed unsupported: getDevToolsAvailability() and getNetworkInspectorAvailability() report unsupported-platform; openDevTools() rejects and the network inspector functions throw E_UNSUPPORTED_PLATFORM."
+            "reason": "Typed unsupported: getDevToolsAvailability(), getNetworkInspectorAvailability() and getProfilerAvailability() report unsupported-platform; openDevTools(), startProfiling() and stopProfiling() reject and the network inspector functions throw E_UNSUPPORTED_PLATFORM."
           },
           "windows-arm64": {
             "status": "not-applicable",
-            "reason": "Typed unsupported: getDevToolsAvailability() and getNetworkInspectorAvailability() report unsupported-platform; openDevTools() rejects and the network inspector functions throw E_UNSUPPORTED_PLATFORM."
+            "reason": "Typed unsupported: getDevToolsAvailability(), getNetworkInspectorAvailability() and getProfilerAvailability() report unsupported-platform; openDevTools(), startProfiling() and stopProfiling() reject and the network inspector functions throw E_UNSUPPORTED_PLATFORM."
           },
           "ios": {
             "status": "not-applicable",

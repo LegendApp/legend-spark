@@ -508,6 +508,14 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   return NO;
 }
 
+- (NSArray<NSString *> *)animatingViews
+{
+  NSMutableArray<NSString *> *views = [NSMutableArray new];
+  for (NSView<SparkMotionHost> *host in _hosts.objectEnumerator)
+    if ([self isAnimating:host.motionTag]) [views addObject:host.accessibilityIdentifier.length ? host.accessibilityIdentifier : [NSString stringWithFormat:@"MotionView %ld", (long)host.motionTag]];
+  return views;
+}
+
 #pragma mark - Baking
 
 - (CAKeyframeAnimation *)animation:(const Bake &)bake channel:(Channel)channel host:(NSView *)host begin:(double)begin rate:(double)rate

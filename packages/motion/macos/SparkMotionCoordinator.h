@@ -51,6 +51,9 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 /** Reduce Motion, Low Power Mode, and the frame rates and window visibility of `tag`'s view (0: the main display, no window). */
 - (void)environment:(NSInteger)tag resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 
+/** Main thread. The MotionViews animating now, by testID, else `MotionView <tag>`: the frame timeline's compositor track (SparkMotionTimeline.mm). */
+- (NSArray<NSString *> *)animatingViews;
+
 // The virtual clock and motion telemetry serve only the in-app test driver, and compile only with it
 // (SPARK_TEST_DRIVER, which the podspec sets; docs/test-driver.md#builds).
 #if SPARK_TEST_DRIVER

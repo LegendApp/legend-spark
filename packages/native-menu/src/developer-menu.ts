@@ -6,6 +6,7 @@ import { NativeEventEmitter, Platform } from "react-native";
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { formatAccelerator, parseAccelerator } from "@legendapp/spark-desktop-app/src/contracts/accelerator";
 import { getDevToolsOpener, observeDevToolsOpener, type DeveloperRuntimeTarget } from "@legendapp/spark-desktop-app/src/contracts/developer-tools";
+import { getProfilerAvailability, startProfiling, stopProfiling, type ProfilingResult } from "@legendapp/spark-desktop-app/src/profiler";
 import type { MenuDeveloperWire, MenuWireItem } from "@legendapp/spark-desktop-app/src/contracts/menu";
 import { getReservedShortcuts } from "@legendapp/spark-desktop-app/src/contracts/reserved-shortcuts";
 import { getShortcutInventory, observeShortcutInventory, type ShortcutInventoryEntry } from "@legendapp/spark-desktop-app/src/contracts/shortcut-inventory";
@@ -21,7 +22,8 @@ export const DEVELOPER_MENU_ID = "spark-developer";
 export const DEVELOPER_MENU_SHORTCUT = "Ctrl+Cmd+Z";
 export const DEVELOPER_ITEM_IDS = {
   root: "spark-developer", reload: "spark-developer-reload", devTools: "spark-developer-devtools", inspector: "spark-developer-inspector",
-  perfMonitor: "spark-developer-perf-monitor", fastRefresh: "spark-developer-fast-refresh", bundleInfo: "spark-developer-bundle-info", show: "spark-developer-show",
+  perfMonitor: "spark-developer-perf-monitor", fastRefresh: "spark-developer-fast-refresh", startProfiling: "spark-developer-start-profiling",
+  stopProfiling: "spark-developer-stop-profiling", bundleInfo: "spark-developer-bundle-info", show: "spark-developer-show",
 } as const;
 const ID = DEVELOPER_ITEM_IDS;
 
@@ -35,14 +37,17 @@ export function developerMenuItems(messages: DeveloperMenuMessages): MenuRootIte
     { type: "action", id: ID.perfMonitor, label: messages.togglePerfMonitor },
     { type: "checkbox", id: ID.fastRefresh, label: messages.fastRefresh, checked: false },
     { type: "separator" },
+    { type: "action", id: ID.startProfiling, label: messages.startProfiling },
+    { type: "action", id: ID.stopProfiling, label: messages.stopProfiling },
+    { type: "separator" },
     { type: "action", id: ID.bundleInfo, label: messages.bundleInfo },
   ] }];
 }
 
-export interface DeveloperMenuOptions { messages: DeveloperMenuMessages; shortcut: string | null; devToolsAvailable: boolean; lines: string[] }
+export interface DeveloperMenuOptions { messages: DeveloperMenuMessages; shortcut: string | null; devToolsAvailable: boolean; profilerAvailable: boolean; lines: string[] }
 
 /** Attaches the adapter instructions and, when the shortcut is free, the hidden item whose key equivalent pops up the menu. */
-export function decorateDeveloperMenu(items: MenuWireItem[], { messages, shortcut, devToolsAvailable, lines }: DeveloperMenuOptions): void {
+export function decorateDeveloperMenu(items: MenuWireItem[], { messages, shortcut, devToolsAvailable, profilerAvailable, lines }: DeveloperMenuOptions): void {
   const root = items.find(item => item.id === ID.root);
   if (!root?.items) throw new SparkError("E_INVALID_DATA", "The Developer menu root is missing");
   const actions: Record<string, MenuDeveloperWire> = {
@@ -51,6 +56,8 @@ export function decorateDeveloperMenu(items: MenuWireItem[], { messages, shortcu
     [ID.inspector]: { action: "toggleInspector" },
     [ID.perfMonitor]: { action: "togglePerfMonitor" },
     [ID.fastRefresh]: { action: "toggleFastRefresh" },
+    [ID.startProfiling]: profilerAvailable ? { action: "startProfiling", available: true } : { action: "startProfiling", available: false, toolTip: messages.profilerUnavailable },
+    [ID.stopProfiling]: { action: "stopProfiling", prompt: messages.saveProfile, message: messages.saveProfileMessage },
     [ID.bundleInfo]: { action: "bundleInfo", title: messages.bundleInfoTitle, ok: messages.ok, copy: messages.copy, labels: { bundleURL: messages.bundleURL, runtime: messages.runtime }, runtimes: { shared: messages.sharedRuntime, isolated: messages.isolatedRuntime }, lines },
   };
   for (const item of root.items) if (item.id && actions[item.id]) item._sparkDev = actions[item.id];
@@ -94,6 +101,11 @@ function isTarget(value: unknown): value is DeveloperRuntimeTarget {
   return target?.runtime === "shared" || (target?.runtime === "isolated" && typeof target.name === "string" && target.name.length > 0);
 }
 
+function profileWritten(result: ProfilingResult) {
+  const runtimes = result.profiles.map(profile => `${profile.path} (${profile.samples} samples${profile.sourceMaps === "applied" ? "" : `, no source maps: ${profile.reason}`})`);
+  console.info(`Profile saved. Trace: ${result.trace}\n${runtimes.join("\n")}`);
+}
+
 let installation: Promise<void> | undefined;
 /** Publishes the Developer menu once per JavaScript runtime lifetime; a reload starts a fresh one. */
 export function installDeveloperMenu(): Promise<void> {
@@ -112,7 +124,9 @@ async function install() {
   const messages = developerMenuMessages((await getSystemInfo()).locale), lines = bundleInfoLines(messages);
   let shortcut = resolveDeveloperShortcut(DEVELOPER_MENU_SHORTCUT, getShortcutInventory());
   let devToolsAvailable = getDevToolsOpener() !== undefined;
-  wireDecorators.set(DEVELOPER_MENU_ID, items => decorateDeveloperMenu(items, { messages, shortcut: shortcut.shortcut, devToolsAvailable, lines }));
+  // runtime-entry installs the profiler before the menu.
+  const profilerAvailable = getProfilerAvailability().available;
+  wireDecorators.set(DEVELOPER_MENU_ID, items => decorateDeveloperMenu(items, { messages, shortcut: shortcut.shortcut, devToolsAvailable, profilerAvailable, lines }));
   const items = developerMenuItems(messages);
   const menu = await createMenu({ id: DEVELOPER_MENU_ID, items });
   const ready = () => {
@@ -129,7 +143,9 @@ async function install() {
   };
   observeShortcutInventory(refresh);
   observeDevToolsOpener(refresh);
-  new NativeEventEmitter(NativeMenu as never).addListener("NativeDeveloperMenu", (event: { action?: unknown; target?: unknown }) => {
+  new NativeEventEmitter(NativeMenu as never).addListener("NativeDeveloperMenu", (event: { action?: unknown; target?: unknown; directory?: unknown }) => {
+    if (event?.action === "startProfiling") { startProfiling().then(() => console.info("Profiling every JavaScript runtime; Developer › Stop Profiling… saves it"), error => console.error("Profiling could not start", error)); return; }
+    if (event?.action === "stopProfiling" && typeof event.directory === "string") { stopProfiling({ directory: event.directory }).then(profileWritten, error => console.error("The profile could not be saved", error)); return; }
     if (event?.action !== "openDevTools" || !isTarget(event.target)) return;
     const open = getDevToolsOpener();
     if (!open) { console.error(new SparkError("E_UNAVAILABLE", "React Native DevTools is not available in this build")); return; }

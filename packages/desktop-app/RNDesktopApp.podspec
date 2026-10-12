@@ -30,4 +30,6 @@ Pod::Spec.new do |s|
   )
   s.dependency "React-Core"
   s.dependency "ReactCodegen"
+  # The development profiler drives Hermes's sampling profiler (SparkProfiler.mm, compiled only when RCT_DEV).
+  s.dependency "hermes-engine"
 end

@@ -2,8 +2,9 @@
 
 Development builds on macOS debug their JavaScript with React Native DevTools: the Chrome DevTools frontend with
 the Hermes debugger, served by the development server that `spark dev` starts. It has breakpoints and stepping, the
-console, sources with source maps from the development bundle, pause on exceptions, and Hermes profiling. Release
-builds contain none of it. Windows is typed unsupported.
+console, sources with source maps from the development bundle, pause on exceptions, and Hermes profiling and heap
+snapshots per runtime. Spark adds a [network inspector](#network-inspector) and an app-wide [profiler](#profiling).
+Release builds contain none of it. Windows is typed unsupported.
 
 ## Open DevTools
 
@@ -141,6 +142,101 @@ Release bundles contain none of it: Metro removes the `__DEV__` branch and the m
 (`tests/developer-menu-release.test.ts`), and the release gate's [release-safety probe](e2e-flows.md#release-safety-probe)
 (`DEVT-REL-04`) fails a release build whose JavaScript contains the inspector's marker.
 
+## Profiling
+
+Development builds on macOS profile every JavaScript runtime at once with Hermes's sampling profiler and record a
+**frame timeline** of the main thread and MotionView animations, saved as one Chrome trace. React Native DevTools
+profiles, traces and snapshots the heap of the one runtime it is attached to.
+
+- **Developer › Start Profiling** starts a recording; **Developer › Stop Profiling…** asks for a folder and saves it
+  there. Both act on the whole app, whatever window is key.
+- From code, `startProfiling()` and `stopProfiling()`:
+
+```ts
+import { getProfilerAvailability, startProfiling, stopProfiling } from "@legendapp/spark/devtools";
+
+getProfilerAvailability();                     // { available: true } | { available: false, reason }
+await startProfiling({ samplesPerSecond: 1000 });
+// ... the work to profile
+const result = await stopProfiling({ directory: "/Users/me/Profiles" }); // default: a new temporary directory
+result.trace;    // .../spark-profiler-20261012-143000.trace.json
+result.profiles; // [{ runtime: "shared", path: ".../spark-profiler-…-shared.cpuprofile", samples, sourceMaps: "applied" }, …]
+result.frames;   // { frames, droppedFrames, maxFrameGapMs, durationMs, fps, refreshRate }
+```
+
+`getProfilerAvailability()` reports `unsupported-platform` outside macOS, `development-only` without `__DEV__`, and
+`missing-module` if `@legendapp/spark/runtime-entry` did not install it. One recording runs per app, whichever runtime
+started it. `startProfiling` and `stopProfiling` reject:
+
+| Code | When |
+| --- | --- |
+| `E_INVALID_ARGUMENT` | `samplesPerSecond` is not an integer from 1 to 10000 (default 1000), or `directory` is not an absolute path |
+| `E_UNSUPPORTED_OPTION` | An unknown option |
+| `E_UNSUPPORTED_PLATFORM`, `E_UNAVAILABLE`, `E_MODULE_UNAVAILABLE` | Unavailable, as `getProfilerAvailability()` reports |
+| `E_BUSY` | `startProfiling` while a recording runs |
+| `E_UNAVAILABLE` | `startProfiling` without a display: the frame timeline needs one |
+| `E_NOT_FOUND` | `stopProfiling` with nothing recording, or a `directory` that is not an existing directory; the recording keeps running |
+| `E_TIMEOUT` | A runtime's JavaScript thread did not hand over its samples within 10 s |
+| `E_ALREADY_EXISTS` | A file of that name is already in `directory`; nothing is replaced |
+
+`stopProfiling` writes, into `directory`:
+
+- `spark-profiler-<time>.trace.json`: a Chrome trace (Trace Event Format) for Chrome DevTools' Performance panel,
+  React Native DevTools or [Perfetto](https://ui.perfetto.dev). It has a track for the main thread's frames, a
+  compositor track with each MotionView's animation, and a track per JavaScript runtime with its sampled stacks, all
+  on one clock.
+- `spark-profiler-<time>-shared.cpuprofile` and `spark-profiler-<time>-isolated-<name>.cpuprofile`: each runtime's
+  samples in the DevTools `Profiler.Profile` format, which Chrome DevTools and speedscope open.
+
+Stacks are source-mapped: each frame names its source file and line, through the development server's `/symbolicate`
+endpoint (Metro's, which LogBox uses). A profile reports `sourceMaps: "unavailable"` with the `reason` when the server
+does not answer, and keeps its frames' bundle positions.
+
+Hermes has one sampling profiler per process, which React Native DevTools' JavaScript profiler and Performance panel
+use too, and the profiler cannot tell whether DevTools is recording: do not record with both at once
+([#409](https://github.com/LegendApp/legend-spark/issues/409)).
+
+### Frame timeline
+
+The frame timeline is the same recorder as the test driver's frame counter (`startFrames` and `stopFrames`,
+[test-driver.md](test-driver.md#frame-timing)): a display link on the main screen in the common run loop modes at the
+display's maximum rate. Every callback is a frame the main thread was free to produce; a gap of more than one refresh
+interval is drawn as a `Dropped <n> frames` slice. Each frame also records which MotionViews are animating, by
+testID (or `MotionView <tag>`), from `@legendapp/spark/motion`'s engine, which become the compositor track's slices.
+It measures the main thread's cadence, not what the window server composited (#50). A recording keeps the
+timestamps of its first 72,000 frames (10 minutes at 120 Hz) and its first 10,000 motion slices, and still counts
+every frame; `truncated` says it dropped some.
+
+The release gate's frame budgets use the same telemetry: `assertFrames`
+([e2e-flows.md](e2e-flows.md#motion-and-frames)) asks `stopFrames` for the timeline and writes it with the same trace
+builder (`packages/desktop-app/src/profiler/trace.ts`) as the artifact `frames-<n>.trace.json`, so a failed frame
+budget opens in the same tools as a developer's profile
+([#163](https://github.com/LegendApp/legend-spark/issues/163)).
+
+### Heap snapshots and allocation timelines
+
+React Native DevTools' **Memory** panel takes heap snapshots, records allocation timelines and samples allocations
+of the runtime it is attached to (Hermes's `HeapProfiler` domain). Each runtime is its own target, so a snapshot holds
+only that runtime's heap: open DevTools for an isolated runtime (`openDevTools({ runtime: { isolated: name } })`, or
+Developer › Open DevTools in its window) to snapshot it. The **Performance** panel records the attached runtime's
+JavaScript samples too.
+
+### How the profiler works
+
+`@legendapp/spark/runtime-entry` installs it inside `if (__DEV__)` on macOS, in every JavaScript runtime
+(`packages/desktop-app/src/profiler/`). Its native half, `packages/desktop-app/macos/SparkProfiler.mm`, compiles only
+when `RCT_DEV`. Start enables Hermes's sampling profiler, which samples every Hermes runtime React Native registered for
+profiling, and starts the frame timeline. Stop disables it and collects each running runtime's samples on that
+runtime's own JavaScript thread, through its `NativeDesktopApp` module's call invoker, then JavaScript source-maps
+them, builds the trace and asks native code to write the files.
+
+Release bundles contain none of it: Metro removes the `__DEV__` branch and the module with it, and release builds
+compile none of `SparkProfiler.mm` (`tests/developer-menu-release.test.ts`). The release gate's
+[release-safety probe](e2e-flows.md#release-safety-probe) (`DEVT-REL-05`) fails a release build whose JavaScript or
+native code contains the profiler's marker (`spark-profiler`, which starts every file name it writes). The frame
+timeline's recorder (`SparkFrameTimeline.mm`) also compiles into builds with the test driver, which the gate needs; it
+holds no profiler code.
+
 ## Release builds
 
 React Native compiles `RCT_DEV` to 0 in release builds, which removes Spark's ⌥⌘I monitor, the target lookup and the
@@ -149,7 +245,8 @@ development builds only. In JavaScript, `getDevToolsAvailability()` reports `dev
 rejects `E_UNAVAILABLE` without native work. `tests/devtools.test.ts` checks these guards in the sources. The release
 gate's [release-safety probe](e2e-flows.md#release-safety-probe) ([#274](https://github.com/LegendApp/legend-spark/issues/274))
 runs the release build pointed at a decoy development server and fails if it connects to it, holds a network or
-listening socket, shows a Developer menu or other debug menu item, or has the network inspector in its JavaScript.
+listening socket, shows a Developer menu or other debug menu item, has the network inspector in its JavaScript, or has
+the profiler in its JavaScript or native code.
 
 ## How it works
 
@@ -192,6 +289,16 @@ redirect, a streamed response, an abort, a 200 KB body and a WebSocket echo reac
 while DevTools gets their events, redacted headers, capped bodies and frames. The Network screen is
 `spark-ks://devtools/network`; for a person, `bun scripts/testing/network-fixtures.ts` prints the address to paste
 into it.
+
+`bun scripts/test-profiler.ts` checks profiling the same way, on the Kitchen Sink's Profiling screen
+(`spark-ks://devtools/profiling`) with its worker runtime running. Over CDP, as React Native DevTools does, it records
+each runtime with the `Profiler` domain and maps its samples through the bundle's source map, records a Performance
+panel trace, takes a heap snapshot of each runtime (each holds only its own runtime's marker object) and records an
+allocation timeline and allocation sampling. Then it calls `startProfiling` and `stopProfiling` while both runtimes
+run `screens/devtools/profiling-workload.ts` and a MotionView slides, and checks the errors, the files (written only
+into a temporary directory it removes), the source-mapped `fibonacci` frames of each runtime's `.cpuprofile` and trace
+track, and the frame and motion tracks. The display link delivers no frames while the display sleeps; the script then
+reports the frame checks as skipped instead of failing.
 
 `bun run ks:capture <area>/<screen> --dev-server http://127.0.0.1:<port>` captures a screen with development
 JavaScript from a running `spark dev`. The Kitchen Sink's DevTools screen is `spark-ks://devtools/devtools`. Its

@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: The profiler is absent without a development bundle
+intent: >
+  The gate's release build, like a dev build running bundled JavaScript without __DEV__, contains no profiler. The
+  Profiling screen reports getProfilerAvailability as development-only and renders no recording controls, workloads
+  or results.
+checks: [DEVT-PROF-05]
+tags: [devtools]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://devtools/profiling" }
+- assertVisible: { id: devtools-profiling-root }
+- assertText: { id: devtools-profiling-availability, equals: '{"available":false,"reason":"development-only"}' }
+- assertVisible: { id: devtools-profiling-unavailable }
+- assertNotVisible: { id: devtools-profiling-start }
+- assertNotVisible: { id: devtools-profiling-workload }
+- assertNotVisible: { id: devtools-profiling-result }

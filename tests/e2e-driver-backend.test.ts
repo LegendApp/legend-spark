@@ -487,14 +487,14 @@ describe("motion and frames", () => {
   test("assertFrames counts frames around its command and records the gate metrics", async () => {
     const { result, app } = await run("- launchApp\n- assertFrames: { during: { tapOn: { id: go } }, fps: { min: 110 }, dropped: 0 }", motionApp());
     expect(result.status).toBe("passed");
-    expect(motionLog(app)).toEqual(["startFrames", "tap go+50,20 {}", "stopFrames"]);
+    expect(motionLog(app)).toEqual(["startFrames", "tap go+50,20 {}", 'stopFrames {"timeline":true}']);
     expect(result.metrics).toEqual({ "frames.fps": [120], "frames.dropped": [0] });
     // `for` keeps counting after the command, sending the app nothing until then.
     const started = performance.now();
     const held = await run("- launchApp\n- assertFrames: { during: { tapOn: { id: go } }, for: 300ms, dropped: 0 }", motionApp());
     expect(held.result.status).toBe("passed");
     expect(performance.now() - started).toBeGreaterThanOrEqual(300);
-    expect(motionLog(held.app)).toEqual(["startFrames", "tap go+50,20 {}", "stopFrames"]);
+    expect(motionLog(held.app)).toEqual(["startFrames", "tap go+50,20 {}", 'stopFrames {"timeline":true}']);
     const dropping = motionApp();
     dropping.frames = { ...FRAMES, droppedFrames: 3, fps: 90, maxFrameGapMs: 33.4 };
     expect((await run("- launchApp\n- assertFrames: { during: { tapOn: { id: go } }, fps: { min: 110 }, dropped: 0 }", dropping)).result.failure).toMatchObject({
@@ -506,6 +506,16 @@ describe("motion and frames", () => {
     const broken = motionApp();
     expect((await run("- launchApp\n- assertFrames: { during: { tapOn: { id: missing } }, dropped: 0 }", broken)).result.failure?.kind).toBe("not-found");
     expect(motionLog(broken).filter(line => !line.startsWith("capture")).at(-1)).toBe("stopFrames");
+  });
+  test("assertFrames asks for the frame timeline and writes it as a Chrome trace artifact", async () => {
+    const app = motionApp();
+    app.frames = { ...FRAMES, timeline: { timestamps: [0, 8.3, 25], intervalMs: 8.333, motion: [{ view: "box", startMs: 0, endMs: 25 }], truncated: false } };
+    const { result } = await run("- launchApp\n- assertFrames: { during: { tapOn: { id: go } }, dropped: 5 }", app);
+    expect(result.status).toBe("passed");
+    const trace = result.artifacts.find(artifact => artifact.kind === "trace");
+    expect(trace?.path).toMatch(/frames-1\.trace\.json$/);
+    const events = JSON.parse(readFileSync(trace!.path, "utf8")).traceEvents as { name: string; tid: number; ph: string; dur?: number }[];
+    expect(events.filter(event => event.ph === "X").map(event => [event.name, event.tid, event.dur])).toEqual([["Frame", 1, 8300], ["Dropped 1 frame", 1, 16700], ["box", 2, 25000]]);
   });
 });
 

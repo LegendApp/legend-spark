@@ -1,10 +1,12 @@
 #import "RNDesktopApp.h"
 #import "SparkDesktop.h"
 #import "SparkDevTools.h"
+#import "SparkProfiler.h"
 #import "SparkLocalization.h"
 @implementation RNDesktopApp { NSMutableSet<NSString *> *_guardIds; BOOL _observing; }
 - (instancetype)init { if ((self = [super init])) _guardIds = [NSMutableSet new]; return self; }
 RCT_EXPORT_MODULE(NativeDesktopApp)
+@synthesize callInvoker = _callInvoker;
 + (BOOL)requiresMainQueueSetup { return YES; }
 - (dispatch_queue_t)methodQueue { return dispatch_get_main_queue(); }
 - (NSArray<NSString *> *)supportedEvents { return @[@"desktop"]; }
@@ -72,6 +74,18 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
       id runtime = args[@"runtime"];
       if (runtime && (![runtime isKindOfClass:NSString.class] || ![runtime length])) { SparkInvalid(reject, @"Expected an isolated runtime name"); return; }
       SparkOpenDevTools(runtime, ^(NSString *code, NSString *message) { if (code) reject(code, message, nil); else resolve(@"null"); });
+    }
+    else if ([method isEqual:@"startProfiling"]) {
+      id rate = args[@"samplesPerSecond"];
+      if (![rate isKindOfClass:NSNumber.class] || [rate doubleValue] < 1 || [rate doubleValue] > 10000) { SparkInvalid(reject, @"Expected samplesPerSecond from 1 to 10000"); return; }
+      SparkProfilerStart([rate doubleValue], ^(NSDictionary *result, NSString *code, NSString *message) { if (code) reject(code, message, nil); else resolve(@"null"); });
+    }
+    else if ([method isEqual:@"stopProfiling"] || [method isEqual:@"writeProfile"]) {
+      id directory = args[@"directory"];
+      if (directory && ![directory isKindOfClass:NSString.class]) { SparkInvalid(reject, @"Expected a directory path"); return; }
+      SparkProfilerCompletion done = ^(NSDictionary *result, NSString *code, NSString *message) { if (code) reject(code, message, nil); else resolve(SparkJSON(result)); };
+      if ([method isEqual:@"stopProfiling"]) SparkProfilerStop(directory, done);
+      else SparkProfilerWrite(directory, args[@"files"], done);
     }
 #endif
     else SparkInvalid(reject, @"Unknown app operation");
