@@ -563,7 +563,9 @@ A session is a plain JSON snapshot of a navigator's open windows that the app st
 ```ts
 const view = createWindowState({ initial: () => ({ route: '/', scrollY: 0, selected: null, split: 220 }), restorationKey: 'editor-view' });
 
-windows.subscribeToSession(async () => settings.set('session', await windows.getSession())); // crash-safe
+const save = async () => settings.set('session', await windows.getSession());
+windows.subscribeToSession(save); // crash-safe: after changes settle, and when a window closes
+await beforeQuit(async () => { await save(); return true; }); // @legendapp/spark/app
 const saved = await settings.get('session');
 if (saved && !(await getAppContext()).launch.safeMode) await windows.restoreSession(saved as WindowSession);
 
@@ -580,8 +582,9 @@ await windows.duplicate(editor, { tab: true });   // as the next tab (macOS)
   visible); a group with no visible window is saved as hidden, ungrouped windows. A restorable value that is not finite, acyclic JSON rejects `E_INVALID_DATA`.
   App-scoped values (`promote`/`share`) are the app's own data and are not part of the session.
 - `restoreSession(session)` validates the whole session before opening anything: an unknown entry
-  rejects `E_NOT_FOUND`, malformed data `E_INVALID_DATA` (including a fixed-`id` entry saved under
-  another ID), and an ID that is already open `E_ALREADY_EXISTS`. Windows reopen with their saved IDs
+  rejects `E_NOT_FOUND`, malformed data (missing or extra keys, bad IDs or bounds, a fixed-`id` entry
+  saved under another ID) `E_INVALID_DATA`, and an ID that is already open `E_ALREADY_EXISTS`, also
+  when another open or restore takes it while this one runs. Windows reopen with their saved IDs
   (so `restoreBounds` records and other per-ID data stay with them), props, titles and visibility, at
   the saved frame passed as explicit `position` and `size`. A frame whose display is no longer
   connected moves to the primary display, fitted into its work area, as the coordinate rules allow.
@@ -600,9 +603,12 @@ await windows.duplicate(editor, { tab: true });   // as the next tab (macOS)
   shares nothing. `tab: true` opens it as the next tab of the source's group instead of cascading.
   An attached value released before the duplicate first reads it rejects `E_NOT_FOUND` there rather
   than starting from `initial`.
-- `subscribeToSession(listener)` notifies at most once per tick when the session may have changed:
-  a window opened, closed, moved, resized or changed tab group, the key window changed, or a
-  restorable value changed. Frames and tab groups are observed natively only while it has listeners.
+- `subscribeToSession(listener)` notifies when the session may have changed: a window opened,
+  closed, moved, resized, was shown or hidden, was retitled with `setWindowOptions`, or changed tab
+  group, the key window changed, or a restorable value changed. Changes coalesce on a 250 ms
+  trailing timer, so a scroll or live resize notifies at most four times a second; a window closing
+  notifies at once. The navigator has no quit hook: save from `beforeQuit` too. Frames, visibility and tab groups
+  are observed natively only while it has listeners.
 - `getWindowSessionAvailability(feature?)` is the windows availability; `'tabs'` (tab groups in
   sessions, `duplicate` with `tab`) is macOS only for now. On Windows, sessions carry no tab groups,
   and restoring one with tab groups or `tab: true` rejects `E_UNSUPPORTED_OPTION` before opening

@@ -48,7 +48,8 @@ export function createWindowState<T>(options: WindowStateOptions<T>): WindowStat
   const { initial, restorationKey } = options;
   if (restorationKey !== undefined) {
     validKey(restorationKey);
-    if (restorableStates.has(restorationKey)) throw new SparkError("E_ALREADY_EXISTS", `A window state already uses the restoration key ${restorationKey}`);
+    // In development, Fast Refresh re-evaluates the module that creates the state: the new one replaces it.
+    if (restorableStates.has(restorationKey) && (globalThis as { __DEV__?: boolean }).__DEV__ !== true) throw new SparkError("E_ALREADY_EXISTS", `A window state already uses the restoration key ${restorationKey}`);
   }
   // Keyed by window instance, so a later window reusing an ID never sees an earlier window's value.
   let own = new WeakMap<WindowInstance, Observable<T>>(), listeners = new WeakMap<WindowInstance, Set<() => void>>();
@@ -117,8 +118,12 @@ export function createWindowState<T>(options: WindowStateOptions<T>): WindowStat
       return value === undefined ? undefined : { value: jsonCopy(value.peek(), `Window state ${restorationKey}`) };
     },
   };
+  if (restorationKey !== undefined) {
+    const replaced = restorableStates.get(restorationKey);
+    if (replaced) windowStates.delete(replaced);
+    restorableStates.set(restorationKey, internals);
+  }
   windowStates.add(internals);
-  if (restorationKey !== undefined) restorableStates.set(restorationKey, internals);
   return {
     get,
     getBinding(window) { return bindings.get(open(window)) ?? null; },

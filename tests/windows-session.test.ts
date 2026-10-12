@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { createRequire } from "node:module";
+import React, { act } from "react";
+const { create } = createRequire(import.meta.url)("react-test-renderer");
 
 type Native = { token: number; title: string; visible: boolean; bounds: { displayId: string; x: number; y: number; width: number; height: number } };
 type Listener = { id: string; token: number; type: string; listener: (event: object) => void; removed: boolean };
 const mocks = vi.hoisted(() => ({
   platform: { OS: "macos" },
+  roots: new Map<string, () => any>(),
   tabbing: true,
   windows: new Map<string, Native>(),
   token: 0,
@@ -18,7 +22,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("react-native", () => ({
   Platform: mocks.platform, NativeModules: {},
-  AppRegistry: { registerComponent: () => {} },
+  AppRegistry: { registerComponent: (name: string, factory: () => unknown) => mocks.roots.set(name, factory as () => any) },
   UIManager: { hasViewManagerConfig: () => false },
   StyleSheet: { create: (styles: object) => styles, hairlineWidth: 1 },
   View: "View", Text: "Text", Pressable: "Pressable", useColorScheme: () => "light",
@@ -51,6 +55,8 @@ vi.mock("../packages/desktop-windows/src/api", () => ({
 }));
 vi.mock("../packages/desktop-windows/src/macos", () => ({ addMacOSWindowListener: vi.fn() }));
 import { createWindowMessages, createWindowState, createWindowsNavigator, getWindowSessionAvailability, type WindowSession, type WindowState } from "../packages/desktop-windows/src/windows";
+import { instanceRecord } from "../packages/desktop-windows/src/windows/instances";
+import { titleChanged } from "../packages/desktop-windows/src/title-changes";
 
 const tick = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
 const deliver = (id: string, type: string, event: object) => {
@@ -254,26 +260,94 @@ test("duplicate opens the source's entry with its props, title and a cascaded fr
   expect(stars.getBinding(await windows.duplicate(copy))).toBe("pinned");
 });
 
-test("subscribeToSession coalesces changes and observes frames and tab groups only while it has listeners", async () => {
+test("subscribeToSession notifies at most every 250 ms on a trailing timer, notifies at once on close, and observes natively only while it has listeners", async () => {
   const windows = navigator(), note = `note${names}`;
   const one = await windows.openInstance(note, { props: { title: "One" } });
   expect(live("boundsChanged")).toEqual([]);
   const changed = vi.fn();
-  const subscription = windows.subscribeToSession(changed);
+  vi.useFakeTimers();
+  try {
+    const subscription = windows.subscribeToSession(changed);
+    await tick();
+    expect(live("boundsChanged")).toEqual([one.id]); expect(live("visibilityChanged")).toEqual([one.id]); expect(live("tabGroupChanged")).toEqual([one.id]);
+    // A live resize or scroll notifies at most every 250 ms, after the change that started the wait.
+    deliver(one.id, "boundsChanged", {}); deliver(one.id, "boundsChanged", {});
+    await vi.advanceTimersByTimeAsync(249); expect(changed).toHaveBeenCalledTimes(0);
+    deliver(one.id, "boundsChanged", {});
+    await vi.advanceTimersByTimeAsync(1); expect(changed).toHaveBeenCalledTimes(1);
+    deliver(one.id, "tabGroupChanged", {}); views.get(one).scrollY.set(10); views.get(one).split.set(300);
+    await vi.advanceTimersByTimeAsync(250); expect(changed).toHaveBeenCalledTimes(2);
+    // Shown or hidden from anywhere, and retitled with setWindowOptions.
+    deliver(one.id, "visibilityChanged", { visible: false });
+    await vi.advanceTimersByTimeAsync(250); expect(changed).toHaveBeenCalledTimes(3);
+    titleChanged(one.id); titleChanged("not-a-navigator-window");
+    await vi.advanceTimersByTimeAsync(250); expect(changed).toHaveBeenCalledTimes(4);
+    const two = await windows.openInstance(note, { props: { title: "Two" } });
+    await vi.advanceTimersByTimeAsync(250); expect(changed).toHaveBeenCalledTimes(5); expect(live("boundsChanged")).toEqual([one.id, two.id]);
+    // Closing notifies without waiting, so a quit right after it still saves.
+    views.get(one).scrollY.set(20);
+    await two.close(); await tick();
+    expect(changed).toHaveBeenCalledTimes(6); expect(live("boundsChanged")).toEqual([one.id]);
+    await vi.advanceTimersByTimeAsync(1000); expect(changed).toHaveBeenCalledTimes(6);
+    views.get(one).scrollY.set(21);
+    subscription.remove(); await tick();
+    await vi.advanceTimersByTimeAsync(1000); expect(changed).toHaveBeenCalledTimes(6);
+    expect(live("boundsChanged")).toEqual([]); expect(live("visibilityChanged")).toEqual([]); expect(live("tabGroupChanged")).toEqual([]);
+  } finally { vi.useRealTimers(); }
+});
+
+test("two concurrent restores of the same session open each window once; the second rejects E_ALREADY_EXISTS", async () => {
+  const windows = navigator(), note = `note${names}`;
+  const saved = (id: string) => ({ id, name: note, props: { title: id }, title: id, visible: true, state: {}, bounds: { displayId: "1", persistentDisplayId: "built-in", x: 10, y: 10, width: 400, height: 300 } });
+  const session: WindowSession = { version: 1, windows: [saved("note-a"), saved("note-b")], tabGroups: [], keyWindowId: null };
+  const [first, second] = await Promise.allSettled([windows.restoreSession(session), windows.restoreSession(session)]);
+  expect(first).toMatchObject({ status: "fulfilled" });
+  expect(second).toMatchObject({ status: "rejected", reason: { code: "E_ALREADY_EXISTS" } });
   await tick();
-  expect(live("boundsChanged")).toEqual([one.id]); expect(live("tabGroupChanged")).toEqual([one.id]);
-  deliver(one.id, "boundsChanged", {}); deliver(one.id, "boundsChanged", {}); deliver(one.id, "tabGroupChanged", {});
-  await tick(); expect(changed).toHaveBeenCalledTimes(1);
-  views.get(one).scrollY.set(10); views.get(one).split.set(300);
-  await tick(); expect(changed).toHaveBeenCalledTimes(2);
-  const two = await windows.openInstance(note, { props: { title: "Two" } });
-  await tick(); expect(changed).toHaveBeenCalledTimes(3); expect(live("boundsChanged")).toEqual([one.id, two.id]);
-  await two.close(); await tick();
-  expect(changed).toHaveBeenCalledTimes(4); expect(live("boundsChanged")).toEqual([one.id]);
-  subscription.remove(); await tick();
-  expect(live("boundsChanged")).toEqual([]); expect(live("tabGroupChanged")).toEqual([]);
-  views.get(one).scrollY.set(11); await tick();
-  expect(changed).toHaveBeenCalledTimes(4);
+  expect(mocks.openWindow).toHaveBeenCalledTimes(2);
+  // The losing restore did not close or untrack the winner's windows.
+  expect(mocks.closeWindow).not.toHaveBeenCalled();
+  expect(windows.list().map((window: { id: string }) => window.id)).toEqual(["note-a", "note-b"]);
+  expect((first as PromiseFulfilledResult<{ isOpen(): boolean }[]>).value.every(window => window.isOpen())).toBe(true);
+});
+
+test("malformed sessions reject E_INVALID_DATA: a missing key, an extra key, bad bounds or a bad ID", async () => {
+  const windows = navigator(), note = `note${names}`;
+  const good = { id: "note-x", name: note, props: null, title: "x", visible: true, state: {}, bounds: { displayId: "1", persistentDisplayId: null, x: 0, y: 0, width: 400, height: 300 } };
+  const { state: _state, ...missing } = good;
+  for (const window of [missing, { ...good, extra: 1 }, { ...good, bounds: { ...good.bounds, width: -5 } }, { ...good, bounds: { ...good.bounds, x: "0" } }, { ...good, id: "bad id!" }]) {
+    await expect(windows.restoreSession({ version: 1, windows: [window], tabGroups: [], keyWindowId: null } as never)).rejects.toMatchObject({ code: "E_INVALID_DATA", cause: expect.anything() });
+  }
+  await expect(windows.restoreSession({ version: 1, windows: [], tabGroups: [], keyWindowId: null, extra: true } as never)).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  await expect(windows.restoreSession(null as never)).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  expect(mocks.openWindow).not.toHaveBeenCalled();
+});
+
+test("a restoration key is taken once in production; in development (Fast Refresh) the last registration wins", () => {
+  expect(() => createWindowState({ initial: () => 0, restorationKey: "note-view" })).toThrow(expect.objectContaining({ code: "E_ALREADY_EXISTS" }));
+  (globalThis as any).__DEV__ = true;
+  try {
+    const refreshed = track(createWindowState({ initial: () => 1, restorationKey: "note-view" }));
+    expect(refreshed).toBeDefined();
+  } finally { delete (globalThis as any).__DEV__; }
+});
+
+test("adopted roots record the props the window opened with, without React Native's rootTag, and none as null", async () => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  const windows = navigator(), note = `note${names}`, settings = `settings${names}`;
+  // Native roots restarted after a JavaScript reload adopt their windows.
+  mocks.windows.set("note-reloaded", { token: ++mocks.token, title: "R", visible: true, bounds: { displayId: "1", x: 0, y: 0, width: 400, height: 300 } });
+  mocks.windows.set(`session-settings-${names}`, { token: ++mocks.token, title: "S", visible: true, bounds: { displayId: "1", x: 0, y: 0, width: 400, height: 300 } });
+  let rendered: any;
+  await act(async () => {
+    rendered = create(React.createElement(React.Fragment, null,
+      React.createElement(mocks.roots.get(`spark.window.session-settings-${names}`)!(), { rootTag: 11 }),
+      React.createElement(mocks.roots.get(`spark.window.${note}`)!(), { sparkWindow: { id: "note-reloaded" }, rootTag: 12 })));
+  });
+  await tick();
+  const session = await windows.getSession();
+  expect(session.windows.map((window: { name: string; props: unknown }) => [window.name, window.props])).toEqual([[settings, null], [note, null]]);
+  await act(async () => { rendered.unmount(); });
 });
 
 test("messages: typed requests reach one window's handler; broadcasts reach every other listener", async () => {
@@ -347,4 +421,19 @@ test("a duplicate whose app value was released before its first read fails inste
   stars.release("released");
   expect(() => stars.get(copy)).toThrow(expect.objectContaining({ code: "E_NOT_FOUND" }));
   expect(() => stars.get(copy)).toThrow(expect.objectContaining({ code: "E_NOT_FOUND" }));
+});
+
+test("messages.remove() detaches every close callback it added to windows", async () => {
+  const windows = navigator(), note = `note${names}`;
+  const messages = createWindowMessages<{ ping(payload: null): string }, { hello: null }>();
+  const one = await windows.openInstance(note, { props: { title: "One" } });
+  const before = instanceRecord(one).closeListeners.size;
+  messages.handle(one, "ping", () => "pong");
+  messages.addListener("hello", () => {}, { window: one });
+  messages.handle(one, "slow" as "ping", () => new Promise<string>(() => {}));
+  const pending = messages.request(one, "slow" as "ping", null);
+  expect(instanceRecord(one).closeListeners.size).toBe(before + 4);
+  messages.remove();
+  await expect(pending).rejects.toMatchObject({ code: "E_CLOSED" });
+  expect(instanceRecord(one).closeListeners.size).toBe(before);
 });

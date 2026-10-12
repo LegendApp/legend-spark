@@ -70,15 +70,19 @@ function fn(value: unknown, name: string) {
 type Listener = { type: string; listener: (payload: unknown, from: WindowInstance | null) => void; window?: WindowInstance };
 
 export function createWindowMessages<R extends WindowRequests = WindowRequests, B extends WindowBroadcasts = WindowBroadcasts>(): WindowMessages<R, B> {
-  const handlers = new WeakMap<WindowInstance, Map<string, (payload: unknown, from: WindowInstance | null) => unknown>>();
+  let handlers = new WeakMap<WindowInstance, Map<string, (payload: unknown, from: WindowInstance | null) => unknown>>();
   const listeners = new Set<Listener>(), pending = new Set<(error: SparkError) => void>();
+  /** Detaches every close callback this object added to a window, for remove(). */
+  const detaches = new Set<() => void>();
   let removed = false;
   const live = () => { if (removed) throw new SparkError("E_CLOSED", "Window messages were removed"); };
   /** Runs `cleanup` when the window closes; the returned function cancels that. */
   const whenClosed = (window: WindowInstance, cleanup: () => void) => {
     const { closeListeners } = instanceRecord(window);
-    closeListeners.add(cleanup);
-    return () => { closeListeners.delete(cleanup); };
+    const run = () => { detaches.delete(detach); cleanup(); };
+    const detach = () => { detaches.delete(detach); closeListeners.delete(run); };
+    closeListeners.add(run); detaches.add(detach);
+    return detach;
   };
 
   return {
@@ -135,8 +139,9 @@ export function createWindowMessages<R extends WindowRequests = WindowRequests, 
     },
     remove() {
       if (removed) return;
-      removed = true; listeners.clear();
+      removed = true; listeners.clear(); handlers = new WeakMap();
       for (const fail of [...pending]) fail(new SparkError("E_CLOSED", "Window messages were removed"));
+      for (const detach of [...detaches]) detach();
     },
   };
 }

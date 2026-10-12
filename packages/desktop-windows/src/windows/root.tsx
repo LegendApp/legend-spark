@@ -12,7 +12,8 @@ type Props = Record<string, unknown>;
 export interface WindowRootProps { props?: Props; sparkWindow: { id: string } }
 export interface RootHost {
   /** Idempotent: the live instance, or one recreated for a root restarted after a reload. */
-  adopt(window: { id: string; name: string; props: Props }): WindowInstance;
+  /** `props`: what the window was opened with, undefined when it had none. */
+  adopt(window: { id: string; name: string; props: Props | undefined }): WindowInstance;
   report(event: WindowErrorEvent): void;
   fallback: ComponentType<ErrorFallbackProps>;
 }
@@ -53,6 +54,11 @@ export function DefaultErrorFallback({ retry, close }: ErrorFallbackProps) {
   </View>;
 }
 
+/** A fixed-ID root's own props: React Native adds `rootTag` to them. Undefined when there are none. */
+function openedProps({ rootTag: _rootTag, ...props }: Props): Props | undefined {
+  return Object.keys(props).length ? props : undefined;
+}
+
 export function createWindowRoot(host: RootHost, content: RootContent, name: string, fixedId?: string): ComponentType<Props> {
   const { runtime } = content;
   // A root restarted after a reload can render before open() or prefetch() loaded the component.
@@ -61,7 +67,7 @@ export function createWindowRoot(host: RootHost, content: RootContent, name: str
     const wrapped = rootProps as Partial<WindowRootProps>;
     const props = fixedId ? rootProps : wrapped.props ?? {};
     // Adopt once per mount, so a late re-render can never pick up a later window reusing the ID.
-    const [instance] = useState(() => host.adopt({ id: fixedId ?? wrapped.sparkWindow?.id ?? "", name, props }));
+    const [instance] = useState(() => host.adopt({ id: fixedId ?? wrapped.sparkWindow?.id ?? "", name, props: fixedId ? openedProps(rootProps) : wrapped.props }));
     const Content = content.resolved();
     const body = runtime
       ? <runtime.module.Threaded component={Content as ThreadedComponent<Props>} props={props} runtimeName={runtime.isolated} style={styles.fill} surfaceKey={instance.id} testID={`spark-window-surface-${instance.id}`} />
