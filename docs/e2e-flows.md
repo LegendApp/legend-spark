@@ -632,7 +632,7 @@ A failed `assertNoLayoutThrash` or `assertNoFlicker` writes the driver's report 
 #### Release-safety probe
 
 `assertNoDebugSurface: { for }` checks that a running release build has no debug surface (#274; `DEVT-REL-01`
-to `03`, `e2e/flows/devtools/release-probe.yaml`). It quits the app if it runs, starts a decoy development server (a
+to `04`, `e2e/flows/devtools/release-probe.yaml`). It quits the app if it runs, starts a decoy development server (a
 TCP listener on 127.0.0.1 the runner owns) and launches the app pointed at it, with `-RCT_jsLocation <decoy>` and
 `SPARK_BUNDLE_URL=http://<decoy>/index.bundle?…`, the settings a development build reads. Once its first rendered UI
 has settled (up to 30 s) and `for` (default 2s) more, it takes one snapshot and fails with every finding:
@@ -646,6 +646,10 @@ has settled (up to 30 s) and `for` (default 2s) more, it takes one snapshot and 
 - **Menus:** the driver's `menus` snapshot, every level and hidden items included: the Developer menu (its
   `spark-developer` identifiers, or any of its titles in English or Arabic, such as Reload or Show Developer Menu) and
   any item whose title names DevTools, an inspector, a debugger or a dev menu.
+- **JavaScript:** every bundle and script in the app (`.jsbundle`, `.bundle`, `.hbc`, `.js`, `.cjs`, `.mjs`, at any
+  depth) is searched for the network inspector's marker (`spark-network-inspector`,
+  `packages/desktop-app/src/network-inspector/marker.ts`), which Hermes bytecode keeps as a string. An app with no
+  JavaScript to search is a finding too ([devtools.md](devtools.md#network-inspector), #271).
 
 It is a `build: release` check: a development build connects to the decoy (or the bundle server) and has the Developer
 menu, so it fails. The gate runs it on the gate's artifact; `bun run harness` runs the gate with the installed artifact

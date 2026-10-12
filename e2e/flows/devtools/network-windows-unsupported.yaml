@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: The network inspector is typed unsupported on Windows
+intent: >
+  On Windows getNetworkInspectorAvailability reports unsupported-platform, so the Network screen shows its
+  availability and no requests or log.
+checks: [DEVT-UNSUP-02]
+tags: [devtools]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://devtools/network" }
+- assertText: { id: devtools-network-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertVisible: { id: devtools-network-unavailable }
+- assertNotVisible: { id: devtools-network-run-fetch }

@@ -97,6 +97,61 @@ checks:
     spec: "#268"
     covers:
       - ./devtools
+  DEVT-NET-01:
+    title: 'With React Native DevTools attached to a development bundle, fetch, XMLHttpRequest and WebSocket traffic reaches its Network panel through the development server: requestWillBeSent with the type (Fetch, XHR, WebSocket) and the initiator''s stack, responseReceived with status, MIME type and the URL that answered after a redirect, dataReceived for each streamed part, loadingFinished or loadingFailed (canceled on abort), Network.getResponseBody with text and binary bodies, and WebSocket handshake, text and binary frames and close'
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Network inspector; #271"
+    covers:
+      - ./devtools
+      - ./devtools#getNetworkLog
+  DEVT-NET-02:
+    title: The inspector changes nothing about a request (the app and the server receive the same bytes, headers, redirects, progress events and aborts); Authorization, Cookie and Set-Cookie read [redacted] in DevTools and the log while the server gets the real values, and bodies and frames keep their first maxBodySize bytes (65536) with their whole size
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Network inspector; #271"
+    covers:
+      - ./devtools#configureNetworkInspector
+      - ./devtools#getNetworkLog
+  DEVT-NET-03:
+    title: With no DevTools session and no network listener the inspector records and reports nothing and listens to no networking events; once DevTools detaches, requests are no longer reported
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Network inspector; #271"
+    covers:
+      - ./devtools#addNetworkListener
+      - ./devtools#getNetworkLog
+  DEVT-NET-04:
+    title: With a development bundle on macOS getNetworkInspectorAvailability reports available and the Network screen offers its loopback scenarios and an empty log
+    platforms: [macos]
+    blocking: true
+    spec: "#271"
+    covers:
+      - ./devtools#getNetworkInspectorAvailability
+      - ./devtools#getNetworkInspectorAvailability().available
+      - ./devtools#addNetworkListener
+  DEVT-NET-05:
+    title: Without a development bundle (release builds included) getNetworkInspectorAvailability reports development-only and the Network screen offers no requests
+    platforms: [macos]
+    blocking: true
+    spec: "#271"
+    covers:
+      - ./devtools#getNetworkInspectorAvailability
+      - ./devtools#getNetworkInspectorAvailability().available
+  DEVT-UNSUP-02:
+    title: On Windows getNetworkInspectorAvailability reports unsupported-platform and the network inspector functions throw E_UNSUPPORTED_PLATFORM
+    platforms: [windows]
+    blocking: true
+    spec: "#271"
+    covers:
+      - ./devtools#getNetworkInspectorAvailability
+  DEVT-VISUAL-02:
+    title: The Network inspector screen matches its goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#271"
+    covers:
+      - ./devtools
   # Release safety (#274): a running release build has no debug surface. The driver backend's release-safety probe
   # (assertNoDebugSurface, docs/e2e-flows.md#release-safety-probe) checks the gate's artifact, which the release harness
   # installs (bun run harness runs the gate with --artifact <installed app>).
@@ -119,5 +174,12 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "#274"
+    covers:
+      - ./devtools
+  DEVT-REL-04:
+    title: A release build's JavaScript (its Hermes bundles and scripts) contains no network inspector
+    platforms: [macos]
+    blocking: true
+    spec: "#271, #274"
     covers:
       - ./devtools

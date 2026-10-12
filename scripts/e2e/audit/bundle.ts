@@ -81,7 +81,7 @@ function head(file: string, length: number): Buffer {
 export const isMachO = (entry: Entry) => entry.kind === "file" && entry.size >= 4 && MACH_O.has(head(entry.abs, 4).readUInt32BE(0));
 const isHermes = (file: string) => head(file, 8).equals(HERMES_MAGIC);
 /** JavaScript the app could load: bundles and scripts by extension. */
-const isScript = (entry: Entry) => entry.kind === "file" && /\.(jsbundle|bundle|hbc|[cm]?js)$/.test(entry.rel);
+export const isScript = (entry: Entry) => entry.kind === "file" && /\.(jsbundle|bundle|hbc|[cm]?js)$/.test(entry.rel);
 
 export function tool(command: string, args: string[]): string {
   const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 512 * 1024 * 1024 });

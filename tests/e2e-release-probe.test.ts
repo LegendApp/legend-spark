@@ -1,5 +1,5 @@
 // The driver backend's release-safety probe (assertNoDebugSurface, scripts/e2e/runner/driver-release.ts; #274): what it
-// finds in a running app's sockets and menus, and the command against a fake app.
+// finds in a running app's sockets, menus and JavaScript, and the command against a fake app.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import net from "node:net";
@@ -8,7 +8,7 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { parseSockets, type DriverMenuItem } from "../scripts/e2e/driver.ts";
 import { DriverBackend } from "../scripts/e2e/runner/driver-backend.ts";
-import { debugMenuItems, socketProblems } from "../scripts/e2e/runner/driver-release.ts";
+import { debugMenuItems, scriptProblems, socketProblems } from "../scripts/e2e/runner/driver-release.ts";
 import { runFlows } from "../scripts/e2e/runner/executor.ts";
 import { FakeApp } from "./e2e-driver-fake.ts";
 import { VirtualClock } from "./e2e-runner-backend.ts";
@@ -66,6 +66,25 @@ test("debug menu items are found at any depth by Developer menu identifier, titl
   expect(debugMenuItems([item("Window", { items: [item("Minimize")] })])).toEqual([]);
 });
 
+/** A .app bundle whose Contents/Resources holds `scripts` (name → contents). */
+function appBundle(scripts: Record<string, string | Buffer>) {
+  const app = path.join(mkdtempSync(path.join(tmpdir(), "e2e-release-app-")), "KitchenSink.app");
+  mkdirSync(path.join(app, "Contents/Resources"), { recursive: true });
+  for (const [name, contents] of Object.entries(scripts)) writeFileSync(path.join(app, "Contents/Resources", name), contents);
+  return app;
+}
+// Hermes bytecode keeps string literals as bytes; a stand-in with the magic number, binary data and the marker.
+const HBC = (text: string) => Buffer.concat([Buffer.from([0xc6, 0x1f, 0xbc, 0x03, 0xc1, 0x03, 0x19, 0x1f, 0, 0, 0, 96]), Buffer.from(text, "utf8"), Buffer.from([0, 255])]);
+
+test("JavaScript that contains the network inspector is a finding, at any depth; an app without JavaScript fails closed", () => {
+  expect(scriptProblems(appBundle({ "main.jsbundle": HBC("getNetworkInspectorAvailability development-only") }))).toEqual([]);
+  expect(scriptProblems(appBundle({ "main.jsbundle": HBC("id spark-network-inspector:shared:"), "worker.js": "ok", "notes.txt": "spark-network-inspector" }))).toEqual([
+    "Contents/Resources/main.jsbundle contains the network inspector (spark-network-inspector)",
+  ]);
+  const empty = appBundle({});
+  expect(scriptProblems(empty)).toEqual([`no JavaScript bundle found in ${empty} to check for the network inspector`]);
+});
+
 const HEADER = "appId: so.legend.spark.examples.kitchensink\nname: Release probe\nintent: The test intent.\n---\n";
 async function probe(app: FakeApp, command = "- assertNoDebugSurface: { for: 0 }") {
   const dir = mkdtempSync(path.join(tmpdir(), "e2e-release-probe-"));
@@ -78,6 +97,7 @@ async function probe(app: FakeApp, command = "- assertNoDebugSurface: { for: 0 }
 describe("assertNoDebugSurface", () => {
   test("relaunches the app pointed at a decoy development server, waits for its first settled UI and passes a clean app", async () => {
     const app = new FakeApp({}, undefined, [item("Window", { items: [item("Minimize")] })]);
+    app.bundle = { app: appBundle({ "main.jsbundle": HBC("release") }), release: true };
     app.sockets = driver => [{ fd: "3", type: "unix", name: path.join(driver.directory, "driver.sock") }];
     const result = await probe(app, "- launchApp\n- assertNoDebugSurface: { for: 0 }");
     expect(result.status, JSON.stringify(result.failure)).toBe("passed");
@@ -87,8 +107,9 @@ describe("assertNoDebugSurface", () => {
     expect(app.log.slice(app.log.indexOf(launches[1]!) + 1)).toEqual(["startup 30000", "menus", "sockets", "quit", "close", "app close"]);
   });
 
-  test("fails with every finding: a connection to the decoy, network and bound Unix sockets, debug menu items", async () => {
+  test("fails with every finding: a connection to the decoy, network and bound Unix sockets, debug menu items, the network inspector", async () => {
     const app = new FakeApp({}, undefined, [item("Developer", { id: "spark-developer", items: [item("Reload", { id: "spark-developer-reload" })] })]);
+    app.bundle = { app: appBundle({ "main.jsbundle": HBC("spark-network-inspector") }), release: true };
     app.onLaunch = async options => {
       const host = options.arguments[options.arguments.indexOf("-RCT_jsLocation") + 1]!.split(":");
       await new Promise<void>((resolve, reject) => net.connect(Number(host[1]), host[0]).on("close", () => resolve()).on("error", reject));
@@ -97,10 +118,11 @@ describe("assertNoDebugSurface", () => {
     const result = await probe(app);
     expect(result.failure).toMatchObject({ kind: "assertion" });
     const lines = result.failure!.message.split("\n");
-    expect(lines[0]).toBe("the app has a debug surface (5 findings):");
+    expect(lines[0]).toBe("the app has a debug surface (6 findings):");
     expect(lines[1]).toMatch(/^ {2}connected 1 time to the development server it was given \(127\.0\.0\.1:\d+; from 127\.0\.0\.1:\d+\)$/);
     expect(lines.slice(2)).toEqual([
       "  fd 12: IPv4 TCP 127.0.0.1:58602->127.0.0.1:8081 (ESTABLISHED)", `  fd 6: Unix socket bound at ${tmpdir()}/devtools.sock`, "  menu item Developer", "  menu item Developer > Reload",
+      "  Contents/Resources/main.jsbundle contains the network inspector (spark-network-inspector)",
     ]);
   });
 });

@@ -199,8 +199,18 @@
   "./devtools": [
     "DevToolsAvailability",
     "DevToolsRuntime",
+    "NetworkBody",
+    "NetworkCallFrame",
+    "NetworkEntry",
+    "NetworkFrame",
+    "NetworkInspectorOptions",
+    "NetworkSource",
     "OpenDevToolsOptions",
+    "addNetworkListener",
+    "configureNetworkInspector",
     "getDevToolsAvailability",
+    "getNetworkInspectorAvailability",
+    "getNetworkLog",
     "openDevTools"
   ],
   "./diagnostics": [
