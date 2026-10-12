@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Sign in with Apple and passkeys screen matches its golden
+intent: >
+  Authentication > Sign in with Apple and passkeys opens from spark-ks://authentication/sign-in with the build's real
+  availability (missing-entitlement for both) and no results yet. The main window matches the approved golden for the
+  appearance and locale (light and dark, English and Arabic), with the shell sidebar masked.
+checks: [AUTH-VISUAL-01]
+tags: [authentication]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://authentication/sign-in" }
+- assertText: { id: authentication-sign-in-availability-apple, equals: '{"available":false,"reason":"missing-entitlement"}' }
+- assertScreenshot: { golden: authentication-sign-in, mask: [{ id: infra-shell-sidebar }] }

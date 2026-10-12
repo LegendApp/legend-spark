@@ -1,0 +1,36 @@
+appId: so.legend.spark.examples.kitchensink
+name: Authorization failures reject typed errors; one request at a time; Cancel aborts a pending request (simulated)
+intent: >
+  With both entitlements simulated, each AuthenticationServices failure the simulation answers rejects a typed
+  AuthorizationError: failed and notInteractive E_UNAVAILABLE, invalidResponse E_INVALID_DATA, matchedExcludedCredential
+  E_ALREADY_EXISTS, unknown E_NATIVE. A request nobody answers stays pending: a second request rejects SparkError:E_BUSY,
+  and Cancel request aborts the first (AuthorizationError E_ABORTED appCancel). Driver simulation only; nothing is shown.
+checks: [AUTH-ERR-01]
+tags: [authentication]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://authentication/sign-in" }
+- simulateAuthorization: { appleId: true, webCredentials: [example.com], answer: failed }
+- tapOn: { id: authentication-sign-in-passkey-create }
+- assertText: { id: authentication-sign-in-passkey-create-result, equals: "AuthorizationError:E_UNAVAILABLE:failed" }
+- simulateAuthorization: { answer: notInteractive }
+- tapOn: { id: authentication-sign-in-apple-sign-in }
+- assertText: { id: authentication-sign-in-apple-result, equals: "AuthorizationError:E_UNAVAILABLE:notInteractive" }
+- simulateAuthorization: { answer: invalidResponse }
+- tapOn: { id: authentication-sign-in-apple-sign-in }
+- assertText: { id: authentication-sign-in-apple-result, equals: "AuthorizationError:E_INVALID_DATA:invalidResponse" }
+- simulateAuthorization: { answer: matchedExcludedCredential }
+- tapOn: { id: authentication-sign-in-passkey-create }
+- assertText: { id: authentication-sign-in-passkey-create-result, equals: "AuthorizationError:E_ALREADY_EXISTS:matchedExcludedCredential" }
+- simulateAuthorization: { answer: unknown }
+- tapOn: { id: authentication-sign-in-apple-sign-in }
+- assertText: { id: authentication-sign-in-apple-result, equals: "AuthorizationError:E_NATIVE:unknown" }
+- simulateAuthorization: { answer: ignore }
+- tapOn: { id: authentication-sign-in-apple-sign-in }
+- assertSimulatedAuthorization: { pending: 1, lastOperation: appleId }
+- tapOn: { id: authentication-sign-in-passkey-create }
+- assertText: { id: authentication-sign-in-passkey-create-result, equals: "SparkError:E_BUSY" }
+- tapOn: { id: authentication-sign-in-apple-cancel }
+- assertText: { id: authentication-sign-in-apple-result, equals: "AuthorizationError:E_ABORTED:appCancel" }
+- assertSimulatedAuthorization: { pending: 0 }
+- takeScreenshot: sign-in-errors

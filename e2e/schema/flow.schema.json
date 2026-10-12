@@ -5468,6 +5468,164 @@
               "type": "object"
             }
           },
+          "simulateAuthorization": {
+            "description": "[driver] Set the simulated state @legendapp/spark/apple-authentication and /passkeys report, in-process: whether the app has the Sign in with Apple entitlement and webcredentials for which domains (the simulation starts from the build's real entitlements), how the next requests end (success, cancel, a failure reason, or ignore: they stay up until cancelled; null clears the answer, so requests reject E_UNAVAILABLE), and the Apple ID credential state (null: signed-in users authorized, others notFound). Never presents a sheet or reaches Apple or a relying party.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "appleId": {
+                  "type": "boolean"
+                },
+                "webCredentials": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 0
+                },
+                "answer": {
+                  "enum": [
+                    "success",
+                    "cancel",
+                    "unknown",
+                    "invalidResponse",
+                    "notHandled",
+                    "failed",
+                    "notInteractive",
+                    "matchedExcludedCredential",
+                    "deviceNotConfigured",
+                    "ignore",
+                    null
+                  ]
+                },
+                "credentialState": {
+                  "enum": [
+                    "authorized",
+                    "revoked",
+                    "notFound",
+                    "transferred",
+                    null
+                  ]
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "appleId"
+                  ]
+                },
+                {
+                  "required": [
+                    "webCredentials"
+                  ]
+                },
+                {
+                  "required": [
+                    "answer"
+                  ]
+                },
+                {
+                  "required": [
+                    "credentialState"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
+          "assertSimulatedAuthorization": {
+            "description": "[driver] Assert the simulated authorization state: how many requests were shown, how many are still up, the last request's operation (appleId, createPasskey or getPasskey), the window it was presented over and its relying party, and how many simulated passkeys exist.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "requests": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "pending": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "lastOperation": {
+                  "enum": [
+                    "appleId",
+                    "createPasskey",
+                    "getPasskey"
+                  ]
+                },
+                "lastWindow": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "lastRelyingPartyId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "passkeys": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "requests"
+                  ]
+                },
+                {
+                  "required": [
+                    "pending"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastOperation"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastWindow"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastRelyingPartyId"
+                  ]
+                },
+                {
+                  "required": [
+                    "passkeys"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "simulateSharing": {
             "description": "[driver] Drive the in-process simulation of @legendapp/spark/sharing: how the simulated share picker answers (a service title, or dismiss; null makes share reject), the services the app's Info.plist would declare, a run of a registered service as the Services menu would (text on a private pasteboard), and opening a Spotlight item or an https universal link through the app delegate as macOS does. Never shows a picker, writes the Spotlight index or reaches pbs.",
             "if": {

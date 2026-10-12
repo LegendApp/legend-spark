@@ -11,6 +11,7 @@
         "@legendapp/spark-app-intents": "0.0.1-next.3",
         "@legendapp/spark-audio": "0.0.1-next.3",
         "@legendapp/spark-auth-session": "0.0.1-next.3",
+        "@legendapp/spark-authentication": "0.0.1-next.3",
         "@legendapp/spark-biometrics": "0.0.1-next.3",
         "@legendapp/spark-clipboard": "0.0.1-next.3",
         "@legendapp/spark-context-menu": "0.0.1-next.3",
@@ -190,6 +191,17 @@
         "expo-web-browser",
       ],
     },
+    "packages/authentication": {
+      "name": "@legendapp/spark-authentication",
+      "version": "0.0.1-next.3",
+      "dependencies": {
+        "@legendapp/spark-desktop-app": "0.0.1-next.3",
+      },
+      "peerDependencies": {
+        "react": "19.1.4",
+        "react-native": "0.81.6",
+      },
+    },
     "packages/biometrics": {
       "name": "@legendapp/spark-biometrics",
       "version": "0.0.1-next.3",
@@ -292,6 +304,7 @@
         "@legendapp/spark-app-intents": "0.0.1-next.3",
         "@legendapp/spark-audio": "0.0.1-next.3",
         "@legendapp/spark-auth-session": "0.0.1-next.3",
+        "@legendapp/spark-authentication": "0.0.1-next.3",
         "@legendapp/spark-biometrics": "0.0.1-next.3",
         "@legendapp/spark-cli": "0.0.1-next.3",
         "@legendapp/spark-clipboard": "0.0.1-next.3",
@@ -1038,6 +1051,8 @@
     "@legendapp/spark-audio": ["@legendapp/spark-audio@workspace:packages/audio"],
 
     "@legendapp/spark-auth-session": ["@legendapp/spark-auth-session@workspace:packages/auth-session"],
+
+    "@legendapp/spark-authentication": ["@legendapp/spark-authentication@workspace:packages/authentication"],
 
     "@legendapp/spark-biometrics": ["@legendapp/spark-biometrics@workspace:packages/biometrics"],
 

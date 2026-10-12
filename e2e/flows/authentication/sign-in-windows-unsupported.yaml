@@ -1,0 +1,18 @@
+appId: so.legend.spark.examples.kitchensink
+name: Sign in with Apple and passkeys are typed unsupported on Windows
+intent: >
+  On Windows the screen reports getAppleAuthenticationAvailability() and getPasskeyAvailability() as
+  unsupported-platform, and Sign in and Create passkey reject SparkError:E_UNSUPPORTED_PLATFORM. Not yet run on Windows.
+  WebAuthn / Windows Hello passkeys and the Sign in with Apple decision: #423.
+checks: [AUTH-UNSUP-01]
+tags: [authentication]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://authentication/sign-in" }
+- extendedWaitUntil: { visible: { id: authentication-sign-in-root }, timeout: 10s }
+- assertText: { id: authentication-sign-in-availability-apple, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: authentication-sign-in-availability-passkeys, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- tapOn: { id: authentication-sign-in-apple-sign-in }
+- assertText: { id: authentication-sign-in-apple-result, equals: "SparkError:E_UNSUPPORTED_PLATFORM" }
+- tapOn: { id: authentication-sign-in-passkey-create }
+- assertText: { id: authentication-sign-in-passkey-create-result, equals: "SparkError:E_UNSUPPORTED_PLATFORM" }

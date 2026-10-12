@@ -1,0 +1,28 @@
+appId: so.legend.spark.examples.kitchensink
+name: Availability reports a missing entitlement truthfully; requests stop before anything is shown
+intent: >
+  The Kitchen Sink is not built with macos.authentication, so Authentication > Sign in with Apple and passkeys reports
+  both features missing-entitlement, and Sign in and Create passkey reject AuthorizationError E_UNAVAILABLE
+  missingEntitlement without a request reaching the (simulated) AuthenticationServices. With the entitlements simulated,
+  Refresh reports both available. Driver simulation only; nothing is presented and nothing leaves the app.
+checks: [AUTH-AVAIL-01]
+tags: [authentication]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://authentication/sign-in" }
+- assertText: { id: authentication-sign-in-availability-apple, equals: '{"available":false,"reason":"missing-entitlement"}' }
+- assertText: { id: authentication-sign-in-availability-passkeys, equals: '{"available":false,"reason":"missing-entitlement"}' }
+- simulateAuthorization: { answer: success }
+- tapOn: { id: authentication-sign-in-apple-sign-in }
+- assertText: { id: authentication-sign-in-apple-result, equals: "AuthorizationError:E_UNAVAILABLE:missingEntitlement" }
+- tapOn: { id: authentication-sign-in-passkey-create }
+- assertText: { id: authentication-sign-in-passkey-create-result, equals: "AuthorizationError:E_UNAVAILABLE:missingEntitlement" }
+- assertSimulatedAuthorization: { requests: 0, pending: 0 }
+- simulateAuthorization: { appleId: true, webCredentials: [example.com] }
+- tapOn: { id: authentication-sign-in-availability-refresh }
+- assertText: { id: authentication-sign-in-availability-apple, equals: '{"available":true}' }
+- assertText: { id: authentication-sign-in-availability-passkeys, equals: '{"available":true}' }
+- simulateAuthorization: { webCredentials: [other.example] }
+- tapOn: { id: authentication-sign-in-availability-refresh }
+- assertText: { id: authentication-sign-in-availability-passkeys, equals: '{"available":false,"reason":"missing-entitlement"}' }
+- takeScreenshot: sign-in-availability

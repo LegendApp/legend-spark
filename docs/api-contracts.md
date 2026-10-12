@@ -417,6 +417,21 @@ deleteBiometricSecret(key: string): Promise<void>;
 ```
 
 The person's answers resolve; a prompt that cannot run or that the app ended rejects a `BiometricError` (a `SparkError` with `reason`): unavailable states, `notInteractive` and `missingEntitlement` are `E_UNAVAILABLE`, `appCancel` (abort) `E_ABORTED`, `invalidContext` `E_CLOSED`; another pending prompt is `E_BUSY`; an LAError or Keychain status the SDK does not name is `E_NATIVE`. The fallback defaults to `none`: the login password is offered only with `fallback: "password"` or a `biometryOrPassword` secret. Secrets live in the data protection keychain with biometry access control; storing and deleting never prompt. In the test driver every call goes to simulated state and never reaches LocalAuthentication or a keychain. macOS only for now; Windows Hello reports `unsupported-platform` (#389). Details: [biometrics](biometrics.md).
+### Sign in with Apple and passkeys
+
+```ts
+// /apple-authentication
+getAppleAuthenticationAvailability(): AuthorizationAvailability; // Availability | { available: false, reason: "missing-entitlement" }
+signInWithApple(options?: { scopes?: ("fullName" | "email")[]; state?; nonce?; windowId?; signal? }): Promise<{ type: "success", credential: AppleIDCredential } | { type: "cancel" }>;
+getAppleIDCredentialState(user: string): Promise<"authorized" | "revoked" | "notFound" | "transferred">;
+// /passkeys: binary values are unpadded base64url strings, as in WebAuthn's JSON serialization.
+getPasskeyAvailability(relyingPartyId: string): AuthorizationAvailability;
+createPasskey(options: { relyingPartyId; challenge; userId; userName; displayName?; userVerification?; attestation?; excludeCredentials?; windowId?; signal? }): Promise<{ type: "success", credential: PasskeyRegistration } | { type: "cancel" }>;
+getPasskey(options: { relyingPartyId; challenge; allowCredentials?; userVerification?; windowId?; signal? }): Promise<{ type: "success", credential: PasskeyAssertion } | { type: "cancel" }>;
+```
+
+Both drive `ASAuthorizationController`, one request at a time (`E_BUSY`), presented over `windowId`'s window or the key window (`E_NOT_FOUND` without one). The person's cancel resolves `{ type: "cancel" }`; other endings reject an `AuthorizationError` (a `SparkError` with `reason`): `missingEntitlement` (checked before anything is created), `notInteractive`, `notHandled`, `failed`, `deviceNotConfigured` are `E_UNAVAILABLE`, `matchedExcludedCredential` `E_ALREADY_EXISTS`, `invalidResponse` `E_INVALID_DATA`, `appCancel` (abort) `E_ABORTED`, `unknown` `E_NATIVE`; an error the SDK does not name is a plain `E_NATIVE`. The entitlements are added only when the app sets `macos.authentication`, and need a team-signed build. Binary values stay base64url rather than buffers because servers exchange WebAuthn JSON. In the test driver every request goes to simulated state and never reaches AuthenticationServices, Apple or a relying party. macOS only for now; Windows reports `unsupported-platform` (#423). Details: [authentication](authentication.md).
+
 ### Sharing, Services and Spotlight
 
 ```ts

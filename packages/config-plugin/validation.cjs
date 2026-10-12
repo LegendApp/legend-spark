@@ -17,9 +17,19 @@ function warnUntranslated(languages) {
   for (const language of missing) warned.add(language);
   console.warn(`localizations lists ${missing.join(", ")}, which Spark's own native strings (menus, dialog defaults) are not translated into; they show in English there while AppKit's follow the language. Spark has ${FRAMEWORK_LANGUAGES.join(", ")}.`);
 }
+// A passkey domain as Apple's associated domains take it: a lowercase host, optionally with ?mode=developer or managed.
+const PASSKEY_DOMAIN = /^(?=.{1,253}(?:\?|$))[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+(?:\?mode=(?:developer|managed|developer\+managed))?$/;
+function validateAuthentication(value) {
+  if (value === undefined) return;
+  object(value, "macos.authentication", ["signInWithApple", "passkeyDomains"]);
+  if (value.signInWithApple !== undefined && typeof value.signInWithApple !== "boolean") throw new Error("macos.authentication.signInWithApple must be a boolean");
+  const domains = value.passkeyDomains;
+  if (domains !== undefined && (!Array.isArray(domains) || new Set(domains).size !== domains.length || domains.some((domain) => typeof domain !== "string" || !PASSKEY_DOMAIN.test(domain))))
+    throw new Error("macos.authentication.passkeyDomains must list unique lowercase domains such as example.com (optionally with ?mode=developer)");
+}
 function validateOwned(value) {
   if (value.macos !== undefined) {
-    object(value.macos, "macos", ["bundleIdentifier", "buildNumber", "icon", "entitlements", "infoPlist", "testDriverInRelease", "testDriverPrivateEvents", "lifecycle", "appIntents"]);
+    object(value.macos, "macos", ["bundleIdentifier", "buildNumber", "icon", "entitlements", "infoPlist", "testDriverInRelease", "testDriverPrivateEvents", "lifecycle", "appIntents", "authentication"]);
     if (typeof value.macos.bundleIdentifier !== "string" || !/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(value.macos.bundleIdentifier)) throw new Error("macos.bundleIdentifier must be a reverse-DNS identifier");
     if (value.macos.buildNumber !== undefined && typeof value.macos.buildNumber !== "string") throw new Error("macos.buildNumber must be a string");
     if (value.macos.icon !== undefined && (typeof value.macos.icon !== "string" || !value.macos.icon.trim())) throw new Error("macos.icon must be a path to a PNG or an Icon Composer .icon document");
@@ -27,6 +37,7 @@ function validateOwned(value) {
     for (const key of ["entitlements", "infoPlist"]) if (value.macos[key] !== undefined) object(value.macos[key], `macos.${key}`);
     require("./lifecycle.cjs").validateLifecycle(value.macos.lifecycle);
     if (value.macos.appIntents !== undefined) require("./app-intents.cjs").validateAppIntents(value.macos.appIntents);
+    validateAuthentication(value.macos.authentication);
   }
   if (value.localizations !== undefined) {
     const languages = value.localizations;

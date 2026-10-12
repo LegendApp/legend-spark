@@ -1,0 +1,29 @@
+appId: so.legend.spark.examples.kitchensink
+name: A passkey is created for the relying party and then used to sign in (simulated)
+intent: >
+  With webcredentials:example.com simulated, Sign in with passkey before any passkey exists is refused by the
+  simulation (SparkError:E_UNAVAILABLE) without a request. Create passkey registers one over the main window and
+  returns its base64url credential ID; Sign in with passkey then returns the same credential with the user handle given
+  at registration. A cancelled request resolves cancel. Driver simulation only: no sheet appears, no relying party or
+  Apple server is reached and no keychain is touched.
+checks: [AUTH-PASSKEY-01]
+tags: [authentication]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://authentication/sign-in" }
+- simulateAuthorization: { webCredentials: [example.com], answer: success }
+- tapOn: { id: authentication-sign-in-availability-refresh }
+- assertText: { id: authentication-sign-in-availability-passkeys, equals: '{"available":true}' }
+- tapOn: { id: authentication-sign-in-passkey-get }
+- assertText: { id: authentication-sign-in-passkey-get-result, equals: "SparkError:E_UNAVAILABLE" }
+- assertSimulatedAuthorization: { requests: 0, passkeys: 0 }
+- tapOn: { id: authentication-sign-in-passkey-create }
+- assertText: { id: authentication-sign-in-passkey-create-result, equals: "success: credential c2ltdWxhdGVkIHBhc3NrZXkgMQ" }
+- assertSimulatedAuthorization: { requests: 1, passkeys: 1, lastOperation: createPasskey, lastRelyingPartyId: example.com, lastWindow: spark.main }
+- tapOn: { id: authentication-sign-in-passkey-get }
+- assertText: { id: authentication-sign-in-passkey-get-result, equals: "success: credential c2ltdWxhdGVkIHBhc3NrZXkgMQ · user ada@example.com" }
+- assertSimulatedAuthorization: { requests: 2, pending: 0, lastOperation: getPasskey, lastRelyingPartyId: example.com }
+- simulateAuthorization: { answer: cancel }
+- tapOn: { id: authentication-sign-in-passkey-get }
+- assertText: { id: authentication-sign-in-passkey-get-result, equals: cancel }
+- takeScreenshot: sign-in-passkeys

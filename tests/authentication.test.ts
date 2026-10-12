@@ -1,0 +1,148 @@
+import { beforeEach, expect, test, vi } from "vitest";
+// @legendapp/spark/apple-authentication and /passkeys against a mocked bridge: validation, wire shapes, results versus
+// typed errors, abort and availability.
+const calls: { method: string; args: any }[] = [];
+let reply: (method: string, args: any) => unknown = () => null;
+let availabilityAnswer = "available";
+const availabilityCalls: any[] = [];
+const platform = { OS: "macos" };
+const module = {
+  call: (method: string, args: string) => { calls.push({ method, args: JSON.parse(args) }); return Promise.resolve(JSON.stringify(reply(method, JSON.parse(args)))); },
+  availability: (args: string) => { availabilityCalls.push(JSON.parse(args)); return availabilityAnswer; },
+};
+vi.doMock("react-native", () => ({ Platform: platform, TurboModuleRegistry: { get: () => module } }));
+const apple = await import("../packages/authentication/src/apple.ts");
+const passkeys = await import("../packages/authentication/src/passkeys.ts");
+const { SparkError } = await import("../packages/desktop-app/src/contracts/index.ts");
+beforeEach(() => { platform.OS = "macos"; reply = () => null; availabilityAnswer = "available"; calls.length = 0; availabilityCalls.length = 0; });
+
+const CHALLENGE = "YSBjaGFsbGVuZ2UgZnJvbSB0aGUgc2VydmVy"; // 27 bytes
+const REGISTRATION = { relyingPartyId: "example.com", challenge: CHALLENGE, userId: "dXNlci0x", userName: "ada@example.com" };
+const CREDENTIAL = { user: "001.u", state: "s", authorizedScopes: ["email"], identityToken: "t", authorizationCode: "c", email: "a@b.c", fullName: null, realUserStatus: "unknown" };
+
+test("availability is truthful per platform and entitlement; unsupported calls reject after validation", async () => {
+  expect(apple.getAppleAuthenticationAvailability()).toEqual({ available: true });
+  expect(passkeys.getPasskeyAvailability("example.com")).toEqual({ available: true });
+  expect(availabilityCalls).toEqual([{ feature: "appleId" }, { feature: "passkeys", relyingPartyId: "example.com" }]);
+  availabilityAnswer = "missing-entitlement";
+  expect(apple.getAppleAuthenticationAvailability()).toEqual({ available: false, reason: "missing-entitlement" });
+  expect(passkeys.getPasskeyAvailability("example.com")).toEqual({ available: false, reason: "missing-entitlement" });
+  availabilityAnswer = "maybe";
+  expect(() => apple.getAppleAuthenticationAvailability()).toThrow(expect.objectContaining({ code: "E_INVALID_DATA" }));
+  expect(() => passkeys.getPasskeyAvailability("https://example.com")).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  platform.OS = "windows";
+  expect(apple.getAppleAuthenticationAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
+  expect(passkeys.getPasskeyAvailability("example.com")).toEqual({ available: false, reason: "unsupported-platform" });
+  await expect(apple.signInWithApple()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  await expect(apple.getAppleIDCredentialState("001.u")).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  await expect(passkeys.createPasskey(REGISTRATION)).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  await expect(passkeys.getPasskey({ relyingPartyId: "example.com", challenge: CHALLENGE })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  await expect(apple.signInWithApple({ scopes: ["phone" as never] })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  expect(calls).toEqual([]);
+});
+
+test("Sign in with Apple sends its request and validates the credential", async () => {
+  reply = () => ({ type: "success", credential: CREDENTIAL });
+  expect(await apple.signInWithApple({ scopes: ["email"], state: "s", nonce: "n", windowId: "main" })).toEqual({ type: "success", credential: CREDENTIAL });
+  expect(calls[0]).toEqual({ method: "perform", args: { id: expect.any(String), operation: "appleId", scopes: ["email"], state: "s", nonce: "n", windowId: "main" } });
+  await apple.signInWithApple();
+  expect(calls[1]!.args).toEqual({ id: expect.any(String), operation: "appleId", scopes: [] });
+  expect(calls[0]!.args.id).not.toBe(calls[1]!.args.id);
+  reply = () => ({ type: "cancel" });
+  expect(await apple.signInWithApple()).toEqual({ type: "cancel" });
+  for (const credential of [{ ...CREDENTIAL, realUserStatus: "real" }, { ...CREDENTIAL, authorizedScopes: ["phone"] }, { ...CREDENTIAL, fullName: { givenName: 1 } }, { ...CREDENTIAL, user: null }]) {
+    reply = () => ({ type: "success", credential });
+    await expect(apple.signInWithApple()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+});
+
+test("options are validated before native", async () => {
+  const invalidApple = [{ scopes: ["email", "email"] }, { scopes: "email" }, { state: "" }, { nonce: "x".repeat(1025) }, { windowId: "a b" }, { signal: {} }, null];
+  for (const options of invalidApple) await expect(apple.signInWithApple(options as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(apple.signInWithApple({ prompt: "login" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  const invalidCreate = [{ relyingPartyId: "Example.com" }, { relyingPartyId: "localhost" }, { challenge: "c2hvcnQ" }, { challenge: "YQ==" + "a".repeat(20) }, { userId: "" },
+    { userId: "a".repeat(88) }, { userName: " " }, { displayName: "" }, { attestation: "self" }, { userVerification: "always" }, { excludeCredentials: ["a+b"] }, { excludeCredentials: "id" }];
+  for (const change of invalidCreate) await expect(passkeys.createPasskey({ ...REGISTRATION, ...change } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(passkeys.createPasskey({ ...REGISTRATION, residentKey: "required" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(passkeys.getPasskey({ relyingPartyId: "example.com", challenge: CHALLENGE, allowCredentials: Array(65).fill("aWQ") })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(passkeys.getPasskey({ relyingPartyId: "example.com", challenge: CHALLENGE, userName: "ada" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(apple.getAppleIDCredentialState("")).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  expect(calls).toEqual([]);
+});
+
+test("passkeys send WebAuthn's base64url values and validate the responses", async () => {
+  const registration = { credentialId: "Y3JlZA", clientDataJSON: "e30", attestationObject: null };
+  reply = () => ({ type: "success", credential: registration });
+  expect(await passkeys.createPasskey({ ...REGISTRATION, displayName: "Ada", attestation: "direct", userVerification: "required", excludeCredentials: ["b2xk"] })).toEqual({ type: "success", credential: registration });
+  expect(calls[0]!.args).toEqual({ id: expect.any(String), operation: "createPasskey", ...REGISTRATION, displayName: "Ada", attestation: "direct", userVerification: "required", excludeCredentials: ["b2xk"] });
+  const assertion = { credentialId: "Y3JlZA", userId: "dXNlci0x", clientDataJSON: "e30", authenticatorData: "YXV0aA", signature: "c2ln" };
+  reply = () => ({ type: "success", credential: assertion });
+  expect(await passkeys.getPasskey({ relyingPartyId: "example.com", challenge: CHALLENGE, allowCredentials: ["Y3JlZA"] })).toEqual({ type: "success", credential: assertion });
+  expect(calls[1]!.args).toEqual({ id: expect.any(String), operation: "getPasskey", relyingPartyId: "example.com", challenge: CHALLENGE, allowCredentials: ["Y3JlZA"] });
+  reply = () => ({ type: "success", credential: { ...assertion, signature: "c2ln==" } });
+  await expect(passkeys.getPasskey({ relyingPartyId: "example.com", challenge: CHALLENGE })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  reply = () => ({ type: "success", credential: registration });
+  await expect(passkeys.getPasskey({ relyingPartyId: "example.com", challenge: CHALLENGE })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+});
+
+test("failures reject a typed AuthorizationError; unknown reasons are invalid data", async () => {
+  const cases: [string, string][] = [["missingEntitlement", "E_UNAVAILABLE"], ["notInteractive", "E_UNAVAILABLE"], ["notHandled", "E_UNAVAILABLE"], ["failed", "E_UNAVAILABLE"],
+    ["deviceNotConfigured", "E_UNAVAILABLE"], ["matchedExcludedCredential", "E_ALREADY_EXISTS"], ["invalidResponse", "E_INVALID_DATA"], ["appCancel", "E_ABORTED"], ["unknown", "E_NATIVE"]];
+  for (const [reason, code] of cases) {
+    reply = () => ({ type: "failure", reason, message: `Simulated ${reason}` });
+    const error = await passkeys.createPasskey(REGISTRATION).catch(cause => cause);
+    expect(error).toBeInstanceOf(passkeys.AuthorizationError);
+    expect(error).toBeInstanceOf(SparkError);
+    expect(error).toMatchObject({ code, reason, message: `Simulated ${reason}` });
+  }
+  expect(apple.AuthorizationError).toBe(passkeys.AuthorizationError);
+  for (const reason of ["canceled", "toString", "constructor"]) {
+    reply = () => ({ type: "failure", reason, message: "?" });
+    await expect(apple.signInWithApple()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  reply = () => ({ type: "done" });
+  await expect(apple.signInWithApple()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+});
+
+test("credential state resolves Apple's answer or rejects its failure", async () => {
+  for (const state of ["authorized", "revoked", "notFound", "transferred"]) {
+    reply = () => state;
+    expect(await apple.getAppleIDCredentialState("001.u")).toBe(state);
+  }
+  expect(calls.at(-1)).toEqual({ method: "credentialState", args: { user: "001.u" } });
+  reply = () => ({ type: "failure", reason: "missingEntitlement", message: "no entitlement" });
+  await expect(apple.getAppleIDCredentialState("001.u")).rejects.toMatchObject({ name: "AuthorizationError", code: "E_UNAVAILABLE", reason: "missingEntitlement" });
+  reply = () => "gone";
+  await expect(apple.getAppleIDCredentialState("001.u")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+});
+
+test("native errors keep their Spark codes", async () => {
+  for (const code of ["E_BUSY", "E_NOT_FOUND", "E_UNAVAILABLE", "E_INVALID_ARGUMENT"]) {
+    module.call = () => Promise.reject(Object.assign(new Error(code), { code }));
+    await expect(apple.signInWithApple()).rejects.toMatchObject({ code });
+  }
+  module.call = (method: string, args: string) => { calls.push({ method, args: JSON.parse(args) }); return Promise.resolve(JSON.stringify(reply(method, JSON.parse(args)))); };
+});
+
+test("aborting cancels the pending request; an aborted signal never reaches native", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await expect(apple.signInWithApple({ signal: controller.signal })).rejects.toMatchObject({ name: "AuthorizationError", code: "E_ABORTED", reason: "appCancel" });
+  expect(calls).toEqual([]);
+  let settle!: (value: unknown) => void;
+  reply = method => method === "cancel" ? null : undefined;
+  const pending = new AbortController();
+  const original = module.call;
+  module.call = (method: string, args: string) => {
+    calls.push({ method, args: JSON.parse(args) });
+    if (method === "cancel") { settle({ type: "failure", reason: "appCancel", message: "The app cancelled the request" }); return Promise.resolve("null"); }
+    return new Promise(resolve => { settle = value => resolve(JSON.stringify(value)); });
+  };
+  const request = passkeys.getPasskey({ relyingPartyId: "example.com", challenge: CHALLENGE, signal: pending.signal });
+  await Promise.resolve();
+  pending.abort();
+  await expect(request).rejects.toMatchObject({ code: "E_ABORTED", reason: "appCancel" });
+  expect(calls.map(entry => entry.method)).toEqual(["perform", "cancel"]);
+  expect(calls[1]!.args).toEqual({ id: calls[0]!.args.id });
+  module.call = original;
+});

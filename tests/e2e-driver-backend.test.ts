@@ -146,6 +146,18 @@ describe("command mapping", () => {
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("biometrics prompts is 0, expected 1") });
   });
 
+  test("simulateAuthorization sets the simulated state; assertSimulatedAuthorization checks requests, the last request and passkeys", async () => {
+    const app = new FakeApp();
+    app.authorization = { appleId: true, webCredentials: ["example.com"], answer: null, credentialState: null, requests: 2, pending: 0,
+      lastRequest: { operation: "createPasskey", window: "spark.main", relyingPartyId: "example.com", userName: "ada" }, passkeys: [{ relyingPartyId: "example.com", credentialId: "aWQ", userName: "ada" }] };
+    const { result } = await run("- launchApp\n- simulateAuthorization: { appleId: false, answer: cancel }\n- simulateAuthorization: { webCredentials: [], credentialState: revoked }\n- assertSimulatedAuthorization: { requests: 2, pending: 0, lastOperation: createPasskey, lastWindow: spark.main, lastRelyingPartyId: example.com, passkeys: 1 }", app);
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => line.includes("Authorization"))).toEqual(['simulateAuthorization {"appleId":false,"answer":"cancel"}', 'simulateAuthorization {"webCredentials":[],"credentialState":"revoked"}', "testAuthorization"]);
+    expect(app.drivers[0]!.authorization).toMatchObject({ appleId: false, answer: "cancel", webCredentials: [], credentialState: "revoked" });
+    const failed = await run("- launchApp\n- assertSimulatedAuthorization: { lastOperation: appleId, timeout: 200ms }");
+    expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('authorization lastOperation is null, expected "appleId"') });
+  });
+
   test("simulateSharing drives the sharing simulation; assertSharing checks what it recorded", async () => {
     const { result, app } = await run("- launchApp\n- simulateSharing: { shareAnswer: Mail, services: [Show] }\n- simulateSharing: { invokeService: { name: Show, text: hi } }\n- assertSharing: { shares: 0, invocations: 1, indexed: [], registered: [] }");
     expect(result.status).toBe("passed");

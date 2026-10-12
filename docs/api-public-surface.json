@@ -107,6 +107,21 @@
     "useWatchedDocumentReload",
     "watchDocumentReload"
   ],
+  "./apple-authentication": [
+    "AppleAuthenticationScope",
+    "AppleIDCredential",
+    "AppleIDCredentialState",
+    "AppleIDFullName",
+    "AppleSignInOptions",
+    "AppleSignInResult",
+    "AuthorizationAvailability",
+    "AuthorizationError",
+    "AuthorizationErrorReason",
+    "Availability",
+    "getAppleAuthenticationAvailability",
+    "getAppleIDCredentialState",
+    "signInWithApple"
+  ],
   "./audio": [
     "AudioMetadata",
     "AudioPlayer",
@@ -569,6 +584,23 @@
     "requestNotificationPermission",
     "scheduleNotification",
     "showNotification"
+  ],
+  "./passkeys": [
+    "AuthorizationAvailability",
+    "AuthorizationError",
+    "AuthorizationErrorReason",
+    "Availability",
+    "Base64URLString",
+    "PasskeyAssertion",
+    "PasskeyAssertionOptions",
+    "PasskeyAssertionResult",
+    "PasskeyRegistration",
+    "PasskeyRegistrationOptions",
+    "PasskeyRegistrationResult",
+    "PasskeyUserVerification",
+    "createPasskey",
+    "getPasskey",
+    "getPasskeyAvailability"
   ],
   "./permissions": [
     "AsyncRegistration",

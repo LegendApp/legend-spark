@@ -124,6 +124,7 @@
     "@legendapp/spark-diagnostics": "0.0.1-next.3",
     "@legendapp/spark-permissions": "0.0.1-next.3",
     "@legendapp/spark-biometrics": "0.0.1-next.3",
+    "@legendapp/spark-authentication": "0.0.1-next.3",
     "@legendapp/spark-sharing": "0.0.1-next.3",
     "@legendapp/spark-plugins": "0.0.1-next.3",
     "@legendapp/spark-media": "0.0.1-next.3",

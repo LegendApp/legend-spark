@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type TestSpeech, type SimulatedSpeech } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type TestSpeech, type SimulatedSpeech } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -117,6 +117,13 @@ export class FakeDriver implements DriverClient {
     return this.biometrics = { ...this.biometrics, ...fields, secrets };
   }
   async testBiometrics() { this.log.push("testBiometrics"); return this.biometrics; }
+  /** The fake's simulated authorization, as the app's simulateAuthorization and testAuthorization commands keep it. */
+  authorization: TestAuthorization = { appleId: false, webCredentials: [], answer: null, credentialState: null, requests: 0, pending: 0, lastRequest: null, passkeys: [] };
+  async simulateAuthorization(state: SimulatedAuthorization) {
+    this.log.push(`simulateAuthorization ${JSON.stringify(state)}`);
+    return this.authorization = { ...this.authorization, ...state };
+  }
+  async testAuthorization() { this.log.push("testAuthorization"); return this.authorization; }
   /** The sharing simulation (FakeApp.sharing), as the app's simulateSharing and testSharing commands keep it. */
   sharing: TestSharing = { shares: [], indexed: {}, services: [], registered: [], invocations: 0, answer: null };
   async simulateSharing(request: SimulatedSharing) {
@@ -213,6 +220,8 @@ export class FakeApp implements DriverApp {
   dragSources: Record<string, DragSource> = {};
   /** The simulated biometric state each launch's driver starts with (FakeDriver's default when unset). */
   biometrics?: TestBiometrics;
+  /** The simulated authorization state each launch's driver starts with (FakeDriver's default when unset). */
+  authorization?: TestAuthorization;
   /** The app's sharing simulation; every launch's driver reads and changes it. */
   sharing: TestSharing = { shares: [], indexed: {}, services: [], registered: [], invocations: 0, answer: null };
   /** The app's App Intents simulation; every launch's driver reads and changes it. */
@@ -261,6 +270,7 @@ export class FakeApp implements DriverApp {
       () => ({ startup: this.startup, state: this.state }), () => ({ commits: this.commits, counters: this.counters, memoryMB: this.memoryMB }), () => this.audit, () => this.sockets(driver));
     driver.dragSources = () => this.dragSources;
     if (this.biometrics) driver.biometrics = this.biometrics;
+    if (this.authorization) driver.authorization = this.authorization;
     driver.sharing = this.sharing;
     driver.appIntents = this.appIntents;
     this.drivers.push(driver);
