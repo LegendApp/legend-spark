@@ -3,7 +3,7 @@ name: AI runner screens match their goldens
 intent: >
   Future-facing capabilities > AI: command runner and AI: tool runner open from their spark-ks:// deep links in the
   running Kitchen Sink and their roots render. AI: tool runner matches the approved golden for the appearance (light
-  and dark), English only until its SegmentedControl mirrors in right-to-left layouts, with the shell sidebar masked;
+  and dark) and locale (English and Arabic, where its SegmentedControl mirrors), with the shell sidebar masked;
   nothing is run, so it shows its initial state. AI: command runner matches its golden in light and dark, English and
   Arabic, with its long breadcrumb truncated beside the theme toggle.
 checks: [FUT-VISUAL-01]
@@ -15,8 +15,7 @@ matrix:
 ---
 - launchApp: { openUrl: "spark-ks://future-facing-capabilities/ai-tool-runner" }
 - assertVisible: { id: future-facing-capabilities-ai-tool-runner-root }
-# Arabic: no golden until SegmentedControl mirrors in RTL (#256).
-- assertScreenshot: { golden: future-facing-capabilities-ai-tool-runner, mask: [{ id: infra-shell-sidebar }], when: { matrix: { locale: en } } }
+- assertScreenshot: { golden: future-facing-capabilities-ai-tool-runner, mask: [{ id: infra-shell-sidebar }] }
 - launchApp: { openUrl: "spark-ks://future-facing-capabilities/ai-command-runner", stopApp: false }
 - assertVisible: { id: future-facing-capabilities-ai-command-runner-root }
 - assertScreenshot: { golden: future-facing-capabilities-ai-command-runner, mask: [{ id: infra-shell-sidebar }] }

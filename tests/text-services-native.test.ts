@@ -74,7 +74,7 @@ beforeAll(async () => {
   const view = patched[componentView]!;
   const helpers = view.slice(view.indexOf("static BOOL RCTSparkIsWritingToolsBehavior"), view.indexOf("#endif // macOS]", view.indexOf("static void RCTSparkApplyWritingToolsBehavior")));
   const [, init] = replacements["Libraries/Text/TextInput/Multiline/RCTUITextView.mm"]![0]!;
-  const sparkTextInput = readFileSync(path.join(root, "packages/ui/macos/RNSparkTextInput.mm"), "utf8").split("\n").filter(line => !line.startsWith("#import")).join("\n");
+  const sparkTextInput = ["RNSparkLayoutDirection.h", "RNSparkTextInput.mm"].map(name => readFileSync(path.join(root, "packages/ui/macos", name), "utf8").split("\n").filter(line => !line.startsWith("#import")).join("\n")).join("\n");
   const input = path.join(directory, "TextServices.mm");
   executable = path.join(directory, "test");
   writeFileSync(input, readFileSync(path.join(import.meta.dirname, "text-services.native.mm"), "utf8")

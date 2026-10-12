@@ -720,8 +720,9 @@ that screen does, not when an area gains a screen. They also mask what changes b
 clock to virtual before a screen with a looping animation opens.
 
 The Arabic goldens came after the RTL fixes for scroll content
-([#234](https://github.com/LegendApp/legend-spark/issues/234)) and text alignment
-([#245](https://github.com/LegendApp/legend-spark/issues/245)).
+([#234](https://github.com/LegendApp/legend-spark/issues/234)), text alignment
+([#245](https://github.com/LegendApp/legend-spark/issues/245)) and Spark's AppKit views
+([#256](https://github.com/LegendApp/legend-spark/issues/256)).
 
 The window size comes from `desktop.config.json` (1000x700 points), unless the shared
 user defaults hold a saved `NSWindow Frame spark.desktop.…main` for

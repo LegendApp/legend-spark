@@ -15,7 +15,8 @@ struct SparkButtonProps : Props {
 struct EventEmitter { virtual ~EventEmitter() = default; };
 static int presses = 0;
 struct SparkButtonEventEmitter : EventEmitter { struct Press {}; void onButtonPress(Press) const { ++presses; } };
-struct LayoutMetrics {};
+enum class LayoutDirection { Undefined, LeftToRight, RightToLeft };
+struct LayoutMetrics { LayoutDirection layoutDirection = LayoutDirection::Undefined; };
 struct SparkButtonComponentDescriptor {};
 using ComponentDescriptorProvider = int;
 template<class T> int concreteComponentDescriptorProvider() { return 0; }
@@ -72,5 +73,10 @@ int main() { @autoreleasepool {
   assert(button.enabled && button.bordered && button.title.length == 0);
   assert(button.contentTintColor == nil && button.keyEquivalent.length == 0 && button.controlSize == NSControlSizeRegular);
   assert(button.accessibilityIdentifier == nil && button.accessibilityLabel == nil);
+  // Fabric's resolved direction reaches the button, and follows later updates.
+  LayoutMetrics ltr{LayoutDirection::LeftToRight}, rtl{LayoutDirection::RightToLeft};
+  [view updateLayoutMetrics:ltr oldLayoutMetrics:LayoutMetrics{}]; assert(button.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionLeftToRight);
+  [view updateLayoutMetrics:rtl oldLayoutMetrics:ltr]; assert(button.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft);
+  [view updateLayoutMetrics:ltr oldLayoutMetrics:rtl]; assert(button.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionLeftToRight);
   puts("Native button styles and sizes passed");
 } }

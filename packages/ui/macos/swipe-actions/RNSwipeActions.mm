@@ -1,4 +1,5 @@
 #import "RNSwipeActions.h"
+#import "RNSparkLayoutDirection.h"
 #import <QuartzCore/QuartzCore.h>
 #import <react/renderer/components/RNSparkUISpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSparkUISpec/EventEmitters.h>
@@ -41,7 +42,7 @@ static void RNSwipeAnimate(NSTimeInterval duration, void (^changes)(void), void 
 @interface RNSwipeActionButton : NSView
 @property (nonatomic, readonly) NSString *actionId;
 @property (nonatomic, readonly) BOOL dismisses;
-/** +1 on the leading side, -1 trailing; the outermost button tracks the content edge once armed. */
+/** +1 on the left side, -1 on the right; the outermost button tracks the content edge once armed. */
 @property (nonatomic) NSInteger edge;
 @property (nonatomic) BOOL followsContent;
 @property (nonatomic, weak) RNSwipeActions *owner;
@@ -79,6 +80,12 @@ static void RNSwipeAnimate(NSTimeInterval duration, void (^changes)(void), void 
   return self;
 }
 - (BOOL)isFlipped { return YES; }
+- (void)setUserInterfaceLayoutDirection:(NSUserInterfaceLayoutDirection)direction
+{
+  [super setUserInterfaceLayoutDirection:direction];
+  _icon.userInterfaceLayoutDirection = direction;
+  _label.userInterfaceLayoutDirection = direction;
+}
 - (BOOL)acceptsFirstMouse:(NSEvent *)event { return YES; }
 // Non-opaque views drag the window by default, which would swallow the click.
 - (BOOL)mouseDownCanMoveWindow { return NO; }
@@ -122,6 +129,8 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
   /** The button filling the revealed strip: the outermost once armed, or a tapped dismissing one. */
   RNSwipeActionButton *_takeover;
   BOOL _dismissed;
+  /** Leading actions sit on the right in right-to-left layouts. */
+  NSUserInterfaceLayoutDirection _direction;
   NSUInteger _generation;
 }
 
@@ -162,8 +171,9 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
   [childComponentView removeFromSuperview];
 }
 
-- (NSArray<RNSwipeActionButton *> *)buttonsFromJson:(const std::string &)json edge:(NSInteger)edge
+- (NSArray<RNSwipeActionButton *> *)buttonsFromJson:(const std::string &)json leading:(BOOL)leading
 {
+  NSInteger edge = leading == (_direction == NSUserInterfaceLayoutDirectionLeftToRight) ? 1 : -1;
   NSData *data = [NSData dataWithBytes:json.data() length:json.size()];
   NSArray *actions = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : @[];
   NSMutableArray *buttons = [NSMutableArray new];
@@ -171,6 +181,7 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
     RNSwipeActionButton *button = [[RNSwipeActionButton alloc] initWithAction:action];
     button.edge = edge;
     button.owner = self;
+    button.userInterfaceLayoutDirection = _direction;
     [buttons addObject:button];
   }
   return buttons;
@@ -183,8 +194,8 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
     _leadingJson = value.leadingActionsJson;
     _trailingJson = value.trailingActionsJson;
     for (NSView *button in [_leading arrayByAddingObjectsFromArray:_trailing]) [button removeFromSuperview];
-    _leading = [self buttonsFromJson:_leadingJson edge:1];
-    _trailing = [self buttonsFromJson:_trailingJson edge:-1];
+    _leading = [self buttonsFromJson:_leadingJson leading:YES];
+    _trailing = [self buttonsFromJson:_trailingJson leading:NO];
     for (NSView *button in [_leading arrayByAddingObjectsFromArray:_trailing]) [_actionsView addSubview:button];
     [self resetPosition];
   }
@@ -196,6 +207,14 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
 - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics
 {
   [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
+  NSUserInterfaceLayoutDirection direction = RNSparkLayoutDirection(layoutMetrics);
+  if (direction != _direction) {
+    // The sides swap, so an open row closes rather than revealing the other side's actions.
+    _direction = direction;
+    for (RNSwipeActionButton *button in _leading) { button.edge = -button.edge; button.userInterfaceLayoutDirection = direction; }
+    for (RNSwipeActionButton *button in _trailing) { button.edge = -button.edge; button.userInterfaceLayoutDirection = direction; }
+    [self resetPosition];
+  }
   [self layoutSubviews];
 }
 
@@ -238,8 +257,8 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
 {
   NSRect bounds = _clipView.bounds;
   _contentView.frame = NSOffsetRect(bounds, _offset, 0);
-  [self layoutButtons:_leading reveal:MAX(0, _offset) bounds:bounds];
-  [self layoutButtons:_trailing reveal:MAX(0, -_offset) bounds:bounds];
+  [self layoutButtons:[self buttonsForOffset:1] reveal:MAX(0, _offset) bounds:bounds];
+  [self layoutButtons:[self buttonsForOffset:-1] reveal:MAX(0, -_offset) bounds:bounds];
 }
 
 /** The first action sits at the outer edge; a takeover button fills the whole revealed strip. */
@@ -258,7 +277,12 @@ static __weak RNSwipeActions *RNSwipeOpenRow;
   }];
 }
 
-- (NSArray<RNSwipeActionButton *> *)buttonsForOffset:(CGFloat)offset { return offset > 0 ? _leading : offset < 0 ? _trailing : @[]; }
+/** Content moving right (a positive offset) reveals the left side's actions. */
+- (NSArray<RNSwipeActionButton *> *)buttonsForOffset:(CGFloat)offset
+{
+  BOOL leftToRight = _direction == NSUserInterfaceLayoutDirectionLeftToRight;
+  return offset > 0 ? (leftToRight ? _leading : _trailing) : offset < 0 ? (leftToRight ? _trailing : _leading) : @[];
+}
 
 - (CGFloat)commitDistance
 {
