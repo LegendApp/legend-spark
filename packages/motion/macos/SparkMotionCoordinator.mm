@@ -193,6 +193,25 @@ static NSString *SparkJSONString(id object)
 @end
 @implementation SparkMotionFrameRecorder @end
 
+/** Where a host's layout box was before a mounting transaction, in its layout reference. */
+@interface SparkMotionLayoutMark : NSObject
+@property (nonatomic) NSInteger surface, transaction;
+@property (nonatomic, weak) NSView *reference;
+@property (nonatomic) NSRect rect;
+@end
+@implementation SparkMotionLayoutMark @end
+
+/** A shared element as it showed before a mounting transaction: its visual centre and size in its window's content view, and their velocities. */
+@interface SparkMotionSharedMark : NSObject {
+@public
+  double box[4], velocity[4];  // centre x, centre y, width, height
+}
+@property (nonatomic) NSInteger surface, transaction;
+@property (nonatomic, weak) NSWindow *window;
+@property (nonatomic, weak) NSView *host;
+@end
+@implementation SparkMotionSharedMark @end
+
 @interface SparkMotionCoordinator ()
 - (BOOL)isAnimating:(NSInteger)tag;
 @end
@@ -204,6 +223,9 @@ static NSString *SparkJSONString(id object)
   NSMutableDictionary<NSString *, SparkMotionLink *> *_links;
   NSMutableSet<SparkMotionFrameRecorder *> *_recorders;
   NSMutableArray<dispatch_block_t> *_awaitingMount;
+  NSMapTable<NSView *, SparkMotionLayoutMark *> *_layoutMarks;
+  NSMutableDictionary<NSString *, SparkMotionSharedMark *> *_sharedMarks;  // only the latest transaction's
+  NSHashTable<NSView *> *_mounting;  // registered, not yet past their first mounting transaction
   NSUInteger _sweepGeneration;
   uint64_t _inputEvent;
 }
@@ -224,6 +246,9 @@ static NSString *SparkJSONString(id object)
     _links = [NSMutableDictionary new];
     _recorders = [NSMutableSet new];
     _awaitingMount = [NSMutableArray new];
+    _layoutMarks = [NSMapTable weakToStrongObjectsMapTable];
+    _sharedMarks = [NSMutableDictionary new];
+    _mounting = [NSHashTable weakObjectsHashTable];
   }
   return self;
 }
@@ -237,6 +262,7 @@ static NSString *SparkJSONString(id object)
   _engine.addView(host.motionTag, initial);
   [_hosts setObject:host forKey:@(host.motionTag)];
   [host applyMotionModel:initial];
+  [_mounting addObject:host];
   if (_engine.virtualClock()) {
     CALayer *layer = host.layer;
     layer.timeOffset = [layer convertTime:CACurrentMediaTime() fromLayer:nil];
@@ -583,6 +609,123 @@ static NSScrollView *SparkFindScrollView(NSView *view)
 {
   [self removeLink:identifier];
   resolve(nil);
+}
+
+#pragma mark - Layout and shared elements
+
+/** The view's layout box (motion transforms excluded) in `reference`, with a top-left origin. */
+static NSRect SparkLayoutRect(NSView *view, NSView *reference)
+{
+  NSRect rect = [view convertRect:view.bounds toView:reference];
+  if (!reference.isFlipped) rect.origin.y = NSHeight(reference.bounds) - NSMaxY(rect);
+  return rect;
+}
+
+/** Layout boxes are compared in the nearest ancestor that animates its own layout (it carries this view), or the window. */
+- (NSView *)layoutReference:(NSView *)host
+{
+  for (NSView *view = host.superview; view; view = view.superview)
+    if ([view conformsToProtocol:@protocol(SparkMotionHost)] && ((NSView<SparkMotionHost> *)view).motionLayout && [_hosts objectForKey:@(((NSView<SparkMotionHost> *)view).motionTag)] == view) return view;
+  return host.window.contentView;
+}
+
+- (BOOL)isRegistered:(NSView<SparkMotionHost> *)host { return host.window && [_hosts objectForKey:@(host.motionTag)] == host; }
+
+- (void)hostWillMount:(NSView<SparkMotionHost> *)host surface:(NSInteger)surface transaction:(NSInteger)transaction
+{
+  if (![self isRegistered:host]) return;
+  if (host.motionLayout) {
+    SparkMotionLayoutMark *mark = [SparkMotionLayoutMark new];
+    mark.surface = surface;
+    mark.transaction = transaction;
+    mark.reference = [self layoutReference:host];
+    mark.rect = SparkLayoutRect(host, mark.reference);
+    [_layoutMarks setObject:mark forKey:host];
+  }
+  if (NSString *sharedId = host.motionSharedId) {
+    const double now = self.now;
+    const NSRect rect = SparkLayoutRect(host, host.window.contentView);
+    const Property properties[4] = {TranslateX, TranslateY, ScaleX, ScaleY};
+    State states[4];
+    for (int i = 0; i < 4; i++) states[i] = _engine.state(host.motionTag, properties[i], now);
+    SparkMotionSharedMark *mark = [SparkMotionSharedMark new];
+    mark.surface = surface;
+    mark.transaction = transaction;
+    mark.window = host.window;
+    mark.host = host;
+    const double layout[4] = {NSMidX(rect), NSMidY(rect), NSWidth(rect), NSHeight(rect)};
+    for (int i = 0; i < 4; i++) {
+      // Motion transforms are about the centre: translation moves it, scale multiplies the size.
+      mark->box[i] = i < 2 ? layout[i] + states[i].value : layout[i] * states[i].value;
+      mark->velocity[i] = i < 2 ? states[i].velocity : layout[i] * states[i].velocity;
+    }
+    // A destination only matches marks of its own transaction, and transactions mount one after another, so marks of
+    // an earlier transaction are dropped: the dictionary holds at most the shared elements of one transaction.
+    SparkMotionSharedMark *any = _sharedMarks.allValues.firstObject;
+    if (any && (any.surface != surface || any.transaction != transaction)) [_sharedMarks removeAllObjects];
+    _sharedMarks[sharedId] = mark;
+  }
+}
+
+- (void)hostDidMount:(NSView<SparkMotionHost> *)host surface:(NSInteger)surface transaction:(NSInteger)transaction
+{
+  const BOOL mounted = [_mounting containsObject:host];
+  [_mounting removeObject:host];
+  SparkMotionLayoutMark *before = [_layoutMarks objectForKey:host];
+  [_layoutMarks removeObjectForKey:host];
+  if (![self isRegistered:host]) return;
+  std::vector<std::pair<Property, State>> from;
+  if (mounted) {
+    // A shared element animates from where another one with its id showed when this transaction began.
+    SparkMotionSharedMark *source = host.motionSharedId ? _sharedMarks[host.motionSharedId] : nil;
+    if (!source || source.surface != surface || source.transaction != transaction || source.window != host.window || source.host == host) return;
+    const NSRect rect = SparkLayoutRect(host, host.window.contentView);
+    if (NSWidth(rect) <= 0 || NSHeight(rect) <= 0) return;
+    from = {{TranslateX, {source->box[0] - NSMidX(rect), source->velocity[0]}}, {TranslateY, {source->box[1] - NSMidY(rect), source->velocity[1]}},
+      {ScaleX, {source->box[2] / NSWidth(rect), source->velocity[2] / NSWidth(rect)}}, {ScaleY, {source->box[3] / NSHeight(rect), source->velocity[3] / NSHeight(rect)}}};
+  } else {
+    // A live window resize re-lays out on every step; following it with springs would trail the window edge.
+    if (!before || before.surface != surface || before.transaction != transaction || host.window.inLiveResize) return;
+    NSView *reference = [self layoutReference:host];
+    if (reference != before.reference) return;
+    const NSRect old = before.rect, rect = SparkLayoutRect(host, reference);
+    if (NSEqualRects(old, rect)) return;
+    const double now = self.now;
+    const BOOL frame = [host.motionLayout isEqual:@"frame"];
+    // `frame` keeps the centre (transforms are about it) and scales the size; `position` keeps the leading top corner.
+    const NSPoint was = frame ? NSMakePoint(NSMidX(old), NSMidY(old)) : NSMakePoint(host.motionRightToLeft ? NSMaxX(old) : NSMinX(old), NSMinY(old));
+    const NSPoint is = frame ? NSMakePoint(NSMidX(rect), NSMidY(rect)) : NSMakePoint(host.motionRightToLeft ? NSMaxX(rect) : NSMinX(rect), NSMinY(rect));
+    auto shifted = [&](Property property, double by, double ratio) {
+      const State state = _engine.state(host.motionTag, property, now);
+      from.emplace_back(property, State{state.value * ratio + by, state.velocity * ratio});
+    };
+    shifted(TranslateX, was.x - is.x, 1);
+    shifted(TranslateY, was.y - is.y, 1);
+    if (frame && NSWidth(rect) > 0 && NSHeight(rect) > 0) {
+      shifted(ScaleX, 0, NSWidth(old) / NSWidth(rect));
+      shifted(ScaleY, 0, NSHeight(old) / NSHeight(rect));
+    }
+  }
+  [self handoff:host from:from];
+}
+
+/** Starts the host's transition from `from` to where each property was heading. */
+- (void)handoff:(NSView<SparkMotionHost> *)host from:(const std::vector<std::pair<Property, State>> &)from
+{
+  NSDictionary *transition = host.motionTransition;
+  if (!transition) return;
+  try {
+    NSMutableDictionary *template_ = [transition mutableCopy];
+    template_[@"to"] = @0;  // each property's own target replaces it
+    std::vector<Settled> settled;
+    if (!_engine.handoff(host.motionTag, from, SparkSpec(template_, TranslateX), self.now, settled)) return;
+    [self apply:host.motionTag channel:Channel::Transform];
+    [self settle:settled];
+    [self scheduleSweep];
+  } catch (const Failure &failure) {
+    // JavaScript validated the transition; only a malformed native prop gets here, and no caller awaits a hand-off.
+    NSLog(@"Spark motion: layout transition rejected: %s", failure.message.c_str());
+  }
 }
 
 #if SPARK_TEST_DRIVER

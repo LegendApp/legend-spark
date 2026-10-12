@@ -2,6 +2,7 @@
 #import "SparkMotionCoordinator.h"
 #import <react/renderer/components/RNSparkMotionSpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSparkMotionSpec/Props.h>
+#import <React/RCTMountingTransactionObserving.h>
 #include <cmath>
 using namespace facebook::react;
 using spark::motion::Values;
@@ -11,12 +12,17 @@ using spark::motion::Values;
 - (void)invalidateLayer;
 @end
 
-@interface RNSparkMotionView () <SparkMotionHost>
+@interface RNSparkMotionView () <SparkMotionHost, RCTMountingTransactionObserving>
 @end
+
+static NSString *SparkMotionString(const std::string &value) { return value.empty() ? nil : [NSString stringWithUTF8String:value.c_str()]; }
 
 @implementation RNSparkMotionView {
   Values _model;
   NSInteger _tag;
+  NSString *_layout;
+  NSString *_sharedId;
+  NSDictionary *_transition;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
@@ -46,6 +52,10 @@ using spark::motion::Values;
 
 - (NSInteger)motionTag { return _tag; }
 - (Values)motionModel { return _model; }
+- (NSString *)motionLayout { return _layout; }
+- (NSString *)motionSharedId { return _sharedId; }
+- (NSDictionary *)motionTransition { return _transition; }
+- (BOOL)motionRightToLeft { return _layoutMetrics.layoutDirection == LayoutDirection::RightToLeft; }
 
 - (void)applyMotionModel:(const Values &)values
 {
@@ -58,6 +68,14 @@ using spark::motion::Values;
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
 {
   [super updateProps:props oldProps:oldProps];
+  const auto &motionProps = *std::static_pointer_cast<const SparkMotionViewProps>(props);
+  // JavaScript validates these; the transition JSON is parsed once per change.
+  _layout = SparkMotionString(motionProps.layout);
+  _sharedId = SparkMotionString(motionProps.sharedId);
+  if (!oldProps || motionProps.transition != std::static_pointer_cast<const SparkMotionViewProps>(oldProps)->transition) {
+    id transition = motionProps.transition.empty() ? nil : [NSJSONSerialization JSONObjectWithData:[NSData dataWithBytes:motionProps.transition.data() length:motionProps.transition.size()] options:0 error:nil];
+    _transition = [transition isKindOfClass:NSDictionary.class] ? transition : nil;
+  }
   if (_tag) return;
   // `initial` applies once, at mount; later renders never overwrite engine-owned values.
   Values initial = spark::motion::kIdentity;
@@ -81,6 +99,17 @@ using spark::motion::Values;
   if (layoutMetrics.frame.size == oldLayoutMetrics.frame.size) return;
   self.transform3D = SparkMotionTransform(_model);
   [SparkMotionCoordinator.shared hostDidResize:self];
+}
+
+// Layout and shared-element hand-offs compare where the view was before a mounting transaction with where it is after.
+- (void)mountingTransactionWillMount:(const MountingTransaction &)transaction withSurfaceTelemetry:(const SurfaceTelemetry &)surfaceTelemetry
+{
+  if (_layout || _sharedId) [SparkMotionCoordinator.shared hostWillMount:self surface:transaction.getSurfaceId() transaction:(NSInteger)transaction.getNumber()];
+}
+
+- (void)mountingTransactionDidMount:(const MountingTransaction &)transaction withSurfaceTelemetry:(const SurfaceTelemetry &)surfaceTelemetry
+{
+  if (_layout || _sharedId) [SparkMotionCoordinator.shared hostDidMount:self surface:transaction.getSurfaceId() transaction:(NSInteger)transaction.getNumber()];
 }
 
 // Fabric re-applies the `opacity` prop on every layer invalidation; motion owns opacity.

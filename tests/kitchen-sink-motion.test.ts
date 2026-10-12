@@ -46,7 +46,7 @@ const plans = () => native.run.mock.calls.map(([json]) => JSON.parse(json));
 test("the motion screens are registered in the motion-system area", async () => {
   const { default: registered } = await import("../examples/kitchen-sink/screens/motion-system/index");
   expect(registered.area).toBe("motion-system");
-  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames"]);
+  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames", "layout"]);
 });
 
 test("springs: preset parameters, playing every preset, and moving with the reading direction", async () => {

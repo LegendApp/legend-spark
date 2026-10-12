@@ -1,0 +1,36 @@
+appId: so.legend.spark.examples.kitchensink
+name: Presence keeps removed rows until their exit settles; siblings reflow with layout springs
+intent: >
+  On Motion system > Layout, presence and shared elements, with the virtual clock frozen, Add row mounts row 4, which
+  enters from the leading side. Remove first keeps row 1 mounted while its exit (fade and shrink, a 200 ms timing)
+  plays; once that settles it unmounts and the rows below slide up with the snappy layout spring, natively (no
+  JavaScript runs per frame). Move last to top reflows every row, and Toggle size scales the frame box from its old
+  width to its new one. Every motion is read from the engine's telemetry on the virtual clock.
+checks: [MOT-PRESENCE-01, MOT-LAYOUT-01, MOT-CLOCK-01]
+tags: [motion-system]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/layout" }
+- extendedWaitUntil: { visible: { id: motion-system-layout-root }, timeout: 10s }
+- assertText: { id: motion-system-layout-availability, equals: '{"available":true}' }
+- setClock: virtual
+- tapOn: { id: motion-system-layout-add }
+- assertText: { id: motion-system-layout-rows, equals: "[1,2,3,4]" }
+- assertMotion: { target: { id: motion-system-layout-row-4 }, settlesWithin: 1s }
+- tapOn: { id: motion-system-layout-remove }
+- assertText: { id: motion-system-layout-rows, equals: "[2,3,4]" }
+# The clock is frozen, so the exiting row is still mounted.
+- assertVisible: { id: motion-system-layout-row-1 }
+- assertMotion: { target: { id: motion-system-layout-row-1 }, kind: timing, settlesWithin: 250ms }
+- extendedWaitUntil: { notVisible: { id: motion-system-layout-row-1 }, timeout: 5s }
+- assertMotion: { target: { id: motion-system-layout-row-2 }, kind: spring, settlesWithin: 1500ms }
+- assertMotion: { target: { id: motion-system-layout-row-4 }, kind: spring, settlesWithin: 1500ms }
+- captureMotion: { target: { id: motion-system-layout-row-4 }, name: layout-reflow }
+- tapOn: { id: motion-system-layout-reorder }
+- assertText: { id: motion-system-layout-rows, equals: "[4,2,3]" }
+- assertMotion: { target: { id: motion-system-layout-row-4 }, kind: spring, settlesWithin: 1500ms }
+- assertMotion: { target: { id: motion-system-layout-row-3 }, kind: spring, settlesWithin: 1500ms }
+- tapOn: { id: motion-system-layout-toggle }
+- assertMotion: { target: { id: motion-system-layout-frame }, kind: spring, settlesWithin: 1500ms }
+- captureMotion: { target: { id: motion-system-layout-frame }, name: layout-frame }
+- setClock: real

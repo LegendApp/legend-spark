@@ -45,7 +45,8 @@ when rendered. There is no JavaScript-driven fallback.
 | `linkScroll(target, options)` | Native scroll link | `Promise<AsyncRegistration>` |
 | `recordMotionFrames(target, { durationMs })` | Frame telemetry | `Promise<MotionFrameReport>` |
 | `getMotionAvailability()` | | `Availability` |
-| `MotionView` | Component | |
+| `MotionView` | Component: `initial`, `enter`, `exit`, `layout`, `sharedId`, `transition` | |
+| `MotionPresence` | Component: keeps removed children mounted while they exit | |
 
 A target is a mounted `MotionView`, as received through its `ref`. `animate`,
 `stagger` and `timeline` validate synchronously and throw `SparkError`
@@ -59,7 +60,55 @@ not settle within 60 s, infinite loops whose shared cycle exceeds 20 s
 `stop()` freezes the animation's properties where they are.
 
 The API is imperative and works from any code holding a `MotionView` ref.
-`MotionView` is the only React-specific export (a component). There are no hooks.
+`MotionView` and `MotionPresence` are the only React-specific exports (components). There
+are no hooks.
+
+## Layout, presence and shared elements
+
+```tsx
+<MotionPresence>
+  {rows.map(row => <MotionView key={row.id} layout="position" initial={{ opacity: 0 }}
+    enter={{ opacity: timing(1, { durationMs: 200 }) }} exit={{ opacity: timing(0, { durationMs: 200 }) }}>…</MotionView>)}
+</MotionPresence>
+{open ? <MotionView sharedId="photo" style={styles.detail} /> : <MotionView sharedId="photo" style={styles.thumbnail} />}
+```
+
+* **Layout** (`layout="position"` or `"frame"`). When a mounting transaction moves the view (a
+  sibling was added, removed, resized or reordered, or its own size changed), the native view
+  compares its layout box before and after the transaction and hands the difference to the
+  engine: the view keeps showing where it was, then animates to its new place with
+  `transition`. `position` keeps the leading top corner moving (top-right in right-to-left
+  layouts) and applies a size change at once; `frame` keeps the centre and scales from the old
+  size, so the content scales during the transition. Boxes are compared in the nearest ancestor
+  `MotionView` that animates its own layout (it carries this view), otherwise in the window. No
+  JavaScript runs for it. Live window resizing does not animate (the view would trail the window
+  edge).
+* **Hand-off.** Layout drives `translateX` and `translateY` (and `scaleX`, `scaleY` for `frame`):
+  each starts at the value that keeps the view in place, with its current velocity, and animates
+  to the value it was heading for (the end of its running animation, or its value at rest). A
+  layout change during a layout animation continues from where the view shows. It replaces an
+  `animate()` running on those properties, which then reports `{ finished: false }`, but keeps
+  that animation's target. Properties driven by a scroll link or repeating forever are left alone.
+* **Presence.** `enter` animates when the view mounts (from `initial`). `exit` needs a
+  `MotionPresence` ancestor: when a child of the presence (matched by key) is removed, the
+  presence keeps rendering it in its place, its `MotionView`s play `exit`, and it unmounts once
+  they all settle; a child without `exit` unmounts at once. Siblings with `layout` then reflow
+  smoothly. A child added back while it exits stays and plays `enter`, which interrupts `exit`.
+  A `MotionView` with `exit` outside a presence, or with an `exit` that repeats forever (it would never
+  unmount), throws `E_INVALID_ARGUMENT`.
+* **Shared elements** (`sharedId`). A `MotionView` that mounts with an id animates from the box
+  (position, size and velocity, including its running motion) where another `MotionView` with the
+  same id showed when the mounting transaction began, in the same window: translation from the
+  centre difference, scale from the size ratio. The source must be mounted when the destination
+  mounts (React commits both changes together, or the source is still exiting in a
+  `MotionPresence`). Both stay visible if both stay mounted. Cross-window transitions are #179.
+* **Transition.** `transition` is `{ type?: 'spring', …spring parameters }` (the default is the
+  `smooth` preset) or `{ type: 'timing', durationMs, easing }`; animation options such as
+  `velocity`, `delayMs` or `repeat` are `E_UNSUPPORTED_OPTION`, and `transition` without `layout`
+  or `sharedId` is `E_INVALID_ARGUMENT`.
+* The engine's telemetry records these hand-offs like any animation, so `assertMotion`,
+  `captureMotion` and frame captures work on them ([Motion telemetry](#motion-telemetry)).
+* Reduce Motion is not applied yet; motion accessibility is #177.
 
 ## Architecture
 
@@ -289,7 +338,12 @@ resolves the element's `Visual` through `ElementCompositionPreview`, converts ea
 channel into linear `KeyFrameAnimation`s on `Offset`, `Scale`,
 `RotationAngleInDegrees` (centre point at half size) and `Opacity`, uses
 `IterationBehavior.Forever` for loop periods and `ScrollViewer.ViewChanged` for scroll
-links. Tracked in the `platform:windows` follow-up issue under #42.
+links. Tracked in the `platform:windows` follow-up issue under #42 (#237).
+
+`MotionPresence` and `MotionView`'s layout, presence and shared-element props are typed
+unsupported the same way: both components throw `E_UNSUPPORTED_PLATFORM` when rendered.
+Layout and shared elements will reuse `Engine::handoff` with the Windows glue comparing layout
+boxes around each mounting transaction (#376).
 
 ## Tradeoffs and limits
 
@@ -301,5 +355,6 @@ links. Tracked in the `platform:windows` follow-up issue under #42.
   re-bakes that channel per scroll event.
 * AppKit hit testing follows the model (final) transform, not the in-flight
   presentation.
-* Reduced motion, layout/presence transitions and visual effects belong to the
-  follow-up motion tasks (#175–#177).
+* Layout boxes are layout geometry: transforms of ancestors (other than a layout-animated
+  ancestor `MotionView`) are not part of them.
+* Reduced motion and visual effects belong to the follow-up motion tasks (#176, #177).

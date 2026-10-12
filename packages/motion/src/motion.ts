@@ -76,7 +76,8 @@ function offset(value: number | undefined, name: string) {
   if (value !== undefined && !(Number.isFinite(value) && value >= 0)) invalid(`${name} must be a non-negative finite number`);
   return value;
 }
-function tracks(values: MotionAnimationValues): Record<string, MotionSpec> {
+/** Validates animation values: numbers become default springs. */
+export function tracks(values: MotionAnimationValues): Record<string, MotionSpec> {
   return Object.fromEntries(channels(values, "Animation values").map(([property, value]) => {
     if (typeof value === "number") return [property, spring(value)];
     if (!isMotionSpec(value)) invalid(`${property} takes a number or a spec from spring(), timing(), keyframes(), decay() or sequence()`);

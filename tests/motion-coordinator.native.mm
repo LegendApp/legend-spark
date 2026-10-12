@@ -13,6 +13,10 @@ static int failures = 0;
 @interface TestHost : NSView <SparkMotionHost>
 @property (nonatomic) NSInteger motionTag;
 @property (nonatomic) Values motionModel;
+@property (nonatomic, strong) NSString *motionLayout;
+@property (nonatomic, strong) NSString *motionSharedId;
+@property (nonatomic, strong) NSDictionary *motionTransition;
+@property (nonatomic) BOOL motionRightToLeft;
 @end
 @implementation TestHost
 - (void)applyMotionModel:(const Values &)values
@@ -242,6 +246,87 @@ int main()
     CHECK(rest->resolved && [JSON0(rest->value)[@"motion"][@"settled"] isEqual:@YES] && std::abs([JSON0(rest->value)[@"values"][@"opacity"] doubleValue] - 0.2) < 1e-9);
     Outcome *bounds = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"slow" resolve:resolve reject:reject]; });
     CHECK([bounds->code isEqual:@"E_INVALID_ARGUMENT"]);
+
+    // Layout and shared-element hand-offs, on the virtual clock. The content view is not flipped (y up); boxes are compared top-left.
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"virtual" resolve:resolve reject:reject]; });
+    NSDictionary *smooth = @{ @"type": @"spring", @"mass": @1, @"stiffness": @157.91367041742973, @"damping": @25.132741228718345 };
+    auto mounted = [&](NSInteger tag, NSRect frame, NSString *layout, NSString *sharedId) {
+      TestHost *view = [[TestHost alloc] initWithFrame:frame];
+      view.wantsLayer = YES;
+      view.motionTag = tag;
+      view.motionLayout = layout;
+      view.motionSharedId = sharedId;
+      view.motionTransition = smooth;
+      [window.contentView addSubview:view];
+      [motion registerHost:view initial:kIdentity];
+      [motion hostDidMount:view surface:1 transaction:tag];  // its own mounting transaction: nothing to hand off
+      return view;
+    };
+    auto value = [&](NSInteger tag, NSString *property) {
+      return [JSON(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion state:tag resolve:resolve reject:reject]; })->value)[@"values"][property] doubleValue];
+    };
+    auto relayout = [&](TestHost *view, NSRect frame, NSInteger transaction) {
+      [motion hostWillMount:view surface:1 transaction:transaction];
+      view.frame = frame;
+      [motion hostDidMount:view surface:1 transaction:transaction];
+    };
+    TestHost *row = mounted(20, NSMakeRect(0, 0, 50, 20), @"position", nil);
+    CHECK(value(20, @"translateY") == 0 && !row.layer.animationKeys.count);
+    relayout(row, NSMakeRect(0, 30, 50, 20), 100);  // 30 pt up: it starts 30 pt below, where it was
+    CHECK(std::abs(value(20, @"translateY") - 30) < 1e-9 && value(20, @"translateX") == 0 && [row.layer animationForKey:@"spark.motion.transform"]);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:100 resolve:resolve reject:reject]; });
+    const double partway = value(20, @"translateY");
+    CHECK(partway > 0 && partway < 30);
+    // Moving again mid-flight carries on from where it shows.
+    relayout(row, NSMakeRect(0, 0, 50, 20), 101);
+    CHECK(std::abs(value(20, @"translateY") - (partway - 30)) < 1e-9);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:3000 resolve:resolve reject:reject]; });
+    CHECK(std::abs(value(20, @"translateY")) < 0.01);
+    // A transaction that does not match the mark, or no layout change, hands off nothing.
+    [motion hostWillMount:row surface:1 transaction:102];
+    row.frame = NSMakeRect(0, 40, 50, 20);
+    [motion hostDidMount:row surface:1 transaction:103];
+    relayout(row, row.frame, 104);
+    CHECK(value(20, @"translateY") == 0);
+    // `frame` keeps the centre and scales from the previous size; `position` in right-to-left keeps the top-right corner.
+    TestHost *card = mounted(21, NSMakeRect(100, 0, 40, 40), @"frame", nil);
+    relayout(card, NSMakeRect(100, 0, 80, 40), 105);
+    CHECK(std::abs(value(21, @"translateX") + 20) < 1e-9 && std::abs(value(21, @"scaleX") - 0.5) < 1e-9 && value(21, @"scaleY") == 1);
+    TestHost *rtl = mounted(22, NSMakeRect(0, 60, 50, 20), @"position", nil);
+    rtl.motionRightToLeft = YES;
+    relayout(rtl, NSMakeRect(0, 60, 30, 20), 106);
+    CHECK(std::abs(value(22, @"translateX") - 20) < 1e-9);
+    // A shared element mounting in the transaction that removes its source starts at the source's box and velocity.
+    TestHost *thumb = mounted(30, NSMakeRect(10, 10, 20, 20), nil, @"photo");
+    [motion hostWillMount:thumb surface:1 transaction:107];
+    [thumb removeFromSuperview];
+    [motion unregisterTag:30];
+    TestHost *detail = [[TestHost alloc] initWithFrame:NSMakeRect(100, 50, 80, 40)];
+    detail.wantsLayer = YES;
+    detail.motionTag = 31;
+    detail.motionSharedId = @"photo";
+    detail.motionTransition = smooth;
+    [window.contentView addSubview:detail];
+    [motion registerHost:detail initial:kIdentity];
+    [motion hostDidMount:detail surface:1 transaction:107];
+    CHECK(std::abs(value(31, @"translateX") + 120) < 1e-9 && std::abs(value(31, @"translateY") - 50) < 1e-9);
+    CHECK(std::abs(value(31, @"scaleX") - 0.25) < 1e-9 && std::abs(value(31, @"scaleY") - 0.5) < 1e-9);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:3000 resolve:resolve reject:reject]; });
+    CHECK(std::abs(value(31, @"translateX")) < 0.01 && std::abs(value(31, @"scaleX") - 1) < 0.001);
+    // One that mounts in a later transaction has no source.
+    TestHost *late2 = mounted(32, NSMakeRect(0, 0, 10, 10), nil, @"photo");
+    CHECK(value(32, @"translateX") == 0);
+    // Shared marks keep only the latest transaction's: each distinct id does not stay behind.
+    NSDictionary *marks = [motion valueForKey:@"sharedMarks"];
+    CHECK(marks.count == 1 && marks[@"photo"]);
+    late2.motionSharedId = @"other";
+    [motion hostWillMount:late2 surface:1 transaction:108];
+    [motion hostDidMount:late2 surface:1 transaction:108];
+    marks = [motion valueForKey:@"sharedMarks"];
+    CHECK(marks.count == 1 && marks[@"other"] && !marks[@"photo"]);
+    for (NSInteger tag : {20, 21, 22, 31, 32}) [motion unregisterTag:tag];
+    (void)late2;
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
 
     // Unmounting settles in-flight animations unfinished.
     Outcome *orphan = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"orphan", 7, @{ @"opacity": Timing(0, 5000) }) resolve:resolve reject:reject]; });

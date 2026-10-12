@@ -31,6 +31,7 @@ bool hasDecay(const Spec &spec) {
 void validate(const Spec &spec) {
   require(finite(spec.to), "Animation targets must be finite numbers");
   require(!spec.velocity || finite(*spec.velocity), "velocity must be a finite number");
+  require(!spec.from || (finite(spec.from->value) && finite(spec.from->velocity)), "A start state must be finite");
   require(positive(spec.restDelta) && positive(spec.restSpeed), "restDelta and restSpeed must be positive finite numbers");
   require(finite(spec.delay) && spec.delay >= 0, "delayMs must be a non-negative finite number");
   require(spec.repeat >= 0 && (std::isinf(spec.repeat) || spec.repeat == std::floor(spec.repeat)), "repeat must be a non-negative integer or Infinity");
@@ -460,9 +461,9 @@ void Engine::run(const Plan &plan, double now, std::vector<Settled> &settled, st
       if (slot.linked) throw Failure{"E_BUSY", std::string(propertyName(property)) + " is driven by a scroll link"};
       auto track = std::make_shared<Track>();
       track->leadDuration = start + spec.delay;
-      track->startValue = slotState(slot, now).value;
-      if (slot.track && track->leadDuration > 0) track->lead = std::make_shared<ContinueCurve>(slot.track, now - slot.begin, track->leadDuration);
-      track->plays = makePlays(spec, slotState(slot, now + track->leadDuration));
+      track->startValue = spec.from ? spec.from->value : slotState(slot, now).value;
+      if (slot.track && track->leadDuration > 0 && !spec.from) track->lead = std::make_shared<ContinueCurve>(slot.track, now - slot.begin, track->leadDuration);
+      track->plays = makePlays(spec, spec.from.value_or(slotState(slot, now + track->leadDuration)));
       track->kind = spec.kind;
       if (track->infinite()) {
         track->plays.cycle = std::ceil(track->plays.cycle * 1000 - 1e-6) / 1000;
@@ -543,6 +544,34 @@ void Engine::stopBatch(const std::string &id, double now, std::vector<Settled> &
     touched.push_back(view);
     observe(view, before, now);
   }
+}
+
+std::optional<double> Engine::target(int64_t view, Property property) const {
+  auto found = views_.find(view);
+  if (found == views_.end()) throw unmounted(view);
+  const Slot &slot = found->second[property];
+  if (!slot.track) return slot.model;
+  if (slot.track->infinite()) return std::nullopt;
+  return slot.track->end().value;
+}
+
+bool Engine::handoff(int64_t view, const std::vector<std::pair<Property, State>> &from, const Spec &transition, double now, std::vector<Settled> &settled) {
+  Plan plan{"spark.handoff." + std::to_string(++handoffs_), {Group{view, {}, false, 0}}};
+  for (const auto &[property, state] : from) {
+    const std::optional<double> to = target(view, property);
+    if (!to || slots(view)[property].linked) continue;
+    Spec spec = transition;
+    spec.to = *to;
+    spec.from = state;
+    const Rest rest = restThreshold(property);
+    spec.restDelta = rest.delta;
+    spec.restSpeed = rest.speed;
+    plan.groups[0].tracks.emplace_back(property, spec);
+  }
+  if (plan.groups[0].tracks.empty()) return false;
+  std::vector<int64_t> touched;
+  run(plan, now, settled, touched);
+  return true;
 }
 
 void Engine::sweep(double now, std::vector<Settled> &settled) {

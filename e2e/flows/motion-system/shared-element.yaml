@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: A shared element animates from its thumbnail to its detail and back
+intent: >
+  On Motion system > Layout, presence and shared elements, with the virtual clock frozen, Open 2 unmounts the second
+  thumbnail and mounts the detail view with the same shared id. The detail starts exactly over the thumbnail (its
+  position and size) and springs to its own frame: the window is captured at 0, 15 and 100 percent of that motion (a spring covers most of its distance early),
+  with the shell sidebar masked. Close mounts the thumbnail again, which springs back from the detail's box.
+checks: [MOT-SHARED-01, MOT-CLOCK-01]
+tags: [motion-system]
+platforms: [macos]
+matrix:
+  appearance: [light]
+  locale: [en]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/layout" }
+- extendedWaitUntil: { visible: { id: motion-system-layout-root }, timeout: 10s }
+- assertVisible: { id: motion-system-layout-thumb-2 }
+- setClock: virtual
+- tapOn: { id: motion-system-layout-open-2 }
+- assertMotion: { target: { id: motion-system-layout-detail }, kind: spring, settlesWithin: 1500ms, frames: { at: [0, 15, 100], golden: layout-shared-open, mask: [{ id: infra-shell-sidebar }] } }
+- captureMotion: { target: { id: motion-system-layout-detail }, name: shared-open }
+- assertNotVisible: { id: motion-system-layout-thumb-2 }
+- tapOn: { id: motion-system-layout-close }
+- assertMotion: { target: { id: motion-system-layout-thumb-2 }, kind: spring, settlesWithin: 1500ms }
+- captureMotion: { target: { id: motion-system-layout-thumb-2 }, name: shared-close }
+- assertNotVisible: { id: motion-system-layout-detail }
+- setClock: real
