@@ -1,0 +1,19 @@
+appId: so.legend.spark.examples.kitchensink
+name: A main-thread hang is reported with its duration and stack
+intent: >
+  With the screen's watchdog at 250 ms, "Block for 1 s" calls simulateHang(1000), which blocks the
+  main thread. Once it recovers, the hang is reported: the screen compares the report with the block
+  and shows the JSON check: duration within the watchdog's resolution, a stack naming
+  SparkSimulateHang, and every frame located in an image. The report is captured.
+checks: [REL-HANG-02]
+tags: [reliability-diagnostics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/hang-watchdog" }
+- extendedWaitUntil: { visible: { text: "watching 250", within: { id: reliability-diagnostics-hang-watchdog-state } }, timeout: 10s }
+- tapOn: { id: reliability-diagnostics-hang-watchdog-block-1000 }
+- extendedWaitUntil: { visible: { text: "blocked 1000", within: { id: reliability-diagnostics-hang-watchdog-block-result } }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-hang-watchdog-simulated }, timeout: 5s }
+- assertText: { id: reliability-diagnostics-hang-watchdog-simulated, equals: '{"blockedMs":1000,"thresholdMs":250,"durationMatches":true,"stackHasSimulateHang":true,"framesLocated":true}' }
+- assertVisible: { id: reliability-diagnostics-hang-watchdog-report-1 }
+- takeScreenshot: hang-reported

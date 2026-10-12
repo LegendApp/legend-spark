@@ -166,8 +166,14 @@
     "openDevTools"
   ],
   "./diagnostics": [
+    "HangReport",
+    "HangStackFrame",
+    "HangWatchdogOptions",
     "StartupTiming",
-    "getStartupTiming"
+    "getHangWatchdogAvailability",
+    "getStartupTiming",
+    "simulateHang",
+    "startHangWatchdog"
   ],
   "./dialogs": [
     "AboutPanelOptions",

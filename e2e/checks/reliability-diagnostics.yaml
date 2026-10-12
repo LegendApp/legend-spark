@@ -57,3 +57,36 @@ checks:
       - ./logging#addLoggingErrorListener
       - ./logging#LogWriteError
       - ./logging#flushLogs
+  REL-HANG-01:
+    title: getHangWatchdogAvailability reports the hang watchdog available on macOS, and the screen's watchdog starts at the default 250 ms threshold
+    platforms: [macos]
+    blocking: true
+    spec: "#166 REL.api-hang"
+    covers:
+      - ./diagnostics
+      - ./diagnostics#getHangWatchdogAvailability
+      - ./diagnostics#getHangWatchdogAvailability().available
+      - ./diagnostics#startHangWatchdog
+  REL-HANG-02:
+    title: A 1 s main-thread block is reported once the main thread recovers, with a duration within the watchdog's resolution of the block and a stack that names SparkSimulateHang, every frame located by image, offset and UUID
+    platforms: [macos]
+    blocking: true
+    spec: "#166 REL.api-hang"
+    covers:
+      - ./diagnostics#startHangWatchdog
+      - ./diagnostics#simulateHang
+  REL-HANG-03:
+    title: A block shorter than the threshold is not reported, a stopped watchdog reports nothing, and a restarted one reports again
+    platforms: [macos]
+    blocking: true
+    spec: "#166 REL.api-hang"
+    covers:
+      - ./diagnostics#startHangWatchdog
+      - ./diagnostics#simulateHang
+  REL-HANG-04:
+    title: On Windows the hang watchdog reports unsupported-platform, and starting it or simulating a hang rejects SparkError:E_UNSUPPORTED_PLATFORM
+    platforms: [windows]
+    blocking: true
+    spec: "#166 REL.api-hang; Windows implementation in #304"
+    covers:
+      - ./diagnostics#getHangWatchdogAvailability().available

@@ -286,6 +286,19 @@ getDisplayAvailability(): Availability;
 
 Display details have their own path rather than widening `getDisplays()` in `/windows`, which stays the portable geometry subset that both hosts implement. Refresh rate is a `{ minimum, maximum, variable }` range so ProMotion and adaptive-sync displays are not reported as one fixed rate. Change events carry the whole new list plus a computed difference; native observation runs only while a listener holds it. These events are separate from `onSystemEvent`'s payload-free `displaysChanged` in `/system`, which remains the portable "displays may have changed" signal; the two never reach each other's listeners. macOS only for now; Windows is typed unsupported (#318). Details: [displays](displays.md).
 
+### Diagnostics
+
+```ts
+// /diagnostics
+startHangWatchdog(options: { thresholdMs?: number; onHang: (report: HangReport) => void }): Promise<AsyncRegistration>;
+simulateHang(durationMs: number): Promise<void>;
+getHangWatchdogAvailability(): Availability;
+getStartupTiming(): StartupTiming;
+// HangReport: { durationMs, thresholdMs, startedAt, stack: { address, image?, imageAddress?, imageOffset?, imageUUID?, symbol?, symbolOffset? }[] }.
+```
+
+The hang watchdog is application-owned: a controller with `remove()`, no hook. Reports arrive after the main thread recovers, because events reach JavaScript through it; each watchdog has its own thread and threshold, and nothing runs while none is started. `simulateHang` blocks the main thread on purpose so apps can check their reporting end to end. macOS only for now; Windows reports `unsupported-platform` (#304). Details: [diagnostics](diagnostics.md).
+
 ### Settings, persistence, and secure storage
 
 ```ts

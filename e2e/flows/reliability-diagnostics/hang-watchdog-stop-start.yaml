@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: Short blocks and stopped watchdogs report nothing; a restarted watchdog reports again
+intent: >
+  At the 250 ms threshold a 100 ms block is not a hang, so nothing is reported. After "Stop watchdog"
+  a 1 s block reports nothing either. "Start watchdog" starts a new watchdog, and the next 1 s block
+  is reported and matches its block.
+checks: [REL-HANG-03]
+tags: [reliability-diagnostics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/hang-watchdog" }
+- extendedWaitUntil: { visible: { text: "watching 250", within: { id: reliability-diagnostics-hang-watchdog-state } }, timeout: 10s }
+- tapOn: { id: reliability-diagnostics-hang-watchdog-clear }
+- tapOn: { id: reliability-diagnostics-hang-watchdog-block-100 }
+- extendedWaitUntil: { visible: { text: "blocked 100", within: { id: reliability-diagnostics-hang-watchdog-block-result } }, timeout: 5s }
+- tapOn: { id: reliability-diagnostics-hang-watchdog-toggle }
+- assertText: { id: reliability-diagnostics-hang-watchdog-state, equals: stopped }
+- assertNotVisible: { id: reliability-diagnostics-hang-watchdog-simulated }
+- tapOn: { id: reliability-diagnostics-hang-watchdog-block-1000 }
+- extendedWaitUntil: { visible: { text: "blocked 1000", within: { id: reliability-diagnostics-hang-watchdog-block-result } }, timeout: 10s }
+- assertNotVisible: { id: reliability-diagnostics-hang-watchdog-simulated }
+- assertText: { id: reliability-diagnostics-hang-watchdog-count, equals: 0 hangs }
+- tapOn: { id: reliability-diagnostics-hang-watchdog-toggle }
+- extendedWaitUntil: { visible: { text: "watching 250", within: { id: reliability-diagnostics-hang-watchdog-state } }, timeout: 5s }
+- tapOn: { id: reliability-diagnostics-hang-watchdog-block-1000 }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-hang-watchdog-simulated }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-hang-watchdog-simulated, equals: '{"blockedMs":1000,"thresholdMs":250,"durationMatches":true,"stackHasSimulateHang":true,"framesLocated":true}' }
