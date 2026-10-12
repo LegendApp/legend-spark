@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: The network inspector is absent without a development bundle
+intent: >
+  The gate's release build, like a dev build running bundled JavaScript without __DEV__, contains no network
+  inspector. The Network screen reports getNetworkInspectorAvailability as development-only and renders no fixture
+  server field, request buttons or log.
+checks: [DEVT-NET-05]
+tags: [devtools]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://devtools/network" }
+- assertVisible: { id: devtools-network-root }
+- assertText: { id: devtools-network-availability, equals: '{"available":false,"reason":"development-only"}' }
+- assertVisible: { id: devtools-network-unavailable }
+- assertNotVisible: { id: devtools-network-server }
+- assertNotVisible: { id: devtools-network-run-fetch }
+- assertNotVisible: { id: devtools-network-log }

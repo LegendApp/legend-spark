@@ -4,98 +4,25 @@
 // with its JavaScript from that server, then checks the debug targets at /json/list and drives them over CDP.
 // The DevTools frontend is never opened: CHROME_PATH points React Native's browser launcher at a recorder.
 import assert from "node:assert/strict";
-import { chmodSync, closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
-import { availablePort } from "../packages/cli/src/local.ts";
-import { processLog, spawnProcess } from "../packages/cli/src/process.ts";
-import { readJson, stateFile } from "../packages/cli/src/project.ts";
-import type { Driver } from "./e2e/driver.ts";
-import { KITCHEN_SINK, KitchenSinkApp } from "./e2e/kitchen-sink.ts";
+import { KITCHEN_SINK } from "./e2e/kitchen-sink.ts";
+import { startDevSession, type Message, type Target } from "./testing/dev-session.ts";
 
-type Target = { id: string; title: string; description: string; appId: string; webSocketDebuggerUrl: string; devtoolsFrontendUrl: string; reactNative: { logicalDeviceId: string; capabilities: Record<string, unknown> } };
-type Message = { id?: number; method?: string; params?: any; result?: any; error?: { message: string } };
-
-const root = path.resolve(import.meta.dirname, "..");
-const work = mkdtempSync(path.join(os.tmpdir(), "ks-devtools-"));
-const sessionLog = path.join(work, "spark-dev.log"), appLog = path.join(work, "app.log"), launches = path.join(work, "launches.txt");
-const chrome = path.join(work, "chrome");
+const recorder = mkdtempSync(path.join(os.tmpdir(), "ks-devtools-browser-"));
+const launches = path.join(recorder, "launches.txt"), chrome = path.join(recorder, "chrome");
 writeFileSync(chrome, `#!/bin/sh\nprintf '%s\\n' "$@" >> '${launches}'\n`);
 chmodSync(chrome, 0o755);
-const port = await availablePort();
-const base = `http://127.0.0.1:${port}`;
-const app = new KitchenSinkApp(undefined, new URL(base));
+const dev = await startDevSession({ prefix: "ks-devtools-", env: { CHROME_PATH: chrome } });
+const { until, targets, target, connect } = dev;
 const probeSource = readFileSync(path.join(KITCHEN_SINK, "screens/devtools/probe.ts"), "utf8");
 // Fast Refresh edits a module that is its own refresh boundary, so the screen keeps its worker runtime.
 const markerFile = path.join(KITCHEN_SINK, "screens/devtools/FastRefreshMarker.tsx");
 const markerSource = readFileSync(markerFile, "utf8");
-const log = openSync(sessionLog, "a");
-const session = spawnProcess([process.execPath, path.join(root, "scripts/spark.mjs"), "dev", "--platform", "macos", "--no-open", "--port", String(port), "--max-workers", "2"], {
-  cwd: KITCHEN_SINK, env: { ...process.env, CI: "false", CHROME_PATH: chrome }, stdin: "ignore", stdout: log, stderr: log,
-});
-let driver: Driver | undefined;
 let debuggerEvents: Message[] = [];
-const sockets: WebSocket[] = [];
-// Interrupted: stop the session and end the driver session too (the driven app quits when its driver connection closes).
-for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => {
-  session.kill("SIGTERM");
-  void Promise.allSettled([session.exited, driver?.close(), app.close()]).then(() => process.exit(130));
-});
-// The debug targets of the launched app: in an isolated driver session, the clone registers as its own bundle identifier.
-let launchedBundleId = "", SHARED = "", WORKER = "";
-
-async function until<T>(check: () => Promise<T | undefined | false>, label: string, timeout = 60000): Promise<T> {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    if (session.exitCode !== null) throw new Error(`spark dev exited (${session.exitCode}). See ${sessionLog}`);
-    const value = await check().catch(() => undefined);
-    if (value) return value;
-    await sleep(200);
-  }
-  throw new Error(`Timed out: ${label}`);
-}
-const targets = async () => (await (await fetch(`${base}/json/list`)).json() as Target[]).filter(target => target.appId === launchedBundleId);
-const target = (title: string) => until(async () => (await targets()).find(item => item.title === title), `debug target "${title}" at /json/list`);
+let SHARED = "", WORKER = "";
 const pass = (message: string) => console.log(`PASS ${message}`);
-
-/** A CDP client for one debug target: requests by id, plus every event it has received. */
-async function connect(item: Target) {
-  const socket = new WebSocket(item.webSocketDebuggerUrl);
-  sockets.push(socket);
-  const events: Message[] = [];
-  const pending = new Map<number, (message: Message) => void>();
-  const state: { closed?: string } = {};
-  socket.onclose = event => { state.closed = `${event.code} ${event.reason}`; for (const resolve of pending.values()) resolve({ error: { message: `the session closed (${state.closed})` } }); };
-  socket.onmessage = event => {
-    const message = JSON.parse(String(event.data)) as Message;
-    if (message.id !== undefined) pending.get(message.id)?.(message);
-    else events.push(message);
-  };
-  await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = () => reject(new Error(`Could not connect to ${item.webSocketDebuggerUrl}`)); });
-  let next = 0;
-  const send = (method: string, params: object = {}) => new Promise<any>((resolve, reject) => {
-    if (state.closed) { reject(new Error(`${method}: the session closed (${state.closed})`)); return; }
-    const id = ++next;
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`No CDP reply to ${method} within 30 s`)); }, 30000);
-    pending.set(id, message => { clearTimeout(timer); pending.delete(id); message.error ? reject(new Error(`${method}: ${message.error.message}`)) : resolve(message.result); });
-    socket.send(JSON.stringify({ id, method, params }));
-  });
-  const event = (method: string, match: (params: any) => boolean = () => true, timeout = 20000) =>
-    until(async () => events.find(message => message.method === method && match(message.params))?.params, `CDP ${method}`, timeout);
-  const evaluate = async (expression: string) => {
-    const { result, exceptionDetails } = await send("Runtime.evaluate", { expression, returnByValue: true });
-    if (exceptionDetails) throw new Error(`${expression}: ${JSON.stringify(exceptionDetails.exception?.description ?? exceptionDetails.text)}`);
-    return result.value;
-  };
-  // Hermes's awaitPromise does not await React Native's Promise polyfill, so a promise reports into a global.
-  const settle = async (expression: string) => {
-    const key = `__ksDevToolsResult${++next}`;
-    await evaluate(`(${expression}).then(value => { globalThis.${key} = { value }; }, error => { globalThis.${key} = { error: error.code ?? String(error) }; }), 0`);
-    return until(async () => await evaluate(`globalThis.${key}`), `${expression} settles`, 30000) as Promise<{ value?: unknown; error?: string }>;
-  };
-  return { send, event, evaluate, settle, events, state };
-}
 
 // Source map v3: generated [line, column] <-> [source, line] for the probe module (lines and columns from 0).
 function sourceMap(map: { sources: string[]; mappings: string }) {
@@ -128,15 +55,8 @@ function sourceMap(map: { sources: string[]; mappings: string }) {
 }
 
 try {
-  const launched = await app.open();
-  launchedBundleId = launched.launchedBundleId;
-  const name = readFileSync(path.join(launched.app, "Contents/Info.plist"), "utf8").match(/<key>CFBundleName<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
-  assert.ok(name, "CFBundleName");
+  const { driver, name, launchedBundleId } = await dev.launch();
   SHARED = `${name} (shared runtime)`; WORKER = `${name} (isolated runtime: ks-devtools)`;
-  await until(async () => existsSync(stateFile(KITCHEN_SINK, "session.json")) && readJson(stateFile(KITCHEN_SINK, "session.json")).port === port && (await fetch(`${base}/status`)).ok, "spark dev ready", 120000);
-  const sessionState = readJson(stateFile(KITCHEN_SINK, "session.json"));
-  assert.equal(sessionState.compatible, true, `The dev build is not compatible with this session: ${sessionState.reason}`);
-  driver = await app.launch({ log: processLog(appLog) });
 
   // 1. Each runtime is its own named target: the shared runtime at launch, the worker once the DevTools screen runs.
   const shared = await target(SHARED);
@@ -259,21 +179,13 @@ try {
   const restarted = await driver.waitFor("devtools-devtools-worker-running", 20000).then(() => true, () => false);
   const reloadedWorker = restarted ? (await targets()).find(item => item.title === WORKER && item.id !== worker.id) : undefined;
   console.log(reloadedWorker ? `PASS reload: the worker re-registered as ${reloadedWorker.id}` : "KNOWN ISSUE #291: the worker runtime did not restart after the reload, so it has no target");
-  await driver.quit();
-  driver = undefined;
 } catch (error) {
   const pauses = debuggerEvents.filter(message => message.method === "Debugger.paused" || message.method === "Debugger.resumed");
   console.error(`Shared runtime debugger events: ${JSON.stringify(pauses.map(message => message.method === "Debugger.paused" ? `paused(${message.params.reason}: ${message.params.callFrames?.[0]?.functionName}) ${JSON.stringify(message.params.data?.description ?? "").slice(0, 120)}` : "resumed"))}`);
-  for (const [label, file] of [["spark dev", sessionLog], ["App", appLog]] as const)
-    if (existsSync(file)) console.error(`${label} log (last 40 lines):\n${readFileSync(file, "utf8").split("\n").slice(-40).join("\n")}`);
+  dev.printLogs();
   throw error;
 } finally {
-  for (const socket of sockets) socket.close();
-  await driver?.close();
-  await app.close();
-  session.kill("SIGTERM");
-  await session.exited;
-  closeSync(log);
+  await dev.close();
   if (readFileSync(markerFile, "utf8") !== markerSource) writeFileSync(markerFile, markerSource);
-  rmSync(work, { recursive: true, force: true });
+  rmSync(recorder, { recursive: true, force: true });
 }

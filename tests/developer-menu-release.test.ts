@@ -11,6 +11,7 @@ const collectDependencies = require("metro/private/ModuleGraph/worker/collectDep
 const BOOTSTRAP = "packages/desktop/runtime-entry.cjs";
 const DEVELOPER_MENU = "@legendapp/spark-native-menu/src/developer-menu";
 const DEVTOOLS_OPENER = "@legendapp/spark-desktop-app/src/devtools-opener";
+const NETWORK_INSPECTOR = "@legendapp/spark-desktop-app/src/network-inspector/install";
 
 /** The module's dependencies as Metro's transform worker collects them: inline __DEV__ (and fold constants when not dev) first. */
 function dependencies(file: string, dev: boolean): string[] {
@@ -22,8 +23,8 @@ function dependencies(file: string, dev: boolean): string[] {
     .dependencies.map((dependency: { name: string }) => dependency.name);
 }
 
-test("Metro drops the Developer menu from the release bundle at compile time", () => {
-  expect(dependencies(BOOTSTRAP, true)).toEqual(["@legendapp/spark-cli/dist/runtime-entry.cjs", DEVTOOLS_OPENER, DEVELOPER_MENU]);
+test("Metro drops the Developer menu and the network inspector from the release bundle at compile time", () => {
+  expect(dependencies(BOOTSTRAP, true)).toEqual(["@legendapp/spark-cli/dist/runtime-entry.cjs", NETWORK_INSPECTOR, DEVTOOLS_OPENER, DEVELOPER_MENU]);
   expect(dependencies(BOOTSTRAP, false)).toEqual(["@legendapp/spark-cli/dist/runtime-entry.cjs"]);
 });
 
@@ -37,6 +38,15 @@ test("only the __DEV__ branch of the bootstrap reaches the Developer menu module
   const importers = [...sources("packages"), ...sources("examples/kitchen-sink")]
     .filter(file => devOnly.test(readFileSync(file, "utf8")) || (file.startsWith("packages/native-menu/") && local.test(readFileSync(file, "utf8"))));
   expect(importers.sort()).toEqual(["packages/desktop-app/src/devtools-opener.ts", BOOTSTRAP, "packages/native-menu/src/developer-menu.ts"]);
+});
+
+test("only the __DEV__ branch of the bootstrap reaches the network inspector", () => {
+  // network-inspector.ts is the public, release-safe surface; the inspector itself is network-inspector/.
+  const sources = readdirSync("packages", { recursive: true, withFileTypes: true }).concat(readdirSync("examples/kitchen-sink", { recursive: true, withFileTypes: true }))
+    .filter(entry => entry.isFile() && /\.(tsx?|cjs|js)$/.test(entry.name) && !entry.parentPath.includes("node_modules"))
+    .map(entry => path.join(entry.parentPath, entry.name));
+  const importers = sources.filter(file => !file.includes("src/network-inspector/") && /network-inspector\/\w+["']/.test(readFileSync(file, "utf8")));
+  expect(importers).toEqual([BOOTSTRAP]);
 });
 
 test("the native Developer menu compiles only when RCT_DEV", () => {

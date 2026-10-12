@@ -77,6 +77,70 @@ DevTools in the build) the menu's Open DevTools item stays disabled with a toolt
 - `SparkInstallDevTools(bundleURL)`: called once by the app delegate. It installs ⌥⌘I and records where the main
   runtime's JavaScript comes from; that server hosts the targets.
 
+## Network inspector
+
+In development bundles on macOS, React Native DevTools' **Network** panel lists the JavaScript runtime's `fetch`,
+`XMLHttpRequest` and `WebSocket` traffic: method, URL, headers, the request body, status, MIME type, the URL that
+answered after redirects, timing, the initiator's stack (source-mapped by DevTools), the response body
+(`Network.getResponseBody`), and a WebSocket's handshake, text and binary frames and close. React Native has no
+`EventSource`; a polyfill built on `XMLHttpRequest` or `fetch` is covered through them.
+
+- **Redaction:** `Authorization`, `Cookie` and `Set-Cookie` values read `[redacted]`, in any letter case, before
+  anything reaches DevTools or the log. The request itself carries the real values.
+- **Size caps:** each body and WebSocket frame keeps its first 64 KiB (text: characters), with its whole size; the
+  log keeps the latest 100 entries and at most 4 MiB, and a WebSocket its latest 50 frames.
+- **No cost while nobody looks:** the inspector records only while DevTools is attached to the runtime or a
+  JavaScript listener exists. Otherwise it keeps nothing, listens to no networking events, and adds one check to each
+  request. Nothing about a request changes: arguments reach React Native as given, and events reach their
+  listeners as before.
+- **Logs:** the inspector never logs a request, header or body. If it cannot reach the development server while DevTools is
+  attached, it warns once per session, with that server's address.
+
+Requests that Spark's native modules make themselves do not pass through the JavaScript runtime and are not listed:
+Sparkle's appcast and update downloads in `@legendapp/spark/updates`
+([#395](https://github.com/LegendApp/legend-spark/issues/395)).
+
+```ts
+import { addNetworkListener, configureNetworkInspector, getNetworkInspectorAvailability, getNetworkLog } from "@legendapp/spark/devtools";
+
+getNetworkInspectorAvailability(); // { available: true } | { available: false, reason }
+const subscription = addNetworkListener(entry => console.log(entry.method, entry.url, entry.state, entry.status));
+getNetworkLog();                   // readonly NetworkEntry[], oldest first
+configureNetworkInspector({ redactHeaders: ["Authorization", "Cookie", "Set-Cookie", "X-Api-Key"], maxBodySize: 16384 });
+subscription.remove();
+```
+
+`getNetworkInspectorAvailability()` reports `unsupported-platform` outside macOS, `development-only` without `__DEV__`,
+and `missing-module` if `@legendapp/spark/runtime-entry` did not install it. The other functions throw
+`E_UNSUPPORTED_PLATFORM`, `E_UNAVAILABLE` or `E_MODULE_UNAVAILABLE` when it is unavailable, `E_INVALID_ARGUMENT` for a
+listener that is not a function or an invalid option, and `E_UNSUPPORTED_OPTION` for an unknown option.
+
+A `NetworkEntry` has `id`, `source` (`fetch`, `xhr` or `websocket`), `method`, `url`, `requestHeaders`, `requestBody`,
+`initiator` (call frames, lines and columns from 1), `state`, `startedAt`, `respondedAt`, `endedAt` (milliseconds since
+the epoch), `status`, `responseURL`, `responseHeaders`, `responseBody`, a WebSocket's `frames` and `close`, and
+`error`. An HTTP request is `pending`, then `finished`, `failed` or `canceled`; a WebSocket is `pending`, `open`, then
+`closed` or `failed`. A body (`NetworkBody`) holds `data` (text, or base64 when `base64`), `size` and `truncated`;
+FormData and file uploads have neither `data` nor `size`. `getNetworkLog()` returns the same array until an entry
+changes, so it works with `useSyncExternalStore`; it is empty while nothing observes.
+
+`configureNetworkInspector(options)` changes `redactHeaders`, `maxEntries` (default 100), `maxBodySize` (bytes,
+default 65536) and `maxLogSize` (bytes, default 4 MiB) for its runtime; lower limits apply at once.
+
+### How the inspector works
+
+`@legendapp/spark/runtime-entry` installs it inside `if (__DEV__)` on macOS, in every JavaScript runtime
+(`packages/desktop-app/src/network-inspector/`). It wraps the JavaScript entry points of React Native's networking
+modules (`RCTNetworking`, which `XMLHttpRequest` and `fetch` use, and the WebSocket module) and, while it records,
+listens to their events. React Native 0.81's own Network domain is off, so the inspector sends Chrome DevTools
+Protocol `Network.*` events to the development server's `/inspector/network` socket, which Expo CLI (`spark dev`)
+passes to the attached DevTools; it also hands over response bodies for `Network.getResponseBody`. A runtime counts
+as attached while React Native's debugger session observer reports an active session. Expo CLI passes the events
+to every attached DevTools session.
+
+Release bundles contain none of it: Metro removes the `__DEV__` branch and the module with it
+(`tests/developer-menu-release.test.ts`), and the release gate's [release-safety probe](e2e-flows.md#release-safety-probe)
+(`DEVT-REL-04`) fails a release build whose JavaScript contains the inspector's marker.
+
 ## Release builds
 
 React Native compiles `RCT_DEV` to 0 in release builds, which removes Spark's ⌥⌘I monitor, the target lookup and the
@@ -85,7 +149,7 @@ development builds only. In JavaScript, `getDevToolsAvailability()` reports `dev
 rejects `E_UNAVAILABLE` without native work. `tests/devtools.test.ts` checks these guards in the sources. The release
 gate's [release-safety probe](e2e-flows.md#release-safety-probe) ([#274](https://github.com/LegendApp/legend-spark/issues/274))
 runs the release build pointed at a decoy development server and fails if it connects to it, holds a network or
-listening socket, or shows a Developer menu or other debug menu item.
+listening socket, shows a Developer menu or other debug menu item, or has the network inspector in its JavaScript.
 
 ## How it works
 
@@ -119,6 +183,15 @@ DevTools. `bun scripts/test-devtools.ts` runs a real development session instead
 5. It edits a source file and restores it, pauses on an uncaught exception, and reloads, checking that the shared
    runtime's session stays attached throughout. It reports, without failing, whether the worker restarted after the
    reload (#291).
+
+`bun scripts/test-network-inspector.ts` checks the network inspector the same way, against loopback fixtures
+(`scripts/testing/network-fixtures.ts`, 127.0.0.1 only). It attaches to the shared runtime over CDP and runs the
+Network screen's scenarios (`screens/devtools/network-demo.ts`): it checks that nothing is recorded or reported
+before a session is active and after it ends, and that fetch, XMLHttpRequest, binary uploads and downloads, a
+redirect, a streamed response, an abort, a 200 KB body and a WebSocket echo reach the app and the server unchanged
+while DevTools gets their events, redacted headers, capped bodies and frames. The Network screen is
+`spark-ks://devtools/network`; for a person, `bun scripts/testing/network-fixtures.ts` prints the address to paste
+into it.
 
 `bun run ks:capture <area>/<screen> --dev-server http://127.0.0.1:<port>` captures a screen with development
 JavaScript from a running `spark dev`. The Kitchen Sink's DevTools screen is `spark-ks://devtools/devtools`. Its

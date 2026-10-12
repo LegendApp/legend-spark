@@ -1,10 +1,11 @@
 appId: so.legend.spark.examples.kitchensink
-name: DevTools screen matches its goldens
+name: DevTools screens match their goldens
 intent: >
-  DevTools > React Native DevTools opens from its spark-ks:// deep link in the running Kitchen Sink, its root renders,
-  and the main window matches the approved golden for the appearance (light and dark, English and Arabic), with the
-  shell sidebar masked. The gate's builds have no development server, so the screen shows its unavailable state.
-checks: [DEVT-VISUAL-01]
+  DevTools > React Native DevTools and DevTools > Network inspector open from their spark-ks:// deep links in the
+  running Kitchen Sink, their roots render, and the main window matches the approved golden for the appearance (light
+  and dark, English and Arabic), with the shell sidebar masked. The gate's builds have no development server and run
+  JavaScript without __DEV__, so both screens show their unavailable state.
+checks: [DEVT-VISUAL-01, DEVT-VISUAL-02]
 tags: [devtools]
 platforms: [macos]
 matrix:
@@ -14,3 +15,6 @@ matrix:
 - launchApp: { openUrl: "spark-ks://devtools/devtools" }
 - assertVisible: { id: devtools-devtools-unavailable }
 - assertScreenshot: { golden: devtools-devtools, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://devtools/network", stopApp: false }
+- assertVisible: { id: devtools-network-unavailable }
+- assertScreenshot: { golden: devtools-network, mask: [{ id: infra-shell-sidebar }] }

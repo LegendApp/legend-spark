@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: The network inspector is available with a development bundle
+intent: >
+  With development JavaScript (__DEV__) on macOS, @legendapp/spark/runtime-entry installs the network inspector:
+  getNetworkInspectorAvailability reports available, and the Network screen shows the fixture server field, a button
+  per loopback scenario (disabled until a 127.0.0.1 address is entered) and an empty log, which subscribing to it
+  started.
+checks: [DEVT-NET-04]
+tags: [devtools]
+platforms: [macos]
+build: dev
+timeout: 120s
+---
+- launchApp: { openUrl: "spark-ks://devtools/network" }
+- assertVisible: { id: devtools-network-root, timeout: 30s }
+- assertText: { id: devtools-network-availability, equals: '{"available":true}' }
+- assertVisible: { id: devtools-network-available }
+- assertVisible: { id: devtools-network-server }
+- assertA11y: { id: devtools-network-run-fetch, enabled: false }
+- assertA11y: { id: devtools-network-run-websocket, enabled: false }
+- assertVisible: { id: devtools-network-empty }
+- assertNotVisible: { id: devtools-network-unavailable }
