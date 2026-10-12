@@ -23,6 +23,7 @@
     "e2e:coverage": "bun scripts/e2e/cli.ts coverage",
     "e2e:run": "bun scripts/e2e/cli.ts run",
     "e2e:golden": "bun scripts/e2e/cli.ts golden",
+    "e2e:audit": "bun scripts/e2e/cli.ts audit",
     "gate": "bun scripts/e2e/cli.ts gate",
     "harness": "bun scripts/harness/cli.ts",
     "gate:signoff": "bun scripts/e2e/cli.ts signoff",

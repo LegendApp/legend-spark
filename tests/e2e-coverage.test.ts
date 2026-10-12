@@ -20,6 +20,15 @@ const coveredBy = (report: CoverageReport) => Object.fromEntries(report.surface.
 const problems = (report: CoverageReport) => report.problems.map(problem => `${problem.area} ${formatDiagnostic(problem).replace(`${FIXTURES}/broken/`, "")}`);
 
 describe("coverage engine", () => {
+  test("an audit check needs no flow, and a flow must not list it too", () => {
+    const registry = "area: dist\nprefix: DIST\nchecks:\n  DIST-HYG-01:\n    title: Hermes only\n    audit: bundle\n    covers: [./config]\n  DIST-HYG-02:\n    title: No maps\n    audit: bundle\n";
+    const flow = "appId: app\nname: maps\nchecks: [DIST-HYG-02]\n---\n- launchApp\n";
+    const report = checkCoverage([{ file: "checks/dist.yaml", kind: "registry", source: registry }, { file: "flows/dist/maps.yaml", kind: "flow", source: flow }], SURFACE);
+    expect(report.problems.map(problem => `${problem.rule} ${problem.message}`)).toEqual(["audit-flow DIST-HYG-02 is verified by the bundle audit; flows must not list it too (flows/dist/maps.yaml)"]);
+    expect(report.checks.map(check => [check.id, check.audit])).toEqual([["DIST-HYG-01", "bundle"], ["DIST-HYG-02", "bundle"]]);
+    expect(report.surface.find(item => item.id === "./config")?.coveredBy).toEqual(["DIST-HYG-01"]);
+  });
+
   test("complete coverage passes", () => {
     const report = coverage("complete");
     expect(report.problems).toEqual([]);

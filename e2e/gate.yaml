@@ -3,7 +3,12 @@ suite: release-gate
 appId: so.legend.spark.examples.kitchensink
 build:
   # `cd examples/kitchen-sink && bun run build` (Release, embedded bundle, ad-hoc signed). The CLI has no Windows release build yet.
-  macos: { artifact: "examples/kitchen-sink/.spark/platforms/macos/products/macos-${ARCH}/release/KitchenSink.app", verifySignature: true }
+  # The bundle audit (#153) checks the size budget and matches every binary to a dSYM in `symbols`, which the build writes next to the app.
+  macos:
+    artifact: "examples/kitchen-sink/.spark/platforms/macos/products/macos-${ARCH}/release/KitchenSink.app"
+    verifySignature: true
+    sizeBudgetMB: 20
+    symbols: "examples/kitchen-sink/.spark/platforms/macos/products/macos-${ARCH}/release/dSYMs"
 targets:
   - { os: macos-14, arch: arm64, machine: macbook-air-m1-8gb }   # oldest supported macOS on the slowest reference Mac: startup, memory, 60 fps
   - { os: macos-15, arch: arm64 }

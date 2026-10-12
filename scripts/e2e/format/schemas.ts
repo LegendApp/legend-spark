@@ -2,7 +2,7 @@ import Ajv from "ajv";
 import { parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import { COMMANDS, isBare, type CommandSpec } from "./commands.ts";
 import {
-  anyStr, bool, byType, CHECK_ID, commands, condition, DEFINITIONS, dict, duration, int, list, MATRIX, obj, oneOf, percent, PLATFORMS, str, SURFACE_ID, type Schema,
+  anyStr, AUDITS, bool, byType, CHECK_ID, commands, condition, DEFINITIONS, dict, duration, int, list, MATRIX, obj, oneOf, percent, PLATFORMS, str, SURFACE_ID, type Schema,
 } from "./primitives.ts";
 
 const DRAFT = "http://json-schema.org/draft-07/schema#";
@@ -78,6 +78,7 @@ export function buildRegistrySchema(): Schema {
           blocking: bool,
           spec: str,
           covers: { ...list(SURFACE_ID), uniqueItems: true, description: "The @legendapp/spark surface this check verifies (see bun run e2e:coverage)." },
+          audit: { ...oneOf(...AUDITS), description: "The gate audit step that verifies this check against the release build, instead of a flow (see docs/e2e-flows.md#audits)." },
         }, ["title"]),
       },
     }, ["area", "prefix", "checks"]),
@@ -91,6 +92,8 @@ export function buildGateSchema(): Schema {
   const artifact = obj({
     artifact: { ...str, description: "The release build to test, relative to the repository root. ${ARCH} becomes the target's arch (arm64 or x64)." },
     verifySignature: bool,
+    sizeBudgetMB: { type: "number", exclusiveMinimum: 0, description: "The bundle audit's size budget for the artifact, in MB (10^6 bytes)." },
+    symbols: { ...str, description: "The folder of the build's debug symbols (dSYMs), relative to the repository root. ${ARCH} becomes the target's arch." },
   }, ["artifact"]);
   return {
     $schema: DRAFT,

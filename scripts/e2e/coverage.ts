@@ -3,9 +3,11 @@ import { isMap, isScalar, type Document, type Node, type Pair } from "yaml";
 import type { SdkSurface } from "../api-surface.ts";
 import { FLOW_DIRS, type Kind } from "./files.ts";
 import { checkFlow, checkRegistry, formatDiagnostic, locate, type Diagnostic, type SourceLocation } from "./format/parser.ts";
+import type { Audit } from "./format/primitives.ts";
 
 export type SurfaceItem = { id: string; kind: "subpath" | "export" | "availability"; subpath: string; coveredBy: string[] };
-export type CoverageCheck = { id: string; area: string; title: string; location: SourceLocation; covers: string[]; flows: string[] };
+/** `audit`: the gate audit step that verifies the check instead of a flow. */
+export type CoverageCheck = { id: string; area: string; title: string; location: SourceLocation; covers: string[]; flows: string[]; audit?: Audit };
 export type CoverageProblem = Diagnostic & { area: string };
 export type CoverageReport = {
   ok: boolean;
@@ -82,7 +84,7 @@ export function checkCoverage(files: E2eFile[], surface: SdkSurface): CoverageRe
       const location = locate(loaded, keyOf(doc, id));
       const registered = checks.get(id);
       if (registered) { problems.push({ ...location, area, rule: "duplicate-check", message: `${id} is already registered at ${registered.location.file}:${registered.location.line}` }); continue; }
-      const check: CoverageCheck = { id, area, title: entry.title, location, covers: entry.covers ?? [], flows: [] };
+      const check: CoverageCheck = { id, area, title: entry.title, location, covers: entry.covers ?? [], flows: [], ...(entry.audit ? { audit: entry.audit } : {}) };
       checks.set(id, check);
       check.covers.forEach((cover, index) => covers.push({ check, id: cover, location: locate(loaded, doc.getIn(["checks", id, "covers", index], true) as Node) }));
     }
@@ -92,12 +94,15 @@ export function checkCoverage(files: E2eFile[], surface: SdkSurface): CoverageRe
     if (!check) problems.push({ ...reference.location, area: reference.area, rule: "unregistered-check", message: `${reference.id} is not registered in any e2e/checks/<area>.yaml` });
     else if (!check.flows.includes(reference.file)) check.flows.push(reference.file);
   }
-  for (const check of checks.values()) if (!check.flows.length) problems.push({ ...check.location, area: check.area, rule: "no-flow", message: `${check.id} is not listed in any flow's checks` });
+  for (const check of checks.values()) {
+    if (check.audit && check.flows.length) problems.push({ ...check.location, area: check.area, rule: "audit-flow", message: `${check.id} is verified by the ${check.audit} audit; flows must not list it too (${check.flows.join(", ")})` });
+    else if (!check.flows.length && !check.audit) problems.push({ ...check.location, area: check.area, rule: "no-flow", message: `${check.id} is not listed in any flow's checks` });
+  }
   const { required, known } = surfaceItems(surface);
   for (const { check, id, location } of covers) {
     if (!known.has(id)) problems.push({ ...location, area: check.area, rule: "unknown-cover", message: `${check.id} covers ${id}, which is not in the @legendapp/spark surface` });
-    // Only a check that some flow verifies counts toward coverage.
-    else if (check.flows.length) for (const item of withContainers(id)) {
+    // Only a check that some flow or audit verifies counts toward coverage.
+    else if (check.flows.length || check.audit) for (const item of withContainers(id)) {
       const coveredBy = required.get(item)?.coveredBy;
       if (coveredBy && !coveredBy.includes(check.id)) coveredBy.push(check.id);
     }
@@ -120,7 +125,8 @@ export function formatCoverage(report: CoverageReport): string {
   const lines: string[] = [];
   for (const area of [...new Set([...report.checks, ...report.problems].map(item => item.area))].sort()) {
     const checks = report.checks.filter(check => check.area === area);
-    lines.push(`${area}: ${count(checks.length, "check")}, ${checks.filter(check => check.flows.length).length} listed by flows`);
+    const audited = checks.filter(check => check.audit).length;
+    lines.push(`${area}: ${count(checks.length, "check")}, ${checks.filter(check => check.flows.length).length} listed by flows${audited ? `, ${audited} verified by audits` : ""}`);
     for (const problem of report.problems.filter(problem => problem.area === area)) lines.push(`  ${formatDiagnostic(problem)}`);
   }
   const uncovered = report.surface.filter(item => !item.coveredBy.length);

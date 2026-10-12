@@ -4,15 +4,16 @@ import path from "node:path";
 import { collect } from "../files.ts";
 import {
   checkBudgets, checkFlow, checkGate, checkRegistry, formatDiagnostic, FlowFormatError,
-  type Budget, type Budgets, type GateManifest, type GateTarget, type Machine,
+  type Budget, type Budgets, type CheckRegistry, type GateManifest, type GateTarget, type Machine,
 } from "../format/parser.ts";
+import type { Audit } from "../format/primitives.ts";
 import type { ManualStep } from "../format/signoff.ts";
 import type { Platform } from "../runner/backend.ts";
 import { expandMatrix } from "../runner/executor.ts";
 import { flowHash, plannedManualSteps } from "./manual.ts";
 
 /** Why the gate fails. The verdict is PASS only when there are none. */
-export type GateCheck = "manifest" | "target" | "source" | "lint" | "coverage" | "build" | "backend" | "flows" | "time-budget" | "budgets" | "signoffs";
+export type GateCheck = "manifest" | "target" | "source" | "lint" | "coverage" | "build" | "audit" | "backend" | "flows" | "time-budget" | "budgets" | "signoffs";
 export type Reason = { check: GateCheck; message: string };
 /** The machine the gate runs on. `model` and `memoryGB` identify a reference machine (macOS only). */
 export type Host = { os: string; arch: "arm64" | "x64"; model?: string; memoryGB?: number };
@@ -34,6 +35,8 @@ export type PlannedFlow = {
   manualSteps?: ManualStep[][];
 };
 export type PlannedBudget = Budget & { baseline: number | "not-measured" };
+/** A check registered with `audit:`, which that gate audit step verifies against the artifact. */
+export type PlannedAudit = { check: string; audit: Audit; title: string; blocking: boolean };
 export type GatePlan = {
   manifest: GateManifest;
   /** The e2e/ directory and the repository root (its parent). */
@@ -47,6 +50,10 @@ export type GatePlan = {
   excluded: Array<{ path: string; reason: string }>;
   /** Budgets with a baseline for this target's machine. */
   budgets: PlannedBudget[];
+  /** The audit checks for this target's platform. A scoped run has none: it judges only its flows. */
+  audits: PlannedAudit[];
+  /** The build's debug symbols folder (`build.<platform>.symbols`), absolute. */
+  symbols?: string;
   problems: Reason[];
   /** `--flow`: the selected gate flows, relative to e2e/. Undefined for the whole gate. */
   scope?: string[];
@@ -108,12 +115,11 @@ function resolveTarget(manifest: GateManifest, budgets: Budgets | undefined, hos
   return target;
 }
 
-/** Blocking: a blocking tag, or a check registered `blocking: true`; otherwise the manifest default. */
-function blockingChecks(root: string, manifest: GateManifest): Set<string> {
+/** Every valid check in the registries. */
+function registeredChecks(root: string, manifest: GateManifest): Array<[string, CheckRegistry["checks"][string]]> {
   const dir = path.join(root, manifest.coverage.checks);
-  if (!existsSync(dir)) return new Set();
-  return new Set(collect(dir).filter(([, kind]) => kind === "registry").flatMap(([file]) =>
-    Object.entries(checkRegistry(readFileSync(file, "utf8"), file).value?.checks ?? {}).filter(([, check]) => check.blocking).map(([id]) => id)));
+  if (!existsSync(dir)) return [];
+  return collect(dir).filter(([, kind]) => kind === "registry").flatMap(([file]) => Object.entries(checkRegistry(readFileSync(file, "utf8"), file).value?.checks ?? {}));
 }
 
 /** The gate flows (manifest `include`) under e2e/, for every target. */
@@ -163,9 +169,12 @@ export function plan(root: string, host: Host, { target: override, only, artifac
   const build = target && manifest.build[target.platform];
   if (target && !build) problems.push({ check: "build", message: `gate.yaml has no ${target.platform} build to test` });
   const tested = build && path.resolve(repo, artifact ?? build.artifact.replaceAll("${ARCH}", target!.arch));
+  const symbols = build?.symbols && path.resolve(repo, build.symbols.replaceAll("${ARCH}", target!.arch));
 
   const all = gateFlows(root, manifest), scope = only && select(root, manifest, all, only);
-  const blocking = blockingChecks(root, manifest), flows: PlannedFlow[] = [], excluded: GatePlan["excluded"] = [];
+  const registered = registeredChecks(root, manifest);
+  // Blocking: a blocking tag, or a check registered `blocking: true`; otherwise the manifest default.
+  const blocking = new Set(registered.filter(([, check]) => check.blocking).map(([id]) => id)), flows: PlannedFlow[] = [], excluded: GatePlan["excluded"] = [];
   for (const { path: relative, file } of target ? all.filter(flow => !scope || scope.includes(flow.path)) : []) {
     const id = relative.replace(/\.ya?ml$/, "");
     const parsed = checkFlow(readFileSync(file, "utf8"), path.relative(process.cwd(), file)).value, header = parsed?.header;
@@ -187,7 +196,9 @@ export function plan(root: string, host: Host, { target: override, only, artifac
     });
   }
   const planned = machine ? (budgets?.budgets ?? []).flatMap(budget => machine.id in budget.baselines ? [{ ...budget, baseline: budget.baselines[machine.id]! }] : []) : [];
-  return { manifest, root, repo, host, target, machine, artifact: tested, flows, excluded, budgets: planned, problems, ...(scope ? { scope } : {}) };
+  const audits = target && !scope ? registered.flatMap(([id, check]) => check.audit && (!check.platforms || check.platforms.includes(target.platform))
+    ? [{ check: id, audit: check.audit, title: check.title, blocking: !!check.blocking || manifest.blocking.default }] : []) : [];
+  return { manifest, root, repo, host, target, machine, artifact: tested, ...(symbols ? { symbols } : {}), flows, excluded, budgets: planned, audits, problems, ...(scope ? { scope } : {}) };
 }
 
 /** Where a run writes its reports: the manifest's paths, or `scoped/` next to them for a `--flow` run, so it never replaces a full gate report. */

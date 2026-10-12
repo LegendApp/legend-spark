@@ -25,7 +25,7 @@ beforeEach(() => {
   moduleRoot = path.join(root, "node_modules/fixture");
   writeJson(path.join(root, "package.json"), { main: "index.ts", dependencies: { fixture: "1.0.0" } });
   write(path.join(root, "index.ts"), "import 'fixture';");
-  writeJson(path.join(moduleRoot, "package.json"), { name: "fixture", version: "1.0.0", spark: { nativeModules: ["Fixture"] } });
+  writeJson(path.join(moduleRoot, "package.json"), { name: "fixture", version: "1.0.0", license: "MIT", spark: { nativeModules: ["Fixture"] } });
   write(path.join(moduleRoot, "src/NativeFixture.ts"), "export const native = 1;");
   write(path.join(moduleRoot, "macos/Fixture.mm"), "native source");
   configure();
@@ -40,6 +40,8 @@ beforeEach(() => {
       write(path.join(root, "macos/Fixture/Info.plist"), JSON.stringify({ SparkProjectIdentifier: "test.fixture" }));
     } else if (argv[0] === "pod") {
       write(path.join(root, "macos/Pods/Manifest.lock"), "fixture");
+      // plutil is mocked to return the file: the acknowledgements as JSON.
+      writeJson(path.join(root, "macos/Pods/Target Support Files/Pods-Fixture/Pods-Fixture-acknowledgements.plist"), { PreferenceSpecifiers: [{ Title: "fmt", License: "MIT", FooterText: "fmt license" }] });
       write(path.join(root, "macos/Pods/Target Support Files/Fixture/Fixture-xcframeworks.sh"), 'install_xcframework "${PODS_ROOT}/../../node_modules/fixture/Fixture.xcframework" "Fixture" "framework" "macos-arm64_x86_64"\n');
       if (commands.restore) {
         write(path.join(framework(), "Info.plist"), "fixture");
@@ -64,6 +66,11 @@ afterEach(() => { vi.restoreAllMocks(); rmSync(root, { recursive: true, force: t
 test.each(["dev", "preview", "release"] as const)("%s builds select the renamed scheme product and clear only that output directory", async mode => {
   configure(true);
   const first = await build(root, mode);
+  // A release lists its third-party notices in the app and keeps its debug symbols next to it.
+  const notices = path.join(first.app, "Contents/Resources/ThirdPartyNotices.txt");
+  expect(mode === "release" ? readFileSync(notices, "utf8") : existsSync(notices)).toBe(mode === "release"
+    ? "Third-party software notices for Fixture\n\nFixture includes the following third-party software.\n\n## fixture 1.0.0\nLicense: MIT\nSource: npm\n\n## fmt\nLicense: MIT\nSource: CocoaPods\n\nfmt license\n" : false);
+  expect(existsSync(path.join(path.dirname(first.app), "dSYMs"))).toBe(mode === "release");
   const config = readJson(path.join(root, "app.json"));
   config.expo.name = "Renamed Fixture";
   writeJson(path.join(root, "app.json"), config);

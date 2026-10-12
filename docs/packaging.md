@@ -16,6 +16,14 @@ npx --no-install spark package
 
 `npm run build` continues to produce an ad-hoc-signed standalone app for local testing. Packaging signs a staging copy and leaves that build output untouched.
 
+A standalone build (`spark build`, macOS) also:
+
+- writes `Contents/Resources/ThirdPartyNotices.txt`: every npm package the production JavaScript bundles or the app links natively, and every CocoaPods acknowledgement, each with its license id and license text when the package ships one. A package with neither a license field nor a license file fails the build.
+- writes the debug symbols to `dSYMs/` next to the app, never into it: the app's dSYM, a dSYM of the prebuilt Hermes binary made before it is stripped (its symbol table only; React Native publishes no DWARF for it), and the dSYMs vendors ship in their pods (Sparkle). Keep that folder with each release to symbolicate its crash reports. `spark package` does not include it in the ZIP.
+- compiles C, Objective-C and C++ with `-ffile-prefix-map=<workspace root>=.` and Hermes bytecode from the bundle's file name, so `__FILE__` strings and JavaScript stack traces hold relative paths, not the build machine's.
+
+The release gate's [bundle audit](e2e-flows.md#audits) checks all of this on the built app.
+
 ## First-run setup
 
 Install a Developer ID Application certificate and its private key through Xcode or Keychain Access. Packaging requires macOS, the native build prerequisites, and access to Apple's notarization service. Mac App Store signing is a separate, unsupported distribution target.

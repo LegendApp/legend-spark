@@ -1,11 +1,12 @@
 import { restoreNativeMetadata } from "./native-metadata.ts";
 import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 import { missingNativeFrameworks, preparationChanges, preserveMacOSPods, type NativePreparation } from "./native-preparation.ts";
-import { macOSReleaseSettings } from "./macos-release.ts";
+import { collectDsyms, macOSReleasePathSettings, macOSReleaseSettings, relativeHermesCompiler } from "./macos-release.ts";
 import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
 import { buildWindows } from "./windows.ts";
 import { copyHelpers } from "./helpers.ts";
+import { acknowledgementsFile, collectNotices, formatNotices, NOTICES_FILE, podNotices } from "./notices.ts";
 import { readAppConfig } from "./project.ts";
 import {
   cpSync,
@@ -368,14 +369,18 @@ async function buildUnlocked(
       `ARCHS=${xcodeArch}`,
       "ONLY_ACTIVE_ARCH=YES",
       "CODE_SIGNING_ALLOWED=NO",
-      ...(mode === "release" ? macOSReleaseSettings : []),
+      ...(mode === "release" ? [...macOSReleaseSettings, ...macOSReleasePathSettings(root)] : []),
       "-jobs",
       "8",
       "build",
     ],
     {
       // Absolute, like analysis: Metro resolves a relative entry from its server root.
-      env: { RCT_NEW_ARCH_ENABLED: "1", ENTRY_FILE: path.resolve(root, entryFile(root)), ...(productionGraph ? { SPARK_RUNTIME_SOURCES: stateFile(root, "analysis/runtime-sources.json") } : {}) },
+      env: {
+        RCT_NEW_ARCH_ENABLED: "1", ENTRY_FILE: path.resolve(root, entryFile(root)),
+        ...(productionGraph ? { SPARK_RUNTIME_SOURCES: stateFile(root, "analysis/runtime-sources.json") } : {}),
+        ...(mode === "release" ? { HERMES_CLI_PATH: relativeHermesCompiler(nativeRoot, stateFile(root, "hermesc")) } : {}),
+      },
       label: `Building ${mode === "go" ? "Spark Runner" : mode} runtime (${configuration}, ${runtime.arch})`,
     },
   );
@@ -411,10 +416,22 @@ async function buildUnlocked(
   );
   copyHelpers(root, destination, readAppConfig(root).expo?.extra?.spark?.helpers);
   if (mode === "release") {
-    // Hermes is prebuilt, so Xcode's app/Pod compiler settings cannot strip it.
+    const sources = metroSourceFiles(path.resolve(root, entryFile(root)), readJson(stateFile(root, "analysis/app.map")).sources);
+    const linked = (readJson(stateFile(root, "native-selection.json")).included as Array<{ root: string }>).map(pkg => pkg.root);
+    const pods = podNotices(JSON.parse(await run(root, ["plutil", "-convert", "json", "-o", "-", acknowledgementsFile(nativeRoot)], { capture: true })));
+    writeFileSync(path.join(destination, "Contents/Resources", NOTICES_FILE), formatNotices(name, collectNotices(root, sources, linked, pods)));
+    // Debug symbols ship next to the app, never in it: the build's dSYMs and those vendors ship in their pods.
+    const symbols = path.join(path.dirname(destination), "dSYMs");
+    mkdirSync(symbols);
+    // Hermes is prebuilt, so Xcode's app/Pod compiler settings cannot strip it. Its dSYM keeps the symbol table that
+    // strip removes (React Native publishes no DWARF for it, so dsymutil warns about every object file).
     const hermes = path.join(destination, "Contents/Frameworks/hermes.framework/Versions/Current/hermes");
-    if (existsSync(hermes))
+    if (existsSync(hermes)) {
+      await run(root, ["dsymutil", hermes, "-o", path.join(symbols, "hermes.framework.dSYM")], { capture: true });
       await run(root, ["strip", "-S", "-x", hermes], { capture: true });
+    }
+    const unmatched = collectDsyms(destination, [products, path.join(nativeRoot, "Pods")], symbols);
+    if (unmatched.length) console.warn(`No dSYM for ${unmatched.join(", ")}; crash reports from ${unmatched.length === 1 ? "it" : "them"} cannot be symbolicated.`);
   }
   // Development apps can opt into a local identity for same-team native plugins.
   // Standalone outputs remain ad-hoc until `spark package` signs its staging copy.

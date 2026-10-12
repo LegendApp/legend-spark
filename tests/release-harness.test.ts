@@ -57,6 +57,7 @@ function env(options: Options = {}) {
     host: () => options.host ?? AIR,
     source: () => ({ commit: COMMIT, dirty: options.dirty ?? false }),
     verifySignature: () => undefined,
+    audit: () => [],
     surface: () => SURFACE,
     stdout: line => out.push(line),
     stderr: line => err.push(line),
