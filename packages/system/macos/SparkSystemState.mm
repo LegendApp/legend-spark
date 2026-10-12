@@ -2,6 +2,7 @@
 #import "SparkAppearancePreferences.h"
 #import <AppKit/AppKit.h>
 #import <CFNetwork/CFNetwork.h>
+#import <IOKit/ps/IOPowerSources.h>
 #import <Network/Network.h>
 #import <SystemConfiguration/SystemConfiguration.h>
 #import <RNDesktopApp/SparkDesktop.h>
@@ -94,6 +95,7 @@ static NSHashTable<SparkSystemStateObserver *> *LiveObservers(void) {
   return table;
 }
 static void ProxiesChanged(SCDynamicStoreRef, CFArrayRef, void *) { SparkEmit(@{ @"type": @"proxyChanged" }); }
+static void PowerChanged(void *) { SparkEmit(@{ @"type": @"powerChanged" }); }
 
 @implementation SparkSystemStateObserver {
   NSSet<NSString *> *_types;
@@ -102,6 +104,7 @@ static void ProxiesChanged(SCDynamicStoreRef, CFArrayRef, void *) { SparkEmit(@{
   dispatch_source_t _memory;
   SCDynamicStoreRef _proxyStore;
   CFRunLoopSourceRef _proxySource;
+  CFRunLoopSourceRef _power;
 }
 - (instancetype)init { if (self = [super init]) { _types = [NSSet set]; _notifications = [NSMutableDictionary new]; } return self; }
 - (void)dealloc { [self stop]; }
@@ -154,10 +157,21 @@ static void ProxiesChanged(SCDynamicStoreRef, CFArrayRef, void *) { SparkEmit(@{
   return YES;
 }
 - (void)stopPath { if (_path) { nw_path_monitor_cancel(_path); _path = nil; } }
+- (void)observePower:(BOOL)observe {
+  if (observe && !_power) {
+    _power = IOPSNotificationCreateRunLoopSource(PowerChanged, NULL);
+    if (_power) CFRunLoopAddSource(CFRunLoopGetMain(), _power, kCFRunLoopCommonModes);
+  } else if (!observe && _power) {
+    CFRunLoopRemoveSource(CFRunLoopGetMain(), _power, kCFRunLoopCommonModes); CFRelease(_power); _power = NULL;
+  }
+}
 
 - (BOOL)observeTypes:(NSSet<NSString *> *)types error:(NSString **)error {
+  // A driver run receives only simulateSystemEvent's events, whatever the host's network, power, displays or
+  // settings do (docs/system.md#testing-system-events): the types stay observed, with no OS source behind them.
+  NSSet<NSString *> *sources = SparkTestDriverActive() ? [NSSet set] : types;
   // Create the sources that can fail first, so a failure leaves the previous sources as they were.
-  BOOL proxies = [types containsObject:@"proxyChanged"], memory = [types containsObject:@"memoryPressure"], network = [types containsObject:@"networkChanged"];
+  BOOL proxies = [sources containsObject:@"proxyChanged"], memory = [sources containsObject:@"memoryPressure"], network = [sources containsObject:@"networkChanged"];
   BOOL newProxies = NO, newMemory = NO;
   if (proxies && !_proxySource) { if (![self startProxies:error]) return NO; newProxies = YES; }
   if (memory && !_memory) {
@@ -172,8 +186,16 @@ static void ProxiesChanged(SCDynamicStoreRef, CFArrayRef, void *) { SparkEmit(@{
   if (!proxies) [self stopProxies];
   if (!memory) [self stopMemory];
   if (!network) [self stopPath];
+  [self observePower:[sources containsObject:@"powerChanged"]];
   NSNotificationCenter *workspace = NSWorkspace.sharedWorkspace.notificationCenter, *local = NSNotificationCenter.defaultCenter;
+  NSDistributedNotificationCenter *distributed = NSDistributedNotificationCenter.defaultCenter;
   NSDictionary<NSString *, NSArray *> *definitions = @{
+    @"sleep": @[workspace, NSWorkspaceWillSleepNotification],
+    @"wake": @[workspace, NSWorkspaceDidWakeNotification],
+    @"lock": @[distributed, @"com.apple.screenIsLocked"],
+    @"unlock": @[distributed, @"com.apple.screenIsUnlocked"],
+    @"appearanceChanged": @[distributed, @"AppleInterfaceThemeChangedNotification"],
+    @"displaysChanged": @[local, NSApplicationDidChangeScreenParametersNotification],
     @"sessionActive": @[workspace, NSWorkspaceSessionDidBecomeActiveNotification],
     @"sessionInactive": @[workspace, NSWorkspaceSessionDidResignActiveNotification],
     @"lowPowerChanged": @[local, NSProcessInfoPowerStateDidChangeNotification],
@@ -186,11 +208,11 @@ static void ProxiesChanged(SCDynamicStoreRef, CFArrayRef, void *) { SparkEmit(@{
   };
   [definitions enumerateKeysAndObjectsUsingBlock:^(NSString *type, NSArray *definition, BOOL *) {
     NSArray *entry = self->_notifications[type];
-    if ([types containsObject:type] && !entry) {
+    if ([sources containsObject:type] && !entry) {
       // Process info notifications arrive on arbitrary threads; the main queue serializes them with the rest.
       id token = [definition[0] addObserverForName:definition[1] object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *) { SparkEmit(@{ @"type": type }); }];
       self->_notifications[type] = @[definition[0], token];
-    } else if (![types containsObject:type] && entry) {
+    } else if (![sources containsObject:type] && entry) {
       [entry[0] removeObserver:entry[1]];
       [self->_notifications removeObjectForKey:type];
     }

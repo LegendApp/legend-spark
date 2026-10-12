@@ -4,9 +4,8 @@ intent: >
   Each simulateSystemEvent here sets the state its event implies (thermal state serious, Low Power Mode on,
   battery power, an offline network path) in the system module; the System state screen receives the
   event, re-reads getSystemInfo and getNetworkStatus, and shows the new state. memoryPressure arrives with
-  its level. The Mac's real power, thermal and network state are untouched, but its real events still arrive
-  (a network path update can land between two simulated events), so the flow finds each simulated event in the
-  list by its type rather than by its position.
+  its level. The Mac's real power, thermal and network state are untouched, and a driver run installs no OS observers,
+  so only simulated events reach the list.
 checks: [SYS-EVENTS-02]
 tags: [system-integration]
 platforms: [macos]

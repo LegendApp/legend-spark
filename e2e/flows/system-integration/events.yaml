@@ -4,8 +4,8 @@ intent: >
   With the System state screen subscribed to onSystemEvent, the driver's simulateSystemEvent delivers
   sleep, wake, lock, unlock, user-switch, locale, time zone, clock, proxy, appearance and display events
   through the system module's native emitter, and the screen logs each one, newest first. The flow never
-  sleeps or locks the Mac or changes its settings; the OS observers that produce these events for real are
-  installed but not triggered.
+  sleeps or locks the Mac or changes its settings; a driver run installs no OS observers, so the list holds only
+  simulated events.
 checks: [SYS-EVENTS-01]
 tags: [system-integration]
 platforms: [macos]

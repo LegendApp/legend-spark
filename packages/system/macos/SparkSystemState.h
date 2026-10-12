@@ -12,6 +12,7 @@ FOUNDATION_EXPORT void SparkSystemNetworkStatus(NSTimeInterval timeout, void (^c
 
 // The system event observers one module instance owns. Each OS source is installed only while an
 // observed event type needs it, so a reload's invalidated instance never removes a newer instance's sources.
+// In a driver run none is installed: only simulateSystemEvent's events arrive.
 @interface SparkSystemStateObserver : NSObject
 // Installs the sources `types` needs and removes the others. NO, with `error` set and the previous
 // sources kept, when a source cannot be created.
