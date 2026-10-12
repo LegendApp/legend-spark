@@ -124,6 +124,8 @@ test("signing traverses nested code inside out without following symlinks outsid
 function harness(arch: "arm64" | "x64" = "arm64", binaryArch = arch === "x64" ? "x86_64" : "arm64") {
   const root = temporary();
   const source = appFixture(root);
+  // A release build writes its dSYMs next to the app.
+  mkdirSync(path.join(root, "dSYMs/Probe.app.dSYM"), { recursive: true });
   writeJson(path.join(root, "app.json"), { expo: { name: "Probe", slug: "probe", version: "1.0.0", macos: { bundleIdentifier: "test.probe" } } });
   writeJson(path.join(root, ".spark/native-selection.json"), { included: [] });
   const runtime: Runtime = { schema: 1, framework: VERSION, platform: "macos", arch, mode: "release", fingerprint: "test", modules: {} };
@@ -133,6 +135,7 @@ function harness(arch: "arm64" | "x64" = "arm64", binaryArch = arch === "x64" ? 
     if (args[0] === "plutil") return args.includes("json") ? readFileSync(args.at(-1)!, "utf8") : "";
     if (args[0] === "lipo") return binaryArch + "\n";
     if (args[0] === "codesign") {
+      if (args.includes("-dvvv") && state.calls.some(call => call[0] === "codesign" && call.includes("--sign") && call[call.indexOf("--sign") + 1] === "-")) return "CodeDirectory flags=0x10002(adhoc,runtime)\nSignature=adhoc\n";
       if (args.includes("-dvvv")) return state.invalidSignature ? "Signature=adhoc\n" : `Authority=${identity.name}\nTeamIdentifier=${identity.teamId}\nCodeDirectory flags=0x10000(runtime)\nTimestamp=Sep 10, 2026\n`;
       return "";
     }
@@ -171,6 +174,9 @@ test("pending notarization resumes without resubmission and verifies the extract
     expect(artifactHash(h.source)).toBe(original);
     expect(h.state.calls.some((args) => args[0] === "spctl" && args.at(-1)!.includes("verify-archive"))).toBe(true);
     expect(existsSync(path.join(h.root, "dist/probe-1.0.0-arm64.zip"))).toBe(true);
+    expect(readJson(path.join(h.root, "dist/probe-1.0.0-arm64-dSYMs.zip"))).toEqual({ app: path.join(h.root, "dSYMs") });
+    expect(result).toMatchObject({ output: path.join(h.root, "dist/probe-1.0.0-arm64.zip"), symbols: path.join(h.root, "dist/probe-1.0.0-arm64-dSYMs.zip") });
+    expect(h.state.calls.filter(args => args[0] === "ditto" && args[1] === "-c").every(args => args.includes("--norsrc"))).toBe(true);
     const before = h.state.calls.filter(args => args[0] === "ditto").length;
     await packageApp(h.root, { waitMs: 0 }, h.dependencies);
     expect(h.state.calls.filter(args => args[0] === "ditto")).toHaveLength(before);
@@ -296,5 +302,19 @@ test("Intel packaging rejects an ARM executable", async () => {
   const h = harness("x64", "arm64");
   try {
     await expect(packageApp(h.root, { waitMs: 0 }, h.dependencies)).rejects.toThrow("x86_64");
+  } finally { h.cleanup(); }
+});
+
+test("ad-hoc packaging needs no credentials, never contacts Apple, and writes a test package with its dSYMs", async () => {
+  const h = harness();
+  try {
+    const result = await packageApp(h.root, { adHoc: true }, { ...h.dependencies, credentials: async () => { throw new Error("credentials must not be read"); } });
+    expect(result).toMatchObject({ pending: false, output: path.join(h.root, "dist/ad-hoc/probe-1.0.0-arm64.zip"), symbols: path.join(h.root, "dist/ad-hoc/probe-1.0.0-arm64-dSYMs.zip") });
+    expect(existsSync(path.join(h.root, "dist/probe-1.0.0-arm64.zip"))).toBe(false);
+    const signs = h.state.calls.filter(args => args[0] === "codesign" && args.includes("--sign"));
+    expect(signs.length).toBeGreaterThan(0);
+    expect(signs.every(args => args[args.indexOf("--sign") + 1] === "-" && args.includes("--timestamp=none") && args.includes("runtime"))).toBe(true);
+    expect(h.state.calls.some(args => args[0] === "xcrun" || args[0] === "spctl")).toBe(false);
+    await expect(packageApp(h.root, { adHoc: true, runner: true }, h.dependencies)).rejects.toThrow("never notarized");
   } finally { h.cleanup(); }
 });

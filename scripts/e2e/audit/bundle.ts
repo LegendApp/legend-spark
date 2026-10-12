@@ -4,23 +4,26 @@ import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, lstatSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import path from "node:path";
 import { NOTICES_FILE } from "../../../packages/cli/src/notices.ts";
-import type { Audit } from "../format/primitives.ts";
 import type { Platform } from "../runner/backend.ts";
 
 export type AuditOptions = {
   /** The artifact: the .app bundle on macOS. */
   app: string;
   platform: Platform;
+  /** The target's architecture: the package audit expects a package for it. */
+  arch?: "arm64" | "x64";
   /** The gate's appId: the bundle identifier the artifact must have. */
   appId: string;
   sizeBudgetMB?: number;
   /** The folder of the build's debug symbols. */
   symbols?: string;
+  /** The `spark package` output: its distribution ZIP, or the folder that holds it (the package audit). */
+  package?: string;
 };
 /** `details`: the findings when the check fails, what it found when it passes, and why when it is unsupported. */
 export type AuditResult = { check: string; status: "passed" | "failed" | "unsupported"; details: string[] };
 
-type Entry = { rel: string; abs: string; size: number; kind: "file" | "dir" | "link" };
+export type Entry = { rel: string; abs: string; size: number; kind: "file" | "dir" | "link" };
 
 /** Hermes bytecode files start with this magic number (little-endian 0x1F1903C103BC1FC6). */
 const HERMES_MAGIC = Buffer.from([0xc6, 0x1f, 0xbc, 0x03, 0xc1, 0x03, 0x19, 0x1f]);
@@ -59,7 +62,7 @@ const SECRETS: Array<[RegExp, string]> = [
 
 const mb = (bytes: number) => `${(bytes / 1e6).toFixed(1)} MB`;
 
-function walk(root: string): Entry[] {
+export function walk(root: string): Entry[] {
   const entries: Entry[] = [];
   const visit = (abs: string, rel: string) => {
     const stat = lstatSync(abs), kind = stat.isSymbolicLink() ? "link" : stat.isDirectory() ? "dir" : "file";
@@ -75,12 +78,12 @@ function head(file: string, length: number): Buffer {
   try { const buffer = Buffer.alloc(length); return buffer.subarray(0, readSync(fd, buffer, 0, length, 0)); } finally { closeSync(fd); }
 }
 
-const isMachO = (entry: Entry) => entry.kind === "file" && entry.size >= 4 && MACH_O.has(head(entry.abs, 4).readUInt32BE(0));
+export const isMachO = (entry: Entry) => entry.kind === "file" && entry.size >= 4 && MACH_O.has(head(entry.abs, 4).readUInt32BE(0));
 const isHermes = (file: string) => head(file, 8).equals(HERMES_MAGIC);
 /** JavaScript the app could load: bundles and scripts by extension. */
 const isScript = (entry: Entry) => entry.kind === "file" && /\.(jsbundle|bundle|hbc|[cm]?js)$/.test(entry.rel);
 
-function tool(command: string, args: string[]): string {
+export function tool(command: string, args: string[]): string {
   const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 512 * 1024 * 1024 });
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")}: ${(result.stderr || result.error?.message || `exit ${result.status}`).trim()}`);
   return result.stdout;
@@ -89,7 +92,7 @@ function tool(command: string, args: string[]): string {
 /** Printable runs of at least 6 bytes, as `strings` finds them, from any file. */
 const printable = (file: string) => readFileSync(file).toString("latin1").match(/[\x20-\x7e]{6,}/g) ?? [];
 
-function check(id: string, run: () => { findings: string[]; evidence: string[] } | string[]): AuditResult {
+export function check(id: string, run: () => { findings: string[]; evidence: string[] } | string[]): AuditResult {
   try {
     const outcome = run();
     if (Array.isArray(outcome)) return { check: id, status: "unsupported", details: outcome };
@@ -150,15 +153,7 @@ export function auditBundle(options: AuditOptions): AuditResult[] {
       if (!mac) return [`PDB symbol files ${WINDOWS_TODO}`];
       if (!options.symbols) return { findings: ["gate.yaml sets no build.macos.symbols folder"], evidence: [] };
       if (!existsSync(options.symbols)) return { findings: [`the symbols folder ${options.symbols} does not exist`], evidence: [] };
-      const dwarf = new Set<string>(), dsyms = walk(options.symbols).filter(entry => entry.kind === "file" && /\.dSYM\/Contents\/Resources\/DWARF\//.test(entry.rel));
-      for (const entry of dsyms) for (const [, uuid] of tool("dwarfdump", ["--uuid", entry.abs]).matchAll(/^UUID: ([0-9A-F-]{36})/gm)) dwarf.add(uuid!);
-      const findings: string[] = [];
-      for (const entry of machO) {
-        const uuids = [...tool("dwarfdump", ["--uuid", entry.abs]).matchAll(/^UUID: ([0-9A-F-]{36}) \(([^)]+)\)/gm)];
-        for (const [, uuid, arch] of uuids) if (!dwarf.has(uuid!)) findings.push(`${entry.rel} (${arch} ${uuid}): no dSYM in ${options.symbols}`);
-        if (!uuids.length) findings.push(`${entry.rel}: no LC_UUID, so no dSYM can match it`);
-      }
-      return { findings, evidence: [`${machO.length} Mach-O binaries matched by ${dsyms.length} dSYM file(s) in ${options.symbols}`] };
+      return dsymFindings(machO, options.symbols);
     }),
     // No absolute paths of the build machine in any file.
     check("DIST-HYG-06", () => {
@@ -237,5 +232,15 @@ export function noticesFindings(text: string, binaries: string[]): { findings: s
   return { findings, evidence: [`${sections.length} packages, each with a license`] };
 }
 
-/** The gate audit steps by the name a check registers with `audit:`. */
-export const AUDIT_STEPS: Readonly<Record<Audit, (options: AuditOptions) => AuditResult[]>> = { bundle: auditBundle };
+/** A dSYM in `symbols` for every UUID (each architecture) of every Mach-O binary. */
+export function dsymFindings(machO: Entry[], symbols: string): { findings: string[]; evidence: string[] } {
+  const dwarf = new Set<string>(), dsyms = walk(symbols).filter(entry => entry.kind === "file" && /\.dSYM\/Contents\/Resources\/DWARF\//.test(entry.rel));
+  for (const entry of dsyms) for (const [, uuid] of tool("dwarfdump", ["--uuid", entry.abs]).matchAll(/^UUID: ([0-9A-F-]{36})/gm)) dwarf.add(uuid!);
+  const findings: string[] = [];
+  for (const entry of machO) {
+    const uuids = [...tool("dwarfdump", ["--uuid", entry.abs]).matchAll(/^UUID: ([0-9A-F-]{36}) \(([^)]+)\)/gm)];
+    for (const [, uuid, arch] of uuids) if (!dwarf.has(uuid!)) findings.push(`${entry.rel} (${arch} ${uuid}): no dSYM in ${symbols}`);
+    if (!uuids.length) findings.push(`${entry.rel}: no LC_UUID, so no dSYM can match it`);
+  }
+  return { findings, evidence: [`${machO.length} Mach-O binaries matched by ${dsyms.length} dSYM file(s) in ${symbols}`] };
+}

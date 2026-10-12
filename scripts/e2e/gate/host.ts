@@ -5,7 +5,7 @@ import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { macOSArchitecture, windowsArchitecture } from "../../../packages/cli/src/platform.ts";
 import { readSdkSurface } from "../../api-surface.ts";
-import { AUDIT_STEPS } from "../audit/bundle.ts";
+import { AUDIT_STEPS } from "../audit/steps.ts";
 import { runningApps } from "../app-state.ts";
 import { plist } from "../kitchen-sink.ts";
 import { BACKENDS } from "../runner/run.ts";

@@ -184,8 +184,10 @@ describe("release gate", () => {
     const results = (...list: AuditResult[]) => (_name: string, options: AuditOptions) => { calls.push(options); return list; };
     const passed: AuditResult = { check: "DIST-HYG-01", status: "passed", details: ["Hermes bytecode"] };
     const report = await gate(dir, { audit: results(passed, { check: "DIST-HYG-02", status: "failed", details: ["a.map: source map"] }) });
-    expect(calls).toEqual([{ app: path.join(dir, "build/macos-arm64/KitchenSink.app"), platform: "macos", appId: "so.legend.kitchensink" }]);
+    expect(calls).toEqual([{ app: path.join(dir, "build/macos-arm64/KitchenSink.app"), platform: "macos", arch: "arm64", appId: "so.legend.kitchensink" }]);
     expect(reasons(report)).toEqual(["audit: DIST-HYG-02 (No maps): a.map: source map"]);
+    // The package audit's ZIP or folder: build.<platform>.package, or --package / the harness's --artifact.
+    expect(plan(path.join(dir, "e2e"), AIR, { package: path.join(dir, "dist/App-1.0-${ARCH}.zip") }).package).toBe(path.join(dir, "dist/App-1.0-arm64.zip"));
     expect(report.audits.map(audit => [audit.check, audit.status, audit.details])).toEqual([["DIST-HYG-01", "passed", ["Hermes bytecode"]], ["DIST-HYG-02", "failed", ["a.map: source map"]]]);
     expect(reasons(await gate(dir, { audit: results(passed, { check: "DIST-HYG-02", status: "unsupported", details: ["needs Windows"] }) }))).toEqual(["audit: DIST-HYG-02 (No maps): unsupported on macos: needs Windows"]);
     expect(reasons(await gate(dir, { audit: results(passed) }))).toEqual(["audit: DIST-HYG-02 (No maps): the bundle audit has no result for it"]);

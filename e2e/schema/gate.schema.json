@@ -35,6 +35,11 @@
               "type": "string",
               "minLength": 1,
               "description": "The folder of the build's debug symbols (dSYMs), relative to the repository root. ${ARCH} becomes the target's arch."
+            },
+            "package": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The spark package output the package audit checks: the distribution ZIP, or the folder holding the one <name>-<version>-<arch>.zip (with its dSYMs archive and updates/ feed), relative to the repository root. ${ARCH} becomes the target's arch."
             }
           },
           "required": [
@@ -62,6 +67,11 @@
               "type": "string",
               "minLength": 1,
               "description": "The folder of the build's debug symbols (dSYMs), relative to the repository root. ${ARCH} becomes the target's arch."
+            },
+            "package": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The spark package output the package audit checks: the distribution ZIP, or the folder holding the one <name>-<version>-<arch>.zip (with its dSYMs archive and updates/ feed), relative to the repository root. ${ARCH} becomes the target's arch."
             }
           },
           "required": [

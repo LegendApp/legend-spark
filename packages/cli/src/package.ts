@@ -23,11 +23,14 @@ export function artifactHash(file: string): string {
   return hash.digest("hex");
 }
 
-type PackageState = { phase: "signed" | "submitting" | "submitted" | "accepted" | "complete"; stagedHash: string; archiveHash: string; submissionId?: string; output?: string; outputHash?: string };
+type PackageState = { phase: "signed" | "submitting" | "submitted" | "accepted" | "complete"; stagedHash: string; archiveHash: string; submissionId?: string; output?: string; outputHash?: string; symbols?: string };
+type PackageOptions = { force?: boolean; submissionId?: string; waitMs?: number; runner?: boolean; adHoc?: boolean };
+/** `spark package --ad-hoc`: signs without an identity and is never notarized; a test package that Gatekeeper rejects as a download. */
+const AD_HOC: SigningCredentials = { hash: "-", name: "ad-hoc", teamId: "", keychainProfile: "" };
 type Dependencies = { run: Runner; build: typeof build; credentials: (root: string) => Promise<SigningCredentials>; wait: (ms: number) => Promise<unknown>; prepareUpdate?: typeof prepareUpdate };
 const defaults: Dependencies = { run, build, credentials, wait: (ms) => sleep(ms) };
 
-export async function packageApp(root: string, options: { force?: boolean; submissionId?: string; waitMs?: number; runner?: boolean } = {}, dependencies: Dependencies = defaults) {
+export async function packageApp(root: string, options: PackageOptions = {}, dependencies: Dependencies = defaults) {
   if (options.submissionId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(options.submissionId)) throw new Error("Submission ID must be a UUID returned by Apple.");
   mkdirSync(stateFile(root, "packaging"), { recursive: true });
   const lock = stateFile(root, "package.lock");
@@ -53,9 +56,10 @@ export async function packageApp(root: string, options: { force?: boolean; submi
   finally { rmSync(lock, { force: true }); }
 }
 
-async function packageUnlocked(root: string, options: { force?: boolean; submissionId?: string; waitMs?: number; runner?: boolean }, deps: Dependencies) {
+async function packageUnlocked(root: string, options: PackageOptions, deps: Dependencies) {
   const execute = deps.run;
-  const identity = await deps.credentials(root);
+  if (options.adHoc && (options.runner || options.submissionId)) throw new Error("--ad-hoc packages are never notarized: it cannot be combined with a Runner package or --submission-id.");
+  const identity = options.adHoc ? AD_HOC : await deps.credentials(root);
   console.log(`Signing identity: ${identity.name}`);
   const result = await deps.build(root, options.runner ? "go" : "release", options.force);
   const config = readAppConfig(root).expo;
@@ -72,6 +76,10 @@ async function packageUnlocked(root: string, options: { force?: boolean; submiss
   const app = path.join(folder, path.basename(result.app));
   const safeName = `${config.slug ?? config.name}-${config.version}-${result.runtime.arch}`.replace(/[^A-Za-z0-9._-]/g, "-");
   const upload = path.join(folder, `${safeName}-${key.slice(0, 16)}-notary.zip`);
+  // A release build writes its dSYMs next to the app; the package archives them when it stages the app, so a later
+  // build cannot replace them while notarization is pending.
+  const symbolsSource = path.join(path.dirname(result.app), "dSYMs"), symbols = options.runner ? undefined : path.join(folder, `${safeName}-dSYMs.zip`);
+  if (symbols && !existsSync(symbolsSource)) throw new Error(`The release build has no dSYMs folder at ${symbolsSource}. Rebuild it with spark package --force.`);
   const statePath = path.join(folder, "state.json");
   mkdirSync(folder, { recursive: true });
   let state: PackageState;
@@ -86,10 +94,41 @@ async function packageUnlocked(root: string, options: { force?: boolean; submiss
     if (artifactHash(app) !== inputHash) throw new Error("The release app changed while copying it. Retry packaging after the other build finishes.");
     await signApp(root, app, identity, entitlements, byPath, execute);
     await validateApp(root, app, identity, expected, false, execute);
-    console.log("✓ Release app signed and verified");
-    await execute(root, ["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", app, upload], { capture: true });
+    console.log(`✓ Release app signed${options.adHoc ? " ad-hoc" : ""} and verified`);
+    // --norsrc: archives keep no extended attributes, so none of the build machine's (com.apple.provenance, quarantine)
+    // ship; signatures live in the bundle.
+    if (symbols) await execute(root, ["ditto", "-c", "-k", "--norsrc", "--keepParent", symbolsSource, symbols], { capture: true });
+    await execute(root, ["ditto", "-c", "-k", "--norsrc", "--keepParent", app, upload], { capture: true });
     state = { phase: "signed", stagedHash: artifactHash(app), archiveHash: createHash("sha256").update(readFileSync(upload)).digest("hex") };
     writeJson(statePath, state);
+  }
+  const distribution = path.join(root, "dist", ...(options.adHoc ? ["ad-hoc"] : []));
+  /** Archives the final app, validates the extracted copy, and writes it with its dSYMs archive to `distribution`. */
+  const distribute = async (finalApp: string, notarized: boolean) => {
+    const archive = path.join(folder, `${safeName}.zip`);
+    await execute(root, ["ditto", "-c", "-k", "--norsrc", "--keepParent", finalApp, archive], { capture: true });
+    const extracted = path.join(folder, "verify-archive");
+    rmSync(extracted, { recursive: true, force: true });
+    mkdirSync(extracted, { recursive: true });
+    try {
+      await execute(root, ["ditto", "-x", "-k", archive, extracted], { capture: true });
+      const entries = readdirSync(extracted).filter((name) => name !== "__MACOSX");
+      if (entries.length !== 1 || !entries[0]!.endsWith(".app")) throw new Error("Distribution archive must contain exactly one app.");
+      await validateApp(root, path.join(extracted, entries[0]!), identity, expected, notarized, execute);
+    } finally { rmSync(extracted, { recursive: true, force: true }); }
+    const output = path.join(distribution, `${safeName}.zip`);
+    mkdirSync(distribution, { recursive: true });
+    for (const [source, target] of [[archive, output], ...(symbols ? [[symbols, path.join(distribution, path.basename(symbols))]] : [])] as const) {
+      const temporary = `${target}.${process.pid}.tmp`;
+      cpSync(source, temporary);
+      renameSync(temporary, target);
+    }
+    return { output, symbols: symbols && path.join(distribution, path.basename(symbols)) };
+  };
+  if (options.adHoc) {
+    const { output, symbols: dsyms } = await distribute(app, false);
+    console.log(`✓ Distribution archive verified\n\nReady (ad-hoc and not notarized: for testing the package, Gatekeeper rejects it as a download): ${output}${dsyms ? `\nDebug symbols: ${dsyms}` : ""}`);
+    return { pending: false as const, output, symbols: dsyms, update: undefined, submissionId: undefined };
   }
   // Reuse the exact verified distribution bytes on retries, including when feed
   // signing failed after notarization. Re-stapling could change the archive.
@@ -97,7 +136,7 @@ async function packageUnlocked(root: string, options: { force?: boolean; submiss
     if (createHash("sha256").update(readFileSync(state.output)).digest("hex") !== state.outputHash) throw new Error("The completed distribution archive changed. Restore it or package a new build number.");
     const update = await (options.runner ? Promise.resolve(undefined) : (deps.prepareUpdate ?? prepareUpdate)(root, state.output, String(expected.buildVersion)));
     console.log(`Ready: ${state.output}`);
-    return { pending: false as const, output: state.output, update, submissionId: state.submissionId };
+    return { pending: false as const, output: state.output, symbols: state.symbols, update, submissionId: state.submissionId };
   }
   const notary = async (command: string, ...args: string[]) => JSON.parse(await execute(root, ["xcrun", "notarytool", command, ...args, ...notaryAuth(identity), "--output-format", "json"], { capture: true }));
   if (options.submissionId) {
@@ -151,27 +190,13 @@ async function packageUnlocked(root: string, options: { force?: boolean; submiss
   cpSync(app, finalApp, { recursive: true, verbatimSymlinks: true });
   await execute(root, ["xcrun", "stapler", "staple", finalApp], { capture: true });
   await validateApp(root, finalApp, identity, expected, true, execute);
-  const archive = path.join(folder, `${safeName}.zip`);
-  await execute(root, ["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", finalApp, archive], { capture: true });
-  const extracted = path.join(folder, "verify-archive");
-  rmSync(extracted, { recursive: true, force: true });
-  mkdirSync(extracted, { recursive: true });
-  try {
-    await execute(root, ["ditto", "-x", "-k", archive, extracted], { capture: true });
-    const entries = readdirSync(extracted).filter((name) => name !== "__MACOSX");
-    if (entries.length !== 1 || !entries[0]!.endsWith(".app")) throw new Error("Distribution archive must contain exactly one app.");
-    await validateApp(root, path.join(extracted, entries[0]!), identity, expected, true, execute);
-  } finally { rmSync(extracted, { recursive: true, force: true }); }
-  const output = path.join(root, "dist", `${safeName}.zip`);
-  mkdirSync(path.dirname(output), { recursive: true });
-  const temporary = `${output}.${process.pid}.tmp`;
-  cpSync(archive, temporary);
-  renameSync(temporary, output);
+  const { output, symbols: dsyms } = await distribute(finalApp, true);
   state.phase = "complete";
   state.output = output;
   state.outputHash = createHash("sha256").update(readFileSync(output)).digest("hex");
+  state.symbols = dsyms;
   writeJson(statePath, state);
   const update = await (options.runner ? Promise.resolve(undefined) : (deps.prepareUpdate ?? prepareUpdate)(root, output, String(expected.buildVersion)));
-  console.log(`✓ Notarization ticket attached\n✓ Distribution archive verified\n\nReady: ${output}`);
-  return { pending: false as const, output, update, submissionId: state.submissionId };
+  console.log(`✓ Notarization ticket attached\n✓ Distribution archive verified\n\nReady: ${output}${dsyms ? `\nDebug symbols: ${dsyms}` : ""}`);
+  return { pending: false as const, output, symbols: dsyms, update, submissionId: state.submissionId };
 }

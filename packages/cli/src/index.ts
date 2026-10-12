@@ -75,7 +75,7 @@ async function main() {
 
 Inside an app: npm run dev, npm run build, npm run package (or pnpm, yarn, bun)
 
-Advanced: updates init <feedURL>, credentials, doctor, analyze, open [app], build --dev, build --preview
+Advanced: updates init <feedURL>, credentials, doctor, analyze, open [app], build --dev, build --preview, package --ad-hoc (test package, not notarized)
 Crash reports: symbolicate <report.json> --dsym <MyApp.app.dSYM or folder> (prints the report with symbols and source lines)
 Windows: dev and build --dev; production builds are not yet supported.
 SDK transfer: sdk export <directory> [--runtime <Spark Runner directory>], sdk import <directory>
@@ -167,7 +167,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       break;
     case "package": {
       if (process.platform !== "darwin") throw new Error("macOS packaging requires macOS.");
-      const result = await packageApp(project(), { force: !!values.force, submissionId: values["submission-id"] as string | undefined });
+      const result = await packageApp(project(), { force: !!values.force, submissionId: values["submission-id"] as string | undefined, adHoc: !!values["ad-hoc"] });
       if (result.pending) process.exitCode = 2;
       break;
     }

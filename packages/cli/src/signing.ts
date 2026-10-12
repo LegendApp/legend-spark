@@ -110,7 +110,8 @@ export async function signApp(root: string, app: string, credentials: SigningCre
     const plist = stateFile(root, `packaging/entitlements/${digest(relative)}.plist`);
     writeJson(plist, value);
     await execute(root, ["plutil", "-convert", "xml1", plist], { capture: true });
-    await execute(root, ["codesign", "--force", "--sign", credentials.hash, "--options", "runtime", "--timestamp", ...(processTarget ? ["--entitlements", plist] : []),
+    // An ad-hoc signature (`-`, spark package --ad-hoc) has no signer to timestamp.
+    await execute(root, ["codesign", "--force", "--sign", credentials.hash, "--options", "runtime", credentials.hash === "-" ? "--timestamp=none" : "--timestamp", ...(processTarget ? ["--entitlements", plist] : []),
       ...(credentials.keychain ? ["--keychain", credentials.keychain] : []), file], { capture: true });
   }
   return order;
@@ -134,9 +135,9 @@ export async function validateApp(root: string, app: string, credentials: Signin
   const targets = await entitlementTargets(root, app, order, expected.entitlements, expected.byPath, execute);
   for (const file of order) {
     const signature = await execute(root, ["codesign", "-dvvv", file], { capture: true });
-    if (!signature.includes(`Authority=${credentials.name}\n`) || !signature.includes(`TeamIdentifier=${credentials.teamId}\n`) || !/flags=.*\bruntime\b/.test(signature) || !/^Timestamp=/m.test(signature)) {
-      throw new Error(`Invalid Developer ID signature, hardened runtime, or timestamp: ${file}`);
-    }
+    const signer = credentials.hash === "-" ? /^Signature=adhoc$/m.test(signature)
+      : signature.includes(`Authority=${credentials.name}\n`) && signature.includes(`TeamIdentifier=${credentials.teamId}\n`) && /^Timestamp=/m.test(signature);
+    if (!signer || !/flags=.*\bruntime\b/.test(signature)) throw new Error(`Invalid ${credentials.hash === "-" ? "ad-hoc" : "Developer ID"} signature, hardened runtime, or timestamp: ${file}`);
     const signedEntitlements = await execute(root, ["codesign", "-d", "--entitlements", ":-", file], { capture: true });
     // Inspect the final signature, not just the input entitlement file.
     const xml = signedEntitlements.match(/<\?xml[\s\S]*?<\/plist>|<plist[\s\S]*?<\/plist>/)?.[0];

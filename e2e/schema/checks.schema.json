@@ -58,7 +58,8 @@
           },
           "audit": {
             "enum": [
-              "bundle"
+              "bundle",
+              "package"
             ],
             "description": "The gate audit step that verifies this check against the release build, instead of a flow (see docs/e2e-flows.md#audits)."
           }
