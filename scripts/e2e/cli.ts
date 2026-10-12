@@ -51,7 +51,7 @@ if (mode === "schema") {
   console.log(`${mode === "lint" ? "linted" : "validated"} ${files.length} file${files.length === 1 ? "" : "s"} (${summary}): ${problems} problem${problems === 1 ? "" : "s"}`);
   process.exitCode = problems ? 1 : 0;
 } else if (mode === "audit") {
-  process.exitCode = auditCommand(args, path.join(repo, "e2e"), hostEnv());
+  process.exitCode = await auditCommand(args, path.join(repo, "e2e"), hostEnv());
 } else if (mode === "golden") {
   process.exitCode = goldenCommand(args, path.join(repo, "e2e"), { stdout: line => console.log(line), stderr: line => console.error(line) });
 } else if (mode === "signoff") {

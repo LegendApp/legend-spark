@@ -1,6 +1,6 @@
 # Packaging a macOS app
 
-`spark package` builds a standalone release, signs it with your Developer ID Application identity, submits it to Apple for notarization, staples the ticket, and verifies the final ZIP. It writes the verified archive to `dist/`. It does not publish artifacts. Apps configured for updates also get a signed Sparkle feed; see [desktop updates](desktop-integrations.md#signed-application-updates).
+`spark package` builds a standalone release, signs it with your Developer ID Application identity, submits it to Apple for notarization, staples the ticket, and verifies the final ZIP. It writes the verified archive to `dist/<slug>-<version>-<arch>.zip`, and the release's debug symbols next to it as `dist/<slug>-<version>-<arch>-dSYMs.zip`. Keep both for each release: the dSYMs symbolicate its crash reports. Archives store no extended attributes (`ditto --norsrc`), so none of the build machine's, such as `com.apple.provenance`, ship. It does not publish artifacts. Apps configured for updates also get a signed Sparkle feed; see [desktop updates](desktop-integrations.md#signed-application-updates).
 
 In a newly created app:
 
@@ -19,10 +19,14 @@ npx --no-install spark package
 A standalone build (`spark build`, macOS) also:
 
 - writes `Contents/Resources/ThirdPartyNotices.txt`: every third-party npm package the production JavaScript bundles or the app links natively, and every CocoaPods acknowledgement, each with its license id and license text when the package ships one. First-party packages are left out: `"private": true` packages, and packages inside the app's workspace root (or the app) that are not installed under `node_modules`. A third-party package with neither a license field nor a license file is listed as `License: UNKNOWN` with a build warning (the gate's bundle audit fails on it).
-- writes the debug symbols to `dSYMs/` next to the app, never into it: the app's dSYM, a dSYM of the prebuilt Hermes binary made before it is stripped (its symbol table only; React Native publishes no DWARF for it), and the dSYMs vendors ship in their pods (Sparkle). Keep that folder with each release to symbolicate its crash reports. `spark package` does not include it in the ZIP.
+- writes the debug symbols to `dSYMs/` next to the app, never into it: the app's dSYM, a dSYM of the prebuilt Hermes binary made before it is stripped (its symbol table only; React Native publishes no DWARF for it), and the dSYMs vendors ship in their pods (Sparkle). `spark package` archives that folder as the `-dSYMs.zip` next to the distribution ZIP, never inside it.
 - compiles C, Objective-C and C++ with `-ffile-prefix-map=<workspace root>=.` and Hermes bytecode from the bundle's file name, so `__FILE__` strings and JavaScript stack traces hold relative paths, not the build machine's.
 
-The release gate's [bundle audit](e2e-flows.md#audits) checks all of this on the built app.
+The release gate's [bundle audit](e2e-flows.md#audits) checks all of this on the built app, and its package audit checks the `spark package` output.
+
+## Ad-hoc test packages
+
+`spark package --ad-hoc` makes the same package without credentials: it signs the staging copy ad-hoc (hardened runtime, the release entitlements, no timestamp), skips notarization, stapling and the update feed, and writes `dist/ad-hoc/<slug>-<version>-<arch>.zip` with its `-dSYMs.zip`. Use it to check the package layout locally; Gatekeeper rejects it as a download, so it is never a release.
 
 ## First-run setup
 
@@ -114,7 +118,7 @@ After acceptance, spark staples a fresh final copy. The original signed upload s
 
 ## Validation status
 
-The orchestration is covered by simulated signing/notarization tests for pending, accepted, rejected, interrupted, and tampered-artifact cases. Signing order was also exercised with real Apple tools and ad-hoc signing on a copy of the local Hello World app. Generated entitlements were checked through a real expo-desktop prebuild.
+The orchestration is covered by simulated signing/notarization tests for pending, accepted, rejected, interrupted, and tampered-artifact cases. Signing order was also exercised with real Apple tools and ad-hoc signing on a copy of the local Hello World app. Generated entitlements were checked through a real expo-desktop prebuild. `spark package --ad-hoc` was run on the Kitchen Sink, and the gate's package audit passed on its output except the Developer ID and notarization check.
 
 A real Developer ID-signed, notarized distribution has not yet been submitted or validated. That acceptance check requires an explicitly selected signing identity and notarization profile. Public prebuilt distribution, provisioning profiles, Sparkle update signing, and publishing remain separate work.
 

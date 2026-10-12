@@ -54,6 +54,8 @@ export type GatePlan = {
   audits: PlannedAudit[];
   /** The build's debug symbols folder (`build.<platform>.symbols`), absolute. */
   symbols?: string;
+  /** The `spark package` output (`build.<platform>.package`): its distribution ZIP or the folder holding it, absolute. */
+  package?: string;
   problems: Reason[];
   /** `--flow`: the selected gate flows, relative to e2e/. Undefined for the whole gate. */
   scope?: string[];
@@ -154,10 +156,12 @@ export type PlanOptions = {
   only?: string[];
   /** Replaces the manifest's build path, such as an installed copy of the release (`--artifact`, `bun run harness`). */
   artifact?: string;
+  /** Replaces the manifest's package path: the `spark package` ZIP or its folder (`--package`, `bun run harness --artifact`). */
+  package?: string;
 };
 
 /** Plans the gate for this machine, or `options.target`. */
-export function plan(root: string, host: Host, { target: override, only, artifact }: PlanOptions = {}): GatePlan {
+export function plan(root: string, host: Host, { target: override, only, artifact, package: packaged }: PlanOptions = {}): GatePlan {
   root = path.resolve(root);
   const manifest = readManifest(root), repo = path.dirname(root), problems: Reason[] = [];
   const budgets = readBudgets(root, manifest, problems);
@@ -170,6 +174,7 @@ export function plan(root: string, host: Host, { target: override, only, artifac
   if (target && !build) problems.push({ check: "build", message: `gate.yaml has no ${target.platform} build to test` });
   const tested = build && path.resolve(repo, artifact ?? build.artifact.replaceAll("${ARCH}", target!.arch));
   const symbols = build?.symbols && path.resolve(repo, build.symbols.replaceAll("${ARCH}", target!.arch));
+  const distribution = (packaged ?? build?.package) && path.resolve(repo, (packaged ?? build!.package!).replaceAll("${ARCH}", target!.arch));
 
   const all = gateFlows(root, manifest), scope = only && select(root, manifest, all, only);
   const registered = registeredChecks(root, manifest);
@@ -198,7 +203,7 @@ export function plan(root: string, host: Host, { target: override, only, artifac
   const planned = machine ? (budgets?.budgets ?? []).flatMap(budget => machine.id in budget.baselines ? [{ ...budget, baseline: budget.baselines[machine.id]! }] : []) : [];
   const audits = target && !scope ? registered.flatMap(([id, check]) => check.audit && (!check.platforms || check.platforms.includes(target.platform))
     ? [{ check: id, audit: check.audit, title: check.title, blocking: !!check.blocking || manifest.blocking.default }] : []) : [];
-  return { manifest, root, repo, host, target, machine, artifact: tested, ...(symbols ? { symbols } : {}), flows, excluded, budgets: planned, audits, problems, ...(scope ? { scope } : {}) };
+  return { manifest, root, repo, host, target, machine, artifact: tested, ...(symbols ? { symbols } : {}), ...(distribution ? { package: distribution } : {}), flows, excluded, budgets: planned, audits, problems, ...(scope ? { scope } : {}) };
 }
 
 /** Where a run writes its reports: the manifest's paths, or `scoped/` next to them for a `--flow` run, so it never replaces a full gate report. */

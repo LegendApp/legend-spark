@@ -127,7 +127,8 @@ async function onHost(options: HarnessOptions, gatePlan: GatePlan, report: Harne
       report.install.quarantineRemoved = true;
       env.gate.stdout(`--local: removed ${QUARANTINE} from the installed copy so it can launch; Gatekeeper rejects it`);
     }
-    const tested = plan(gatePlan.root, gatePlan.host, { target: options.target, artifact: installed.app });
+    // The package audit checks the downloaded ZIP (spark package output) with the dSYMs archive and feed next to it.
+    const tested = plan(gatePlan.root, gatePlan.host, { target: options.target, artifact: installed.app, ...(installed.format === "zip" ? { package: file } : {}) });
     const files = { json: path.join(dir, "gate/report.json"), html: path.join(dir, "gate/index.html") };
     const gateReport = await runGate({ ...tested, manifest: { ...tested.manifest, report: { json: path.relative(env.repo, files.json), html: path.relative(env.repo, files.html) } } }, env.gate);
     writeGateReport(gateReport, files, env.repo);
@@ -152,6 +153,10 @@ async function inVm(options: HarnessOptions, gatePlan: GatePlan, report: Harness
   try {
     const { file, packagedFrom } = await artifactFor(options, gatePlan, share, dir, env);
     copyFileSync(file, path.join(share, path.basename(file)));
+    // What the package audit reads next to a spark package ZIP: its dSYMs archive and the Sparkle feed.
+    for (const sibling of file.endsWith(".zip") ? [`${path.basename(file, ".zip")}-dSYMs.zip`, "updates"] : []) {
+      if (existsSync(path.join(path.dirname(file), sibling))) cpSync(path.join(path.dirname(file), sibling), path.join(share, sibling), { recursive: true });
+    }
     const archive = await env.sh(["git", "-C", env.repo, "archive", "--format=tar.gz", "-o", path.join(share, "source.tar.gz"), report.commit]);
     if (archive.code) throw new HarnessError("vm", `git archive ${report.commit} failed: ${archive.stderr.trim()}`);
     copyFileSync(env.bun, path.join(share, "bun"));

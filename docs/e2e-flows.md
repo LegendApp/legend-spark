@@ -1069,7 +1069,7 @@ An audit is a gate step that checks the release artifact itself instead of drivi
 with `audit: <name>` is verified by that step, so no flow lists it (coverage reports `audit-flow` if one does). The
 gate runs each audit step once, after the build check, and judges every audit check for the target's platform: a
 `failed` or `unsupported` result, or no result, fails a blocking check. A scoped run (`--flow`) runs no audits.
-`bun run e2e:audit [--artifact <app>]` runs only the audits for this machine's target and prints each result.
+`bun run e2e:audit [--artifact <app>] [--package <zip or folder>]` runs only the audits for this machine's target and prints each result.
 
 `bundle` (`scripts/e2e/audit/bundle.ts`, registered in `checks/packaging-distribution.yaml`) audits release bundle
 hygiene (#153):
@@ -1089,9 +1089,28 @@ hygiene (#153):
 
 On Windows, 02, 03, 06, 07 and 09 run on the artifact's files; 01, 04, 05, 08 and 10 report `unsupported` until there
 is a Windows release build and PE/PDB tooling (#51). Uploading symbols to a crash service is not part of the audit:
-Spark has no symbol server; crash reports are symbolicated locally from the dSYMs ([diagnostics](diagnostics.md)). Notarization is checked by the
-[release harness](release-harness.md), not here. The in-app test driver ships in the Kitchen Sink release build on
+Spark has no symbol server; crash reports are symbolicated locally from the dSYMs ([diagnostics](diagnostics.md)). The bundle audit does not check notarization: the
+package audit and the [release harness](release-harness.md) do. The in-app test driver ships in the Kitchen Sink release build on
 purpose (the gate drives it); keeping it out of consumer release builds is #340.
+
+`package` (`scripts/e2e/audit/package.ts`, registered in `checks/packaging-distribution.yaml`) audits the `spark package`
+output (#151): `build.<platform>.package` in `gate.yaml`, `--package`, or the release harness's `--artifact` ZIP. It is
+the distribution ZIP, or the folder holding the one `<name>-<version>-<arch>.zip`; the dSYMs archive and the `updates/`
+feed are read next to it. Try it without credentials on `spark package --ad-hoc` output
+(`bun run e2e:audit --package examples/kitchen-sink/dist/ad-hoc`), which fails only `DIST-PKG-06`.
+
+| Check | What it verifies |
+|---|---|
+| `DIST-PKG-01` | The ZIP is named `<name>-<version>-<arch>.zip`, holds only the `.app`, stores no extended attributes (`__MACOSX/` or `._` AppleDouble entries, such as the build machine's `com.apple.provenance`), and `codesign --verify --deep --strict` accepts the extracted app. |
+| `DIST-PKG-02` | `<name>-<version>-<arch>-dSYMs.zip` is next to it and has a dSYM for every Mach-O UUID in the packaged app. |
+| `DIST-PKG-03` | The name's version is `CFBundleShortVersionString`; `CFBundleIdentifier` is `appId`; the versions, build number and `spark-runtime.json` `fingerprint` and `sourceRevision` match the release build the gate tests. |
+| `DIST-PKG-04` | The package is for the target's architecture: the executable has only that architecture and every binary has it (prebuilt universal ones, such as Sparkle's helpers, are listed); no binary's `minos` is newer than `LSMinimumSystemVersion`. |
+| `DIST-PKG-05` | An app with `SUFeedURL` requires a signed feed (`SURequireSignedFeed`), and `updates/<feed>` is signed with `SUPublicEDKey`. Its newest item is this build with the same short version and minimum macOS, an arm64 item requires arm64, and every enclosure is next to the feed, has its length and a valid EdDSA signature; the full update is the package's bytes. An app without `SUFeedURL` passes: it has no feed. |
+| `DIST-PKG-06` | Installed from the ZIP as a quarantined download (the release harness's install and verification): Developer ID signature, hardened runtime, secure timestamp, notarized, ticket stapled, Gatekeeper accepts it. Needs Developer ID and notarization credentials: an ad-hoc package fails it. |
+| `DIST-PKG-07` | Extracting the quarantined download carries `com.apple.quarantine` to the app, so Gatekeeper assesses its first launch. |
+
+Spark makes no DMG, so there is no DMG layout check. App translocation at launch is not checked: it needs a notarized
+app launched from its quarantined location.
 
 ### Budgets
 

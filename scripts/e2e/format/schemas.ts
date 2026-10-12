@@ -94,6 +94,7 @@ export function buildGateSchema(): Schema {
     verifySignature: bool,
     sizeBudgetMB: { type: "number", exclusiveMinimum: 0, description: "The bundle audit's size budget for the artifact, in MB (10^6 bytes)." },
     symbols: { ...str, description: "The folder of the build's debug symbols (dSYMs), relative to the repository root. ${ARCH} becomes the target's arch." },
+    package: { ...str, description: "The spark package output the package audit checks: the distribution ZIP, or the folder holding the one <name>-<version>-<arch>.zip (with its dSYMs archive and updates/ feed), relative to the repository root. ${ARCH} becomes the target's arch." },
   }, ["artifact"]);
   return {
     $schema: DRAFT,

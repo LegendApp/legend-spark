@@ -63,3 +63,47 @@ checks:
     blocking: true
     spec: "#153"
     audit: bundle
+  # macOS packaging (#151): the gate's package audit (scripts/e2e/audit/package.ts) runs these against the spark package
+  # output (gate.yaml build.macos.package; the release harness passes its --artifact ZIP). Spark has no Windows package yet (#51).
+  DIST-PKG-01:
+    title: The package is one <name>-<version>-<arch>.zip holding only the app, with no extended attributes of the build machine stored in it, and the extracted app's signature verifies (codesign --verify --deep --strict)
+    platforms: [macos]
+    blocking: true
+    spec: "#151"
+    audit: package
+  DIST-PKG-02:
+    title: A <name>-<version>-<arch>-dSYMs.zip next to the package has a dSYM for every binary UUID in the packaged app
+    platforms: [macos]
+    blocking: true
+    spec: "#151"
+    audit: package
+  DIST-PKG-03:
+    title: One version everywhere; the package name, the packaged Info.plist (identifier, version, build number) and spark-runtime.json match the release build the gate tests
+    platforms: [macos]
+    blocking: true
+    spec: "#151"
+    audit: package
+  DIST-PKG-04:
+    title: The package is thin for the target's architecture (the executable has only that architecture, every binary has it) and no binary needs a newer macOS than LSMinimumSystemVersion
+    platforms: [macos]
+    blocking: true
+    spec: "#151"
+    audit: package
+  DIST-PKG-05:
+    title: An app that updates through Sparkle has a signed appcast whose newest item is this build, with matching versions, minimum macOS and architecture, and whose update archive is this package, signed with the app's SUPublicEDKey
+    platforms: [macos]
+    blocking: true
+    spec: "#151"
+    audit: package
+  DIST-PKG-06:
+    title: Installed from the package as a quarantined download, the app has a Developer ID signature with hardened runtime and secure timestamp, is notarized with the ticket stapled, and Gatekeeper accepts it
+    platforms: [macos]
+    blocking: true
+    spec: "#151; needs Developer ID and notarization credentials (spark package); an ad-hoc package (spark package --ad-hoc) fails it"
+    audit: package
+  DIST-PKG-07:
+    title: Extracting the package from a quarantined download passes the quarantine to the app, so Gatekeeper assesses its first launch
+    platforms: [macos]
+    blocking: true
+    spec: "#151"
+    audit: package

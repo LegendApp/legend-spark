@@ -7,7 +7,7 @@ const options = {
   device: { type: "string" }, project: { type: "string" }, platform: { type: "string" },
   packages: { type: "string" }, port: { type: "string" }, runner: { type: "boolean" },
   dev: { type: "boolean" }, release: { type: "boolean" }, preview: { type: "boolean" },
-  force: { type: "boolean" }, dsym: { type: "string", multiple: true }, "submission-id": { type: "string" }, help: { type: "boolean", short: "h" },
+  force: { type: "boolean" }, dsym: { type: "string", multiple: true }, "submission-id": { type: "string" }, "ad-hoc": { type: "boolean" }, help: { type: "boolean", short: "h" },
 } as const;
 const commands: Record<string, { flags: readonly string[]; arguments: readonly [number, number] }> = {
   create: { flags: ["example", "package-manager", "universal", "platform", "packages"], arguments: [1, 1] },
@@ -23,7 +23,7 @@ const commands: Record<string, { flags: readonly string[]; arguments: readonly [
   doctor: { flags: ["project"], arguments: [0, 0] },
   "updates init": { flags: ["project", "platform"], arguments: [1, 1] },
   credentials: { flags: ["project", "platform"], arguments: [0, 0] },
-  package: { flags: ["project", "platform", "force", "submission-id"], arguments: [0, 0] },
+  package: { flags: ["project", "platform", "force", "submission-id", "ad-hoc"], arguments: [0, 0] },
   analyze: { flags: ["project", "platform"], arguments: [0, 0] },
   open: { flags: ["project", "platform", "port"], arguments: [0, 1] },
   symbolicate: { flags: ["dsym"], arguments: [1, 1] },
