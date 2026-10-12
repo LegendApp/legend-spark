@@ -116,7 +116,7 @@ const ar: DialogMessages = {
   aboutOverrides: "لوحة حول مع قيم مخصصة",
   aboutName: "Spark Kitchen Sink",
   aboutCredits: "صُنع باستخدام Legend Spark.",
-  aboutCopyright: "© ٢٠٢٦ Legend",
+  aboutCopyright: "© 2026 Legend",
   noResult: "—",
 };
 

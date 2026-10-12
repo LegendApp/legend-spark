@@ -1,5 +1,5 @@
 import { useI18n } from "../../shell/app-controller";
-import type { Locale } from "../../shell/i18n";
+import { MESSAGES, type Locale } from "../../shell/i18n";
 
 // Strings for the System state screen. Event types, thermal states, interfaces, versions, locales,
 // time zones, proxies and availability JSON are API data, not translated.
@@ -29,6 +29,7 @@ const en: SystemStateMessages = {
   injected: "In a test-driver run, flows deliver these events with simulateSystemEvent instead of changing the Mac.",
 };
 
+const n = MESSAGES.ar.number;
 const ar: SystemStateMessages = {
   title: "حالة النظام",
   intro: "حالة الطاقة والحرارة والشبكة والجلسة والخمول والذاكرة، والأحداث التي تُبلغ عن تغيّرها.",
@@ -37,7 +38,7 @@ const ar: SystemStateMessages = {
   osVersion: "إصدار النظام", architecture: "المعمارية", translated: "مترجَم (Rosetta)", locale: "الإعدادات المحلية", timeZone: "المنطقة الزمنية",
   appearance: "المظهر", idle: "مدة الخمول", powerSource: "مصدر الطاقة", battery: "البطارية", lowPower: "وضع الطاقة المنخفضة", thermal: "الحالة الحرارية",
   status: "الحالة", interfaces: "الواجهات", expensive: "مكلفة", constrained: "وضع البيانات المنخفضة", proxies: "الوكلاء",
-  dark: "داكن", light: "فاتح", onBattery: "البطارية", onAC: "محوّل الطاقة", seconds: value => `${value.toFixed(0)} ث`, noBattery: "لا توجد بطارية",
+  dark: "داكن", light: "فاتح", onBattery: "البطارية", onAC: "محوّل الطاقة", seconds: value => `${n(Math.round(value))} ث`, noBattery: "لا توجد بطارية",
   unsupported: "غير متاح على هذا النظام",
   yes: "نعم", no: "لا", none: "لا شيء",
   listening: "يستمع إلى أحداث النظام.", subscribing: "جارٍ الاشتراك في أحداث النظام…",

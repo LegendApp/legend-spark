@@ -68,7 +68,7 @@ test("the outline holds 10,010 rows in three levels with controlled expansion, i
   await mount(OutlineScreen);
   const outline = byID("native-controls-outline-list").props;
   expect(count(outline.rows)).toBe(10_010);
-  expect(outline.rows[0].cells).toEqual({ name: "مجموعة ١", kind: "مجموعة", size: "١٠ عنصر" });
+  expect(outline.rows[0].cells).toEqual({ name: "مجموعة 1", kind: "مجموعة", size: "10 عنصر" });
   expect(outline.columns.map((column: { title: string; sortable?: boolean }) => [column.title, column.sortable])).toEqual([["الاسم", undefined], ["النوع", undefined], ["الحجم", undefined]]);
   expect(outline.expandedIds).toEqual(["group-1", "folder-1-1"]);
   await act(async () => outline.onExpandedChange(["group-1", "folder-1-1", "group-2"]));

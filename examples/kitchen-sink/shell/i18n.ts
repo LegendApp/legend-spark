@@ -33,7 +33,15 @@ export type Messages = {
 };
 
 const SCHEME_HINT = "spark-ks://<area>/<screen>";
-const arabicDigits = (value: number) => String(value).replace(/\d/g, digit => "٠١٢٣٤٥٦٧٨٩"[Number(digit)]!);
+// Human-facing numbers go through the catalog's number(), so the shell and every screen use one digit system per
+// locale: what Intl.NumberFormat gives for it under Hermes. On macOS that is Western digits for "ar" (and Hermes ignores
+// a -u-nu-arab extension), so Arabic text uses Western digits too. Grouping stays off, as before.
+const numberFormat = (locale: string) => {
+  const format = new Intl.NumberFormat(locale, { useGrouping: false });
+  return (value: number) => format.format(value);
+};
+const enNumber = numberFormat("en");
+const arNumber = numberFormat("ar");
 const enThemes: Record<ThemeChoice, string> = { system: "System", light: "Light", dark: "Dark" };
 const arThemes: Record<ThemeChoice, string> = { system: "النظام", light: "فاتح", dark: "داكن" };
 
@@ -41,9 +49,9 @@ const en: Messages = {
   appTitle: "Kitchen Sink",
   subtitle: (mode, projectId) => `${mode ?? "unknown"} · ${projectId ?? "no project"}`,
   allScreens: "All screens",
-  screens: count => `${count} ${count === 1 ? "screen" : "screens"}`,
+  screens: count => `${enNumber(count)} ${count === 1 ? "screen" : "screens"}`,
   navLabel: (title, count) => `${title}, ${en.screens(count)}`,
-  home: (populated, total) => `${populated} of ${total} areas have screens. Every screen opens from ${SCHEME_HINT}.`,
+  home: (populated, total) => `${enNumber(populated)} of ${enNumber(total)} areas have screens. Every screen opens from ${SCHEME_HINT}.`,
   areaChecks: (prefix, area, url) => `Checks ${prefix}-… · e2e/checks/${area}.yaml · ${url}`,
   areaEmpty: area => `No screens registered yet. Add them in screens/${area}/index.tsx.`,
   notFound: "No such screen",
@@ -66,7 +74,7 @@ const en: Messages = {
   unsavedMessage: "Discard your changes?",
   keepEditing: "Keep editing",
   discard: "Discard",
-  number: String,
+  number: enNumber,
   areas: {
     "infra": "Gate infrastructure",
     "app-lifecycle": "App lifecycle",
@@ -115,7 +123,7 @@ function arabicScreens(count: number) {
   if (count === 0) return "لا توجد شاشات";
   if (count === 1) return "شاشة واحدة";
   if (count === 2) return "شاشتان";
-  return `${arabicDigits(count)} ${rest >= 3 && rest <= 10 ? "شاشات" : "شاشة"}`;
+  return `${arNumber(count)} ${rest >= 3 && rest <= 10 ? "شاشات" : "شاشة"}`;
 }
 
 const ar: Messages = {
@@ -124,7 +132,7 @@ const ar: Messages = {
   allScreens: "كل الشاشات",
   screens: arabicScreens,
   navLabel: (title, count) => `${title}، ${arabicScreens(count)}`,
-  home: (populated, total) => `المجالات التي لها شاشات: ${arabicDigits(populated)} من ${arabicDigits(total)}. تُفتح كل شاشة من ${SCHEME_HINT}.`,
+  home: (populated, total) => `المجالات التي لها شاشات: ${arNumber(populated)} من ${arNumber(total)}. تُفتح كل شاشة من ${SCHEME_HINT}.`,
   areaChecks: (prefix, area, url) => `الفحوص ${prefix}-… · e2e/checks/${area}.yaml · ${url}`,
   areaEmpty: area => `لا توجد شاشات مسجّلة بعد. أضفها في screens/${area}/index.tsx.`,
   notFound: "لا توجد شاشة بهذا الاسم",
@@ -147,7 +155,7 @@ const ar: Messages = {
   unsavedMessage: "هل تريد تجاهل تغييراتك؟",
   keepEditing: "متابعة التحرير",
   discard: "تجاهل",
-  number: arabicDigits,
+  number: arNumber,
   areas: {
     "infra": "بنية بوابة الإصدار",
     "app-lifecycle": "دورة حياة التطبيق",

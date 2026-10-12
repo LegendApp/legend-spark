@@ -28,12 +28,13 @@ export function printingAvailability() {
   return { printing: getPrintingAvailability(), "print-panel": getPrintingAvailability("printPanel"), "page-setup": getPrintingAvailability("pageSetup"), "pdf-export": getPrintingAvailability("pdfExport") };
 }
 
-const group = (value: number) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 const escape = (value: string) => value.replace(/[&<>"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[char]!);
 /** A multi-page report in the screen's language, right to left in Arabic. */
 export function reportHTML(t: PrintingMessages, locale: Locale) {
   const { report } = t;
-  const rows = report.regions.map((region, index) => `<tr><td>${escape(region)}</td><td>${group(1200 + index * 317)}</td><td>$${group(48000 + index * 9125)}</td></tr>`).join("");
+  // Grouped, in the locale's digits like every other number in the Kitchen Sink (shell/i18n.ts).
+  const group = new Intl.NumberFormat(locale);
+  const rows = report.regions.map((region, index) => `<tr><td>${escape(region)}</td><td>${group.format(1200 + index * 317)}</td><td>$${group.format(48000 + index * 9125)}</td></tr>`).join("");
   return `<html dir="${locale === "ar" ? "rtl" : "ltr"}" lang="${locale}"><body style="font-family: -apple-system, Helvetica; font-size: 12pt; color: #1d1d1f">
 <h1>${escape(report.title)}</h1><p style="color: #6e6e73">${escape(report.intro)}</p>
 <h2>${escape(report.tableHeading)}</h2>

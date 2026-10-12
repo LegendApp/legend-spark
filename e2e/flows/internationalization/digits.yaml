@@ -1,0 +1,34 @@
+appId: so.legend.spark.examples.kitchensink
+name: One digit system per locale in the shell and on screens
+intent: >
+  The shell and every screen format human-facing numbers with the catalog's number() (shell/i18n.ts), which is
+  Intl.NumberFormat for the locale under Hermes. On macOS that gives Western digits for "ar", so in Arabic, as in
+  English, the catalog summary, a sidebar count, Scroll direction's month numbers and hint, Motion's scroll rows,
+  Printing's default page setup (A4, 54-point margins after clearState) and Hang watchdog's block buttons show
+  Western digits and none of the Arabic-Indic digits the shell used to write by hand. JSON results, IDs and testIDs
+  are data, never formatted.
+checks: [I18N-DIGITS-01]
+tags: [internationalization]
+platforms: [macos]
+matrix:
+  locale: [en, ar]
+---
+- launchApp: { clearState: true }
+- assertVisible: { id: infra-shell-summary, text: '/^[0-9]+ of [0-9]+ areas have screens\./', when: { matrix: { locale: en } } }
+- assertVisible: { id: infra-shell-summary, text: '/^المجالات التي لها شاشات: [0-9]+ من [0-9]+\./', when: { matrix: { locale: ar } } }
+- assertVisible: { id: infra-shell-area-native-controls-count, text: '/^[0-9]+$/' }
+- launchApp: { openUrl: "spark-ks://internationalization/scroll-direction", stopApp: false }
+- assertText: { id: internationalization-scroll-direction-month-1, equals: "1" }
+- assertText: { id: internationalization-scroll-direction-month-12, equals: "12" }
+- assertText: { id: internationalization-scroll-direction-hint, equals: "Month 1 starts at the leading edge. Scroll toward the trailing edge for the rest.", when: { matrix: { locale: en } } }
+- assertText: { id: internationalization-scroll-direction-hint, equals: "يبدأ الشهر 1 من بداية السطر. مرّر نحو نهايته لرؤية البقية.", when: { matrix: { locale: ar } } }
+- launchApp: { openUrl: "spark-ks://motion-system/scroll-and-frames", stopApp: false }
+- assertText: { id: motion-system-scroll-and-frames-row-12, equals: "Row 12", when: { matrix: { locale: en } } }
+- assertText: { id: motion-system-scroll-and-frames-row-12, equals: "الصف 12", when: { matrix: { locale: ar } } }
+- launchApp: { openUrl: "spark-ks://document-model/printing", stopApp: false }
+- assertText: { id: document-model-printing-current-setup, equals: "A4 · Portrait · margins 54/54/54/54 pt", when: { matrix: { locale: en } } }
+- assertText: { id: document-model-printing-current-setup, equals: "A4 · عمودي · الهوامش 54/54/54/54 نقطة", when: { matrix: { locale: ar } } }
+- launchApp: { openUrl: "spark-ks://reliability-diagnostics/hang-watchdog", stopApp: false }
+- assertVisible: { id: reliability-diagnostics-hang-watchdog-block-3000, text: "Block for 3 s", when: { matrix: { locale: en } } }
+- assertVisible: { id: reliability-diagnostics-hang-watchdog-block-3000, text: "حظر لمدة 3 ث", when: { matrix: { locale: ar } } }
+- assertVisible: { id: reliability-diagnostics-hang-watchdog-block-500, text: "حظر لمدة 500 م.ث", when: { matrix: { locale: ar } } }

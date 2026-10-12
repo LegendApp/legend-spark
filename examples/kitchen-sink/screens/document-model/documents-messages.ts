@@ -1,5 +1,5 @@
 import { useI18n } from "../../shell/app-controller";
-import type { Locale } from "../../shell/i18n";
+import { MESSAGES, type Locale } from "../../shell/i18n";
 import type { DocumentCheck } from "./documents-demo";
 
 // Strings for the Documents screen. Results are error codes and file names from the API, so flows can
@@ -59,12 +59,13 @@ const en: DocumentsMessages = {
   running: "Running…",
 };
 
+const n = MESSAGES.ar.number;
 const ar: DocumentsMessages = {
   title: "المستندات",
   intro: "جلسة مستند واحدة على ملف مؤقت: تتبّع التعديلات يحرّك نقطة التعديل في هذه النافذة وأيقونة الملف، ويُتحقق من تعارض الحفظ داخل تنسيق الملفات، ويحفظ الحفظ التلقائي في المكان.",
-  untitled: number => number === 1 ? "بلا عنوان" : `بلا عنوان ${number}`,
+  untitled: number => number === 1 ? "بلا عنوان" : `بلا عنوان ${n(number)}`,
   sample: "مسودة ملاحظات لم تُحفظ بعد.\n",
-  copyName: (name, number) => number === 1 ? `نسخة من ${name}` : `نسخة ${number} من ${name}`,
+  copyName: (name, number) => number === 1 ? `نسخة من ${name}` : `نسخة ${n(number)} من ${name}`,
   sections: { availability: "التوفر", document: "المستند", operations: "العمليات", versions: "الإصدارات", checks: "الفحوص", duplicate: "النسخة" },
   state: { path: "المسار", untitled: "بلا عنوان", edited: "معدَّل", saved: "محفوظ", locked: "مقفل", readOnly: "للقراءة فقط", conflict: "تغيّر على القرص", autosave: "حفظ تلقائي في المكان بعد 0.8 ث" },
   actions: {
