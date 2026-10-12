@@ -240,8 +240,9 @@ int main() { @autoreleasepool {
   materialProps->crossfade = R"({"type":"timing","durationMs":200,"easing":[0,0,1,1]})";
   [material updateProps:materialProps oldProps:nullptr];
   SparkMotionMaterialStack *stack = [material valueForKey:@"motionMaterial"];
-  CHECK(stack.materialCount == 1 && [stack.subviews.firstObject isKindOfClass:NSVisualEffectView.class] && ((NSVisualEffectView *)stack.subviews.firstObject).blendingMode == NSVisualEffectBlendingModeWithinWindow);
-  CHECK(std::abs(stack.layer.opacity - 0.5) < 1e-6 && stack.tintLayer.backgroundColor && [[material valueForKey:@"motionCrossfade"][@"durationMs"] isEqual:@200]);
+  NSVisualEffectView *effect = (NSVisualEffectView *)stack.incomingLayer.delegate;
+  CHECK(stack.materialCount == 1 && [effect isKindOfClass:NSVisualEffectView.class] && effect.blendingMode == NSVisualEffectBlendingModeWithinWindow);
+  CHECK(std::abs(stack.materialsLayer.opacity - 0.5) < 1e-6 && stack.tintLayer.backgroundColor && [[material valueForKey:@"motionCrossfade"][@"durationMs"] isEqual:@200]);
 
   // Drag view: drag source, accepted types and enabled state come from the mount.
   RNDesktopDragView *drag = [[RNDesktopDragView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];

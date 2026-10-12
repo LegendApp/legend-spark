@@ -74,7 +74,7 @@ void SparkMotionApplyLayer(NSView<SparkMotionHost> *host, const Values &values)
     layer.mask = mask;  // React Native clears a view's mask when it invalidates its layer
   }
   if (SparkMotionMaterialStack *material = SparkMotionMaterialOf(host)) {
-    material.layer.opacity = std::clamp(values[MaterialIntensity], 0.0, 1.0);
+    material.materialsLayer.opacity = std::clamp(values[MaterialIntensity], 0.0, 1.0);
     material.tintLayer.opacity = std::clamp(values[MaterialTintOpacity], 0.0, 1.0);
     material.incomingLayer.opacity = std::clamp(values[MaterialCrossfade], 0.0, 1.0);
     [material setCornerRadius:layer.cornerRadius];
@@ -690,7 +690,7 @@ static NSArray<NSString *> *SparkMotionKeyPaths(Channel channel)
     case Channel::Shadow: return @[@"shadowOpacity", @"shadowRadius", @"shadowOffset"];
     case Channel::Blur: return @[@"filters.sparkBlur.inputRadius"];
     case Channel::Mask: return @[@"bounds", @"position", @"cornerRadius"];
-    case Channel::Material: return @[@"opacity", @"opacity", @"opacity"];  // the material stack's, the tint's and the incoming material's layers
+    case Channel::Material: return @[@"opacity", @"opacity", @"opacity"];  // the material views' container's, the tint's and the incoming material's layers
     case Channel::Count: break;
   }
   return @[];
@@ -769,7 +769,7 @@ static BOOL SparkMotionAnimating(Engine &engine, NSInteger tag, Channel channel,
     if (channel == Channel::Material && !material) continue;  // checkOwnable keeps plain MotionViews from animating it
     NSArray<NSString *> *keyPaths = SparkMotionKeyPaths(channel);
     for (NSUInteger index = 0; index < keyPaths.count; index++) {
-      CALayer *target = channel == Channel::Mask ? SparkMotionMask(host) : channel != Channel::Material ? layer : index == 0 ? material.layer : index == 1 ? material.tintLayer : material.incomingLayer;
+      CALayer *target = channel == Channel::Mask ? SparkMotionMask(host) : channel != Channel::Material ? layer : index == 0 ? material.materialsLayer : index == 1 ? material.tintLayer : material.incomingLayer;
       if (!target) continue;
       NSString *lead = [@"spark.motion." stringByAppendingString:keyPaths[index]], *loop = [lead stringByAppendingString:@".loop"];
       [target removeAnimationForKey:lead];

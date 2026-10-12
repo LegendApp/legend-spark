@@ -325,8 +325,9 @@ behind-window vibrancy (`macos.backgroundMaterial`, [windows](api-window-contrac
 | `tintColor` | A [color](#colors) drawn over the material at `materialTintOpacity` |
 | `crossfade` | How a change of material crossfades: a [`MotionTransition`](#layout-presence-and-shared-elements) (default: 250 ms, ease-in-out) |
 
-Liquid Glass has no `blendingMode`, `state` or `emphasized` (`E_UNSUPPORTED_OPTION`), takes the view's corner radius at
-rest (a `borderRadius` animation reshapes the glass when it settles), and needs macOS 26 and an app built with the macOS
+Liquid Glass has no `blendingMode`, `state` or `emphasized` (`E_UNSUPPORTED_OPTION`), takes the view's corner radius: a
+`borderRadius` animation reshapes the glass to its target radius at once, when the animation starts (the glass draws
+its own shape, which Core Animation cannot animate), and needs macOS 26 and an app built with the macOS
 26 SDK. `getMaterialAvailability(material)` asks the native side, so it is `{ available: true }` only when both have
 the material (`host-restriction` otherwise; `unsupported-platform` or `missing-module` like motion); rendering an
 unavailable material throws `E_UNAVAILABLE`.
@@ -334,12 +335,13 @@ unavailable material throws `E_UNAVAILABLE`.
 **Why a crossfade.** Material, blending mode and state are not animatable layer properties, and driving the
 window server's backdrop blur radius needs private Core Animation filters, which Spark does not use. So:
 
-* `materialIntensity` (default 1) is the opacity of the material, under the tint: 0 shows what is behind the view
-  unblurred, 1 the material. `materialTintOpacity` (default 1) is the opacity of `tintColor`. Both are engine
+* `materialIntensity` (default 1) is the opacity of the material views, under the tint, which it does not fade: 0
+  shows what is behind the view unblurred (with the tint over it), 1 the material. `materialTintOpacity` (default 1) is the opacity of `tintColor`. Both are engine
   properties: springs, timing, keyframes, interruption, telemetry, scroll links and captures work on them, baked into
   Core Animation keyframe animations on the material's and the tint's layers.
 * A change of `material` (or `blendingMode`, `state`, `emphasized`) adds the new material over the one showing and
-  the engine fades it in with `crossfade`; the old one is removed once it is covered. A change during a crossfade
+  the engine fades it in with `crossfade`; the old one is removed once it is covered. Overlapping crossfades keep at most three materials (the one showing, an
+interrupted one and the incoming one): a fourth change drops the oldest, which lies under the partly faded ones. A change during a crossfade
   leaves the material it interrupted as far as it got and fades the newest in over it, so nothing jumps. The
   crossfade is the engine property `materialCrossfade` (0 to 1): telemetry reports it and `waitForMotion` waits for
   it, but only material changes drive it (`animate` and `setMotionValues` reject it with `E_INVALID_ARGUMENT`). A

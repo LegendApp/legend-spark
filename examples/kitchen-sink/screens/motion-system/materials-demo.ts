@@ -1,3 +1,4 @@
+import { SparkError } from "@legendapp/spark/contracts";
 import { animate, getMaterialAvailability, spring, timing, type MotionMaterialName, type MotionTarget } from "@legendapp/spark/motion";
 import { settledValues } from "./effects-demo";
 
@@ -16,6 +17,12 @@ const GLASS: readonly MotionMaterialName[] = ["glass", "clearGlass"];
 const availability = (materials: readonly MotionMaterialName[]) => Object.fromEntries(materials.map(material => [material, getMaterialAvailability(material).available]));
 /** Whether this app on this macOS has each material. */
 export const materialAvailability = () => ({ visualEffects: availability(VISUAL_EFFECTS), glass: availability(GLASS) });
+
+/** Throws the typed reason Liquid Glass is unavailable here (an older macOS, or an app built with an older SDK). */
+export function requireGlass() {
+  const availability = getMaterialAvailability("glass");
+  if (!availability.available) throw new SparkError("E_UNAVAILABLE", `Liquid Glass is unavailable: ${availability.reason}`);
+}
 
 /** Fades the material in or out (its intensity); what is behind the panel shows unblurred at 0. */
 export const fadeMaterial = (target: MotionTarget | null, shown: boolean) =>

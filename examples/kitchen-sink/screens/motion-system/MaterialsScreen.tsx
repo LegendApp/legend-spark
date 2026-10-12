@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { View } from "react-native";
 import { Button } from "@legendapp/spark/ui";
 import { MotionMaterial, type MotionEnvironment, type MotionTarget } from "@legendapp/spark/motion";
-import { fadeMaterial, materialAvailability, STEPS, TINT, tintMaterial } from "./materials-demo";
+import { fadeMaterial, materialAvailability, requireGlass, STEPS, TINT, tintMaterial } from "./materials-demo";
 import { useMaterialsMessages } from "./materials-messages";
 import { useReadout } from "./motion-demo";
 import { useMotionEnvironment } from "./motion-lifecycle";
@@ -23,7 +23,7 @@ export function Materials() {
   const [glass, setGlass] = useState(false);
   const [shown, setShown] = useState({ material: true, tint: false });
   const toggle = (key: keyof typeof shown) => { setShown(state => ({ ...state, [key]: !state[key] })); return !shown[key]; };
-  const results = { material: useReadout(), tint: useReadout() };
+  const results = { material: useReadout(), tint: useReadout(), glass: useReadout() };
   const environment = useMotionEnvironment(panel, ENVIRONMENT);
   const available = materialAvailability();
   const material = glass ? "glass" : STEPS[step]!;
@@ -41,10 +41,12 @@ export function Materials() {
       <Readout testID={id("material")} text={JSON.stringify({ material })} />
       <Actions>
         <Button testID={id("next")} onPress={() => { setGlass(false); setStep(index => (index + 1) % STEPS.length); }}>{t.next}</Button>
-        {available.glass.glass && <Button testID={id("glass")} onPress={() => setGlass(on => !on)}>{t.glass}</Button>}
+        {/* Always offered, so the screen looks the same on every macOS: without Liquid Glass it reports why. */}
+        <Button testID={id("glass")} onPress={() => results.glass.run(async () => { requireGlass(); setGlass(!glass); return { glass: !glass }; })}>{t.glass}</Button>
         <Button testID={id("fade")} onPress={() => results.material.run(() => fadeMaterial(panel.current, toggle("material")))}>{t.fade}</Button>
         <Button testID={id("tint")} onPress={() => results.tint.run(() => tintMaterial(panel.current, toggle("tint")))}>{t.tint}</Button>
       </Actions>
+      <Readout testID={id("glass-result")} text={results.glass.text} />
       <Readout testID={id("fade-result")} text={results.material.text} />
       <Readout testID={id("tint-result")} text={results.tint.text} />
     </Section>

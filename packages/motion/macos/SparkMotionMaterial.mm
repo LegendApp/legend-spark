@@ -32,6 +32,7 @@ BOOL SparkMotionMaterialSupported(NSString *name)
 @end
 
 @implementation SparkMotionMaterialStack {
+  SparkMotionTintView *_materials;
   SparkMotionTintView *_tint;
 }
 
@@ -40,10 +41,13 @@ BOOL SparkMotionMaterialSupported(NSString *name)
   if ((self = [super initWithFrame:frame])) {
     self.wantsLayer = YES;
     self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    _materials = [[SparkMotionTintView alloc] initWithFrame:self.bounds];
     _tint = [[SparkMotionTintView alloc] initWithFrame:self.bounds];
-    _tint.wantsLayer = YES;
-    _tint.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-    [self addSubview:_tint];
+    for (NSView *view in @[_materials, _tint]) {
+      view.wantsLayer = YES;
+      view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+      [self addSubview:view];
+    }
   }
   return self;
 }
@@ -79,21 +83,18 @@ BOOL SparkMotionMaterialSupported(NSString *name)
   return view;
 }
 
-- (NSArray<NSView *> *)materials
-{
-  NSMutableArray<NSView *> *materials = [self.subviews mutableCopy];
-  [materials removeObject:_tint];
-  return materials;
-}
+- (NSArray<NSView *> *)materials { return _materials.subviews; }
 
 - (void)push:(NSView *)material replace:(BOOL)replace
 {
   if (replace) for (NSView *view in self.materials) [view removeFromSuperview];
-  material.frame = self.bounds;
+  material.frame = _materials.bounds;
   material.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  [self addSubview:material positioned:NSWindowBelow relativeTo:_tint];
+  [_materials addSubview:material];
+  while (self.materials.count > kSparkMotionMaterialLimit) [self.materials.firstObject removeFromSuperview];
 }
 
+- (CALayer *)materialsLayer { return _materials.layer; }
 - (CALayer *)incomingLayer { return self.materials.lastObject.layer; }
 - (CALayer *)tintLayer { return _tint.layer; }
 - (NSUInteger)materialCount { return self.materials.count; }

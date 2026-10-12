@@ -556,12 +556,18 @@ int main()
     faint[MaterialIntensity] = 0.25;
     [motion registerHost:panel initial:faint];
     SparkMotionMaterialStack *stack = panel.motionMaterial;
-    CHECK(stack.materialCount == 1 && stack.incomingLayer == sidebar.layer && std::abs(stack.layer.opacity - 0.25) < 1e-6 && stack.tintLayer.opacity == 1 && sidebar.layer.opacity == 1);
+    CHECK(stack.materialCount == 1 && stack.incomingLayer == sidebar.layer && std::abs(stack.materialsLayer.opacity - 0.25) < 1e-6 && stack.layer.opacity == 1 && stack.tintLayer.opacity == 1 && sidebar.layer.opacity == 1);
     Outcome *intensity = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"intensity", 15, @{ @"materialIntensity": Timing(1, 200), @"materialTintOpacity": Timing(0, 200) }) resolve:resolve reject:reject]; });
-    CHECK(!intensity->code && [stack.layer animationForKey:@"spark.motion.opacity"] && [stack.tintLayer animationForKey:@"spark.motion.opacity"] && ![panel.layer animationForKey:@"spark.motion.opacity"]);
-    CHECK(stack.layer.opacity == 1 && stack.tintLayer.opacity == 0);
+    CHECK(!intensity->code && [stack.materialsLayer animationForKey:@"spark.motion.opacity"] && ![stack.layer animationForKey:@"spark.motion.opacity"] && [stack.tintLayer animationForKey:@"spark.motion.opacity"] && ![panel.layer animationForKey:@"spark.motion.opacity"]);
+    CHECK(stack.materialsLayer.opacity == 1 && stack.tintLayer.opacity == 0);
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
     CHECK(intensity->resolved && [JSON(intensity->value)[@"finished"] isEqual:@YES]);
+    // Intensity fades only the material: at intensity 0 the tint still shows, over what is behind the view.
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @15, @"values": @{ @"materialIntensity": @0, @"materialTintOpacity": @1 } } resolve:resolve reject:reject]; });
+    CHECK(stack.materialsLayer.opacity == 0 && stack.tintLayer.opacity == 1 && stack.layer.opacity == 1);
+    NSView *tintView = (NSView *)stack.tintLayer.delegate, *materialsView = (NSView *)stack.materialsLayer.delegate;
+    CHECK(tintView.superview == stack && materialsView.superview == stack && [stack.subviews indexOfObject:tintView] > [stack.subviews indexOfObject:materialsView]);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @15, @"values": @{ @"materialIntensity": @1, @"materialTintOpacity": @0 } } resolve:resolve reject:reject]; });
     // A crossfade, interrupted halfway by another: the first stays as far as it got under the second until that covers it.
     NSView *hud = [SparkMotionMaterialStack materialView:@{ @"material": @"hudWindow" } error:&materialError];
     panel.motionCrossfade = @{ @"type": @"timing", @"durationMs": @400, @"easing": @[@0, @0, @1, @1] };
@@ -578,7 +584,19 @@ int main()
     NSDictionary *crossfading = panelTelemetry();
     CHECK([crossfading[@"animating"] containsObject:@"materialCrossfade"] && [crossfading[@"values"][@"materialCrossfade"] doubleValue] == 0);
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:400 resolve:resolve reject:reject]; });
-    CHECK(stack.materialCount == 1 && stack.incomingLayer == popover.layer && popover.superview == stack && !hud.superview && !sidebar.superview);
+    CHECK(stack.materialCount == 1 && stack.incomingLayer == popover.layer && popover.superview.superview == stack && !hud.superview && !sidebar.superview);
+    // Rapid changes keep at most three materials: the oldest, under the partly faded ones, is dropped.
+    NSMutableArray<NSView *> *rapid = [NSMutableArray new];
+    for (NSString *name in @[@"sidebar", @"menu", @"sheet", @"toolTip", @"titlebar", @"hudWindow"]) {
+      NSView *next = [SparkMotionMaterialStack materialView:@{ @"material": name } error:&materialError];
+      [rapid addObject:next];
+      [motion host:panel crossfadeTo:next];
+      CHECK(stack.materialCount <= kSparkMotionMaterialLimit && stack.incomingLayer == next.layer);
+      Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:50 resolve:resolve reject:reject]; });
+    }
+    CHECK(stack.materialCount == 3 && rapid[3].superview && rapid[4].superview && rapid[5].superview && !rapid[2].superview && !popover.superview);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:400 resolve:resolve reject:reject]; });
+    CHECK(stack.materialCount == 1 && stack.incomingLayer == rapid[5].layer);
     // Under Reduce Motion a crossfade is the 200 ms fade, without overshoot.
     [motion simulate:@{ @"reduceMotion": @YES }];
     panel.motionCrossfade = @{ @"type": @"spring", @"mass": @1, @"stiffness": @100, @"damping": @5 };

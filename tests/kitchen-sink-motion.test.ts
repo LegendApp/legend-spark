@@ -214,6 +214,7 @@ test("backdrop materials: Next and Glass crossfade the panel's material, Fade an
   expect(text(id("material"))).toBe('{"material":"popover"}');
   await press(id("glass"));
   expect(JSON.parse(panel().material)).toEqual({ material: "glass" });
+  expect(text(id("glass-result"))).toBe('{"glass":true}');
   native.getState.mockResolvedValue(JSON.stringify({ values: { ...JSON.parse(state0(0, 0)).values, materialIntensity: 0, materialTintOpacity: 1 }, velocities: JSON.parse(state0(0, 0)).velocities, animating: [] }));
   await press(id("fade"));
   expect(plans()[0].groups[0].tracks).toEqual({ materialIntensity: expect.objectContaining({ type: "timing", to: 0, durationMs: 400 }) });
@@ -222,12 +223,14 @@ test("backdrop materials: Next and Glass crossfade the panel's material, Fade an
   expect(plans()[1].groups[0].tracks).toEqual({ materialTintOpacity: expect.objectContaining({ type: "spring", to: 1 }) });
   expect(text(id("tint-result"))).toBe('{"finished":true,"materialTintOpacity":1}');
   await act(async () => rendered.unmount()); rendered = undefined;
-  // Without Liquid Glass (an older macOS or SDK), the screen offers no Glass button and says why.
+  // Without Liquid Glass (an older macOS or SDK), Glass reports why and the material stays.
   native.supportsMaterial.mockImplementation(name => !name.toLowerCase().includes("glass"));
   await mount(Materials);
   expect(text(id("material-availability"))).toBe(visualEffects);
   expect(text(id("glass-availability"))).toBe('{"glass":false,"clearGlass":false}');
-  expect(rendered.root.findAll((node: any) => typeof node.type === "string" && node.props.testID === id("glass"))).toHaveLength(0);
+  await press(id("glass"));
+  expect(text(id("glass-result"))).toBe("SparkError:E_UNAVAILABLE");
+  expect(JSON.parse(panel().material)).toEqual({ material: "hudWindow", blendingMode: "withinWindow" });
   native.supportsMaterial.mockImplementation(() => true);
 });
 

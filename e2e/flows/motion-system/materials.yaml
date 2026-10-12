@@ -6,7 +6,7 @@ intent: >
   (materialCrossfade); Next during that crossfade interrupts it and the
   menu material fades in over the sidebar one as far as it got. Fade animates the material's intensity to 0 and
   back on a timing curve, and Tint springs the tint's opacity in. Where this Mac has Liquid Glass (macOS 26 and its
-  SDK), Glass crossfades to it; the availability readouts report every visual effect material and both Liquid Glass
+  SDK), Glass crossfades to it; elsewhere it reports E_UNAVAILABLE and the material stays; the availability readouts report every visual effect material and both Liquid Glass
   styles. Goldens are captured at rest only, with
   the material faded out and with it tinted: captures render in-process, where every material draws as the same flat
   fill without blur, so materials and the crossfade are checked through the values the engine reports
@@ -25,9 +25,6 @@ matrix:
 - assertText: { id: motion-system-materials-environment, equals: '{"reduceMotion":false,"reduceTransparency":false}' }
 - assertText: { id: motion-system-materials-material, equals: '{"material":"hudWindow"}' }
 - assertText: { id: motion-system-materials-material-availability, equals: '{"titlebar":true,"selection":true,"menu":true,"popover":true,"sidebar":true,"headerView":true,"sheet":true,"windowBackground":true,"hudWindow":true,"fullScreenUI":true,"toolTip":true,"contentBackground":true,"underWindowBackground":true,"underPageBackground":true}' }
-# Liquid Glass is offered exactly where it is available.
-- assertText: { id: motion-system-materials-glass-availability, equals: '{"glass":true,"clearGlass":true}', when: { visible: { id: motion-system-materials-glass } } }
-- assertText: { id: motion-system-materials-glass-availability, equals: '{"glass":false,"clearGlass":false}', when: { notVisible: { id: motion-system-materials-glass } } }
 - setClock: virtual
 # A crossfade from the HUD material to the popover one.
 - tapOn: { id: motion-system-materials-next }
@@ -50,11 +47,20 @@ matrix:
 - assertMotion: { target: { id: motion-system-materials-panel }, kind: spring, settlesWithin: 1200ms }
 - assertText: { id: motion-system-materials-tint-result, equals: '{"finished":true,"materialTintOpacity":1}' }
 - assertScreenshot: { golden: materials-tinted, mask: [{ id: infra-shell-sidebar }, { id: motion-system-materials-glass-availability }] }
-# Liquid Glass, where this app and macOS have it.
-- tapOn: { id: motion-system-materials-glass, when: { visible: { id: motion-system-materials-glass } } }
-- assertText: { id: motion-system-materials-material, equals: '{"material":"glass"}', when: { visible: { id: motion-system-materials-glass } } }
-- assertMotion: { target: { id: motion-system-materials-panel }, kind: spring, settlesWithin: 1200ms, when: { visible: { id: motion-system-materials-glass } } }
-- takeScreenshot: materials-glass
+# Liquid Glass where this app and macOS have it; elsewhere Glass reports E_UNAVAILABLE and the material stays.
+- runFlow:
+    when: { visible: { text: '{"glass":true,"clearGlass":true}' } }
+    commands:
+      - tapOn: { id: motion-system-materials-glass }
+      - assertText: { id: motion-system-materials-glass-result, equals: '{"glass":true}' }
+      - assertText: { id: motion-system-materials-material, equals: '{"material":"glass"}' }
+      - assertMotion: { target: { id: motion-system-materials-panel }, kind: spring, settlesWithin: 1200ms }
+- runFlow:
+    when: { visible: { text: '{"glass":false,"clearGlass":false}' } }
+    commands:
+      - tapOn: { id: motion-system-materials-glass }
+      - assertText: { id: motion-system-materials-glass-result, equals: SparkError:E_UNAVAILABLE }
+      - assertText: { id: motion-system-materials-material, equals: '{"material":"menu"}' }
 # Reduce Motion: the spring crossfade plays as the 200 ms fade. Reduce Transparency is reported.
 - simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: true }
 - assertText: { id: motion-system-materials-environment, equals: '{"reduceMotion":true,"reduceTransparency":false}' }
