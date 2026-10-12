@@ -1,0 +1,14 @@
+appId: so.legend.spark.examples.kitchensink
+name: Release build carries every app icon size and the macOS 26 icon styles
+intent: >
+  Reads the app icon of the release build on disk, with no backend. Info.plist names the asset catalog icon
+  (CFBundleIconName) and the .icns file (CFBundleIconFile); the catalog has 32 to 1024 pixel renditions (16 to
+  512 points at 2x) and the .icns file for older macOS is valid. The Kitchen Sink icon is an Icon Composer document
+  (macos.icon), so the catalog carries its image stacks for the default (NSAppearanceNameAqua), dark
+  (NSAppearanceNameDarkAqua) and tintable (ISAppearanceTintable) appearances, which the clear and tinted styles
+  render. A build from PNG artwork with transparent corners has the sizes but no styles.
+checks: [APPR-ICONSIZE-01, APPR-ICONSTYLE-01]
+tags: [appearance-theming]
+platforms: [macos]
+---
+- assertAppIcon: { app: "${APP_PATH}", styles: [default, dark, clear, tinted] }

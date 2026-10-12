@@ -1,0 +1,14 @@
+appId: so.legend.spark.examples.kitchensink
+name: The app icon is typed unsupported on Windows
+intent: >
+  On Windows the App icon screen reports getAppIconAvailability() as unsupported-platform, and getAppIcon() rejects
+  SparkError:E_UNSUPPORTED_PLATFORM, which the screen shows. Implementation: #353.
+checks: [APPR-ICONUNSUP-01]
+tags: [appearance-theming]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://appearance-theming/app-icon" }
+- extendedWaitUntil: { visible: { id: appearance-theming-app-icon-root }, timeout: 10s }
+- assertText: { id: appearance-theming-app-icon-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- extendedWaitUntil: { visible: { id: appearance-theming-app-icon-error }, timeout: 10s }
+- assertText: { id: appearance-theming-app-icon-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }

@@ -10,6 +10,11 @@ export type HelperConfiguration = string | Partial<Record<HelperTarget, { direct
 export interface MacOSConfiguration {
   bundleIdentifier: string;
   buildNumber?: string;
+  /**
+   * The app icon, relative to the project: an Icon Composer `.icon` document (the macOS 26 default, dark, clear and
+   * tinted styles) or a PNG. Defaults to `expo.icon` (docs/configuration.md#app-icons).
+   */
+  icon?: string;
   infoPlist?: Record<string, JsonValue>;
   entitlements?: Record<string, JsonValue>;
   /**

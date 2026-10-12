@@ -7,8 +7,8 @@ import { toolchainRpathsPodfile } from "../packages/config-plugin/rpaths.cjs";
 import { macAppReader, parseMachO, parseSignature, type AppReader, type CodeSignature, type MachOSlice } from "../scripts/e2e/macho.ts";
 import { COMMANDS } from "../scripts/e2e/format/commands.ts";
 import { Failure } from "../scripts/e2e/runner/backend.ts";
-import { runFlows } from "../scripts/e2e/runner/executor.ts";
-import { ARTIFACT_COMMANDS, assertCodeSigning, assertEntitlements, assertLoadPaths } from "../scripts/e2e/runner/security.ts";
+import { BUILD_AUDITS, runFlows } from "../scripts/e2e/runner/executor.ts";
+import { assertCodeSigning, assertEntitlements, assertLoadPaths } from "../scripts/e2e/runner/security.ts";
 import { MemoryBackend, VirtualClock } from "./e2e-runner-backend.ts";
 
 type Spec = Partial<Omit<MachOSlice, "arch">> & { signature?: Partial<CodeSignature> };
@@ -200,7 +200,7 @@ describe("Mach-O and signature parsing", () => {
 
 describe("in flows", () => {
   test("every runner command has an implementation", () => {
-    expect(Object.keys(COMMANDS).filter(name => COMMANDS[name]!.runner).sort()).toEqual(Object.keys(ARTIFACT_COMMANDS).sort());
+    expect(Object.keys(COMMANDS).filter(name => COMMANDS[name]!.runner).sort()).toEqual(Object.keys(BUILD_AUDITS).sort());
   });
 
   test("a flow of runner commands alone starts no backend, so it never opens the app", async () => {

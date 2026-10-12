@@ -89,3 +89,5 @@
 - assertCodeSigning: { app: "${APP_PATH}" }
 - assertLoadPaths: "${APP_PATH}"
 - assertLoadPaths: { app: "${APP_PATH}" }
+- assertAppIcon: "${APP_PATH}"
+- assertAppIcon: { app: "${APP_PATH}", styles: [default, dark, clear, tinted] }

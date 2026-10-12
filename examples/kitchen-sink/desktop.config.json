@@ -12,6 +12,7 @@
   },
   "macos": {
     "bundleIdentifier": "so.legend.spark.examples.kitchensink",
+    "icon": "./assets/KitchenSink.icon",
     "testDriverPrivateEvents": true
   },
   "localizations": [
@@ -25,7 +26,8 @@
   ],
   "expo": {
     "name": "KitchenSink",
-    "slug": "spark-kitchen-sink"
+    "slug": "spark-kitchen-sink",
+    "icon": "./assets/icon.png"
   },
   "expoByPlatform": {
     "macos": {

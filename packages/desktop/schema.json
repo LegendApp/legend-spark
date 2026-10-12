@@ -182,6 +182,11 @@
         "buildNumber": {
           "type": "string"
         },
+        "icon": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The macOS app icon: an Icon Composer .icon document (default, dark, clear and tinted styles) or a PNG, relative to the project. Defaults to expo.icon (docs/configuration.md#app-icons)."
+        },
         "entitlements": {
           "type": "object"
         },

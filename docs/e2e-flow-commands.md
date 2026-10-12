@@ -248,6 +248,12 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | `assertCodeSigning` | value → `app` | `app`* | runner | Assert every Mach-O file of the app is signed by the main executable's team (not ad-hoc), every process has the hardened runtime, and none disables library validation. |
 | `assertLoadPaths` | value → `app` | `app`* | runner | Assert no load path lets a library from outside the bundle or the system into the app: LC_RPATH entries, dependencies (weak ones too) and LC_DYLD_ENVIRONMENT. On Windows: the DLL search order, not implemented yet (#51). |
 
+## Build audits
+
+| Command | Short form | Keys | Backend | Summary |
+|---|---|---|---|---|
+| `assertAppIcon` | value → `app` | `app`*, `styles` | runner | Assert the app's icon has every size the platform draws: on macOS 32 to 1024 px asset catalog renditions and a valid .icns, on Windows the executable's 16, 20, 24, 32, 40, 48, 64 and 256 px icons. `styles`: the macOS 26 Icon Composer styles it must carry (default, dark, clear, tinted). |
+
 ## Control flow
 
 | Command | Short form | Keys | Backend | Summary |

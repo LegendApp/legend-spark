@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: Windows build's executable carries every app icon size
+intent: >
+  Reads the first icon group (RT_GROUP_ICON) of the Windows build's executable on disk, with no backend: the icon
+  Explorer, the taskbar, Start and the title bar draw. It has 16, 20, 24, 32, 40, 48, 64 and 256 pixel images, built
+  from expo.icon (assets/icon.png). Not yet run on a Windows build (#353).
+checks: [APPR-ICONWIN-01]
+tags: [appearance-theming]
+platforms: [windows]
+---
+- assertAppIcon: "${APP_PATH}"

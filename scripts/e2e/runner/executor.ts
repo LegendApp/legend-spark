@@ -6,9 +6,10 @@ import { COMMANDS } from "../format/commands.ts";
 import { checkFlow, checkSubflow, formatDiagnostic, type Condition, type FlowAst, type FlowCommand, type SourceLocation } from "../format/parser.ts";
 import { NESTED, SELECTOR_PROPS } from "../format/primitives.ts";
 import {
-  Failure, RETRYABLE, type Artifact, type Backend, type Candidate, type CommandContext, type FailureKind, type Matrix, type Target, type WindowInfo,
+  Failure, RETRYABLE, type Artifact, type Backend, type Candidate, type CommandContext, type FailureKind, type Matrix, type Platform, type Target, type WindowInfo,
 } from "./backend.ts";
 import { writeBundle } from "./bundle.ts";
+import { assertAppIcon } from "./icons.ts";
 import { ARTIFACT_COMMANDS } from "./security.ts";
 import { assertScreenshot, takeScreenshot, type GoldenResult } from "./screenshot.ts";
 import { candidate, center, describe, filterElements, locate, nearby, parseSelector, parseWindow, pickWindows, type Finder, type Located, type Selector } from "./selectors.ts";
@@ -16,6 +17,8 @@ import { candidate, center, describe, filterElements, locate, nearby, parseSelec
 export const DEFAULT_TIMEOUT_MS = 5000;
 export const DEFAULT_FLOW_TIMEOUT_MS = 10 * 60_000;
 const POLL_MS = 100;
+/** Commands the runner runs over the build on disk; see `runner` in scripts/e2e/format/commands.ts. */
+export const BUILD_AUDITS: Readonly<Record<string, (args: Record<string, unknown>, platform: Platform) => void>> = { ...ARTIFACT_COMMANDS, assertAppIcon };
 
 export type Clock = { now(): number; sleep(ms: number): Promise<void> };
 export const realClock: Clock = { now: () => performance.now(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)) };
@@ -297,7 +300,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
       case "assertVisible": await find(observed(), selectorArgs(args), "any", timeoutMs); return;
       case "assertNotVisible": await find(observed(), selectorArgs(args), "none", timeoutMs); return;
     }
-    if (COMMANDS[command.name]!.runner) return ARTIFACT_COMMANDS[command.name]!(args, platform);
+    if (COMMANDS[command.name]!.runner) return BUILD_AUDITS[command.name]!(args, platform);
     const { backend, whiteBox } = route(command.name, backends, allowWhiteBox);
     if (whiteBox) step.whiteBox = true;
     const context: CommandContext = {

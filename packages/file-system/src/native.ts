@@ -15,12 +15,12 @@ export function native() {
 /**
  * Desktop targets implementing each optional file capability. Module presence is checked separately.
  * Windows omissions: bookmarks, Full Disk Access and coordination have no Windows counterpart; document versions are
- * NSFileVersion-backed (Windows: LegendApp/legend-spark#280); alternate
+ * NSFileVersion-backed (Windows: LegendApp/legend-spark#280); the app's own icon is macOS-only for now (Windows: LegendApp/legend-spark#353); alternate
  * data streams are not extended attributes; previews need a hosted IPreviewHandler (LegendApp/legend-spark#223).
  */
 const support = {
   bookmarks: ["macos"], fullDiskAccess: ["macos"], coordination: ["macos"], openWith: ["macos", "windows"],
-  fileIcons: ["macos", "windows"], thumbnails: ["macos", "windows"], quickLook: ["macos"], extendedAttributes: ["macos"],
+  fileIcons: ["macos", "windows"], appIcon: ["macos"], thumbnails: ["macos", "windows"], quickLook: ["macos"], extendedAttributes: ["macos"],
   quarantine: ["macos", "windows"], diskSpace: ["macos", "windows"], versions: ["macos"],
 } as const satisfies Record<string, readonly ("macos" | "windows")[]>;
 export type FileFeature = keyof typeof support;

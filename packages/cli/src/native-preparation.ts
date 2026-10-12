@@ -47,6 +47,7 @@ export function preparationChanges(previous: NativePreparation | undefined, curr
     reasons.push(updatesChanged ? "native configuration changed (updater settings)" : "native configuration changed");
   }
   if (previous.inputs.plugin !== current.inputs?.plugin) reasons.push("native host/config plugin changed");
+  if (previous.inputs.icon !== current.inputs?.icon) reasons.push("app icon changed");
   const before = new Map(previous.inputs.packages.map(([name, root, contents]) => [name, { root, contents }]));
   for (const [name, root, contents] of current.inputs?.packages ?? []) {
     const prior = before.get(name);

@@ -50,6 +50,31 @@ update signing, helper bundles and desktop lifecycle policy. Expo owns its plugi
 and mobile/web settings: put those under `expo`, or `expoByPlatform.<target>`.
 Those objects retain Expo's model rather than a renamed Spark facade.
 
+### App icons
+
+`macos.icon` is the macOS app icon, and `expo.icon` the icon for every other target and
+the macOS default. Paths are relative to the project. Without either, the app keeps the
+template's generic icon.
+
+- An Icon Composer document (`"macos.icon": "./assets/App.icon"`, made with Icon
+  Composer in Xcode 26) becomes the target's `AppIcon.icon` resource. Xcode 26 or later
+  compiles it into the default, dark, clear and tinted styles of macOS 26, plus the flat
+  icons earlier macOS shows. This is the way to get those styles.
+- A PNG whose corners are opaque (full-bleed artwork, such as an Expo icon) is wrapped in
+  a generated Icon Composer document: macOS masks it to the system shape and derives the
+  dark, clear and tinted styles itself. That also needs Xcode 26 or later.
+- A PNG with transparent corners already has its own shape. It fills every
+  `AppIcon.appiconset` slot (16 to 512 points at 1x and 2x), and macOS 26 shows it as a
+  legacy icon, without the styles.
+- Windows writes `expo.icon` (`expoByPlatform.windows.icon` overrides it) into the
+  executable's `.ico` at 16, 20, 24, 32, 40, 48, 64 and 256 pixels. Use a PNG.
+
+PNGs are scaled to cover a square; give at least 1024×1024 pixels. On macOS, editing the
+icon in place prepares the native project again on the next build. `getAppIcon()` returns the
+icon as Finder and the Dock draw it ([files](files.md#icons-thumbnails-and-quick-look)).
+The release gate audits it with `assertAppIcon`
+([e2e-flows](e2e-flows.md#app-icon-audit)).
+
 ## Existing Expo projects
 
 Keep Expo's configuration as the source of application name/version and compose it

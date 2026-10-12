@@ -38,7 +38,8 @@ function macOnly(command: string, platform: Platform) {
   if (platform === "windows") throw new Failure("unsupported", `${command} audits macOS code signatures; the Windows release build has no equivalent here`);
 }
 
-function verdict(command: string, problems: string[]) {
+/** Fails `command` with its problems, the first 40 listed. */
+export function verdict(command: string, problems: string[]) {
   if (!problems.length) return;
   const shown = problems.slice(0, 40);
   throw new Failure("assertion", `${command} found ${problems.length} problem${problems.length === 1 ? "" : "s"}:\n${shown.map(problem => `  ${problem}`).join("\n")}${problems.length > shown.length ? `\n  … and ${problems.length - shown.length} more` : ""}`);
