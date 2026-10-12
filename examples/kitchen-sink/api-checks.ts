@@ -3,7 +3,7 @@ import * as clipboard from "@legendapp/spark/clipboard";
 import * as secureStore from "@legendapp/spark/secure-storage";
 import * as links from "@legendapp/spark/links";
 import { clipboardRead, clipboardRoundTrip, secureStorageLifecycle, linkingResolution } from "./contract-cases";
-import type { TestDriver } from "./test-driver";
+import type { SDKTestDriver } from "./sdk-test-driver";
 
 type Check = (name: string, action: () => Promise<void>, contracts?: string[]) => Promise<void>;
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
@@ -12,7 +12,7 @@ async function until(predicate: () => boolean) {
   for (let attempt = 0; attempt < 100; attempt++) { if (predicate()) return; await delay(25); }
   throw new Error("Expected URL event was not delivered");
 }
-export async function runAPIChecks(check: Check, driver?: TestDriver, expectedInitial?: string | null) {
+export async function runAPIChecks(check: Check, driver: SDKTestDriver | null, expectedInitial?: string | null) {
   const token = `api-test-${Date.now()}`;
   const native = async (method: string, args: object = {}) => JSON.parse(await driver!.call(method, JSON.stringify(args)));
   await check("Expo clipboard: string read and presence", async () => {

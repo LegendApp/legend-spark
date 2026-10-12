@@ -22,12 +22,10 @@ writeJson(pkgFile, pkg);
 await run(root, managerCommand(packageManager(root), ["install"]));
 const configFile = path.join(root, "desktop.config.json");
 const originalConfig = readFileSync(configFile, "utf8");
-const originalDriver = readFileSync(path.join(root, "test-driver.ts"), "utf8");
 const configuration = readJson(configFile);
 configuration.scheme = "spark-api-test";
 configuration.macos = { ...configuration.macos, bundleIdentifier: "so.legend.spark.prototype.apiadapters" };
 writeJson(configFile, configuration);
-writeFileSync(path.join(root, "test-driver.ts"), 'import driver from "@legendapp/spark-sdk-test-driver";\nexport type TestDriver = typeof driver;\nexport const testDriver = driver;\n');
 const directory = path.join(root, ".spark/api-results"); mkdirSync(directory, { recursive: true });
 const port = await availablePort();
 let metro: ReturnType<typeof spawnProcess> | undefined;
@@ -113,5 +111,4 @@ try {
   if (application) await run(root, [lsregister, "-u", application]);
   if (staging) rmSync(staging, { recursive: true });
   writeFileSync(configFile, originalConfig); prepareConfig(root);
-  writeFileSync(path.join(root, "test-driver.ts"), originalDriver);
 }

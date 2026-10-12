@@ -1,12 +1,12 @@
 import React, { useEffect, useRef } from "react";
-import { Text, View, TurboModuleRegistry, type TurboModule } from "react-native";
+import { Text, View } from "react-native";
 import { WebView } from "@legendapp/spark/webview";
 import { writeText } from "@legendapp/spark/files";
 import { runExpansionChecks } from "./expansion-checks";
 import { DragDropView } from "@legendapp/spark/drag-drop";
 import { showMessage } from "@legendapp/spark/dialogs";
 const dragSource = { text: "Drag this text" };
-const driver = TurboModuleRegistry.get<TurboModule & { call(method: string, args: string): Promise<string> }>("NativeSDKTestDriver");
+import { sdkTestDriver } from "./sdk-test-driver";
 const source = { html: '<html><body><p id="value">initial</p></body></html>' };
 const injection = "document.getElementById('value').textContent='native-to-web'; window.ReactNativeWebView.postMessage(document.getElementById('value').textContent); true;";
 export function ExpansionChecks({ report }: { report: string }) {
@@ -26,6 +26,7 @@ export function ExpansionChecks({ report }: { report: string }) {
         while (!webMessage.current && !webError.current && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
         if (webMessage.current !== "native-to-web") throw new Error(webError.current || `Missing WebView message: ${webMessage.current}`);
       });
+      const driver = sdkTestDriver;
       if (driver) {
         await check("drag source hit testing and native drop events reach JavaScript", async () => {
           await driver.call("dragDrop", "{}");
