@@ -1038,6 +1038,26 @@ static char RNSidebarSplitViewStartupKey;
   [self publishSplitViewLayoutAllowEstimatedReady:NO];
 }
 
+// Each item view lays its pane out by its own direction, not the split view's. macOS 26 floats the sidebar
+// pane in glass inset from the item's outer edge, and places it from the item's direction when the item
+// moves into a window, so a split already in one is re-hosted to place it again.
+- (void)updateItemLayoutDirection
+{
+  NSUserInterfaceLayoutDirection direction = _splitViewController.splitView.userInterfaceLayoutDirection;
+  BOOL changed = NO;
+  for (NSView *item in _splitViewController.splitView.arrangedSubviews) {
+    if (item.userInterfaceLayoutDirection != direction) {
+      item.userInterfaceLayoutDirection = direction;
+      item.needsLayout = YES;
+      changed = YES;
+    }
+  }
+  if (changed && self.window) {
+    [_splitViewController.view removeFromSuperview];
+    [self addSubview:_splitViewController.view];
+  }
+}
+
 - (void)layoutSplitView
 {
   if (_layingOutSplitView) {
@@ -1049,6 +1069,7 @@ static char RNSidebarSplitViewStartupKey;
   _splitViewController.splitView.frame = bounds;
   [self updateSplitItemSizing];
   [self updateListItem];
+  [self updateItemLayoutDirection];
   [self updateSidebarCollapsed];
   if (_contentContainer.bounds.size.width <= 0 ||
       _contentContainer.bounds.size.height <= 0 ||
