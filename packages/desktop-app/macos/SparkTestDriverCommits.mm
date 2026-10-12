@@ -134,12 +134,13 @@ void SparkDriverCommits(NSString *command, NSDictionary *request, SparkTestDrive
     return;
   }
   if (!watch) { reply(SparkDriverFailure(@"E_INVALID_STATE", @"Commits are not being watched; startCommits first")); return; }
+  // Taken at once, so a second stopCommits while this one waits to settle fails instead of releasing the observer twice.
   SparkDriverCommitWatch *done = watch;
+  watch = nil;
   SparkDriverWhenSettled(request[@"timeoutMs"], ^(BOOL settled) {
     [done snapshot];
     CFRunLoopObserverInvalidate(done.observer);
     CFRelease(done.observer);
-    watch = nil;
     if (!settled) { reply(SparkDriverFailure(@"E_NOT_SETTLED", @"The UI kept mounting changes until the timeout")); return; }
     NSMutableArray *relayouts = [NSMutableArray new];
     for (SparkDriverViewRecord *record in done.views.objectEnumerator)
