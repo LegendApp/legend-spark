@@ -1,0 +1,33 @@
+appId: so.legend.spark.examples.kitchensink
+name: Special window types are typed unsupported on Windows
+intent: >
+  On Windows, Multiwindow > Special windows lists every special window type as unsupported-platform, and each
+  factory step rejects E_UNSUPPORTED_PLATFORM without opening a window. Windows implementations are tracked in #394.
+checks: [MW-SPECIAL-11]
+tags: [multiwindow]
+platforms: [windows]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/special-windows" }
+- extendedWaitUntil: { visible: { id: multiwindow-special-windows-root }, timeout: 10s }
+- assertVisible: { id: multiwindow-special-windows-availability-commandBar-unsupported-platform }
+- assertVisible: { id: multiwindow-special-windows-availability-hud-unsupported-platform }
+- assertVisible: { id: multiwindow-special-windows-availability-preview-unsupported-platform }
+- assertVisible: { id: multiwindow-special-windows-availability-pictureInPicture-unsupported-platform }
+- assertVisible: { id: multiwindow-special-windows-availability-popover-unsupported-platform }
+- assertVisible: { id: multiwindow-special-windows-availability-edgeDrawer-unsupported-platform }
+- assertVisible: { id: multiwindow-special-windows-availability-overlay-unsupported-platform }
+- assertVisible: { id: multiwindow-special-windows-availability-desktopWidget-unsupported-platform }
+- assertVisible: { id: multiwindow-special-windows-availability-presenter-unsupported-platform }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=bar" }
+- assertVisible: { id: multiwindow-special-windows-run-1-steps-1 }
+- assertVisible: { id: multiwindow-special-windows-error-E_UNSUPPORTED_PLATFORM }
+- assertText: { id: multiwindow-special-windows-bar, equals: closed }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=pip" }
+- assertVisible: { id: multiwindow-special-windows-run-2-steps-1 }
+- assertVisible: { id: multiwindow-special-windows-error-E_UNSUPPORTED_PLATFORM }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=presenter" }
+- assertVisible: { id: multiwindow-special-windows-run-3-steps-1 }
+- assertVisible: { id: multiwindow-special-windows-error-E_UNSUPPORTED_PLATFORM }
+- assertWindow: { count: 1 }

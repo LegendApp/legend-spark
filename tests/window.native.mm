@@ -361,6 +361,12 @@ static void TestShownTabs(RNDesktopWindows *api) {
   Pump();
   puts("Shown window tabs passed");
 }
+// A simulated display as the driver takes it (docs/displays.md#simulated-displays), with a menu bar of `menuBar` points.
+static NSDictionary *SimulatedDisplay(NSString *identifier, BOOL primary, double x, double y, double width, double height, double menuBar) {
+  return @{ @"id": identifier, @"persistentId": NSNull.null, @"name": identifier, @"primary": @(primary), @"origin": @{ @"x": @(x), @"y": @(y) },
+    @"size": @{ @"width": @(width), @"height": @(height) }, @"workArea": @{ @"x": @0, @"y": @(menuBar), @"width": @(width), @"height": @(height - menuBar) }, @"scaleFactor": @2,
+    @"safeArea": @{ @"top": @(menuBar), @"left": @0, @"bottom": @0, @"right": @0 } };
+}
 static NSDictionary *DriverCommand(NSString *name, NSDictionary *request) {
   __block NSDictionary *answer = nil; driverCommands[name](request, ^(NSDictionary *value) { answer = value; }); Pump(); return answer;
 }
@@ -370,10 +376,12 @@ static void TestDisplays(RNDesktopWindows *api) {
   Call(api, @"observeDisplays", @{}); assert(!failure);
   NSDictionary *snapshot = SparkArgs(reply); double sequence = [snapshot[@"sequence"] doubleValue];
   assert([snapshot[@"displays"] count] == NSScreen.screens.count);
-  NSArray *simulated = @[@{ @"id": @"901", @"primary": @YES }];
+  NSArray *simulated = @[SimulatedDisplay(@"901", YES, 0, 0, 1512, 982, 32)];
   assert([DriverCommand(@"simulateDisplays", @{ @"displays": simulated })[@"ok"] boolValue]);
   assert([simulatedState isEqual:@{ @"maximumFramesPerSecond": NSNull.null }]);  // no refresh rate given
-  NSArray *promotion = @[@{ @"id": @"902", @"primary": @NO, @"refreshRate": @{ @"maximum": @60 } }, @{ @"id": @"901", @"primary": @YES, @"refreshRate": @{ @"maximum": @120 } }];
+  NSMutableDictionary *external = [SimulatedDisplay(@"902", NO, 1512, 0, 1920, 1080, 0) mutableCopy], *builtIn = [SimulatedDisplay(@"901", YES, 0, 0, 1512, 982, 32) mutableCopy];
+  external[@"refreshRate"] = @{ @"maximum": @60 }; builtIn[@"refreshRate"] = @{ @"maximum": @120 };
+  NSArray *promotion = @[external, builtIn];
   assert([DriverCommand(@"simulateDisplays", @{ @"displays": promotion })[@"ok"] boolValue] && [simulatedState isEqual:@{ @"maximumFramesPerSecond": @120 }]);
   assert([DriverCommand(@"simulateDisplays", @{ @"displays": simulated })[@"ok"] boolValue]);
   NSDictionary *event = events.lastObject;
@@ -381,7 +389,9 @@ static void TestDisplays(RNDesktopWindows *api) {
   Call(api, @"displayDetails", @{}); assert([SparkArgs(reply) isEqual:simulated]);
   assert([DriverCommand(@"simulateDisplays", @{ @"displays": NSNull.null })[@"ok"] boolValue]);
   assert([events.lastObject[@"displays"] count] == NSScreen.screens.count && [simulatedState isEqual:@{ @"maximumFramesPerSecond": NSNull.null }]);
-  for (id invalid in @[@[], @"901", @[@1]]) assert([DriverCommand(@"simulateDisplays", @{ @"displays": invalid })[@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
+  NSDictionary *bare = @{ @"id": @"902", @"primary": @NO };
+  NSArray *twoPrimaries = @[SimulatedDisplay(@"901", YES, 0, 0, 800, 600, 0), SimulatedDisplay(@"902", YES, 800, 0, 800, 600, 0)];
+  for (id invalid in @[@[], @"901", @[@1], @[@{ @"id": @"901", @"primary": @YES }], @[simulated.firstObject, bare], twoPrimaries]) assert([DriverCommand(@"simulateDisplays", @{ @"displays": invalid })[@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
   assert([DriverCommand(@"simulateDisplays", @{})[@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
   Call(api, @"unobserveDisplays", @{}); assert(!failure);
   NSUInteger count = events.count;
@@ -410,6 +420,61 @@ static void TestSessionFrames(RNDesktopWindows *api) {
   Pump(); driverActive = NO;
   [NSUserDefaults.standardUserDefaults removeObjectForKey:SavedStateKey(@"session-copy")];
   puts("Window session frames passed");
+}
+// Special window types (docs/api-window-contract.md#special-window-types): collection behaviors, and in driver mode
+// window geometry on simulated displays and corner snapping. Windows are never on screen.
+static void TestSpecialWindows(RNDesktopWindows *api) {
+  driverActive = YES;
+  NSPanel *panel = (NSPanel *)RealWindow(@"special-panel", NSPanel.class);
+  panel.styleMask |= NSWindowStyleMaskNonactivatingPanel;
+  Call(api, @"completeOpen", @{ @"id": @"special-panel", @"size": @{ @"width": @400, @"height": @300 }, @"macos": @{ @"spaces": @"all", @"fullScreenAuxiliary": @YES, @"stationary": @YES, @"ignoresCycle": @YES } }); assert(!failure);
+  NSWindowCollectionBehavior behavior = panel.collectionBehavior;
+  assert(behavior & NSWindowCollectionBehaviorCanJoinAllSpaces); assert(behavior & NSWindowCollectionBehaviorFullScreenAuxiliary); assert(!(behavior & NSWindowCollectionBehaviorFullScreenPrimary));
+  assert(behavior & NSWindowCollectionBehaviorStationary); assert(behavior & NSWindowCollectionBehaviorIgnoresCycle); assert(!OnScreen(panel));
+  Call(api, @"options", @{ @"id": @"special-panel", @"options": @{ @"macos": @{ @"fullScreenAuxiliary": @NO, @"stationary": @NO, @"ignoresCycle": @NO } } }); assert(!failure);
+  behavior = panel.collectionBehavior;
+  assert(!(behavior & (NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorStationary | NSWindowCollectionBehaviorIgnoresCycle))); assert(behavior & NSWindowCollectionBehaviorCanJoinAllSpaces);
+
+  // Simulated displays: 901 (primary, 32-point menu bar) and 902 to its right, 100 points lower.
+  NSArray *displays = @[SimulatedDisplay(@"901", YES, 0, 0, 1512, 982, 32), SimulatedDisplay(@"902", NO, 1512, 100, 1920, 1080, 0)];
+  assert([DriverCommand(@"simulateDisplays", @{ @"displays": displays })[@"ok"] boolValue]);
+  Call(api, @"displays", @{}); assert(!failure);
+  NSArray *info = (NSArray *)SparkArgs(reply);
+  assert(info.count == 2 && [info[1][@"id"] isEqual:@"902"] && ![info[1][@"primary"] boolValue] && [info[0][@"workArea"][@"y"] isEqual:@32] && [info[1][@"size"][@"width"] isEqual:@1920]);
+  NSWindow *audience = RealWindow(@"special-audience");
+  Call(api, @"completeOpen", @{ @"id": @"special-audience", @"position": @{ @"displayId": @"902", @"x": @0, @"y": @0 }, @"size": @{ @"width": @1920, @"height": @1080 } }); assert(!failure);
+  // AppKit global frame: x from the origin, Y upward from the primary display's bottom (982 - 100 - 1080).
+  assert(NSEqualRects(audience.frame, NSMakeRect(1512, -198, 1920, 1080)));
+  Call(api, @"info", @{ @"id": @"special-audience" }); assert([SparkArgs(reply)[@"bounds"] isEqual:(@{ @"displayId": @"902", @"x": @0, @"y": @0, @"width": @1920, @"height": @1080 })]);
+  NSWindow *controller = RealWindow(@"special-controller");
+  Call(api, @"completeOpen", @{ @"id": @"special-controller", @"size": @{ @"width": @1000, @"height": @700 } }); assert(!failure);
+  Call(api, @"info", @{ @"id": @"special-controller" }); assert([SparkArgs(reply)[@"bounds"] isEqual:(@{ @"displayId": @"901", @"x": @256, @"y": @157, @"width": @1000, @"height": @700 })]);
+  Call(api, @"center", @{ @"id": @"special-controller", @"displayId": @"902" }); assert(!failure);
+  Call(api, @"info", @{ @"id": @"special-controller" }); assert([SparkArgs(reply)[@"bounds"] isEqual:(@{ @"displayId": @"902", @"x": @460, @"y": @190, @"width": @1000, @"height": @700 })]);
+  // A window that is not on screen moves at once: an animated move resolves without AppKit's on-screen animation.
+  Call(api, @"bounds", @{ @"id": @"special-controller", @"durationMs": @200, @"bounds": @{ @"displayId": @"902", @"x": @10, @"y": @20, @"width": @1000, @"height": @700 } });
+  assert(!failure && [reply isEqual:@"null"]); assert([SparkWindowBounds(controller) isEqual:(@{ @"displayId": @"902", @"x": @10, @"y": @20, @"width": @1000, @"height": @700 })]);
+  Call(api, @"bounds", @{ @"id": @"special-controller", @"bounds": @{ @"displayId": @"903", @"x": @0, @"y": @0, @"width": @400, @"height": @300 } }); assert([failure isEqual:@"E_NOT_FOUND"]);
+
+  // Corner snapping: a move ends at the nearest corner of the work area, inset by the margin.
+  Call(api, @"options", @{ @"id": @"special-controller", @"options": @{ @"macos": @{ @"cornerSnapping": @{ @"margin": @16 } } } }); assert(!failure);
+  Call(api, @"bounds", @{ @"id": @"special-controller", @"bounds": @{ @"displayId": @"901", @"x": @100, @"y": @80, @"width": @400, @"height": @300 } }); assert(!failure);
+  for (int i = 0; i < 50 && ![SparkWindowBounds(controller)[@"x"] isEqual:@16]; ++i) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  assert([SparkWindowBounds(controller) isEqual:(@{ @"displayId": @"901", @"x": @16, @"y": @48, @"width": @400, @"height": @300 })]);
+  Call(api, @"bounds", @{ @"id": @"special-controller", @"bounds": @{ @"displayId": @"902", @"x": @1500, @"y": @700, @"width": @400, @"height": @300 } }); assert(!failure);
+  for (int i = 0; i < 50 && ![SparkWindowBounds(controller)[@"x"] isEqual:@1504]; ++i) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  assert([SparkWindowBounds(controller) isEqual:(@{ @"displayId": @"902", @"x": @1504, @"y": @764, @"width": @400, @"height": @300 })]);
+  Call(api, @"options", @{ @"id": @"special-controller", @"options": @{ @"macos": @{ @"cornerSnapping": NSNull.null } } }); assert(!failure);
+  Call(api, @"bounds", @{ @"id": @"special-controller", @"bounds": @{ @"displayId": @"902", @"x": @700, @"y": @300, @"width": @400, @"height": @300 } }); assert(!failure);
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.3]];
+  assert([SparkWindowBounds(controller) isEqual:(@{ @"displayId": @"902", @"x": @700, @"y": @300, @"width": @400, @"height": @300 })]);
+
+  assert([DriverCommand(@"simulateDisplays", @{ @"displays": NSNull.null })[@"ok"] boolValue]);
+  Call(api, @"displays", @{}); assert([SparkArgs(reply) count] == NSScreen.screens.count);
+  assert(!OnScreen(panel) && !OnScreen(audience) && !OnScreen(controller));
+  for (NSWindow *window in @[panel, audience, controller]) [window close];
+  Pump(); driverActive = NO;
+  puts("Special windows passed");
 }
 static void TestGuards(RNDesktopWindows *api) {
   TestWindow *window = [TestWindow new]; windows[@"editor"] = (NSWindow *)window;
@@ -446,8 +511,9 @@ int main(int argc, char **argv) { @autoreleasepool {
     @"driver": ^(RNDesktopWindows *a) { TestDriverMode(a); }, @"tabs": ^(RNDesktopWindows *a) { TestWindowTabs(a); },
     @"shown-tabs": ^(RNDesktopWindows *a) { TestShownTabs(a); }, @"tab-restoration": ^(RNDesktopWindows *a) { TestTabRestoration(a); },
     @"displays": ^(RNDesktopWindows *a) { TestDisplays(a); }, @"session-frames": ^(RNDesktopWindows *a) { TestSessionFrames(a); },
+    @"special": ^(RNDesktopWindows *a) { TestSpecialWindows(a); },
   };
   NSString *only = argc > 1 && argv[1][0] != '-' ? @(argv[1]) : nil;
   if (only && !suites[only]) { fprintf(stderr, "Unknown suite %s\n", argv[1]); return 2; }
-  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration", @"displays", @"session-frames"]) if (!only || [only isEqual:name]) suites[name](api);
+  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration", @"displays", @"session-frames", @"special"]) if (!only || [only isEqual:name]) suites[name](api);
 } }

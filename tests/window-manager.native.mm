@@ -356,6 +356,22 @@ int main() { @autoreleasepool {
     @"titlebarAppearsTransparent": @NO, @"hasToolbar": @NO } });
   assert(chrome.level == NSNormalWindowLevel); assert(!chrome.representedURL); assert(![chrome standardWindowButton:NSWindowCloseButton].hidden);
   assert(chrome.titleVisibility == NSWindowTitleVisible); assert(!chrome.titlebarAppearsTransparent); assert(!chrome.toolbar);
+  // Special window types: the HUD panel style and the desktop level (never shown).
+  NSPanel *hud = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];
+  hud.releasedWhenClosed = NO; manager.windows[@"hud"] = hud;
+  NSDictionary *constants = [NSJSONSerialization JSONObjectWithData:[[manager getConstantsJson] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+  assert([constants[@"WINDOW_LEVEL_DESKTOP"] integerValue] == CGWindowLevelForKey(kCGDesktopWindowLevelKey) + 1);
+  assert([constants[@"WINDOW_LEVEL_DESKTOP"] integerValue] < CGWindowLevelForKey(kCGDesktopIconWindowLevelKey));
+  __block BOOL hudApplied = NO;
+  [manager setWindowOptions:@"hud" optionsJson:[manager jsonStringFromObject:@{ @"level": constants[@"WINDOW_LEVEL_DESKTOP"], @"windowStyle": @{ @"panelStyle": @"hud" } }] resolve:^(id result) { hudApplied = [result containsString:@"true"]; } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  assert(hudApplied);
+  assert((hud.styleMask & (NSWindowStyleMaskHUDWindow | NSWindowStyleMaskUtilityWindow | NSWindowStyleMaskTitled)) == (NSWindowStyleMaskHUDWindow | NSWindowStyleMaskUtilityWindow | NSWindowStyleMaskTitled));
+  assert(!(hud.styleMask & NSWindowStyleMaskNonactivatingPanel)); assert(hud.level == CGWindowLevelForKey(kCGDesktopWindowLevelKey) + 1); assert(!hud.visible);
+  assert(hud.hidesOnDeactivate);
+  // A non-activating panel stays on screen while another app is active.
+  [manager setWindowOptions:@"hud" optionsJson:[manager jsonStringFromObject:@{ @"windowStyle": @{ @"panelStyle": @"nonactivating" } }] resolve:^(id) {} reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+  assert(hud.styleMask & NSWindowStyleMaskNonactivatingPanel); assert(!(hud.styleMask & NSWindowStyleMaskHUDWindow)); assert(!hud.hidesOnDeactivate);
+  [manager.windows removeObjectForKey:@"hud"]; [hud close];
   // Test driver mode records the window as shown without ordering it on screen.
   driverActive = YES;
   [manager showWindow:@"chrome" resolve:^(id result) { assert([result containsString:@"true"]); } reject:^(NSString *, NSString *, NSError *) { assert(false); }];

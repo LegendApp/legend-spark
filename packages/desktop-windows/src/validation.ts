@@ -113,12 +113,16 @@ function entries(value: unknown, name: string): ObjectValue[] {
   return value;
 }
 export function validateMacOS(value: MacOSWindowOptions) {
-  object(value, "macos"); keys(value, ["panelStyle", "representedUri", "level", "titleBar", "toolbar", "startupSplitView", "restoreOnLaunch", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial"]);
-  enumValue(value.panelStyle, ["utility", "documentModal", "nonactivating"], "panelStyle");
-  enumValue(value.level, ["normal", "floating", "modalPanel", "mainMenu", "status", "screenSaver"], "level");
+  object(value, "macos"); keys(value, ["panelStyle", "representedUri", "level", "titleBar", "toolbar", "startupSplitView", "restoreOnLaunch", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "fullScreenAuxiliary", "stationary", "ignoresCycle", "cornerSnapping"]);
+  enumValue(value.panelStyle, ["utility", "documentModal", "nonactivating", "hud"], "panelStyle");
+  enumValue(value.level, ["normal", "floating", "modalPanel", "mainMenu", "status", "screenSaver", "desktop"], "level");
   enumValue(value.spaces, ["default", "all", "active"], "spaces");
   enumValue(value.backgroundMaterial, ["none", "sidebar", "windowBackground", "hudWindow", "popover"], "backgroundMaterial");
-  flags(value, ["restoreOnLaunch", "simpleFullscreen", "documentEdited"]);
+  flags(value, ["restoreOnLaunch", "simpleFullscreen", "documentEdited", "fullScreenAuxiliary", "stationary", "ignoresCycle"]);
+  if (value.cornerSnapping !== undefined && value.cornerSnapping !== null) {
+    object(value.cornerSnapping, "cornerSnapping"); keys(value.cornerSnapping, ["margin"]);
+    number(value.cornerSnapping.margin, "cornerSnapping.margin", 0, 500);
+  }
   if (value.representedUri !== undefined && value.representedUri !== null) {
     text(value.representedUri, "represented URI", false);
     try { new URL(value.representedUri); } catch { throw new SparkError("E_INVALID_ARGUMENT", "representedUri must be an absolute URI"); }

@@ -102,8 +102,11 @@ exactly those displays and reports the change to listeners, and `"displays": nul
 real ones. Flows use it as `simulateDisplays: { displays: [...] }` and
 `simulateDisplays: { restore: true }` ([e2e-flow-commands.md](e2e-flow-commands.md)). It exists only in
 driver mode and changes nothing in the OS: no resolution, arrangement or refresh rate changes, and no
-display sleep. Window geometry (`@legendapp/spark/windows`, including its `getDisplays`) keeps using the
-real displays.
+display sleep. Every display needs a unique `id`, `primary` (exactly one), `origin`, a positive `size`, a
+`workArea` and a positive `scaleFactor`; anything else rejects `E_INVALID_ARGUMENT`. While displays are simulated,
+window geometry (`@legendapp/spark/windows`: `getDisplays`, `getCursorPoint`, window bounds, `position`,
+`setWindowBounds` and `centerWindow`) uses them as well, placing windows by each display's `origin` and work
+area, so special windows such as presenter mode can be tested on two displays. Driven windows are never on screen.
 
 ## Platforms
 

@@ -113,6 +113,12 @@ describe("command mapping", () => {
     expect(calls).toEqual([[expect.objectContaining({ id: "7", persistentId: null, colorSpace: { name: null, gamut: "srgb" }, edrHeadroom: { current: 1, potential: 1, reference: null } })], null]);
   });
 
+  test("simulateGlobalShortcut presses a registered global shortcut by its parsed key and modifier flags", async () => {
+    const { result, app } = await run("- launchApp\n- simulateGlobalShortcut: cmd+shift+space");
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => line.startsWith("simulateGlobalShortcut"))).toEqual([`simulateGlobalShortcut ${JSON.stringify({ key: " ", modifiers: (1 << 20) | (1 << 17) })}`]);
+  });
+
   test("setClipboard writes the app's test pasteboard; assertClipboard checks its types and text", async () => {
     const { result, app } = await run("- launchApp\n- setClipboard: { text: copied, html: \"<b>copied</b>\", concealed: true }\n- assertClipboard: { types: [public.html, org.nspasteboard.ConcealedType], text: copied }");
     expect(result.status).toBe("passed");

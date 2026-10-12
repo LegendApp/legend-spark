@@ -17,7 +17,7 @@ test.skipIf(process.platform !== "darwin")("native window guards settle close de
     // The harness strips the imports, SparkTestDriver.h included; it tests the driver's simulateDisplays command.
     await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-DSPARK_TEST_DRIVER=1", "-framework", "AppKit", "-framework", "CoreGraphics", input, path.join(root, "packages/desktop-windows/macos/SparkDisplays.mm"), "-o", output], { timeout: 60000 });
     const result = await runOk(output, [], { timeout: 60000 });
-    for (const suite of ["Window guards passed", "Window options passed (left-to-right)", "Driver mode windows stayed off screen", "Window tabs passed", "Shown window tabs passed", "Window tab restoration passed", "Display observation passed", "Window session frames passed"]) expect(result).toContain(suite);
+    for (const suite of ["Window guards passed", "Window options passed (left-to-right)", "Driver mode windows stayed off screen", "Window tabs passed", "Shown window tabs passed", "Window tab restoration passed", "Display observation passed", "Window session frames passed", "Special windows passed"]) expect(result).toContain(suite);
     // Right-to-left title bars mirror the traffic lights; positions are measured from the leading edge. Only the options suite depends on direction.
     expect(await runOk(output, ["options", "-AppleTextDirection", "YES", "-NSForceRightToLeftWritingDirection", "YES"], { timeout: 30000 })).toBe("Window options passed (right-to-left)\n");
   } finally {

@@ -13,7 +13,7 @@ export async function macosCommand(operation: () => Promise<string>): Promise<vo
   if (!result.success) throw new SparkError("E_NATIVE", result.message ?? "macOS window operation failed");
 }
 /** `macos` fields the window module applies with the common options; the window manager owns the rest. */
-export const COMMON_MACOS: readonly string[] = ["spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial"];
+export const COMMON_MACOS: readonly string[] = ["spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "fullScreenAuxiliary", "stationary", "ignoresCycle", "cornerSnapping"];
 const COMMON_TITLE_BAR: readonly string[] = ["subtitle", "trafficLightPosition"];
 /** The window manager's share of a `macos` group, or undefined when it has none. */
 export function appKitOptions<T extends MacOSWindowOptions>(options: T | undefined): T | undefined {
@@ -30,7 +30,7 @@ export function macosOptions(options: MacOSWindowOptions | undefined): Record<st
   if (options.restoreOnLaunch !== undefined) result.restoreOnLaunch = options.restoreOnLaunch;
   if (options.startupSplitView !== undefined) style.startupSplitView = options.startupSplitView;
   if (options.level !== undefined) {
-    const names = { normal: "NORMAL", floating: "FLOATING", modalPanel: "MODAL_PANEL", mainMenu: "MAIN_MENU", status: "STATUS", screenSaver: "SCREEN_SAVER" };
+    const names = { normal: "NORMAL", floating: "FLOATING", modalPanel: "MODAL_PANEL", mainMenu: "MAIN_MENU", status: "STATUS", screenSaver: "SCREEN_SAVER", desktop: "DESKTOP" };
     const constants = parseNativeResult(macosNative().getConstantsJson(), (value): value is Record<string, number> => !!value && typeof value === "object");
     const value = constants[`WINDOW_LEVEL_${names[options.level]}`];
     if (!Number.isFinite(value)) throw new SparkError("E_INVALID_DATA", "Missing native window level constant");

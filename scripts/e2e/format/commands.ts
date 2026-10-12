@@ -114,6 +114,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   // Keyboard & text
   pressKey: single("keyboard", "Press a key, such as Escape, Enter or F5.", "key", accelerator, {}, { maestro: true }),
   shortcut: single("keyboard", "Press a keyboard shortcut, such as cmd+shift+s.", "keys", accelerator),
+  simulateGlobalShortcut: single("keyboard", "Press a global shortcut the app registered with @legendapp/spark/global-shortcuts, such as cmd+shift+space, in-process: its handler runs as for a real press. A driven app never registers hotkeys with the system. Fails when nothing is registered for those keys.", "keys", accelerator, {}, { driver: true }),
   inputText: single("keyboard", "Insert text in one step (Maestro inputText).", "text", str, { into: selector }, { maestro: true }),
   typeText: single("keyboard", "Type text as per-key events.", "text", str, { into: selector }),
   imeCompose: spec("keyboard", "Compose text through an input method and commit a candidate.", { layout: str, keys: str, commit: str }, { required: ["layout", "keys"] }),

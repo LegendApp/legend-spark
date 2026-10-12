@@ -45,6 +45,8 @@
 - searchHelpMenu: { query: "sidebar", expectItem: "View > Show Sidebar" }
 # Keyboard & text
 - shortcut: "cmd+shift+s"
+- simulateGlobalShortcut: cmd+shift+space   # driver; a registered global shortcut's press, in-process
+- simulateGlobalShortcut: { keys: "cmd+shift+space" }
 - pressKey: Escape
 - inputText: { text: "héllo 👋🏽", into: { id: title } }
 - typeText: { text: "héllo 👋🏽", into: { id: title } }

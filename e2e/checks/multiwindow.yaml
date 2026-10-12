@@ -123,3 +123,86 @@ checks:
     spec: "docs/api-window-contract.md §Window sessions"
     covers:
       - ./windows#createWindowsNavigator
+  MW-SPECIAL-01:
+    title: getSpecialWindowAvailability reports every special window type available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Special window types"
+    covers:
+      - ./windows#getSpecialWindowAvailability
+      - ./windows#getSpecialWindowAvailability().available
+  MW-SPECIAL-02:
+    title: A command bar opens hidden; its global hotkey shows it centered on the display with its top a fifth of the way down the work area, and pressing it again hides it; removing it unregisters the hotkey
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Special window types"
+    covers:
+      - ./windows#createCommandBar
+  MW-SPECIAL-03:
+    title: A HUD shows centered two thirds of the way down the display and hides itself after its duration; a duration of 0 keeps it until hide()
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Special window types"
+    covers:
+      - ./windows#createHUD
+  MW-SPECIAL-04:
+    title: A preview window grows from its thumbnail to the center of the display and shrinks back into the thumbnail before it closes
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Special window types"
+    covers:
+      - ./windows#openPreviewWindow
+  MW-SPECIAL-05:
+    title: A picture-in-picture window opens in the bottom-right corner, snapTo moves it to another corner, and any other move snaps to the nearest corner
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Special window types"
+    covers:
+      - ./windows#openPictureInPicture
+  MW-SPECIAL-06:
+    title: A notch popover hangs centered below the menu bar of the notched display, and a menu bar item popover hangs below the item, kept inside the display
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Special window types"
+    covers:
+      - ./windows#openPopover
+  MW-SPECIAL-07:
+    title: An edge drawer waits hidden past the display's right edge, slides in flush with it when opened, and slides out and hides when closed
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Special window types"
+    covers:
+      - ./windows#createEdgeDrawer
+  MW-SPECIAL-08:
+    title: A click-through overlay and a desktop widget open shown at the requested rectangle and position, and close with closeWindow
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Special window types"
+    covers:
+      - ./windows#openOverlay
+      - ./windows#openDesktopWidget
+  MW-SPECIAL-09:
+    title: Presenter mode fills the second display with the audience window and centers the controller on the primary one; swapping exchanges them, disconnecting a display ends it and closes both, and with one display it rejects E_UNAVAILABLE
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Special window types"
+    covers:
+      - ./windows#startPresenterMode
+  MW-SPECIAL-10:
+    title: On screen, the command bar and popovers take key focus without activating the app and close or hide when another window takes it; panels show over fullscreen apps and on every Space; the overlay lets clicks through; the desktop widget sits below every app window; a dragged picture-in-picture window snaps to a corner on release
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Special window types"
+    covers:
+      - ./windows#createCommandBar
+      - ./windows#openPopover
+      - ./windows#openOverlay
+      - ./windows#openDesktopWidget
+      - ./windows#openPictureInPicture
+  MW-SPECIAL-11:
+    title: On Windows, getSpecialWindowAvailability reports unsupported-platform for every type and every special window factory rejects E_UNSUPPORTED_PLATFORM
+    platforms: [windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Special window types"
+    covers:
+      - ./windows#getSpecialWindowAvailability

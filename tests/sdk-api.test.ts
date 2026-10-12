@@ -230,6 +230,22 @@ test("tray scopes actions, serializes updates and waits before removing", async 
   await item.remove(); expect(calls.map(call => call.method)).toEqual(["create", "update", "update", "remove"]);
   await expect(item.update({ title: "Late" })).rejects.toThrow("removed");
 });
+test("tray bounds come from its own instance, are validated, and reject after removal and on Windows", async () => {
+  const item = await tray.createTray({ id: "bounds", title: "B" });
+  handlers.set("NativeDesktopTray.bounds", () => ({ displayId: "1", x: 900, y: 0, width: 32, height: 24 }));
+  expect(await item.getBounds()).toEqual({ displayId: "1", x: 900, y: 0, width: 32, height: 24 });
+  expect(calls.at(-1)).toMatchObject({ method: "bounds", args: { id: "bounds", instanceId: calls[0].args.instanceId } });
+  handlers.set("NativeDesktopTray.bounds", () => ({ displayId: "1", x: 900, y: 0, width: 0, height: 24 }));
+  await expect(item.getBounds()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  handlers.set("NativeDesktopTray.bounds", () => { throw nativeError("E_UNAVAILABLE"); });
+  await expect(item.getBounds()).rejects.toMatchObject({ code: "E_UNAVAILABLE" });
+  await item.remove();
+  await expect(item.getBounds()).rejects.toMatchObject({ code: "E_CLOSED" });
+  platform.OS = "windows";
+  const windows = await tray.createTray({ id: "bounds-windows", title: "B" });
+  await expect(windows.getBounds()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  await windows.remove();
+});
 test("updates expose availability without starting and preserve native errors", async () => {
   handlers.set("NativeDesktopUpdates.status", () => ({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null, skippedBuild: null, skippedMajorBuild: null, lastCheckedAt: null }));
   expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null });

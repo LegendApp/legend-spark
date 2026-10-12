@@ -1,0 +1,72 @@
+appId: so.legend.spark.examples.kitchensink
+name: Preview, picture in picture, popovers, edge drawer, overlay and desktop widget placement
+intent: >
+  Multiwindow > Special windows runs steps from spark-ks://multiwindow/special-windows?run=… deep links, each run
+  starting with no special windows open, on one simulated display, 901 (1512 × 982, a 32-point menu bar and a notch).
+  The readout shows each window's state and bounds as the window API reports them (the driver never shows windows).
+  The preview opens at the center of the work area after growing from its thumbnail, and closes. Picture in picture
+  opens in the bottom-right corner 16 points in, a move near the middle snaps it to the nearest corner (top left), and
+  snapTo moves it to the top right. The notch popover hangs 4 points below the menu bar, centered; the menu bar item
+  popover hangs 4 points below the item, pushed left to stay inside the display. The edge drawer waits hidden just
+  past the right edge, slides in flush with it, and slides back out and hides. The overlay and the desktop widget open
+  shown at their rectangle and position, and close. The flow restores the real displays at the end.
+checks: [MW-SPECIAL-04, MW-SPECIAL-05, MW-SPECIAL-06, MW-SPECIAL-07, MW-SPECIAL-08]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+---
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows" }
+- extendedWaitUntil: { visible: { id: multiwindow-special-windows-root }, timeout: 10s }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=preview" }
+- assertVisible: { id: multiwindow-special-windows-run-1-steps-1 }
+- assertText: { id: multiwindow-special-windows-preview, equals: "shown on 901 at 356,207 size 800x600" }
+- takeScreenshot: { name: special-preview, window: { id: ks-special-preview } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=preview,preview-close" }
+- assertVisible: { id: multiwindow-special-windows-run-2-steps-2 }
+- assertText: { id: multiwindow-special-windows-preview, equals: closed }
+# Picture in picture: bottom right, then a move snaps to the nearest corner, then snapTo.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=pip" }
+- assertVisible: { id: multiwindow-special-windows-run-3-steps-1 }
+- assertText: { id: multiwindow-special-windows-pip, equals: "shown on 901 at 1176,786 size 320x180" }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=pip,pip-move" }
+- assertVisible: { id: multiwindow-special-windows-run-4-steps-2 }
+- extendedWaitUntil: { visible: { id: multiwindow-special-windows-pip, text: "shown on 901 at 16,48 size 320x180" }, timeout: 5s }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=pip,pip-topRight" }
+- assertVisible: { id: multiwindow-special-windows-run-5-steps-2 }
+- assertText: { id: multiwindow-special-windows-pip, equals: "shown on 901 at 1176,48 size 320x180" }
+- takeScreenshot: { name: special-picture-in-picture, window: { id: ks-special-pip } }
+# Popovers below the notch and below a menu bar item.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=popover-notch" }
+- assertVisible: { id: multiwindow-special-windows-run-6-steps-1 }
+- assertText: { id: multiwindow-special-windows-popover, equals: "shown on 901 at 576,36 size 360x220" }
+- takeScreenshot: { name: special-popover, window: { id: ks-special-popover } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=popover-item" }
+- assertVisible: { id: multiwindow-special-windows-run-7-steps-1 }
+- assertText: { id: multiwindow-special-windows-popover, equals: "shown on 901 at 1044,28 size 360x220" }
+# Edge drawer: hidden past the right edge, in, out.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=drawer" }
+- assertVisible: { id: multiwindow-special-windows-run-8-steps-1 }
+- assertText: { id: multiwindow-special-windows-drawer, equals: "hidden on 901 at 1512,32 size 320x950" }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=drawer,drawer-toggle" }
+- assertVisible: { id: multiwindow-special-windows-run-9-steps-2 }
+- assertText: { id: multiwindow-special-windows-drawer, equals: "shown on 901 at 1192,32 size 320x950" }
+- takeScreenshot: { name: special-edge-drawer, window: { id: ks-special-drawer } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=drawer,drawer-toggle,drawer-toggle" }
+- assertVisible: { id: multiwindow-special-windows-run-10-steps-3 }
+- assertText: { id: multiwindow-special-windows-drawer, equals: "hidden on 901 at 1512,32 size 320x950" }
+# Overlay and desktop widget.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=overlay,widget" }
+- assertVisible: { id: multiwindow-special-windows-run-11-steps-2 }
+- assertText: { id: multiwindow-special-windows-overlay, equals: "shown on 901 at 100,100 size 400x300" }
+- assertText: { id: multiwindow-special-windows-widget, equals: "shown on 901 at 40,80 size 200x200" }
+- takeScreenshot: { name: special-desktop-widget, window: { id: ks-special-widget } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=overlay,widget,overlay-close,widget-close" }
+- assertVisible: { id: multiwindow-special-windows-run-12-steps-4 }
+- assertText: { id: multiwindow-special-windows-overlay, equals: closed }
+- assertText: { id: multiwindow-special-windows-widget, equals: closed }
+- assertNotVisible: { id: multiwindow-special-windows-error-other }
+- simulateDisplays: { restore: true }

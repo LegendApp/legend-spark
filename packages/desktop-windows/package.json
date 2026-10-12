@@ -14,7 +14,8 @@
     "react-native": "0.81.6",
     "@legendapp/spark-commands": "0.0.1-next.3",
     "@react-native-runtimes/core": "0.1.0-alpha.2",
-    "@legendapp/spark-native-menu": "0.0.1-next.3"
+    "@legendapp/spark-native-menu": "0.0.1-next.3",
+    "@legendapp/spark-global-shortcuts": "0.0.1-next.3"
   },
   "peerDependenciesMeta": {
     "@legendapp/spark-commands": {
@@ -24,6 +25,9 @@
       "optional": true
     },
     "@legendapp/spark-native-menu": {
+      "optional": true
+    },
+    "@legendapp/spark-global-shortcuts": {
       "optional": true
     }
   },

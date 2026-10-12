@@ -18,7 +18,7 @@ import { Shell } from "./shell/Shell";
 import { sdkTestDriver } from "./sdk-test-driver";
 import { argument, reportLaunch, type ReportFlag } from "./launch";
 
-type Props = Partial<app.AppContext> & { windowId?: string; windowProps?: { overlay?: boolean; message?: string; readyFile?: string } };
+type Props = Partial<app.AppContext> & { windowId?: string; windowProps?: { overlay?: boolean; message?: string; readyFile?: string; special?: string } };
 const reports: Record<ReportFlag, (report: string, args: readonly string[]) => ReactElement> = {
   "--spark-auth-report": (report, args) => <AuthChecks report={report} provider={argument(args, "--spark-auth-provider")!} />,
   "--spark-audio-report": (report, args) => <AudioChecks report={report} source={argument(args, "--spark-audio-source")!} />,
@@ -43,6 +43,10 @@ function SecondaryWindow(props: Props) {
     if (file) void files.writeText(file, props.windowProps?.message ?? "").catch(console.error);
     return () => { if (file) void files.writeText(`${file}.closed`, "unmounted").catch(console.error); };
   }, [props.windowProps?.readyFile, props.windowProps?.message]);
+  // Multiwindow > Special windows: a label over a transparent background, so the window's vibrancy shows around it.
+  if (props.windowProps?.special) return <View style={styles.special} testID="special-window">
+    <Text className="rounded-lg bg-background px-4 py-2 text-lg font-semibold text-foreground">{props.windowProps.special}</Text>
+  </View>;
   if (props.windowProps?.overlay) return <View style={{ flex: 1, padding: 12, backgroundColor: "transparent" }}>
     <View style={{ borderRadius: 12, padding: 12, gap: 8 }} className="bg-background">
       <Text className="text-foreground">Overlay — keyboard focus stays in your app</Text>
@@ -72,4 +76,4 @@ function AutomatedChecks({ report, args }: { report: string; args: readonly stri
   }, [report, args]);
   return <ScrollView style={styles.root} className="bg-background" testID="automated-checks"><Text style={styles.title} className="text-foreground">Native SDK checks</Text>{checks.map(check => <Text key={check.name} className="text-muted">{check.passed ? "PASS" : "FAIL"} {check.name} {check.error}</Text>)}</ScrollView>;
 }
-const styles = StyleSheet.create({ root: { flex: 1, padding: 24, gap: 16 }, title: { fontSize: 28, fontWeight: "700" } });
+const styles = StyleSheet.create({ root: { flex: 1, padding: 24, gap: 16 }, title: { fontSize: 28, fontWeight: "700" }, special: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" } });
