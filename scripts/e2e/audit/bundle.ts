@@ -195,6 +195,7 @@ export function auditBundle(options: AuditOptions): AuditResult[] {
       expect("NSPrincipalClass", value => value === "NSApplication", "NSApplication");
       const ats = (info.NSAppTransportSecurity ?? {}) as Record<string, unknown>;
       if (ats.NSAllowsArbitraryLoads === true) findings.push("NSAppTransportSecurity.NSAllowsArbitraryLoads is true: release builds keep App Transport Security on");
+      if (ats.NSAllowsLocalNetworking !== undefined) findings.push("NSAppTransportSecurity.NSAllowsLocalNetworking is set: it is for the development server, and spark build removes it from release builds");
       const exceptions = Object.keys((ats.NSExceptionDomains ?? {}) as object).filter(domain => /^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(domain));
       if (exceptions.length) findings.push(`NSAppTransportSecurity exempts ${exceptions.join(", ")}: that is for a development server`);
       return { findings, evidence: [`${info.CFBundleIdentifier} ${info.CFBundleShortVersionString} (${info.CFBundleVersion}), minimum macOS ${info.LSMinimumSystemVersion}`] };

@@ -42,6 +42,24 @@ export function relativeHermesCompiler(nativeRoot: string, file: string): string
   return file;
 }
 
+/**
+ * Removes App Transport Security's local networking exemption (NSAllowsLocalNetworking, which the Spark config plugin
+ * sets for the development server) from a release app's Info.plist, and the NSAppTransportSecurity dictionary when that
+ * was its only key. Release builds load their embedded JavaScript and reach no development server. `plutil` runs the
+ * command through the build's runner and returns its output.
+ */
+export async function removeLocalNetworking(app: string, plutil: (args: string[]) => Promise<string>) {
+  const plist = path.join(app, "Contents/Info.plist");
+  let extracted: string;
+  try { extracted = await plutil(["-extract", "NSAppTransportSecurity", "json", "-o", "-", plist]); } catch (error) {
+    if (String((error as Error).message).includes("No value at that key path")) return;
+    throw error;
+  }
+  const ats = JSON.parse(extracted) as Record<string, unknown>;
+  if (!("NSAllowsLocalNetworking" in ats)) return;
+  await plutil(["-remove", Object.keys(ats).length === 1 ? "NSAppTransportSecurity" : "NSAppTransportSecurity.NSAllowsLocalNetworking", plist]);
+}
+
 const MACH_O = new Set([0xfeedfacf, 0xcffaedfe, 0xcafebabe, 0xbebafeca]);
 function isMachO(file: string): boolean {
   const fd = openSync(file, "r"), magic = Buffer.alloc(4);

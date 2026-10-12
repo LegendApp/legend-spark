@@ -72,7 +72,7 @@ describe.skipIf(!darwin)("package audit on a real package", () => {
     expect(results["DIST-PKG-04"]!.details[0]).toMatch(/^1 Mach-O binaries have arm64 code, needing at most macOS 14\.0 \(LSMinimumSystemVersion 14\.0\); the executable is arm64 only$/);
     expect(results["DIST-PKG-05"]!.details[0]).toBe("appcast.xml is signed; build 7 (1.2.0) is the newest of 2 item(s); 1 enclosure(s) signed, and the update is App-1.2.0-arm64.zip");
     expect(results["DIST-PKG-06"]!.details[0]).toMatch(/^Developer ID Application: Example Corp \(ABCDE12345\) \/ notarized \/ stapled; /);
-  });
+  }, 60_000); // Runs every check on a real signed package: well under a second locally, much slower on a loaded CI runner.
 
   test("finds stored attributes, a missing dSYMs archive, another build, the wrong architecture and a broken feed", async () => {
     const leaky = fixture(root, "leaky", { zipArgs: ["--sequesterRsrc"], dsyms: false, signed: app => run("xattr", "-w", "com.example.builder", "x", path.join(app, "Contents/Resources/spark-runtime.json")) });

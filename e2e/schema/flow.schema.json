@@ -166,7 +166,8 @@
           "assertKeyboardReachable",
           "assertNoTruncation",
           "assertLocalized",
-          "startTrace"
+          "startTrace",
+          "assertNoDebugSurface"
         ]
       },
       "else": {
@@ -7237,6 +7238,30 @@
             "else": {
               "type": "string",
               "minLength": 1
+            }
+          },
+          "assertNoDebugSurface": {
+            "description": "[driver] Relaunch the app pointed at a decoy development server (RCT_jsLocation and SPARK_BUNDLE_URL) and, once its first UI settles and `for` (default 2s) more, assert it never connected to it, holds no network socket and no bound Unix socket but the driver's (lsof), and has no Developer menu or debug menu item (DevTools, inspector, debugger), hidden ones included. For release builds.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "for": {
+                  "$ref": "#/definitions/duration"
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "null"
             }
           },
           "assertLoadPaths": {

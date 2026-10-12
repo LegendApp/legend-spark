@@ -13,6 +13,8 @@ vi.mock("../packages/cli/src/native-patch-preflight.ts", () => ({ assertNativePa
 let root: string;
 let moduleRoot: string;
 const write = (file: string, value = "") => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, value); };
+// The config plugin's App Transport Security key, which release builds drop (removeLocalNetworking). JSON: plutil is mocked.
+const INFO_PLIST = JSON.stringify({ CFBundleIdentifier: "test.fixture", NSAppTransportSecurity: { NSAllowsLocalNetworking: true } });
 const framework = () => path.join(moduleRoot, "Fixture.xcframework");
 const commandCount = (name: string) => commands.run.mock.calls.filter(([, argv]) => argv[0] === name || argv.includes(name)).length;
 const configure = (release = false) => writeJson(path.join(root, "app.json"), { expo: {
@@ -50,12 +52,22 @@ beforeEach(() => {
     } else if (argv.includes("export:embed")) {
       write(argv[argv.indexOf("--bundle-output") + 1]!, "fixture bundle");
       write(argv[argv.indexOf("--sourcemap-output") + 1]!, JSON.stringify({ sources: ["/index.ts"] }));
+    } else if (argv[0] === "plutil" && argv[1] === "-extract") {
+      // Like plutil on a JSON plist: the value at a top-level key, or its error for a missing one.
+      const value = JSON.parse(readFileSync(argv.at(-1)!, "utf8"))[argv[2]!];
+      if (value === undefined) throw new Error(`plutil exited 1\nCould not extract value, error: No value at that key path or invalid key path: ${argv[2]}`);
+      return JSON.stringify(value);
+    } else if (argv[0] === "plutil" && argv[1] === "-remove") {
+      const file = argv.at(-1)!, info = JSON.parse(readFileSync(file, "utf8")), [key, nested] = argv[2]!.split(".");
+      if (nested) delete info[key!][nested]; else delete info[key!];
+      writeFileSync(file, JSON.stringify(info));
     } else if (argv[0] === "plutil" && argv.includes("json")) {
       return readFileSync(argv.at(-1)!, "utf8");
     } else if (argv[0] === "xcodebuild") {
       const derived = argv[argv.indexOf("-derivedDataPath") + 1]!;
       const configuration = argv[argv.indexOf("-configuration") + 1]!;
       write(path.join(derived, "Build/Products", configuration, "Fixture.app/Contents/Resources/main.jsbundle"), "built bundle");
+      write(path.join(derived, "Build/Products", configuration, "Fixture.app/Contents/Info.plist"), INFO_PLIST);
     }
     return "";
   });
@@ -86,6 +98,7 @@ test.each(["dev", "preview", "release"] as const)("%s builds select the renamed 
       const configuration = argv[argv.indexOf("-configuration") + 1]!;
       const resources = path.join(derived, "Build/Products", configuration, "RenamedFixture.app/Contents/Resources");
       write(path.join(resources, "main.jsbundle"), "renamed bundle");
+      write(path.join(resources, "../Info.plist"), INFO_PLIST);
       symlinkSync("main.jsbundle", path.join(resources, "bundle-link"));
     }
     return result;
@@ -98,6 +111,8 @@ test.each(["dev", "preview", "release"] as const)("%s builds select the renamed 
   const renamed = await build(root, mode);
   expect(renamed.app).toBe(path.join(output, "RenamedFixture.app"));
   expect(readFileSync(path.join(renamed.app, "Contents/Resources/main.jsbundle"), "utf8")).toBe("renamed bundle");
+  // Only release builds drop the development server's local networking exemption.
+  expect(readFileSync(path.join(renamed.app, "Contents/Info.plist"), "utf8").includes("NSAllowsLocalNetworking")).toBe(mode !== "release");
   expect(readlinkSync(path.join(renamed.app, "Contents/Resources/bundle-link"))).toBe("main.jsbundle");
   expect(existsSync(first.app)).toBe(false);
   expect(readFileSync(otherMode, "utf8")).toBe("other mode");

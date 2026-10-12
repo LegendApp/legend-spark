@@ -38,6 +38,7 @@ module.exports = function withSparkDesktop(config) {
       if (!(key in generated)) delete mod.modResults[key];
     Object.assign(mod.modResults, generated);
     mod.modResults.SparkFrameworkVersion = sparkVersion;
+    // For the development server; spark build removes it from release builds (removeLocalNetworking in packages/cli/src/macos-release.ts).
     mod.modResults.NSAppTransportSecurity = { NSAllowsLocalNetworking: true };
     return mod;
   });
