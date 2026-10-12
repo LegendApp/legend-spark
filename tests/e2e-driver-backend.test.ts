@@ -433,6 +433,29 @@ describe("app inspection", () => {
     });
     expect((await run("- launchApp\n- assertState: { path: nope, equals: 1, timeout: 200ms }", app)).result.failure).toMatchObject({ kind: "not-found", message: "assertState nope: E_NOT_FOUND: No test state at nope" });
   });
+
+  test("assertCrashSymbol names a dev build's report in-process and needs the dSYMs next to a release build", async () => {
+    const frame = (symbol?: string) => ({ address: "0x1004", image: "/tmp/clone/KitchenSink.app/Contents/MacOS/KitchenSink", imageAddress: "0x1000", imageOffset: 4, imageUUID: "0F2C0000-0000-0000-0000-000000000000", ...(symbol ? { symbol } : {}) });
+    const app = new FakeApp();
+    app.state = { "crash.report": { kind: "native", stack: [frame("SparkCrashNow"), frame("main")] }, "crash.stripped": { kind: "native", stack: [frame("_mh_execute_header")] }, "crash.none": null };
+    const check = async (path: string, symbol = "SparkCrashNow") => (await run(`- launchApp\n- assertCrashSymbol: { path: ${path}, symbol: ${symbol} }`, app)).result;
+    expect((await check("crash.report")).status).toBe("passed");
+    // A dev build's assertion stays in-process: a report without the name fails, whatever symbols exist on disk.
+    expect((await check("crash.stripped")).failure).toMatchObject({ kind: "assertion", message: "no frame of crash.stripped is named SparkCrashNow in-process (frames: _mh_execute_header)" });
+    expect((await check("crash.report", "SparkCrashRecurse")).failure).toMatchObject({ kind: "assertion" });
+    expect((await check("crash.none")).failure).toMatchObject({ kind: "assertion", message: "state crash.none is not a native crash report: null" });
+
+    // A release build: symbolicated with <dir of the app>/dSYMs; without that folder it fails as "no dSYM".
+    const dir = mkdtempSync(path.join(tmpdir(), "e2e-crash-symbol-"));
+    app.bundle = { app: path.join(dir, "KitchenSink.app"), release: true };
+    expect((await check("crash.stripped")).failure).toMatchObject({ kind: "invalid", message: expect.stringMatching(/^no dSYM: .*KitchenSink\.app is a stripped release build with no dSYMs folder next to it/) });
+    mkdirSync(path.join(dir, "dSYMs"));
+    // An in-process name never counts for a release build; only what its dSYMs name. Here none covers the app's image.
+    expect((await check("crash.report")).failure).toMatchObject({
+      kind: "assertion",
+      message: `no frame of crash.report is named SparkCrashNow after symbolicating with the dSYMs next to the app (frames: ?); no dSYM in ${path.join(dir, "dSYMs")} for KitchenSink (0F2C0000-0000-0000-0000-000000000000)`,
+    });
+  });
 });
 
 describe("layout, flicker, leaks and memory", () => {

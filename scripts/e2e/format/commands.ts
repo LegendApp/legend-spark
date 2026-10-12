@@ -249,6 +249,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
 
   // State introspection (discouraged; prefer black-box)
   assertState: spec("state", "Assert app state by path.", { path: str, equals: anyValue }, { required: ["path", "equals"], driver: true }),
+  assertCrashSymbol: spec("state", "Assert the native crash report at state `path` has a frame named `symbol`. A dev build's report carries in-process names; a release build is stripped, so the report is symbolicated with the dSYMs in the `dSYMs` folder next to the app (as `spark symbolicate`), and a release build without them fails.", { path: str, symbol: str }, { required: ["path", "symbol"], driver: true }),
 
   // Security audits of the build on disk (docs/e2e-flows.md#security-audits)
   assertEntitlements: spec("security", "Assert every process of the app is signed with only the entitlements `allow` names, each with its reason, and never get-task-allow; an `allow` entry no process carries fails. `sandbox`: whether this is the sandboxed variant, which sandboxes every process.", { app: str, sandbox: bool, allow: dict(str) }, { required: ["app", "sandbox"], runner: true }),

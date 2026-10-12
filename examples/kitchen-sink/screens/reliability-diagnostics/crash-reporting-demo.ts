@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { exposeTestState } from "@legendapp/spark/app";
 import { SparkError } from "@legendapp/spark/contracts";
 import {
   deleteCrashReports, getCrashReportingAvailability, getCrashReportingConsent, getCrashReports, setCrashReportingConsent, simulateCrash,
@@ -15,18 +16,27 @@ const describe = (value: unknown) => value instanceof SparkError ? `SparkError:$
 
 /**
  * How a simulated crash's report compares with what was asked for, as JSON for the screen and its flows:
- * native reports name the frame that crashed (the recursion for a stack overflow) and locate every frame in
- * an image; JavaScript reports keep the engine's error name and stack. `listed`: getCrashReports returns it afterwards.
+ * native reports locate every frame in an image; JavaScript reports keep the engine's error name and stack.
+ * `listed`: getCrashReports returns it afterwards. Which frame a native report names is checked by flows with
+ * assertCrashSymbol on the exposed report, since a stripped release build names its frames only with its dSYMs.
  */
 export function simulatedCheck(kind: SimulatedCrashKind, report: CrashReport, listed: boolean) {
   if (report.kind === "javascript") return JSON.stringify({ kind, report: report.kind, simulated: report.simulated, name: report.name, hasStack: !!report.stack, listed });
-  const crashed = kind === "stackOverflow" ? "SparkCrashRecurse" : "SparkCrashNow";
   return JSON.stringify({
     kind, report: report.kind, simulated: report.simulated, signal: report.signal, ...(report.exception ? { exception: report.exception.name } : {}),
-    namesCrash: report.stack.some(frame => frame.symbol === crashed),
     framesLocated: report.stack.length > 0 && report.stack.every(frame => frame.image !== undefined && frame.imageOffset !== undefined && frame.imageUUID !== undefined),
     listed,
   });
+}
+
+/** The last simulated crash's report, exposed to the test driver as `crashReporting.lastReport` (null before one). */
+function useExposedReport() {
+  const last = useRef<CrashReport | null>(null);
+  useEffect(() => {
+    const exposed = exposeTestState("crashReporting", () => ({ lastReport: last.current }));
+    return () => exposed.remove();
+  }, []);
+  return last;
 }
 
 /** The user's consent, the reports on this Mac, simulated crashes and deleting reports. */
@@ -36,6 +46,7 @@ export function useCrashReportingDemo() {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<SimulatedCrashKind>();
   const [result, setResult] = useState<string>();
+  const last = useExposedReport();
 
   const refresh = useCallback(async () => {
     const latest = await getCrashReports();
@@ -55,11 +66,12 @@ export function useCrashReportingDemo() {
     setResult(undefined);
     try {
       const report = await simulateCrash(kind);
+      last.current = report;
       const listed = (await refresh()).some(candidate => candidate.id === report.id);
       setResult(simulatedCheck(kind, report, listed));
     } catch (cause) { setResult(describe(cause)); }
     finally { setBusy(undefined); }
-  }, [refresh]);
+  }, [refresh, last]);
   const deleteAll = useCallback(async () => {
     try { await deleteCrashReports(); await refresh(); setResult(undefined); }
     catch (cause) { setError(describe(cause)); }

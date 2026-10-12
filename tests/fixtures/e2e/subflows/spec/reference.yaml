@@ -124,6 +124,7 @@
 - killProcess: { name: sidecar }
 # State introspection
 - assertState: { path: "documents.open.length", equals: 2 }
+- assertCrashSymbol: { path: crashReporting.lastReport, symbol: SparkCrashNow }
 # Control flow
 - runFlow: { file: subflows/reset-state.yaml, env: { USER: test } }
 - repeat: { times: 3, commands: [{ pressKey: Tab }] }

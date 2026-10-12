@@ -13,7 +13,7 @@ import {
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
-import { inspectCommands, type InspectClient } from "./driver-inspect.ts";
+import { inspectCommands, type InspectClient, type InspectedApp } from "./driver-inspect.ts";
 import { motionCommands, type MotionClient } from "./driver-motion.ts";
 import { renderCommands, type RenderClient } from "./driver-render.ts";
 import { ms } from "./executor.ts";
@@ -48,8 +48,11 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
 };
 /** The app under test (`KitchenSinkApp` in scripts/e2e/kitchen-sink.ts): prepared per flow, launched in driver mode. */
 export type DriverApp = {
-  /** `dev`: a `build: dev` flow, which needs the development JavaScript bundle (only a dev build can load one). */
-  open(options: { dev: boolean }): Promise<{ app: string; bundleId: string; launchedBundleId: string }>;
+  /**
+   * `dev`: a `build: dev` flow, which needs the development JavaScript bundle (only a dev build can load one). `app` is the
+   * bundle given (not an isolated clone); `release`: it embeds its JavaScript (a release build).
+   */
+  open(options: { dev: boolean }): Promise<{ app: string; release: boolean; bundleId: string; launchedBundleId: string }>;
   /** Launch arguments and environment variables the launch sets itself, so a flow may not; `locale` only when the matrix sets one. */
   readonly reserved: { readonly arguments: readonly string[]; readonly env: readonly string[]; readonly locale: readonly string[] };
   /** Deletes the state of the driver session (docs/e2e-flows.md#app-state) while the app is not running; returns what existed. */
@@ -90,7 +93,7 @@ export class DriverBackend implements Backend {
     // The display source of @legendapp/spark/displays (docs/displays.md#simulated-displays).
     simulateDisplays: async args => { await this.client().simulateDisplays(args.restore ? null : args.displays as object[]); },
     // Startup phases and the state the app exposes (docs/e2e-flows.md#app-inspection).
-    ...inspectCommands(() => this.client()),
+    ...inspectCommands(() => this.client(), () => this.opened!),
     // Layout thrash, flicker, leak counters and memory (docs/e2e-flows.md#layout-flicker-and-leaks).
     ...renderCommands(() => this.client(), () => this.launchCounters),
     // Black-box commands, run here in-process (white-box) only when no black-box backend is active.
@@ -140,6 +143,7 @@ export class DriverBackend implements Backend {
     assertAppMenu: (args, context) => context.eventually(async () => assertMenu(await this.client().menus(), args)),
   });
   private session?: Session;
+  private opened?: InspectedApp;
   private driver?: DriverClient;
   private logs: string[] = [];
   private launches = 0;
@@ -159,7 +163,8 @@ export class DriverBackend implements Backend {
     this.logs = [];
     this.launches = 0;
     this.countsLaunches = usesLaunchCounters(session.flow);
-    const { app, bundleId } = await this.app.open({ dev: session.flow.header.build === "dev" });
+    const { app, release, bundleId } = await this.app.open({ dev: session.flow.header.build === "dev" });
+    this.opened = { app, release };
     if (session.flow.header.appId === bundleId) return;
     await this.app.close(); // The runner stops only backends that started.
     throw new Failure("invalid", `the flow is for ${session.flow.header.appId}, but ${app} is ${bundleId}`);

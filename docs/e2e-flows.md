@@ -524,7 +524,7 @@ fails with `invalid`.
 | `setClock`, `advanceClock` | The motion engine's `setClock` and `advanceClock` driver commands ([motion.md](motion.md#virtual-clock-for-the-test-driver)); `advanceClock` sends `duration` in milliseconds |
 | `captureMotion`, `assertMotion`, `interruptAt` | Motion telemetry: `motionState`, `waitForMotion` and `sampleMotion` ([Motion and frames](#motion-and-frames)). The target needs a testID. |
 | `assertFrames` | `startFrames`, the `during` command, `stopFrames` ([Motion and frames](#motion-and-frames)) |
-| `assertStartup`, `assertState` | `startup` and `state` ([App inspection](#app-inspection)) |
+| `assertStartup`, `assertState`, `assertCrashSymbol` | `startup` and `state` ([App inspection](#app-inspection)) |
 | `assertNoLayoutThrash`, `assertNoFlicker`, `assertNoLeaks`, `assertMemory` | `startCommits`/`stopCommits`, `counters` and `listeners`, `memory` ([Layout, flicker and leaks](#layout-flicker-and-leaks)) |
 | `takeScreenshot`, `assertScreenshot`, failure screenshot | `capture` of the main window, or of the window `window` selects (`id:<identifier>`), its frame view (the content view's superview, title bar included). Element frames are points from the window's top-left, the capture's origin, so masks line up. |
 | failure evidence | Each launch's app log, and a capture of the main window while the app runs |
@@ -606,6 +606,7 @@ identifier runs, a copy someone is using included, and for any domain but the fl
 |---|---|
 | `assertStartup: { coldMs, firstPaintMs, id }` | Reads the startup phases of the running launch ([docs/test-driver.md](test-driver.md#startup-phases)), waiting for its first rendered UI to settle (30 s, or the command's `timeout`), and records `startup.coldMs` (process start to the first UI settled; with `id`, to the first settled UI showing the element with that testID) and `startup.firstPaintMs` (process start to its first mount) as [metrics](#metrics). Each takes `{ min, max }` in milliseconds; the failure lists every phase. The gate's [budgets](#budgets) hold the reference baselines. |
 | `assertState: { path, equals }` | The JSON value at `path` of the state the app exposes with `exposeTestState` ([docs/test-driver.md](test-driver.md#exposed-state)), polled until it deeply equals `equals`. A name or key the app does not have is `not-found`; an app whose JavaScript never answers fails with `timeout`. Prefer checks of what a user sees; use it for state the UI does not show. |
+| `assertCrashSymbol: { path, symbol }` | Reads the native crash report (`@legendapp/spark/diagnostics`) at `path` of the exposed state, once, and fails unless a frame of its stack is named `symbol`. On a dev build the names are the ones the app found in-process. A release build (it embeds its JavaScript) is stripped, so its report is first symbolicated with the dSYMs in the `dSYMs` folder next to the app given (`--app`, or the gate's artifact), with the code of `spark symbolicate`; an app with no such folder fails (`invalid`, "no dSYM"), and a failure lists the app's images that have no dSYM there. |
 
 ```yaml
 - launchApp
