@@ -1,0 +1,76 @@
+area: authentication
+prefix: AUTH
+checks:
+  AUTH-AVAIL-01:
+    title: "getAppleAuthenticationAvailability and getPasskeyAvailability report missing-entitlement in a build without the entitlements (the Kitchen Sink) and requests reject AuthorizationError E_UNAVAILABLE missingEntitlement before anything is shown; with the entitlements (simulated) both report available"
+    platforms: [macos]
+    blocking: true
+    spec: "#146 AUTH.api"
+    covers:
+      - ./apple-authentication
+      - ./apple-authentication#getAppleAuthenticationAvailability
+      - ./apple-authentication#getAppleAuthenticationAvailability().available
+      - ./passkeys
+      - ./passkeys#getPasskeyAvailability
+      - ./passkeys#getPasskeyAvailability().available
+      - ./passkeys#AuthorizationError
+      - ./apple-authentication#AuthorizationError
+  AUTH-SIWA-01:
+    title: "signInWithApple presents over the calling window and resolves the credential (user, identity token, the scopes' email and name, the state echoed) or cancel when the person cancels (driver simulation; no sheet, no Apple servers)"
+    platforms: [macos]
+    blocking: true
+    spec: "#146 AUTH.api"
+    covers:
+      - ./apple-authentication#signInWithApple
+  AUTH-SIWASTATE-01:
+    title: "getAppleIDCredentialState reports authorized for the signed-in user and revoked, notFound or transferred as Apple answers (driver simulation; no Apple servers)"
+    platforms: [macos]
+    blocking: true
+    spec: "#146 AUTH.api"
+    covers:
+      - ./apple-authentication#getAppleIDCredentialState
+  AUTH-PASSKEY-01:
+    title: "createPasskey registers a passkey for the relying party and getPasskey signs in with it, returning base64url WebAuthn values with the user handle given at registration (driver simulation; no sheet, no relying party)"
+    platforms: [macos]
+    blocking: true
+    spec: "#146 AUTH.api"
+    covers:
+      - ./passkeys#createPasskey
+      - ./passkeys#getPasskey
+  AUTH-ERR-01:
+    title: "AuthenticationServices failures reject a typed AuthorizationError (failed and notInteractive E_UNAVAILABLE, invalidResponse E_INVALID_DATA, matchedExcludedCredential E_ALREADY_EXISTS, unknown E_NATIVE); a second request while one is up is SparkError:E_BUSY; Cancel request aborts the pending one with E_ABORTED appCancel"
+    platforms: [macos]
+    blocking: true
+    spec: "#146 AUTH.api"
+    covers:
+      - ./apple-authentication#signInWithApple
+      - ./passkeys#createPasskey
+      - ./passkeys#getPasskey
+      - ./passkeys#AuthorizationError
+  AUTH-REAL-01:
+    title: "Real sheets on a team-signed build with macos.authentication: both available; Sign in with Apple shows Apple's sheet over the window and returns the credential, cancelling resolves cancel, Cancel request dismisses the sheet; the credential state is authorized; a passkey is created and used for a domain whose association file lists the app"
+    platforms: [macos]
+    blocking: true
+    spec: "#146 AUTH.api; provisioning profiles #424"
+    covers:
+      - ./apple-authentication#signInWithApple
+      - ./apple-authentication#getAppleIDCredentialState
+      - ./passkeys#createPasskey
+      - ./passkeys#getPasskey
+  AUTH-UNSUP-01:
+    title: "On Windows getAppleAuthenticationAvailability and getPasskeyAvailability report unsupported-platform and requests reject SparkError:E_UNSUPPORTED_PLATFORM (WebAuthn / Windows Hello: #423)"
+    platforms: [windows]
+    blocking: true
+    spec: "#146 AUTH.api; Windows implementation #423"
+    covers:
+      - ./apple-authentication#getAppleAuthenticationAvailability().available
+      - ./passkeys#getPasskeyAvailability().available
+      - ./apple-authentication#signInWithApple
+      - ./passkeys#createPasskey
+  AUTH-VISUAL-01:
+    title: "The Sign in with Apple and passkeys screen matches its golden in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#146 AUTH.api"
+    covers:
+      - ./apple-authentication#getAppleAuthenticationAvailability().available

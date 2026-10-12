@@ -1,0 +1,45 @@
+appId: so.legend.spark.examples.kitchensink
+name: Real Sign in with Apple and passkey sheets on a team-signed build
+intent: >
+  The real AuthenticationServices paths of @legendapp/spark/apple-authentication and /passkeys, which no automated run
+  may reach: they show Apple's sheets, contact Apple's servers and create a passkey in the person's keychain. manual:
+  true keeps the gate from running it. It needs a Kitchen Sink built with macos.authentication { signInWithApple: true,
+  passkeyDomains: [<a domain you control>] }, signed by Seth's team with a provisioning profile granting both
+  entitlements (spark package cannot embed one yet: #424), the domain serving an apple-app-site-association file that
+  lists the app under webcredentials, and RELYING_PARTY in screens/authentication/sign-in-demo.ts set to that domain.
+  Use a test Apple ID, never a personal one, and delete the passkey and revoke the app in the Apple ID settings
+  afterwards.
+checks: [AUTH-REAL-01]
+tags: [authentication]
+platforms: [macos]
+manual: true
+---
+- launchApp: { openUrl: "spark-ks://authentication/sign-in" }
+- extendedWaitUntil: { visible: { id: authentication-sign-in-root }, timeout: 10s }
+- manualStep:
+    instruction: >-
+      Open Authentication > Sign in with Apple and passkeys in the team-signed build. Read both availability rows.
+    expect: >-
+      Both show {"available":true}. (The development build shows missing-entitlement for both.)
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Sign in and complete Sign in with Apple with the test Apple ID, sharing name and email. Press Credential
+      state. Press Sign in again and cancel the sheet. Press Sign in once more and, with the sheet up, press Cancel
+      request in the Kitchen Sink window.
+    expect: >-
+      The sheet appears attached to the Kitchen Sink window. The result shows success with the user, the email (or a
+      private relay address) and the name on the first sign-in, state kitchen-sink; Credential state shows authorized.
+      Cancelling shows cancel. Cancel request dismisses the sheet and shows AuthorizationError:E_ABORTED:appCancel.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Create passkey and save the passkey with Touch ID or the login password. Then press Sign in with passkey
+      and choose it.
+    expect: >-
+      The sheet names the relying party and ada@example.com. Create shows success: credential <ID>; Sign in with passkey
+      shows the same credential ID and user ada@example.com.
+    evidence: none
+    signoff: required
