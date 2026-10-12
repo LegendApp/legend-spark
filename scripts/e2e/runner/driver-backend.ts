@@ -11,7 +11,7 @@ import { processLog, type ProcessLog } from "../../../packages/cli/src/process.t
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
@@ -44,6 +44,8 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   testClipboard(): Promise<TestClipboard>;
   simulatePermission(state: { kind: string; authorization?: string; answer?: "allow" | "deny" | "ignore" | null }): Promise<TestPermission>;
   testPermission(kind: string): Promise<TestPermission>;
+  simulateBiometrics(state: SimulatedBiometrics): Promise<TestBiometrics>;
+  testBiometrics(): Promise<TestBiometrics>;
   testDrag(request: TestDragRequest): Promise<TestDragReply>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
   tap(target: InputTarget, options?: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
@@ -112,6 +114,9 @@ export class DriverBackend implements Backend {
     // Simulated @legendapp/spark/permissions state, never TCC (docs/permissions.md#testing).
     simulatePermission: async args => { await this.client().simulatePermission(args as { kind: string; authorization?: string; answer?: "allow" | "deny" | "ignore" | null }); },
     assertSimulatedPermission: (args, context) => context.eventually(async () => assertSimulatedPermission(await this.client().testPermission(args.kind as string), args)),
+    // Simulated @legendapp/spark/biometrics state, never LocalAuthentication or a keychain (docs/biometrics.md#testing).
+    simulateBiometrics: async args => { await this.client().simulateBiometrics(args as SimulatedBiometrics); },
+    assertSimulatedBiometrics: (args, context) => context.eventually(async () => assertSimulatedBiometrics(await this.client().testBiometrics(), args)),
     // Startup phases and the state the app exposes (docs/e2e-flows.md#app-inspection).
     ...inspectCommands(() => this.client(), () => this.opened!),
     // Layout thrash, flicker, leak counters and memory (docs/e2e-flows.md#layout-flicker-and-leaks).
@@ -508,6 +513,15 @@ export function assertMenu(menus: readonly DriverMenuItem[], args: Record<string
     const actual = found.shortcut ? formatAccelerator({ key: found.shortcut.key.toLowerCase(), modifiers: found.shortcut.modifiers }) : null;
     const expected = formatAccelerator(parseAccelerator(String(args.shortcut), "macos", { allowUnmodifiedCharacter: true, allowExtendedKeys: true }));
     if (actual !== expected) fail("shortcut", expected, actual);
+  }
+}
+export function assertSimulatedBiometrics(biometrics: TestBiometrics, args: Record<string, unknown>) {
+  const actual: Record<string, unknown> = { prompts: biometrics.prompts, pending: biometrics.pending, lastOperation: biometrics.lastPrompt?.operation ?? null,
+    lastReason: biometrics.lastPrompt?.reason ?? null, lastFallback: biometrics.lastPrompt?.fallback ?? null, secrets: biometrics.secrets };
+  for (const key of Object.keys(actual)) {
+    if (args[key] === undefined) continue;
+    const [got, expected] = [JSON.stringify(actual[key], Object.keys(actual[key] ?? {}).sort()), JSON.stringify(args[key], Object.keys(args[key] ?? {}).sort())];
+    if (got !== expected) throw new Failure("assertion", `biometrics ${key} is ${JSON.stringify(actual[key])}, expected ${JSON.stringify(args[key])}`);
   }
 }
 /** Every listed type is on the test pasteboard (others may be too), and its plain text is exactly `text`. */

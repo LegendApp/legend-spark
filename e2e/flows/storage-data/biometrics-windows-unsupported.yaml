@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Biometrics are typed unsupported on Windows
+intent: >
+  On Windows the Biometrics screen reports getBiometricAvailability() as unsupported-platform; the status read rejects
+  SparkError:E_UNSUPPORTED_PLATFORM, which the status row shows, and so does a prompt. Not yet run on Windows. Windows
+  Hello: #389.
+checks: [DATA-BIOUNSUP-01]
+tags: [storage-data]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://storage-data/biometrics" }
+- extendedWaitUntil: { visible: { id: storage-data-biometrics-root }, timeout: 10s }
+- assertText: { id: storage-data-biometrics-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: storage-data-biometrics-status, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: storage-data-biometrics-auth-none }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "none: SparkError:E_UNSUPPORTED_PLATFORM" }

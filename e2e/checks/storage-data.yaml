@@ -1,0 +1,63 @@
+area: storage-data
+prefix: DATA
+checks:
+  DATA-BIOAVAIL-01:
+    title: "getBiometricAvailability reports the biometrics module available on macOS, and getBiometricStatus reports the sensor and each policy's state without a prompt"
+    platforms: [macos]
+    blocking: true
+    spec: "#142 DATA.api-bio"
+    covers:
+      - ./biometrics
+      - ./biometrics#getBiometricAvailability
+      - ./biometrics#getBiometricAvailability().available
+      - ./biometrics#getBiometricStatus
+  DATA-BIOAUTH-01:
+    title: "authenticateWithBiometrics prompts with the reason and the requested fallback (Touch ID only by default, the login password, or the app's button) and resolves success, userCancel, systemCancel, userFallback and authenticationFailed as results (driver simulation; no Touch ID prompt)"
+    platforms: [macos]
+    blocking: true
+    spec: "#142 DATA.api-bio"
+    covers:
+      - ./biometrics#authenticateWithBiometrics
+  DATA-BIOERR-01:
+    title: "Without a prompt biometrics cannot run, authenticateWithBiometrics rejects a typed BiometricError: lockout, notEnrolled and notAvailable are E_UNAVAILABLE unless the password fallback was asked for; aborting the signal is E_ABORTED appCancel; a second prompt is SparkError:E_BUSY"
+    platforms: [macos]
+    blocking: true
+    spec: "#142 DATA.api-bio"
+    covers:
+      - ./biometrics#authenticateWithBiometrics
+      - ./biometrics#getBiometricStatus
+      - ./biometrics#BiometricError
+  DATA-BIOSECRET-01:
+    title: "setBiometricSecret stores a Keychain secret behind its access without a prompt; getBiometricSecret prompts and returns it, null without a prompt when none is stored; a fingerprint change removes biometryCurrentSet secrets only; biometryOrPassword secrets stay readable when biometrics are locked out; deleteBiometricSecret is idempotent"
+    platforms: [macos]
+    blocking: true
+    spec: "#142 DATA.api-bio"
+    covers:
+      - ./biometrics#setBiometricSecret
+      - ./biometrics#getBiometricSecret
+      - ./biometrics#deleteBiometricSecret
+  DATA-BIOREAL-01:
+    title: "Real Touch ID: each fallback shows the system prompt with the reason and the right buttons, cancelling and a wrong finger report their outcomes, Cancel prompt dismisses it, and a secret stored behind biometry is read only after Touch ID"
+    platforms: [macos]
+    blocking: true
+    spec: "#142 DATA.api-bio"
+    covers:
+      - ./biometrics#authenticateWithBiometrics
+      - ./biometrics#getBiometricSecret
+      - ./biometrics#setBiometricSecret
+  DATA-BIOUNSUP-01:
+    title: "On Windows getBiometricAvailability reports unsupported-platform and getBiometricStatus, prompts and secrets reject SparkError:E_UNSUPPORTED_PLATFORM (Windows Hello: #389)"
+    platforms: [windows]
+    blocking: true
+    spec: "#142 DATA.api-bio; Windows implementation #389"
+    covers:
+      - ./biometrics#getBiometricAvailability().available
+      - ./biometrics#getBiometricStatus
+      - ./biometrics#authenticateWithBiometrics
+  DATA-BIOVISUAL-01:
+    title: "The Biometrics screen matches its golden in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#142 DATA.api-bio"
+    covers:
+      - ./biometrics#getBiometricAvailability().available

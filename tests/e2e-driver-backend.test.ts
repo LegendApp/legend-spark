@@ -129,6 +129,17 @@ describe("command mapping", () => {
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('photos authorization is "notDetermined", expected "authorized"') });
   });
 
+  test("simulateBiometrics sets the simulated state; assertSimulatedBiometrics checks prompts, the last prompt and secrets", async () => {
+    const app = new FakeApp();
+    app.biometrics = { biometryType: "touchId", biometrics: "available", password: "available", answer: null, pending: 0, prompts: 2, lastPrompt: { operation: "secret", reason: "Read the vault", fallback: "none" }, secrets: { vault: "biometryCurrentSet", pin: "biometryOrPassword" } };
+    const { result } = await run("- launchApp\n- simulateBiometrics: { biometrics: lockout, answer: userCancel }\n- simulateBiometrics: { enrollmentChanged: true }\n- assertSimulatedBiometrics: { prompts: 2, pending: 0, lastOperation: secret, lastReason: Read the vault, lastFallback: none, secrets: { pin: biometryOrPassword } }", app);
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => line.includes("Biometrics"))).toEqual(['simulateBiometrics {"biometrics":"lockout","answer":"userCancel"}', 'simulateBiometrics {"enrollmentChanged":true}', "testBiometrics"]);
+    expect(app.drivers[0]!.biometrics).toMatchObject({ biometrics: "lockout", answer: "userCancel" });
+    const failed = await run("- launchApp\n- assertSimulatedBiometrics: { prompts: 1, timeout: 200ms }");
+    expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("biometrics prompts is 0, expected 1") });
+  });
+
   test("dragAndDrop runs a Spark drag source's drag in process: begin, move, a hold for spring loading, drop", async () => {
     const app = new FakeApp({ source: 1, target: 1 });
     app.dragSources = { source: {} };

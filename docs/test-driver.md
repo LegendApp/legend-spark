@@ -21,7 +21,7 @@ Never set `testDriverInRelease` for an app you distribute. How it works:
 
 - The config plugin writes `ENV['SPARK_TEST_DRIVER_RELEASE'] = '1'` into the generated Podfile when the
   option is set. Every Spark pod that includes `SparkTestDriver.h` (`RNDesktopApp`, `RNSparkUI`,
-  `RNSparkMotion`, `RNDesktopSystem`, `RNDesktopWindows`, `RNDesktopClipboard`, `RNDesktopDrag`, `RNDesktopPermissions`), and `RNDesktopDiagnostics`, sets the build setting
+  `RNSparkMotion`, `RNDesktopSystem`, `RNDesktopWindows`, `RNDesktopClipboard`, `RNDesktopDrag`, `RNDesktopPermissions`, `RNDesktopBiometrics`), and `RNDesktopDiagnostics`, sets the build setting
   `SPARK_TEST_DRIVER` to 1 in the Debug configuration, and in other configurations to 1 with that variable or 0
   without it, and passes it to the preprocessor. `RNDesktopApp` also gives it to the app target, for the host's
   app delegate.
@@ -252,7 +252,9 @@ package moves `@legendapp/spark/clipboard` onto a private pasteboard when the dr
 drag-drop package registers `testDrag`, which runs a drag between Spark drag views in process as the window server
 would, and drops promised files in a temporary folder as Finder would ([drag-drop.md](drag-drop.md#testing)). The permissions package
 answers `@legendapp/spark/permissions` from simulated state in driver mode, never from TCC, and registers
-`simulatePermission` and `testPermission` to set and read it ([permissions.md](permissions.md#testing)).
+`simulatePermission` and `testPermission` to set and read it ([permissions.md](permissions.md#testing)). The biometrics package answers `@legendapp/spark/biometrics` from simulated state in driver mode,
+never showing a Touch ID prompt or touching a keychain, and registers `simulateBiometrics` and `testBiometrics`
+([biometrics.md](biometrics.md#testing)).
 
 Modules also get four hooks (`SparkTestDriver.h`, main thread): `SparkTestDriverFindView`
 finds a view by testID as `waitFor` does; `SparkTestDriverObserveStart` runs a block once the

@@ -17,4 +17,6 @@
 - permission: { reset: camera }             # grant | revoke | reset
 - simulatePermission: { kind: camera, authorization: notDetermined, answer: allow }   # driver; never reaches TCC
 - assertSimulatedPermission: { kind: camera, authorization: authorized, requests: 1, prompts: 1, settingsOpened: 0 }
+- simulateBiometrics: { biometrics: lockout, answer: userCancel }   # driver; never shows a Touch ID prompt
+- assertSimulatedBiometrics: { prompts: 1, lastFallback: password, secrets: { vault: biometryCurrentSet } }
 - setFocusMode: doNotDisturb

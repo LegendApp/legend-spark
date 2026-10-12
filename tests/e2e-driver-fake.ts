@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -102,6 +102,15 @@ export class FakeDriver implements DriverClient {
     this.log.push(`testPermission ${kind}`);
     return this.permissions[kind] ?? { authorization: "notDetermined", answer: null, requests: 0, prompts: 0, settingsOpened: 0 };
   }
+  /** The fake's simulated biometrics, as the app's simulateBiometrics and testBiometrics commands keep them. */
+  biometrics: TestBiometrics = { biometryType: "touchId", biometrics: "available", password: "available", answer: null, prompts: 0, pending: 0, lastPrompt: null, secrets: {} };
+  async simulateBiometrics(state: SimulatedBiometrics) {
+    this.log.push(`simulateBiometrics ${JSON.stringify(state)}`);
+    const { enrollmentChanged, ...fields } = state;
+    const secrets = enrollmentChanged ? Object.fromEntries(Object.entries(this.biometrics.secrets).filter(([, access]) => access !== "biometryCurrentSet")) : this.biometrics.secrets;
+    return this.biometrics = { ...this.biometrics, ...fields, secrets };
+  }
+  async testBiometrics() { this.log.push("testBiometrics"); return this.biometrics; }
   /** Spark drag sources (FakeApp.dragSources), as the app's testDrag command sees them. */
   dragSources: () => Record<string, DragSource> = () => ({});
   private dragging?: { promised: string[] };
@@ -173,6 +182,8 @@ export class FakeApp implements DriverApp {
   readonly drivers: FakeDriver[] = [];
   /** Spark drag sources by testID, and the promised files a drop in a folder writes. */
   dragSources: Record<string, DragSource> = {};
+  /** The simulated biometric state each launch's driver starts with (FakeDriver's default when unset). */
+  biometrics?: TestBiometrics;
   /** Extra elements of the in-process accessibility view; tests may change them while a flow runs. */
   elements: DriverElement[] = [];
   /** Scripted motion telemetry by testID, and the next frame report (or driver failure). */
@@ -216,6 +227,7 @@ export class FakeApp implements DriverApp {
     const driver: FakeDriver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar, () => this.motions, () => this.frames, () => this.cursor,
       () => ({ startup: this.startup, state: this.state }), () => ({ commits: this.commits, counters: this.counters, memoryMB: this.memoryMB }), () => this.audit, () => this.sockets(driver));
     driver.dragSources = () => this.dragSources;
+    if (this.biometrics) driver.biometrics = this.biometrics;
     this.drivers.push(driver);
     return driver;
   }

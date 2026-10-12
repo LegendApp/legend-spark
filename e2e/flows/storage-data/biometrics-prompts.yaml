@@ -1,0 +1,39 @@
+appId: so.legend.spark.examples.kitchensink
+name: Biometric prompts resolve the person's answer per fallback policy (simulated)
+intent: >
+  Storage & data > Biometrics reads the status on open: Touch ID, available for both policies. In driver mode
+  @legendapp/spark/biometrics answers from simulated state and never creates an LAContext or shows a prompt. Without a
+  simulated answer a prompt rejects SparkError:E_UNAVAILABLE and nothing is shown. Each Prompt button asks with the
+  screen's reason and its fallback (none by default, the login password, or the app's button); success and the person's
+  outcomes (userCancel, systemCancel, authenticationFailed, and userFallback from the app's button) resolve as results.
+checks: [DATA-BIOAVAIL-01, DATA-BIOAUTH-01]
+tags: [storage-data]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://storage-data/biometrics" }
+- assertText: { id: storage-data-biometrics-availability, equals: '{"available":true}' }
+- assertText: { id: storage-data-biometrics-status, equals: "touchId · biometrics available · password available" }
+- tapOn: { id: storage-data-biometrics-auth-none }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "none: SparkError:E_UNAVAILABLE" }
+- assertSimulatedBiometrics: { prompts: 0, pending: 0 }
+- simulateBiometrics: { answer: success }
+- tapOn: { id: storage-data-biometrics-auth-none }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "none: success" }
+- assertSimulatedBiometrics: { prompts: 1, pending: 0, lastOperation: authenticate, lastReason: unlock the Kitchen Sink demo, lastFallback: none }
+- tapOn: { id: storage-data-biometrics-auth-password }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "password: success" }
+- assertSimulatedBiometrics: { prompts: 2, lastFallback: password }
+- simulateBiometrics: { answer: userCancel }
+- tapOn: { id: storage-data-biometrics-auth-none }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "none: userCancel" }
+- simulateBiometrics: { answer: systemCancel }
+- tapOn: { id: storage-data-biometrics-auth-password }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "password: systemCancel" }
+- simulateBiometrics: { answer: authenticationFailed }
+- tapOn: { id: storage-data-biometrics-auth-none }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "none: authenticationFailed" }
+- simulateBiometrics: { answer: userFallback }
+- tapOn: { id: storage-data-biometrics-auth-app }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "app: userFallback" }
+- assertSimulatedBiometrics: { prompts: 6, pending: 0, lastFallback: app }
+- takeScreenshot: biometrics-prompts

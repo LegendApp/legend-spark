@@ -5260,6 +5260,181 @@
               "type": "object"
             }
           },
+          "simulateBiometrics": {
+            "description": "[driver] Set the simulated state @legendapp/spark/biometrics reports, in-process: the sensor, whether biometrics alone and biometrics or the login password can be evaluated, and how the next simulated prompts end (ignore: they stay up until cancelled; null clears the answer, so prompts reject E_UNAVAILABLE). enrollmentChanged: true removes biometryCurrentSet secrets, as adding or removing a fingerprint does. Never shows a Touch ID or password prompt or touches a keychain.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "biometryType": {
+                  "enum": [
+                    "touchId",
+                    "none",
+                    "unknown"
+                  ]
+                },
+                "biometrics": {
+                  "enum": [
+                    "available",
+                    "notAvailable",
+                    "notEnrolled",
+                    "lockout",
+                    "passcodeNotSet",
+                    "disconnected",
+                    "notPaired"
+                  ]
+                },
+                "password": {
+                  "enum": [
+                    "available",
+                    "passcodeNotSet",
+                    "notAvailable"
+                  ]
+                },
+                "answer": {
+                  "enum": [
+                    "success",
+                    "userCancel",
+                    "systemCancel",
+                    "userFallback",
+                    "authenticationFailed",
+                    "ignore",
+                    null
+                  ]
+                },
+                "enrollmentChanged": {
+                  "const": true
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "biometryType"
+                  ]
+                },
+                {
+                  "required": [
+                    "biometrics"
+                  ]
+                },
+                {
+                  "required": [
+                    "password"
+                  ]
+                },
+                {
+                  "required": [
+                    "answer"
+                  ]
+                },
+                {
+                  "required": [
+                    "enrollmentChanged"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
+          "assertSimulatedBiometrics": {
+            "description": "[driver] Assert the simulated biometric state: how many prompts were shown, how many are still up, the last prompt's operation (authenticate or secret), reason and fallback, and the stored secrets with their access (exactly).",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "prompts": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "pending": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "lastOperation": {
+                  "enum": [
+                    "authenticate",
+                    "secret"
+                  ]
+                },
+                "lastReason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "lastFallback": {
+                  "enum": [
+                    "none",
+                    "password",
+                    "app"
+                  ]
+                },
+                "secrets": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "enum": [
+                      "biometryCurrentSet",
+                      "biometryAny",
+                      "biometryOrPassword"
+                    ]
+                  }
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "prompts"
+                  ]
+                },
+                {
+                  "required": [
+                    "pending"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastOperation"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastReason"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastFallback"
+                  ]
+                },
+                {
+                  "required": [
+                    "secrets"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "permission": {
             "description": "Grant, revoke or reset a privacy permission.",
             "if": {

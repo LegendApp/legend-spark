@@ -30,6 +30,12 @@ export type TestDragReply = { started?: boolean; operation?: string; files?: str
 export type TestClipboard = { types: string[]; text: string | null; changeCount: number };
 /** The simulated state of one @legendapp/spark/permissions kind (the `testPermission` driver command). */
 export type TestPermission = { authorization: string; answer: "allow" | "deny" | "ignore" | null; requests: number; prompts: number; settingsOpened: number };
+/** The simulated state of @legendapp/spark/biometrics (the `testBiometrics` driver command). */
+export type TestBiometrics = {
+  biometryType: string; biometrics: string; password: string; answer: string | null; prompts: number; pending: number;
+  lastPrompt: { operation: string; reason: string; fallback: string; cancelLabel?: string; fallbackLabel?: string } | null; secrets: Record<string, string>;
+};
+export type SimulatedBiometrics = { biometryType?: string; biometrics?: string; password?: string; answer?: string | null; enrollmentChanged?: true };
 /** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
 export type SimulatedSystemEvent = {
   type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string;
@@ -305,6 +311,10 @@ export class Driver {
   }
   /** A kind's simulated permission state: authorization, answer, and counts of requests, prompts and System Settings openings. */
   async testPermission(kind: string) { return body<{ permission: TestPermission }>(await this.request({ command: "testPermission", kind }, 10000)).permission; }
+  /** Sets the simulated state @legendapp/spark/biometrics reports (docs/biometrics.md#testing); no prompt or keychain is reached. */
+  async simulateBiometrics(state: SimulatedBiometrics) { return body<{ biometrics: TestBiometrics }>(await this.request({ command: "simulateBiometrics", ...state }, 10000)).biometrics; }
+  /** The simulated biometric state: sensor, policy states, answer, prompts shown and pending, the last prompt and stored secrets. */
+  async testBiometrics() { return body<{ biometrics: TestBiometrics }>(await this.request({ command: "testBiometrics" }, 10000)).biometrics; }
   /** Startup phases of this launch, once its first rendered UI has settled; with `testID`, `ready` once that element first showed settled. */
   async startup(timeoutMs = 30000, testID?: string) {
     return (await this.request({ command: "startup", timeoutMs, ...(testID === undefined ? {} : { testID }) }, timeoutMs + 10000)).phases as StartupPhases;

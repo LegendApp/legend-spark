@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Biometrics screen matches its golden
+intent: >
+  Storage & data > Biometrics opens from spark-ks://storage-data/biometrics with the simulated initial status (Touch ID,
+  both policies available) and no results yet. The main window matches the approved golden for the appearance and
+  locale (light and dark, English and Arabic), with the shell sidebar masked.
+checks: [DATA-BIOVISUAL-01]
+tags: [storage-data]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://storage-data/biometrics" }
+- assertText: { id: storage-data-biometrics-status, equals: "touchId · biometrics available · password available" }
+- assertScreenshot: { golden: storage-data-biometrics, mask: [{ id: infra-shell-sidebar }] }

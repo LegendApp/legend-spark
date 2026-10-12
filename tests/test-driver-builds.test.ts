@@ -59,7 +59,7 @@ const DRIVER_DEFINITION = "$(inherited) SPARK_TEST_DRIVER=$(SPARK_TEST_DRIVER)";
 // to link in a release build without the driver), and diagnostics, whose simulated crashes need the driver.
 const DRIVER_PODS = ["packages/ui/RNSparkUI.podspec", "packages/motion/RNSparkMotion.podspec", "packages/system/RNDesktopSystem.podspec",
   "packages/desktop-windows/RNDesktopWindows.podspec", "packages/diagnostics/RNDesktopDiagnostics.podspec", "packages/clipboard/RNDesktopClipboard.podspec", "packages/drag-drop/RNDesktopDrag.podspec",
-  "packages/permissions/RNDesktopPermissions.podspec"];
+  "packages/permissions/RNDesktopPermissions.podspec", "packages/biometrics/RNDesktopBiometrics.podspec"];
 
 test("every Spark source that includes SparkTestDriver.h belongs to a pod that sets SPARK_TEST_DRIVER", () => {
   const sources = (directory: string): string[] => readdirSync(directory, { withFileTypes: true }).flatMap(entry =>
@@ -67,7 +67,7 @@ test("every Spark source that includes SparkTestDriver.h belongs to a pod that s
   const including = new Set(readdirSync(path.join(root, "packages")).flatMap(name => sources(path.join(root, "packages", name)))
     .filter(file => /SparkTestDriver\.h|SparkTestDriverPrivate\.h/.test(readFileSync(file, "utf8")))
     .map(file => path.relative(path.join(root, "packages"), file).split(path.sep)[0]));
-  expect([...including].sort()).toEqual(["clipboard", "desktop-app", "desktop-host", "desktop-windows", "drag-drop", "motion", "permissions", "system", "ui"]);
+  expect([...including].sort()).toEqual(["biometrics", "clipboard", "desktop-app", "desktop-host", "desktop-windows", "drag-drop", "motion", "permissions", "system", "ui"]);
 });
 
 test("driver command registrations sit in the driver's excluded sources or inside #if SPARK_TEST_DRIVER", () => {

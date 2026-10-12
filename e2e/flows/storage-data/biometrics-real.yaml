@@ -1,0 +1,43 @@
+appId: so.legend.spark.examples.kitchensink
+name: Real Touch ID prompts and biometry-gated Keychain secrets
+intent: >
+  The real LocalAuthentication and Keychain paths of @legendapp/spark/biometrics, which no automated run may reach: they
+  show Touch ID prompts and write this Mac's keychain. manual: true keeps the gate from running it. Run it by hand on a
+  Mac with Touch ID and an enrolled finger. The secrets need the data protection keychain, so the build must be signed
+  with a Keychain access group; without one the secret rows show BiometricError:E_UNAVAILABLE:missingEntitlement.
+  Delete each secret afterwards.
+checks: [DATA-BIOREAL-01]
+tags: [storage-data]
+platforms: [macos]
+manual: true
+---
+- launchApp: { openUrl: "spark-ks://storage-data/biometrics" }
+- extendedWaitUntil: { visible: { id: storage-data-biometrics-root }, timeout: 10s }
+- manualStep:
+    instruction: >-
+      Open Storage & data > Biometrics. Press Prompt on "Touch ID only" and touch the sensor; again and press Cancel;
+      again with a finger that is not enrolled until macOS gives up. Press Prompt on "Touch ID or the login password"
+      and enter the password instead. Press Prompt on "Touch ID or the app's own sign-in" and press its "Use account
+      password" button.
+    expect: >-
+      Each prompt says "unlock the Kitchen Sink demo". Touch ID only has no password button; the result shows
+      none: success, none: userCancel, then none: authenticationFailed. The password prompt accepts the login password
+      (password: success). The app's prompt shows "Use account password" and ends with app: userFallback.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Prompt on "Touch ID only", leave the prompt up and press Cancel prompt in the Kitchen Sink window.
+    expect: >-
+      The prompt disappears and the result shows none: BiometricError:E_ABORTED:appCancel.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      For each secret row press Store, then Read (touch the sensor; for the last row enter the password instead), then
+      Delete, then Read again.
+    expect: >-
+      Store shows stored without any prompt. Read shows the Touch ID prompt, then value: secret for <row's access>.
+      Delete shows deleted without a prompt, and the last Read shows value: null without a prompt.
+    evidence: none
+    signoff: required

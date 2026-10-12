@@ -1,0 +1,38 @@
+appId: so.legend.spark.examples.kitchensink
+name: Biometric prompts that cannot run reject typed errors; Cancel aborts a pending prompt (simulated)
+intent: >
+  When biometrics are locked out, not enrolled or absent, a Touch ID-only prompt rejects BiometricError E_UNAVAILABLE
+  with that reason before any prompt appears, and the status shows the state; with the login-password fallback,
+  asked for explicitly, the prompt still runs. A prompt nobody answers stays pending: a second prompt rejects
+  SparkError:E_BUSY, and Cancel prompt aborts the first (E_ABORTED appCancel). Driver simulation only; no Touch ID or
+  password prompt appears.
+checks: [DATA-BIOERR-01]
+tags: [storage-data]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://storage-data/biometrics" }
+- assertText: { id: storage-data-biometrics-status, equals: "touchId · biometrics available · password available" }
+- simulateBiometrics: { biometrics: lockout, answer: success }
+- tapOn: { id: storage-data-biometrics-auth-none }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "none: BiometricError:E_UNAVAILABLE:lockout" }
+- assertText: { id: storage-data-biometrics-status, equals: "touchId · biometrics lockout · password available" }
+- assertSimulatedBiometrics: { prompts: 0 }
+- tapOn: { id: storage-data-biometrics-auth-password }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "password: success" }
+- assertSimulatedBiometrics: { prompts: 1, lastFallback: password }
+- simulateBiometrics: { biometrics: notEnrolled }
+- tapOn: { id: storage-data-biometrics-auth-app }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "app: BiometricError:E_UNAVAILABLE:notEnrolled" }
+- simulateBiometrics: { biometryType: none, biometrics: notAvailable, password: passcodeNotSet }
+- tapOn: { id: storage-data-biometrics-auth-password }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "password: BiometricError:E_UNAVAILABLE:passcodeNotSet" }
+- assertText: { id: storage-data-biometrics-status, equals: "none · biometrics notAvailable · password passcodeNotSet" }
+- simulateBiometrics: { biometryType: touchId, biometrics: available, password: available, answer: ignore }
+- tapOn: { id: storage-data-biometrics-auth-none }
+- assertSimulatedBiometrics: { pending: 1 }
+- tapOn: { id: storage-data-biometrics-auth-password }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "password: SparkError:E_BUSY" }
+- tapOn: { id: storage-data-biometrics-auth-cancel }
+- assertText: { id: storage-data-biometrics-auth-result, equals: "none: BiometricError:E_ABORTED:appCancel" }
+- assertSimulatedBiometrics: { pending: 0 }
+- takeScreenshot: biometrics-errors
