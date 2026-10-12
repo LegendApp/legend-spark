@@ -7,7 +7,10 @@ import { goldenCommand } from "../scripts/e2e/golden/approve.ts";
 import { compare, deltaE2000, readPng, writePng, type Image } from "../scripts/e2e/golden/diff.ts";
 import { checkGoldenId, goldenId } from "../scripts/e2e/golden/store.ts";
 import { runFlows } from "../scripts/e2e/runner/executor.ts";
+import type { CommandHandler } from "../scripts/e2e/runner/backend.ts";
+import { motionCommands } from "../scripts/e2e/runner/driver-motion.ts";
 import { buildReport, html, writeReports } from "../scripts/e2e/runner/report.ts";
+import { FakeDriver, fakeMotion, fakeSamples } from "./e2e-driver-fake.ts";
 import { element, MemoryBackend, VirtualClock } from "./e2e-runner-backend.ts";
 
 type Color = [number, number, number, number?];
@@ -107,7 +110,7 @@ describe("assertScreenshot in the runner", () => {
   const FRAME = { x: 100, y: 50, width: 50, height: 50 };
   const header = (matrix: string) => `appId: so.legend.kitchensink\nname: Golden\nintent: Shows the catalog.\nmatrix: ${matrix}\n---\n`;
 
-  function setup(commands: string, goldens: Record<string, Image> = {}, matrix = "{ appearance: [light], locale: [en] }") {
+  function setup(commands: string, goldens: Record<string, Image> = {}, matrix = "{ appearance: [light], locale: [en] }", handlers: Record<string, CommandHandler> = {}) {
     const root = mkdtempSync(path.join(tmpdir(), "e2e-golden-"));
     mkdirSync(path.join(root, "flows/area"), { recursive: true });
     writeFileSync(path.join(root, "flows/area/test.yaml"), header(matrix) + commands);
@@ -117,7 +120,7 @@ describe("assertScreenshot in the runner", () => {
     }
     const screen = { image: image(100, 100) };
     const backend = new MemoryBackend(new VirtualClock(), {
-      name: "driver", kind: "driver", matrix: ["appearance", "locale"], collect: false,
+      name: "driver", kind: "driver", matrix: ["appearance", "locale"], collect: false, commands: handlers,
       elements: [element("clock", { id: "clock", frame: { x: 110, y: 60, width: 5, height: 5 } })],
       screenshot: async file => { writePng(file, screen.image); return { frame: FRAME, scale: 2 }; },
     });
@@ -177,6 +180,17 @@ describe("assertScreenshot in the runner", () => {
     const { result } = await run();
     expect(result.status).toBe("passed");
     expect(result.goldens[0]!.stats).toEqual({ compared: 10000 - 100 - 100, different: 0, antialiased: 0, ratio: 0 });
+  });
+
+  test("assertMotion frames take the same masks", async () => {
+    const motion = new FakeDriver([], {}, () => [], [], () => ({ clock: { motion: fakeMotion(), samples: fakeSamples([0]), clock: "virtual" } }));
+    const { run, screen } = setup("- assertMotion: { target: { id: clock }, frames: { at: [0, 100], golden: home, mask: [{ id: clock }], maskRects: [{ x: 40, y: 0, w: 10, h: 2.5 }] } }\n",
+      { [`${GOLDEN}-0`]: image(100, 100), [`${GOLDEN}-100`]: image(100, 100) }, undefined, motionCommands(() => motion));
+    fill(screen.image, 20, 20, 10, 10, BLACK);
+    fill(screen.image, 80, 0, 20, 5, BLACK);
+    const { result } = await run();
+    expect(result.status).toBe("passed");
+    expect(result.goldens.map(golden => [golden.id, golden.stats?.compared])).toEqual([[`${GOLDEN}-0`, 9800], [`${GOLDEN}-100`, 9800]]);
   });
 
   test("a missing golden fails and is never created", async () => {

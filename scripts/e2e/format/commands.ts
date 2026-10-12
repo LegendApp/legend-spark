@@ -49,6 +49,8 @@ const simulatedDisplay = fields({
   refreshRate: fields({ minimum: num, maximum: num, variable: bool }), colorSpace: fields({ name: nullable("string"), gamut: oneOf("srgb", "p3") }),
   edrHeadroom: fields({ current: num, potential: num, reference: nullable("number") }),
 });
+/** Regions a golden comparison ignores: elements, or rectangles in points from the image's top-left. */
+const masks = { mask: list(selector), maskRects: list(obj({ x: num, y: num, w: num, h: num }, ["x", "y", "w", "h"])) };
 
 export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   // Lifecycle
@@ -190,7 +192,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   captureMotion: spec("motion", "Record motion samples for a target.", { target: selector, until: { type: ["string", "integer"], pattern: "^(settled|\\d+(\\.\\d+)?(ms|s|m))$", minimum: 0, description: "settled, or a duration" }, name: str }, { required: ["target", "name"], driver: true }),
   assertMotion: spec("motion", "Assert motion of a target.", {
     target: selector, kind: oneOf("spring", "timing", "crossfade", "none"), velocityContinuous: bool, overshoot: bound(pixels), settlesWithin: duration,
-    frames: obj({ at: list({ type: "number", minimum: 0, maximum: 100 }), golden: str }, ["at", "golden"]),
+    frames: obj({ at: list({ type: "number", minimum: 0, maximum: 100 }), golden: str, ...masks }, ["at", "golden"]),
   }, { required: ["target"], driver: true }),
   interruptAt: spec("motion", "Run a command when the running motion reaches a progress point.", { target: selector, progress: fraction, with: command }, { required: ["progress", "with"], driver: true }),
   assertFrames: spec("motion", "Assert frame rate and drops while a command runs, and for at least `for` from the start (real clock).", { during: command, for: duration, fps: bound(num), dropped: int() }, { required: ["during"], rule: anyKey("fps", "dropped"), driver: true }),
@@ -200,7 +202,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   // Visual
   takeScreenshot: single("visual", "Capture the app in-process (driver capture, no screen-recording permission) to output/<name>.png.", "name", fileName, { window: windowSelector }, { maestro: true, driver: true }),
   assertScreenshot: single("visual", "Capture in-process and compare with golden/<platform>/<appearance>/<locale>/<golden>.png: at most `threshold` of the pixels (default 0%) may differ by more than `tolerance` (CIEDE2000, default 2), ignoring anti-aliasing and masks (elements, or `maskRects` in points from the image's top-left).", "golden", fileName, {
-    window: windowSelector, threshold: percent, tolerance: { type: "number", minimum: 0, maximum: 100 }, mask: list(selector), maskRects: list(obj({ x: num, y: num, w: num, h: num }, ["x", "y", "w", "h"])),
+    window: windowSelector, threshold: percent, tolerance: { type: "number", minimum: 0, maximum: 100 }, ...masks,
   }, { driver: true }),
   startRecording: spec("visual", "Start a screen recording.", { name: str }),
   stopRecording: single("visual", "Stop and save the recording.", "name", str),

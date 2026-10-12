@@ -68,14 +68,14 @@ export function motionCommands(client: () => MotionClient): Record<string, Comma
   }
   const settled = (id: string, what: string, context: CommandContext) => driven(what, () => client().waitForMotion(id, { settled: true }, context.timeoutMs));
 
-  /** Captures the window at each progress point of the motion (percent of its start to its end) and compares it with `<golden>-<percent>`. */
-  async function frames(id: string, { at, golden }: { at: number[]; golden: string }, context: CommandContext) {
+  /** Captures the window at each progress point of the motion (percent of its start to its end) and compares it with `<golden>-<percent>`, with assertScreenshot's masks. */
+  async function frames(id: string, { at, golden, ...masks }: { at: number[]; golden: string }, context: CommandContext) {
     if ((await driven("assertMotion frames", () => client().motionState(id))).clock !== "virtual")
       throw new Failure("invalid", "assertMotion frames are exact frames of the virtual clock; run setClock: virtual before the motion starts");
     const failures: Failure[] = [];
     for (const percent of [...at].sort((a, b) => a - b)) {
       await driven(`assertMotion frames at ${percent}%`, () => client().waitForMotion(id, { progress: percent / 100 }, context.timeoutMs));
-      const screenshot: FlowCommand = { name: "assertScreenshot", args: { golden: `${golden}-${String(percent).replace(".", "_")}` }, location: context.command.location };
+      const screenshot: FlowCommand = { name: "assertScreenshot", args: { ...masks, golden: `${golden}-${String(percent).replace(".", "_")}` }, location: context.command.location };
       try { await context.run([screenshot]); } catch (error) {
         const failure = (error as { failure?: unknown }).failure ?? error;
         if (!(failure instanceof Failure) || failure.kind !== "assertion") throw error;
