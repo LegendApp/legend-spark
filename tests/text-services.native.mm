@@ -19,7 +19,8 @@ struct EventEmitter { using Shared = std::shared_ptr<const EventEmitter>; virtua
 struct TextChange { std::string text; int eventCount; };
 static std::vector<TextChange> changes;
 struct SparkTextInputEventEmitter : EventEmitter { void onTextChange(TextChange event) const { changes.push_back(event); } };
-struct LayoutMetrics {};
+enum class LayoutDirection { Undefined, LeftToRight, RightToLeft };
+struct LayoutMetrics { LayoutDirection layoutDirection = LayoutDirection::Undefined; };
 using ComponentDescriptorProvider = int;
 struct SparkTextInputComponentDescriptor {};
 template<class T> int concreteComponentDescriptorProvider() { return 0; }
