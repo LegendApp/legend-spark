@@ -6,7 +6,7 @@ import { outcome, run, runOk } from "./subprocess.ts";
 const darwin = process.platform === "darwin";
 const root = path.resolve(import.meta.dirname, "..");
 const native = path.join(root, "packages/desktop-app/macos");
-const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm", "SparkTestDriverCommits.mm"].map(file => path.join(native, file));
+const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm", "SparkTestDriverCommits.mm", "SparkTestDriverAudit.mm"].map(file => path.join(native, file));
 const compile = (sources: string[], output: string, include: string[] = [], flags: string[] = []) => runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore",
   ...flags, "-I", native, ...include.flatMap(directory => ["-I", directory]), ...sources, "-o", output], { timeout: 120_000 });
 // Gesture and extra mouse button synthesis use private CoreGraphics functions, compiled only on request
@@ -99,6 +99,9 @@ test.skipIf(!darwin)("frame counting keeps an idle main thread's cadence and see
   const result = await passes("frames");
   const skipped = /^frames skipped: (.*)$/m.exec(result.stdout);
   context.skip(skipped !== null, `no display link to count frames with: ${skipped?.[1]}`);
+}, 90_000);
+test.skipIf(!darwin)("accessibility audit facts: descriptions, declared text colours, and renders that show every text, scrolling as needed", async () => {
+  await passes("audit");
 }, 90_000);
 // Opens a real context menu on screen for a moment, so it runs only where that is acceptable (SPARK_GUI_TESTS=1).
 test.skipIf(!darwin || !process.env.SPARK_GUI_TESTS)("input that opens a native menu closes it and fails with E_MENU (opens a menu on screen; SPARK_GUI_TESTS=1)", async () => {

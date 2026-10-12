@@ -182,6 +182,7 @@ send one request at a time; each reply echoes `id`. Failures are
 | `pressKey` | `key`, `modifiers`, `window` | One key press. `key` is one character: a character key, or AppKit's character for a function key (`"\r"` Return, `"\u001b"` Escape, `"\u007f"` Delete, `"\uf700"` Up arrow, `"\uf704"` F1). |
 | `typeText` | `text`, `window` | One key press per user-perceived character, any Unicode (no input method). A newline presses Return. |
 | `menus` | | `menus`: the application menu bar (`NSApp.mainMenu`) as a tree, after `-[NSMenu update]` validates it, so `enabled` and `state` are what a user opening the menu sees. Items have `title`, `id`, `enabled`, `hidden`, `state` (`on`/`off`/`mixed`), optional `shortcut` (`key`, `modifiers` as NSEventModifierFlags bits), `toolTip`, `alternate` and `items`; separators are `{ "separator": true }`. The system Services menu is not expanded. A driven app shows no menu bar, but it has one. |
+| `accessibilityAudit` | `scope` (`window`: the main window, `app`: every window with an identifier), `name`, `timeoutMs` (5000) | `windows`, `captures` and `elements`, once mounted UI updates have settled: the facts of an [accessibility audit](#accessibility-audit). |
 | `startFrames` | | `refreshRate`. Starts counting frames ([Frame timing](#frame-timing)). `E_BUSY` while counting, `E_UNAVAILABLE` without a display. |
 | `stopFrames` | | `frames`, `droppedFrames`, `maxFrameGapMs`, `durationMs`, `fps`, `refreshRate` since `startFrames`. `E_INVALID_STATE` without `startFrames`; `E_UNAVAILABLE` when the display link delivered fewer than two frames. |
 | `startup` | `testID`, `timeoutMs` (30000) | `phases`: milliseconds from the kernel's start of the process to each startup phase ([Startup phases](#startup-phases)), once the first rendered UI has settled and, with `testID`, that element has shown at a quiet point. `E_TIMEOUT` before that; `E_UNAVAILABLE` when the kernel does not report the start time. |
@@ -411,6 +412,37 @@ AppKit views changed in separate run-loop turns.
 process and global-shortcut listeners use. Packages with their own event emitters (menus, shortcuts, audio, file
 system) are not counted. Only the main JavaScript runtime answers; with no JavaScript observing desktop events it is
 0. `tests/test-driver.native.mm` (modes `commits` and `state`) and `tests/test-state.test.ts` check them.
+
+## Accessibility audit
+
+`accessibilityAudit` (`packages/desktop-app/macos/SparkTestDriverAudit.mm`) collects what the audit rules need from
+inside the process; the runner judges it (`auditAccessibility`, [docs/e2e-flows.md](e2e-flows.md#accessibility-audit)).
+Without TCC there is no AX client, so these are the views' own NSAccessibility answers, not what VoiceOver reads
+through the accessibility API.
+
+- `elements`: in each window's content view (the title bar and its buttons are AppKit's), every view that is an
+  accessibility element, every control (through its cell), and every view that draws non-blank text (React Native
+  `Text`, non-editable text fields): `key`, `parent`, `window`, `id` (testID), `within` (the nearest testID of it or
+  an ancestor), `frame` (as `waitFor`), `element` (AppKit exposes it), `role` (as `elements`), `label`, `title`,
+  `placeholder`, `value`, `help`, `editable` (for views that can be), `focusable` (an AppKit control that does not
+  refuse first responder, another view that accepts it, or anything inside a table, outline or collection view), `enabled` (false inside a disabled AppKit
+  control; React Native macOS views report `accessibilityEnabled` NO unless their accessibility traits changed and
+  never map `accessibilityState.disabled` to it, so it is not read from them), and `opacity` (the product of its and
+  its ancestors' layer opacity). A text also has `text` and `textStyle`: its distinct
+  foreground colours resolved to sRGB in the view's effective appearance (`r`, `g`, `b` 0-255, `a` 0-1; `unresolved`
+  when one is not an sRGB colour), its smallest font size in points, and whether every run is bold. Colours of a
+  vibrant appearance (a sidebar's) are resolved in the matching non-vibrant one: they are translucent greys the
+  window server blends with what is behind them, which an in-process render skips. While its window is not key (a
+  driven window never is), AppKit draws a source list's text fields at half opacity through their layer; their
+  `opacity` is their `alphaValue`, as a user sees them in the active window.
+- `captures`: sRGB renders of the window, `<name>-<n>.png` in the run directory, as `capture` renders it. Each visible
+  text has `capture` (an index) and `sample` (the pixels of that render that show it). A text the window does not
+  show is scrolled into view (`scrollRectToVisible:`, as pointer input does) and the window is rendered again, until
+  every text was rendered whole, or as much of it as scrolling can show (`clipped`). A text nothing can show has no
+  `sample`. Every scroll position is restored before the reply.
+
+`tests/test-driver.native.mm` (mode `audit`) checks an undescribed image button, a button-role view that cannot take focus, a text's declared colour and sample,
+and a text below the fold of a scroll view that the audit scrolls to, renders and scrolls back.
 
 ## What a capture contains
 

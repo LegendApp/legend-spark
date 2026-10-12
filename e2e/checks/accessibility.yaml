@@ -1,0 +1,11 @@
+area: accessibility
+prefix: A11Y
+checks:
+  A11Y-AUDIT-01:
+    title: >
+      The macOS accessibility audit finds zero errors on every catalog screen and shell page, in light and dark,
+      English and Arabic: controls and images are described, controls take keyboard focus, and text meets the HIG
+      contrast ratio
+    platforms: [macos]
+    blocking: true
+    spec: "#157; docs/e2e-flows.md#accessibility-audit"

@@ -29,10 +29,11 @@ function useSelection(initial: string) {
   const onSelectionChange = ({ id }: { id: string | null }) => { setSelectedId(id); setStatus(`Selected ${id}`); };
   return { selectedId, status, setStatus, onSelectionChange };
 }
-function Row({ title, detail }: { title: string; detail: string }) {
+// The selected row's detail uses the foreground colour: muted text is too faint on the selection.
+function Row({ title, detail, selected }: { title: string; detail: string; selected: boolean }) {
   return <View className="grow justify-center gap-1 px-3">
     <Text className="text-sm font-bold text-foreground">{title}</Text>
-    <Text className="text-xs text-muted">{detail}</Text>
+    <Text className={`text-xs ${selected ? "text-foreground" : "text-muted"}`}>{detail}</Text>
   </View>;
 }
 
@@ -52,7 +53,7 @@ export function SidebarDynamicHeights() {
     <Status testID="native-controls-sidebar-dynamic-heights-selected">Selected: {selectedId}</Status>
     <Status testID="native-controls-sidebar-dynamic-heights-status">{status}</Status>
     <Sidebar testID="native-controls-sidebar-dynamic-heights-list" style={frame} defaultRowHeight={28} selectedId={selectedId} onSelectionChange={onSelectionChange}>
-      {dynamicRows.map(row => <SidebarItem key={row.id} id={row.id} rowHeight="auto" style={{ minHeight: row.minHeight }}><Row {...row} /></SidebarItem>)}
+      {dynamicRows.map(row => <SidebarItem key={row.id} id={row.id} rowHeight="auto" style={{ minHeight: row.minHeight }}><Row {...row} selected={selectedId === row.id} /></SidebarItem>)}
     </Sidebar>
   </Panel>;
 }
@@ -65,7 +66,7 @@ export function SidebarReactRows() {
     <Sidebar testID="native-controls-sidebar-react-rows-list" style={frame} defaultRowHeight={44} selectedId={selectedId} onSelectionChange={onSelectionChange}>
       {reactRows.map(row => <SidebarItem key={row.id} id={row.id} rowHeight={44} style={{ height: 44 }}
         onContextMenu={({ windowPosition }) => setStatus(`Right clicked ${row.id} at ${Math.round(windowPosition.x)}, ${Math.round(windowPosition.y)}`)}>
-        <Row {...row} />
+        <Row {...row} selected={selectedId === row.id} />
       </SidebarItem>)}
     </Sidebar>
   </Panel>;

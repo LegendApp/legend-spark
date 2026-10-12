@@ -1,0 +1,56 @@
+appId: so.legend.spark.examples.kitchensink
+name: Accessibility audit of the catalog and area pages
+intent: >
+  The Kitchen Sink shell's own pages, the catalog (All screens) and the page of every area, each opened from its
+  spark-ks:// link in the running app, pass the accessibility audit of the main window with no errors: every control
+  and image has a label or title, every control takes keyboard focus, and all enabled text meets the HIG contrast
+  ratio against what is rendered behind it. The sidebar, breadcrumb and theme toggle are audited on every page. Runs
+  in light and dark, in English and Arabic (right to left).
+checks: [A11Y-AUDIT-01]
+tags: [accessibility]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp
+- assertVisible: { id: infra-shell-home }
+- auditAccessibility: { maxErrors: 0 }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: infra } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: app-lifecycle } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: windows } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: toolbar-title-bar } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: menus } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: keyboard } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: pointer-trackpad } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: text-input-editing } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: native-controls } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: appearance-theming } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: displays-graphics } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: files-filesystem } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: dialogs } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: document-model } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: clipboard } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: drag-drop } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: notifications } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: system-integration } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: media } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: networking-webview } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: processes-ipc } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: storage-data } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: authentication } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: updates } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: packaging-distribution } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: accessibility } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: internationalization } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: performance-budgets } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: reliability-diagnostics } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: security } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: developer-experience } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: edge-abuse-cases } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: motion-system } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: flourishes-micro-interactions } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: multiwindow } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: component-library } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: future-facing-capabilities } }
+- runFlow: { file: subflows/accessibility/audit-area.yaml, env: { AREA: devtools } }

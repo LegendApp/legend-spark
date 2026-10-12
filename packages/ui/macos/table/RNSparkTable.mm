@@ -74,6 +74,14 @@ static BOOL RNSparkTableSelectAll(NSTableView *view, NSEvent *event) {
 - (BOOL)performKeyEquivalent:(NSEvent *)event { return RNSparkTableSelectAll(self, event) || [super performKeyEquivalent:event]; }
 - (NSMenu *)menuForEvent:(NSEvent *)event { [self.input tableContextMenu:event]; return nil; }
 - (void)rightMouseDown:(NSEvent *)event { [self menuForEvent:event]; }
+// AppKit's disclosure triangles have no description, so each is labelled with its row's outline column text, which
+// VoiceOver reads before "disclosure triangle, collapsed".
+- (void)didAddRowView:(NSTableRowView *)rowView forRow:(NSInteger)row {
+  [super didAddRowView:rowView forRow:row];
+  RNSparkTableRow *item = [self itemAtRow:row];
+  for (NSView *view in rowView.subviews)
+    if ([view.identifier isEqual:NSOutlineViewDisclosureButtonKey]) view.accessibilityLabel = item.cells[self.outlineTableColumn.identifier];
+}
 @end
 
 static NSString *ToNSString(std::string const &value) { return [[NSString alloc] initWithBytes:value.data() length:value.size() encoding:NSUTF8StringEncoding] ?: @""; }

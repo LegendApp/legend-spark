@@ -11,6 +11,7 @@ export type PointerMessages = {
   customChild: string;
   typingHint: string;
   placeholder: string;
+  typingField: string;
   hide: string;
   canvasHint: string;
   readouts: { scale: string; rotation: string; swipe: string; smartZooms: string; stage: string; forceClicks: string; button: string };
@@ -29,6 +30,7 @@ const en: PointerMessages = {
   customChild: "Child with cursor: pointer",
   typingHint: "Typing hides the cursor until the pointer moves, as in any text field. The button does the same for your own views.",
   placeholder: "Type something",
+  typingField: "Typing field",
   hide: "Hide cursor until moved",
   canvasHint: "Pinch, rotate, swipe with three fingers, double-tap with two fingers, force click, or press the back and forward mouse buttons over the canvas.",
   readouts: { scale: "Scale", rotation: "Rotation (°)", swipe: "Swipe", smartZooms: "Smart zooms", stage: "Pressure stage", forceClicks: "Force clicks", button: "Mouse button" },
@@ -46,6 +48,7 @@ const ar: PointerMessages = {
   customChild: "عنصر فرعي بالمؤشر: pointer",
   typingHint: "تُخفي الكتابة المؤشر حتى يتحرك، كما في أي حقل نص. ويفعل الزر الشيء نفسه لعناصرك.",
   placeholder: "اكتب شيئًا",
+  typingField: "حقل الكتابة",
   hide: "إخفاء المؤشر حتى يتحرك",
   canvasHint: "قرّب بإصبعين أو دوّر أو اسحب بثلاثة أصابع أو انقر مرتين بإصبعين أو انقر بقوة أو اضغط زرّي الرجوع والتقدّم في الفأرة فوق اللوحة.",
   readouts: { scale: "المقياس", rotation: "الدوران (°)", swipe: "السحب", smartZooms: "التكبير الذكي", stage: "مرحلة الضغط", forceClicks: "النقرات القوية", button: "زر الفأرة" },
