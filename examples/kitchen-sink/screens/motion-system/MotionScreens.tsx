@@ -6,6 +6,7 @@ import {
   badgeState, blockJs, describeError, interrupt, playDecay, playKeyframes, playPresets, playSequence, playStagger, playTimeline, presetParameters,
   PRESETS, release, reset, SCROLL_SOURCE, stop, startSlide, TRACK, useLoop, useReadout, useScrollLink, useWay, type Targets,
 } from "./motion-demo";
+import { playCues, shake, slide, startHidden, startLong, useMotionEnvironment } from "./motion-lifecycle";
 import { useMotionMessages } from "./motion-messages";
 
 // Test IDs: motion-system-<screen>-<part>. Readouts are the JSON the API reports.
@@ -149,6 +150,57 @@ export function ScrollAndFrames() {
       <Readout testID="motion-system-scroll-and-frames-loop" text={loop} />
       <Actions><Button testID="motion-system-scroll-and-frames-block" onPress={() => frames.run(() => blockJs(runner.current))}>{t.blockJs}</Button></Actions>
       <Readout testID="motion-system-scroll-and-frames-report" text={frames.text} />
+    </Section>
+  </Page>;
+}
+
+export function AccessibilityPower() {
+  const t = useMotionMessages();
+  const way = useWay();
+  const card = useRef<MotionTarget>(null), spinner = useRef<MotionTarget>(null), slider = useRef<MotionTarget>(null), cued = useRef<MotionTarget>(null), long = useRef<MotionTarget>(null);
+  const environment = useMotionEnvironment(card);
+  const [forward, setForward] = useState({ card: true, cued: true });
+  const [mounted, setMounted] = useState(true);
+  const reduced = useReadout(), hidden = useReadout(), cues = useReadout(), lifecycle = useReadout();
+  const flip = (key: keyof typeof forward) => { setForward(state => ({ ...state, [key]: !state[key] })); return forward[key]; };
+  const id = (part: string) => `motion-system-accessibility-power-${part}`;
+  return <Page screen="accessibility-power">
+    <Section title={t.environment} hint={t.environmentHint}>
+      <Readout testID={id("environment")} text={environment.text} />
+      <Actions><Button testID={id("refresh")} onPress={environment.refresh}>{t.refresh}</Button></Actions>
+    </Section>
+    <Section title={t.reduceMotion} hint={t.reduceMotionHint}>
+      {/* Laid out once the card is in its window: the first read reports that window, not the main display. */}
+      <View onLayout={environment.refresh}><Box target={card} testID={id("card")} /></View>
+      <Actions>
+        <Button testID={id("slide")} onPress={() => reduced.run(() => slide(card.current, flip("card"), way))}>{t.slide}</Button>
+        <Button testID={id("shake")} onPress={() => reduced.run(() => shake(card.current, way))}>{t.shake}</Button>
+        <Button testID={id("instant")} onPress={() => reduced.run(() => slide(card.current, flip("card"), way, "instant"))}>{t.instant}</Button>
+      </Actions>
+      <Readout testID={id("reduced-result")} text={reduced.text} />
+    </Section>
+    <Section title={t.hidden} hint={t.hiddenHint}>
+      <View className="flex-row items-center gap-3">
+        <MotionView ref={spinner} testID={id("spinner")} style={{ width: SIZE - 8, height: SIZE - 8 }}>
+          <View className="flex-1 rounded-md border-4 border-success border-t-danger" />
+        </MotionView>
+      </View>
+      <Box target={slider} testID={id("slider")} tone="bg-danger" />
+      <Actions><Button testID={id("hidden-start")} onPress={() => hidden.run(() => startHidden(spinner.current, slider.current, way))}>{t.startHidden}</Button></Actions>
+      <Readout testID={id("hidden-result")} text={hidden.text} />
+    </Section>
+    <Section title={t.cues} hint={t.cuesHint}>
+      <Box target={cued} testID={id("cued")} />
+      <Actions><Button testID={id("cues-play")} onPress={() => cues.run(() => playCues(cued.current, flip("cued"), way))}>{t.playCues}</Button></Actions>
+      <Readout testID={id("cues-result")} text={cues.text} />
+    </Section>
+    <Section title={t.lifecycle} hint={t.lifecycleHint}>
+      {mounted ? <Box target={long} testID={id("long")} /> : <View className="h-10" />}
+      <Actions>
+        <Button testID={id("long-start")} disabled={!mounted} onPress={() => lifecycle.run(() => startLong(long.current, way))}>{t.startLong}</Button>
+        <Button testID={id("long-mount")} onPress={() => setMounted(!mounted)}>{mounted ? t.unmount : t.mount}</Button>
+      </Actions>
+      <Readout testID={id("long-result")} text={lifecycle.text} />
     </Section>
   </Page>;
 }

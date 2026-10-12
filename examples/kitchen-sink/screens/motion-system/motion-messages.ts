@@ -31,6 +31,25 @@ type MotionMessages = {
   frames: string;
   framesHint: string;
   blockJs: string;
+  environment: string;
+  environmentHint: string;
+  refresh: string;
+  reduceMotion: string;
+  reduceMotionHint: string;
+  slide: string;
+  shake: string;
+  instant: string;
+  hidden: string;
+  hiddenHint: string;
+  startHidden: string;
+  cues: string;
+  cuesHint: string;
+  playCues: string;
+  lifecycle: string;
+  lifecycleHint: string;
+  startLong: string;
+  unmount: string;
+  mount: string;
 };
 
 const en: MotionMessages = {
@@ -61,6 +80,25 @@ const en: MotionMessages = {
   frames: "JavaScript block",
   framesHint: "The runner loops on the compositor from mount. The button blocks the JavaScript thread for 500 ms while recording 1.5 s of its frames.",
   blockJs: "Block JS for 500 ms",
+  environment: "Motion environment",
+  environmentHint: "Reduce Motion, Low Power Mode, the frame rate motion runs at in this window, and whether the window is visible. Updates when the settings change.",
+  refresh: "Refresh",
+  reduceMotion: "Reduce Motion alternates",
+  reduceMotionHint: "With Reduce Motion on, the slide jumps and fades in, the shake becomes a dim pulse, and the instant slide jumps. Off, they play as written.",
+  slide: "Slide",
+  shake: "Shake",
+  instant: "Slide (instant alternate)",
+  hidden: "Hidden window",
+  hiddenHint: "The spinner repeats forever and pauses while the window is hidden; the 8 s slide jumps to its end instead.",
+  startHidden: "Start spinner and slide",
+  cues: "Haptic and sound cues",
+  cuesHint: "An alignment haptic on the first frame, and a level-change haptic with the Tink sound on the frame the spring settles.",
+  playCues: "Play with cues",
+  lifecycle: "Unmount cancels",
+  lifecycleHint: "Unmounting the view during its 10 s slide stops the animation: it reports finished false.",
+  startLong: "Start 10 s slide",
+  unmount: "Unmount",
+  mount: "Mount",
 };
 
 const n = MESSAGES.ar.number;
@@ -92,6 +130,25 @@ const ar: MotionMessages = {
   frames: "حظر JavaScript",
   framesHint: "يتحرك العدّاء على المُركِّب منذ التحميل. يحظر الزر خيط JavaScript لمدة 500 مللي ثانية أثناء تسجيل 1.5 ثانية من إطاراته.",
   blockJs: "حظر JS لمدة 500 مللي ثانية",
+  environment: "بيئة الحركة",
+  environmentHint: "تقليل الحركة، ووضع الطاقة المنخفضة، ومعدل الإطارات الذي تعمل به الحركة في هذه النافذة، وما إذا كانت النافذة ظاهرة. يتحدّث عند تغيّر الإعدادات.",
+  refresh: "تحديث",
+  reduceMotion: "بدائل تقليل الحركة",
+  reduceMotionHint: "عند تشغيل تقليل الحركة، يقفز الانزلاق ثم يظهر تدريجيًا، ويصبح الاهتزاز نبضة خافتة، ويقفز الانزلاق الفوري. وعند إيقافه تعمل كما كُتبت.",
+  slide: "انزلاق",
+  shake: "اهتزاز",
+  instant: "انزلاق (بديل فوري)",
+  hidden: "نافذة مخفية",
+  hiddenHint: "يدور المؤشر بلا توقف ويتوقف مؤقتًا ما دامت النافذة مخفية؛ أما الانزلاق ذو 8 ثوانٍ فيقفز إلى نهايته.",
+  startHidden: "بدء المؤشر والانزلاق",
+  cues: "إشارات اللمس والصوت",
+  cuesHint: "إشارة لمسية للمحاذاة في الإطار الأول، وإشارة لتغيّر المستوى مع صوت Tink في الإطار الذي يستقر فيه النابض.",
+  playCues: "تشغيل مع الإشارات",
+  lifecycle: "إلغاء التحميل يلغي الحركة",
+  lifecycleHint: "إلغاء تحميل العرض أثناء انزلاقه ذي 10 ثوانٍ يوقف الحركة: فتُبلغ بأنها لم تكتمل.",
+  startLong: "بدء انزلاق 10 ثوانٍ",
+  unmount: "إلغاء التحميل",
+  mount: "تحميل",
 };
 
 export const MOTION_MESSAGES: Record<Locale, MotionMessages> = { en, ar };
