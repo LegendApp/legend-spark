@@ -17,6 +17,8 @@ export type StateHost = {
   home: string;
   temp: string;
   cache: string;
+  /** The directory that holds isolated sessions' roots: os.tmpdir(). */
+  roots: string;
   /** Running processes of the app, by bundle identifier. */
   running(bundleId: string): string[];
   /** `defaults delete <domain>` when the domain holds a key; false when it holds none. */
@@ -74,9 +76,9 @@ function checkIdentity({ bundleId, projectId }: AppIdentity, action: string) {
   if (!BUNDLE_ID.test(bundleId) || bundleId.startsWith("com.apple.")) throw new Error(`${action} refuses bundle identifier "${bundleId}": not an app's reverse-DNS identifier`);
   if (!projectId.trim()) throw new Error(`${action} refuses ${bundleId}: its Spark project identifier is empty`);
 }
-function checkRoots(host: Pick<StateHost, "home" | "temp" | "cache">, action: string) {
+function checkRoots(host: Pick<StateHost, "home" | "temp" | "cache" | "roots">, action: string) {
   // Every path is joined onto these roots; a relative or empty root would delete relative to the working directory.
-  for (const [name, root] of [["home", host.home], ["temp", host.temp], ["cache", host.cache]] as const) {
+  for (const [name, root] of [["home", host.home], ["temp", host.temp], ["cache", host.cache], ["roots", host.roots]] as const) {
     if (!path.isAbsolute(root) || path.resolve(root) === path.parse(root).root) throw new Error(`${action} refuses: the ${name} directory "${root}" is not an absolute, non-root path`);
   }
 }
@@ -149,9 +151,11 @@ function alive(pid: number) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; }
 }
-/** A session root: a direct child of the temporary directory, named for the clone's identity. */
-function isRoot(root: string, bundleId: string) {
-  return path.dirname(path.resolve(root)) === path.resolve(os.tmpdir()) && path.basename(root).startsWith(`${ROOT_PREFIX}${bundleId}-`);
+/** The name of a session root of the clone `bundleId`: mkdtemp's six characters after the prefix, so another identity's roots never match. */
+const rootName = (bundleId: string) => new RegExp(`^${ROOT_PREFIX}${bundleId.replaceAll(".", "\\.")}-[A-Za-z0-9]{6}$`);
+/** A session root: a direct child of the host's roots directory, named for the clone's identity. */
+function isRoot(root: string, bundleId: string, roots: string) {
+  return path.dirname(path.resolve(root)) === path.resolve(roots) && rootName(bundleId).test(path.basename(root));
 }
 
 /**
@@ -169,7 +173,7 @@ export class DriverState implements AppState {
 
   private constructor(readonly root: string, app: string, identity: AppIdentity, private readonly host: StateHost) {
     this.identity = driverIdentity(identity);
-    if (!isRoot(root, this.identity.bundleId)) throw new Error(`driver state refuses root ${root}: not ${os.tmpdir()}/${ROOT_PREFIX}${this.identity.bundleId}-*`);
+    if (!isRoot(root, this.identity.bundleId, host.roots)) throw new Error(`driver state refuses root ${root}: not ${host.roots}/${ROOT_PREFIX}${this.identity.bundleId}-*`);
     this.app = path.join(root, path.basename(app));
     this.home = path.join(root, "home");
     // dirhelper creates `<directory>/<suffix>` protected by System Integrity Protection: its contents can be deleted, it
@@ -198,14 +202,14 @@ export class DriverState implements AppState {
     try {
       const running = host.running(bundleId);
       if (running.length) throw new Error(`another driver session runs ${bundleId}: ${running.join(", ")}`);
-      for (const stale of readdirSync(os.tmpdir()).filter(name => name.startsWith(`${ROOT_PREFIX}${bundleId}-`))) {
-        const dir = path.join(os.tmpdir(), stale);
+      for (const stale of readdirSync(host.roots).filter(name => rootName(bundleId).test(name))) {
+        const dir = path.join(host.roots, stale);
         if (lstatSync(dir).isDirectory()) for (const name of readdirSync(dir).filter(name => name.endsWith(".app"))) host.unregister(path.join(dir, name));
         rmSync(dir, { recursive: true, force: true });
       }
       remove(statePaths(driverIdentity(identity), host));
       host.deleteDefaults(bundleId);
-      root = mkdtempSync(path.join(os.tmpdir(), `${ROOT_PREFIX}${bundleId}-`));
+      root = mkdtempSync(path.join(host.roots, `${ROOT_PREFIX}${bundleId}-`));
       const state = new DriverState(root, app, identity, host);
       execFileSync("cp", ["-cR", app, state.app]);
       const plist = path.join(state.app, "Contents/Info.plist");
@@ -255,7 +259,7 @@ export class DriverState implements AppState {
       this.host.deleteDefaults(this.identity.bundleId);
       this.empty();
       this.host.unregister(this.app);
-      if (!isRoot(this.root, this.identity.bundleId)) throw new Error(`driver state refuses to delete ${this.root}`);
+      if (!isRoot(this.root, this.identity.bundleId, this.host.roots)) throw new Error(`driver state refuses to delete ${this.root}`);
       rmSync(this.root, { recursive: true, force: true });
     } finally {
       rmSync(this.lock, { recursive: true, force: true });
@@ -288,7 +292,7 @@ function entries(dir: string, depth: number): string[] {
 
 const LSREGISTER = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
 
-function macHost(): StateHost {
+export function macHost(): StateHost {
   const run = (command: string, args: string[], env: NodeJS.ProcessEnv = process.env) => {
     const result = spawnSync(command, args, { encoding: "utf8", env });
     if (result.error) throw result.error;
@@ -300,6 +304,7 @@ function macHost(): StateHost {
     home: os.homedir(),
     temp: run("getconf", ["DARWIN_USER_TEMP_DIR"], env).stdout.trim(),
     cache: run("getconf", ["DARWIN_USER_CACHE_DIR"], env).stdout.trim(),
+    roots: os.tmpdir(),
     running: bundleId => run("lsappinfo", ["find", `bundleid=${bundleId}`]).stdout.split("\n").map(line => line.trim()).filter(Boolean),
     deleteDefaults(domain) {
       // `defaults export` prints the domain as an XML property list (an empty dictionary when it has no keys) on every

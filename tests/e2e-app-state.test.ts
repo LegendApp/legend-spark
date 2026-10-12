@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -14,20 +14,20 @@ const ASN = 'ASN:0x0-0x1-"KitchenSink":';
 const cleanup: string[] = [];
 afterEach(() => { for (const dir of cleanup.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-/** A host whose home, temporary and cache directories are scratch directories. `running` answers from `processes`. */
+/** A host whose home, temporary, cache and session roots directories are scratch directories. `running` answers from `processes`. */
 function host(overrides: Partial<StateHost> = {}) {
   const base = mkdtempSync(path.join(tmpdir(), "e2e-app-state-"));
   cleanup.push(base);
   const calls: string[] = [];
   const processes: Record<string, string[]> = {};
   const value: StateHost = {
-    home: path.join(base, "home"), temp: path.join(base, "T"), cache: path.join(base, "C"),
+    home: path.join(base, "home"), temp: path.join(base, "T"), cache: path.join(base, "C"), roots: path.join(base, "roots"),
     running: bundleId => { calls.push(`running ${bundleId}`); return processes[bundleId] ?? []; },
     deleteDefaults: domain => { calls.push(`defaults delete ${domain}`); return true; },
     unregister: app => { calls.push(`unregister ${app}`); },
     ...overrides,
   };
-  mkdirSync(value.temp, { recursive: true });
+  for (const dir of [value.temp, value.roots]) mkdirSync(dir, { recursive: true });
   return { host: value, calls, base, processes };
 }
 const touch = (file: string, text = "state") => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, text); };
@@ -145,7 +145,7 @@ describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)"
     execFileSync("xattr", ["-w", "com.apple.quarantine", "0081;00000000;test;", path.join(app, "Contents/Info.plist")]);
     const state = create(app, fake);
     expect(path.dirname(state.app)).toBe(state.root);
-    expect(path.dirname(state.root)).toBe(path.resolve(tmpdir()));
+    expect(path.dirname(state.root)).toBe(fake.roots);
     expect(path.basename(state.root)).toMatch(new RegExp(`^spark-driver-state-${DRIVER.bundleId}-`));
     expect(state.identity).toEqual(DRIVER);
     expect(state.env).toEqual({ CFFIXED_USER_HOME: path.join(state.root, "home"), DIRHELPER_USER_DIR_SUFFIX: DRIVER.bundleId });
@@ -159,16 +159,34 @@ describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)"
 
   test("starts clean: earlier sessions' roots are unregistered and deleted, and the clone's state outside a root is deleted", () => {
     const { host: fake, calls } = host();
-    const stale = mkdtempSync(path.join(tmpdir(), `spark-driver-state-${DRIVER.bundleId}-`));
+    const stale = mkdtempSync(path.join(fake.roots, `spark-driver-state-${DRIVER.bundleId}-`));
     touch(path.join(stale, "KitchenSink.app", "Contents", "Info.plist"));
-    const other = mkdtempSync(path.join(tmpdir(), "spark-driver-state-com.example.other.driver-"));
-    cleanup.push(other);
+    const other = mkdtempSync(path.join(fake.roots, "spark-driver-state-com.example.other.driver-"));
     const escaped = path.join(fake.home, "Library", "Saved Application State", `${DRIVER.bundleId}.savedState`, "data");
     const own = path.join(fake.home, "Library", "Saved Application State", `${BUNDLE_ID}.savedState`, "data");
     [escaped, own].forEach(file => touch(file));
     create(bundle(), fake);
     expect(calls).toContain(`unregister ${path.join(stale, "KitchenSink.app")}`);
     expect([existsSync(stale), existsSync(other), existsSync(escaped), existsSync(own)]).toEqual([false, true, false, true]);
+  });
+
+  test("sweeps only its own roots, leaving other identities' roots and undeletable lookalikes alone", () => {
+    const { host: fake } = host();
+    // Lookalikes: an app whose bundle identifier extends the clone's, a non-mkdtemp name, and an entry that cannot be
+    // deleted (like the System Integrity Protection-protected `spark-driver-state-*-dirs` folders a macOS temp dir can hold).
+    const others = [`spark-driver-state-${DRIVER.bundleId}-x.driver-abc123`, `spark-driver-state-${DRIVER.bundleId}-keep`, "spark-driver-state-7bGgPj-dirs"]
+      .map(name => path.join(fake.roots, name));
+    others.forEach(dir => touch(path.join(dir, "data")));
+    chmodSync(others[2], 0o500);
+    const stale = mkdtempSync(path.join(fake.roots, `spark-driver-state-${DRIVER.bundleId}-`));
+    try {
+      const state = create(bundle(), fake);
+      expect(existsSync(stale)).toBe(false);
+      expect(others.filter(dir => existsSync(path.join(dir, "data")))).toEqual(others);
+      expect(readdirSync(fake.roots).sort()).toEqual([...others.map(dir => path.basename(dir)), path.basename(state.root)].sort());
+    } finally {
+      chmodSync(others[2], 0o700);
+    }
   });
 
   test("clearState deletes the session's defaults domain and files, never the clone, the app's own state or link targets", () => {
@@ -240,8 +258,7 @@ describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)"
   test("refuses a running clone, a sandboxed app, a bad identifier and entitlements an ad hoc copy cannot carry, leaving nothing behind", () => {
     const { host: fake, processes } = host();
     const app = bundle();
-    const roots = () => readdirSync(tmpdir()).filter(name => name.startsWith(`spark-driver-state-${DRIVER.bundleId}-`)).length;
-    const before = roots();
+    const roots = () => readdirSync(fake.roots).length;
     processes[DRIVER.bundleId] = [ASN];
     expect(() => DriverState.create(app, KITCHEN_SINK, fake)).toThrow(`another driver session runs ${DRIVER.bundleId}: ${ASN}`);
     delete processes[DRIVER.bundleId];
@@ -250,7 +267,7 @@ describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)"
     expect(() => DriverState.create(app, { ...KITCHEN_SINK, bundleId: "com.apple.finder" }, fake)).toThrow('a driver launch refuses bundle identifier "com.apple.finder"');
     expect(() => DriverState.create(bundle({ "keychain-access-groups": ["ABCDE12345.so.legend"], "com.apple.security.app-sandbox": false }), KITCHEN_SINK, fake))
       .toThrow(/an ad hoc signed copy cannot carry its entitlements keychain-access-groups$/);
-    expect(roots()).toBe(before);
+    expect(roots()).toBe(0);
     expect(existsSync(path.join(fake.temp, `spark-driver-${DRIVER.bundleId}.lock`))).toBe(false);
   });
 
