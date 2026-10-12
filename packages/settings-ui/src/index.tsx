@@ -10,6 +10,9 @@ const SETTINGS_TITLEBAR_CONTENT_INSET = 56;
 const settingsContentInset = { bottom: 0, left: 0, right: 0, top: SETTINGS_TITLEBAR_CONTENT_INSET };
 const settingsSidebarPressablePlatformProps = Platform.OS === "macos" ? { enableFocusRing: false } : {};
 const SettingsRowGroupContext = createContext(false);
+// Load the windows API lazily, once, and share that import across every settings window.
+let windowsApi: Promise<typeof import("@legendapp/spark-desktop-windows/src/api")> | undefined;
+const loadWindowsApi = () => windowsApi ??= import("@legendapp/spark-desktop-windows/src/api");
 export * from "./options";
 
 export interface SettingsWindowPage<PageId extends string = string> {
@@ -78,7 +81,7 @@ function useSettingsWindow(windowId: string, title: string, appearance: SidebarS
   const showIfReady = useCallback(() => {
     if (!active.current || !contentReady.current || !splitReady.current || shown.current) return;
     shown.current = true;
-    void import("@legendapp/spark-desktop-windows/src/api").then(async windows => {
+    void loadWindowsApi().then(async windows => {
       if (!active.current) { shown.current = false; return; }
       await windows.showWindow(windowId);
     }).catch(cause => { shown.current = false; report(cause); });
@@ -86,7 +89,7 @@ function useSettingsWindow(windowId: string, title: string, appearance: SidebarS
   useEffect(() => { active.current = true; showIfReady(); return () => { active.current = false; }; }, [showIfReady]);
   useEffect(() => {
     let current = true;
-    void import("@legendapp/spark-desktop-windows/src/api").then(async windows => {
+    void loadWindowsApi().then(async windows => {
       if (current) await windows.setWindowOptions(windowId, { title, appearance });
     }).catch(cause => { if (current) report(cause); });
     return () => { current = false; };
