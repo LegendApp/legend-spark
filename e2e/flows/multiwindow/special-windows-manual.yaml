@@ -1,0 +1,53 @@
+appId: so.legend.spark.examples.kitchensink
+name: Special windows on screen, by hand
+intent: >
+  What only the window server shows, checked by a person on a Mac with two displays: the command bar's real global
+  hotkey from another app, key focus without activating Kitchen Sink and hiding on blur; the notch popover closing on
+  blur; panels over another app's fullscreen Space and on every Space; the overlay letting clicks through; the desktop
+  widget below every app window and the desktop icons; a dragged picture-in-picture window snapping on release; and
+  presenter mode on real displays. The driver never shows windows, so none of this runs in-process.
+checks: [MW-SPECIAL-10]
+tags: [multiwindow]
+platforms: [macos]
+build: release
+manual: true
+timeout: 15m
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/special-windows" }
+- tapOn: { id: multiwindow-special-windows-bar-button }
+- manualStep:
+    instruction: 'Click a Finder window so Finder is the active app, then press Cmd+Shift+Space. Type a few letters, then click the Finder window again.'
+    expect: 'The command bar appears centered near the top of the display under the pointer with a blurred background, Finder stays the active app in the menu bar, and the bar hides when Finder''s window is clicked.'
+    evidence: none
+    signoff: required
+- tapOn: { id: multiwindow-special-windows-popover-notch-button }
+- manualStep:
+    instruction: 'Look below the menu bar, then click the Kitchen Sink main window.'
+    expect: 'A popover hangs centered below the menu bar (below the notch on a notched display) and closes when the main window is clicked.'
+    evidence: none
+    signoff: required
+- tapOn: { id: multiwindow-special-windows-pip-button }
+- tapOn: { id: multiwindow-special-windows-overlay-button }
+- tapOn: { id: multiwindow-special-windows-widget-button }
+- manualStep:
+    instruction: 'Put Safari in fullscreen, press Cmd+Shift+Space, then leave fullscreen. Switch to another Space with Control-Right Arrow and back.'
+    expect: 'The command bar shows over fullscreen Safari. The picture-in-picture window and the overlay are on every Space; the desktop widget stays on the desktop of every Space.'
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: 'Click inside the click-through overlay near the top-left of the display on whatever is behind it. Then press F11 (Show Desktop) and press it again.'
+    expect: 'The click reaches the window or desktop behind the overlay. The desktop widget sits below every app window and the desktop icons, and stays in place when Show Desktop moves the windows aside.'
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: 'Drag the picture-in-picture window by its top edge to near the middle of the display and release the mouse button.'
+    expect: 'It slides into the nearest corner of the display, 16 points in, when the button comes up, keeping its 16:9 shape.'
+    evidence: none
+    signoff: required
+- tapOn: { id: multiwindow-special-windows-presenter-button }
+- manualStep:
+    instruction: 'With a second display connected, look at both displays; press Swap presenter displays; then press Stop presenter mode.'
+    expect: 'The audience window covers the second display including its menu bar, the presenter notes window is centered on the main display; swapping exchanges them; stopping closes both.'
+    evidence: none
+    signoff: required
+- tapOn: { id: multiwindow-special-windows-close-all }

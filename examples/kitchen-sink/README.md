@@ -75,6 +75,13 @@ They share `Panel.tsx`.
 per-window stars with promotion (`createWindowState`), per-window undo and menus, an
 error-isolation window and an isolated-runtime window.
 
+`multiwindow/special-windows` opens one of each special window type from `/windows`: a command bar on a global
+hotkey, a HUD, a preview, picture in picture, notch and menu bar popovers, an edge drawer, a click-through overlay,
+a desktop widget and presenter mode. Its readout shows each window's state and bounds as the window API reports
+them, and `spark-ks://multiwindow/special-windows?run=pip,pip-move,…` runs a sequence of steps from a fresh start
+(steps in `screens/multiwindow/special-windows.ts`). See
+[the window contract](../../docs/api-window-contract.md#special-window-types).
+
 `windows/window-options` opens a child window with options applied at open, then
 changes each option from the Windows epic on the live child (one row per option),
 lists `getWindowAvailability(option)` and probes rejected requests. The audit is in

@@ -1,0 +1,63 @@
+appId: so.legend.spark.examples.kitchensink
+name: Special windows availability, a command bar on a global hotkey, and a HUD that hides itself
+intent: >
+  Multiwindow > Special windows runs special window steps from spark-ks://multiwindow/special-windows?run=… deep links,
+  each run starting with no special windows open, and its readout shows each window's state and bounds as the window
+  API reports them. The driver never shows windows, so the readout is the evidence. The flow simulates one display,
+  901 (1512 × 982 with a 32-point menu bar), so placement is exact. Every type reports available. The command bar
+  opens hidden; its Cmd+Shift+Space hotkey (pressed in-process with simulateGlobalShortcut, never registered with the
+  system) shows it centered with its top a fifth of the way down the work area, and pressing it again hides it. The
+  HUD shows centered two thirds of the way down and hides itself after 1.5 s; held, it stays until hidden. The flow
+  restores the real displays at the end.
+checks: [MW-SPECIAL-01, MW-SPECIAL-02, MW-SPECIAL-03]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows" }
+- extendedWaitUntil: { visible: { id: multiwindow-special-windows-root }, timeout: 10s }
+- assertVisible: { id: multiwindow-special-windows-availability-commandBar-available }
+- assertVisible: { id: multiwindow-special-windows-availability-hud-available }
+- assertVisible: { id: multiwindow-special-windows-availability-preview-available }
+- assertVisible: { id: multiwindow-special-windows-availability-pictureInPicture-available }
+- assertVisible: { id: multiwindow-special-windows-availability-popover-available }
+- assertVisible: { id: multiwindow-special-windows-availability-edgeDrawer-available }
+- assertVisible: { id: multiwindow-special-windows-availability-overlay-available }
+- assertVisible: { id: multiwindow-special-windows-availability-desktopWidget-available }
+- assertVisible: { id: multiwindow-special-windows-availability-presenter-available }
+# The command bar opens hidden; the hotkey toggles it.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=bar" }
+- assertVisible: { id: multiwindow-special-windows-run-1-steps-1 }
+- assertNotVisible: { id: multiwindow-special-windows-error-E_UNSUPPORTED_PLATFORM }
+- assertVisible: { id: multiwindow-special-windows-bar, text: "/^hidden on 901 /" }
+- simulateGlobalShortcut: cmd+shift+space
+- extendedWaitUntil: { visible: { id: multiwindow-special-windows-bar, text: "shown on 901 at 436,222 size 640x120" }, timeout: 5s }
+- takeScreenshot: { name: special-command-bar, window: { id: ks-special-bar } }
+- takeScreenshot: special-windows-screen
+- simulateGlobalShortcut: cmd+shift+space
+- extendedWaitUntil: { visible: { id: multiwindow-special-windows-bar, text: "hidden on 901 at 436,222 size 640x120" }, timeout: 5s }
+# Removing the bar closes it and unregisters the hotkey.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=bar,bar-toggle,bar-remove" }
+- assertVisible: { id: multiwindow-special-windows-run-2-steps-3 }
+- assertText: { id: multiwindow-special-windows-bar, equals: closed }
+# The HUD hides itself after 1.5 s.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=hud" }
+- assertVisible: { id: multiwindow-special-windows-run-3-steps-1 }
+- assertText: { id: multiwindow-special-windows-hud, equals: "shown on 901 at 656,565 size 200x200" }
+- takeScreenshot: { name: special-hud, window: { id: ks-special-hud } }
+- extendedWaitUntil: { visible: { id: multiwindow-special-windows-hud, text: "hidden on 901 at 656,565 size 200x200" }, timeout: 5s }
+# Held (duration 0), it stays shown until hidden.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=hud,hud-hold" }
+- assertVisible: { id: multiwindow-special-windows-run-4-steps-2 }
+- assertText: { id: multiwindow-special-windows-hud, equals: "shown on 901 at 656,565 size 200x200" }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/special-windows?run=hud,hud-hold,hud-hide" }
+- assertVisible: { id: multiwindow-special-windows-run-5-steps-3 }
+- assertText: { id: multiwindow-special-windows-hud, equals: "hidden on 901 at 656,565 size 200x200" }
+- simulateDisplays: { restore: true }
