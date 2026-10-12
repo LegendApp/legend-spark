@@ -228,7 +228,7 @@ export function auditBundle(options: AuditOptions): AuditResult[] {
  */
 export function noticesFindings(text: string, binaries: string[]): { findings: string[]; evidence: string[] } {
   const sections = text.split(/^## /m).slice(1).map(section => ({ title: section.split("\n")[0]!, body: section }));
-  const findings = sections.filter(section => !/^License: \S/m.test(section.body)).map(section => `${section.title}: no license`);
+  const findings = sections.filter(section => !/^License: \S/m.test(section.body) || /^License: UNKNOWN$/m.test(section.body)).map(section => `${section.title}: no license`);
   if (!sections.length) findings.push("lists no packages");
   const names = sections.map(section => section.title.split(" ")[0]!.toLowerCase());
   for (const framework of new Set(binaries.flatMap(binary => binary.match(/Contents\/Frameworks\/([^/]+)\.framework\//)?.[1] ?? []))) {

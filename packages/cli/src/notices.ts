@@ -1,6 +1,7 @@
 // Third-party license notices for a macOS release build: Contents/Resources/ThirdPartyNotices.txt (#153).
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
+import { sourceRoot } from "./macos-release.ts";
 
 export const NOTICES_FILE = "ThirdPartyNotices.txt";
 
@@ -15,14 +16,13 @@ function packageRoot(file: string): string | undefined {
   }
 }
 
-/** Name, version, license id and license text of an npm package directory. */
+/** Name, version, license id and license text of an npm package directory. `UNKNOWN` when it declares and ships no license. */
 export function npmNotice(dir: string): Notice {
   const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
   const file = readdirSync(dir).find(name => LICENSE_FILE.test(name));
   const license = typeof pkg.license === "string" ? pkg.license : pkg.license?.type ?? (Array.isArray(pkg.licenses) ? pkg.licenses.map((entry: { type: string }) => entry.type).join(" OR ") : undefined);
   const text = file ? readFileSync(path.join(dir, file), "utf8").trim() : undefined;
-  if (!license && !text) throw new Error(`${pkg.name}@${pkg.version} (${dir}) declares no license and has no license file; the release cannot list its notice`);
-  return { name: pkg.name, version: pkg.version, license: license ?? "see text", ...(text ? { text } : {}), source: "npm" };
+  return { name: pkg.name, version: pkg.version, license: license ?? (text ? "see text" : "UNKNOWN"), ...(text ? { text } : {}), source: "npm" };
 }
 
 /** The app target's CocoaPods acknowledgements plist: native code the pods vendor (folly, boost, Hermes, Sparkle, …). */
@@ -40,18 +40,29 @@ export function podNotices(acknowledgements: { PreferenceSpecifiers: Array<{ Tit
 }
 
 /**
- * Notices for every npm package whose code the app bundles (`sources`: the production JavaScript's source files) or links
- * natively (`nativePackages`), and every pod with an acknowledgement. The app's own package is not third-party.
+ * First-party code is not listed: a `"private": true` package, or one inside the app's workspace root (or the app) that
+ * is not installed under node_modules, such as the app itself and its monorepo's workspace packages.
+ */
+export function isFirstParty(dir: string, workspace: string): boolean {
+  if (JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8")).private === true) return true;
+  const inside = path.relative(workspace, dir);
+  return !inside.startsWith("..") && !path.isAbsolute(inside) && !inside.split(path.sep).includes("node_modules");
+}
+
+/**
+ * Notices for every third-party npm package whose code the app bundles (`sources`: the production JavaScript's source
+ * files) or links natively (`nativePackages`), and every pod with an acknowledgement.
  */
 export function collectNotices(appRoot: string, sources: string[], nativePackages: string[], pods: Notice[]): Notice[] {
-  const own = realpathSync(appRoot);
+  const workspace = realpathSync(sourceRoot(appRoot));
   const roots = new Set<string>();
   for (const file of sources) {
     if (!existsSync(file)) continue;
     const root = packageRoot(realpathSync(file));
-    if (root && root !== own) roots.add(root);
+    if (root) roots.add(root);
   }
   for (const dir of nativePackages) roots.add(realpathSync(dir));
+  for (const dir of roots) if (isFirstParty(dir, workspace)) roots.delete(dir);
   const byName = new Map<string, Notice>();
   for (const notice of [...[...roots].map(npmNotice), ...pods]) {
     const key = `${notice.source}:${notice.name}`;

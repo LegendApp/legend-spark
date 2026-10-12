@@ -419,10 +419,14 @@ async function buildUnlocked(
     const sources = metroSourceFiles(path.resolve(root, entryFile(root)), readJson(stateFile(root, "analysis/app.map")).sources);
     const linked = (readJson(stateFile(root, "native-selection.json")).included as Array<{ root: string }>).map(pkg => pkg.root);
     const pods = podNotices(JSON.parse(await run(root, ["plutil", "-convert", "json", "-o", "-", acknowledgementsFile(nativeRoot)], { capture: true })));
-    writeFileSync(path.join(destination, "Contents/Resources", NOTICES_FILE), formatNotices(name, collectNotices(root, sources, linked, pods)));
+    const notices = collectNotices(root, sources, linked, pods);
+    const unknown = notices.filter(notice => notice.license === "UNKNOWN").map(notice => `${notice.name}@${notice.version}`);
+    if (unknown.length) console.warn(`${unknown.join(", ")} declare${unknown.length === 1 ? "s" : ""} no license and ship${unknown.length === 1 ? "s" : ""} no license file; ${NOTICES_FILE} lists ${unknown.length === 1 ? "it" : "them"} as License: UNKNOWN.`);
+    writeFileSync(path.join(destination, "Contents/Resources", NOTICES_FILE), formatNotices(name, notices));
     // Debug symbols ship next to the app, never in it: the build's dSYMs and those vendors ship in their pods.
     const symbols = path.join(path.dirname(destination), "dSYMs");
-    mkdirSync(symbols);
+    rmSync(symbols, { recursive: true, force: true });
+    mkdirSync(symbols, { recursive: true });
     // Hermes is prebuilt, so Xcode's app/Pod compiler settings cannot strip it. Its dSYM keeps the symbol table that
     // strip removes (React Native publishes no DWARF for it, so dsymutil warns about every object file).
     const hermes = path.join(destination, "Contents/Frameworks/hermes.framework/Versions/Current/hermes");
