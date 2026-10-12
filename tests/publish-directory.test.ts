@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { publishDirectory } from "../packages/cli/src/publish-directory.ts";
 
-// One compiled swap helper for the file; compiling it can take seconds on a cold CI runner.
+// renamex_np and the helper compiler are macOS-only. One compiled swap helper for the file; compiling it can take seconds on a cold CI runner.
 let tools: string;
 beforeAll(() => { tools = mkdtempSync(path.join(os.tmpdir(), "spark-publish-tools-")); });
 afterAll(() => rmSync(tools, { recursive: true, force: true }));
@@ -26,7 +26,7 @@ function stage(generation: number) {
   return staged;
 }
 
-test("publishes into a missing target and replaces an existing one, keeping symlinks and removing the old copy", () => {
+test.skipIf(process.platform !== "darwin")("publishes into a missing target and replaces an existing one, keeping symlinks and removing the old copy", () => {
   const target = path.join(root, "release");
   publishDirectory(stage(1), target, tools);
   publishDirectory(stage(2), target, tools);
@@ -35,7 +35,7 @@ test("publishes into a missing target and replaces an existing one, keeping syml
   expect(existsSync(path.join(root, "release.staging"))).toBe(false);
 }, 60_000);
 
-test("a failed swap leaves the old product in place", () => {
+test.skipIf(process.platform !== "darwin")("a failed swap leaves the old product in place", () => {
   const target = path.join(root, "release");
   publishDirectory(stage(1), target, tools);
   // Swapping with a missing staging directory fails the way an unsupported volume does: an error, no change.
@@ -43,7 +43,7 @@ test("a failed swap leaves the old product in place", () => {
   expect(readFileSync(path.join(target, files[0]!), "utf8")).toBe(marker(1));
 }, 60_000);
 
-test("a reader polling during repeated rebuilds always finds the whole product", async () => {
+test.skipIf(process.platform !== "darwin")("a reader polling during repeated rebuilds always finds the whole product", async () => {
   const target = path.join(root, "release");
   publishDirectory(stage(0), target, tools);
   const stop = path.join(root, "stop");
@@ -67,8 +67,9 @@ test("a reader polling during repeated rebuilds always finds the whole product",
   let output = "";
   reader.stdout.on("data", chunk => { output += chunk; });
   await new Promise<void>(resolve => reader.stdout.once("data", () => resolve()));
-  for (let generation = 1; generation <= 20; generation++) publishDirectory(stage(generation), target, tools);
-  writeFileSync(stop, "");
+  // The reader stops even when publishing throws, so a failure cannot leave it polling.
+  try { for (let generation = 1; generation <= 20; generation++) publishDirectory(stage(generation), target, tools); }
+  finally { writeFileSync(stop, ""); }
   await new Promise(resolve => reader.once("exit", resolve));
   const { reads, failures } = JSON.parse(output.trim().split("\n").at(-1)!);
   expect(failures).toEqual([]);
