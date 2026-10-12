@@ -324,6 +324,18 @@ int main()
     [motion hostDidMount:late2 surface:1 transaction:108];
     marks = [motion valueForKey:@"sharedMarks"];
     CHECK(marks.count == 1 && marks[@"other"] && !marks[@"photo"]);
+    // Under Reduce Motion a layout hand-off plays the alternate: the row is at its new place at once and fades in there.
+    [motion simulate:@{ @"reduceMotion": @YES }];
+    relayout(row, NSMakeRect(0, 0, 50, 20), 109);
+    CHECK(value(20, @"translateY") == 0 && value(20, @"opacity") == 0 && [row.layer animationForKey:@"spark.motion.opacity"]);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    CHECK(value(20, @"opacity") == 1);
+    [motion simulate:@{ @"reduceMotion": @NO }];
+    // In a hidden window the hand-off completes at once: nothing animates there.
+    [motion simulateWindow:window visible:NO];
+    relayout(row, NSMakeRect(0, 40, 50, 20), 110);
+    CHECK(value(20, @"translateY") == 0 && row.layer.animationKeys.count == 0);
+    [motion simulateWindow:window visible:YES];
     for (NSInteger tag : {20, 21, 22, 31, 32}) [motion unregisterTag:tag];
     (void)late2;
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
@@ -335,13 +347,13 @@ int main()
 
     // Accessibility, power and lifecycle (docs/motion.md#reduce-motion and the sections after it), on the virtual clock.
     // Reduce Motion, Low Power Mode and the display's rate are simulated: the Mac's settings are untouched.
-    TestHost *card = [[TestHost alloc] initWithFrame:NSMakeRect(0, 0, 40, 40)];
-    card.wantsLayer = YES;
-    card.motionTag = 9;
+    TestHost *lifecycleCard = [[TestHost alloc] initWithFrame:NSMakeRect(0, 0, 40, 40)];
+    lifecycleCard.wantsLayer = YES;
+    lifecycleCard.motionTag = 9;
     NSWindow *other = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 200, 100) styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
     other.releasedWhenClosed = NO;
-    [other.contentView addSubview:card];
-    [motion registerHost:card initial:kIdentity];
+    [other.contentView addSubview:lifecycleCard];
+    [motion registerHost:lifecycleCard initial:kIdentity];
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"virtual" resolve:resolve reject:reject]; });
     auto environment = [&](NSInteger tag) { return JSON(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion environment:tag resolve:resolve reject:reject]; })->value); };
     [motion simulate:@{ @"reduceMotion": @NO, @"lowPowerMode": @NO, @"maximumFramesPerSecond": @120 }];
@@ -353,14 +365,14 @@ int main()
     CHECK([unmounted->code isEqual:@"E_NOT_FOUND"]);  // after the bounded wait for a mount
     // 120 Hz on ProMotion: one sample per 1/120 s and a 120 Hz compositor request; 60 Hz displays and Low Power Mode cap it.
     Outcome *fast = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"fast", 9, @{ @"translateX": Timing(50, 500) }) resolve:resolve reject:reject]; });
-    CAKeyframeAnimation *baked = (CAKeyframeAnimation *)[card.layer animationForKey:@"spark.motion.transform"];
+    CAKeyframeAnimation *baked = (CAKeyframeAnimation *)[lifecycleCard.layer animationForKey:@"spark.motion.transform"];
     CHECK(baked.values.count == 61 && baked.preferredFrameRateRange.preferred == 120 && baked.preferredFrameRateRange.maximum == 120);
     [motion simulate:@{ @"lowPowerMode": @YES }];  // re-bakes the running animation at 60 Hz, from now, with the same end
-    baked = (CAKeyframeAnimation *)[card.layer animationForKey:@"spark.motion.transform"];
+    baked = (CAKeyframeAnimation *)[lifecycleCard.layer animationForKey:@"spark.motion.transform"];
     CHECK(baked.values.count == 31 && baked.preferredFrameRateRange.preferred == 60 && std::abs(baked.duration - 0.5) < 1e-9);
     CHECK([environment(9)[@"frameRate"] isEqual:@60] && [environment(9)[@"lowPowerMode"] isEqual:@YES]);
     [motion simulate:@{ @"lowPowerMode": @NO, @"maximumFramesPerSecond": @60 }];
-    CHECK([environment(9)[@"frameRate"] isEqual:@60] && ((CAKeyframeAnimation *)[card.layer animationForKey:@"spark.motion.transform"]).values.count == 31);
+    CHECK([environment(9)[@"frameRate"] isEqual:@60] && ((CAKeyframeAnimation *)[lifecycleCard.layer animationForKey:@"spark.motion.transform"]).values.count == 31);
     CHECK([JSON0(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion telemetry:9 resolve:resolve reject:reject]; })->value)[@"frameRate"] isEqual:@60]);
     // null stops simulating the display's rate (simulateDisplays' restore): the real display's rate, or null without one.
     [motion simulate:@{ @"maximumFramesPerSecond": NSNull.null }];
@@ -378,7 +390,7 @@ int main()
     NSMutableDictionary *cued = [Request(@"reduced", 9, @{ @"translateX": spring }) mutableCopy];
     cued[@"cues"] = @[@{ @"at": @0, @"haptic": @"alignment" }, @{ @"at": @"end", @"haptic": @"levelChange", @"sound": @"Tink" }];
     Outcome *reduced = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:cued resolve:resolve reject:reject]; });
-    CHECK(!reduced->code && card.motionModel[TranslateX] == 0 && card.motionModel[Opacity] == 1);
+    CHECK(!reduced->code && lifecycleCard.motionModel[TranslateX] == 0 && lifecycleCard.motionModel[Opacity] == 1);
     NSDictionary *fading = JSON0(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion telemetry:9 resolve:resolve reject:reject]; })->value);
     CHECK([fading[@"motion"][@"kinds"][@"translateX"] isEqual:@"jump"] && [fading[@"motion"][@"kinds"][@"opacity"] isEqual:@"timing"]);
     CHECK([fading[@"values"][@"opacity"] doubleValue] == 0 && [fading[@"values"][@"translateX"] doubleValue] == 0);
@@ -408,8 +420,8 @@ int main()
     Outcome *slideAway = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"away", 9, @{ @"translateX": Timing(80, 1000) }) resolve:resolve reject:reject]; });
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:250 resolve:resolve reject:reject]; });
     [motion simulateWindow:other visible:NO];
-    CHECK(slideAway->resolved && [JSON(slideAway->value)[@"finished"] isEqual:@YES] && card.motionModel[TranslateX] == 80 && !spin->resolved);
-    CHECK([environment(9)[@"windowVisible"] isEqual:@NO] && card.layer.animationKeys.count == 0 && std::abs(card.motionModel[Rotate] - 90) < 1e-6);
+    CHECK(slideAway->resolved && [JSON(slideAway->value)[@"finished"] isEqual:@YES] && lifecycleCard.motionModel[TranslateX] == 80 && !spin->resolved);
+    CHECK([environment(9)[@"windowVisible"] isEqual:@NO] && lifecycleCard.layer.animationKeys.count == 0 && std::abs(lifecycleCard.motionModel[Rotate] - 90) < 1e-6);
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:1000 resolve:resolve reject:reject]; });
     // An operation on the hidden view resumes it while it runs: its cue moves with the loop's tracks, not only at show.
     CHECK(!Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @9, @"values": @{ @"translateY": @5 } } resolve:resolve reject:reject]; })->code);
@@ -418,7 +430,7 @@ int main()
     CHECK([frozen[@"paused"] isEqual:@YES] && [frozen[@"hidden"] isEqual:@YES] && std::abs([frozen[@"values"][@"rotate"] doubleValue] - 90) < 1e-6);
     CHECK([[frozen[@"cues"] lastObject][@"frameMs"] isEqual:NSNull.null]);  // the cue at 750 ms waits for the paused loop
     [motion simulateWindow:other visible:YES];
-    CHECK([card.layer animationForKey:@"spark.motion.transform.loop"] != nil);
+    CHECK([lifecycleCard.layer animationForKey:@"spark.motion.transform.loop"] != nil);
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:500 resolve:resolve reject:reject]; });
     NSDictionary *resumed = JSON0(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion telemetry:9 resolve:resolve reject:reject]; })->value);
     CHECK([resumed[@"paused"] isEqual:@NO] && std::abs([resumed[@"values"][@"rotate"] doubleValue] - 270) < 1e-6 && [[resumed[@"cues"] lastObject][@"frameMs"] isKindOfClass:NSNumber.class]);
@@ -429,12 +441,12 @@ int main()
     held[@"whenHidden"] = @"pause";
     Outcome *holding = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:held resolve:resolve reject:reject]; });
     [motion simulateWindow:other visible:NO];
-    CHECK(!holding->resolved && std::abs(card.motionModel[Opacity] - 1) < 1e-9);
+    CHECK(!holding->resolved && std::abs(lifecycleCard.motionModel[Opacity] - 1) < 1e-9);
 
     // Closing the window cancels its motion: the loop and the held fade stop where they are, finished false.
     [other close];
     CHECK(spin->resolved && [JSON(spin->value)[@"finished"] isEqual:@NO] && holding->resolved && [JSON(holding->value)[@"finished"] isEqual:@NO]);
-    CHECK(card.layer.animationKeys.count == 0);
+    CHECK(lifecycleCard.layer.animationKeys.count == 0);
     [motion unregisterTag:9];
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
 

@@ -204,9 +204,10 @@ public:
    * Layout and shared-element hand-off (docs/motion.md#layout-presence-and-shared-elements): each property jumps to
    * `from` (value and velocity) and runs `transition` to the value it was heading for (its animation's end, or its
    * value at rest). Animations it replaces settle unfinished. A property driven by a scroll link or repeating forever
-   * is left alone. Returns false when no property was handed off.
+   * is left alone. Returns false when no property was handed off. With `reduceMotion` (the user's setting) it plays the
+   * plan's Reduce Motion alternate (docs/motion.md#reduce-motion): the view is at its new place at once and fades in.
    */
-  bool handoff(int64_t view, const std::vector<std::pair<Property, State>> &from, const Spec &transition, double now, std::vector<Settled> &settled);
+  bool handoff(int64_t view, const std::vector<std::pair<Property, State>> &from, const Spec &transition, double now, std::vector<Settled> &settled, bool reduceMotion);
   /** The value a property settles at: its animation's end, or its value at rest; none while it repeats forever. */
   std::optional<double> target(int64_t view, Property property) const;
   /** Settles tracks that ended by `now`. */

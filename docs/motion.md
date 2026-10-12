@@ -292,6 +292,9 @@ reduced timeline is as short as its alternates. The setting is read once per pla
 starts: a running animation is not changed when the user toggles it. `getMotionEnvironment()`
 reports the setting for code that chooses different content rather than different motion. The
 engine marks changes made at once as kind `jump` in [motion telemetry](#motion-telemetry).
+Layout and shared-element hand-offs follow the same rule with the `fade` alternate: under
+Reduce Motion the view is at its new place at once and fades in there, and in a hidden window
+the hand-off completes at once.
 
 ## Frame rate and power
 

@@ -710,8 +710,9 @@ std::optional<double> Engine::target(int64_t view, Property property) const {
   return slot.track->end().value;
 }
 
-bool Engine::handoff(int64_t view, const std::vector<std::pair<Property, State>> &from, const Spec &transition, double now, std::vector<Settled> &settled) {
+bool Engine::handoff(int64_t view, const std::vector<std::pair<Property, State>> &from, const Spec &transition, double now, std::vector<Settled> &settled, bool reduceMotion) {
   Plan plan{"spark.handoff." + std::to_string(++handoffs_), {Group{view, {}, false, 0}}};
+  plan.reduceMotion = reduceMotion;
   for (const auto &[property, state] : from) {
     const std::optional<double> to = target(view, property);
     if (!to || slots(view)[property].linked) continue;

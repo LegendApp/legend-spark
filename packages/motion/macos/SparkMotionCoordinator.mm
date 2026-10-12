@@ -1051,12 +1051,17 @@ static NSRect SparkLayoutRect(NSView *view, NSView *reference)
   try {
     NSMutableDictionary *template_ = [transition mutableCopy];
     template_[@"to"] = @0;  // each property's own target replaces it
+    // A view in a hidden window completes its hand-off at once, like any plan; under Reduce Motion it plays the alternate.
+    [self syncHidden:host.motionTag];
     std::vector<Settled> settled;
-    if (!_engine.handoff(host.motionTag, from, SparkSpec(template_, TranslateX), self.now, settled)) return;
-    [self apply:host.motionTag channel:Channel::Transform];
+    const BOOL handed = _engine.handoff(host.motionTag, from, SparkSpec(template_, TranslateX), self.now, settled, self.reduceMotion);
+    [self moveResumedCues];
+    if (!handed) return;
+    [self applyAll:host.motionTag];  // the Reduce Motion alternate also fades opacity
     [self settle:settled];
     [self scheduleSweep];
   } catch (const Failure &failure) {
+    [self moveResumedCues];
     // JavaScript validated the transition; only a malformed native prop gets here, and no caller awaits a hand-off.
     NSLog(@"Spark motion: layout transition rejected: %s", failure.message.c_str());
   }
