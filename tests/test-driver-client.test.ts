@@ -33,6 +33,14 @@ test("launches with a private run directory and one-time token, then drives the 
     expect(await driver.sampleMotion("box", { fromMs: 1000, intervalMs: 50 })).toEqual({ fromMs: 1000, toMs: 1100, intervalMs: 50, truncated: false, samples: [] });
     expect(await driver.startFrames()).toEqual({ refreshRate: 120 });
     expect(await driver.stopFrames()).toEqual({ frames: 61, droppedFrames: 0, maxFrameGapMs: 8.3, durationMs: 500, fps: 120, refreshRate: 120 });
+    expect(await driver.startup(2000)).toEqual({ firstMount: 510, settled: 690, echo: [2000, null] });
+    expect(await driver.startup(2000, "catalog")).toEqual({ firstMount: 510, settled: 690, echo: [2000, "catalog"] });
+    expect(await driver.state("documents.open.length")).toEqual({ path: "documents.open.length", timeoutMs: 5000 });
+    await expect(driver.state("missing")).rejects.toThrow("E_NOT_FOUND: No test state named missing");
+    await driver.startCommits();
+    expect(await driver.stopCommits(3000)).toEqual({ commits: 2, relayouts: [], gaps: [], blanks: [], echo: 3000 });
+    expect(await driver.counters()).toEqual({ windows: 1, views: 10, fileDescriptors: 30, listeners: 4 });
+    expect(await driver.memory()).toEqual({ footprintMB: 120.5, residentMB: 200 });
     const capture = await driver.capture("main", "home");
     expect(capture).toEqual({ file: path.join(driver.directory, "home.png"), width: 2000, height: 1400, scale: 2 });
     expect(readFileSync(capture.file, "utf8")).toBe("png");

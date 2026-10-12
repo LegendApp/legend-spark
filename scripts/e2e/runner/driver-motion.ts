@@ -33,7 +33,7 @@ const DRIVER_FAILURES: Record<string, FailureKind> = {
 const FILE_NAME = /^[A-Za-z0-9_-]{1,100}$/;
 
 /** Driver failures as typed flow failures: `E_UNKNOWN_COMMAND` means the app does not link the motion module. */
-async function driven<T>(what: string, call: () => Promise<T>): Promise<T> {
+export async function driven<T>(what: string, call: () => Promise<T>): Promise<T> {
   try { return await call(); } catch (error) {
     if (error instanceof DriverError) throw new Failure(DRIVER_FAILURES[error.code] ?? "error", `${what}: ${error.message}`);
     throw error;

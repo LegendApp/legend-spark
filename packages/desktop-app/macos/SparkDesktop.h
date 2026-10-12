@@ -16,6 +16,11 @@ FOUNDATION_EXPORT NSDictionary *SparkContext(void);
 FOUNDATION_EXPORT NSDictionary *SparkInitialProps(NSString *windowID, NSDictionary *props);
 FOUNDATION_EXPORT NSString *SparkNamespace(void);
 FOUNDATION_EXPORT void SparkEmit(NSDictionary *event);
+// The JavaScript answer to the test driver's `state` request: { requestId, value } or { requestId, error: { code, message } }.
+// NO when no request with that ID is waiting (it timed out).
+FOUNDATION_EXPORT BOOL SparkReplyDriverState(NSDictionary *answer);
+// NativeDesktopApp's startObserving and stopObserving: whether any JavaScript observes desktop events.
+FOUNDATION_EXPORT void SparkSetDesktopObserved(BOOL observed);
 FOUNDATION_EXPORT void SparkOpenURLs(NSArray<NSURL *> *urls);
 FOUNDATION_EXPORT NSArray *SparkPendingURLs(void);
 FOUNDATION_EXPORT NSString *SparkInitialURL(void);

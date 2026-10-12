@@ -542,7 +542,7 @@
             }
           },
           "assertStartup": {
-            "description": "[driver] Assert startup phase timings in milliseconds.",
+            "description": "[driver] Assert startup phase timings in milliseconds. With `id`, coldMs ends when the element with that testID first shows in a settled UI.",
             "if": {
               "type": "object"
             },
@@ -574,6 +574,10 @@
                   },
                   "additionalProperties": false,
                   "minProperties": 1
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
                 },
                 "when": {
                   "$ref": "#/definitions/condition"

@@ -50,6 +50,17 @@ export type MotionSamples = { fromMs: number; toMs: number; intervalMs: number; 
 export type MotionUntil = { progress: number } | { elapsedMs: number } | { settled: true };
 /** Main-thread display-link cadence between startFrames and stopFrames (docs/test-driver.md#frame-timing). */
 export type FrameReport = { frames: number; droppedFrames: number; maxFrameGapMs: number; durationMs: number; fps: number; refreshRate: number };
+/** Startup phases in milliseconds since the kernel started the process (docs/test-driver.md#startup-phases); a phase the app never reached is absent. */
+export type StartupPhases = { willFinishLaunching?: number; didFinishLaunching?: number; bundleLoaded?: number; firstMount: number; settled: number; ready?: number };
+/** What the driver saw between startCommits and stopCommits (docs/test-driver.md#layout-thrash-and-flicker). */
+export type CommitReport = {
+  commits: number;
+  relayouts: Array<{ view: string; window: string; changes: number; frames: Frame[] }>;
+  gaps: Array<{ id: string; window: string; commits: number }>;
+  blanks: Array<{ window: string; commits: number }>;
+};
+/** Leak counters (docs/test-driver.md#leak-counters). */
+export type Counters = { windows: number; views: number; fileDescriptors: number; listeners: number };
 export type LaunchOptions = { executable: string; args?: string[]; env?: Record<string, string>; log?: ProcessLog; startTimeoutMs?: number };
 type Reply = { id?: unknown; ok: boolean; error?: { code: string; message: string }; [key: string]: unknown };
 
@@ -206,6 +217,23 @@ export class Driver {
   async stopFrames() { return body<FrameReport>(await this.request({ command: "stopFrames" }, 10000)); }
   /** Reports `displays` (DisplayDetails) through @legendapp/spark/displays instead of the real ones; null restores them (docs/displays.md#simulated-displays). */
   async simulateDisplays(displays: readonly object[] | null) { await this.request({ command: "simulateDisplays", displays }, 10000); }
+  /** Startup phases of this launch, once its first rendered UI has settled; with `testID`, `ready` once that element first showed settled. */
+  async startup(timeoutMs = 30000, testID?: string) {
+    return (await this.request({ command: "startup", timeoutMs, ...(testID === undefined ? {} : { testID }) }, timeoutMs + 10000)).phases as StartupPhases;
+  }
+  /** The JSON value at `path` of the state the app exposes (exposeTestState in @legendapp/spark/app). */
+  async state(path: string, timeoutMs = 5000) { return (await this.request({ command: "state", path, timeoutMs }, timeoutMs + 10000)).value; }
+  /** Starts watching the commits of the main run loop: view frames and visible elements. */
+  async startCommits() { await this.request({ command: "startCommits" }, 10000); }
+  /** Waits for the UI to settle, stops watching and reports relayouts, gaps and blank windows. */
+  async stopCommits(timeoutMs = 5000) { return body<CommitReport>(await this.request({ command: "stopCommits", timeoutMs }, timeoutMs + 10000)); }
+  /** Leak counters once the UI has settled: windows, views and file descriptors, and the JavaScript's desktop event listeners. */
+  async counters(timeoutMs = 5000): Promise<Counters> {
+    const native = body<Omit<Counters, "listeners">>(await this.request({ command: "counters", timeoutMs }, timeoutMs + 10000));
+    return { ...native, listeners: (await this.request({ command: "listeners", timeoutMs }, timeoutMs + 10000)).listeners as number };
+  }
+  /** The process's memory: its footprint (what Activity Monitor shows) and resident size, in MB. */
+  async memory() { return body<{ footprintMB: number; residentMB: number }>(await this.request({ command: "memory" }, 10000)); }
   /** Clicks a target in-process (docs/test-driver.md#input): `clickCount` 1-3, left, right, back or forward button. */
   async tap(target: InputTarget, options: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] } = {}) {
     await this.request({ command: "tap", ...target, ...options }, 10000);

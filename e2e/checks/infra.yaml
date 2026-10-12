@@ -38,3 +38,25 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "docs/e2e-flows.md Manual sign-offs; #57"
+  INFRA-DRIVER-07:
+    title: assertStartup reports the launch's startup phases from the process start to the first settled UI showing the catalog, and records startup.coldMs and startup.firstPaintMs
+    platforms: [macos]
+    blocking: true
+    spec: "docs/test-driver.md Startup phases; #52"
+  INFRA-DRIVER-08:
+    title: assertState reads the state the app exposes with exposeTestState (its navigation and app-wide state), which follows deep links and input
+    platforms: [macos]
+    blocking: true
+    spec: "docs/test-driver.md Exposed state; #52"
+    covers:
+      - ./app#exposeTestState
+  INFRA-DRIVER-09:
+    title: assertNoLayoutThrash and assertNoFlicker watch every commit while a click navigates, and no view is laid out twice and no element goes missing
+    platforms: [macos]
+    blocking: true
+    spec: "docs/test-driver.md Layout thrash and flicker; #52"
+  INFRA-DRIVER-10:
+    title: assertNoLeaks finds the leak counters (windows, views, file descriptors, desktop event listeners) back at their baseline after repeated navigation, and assertMemory records the app's footprint
+    platforms: [macos]
+    blocking: true
+    spec: "docs/test-driver.md Leak counters; #52"

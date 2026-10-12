@@ -30,6 +30,14 @@ function dispatch(hub: Hub, event: DesktopEvent) {
   route(hub.buckets.get(event.type), event);
   if (event.type !== "*") route(hub.buckets.get("*"), event);
 }
+/**
+ * The test driver's `listeners` leak counter (docs/test-driver.md#leak-counters): this hub's subscriptions. Isolated
+ * runtimes keep their own hubs and do not answer, so the count is the main runtime's.
+ */
+function answerListeners(native: Spec, hub: Hub, requestId: unknown) {
+  if ((globalThis as { __THREADED_RUNTIME_ENV__?: unknown }).__THREADED_RUNTIME_ENV__ || !Number.isSafeInteger(requestId)) return;
+  native.call("replyDriverState", JSON.stringify({ requestId, value: hub.count })).catch(console.error);
+}
 /** Route once by native event type/resource instead of waking every feature listener. */
 export function onDesktopEvent(listener: (event: DesktopEvent) => void, filter?: DesktopEventFilter): Subscription {
   const native = TurboModuleRegistry.get<Spec>("NativeDesktopApp");
@@ -38,7 +46,9 @@ export function onDesktopEvent(listener: (event: DesktopEvent) => void, filter?:
   if (!hub) {
     const created: Hub = { count: 0, buckets: new Map(), subscription: undefined! };
     created.subscription = new NativeEventEmitter(native).addListener("desktop", (event: unknown) => {
-      if (event && typeof event === "object" && typeof (event as DesktopEvent).type === "string") dispatch(created, event as DesktopEvent);
+      if (!event || typeof event !== "object" || typeof (event as DesktopEvent).type !== "string") return;
+      if ((event as DesktopEvent).type === "driverListeners") answerListeners(native, created, (event as DesktopEvent).requestId);
+      else dispatch(created, event as DesktopEvent);
     });
     hubs.set(native, created); hub = created;
   }

@@ -65,7 +65,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   assertCrashRecovery: spec("lifecycle", "Assert the app recovers after crashApp."),
   relaunchApp: spec("lifecycle", "Quit and relaunch the app.", { preserveState: bool }),
   assertAppState: spec("lifecycle", "Assert process and activation state.", { running: bool, active: bool, hidden: bool, dockIconVisible: bool }, { rule: anyKey("running", "active", "hidden", "dockIconVisible") }),
-  assertStartup: spec("lifecycle", "Assert startup phase timings in milliseconds.", { coldMs: bound(num), firstPaintMs: bound(num) }, { rule: anyKey("coldMs", "firstPaintMs"), driver: true }),
+  assertStartup: spec("lifecycle", "Assert startup phase timings in milliseconds. With `id`, coldMs ends when the element with that testID first shows in a settled UI.", { coldMs: bound(num), firstPaintMs: bound(num), id: str }, { rule: anyKey("coldMs", "firstPaintMs"), driver: true }),
 
   // Windows / multiwindow
   assertWindow: spec("windows", "Assert window count and state; frame/fullscreen/level/edited/onDisplay apply to `window` (default key).", {

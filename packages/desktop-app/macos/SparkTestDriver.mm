@@ -5,6 +5,8 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
+#include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -20,6 +22,14 @@ static id activity;
 static std::atomic<bool> authenticated{false};
 static CFTimeInterval lastMount = 0;
 static const CFTimeInterval SparkSettleInterval = 0.1;
+// Startup phases (docs/test-driver.md#startup-phases), CACurrentMediaTime() seconds, 0 until reached. The bundle
+// notification arrives on the JavaScript thread. Quiet points are the startup's settled moments: the last mount before
+// 100 ms without one, and the elements (testIDs) the windows showed then; `settled` is the first with an element.
+static CFTimeInterval processStart = 0, driverStart = 0, didFinishLaunching = 0, firstMount = 0;
+static NSMutableArray<NSDictionary *> *quietPoints;
+static const NSUInteger SparkMaxQuietPoints = 50;
+static const CFTimeInterval SparkStartupWindow = 60;
+static std::atomic<CFTimeInterval> bundleLoaded{0};
 static const NSUInteger SparkMaxMessage = 1 << 20;
 
 static void SparkDriverRefuse(NSString *message) {
@@ -29,10 +39,32 @@ static void SparkDriverRefuse(NSString *message) {
 static void SparkDriverTerminate(void) { ending = YES; [NSApp terminate:nil]; }
 BOOL SparkTestDriverActive(void) { return active; }
 BOOL SparkTestDriverEnding(void) { return ending; }
-void SparkTestDriverDidMount(void) { lastMount = CACurrentMediaTime(); }
+// Elements: visible views with a testID and an area.
+static void SparkCollectShown(NSView *view, NSMutableSet<NSString *> *ids) {
+  if (view.isHidden || view.alphaValue <= 0) return;
+  if (view.accessibilityIdentifier.length && view.frame.size.width > 0 && view.frame.size.height > 0) [ids addObject:view.accessibilityIdentifier];
+  for (NSView *child in view.subviews) SparkCollectShown(child, ids);
+}
+// Records a quiet point of the startup (its first 60 s, at most 50) when the UI has been quiet for 100 ms: seen by a
+// wait for settling, or by the check each startup mount schedules. A mount changes the views, so a point the checks
+// missed before the next mount is not recorded.
+static void SparkNoteQuiet(CFTimeInterval now) {
+  if (!lastMount || now - lastMount < SparkSettleInterval || lastMount - firstMount > SparkStartupWindow || quietPoints.count >= SparkMaxQuietPoints) return;
+  if ([quietPoints.lastObject[@"at"] doubleValue] == lastMount) return;
+  NSMutableSet<NSString *> *ids = [NSMutableSet new];
+  for (NSWindow *window in NSApp.windows) if (window.contentView) SparkCollectShown(window.contentView, ids);
+  [quietPoints addObject:@{ @"at": @(lastMount), @"ids": ids }];
+}
+void SparkTestDriverDidMount(void) {
+  const CFTimeInterval now = CACurrentMediaTime();
+  if (!firstMount) firstMount = now;
+  lastMount = now;
+  if (now - firstMount <= SparkStartupWindow && quietPoints.count < SparkMaxQuietPoints)
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SparkSettleInterval * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ SparkNoteQuiet(CACurrentMediaTime()); });
+}
 static NSArray<NSString *> *SparkBuiltInCommands(void) {
-  return [[@[@"ping", @"navigate", @"openFile", @"waitFor", @"elements", @"setAppAppearance", @"capture", @"menus", @"quit"]
-    arrayByAddingObjectsFromArray:SparkDriverInputCommandNames()] arrayByAddingObjectsFromArray:SparkDriverFrameCommandNames()];
+  return [[@[@"ping", @"navigate", @"openFile", @"waitFor", @"elements", @"setAppAppearance", @"capture", @"menus", @"startup", @"quit"]
+    arrayByAddingObjectsFromArray:SparkDriverInputCommandNames()] arrayByAddingObjectsFromArray:[SparkDriverFrameCommandNames() arrayByAddingObjectsFromArray:SparkDriverCommitCommandNames()]];
 }
 static NSMutableArray<dispatch_block_t> *SparkStartObservers(void) {
   static NSMutableArray *observers;
@@ -159,10 +191,15 @@ static void SparkWaitUntil(NSTimeInterval timeout, BOOL (^ready)(void), void (^d
   }];
   [NSRunLoop.mainRunLoop addTimer:timer forMode:NSRunLoopCommonModes];
 }
-static BOOL SparkSettled(void) { return CACurrentMediaTime() - lastMount >= SparkSettleInterval; }
+static BOOL SparkSettled(void) {
+  const CFTimeInterval now = CACurrentMediaTime();
+  SparkNoteQuiet(now);
+  return now - lastMount >= SparkSettleInterval;
+}
 static NSTimeInterval SparkTimeout(id value, NSTimeInterval fallback) {
   return [value isKindOfClass:NSNumber.class] ? MIN(MAX([value doubleValue], 0), 120000) / 1000 : fallback;
 }
+void SparkDriverWhenSettled(id timeoutMs, void (^done)(BOOL settled)) { SparkWaitUntil(SparkTimeout(timeoutMs, 5), ^{ return SparkSettled(); }, done); }
 NSView *SparkDriverFrameView(NSWindow *window) { return window.contentView.superview ?: window.contentView; }
 NSView *SparkDriverFindTestID(NSView *view, NSString *testID) {
   if (view.isHidden) return nil;
@@ -431,6 +468,41 @@ static NSArray *SparkMenuItems(NSMenu *menu) {
   }
   return items;
 }
+// When the kernel started this process, on the CACurrentMediaTime() clock; 0 if it does not say.
+static CFTimeInterval SparkProcessStart(void) {
+  struct kinfo_proc info = {};
+  size_t size = sizeof info;
+  int name[] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid() };
+  struct timeval now;
+  if (sysctl(name, 4, &info, &size, NULL, 0) != 0 || size != sizeof info || gettimeofday(&now, NULL) != 0) return 0;
+  const struct timeval started = info.kp_proc.p_starttime;
+  return CACurrentMediaTime() - ((now.tv_sec - started.tv_sec) + (now.tv_usec - started.tv_usec) / 1e6);
+}
+// The first quiet point of the startup that shows an element, or the element `testID`.
+static NSDictionary *SparkQuietPoint(NSString *testID) {
+  for (NSDictionary *point in quietPoints) if (testID ? [point[@"ids"] containsObject:testID] : [point[@"ids"] count] > 0) return point;
+  return nil;
+}
+// Startup phases in milliseconds since the process started, once the first rendered UI has settled; with `testID`, also
+// `ready`, once that element has shown at a quiet point.
+static void SparkStartup(NSDictionary *request, SparkDriverReply reply) {
+  if (!processStart) { reply(SparkDriverFailure(@"E_UNAVAILABLE", @"The kernel did not report when this process started")); return; }
+  NSString *testID = request[@"testID"];
+  if (testID && (![testID isKindOfClass:NSString.class] || !testID.length)) { reply(SparkDriverFailure(@"E_INVALID_ARGUMENT", @"startup testID must be a non-empty string")); return; }
+  SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 30), ^{ SparkSettled(); return (BOOL)(SparkQuietPoint(nil) && (!testID || SparkQuietPoint(testID))); }, ^(BOOL settled) {
+    if (!settled) {
+      NSString *what = !firstMount ? @"The app has not mounted UI" : !SparkQuietPoint(nil) ? @"The first UI did not show an element (a view with a testID) and stop mounting changes for 100 ms"
+        : [NSString stringWithFormat:@"%@ was not shown when the UI stopped mounting changes for 100 ms during its first %.0f s", testID, SparkStartupWindow];
+      reply(SparkDriverFailure(@"E_TIMEOUT", [what stringByAppendingString:@" before the timeout"]));
+      return;
+    }
+    NSMutableDictionary *phases = [NSMutableDictionary new];
+    NSDictionary *times = @{ @"willFinishLaunching": @(driverStart), @"didFinishLaunching": @(didFinishLaunching), @"bundleLoaded": @(bundleLoaded.load()),
+      @"firstMount": @(firstMount), @"settled": SparkQuietPoint(nil)[@"at"], @"ready": testID ? SparkQuietPoint(testID)[@"at"] : @0 };
+    for (NSString *phase in times) if ([times[phase] doubleValue] > 0) phases[phase] = @(([times[phase] doubleValue] - processStart) * 1000);
+    reply(@{ @"ok": @YES, @"phases": phases });
+  });
+}
 static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   NSString *command = request[@"command"];
   if ([command isEqual:@"ping"]) reply(@{ @"ok": @YES });
@@ -460,6 +532,8 @@ static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   else if ([command isEqual:@"capture"]) SparkCapture(request, reply);
   else if ([SparkDriverInputCommandNames() containsObject:command]) { SparkNoteInput(); SparkDriverInput(command, request, reply); }
   else if ([SparkDriverFrameCommandNames() containsObject:command]) SparkDriverFrames(command, request, reply);
+  else if ([SparkDriverCommitCommandNames() containsObject:command]) SparkDriverCommits(command, request, reply);
+  else if ([command isEqual:@"startup"]) SparkStartup(request, reply);
   else if ([command isEqual:@"menus"]) reply(@{ @"ok": @YES, @"menus": NSApp.mainMenu ? SparkMenuItems(NSApp.mainMenu) : @[] });
   else if ([command isKindOfClass:NSString.class] && SparkModuleCommands()[command]) SparkModuleCommands()[command](request, reply);
   else reply(SparkDriverFailure(@"E_UNKNOWN_COMMAND", [NSString stringWithFormat:@"Unknown command %@", command]));
@@ -541,6 +615,17 @@ BOOL SparkTestDriverStart(void) {
   listenFD = SparkListen(socketPath);
   if (listenFD < 0) SparkDriverRefuse([NSString stringWithFormat:@"Unable to listen on %@: %s", socketPath, strerror(errno)]);
   active = YES;
+  driverStart = CACurrentMediaTime();
+  quietPoints = [NSMutableArray new];
+  processStart = SparkProcessStart();
+  [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidFinishLaunchingNotification object:nil queue:nil usingBlock:^(NSNotification *) {
+    if (!didFinishLaunching) didFinishLaunching = CACurrentMediaTime();
+  }];
+  // React Native posts it on the JavaScript thread once the bundle has run (RCTInstance); a reload posts it again.
+  [NSNotificationCenter.defaultCenter addObserverForName:@"RCTInstanceDidLoadBundle" object:nil queue:nil usingBlock:^(NSNotification *) {
+    CFTimeInterval unset = 0;
+    bundleLoaded.compare_exchange_strong(unset, CACurrentMediaTime());
+  }];
   for (dispatch_block_t observer in SparkStartObservers()) observer();
   [SparkStartObservers() removeAllObjects];
   // Never take focus from the person using this Mac, and avoid App Nap timer throttling.

@@ -184,6 +184,13 @@ send one request at a time; each reply echoes `id`. Failures are
 | `menus` | | `menus`: the application menu bar (`NSApp.mainMenu`) as a tree, after `-[NSMenu update]` validates it, so `enabled` and `state` are what a user opening the menu sees. Items have `title`, `id`, `enabled`, `hidden`, `state` (`on`/`off`/`mixed`), optional `shortcut` (`key`, `modifiers` as NSEventModifierFlags bits), `toolTip`, `alternate` and `items`; separators are `{ "separator": true }`. The system Services menu is not expanded. A driven app shows no menu bar, but it has one. |
 | `startFrames` | | `refreshRate`. Starts counting frames ([Frame timing](#frame-timing)). `E_BUSY` while counting, `E_UNAVAILABLE` without a display. |
 | `stopFrames` | | `frames`, `droppedFrames`, `maxFrameGapMs`, `durationMs`, `fps`, `refreshRate` since `startFrames`. `E_INVALID_STATE` without `startFrames`; `E_UNAVAILABLE` when the display link delivered fewer than two frames. |
+| `startup` | `testID`, `timeoutMs` (30000) | `phases`: milliseconds from the kernel's start of the process to each startup phase ([Startup phases](#startup-phases)), once the first rendered UI has settled and, with `testID`, that element has shown at a quiet point. `E_TIMEOUT` before that; `E_UNAVAILABLE` when the kernel does not report the start time. |
+| `state` | `path`, `timeoutMs` (5000) | `value`: the JSON value at `path` of the state the app's JavaScript exposes ([Exposed state](#exposed-state)). The app's errors pass through (`E_NOT_FOUND` for a name or key it does not have); `E_TIMEOUT` when no JavaScript answers. |
+| `startCommits` | | Starts watching the main run loop's commits ([Layout thrash and flicker](#layout-thrash-and-flicker)). `E_BUSY` while watching. |
+| `stopCommits` | `timeoutMs` (5000) | Once mounted UI updates have settled: `commits`, `relayouts` (`view`, `window`, `changes`, `frames`), `gaps` (`id`, `window`, `commits`) and `blanks` (`window`, `commits`) since `startCommits`. `E_INVALID_STATE` without `startCommits`; `E_NOT_SETTLED` if the UI never settles (watching ends either way). |
+| `counters` | `timeoutMs` (5000) | Once mounted UI updates have settled: `windows`, `views` and `fileDescriptors` ([Leak counters](#leak-counters)). `E_NOT_SETTLED` otherwise. |
+| `listeners` | `timeoutMs` (5000) | `listeners`: the JavaScript's desktop event subscriptions ([Leak counters](#leak-counters)). `E_TIMEOUT` when no JavaScript answers. |
+| `memory` | | `footprintMB` (the process's physical footprint, as Activity Monitor's Memory column) and `residentMB`, from `task_info`. |
 | `quit` | | `ok`, then the session ends and the app quits. |
 
 Optional modules add commands with `SparkTestDriverRegisterCommand` (main thread; built-in
@@ -323,6 +330,87 @@ budget every UI update and gesture has. It is not a measurement of what the wind
 composited, which needs out-of-process instrumentation (#50). `tests/test-driver.native.mm`
 (mode `hooks`) checks that an idle main thread keeps the display's cadence and that blocking
 it for 250 ms drops frames and shows a gap of at least 240 ms.
+
+## Startup phases
+
+The driver records when a driven launch reaches each phase, on one clock (`CACurrentMediaTime`), and `startup`
+reports them in milliseconds from the moment the kernel started the process (`p_starttime` from `sysctl`, the
+runner's spawn):
+
+| Phase | When |
+| --- | --- |
+| `willFinishLaunching` | The driver starts, first thing in the host's `applicationWillFinishLaunching:` |
+| `didFinishLaunching` | `NSApplicationDidFinishLaunchingNotification` |
+| `bundleLoaded` | React Native has run the JavaScript bundle (`RCTInstanceDidLoadBundle`, posted on the JavaScript thread) |
+| `firstMount` | The first mounted UI transaction |
+| `settled` | The first quiet point that shows an element: the last mount before 100 ms without one, when a window showed a visible view with a testID |
+| `ready` | With `testID`: the first quiet point at which that element showed. An app that first shows a placeholder (the Kitchen Sink's "Starting…"), then its content once asynchronous setup finishes, settles with the placeholder and is ready with the content. |
+
+The driver records quiet points during the first 60 s after the first mount (at most 50), when a wait for settling or
+the check each mount schedules 100 ms later sees the UI quiet; a quiet point those checks miss before the next mount is
+not recorded. A phase the app never reached is absent. Later mounts (navigation, input) never change them. The driven window is
+never on screen, so `firstMount` is the first UI committed, not composited. Every driver launch is a new process, but
+the file cache may hold the app from an earlier launch, so `settled` is a fresh-process launch, not a cold boot.
+`assertStartup` records `settled` (with `id`, `ready`) as `startup.coldMs` and `firstMount` as `startup.firstPaintMs`
+([docs/e2e-flows.md](e2e-flows.md#app-inspection)). `tests/test-driver.native.mm` (mode `startup`) checks the order
+of the phases, that a quiet UI without elements has not settled, that `settled` is a mount of the first UI with one,
+and `ready` for an element that shows later and one that never does.
+
+## Exposed state
+
+`assertState` checks app state that is not on screen. The app exposes it by name from `@legendapp/spark/app`:
+
+```ts
+import { exposeTestState } from "@legendapp/spark/app";
+
+const registration = exposeTestState("documents", () => documentStore.get()); // { remove() }
+```
+
+`state` with `path: "documents.open.length"` posts a `driverState` desktop event; `exposeTestState` answers through
+the `NativeDesktopApp` module (`replyDriverState`) with the value of `read()` at the path: the name, then own
+properties or array indices separated by dots. `read` runs only when a driver session asks, so it costs nothing
+outside driver mode. The value must be JSON data; `undefined`, functions and symbols fail `E_INVALID_DATA`, and
+`read` throwing fails `E_STATE`. A name nobody exposed, or a key the value does not have, fails `E_NOT_FOUND`. Names
+are JavaScript identifiers, exposed once at a time (`E_ALREADY_EXISTS`). The Kitchen Sink exposes `navigation` (its
+current route) and `app` (its app-wide state: locale, errors, the document) in `shell/app-controller.ts`.
+`tests/test-driver.native.mm` (mode `state`) checks the native relay and `tests/test-state.test.ts` the JavaScript.
+
+## Layout thrash and flicker
+
+Between `startCommits` and `stopCommits` (`packages/desktop-app/macos/SparkTestDriverCommits.mm`) the driver walks
+every window's views each time the main run loop commits its Core Animation transaction: a run-loop observer in the
+common modes, ordered right after Core Animation's commit, before the run loop waits. That is the model the next frame
+shows; a driven window is never on screen, so nothing is composited. A commit that changed no view frame and no
+visible element is not counted. Elements are views with a testID; a view is visible when neither it nor an ancestor is
+hidden or has alpha 0, and it has an area.
+
+- `relayouts`: views whose frame (in their superview) changed in more than one commit, with their frames in order (at
+  most 8). The frame a view has when it is mounted, or when watching starts, is not a change. A view without a testID
+  is named by its class and the nearest enclosing testID.
+- `gaps`: elements that were visible, then not visible for one or more commits, then visible again: a partial frame.
+  An element that leaves for good, or appears, is not a gap.
+- `blanks`: commits in which a window that showed elements showed none.
+
+What it cannot see: changes within one commit (a frame set twice before the commit is one change), pixels (a view
+that draws nothing is still visible), and the window server's compositing (#50). Virtualized lists remove rows that
+scroll out and add them back, which is a gap. `tests/test-driver.native.mm` (mode `commits`) checks each report on
+AppKit views changed in separate run-loop turns.
+
+## Leak counters
+
+`counters` waits for mounted UI updates to settle, then counts:
+
+| Counter | What |
+| --- | --- |
+| `windows` | `NSApp.windows`: every window AppKit holds, shown or not |
+| `views` | Views in those windows' trees (frame view included). Views React Native keeps for reuse outside the tree are not counted. |
+| `fileDescriptors` | The process's open file descriptors (`proc_pidinfo`), files and sockets included |
+
+`listeners` asks the app's JavaScript, like `state`, for the subscriptions of Spark's desktop event hub
+(`onDesktopEvent` in `@legendapp/spark-desktop-app`), which app, window, link, system, notification, tray, update,
+process and global-shortcut listeners use. Packages with their own event emitters (menus, shortcuts, audio, file
+system) are not counted. Only the main JavaScript runtime answers; with no JavaScript observing desktop events it is
+0. `tests/test-driver.native.mm` (modes `commits` and `state`) and `tests/test-state.test.ts` check them.
 
 ## What a capture contains
 

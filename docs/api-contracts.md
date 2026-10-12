@@ -113,6 +113,7 @@ hide(): Promise<void>;
 quit(): Promise<{ quitRequested: true } | { quitRequested: false; reason: 'vetoed' }>;
 beforeQuit(handler: () => boolean | Promise<boolean>): Promise<AsyncRegistration>;
 addAppListener(type, listener): Subscription; // Typed event map.
+exposeTestState(name: string, read: () => unknown): Subscription; // Read by the in-app test driver (macOS).
 
 // /app/documents
 noteRecentDocument(path: string): Promise<void>;

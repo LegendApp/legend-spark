@@ -8,10 +8,12 @@ import path from "node:path";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
-  DriverError, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
+  DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
   type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton,
 } from "../driver.ts";
+import { inspectCommands, type InspectClient } from "./driver-inspect.ts";
 import { motionCommands, type MotionClient } from "./driver-motion.ts";
+import { renderCommands, type RenderClient } from "./driver-render.ts";
 import { ms } from "./executor.ts";
 import { matchesText, parseSelector } from "./selectors.ts";
 import {
@@ -19,7 +21,7 @@ import {
 } from "./backend.ts";
 
 /** What the backend uses of a driver session (`Driver` in scripts/e2e/driver.ts). Tests pass a double. */
-export type DriverClient = MotionClient & {
+export type DriverClient = MotionClient & InspectClient & RenderClient & {
   readonly running: boolean;
   navigate(url: string): Promise<void>;
   openFile(file: string): Promise<void>;
@@ -71,7 +73,7 @@ export class DriverBackend implements Backend {
   readonly platform = "macos";
   /** `appearance` through setAppAppearance after each launch; `locale` through launch arguments. */
   readonly matrix: ReadonlySet<string> = new Set(["appearance", "locale"]);
-  readonly commands: Readonly<Record<string, CommandHandler>> = {
+  readonly commands: Readonly<Record<string, CommandHandler>> = this.baselined({
     launchApp: args => this.launchApp(args),
     stopApp: () => this.quit(),
     preserveAppDefaults: (args, context) => this.preserveAppDefaults(args, context),
@@ -85,6 +87,10 @@ export class DriverBackend implements Backend {
     ...motionCommands(() => this.client()),
     // The display source of @legendapp/spark/displays (docs/displays.md#simulated-displays).
     simulateDisplays: async args => { await this.client().simulateDisplays(args.restore ? null : args.displays as object[]); },
+    // Startup phases and the state the app exposes (docs/e2e-flows.md#app-inspection).
+    ...inspectCommands(() => this.client()),
+    // Layout thrash, flicker, leak counters and memory (docs/e2e-flows.md#layout-flicker-and-leaks).
+    ...renderCommands(() => this.client(), () => this.launchCounters),
     // Black-box commands, run here in-process (white-box) only when no black-box backend is active.
     tapOn: (args, context) => this.click(args, context, {}),
     doubleClickOn: (args, context) => this.click(args, context, { clickCount: 2 }),
@@ -128,12 +134,19 @@ export class DriverBackend implements Backend {
     assertA11y: (args, context) => this.assertA11y(args, context),
     // White-box: the menu bar as AppKit holds it, validated as when a user opens it (assertMenuItem is the black-box form).
     assertAppMenu: (args, context) => context.eventually(async () => assertMenu(await this.client().menus(), args)),
-  };
+  });
   private session?: Session;
   private driver?: DriverClient;
   private logs: string[] = [];
   private launches = 0;
   private captures = 0;
+  /**
+   * Leak counters of the running launch before the flow's first command on it other than launchApp (visibility checks
+   * are the runner's), once the UI settled: taken only for a flow with assertNoLeaks since: flowStart.
+   */
+  private launchCounters?: Counters;
+  private countsLaunches = false;
+  private launchCountersDue = false;
 
   constructor(private readonly app: DriverApp) {}
 
@@ -141,6 +154,7 @@ export class DriverBackend implements Backend {
     this.session = session;
     this.logs = [];
     this.launches = 0;
+    this.countsLaunches = usesLaunchCounters(session.flow);
     const { app, bundleId } = await this.app.open({ dev: session.flow.header.build === "dev" });
     if (session.flow.header.appId === bundleId) return;
     await this.app.close(); // The runner stops only backends that started.
@@ -152,6 +166,17 @@ export class DriverBackend implements Backend {
       this.session = undefined;
       await this.app.close();
     }
+  }
+
+  /** Takes the launch's leak counters, when due, before every command other than launchApp and stopApp. */
+  private baselined(handlers: Record<string, CommandHandler>): Record<string, CommandHandler> {
+    return Object.fromEntries(Object.entries(handlers).map(([name, handler]) => [name, name === "launchApp" || name === "stopApp" ? handler : async (args, context) => {
+      if (this.launchCountersDue) {
+        this.launchCountersDue = false;
+        this.launchCounters = await this.client().counters();
+      }
+      await handler(args, context);
+    }]));
   }
 
   /** The running app's driver session. */
@@ -191,6 +216,8 @@ export class DriverBackend implements Backend {
       this.logs.push(log);
       this.driver = await this.app.launch({ locale, arguments: argv, env, log: processLog(log) });
       if (matrix.appearance !== undefined) await this.driver.setAppAppearance(matrix.appearance as "light" | "dark", LAUNCH_APPEARANCE_MS);
+      this.launchCounters = undefined;
+      this.launchCountersDue = this.countsLaunches;
     }
     if (args.openUrl !== undefined) await this.driver!.navigate(String(args.openUrl));
     if (file !== undefined) await this.driver!.openFile(file);
@@ -345,6 +372,15 @@ export class DriverBackend implements Backend {
     await this.screenshot(file);
     return [...artifacts, { kind: "screenshot", path: file }];
   }
+}
+
+/** Whether any command, nested ones included, is `assertNoLeaks` with `since: flowStart`. */
+function usesLaunchCounters(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(usesLaunchCounters);
+  if (!value || typeof value !== "object") return false;
+  const command = value as { name?: unknown; args?: Record<string, unknown> };
+  if (command.name === "assertNoLeaks" && command.args?.since === "flowStart") return true;
+  return Object.values(value).some(usesLaunchCounters);
 }
 
 const titleOf = (item: DriverMenuItem) => item.separator ? "" : item.title.trim();

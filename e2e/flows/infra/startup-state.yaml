@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: Startup phases and exposed app state through the in-app driver
+intent: >
+  The Kitchen Sink launches in driver mode to the catalog, and assertStartup reads the launch's startup phases from
+  the process start to the first settled UI that shows the catalog (past the "Starting…" placeholder) (the bounds are a sanity cap; the gate's budgets hold the
+  reference baselines). The app exposes its navigation and app-wide state with exposeTestState: the navigation is the
+  catalog with no app errors, follows a click on the catalog's Launch state card, and follows a deep link to
+  Infra > Desktop checks.
+checks: [INFRA-DRIVER-07, INFRA-DRIVER-08]
+tags: [infra]
+platforms: [macos]
+---
+- launchApp
+- assertVisible: { id: infra-shell-home }
+- assertStartup: { id: infra-shell-home, coldMs: { max: 30000 }, firstPaintMs: { max: 30000 } }
+- assertState: { path: navigation, equals: { kind: catalog } }
+- assertState: { path: app.errors.length, equals: 0 }
+- tapOn: { id: infra-shell-screen-infra-launch-state }
+- assertState: { path: navigation, equals: { kind: screen, area: infra, screen: launch-state } }
+- launchApp: { openUrl: "spark-ks://infra/desktop-checks", stopApp: false }
+- assertState: { path: navigation, equals: { kind: screen, area: infra, screen: desktop-checks } }
