@@ -1,0 +1,23 @@
+appId: so.legend.spark.examples.kitchensink
+name: Late and failing promised data
+intent: >
+  A provider that takes longer than its 300 ms timeoutMs gives the paste nothing and reports
+  SparkError:E_TIMEOUT through onError when its answer arrives. A provider that throws gives the paste nothing at
+  once and reports SparkError:E_UNAVAILABLE. Runs on the app's private test pasteboard.
+checks: [CLIP-PROMISE-02]
+tags: [clipboard]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://clipboard/data" }
+- extendedWaitUntil: { visible: { id: clipboard-data-root }, timeout: 10s }
+- tapOn: { id: clipboard-data-promise-slow }
+- assertText: { id: clipboard-data-promise-slow-result, equals: resolved }
+- assertClipboard: { types: [public.utf8-plain-text] }
+- assertText: { id: clipboard-data-provide-error, equals: SparkError:E_TIMEOUT }
+- tapOn: { id: clipboard-data-promise-failing }
+- assertText: { id: clipboard-data-promise-failing-result, equals: resolved }
+- tapOn: { id: clipboard-data-has-text }
+- assertText: { id: clipboard-data-has-text-result, equals: "true" }
+- tapOn: { id: clipboard-data-read }
+- assertText: { id: clipboard-data-read-result, equals: '{"types":[],"text":null}' }
+- assertText: { id: clipboard-data-provide-error, equals: SparkError:E_UNAVAILABLE }

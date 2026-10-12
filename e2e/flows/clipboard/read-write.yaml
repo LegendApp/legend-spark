@@ -1,0 +1,30 @@
+appId: so.legend.spark.examples.kitchensink
+name: Copy, read and clear the clipboard
+intent: >
+  Copy text puts the sample text on the pasteboard another app reads, and Copy text, HTML and RTF adds the HTML and
+  RTF representations. Read clipboard, Read text as HTML (getStringAsync with StringFormat.HTML), List standard formats (the uniform type identifiers getClipboardFormats reports) and Has text report what is there, and Clear clipboard empties
+  it. The driver backend runs this on the app's private test pasteboard, never the user's clipboard.
+checks: [CLIP-RW-01]
+tags: [clipboard]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://clipboard/data" }
+- extendedWaitUntil: { visible: { id: clipboard-data-root }, timeout: 10s }
+- tapOn: { id: clipboard-data-copy-text }
+- assertText: { id: clipboard-data-copy-text-result, equals: "true" }
+- assertClipboard: { types: [public.utf8-plain-text], text: Spark clipboard text }
+- tapOn: { id: clipboard-data-copy-rich }
+- assertText: { id: clipboard-data-copy-rich-result, equals: resolved }
+- assertClipboard: { types: [public.utf8-plain-text, public.html, public.rtf], text: Spark clipboard text }
+- tapOn: { id: clipboard-data-read }
+- assertText: { id: clipboard-data-read-result, equals: '{"types":["html","rtf","text"],"text":"Spark clipboard text"}' }
+- tapOn: { id: clipboard-data-get-html }
+- assertText: { id: clipboard-data-get-html-result, equals: "<p><b>Spark</b> clipboard</p>" }
+- tapOn: { id: clipboard-data-formats }
+- assertText: { id: clipboard-data-formats-result, equals: '["public.utf8-plain-text","public.html","public.rtf","public.utf16-external-plain-text"]' }
+- tapOn: { id: clipboard-data-has-text }
+- assertText: { id: clipboard-data-has-text-result, equals: "true" }
+- tapOn: { id: clipboard-data-clear }
+- assertText: { id: clipboard-data-clear-result, equals: resolved }
+- tapOn: { id: clipboard-data-has-text }
+- assertText: { id: clipboard-data-has-text-result, equals: "false" }

@@ -1,0 +1,64 @@
+area: clipboard
+prefix: CLIP
+checks:
+  CLIP-AVAIL-01:
+    title: getRichClipboardAvailability reports the module and its promisedData, changeEvents and privacyMarkers features as available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#115 CLIP.api"
+    covers:
+      - ./clipboard#getRichClipboardAvailability
+      - ./clipboard#getRichClipboardAvailability().available
+  CLIP-UNSUP-01:
+    title: On Windows promisedData, changeEvents and privacyMarkers report unsupported-platform, and promising data, watching changes, reading the change count and copying concealed data reject SparkError E_UNSUPPORTED_PLATFORM (Windows implementation #359)
+    platforms: [windows]
+    blocking: true
+    spec: "#115 CLIP.api; #359"
+    covers:
+      - ./clipboard#getRichClipboardAvailability
+      - ./clipboard#writePromisedClipboard
+      - ./clipboard#onClipboardChange
+      - ./clipboard#getClipboardChangeCount
+  CLIP-RW-01:
+    title: setStringAsync and writeClipboard put text, HTML and RTF on the pasteboard another app reads; readClipboard, getClipboardFormats, hasStringAsync, getStringAsync with StringFormat.HTML and clearClipboard read and clear it
+    platforms: [macos]
+    blocking: true
+    spec: "#115 CLIP.api"
+    covers:
+      - ./clipboard#setStringAsync
+      - ./clipboard#getStringAsync
+      - ./clipboard#StringFormat
+      - ./clipboard#writeClipboard
+      - ./clipboard#readClipboard
+      - ./clipboard#getClipboardFormats
+      - ./clipboard#hasStringAsync
+      - ./clipboard#clearClipboard
+  CLIP-PRIV-01:
+    title: writeClipboard with concealed or transient puts the nspasteboard.org ConcealedType or TransientType marker beside the data
+    platforms: [macos]
+    blocking: true
+    spec: "#115 CLIP.api"
+    covers:
+      - ./clipboard#writeClipboard
+  CLIP-PROMISE-01:
+    title: writePromisedClipboard offers text, HTML and PNG without producing any; another app's paste of text makes the app provide text only, and reading the rest provides each remaining type once
+    platforms: [macos]
+    blocking: true
+    spec: "#115 CLIP.api"
+    covers:
+      - ./clipboard#writePromisedClipboard
+  CLIP-PROMISE-02:
+    title: A provider slower than timeoutMs gives the paste nothing and reports SparkError E_TIMEOUT; a provider that throws gives the paste nothing at once and reports SparkError E_UNAVAILABLE
+    platforms: [macos]
+    blocking: true
+    spec: "#115 CLIP.api"
+    covers:
+      - ./clipboard#writePromisedClipboard
+  CLIP-CHANGE-01:
+    title: onClipboardChange reports a change by another app and by this app with the new change count, matching getClipboardChangeCount, and reports nothing after its registration is removed
+    platforms: [macos]
+    blocking: true
+    spec: "#115 CLIP.api"
+    covers:
+      - ./clipboard#onClipboardChange
+      - ./clipboard#getClipboardChangeCount

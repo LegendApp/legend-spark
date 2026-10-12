@@ -1,0 +1,29 @@
+appId: so.legend.spark.examples.kitchensink
+name: Clipboard change monitoring
+intent: >
+  Start watching registers onClipboardChange. A copy by another app (setClipboard on the app's private test
+  pasteboard) and a copy in the app each arrive as one change event with the new change count, which Read change
+  count matches. After Stop watching removes the registration, a further copy reports nothing.
+checks: [CLIP-CHANGE-01]
+tags: [clipboard]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://clipboard/data" }
+- extendedWaitUntil: { visible: { id: clipboard-data-root }, timeout: 10s }
+- tapOn: { id: clipboard-data-watch }
+- assertText: { id: clipboard-data-watching, equals: "true" }
+- assertText: { id: clipboard-data-events, equals: "0" }
+- setClipboard: { text: Copied in another app }
+- assertText: { id: clipboard-data-events, equals: "1" }
+- assertText: { id: clipboard-data-last-change, equals: "1" }
+- tapOn: { id: clipboard-data-copy-text }
+- assertText: { id: clipboard-data-events, equals: "2" }
+- tapOn: { id: clipboard-data-change-count }
+- assertText: { id: clipboard-data-change-count-result, equals: "2" }
+- assertText: { id: clipboard-data-last-change, equals: "2" }
+- tapOn: { id: clipboard-data-unwatch }
+- assertText: { id: clipboard-data-watching, equals: "false" }
+- setClipboard: { text: Copied again }
+- tapOn: { id: clipboard-data-change-count }
+- assertText: { id: clipboard-data-change-count-result, equals: "3" }
+- assertText: { id: clipboard-data-events, equals: "2" }
