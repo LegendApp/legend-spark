@@ -46,13 +46,27 @@ const plistValue = (app: string, key: string) => {
 
 type Resolved = { app: string; executable: string; embedded: boolean } & AppIdentity;
 
+/** Bundles one Kitchen Sink entry for macOS without Metro's server. Output shows only with a `label`. */
+async function exportBundle(entry: string, dev: boolean, label: string | undefined): Promise<Buffer> {
+  const work = mkdtempSync(path.join(os.tmpdir(), "ks-bundle-"));
+  try {
+    const file = path.join(work, "index.bundle");
+    await run(KITCHEN_SINK, [binary(KITCHEN_SINK, "expo"), "export:embed", "--platform", "macos", "--entry-file", entry,
+      "--bundle-output", file, "--dev", String(dev), "--minify", "false", "--max-workers", "2"], { env: { CI: "1" }, capture: !label, label });
+    return readFileSync(file);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
 /**
  * An app bundle in driver mode. `open()` starts a driver session (docs/e2e-flows.md#app-state), which every launch runs
  * until `close()` ends it: with `state: "isolated"` (the default) a clone of the app with its own identity and state
  * (`DriverState`), with `exact` (the release gate) the app itself and its real state.
  * A release build (`Contents/Resources/main.jsbundle`) runs its embedded JavaScript.
  * A dev build loads JavaScript over HTTP, so `open()` bundles the current Kitchen Sink source (no Metro), once per
- * mode, and serves it on 127.0.0.1 until `close()`. The default bundle is built without `__DEV__`; `{ dev: true }`
+ * mode, and serves it on 127.0.0.1 until `close()`, with the Runtimes worker entry (`.threaded-runtime/entry.bundle`) that
+ * isolated runtimes load, bundled in the background once the app's is ready. The default bundle is built without `__DEV__`; `{ dev: true }`
  * serves a development bundle (`__DEV__` code such as the Developer menu, LogBox), for `build: dev` flows. With
  * `devServer` (a running `spark dev` origin such as http://127.0.0.1:8081), a dev build loads development JavaScript
  * from that server instead, with its inspector proxy (React Native DevTools).
@@ -60,7 +74,8 @@ type Resolved = { app: string; executable: string; embedded: boolean } & AppIden
 export class KitchenSinkApp {
   private resolved?: Resolved;
   private readonly bundles = new Map<boolean, Buffer>();
-  private served?: { dev: boolean; bundle: Buffer };
+  private readonly workerBundles = new Map<boolean, Promise<Buffer>>();
+  private served?: { dev: boolean; bundle: Buffer; worker: Promise<Buffer> };
   private server?: Server;
   private state?: AppState;
 
@@ -110,23 +125,30 @@ export class KitchenSinkApp {
     if (this.devServer) return;
     let bundle = this.bundles.get(dev);
     if (!bundle) {
-      const work = mkdtempSync(path.join(os.tmpdir(), "ks-bundle-"));
-      try {
-        const file = path.join(work, "index.bundle");
-        prepareConfig(KITCHEN_SINK);
-        await run(KITCHEN_SINK, [binary(KITCHEN_SINK, "expo"), "export:embed", "--platform", "macos", "--entry-file", path.resolve(KITCHEN_SINK, entryFile(KITCHEN_SINK)),
-          "--bundle-output", file, "--dev", String(dev), "--minify", "false", "--max-workers", "2"], { env: { CI: "1" }, capture: !label, label });
-        bundle = readFileSync(file);
-        this.bundles.set(dev, bundle);
-      } finally {
-        rmSync(work, { recursive: true, force: true });
-      }
+      prepareConfig(KITCHEN_SINK);
+      bundle = await exportBundle(path.resolve(KITCHEN_SINK, entryFile(KITCHEN_SINK)), dev, label);
+      this.bundles.set(dev, bundle);
     }
-    this.served = { dev, bundle };
+    // Loading Metro's config for the app's bundle generated the worker entry; most launches never request it.
+    let worker = this.workerBundles.get(dev);
+    if (!worker) {
+      worker = exportBundle(path.join(KITCHEN_SINK, ".threaded-runtime/entry.js"), dev, undefined);
+      worker.catch(() => undefined);
+      this.workerBundles.set(dev, worker);
+    }
+    this.served = { dev, bundle, worker };
     if (this.server) return;
     const server = createServer((request, response) => {
-      if (new URL(request.url ?? "/", "http://127.0.0.1").pathname === "/index.bundle") {
+      const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+      if (pathname === "/index.bundle") {
         response.writeHead(200, { "Content-Type": "application/javascript" }).end(this.served!.bundle);
+        return;
+      }
+      if (pathname === "/.threaded-runtime/entry.bundle" && this.served) {
+        this.served.worker.then(worker => response.writeHead(200, { "Content-Type": "application/javascript" }).end(worker), (error: unknown) => {
+          console.error(`Kitchen Sink: bundling the Runtimes worker entry failed: ${error instanceof Error ? error.message : String(error)}`);
+          response.writeHead(500).end();
+        });
         return;
       }
       console.error(`Kitchen Sink: the app requested ${request.url}, which is not served`);
@@ -184,14 +206,18 @@ export class KitchenSinkApp {
     });
   }
 
-  /** Stops serving JavaScript and ends the driver session (an isolated one deletes its clone and state); the bundles are kept for the next `open()`. */
+  /**
+   * Stops serving JavaScript and ends the driver session (an isolated one deletes its clone and state); the bundles are
+   * kept for the next `open()`. Waits for the worker entry's bundling, so no bundler outlives the session.
+   */
   async close() {
-    const server = this.server, state = this.state;
+    const server = this.server, state = this.state, worker = this.served?.worker;
     this.server = undefined;
     this.served = undefined;
     this.state = undefined;
     try { await state?.dispose(); } finally {
       if (server) await new Promise<void>(resolve => server.close(() => resolve()));
+      await worker?.catch(() => undefined);
     }
   }
 }
