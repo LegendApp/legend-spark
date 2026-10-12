@@ -553,6 +553,7 @@ static BOOL SetBounds(NSWindow *window, NSDictionary *bounds, double durationMs,
 // "displaysChanged" (onSystemEvent), which carries no payload: the two streams stay separate.
 static double DisplaySequence;
 static void EmitDisplays(void) { SparkEmit(@{ @"type": @"displayDetailsChanged", @"sequence": @(++DisplaySequence), @"displays": SparkDisplayDetails() }); }
+#if SPARK_TEST_DRIVER
 // The in-app test driver's display source (docs/displays.md#simulated-displays). Reachable only through an
 // authenticated driver session: {"command": "simulateDisplays", "displays": [DisplayDetails, ...] | null}.
 @interface SparkDisplaysDriver : NSObject
@@ -569,6 +570,7 @@ static void EmitDisplays(void) { SparkEmit(@{ @"type": @"displayDetailsChanged",
   });
 }
 @end
+#endif
 @interface RNDesktopWindows ()
 @property SparkDisplayObserver *displayObserver;
 @property NSUInteger displayObservers;

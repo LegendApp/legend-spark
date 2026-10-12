@@ -32,10 +32,14 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 - (void)state:(NSInteger)tag resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)link:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)unlink:(NSString *)identifier resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
+- (void)recordFrames:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
+
+// The virtual clock and motion telemetry serve only the in-app test driver, and compile only with it
+// (SPARK_TEST_DRIVER, which the podspec sets; docs/test-driver.md#builds).
+#if SPARK_TEST_DRIVER
 - (void)setClock:(NSString *)mode resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)advanceClock:(double)milliseconds resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)clock:(SparkMotionResolve)resolve;
-- (void)recordFrames:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 
 // Motion telemetry for the in-app test driver (docs/motion.md#motion-telemetry). Replies are dictionaries.
 /** The registered MotionView that is `view` or its nearest ancestor. */
@@ -55,6 +59,7 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 - (void)sample:(NSInteger)tag request:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 /** Gives every view its presented values (engine state now) for the duration of `render`, so an in-process render shows the frame on screen. */
 - (void)presenting:(dispatch_block_t)render;
+#endif
 @end
 
 /** Composed `translate · rotate · scale` about the view centre, matching React Native's transform order. */

@@ -3,6 +3,26 @@
 // In-app test driver for the release gate (docs/test-driver.md). Inert unless the
 // gate runner launches the app with SPARK_TEST_DRIVER_DIR naming a private run
 // directory that holds a one-time token. Main-thread confined.
+//
+// The RNDesktopApp, RNSparkUI, RNSparkMotion, RNDesktopSystem and RNDesktopWindows podspecs set SPARK_TEST_DRIVER: 1 in
+// Debug builds, and in other builds only for apps that set macos.testDriverInRelease (docs/test-driver.md#builds).
+// At 0 the driver's sources are not compiled, these functions are inline no-ops, and the hooks below are undeclared,
+// so code that registers driver commands must sit inside #if SPARK_TEST_DRIVER. A file compiled without the setting
+// gets the driver declarations; in a build without the driver it then fails to link instead of shipping driver code.
+#ifndef SPARK_TEST_DRIVER
+#define SPARK_TEST_DRIVER 1
+#endif
+
+#if !SPARK_TEST_DRIVER
+static inline BOOL SparkTestDriverStart(void)
+{
+  if (getenv("SPARK_TEST_DRIVER_DIR")) NSLog(@"Spark: this build has no test driver; SPARK_TEST_DRIVER_DIR is ignored");
+  return NO;
+}
+static inline BOOL SparkTestDriverActive(void) { return NO; }
+static inline void SparkTestDriverDidMount(void) {}
+static inline BOOL SparkTestDriverEnding(void) { return NO; }
+#else
 
 // Call first in applicationWillFinishLaunching:. Returns YES in driver mode, where
 // the app never activates and its windows are rendered without being shown.
@@ -35,3 +55,4 @@ FOUNDATION_EXPORT void SparkTestDriverObserveInput(dispatch_block_t observer);
 // Motion uses it to render the presented frame of running animations rather than their final values.
 typedef void (^SparkTestDriverRenderWrapper)(dispatch_block_t render);
 FOUNDATION_EXPORT void SparkTestDriverWrapRender(SparkTestDriverRenderWrapper wrapper);
+#endif

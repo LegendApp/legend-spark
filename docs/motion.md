@@ -225,7 +225,8 @@ The engine reads time from one clock. The in-app test driver
 ([test-driver.md](test-driver.md), #52) controls it through two driver commands that
 the motion package registers with `SparkTestDriverRegisterCommand`. They exist only
 inside an authenticated driver session; the clock is not part of the public
-JavaScript API.
+JavaScript API. The clock commands and motion telemetry compile only into builds that have the driver
+([test-driver.md](test-driver.md#builds)).
 
 | Command | Fields | Effect |
 | --- | --- | --- |

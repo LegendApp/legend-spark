@@ -193,6 +193,10 @@
         "infoPlist": {
           "type": "object"
         },
+        "testDriverInRelease": {
+          "type": "boolean",
+          "description": "Compile the in-app test driver into release builds too; Debug builds always have it. For apps the release gate drives: keep it off for apps you distribute (docs/test-driver.md#builds)."
+        },
         "testDriverPrivateEvents": {
           "type": "boolean",
           "description": "Compile the test driver's trackpad gesture and extra mouse button synthesis, which uses private CoreGraphics event functions. Test builds only: keep it off for apps you distribute (docs/test-driver.md#private-event-functions)."

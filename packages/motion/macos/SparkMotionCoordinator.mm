@@ -585,6 +585,7 @@ static NSScrollView *SparkFindScrollView(NSView *view)
   resolve(nil);
 }
 
+#if SPARK_TEST_DRIVER
 #pragma mark - Clock
 
 - (void)setClock:(NSString *)mode resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
@@ -812,6 +813,7 @@ static double SparkMotionTarget(const Episode &episode, NSDictionary *until)
   for (const auto &[host, model] : models) [host applyMotionModel:model];
   [CATransaction commit];
 }
+#endif
 
 #pragma mark - Frame telemetry
 
