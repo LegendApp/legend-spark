@@ -50,7 +50,9 @@ and 2 for a usage error.
    commit, so the app must have been built from it. An old signed artifact next to
    today's checkout is another build, and fails with `revision`.
 5. **Gate.** `bun run gate --target <target> --artifact <installed app>` runs in
-   process. Its report goes to `gate/` in the harness report directory.
+   process. Like every gate run it drives the installed app itself with its real state
+   (`state: "exact"`), not the isolated `.driver` copy `e2e:run` uses. Its report goes to
+   `gate/` in the harness report directory.
 6. **Report:** `artifacts/harness/<commit>/<target>/report.json`, where `<target>` is
    the target ID with `/` replaced by `-`, such as `macos-15-arm64`.
 

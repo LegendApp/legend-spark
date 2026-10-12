@@ -41,14 +41,14 @@ function artifact(name: string): string {
 /** `revision`: what the installed app records as its source revision (COMMIT unless given; null for none). */
 type Options = { signing?: Signing; propagate?: boolean; revision?: string | null; stapled?: boolean; host?: Host; dirty?: boolean; elements?: ReturnType<typeof element>[]; vm?: FakeVm; dir?: string; signal?: AbortSignal };
 
-/** The gate runs the fixture's flows on in-memory backends (tests/e2e-runner-backend.ts); `apps` records the app each backend was given. */
+/** The gate runs the fixture's flows on in-memory backends (tests/e2e-runner-backend.ts); `launches` records what each app backend was given: the gate must drive the installed copy itself (`state: "exact"`), never an isolated clone. */
 function env(options: Options = {}) {
-  const clock = new VirtualClock(), out: string[] = [], err: string[] = [], apps: Array<string | undefined> = [];
+  const clock = new VirtualClock(), out: string[] = [], err: string[] = [], launches: Array<{ app?: string; state?: "isolated" | "exact" }> = [];
   const mac = new FakeMac(options.signing ?? "notarized", options.propagate ?? true, options.revision === null ? undefined : options.revision ?? COMMIT, options.stapled ?? true);
   const launchApp: CommandHandler = async () => { await clock.sleep(100); };
   const gate: GateEnv = {
     backends: {
-      app: ({ app }) => { apps.push(app); return new MemoryBackend(clock, { name: "app", matrix: ["appearance"], elements: options.elements ?? [element("catalog", { id: "catalog" }), element("toggle", { id: "theme-toggle" })], commands: { launchApp } }); },
+      app: given => { launches.push(given); return new MemoryBackend(clock, { name: "app", matrix: ["appearance"], elements: options.elements ?? [element("catalog", { id: "catalog" }), element("toggle", { id: "theme-toggle" })], commands: { launchApp } }); },
       driver: () => new MemoryBackend(clock, { name: "driver", kind: "driver", commands: { assertStartup: async (_args, context) => { context.metric("startup.coldMs", 690); } } }),
     },
     host: () => options.host ?? AIR,
@@ -61,7 +61,7 @@ function env(options: Options = {}) {
     signal: options.signal,
   };
   const harnessEnv: HarnessEnv = { repo: options.dir ?? repo(), gate, sh: mac.sh, vm: options.vm ?? new FakeVm(async () => { throw new Error("no VM expected"); }), bun: process.execPath, now: () => new Date("2026-10-11T08:00:00Z") };
-  return { env: harnessEnv, mac, out, err, apps };
+  return { env: harnessEnv, mac, out, err, launches };
 }
 
 async function harness(args: string[], options: Options = {}, prepare: (mac: FakeMac) => void = () => {}) {
@@ -92,7 +92,7 @@ describe("release harness on this machine", () => {
       ["ditto", "-x", "-k", downloaded, path.dirname(installed)],
       ["xattr", "-p", "com.apple.quarantine", installed],
     ]);
-    expect(run.apps.every(app => app === installed)).toBe(true);
+    expect(run.launches).toEqual([{ app: installed, state: "exact" }]);
     expect(run.mac.calls.some(call => call[0] === "xattr" && call[1] === "-d")).toBe(false); // A release launches it quarantined.
     const gate: GateReport = JSON.parse(readFileSync(path.join(run.dir, "gate/report.json"), "utf8"));
     expect([gate.verdict, gate.build.artifact, gate.run]).toEqual(["PASS", installed, path.relative(run.env.repo, path.join(run.dir, "gate/run"))]);
@@ -122,7 +122,7 @@ describe("release harness on this machine", () => {
       expect.stringMatching(/^notarization: Gatekeeper rejected the app; a release must be notarized: .*KitchenSink\.app: rejected$/),
       "gate: not run: the installed app failed the release checks above",
     ]);
-    expect(run.apps).toEqual([]);
+    expect(run.launches).toEqual([]);
     expect(existsSync(path.join(run.dir, "gate"))).toBe(false);
   });
 
@@ -144,7 +144,7 @@ describe("release harness on this machine", () => {
       expect.stringMatching(/^notarization: the notarization ticket is not stapled, so Gatekeeper needs the network to accept the app: .*does not have a ticket stapled to it\.$/s),
       "gate: not run: the installed app failed the release checks above",
     ]);
-    expect(run.apps).toEqual([]);
+    expect(run.launches).toEqual([]);
   });
 
   test("an app built from another commit, or recording none, fails in release mode and is never launched", async () => {
@@ -155,7 +155,7 @@ describe("release harness on this machine", () => {
       `revision: the installed app was built from ${old}, not ${COMMIT}: this run would certify another build`,
       "gate: not run: the installed app failed the release checks above",
     ]);
-    expect(stale.apps).toEqual([]);
+    expect(stale.launches).toEqual([]);
     const unrecorded = await harness(["--artifact", artifact("KitchenSink.dmg")], { revision: null });
     expect(unrecorded.report.install!.sourceRevision).toBeUndefined();
     expect(unrecorded.reasons).toEqual([
