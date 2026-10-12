@@ -1119,9 +1119,9 @@ purpose (the gate drives it); keeping it out of consumer release builds is #340.
 
 `package` (`scripts/e2e/audit/package.ts`, registered in `checks/packaging-distribution.yaml`) audits the `spark package`
 output (#151): `build.<platform>.package` in `gate.yaml`, `--package`, or the release harness's `--artifact` ZIP. It is
-the distribution ZIP, or the folder holding the one `<name>-<version>-<arch>.zip`; the dSYMs archive and the `updates/`
-feed are read next to it. Try it without credentials on `spark package --ad-hoc` output
-(`bun run e2e:audit --package examples/kitchen-sink/dist/ad-hoc`), which fails only `DIST-PKG-06`.
+the distribution ZIP, or the folder holding the one `<name>-<version>-<arch>.zip`; the dSYMs archive, the DMG and the
+`updates/` feed are read next to it. Try it without credentials on `spark package --ad-hoc` output
+(`bun run e2e:audit --package examples/kitchen-sink/dist/ad-hoc`), which fails only `DIST-PKG-06` and `DIST-PKG-09`.
 
 | Check | What it verifies |
 |---|---|
@@ -1132,6 +1132,8 @@ feed are read next to it. Try it without credentials on `spark package --ad-hoc`
 | `DIST-PKG-05` | An app with `SUFeedURL` requires a signed feed (`SURequireSignedFeed`), and `updates/<feed>` is signed with `SUPublicEDKey`. Its newest item is this build with the same short version and minimum macOS, an arm64 item requires arm64, and every enclosure is next to the feed, has its length and a valid EdDSA signature; the full update is the package's bytes. An app without `SUFeedURL` passes: it has no feed. |
 | `DIST-PKG-06` | Installed from the ZIP as a quarantined download (the release harness's install and verification): Developer ID signature, hardened runtime, secure timestamp, notarized, ticket stapled, Gatekeeper accepts it. Needs Developer ID and notarization credentials: an ad-hoc package fails it. |
 | `DIST-PKG-07` | Extracting the quarantined download carries `com.apple.quarantine` to the app, so Gatekeeper assesses its first launch. |
+| `DIST-PKG-08` | `<name>-<version>-<arch>.dmg` is next to the ZIP, a compressed read-only image (UDZO, UDBZ, ULFO or ULMO). Mounted with `hdiutil attach -readonly -nobrowse -noautoopen` at a temporary mountpoint (always detached), it holds exactly the ZIP's `.app` (the same files, modes and links; `codesign --verify --deep --strict` accepts it there) and an `Applications` link to `/Applications`, and stores no extended attributes (a link's HFS+ Finder info, which holds its type, aside). |
+| `DIST-PKG-09` | The DMG has a Developer ID Application signature of the app's team with a secure timestamp (`codesign --verify --strict`), a stapled notarization ticket (`xcrun stapler validate`), and Gatekeeper accepts opening it as notarized (`spctl --assess --type open --context context:primary-signature`). Needs Developer ID and notarization credentials: an ad-hoc package's DMG is unsigned and fails it. |
 
 Spark makes no DMG, so there is no DMG layout check. App translocation at launch is not checked: it needs a notarized
 app launched from its quarantined location.

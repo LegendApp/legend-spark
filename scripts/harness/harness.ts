@@ -153,8 +153,8 @@ async function inVm(options: HarnessOptions, gatePlan: GatePlan, report: Harness
   try {
     const { file, packagedFrom } = await artifactFor(options, gatePlan, share, dir, env);
     copyFileSync(file, path.join(share, path.basename(file)));
-    // What the package audit reads next to a spark package ZIP: its dSYMs archive and the Sparkle feed.
-    for (const sibling of file.endsWith(".zip") ? [`${path.basename(file, ".zip")}-dSYMs.zip`, "updates"] : []) {
+    // What the package audit reads next to a spark package ZIP: its dSYMs archive, its DMG and the Sparkle feed.
+    for (const sibling of file.endsWith(".zip") ? [`${path.basename(file, ".zip")}-dSYMs.zip`, `${path.basename(file, ".zip")}.dmg`, "updates"] : []) {
       if (existsSync(path.join(path.dirname(file), sibling))) cpSync(path.join(path.dirname(file), sibling), path.join(share, sibling), { recursive: true });
     }
     const archive = await env.sh(["git", "-C", env.repo, "archive", "--format=tar.gz", "-o", path.join(share, "source.tar.gz"), report.commit]);

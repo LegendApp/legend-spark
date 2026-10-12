@@ -193,9 +193,20 @@ describe("release harness on this machine", () => {
     expect(run.code).toBe(0);
     expect(run.report).toMatchObject({ verdict: "PASS", local: true, releasable: false, reasons: [] });
     expect(run.report.signature).toMatchObject({ summary: "ad-hoc / not notarized / not stapled", signature: "ad-hoc", notarized: false, gatekeeper: { accepted: false } });
-    const create = run.mac.calls.find(call => call[1] === "create")!;
-    expect(create).toEqual(["hdiutil", "create", "-quiet", "-srcfolder", expect.stringMatching(/\/dmg$/), "-volname", "KitchenSink", "-format", "UDZO", "-o", expect.stringMatching(/\/KitchenSink\.dmg$/)]);
-    expect(run.mac.calls).toContainEqual(["ditto", path.join(run.env.repo, "build/macos-arm64/KitchenSink.app"), path.join(create[4]!, "KitchenSink.app")]);
+    const hybrid = run.mac.calls.find(call => call[1] === "makehybrid")!;
+    expect(hybrid).toEqual(["hdiutil", "makehybrid", "-quiet", "-hfs", "-hfs-volume-name", "KitchenSink", "-o", expect.stringMatching(/\/KitchenSink\.dmg\.hfs\.dmg$/), expect.stringMatching(/\/KitchenSink\.dmg\.stage$/)]);
+    // Finder info is cleared on a writable copy, mounted without Finder and detached, before it is compressed.
+    const dmg = hybrid[7]!.replace(/\.hfs\.dmg$/, "");
+    expect(run.mac.calls.filter(call => call[0] === "hdiutil" && call[1] !== "attach" || call[0] === "xattr" && call[1] === "-c" || call[1] === "attach" && call[2] === `${dmg}.rw.dmg`)).toEqual([
+      hybrid,
+      ["hdiutil", "convert", "-quiet", hybrid[7], "-format", "UDRW", "-o", `${dmg}.rw.dmg`],
+      ["hdiutil", "attach", `${dmg}.rw.dmg`, "-nobrowse", "-noautoopen", "-mountpoint", `${dmg}.volume`],
+      ["xattr", "-c", "-r", `${dmg}.volume`],
+      ["hdiutil", "detach", `${dmg}.volume`],
+      ["hdiutil", "convert", "-quiet", `${dmg}.rw.dmg`, "-format", "UDZO", "-o", dmg],
+      expect.arrayContaining(["hdiutil", "detach"]),
+    ]);
+    expect(run.mac.calls).toContainEqual(["ditto", path.join(run.env.repo, "build/macos-arm64/KitchenSink.app"), path.join(hybrid[8]!, "KitchenSink.app")]);
     expect(run.report.artifact).toEqual({ file: path.relative(run.env.repo, path.join(run.dir, "KitchenSink.dmg")), format: "dmg", sha256: expect.any(String), packagedFrom: "build/macos-arm64/KitchenSink.app" });
     expect(existsSync(path.join(run.dir, "KitchenSink.dmg"))).toBe(true);
     // The verdicts are recorded with the quarantine on; then it is removed so macOS lets the rejected app start.

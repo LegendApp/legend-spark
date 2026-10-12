@@ -64,7 +64,8 @@ checks:
     spec: "#153"
     audit: bundle
   # macOS packaging (#151): the gate's package audit (scripts/e2e/audit/package.ts) runs these against the spark package
-  # output (gate.yaml build.macos.package; the release harness passes its --artifact ZIP). Spark has no Windows package yet (#51).
+  # output (gate.yaml build.macos.package; the release harness passes its --artifact ZIP) and the DMG next to it (#362).
+  # Spark has no Windows package yet (#51).
   DIST-PKG-01:
     title: The package is one <name>-<version>-<arch>.zip holding only the app, with no extended attributes of the build machine stored in it, and the extracted app's signature verifies (codesign --verify --deep --strict)
     platforms: [macos]
@@ -106,4 +107,16 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "#151"
+    audit: package
+  DIST-PKG-08:
+    title: A <name>-<version>-<arch>.dmg next to the package is a compressed read-only image that, mounted read-only, holds exactly the ZIP's app (the same files, whose signature codesign --verify --deep --strict accepts there) and a link to /Applications, with no extended attributes of the build machine
+    platforms: [macos]
+    blocking: true
+    spec: "#362"
+    audit: package
+  DIST-PKG-09:
+    title: The DMG has a Developer ID signature of the app's team with a secure timestamp, is notarized with the ticket stapled, and Gatekeeper accepts opening it
+    platforms: [macos]
+    blocking: true
+    spec: "#362; needs Developer ID and notarization credentials (spark package); an ad-hoc package's DMG (spark package --ad-hoc) is unsigned and fails it"
     audit: package

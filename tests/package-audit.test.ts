@@ -1,12 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { AuditOptions } from "../scripts/e2e/audit/bundle.ts";
 import { auditPackage, PACKAGE_CHECKS } from "../scripts/e2e/audit/package.ts";
 import { parseCheckRegistry } from "../scripts/e2e/format/parser.ts";
+import { createDmg } from "../packages/cli/src/dmg.ts";
+import { sh, type Sh } from "../scripts/harness/install.ts";
 import { FakeMac } from "./release-harness-doubles.ts";
 
 const darwin = process.platform === "darwin";
@@ -20,10 +22,11 @@ type Fixture = { options: AuditOptions; dir: string; zip: string };
 
 /**
  * A spark package output made as `spark package` makes it: a real arm64 app (compiled, ad-hoc signed, with a dSYM) in
- * `App-1.2.0-arm64.zip`, its dSYMs archive, and a signed Sparkle feed whose update is the package. `change` edits the
- * app's Info.plist, archiving, the feed or the names.
+ * `App-1.2.0-arm64.zip`, its dSYMs archive, a signed Sparkle feed whose update is the package and, with `dmg`, its
+ * `App-1.2.0-arm64.dmg` made by spark package's createDmg. `change` edits the app's Info.plist, archiving, the feed or
+ * the names.
  */
-function fixture(root: string, name: string, change: { info?: Record<string, unknown>; feed?: (xml: string) => string; zipArgs?: string[]; dsyms?: boolean; zipName?: string; signed?: (app: string) => void } = {}): Fixture {
+async function fixture(root: string, name: string, change: { info?: Record<string, unknown>; feed?: (xml: string) => string; zipArgs?: string[]; dsyms?: boolean; zipName?: string; signed?: (app: string) => void; dmg?: boolean } = {}): Promise<Fixture> {
   const dir = path.join(root, name), stage = path.join(root, `${name}-stage`), app = path.join(stage, "App.app");
   mkdirSync(path.join(app, "Contents/MacOS"), { recursive: true });
   mkdirSync(path.join(app, "Contents/Resources"), { recursive: true });
@@ -45,6 +48,7 @@ function fixture(root: string, name: string, change: { info?: Record<string, unk
   const zip = path.join(dir, change.zipName ?? "App-1.2.0-arm64.zip");
   run("ditto", "-c", "-k", ...(change.zipArgs ?? ["--norsrc"]), "--keepParent", app, zip);
   if (change.dsyms !== false) run("ditto", "-c", "-k", "--norsrc", "--keepParent", path.join(stage, "dSYMs"), path.join(dir, `${path.basename(zip, ".zip")}-dSYMs.zip`));
+  if (change.dmg) await createDmg(app, zip.replace(/\.zip$/, ".dmg"), async argv => run(argv[0]!, ...argv.slice(1)));
   // The feed spark package writes with generate_appcast: the update archive next to it, signed, and the feed signed.
   const updates = path.join(dir, "updates"), update = path.join(updates, "App-1.2.0-arm64-build-7.zip");
   mkdirSync(updates);
@@ -59,7 +63,9 @@ function fixture(root: string, name: string, change: { info?: Record<string, unk
   return { dir, zip, options: { app, platform: "macos", arch: "arm64", appId: "so.legend.app", package: dir } };
 }
 
-const statuses = async (options: AuditOptions, mac = new FakeMac("notarized")) => Object.fromEntries((await auditPackage(options, mac.sh)).map(result => [result.check, result]));
+/** FakeMac's signing tools with the real hdiutil, which mounts the fixture's real DMG. */
+const withDisks = (mac: FakeMac): Sh => argv => argv[0] === "hdiutil" ? sh(argv) : mac.sh(argv);
+const statuses = async (options: AuditOptions, mac = new FakeMac("notarized"), run = withDisks(mac)) => Object.fromEntries((await auditPackage(options, run)).map(result => [result.check, result]));
 
 describe.skipIf(!darwin)("package audit on a real package", () => {
   let root: string;
@@ -67,21 +73,47 @@ describe.skipIf(!darwin)("package audit on a real package", () => {
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
   test("a Developer ID signed, notarized package with dSYMs and a signed feed passes every check", async () => {
-    const results = await statuses(fixture(root, "clean").options);
+    const results = await statuses((await fixture(root, "clean", { dmg: true })).options);
     for (const id of PACKAGE_CHECKS) expect([id, results[id]!.status, results[id]!.details]).toEqual([id, "passed", expect.any(Array)]);
     expect(results["DIST-PKG-04"]!.details[0]).toMatch(/^1 Mach-O binaries have arm64 code, needing at most macOS 14\.0 \(LSMinimumSystemVersion 14\.0\); the executable is arm64 only$/);
     expect(results["DIST-PKG-05"]!.details[0]).toBe("appcast.xml is signed; build 7 (1.2.0) is the newest of 2 item(s); 1 enclosure(s) signed, and the update is App-1.2.0-arm64.zip");
     expect(results["DIST-PKG-06"]!.details[0]).toMatch(/^Developer ID Application: Example Corp \(ABCDE12345\) \/ notarized \/ stapled; /);
-  }, 60_000); // Runs every check on a real signed package: well under a second locally, much slower on a loaded CI runner.
+    expect(results["DIST-PKG-08"]!.details).toEqual(["App-1.2.0-arm64.dmg (UDZO, mounted read-only) holds exactly App.app, the same files as the ZIP's, whose signature codesign --verify --deep --strict accepts, and an Applications link to /Applications; no extended attributes"]);
+    expect(results["DIST-PKG-09"]!.details).toEqual(["App-1.2.0-arm64.dmg: Developer ID Application: Example Corp (ABCDE12345), timestamped; notarization ticket stapled; Gatekeeper accepts opening it (Notarized Developer ID)"]);
+  }, 120_000); // Runs every check on a real signed package and DMG: seconds locally, much slower on a loaded CI runner.
+
+  test("the DMG must be there, mount read-only, hold exactly the ZIP's app and the Applications link, store no attributes, and be detached again", async () => {
+    const missing = await statuses((await fixture(root, "no-dmg")).options);
+    for (const id of ["DIST-PKG-08", "DIST-PKG-09"]) expect(missing[id]!.details).toEqual(["App-1.2.0-arm64.dmg is missing next to App-1.2.0-arm64.zip; spark package writes it"]);
+    // A writable image of another app, with a stray file and an attribute from the build machine.
+    const odd = await fixture(root, "odd-dmg"), stage = path.join(root, "odd-dmg-image");
+    mkdirSync(stage);
+    cpSync(odd.options.app, path.join(stage, "App.app"), { recursive: true });
+    writeFileSync(path.join(stage, "App.app/Contents/Resources/extra.txt"), "extra");
+    run("xattr", "-w", "com.example.builder", "x", path.join(stage, "App.app/Contents/Info.plist"));
+    writeFileSync(path.join(stage, "README.txt"), "read me");
+    run("hdiutil", "create", "-quiet", "-srcfolder", stage, "-format", "UDRW", "-o", path.join(odd.dir, "App-1.2.0-arm64.dmg"));
+    const mac = new FakeMac("notarized"), disks = withDisks(mac), mounts: string[] = [];
+    const found = await statuses(odd.options, mac, async argv => { if (argv[0] === "hdiutil" && ["attach", "detach"].includes(argv[1]!)) mounts.push(`${argv[1]} ${argv.at(argv[1] === "attach" ? -1 : 2)}`); return disks(argv); });
+    expect(found["DIST-PKG-08"]!.details).toEqual([
+      "App-1.2.0-arm64.dmg is a UDRW image, not a compressed read-only one (UDZO, UDBZ, ULFO, ULMO)",
+      "App-1.2.0-arm64.dmg holds App.app, README.txt; it must hold exactly App.app and an Applications link",
+      "its App.app is not the ZIP's: their files, modes or links differ",
+      expect.stringMatching(/^codesign --verify --deep --strict rejects its App\.app: .*a sealed resource is missing or invalid/s),
+      expect.stringMatching(/^App-1\.2\.0-arm64\.dmg stores extended attributes of the build machine \(.*com\.example\.builder.*\)$/),
+    ]);
+    expect(mounts).toEqual([expect.stringMatching(/^attach .*\/spark-package-dmg-\w+$/), mounts[0]!.replace("attach", "detach")]);
+    expect(existsSync(mounts[0]!.slice("attach ".length))).toBe(false);
+  }, 120_000); // Makes and mounts real disk images: seconds locally, much slower on a loaded CI runner.
 
   test("finds stored attributes, a missing dSYMs archive, another build, the wrong architecture and a broken feed", async () => {
-    const leaky = fixture(root, "leaky", { zipArgs: ["--sequesterRsrc"], dsyms: false, signed: app => run("xattr", "-w", "com.example.builder", "x", path.join(app, "Contents/Resources/spark-runtime.json")) });
+    const leaky = await fixture(root, "leaky", { zipArgs: ["--sequesterRsrc"], dsyms: false, signed: app => run("xattr", "-w", "com.example.builder", "x", path.join(app, "Contents/Resources/spark-runtime.json")) });
     const results = await statuses(leaky.options);
     expect(results["DIST-PKG-01"]!.details).toEqual([expect.stringMatching(/^App-1\.2\.0-arm64\.zip stores extended attributes of the build machine in \d+ AppleDouble entries \(.*com\.example\.builder.*\); archive with ditto --norsrc$/)]);
     expect(results["DIST-PKG-02"]!.details).toEqual(["App-1.2.0-arm64-dSYMs.zip is missing next to App-1.2.0-arm64.zip: the release's crash reports could not be symbolicated"]);
 
-    const other = fixture(root, "other", { zipName: "App-1.3.0-arm64.zip", info: { LSMinimumSystemVersion: "13.0" }, feed: xml => xml.replace("<sparkle:version>6<", "<sparkle:version>8<").replace("<sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>", "") });
-    const build = fixture(root, "build").options.app;
+    const other = await fixture(root, "other", { zipName: "App-1.3.0-arm64.zip", info: { LSMinimumSystemVersion: "13.0" }, feed: xml => xml.replace("<sparkle:version>6<", "<sparkle:version>8<").replace("<sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>", "") });
+    const build = (await fixture(root, "build")).options.app;
     const found = await statuses({ ...other.options, app: build });
     expect(found["DIST-PKG-03"]!.details).toEqual(["App-1.3.0-arm64.zip names version 1.3.0; the app's CFBundleShortVersionString is 1.2.0"]);
     expect(found["DIST-PKG-04"]!.details).toEqual(["Contents/MacOS/App needs macOS 14.0; LSMinimumSystemVersion is 13.0, so it would fail to load there"]);
@@ -90,28 +122,33 @@ describe.skipIf(!darwin)("package audit on a real package", () => {
       "the item's sparkle:minimumSystemVersion is 14.0; Info.plist says 13.0",
       "the arm64-only item has no sparkle:hardwareRequirements arm64, so Intel Macs would download it",
     ]);
-    expect((await statuses({ ...fixture(root, "intel", { zipName: "App-1.2.0-x64.zip" }).options, arch: "x64" }))["DIST-PKG-04"]!.details).toEqual(["Contents/MacOS/App has no x86_64 code (arm64)"]);
-  });
+    expect((await statuses({ ...(await fixture(root, "intel", { zipName: "App-1.2.0-x64.zip" })).options, arch: "x64" }))["DIST-PKG-04"]!.details).toEqual(["Contents/MacOS/App has no x86_64 code (arm64)"]);
+  }, 120_000); // Builds, signs and audits real packages: seconds locally, much slower on a loaded CI runner.
 
   test("an unsigned or tampered feed fails, and an app without SUFeedURL needs none", async () => {
-    const tampered = fixture(root, "tampered");
+    const tampered = await fixture(root, "tampered");
     writeFileSync(path.join(tampered.dir, "updates/appcast.xml"), readFileSync(path.join(tampered.dir, "updates/appcast.xml"), "utf8").replace("<title>App</title>", "<title>Evil</title>"));
     expect((await statuses(tampered.options))["DIST-PKG-05"]!.details).toEqual(["appcast.xml: its signature does not verify with SUPublicEDKey"]);
-    const unsigned = fixture(root, "unsigned", { info: { SURequireSignedFeed: false } });
+    const unsigned = await fixture(root, "unsigned", { info: { SURequireSignedFeed: false } });
     writeFileSync(path.join(unsigned.dir, "updates/appcast.xml"), readFileSync(path.join(unsigned.dir, "updates/appcast.xml"), "utf8").replace(/<!-- sparkle-signatures:[\s\S]*$/, ""));
     expect((await statuses(unsigned.options))["DIST-PKG-05"]!.details).toEqual(["SURequireSignedFeed is not true: Sparkle would accept an unsigned feed", "appcast.xml is not signed (no sparkle-signatures block)"]);
-    const local = fixture(root, "local", { info: { SUFeedURL: undefined } });
+    const local = await fixture(root, "local", { info: { SUFeedURL: undefined } });
     expect((await statuses(local.options))["DIST-PKG-05"]).toEqual({ check: "DIST-PKG-05", status: "passed", details: ["the app has no SUFeedURL: it does not update through Sparkle, so the package has no feed"] });
-  });
+  }, 120_000); // Builds, signs and audits real packages: seconds locally, much slower on a loaded CI runner.
 
   test("an ad-hoc package fails the credentials check; a quarantine that does not reach the app fails", async () => {
-    const { options } = fixture(root, "ad-hoc");
+    const { options } = await fixture(root, "ad-hoc", { dmg: true });
     const adHoc = await statuses(options, new FakeMac("ad-hoc"));
     expect(adHoc["DIST-PKG-06"]!.status).toBe("failed");
     expect(adHoc["DIST-PKG-06"]!.details[0]).toBe("the app is signed ad-hoc; a release needs a Developer ID Application signature");
+    const unsigned = new FakeMac("ad-hoc");
+    unsigned.failures.set("codesign", { code: 1, stdout: "", stderr: "code object is not signed at all" });
+    const dmg = await statuses(options, unsigned);
+    expect(dmg["DIST-PKG-09"]!.status).toBe("failed");
+    expect(dmg["DIST-PKG-09"]!.details.slice(0, 2)).toEqual(["codesign --verify --strict rejects App-1.2.0-arm64.dmg: code object is not signed at all", "App-1.2.0-arm64.dmg is not signed; a release DMG needs a Developer ID Application signature"]);
     const lost = await statuses(options, new FakeMac("notarized", false));
     expect(lost["DIST-PKG-07"]!.details[0]).toMatch(/^installing App-1\.2\.0-arm64\.zip as a quarantined download failed: the installed KitchenSink\.app has no com\.apple\.quarantine attribute/);
-  });
+  }, 120_000); // Builds, signs and audits real packages: seconds locally, much slower on a loaded CI runner.
 });
 
 describe("package audit", () => {

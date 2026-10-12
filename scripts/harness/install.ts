@@ -2,8 +2,9 @@
 // the way a person does, then ask macOS what it thinks of the signature before anything runs.
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, symlinkSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { createDmg } from "../../packages/cli/src/dmg.ts";
 
 export type Command = { code: number; stdout: string; stderr: string };
 /** Runs a command to completion with all its output; `signal` kills it. Tests pass a double; `sh` is the real one. */
@@ -44,21 +45,16 @@ function onlyApp(dir: string, what: string): string {
   return apps[0]!;
 }
 
-/** A local distributable for `--local`: the app and an /Applications link in a compressed, read-only disk image, as a release DMG is laid out. */
+/** A local distributable for `--local`: the app and an /Applications link in a compressed, read-only disk image, as `spark package` lays out a release DMG. */
 export async function packageDmg(app: string, work: string, run: Sh): Promise<string> {
-  const stage = path.join(work, "dmg");
-  mkdirSync(stage, { recursive: true });
-  await must(run, ["ditto", app, path.join(stage, path.basename(app))], "artifact");
-  symlinkSync("/Applications", path.join(stage, "Applications"));
-  const dmg = path.join(work, `${path.basename(app, ".app")}.dmg`);
-  await must(run, ["hdiutil", "create", "-quiet", "-srcfolder", stage, "-volname", path.basename(app, ".app"), "-format", "UDZO", "-o", dmg], "artifact");
-  return dmg;
+  mkdirSync(work, { recursive: true });
+  return createDmg(app, path.join(work, `${path.basename(app, ".app")}.dmg`), argv => must(run, argv, "artifact"));
 }
 
 export type Installed = { app: string; format: "dmg" | "zip"; sha256: string; quarantine: string };
 
 /** Detaches a mounted disk image, forcing it if a plain detach fails. Returns why it is still mounted, or undefined. */
-async function detach(volume: string, run: Sh): Promise<string | undefined> {
+export async function detach(volume: string, run: Sh): Promise<string | undefined> {
   const plain = await run(["hdiutil", "detach", volume]);
   if (!plain.code) return undefined;
   const forced = await run(["hdiutil", "detach", "-force", volume]);

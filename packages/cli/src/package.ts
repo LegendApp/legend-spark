@@ -7,8 +7,11 @@ import path from "node:path";
 import { build } from "./build.ts";
 import { credentials, notaryAuth, type Runner, type SigningCredentials } from "./credentials.ts";
 import { run } from "./commands.ts";
-import { appEntitlements, distributionEntitlements, signApp, validateApp } from "./signing.ts";
+import { appEntitlements, distributionEntitlements, signApp, validateApp, validateDmg } from "./signing.ts";
+import { createDmg } from "./dmg.ts";
 import { digest, readJson, stateFile, writeJson } from "./project.ts";
+
+const sha256 = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex");
 
 export function artifactHash(file: string): string {
   const hash = createHash("sha256");
@@ -23,7 +26,11 @@ export function artifactHash(file: string): string {
   return hash.digest("hex");
 }
 
-type PackageState = { phase: "signed" | "submitting" | "submitted" | "accepted" | "complete"; stagedHash: string; archiveHash: string; submissionId?: string; output?: string; outputHash?: string; symbols?: string };
+/** One notarization submission: of the signed app (the package state itself), then of the signed DMG. */
+type Submission = { phase: "signed" | "submitting" | "submitted" | "accepted" | "complete"; archiveHash: string; submissionId?: string };
+/** The signed DMG (`archiveHash`) made from the stapled app with the verified ZIP (`zipHash`), and once complete its distributed copy. */
+type DmgState = Submission & { zipHash: string; output?: string; outputHash?: string };
+type PackageState = Submission & { stagedHash: string; output?: string; outputHash?: string; symbols?: string; dmg?: DmgState };
 type PackageOptions = { force?: boolean; submissionId?: string; waitMs?: number; runner?: boolean; adHoc?: boolean };
 /** `spark package --ad-hoc`: signs without an identity and is never notarized; a test package that Gatekeeper rejects as a download. */
 const AD_HOC: SigningCredentials = { hash: "-", name: "ad-hoc", teamId: "", keychainProfile: "" };
@@ -58,6 +65,7 @@ export async function packageApp(root: string, options: PackageOptions = {}, dep
 
 async function packageUnlocked(root: string, options: PackageOptions, deps: Dependencies) {
   const execute = deps.run;
+  const exec = (argv: string[]) => execute(root, argv, { capture: true });
   if (options.adHoc && (options.runner || options.submissionId)) throw new Error("--ad-hoc packages are never notarized: it cannot be combined with a Runner package or --submission-id.");
   const identity = options.adHoc ? AD_HOC : await deps.credentials(root);
   console.log(`Signing identity: ${identity.name}`);
@@ -71,7 +79,7 @@ async function packageUnlocked(root: string, options: PackageOptions, deps: Depe
   const expected = { arch: result.runtime.arch, runner: options.runner, bundleId: config.macos.bundleIdentifier, version: config.version, buildVersion: info.CFBundleVersion, entitlements, byPath };
   if (!expected.bundleId || !expected.version || !expected.buildVersion) throw new Error("Bundle identifier and release version metadata must be configured before packaging.");
   const inputHash = artifactHash(result.app);
-  const key = digest(JSON.stringify({ recipe: 1, inputHash, identity: identity.hash, entitlements, byPath }));
+  const key = digest(JSON.stringify({ recipe: 2, inputHash, identity: identity.hash, entitlements, byPath }));
   const folder = stateFile(root, `packaging/${key}`);
   const app = path.join(folder, path.basename(result.app));
   const safeName = `${config.slug ?? config.name}-${config.version}-${result.runtime.arch}`.replace(/[^A-Za-z0-9._-]/g, "-");
@@ -85,7 +93,7 @@ async function packageUnlocked(root: string, options: PackageOptions, deps: Depe
   let state: PackageState;
   if (existsSync(statePath)) {
     state = readJson(statePath);
-    if (!existsSync(app) || artifactHash(app) !== state.stagedHash || !existsSync(upload) || createHash("sha256").update(readFileSync(upload)).digest("hex") !== state.archiveHash) {
+    if (!existsSync(app) || artifactHash(app) !== state.stagedHash || !existsSync(upload) || sha256(upload) !== state.archiveHash) {
       throw new Error(`The staged notarization artifacts changed. Preserve ${statePath} for submission recovery; rebuild from clean inputs before retrying.`);
     }
   } else {
@@ -99,104 +107,153 @@ async function packageUnlocked(root: string, options: PackageOptions, deps: Depe
     // ship; signatures live in the bundle.
     if (symbols) await execute(root, ["ditto", "-c", "-k", "--norsrc", "--keepParent", symbolsSource, symbols], { capture: true });
     await execute(root, ["ditto", "-c", "-k", "--norsrc", "--keepParent", app, upload], { capture: true });
-    state = { phase: "signed", stagedHash: artifactHash(app), archiveHash: createHash("sha256").update(readFileSync(upload)).digest("hex") };
+    state = { phase: "signed", stagedHash: artifactHash(app), archiveHash: sha256(upload) };
     writeJson(statePath, state);
   }
   const distribution = path.join(root, "dist", ...(options.adHoc ? ["ad-hoc"] : []));
-  /** Archives the final app, validates the extracted copy, and writes it with its dSYMs archive to `distribution`. */
-  const distribute = async (finalApp: string, notarized: boolean) => {
-    const archive = path.join(folder, `${safeName}.zip`);
-    await execute(root, ["ditto", "-c", "-k", "--norsrc", "--keepParent", finalApp, archive], { capture: true });
+  // The distribution ZIP and DMG are staged here; the DMG Apple notarizes keeps its unique upload name.
+  const zip = path.join(folder, `${safeName}.zip`), dmg = path.join(folder, `${safeName}.dmg`), signedDmg = path.join(folder, `${safeName}-${key.slice(0, 16)}.dmg`);
+  /** Archives the final app as the staged ZIP and validates the extracted copy. */
+  const archive = async (finalApp: string, notarized: boolean) => {
+    await exec(["ditto", "-c", "-k", "--norsrc", "--keepParent", finalApp, zip]);
     const extracted = path.join(folder, "verify-archive");
     rmSync(extracted, { recursive: true, force: true });
     mkdirSync(extracted, { recursive: true });
     try {
-      await execute(root, ["ditto", "-x", "-k", archive, extracted], { capture: true });
+      await exec(["ditto", "-x", "-k", zip, extracted]);
       const entries = readdirSync(extracted).filter((name) => name !== "__MACOSX");
       if (entries.length !== 1 || !entries[0]!.endsWith(".app")) throw new Error("Distribution archive must contain exactly one app.");
       await validateApp(root, path.join(extracted, entries[0]!), identity, expected, notarized, execute);
     } finally { rmSync(extracted, { recursive: true, force: true }); }
-    const output = path.join(distribution, `${safeName}.zip`);
-    mkdirSync(distribution, { recursive: true });
-    for (const [source, target] of [[archive, output], ...(symbols ? [[symbols, path.join(distribution, path.basename(symbols))]] : [])] as const) {
-      const temporary = `${target}.${process.pid}.tmp`;
-      cpSync(source, temporary);
-      renameSync(temporary, target);
-    }
-    return { output, symbols: symbols && path.join(distribution, path.basename(symbols)) };
   };
+  /** Copies staged files to `distribution`, replacing each atomically, and returns their paths there. */
+  const publish = (...files: string[]) => files.map((source) => {
+    const target = path.join(distribution, path.basename(source)), temporary = `${target}.${process.pid}.tmp`;
+    mkdirSync(distribution, { recursive: true });
+    cpSync(source, temporary);
+    renameSync(temporary, target);
+    return target;
+  });
   if (options.adHoc) {
-    const { output, symbols: dsyms } = await distribute(app, false);
-    console.log(`✓ Distribution archive verified\n\nReady (ad-hoc and not notarized: for testing the package, Gatekeeper rejects it as a download): ${output}${dsyms ? `\nDebug symbols: ${dsyms}` : ""}`);
-    return { pending: false as const, output, symbols: dsyms, update: undefined, submissionId: undefined };
+    await archive(app, false);
+    // An ad-hoc package's DMG is unsigned: only a Developer ID signature would make Gatekeeper trust it.
+    await createDmg(app, dmg, exec);
+    const [output, image, dsyms] = publish(zip, dmg, ...(symbols ? [symbols] : [])) as [string, string, string?];
+    console.log(`✓ Distribution archive verified\n\nReady (ad-hoc and not notarized: for testing the package, Gatekeeper rejects it as a download): ${output}\nDisk image: ${image}${dsyms ? `\nDebug symbols: ${dsyms}` : ""}`);
+    return { pending: false as const, output, dmg: image, symbols: dsyms, update: undefined, submissionId: undefined };
   }
+  const prepare = (output: string) => options.runner ? Promise.resolve(undefined) : (deps.prepareUpdate ?? prepareUpdate)(root, output, String(expected.buildVersion));
   // Reuse the exact verified distribution bytes on retries, including when feed
   // signing failed after notarization. Re-stapling could change the archive.
-  if (state.phase === "complete" && state.output && state.outputHash && existsSync(state.output)) {
-    if (createHash("sha256").update(readFileSync(state.output)).digest("hex") !== state.outputHash) throw new Error("The completed distribution archive changed. Restore it or package a new build number.");
-    const update = await (options.runner ? Promise.resolve(undefined) : (deps.prepareUpdate ?? prepareUpdate)(root, state.output, String(expected.buildVersion)));
-    console.log(`Ready: ${state.output}`);
-    return { pending: false as const, output: state.output, symbols: state.symbols, update, submissionId: state.submissionId };
-  }
-  const notary = async (command: string, ...args: string[]) => JSON.parse(await execute(root, ["xcrun", "notarytool", command, ...args, ...notaryAuth(identity), "--output-format", "json"], { capture: true }));
-  if (options.submissionId) {
-    if (state.submissionId && state.submissionId !== options.submissionId) throw new Error("This artifact already has a different notarization submission ID.");
-    const recovered = await notary("info", options.submissionId);
-    if (recovered.id !== options.submissionId || recovered.name !== path.basename(upload)) throw new Error("That notarization submission does not match this upload filename.");
-    state.submissionId = options.submissionId;
-    state.phase = "submitted";
-    writeJson(statePath, state);
-  }
-  if (!state.submissionId) {
-    if (state.phase !== "signed") throw new Error("The previous notarization submission has an unknown outcome. Find its ID using notarytool history, then run spark package --submission-id <id>. spark will not submit it twice automatically.");
-    state.phase = "submitting";
-    writeJson(statePath, state);
-    console.log("Submitting the signed app to Apple for notarization…");
-    const submitted = await notary("submit", upload, "--no-wait");
-    if (typeof submitted.id !== "string" || !/^[0-9a-f-]{36}$/i.test(submitted.id)) throw new Error("Apple did not return a valid submission ID. Run spark package again for recovery instructions.");
-    state.submissionId = submitted.id;
-    state.phase = "submitted";
-    writeJson(statePath, state);
-  }
-  const submissionId = state.submissionId;
-  if (!submissionId || !/^[0-9a-f-]{36}$/i.test(submissionId)) throw new Error("Invalid saved notarization submission ID.");
-  const deadline = Date.now() + (options.waitMs ?? 120_000);
-  while (true) {
-    const response = await notary("info", submissionId);
-    if (response.status === "Accepted") break;
-    if (response.status !== "In Progress") {
-      const log = await notary("log", submissionId);
-      writeJson(path.join(folder, "notary-log.json"), log);
-      throw new Error(`Notarization ${response.status}. See ${path.join(folder, "notary-log.json")}. Fix the reported issues and package a new build.`);
+  if (state.phase === "complete") {
+    // A deleted output is copied again from the staged file with the same bytes.
+    for (const { output = "", staged, hash } of [{ output: state.output, staged: zip, hash: state.outputHash }, ...(state.dmg ? [{ output: state.dmg.output, staged: dmg, hash: state.dmg.outputHash }] : [])]) {
+      if (!existsSync(output) && existsSync(staged) && sha256(staged) === hash) publish(staged);
+      if (!existsSync(output) || sha256(output) !== hash) throw new Error(`The completed distribution archive changed: ${output}. Restore it or package a new build number.`);
     }
-    console.log(`Apple is processing submission ${state.submissionId}…`);
-    if (Date.now() >= deadline) {
-      console.log("Notarization is still pending. Run spark package again to resume; the app will not be rebuilt or resubmitted if its inputs are unchanged.");
-      return { pending: true as const, submissionId: state.submissionId };
-    }
-    await deps.wait(Math.min(15_000, Math.max(0, deadline - Date.now())));
+    const update = await prepare(state.output!);
+    console.log(`Ready: ${state.output}${state.dmg ? `\nDisk image: ${state.dmg.output}` : ""}`);
+    return { pending: false as const, output: state.output!, dmg: state.dmg?.output, symbols: state.symbols, update, submissionId: state.submissionId };
   }
-  const log = await notary("log", submissionId);
-  writeJson(path.join(folder, "notary-log.json"), log);
-  if (log.sha256?.toLowerCase() !== state.archiveHash) throw new Error("Apple’s notarization log does not match the uploaded archive hash.");
-  state.phase = "accepted";
-  writeJson(statePath, state);
-  console.log("✓ Notarization accepted");
-  // Keep the submitted artifact immutable. An interrupted staple/validation run
-  // can recreate this final copy without losing its accepted submission.
-  const finalApp = path.join(folder, "final", path.basename(app));
-  rmSync(path.dirname(finalApp), { recursive: true, force: true });
-  mkdirSync(path.dirname(finalApp), { recursive: true });
-  cpSync(app, finalApp, { recursive: true, verbatimSymlinks: true });
-  await execute(root, ["xcrun", "stapler", "staple", finalApp], { capture: true });
-  await validateApp(root, finalApp, identity, expected, true, execute);
-  const { output, symbols: dsyms } = await distribute(finalApp, true);
+  const notary = async (command: string, ...args: string[]) => JSON.parse(await exec(["xcrun", "notarytool", command, ...args, ...notaryAuth(identity), "--output-format", "json"]));
+  /**
+   * Notarizes `upload` once: submits it, or adopts the `recovery` submission, then waits up to `waitMs` for Apple and
+   * checks Apple's hash of it. Returns false while Apple is still processing it. Each step is saved, so a rerun resumes.
+   */
+  const notarize = async (submission: Submission, upload: string, log: string, recovery?: string) => {
+    if (submission.phase === "accepted" || submission.phase === "complete") return true;
+    const name = path.basename(upload);
+    if (recovery) {
+      if (submission.submissionId && submission.submissionId !== recovery) throw new Error(`${name} already has a different notarization submission ID.`);
+      const recovered = await notary("info", recovery);
+      if (recovered.id !== recovery || recovered.name !== name) throw new Error("That notarization submission does not match this upload filename.");
+      submission.submissionId = recovery;
+      submission.phase = "submitted";
+      writeJson(statePath, state);
+    }
+    if (!submission.submissionId) {
+      if (submission.phase !== "signed") throw new Error(`The previous notarization submission of ${name} has an unknown outcome. Find its ID using notarytool history, then run spark package --submission-id <id>. spark will not submit it twice automatically.`);
+      submission.phase = "submitting";
+      writeJson(statePath, state);
+      console.log(`Submitting ${name} to Apple for notarization…`);
+      const submitted = await notary("submit", upload, "--no-wait");
+      if (typeof submitted.id !== "string" || !/^[0-9a-f-]{36}$/i.test(submitted.id)) throw new Error("Apple did not return a valid submission ID. Run spark package again for recovery instructions.");
+      submission.submissionId = submitted.id;
+      submission.phase = "submitted";
+      writeJson(statePath, state);
+    }
+    const submissionId = submission.submissionId;
+    if (!submissionId || !/^[0-9a-f-]{36}$/i.test(submissionId)) throw new Error("Invalid saved notarization submission ID.");
+    const deadline = Date.now() + (options.waitMs ?? 120_000);
+    while (true) {
+      const response = await notary("info", submissionId);
+      if (response.status === "Accepted") break;
+      if (response.status !== "In Progress") {
+        writeJson(path.join(folder, log), await notary("log", submissionId));
+        throw new Error(`Notarization ${response.status}. See ${path.join(folder, log)}. Fix the reported issues and package a new build.`);
+      }
+      console.log(`Apple is processing submission ${submissionId}…`);
+      if (Date.now() >= deadline) {
+        console.log("Notarization is still pending. Run spark package again to resume; the app will not be rebuilt or resubmitted if its inputs are unchanged.");
+        return false;
+      }
+      await deps.wait(Math.min(15_000, Math.max(0, deadline - Date.now())));
+    }
+    const result = await notary("log", submissionId);
+    writeJson(path.join(folder, log), result);
+    if (result.sha256?.toLowerCase() !== submission.archiveHash) throw new Error("Apple’s notarization log does not match the uploaded archive hash.");
+    submission.phase = "accepted";
+    writeJson(statePath, state);
+    console.log(`✓ Notarization of ${name} accepted`);
+    return true;
+  };
+  const appAccepted = state.phase === "accepted";
+  if (!await notarize(state, upload, "notary-log.json", appAccepted ? undefined : options.submissionId)) return { pending: true as const, submissionId: state.submissionId };
+  // The DMG holds the stapled app and is notarized itself; a Runner package is only a ZIP.
+  if (!state.dmg) {
+    // Keep the submitted artifact immutable. An interrupted staple/validation run
+    // can recreate this final copy without losing its accepted submission.
+    const finalApp = path.join(folder, "final", path.basename(app));
+    rmSync(path.dirname(finalApp), { recursive: true, force: true });
+    mkdirSync(path.dirname(finalApp), { recursive: true });
+    cpSync(app, finalApp, { recursive: true, verbatimSymlinks: true });
+    await exec(["xcrun", "stapler", "staple", finalApp]);
+    await validateApp(root, finalApp, identity, expected, true, execute);
+    await archive(finalApp, true);
+    console.log("✓ Notarization ticket attached\n✓ Distribution archive verified");
+    if (options.runner) {
+      const [output] = publish(zip) as [string];
+      state.phase = "complete";
+      state.output = output;
+      state.outputHash = sha256(output);
+      writeJson(statePath, state);
+      console.log(`\nReady: ${output}`);
+      return { pending: false as const, output, dmg: undefined, symbols: undefined, update: undefined, submissionId: state.submissionId };
+    }
+    await createDmg(finalApp, signedDmg, exec);
+    await exec(["codesign", "--force", "--sign", identity.hash, "--timestamp", ...(identity.keychain ? ["--keychain", identity.keychain] : []), signedDmg]);
+    state.dmg = { phase: "signed", archiveHash: sha256(signedDmg), zipHash: sha256(zip) };
+    writeJson(statePath, state);
+    console.log("✓ Disk image signed");
+  } else if (!existsSync(zip) || sha256(zip) !== state.dmg.zipHash || !existsSync(signedDmg) || sha256(signedDmg) !== state.dmg.archiveHash) {
+    throw new Error(`The staged distribution archive or disk image changed. Preserve ${statePath} for submission recovery; rebuild from clean inputs before retrying.`);
+  }
+  // --submission-id names the app's submission until Apple accepts the app, then the DMG's.
+  const dmgRecovery = appAccepted && options.submissionId !== state.submissionId ? options.submissionId : undefined;
+  if (!await notarize(state.dmg, signedDmg, "dmg-notary-log.json", dmgRecovery)) return { pending: true as const, submissionId: state.dmg.submissionId };
+  // Staple a copy, so the submitted DMG stays immutable for a retry.
+  cpSync(signedDmg, dmg);
+  await exec(["xcrun", "stapler", "staple", dmg]);
+  await validateDmg(root, dmg, identity, execute);
+  const [output, image, dsyms] = publish(zip, dmg, ...(symbols ? [symbols] : [])) as [string, string, string?];
   state.phase = "complete";
   state.output = output;
-  state.outputHash = createHash("sha256").update(readFileSync(output)).digest("hex");
+  state.outputHash = sha256(output);
   state.symbols = dsyms;
+  state.dmg.output = image;
+  state.dmg.outputHash = sha256(image);
   writeJson(statePath, state);
-  const update = await (options.runner ? Promise.resolve(undefined) : (deps.prepareUpdate ?? prepareUpdate)(root, output, String(expected.buildVersion)));
-  console.log(`✓ Notarization ticket attached\n✓ Distribution archive verified\n\nReady: ${output}${dsyms ? `\nDebug symbols: ${dsyms}` : ""}`);
-  return { pending: false as const, output, symbols: dsyms, update, submissionId: state.submissionId };
+  const update = await prepare(output);
+  console.log(`✓ Disk image notarization ticket attached and verified\n\nReady: ${output}\nDisk image: ${image}${dsyms ? `\nDebug symbols: ${dsyms}` : ""}`);
+  return { pending: false as const, output, dmg: image, symbols: dsyms, update, submissionId: state.submissionId };
 }

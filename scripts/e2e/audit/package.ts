@@ -1,15 +1,18 @@
 // The gate's package audit: the `spark package` output as a person downloads it (docs/e2e-flows.md#audits, #151).
 // It extracts the distribution ZIP and checks its layout, the dSYMs archive next to it, versions, architectures, the
-// Sparkle feed, and, by installing it as a quarantined download, its signature, notarization and quarantine.
+// Sparkle feed, and, by installing it as a quarantined download, its signature, notarization and quarantine. It mounts
+// the DMG next to it read-only and checks its layout, that its app is the ZIP's, and its signature and notarization.
+import { spawnSync } from "node:child_process";
 import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { artifactHash } from "../../../packages/cli/src/package.ts";
 import { compareBuildNumbers, verifyUpdateSignature } from "../../../packages/cli/src/updates.ts";
-import { describeSignature, install, judgeSignature, sh, verify, type Sh } from "../../harness/install.ts";
+import { describeSignature, detach, install, judgeSignature, sh, verify, type Sh } from "../../harness/install.ts";
 import { check, dsymFindings, isMachO, tool, walk, type AuditOptions, type AuditResult } from "./bundle.ts";
 
-export const PACKAGE_CHECKS = ["DIST-PKG-01", "DIST-PKG-02", "DIST-PKG-03", "DIST-PKG-04", "DIST-PKG-05", "DIST-PKG-06", "DIST-PKG-07"] as const;
+export const PACKAGE_CHECKS = ["DIST-PKG-01", "DIST-PKG-02", "DIST-PKG-03", "DIST-PKG-04", "DIST-PKG-05", "DIST-PKG-06", "DIST-PKG-07", "DIST-PKG-08", "DIST-PKG-09"] as const;
 /** Mach-O architecture names of the gate's target arches. */
 const MACHO_ARCH = { arm64: "arm64", x64: "x86_64" } as const;
 type Info = Record<string, unknown>;
@@ -99,6 +102,66 @@ export function appcastFindings(info: Info, zip: string, arch: "arm64" | "x64"):
   return { findings, evidence: [`${path.basename(feed)} is signed; build ${build} (${info.CFBundleShortVersionString}) is the newest of ${items.length} item(s); ${enclosures.length} enclosure(s) signed, and the update is ${path.basename(zip)}`] };
 }
 
+/** Compressed, read-only disk image formats (zlib, bzip2, LZFSE, LZMA). */
+const COMPRESSED_READ_ONLY = ["UDZO", "UDBZ", "ULFO", "ULMO"];
+
+/**
+ * The DMG next to the ZIP, mounted read-only and without Finder (`-nobrowse`) at a temporary mountpoint and always
+ * detached: its layout must be exactly `app` (the ZIP's app, the same files, its signature valid there) and an
+ * `/Applications` link, in a compressed read-only image that stores no extended attributes.
+ */
+async function dmgLayout(dmg: string, app: string, run: Sh): Promise<Outcome> {
+  const findings: string[] = [], name = path.basename(app);
+  const format = /<key>Format<\/key>\s*<string>([^<]*)<\/string>/.exec(tool("hdiutil", ["imageinfo", "-plist", dmg]))?.[1];
+  if (!COMPRESSED_READ_ONLY.includes(format ?? "")) findings.push(`${path.basename(dmg)} is a ${format ?? "unknown"} image, not a compressed read-only one (${COMPRESSED_READ_ONLY.join(", ")})`);
+  // Outside the audit's work folder, which is deleted: a volume that will not detach stays mounted there, read-only.
+  const volume = mkdtempSync(path.join(os.tmpdir(), "spark-package-dmg-"));
+  const attach = await run(["hdiutil", "attach", dmg, "-readonly", "-nobrowse", "-noautoopen", "-mountpoint", volume]);
+  if (attach.code) {
+    rmSync(volume, { recursive: true });
+    return { findings: [...findings, `hdiutil attach ${path.basename(dmg)} exited ${attach.code}: ${(attach.stderr || attach.stdout).trim()}`], evidence: [] };
+  }
+  try {
+    const entries = readdirSync(volume).sort(), link = path.join(volume, "Applications");
+    if (entries.join() !== [name, "Applications"].sort().join()) findings.push(`${path.basename(dmg)} holds ${entries.join(", ") || "nothing"}; it must hold exactly ${name} and an Applications link`);
+    if (entries.includes("Applications") && !(lstatSync(link).isSymbolicLink() && readlinkSync(link) === "/Applications")) findings.push("its Applications entry is not a link to /Applications");
+    if (entries.includes(name) && artifactHash(path.join(volume, name)) !== artifactHash(app)) findings.push(`its ${name} is not the ZIP's: their files, modes or links differ`);
+    if (entries.includes(name)) {
+      const strict = spawnSync("codesign", ["--verify", "--deep", "--strict", "--verbose=1", path.join(volume, name)], { encoding: "utf8" });
+      if (strict.status !== 0) findings.push(`codesign --verify --deep --strict rejects its ${name}: ${strict.stderr.trim()}`);
+    }
+    // HFS+ stores a symbolic link's type in its Finder info; any other attribute came from the build machine.
+    const attributes = [...new Set(tool("xattr", ["-r", "-s", volume]).split("\n").filter(Boolean).map(line => [line.slice(0, line.lastIndexOf(": ")), line.slice(line.lastIndexOf(": ") + 2)] as const)
+      .filter(([file, attribute]) => !(attribute === "com.apple.FinderInfo" && lstatSync(file).isSymbolicLink())).map(([, attribute]) => attribute))].sort();
+    if (attributes.length) findings.push(`${path.basename(dmg)} stores extended attributes of the build machine (${attributes.join(", ")})`);
+  } finally {
+    const stuck = await detach(volume, run).catch((error: Error) => `hdiutil detach ${volume} failed: ${error.message}`);
+    if (stuck) findings.push(stuck);
+    else rmSync(volume, { recursive: true });
+  }
+  return { findings, evidence: [`${path.basename(dmg)} (${format}, mounted read-only) holds exactly ${name}, the same files as the ZIP's, whose signature codesign --verify --deep --strict accepts, and an Applications link to /Applications; no extended attributes`] };
+}
+
+/** The DMG's own Developer ID signature (with the app's team and a secure timestamp), stapled ticket and Gatekeeper's verdict on opening it. */
+async function dmgSignature(dmg: string, team: string | undefined, run: Sh): Promise<Outcome> {
+  const findings: string[] = [], file = path.basename(dmg);
+  const strict = await run(["codesign", "--verify", "--strict", "--verbose=2", dmg]);
+  if (strict.code) findings.push(`codesign --verify --strict rejects ${file}: ${(strict.stderr || strict.stdout).trim()}`);
+  const details = (await run(["codesign", "-dvvv", dmg])).stderr;
+  const authority = /^Authority=(.*)$/m.exec(details)?.[1], teamId = /^TeamIdentifier=(.*)$/m.exec(details)?.[1];
+  if (!authority?.startsWith("Developer ID Application: ")) findings.push(`${file} is ${authority ? `signed by ${authority}` : /^Signature=adhoc$/m.test(details) ? "signed ad-hoc" : "not signed"}; a release DMG needs a Developer ID Application signature`);
+  else {
+    if (team && teamId !== team) findings.push(`${file} is signed by team ${teamId}; the app by ${team}`);
+    if (!/^Timestamp=/m.test(details)) findings.push(`${file}'s signature has no secure timestamp`);
+  }
+  const staple = await run(["xcrun", "stapler", "validate", dmg]);
+  if (staple.code) findings.push(`${file} has no valid stapled notarization ticket: ${(staple.stdout + staple.stderr).trim()}`);
+  const assess = await run(["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", dmg]);
+  const verdict = (assess.stderr + assess.stdout).trim(), source = /^source=(.*)$/m.exec(verdict)?.[1];
+  if (assess.code || source !== "Notarized Developer ID") findings.push(`Gatekeeper ${assess.code ? "rejects" : "accepts"} opening ${file}${source ? ` (source=${source})` : ""}; a release DMG must be notarized: ${verdict}`);
+  return { findings, evidence: [`${file}: ${authority}, timestamped; notarization ticket stapled; Gatekeeper accepts opening it (${source})`] };
+}
+
 /** Every check of the package audit. `run` runs the harness's install and signature tools (tests pass a double). */
 export async function auditPackage(options: AuditOptions, run: Sh = sh): Promise<AuditResult[]> {
   const all = (status: AuditResult["status"], details: string[]) => PACKAGE_CHECKS.map(id => ({ check: id, status, details }));
@@ -119,6 +182,11 @@ export async function auditPackage(options: AuditOptions, run: Sh = sh): Promise
     // One quarantined install, as a person downloads it, for the signature and quarantine checks.
     const installed = await install(zip, path.join(work, "install"), run, []).catch((error: Error) => error);
     const verification = installed instanceof Error ? installed : await verify(installed.app, run);
+    const dmg = path.join(path.dirname(zip), `${base}.dmg`);
+    const missing = { findings: [`${path.basename(dmg)} is missing next to ${path.basename(zip)}; spark package writes it`], evidence: [] };
+    const [layout, signature] = existsSync(dmg)
+      ? [await dmgLayout(dmg, app, run).catch((error: Error) => ({ findings: [error.message], evidence: [] })), await dmgSignature(dmg, verification instanceof Error ? undefined : verification.teamId, run)]
+      : [missing, missing];
 
     return [
       // Layout and naming: <name>-<version>-<arch>.zip holding only the app, no stored extended attributes, signature intact.
@@ -182,6 +250,9 @@ export async function auditPackage(options: AuditOptions, run: Sh = sh): Promise
         if (installed instanceof Error) return { findings: [`installing ${path.basename(zip)} as a quarantined download failed: ${installed.message}`], evidence: [] };
         return { findings: [], evidence: [`extracted from the quarantined download, ${path.basename(installed.app)} carries com.apple.quarantine ${installed.quarantine}, so Gatekeeper assesses its first launch`] };
       }),
+      check("DIST-PKG-08", () => layout),
+      // Needs Developer ID and notarization credentials, like DIST-PKG-06: an ad-hoc package's DMG is unsigned.
+      check("DIST-PKG-09", () => signature),
     ];
   } finally { rmSync(work, { recursive: true, force: true }); }
 }
