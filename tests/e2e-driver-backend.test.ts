@@ -121,6 +121,41 @@ describe("command mapping", () => {
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("clipboard lacks public.html; it has [public.utf8-plain-text]") });
   });
 
+  test("dragAndDrop runs a Spark drag source's drag in process: begin, move, a hold for spring loading, drop", async () => {
+    const app = new FakeApp({ source: 1, target: 1 });
+    app.dragSources = { source: {} };
+    const started = Date.now();
+    const { result } = await run("- launchApp\n- dragAndDrop: { from: { id: source }, to: { id: target }, modifiers: [alt], holdAt: 300ms }", app);
+    expect(result.status).toBe("passed");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(300);
+    expect(app.log.filter(line => line.startsWith("testDrag") || line.startsWith("drag "))).toEqual([
+      'testDrag {"phase":"begin","from":"source","modifiers":["option"]}', 'testDrag {"phase":"move","to":"target","modifiers":["option"]}',
+      'testDrag {"phase":"move","to":"target","modifiers":["option"]}', 'testDrag {"phase":"drop","modifiers":["option"]}']);
+    // A source that refuses (its onError says why) drags nothing; steps cancels the started drag as unsupported.
+    app.dragSources = { source: { refuse: true } };
+    app.log.length = 0;
+    expect((await run("- launchApp\n- dragAndDrop: { from: { id: source }, to: { id: target } }", app)).result.status).toBe("passed");
+    expect(app.log.filter(line => line.startsWith("testDrag"))).toEqual(['testDrag {"phase":"begin","from":"source"}']);
+    app.dragSources = { source: {} };
+    app.log.length = 0;
+    expect((await run("- launchApp\n- dragAndDrop: { from: { id: source }, to: { id: target }, steps: 3 }", app)).result.failure).toMatchObject({ kind: "unsupported" });
+    expect(app.log.filter(line => line.startsWith("testDrag")).at(-1)).toBe('testDrag {"phase":"cancel"}');
+  });
+
+  test("dragToFinder drops a Spark drag in a private temporary folder and expects the promised file there", async () => {
+    const app = new FakeApp({ source: 1, plain: 1 });
+    app.dragSources = { source: { promised: ["Notes.txt"] } };
+    const { result } = await run("- launchApp\n- dragToFinder: { from: { id: source }, expectFile: Notes.txt }", app);
+    expect(result.status).toBe("passed");
+    const drop = app.log.find(line => line.includes("dropInFolder"))!;
+    const folder = JSON.parse(drop.slice("testDrag ".length)).folder as string;
+    expect(folder.startsWith(path.join(tmpdir(), "spark-drop-"))).toBe(true);
+    expect(existsSync(folder)).toBe(false); // removed after the flow
+    expect((await run("- launchApp\n- dragToFinder: { from: { id: source }, expectFile: Other.txt }", app)).result.failure).toMatchObject({ kind: "assertion", message: "the drop wrote [Notes.txt], not Other.txt" });
+    expect((await run("- launchApp\n- dragToFinder: { from: { id: plain }, expectFile: Notes.txt }", app)).result.failure).toMatchObject({ kind: "unsupported" });
+    expect((await run("- launchApp\n- dragToFinder: { from: { id: source }, expectFile: ../Notes.txt }", app)).result.failure).toMatchObject({ kind: "invalid" });
+  });
+
   test("setAppAppearance maps to the driver; takeScreenshot captures the main window into the flow's output", async () => {
     const { result, app } = await run("- launchApp\n- setAppAppearance: dark\n- takeScreenshot: shot");
     expect(result.status).toBe("passed");
@@ -542,7 +577,7 @@ describe("unsupported and invalid", () => {
     ["- mouseButton: back", "backend driver presses a mouse button only `on` a target"],
     ["- pinch: { scale: 2 }", "backend driver performs pinch only `on` a target"],
     ["- rotate: { degrees: 10 }", "backend driver performs rotate only `on` a target"],
-    ["- dragAndDrop: { from: { id: save }, to: { id: list }, holdAt: 1s }", "dragAndDrop holdAt is not supported by backend driver"],
+    ["- dragAndDrop: { from: { id: row }, to: { id: list }, holdAt: 1s }", "dragAndDrop holdAt is not supported by backend driver"],
     ["- assertText: { id: save, equals: x, lineEndings: crlf }", "assertText lineEndings is not supported by backend driver"],
     ["- pressKey: MediaPlayPause", "backend driver cannot press MediaPlayPause"],
     ["- pressKey: capslock+a", "backend driver cannot press capslock+a"],

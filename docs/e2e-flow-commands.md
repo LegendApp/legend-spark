@@ -108,9 +108,9 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 
 | Command | Short form | Keys | Backend | Summary |
 |---|---|---|---|---|
-| `dragAndDrop` | — | `from`*, `to`*, `modifiers`, `holdAt`, `steps` | black-box | Drag from one target to another. |
+| `dragAndDrop` | — | `from`*, `to`*, `modifiers`, `holdAt`, `steps` | black-box | Drag from one target to another (on the driver backend, a Spark drag source drags in process; `holdAt` waits over `to`). |
 | `dragFromFinder` | — | `files`*, `to`* | black-box | Drag files from the file manager onto a target. |
-| `dragToFinder` | — | `from`*, `expectFile`* | black-box | Drag a target to the file manager and expect a file. |
+| `dragToFinder` | — | `from`*, `expectFile`* | black-box | Drag a target to the file manager and expect a file (on the driver backend, a Spark drag source dropped in a private temporary folder). |
 | `dragToDock` | — | `files`* | black-box | Drag files onto the Dock icon. |
 | `cancelDrag` | — | `from`*, `via` | black-box | Start a drag, cancel it, and assert the fly-back. |
 

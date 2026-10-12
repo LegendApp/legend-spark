@@ -3632,7 +3632,7 @@
             }
           },
           "dragAndDrop": {
-            "description": "Drag from one target to another.",
+            "description": "Drag from one target to another (on the driver backend, a Spark drag source drags in process; `holdAt` waits over `to`).",
             "if": {
               "type": "object"
             },
@@ -3720,7 +3720,7 @@
             }
           },
           "dragToFinder": {
-            "description": "Drag a target to the file manager and expect a file.",
+            "description": "Drag a target to the file manager and expect a file (on the driver backend, a Spark drag source dropped in a private temporary folder).",
             "if": {
               "type": "object"
             },

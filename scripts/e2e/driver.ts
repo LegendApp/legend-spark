@@ -15,6 +15,16 @@ export type Capture = { file: string; width: number; height: number; scale: numb
  */
 export type InputTarget = { testID: string; offset?: { x: number; y: number } } | { point: { x: number; y: number }; window?: DriverWindow };
 export type Modifier = "cmd" | "ctrl" | "option" | "shift" | "fn";
+/**
+ * A phase of a Spark drag view's drag, run in process as the window server would (docs/drag-drop.md#testing): begin from
+ * the source view containing `from`, move over the drag view containing `to` (null: over nothing), drop, cancel, or drop
+ * in a temporary folder as Finder would, which writes the drag's promised files there.
+ */
+export type TestDragRequest =
+  | { phase: "begin"; from: string; modifiers?: Modifier[] } | { phase: "move"; to: string | null; modifiers?: Modifier[] }
+  | { phase: "drop" | "cancel"; modifiers?: Modifier[] } | { phase: "dropInFolder"; folder: string };
+/** `started` (begin: false when the source refused, reporting why through its onError), `operation`, or the written `files`. */
+export type TestDragReply = { started?: boolean; operation?: string; files?: string[]; items?: number; types?: string[]; image?: { width: number; height: number } };
 /** The app's private test pasteboard: its types, its plain text (null without any) and its change count. */
 export type TestClipboard = { types: string[]; text: string | null; changeCount: number };
 /** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
@@ -227,6 +237,10 @@ export class Driver {
   /** Writes the app's private test pasteboard as another app would (docs/clipboard.md#testing); the user's clipboard is untouched. */
   async setTestClipboard(content: { text?: string; html?: string; concealed?: boolean }) {
     await this.request({ command: "setTestClipboard", ...content }, 10000);
+  }
+  /** One phase of an in-process drag between Spark drag views; dropInFolder waits for the app to write its promised files. */
+  async testDrag(request: TestDragRequest): Promise<TestDragReply> {
+    return body<TestDragReply>(await this.request({ command: "testDrag", ...request }, request.phase === "dropInFolder" ? 70000 : 10000));
   }
   /** Reads the app's private test pasteboard as another app's paste would, so the app provides promised data. */
   async testClipboard(timeoutMs = 40000): Promise<TestClipboard> {

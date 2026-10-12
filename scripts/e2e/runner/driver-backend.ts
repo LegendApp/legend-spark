@@ -3,13 +3,14 @@
 // black-box commands it implements (input, gestures, assertCursor, assertText, assertA11y, auditAccessibility) with in-process events when no black-box backend
 // is active; the runner labels those steps white-box. Commands it cannot serve are missing from `commands`, so the
 // runner fails them as unsupported; real OS input and the accessibility tree belong to the black-box backend (#50).
-import { copyFileSync, existsSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type TestClipboard,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type TestClipboard, type TestDragReply, type TestDragRequest,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
@@ -35,6 +36,7 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   simulateDisplays(displays: readonly object[] | null): Promise<void>;
   setTestClipboard(content: { text?: string; html?: string; concealed?: boolean }): Promise<void>;
   testClipboard(): Promise<TestClipboard>;
+  testDrag(request: TestDragRequest): Promise<TestDragReply>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
   tap(target: InputTarget, options?: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
   gesture(target: InputTarget, gesture: Gesture, modifiers?: Modifier[]): Promise<void>;
@@ -134,11 +136,52 @@ export class DriverBackend implements Backend {
     shortcut: async args => this.press(String(args.keys)),
     scroll: (args, context) => this.scroll(args, context),
     swipe: (args, context) => this.swipe(args, context),
+    // A Spark drag source drags in process as the window server would (docs/drag-drop.md#testing); other views get pointer input.
     dragAndDrop: async (args, context) => {
-      this.unsupported("dragAndDrop", args, ["holdAt"]);
-      const from = await context.resolve(args.from), to = await context.resolve(args.to);
-      if (from.element.window !== to.element.window) throw new Failure("unsupported", "backend driver drags only within one window");
-      await this.client().drag(this.input(from), this.input(to), { ...(args.steps === undefined ? {} : { steps: args.steps as number }), ...this.modifiers(args) });
+      const from = await context.resolve(args.from);
+      const { modifiers } = this.modifiers(args);
+      const drag = await this.beginDrag(from, modifiers);
+      if (drag === "not-source") {
+        this.unsupported("dragAndDrop", args, ["holdAt"]);
+        const to = await context.resolve(args.to);
+        if (from.element.window !== to.element.window) throw new Failure("unsupported", "backend driver drags only within one window");
+        await this.client().drag(this.input(from), this.input(to), { ...(args.steps === undefined ? {} : { steps: args.steps as number }), ...this.modifiers(args) });
+        return;
+      }
+      if (drag === "refused") return;
+      const client = this.client();
+      try {
+        if (args.steps !== undefined) throw new Failure("unsupported", "dragAndDrop steps is not supported by backend driver for a Spark drag source");
+        const to = await context.resolve(args.to);
+        if (!to.element.id) throw new Failure("unsupported", "backend driver drops a Spark drag only on a target with an id");
+        await client.testDrag({ phase: "move", to: to.element.id, modifiers });
+        if (args.holdAt !== undefined) {
+          await new Promise(resolve => setTimeout(resolve, ms(args.holdAt as string | number)));
+          await client.testDrag({ phase: "move", to: to.element.id, modifiers });
+        }
+      } catch (error) {
+        await client.testDrag({ phase: "cancel" });
+        throw error;
+      }
+      await client.testDrag({ phase: "drop", modifiers });
+    },
+    // Finder, as a drop into a private temporary folder: the drag's promised files are written there, never in a user folder.
+    dragToFinder: async (args, context) => {
+      const name = String(args.expectFile);
+      if (!name || name !== path.basename(name)) throw new Failure("invalid", "backend driver expects dragToFinder expectFile to be a file name");
+      const from = await context.resolve(args.from);
+      const drag = await this.beginDrag(from);
+      if (drag === "not-source") throw new Failure("unsupported", `backend driver drags to Finder only from a Spark drag source; ${from.element.id ?? from.element.key} is not one`);
+      if (drag === "refused") throw new Failure("assertion", "the drag did not start: the source reported why through its onError");
+      const folder = mkdtempSync(path.join(os.tmpdir(), "spark-drop-"));
+      context.onRestore(`drop folder ${folder}`, async () => rmSync(folder, { recursive: true, force: true }));
+      let files: string[];
+      try { files = (await this.client().testDrag({ phase: "dropInFolder", folder })).files ?? []; }
+      catch (error) { throw new Failure("assertion", `the promised files were not written: ${(error as Error).message}`); }
+      if (!existsSync(path.join(folder, name))) throw new Failure("assertion", `the drop wrote [${files.map(file => path.basename(file)).join(", ")}], not ${name}`);
+      const copy = path.join(context.outputDir, `dropped-${name}`);
+      copyFileSync(path.join(folder, name), copy);
+      context.addArtifact({ kind: "output", path: copy });
     },
     assertText: (args, context) => this.assertText(args, context),
     assertA11y: (args, context) => this.assertA11y(args, context),
@@ -274,6 +317,12 @@ export class DriverBackend implements Backend {
     if (element.id) return { testID: element.id, offset: { x: point.x - element.frame.x, y: point.y - element.frame.y } };
     if (!element.window) throw new Failure("unsupported", `backend driver cannot address the window of ${JSON.stringify(element.key)}: it has no identifier`);
     return { point, window: `id:${element.window}` };
+  }
+  /** Begins an in-process drag when `from` is (in) a Spark drag source: `refused` when the source reported an error instead. */
+  private async beginDrag(from: Target, modifiers?: Modifier[]): Promise<"started" | "refused" | "not-source"> {
+    if (!from.element.id) return "not-source";
+    try { return (await this.client().testDrag({ phase: "begin", from: from.element.id, ...(modifiers ? { modifiers } : {}) })).started ? "started" : "refused"; }
+    catch (error) { if (error instanceof DriverError && (error.code === "E_NOT_DRAG_SOURCE" || error.code === "E_UNKNOWN_COMMAND")) return "not-source"; throw error; }
   }
   private modifiers(args: Record<string, unknown>) {
     return args.modifiers === undefined ? {} : { modifiers: (args.modifiers as string[]).map(name => (name === "alt" ? "option" : name) as Modifier) };
