@@ -21,6 +21,7 @@ import { doctor, run } from "./commands.ts";
 import { findFramework, findProject, sparkHome, creationManifest, packageManifest, registerRuntime } from "./local.ts";
 import { readJson, stateFile, VERSION, writeJson } from "./project.ts";
 import { devCommand } from "./dev-command.ts";
+import { findDwarf, symbolicateReport } from "./symbolicate.ts";
 
 async function main() {
   const argv = process.argv.slice(2);
@@ -75,6 +76,7 @@ async function main() {
 Inside an app: npm run dev, npm run build, npm run package (or pnpm, yarn, bun)
 
 Advanced: updates init <feedURL>, credentials, doctor, analyze, open [app], build --dev, build --preview
+Crash reports: symbolicate <report.json> --dsym <MyApp.app.dSYM or folder> (prints the report with symbols and source lines)
 Windows: dev and build --dev; production builds are not yet supported.
 SDK transfer: sdk export <directory> [--runtime <Spark Runner directory>], sdk import <directory>
 SDK maintainers: sdk pack, sdk package-runner, sdk build-runner [--platform windows], sdk register <runtime directory>
@@ -193,6 +195,16 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       if (!existsSync(product)) throw new Error("The app binary is missing. Rebuild it with npm run build.");
       const app = await launch(root, product, port);
       await app.exited;
+      break;
+    }
+    case "symbolicate": {
+      if (process.platform !== "darwin") throw new Error("spark symbolicate uses atos and dwarfdump, which require macOS.");
+      const dsyms = values.dsym as string[] | undefined;
+      if (!dsyms?.length) throw new Error("Usage: spark symbolicate <report.json> --dsym <MyApp.app.dSYM or folder> [--dsym …]");
+      const dwarf = findDwarf(dsyms);
+      const input = JSON.parse(readFileSync(path.resolve(positionals[1]!), "utf8"));
+      const output = Array.isArray(input) ? input.map(report => symbolicateReport(report, dwarf)) : symbolicateReport(input, dwarf);
+      console.log(JSON.stringify(output, null, 2));
       break;
     }
     default: throw new Error(`Unknown command: ${command}. Run spark --help.`);

@@ -9,7 +9,7 @@ const macos = path.join(root, "packages/diagnostics/macos");
 
 async function build(binary: string, flags: string[]) {
   await runOk("clang++", [...flags, "-fobjc-arc", "-fblocks", "-std=c++20", "-Wall", "-Werror", "-mmacosx-version-min=14.0", "-I", macos, "-framework", "Foundation",
-    path.join(root, "tests/hang-watchdog.native.mm"), path.join(macos, "SparkHangWatchdog.mm"), "-o", binary], { timeout: 120_000 });
+    path.join(root, "tests/hang-watchdog.native.mm"), path.join(macos, "SparkHangWatchdog.mm"), path.join(macos, "SparkStack.mm"), "-o", binary], { timeout: 120_000 });
 }
 
 // Real main-thread hangs in a test process: reports, durations, symbolicated stacks, stop and thread exit.

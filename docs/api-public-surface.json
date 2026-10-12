@@ -166,12 +166,22 @@
     "openDevTools"
   ],
   "./diagnostics": [
+    "CrashReport",
     "HangReport",
-    "HangStackFrame",
     "HangWatchdogOptions",
+    "JavaScriptCrashReport",
+    "NativeCrashReport",
+    "SimulatedCrashKind",
+    "StackFrame",
     "StartupTiming",
+    "deleteCrashReports",
+    "getCrashReportingAvailability",
+    "getCrashReportingConsent",
+    "getCrashReports",
     "getHangWatchdogAvailability",
     "getStartupTiming",
+    "setCrashReportingConsent",
+    "simulateCrash",
     "simulateHang",
     "startHangWatchdog"
   ],

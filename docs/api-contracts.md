@@ -294,10 +294,20 @@ startHangWatchdog(options: { thresholdMs?: number; onHang: (report: HangReport) 
 simulateHang(durationMs: number): Promise<void>;
 getHangWatchdogAvailability(): Availability;
 getStartupTiming(): StartupTiming;
-// HangReport: { durationMs, thresholdMs, startedAt, stack: { address, image?, imageAddress?, imageOffset?, imageUUID?, symbol?, symbolOffset? }[] }.
+getCrashReportingAvailability(): Availability;
+getCrashReportingConsent(): Promise<boolean>;
+setCrashReportingConsent(granted: boolean): Promise<void>;
+getCrashReports(): Promise<CrashReport[]>;
+deleteCrashReports(ids?: string[]): Promise<void>;
+simulateCrash(kind: "badAccess" | "abort" | "uncaughtException" | "trap" | "stackOverflow" | "javascript"): Promise<CrashReport>;
+// StackFrame: { address, image?, imageAddress?, imageOffset?, imageUUID?, symbol?, symbolOffset? }.
+// HangReport: { durationMs, thresholdMs, startedAt, stack: StackFrame[] }.
+// CrashReport: { id, createdAt, simulated, app } & ({ kind: "native", signal, signalCode, faultAddress?, mainThread, exception?, stack: StackFrame[] } | { kind: "javascript", fatal: true, name, message, stack? }).
 ```
 
 The hang watchdog is application-owned: a controller with `remove()`, no hook. Reports arrive after the main thread recovers, because events reach JavaScript through it; each watchdog has its own thread and threshold, and nothing runs while none is started. `simulateHang` blocks the main thread on purpose so apps can check their reporting end to end. macOS only for now; Windows reports `unsupported-platform` (#304). Details: [diagnostics](diagnostics.md).
+
+Crash reporting is opt-in and local: nothing is recorded until `setCrashReportingConsent(true)`, which is kept in the app's defaults, and nothing is sent anywhere; the app reads its reports with `getCrashReports` and sends them where it wants. Native crashes (signals and uncaught Objective-C exceptions) are written by the crashing process with async-signal-safe calls only, then passed on to the previous handler and the system crash reporter; they become symbolicated reports at the next launch (or the next `getCrashReports`). Fatal JavaScript errors are written synchronously before React Native's handler runs. `simulateCrash` requires consent and never ends the app: native kinds crash a helper process started from the app's executable. Offline symbolication with a dSYM is `spark symbolicate`. macOS only for now; Windows reports `unsupported-platform` (#343). Details: [diagnostics](diagnostics.md#crash-reporting).
 
 ### Pointer
 
