@@ -8,6 +8,7 @@ import { expect, test } from "vitest";
 const policy: Record<string, Record<string, { imperative: string } | { reactOnly: string }>> = {
   "./audio": { useAudioPlayer: { imperative: "createAudioPlayer" } },
   "./menus": { useMenu: { imperative: "createMenu" } },
+  "./plugins": { usePlugins: { imperative: "createPluginHost" } },
   "./shortcuts/commands": {
     useRoutedHotkeys: { imperative: "createHotkeyRouter" },
     useHotkeySuspension: { imperative: "createHotkeyRouter" },

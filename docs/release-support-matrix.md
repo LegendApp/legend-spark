@@ -72,6 +72,7 @@ Package: `@legendapp/spark@0.0.1-next.3`. This matrix is generated from `package
 | [`./permissions`](../packages/desktop/permissions.ts) | [permissions/package.json](../packages/permissions/package.json)<br>macos: `packages/permissions/macos/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/permissions.test.ts](../tests/permissions.test.ts)<br>[tests/permissions-native.test.ts](../tests/permissions-native.test.ts)<br>No mapped shared runtime case |
 | [`./biometrics`](../packages/desktop/biometrics.ts) | [biometrics/package.json](../packages/biometrics/package.json)<br>macos: `packages/biometrics/macos/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/biometrics.test.ts](../tests/biometrics.test.ts)<br>[tests/biometrics-native.test.ts](../tests/biometrics-native.test.ts)<br>No mapped shared runtime case |
 | [`./sharing`](../packages/desktop/sharing.ts) | [sharing/package.json](../packages/sharing/package.json)<br>macos: `packages/sharing/macos/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/sharing.test.ts](../tests/sharing.test.ts)<br>[tests/sharing-native.test.ts](../tests/sharing-native.test.ts)<br>No mapped shared runtime case |
+| [`./plugins`](../packages/desktop/plugins.ts) | [plugins/package.json](../packages/plugins/package.json)<br>no platform-specific source file | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/plugins.test.ts](../tests/plugins.test.ts)<br>No mapped shared runtime case |
 
 ## Build and configuration exports
 

@@ -1,0 +1,27 @@
+{
+  "name": "@legendapp/spark-plugins",
+  "version": "0.0.1-next.3",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "src"
+  ],
+  "dependencies": {
+    "@legendapp/spark-desktop-app": "0.0.1-next.3"
+  },
+  "peerDependencies": {
+    "react": "19.1.4",
+    "react-native": "0.81.6",
+    "@react-native-runtimes/core": "0.1.0-alpha.2"
+  },
+  "peerDependenciesMeta": {
+    "@react-native-runtimes/core": {
+      "optional": true
+    }
+  },
+  "private": true,
+  "spark": {
+    "sdk": true
+  }
+}

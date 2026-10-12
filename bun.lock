@@ -29,6 +29,7 @@
         "@legendapp/spark-native-menu": "0.0.1-next.3",
         "@legendapp/spark-notifications": "0.0.1-next.3",
         "@legendapp/spark-permissions": "0.0.1-next.3",
+        "@legendapp/spark-plugins": "0.0.1-next.3",
         "@legendapp/spark-printing": "0.0.1-next.3",
         "@legendapp/spark-processes": "0.0.1-next.3",
         "@legendapp/spark-secure-storage": "0.0.1-next.3",
@@ -301,6 +302,7 @@
         "@legendapp/spark-native-menu": "0.0.1-next.3",
         "@legendapp/spark-notifications": "0.0.1-next.3",
         "@legendapp/spark-permissions": "0.0.1-next.3",
+        "@legendapp/spark-plugins": "0.0.1-next.3",
         "@legendapp/spark-printing": "0.0.1-next.3",
         "@legendapp/spark-processes": "0.0.1-next.3",
         "@legendapp/spark-secure-storage": "0.0.1-next.3",
@@ -529,6 +531,21 @@
         "react": "19.1.4",
         "react-native": "0.81.6",
       },
+    },
+    "packages/plugins": {
+      "name": "@legendapp/spark-plugins",
+      "version": "0.0.1-next.3",
+      "dependencies": {
+        "@legendapp/spark-desktop-app": "0.0.1-next.3",
+      },
+      "peerDependencies": {
+        "@react-native-runtimes/core": "0.1.0-alpha.2",
+        "react": "19.1.4",
+        "react-native": "0.81.6",
+      },
+      "optionalPeers": [
+        "@react-native-runtimes/core",
+      ],
     },
     "packages/printing": {
       "name": "@legendapp/spark-printing",
@@ -1042,6 +1059,8 @@
     "@legendapp/spark-notifications": ["@legendapp/spark-notifications@workspace:packages/notifications"],
 
     "@legendapp/spark-permissions": ["@legendapp/spark-permissions@workspace:packages/permissions"],
+
+    "@legendapp/spark-plugins": ["@legendapp/spark-plugins@workspace:packages/plugins"],
 
     "@legendapp/spark-printing": ["@legendapp/spark-printing@workspace:packages/printing"],
 

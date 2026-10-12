@@ -84,6 +84,7 @@
     "./pointer",
     "./permissions",
     "./biometrics",
-    "./sharing"
+    "./sharing",
+    "./plugins"
   ]
 }
