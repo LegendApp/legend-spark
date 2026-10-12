@@ -1,0 +1,48 @@
+appId: so.legend.spark.examples.kitchensink
+name: Bundled plugins load into isolated runtimes and register commands, panels, file types and menu items
+intent: >
+  Future-facing capabilities > Plugins lists the five declared plugins unloaded, with getPluginAvailability()
+  available, before any plugin code runs. Loading Hello activates it in its own runtime: its Greet command runs there
+  (main: false) and cannot see a global the screen set on the main runtime. Echo loads into a different runtime.
+  Hello's menu item is published in the app's Plugins menu and runs its command; a .ksnote path opens through its file
+  type's command; its panel renders in Hello's runtime and keeps its own state. A command that throws rejects
+  PluginError:command while Hello stays loaded with its heap (the greeting count continues) and Echo keeps working.
+checks: [FUT-PLUGINAVAIL-01, FUT-PLUGINLOAD-01, FUT-PLUGINREG-01, FUT-PLUGINISO-01]
+tags: [future-facing-capabilities]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://future-facing-capabilities/plugins" }
+- assertText: { id: future-facing-capabilities-plugins-availability, equals: '{"available":true}' }
+- assertText: { id: future-facing-capabilities-plugins-hello-state, equals: unloaded }
+- assertText: { id: future-facing-capabilities-plugins-echo-state, equals: unloaded }
+- assertText: { id: future-facing-capabilities-plugins-overreach-state, equals: unloaded }
+- assertText: { id: future-facing-capabilities-plugins-future-state, equals: unloaded }
+- assertText: { id: future-facing-capabilities-plugins-ungranted-state, equals: unloaded }
+- assertVisible: { id: future-facing-capabilities-plugins-none }
+- assertAppMenu: { path: "Plugins > Greet from the menu", exists: false }
+- tapOn: { id: future-facing-capabilities-plugins-hello-load }
+- assertText: { id: future-facing-capabilities-plugins-hello-result, equals: loaded }
+- assertText: { id: future-facing-capabilities-plugins-hello-state, equals: loaded }
+- tapOn: { id: future-facing-capabilities-plugins-command-hello-greet }
+- assertText: { id: future-facing-capabilities-plugins-output, equals: '{"greeting":"Hello","runtime":"spark-plugin.so.legend.ks.hello","main":false,"hostGlobalVisible":false,"greetings":1}' }
+- tapOn: { id: future-facing-capabilities-plugins-echo-load }
+- assertText: { id: future-facing-capabilities-plugins-echo-state, equals: loaded }
+- tapOn: { id: future-facing-capabilities-plugins-command-echo-echo }
+- assertText: { id: future-facing-capabilities-plugins-output, equals: '{"echoed":{"text":"ping"},"runtime":"spark-plugin.so.legend.ks.echo","main":false,"hostGlobalVisible":false}' }
+- assertAppMenu: { path: "Plugins > Greet from the menu", enabled: true }
+- tapOn: { id: future-facing-capabilities-plugins-menu-hello-menu-greet }
+- assertText: { id: future-facing-capabilities-plugins-output, equals: '{"greeting":"Hello","runtime":"spark-plugin.so.legend.ks.hello","main":false,"hostGlobalVisible":false,"greetings":2}' }
+- tapOn: { id: future-facing-capabilities-plugins-open-sample }
+- assertText: { id: future-facing-capabilities-plugins-output, equals: '{"opened":"/tmp/kitchen-sink/sample.ksnote","runtime":"spark-plugin.so.legend.ks.hello","main":false}' }
+- assertVisible: { id: future-facing-capabilities-plugins-panel-hello-panel }
+- assertText: { id: future-facing-capabilities-plugins-panel-runtime, equals: "spark-plugin.so.legend.ks.hello · main: false" }
+- assertA11y: { id: future-facing-capabilities-plugins-panel-increment, label: "Count: 0" }
+- tapOn: { id: future-facing-capabilities-plugins-panel-increment }
+- assertA11y: { id: future-facing-capabilities-plugins-panel-increment, label: "Count: 1" }
+- tapOn: { id: future-facing-capabilities-plugins-command-hello-crash }
+- assertText: { id: future-facing-capabilities-plugins-output, equals: "PluginError:command" }
+- assertText: { id: future-facing-capabilities-plugins-hello-state, equals: loaded }
+- tapOn: { id: future-facing-capabilities-plugins-command-hello-greet }
+- assertText: { id: future-facing-capabilities-plugins-output, equals: '{"greeting":"Hello","runtime":"spark-plugin.so.legend.ks.hello","main":false,"hostGlobalVisible":false,"greetings":3}' }
+- tapOn: { id: future-facing-capabilities-plugins-command-echo-echo }
+- assertText: { id: future-facing-capabilities-plugins-output, equals: '{"echoed":{"text":"ping"},"runtime":"spark-plugin.so.legend.ks.echo","main":false,"hostGlobalVisible":false}' }

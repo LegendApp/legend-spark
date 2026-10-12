@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: Plugin sandbox violations, ungranted capabilities and other API versions are rejected
+intent: >
+  Overreach requests only commands, then registers a menu item when it activates: the host rejects the sandbox
+  violation with SparkError:E_PERMISSION_DENIED, marks it failed and registers nothing. Ungranted requests panels, which
+  the Kitchen Sink does not grant, and Future targets plugin API 2: both are rejected (E_PERMISSION_DENIED and
+  E_UNSUPPORTED_OPTION) before they activate. Their activate throws, so a PluginError:activate result would show that
+  they ran. No Plugins menu appears.
+checks: [FUT-PLUGINPERM-01, FUT-PLUGINVER-01]
+tags: [future-facing-capabilities]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://future-facing-capabilities/plugins" }
+- assertText: { id: future-facing-capabilities-plugins-availability, equals: '{"available":true}' }
+- tapOn: { id: future-facing-capabilities-plugins-overreach-load }
+- assertText: { id: future-facing-capabilities-plugins-overreach-result, equals: "SparkError:E_PERMISSION_DENIED" }
+- assertText: { id: future-facing-capabilities-plugins-overreach-state, equals: "failed (E_PERMISSION_DENIED)" }
+- tapOn: { id: future-facing-capabilities-plugins-ungranted-load }
+- assertText: { id: future-facing-capabilities-plugins-ungranted-result, equals: "SparkError:E_PERMISSION_DENIED" }
+- assertText: { id: future-facing-capabilities-plugins-ungranted-state, equals: "failed (E_PERMISSION_DENIED)" }
+- tapOn: { id: future-facing-capabilities-plugins-future-load }
+- assertText: { id: future-facing-capabilities-plugins-future-result, equals: "SparkError:E_UNSUPPORTED_OPTION" }
+- assertText: { id: future-facing-capabilities-plugins-future-state, equals: "failed (E_UNSUPPORTED_OPTION)" }
+- assertVisible: { id: future-facing-capabilities-plugins-none }
+- assertNotVisible: { id: future-facing-capabilities-plugins-menu-overreach-menu }
+- assertAppMenu: { path: "Plugins > Injected menu item", exists: false }
+- takeScreenshot: plugins-rejected

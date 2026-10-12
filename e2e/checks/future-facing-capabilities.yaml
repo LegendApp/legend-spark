@@ -9,3 +9,75 @@ checks:
     covers:
       - ./ui/uniwind#SegmentedControl
       - ./ui/uniwind#Button
+  FUT-PLUGINAVAIL-01:
+    title: "getPluginAvailability reports plugins available on macOS (the Runtimes module is present), and the Plugins screen lists every declared plugin unloaded, with its manifest, before any plugin code runs"
+    platforms: [macos]
+    blocking: true
+    spec: "#211 FUT.plugins; docs/plugins.md"
+    covers:
+      - ./plugins
+      - ./plugins#getPluginAvailability
+      - ./plugins#getPluginAvailability().available
+      - ./plugins#createPluginHost
+      - ./plugins#usePlugins
+  FUT-PLUGINLOAD-01:
+    title: "Loading a bundled plugin (runtimeFunction(definePlugin(...))) activates it in its own isolated runtime: commands run there (main: false), two plugins report different runtimes, and neither sees a global set on the main runtime"
+    platforms: [macos]
+    blocking: true
+    spec: "#211 FUT.plugins; #178 MW.arch runtime model"
+    covers:
+      - ./plugins#definePlugin
+      - ./plugins#createPluginHost
+      - ./plugins#PLUGIN_API_VERSION
+  FUT-PLUGINREG-01:
+    title: "A loaded plugin's commands, panels, file types and menu items are registered: its commands run, its menu item is published in the app's Plugins menu (createMenu) and runs its command, a .ksnote file opens through its file type's command, and its panel renders in the plugin's runtime"
+    platforms: [macos]
+    blocking: true
+    spec: "#211 FUT.plugins"
+    covers:
+      - ./plugins#createPluginHost
+      - ./plugins#PLUGIN_CAPABILITIES
+      - ./menus#createMenu
+  FUT-PLUGINPERM-01:
+    title: "Capability enforcement: a plugin that registers a kind its manifest did not request (a sandbox violation) fails to load with SparkError:E_PERMISSION_DENIED and registers nothing; a plugin requesting a capability the app did not grant is rejected the same way before its runtime starts"
+    platforms: [macos]
+    blocking: true
+    spec: "#211 FUT.plugins; plugin loading is a code-execution surface (SEC: #391 tracks a native-module sandbox)"
+    covers:
+      - ./plugins#createPluginHost
+  FUT-PLUGINVER-01:
+    title: "Version check: a plugin written for another plugin API version fails to load with SparkError:E_UNSUPPORTED_OPTION and never runs; nothing falls back"
+    platforms: [macos]
+    blocking: true
+    spec: "#211 FUT.plugins"
+    covers:
+      - ./plugins#PLUGIN_API_VERSION
+  FUT-PLUGINISO-01:
+    title: "Error isolation: a command that throws rejects with PluginError (phase command); that plugin stays loaded and keeps its heap, and another plugin and the host keep working"
+    platforms: [macos]
+    blocking: true
+    spec: "#211 FUT.plugins"
+    covers:
+      - ./plugins#PluginError
+  FUT-PLUGINUNLOAD-01:
+    title: "Unloading a plugin withdraws its commands, menu items, file types and panel and destroys its runtime; loading it again starts a fresh heap"
+    platforms: [macos]
+    blocking: true
+    spec: "#211 FUT.plugins"
+    covers:
+      - ./plugins#createPluginHost
+      - ./plugins#usePlugins
+  FUT-PLUGINUNSUP-01:
+    title: "On Windows getPluginAvailability reports unsupported-platform and loading a plugin rejects SparkError:E_UNSUPPORTED_PLATFORM until plugin isolation is verified there (#390)"
+    platforms: [windows]
+    blocking: true
+    spec: "#211 FUT.plugins; Windows #390"
+    covers:
+      - ./plugins#getPluginAvailability().available
+  FUT-PLUGINVISUAL-01:
+    title: "The Plugins screen matches its golden in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#211 FUT.plugins"
+    covers:
+      - ./ui/uniwind#Button

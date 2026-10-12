@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Plugins screen matches its goldens
+intent: >
+  Future-facing capabilities > Plugins opens from spark-ks://future-facing-capabilities/plugins with every declared
+  plugin unloaded, and matches the approved golden for the appearance and locale (light and dark, English and Arabic),
+  with the shell sidebar masked.
+checks: [FUT-PLUGINVISUAL-01]
+tags: [future-facing-capabilities]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://future-facing-capabilities/plugins" }
+- assertText: { id: future-facing-capabilities-plugins-hello-state, equals: unloaded }
+- assertScreenshot: { golden: future-facing-capabilities-plugins, mask: [{ id: infra-shell-sidebar }] }
