@@ -15,4 +15,6 @@
 - simulateSystemEvent: sleep               # in-app event (driver); sleepSystem and lockScreen change the OS
 - simulateSystemEvent: { type: thermalChanged, thermal: serious }
 - permission: { reset: camera }             # grant | revoke | reset
+- simulatePermission: { kind: camera, authorization: notDetermined, answer: allow }   # driver; never reaches TCC
+- assertSimulatedPermission: { kind: camera, authorization: authorized, requests: 1, prompts: 1, settingsOpened: 0 }
 - setFocusMode: doNotDisturb

@@ -101,3 +101,60 @@ checks:
     spec: "#124 SYS.api-events"
     covers:
       - ./system#getSystemAvailability().available
+  SYS-PERMAVAIL-01:
+    title: "getPermissionAvailability reports the permissions module available on macOS, and every kind's state reads without a prompt"
+    platforms: [macos]
+    blocking: true
+    spec: "#126 SYS.api-perms"
+    covers:
+      - ./permissions
+      - ./permissions#getPermissionAvailability
+      - ./permissions#getPermissionAvailability().available
+      - ./permissions#getPermissionStatus
+  SYS-PERMREQ-01:
+    title: "requestPermission shows one prompt while macOS could (undetermined, write-only calendar), resolves the answer as status and native authorization, resolves a decided state without a prompt, and rejects SparkError:E_UNAVAILABLE without an answer (driver simulation; TCC is untouched)"
+    platforms: [macos]
+    blocking: true
+    spec: "#126 SYS.api-perms"
+    covers:
+      - ./permissions#requestPermission
+      - ./permissions#getPermissionStatus
+  SYS-PERMEVENTS-01:
+    title: "addPermissionListener reports each changed kind with its previous and new state, after a request and after a change made outside the app; an unknown native state reads as unknown"
+    platforms: [macos]
+    blocking: true
+    spec: "#126 SYS.api-perms"
+    covers:
+      - ./permissions#addPermissionListener
+  SYS-PERMSETTINGS-01:
+    title: "openPermissionSettings resolves for a kind's Privacy & Security pane (in driver mode recorded, never opened; tests/permissions.native.mm checks the x-apple.systempreferences links)"
+    platforms: [macos]
+    blocking: true
+    spec: "#126 SYS.api-perms"
+    covers:
+      - ./permissions#openPermissionSettings
+  SYS-PERMREAL-01:
+    title: "Real TCC prompts: requesting camera, microphone, contacts, calendar, photos, location and Finder automation shows each system prompt once and reports the answer; screen recording, accessibility and input monitoring send the person to System Settings, and the change arrives when the app becomes active; Settings opens each pane"
+    platforms: [macos]
+    blocking: true
+    spec: "#126 SYS.api-perms"
+    covers:
+      - ./permissions#requestPermission
+      - ./permissions#addPermissionListener
+      - ./permissions#openPermissionSettings
+  SYS-PERMUNSUP-01:
+    title: "On Windows getPermissionAvailability reports unsupported-platform and status reads and the listener reject SparkError:E_UNSUPPORTED_PLATFORM (#378)"
+    platforms: [windows]
+    blocking: true
+    spec: "#126 SYS.api-perms; Windows implementation #378"
+    covers:
+      - ./permissions#getPermissionAvailability().available
+      - ./permissions#getPermissionStatus
+      - ./permissions#addPermissionListener
+  SYS-PERMVISUAL-01:
+    title: "The Privacy permissions screen matches its golden in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#126 SYS.api-perms"
+    covers:
+      - ./permissions#getPermissionAvailability().available

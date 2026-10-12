@@ -121,6 +121,14 @@ describe("command mapping", () => {
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("clipboard lacks public.html; it has [public.utf8-plain-text]") });
   });
 
+  test("simulatePermission sets a kind's simulated state; assertSimulatedPermission checks it", async () => {
+    const { result, app } = await run("- launchApp\n- simulatePermission: { kind: camera, authorization: denied, answer: allow }\n- simulatePermission: { kind: camera, answer: null }\n- assertSimulatedPermission: { kind: camera, authorization: denied, prompts: 0 }");
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => line.includes("Permission"))).toEqual(['simulatePermission {"kind":"camera","authorization":"denied","answer":"allow"}', 'simulatePermission {"kind":"camera","answer":null}', "testPermission camera"]);
+    const failed = await run("- launchApp\n- assertSimulatedPermission: { kind: photos, authorization: authorized, timeout: 200ms }");
+    expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('photos authorization is "notDetermined", expected "authorized"') });
+  });
+
   test("dragAndDrop runs a Spark drag source's drag in process: begin, move, a hold for spring loading, drop", async () => {
     const app = new FakeApp({ source: 1, target: 1 });
     app.dragSources = { source: {} };

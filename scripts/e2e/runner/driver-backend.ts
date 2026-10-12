@@ -11,7 +11,7 @@ import { processLog, type ProcessLog } from "../../../packages/cli/src/process.t
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestDragRequest,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
@@ -42,6 +42,8 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   simulateDisplays(displays: readonly object[] | null): Promise<void>;
   setTestClipboard(content: { text?: string; html?: string; concealed?: boolean }): Promise<void>;
   testClipboard(): Promise<TestClipboard>;
+  simulatePermission(state: { kind: string; authorization?: string; answer?: "allow" | "deny" | null }): Promise<TestPermission>;
+  testPermission(kind: string): Promise<TestPermission>;
   testDrag(request: TestDragRequest): Promise<TestDragReply>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
   tap(target: InputTarget, options?: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
@@ -107,6 +109,9 @@ export class DriverBackend implements Backend {
     // The app's private test pasteboard, never the user's clipboard (docs/clipboard.md#testing).
     setClipboard: async args => { await this.client().setTestClipboard(args as { text?: string; html?: string; concealed?: boolean }); },
     assertClipboard: (args, context) => context.eventually(async () => assertClipboard(await this.client().testClipboard(), args)),
+    // Simulated @legendapp/spark/permissions state, never TCC (docs/permissions.md#testing).
+    simulatePermission: async args => { await this.client().simulatePermission(args as { kind: string; authorization?: string; answer?: "allow" | "deny" | null }); },
+    assertSimulatedPermission: (args, context) => context.eventually(async () => assertSimulatedPermission(await this.client().testPermission(args.kind as string), args)),
     // Startup phases and the state the app exposes (docs/e2e-flows.md#app-inspection).
     ...inspectCommands(() => this.client(), () => this.opened!),
     // Layout thrash, flicker, leak counters and memory (docs/e2e-flows.md#layout-flicker-and-leaks).
@@ -506,6 +511,10 @@ export function assertMenu(menus: readonly DriverMenuItem[], args: Record<string
   }
 }
 /** Every listed type is on the test pasteboard (others may be too), and its plain text is exactly `text`. */
+export function assertSimulatedPermission(permission: TestPermission, args: Record<string, unknown>) {
+  for (const key of ["authorization", "requests", "prompts", "settingsOpened"] as const)
+    if (args[key] !== undefined && permission[key] !== args[key]) throw new Failure("assertion", `${String(args.kind)} ${key} is ${JSON.stringify(permission[key])}, expected ${JSON.stringify(args[key])}`);
+}
 export function assertClipboard(clipboard: TestClipboard, args: Record<string, unknown>) {
   const missing = ((args.types as string[] | undefined) ?? []).filter(type => !clipboard.types.includes(type));
   if (missing.length) throw new Failure("assertion", `clipboard lacks ${missing.join(", ")}; it has [${clipboard.types.join(", ")}]`);

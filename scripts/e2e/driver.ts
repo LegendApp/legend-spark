@@ -28,6 +28,8 @@ export type TestDragRequest =
 export type TestDragReply = { started?: boolean; operation?: string; files?: string[]; items?: number; types?: string[]; image?: { width: number; height: number } };
 /** The app's private test pasteboard: its types, its plain text (null without any) and its change count. */
 export type TestClipboard = { types: string[]; text: string | null; changeCount: number };
+/** The simulated state of one @legendapp/spark/permissions kind (the `testPermission` driver command). */
+export type TestPermission = { authorization: string; answer: "allow" | "deny" | null; requests: number; prompts: number; settingsOpened: number };
 /** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
 export type SimulatedSystemEvent = {
   type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string;
@@ -289,6 +291,12 @@ export class Driver {
   async stopFrames() { return body<FrameReport>(await this.request({ command: "stopFrames" }, 10000)); }
   /** Reports `displays` (DisplayDetails) through @legendapp/spark/displays instead of the real ones; null restores them (docs/displays.md#simulated-displays). */
   async simulateDisplays(displays: readonly object[] | null) { await this.request({ command: "simulateDisplays", displays }, 10000); }
+  /** Sets the simulated state @legendapp/spark/permissions reports for a kind (docs/permissions.md#testing); TCC is untouched. */
+  async simulatePermission(state: { kind: string; authorization?: string; answer?: "allow" | "deny" | null }) {
+    return body<{ permission: TestPermission }>(await this.request({ command: "simulatePermission", ...state }, 10000)).permission;
+  }
+  /** A kind's simulated permission state: authorization, answer, and counts of requests, prompts and System Settings openings. */
+  async testPermission(kind: string) { return body<{ permission: TestPermission }>(await this.request({ command: "testPermission", kind }, 10000)).permission; }
   /** Startup phases of this launch, once its first rendered UI has settled; with `testID`, `ready` once that element first showed settled. */
   async startup(timeoutMs = 30000, testID?: string) {
     return (await this.request({ command: "startup", timeoutMs, ...(testID === undefined ? {} : { testID }) }, timeoutMs + 10000)).phases as StartupPhases;

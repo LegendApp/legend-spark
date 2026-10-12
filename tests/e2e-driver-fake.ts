@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -87,6 +87,17 @@ export class FakeDriver implements DriverClient {
     this.clipboard = { types, text: content.text ?? null, changeCount: this.clipboard.changeCount + 1 };
   }
   async testClipboard() { this.log.push("testClipboard"); return this.clipboard; }
+  /** The fake's simulated permissions, as the app's simulatePermission and testPermission commands keep them. */
+  permissions: Record<string, TestPermission> = {};
+  async simulatePermission({ kind, authorization, answer }: { kind: string; authorization?: string; answer?: "allow" | "deny" | null }) {
+    this.log.push(`simulatePermission ${JSON.stringify({ kind, authorization, answer })}`);
+    const current = this.permissions[kind] ?? { authorization: "notDetermined", answer: null, requests: 0, prompts: 0, settingsOpened: 0 };
+    return this.permissions[kind] = { ...current, ...(authorization === undefined ? {} : { authorization }), ...(answer === undefined ? {} : { answer }) };
+  }
+  async testPermission(kind: string) {
+    this.log.push(`testPermission ${kind}`);
+    return this.permissions[kind] ?? { authorization: "notDetermined", answer: null, requests: 0, prompts: 0, settingsOpened: 0 };
+  }
   /** Spark drag sources (FakeApp.dragSources), as the app's testDrag command sees them. */
   dragSources: () => Record<string, DragSource> = () => ({});
   private dragging?: { promised: string[] };

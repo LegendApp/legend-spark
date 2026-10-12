@@ -1,0 +1,44 @@
+appId: so.legend.spark.examples.kitchensink
+name: Real privacy prompts, System Settings panes and change events
+intent: >
+  The real TCC paths of @legendapp/spark/permissions, which no automated run may reach: requests show system prompts
+  and change this Mac's privacy settings, and Settings opens System Settings. manual: true keeps the gate from running
+  it. Run it by hand on a Mac whose privacy settings for the Kitchen Sink may change, in a development build (spark dev),
+  which is not signed with the hardened runtime: the release build declares no entitlements, so macOS would deny camera,
+  microphone, contacts, calendar, photos, location and automation without a prompt. Reset the Kitchen Sink afterwards
+  with tccutil reset All so.legend.spark.examples.kitchensink.
+checks: [SYS-PERMREAL-01]
+tags: [system-integration]
+platforms: [macos]
+manual: true
+---
+- launchApp: { openUrl: "spark-ks://system-integration/permissions" }
+- extendedWaitUntil: { visible: { id: system-integration-permissions-listening }, timeout: 10s }
+- manualStep:
+    instruction: >-
+      In a development build, open System integration > Privacy permissions. For Camera, Microphone, Contacts,
+      Calendar, Photos, Location and Automation (Finder) in turn, press Request and answer the system prompt (allow
+      some, deny others); then press Request again.
+    expect: >-
+      Each Request shows its system prompt once and its row then shows the answer, granted (authorized) or
+      denied (denied); the second Request shows no prompt and the same state. The Changes list shows each change.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Request for Screen recording, Accessibility and Input monitoring. Grant one of them in the System Settings
+      pane macOS points to, then switch back to the Kitchen Sink. For screen recording, macOS asks to quit and reopen.
+    expect: >-
+      Each Request resolves at once; screen recording and accessibility show denied (notGranted) until granted. When
+      the app becomes active again, the granted row shows granted (authorized) and the Changes list shows the change.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Settings on each row, then return to the Kitchen Sink.
+    expect: >-
+      System Settings opens Privacy & Security at that kind's pane (Camera, Microphone, Screen & System Audio
+      Recording, Accessibility, Input Monitoring, Automation, Contacts, Calendars, Photos, Location Services), and
+      each row shows opened.
+    evidence: none
+    signoff: required

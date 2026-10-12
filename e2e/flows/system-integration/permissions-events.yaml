@@ -1,0 +1,29 @@
+appId: so.legend.spark.examples.kitchensink
+name: Permission changes reach the listener; Settings links are recorded, never opened (simulated)
+intent: >
+  The Privacy permissions screen's listener reports each changed kind with its previous and new status. A change made
+  outside the app (simulatePermission authorization, as when the person changes System Settings) and a request's answer
+  both arrive. An authorization this SDK does not know reads as unknown (unknown). Settings resolves "opened" for the
+  location pane; in driver mode the opening is only counted, and System Settings never opens. TCC is untouched.
+checks: [SYS-PERMEVENTS-01, SYS-PERMSETTINGS-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/permissions" }
+- assertVisible: { id: system-integration-permissions-listening }
+- assertText: { id: system-integration-permissions-location-status, equals: "undetermined (notDetermined)" }
+- simulatePermission: { kind: location, authorization: denied }
+- assertVisible: { text: "location: undetermined → denied", within: { id: system-integration-permissions-events } }
+- assertText: { id: system-integration-permissions-location-status, equals: "denied (denied)" }
+- simulatePermission: { kind: photos, authorization: unknown }
+- assertVisible: { text: "photos: undetermined → unknown", within: { id: system-integration-permissions-events } }
+- assertText: { id: system-integration-permissions-photos-status, equals: "unknown (unknown)" }
+- simulatePermission: { kind: inputMonitoring, answer: allow }
+- tapOn: { id: system-integration-permissions-inputMonitoring-request }
+- assertVisible: { text: "inputMonitoring: undetermined → granted", within: { id: system-integration-permissions-events } }
+- assertText: { id: system-integration-permissions-inputMonitoring-status, equals: "granted (authorized)" }
+- tapOn: { id: system-integration-permissions-location-settings }
+- assertText: { id: system-integration-permissions-location-result, equals: opened }
+- assertSimulatedPermission: { kind: location, settingsOpened: 1, requests: 0 }
+- takeScreenshot: permissions-events
+- assertNotVisible: { id: system-integration-permissions-error }

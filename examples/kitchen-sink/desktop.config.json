@@ -14,7 +14,16 @@
     "bundleIdentifier": "so.legend.spark.examples.kitchensink",
     "icon": "./assets/KitchenSink.icon",
     "testDriverInRelease": true,
-    "testDriverPrivateEvents": true
+    "testDriverPrivateEvents": true,
+    "infoPlist": {
+      "NSCameraUsageDescription": "The Privacy permissions screen requests camera access to show the prompt.",
+      "NSMicrophoneUsageDescription": "The Privacy permissions screen requests microphone access to show the prompt.",
+      "NSAppleEventsUsageDescription": "The Privacy permissions screen requests permission to automate Finder to show the prompt.",
+      "NSContactsUsageDescription": "The Privacy permissions screen requests contacts access to show the prompt.",
+      "NSCalendarsFullAccessUsageDescription": "The Privacy permissions screen requests calendar access to show the prompt.",
+      "NSPhotoLibraryUsageDescription": "The Privacy permissions screen requests photo library access to show the prompt.",
+      "NSLocationUsageDescription": "The Privacy permissions screen requests location access to show the prompt."
+    }
   },
   "localizations": [
     "en",

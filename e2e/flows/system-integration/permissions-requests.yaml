@@ -1,0 +1,49 @@
+appId: so.legend.spark.examples.kitchensink
+name: Permission requests prompt once, resolve the answer and reject without one (simulated)
+intent: >
+  System integration > Privacy permissions reads every kind's state on open: undetermined, or not granted for screen
+  recording and accessibility. In driver mode @legendapp/spark/permissions answers from simulated state and never
+  reaches TCC, shows a prompt or opens System Settings. A request with no simulated answer rejects
+  SparkError:E_UNAVAILABLE without a prompt. With an answer, one simulated prompt appears and the request resolves
+  it: allow is granted (authorized), deny is denied (denied), or denied (notGranted) for screen recording. A decided
+  state resolves again without a prompt, and write-only calendar access prompts once more for full access.
+checks: [SYS-PERMAVAIL-01, SYS-PERMREQ-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/permissions" }
+- assertVisible: { id: system-integration-permissions-listening }
+- assertText: { id: system-integration-permissions-availability, equals: '{"available":true}' }
+- assertText: { id: system-integration-permissions-camera-status, equals: "undetermined (notDetermined)" }
+- assertText: { id: system-integration-permissions-screenRecording-status, equals: "denied (notGranted)" }
+- assertText: { id: system-integration-permissions-accessibility-status, equals: "denied (notGranted)" }
+- assertText: { id: system-integration-permissions-automation-status, equals: "undetermined (notDetermined)" }
+- assertText: { id: system-integration-permissions-location-status, equals: "undetermined (notDetermined)" }
+- tapOn: { id: system-integration-permissions-contacts-request }
+- assertText: { id: system-integration-permissions-contacts-result, equals: SparkError:E_UNAVAILABLE }
+- assertSimulatedPermission: { kind: contacts, authorization: notDetermined, requests: 1, prompts: 0 }
+- simulatePermission: { kind: camera, answer: allow }
+- tapOn: { id: system-integration-permissions-camera-request }
+- assertText: { id: system-integration-permissions-camera-result, equals: "granted (authorized)" }
+- assertText: { id: system-integration-permissions-camera-status, equals: "granted (authorized)" }
+- assertSimulatedPermission: { kind: camera, authorization: authorized, requests: 1, prompts: 1 }
+- tapOn: { id: system-integration-permissions-camera-request }
+- assertSimulatedPermission: { kind: camera, requests: 2, prompts: 1 }
+- simulatePermission: { kind: microphone, answer: deny }
+- tapOn: { id: system-integration-permissions-microphone-request }
+- assertText: { id: system-integration-permissions-microphone-result, equals: "denied (denied)" }
+- assertSimulatedPermission: { kind: microphone, authorization: denied, prompts: 1 }
+- simulatePermission: { kind: calendar, authorization: writeOnly, answer: allow }
+- assertText: { id: system-integration-permissions-calendar-status, equals: "denied (writeOnly)" }
+- tapOn: { id: system-integration-permissions-calendar-request }
+- assertText: { id: system-integration-permissions-calendar-result, equals: "granted (authorized)" }
+- assertSimulatedPermission: { kind: calendar, authorization: authorized, prompts: 1 }
+- simulatePermission: { kind: screenRecording, answer: deny }
+- tapOn: { id: system-integration-permissions-screenRecording-request }
+- assertText: { id: system-integration-permissions-screenRecording-result, equals: "denied (notGranted)" }
+- simulatePermission: { kind: automation, answer: allow }
+- tapOn: { id: system-integration-permissions-automation-request }
+- assertText: { id: system-integration-permissions-automation-result, equals: "granted (authorized)" }
+- assertSimulatedPermission: { kind: automation, authorization: authorized, prompts: 1 }
+- takeScreenshot: permissions-requests
+- assertNotVisible: { id: system-integration-permissions-error }
