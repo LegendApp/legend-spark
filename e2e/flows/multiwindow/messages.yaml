@@ -1,0 +1,28 @@
+appId: so.legend.spark.examples.kitchensink
+name: Typed requests and broadcasts between windows
+intent: >
+  With two note windows open, the main window asks note 1 for its summary and shows the typed reply (title, route,
+  scroll offset, selected item, sidebar width, stars). A broadcast from the main window reaches both note windows and
+  the main window's own listener (3); a broadcast from note 2 reaches note 1 and the main window but not note 2 itself
+  (2), and each window shows the last word it heard and who sent it.
+checks: [MW-MSG-01, MW-MSG-02]
+tags: [multiwindow]
+timeout: 120s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/windows" }
+- assertVisible: { id: multiwindow-windows-root }
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=open,open,route-1-details,select-1-2,split-1-200,star-1,request-1", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-7 }
+- assertVisible: { id: multiwindow-windows-reply-1-details-0-2-200-1 }
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=broadcast-hello", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-1 }
+- assertVisible: { id: multiwindow-windows-delivered-3 }
+- assertVisible: { id: multiwindow-windows-heard-hello-from-main }
+- assertVisible: { id: multiwindow-note-highlight-hello-from-main, window: { title: "Note 1" } }
+- assertVisible: { id: multiwindow-note-highlight-hello-from-main, window: { title: "Note 2" } }
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=broadcast-2-bye", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-1 }
+- assertVisible: { id: multiwindow-windows-delivered-2 }
+- assertVisible: { id: multiwindow-windows-heard-bye-from-2 }
+- assertVisible: { id: multiwindow-note-highlight-bye-from-2, window: { title: "Note 1" } }
+- assertVisible: { id: multiwindow-note-highlight-hello-from-main, window: { title: "Note 2" } }

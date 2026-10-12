@@ -3,7 +3,7 @@ import type * as Runtimes from "@react-native-runtimes/core";
 import type { MenuAction, MenuRootItem } from "@legendapp/spark-native-menu";
 import type { HotkeyRouter, RoutedHotkeyHandlers } from "@legendapp/spark-commands/src/router";
 import type { HotkeyDefinition } from "@legendapp/spark-commands/src/bindings";
-import type { CloseResult, MacOSToolbarOptions, MacOSWindowEvent, WindowOpenOptions } from "../types";
+import type { CloseResult, MacOSToolbarOptions, MacOSWindowEvent, WindowBounds, WindowId, WindowOpenOptions } from "../types";
 
 type WithoutIdentity<T> = T extends unknown ? Omit<T, "id" | "component" | "props"> : never;
 export type NavigatorWindowOptions = WithoutIdentity<WindowOpenOptions>;
@@ -105,4 +105,42 @@ export interface WindowsNavigatorOptions {
   errorFallback?: ComponentType<ErrorFallbackProps>;
   /** Defaults to console.error. */
   onError?: (event: WindowErrorEvent) => void;
+}
+
+/** `tabs`: tab groups in sessions and `duplicate` with `tab`. */
+export type WindowSessionFeature = "tabs";
+/** One window of a `WindowSession`. Plain JSON, for the app to store where it likes. */
+export interface SavedWindow {
+  id: WindowId;
+  /** The navigator entry. */
+  name: string;
+  /** Null for a window opened without props. */
+  props: Record<string, unknown> | null;
+  title: string;
+  visible: boolean;
+  /** The frame, and the display's `persistentId` (null when it has none) to find it again after displays change. */
+  bounds: WindowBounds & { persistentDisplayId: string | null };
+  /** Restorable window state by restoration key. */
+  state: Record<string, unknown>;
+}
+/** A tab group of saved windows, in tab order. macOS only. */
+export interface SavedTabGroup { windowIds: WindowId[]; selectedWindowId: WindowId | null }
+/** What `getSession` saves and `restoreSession` opens again. */
+export interface WindowSession {
+  version: 1;
+  /** In opening order. */
+  windows: SavedWindow[];
+  /** Groups of two or more saved windows. Always empty on Windows. */
+  tabGroups: SavedTabGroup[];
+  keyWindowId: WindowId | null;
+}
+export interface DuplicateWindowOptions {
+  /** Shallowly merged over the source's props. */
+  props?: Record<string, unknown>;
+  /** Over the source's title and cascaded frame. */
+  options?: NavigatorWindowOptions;
+  /** Copy app-scoped values the source is attached to (restorable states only) instead of sharing them. */
+  detached?: boolean;
+  /** Open as the next tab of the source's tab group instead of a cascaded window. macOS only for now. */
+  tab?: boolean;
 }

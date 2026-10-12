@@ -383,6 +383,28 @@ static void TestDisplays(RNDesktopWindows *api) {
   assert(events.count == count);
   puts("Display observation passed");
 }
+// Window sessions (restoreSession, duplicate) reopen a window at the bounds `info` reported, with explicit
+// position and size. In driver mode too, the reopened window reports the same bounds and has the same frame,
+// fractional points included, and explicit geometry wins over a saved restoreBounds record.
+static void TestSessionFrames(RNDesktopWindows *api) {
+  driverActive = YES;
+  NSWindow *source = RealWindow(@"session-source");
+  Call(api, @"completeOpen", @{ @"id": @"session-source", @"size": @{ @"width": @640, @"height": @480 } }); assert(!failure);
+  NSRect visible = NSScreen.screens.firstObject.visibleFrame;
+  [source setFrame:NSMakeRect(NSMinX(visible) + 137.5, NSMinY(visible) + 61.25, 701.5, 433) display:NO]; Pump();
+  Call(api, @"info", @{ @"id": @"session-source" }); assert(!failure);
+  NSDictionary *bounds = SparkArgs(reply)[@"bounds"];
+  [NSUserDefaults.standardUserDefaults setObject:@{ @"version": @1, @"bounds": @{ @"displayId": bounds[@"displayId"], @"x": @0, @"y": @0, @"width": @300, @"height": @200 }, @"persistentId": @"" } forKey:SavedStateKey(@"session-copy")];
+  NSWindow *copy = RealWindow(@"session-copy");
+  Call(api, @"completeOpen", @{ @"id": @"session-copy", @"restoreBounds": @YES, @"position": @{ @"displayId": bounds[@"displayId"], @"x": bounds[@"x"], @"y": bounds[@"y"] }, @"size": @{ @"width": bounds[@"width"], @"height": bounds[@"height"] } }); assert(!failure);
+  Call(api, @"info", @{ @"id": @"session-copy" }); assert(!failure);
+  assert([SparkArgs(reply)[@"bounds"] isEqual:bounds]); assert(NSEqualRects(copy.frame, source.frame));
+  assert(!OnScreen(source) && !OnScreen(copy));
+  for (NSWindow *window in @[copy, source]) [window close];
+  Pump(); driverActive = NO;
+  [NSUserDefaults.standardUserDefaults removeObjectForKey:SavedStateKey(@"session-copy")];
+  puts("Window session frames passed");
+}
 static void TestGuards(RNDesktopWindows *api) {
   TestWindow *window = [TestWindow new]; windows[@"editor"] = (NSWindow *)window;
   __block NSString *result = nil;
@@ -417,9 +439,9 @@ int main(int argc, char **argv) { @autoreleasepool {
     @"guards": ^(RNDesktopWindows *a) { TestGuards(a); }, @"options": ^(RNDesktopWindows *a) { TestWindowOptions(a); },
     @"driver": ^(RNDesktopWindows *a) { TestDriverMode(a); }, @"tabs": ^(RNDesktopWindows *a) { TestWindowTabs(a); },
     @"shown-tabs": ^(RNDesktopWindows *a) { TestShownTabs(a); }, @"tab-restoration": ^(RNDesktopWindows *a) { TestTabRestoration(a); },
-    @"displays": ^(RNDesktopWindows *a) { TestDisplays(a); },
+    @"displays": ^(RNDesktopWindows *a) { TestDisplays(a); }, @"session-frames": ^(RNDesktopWindows *a) { TestSessionFrames(a); },
   };
   NSString *only = argc > 1 && argv[1][0] != '-' ? @(argv[1]) : nil;
   if (only && !suites[only]) { fprintf(stderr, "Unknown suite %s\n", argv[1]); return 2; }
-  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration", @"displays"]) if (!only || [only isEqual:name]) suites[name](api);
+  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration", @"displays", @"session-frames"]) if (!only || [only isEqual:name]) suites[name](api);
 } }

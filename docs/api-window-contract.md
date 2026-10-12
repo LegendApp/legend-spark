@@ -524,6 +524,97 @@ links.addEventListener('url', event => {
 });
 ```
 
+#### Messages between windows
+
+`createWindowMessages<Requests, Broadcasts>()` sends typed requests to one window and broadcasts to
+every listening window. It belongs to the shared runtime: payloads and results pass by reference in
+the one heap, nothing is serialized. Code in an isolated runtime cannot use it; it receives props.
+
+```ts
+type Requests = { summary(payload: { full: boolean }): { title: string; selection: number[] } };
+type Broadcasts = { themeChanged: { dark: boolean } };
+export const messages = createWindowMessages<Requests, Broadcasts>();
+
+messages.handle(editor, 'summary', ({ full }, from) => summarize(editor, full)); // Subscription
+const summary = await messages.request(editor, 'summary', { full: true }, { from: inspector, timeoutMs: 5000 });
+messages.addListener('themeChanged', ({ dark }, from) => apply(dark), { window: inspector });
+messages.broadcast('themeChanged', { dark: true }, { from: settings }); // returns the number of listeners called
+```
+
+- `handle(window, type, handler)`: one handler per window and type; a second rejects `E_BUSY`. It is
+  removed when the window closes. `from` is the sending window, or `null` for app code such as the
+  main window (which is not a navigator window and so cannot be a request target).
+- `request` resolves the handler's result. It rejects `E_NOT_FOUND` without a handler, `E_CLOSED`
+  when the window has closed or closes first, `E_TIMEOUT` after `timeoutMs` (1–2147483647, default
+  30000), or with the handler's own error. The handler always runs asynchronously, never inside the
+  caller's stack.
+- `broadcast` calls every listener for the type now, in registration order, except those registered
+  with `window` equal to `from`, and returns how many it called. A throwing listener is reported to
+  `console.error` and the rest still run. A listener with `window` ends when that window closes.
+- Types are names of 1–100 letters, numbers or `_ . : -`. `remove()` drops every handler and
+  listener; pending requests reject `E_CLOSED`.
+
+#### Window sessions: exact restoration, New Window
+
+A session is a plain JSON snapshot of a navigator's open windows that the app stores where it likes
+(for example Spark settings) and opens again after a quit, a crash or a logout. Per-window UI state
+(route, scroll offset, selection, split sizes) lives in a restorable window state:
+
+```ts
+const view = createWindowState({ initial: () => ({ route: '/', scrollY: 0, selected: null, split: 220 }), restorationKey: 'editor-view' });
+
+const save = async () => settings.set('session', await windows.getSession());
+windows.subscribeToSession(save); // crash-safe: after changes settle, and when a window closes
+await beforeQuit(async () => { await save(); return true; }); // @legendapp/spark/app
+const saved = await settings.get('session');
+if (saved && !(await getAppContext()).launch.safeMode) await windows.restoreSession(saved as WindowSession);
+
+await windows.duplicate(editor);                  // File ▸ New Window
+await windows.duplicate(editor, { detached: true }); // shares nothing with the source
+await windows.duplicate(editor, { tab: true });   // as the next tab (macOS)
+```
+
+- `getSession()` records each open navigator window in opening order: entry `name`, `id`, `props`
+  (null without), current `title`, `visible`, `bounds` with the display's `persistentId`
+  (`persistentDisplayId`), and `state`: the window's private value of every state created with a
+  `restorationKey`, by key. It also records tab groups of two or more saved windows (macOS) and the
+  key window. A tab of a shown group is saved as visible (AppKit reports background tabs as not
+  visible); a group with no visible window is saved as hidden, ungrouped windows. A restorable value that is not finite, acyclic JSON rejects `E_INVALID_DATA`.
+  App-scoped values (`promote`/`share`) are the app's own data and are not part of the session.
+- `restoreSession(session)` validates the whole session before opening anything: an unknown entry
+  rejects `E_NOT_FOUND`, malformed data (missing or extra keys, bad IDs or bounds, a fixed-`id` entry
+  saved under another ID) `E_INVALID_DATA`, and an ID that is already open `E_ALREADY_EXISTS`, also
+  when another open or restore takes it while this one runs. Windows reopen with their saved IDs
+  (so `restoreBounds` records and other per-ID data stay with them), props, titles and visibility, at
+  the saved frame passed as explicit `position` and `size`. A frame whose display is no longer
+  connected moves to the primary display, fitted into its work area, as the coordinate rules allow.
+  Tab groups reopen together in tab order (`tabbedWith`), then the saved tab is selected and the
+  saved key window focused. Each restorable state starts from its saved value on first access; a
+  saved key whose state does not exist yet (its module is not loaded) is kept and saved again. If a
+  window fails to open, the windows this restore opened are closed and it rejects with that failure.
+  It resolves the windows in the session's order. An app with a removed entry filters
+  `session.windows` itself first.
+- `duplicate(source, options?)` is New Window: a window of the source's entry (not a fixed-`id`
+  entry: `E_INVALID_ARGUMENT`) with its props (`options.props` merged over them), its current title,
+  and its frame cascaded by 24 logical units, kept inside the display's work area; `options.options`
+  overrides any of that. Every window state starts attached to the same app-scoped value as the
+  source, or with a JSON copy of the source's restorable private value; non-restorable private values
+  start from `initial`. `detached: true` copies attached restorable values instead, so the new window
+  shares nothing. `tab: true` opens it as the next tab of the source's group instead of cascading.
+  An attached value released before the duplicate first reads it rejects `E_NOT_FOUND` there rather
+  than starting from `initial`.
+- `subscribeToSession(listener)` notifies when the session may have changed: a window opened,
+  closed, moved, resized, was shown or hidden, was retitled with `setWindowOptions`, or changed tab
+  group, the key window changed, or a restorable value changed. Changes coalesce on a 250 ms
+  trailing timer, so a scroll or live resize notifies at most four times a second; a window closing
+  notifies at once. The navigator has no quit hook: save from `beforeQuit` too. Frames, visibility and tab groups
+  are observed natively only while it has listeners.
+- `getWindowSessionAvailability(feature?)` is the windows availability; `'tabs'` (tab groups in
+  sessions, `duplicate` with `tab`) is macOS only for now. On Windows, sessions carry no tab groups,
+  and restoring one with tab groups or `tab: true` rejects `E_UNSUPPORTED_OPTION` before opening
+  anything (window tabs on Windows: #295).
+- Driver mode applies explicit frames, so restored and duplicated frames are exact there too.
+
 #### Undo, keyboard, menus and toolbar per window
 
 - Every instance owns an undo stack (`instance.undo`: `push({ label, undo, redo })`, `undo()`,
@@ -557,6 +648,9 @@ isolated runtime when that matters.
 
 The navigator, state, undo, menu, hotkey, toolbar and error-boundary behavior is implemented in
 shared JavaScript and covered by unit tests against mocked native modules
-(`tests/windows-navigator.test.ts`, including the original navigator contract; `tests/windows-navigator-menuless.test.ts` without the menu module). The Kitchen Sink `multiwindow` screen and its flows
-(`e2e/flows/multiwindow/`) exercise it, but no flow backend exists yet, so native acceptance on
-macOS and Windows is pending. The commands router behind window hotkeys requires macOS.
+(`tests/windows-navigator.test.ts`, including the original navigator contract; `tests/windows-navigator-menuless.test.ts` without the menu module).
+Messages and sessions are covered the same way by `tests/windows-session.test.ts`;
+`tests/window.native.mm` checks that a window reopened at the bounds another window reported has the same
+bounds and frame in driver mode. The `multiwindow` session-restore, session-relaunch, duplicate and messages
+flows run on macOS with the in-app driver (`--backend driver`). The other `multiwindow` flows do not
+run on the driver yet (most use `focusWindow`, which needs a black-box backend); nothing has run on Windows yet (#51). The commands router behind window hotkeys requires macOS.

@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { titleChanged } from "./title-changes";
 import { SparkError, asyncRegistration, nativeError, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
@@ -79,6 +80,7 @@ export async function setWindowOptions(id: string, options: WindowUpdateOptions)
   const appKit = appKitOptions(snapshot.macos);
   if (!snapshot.macos || Object.keys(snapshot).some(key => key !== "macos") || snapshot.macos.titleBar || Object.keys(snapshot.macos).some(key => COMMON_MACOS.includes(key))) {
     await windowCommand("options", { id, options: snapshot });
+    if (snapshot.title !== undefined) titleChanged(id);
   }
   if (appKit) await updateMacOSWindow(id, appKit);
 }

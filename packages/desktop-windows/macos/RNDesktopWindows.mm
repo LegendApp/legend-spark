@@ -27,7 +27,9 @@ static void Hide(NSWindow *window) {
   if (window.sheetParent) [window.sheetParent endSheet:window];
   [window orderOut:nil];
 }
-static BOOL Visible(NSWindow *window) { return (SparkTestDriverActive() ? SparkDriverShown(window) : window.visible) && !NSApp.hidden; }
+// Driver mode reports what the app did (docs/test-driver.md): a driven app runs with no presence, which AppKit
+// reports as hidden.
+static BOOL Visible(NSWindow *window) { return SparkTestDriverActive() ? SparkDriverShown(window) : window.visible && !NSApp.hidden; }
 static char SimpleFullscreenKey, TrafficLightKey, MaterialKey;
 static BOOL InSimpleFullscreen(NSWindow *window) { return objc_getAssociatedObject(window, &SimpleFullscreenKey) != nil; }
 static void SetSimpleFullscreen(NSWindow *window, BOOL enabled);

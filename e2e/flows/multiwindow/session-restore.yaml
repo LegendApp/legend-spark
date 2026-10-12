@@ -1,0 +1,44 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window sessions restore frames, per-window view state and tab groups
+intent: >
+  Multiwindow > Multiwindow runs session steps from spark-ks://multiwindow/windows?run=… deep links. Note 1 gets the
+  details route, a scroll offset, a selected item, a sidebar width and an explicit frame; note 3 opens as a New Window
+  tab of note 2. The main window's readout is read back with getSession(). After saving the session, closing every note
+  window and restoring it, the readout and each note window show the same frames, routes, scroll offsets, selections,
+  sidebar widths and tab group, and the note windows' own views report the restored values. Driver mode never shows a
+  window; tab groups regroup off screen (docs/test-driver.md).
+checks: [MW-RESTORE-01, MW-RESTORE-03]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 180s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/windows" }
+- assertVisible: { id: multiwindow-windows-root }
+- assertVisible: { id: multiwindow-windows-session-tabs-available }
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=open,open,route-1-details,scroll-1-240,select-1-3,split-1-220,frame-1-120-140-720-500,select-2-5,tab-2", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-9 }
+- assertVisible: { id: multiwindow-windows-session-count-3 }
+- assertVisible: { id: multiwindow-windows-session-1-details-scroll-240-item-3-split-220 }
+- assertVisible: { id: multiwindow-windows-frame-1-120-140-720-500 }
+- assertVisible: { id: multiwindow-windows-tabs-2-3-selected-3 }
+- assertVisible: { id: multiwindow-note-scroll-240, window: { title: "Note 1" } }
+- assertVisible: { id: multiwindow-note-split-220, window: { title: "Note 1" } }
+# Save, close every note window, restore.
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=save,close", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-2 }
+- assertVisible: { id: multiwindow-windows-saved-3 }
+- assertVisible: { id: multiwindow-windows-session-count-0 }
+- launchApp: { openUrl: "spark-ks://multiwindow/windows?run=restore", stopApp: false }
+- assertVisible: { id: multiwindow-windows-steps-1 }
+- assertVisible: { id: multiwindow-windows-session-count-3 }
+- assertVisible: { id: multiwindow-windows-session-1-details-scroll-240-item-3-split-220 }
+- assertVisible: { id: multiwindow-windows-frame-1-120-140-720-500 }
+- assertVisible: { id: multiwindow-windows-session-2-document-scroll-0-item-5-split-160 }
+- assertVisible: { id: multiwindow-windows-session-3-document-scroll-0-item-5-split-160 }
+- assertVisible: { id: multiwindow-windows-tabs-2-3-selected-3 }
+- assertVisible: { id: multiwindow-note-route-is-details, window: { title: "Note 1" } }
+- assertVisible: { id: multiwindow-note-scroll-240, window: { title: "Note 1" } }
+- assertVisible: { id: multiwindow-note-selected-3, window: { title: "Note 1" } }
+- assertVisible: { id: multiwindow-note-split-220, window: { title: "Note 1" } }
+- assertVisible: { id: multiwindow-note-selected-5, window: { title: "Note 3" } }
+- assertNotVisible: { id: multiwindow-windows-session-error-E_ALREADY_EXISTS }

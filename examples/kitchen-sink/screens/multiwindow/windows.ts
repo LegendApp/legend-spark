@@ -2,13 +2,13 @@ import { useSyncExternalStore } from "react";
 import * as Runtimes from "@react-native-runtimes/core";
 import { createWindowsNavigator } from "@legendapp/spark/windows";
 import { IsolatedPanel } from "./IsolatedPanel";
-import { addStar, reportWindowError } from "./state";
+import { addStar, adoptNote, nextNoteTitle, reportWindowError } from "./state";
 import { CrashWindow, NoteWindow, SettingsWindow } from "./WindowContents";
 
 export const windows = createWindowsNavigator({
   note: {
     component: NoteWindow,
-    options: { size: { width: 520, height: 420 } },
+    options: { size: { width: 680, height: 480 } },
     undoMenu: true,
     menus: () => [{ type: "submenu", id: "multiwindow-note", label: "Note", items: [{ type: "action", id: "multiwindow-note-star", label: "Add Star" }] }],
     onMenuAction: (action, window) => { if (action.itemId === "multiwindow-note-star") addStar(window); },
@@ -18,10 +18,11 @@ export const windows = createWindowsNavigator({
   plugin: { component: IsolatedPanel, runtime: { isolated: "ks-plugins", module: Runtimes }, options: { title: "Isolated runtime", size: { width: 520, height: 360 } } },
 }, { onError: reportWindowError });
 
-let notes = 0;
-export function openNote() {
-  const title = `Note ${++notes}`;
-  return windows.openInstance("note", { props: { title }, options: { title } });
+export async function openNote() {
+  const title = nextNoteTitle();
+  const window = await windows.openInstance("note", { props: { title }, options: { title } });
+  adoptNote(window, title);
+  return window;
 }
 
 // One snapshot per navigator change, updated before React's subscribers run.
