@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: Haptic feedback call path
+intent: >
+  Each haptic pattern button calls performHapticFeedback and shows resolved once AppKit has the request.
+  Feedback plays only on a Force Touch trackpad, which macOS cannot detect, so this checks the call path, not
+  that anything played; tests/pointer.native.mm checks what reaches AppKit's performer. An unknown pattern
+  rejects SparkError E_INVALID_ARGUMENT.
+checks: [PTR-HAPTIC-01]
+tags: [pointer-trackpad]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://pointer-trackpad/pointer" }
+- extendedWaitUntil: { visible: { id: pointer-trackpad-pointer-root }, timeout: 10s }
+- tapOn: { id: pointer-trackpad-pointer-haptic-generic }
+- assertText: { id: pointer-trackpad-pointer-haptic-generic-result, equals: resolved }
+- tapOn: { id: pointer-trackpad-pointer-haptic-alignment }
+- assertText: { id: pointer-trackpad-pointer-haptic-alignment-result, equals: resolved }
+- tapOn: { id: pointer-trackpad-pointer-haptic-levelChange }
+- assertText: { id: pointer-trackpad-pointer-haptic-levelChange-result, equals: resolved }
+- tapOn: { id: pointer-trackpad-pointer-haptic-invalid }
+- assertText: { id: pointer-trackpad-pointer-haptic-invalid-result, equals: SparkError:E_INVALID_ARGUMENT }

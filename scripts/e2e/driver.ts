@@ -17,6 +17,16 @@ export type InputTarget = { testID: string; offset?: { x: number; y: number } } 
 export type Modifier = "cmd" | "ctrl" | "option" | "shift" | "fn";
 /** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
 export type SimulatedSystemEvent = { type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string };
+export type MouseButton = "left" | "right" | "back" | "forward";
+/** A trackpad gesture (docs/test-driver.md#input). `rotation` is AppKit's: degrees, counterclockwise positive. */
+export type Gesture =
+  | { kind: "magnify"; magnification: number; steps?: number }
+  | { kind: "rotate"; rotation: number; steps?: number }
+  | { kind: "swipe"; direction: "left" | "right" | "up" | "down" }
+  | { kind: "smartMagnify" }
+  | { kind: "pressure"; stage?: 1 | 2 };
+/** The cursor AppKit would show (docs/test-driver.md#cursor). */
+export type DriverCursor = { cursor: string; hiddenUntilMoved: boolean };
 /** One entry of `elements`: a visible view with a testID, or an accessibility element, in waitFor frame coordinates. */
 export type DriverElement = { key: string; parent?: string; window: string; id?: string; role?: string; label?: string; text?: string; value?: string; frame: Frame };
 export type DriverWindowInfo = { id: string; title: string; key: boolean; main: boolean; frame: Frame };
@@ -196,8 +206,8 @@ export class Driver {
   async stopFrames() { return body<FrameReport>(await this.request({ command: "stopFrames" }, 10000)); }
   /** Reports `displays` (DisplayDetails) through @legendapp/spark/displays instead of the real ones; null restores them (docs/displays.md#simulated-displays). */
   async simulateDisplays(displays: readonly object[] | null) { await this.request({ command: "simulateDisplays", displays }, 10000); }
-  /** Clicks a target in-process (docs/test-driver.md#input): `clickCount` 1-3, left or right button. */
-  async tap(target: InputTarget, options: { button?: "left" | "right"; clickCount?: number; modifiers?: Modifier[] } = {}) {
+  /** Clicks a target in-process (docs/test-driver.md#input): `clickCount` 1-3, left, right, back or forward button. */
+  async tap(target: InputTarget, options: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] } = {}) {
     await this.request({ command: "tap", ...target, ...options }, 10000);
   }
   /** Moves the driver's pointer onto a target: tracking-area enter and exit events and a mouse move. */
@@ -211,6 +221,15 @@ export class Driver {
   /** Scrolls over a target, positive toward the end of the content: points with `precise`, else lines. */
   async scroll(target: InputTarget, delta: { deltaX?: number; deltaY?: number; precise?: boolean }) {
     await this.request({ command: "scroll", ...target, ...delta }, 10000);
+  }
+  /** Performs a trackpad gesture over a target, after moving the driver's pointer there. */
+  async gesture(target: InputTarget, gesture: Gesture, modifiers?: Modifier[]) {
+    await this.request({ command: "gesture", ...target, ...gesture, ...(modifiers ? { modifiers } : {}) }, 10000);
+  }
+  /** The cursor AppKit would show over a target, or at the driver's pointer; the pointer does not move. */
+  async cursor(target?: InputTarget): Promise<DriverCursor> {
+    const reply = await this.request({ command: "cursor", ...target }, 10000);
+    return { cursor: reply.cursor as string, hiddenUntilMoved: reply.hiddenUntilMoved as boolean };
   }
   /** Presses one key (a character, or AppKit's function-key character such as "\uf700") in the window of the last pointer input, or `window`. */
   async pressKey(key: string, modifiers: Modifier[] = [], window?: DriverWindow) {

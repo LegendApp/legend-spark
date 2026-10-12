@@ -80,6 +80,7 @@
     "./ui/popover",
     "./ui/tab-view",
     "./displays",
-    "./logging"
+    "./logging",
+    "./pointer"
   ]
 }

@@ -1,0 +1,33 @@
+appId: so.legend.spark.examples.kitchensink
+name: Trackpad gestures, Force Touch pressure and the back and forward buttons
+intent: >
+  Over the canvas PointerView, a pinch to 1.5 scales the card to 1.50, a 30° clockwise rotation turns it by 30, a
+  three-finger swipe left reports left, and a two-finger double tap counts a smart zoom (and toggles the scale). A
+  force click reaches pressure stage 2 once and ends at stage 0. The back and forward mouse buttons report back and
+  forward. The driver delivers these as AppKit's own trackpad and mouse NSEvents in the app (docs/test-driver.md#input);
+  real trackpad input needs the black-box backend.
+checks: [PTR-GESTURE-01, PTR-PRESSURE-01, PTR-BUTTONS-01]
+tags: [pointer-trackpad]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://pointer-trackpad/pointer" }
+- extendedWaitUntil: { visible: { id: pointer-trackpad-pointer-root }, timeout: 10s }
+- assertText: { id: pointer-trackpad-pointer-scale, equals: "1.00" }
+- pinch: { on: { id: pointer-trackpad-pointer-canvas }, scale: 1.5 }
+- assertText: { id: pointer-trackpad-pointer-scale, equals: "1.50" }
+- rotate: { on: { id: pointer-trackpad-pointer-canvas }, degrees: 30 }
+- assertText: { id: pointer-trackpad-pointer-rotation, equals: "30" }
+- swipe: { from: { id: pointer-trackpad-pointer-canvas }, direction: left, fingers: 3 }
+- assertText: { id: pointer-trackpad-pointer-swipe, equals: left }
+- smartZoomOn: { id: pointer-trackpad-pointer-canvas }
+- assertText: { id: pointer-trackpad-pointer-smart-zooms, equals: "1" }
+- forceClickOn: { id: pointer-trackpad-pointer-canvas }
+- assertText: { id: pointer-trackpad-pointer-force-clicks, equals: "1" }
+- assertText: { id: pointer-trackpad-pointer-stage, equals: "0" }
+- mouseButton: { button: back, on: { id: pointer-trackpad-pointer-canvas } }
+- assertText: { id: pointer-trackpad-pointer-button, equals: back }
+- mouseButton: { button: forward, on: { id: pointer-trackpad-pointer-canvas } }
+- assertText: { id: pointer-trackpad-pointer-button, equals: forward }
+- assertNotVisible: { id: pointer-trackpad-pointer-error }
+- tapOn: { id: pointer-trackpad-pointer-reset }
+- assertText: { id: pointer-trackpad-pointer-scale, equals: "1.00" }

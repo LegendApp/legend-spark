@@ -80,7 +80,8 @@
     "./motion": "./motion.ts",
     "./printing": "./printing.ts",
     "./displays": "./displays.ts",
-    "./logging": "./logging.ts"
+    "./logging": "./logging.ts",
+    "./pointer": "./pointer.ts"
   },
   "files": [
     "*.ts",

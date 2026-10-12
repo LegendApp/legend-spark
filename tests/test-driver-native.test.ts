@@ -1,27 +1,32 @@
 import { beforeAll, afterAll, expect, test } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { outcome, run, runOk } from "./subprocess.ts";
 
 const darwin = process.platform === "darwin";
 const root = path.resolve(import.meta.dirname, "..");
 const native = path.join(root, "packages/desktop-app/macos");
-const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverFrames.mm"].map(file => path.join(native, file));
-const compile = (sources: string[], output: string, include: string[] = []) => runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore",
-  "-I", native, ...include.flatMap(directory => ["-I", directory]), ...sources, "-o", output], { timeout: 120_000 });
-let directory = "", harness = "", windowState = "";
+const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm"].map(file => path.join(native, file));
+const compile = (sources: string[], output: string, include: string[] = [], flags: string[] = []) => runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore",
+  ...flags, "-I", native, ...include.flatMap(directory => ["-I", directory]), ...sources, "-o", output], { timeout: 120_000 });
+// Gesture and extra mouse button synthesis use private CoreGraphics functions, compiled only on request
+// (docs/test-driver.md#private-event-functions). The harness opts in; `withoutPrivateEvents` is an app that does not.
+const PRIVATE_EVENTS = ["-DSPARK_TEST_DRIVER_PRIVATE_EVENTS=1"];
+let directory = "", harness = "", withoutPrivateEvents = "", windowState = "";
 // Unix socket paths are limited to 104 bytes, so run directories live under /tmp.
 beforeAll(async () => {
   if (!darwin) return;
   directory = mkdtempSync("/tmp/spark-driver-test-");
   harness = path.join(directory, "test-driver");
+  withoutPrivateEvents = path.join(directory, "test-driver-without-private-events");
   // SparkWindow.mm includes SparkDesktop.h, which needs one React Native type.
   const shim = path.join(directory, "include/React");
   mkdirSync(shim, { recursive: true });
   writeFileSync(path.join(shim, "RCTBridgeModule.h"), "typedef void (^RCTPromiseRejectBlock)(NSString *code, NSString *message, NSError *error);\n");
   windowState = path.join(directory, "driver-window-state");
   await Promise.all([
-    compile([...driverSources, path.join(root, "tests/test-driver.native.mm")], harness),
+    compile([...driverSources, path.join(root, "tests/test-driver.native.mm")], harness, [], PRIVATE_EVENTS),
+    compile([...driverSources, path.join(root, "tests/test-driver.native.mm")], withoutPrivateEvents, [], ["-O2"]),
     compile([...driverSources, path.join(native, "SparkWindow.mm"), path.join(root, "tests/driver-window-state.native.mm")], windowState, [path.join(directory, "include")]),
   ]);
 }, 240_000);
@@ -63,6 +68,19 @@ test.skipIf(!darwin)("driver mode keeps the configured window size although a fr
 }, 90_000);
 test.skipIf(!darwin)("input: clicks, drags, hover, scroll, typing and keys reach real AppKit controls in-process without activating, and modal loops do not block the session", async () => {
   await passes("input");
+}, 90_000);
+test.skipIf(!darwin)("without SPARK_TEST_DRIVER_PRIVATE_EVENTS the binary never names the private event functions, and gestures and extra buttons fail typed", async () => {
+  const names = ["CGEventSetWindowLocation", "CGEventGetWindowLocation"];
+  const off = readFileSync(withoutPrivateEvents).toString("latin1"), on = readFileSync(harness).toString("latin1");
+  for (const name of names) {
+    expect(off.includes(name), `${name} in a build without the flag`).toBe(false);
+    expect(on.includes(name), `${name} in the opted-in build`).toBe(true);
+  }
+  const result = await run(withoutPrivateEvents, ["pointer-off", directory], { timeout: 60_000 });
+  expect(result.stdout, outcome(result)).toContain("pointer-off passed");
+}, 90_000);
+test.skipIf(!darwin)("pointer: gestures, pressure, back and forward buttons and cursor queries in-process; cursor hiding is recorded, never applied", async () => {
+  await passes("pointer");
 }, 90_000);
 test.skipIf(!darwin)("module hooks: start and input observers, render wrappers around captures", async () => {
   await passes("hooks");

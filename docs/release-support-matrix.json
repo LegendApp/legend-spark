@@ -3999,6 +3999,66 @@
       }
     },
     {
+      "path": "./pointer",
+      "sourceTarget": "./pointer.ts",
+      "kind": "runtime-api",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-ui",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/pointer.test.ts",
+          "tests/pointer-native.test.ts"
+        ],
+        "portableCommand": "bun run test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; docs/desktop-manual-acceptance.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos on Intel; docs/macos-intel.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "Typed unsupported: getPointerAvailability() reports unsupported-platform, hideCursorUntilMoved and performHapticFeedback reject E_UNSUPPORTED_PLATFORM and PointerView throws it; Windows tracked in #331."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "Typed unsupported: getPointerAvailability() reports unsupported-platform, hideCursorUntilMoved and performHapticFeedback reject E_UNSUPPORTED_PLATFORM and PointerView throws it; Windows tracked in #331."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "macOS-only provider; other targets are outside this API contract."
+          }
+        }
+      },
+      "providerSources": [
+        "packages/ui/package.json"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/ui/macos/pointer/"
+        ],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      }
+    },
+    {
       "path": "./ui/popover",
       "sourceTarget": "./ui-popover.ts",
       "kind": "ui",

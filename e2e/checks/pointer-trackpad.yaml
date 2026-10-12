@@ -1,0 +1,69 @@
+area: pointer-trackpad
+prefix: PTR
+checks:
+  PTR-AVAIL-01:
+    title: getPointerAvailability reports the pointer module and each feature (custom cursors, hide cursor, gestures, pressure, mouse buttons, haptics) as available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#83 PTR.api"
+    covers:
+      - ./pointer#getPointerAvailability
+      - ./pointer#getPointerAvailability().available
+  PTR-UNSUP-01:
+    title: On Windows every pointer feature reports unsupported-platform, and hideCursorUntilMoved and performHapticFeedback reject SparkError E_UNSUPPORTED_PLATFORM (Windows implementation #331)
+    platforms: [windows]
+    blocking: true
+    spec: "#83 PTR.api; #331"
+    covers:
+      - ./pointer#getPointerAvailability
+      - ./pointer#hideCursorUntilMoved
+      - ./pointer#performHapticFeedback
+  PTR-CURSOR-01:
+    title: The cursor style shows AppKit's cursors (pointer, text, crosshair, grab, not-allowed), and a PointerView's custom SF Symbol cursor covers the view while a child's own cursor wins inside it
+    platforms: [macos]
+    blocking: true
+    spec: "#83 PTR.api"
+    covers:
+      - ./pointer#PointerView
+  PTR-HIDE-01:
+    title: Typing in a text input hides the cursor until the pointer moves, hideCursorUntilMoved does the same, and moving the pointer shows it again; the real cursor is never hidden in driver mode
+    platforms: [macos]
+    blocking: true
+    spec: "#83 PTR.api"
+    covers:
+      - ./pointer#hideCursorUntilMoved
+  PTR-GESTURE-01:
+    title: Over a PointerView, a pinch reports the scale change, a two-finger rotation reports clockwise degrees, a three-finger swipe its direction, and a two-finger double tap a smart zoom
+    platforms: [macos]
+    blocking: true
+    spec: "#83 PTR.api"
+    covers:
+      - ./pointer#PointerView
+  PTR-PRESSURE-01:
+    title: A force click over a PointerView reports Force Touch pressure through stage 1 into stage 2 and back to 0
+    platforms: [macos]
+    blocking: true
+    spec: "#83 PTR.api"
+    covers:
+      - ./pointer#PointerView
+  PTR-BUTTONS-01:
+    title: The back and forward mouse buttons over a PointerView report back and forward
+    platforms: [macos]
+    blocking: true
+    spec: "#83 PTR.api"
+    covers:
+      - ./pointer#PointerView
+  PTR-HAPTIC-01:
+    title: performHapticFeedback resolves for the generic, alignment and level change patterns (the call path; physical feedback needs a Force Touch trackpad and is not asserted), and an unknown pattern rejects SparkError E_INVALID_ARGUMENT
+    platforms: [macos]
+    blocking: true
+    spec: "#83 PTR.api"
+    covers:
+      - ./pointer#performHapticFeedback
+  PTR-VISUAL-01:
+    title: The Pointer screen matches its approved goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #83"
+    covers:
+      - ./pointer

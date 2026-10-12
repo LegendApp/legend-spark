@@ -12,6 +12,12 @@ export interface MacOSConfiguration {
   buildNumber?: string;
   infoPlist?: Record<string, JsonValue>;
   entitlements?: Record<string, JsonValue>;
+  /**
+   * Compile the test driver's trackpad gesture and extra mouse button synthesis, which uses private CoreGraphics
+   * event functions (SPARK_TEST_DRIVER_PRIVATE_EVENTS). Default false: the functions' names are then absent from the
+   * binary, as App Store review requires. Test builds only (docs/test-driver.md#private-event-functions).
+   */
+  testDriverPrivateEvents?: boolean;
   lifecycle?: MacOSLifecycle;
 }
 export interface SigningConfiguration {

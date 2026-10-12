@@ -12,6 +12,7 @@
   },
   "macos": {
     "bundleIdentifier": "so.legend.spark.examples.kitchensink",
+    "testDriverPrivateEvents": true,
     "infoPlist": {
       "CFBundleLocalizations": [
         "en",

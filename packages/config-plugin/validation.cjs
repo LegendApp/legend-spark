@@ -9,9 +9,10 @@ function validatePlatforms(value) {
 }
 function validateOwned(value) {
   if (value.macos !== undefined) {
-    object(value.macos, "macos", ["bundleIdentifier", "buildNumber", "entitlements", "infoPlist", "lifecycle"]);
+    object(value.macos, "macos", ["bundleIdentifier", "buildNumber", "entitlements", "infoPlist", "testDriverPrivateEvents", "lifecycle"]);
     if (typeof value.macos.bundleIdentifier !== "string" || !/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(value.macos.bundleIdentifier)) throw new Error("macos.bundleIdentifier must be a reverse-DNS identifier");
     if (value.macos.buildNumber !== undefined && typeof value.macos.buildNumber !== "string") throw new Error("macos.buildNumber must be a string");
+    if (value.macos.testDriverPrivateEvents !== undefined && typeof value.macos.testDriverPrivateEvents !== "boolean") throw new Error("macos.testDriverPrivateEvents must be a boolean");
     for (const key of ["entitlements", "infoPlist"]) if (value.macos[key] !== undefined) object(value.macos[key], `macos.${key}`);
     require("./lifecycle.cjs").validateLifecycle(value.macos.lifecycle);
   }

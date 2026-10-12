@@ -299,6 +299,19 @@ getStartupTiming(): StartupTiming;
 
 The hang watchdog is application-owned: a controller with `remove()`, no hook. Reports arrive after the main thread recovers, because events reach JavaScript through it; each watchdog has its own thread and threshold, and nothing runs while none is started. `simulateHang` blocks the main thread on purpose so apps can check their reporting end to end. macOS only for now; Windows reports `unsupported-platform` (#304). Details: [diagnostics](diagnostics.md).
 
+### Pointer
+
+```ts
+// /pointer
+getPointerAvailability(feature?: "customCursors" | "hideCursorUntilMoved" | "gestures" | "pressure" | "mouseButtons" | "haptics"): Availability;
+hideCursorUntilMoved(): Promise<void>;
+performHapticFeedback(pattern: "generic" | "alignment" | "levelChange", options?: { performanceTime?: "default" | "now" | "drawCompleted" }): Promise<void>;
+<PointerView customCursor={{ type: "symbol", name } | { type: "image", path, hotSpot }}
+  onMagnify onRotate onSwipe onSmartMagnify onPressure onMouseButton onError {...viewProps} />
+```
+
+Standard cursors stay React Native's `cursor` style; `PointerView` adds custom cursors and the input React Native views do not report (trackpad gestures, Force Touch pressure, back and forward buttons), with typed events in view points. Rotation is clockwise degrees, as React Native transforms. The view is the subject because AppKit delivers these events to the view under the pointer; handlers it lacks pass on through the responder chain. Availability reports the API path: macOS cannot tell whether a Force Touch trackpad is present, so haptics resolve without playing on other hardware. Details: [pointer](pointer.md).
+
 ### Settings, persistence, and secure storage
 
 ```ts

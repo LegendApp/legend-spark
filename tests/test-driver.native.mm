@@ -262,6 +262,47 @@ static NSWindow *MakeInputWindow(void) {
   NSApp.mainMenu = menu;
   return window;
 }
+// Gesture and cursor targets (mode "pointer").
+static NSMutableArray<NSString *> *gestures;
+static NSMutableSet<NSValue *> *gestureLocations; // locationInWindow of every gesture and pressure event.
+@interface GestureRecorder : NSView
+@end
+@implementation GestureRecorder
+- (BOOL)acceptsFirstMouse:(NSEvent *)event { return YES; }
+- (void)mouseDown:(NSEvent *)event { [gestures addObject:@"down"]; }
+- (void)mouseUp:(NSEvent *)event { [gestures addObject:@"up"]; }
+- (void)otherMouseDown:(NSEvent *)event { [gestures addObject:[NSString stringWithFormat:@"otherDown %ld", (long)event.buttonNumber]]; }
+- (void)otherMouseUp:(NSEvent *)event { [gestures addObject:[NSString stringWithFormat:@"otherUp %ld", (long)event.buttonNumber]]; }
+- (void)magnifyWithEvent:(NSEvent *)event { [gestureLocations addObject:[NSValue valueWithPoint:event.locationInWindow]]; [gestures addObject:[NSString stringWithFormat:@"magnify %g %lu", event.magnification, (unsigned long)event.phase]]; }
+- (void)rotateWithEvent:(NSEvent *)event { [gestureLocations addObject:[NSValue valueWithPoint:event.locationInWindow]]; [gestures addObject:[NSString stringWithFormat:@"rotate %g %lu", event.rotation, (unsigned long)event.phase]]; }
+- (void)swipeWithEvent:(NSEvent *)event { [gestureLocations addObject:[NSValue valueWithPoint:event.locationInWindow]]; [gestures addObject:[NSString stringWithFormat:@"swipe %g %g", event.deltaX, event.deltaY]]; }
+- (void)smartMagnifyWithEvent:(NSEvent *)event { [gestureLocations addObject:[NSValue valueWithPoint:event.locationInWindow]]; [gestures addObject:@"smartMagnify"]; }
+- (void)pressureChangeWithEvent:(NSEvent *)event { [gestureLocations addObject:[NSValue valueWithPoint:event.locationInWindow]]; [gestures addObject:[NSString stringWithFormat:@"pressure %ld %g %g", (long)event.stage, event.pressure, event.stageTransition]]; }
+- (void)resetCursorRects { [self addCursorRect:self.bounds cursor:NSCursor.pointingHandCursor]; }
+@end
+// Sets its cursor from -cursorUpdate:, as views with an NSTrackingCursorUpdate area do.
+@interface UpdateCursorView : NSView
+@end
+@implementation UpdateCursorView
+- (void)updateTrackingAreas {
+  [super updateTrackingAreas];
+  if (!self.trackingAreas.count) [self addTrackingArea:[[NSTrackingArea alloc] initWithRect:NSZeroRect options:NSTrackingCursorUpdate | NSTrackingActiveAlways | NSTrackingInVisibleRect owner:self userInfo:nil]];
+}
+- (void)cursorUpdate:(NSEvent *)event { [NSCursor.crosshairCursor set]; }
+@end
+static NSWindow *MakePointerWindow(void) {
+  gestures = [NSMutableArray new]; gestureLocations = [NSMutableSet new];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
+  window.identifier = @"pointer"; window.releasedWhenClosed = NO;
+  auto add = ^(NSView *view, NSString *testID, NSRect frame) { view.frame = frame; view.accessibilityIdentifier = testID; [window.contentView addSubview:view]; };
+  add([GestureRecorder new], @"pointer-gestures", NSMakeRect(20, 150, 150, 120));
+  UpdateCursorView *update = [UpdateCursorView new];
+  add(update, @"pointer-update", NSMakeRect(200, 150, 150, 120));
+  [update updateTrackingAreas];
+  add([NSTextField textFieldWithString:@""], @"pointer-field", NSMakeRect(20, 100, 200, 24));
+  add([NSView new], @"pointer-plain", NSMakeRect(20, 20, 100, 60));
+  return window;
+}
 static id OnMain(id (^read)(void)) { __block id value; dispatch_sync(dispatch_get_main_queue(), ^{ value = read(); }); return value; }
 
 // Samples the center of a content-view rect (points, y-up) in a PNG written by the driver.
@@ -550,6 +591,89 @@ int main(int argc, char **argv) { @autoreleasepool {
       Check([Code(Request(fd, @{ @"command": @"pressKey", @"key": @"a", @"modifiers": @[@"hyper"] })) isEqual:@"E_INVALID_ARGUMENT"], @"unknown modifiers fail");
       Check([Code(Request(fd, @{ @"command": @"scroll", @"testID": @"input-scroll" })) isEqual:@"E_INVALID_ARGUMENT"], @"scroll needs a delta");
       Check([OnMain(^{ return @(!NSApp.isActive && !NSApp.keyWindow && NSApp.activationPolicy == NSApplicationActivationPolicyProhibited); }) boolValue], @"input never activates the app");
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
+  else if ([mode isEqual:@"pointer"]) {
+    NSWindow *pointerWindow = MakePointerWindow();
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+      auto ok = ^NSDictionary *(NSDictionary *request) {
+        NSDictionary *reply = Request(fd, request);
+        Check([reply[@"ok"] boolValue], [NSString stringWithFormat:@"%@: %@", request, reply]);
+        return reply;
+      };
+      auto take = ^NSArray *{ return OnMain(^{ NSArray *seen = [gestures copy]; [gestures removeAllObjects]; return seen; }); };
+      auto expect = ^(NSArray *expected, NSString *what) { NSArray *seen = take(); Check([seen isEqual:expected], [NSString stringWithFormat:@"%@ (%@)", what, seen]); };
+      // The cursor AppKit would show, from cursor rects and cursor updates, without changing the real one. (First: pointer input orders the window in, where its text field becomes first responder.)
+      auto cursor = ^NSDictionary *(NSString *testID) { return ok(testID ? @{ @"command": @"cursor", @"testID": testID } : @{ @"command": @"cursor" }); };
+      Check([cursor(@"pointer-gestures")[@"cursor"] isEqual:@"pointingHand"], @"a cursor rect");
+      Check([cursor(@"pointer-update")[@"cursor"] isEqual:@"crosshair"], @"a cursor set from -cursorUpdate:");
+      Check([cursor(@"pointer-field")[@"cursor"] isEqual:@"IBeam"], @"a text field's I-beam");
+      Check([cursor(@"pointer-plain")[@"cursor"] isEqual:@"arrow"], @"the arrow elsewhere");
+      Check([cursor(@"pointer-gestures")[@"cursor"] isEqual:@"pointingHand"], @"asking again finds the same cursor rect");
+      NSDictionary *target = @{ @"testID": @"pointer-gestures" };
+      auto gesture = ^(NSDictionary *fields) { NSMutableDictionary *request = [target mutableCopy]; request[@"command"] = @"gesture"; [request addEntriesFromDictionary:fields]; ok(request); };
+      gesture(@{ @"kind": @"magnify", @"magnification": @0.5, @"steps": @2 });
+      expect(@[@"magnify 0 1", @"magnify 0.25 4", @"magnify 0.25 4", @"magnify 0 8"], @"magnify begins, changes in equal steps and ends at the view under the pointer");
+      gesture(@{ @"kind": @"rotate", @"rotation": @-30, @"steps": @3 });
+      expect(@[@"rotate 0 1", @"rotate -10 4", @"rotate -10 4", @"rotate -10 4", @"rotate 0 8"], @"rotate in degrees, counterclockwise positive");
+      for (NSArray *swipe in @[@[@"left", @"swipe 1 0"], @[@"right", @"swipe -1 0"], @[@"up", @"swipe 0 1"], @[@"down", @"swipe 0 -1"]]) {
+        gesture(@{ @"kind": @"swipe", @"direction": swipe[0] });
+        expect(@[swipe[1]], [NSString stringWithFormat:@"a %@ swipe has AppKit's deltas (left and up are positive)", swipe[0]]);
+      }
+      gesture(@{ @"kind": @"smartMagnify" });
+      expect(@[@"smartMagnify"], @"smart magnify");
+      gesture(@{ @"kind": @"pressure" });
+      expect(@[@"down", @"pressure 1 0.25 0", @"pressure 1 0.5 0", @"pressure 1 1 0.5", @"pressure 2 0.5 0", @"pressure 0 0 0", @"up"], @"a force click: pressure rises through stage 1 into stage 2 between press and release");
+      gesture(@{ @"kind": @"pressure", @"stage": @1 });
+      expect(@[@"down", @"pressure 1 0.25 0", @"pressure 1 0.5 0", @"pressure 1 1 0", @"pressure 0 0 0", @"up"], @"a stage 1 pressure click never reaches stage 2");
+      NSValue *center = OnMain(^{ NSView *view = SparkDriverFindView(@"pointer-gestures"); return [NSValue valueWithPoint:[view convertPoint:NSMakePoint(NSMidX(view.bounds), NSMidY(view.bounds)) toView:nil]]; });
+      NSSet *locations = OnMain(^{ return [gestureLocations copy]; });
+      Check([locations isEqual:[NSSet setWithObject:center]], [NSString stringWithFormat:@"every gesture arrives at the target's center in window coordinates (%@ at %@)", locations, center]);
+      ok(@{ @"command": @"tap", @"testID": @"pointer-gestures", @"button": @"back" });
+      ok(@{ @"command": @"tap", @"testID": @"pointer-gestures", @"button": @"forward" });
+      expect(@[@"otherDown 3", @"otherUp 3", @"otherDown 4", @"otherUp 4"], @"back and forward are mouse buttons 3 and 4");
+      Check([Code(Request(fd, @{ @"command": @"gesture", @"testID": @"pointer-gestures", @"kind": @"pinch" })) isEqual:@"E_INVALID_ARGUMENT"], @"unknown gestures fail");
+      Check([Code(Request(fd, @{ @"command": @"gesture", @"testID": @"pointer-gestures", @"kind": @"magnify" })) isEqual:@"E_INVALID_ARGUMENT"], @"magnify needs a magnification");
+      Check([Code(Request(fd, @{ @"command": @"gesture", @"testID": @"pointer-gestures", @"kind": @"magnify", @"magnification": @-1 })) isEqual:@"E_INVALID_ARGUMENT"], @"magnify cannot shrink to nothing");
+      Check([Code(Request(fd, @{ @"command": @"gesture", @"testID": @"pointer-gestures", @"kind": @"swipe", @"direction": @"in" })) isEqual:@"E_INVALID_ARGUMENT"], @"swipe needs a direction");
+      Check([Code(Request(fd, @{ @"command": @"gesture", @"testID": @"pointer-gestures", @"kind": @"pressure", @"stage": @3 })) isEqual:@"E_INVALID_ARGUMENT"], @"pressure stages are 1 and 2");
+      Check([Code(Request(fd, @{ @"command": @"tap", @"testID": @"pointer-gestures", @"button": @"middle" })) isEqual:@"E_INVALID_ARGUMENT"], @"unknown buttons fail");
+      ok(@{ @"command": @"tap", @"testID": @"pointer-field" });
+      ok(@{ @"command": @"typeText", @"text": @"a" });
+      NSDictionary *typing = cursor(nil);
+      // While a field is edited outside the key window, AppKit gives its field editor a copy of the arrow.
+      Check([typing[@"cursor"] isEqual:@"arrow"] && [typing[@"hiddenUntilMoved"] boolValue], [NSString stringWithFormat:@"typing hides the cursor until it moves, recorded at the driver's pointer (%@)", typing]);
+      ok(@{ @"command": @"hover", @"testID": @"pointer-plain" });
+      Check(![cursor(nil)[@"hiddenUntilMoved"] boolValue], @"a pointer move ends it");
+      OnMain(^{ [NSCursor setHiddenUntilMouseMoves:YES]; return (id)nil; });
+      Check([cursor(nil)[@"hiddenUntilMoved"] boolValue], @"the app's own +[NSCursor setHiddenUntilMouseMoves:] is recorded");
+      Check([OnMain(^{ return @(!NSApp.isActive && !pointerWindow.isVisible); }) boolValue], @"pointer input never activates the app and leaves the window off screen");
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
+  // Built without SPARK_TEST_DRIVER_PRIVATE_EVENTS, as an app that does not opt in: gestures and extra mouse buttons
+  // fail with a typed error, while the rest of the input still works.
+  else if ([mode isEqual:@"pointer-off"]) {
+    MakePointerWindow();
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+      for (NSDictionary *request in @[@{ @"command": @"gesture", @"testID": @"pointer-gestures", @"kind": @"smartMagnify" },
+                                      @{ @"command": @"tap", @"testID": @"pointer-gestures", @"button": @"back" }]) {
+        NSDictionary *reply = Request(fd, request);
+        Check([Code(reply) isEqual:@"E_UNSUPPORTED"] && [reply[@"error"][@"message"] containsString:@"SPARK_TEST_DRIVER_PRIVATE_EVENTS"],
+          [NSString stringWithFormat:@"%@ fails naming the missing build flag (%@)", request[@"command"], reply]);
+      }
+      Check([OnMain(^{ return @(gestures.count); }) integerValue] == 0, @"nothing reached the view");
+      Check([Request(fd, @{ @"command": @"tap", @"testID": @"pointer-gestures" })[@"ok"] boolValue] && [OnMain(^{ return [gestures copy]; }) isEqual:(@[@"down", @"up"])], @"left clicks still work");
+      Check([Request(fd, @{ @"command": @"cursor", @"testID": @"pointer-gestures" })[@"cursor"] isEqual:@"pointingHand"], @"cursor queries still work");
       Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
       finished = YES;
     });
