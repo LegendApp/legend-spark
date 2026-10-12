@@ -86,8 +86,8 @@ function describe(element: AuditElement) {
  * - keyboard: an enabled exposed element with a role in OPERABLE_ROLES (read-only text excepted) is focusable, is
  *   inside a table, outline or collection view, or is part of a focusable control.
  * - contrast: enabled text with a declared colour has the HIG contrast against the dominant colour rendered behind
- *   it, for every colour it draws in (alpha and ancestor opacity composited). Text in a disabled AppKit control is
- *   exempt, as in WCAG; React Native macOS does not expose a disabled state, so its text is always judged.
+ *   it, for every colour it draws in (alpha and ancestor opacity composited). Text in a disabled AppKit control or
+ *   React Native view is exempt, as in WCAG.
  *   Text whose colour does not resolve to sRGB cannot be measured, which is an error, not a pass.
  */
 export function judgeAudit(facts: AuditFacts, scope: "window" | "app", read: (file: string) => Image): AuditReport {

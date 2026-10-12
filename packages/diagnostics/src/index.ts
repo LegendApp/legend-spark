@@ -77,7 +77,8 @@ export async function startHangWatchdog(options: HangWatchdogOptions): Promise<A
 
 /**
  * Blocks the main thread for `durationMs` (integer, 1 to 10000), to check hang reporting end to end.
- * The app does not respond meanwhile; the promise resolves once the main thread is free again.
+ * The app does not respond meanwhile; the promise resolves once the main thread is free again. Only in Debug builds
+ * and builds with the test driver: a release build you distribute rejects `E_UNAVAILABLE` and never blocks.
  */
 export async function simulateHang(durationMs: number): Promise<void> {
   if (!integer(durationMs, 1, 10000)) invalid("durationMs must be an integer from 1 to 10000");

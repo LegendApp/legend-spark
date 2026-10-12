@@ -1,5 +1,5 @@
 import { Component, useState, type PropsWithChildren, type ReactNode } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import {
   Button, Checkbox, ComboBox, DisclosureTriangle, getButtonAvailability, getControlAvailability, LevelIndicator, PathControl,
   Progress, RadioGroup, Slider, Stepper, Switch, TokenField,
@@ -134,7 +134,38 @@ export function Buttons() {
     row,
     availability: getButtonAvailability(variantOf(row) ? { variant: variantOf(row) } : undefined),
     render: shared => <Presses shared={shared}>{press => <Button {...shared} variant={variantOf(row)} onPress={press}>{t.rows[row]}</Button>}</Presses>,
-  }))}>{disabled => <KeyboardButtons disabled={disabled} />}</Gallery>;
+  }))}>{disabled => <><KeyboardButtons disabled={disabled} /><Pressables disabled={disabled} /></>}</Gallery>;
+}
+
+/**
+ * React Native Pressables, which report their disabled and selected state to accessibility like the native buttons. The
+ * page's Disable controls checkbox and the section's own toggle (a Pressable too) disable them.
+ */
+function Pressables({ disabled: pageDisabled }: { disabled: boolean }) {
+  const t = useControlMessages();
+  const [count, setCount] = useState(0);
+  const [selected, setSelected] = useState(false);
+  const [off, setOff] = useState(false);
+  const disabled = pageDisabled || off;
+  const id = "native-controls-buttons-pressable";
+  const look = (highlighted: boolean, dimmed = disabled) => `rounded-md border border-border px-3 py-1.5 ${highlighted ? "bg-highlight" : ""} ${dimmed ? "opacity-50" : ""}`;
+  return <View className="gap-3 border-b border-border pb-4">
+    <Text className="text-sm font-semibold text-foreground" accessibilityRole="header">{t.pressables}</Text>
+    <View className="flex-row flex-wrap items-center gap-3">
+      <Pressable testID={`${id}-disable`} accessibilityRole="checkbox" accessibilityLabel={t.disablePressables} accessibilityState={{ checked: off }} disabled={pageDisabled}
+        onPress={() => setOff(value => !value)} className={look(off, pageDisabled)}>
+        <Text className="text-sm text-foreground">{t.disablePressables}</Text>
+      </Pressable>
+      <Pressable testID={id} accessibilityRole="button" accessibilityLabel={t.pressable} disabled={disabled} onPress={() => setCount(value => value + 1)} className={look(false)}>
+        <Text className="text-sm text-foreground">{t.pressable}</Text>
+      </Pressable>
+      <Text selectable className="font-mono text-xs text-muted" testID={`${id}-value`}>{JSON.stringify(count)}</Text>
+      <Pressable testID={`${id}-selectable`} accessibilityRole="button" accessibilityLabel={t.selectable} accessibilityState={{ selected }} disabled={disabled}
+        onPress={() => setSelected(value => !value)} className={look(selected)}>
+        <Text className="text-sm text-foreground">{t.selectable}</Text>
+      </Pressable>
+    </View>
+  </View>;
 }
 
 /** One default (Return) and one cancel (Escape) button at a time, next to a plain button that must ignore Return. */

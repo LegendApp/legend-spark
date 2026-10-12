@@ -4,7 +4,9 @@ intent: >
   On Native controls > Button styles, every plain (no variant), push, bevel, toolbar, help and
   destructive button presses once in all four sizes. At each size, Return presses only the
   variant="default" button and never the plain one, and Escape presses the variant="cancel"
-  button. Disabled buttons ignore clicks and Return.
+  button. Disabled buttons ignore clicks and Return. React Native Pressables report their state to accessibility
+  in-process (#350): enabled until their toggle disables them, then not enabled and ignoring clicks, and enabled again
+  after; the selectable one selected after a press, also while disabled, and unselected after another.
 checks: [CTRL-BUTTON-01, CTRL-BUTTON-02, CTRL-DISABLED-01, CTRL-A11Y-01]
 tags: [native-controls]
 platforms: [macos]
@@ -110,6 +112,21 @@ matrix:
 - tapOn: { id: native-controls-buttons-push-regular }
 - assertText: { id: native-controls-buttons-push-regular-value, equals: '1' }
 - tapOn: { id: native-controls-buttons-disabled }
+# React Native Pressables report their accessibility state as it changes
+- assertA11y: { id: native-controls-buttons-pressable, enabled: true, selected: false }
+- tapOn: { id: native-controls-buttons-pressable }
+- assertText: { id: native-controls-buttons-pressable-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-pressable-selectable }
+- assertA11y: { id: native-controls-buttons-pressable-selectable, enabled: true, selected: true }
+- tapOn: { id: native-controls-buttons-pressable-disable }
+- assertA11y: { id: native-controls-buttons-pressable, enabled: false, selected: false }
+- assertA11y: { id: native-controls-buttons-pressable-selectable, enabled: false, selected: true }
+- tapOn: { id: native-controls-buttons-pressable }
+- assertText: { id: native-controls-buttons-pressable-value, equals: '1' }
+- tapOn: { id: native-controls-buttons-pressable-disable }
+- assertA11y: { id: native-controls-buttons-pressable, enabled: true }
+- tapOn: { id: native-controls-buttons-pressable-selectable }
+- assertA11y: { id: native-controls-buttons-pressable-selectable, enabled: true, selected: false }
 - assertA11y: { id: native-controls-buttons-keyboard-default, label: "Default", when: { matrix: { locale: en-US } } }
 - assertA11y: { id: native-controls-buttons-keyboard-default, label: "افتراضي", when: { matrix: { locale: ar } } }
 - takeScreenshot: buttons

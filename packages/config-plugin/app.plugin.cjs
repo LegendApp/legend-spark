@@ -38,6 +38,7 @@ module.exports = function withSparkDesktop(config) {
       if (!(key in generated)) delete mod.modResults[key];
     Object.assign(mod.modResults, generated);
     mod.modResults.SparkFrameworkVersion = sparkVersion;
+    // For the development server; spark build removes it from release builds (removeLocalNetworking in packages/cli/src/macos-release.ts).
     mod.modResults.NSAppTransportSecurity = { NSAllowsLocalNetworking: true };
     return mod;
   });
@@ -51,6 +52,7 @@ module.exports = function withSparkDesktop(config) {
     require("./devtools-targets.cjs").installDevToolsTargetsPatch(mod.modRequest.projectRoot);
     require("./text-services.cjs").installTextServicesPatch(mod.modRequest.projectRoot);
     require("./text-input-accessibility.cjs").installTextInputAccessibilityPatch(mod.modRequest.projectRoot);
+    require("./accessibility-state.cjs").installAccessibilityStatePatch(mod.modRequest.projectRoot);
     // The beta template passes the resolved package to use_react_native!, but
     // post_install otherwise resets Xcode script paths to ../node_modules.
     mod.modResults.contents = mod.modResults.contents.replace(

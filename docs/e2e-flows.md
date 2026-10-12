@@ -517,7 +517,7 @@ fails with `invalid`.
 | `setClipboard`, `assertClipboard` | `setTestClipboard` and `testClipboard` on the app's private test pasteboard, never the user's clipboard ([clipboard.md](clipboard.md#testing)). `assertClipboard` polls until every listed type is present and the plain text equals `text`; reading the text makes the app provide promised text, as another app's paste would. |
 | `dragAndDrop` | From a Spark drag source (a `from` with an id inside a `DragDropView` source): `testDrag` begin, move over `to` (which needs an id), a wait of `holdAt` over it, then drop, with `modifiers` held throughout; `steps` is `unsupported` ([drag-drop.md](drag-drop.md#testing)). From any other view: `drag` from `from` to `to` in one window, with `steps` and `modifiers`; `holdAt` is `unsupported`. Window server drag sessions from other views need the black-box backend. |
 | `dragToFinder` | `testDrag` from a Spark drag source, dropped in a private temporary folder the runner creates and removes after the flow: the drag's promised files are written there, and `expectFile` (a file name) must be one of them. The file is kept as an `output` artifact. Any other source is `unsupported`. |
-| `assertText`, `assertA11y` | The element's `text`, and its `label`, `role` and `value`, from `elements`, polled until they match. `lineEndings` and `hint` are `unsupported`. |
+| `assertText`, `assertA11y` | The element's `text`, and its `label`, `role`, `value`, `enabled` and `selected`, from `elements`, polled until they match. `lineEndings` and `hint` are `unsupported`. |
 | matrix `appearance` | `setAppAppearance` after each launch (the app override; the OS setting is untouched) |
 | matrix `locale` | Launch arguments `-AppleLanguages (<locale>) -AppleLocale <locale>` |
 | `setAppAppearance` | `setAppAppearance`; lasts until the app quits |
@@ -541,7 +541,7 @@ judge in-process ([facts](test-driver.md#accessibility-audit)). Errors:
 | --- | --- |
 | `description` | An exposed accessibility element whose role is a control or an image (button, check box, radio button, pop-up and menu button, combo box, slider, stepper, text field and area, link, image, disclosure triangle, colour well, segmented control) has neither a label nor a title. A placeholder is not a description. Read-only text fields and areas (a selectable React Native `Text`) are described by their text. |
 | `keyboard` | An enabled exposed element whose role is a control (the roles above but image; read-only text excepted) cannot take keyboard focus: an AppKit control that refuses first responder, or another view (a React Native `Pressable` without `focusable`) that does not accept it. Items of a table, outline or collection view are reached with the arrow keys, and parts of a control that takes focus (a search field's buttons) come with it; both pass. |
-| `contrast` | Enabled text is below the [HIG](https://developer.apple.com/design/human-interface-guidelines/accessibility#Color-and-effects) contrast ratio against the background rendered behind it: 4.5:1, or 3:1 for text of 18 points or more or bold. The background is the most frequent colour of the text's pixels in the capture; the foreground is each colour the text declares, its alpha and its ancestors' opacity composited over that background, and the worst one counts. Text in a disabled AppKit control is exempt, as in WCAG; React Native macOS exposes no disabled state, so React Native text is always judged. A colour that does not resolve to sRGB cannot be measured and is an error. |
+| `contrast` | Enabled text is below the [HIG](https://developer.apple.com/design/human-interface-guidelines/accessibility#Color-and-effects) contrast ratio against the background rendered behind it: 4.5:1, or 3:1 for text of 18 points or more or bold. The background is the most frequent colour of the text's pixels in the capture; the foreground is each colour the text declares, its alpha and its ancestors' opacity composited over that background, and the worst one counts. Text in a disabled AppKit control or a disabled React Native view (`disabled`, `accessibilityState.disabled`; [the accessibility state patch](expo-desktop-integration.md#rn-macos-accessibility-state-patch)) is exempt, as in WCAG. A colour that does not resolve to sRGB cannot be measured and is an error. |
 
 The window's content view is audited; the title bar and its buttons are AppKit's. It writes the flow's nth audit to
 `output/a11y-audit-<n>.a11y.json` (`scope`, `windows`, `counts` of elements, described elements, operable elements, texts,
@@ -627,6 +627,28 @@ identifier runs, a copy someone is using included, and for any domain but the fl
 
 A failed `assertNoLayoutThrash` or `assertNoFlicker` writes the driver's report to
 `output/<command>-line<line>.commits.json`.
+
+#### Release-safety probe
+
+`assertNoDebugSurface: { for }` checks that a running release build has no debug surface (#274; `DEVT-REL-01`
+to `03`, `e2e/flows/devtools/release-probe.yaml`). It quits the app if it runs, starts a decoy development server (a
+TCP listener on 127.0.0.1 the runner owns) and launches the app pointed at it, with `-RCT_jsLocation <decoy>` and
+`SPARK_BUNDLE_URL=http://<decoy>/index.bundle?…`, the settings a development build reads. Once its first rendered UI
+has settled (up to 30 s) and `for` (default 2s) more, it takes one snapshot and fails with every finding:
+
+- **Development server:** any connection to the decoy. A release build loads its embedded JavaScript and opens no
+  packager, inspector or HMR connection.
+- **Sockets:** `lsof -p <app pid>` (outside the app, not through the driver). Any IPv4 or IPv6 socket, listening or
+  connected, is a finding, and so is any bound Unix socket (one with a path) other than the driver's own channel
+  (`driver.sock` in the session's run directory). A driven app skips the single-instance lock ([app state](#app-state)),
+  so it has no single-instance socket. lsof failing, or not listing the process's files, fails the command.
+- **Menus:** the driver's `menus` snapshot, every level and hidden items included: the Developer menu (its
+  `spark-developer` identifiers, or any of its titles in English or Arabic, such as Reload or Show Developer Menu) and
+  any item whose title names DevTools, an inspector, a debugger or a dev menu.
+
+It is a `build: release` check: a development build connects to the decoy (or the bundle server) and has the Developer
+menu, so it fails. The gate runs it on the gate's artifact; `bun run harness` runs the gate with the installed artifact
+(`--artifact`), so the probe runs against the signed app it installed.
 
 #### App state
 
@@ -1086,7 +1108,7 @@ hygiene (#153):
 | `DIST-HYG-05` | Every Mach-O UUID in the app has a dSYM in `build.<platform>.symbols` (the build's `dSYMs/` folder next to the app). |
 | `DIST-HYG-06` | No file holds an absolute path of the build machine (`/Users/<name>/`, `/home/<name>/`, `/var/folders/`, `C:\Users\<name>\`). |
 | `DIST-HYG-07` | No file holds a credential: private keys, AWS, GitHub, Slack, Google, Stripe, npm or API secret keys. |
-| `DIST-HYG-08` | Info.plist: `CFBundleIdentifier` is the manifest's `appId`; package type `APPL`; name; an executable that exists; numeric versions; `LSMinimumSystemVersion` 14 or earlier; `NSPrincipalClass` `NSApplication`; no `NSAllowsArbitraryLoads` and no App Transport Security exception for localhost. |
+| `DIST-HYG-08` | Info.plist: `CFBundleIdentifier` is the manifest's `appId`; package type `APPL`; name; an executable that exists; numeric versions; `LSMinimumSystemVersion` 14 or earlier; `NSPrincipalClass` `NSApplication`; no `NSAllowsArbitraryLoads`, no App Transport Security exception for localhost and no `NSAllowsLocalNetworking` (development builds only: `spark build` removes it from release builds, #274). |
 | `DIST-HYG-09` | The artifact's size is within `build.<platform>.sizeBudgetMB`. |
 | `DIST-HYG-10` | `Contents/Resources/ThirdPartyNotices.txt` lists packages, each with a license, including every embedded framework. |
 

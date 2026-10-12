@@ -33,7 +33,8 @@ Never set `testDriverInRelease` for an app you distribute. How it works:
   build fails to compile. So does code that serves only the driver: motion's virtual clock and telemetry,
   `simulateSystemEvent`'s appearance overrides, the host's `replyDriverState` operation (the `exposeTestState`
   answer), and diagnostics' native simulated crashes (the `SPARK_SIMULATE_CRASH` launch hook; `simulateCrash`
-  rejects native kinds with `E_UNAVAILABLE` without it). A file that includes the header without the setting
+  rejects native kinds with `E_UNAVAILABLE` without it) and simulated hangs (`simulateHang` rejects `E_UNAVAILABLE`
+  without it). A file that includes the header without the setting
   gets the driver declarations, so a release build without the driver fails to link rather than ship driver
   code.
 - A build without the driver that is launched with `SPARK_TEST_DRIVER_DIR` logs
@@ -48,8 +49,8 @@ Never set `testDriverInRelease` for an app you distribute. How it works:
 `tests/test-driver-builds.test.ts` checks the configuration, the Podfile lines and every podspec's build
 settings. It also compiles a stripped, dead-stripped binary each way and runs the release check on both:
 the one without the driver has no driver strings or `SparkTestDriver` symbols, logs and starts normally
-with `SPARK_TEST_DRIVER_DIR` set, ignores `SPARK_SIMULATE_CRASH`, and has `SparkSimulateCrash` fail
-`E_UNAVAILABLE`. It also checks that every `SparkTestDriverRegisterCommand` call outside the excluded
+with `SPARK_TEST_DRIVER_DIR` set, ignores `SPARK_SIMULATE_CRASH`, has `SparkSimulateCrash` fail
+`E_UNAVAILABLE` and `SparkSimulateHang` return without blocking; the one with the driver blocks. It also checks that every `SparkTestDriverRegisterCommand` call outside the excluded
 sources sits after `#if SPARK_TEST_DRIVER`.
 
 ## Kitchen Sink screenshots
@@ -214,7 +215,7 @@ send one request at a time; each reply echoes `id`. Failures are
 | `navigate` | `url`, `timeoutMs` (30000) | Waits for the first rendered UI to settle (so link listeners are subscribed), then opens the URL through `application:openURLs:`, the path the OS uses for deep links. |
 | `openFile` | `path`, `timeoutMs` (30000) | `path` must be absolute and exist (`E_INVALID_ARGUMENT`, `E_NOT_FOUND`). Waits like `navigate`, then opens a file URL for it through `application:openURLs:`, the path the OS uses for a file opened from Finder. `navigate` rejects file URLs, so only `openFile` delivers files. |
 | `waitFor` | `testID`, `timeoutMs` (10000) | `window` identifier and `frame` of the first visible view whose accessibility identifier (React Native `testID`) matches. `frame` is in points from the top-left of the window's frame view, the area `capture` renders, so frame × `scale` is the view's pixels in a capture. `E_TIMEOUT` otherwise; `timeoutMs: 0` checks once. |
-| `elements` | | `windows` (`id`, `title`, `key`, `main`, `frame`), front to back, and `elements`: the in-process accessibility view of every window with an identifier. An element is a visible view with a testID, or an accessibility element (controls through their cells) with a role, label or text: `key`, `parent` (the key of the nearest enclosing element), `window`, `id`, `role` (the NSAccessibility role without `AX`: `button`, `staticText`, `radioButton`), `label`, `text` (the string value, else the title, else the displayed text of a view with attributed text, such as React Native `Text`), `value` (the accessibility value as a string, numbers included) and `frame` (as `waitFor`). A view inside an element with the same testID (the native control a React Native view hosts) refines that element. The components of an `NSPathControl` and the tab buttons of an `NSTabView` (accessibility elements that are not views) are elements too. A window's `frame` is its frame view, at 0,0. |
+| `elements` | | `windows` (`id`, `title`, `key`, `main`, `frame`), front to back, and `elements`: the in-process accessibility view of every window with an identifier. An element is a visible view with a testID, or an accessibility element (controls through their cells) with a role, label or text: `key`, `parent` (the key of the nearest enclosing element), `window`, `id`, `role` (the NSAccessibility role without `AX`: `button`, `staticText`, `radioButton`), `label`, `text` (the string value, else the title, else the displayed text of a view with attributed text, such as React Native `Text`), `value` (the accessibility value as a string, numbers included), `enabled` and `selected` (its `isAccessibilityEnabled` and `isAccessibilitySelected`, a control's through its cell) and `frame` (as `waitFor`). A view inside an element with the same testID (the native control a React Native view hosts) refines that element. The components of an `NSPathControl` and the tab buttons of an `NSTabView` (accessibility elements that are not views) are elements too. A window's `frame` is its frame view, at 0,0. |
 | `setAppAppearance` | `appearance` (`light`/`dark`), `timeoutMs` (10000) | Waits for the first rendered UI to settle (an override set while the app is still launching did not last), then sets `NSApp.appearance` (an app override; the OS setting is untouched; per-window appearances still win). If the effective appearance changed, replies `changed: true` once a UI update has mounted and settled, else `E_TIMEOUT`. `timeoutMs` bounds each wait. |
 | `capture` | `window` (`main`, `key`, `id:<identifier>`, `title:<title>`), `name`, `timeoutMs` (5000) | `file`, `width`, `height` (pixels), `scale`, once mounted UI updates have settled. `E_NOT_SETTLED` if they never do. |
 | `tap` | target, `button` (`left`/`right`/`back`/`forward`), `clickCount` (1-3), `modifiers` | Moves the driver's pointer to the target, then presses and releases `clickCount` times. `back` and `forward` are mouse buttons 3 and 4 (other-mouse events; they need [private event functions](#private-event-functions)). |
@@ -473,8 +474,9 @@ through the accessibility API.
   an ancestor), `frame` (as `waitFor`), `element` (AppKit exposes it), `role` (as `elements`), `label`, `title`,
   `placeholder`, `value`, `help`, `editable` (for views that can be), `focusable` (an AppKit control that does not
   refuse first responder, another view that accepts it, or anything inside a table, outline or collection view), `enabled` (false inside a disabled AppKit
-  control; React Native macOS views report `accessibilityEnabled` NO unless their accessibility traits changed and
-  never map `accessibilityState.disabled` to it, so it is not read from them), and `opacity` (the product of its and
+  control or a React Native view whose `isAccessibilityEnabled` is NO, which [the accessibility state
+  patch](expo-desktop-integration.md#rn-macos-accessibility-state-patch) answers from `accessibilityState.disabled`;
+  other views, such as text views, report NO whether or not they are enabled, so it is not read from them), and `opacity` (the product of its and
   its ancestors' layer opacity). A text also has `text` and `textStyle`: its distinct
   foreground colours resolved to sRGB in the view's effective appearance (`r`, `g`, `b` 0-255, `a` 0-1; `unresolved`
   when one is not an sRGB colour), its smallest font size in points, and whether every run is bold. Colours of a
@@ -488,7 +490,7 @@ through the accessibility API.
   every text was rendered whole, or as much of it as scrolling can show (`clipped`). A text nothing can show has no
   `sample`. Every scroll position is restored before the reply.
 
-`tests/test-driver.native.mm` (mode `audit`) checks an undescribed image button, a button-role view that cannot take focus, a text's declared colour and sample,
+`tests/test-driver.native.mm` (mode `audit`) checks an undescribed image button, a button-role view that cannot take focus, a disabled React Native view and its text, a text's declared colour and sample,
 and a text below the fold of a scroll view that the audit scrolls to, renders and scrolls back.
 
 ## What a capture contains

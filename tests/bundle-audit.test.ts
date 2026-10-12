@@ -62,6 +62,16 @@ describe("bundle audit", () => {
     expect(results["DIST-HYG-10"]!.details).toEqual(["left-pad 1.0.0: no license"]);
   });
 
+  test.skipIf(process.platform !== "darwin")("Info.plist keeps App Transport Security on: no arbitrary loads, localhost exception or local networking", () => {
+    const ats = "<key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/><key>NSAllowsLocalNetworking</key><true/><key>NSExceptionDomains</key><dict><key>localhost</key><dict/></dict></dict>";
+    const results = byCheck(bundle({ "Contents/Info.plist": PLIST.replace("</dict></plist>", `${ats}\n</dict></plist>`) }));
+    expect(results["DIST-HYG-08"]).toMatchObject({ status: "failed", details: [
+      "NSAppTransportSecurity.NSAllowsArbitraryLoads is true: release builds keep App Transport Security on",
+      "NSAppTransportSecurity.NSAllowsLocalNetworking is set: it is for the development server, and spark build removes it from release builds",
+      "NSAppTransportSecurity exempts localhost: that is for a development server",
+    ] });
+  });
+
   test("fails closed without a size budget, a symbols folder or notices", () => {
     const options = bundle();
     writeFileSync(path.join(options.app, "Contents/Resources/ThirdPartyNotices.txt"), "");

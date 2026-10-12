@@ -216,7 +216,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   assertPixelDiff: spec("visual", "Compare two captured screenshots.", { a: str, b: str, max: { type: ["string", "number"], pattern: "^\\d+(\\.\\d+)?%$", minimum: 0, description: "a pixel count or a percentage such as 0.5%" } }, { required: ["a", "b", "max"] }),
 
   // Accessibility
-  assertA11y: spec("a11y", "Assert the accessibility properties of an element.", { id: str, label: text, role: str, value: anyStr, hint: text }, { required: ["id"], rule: anyKey("label", "role", "value", "hint") }),
+  assertA11y: spec("a11y", "Assert the accessibility properties of an element.", { id: str, label: text, role: str, value: anyStr, hint: text, enabled: bool, selected: bool }, { required: ["id"], rule: anyKey("label", "role", "value", "hint", "enabled", "selected") }),
   auditAccessibility: spec("a11y", "Run the platform accessibility audit.", { scope, maxErrors: int() }),
   voiceOver: single("a11y", "Turn the screen reader on or off.", "enable", bool),
   screenReaderNext: spec("a11y", "Move the screen reader to the next element."),
@@ -254,6 +254,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   // Security audits of the build on disk (docs/e2e-flows.md#security-audits)
   assertEntitlements: spec("security", "Assert every process of the app is signed with only the entitlements `allow` names, each with its reason, and never get-task-allow; an `allow` entry no process carries fails. `sandbox`: whether this is the sandboxed variant, which sandboxes every process.", { app: str, sandbox: bool, allow: dict(str) }, { required: ["app", "sandbox"], runner: true }),
   assertCodeSigning: single("security", "Assert every Mach-O file of the app is signed by the main executable's team (not ad-hoc), every process has the hardened runtime, and none disables library validation.", "app", str, {}, { runner: true }),
+  assertNoDebugSurface: spec("security", "Relaunch the app pointed at a decoy development server (RCT_jsLocation and SPARK_BUNDLE_URL) and, once its first UI settles and `for` (default 2s) more, assert it never connected to it, holds no network socket and no bound Unix socket but the driver's (lsof), and has no Developer menu or debug menu item (DevTools, inspector, debugger), hidden ones included. For release builds.", { for: duration }, { driver: true }),
   assertLoadPaths: single("security", "Assert no load path lets a library from outside the bundle or the system into the app: LC_RPATH entries, dependencies (weak ones too) and LC_DYLD_ENVIRONMENT. On Windows: the DLL search order, not implemented yet (#51).", "app", str, {}, { runner: true }),
 
   // Build audits of the build on disk (docs/e2e-flows.md#app-icon-audit)

@@ -53,7 +53,8 @@ and 2 for a usage error.
    process. With a `.zip` artifact, the gate's [package audit](e2e-flows.md#audits) checks that
    ZIP (`--package`), with the `-dSYMs.zip` and `updates/` feed next to it; `--vm` copies them
    into the guest too. Like every gate run it drives the installed app itself with its real state
-   (`state: "exact"`), not the isolated `.driver` copy `e2e:run` uses. Its report goes to
+   (`state: "exact"`), not the isolated `.driver` copy `e2e:run` uses, so the
+   [release-safety probe](e2e-flows.md#release-safety-probe) checks the installed app's sockets and menus. Its report goes to
    `gate/` in the harness report directory.
 6. **Report:** `artifacts/harness/<commit>/<target>/report.json`, where `<target>` is
    the target ID with `/` replaced by `-`, such as `macos-15-arm64`.

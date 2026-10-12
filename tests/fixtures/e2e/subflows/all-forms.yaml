@@ -87,6 +87,8 @@
 - assertEntitlements: { app: "${APP_PATH}", sandbox: false, allow: { com.apple.security.device.camera: The camera screen records video. } }
 - assertCodeSigning: "${APP_PATH}"
 - assertCodeSigning: { app: "${APP_PATH}" }
+- assertNoDebugSurface
+- assertNoDebugSurface: { for: 3s }
 - assertLoadPaths: "${APP_PATH}"
 - assertLoadPaths: { app: "${APP_PATH}" }
 - assertAppIcon: "${APP_PATH}"

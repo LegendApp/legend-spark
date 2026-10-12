@@ -92,7 +92,9 @@ The top of a report from the native test harness (`tests/hang-watchdog.native.mm
 `simulateHang(durationMs)` blocks the main thread for an integer number of milliseconds (1 to
 10000). The app does not respond meanwhile, so use it in development and tests: it checks that
 hangs flow from the watchdog to wherever your app sends them. The promise resolves once the main
-thread is free again.
+thread is free again. It exists only in Debug builds and builds with the test driver
+(`macos.testDriverInRelease`, [test driver](test-driver.md#builds)): a release build you distribute
+rejects it with `E_UNAVAILABLE` and never blocks.
 
 ## Availability and errors
 

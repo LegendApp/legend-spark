@@ -83,8 +83,9 @@ React Native compiles `RCT_DEV` to 0 in release builds, which removes Spark's ‚å
 native `openDevTools` operation. React Native registers debug targets only when Fusebox is enabled, which it is in
 development builds only. In JavaScript, `getDevToolsAvailability()` reports `development-only` and `openDevTools`
 rejects `E_UNAVAILABLE` without native work. `tests/devtools.test.ts` checks these guards in the sources. The release
-gate ([#274](https://github.com/LegendApp/legend-spark/issues/274)) checks the built app for inspector sockets and
-other debug surface.
+gate's [release-safety probe](e2e-flows.md#release-safety-probe) ([#274](https://github.com/LegendApp/legend-spark/issues/274))
+runs the release build pointed at a decoy development server and fails if it connects to it, holds a network or
+listening socket, or shows a Developer menu or other debug menu item.
 
 ## How it works
 

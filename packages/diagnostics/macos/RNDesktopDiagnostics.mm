@@ -38,7 +38,7 @@ RCT_EXPORT_MODULE(NativeDesktopDiagnostics)
   } else if ([method isEqual:@"simulateHang"]) {
     NSNumber *duration = args[@"durationMs"];
     if (![duration isKindOfClass:NSNumber.class]) { SparkInvalid(reject, @"Expected durationMs"); return; }
-    SparkSimulateHang(duration.unsignedIntegerValue);
+    if (!SparkSimulateHang(duration.unsignedIntegerValue)) { reject(@"E_UNAVAILABLE", @"simulateHang exists only in Debug builds and builds with the test driver (macos.testDriverInRelease)", nil); return; }
   } else if ([method isEqual:@"getConsent"]) {
     resolve(SparkJSON(@(SparkCrashConsent()))); return;
   } else if ([method isEqual:@"setConsent"]) {

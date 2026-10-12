@@ -289,10 +289,13 @@ describe("white-box input (no black-box backend active)", () => {
     expect((await run("- launchApp\n- assertText: { id: gone, equals: x, timeout: 100ms }", app)).result.failure).toMatchObject({ kind: "not-found" });
   });
 
-  test("assertA11y checks the label, role and value NSAccessibility reports in-process", async () => {
+  test("assertA11y checks the label, role, value, enabled and selected state NSAccessibility reports in-process", async () => {
     const app = new FakeApp();
-    app.elements = [{ key: "d", window: "spark.main", id: "default", role: "button", label: "افتراضي", value: "5", frame: FRAME }];
-    expect((await run('- launchApp\n- assertA11y: { id: default, label: "افتراضي", role: button, value: "5" }\n- assertA11y: { id: default, label: "/^اف/" }', app)).result.status).toBe("passed");
+    app.elements = [{ key: "d", window: "spark.main", id: "default", role: "button", label: "افتراضي", value: "5", enabled: false, selected: true, frame: FRAME }];
+    expect((await run('- launchApp\n- assertA11y: { id: default, label: "افتراضي", role: button, value: "5", enabled: false, selected: true }\n- assertA11y: { id: default, label: "/^اف/" }', app)).result.status).toBe("passed");
+    expect((await run("- launchApp\n- assertA11y: { id: default, enabled: true, timeout: 100ms }", app)).result.failure).toMatchObject({
+      kind: "assertion", message: '{"id":"default"} reports enabled false, not true',
+    });
     expect((await run("- launchApp\n- assertA11y: { id: default, label: Default, timeout: 100ms }", app)).result.failure).toMatchObject({
       kind: "assertion", message: 'the accessibility label of {"id":"default"} is "افتراضي", not "Default"',
     });

@@ -6,16 +6,18 @@
 import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type TestClipboard, type TestDragReply, type TestDragRequest,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestDragRequest,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
 import { inspectCommands, type InspectClient, type InspectedApp } from "./driver-inspect.ts";
-import { motionCommands, type MotionClient } from "./driver-motion.ts";
+import { driven, motionCommands, type MotionClient } from "./driver-motion.ts";
+import { debugMenuItems, decoyServer, socketProblems } from "./driver-release.ts";
 import { renderCommands, type RenderClient } from "./driver-render.ts";
 import { ms } from "./executor.ts";
 import { matchesText, parseSelector } from "./selectors.ts";
@@ -26,6 +28,10 @@ import {
 /** What the backend uses of a driver session (`Driver` in scripts/e2e/driver.ts). Tests pass a double. */
 export type DriverClient = MotionClient & InspectClient & RenderClient & AuditClient & {
   readonly running: boolean;
+  /** The session's private run directory, which holds the driver's socket (driver.sock). */
+  readonly directory: string;
+  /** The sockets the app process holds (lsof). */
+  sockets(): ProcessSocket[];
   navigate(url: string): Promise<void>;
   openFile(file: string): Promise<void>;
   setAppAppearance(appearance: "light" | "dark", timeoutMs?: number): Promise<{ changed: boolean }>;
@@ -75,6 +81,8 @@ const MODIFIER_BITS: Array<[number, Modifier]> = [[1 << 20, "cmd"], [1 << 18, "c
 const SCROLL_AMOUNT = { precise: 100, lines: 3 };
 /** The first render includes loading JavaScript, so the matrix appearance waits longer than an in-flow change. */
 const LAUNCH_APPEARANCE_MS = 30000;
+/** How long assertNoDebugSurface waits for the relaunched app's first settled UI. */
+const STARTUP_TIMEOUT_MS = 30000;
 
 export class DriverBackend implements Backend {
   readonly name = "driver";
@@ -189,6 +197,8 @@ export class DriverBackend implements Backend {
     auditAccessibility: auditCommand(() => this.client(), readPng),
     // White-box: the menu bar as AppKit holds it, validated as when a user opens it (assertMenuItem is the black-box form).
     assertAppMenu: (args, context) => context.eventually(async () => assertMenu(await this.client().menus(), args)),
+    // The release-safety probe (docs/e2e-flows.md#release-safety-probe).
+    assertNoDebugSurface: args => this.assertNoDebugSurface(args),
   });
   private session?: Session;
   private opened?: InspectedApp;
@@ -251,8 +261,7 @@ export class DriverBackend implements Backend {
   private async launchApp(args: Record<string, unknown>) {
     const unsupported = Object.keys(args).filter(key => !LAUNCH_KEYS.has(key));
     if (unsupported.length) throw new Failure("unsupported", `launchApp ${unsupported.join(", ")} is not supported by backend driver`);
-    const { matrix, dir } = this.session!;
-    const locale = matrix.locale as string | undefined;
+    const locale = this.session!.matrix.locale as string | undefined;
     const argv = (args.arguments ?? []) as string[], env = (args.env ?? {}) as Record<string, string>, file = args.openFile as string | undefined;
     const relaunch = args.stopApp !== false || !this.driver?.running;
     const fresh = FRESH_KEYS.filter(key => args[key] !== undefined);
@@ -261,23 +270,45 @@ export class DriverBackend implements Backend {
     const taken = [...argv.filter(arg => flags.has(arg)), ...Object.keys(env).filter(name => reserved.env.includes(name))];
     if (taken.length) throw new Failure("invalid", `launchApp ${taken.join(", ")} ${taken.length === 1 ? "is" : "are"} reserved by backend driver`);
     if (file !== undefined && !(path.isAbsolute(file) && existsSync(file))) throw new Failure("invalid", `launchApp openFile ${file} is not an absolute path to an existing file`);
-    if (relaunch) {
-      await this.quit();
-      const launch = ++this.launches;
-      if (args.clearState === true) {
-        const cleared = path.join(dir, `clear-state-${launch}.log`);
-        writeFileSync(cleared, (await this.app.clearState()).map(item => `${item}\n`).join(""));
-        this.logs.push(cleared);
-      }
-      const log = path.join(dir, `app-${launch}.log`);
-      this.logs.push(log);
-      this.driver = await this.app.launch({ locale, arguments: argv, env, log: processLog(log) });
-      if (matrix.appearance !== undefined) await this.driver.setAppAppearance(matrix.appearance as "light" | "dark", LAUNCH_APPEARANCE_MS);
-      this.launchCounters = undefined;
-      this.launchCountersDue = this.countsLaunches;
-    }
+    if (relaunch) await this.relaunch(argv, env, args.clearState === true);
     if (args.openUrl !== undefined) await this.driver!.navigate(String(args.openUrl));
     if (file !== undefined) await this.driver!.openFile(file);
+  }
+
+  /** Quits a running app and launches it again with `argv` and `env` (reserved ones included), the matrix locale and appearance. */
+  private async relaunch(argv: readonly string[], env: Record<string, string>, clearState = false) {
+    const { matrix, dir } = this.session!;
+    await this.quit();
+    const launch = ++this.launches;
+    if (clearState) {
+      const cleared = path.join(dir, `clear-state-${launch}.log`);
+      writeFileSync(cleared, (await this.app.clearState()).map(item => `${item}\n`).join(""));
+      this.logs.push(cleared);
+    }
+    const log = path.join(dir, `app-${launch}.log`);
+    this.logs.push(log);
+    this.driver = await this.app.launch({ locale: matrix.locale as string | undefined, arguments: argv, env, log: processLog(log) });
+    if (matrix.appearance !== undefined) await this.driver.setAppAppearance(matrix.appearance as "light" | "dark", LAUNCH_APPEARANCE_MS);
+    this.launchCounters = undefined;
+    this.launchCountersDue = this.countsLaunches;
+  }
+
+  /**
+   * Relaunches the app pointed at a decoy development server (driver-release.ts), waits for its first settled UI and
+   * then `for` (default 2s), and fails with everything it finds: connections to the decoy, network sockets and bound
+   * Unix sockets other than the driver's, and debug menu items. One snapshot, never retried.
+   */
+  private async assertNoDebugSurface(args: Record<string, unknown>) {
+    const decoy = await decoyServer();
+    try {
+      await this.relaunch(decoy.arguments, decoy.env);
+      const client = this.client();
+      await driven("assertNoDebugSurface startup", () => client.startup(STARTUP_TIMEOUT_MS));
+      await delay(ms((args.for ?? "2s") as string | number));
+      const menus = debugMenuItems(await driven("assertNoDebugSurface menus", () => client.menus())).map(item => `menu item ${item}`);
+      const problems = [...decoy.problems(), ...socketProblems(client.sockets(), path.join(client.directory, "driver.sock")), ...menus];
+      if (problems.length) throw new Failure("assertion", `the app has a debug surface (${problems.length} finding${problems.length === 1 ? "" : "s"}):\n${problems.map(problem => `  ${problem}`).join("\n")}`);
+    } finally { await decoy.close(); }
   }
 
   /**
@@ -408,7 +439,7 @@ export class DriverBackend implements Backend {
       if (text !== equals) throw new Failure("assertion", `the text of ${JSON.stringify({ id })} is ${JSON.stringify(text ?? null)}, not ${JSON.stringify(equals)}`);
     });
   }
-  /** `label`, `role` and `value` of the element as NSAccessibility reports them in-process; `label` matches like a selector's. */
+  /** `label`, `role`, `value`, `enabled` and `selected` of the element as NSAccessibility reports them in-process; `label` matches like a selector's. */
   private async assertA11y(args: Record<string, unknown>, context: CommandContext) {
     this.unsupported("assertA11y", args, ["hint"]);
     const id = String(args.id), label = args.label === undefined ? undefined : parseSelector({ label: args.label }, context.platform).atom.label!;
@@ -417,6 +448,8 @@ export class DriverBackend implements Backend {
       if (label && !matchesText(label, element.label)) throw new Failure("assertion", `the accessibility label of ${JSON.stringify({ id })} is ${JSON.stringify(element.label ?? null)}, not ${JSON.stringify(args.label)}`);
       if (args.role !== undefined && element.role !== args.role) throw new Failure("assertion", `the accessibility role of ${JSON.stringify({ id })} is ${JSON.stringify(element.role ?? null)}, not ${JSON.stringify(args.role)}`);
       if (args.value !== undefined && element.value !== args.value) throw new Failure("assertion", `the accessibility value of ${JSON.stringify({ id })} is ${JSON.stringify(element.value ?? null)}, not ${JSON.stringify(args.value)}`);
+      for (const state of ["enabled", "selected"] as const)
+        if (args[state] !== undefined && element[state] !== args[state]) throw new Failure("assertion", `${JSON.stringify({ id })} reports ${state} ${JSON.stringify(element[state] ?? null)}, not ${args[state]}`);
     });
   }
 

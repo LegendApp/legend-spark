@@ -1,4 +1,5 @@
 // Client for the Spark in-app test driver (docs/test-driver.md).
+import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync, watch, writeFileSync } from "node:fs";
 import net from "node:net";
@@ -44,7 +45,7 @@ export type Gesture =
 /** The cursor AppKit would show (docs/test-driver.md#cursor). */
 export type DriverCursor = { cursor: string; hiddenUntilMoved: boolean };
 /** One entry of `elements`: a visible view with a testID, or an accessibility element, in waitFor frame coordinates. */
-export type DriverElement = { key: string; parent?: string; window: string; id?: string; role?: string; label?: string; text?: string; value?: string; frame: Frame };
+export type DriverElement = { key: string; parent?: string; window: string; id?: string; role?: string; label?: string; text?: string; value?: string; enabled?: boolean; selected?: boolean; frame: Frame };
 export type DriverWindowInfo = { id: string; title: string; key: boolean; main: boolean; frame: Frame };
 /** One application menu item as AppKit holds it (`menus`). `shortcut.modifiers` are NSEventModifierFlags bits. */
 export type DriverMenuItem =
@@ -95,6 +96,8 @@ export type CommitReport = {
 };
 /** Leak counters (docs/test-driver.md#leak-counters). */
 export type Counters = { windows: number; views: number; fileDescriptors: number; listeners: number };
+/** A socket the app process holds (lsof): `type` IPv4, IPv6 or unix; `name` its addresses or path; `state` a TCP socket's (LISTEN, ESTABLISHED, …). */
+export type ProcessSocket = { fd: string; type: string; protocol?: string; name: string; state?: string };
 export type LaunchOptions = { executable: string; args?: string[]; env?: Record<string, string>; log?: ProcessLog; startTimeoutMs?: number };
 type Reply = { id?: unknown; ok: boolean; error?: { code: string; message: string }; [key: string]: unknown };
 
@@ -146,6 +149,26 @@ function socketReady(socket: string, app: ManagedProcess, timeoutMs: number) {
 
 const clock = (reply: Reply) => ({ mode: reply.mode as "virtual" | "real", timeMs: reply.timeMs as number });
 const body = <T>({ id: _id, ok: _ok, ...rest }: Reply) => rest as T;
+
+/**
+ * The sockets in `lsof -F ftPnT` output for process `pid`. Fails closed: output that does not list the process with its
+ * open files throws, so a process lsof could not read never looks like one without sockets.
+ */
+export function parseSockets(output: string, pid: number): ProcessSocket[] {
+  const lines = output.split("\n").filter(Boolean);
+  if (lines[0] !== `p${pid}` || !lines.some(line => line.startsWith("f"))) throw new Error(`lsof listed no open files of process ${pid}:\n${output}`);
+  const files: ProcessSocket[] = [];
+  for (const line of lines.slice(1)) {
+    const field = line[0], value = line.slice(1);
+    if (field === "f") files.push({ fd: value, type: "", name: "" });
+    else if (!files.length) throw new Error(`Unexpected lsof output for process ${pid}: ${line}`);
+    else if (field === "t") files.at(-1)!.type = value;
+    else if (field === "P") files.at(-1)!.protocol = value;
+    else if (field === "n") files.at(-1)!.name = value;
+    else if (field === "T" && value.startsWith("ST=")) files.at(-1)!.state = value.slice(3);
+  }
+  return files.filter(file => file.type === "IPv4" || file.type === "IPv6" || file.type === "unix");
+}
 
 /** One authenticated session; requests run one at a time. Quitting or disconnecting quits the app. */
 export class Driver {
@@ -329,6 +352,14 @@ export class Driver {
     const exited = await Promise.race([this.app.exited.then(() => true), new Promise<false>(resolve => { timer = setTimeout(() => resolve(false), timeoutMs); })]);
     clearTimeout(timer);
     if (!exited) { this.app.kill("SIGKILL"); await this.app.exited; throw new Error(`The app did not quit within ${timeoutMs} ms`); }
+  }
+  /** The sockets the app process holds, read with lsof outside the app (not through the driver). */
+  sockets(): ProcessSocket[] {
+    const pid = this.app.pid;
+    if (pid === undefined || !this.running) throw new Error("The app is not running");
+    const result = spawnSync("lsof", ["-nP", "-p", String(pid), "-F", "ftPnT"], { encoding: "utf8" });
+    if (result.status !== 0) throw new Error(`lsof -p ${pid} failed (${result.status ?? result.signal}): ${result.stderr.trim()}`);
+    return parseSockets(result.stdout, pid);
   }
   /** Whether the app process is still running. */
   get running() { return this.app.exitCode === null && this.app.signalCode === null; }

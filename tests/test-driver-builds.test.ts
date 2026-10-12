@@ -116,13 +116,14 @@ test("the Kitchen Sink, which the gate drives as a release build, opts in", () =
 
 // A release-style binary built without the driver and one built with it, checked the way `spark build` checks every
 // macOS release build.
-// Both include the crash reporter, whose native simulated crashes need the driver.
+// Both include the crash reporter and the hang watchdog, whose native simulated crashes and simulated hangs need the driver.
 const native = path.join(root, "packages/desktop-app/macos"), diagnostics = path.join(root, "packages/diagnostics/macos");
 const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm", "SparkTestDriverCommits.mm",
   "SparkTestDriverAudit.mm"].map(file => path.join(native, file));
-const crashSources = ["SparkCrashReporter.mm", "SparkStack.mm"].map(file => path.join(diagnostics, file));
+const crashSources = ["SparkCrashReporter.mm", "SparkHangWatchdog.mm", "SparkStack.mm"].map(file => path.join(diagnostics, file));
 const host = `#import "SparkTestDriver.h"
 #import "SparkCrashReporter.h"
+#import "SparkHangWatchdog.h"
 int main(void) {
   @autoreleasepool {
     BOOL driven = SparkTestDriverStart();
@@ -132,6 +133,9 @@ int main(void) {
     NSError *error;
     printf("simulateCrash %s\\n", SparkSimulateCrash(@"/tmp", @"abort", &error) ? "ran" : [error.userInfo[SparkCrashCodeKey] UTF8String]);
 #endif
+    NSDate *start = NSDate.date;
+    BOOL hung = SparkSimulateHang(300);
+    printf("simulateHang %s\\n", hung ? (-start.timeIntervalSinceNow >= 0.3 ? "blocked" : "returned early") : "unavailable");
   }
   return 0;
 }
@@ -153,7 +157,7 @@ beforeAll(async () => {
 }, 240_000);
 afterAll(() => { if (directory) rmSync(directory, { recursive: true, force: true }); });
 
-test.skipIf(!darwin)("a build without the driver has none of its code, ignores SPARK_TEST_DRIVER_DIR and SPARK_SIMULATE_CRASH, and passes the release check", async () => {
+test.skipIf(!darwin)("a build without the driver has none of its code, ignores SPARK_TEST_DRIVER_DIR and SPARK_SIMULATE_CRASH, cannot simulate a hang, and passes the release check", async () => {
   const binary = path.join(app("Consumer"), "Contents/MacOS/Consumer");
   expect(testDriverMarkers(app("Consumer"))).toEqual([]);
   expect(execFileSync("nm", [binary], { encoding: "utf8" })).not.toContain("SparkTestDriver");
@@ -161,12 +165,15 @@ test.skipIf(!darwin)("a build without the driver has none of its code, ignores S
   expect(() => checkReleaseTestDriver(app("Consumer"), true)).toThrow("macos.testDriverInRelease is set, but the release build lacks the test driver (driver.sock, Spark test driver:");
   const result = await run(binary, [], { env: { ...process.env, SPARK_TEST_DRIVER_DIR: "/nonexistent", SPARK_SIMULATE_CRASH: "abort", SPARK_SIMULATE_CRASH_DIRECTORY: directory }, timeout: 30_000 });
   expect(result.status, outcome(result)).toBe(0);
-  expect(result.stdout).toBe("started 0 active 0 ending 0\nsimulateCrash E_UNAVAILABLE\n");
+  expect(result.stdout).toBe("started 0 active 0 ending 0\nsimulateCrash E_UNAVAILABLE\nsimulateHang unavailable\n");
   expect(result.stderr).toContain("Spark: this build has no test driver; SPARK_TEST_DRIVER_DIR is ignored");
 }, 60_000);
 
-test.skipIf(!darwin)("a build with the driver has it, which the release check requires with macos.testDriverInRelease and refuses without", () => {
+test.skipIf(!darwin)("a build with the driver has it, simulates a hang, and the release check requires it with macos.testDriverInRelease and refuses it without", async () => {
+  const result = await run(path.join(app("Gate"), "Contents/MacOS/Gate"), [], { timeout: 30_000 });
+  expect(result.status, outcome(result)).toBe(0);
+  expect(result.stdout).toBe("started 0 active 0 ending 0\nsimulateHang blocked\n");
   expect(testDriverMarkers(app("Gate"))).toEqual(expect.arrayContaining(["driver.sock", "Spark test driver:", "startCommits", "accessibilityAudit", "SPARK_SIMULATE_CRASH"]));
   expect(() => checkReleaseTestDriver(app("Gate"), true)).not.toThrow();
   expect(() => checkReleaseTestDriver(app("Gate"), false)).toThrow("The release build contains test driver code (driver.sock, Spark test driver:");
-});
+}, 60_000);

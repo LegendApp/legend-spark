@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type TestDragRequest } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -33,13 +33,14 @@ const describeTarget = (target: InputTarget) => "testID" in target ? `${target.t
 export class FakeDriver implements DriverClient {
   running = true;
   private calls = 0;
-  private readonly directory = mkdtempSync(path.join(tmpdir(), "fake-driver-"));
+  readonly directory = mkdtempSync(path.join(tmpdir(), "fake-driver-"));
   constructor(private readonly log: string[], private readonly views: Record<string, number>, private readonly extra: () => DriverElement[] = () => [], private readonly menuBar: DriverMenuItem[] = [],
     private readonly motions: () => Record<string, FakeMotion> = () => ({}), private readonly frames: () => FrameReport | DriverError = () => FRAMES,
     private readonly cursorAt: () => DriverCursor = () => ({ cursor: "arrow", hiddenUntilMoved: false }),
     private readonly inspected: () => { startup: StartupPhases | DriverError; state: Record<string, unknown> } = () => ({ startup: STARTUP, state: {} }),
     private readonly rendered: () => { commits: CommitReport | DriverError; counters: () => Counters; memoryMB: number } = () => ({ commits: COMMITS, counters: () => COUNTERS, memoryMB: 300 }),
-    private readonly audit: () => AuditFacts = () => ({ windows: [], captures: [], elements: [] })) {}
+    private readonly audit: () => AuditFacts = () => ({ windows: [], captures: [], elements: [] }),
+    private readonly processSockets: () => ProcessSocket[] = () => []) {}
 
   async navigate(url: string) { this.log.push(`navigate ${url}`); }
   async openFile(file: string) { this.log.push(`openFile ${file}`); }
@@ -144,6 +145,7 @@ export class FakeDriver implements DriverClient {
   async pressKey(key: string, modifiers: string[] = []) { this.log.push(`pressKey ${JSON.stringify(key)} ${modifiers.join("+")}`); }
   async typeText(text: string) { this.log.push(`typeText ${text}`); }
   async menus() { this.log.push("menus"); return this.menuBar; }
+  sockets() { this.log.push("sockets"); return this.processSockets(); }
   async quit() { this.log.push("quit"); this.running = false; }
   async close() { this.log.push("close"); this.running = false; }
 }
@@ -172,6 +174,10 @@ export class FakeApp implements DriverApp {
   memoryMB = 300;
   /** The facts the next accessibilityAudit reports. */
   audit: AuditFacts = { windows: [], captures: [], elements: [] };
+  /** The sockets lsof finds in the app process; `driver.sock` names the session's driver socket. */
+  sockets: (driver: FakeDriver) => ProcessSocket[] = () => [];
+  /** Runs at each launch with its options, as the app would start (a test can connect where a launch points). */
+  onLaunch?: (options: { arguments: readonly string[]; env: Readonly<Record<string, string>> }) => Promise<void>;
   constructor(private readonly views: Record<string, number> = {}, private readonly bundleId = "so.legend.spark.examples.kitchensink", readonly menuBar: DriverMenuItem[] = []) {}
 
   readonly reserved = { arguments: ["-RCT_jsLocation"], env: ["SPARK_TEST_DRIVER_DIR", "SPARK_BUNDLE_URL"], locale: ["-AppleLanguages", "-AppleLocale"] };
@@ -191,8 +197,9 @@ export class FakeApp implements DriverApp {
     const extra = [...(options.arguments.length ? [`args=${options.arguments.join(" ")}`] : []), ...(Object.keys(options.env).length ? [`env=${JSON.stringify(options.env)}`] : [])];
     this.log.push([`launch locale=${options.locale ?? "-"}`, ...extra, `log=${path.basename(options.log.file)}`].join(" "));
     writeFileSync(options.log.file, "app log");
-    const driver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar, () => this.motions, () => this.frames, () => this.cursor,
-      () => ({ startup: this.startup, state: this.state }), () => ({ commits: this.commits, counters: this.counters, memoryMB: this.memoryMB }), () => this.audit);
+    await this.onLaunch?.(options);
+    const driver: FakeDriver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar, () => this.motions, () => this.frames, () => this.cursor,
+      () => ({ startup: this.startup, state: this.state }), () => ({ commits: this.commits, counters: this.counters, memoryMB: this.memoryMB }), () => this.audit, () => this.sockets(driver));
     driver.dragSources = () => this.dragSources;
     this.drivers.push(driver);
     return driver;

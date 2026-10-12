@@ -89,6 +89,11 @@ test("simulateHang sends its duration and resolves when the main thread is free"
   expect(mocks.calls).toEqual([{ method: "simulateHang", args: { durationMs: 1000 } }]);
 });
 
+test("simulateHang keeps the native E_UNAVAILABLE of a build without the test driver", async () => {
+  mocks.fail = method => method === "simulateHang" && Object.assign(new Error("simulateHang exists only in Debug builds and builds with the test driver (macos.testDriverInRelease)"), { code: "E_UNAVAILABLE" });
+  await expect(diagnostics.simulateHang(1000)).rejects.toMatchObject({ name: "SparkError", code: "E_UNAVAILABLE" });
+});
+
 test("availability is truthful per platform, and unsupported calls reject typed after validation", async () => {
   expect(diagnostics.getHangWatchdogAvailability()).toEqual({ available: true });
   for (const OS of ["windows", "ios", "android", "web"]) {

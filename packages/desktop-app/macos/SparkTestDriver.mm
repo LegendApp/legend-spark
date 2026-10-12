@@ -415,7 +415,8 @@ static void SparkCollectParts(id parent, NSWindow *window, NSString *windowID, N
 // The in-process accessibility view of a window: every visible view with a testID, and every accessibility element
 // (controls through their cells, as AppKit exposes them) with a role, label or text. `role` is the NSAccessibility
 // role without AX (AXButton is button). `text` is the string value, else the title, else the displayed text of a
-// view with attributed text (React Native Text). A view inside an element with the same testID (a native control a
+// view with attributed text (React Native Text). `enabled` and `selected` are its isAccessibilityEnabled and
+// isAccessibilitySelected (a control's through its cell). A view inside an element with the same testID (a native control a
 // React Native view hosts) refines that element instead of adding one.
 static void SparkCollectElements(NSView *view, NSString *window, NSMutableDictionary *parent, NSMutableArray *elements) {
   if (view.isHidden) return;
@@ -429,8 +430,10 @@ static void SparkCollectElements(NSView *view, NSString *window, NSMutableDictio
       ?: ([attributed isKindOfClass:NSAttributedString.class] ? SparkNonEmpty([attributed string]) : nil);
     id rawValue = view.accessibilityValue ?: cell.accessibilityValue;
     NSString *value = [rawValue isKindOfClass:NSNumber.class] ? [rawValue stringValue] : SparkNonEmpty(rawValue);
+    NSNumber *enabled = @(cell ? cell.isAccessibilityEnabled : view.isAccessibilityEnabled), *selected = @(cell ? cell.isAccessibilitySelected : view.isAccessibilitySelected);
     if (testID && [parent[@"id"] isEqual:testID]) {
       parent[@"frame"] = SparkDriverFrame(view);
+      parent[@"enabled"] = enabled; parent[@"selected"] = selected;
       if (role) parent[@"role"] = role;
       if (label) parent[@"label"] = label;
       if (text) parent[@"text"] = text;
@@ -438,6 +441,7 @@ static void SparkCollectElements(NSView *view, NSString *window, NSMutableDictio
     } else if (testID || role || label || text) {
       element = [@{ @"key": [NSString stringWithFormat:@"%lu", (unsigned long)elements.count], @"window": window, @"frame": SparkDriverFrame(view) } mutableCopy];
       element[@"parent"] = parent[@"key"]; element[@"id"] = testID; element[@"role"] = role; element[@"label"] = label; element[@"text"] = text; element[@"value"] = value;
+      element[@"enabled"] = enabled; element[@"selected"] = selected;
       [elements addObject:element];
     }
   }

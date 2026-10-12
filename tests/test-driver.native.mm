@@ -28,6 +28,16 @@ static const char *token = "0123456789abcdef0123456789abcdef0123456789abcdef0123
 - (void)drawRect:(NSRect)rect { [NSColor.greenColor setFill]; NSRectFill(self.bounds); }
 @end
 
+// A React Native view as Spark's accessibility state patch leaves it: enabled and selected follow its
+// accessibilityState (packages/config-plugin/accessibility-state.cjs).
+@interface RCTViewComponentView : NSView
+@property BOOL disabled, chosen;
+@end
+@implementation RCTViewComponentView
+- (BOOL)isAccessibilityEnabled { return !self.disabled; }
+- (BOOL)isAccessibilitySelected { return self.chosen; }
+@end
+
 // Two empty rows in a source list, the style the Sidebar uses; the first is selected.
 @interface SourceList : NSObject <NSTableViewDataSource, NSTableViewDelegate>
 @end
@@ -932,8 +942,8 @@ int main(int argc, char **argv) { @autoreleasepool {
     });
   }
   else if ([mode isEqual:@"audit"]) {
-    // Accessibility audit facts: an image-only button without a description, faint text, and text below the fold of
-    // a scroll view, which the audit scrolls into view to render and then scrolls back.
+    // Accessibility audit facts: an image-only button without a description, faint text, a disabled React Native view,
+    // and text below the fold of a scroll view, which the audit scrolls into view to render and then scrolls back.
     NSImage *glyph = [NSImage imageWithSize:NSMakeSize(16, 16) flipped:NO drawingHandler:^BOOL(NSRect rect) { [NSColor.blackColor setFill]; NSRectFill(rect); return YES; }];
     NSButton *unnamed = [NSButton buttonWithImage:glyph target:nil action:nil];
     unnamed.frame = NSMakeRect(20, 40, 32, 32); unnamed.accessibilityIdentifier = @"audit-unnamed";
@@ -950,7 +960,18 @@ int main(int argc, char **argv) { @autoreleasepool {
     NSView *pressable = [[NSView alloc] initWithFrame:NSMakeRect(20, 80, 40, 20)];
     pressable.accessibilityElement = YES; pressable.accessibilityRole = NSAccessibilityButtonRole; pressable.accessibilityLabel = @"Pressable";
     pressable.accessibilityIdentifier = @"audit-pressable";
-    for (NSView *view in @[unnamed, faint, scroll, pressable]) [window.contentView addSubview:view];
+    // A disabled, selected React Native Pressable (which `disabled` makes refuse focus) around faint text; an AppKit
+    // text view, which reports isAccessibilityEnabled NO, is not disabled by it.
+    RCTViewComponentView *disabled = [[RCTViewComponentView alloc] initWithFrame:NSMakeRect(80, 80, 60, 20)];
+    disabled.accessibilityElement = YES; disabled.accessibilityRole = NSAccessibilityButtonRole; disabled.accessibilityLabel = @"Disabled";
+    disabled.accessibilityIdentifier = @"audit-disabled"; disabled.disabled = YES; disabled.chosen = YES;
+    NSTextField *dimmed = [NSTextField labelWithString:@"Dim"];
+    dimmed.frame = NSMakeRect(0, 0, 60, 20); dimmed.accessibilityIdentifier = @"audit-disabled-text";
+    dimmed.textColor = [NSColor colorWithSRGBRed:0.9 green:0.9 blue:0.9 alpha:1];
+    [disabled addSubview:dimmed];
+    NSTextView *textView = [[NSTextView alloc] initWithFrame:NSMakeRect(150, 80, 40, 20)];
+    textView.accessibilityIdentifier = @"audit-text-view";
+    for (NSView *view in @[unnamed, faint, scroll, pressable, disabled, textView]) [window.contentView addSubview:view];
     const NSPoint origin = scroll.contentView.bounds.origin;
     Client(^{
       int fd = Connect();
@@ -969,6 +990,12 @@ int main(int argc, char **argv) { @autoreleasepool {
         [NSString stringWithFormat:@"an image-only button has no label or title (%@)", button]);
       Check([button[@"focusable"] boolValue] && ![byID(@"audit-pressable")[@"focusable"] boolValue],
         [NSString stringWithFormat:@"an AppKit button takes focus; a view that does not accept first responder does not (%@)", byID(@"audit-pressable")]);
+      Check(![byID(@"audit-disabled")[@"enabled"] boolValue] && ![byID(@"audit-disabled-text")[@"enabled"] boolValue] && [byID(@"audit-text-view")[@"enabled"] boolValue]
+        && [byID(@"audit-pressable")[@"enabled"] boolValue],
+        [NSString stringWithFormat:@"a disabled React Native view and its text are not enabled; an AppKit text view is (%@, %@)", byID(@"audit-disabled"), byID(@"audit-text-view")]);
+      NSDictionary *reported = nil;
+      for (NSDictionary *element in Request(fd, @{ @"command": @"elements" })[@"elements"]) if ([element[@"id"] isEqual:@"audit-disabled"]) reported = element;
+      Check([reported[@"enabled"] isEqual:@NO] && [reported[@"selected"] isEqual:@YES], [NSString stringWithFormat:@"elements: a view's accessibility enabled and selected state (%@)", reported]);
       NSDictionary *native = nil;
       for (NSDictionary *element in audit[@"elements"]) if ([element[@"role"] isEqual:@"button"] && [element[@"title"] isEqual:@"Native button"]) native = element;
       Check(native != nil, @"a titled button reports its title");
