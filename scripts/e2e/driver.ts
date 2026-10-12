@@ -52,6 +52,24 @@ export type MotionSample = { tMs: number; values: MotionValues; velocities: Moti
 export type MotionSamples = { fromMs: number; toMs: number; intervalMs: number; truncated: boolean; samples: MotionSample[] };
 /** What waitForMotion waits for, after motion of the view started or was interrupted after the last driver input. */
 export type MotionUntil = { progress: number } | { elapsedMs: number } | { settled: true };
+/** An sRGB colour: 0-255 channels, alpha 0-1. */
+export type AuditColor = { r: number; g: number; b: number; a: number };
+/** The text a view draws: its distinct declared colours (sRGB, in the view's appearance), its smallest font size in points, and whether every run is bold. */
+export type AuditTextStyle = { colors: AuditColor[]; unresolved: boolean; size: number; bold: boolean };
+/**
+ * One element of `accessibilityAudit` (docs/test-driver.md#accessibility-audit): an accessibility element, a control,
+ * or a view that draws text. `element` is whether AppKit exposes it as an accessibility element; `enabled` is false
+ * inside a disabled AppKit control; `opacity` includes its ancestors'; `editable` is set for views that can be; `focusable` is whether the keyboard reaches it (it takes focus, or is in a table or collection view); `within` is the nearest testID of it or an ancestor. A sampled text has `capture`
+ * (an index into the captures) and `sample`, the pixels of that capture that show it (`clipped` when only part).
+ */
+export type AuditElement = {
+  key: string; parent?: string; window: string; id?: string; within?: string; frame: Frame; element: boolean; enabled: boolean; opacity: number;
+  role?: string; label?: string; title?: string; placeholder?: string; value?: string; help?: string; editable?: boolean; focusable?: boolean;
+  text?: string; textStyle?: AuditTextStyle; capture?: number; sample?: Frame; clipped?: boolean;
+};
+/** An sRGB render of a window that audit samples refer to; `file` is in the run directory. */
+export type AuditCapture = { file: string; window: string; width: number; height: number; scale: number };
+export type AuditFacts = { windows: Array<{ id: string; title: string }>; captures: AuditCapture[]; elements: AuditElement[] };
 /** Main-thread display-link cadence between startFrames and stopFrames (docs/test-driver.md#frame-timing). */
 export type FrameReport = { frames: number; droppedFrames: number; maxFrameGapMs: number; durationMs: number; fps: number; refreshRate: number };
 /** Startup phases in milliseconds since the kernel started the process (docs/test-driver.md#startup-phases); a phase the app never reached is absent. */
@@ -240,6 +258,14 @@ export class Driver {
   }
   /** The process's memory: its footprint (what Activity Monitor shows) and resident size, in MB. */
   async memory() { return body<{ footprintMB: number; residentMB: number }>(await this.request({ command: "memory" }, 10000)); }
+  /**
+   * The facts of an accessibility audit of the main window (`window`) or every window with an identifier (`app`), once
+   * mounted UI updates settle: elements, and sRGB renders `<name>-<n>.png` that show every text (scrolled into view).
+   */
+  async accessibilityAudit(scope: "window" | "app", name: string, timeoutMs = 5000): Promise<AuditFacts> {
+    const facts = body<AuditFacts>(await this.request({ command: "accessibilityAudit", scope, name, timeoutMs }, timeoutMs + 60000));
+    return { ...facts, captures: facts.captures.map(capture => ({ ...capture, file: path.join(this.directory, capture.file) })) };
+  }
   /** Clicks a target in-process (docs/test-driver.md#input): `clickCount` 1-3, left, right, back or forward button. */
   async tap(target: InputTarget, options: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] } = {}) {
     await this.request({ command: "tap", ...target, ...options }, 10000);

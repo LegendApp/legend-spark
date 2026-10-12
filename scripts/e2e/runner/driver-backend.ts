@@ -1,6 +1,6 @@
 // The Spark in-app driver (docs/test-driver.md) as a runner backend: white-box, in-process, macOS
 // (docs/e2e-flows.md#the-driver-backend). It selects through the app's in-process accessibility view and runs the
-// black-box commands it implements (input, gestures, assertCursor, assertText, assertA11y) with in-process events when no black-box backend
+// black-box commands it implements (input, gestures, assertCursor, assertText, assertA11y, auditAccessibility) with in-process events when no black-box backend
 // is active; the runner labels those steps white-box. Commands it cannot serve are missing from `commands`, so the
 // runner fails them as unsupported; real OS input and the accessibility tree belong to the black-box backend (#50).
 import { copyFileSync, existsSync, writeFileSync } from "node:fs";
@@ -11,6 +11,8 @@ import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
   type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton,
 } from "../driver.ts";
+import { readPng } from "../golden/diff.ts";
+import { auditCommand, type AuditClient } from "./driver-audit.ts";
 import { inspectCommands, type InspectClient } from "./driver-inspect.ts";
 import { motionCommands, type MotionClient } from "./driver-motion.ts";
 import { renderCommands, type RenderClient } from "./driver-render.ts";
@@ -21,7 +23,7 @@ import {
 } from "./backend.ts";
 
 /** What the backend uses of a driver session (`Driver` in scripts/e2e/driver.ts). Tests pass a double. */
-export type DriverClient = MotionClient & InspectClient & RenderClient & {
+export type DriverClient = MotionClient & InspectClient & RenderClient & AuditClient & {
   readonly running: boolean;
   navigate(url: string): Promise<void>;
   openFile(file: string): Promise<void>;
@@ -132,6 +134,8 @@ export class DriverBackend implements Backend {
     },
     assertText: (args, context) => this.assertText(args, context),
     assertA11y: (args, context) => this.assertA11y(args, context),
+    // The macOS accessibility audit rules that need no assistive-technology client, judged from in-process facts.
+    auditAccessibility: auditCommand(() => this.client(), readPng),
     // White-box: the menu bar as AppKit holds it, validated as when a user opens it (assertMenuItem is the black-box form).
     assertAppMenu: (args, context) => context.eventually(async () => assertMenu(await this.client().menus(), args)),
   });

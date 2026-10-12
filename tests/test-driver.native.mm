@@ -931,6 +931,68 @@ int main(int argc, char **argv) { @autoreleasepool {
       finished = YES;
     });
   }
+  else if ([mode isEqual:@"audit"]) {
+    // Accessibility audit facts: an image-only button without a description, faint text, and text below the fold of
+    // a scroll view, which the audit scrolls into view to render and then scrolls back.
+    NSImage *glyph = [NSImage imageWithSize:NSMakeSize(16, 16) flipped:NO drawingHandler:^BOOL(NSRect rect) { [NSColor.blackColor setFill]; NSRectFill(rect); return YES; }];
+    NSButton *unnamed = [NSButton buttonWithImage:glyph target:nil action:nil];
+    unnamed.frame = NSMakeRect(20, 40, 32, 32); unnamed.accessibilityIdentifier = @"audit-unnamed";
+    NSTextField *faint = [NSTextField labelWithString:@"Faint"];
+    faint.frame = NSMakeRect(60, 40, 120, 20); faint.font = [NSFont systemFontOfSize:13]; faint.accessibilityIdentifier = @"audit-faint";
+    faint.textColor = [NSColor colorWithSRGBRed:0.8 green:0.8 blue:0.8 alpha:1];
+    NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(200, 10, 180, 60)];
+    NSView *document = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 180, 300)];
+    NSTextField *below = [NSTextField labelWithString:@"Below the fold"];
+    below.frame = NSMakeRect(10, 260, 160, 20); below.accessibilityIdentifier = @"audit-below";
+    [document addSubview:below];
+    scroll.documentView = document;
+    // A view exposed as a button that does not accept first responder, as a React Native Pressable without `focusable`.
+    NSView *pressable = [[NSView alloc] initWithFrame:NSMakeRect(20, 80, 40, 20)];
+    pressable.accessibilityElement = YES; pressable.accessibilityRole = NSAccessibilityButtonRole; pressable.accessibilityLabel = @"Pressable";
+    pressable.accessibilityIdentifier = @"audit-pressable";
+    for (NSView *view in @[unnamed, faint, scroll, pressable]) [window.contentView addSubview:view];
+    const NSPoint origin = scroll.contentView.bounds.origin;
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+      Check([Code(Request(fd, @{ @"command": @"accessibilityAudit", @"scope": @"screen", @"name": @"a" })) isEqual:@"E_INVALID_ARGUMENT"], @"audit scope is window or app");
+      Check([Code(Request(fd, @{ @"command": @"accessibilityAudit", @"name": @"../a" })) isEqual:@"E_INVALID_ARGUMENT"], @"audit names stay in the run directory");
+      NSDictionary *audit = Request(fd, @{ @"command": @"accessibilityAudit", @"name": @"audit" });
+      Check([audit[@"ok"] boolValue] && [audit[@"windows"][0][@"id"] isEqual:@"spark.main"], [NSString stringWithFormat:@"accessibilityAudit %@", audit]);
+      NSDictionary *(^byID)(NSString *) = ^NSDictionary *(NSString *testID) {
+        for (NSDictionary *element in audit[@"elements"]) if ([element[@"id"] isEqual:testID]) return element;
+        return nil;
+      };
+      NSDictionary *button = byID(@"audit-unnamed");
+      Check([button[@"role"] isEqual:@"button"] && !button[@"label"] && !button[@"title"] && [button[@"element"] boolValue] && [button[@"enabled"] boolValue],
+        [NSString stringWithFormat:@"an image-only button has no label or title (%@)", button]);
+      Check([button[@"focusable"] boolValue] && ![byID(@"audit-pressable")[@"focusable"] boolValue],
+        [NSString stringWithFormat:@"an AppKit button takes focus; a view that does not accept first responder does not (%@)", byID(@"audit-pressable")]);
+      NSDictionary *native = nil;
+      for (NSDictionary *element in audit[@"elements"]) if ([element[@"role"] isEqual:@"button"] && [element[@"title"] isEqual:@"Native button"]) native = element;
+      Check(native != nil, @"a titled button reports its title");
+      NSDictionary *text = byID(@"audit-faint");
+      Check([text[@"text"] isEqual:@"Faint"] && [text[@"textStyle"][@"colors"] isEqual:@[@{ @"r": @204, @"g": @204, @"b": @204, @"a": @1 }]] && [text[@"textStyle"][@"size"] isEqual:@13]
+        && ![text[@"textStyle"][@"bold"] boolValue] && [text[@"capture"] isEqual:@0] && ![text[@"clipped"] boolValue],
+        [NSString stringWithFormat:@"text reports its declared colour, size and where the first render shows it (%@)", text]);
+      NSDictionary *sample = text[@"sample"], *capture = audit[@"captures"][0];
+      CGFloat scale = [capture[@"scale"] doubleValue];
+      Check(scale >= 1 && [sample[@"width"] doubleValue] == floor(180 * scale) - ceil(60 * scale) && [sample[@"height"] doubleValue] == floor(20 * scale) - ceil(0 * scale),
+        [NSString stringWithFormat:@"the sample is the text's pixels in the capture (%@ at %@)", sample, capture]);
+      NSDictionary *hidden = byID(@"audit-below");
+      Check([hidden[@"capture"] intValue] >= 1 && ![hidden[@"clipped"] boolValue] && [audit[@"captures"] count] == [hidden[@"capture"] unsignedIntegerValue] + 1,
+        [NSString stringWithFormat:@"text below the fold is scrolled into view and rendered again (%@, %@)", hidden, audit[@"captures"]]);
+      for (NSDictionary *each in audit[@"captures"]) {
+        struct stat file;
+        Check(stat([directory stringByAppendingPathComponent:each[@"file"]].fileSystemRepresentation, &file) == 0 && (file.st_mode & 0777) == 0600, @"audit captures are private files in the run directory");
+      }
+      NSValue *restored = OnMain(^{ return [NSValue valueWithPoint:scroll.contentView.bounds.origin]; });
+      Check(NSEqualPoints(restored.pointValue, origin), @"the audit restores scroll positions");
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
   else Check(NO, [@"unknown mode " stringByAppendingString:mode]);
 
   Pump(^{ return (BOOL)(finished && terminateRequested); }, 20);

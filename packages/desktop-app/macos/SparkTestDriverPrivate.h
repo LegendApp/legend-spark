@@ -11,6 +11,16 @@ NSView *SparkDriverFindTestID(NSView *view, NSString *testID);
 NSView *SparkDriverFindView(NSString *testID);
 // main, key, id:<identifier> or title:<title>; nil with `failure` set otherwise.
 NSWindow *SparkDriverResolveWindow(id target, NSString **failure);
+// The view's frame in points from the top-left of its window's frame view: {x, y, width, height}.
+NSDictionary *SparkDriverFrame(NSView *view);
+// An NSAccessibility role without AX ("AXButton" is "button"); nil for none or the unknown role.
+NSString *SparkDriverRoleName(id role);
+// What `capture` renders: the window's frame view, inside the modules' render wrappers.
+NSBitmapImageRep *SparkDriverRenderWindow(NSWindow *window);
+// 1-100 of [A-Za-z0-9_-], not starting with -.
+BOOL SparkDriverCaptureName(id name);
+// Creates `file` (a capture name plus extension) in the run directory, never overwriting; 0 or an errno.
+int SparkDriverWriteCapture(NSString *file, NSData *data);
 
 NSArray<NSString *> *SparkDriverInputCommandNames(void);
 // Called once when the driver starts.
@@ -40,3 +50,6 @@ void SparkDriverWhenSettled(id timeoutMs, void (^done)(BOOL settled));
 // Commit watching, leak counters and memory (SparkTestDriverCommits.mm): startCommits, stopCommits, counters, memory.
 NSArray<NSString *> *SparkDriverCommitCommandNames(void);
 void SparkDriverCommits(NSString *command, NSDictionary *request, SparkTestDriverReply reply);
+// Accessibility audit facts (SparkTestDriverAudit.mm): accessibilityAudit.
+NSArray<NSString *> *SparkDriverAuditCommandNames(void);
+void SparkDriverAudit(NSDictionary *request, SparkTestDriverReply reply);

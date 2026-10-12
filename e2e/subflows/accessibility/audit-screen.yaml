@@ -1,0 +1,4 @@
+# Opens spark-ks://${AREA}/${SCREEN} in the running Kitchen Sink, waits for the screen's root, and audits the main window.
+- launchApp: { openUrl: "spark-ks://${AREA}/${SCREEN}", stopApp: false }
+- assertVisible: { id: "${AREA}-${SCREEN}-root" }
+- auditAccessibility: { maxErrors: 0 }

@@ -1,0 +1,4 @@
+# Opens the catalog page of area ${AREA} (spark-ks://${AREA}) in the running Kitchen Sink and audits the main window.
+- launchApp: { openUrl: "spark-ks://${AREA}", stopApp: false }
+- assertVisible: { id: "infra-shell-area-${AREA}-screens" }
+- auditAccessibility: { maxErrors: 0 }

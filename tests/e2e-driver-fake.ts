@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -38,7 +38,8 @@ export class FakeDriver implements DriverClient {
     private readonly motions: () => Record<string, FakeMotion> = () => ({}), private readonly frames: () => FrameReport | DriverError = () => FRAMES,
     private readonly cursorAt: () => DriverCursor = () => ({ cursor: "arrow", hiddenUntilMoved: false }),
     private readonly inspected: () => { startup: StartupPhases | DriverError; state: Record<string, unknown> } = () => ({ startup: STARTUP, state: {} }),
-    private readonly rendered: () => { commits: CommitReport | DriverError; counters: () => Counters; memoryMB: number } = () => ({ commits: COMMITS, counters: () => COUNTERS, memoryMB: 300 })) {}
+    private readonly rendered: () => { commits: CommitReport | DriverError; counters: () => Counters; memoryMB: number } = () => ({ commits: COMMITS, counters: () => COUNTERS, memoryMB: 300 }),
+    private readonly audit: () => AuditFacts = () => ({ windows: [], captures: [], elements: [] })) {}
 
   async navigate(url: string) { this.log.push(`navigate ${url}`); }
   async openFile(file: string) { this.log.push(`openFile ${file}`); }
@@ -98,6 +99,7 @@ export class FakeDriver implements DriverClient {
   }
   async counters(timeoutMs?: number) { this.log.push(`counters ${timeoutMs}`); return this.rendered().counters(); }
   async memory() { this.log.push("memory"); return { footprintMB: this.rendered().memoryMB, residentMB: 500 }; }
+  async accessibilityAudit(scope: "window" | "app", name: string) { this.log.push(`accessibilityAudit ${scope} ${name}`); return this.audit(); }
   async elements() {
     this.log.push("elements");
     const calls = ++this.calls;
@@ -135,6 +137,8 @@ export class FakeApp implements DriverApp {
   commits: CommitReport | DriverError = COMMITS;
   counters: () => Counters = () => COUNTERS;
   memoryMB = 300;
+  /** The facts the next accessibilityAudit reports. */
+  audit: AuditFacts = { windows: [], captures: [], elements: [] };
   constructor(private readonly views: Record<string, number> = {}, private readonly bundleId = "so.legend.spark.examples.kitchensink", readonly menuBar: DriverMenuItem[] = []) {}
 
   readonly reserved = { arguments: ["-RCT_jsLocation"], env: ["SPARK_TEST_DRIVER_DIR", "SPARK_BUNDLE_URL"], locale: ["-AppleLanguages", "-AppleLocale"] };
@@ -153,7 +157,7 @@ export class FakeApp implements DriverApp {
     this.log.push([`launch locale=${options.locale ?? "-"}`, ...extra, `log=${path.basename(options.log.file)}`].join(" "));
     writeFileSync(options.log.file, "app log");
     const driver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar, () => this.motions, () => this.frames, () => this.cursor,
-      () => ({ startup: this.startup, state: this.state }), () => ({ commits: this.commits, counters: this.counters, memoryMB: this.memoryMB }));
+      () => ({ startup: this.startup, state: this.state }), () => ({ commits: this.commits, counters: this.counters, memoryMB: this.memoryMB }), () => this.audit);
     this.drivers.push(driver);
     return driver;
   }

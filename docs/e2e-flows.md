@@ -497,6 +497,7 @@ fails with `invalid`.
 | matrix `appearance` | `setAppAppearance` after each launch (the app override; the OS setting is untouched) |
 | matrix `locale` | Launch arguments `-AppleLanguages (<locale>) -AppleLocale <locale>` |
 | `setAppAppearance` | `setAppAppearance`; lasts until the app quits |
+| `auditAccessibility` | `accessibilityAudit`, judged by the runner ([Accessibility audit](#accessibility-audit)). |
 | `assertAppMenu` | `menus`: the menu bar as AppKit holds it, validated as when a user opens it. `path` matches titles; `exists: false` passes when any segment is missing. Polled like other checks. |
 | `setClock`, `advanceClock` | The motion engine's `setClock` and `advanceClock` driver commands ([motion.md](motion.md#virtual-clock-for-the-test-driver)); `advanceClock` sends `duration` in milliseconds |
 | `captureMotion`, `assertMotion`, `interruptAt` | Motion telemetry: `motionState`, `waitForMotion` and `sampleMotion` ([Motion and frames](#motion-and-frames)). The target needs a testID. |
@@ -505,6 +506,33 @@ fails with `invalid`.
 | `assertNoLayoutThrash`, `assertNoFlicker`, `assertNoLeaks`, `assertMemory` | `startCommits`/`stopCommits`, `counters` and `listeners`, `memory` ([Layout, flicker and leaks](#layout-flicker-and-leaks)) |
 | `takeScreenshot`, `assertScreenshot`, failure screenshot | `capture` of the main window, or of the window `window` selects (`id:<identifier>`), its frame view (the content view's superview, title bar included). Element frames are points from the window's top-left, the capture's origin, so masks line up. |
 | failure evidence | Each launch's app log, and a capture of the main window while the app runs |
+
+#### Accessibility audit
+
+`auditAccessibility: { scope, maxErrors }` (`scripts/e2e/runner/driver-audit.ts`) audits the main window (`scope:
+window`, the default) or every window (`app`) with the rules of the macOS accessibility audit that the driver can
+judge in-process ([facts](test-driver.md#accessibility-audit)). Errors:
+
+| Rule | Error |
+| --- | --- |
+| `description` | An exposed accessibility element whose role is a control or an image (button, check box, radio button, pop-up and menu button, combo box, slider, stepper, text field and area, link, image, disclosure triangle, colour well, segmented control) has neither a label nor a title. A placeholder is not a description. Read-only text fields and areas (a selectable React Native `Text`) are described by their text. |
+| `keyboard` | An enabled exposed element whose role is a control (the roles above but image; read-only text excepted) cannot take keyboard focus: an AppKit control that refuses first responder, or another view (a React Native `Pressable` without `focusable`) that does not accept it. Items of a table, outline or collection view are reached with the arrow keys, and parts of a control that takes focus (a search field's buttons) come with it; both pass. |
+| `contrast` | Enabled text is below the [HIG](https://developer.apple.com/design/human-interface-guidelines/accessibility#Color-and-effects) contrast ratio against the background rendered behind it: 4.5:1, or 3:1 for text of 18 points or more or bold. The background is the most frequent colour of the text's pixels in the capture; the foreground is each colour the text declares, its alpha and its ancestors' opacity composited over that background, and the worst one counts. Text in a disabled AppKit control is exempt, as in WCAG; React Native macOS exposes no disabled state, so React Native text is always judged. A colour that does not resolve to sRGB cannot be measured and is an error. |
+
+The window's content view is audited; the title bar and its buttons are AppKit's. It writes the flow's nth audit to
+`output/a11y-audit-<n>.a11y.json` (`scope`, `windows`, `counts` of elements, described elements, operable elements, texts,
+measured texts and texts no render shows, `errors`, and the `unseen` texts) and copies the captures its errors refer
+to into `output/`. More than `maxErrors` (default 0) errors fail the step with `assertion`, listing the first ten.
+
+The step is white-box: it reads the app's views, not the accessibility tree an assistive technology sees. The rules
+that need an AX client or real input (the parent/child consistency of the tree, the order Tab visits controls in, what
+VoiceOver speaks) belong to the black-box backend ([#50](https://github.com/LegendApp/legend-spark/issues/50)). Text truncation is
+`assertNoTruncation`.
+
+The release gate audits every catalog screen and shell page: `e2e/flows/accessibility/audit-<area>.yaml` (one per
+area, through `subflows/accessibility/audit-screen.yaml`) and `audit-shell.yaml` (the catalog and every area page),
+check `A11Y-AUDIT-01`, in light and dark, English and Arabic. `tests/e2e-driver-audit.test.ts` fails when a registered
+screen or an area has no audit.
 
 #### Motion and frames
 

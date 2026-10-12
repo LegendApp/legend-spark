@@ -1,0 +1,19 @@
+appId: so.legend.spark.examples.kitchensink
+name: Accessibility audit of the reliability-diagnostics screens
+intent: >
+  Every reliability-diagnostics screen of the Kitchen Sink catalog (Logging, Hang watchdog, Crash reporting) opens from its spark-ks:// link in the
+  running app, its root renders, and the accessibility audit of the main window finds no errors: every control and
+  image has a label or title, every control takes keyboard focus, and all enabled text meets the HIG contrast ratio
+  against what is rendered behind it.
+  Runs in light and dark, in English and Arabic (right to left).
+checks: [A11Y-AUDIT-01]
+tags: [accessibility]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: reliability-diagnostics, SCREEN: logging } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: reliability-diagnostics, SCREEN: hang-watchdog } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: reliability-diagnostics, SCREEN: crash-reporting } }

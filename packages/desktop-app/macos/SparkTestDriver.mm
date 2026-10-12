@@ -63,8 +63,9 @@ void SparkTestDriverDidMount(void) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SparkSettleInterval * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ SparkNoteQuiet(CACurrentMediaTime()); });
 }
 static NSArray<NSString *> *SparkBuiltInCommands(void) {
-  return [[@[@"ping", @"navigate", @"openFile", @"waitFor", @"elements", @"setAppAppearance", @"capture", @"menus", @"startup", @"quit"]
-    arrayByAddingObjectsFromArray:SparkDriverInputCommandNames()] arrayByAddingObjectsFromArray:[SparkDriverFrameCommandNames() arrayByAddingObjectsFromArray:SparkDriverCommitCommandNames()]];
+  return [[[@[@"ping", @"navigate", @"openFile", @"waitFor", @"elements", @"setAppAppearance", @"capture", @"menus", @"startup", @"quit"]
+    arrayByAddingObjectsFromArray:SparkDriverInputCommandNames()] arrayByAddingObjectsFromArray:[SparkDriverFrameCommandNames() arrayByAddingObjectsFromArray:SparkDriverCommitCommandNames()]]
+    arrayByAddingObjectsFromArray:SparkDriverAuditCommandNames()];
 }
 static NSMutableArray<dispatch_block_t> *SparkStartObservers(void) {
   static NSMutableArray *observers;
@@ -233,7 +234,7 @@ NSWindow *SparkDriverResolveWindow(id target, NSString **failure) {
   if (matches.count != 1) { *failure = [NSString stringWithFormat:@"%lu windows match %@", (unsigned long)matches.count, target]; return nil; }
   return matches.firstObject;
 }
-static BOOL SparkCaptureName(id name) {
+BOOL SparkDriverCaptureName(id name) {
   if (![name isKindOfClass:NSString.class] || [name length] < 1 || [name length] > 100) return NO;
   NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"];
   return [name rangeOfCharacterFromSet:allowed.invertedSet].location == NSNotFound && [name characterAtIndex:0] != '-';
@@ -278,8 +279,25 @@ static void SparkCoverSelectionMaterials(NSView *view, NSMutableArray<dispatch_b
   }
   for (NSView *child in view.subviews) SparkCoverSelectionMaterials(child, restore);
 }
+// What `capture` renders: the window's frame view, inside the modules' render wrappers, with source-list selections covered.
+NSBitmapImageRep *SparkDriverRenderWindow(NSWindow *window) {
+  NSView *view = SparkDriverFrameView(window);
+  __block NSBitmapImageRep *rep = nil;
+  SparkWrapped(0, ^{
+    [window layoutIfNeeded];
+    [view displayIfNeeded];
+    NSMutableArray<dispatch_block_t> *restore = [NSMutableArray new];
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    SparkCoverSelectionMaterials(view, restore);
+    rep = SparkRender(view);
+    for (dispatch_block_t undo in restore) undo();
+    [CATransaction commit];
+  });
+  return rep;
+}
 // Captures are created only inside the runner's private run directory.
-static int SparkWriteCapture(NSString *file, NSData *data) {
+int SparkDriverWriteCapture(NSString *file, NSData *data) {
   int fd = openat(directoryFD, file.fileSystemRepresentation, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
   if (fd < 0) return errno;
   const char *bytes = (const char *)data.bytes;
@@ -301,26 +319,14 @@ static void SparkCapture(NSDictionary *request, SparkDriverReply reply) {
   NSWindow *window = SparkDriverResolveWindow(request[@"window"], &failure);
   if (!window) { reply(SparkDriverFailure(@"E_NO_WINDOW", failure)); return; }
   NSString *name = request[@"name"];
-  if (!SparkCaptureName(name)) { reply(SparkDriverFailure(@"E_INVALID_ARGUMENT", @"Capture names use 1-100 of [A-Za-z0-9_-] and do not start with -")); return; }
+  if (!SparkDriverCaptureName(name)) { reply(SparkDriverFailure(@"E_INVALID_ARGUMENT", @"Capture names use 1-100 of [A-Za-z0-9_-] and do not start with -")); return; }
   SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 5), ^{ return SparkSettled(); }, ^(BOOL settled) {
     if (!settled) { reply(SparkDriverFailure(@"E_NOT_SETTLED", @"The UI kept mounting changes until the timeout")); return; }
-    NSView *view = SparkDriverFrameView(window);
-    __block NSBitmapImageRep *rep = nil;
-    SparkWrapped(0, ^{
-      [window layoutIfNeeded];
-      [view displayIfNeeded];
-      NSMutableArray<dispatch_block_t> *restore = [NSMutableArray new];
-      [CATransaction begin];
-      [CATransaction setDisableActions:YES];
-      SparkCoverSelectionMaterials(view, restore);
-      rep = SparkRender(view);
-      for (dispatch_block_t undo in restore) undo();
-      [CATransaction commit];
-    });
+    NSBitmapImageRep *rep = SparkDriverRenderWindow(window);
     NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
     if (!png) { reply(SparkDriverFailure(@"E_RENDER", @"Rendering produced no image")); return; }
     NSString *file = [name stringByAppendingPathExtension:@"png"];
-    int error = SparkWriteCapture(file, png);
+    int error = SparkDriverWriteCapture(file, png);
     if (error) { reply(SparkDriverFailure(@"E_IO", [NSString stringWithFormat:@"%@: %s", file, strerror(error)])); return; }
     reply(@{ @"ok": @YES, @"file": file, @"width": @(rep.pixelsWide), @"height": @(rep.pixelsHigh), @"scale": @(window.backingScaleFactor) });
   });
@@ -359,13 +365,18 @@ static void SparkOpenURL(NSURL *url, NSDictionary *request, SparkDriverReply rep
   });
 }
 // Points from the top-left of the window's frame view, the area `capture` renders, so frames map onto capture pixels.
-static NSDictionary *SparkFrame(NSView *view) {
+NSDictionary *SparkDriverFrame(NSView *view) {
   NSView *root = SparkDriverFrameView(view.window);
   NSRect frame = [view convertRect:view.bounds toView:root];
   if (!root.isFlipped) frame.origin.y = NSHeight(root.bounds) - NSMaxY(frame);
   return @{ @"x": @(frame.origin.x), @"y": @(frame.origin.y), @"width": @(frame.size.width), @"height": @(frame.size.height) };
 }
 static NSString *SparkNonEmpty(id value) { return [value isKindOfClass:NSString.class] && [value length] ? value : nil; }
+NSString *SparkDriverRoleName(id role) {
+  NSString *name = SparkNonEmpty(role);
+  if ([name isEqual:NSAccessibilityUnknownRole]) return nil;
+  return [name hasPrefix:@"AX"] && name.length > 2 ? [[[name substringWithRange:NSMakeRange(2, 1)] lowercaseString] stringByAppendingString:[name substringFromIndex:3]] : name;
+}
 // An NSTabView's tab buttons (NSTabViewItem) implement only the legacy accessibility attribute protocol. In process,
 // their AXPosition and AXSize are a screen rect, as accessibilityFrame is.
 #pragma clang diagnostic push
@@ -386,9 +397,7 @@ static void SparkCollectParts(id parent, NSWindow *window, NSString *windowID, N
   if (!depth) return;
   for (id child in SparkPart(parent, @selector(accessibilityChildren), NSAccessibilityChildrenAttribute)) {
     if ([child isKindOfClass:NSView.class]) continue;
-    NSString *role = SparkNonEmpty(SparkPart(child, @selector(accessibilityRole), NSAccessibilityRoleAttribute)), *label = SparkNonEmpty(SparkPart(child, @selector(accessibilityLabel), NSAccessibilityDescriptionAttribute));
-    if ([role isEqual:NSAccessibilityUnknownRole]) role = nil;
-    if ([role hasPrefix:@"AX"] && role.length > 2) role = [[[role substringWithRange:NSMakeRange(2, 1)] lowercaseString] stringByAppendingString:[role substringFromIndex:3]];
+    NSString *role = SparkDriverRoleName(SparkPart(child, @selector(accessibilityRole), NSAccessibilityRoleAttribute)), *label = SparkNonEmpty(SparkPart(child, @selector(accessibilityLabel), NSAccessibilityDescriptionAttribute));
     NSString *text = SparkNonEmpty(SparkPart(child, @selector(accessibilityValue), NSAccessibilityValueAttribute)) ?: SparkNonEmpty(SparkPart(child, @selector(accessibilityTitle), NSAccessibilityTitleAttribute));
     NSMutableDictionary *element = owner;
     if (role || label || text) {
@@ -414,22 +423,20 @@ static void SparkCollectElements(NSView *view, NSString *window, NSMutableDictio
   NSCell *cell = [view isKindOfClass:NSControl.class] ? ((NSControl *)view).cell : nil;
   NSMutableDictionary *element = parent;
   if (testID || cell || view.isAccessibilityElement) {
-    NSString *role = SparkNonEmpty(cell.accessibilityRole) ?: SparkNonEmpty(view.accessibilityRole), *label = SparkNonEmpty(view.accessibilityLabel);
-    if ([role isEqual:NSAccessibilityUnknownRole]) role = nil;
-    if ([role hasPrefix:@"AX"] && role.length > 2) role = [[[role substringWithRange:NSMakeRange(2, 1)] lowercaseString] stringByAppendingString:[role substringFromIndex:3]];
+    NSString *role = SparkDriverRoleName(SparkNonEmpty(cell.accessibilityRole) ?: view.accessibilityRole), *label = SparkNonEmpty(view.accessibilityLabel);
     id attributed = [view respondsToSelector:@selector(attributedText)] ? [view valueForKey:@"attributedText"] : nil;
     NSString *text = SparkNonEmpty(view.accessibilityValue) ?: SparkNonEmpty(cell.accessibilityValue) ?: SparkNonEmpty(view.accessibilityTitle)
       ?: ([attributed isKindOfClass:NSAttributedString.class] ? SparkNonEmpty([attributed string]) : nil);
     id rawValue = view.accessibilityValue ?: cell.accessibilityValue;
     NSString *value = [rawValue isKindOfClass:NSNumber.class] ? [rawValue stringValue] : SparkNonEmpty(rawValue);
     if (testID && [parent[@"id"] isEqual:testID]) {
-      parent[@"frame"] = SparkFrame(view);
+      parent[@"frame"] = SparkDriverFrame(view);
       if (role) parent[@"role"] = role;
       if (label) parent[@"label"] = label;
       if (text) parent[@"text"] = text;
       if (value) parent[@"value"] = value;
     } else if (testID || role || label || text) {
-      element = [@{ @"key": [NSString stringWithFormat:@"%lu", (unsigned long)elements.count], @"window": window, @"frame": SparkFrame(view) } mutableCopy];
+      element = [@{ @"key": [NSString stringWithFormat:@"%lu", (unsigned long)elements.count], @"window": window, @"frame": SparkDriverFrame(view) } mutableCopy];
       element[@"parent"] = parent[@"key"]; element[@"id"] = testID; element[@"role"] = role; element[@"label"] = label; element[@"text"] = text; element[@"value"] = value;
       [elements addObject:element];
     }
@@ -524,7 +531,7 @@ static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
     __block NSView *match = nil;
     SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 10), ^{ return (BOOL)((match = SparkDriverFindView(testID)) != nil); }, ^(BOOL found) {
       if (!found) { reply(SparkDriverFailure(@"E_TIMEOUT", [NSString stringWithFormat:@"No view with testID %@", testID])); return; }
-      reply(@{ @"ok": @YES, @"window": match.window.identifier ?: @"", @"frame": SparkFrame(match) });
+      reply(@{ @"ok": @YES, @"window": match.window.identifier ?: @"", @"frame": SparkDriverFrame(match) });
     });
   }
   else if ([command isEqual:@"elements"]) SparkElements(reply);
@@ -534,6 +541,7 @@ static void SparkExecute(NSDictionary *request, SparkDriverReply reply) {
   else if ([SparkDriverFrameCommandNames() containsObject:command]) SparkDriverFrames(command, request, reply);
   else if ([SparkDriverCommitCommandNames() containsObject:command]) SparkDriverCommits(command, request, reply);
   else if ([command isEqual:@"startup"]) SparkStartup(request, reply);
+  else if ([SparkDriverAuditCommandNames() containsObject:command]) SparkDriverAudit(request, reply);
   else if ([command isEqual:@"menus"]) reply(@{ @"ok": @YES, @"menus": NSApp.mainMenu ? SparkMenuItems(NSApp.mainMenu) : @[] });
   else if ([command isKindOfClass:NSString.class] && SparkModuleCommands()[command]) SparkModuleCommands()[command](request, reply);
   else reply(SparkDriverFailure(@"E_UNKNOWN_COMMAND", [NSString stringWithFormat:@"Unknown command %@", command]));

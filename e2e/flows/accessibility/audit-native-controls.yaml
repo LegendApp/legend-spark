@@ -1,0 +1,32 @@
+appId: so.legend.spark.examples.kitchensink
+name: Accessibility audit of the native-controls screens
+intent: >
+  Every native-controls screen of the Kitchen Sink catalog (Sidebar: data items, Sidebar: dynamic heights, Sidebar: React rows, Split view, Glass, SF Symbols, Search field, Toggles, Value inputs, Indicators, Button styles, Table, Outline, Pickers, Popover, Tab view) opens from its spark-ks:// link in the
+  running app, its root renders, and the accessibility audit of the main window finds no errors: every control and
+  image has a label or title, every control takes keyboard focus, and all enabled text meets the HIG contrast ratio
+  against what is rendered behind it.
+  Runs in light and dark, in English and Arabic (right to left).
+checks: [A11Y-AUDIT-01]
+tags: [accessibility]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: sidebar-data-items } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: sidebar-dynamic-heights } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: sidebar-react-rows } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: split-view } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: glass } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: symbol } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: search } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: toggles } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: inputs } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: indicators } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: buttons } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: table } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: outline } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: pickers } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: popover } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: native-controls, SCREEN: tab-view } }
