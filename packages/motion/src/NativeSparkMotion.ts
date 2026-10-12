@@ -13,6 +13,13 @@ export interface Spec extends TurboModule {
   recordFrames(requestJson: string): Promise<string>;
   /** `tag` 0 reads the main display without a window. */
   environment(tag: number): Promise<string>;
+  /** Resolves `{ played }`: the effect, its Reduce Motion alternate (`pulse`, `fade`) or `none`. */
+  playSymbolEffect(requestJson: string): Promise<string>;
+  removeSymbolEffect(requestJson: string): Promise<void>;
+  /** Whether an SF Symbol with this name exists on this macOS. */
+  hasSymbol(name: string): boolean;
+  /** Whether this app's SDK and this macOS have a symbol effect, or `replace`. */
+  supportsSymbolEffect(name: string): boolean;
 }
 
 export default TurboModuleRegistry.get<Spec>("NativeSparkMotion");

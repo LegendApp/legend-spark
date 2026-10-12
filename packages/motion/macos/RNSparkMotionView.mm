@@ -4,6 +4,8 @@
 #import <react/renderer/components/RNSparkMotionSpec/Props.h>
 #import <React/RCTMountingTransactionObserving.h>
 #include <cmath>
+#import <react/featureflags/ReactNativeFeatureFlags.h>
+#import <react/renderer/graphics/Color.h>
 using namespace facebook::react;
 using spark::motion::Values;
 
@@ -23,6 +25,7 @@ static NSString *SparkMotionString(const std::string &value) { return value.empt
   NSString *_layout;
   NSString *_sharedId;
   NSDictionary *_transition;
+  uint32_t _owned;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
@@ -56,13 +59,32 @@ static NSString *SparkMotionString(const std::string &value) { return value.empt
 - (NSString *)motionSharedId { return _sharedId; }
 - (NSDictionary *)motionTransition { return _transition; }
 - (BOOL)motionRightToLeft { return _layoutMetrics.layoutDirection == LayoutDirection::RightToLeft; }
+- (uint32_t)motionOwnedChannels { return _owned; }
+- (void)setMotionOwnedChannels:(uint32_t)owned { _owned = owned; }
+
+// The conditions under which RCTViewComponentView's invalidateLayer draws the background and borders on sublayers, and
+// clips its content with a mask layer, instead of using this view's own layer.
+- (uint32_t)motionStyleChannels
+{
+  using spark::motion::Channel;
+  const auto &props = *std::static_pointer_cast<const ViewProps>(_props);
+  const auto border = props.resolveBorderMetrics(_layoutMetrics);
+  const bool clips = props.getClipsContentToBounds();
+  const bool transparentBorder = border.borderColors.left && colorComponentsFromColor(border.borderColors.left).alpha == 0;
+  const bool layerBorders = border.borderColors.isUniform() && border.borderWidths.isUniform() && border.borderStyles.isUniform() &&
+    border.borderStyles.left == BorderStyle::Solid && border.borderRadii.isUniform() && (border.borderWidths.left == 0 || clips || transparentBorder);
+  const bool clipMask = clips && (!border.borderRadii.isUniform() ||
+    (ReactNativeFeatureFlags::enableIOSViewClipToPaddingBox() && (!border.borderWidths.isUniform() || border.borderWidths.left != 0)));
+  return (layerBorders ? 0 : SparkMotionChannelBit(Channel::BackgroundColor) | SparkMotionChannelBit(Channel::BorderRadius)) |
+    (clipMask ? SparkMotionChannelBit(Channel::Mask) : 0);
+}
 
 - (void)applyMotionModel:(const Values &)values
 {
   _model = values;
   // RCTUIView keeps transform3D across AppKit's layer resets and centres it like React Native.
   self.transform3D = SparkMotionTransform(values);
-  self.layer.opacity = values[spark::motion::Opacity];
+  SparkMotionApplyLayer(self, values);
 }
 
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
@@ -86,7 +108,9 @@ static NSString *SparkMotionString(const std::string &value) { return value.empt
     for (id name in (NSDictionary *)values) {
       auto property = [name isKindOfClass:NSString.class] ? spark::motion::propertyFromName([name UTF8String]) : std::nullopt;
       id value = ((NSDictionary *)values)[name];
-      if (property && [value isKindOfClass:NSNumber.class] && std::isfinite([value doubleValue])) initial[*property] = [value doubleValue];
+      if (!property || ![value isKindOfClass:NSNumber.class] || !std::isfinite([value doubleValue])) continue;
+      initial[*property] = [value doubleValue];
+      _owned |= SparkMotionChannelBit(spark::motion::channelOf(*property));
     }
   }
   _tag = self.reactTag.integerValue;
@@ -112,11 +136,14 @@ static NSString *SparkMotionString(const std::string &value) { return value.empt
   if (_layout || _sharedId) [SparkMotionCoordinator.shared hostDidMount:self surface:transaction.getSurfaceId() transaction:(NSInteger)transaction.getNumber()];
 }
 
-// Fabric re-applies the `opacity` prop on every layer invalidation; motion owns opacity.
+// Fabric re-applies the style (opacity, background, corners, shadow) on every layer invalidation and clears the mask.
+// Motion owns opacity and the mask, and the background, corners and shadow once it drives them; until then the engine
+// takes them from the style.
 - (void)invalidateLayer
 {
   [super invalidateLayer];
-  self.layer.opacity = _model[spark::motion::Opacity];
+  if (_tag) _model = [SparkMotionCoordinator.shared styledModel:self model:_model];
+  SparkMotionApplyLayer(self, _model);
 }
 
 @end

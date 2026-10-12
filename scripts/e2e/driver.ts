@@ -66,7 +66,12 @@ export type DriverMenuItem =
   | { separator: true }
   | { separator?: undefined; title: string; id?: string; enabled: boolean; hidden: boolean; state: "on" | "off" | "mixed"; shortcut?: { key: string; modifiers: number }; toolTip?: string; alternate?: boolean; items?: DriverMenuItem[] };
 /** Motion telemetry (docs/motion.md#motion-telemetry). Times are engine milliseconds; values are points, degrees, opacity and scale. */
-export type MotionProperty = "opacity" | "translateX" | "translateY" | "scaleX" | "scaleY" | "rotate";
+/** The motion engine's properties (docs/motion.md#properties-and-units); `backgroundColor` is its four OKLCH components. */
+export type MotionProperty =
+  | "opacity" | "translateX" | "translateY" | "scaleX" | "scaleY" | "rotate" | "rotateX" | "rotateY" | "perspective"
+  | "borderRadius" | "backgroundColorL" | "backgroundColorC" | "backgroundColorH" | "backgroundColorAlpha"
+  | "shadowOpacity" | "shadowRadius" | "shadowOffsetX" | "shadowOffsetY" | "blur"
+  | "maskInsetTop" | "maskInsetBottom" | "maskInsetStart" | "maskInsetEnd" | "maskRadius";
 export type MotionValues = Record<MotionProperty, number>;
 export type MotionInterruption = { timeMs: number; property: MotionProperty; before: { value: number; velocity: number }; after: { value: number; velocity: number } };
 /** A view's latest motion: from rest to rest. `endMs` is null while an animation repeats forever; `afterInput` once it started or was interrupted after the last driver input. */

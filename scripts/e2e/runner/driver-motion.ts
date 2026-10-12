@@ -22,10 +22,8 @@ export type MotionClient = {
 };
 
 /** The engine's rest thresholds (docs/motion.md#springs): what counts as the same value and velocity across an interruption. */
-const REST: Record<MotionProperty, { delta: number; speed: number }> = {
-  opacity: { delta: 0.0005, speed: 0.005 }, scaleX: { delta: 0.0005, speed: 0.005 }, scaleY: { delta: 0.0005, speed: 0.005 },
-  translateX: { delta: 0.01, speed: 0.1 }, translateY: { delta: 0.01, speed: 0.1 }, rotate: { delta: 0.01, speed: 0.1 },
-};
+const FINE: readonly MotionProperty[] = ["opacity", "scaleX", "scaleY", "backgroundColorL", "backgroundColorC", "backgroundColorAlpha", "shadowOpacity"];
+const REST = (property: MotionProperty) => FINE.includes(property) ? { delta: 0.0005, speed: 0.005 } : { delta: 0.01, speed: 0.1 };
 const TRANSLATION: MotionProperty[] = ["translateX", "translateY"];
 const KINDS = { spring: ["spring"], timing: ["timing", "keyframes"] } as const;
 const DRIVER_FAILURES: Record<string, FailureKind> = {
@@ -50,7 +48,7 @@ const describeHandoff = ({ property, before, after }: MotionInterruption) =>
   `${property} ${round(before.value)} at ${round(before.velocity)}/s → ${round(after.value)} at ${round(after.velocity)}/s`;
 /** An interruption that changed the property's value or velocity beyond the engine's rest thresholds. */
 const jumps = ({ property, before, after }: MotionInterruption) =>
-  Math.abs(after.value - before.value) > REST[property].delta || Math.abs(after.velocity - before.velocity) > Math.max(REST[property].speed, 1e-6 * Math.abs(before.velocity));
+  Math.abs(after.value - before.value) > REST(property).delta || Math.abs(after.velocity - before.velocity) > Math.max(REST(property).speed, 1e-6 * Math.abs(before.velocity));
 
 /** Overshoot past the final value in the direction of travel, in points, over the translation properties that travelled. */
 function overshoot(motion: Motion, samples: MotionSamples): number | undefined {
@@ -174,7 +172,7 @@ export function motionCommands(client: () => MotionClient): Record<string, Comma
         else await new Promise(resolve => setTimeout(resolve, PAUSE_CHECK_MS));
         const later = await state();
         if (!hidden.paused) problems.push(hidden.animating.length ? "it kept animating while its window was hidden" : "it finished instead of pausing");
-        const moved = (Object.keys(later.values) as MotionProperty[]).filter(property => Math.abs(later.values[property] - hidden.values[property]) > REST[property].delta);
+        const moved = (Object.keys(later.values) as MotionProperty[]).filter(property => Math.abs(later.values[property] - hidden.values[property]) > REST(property).delta);
         if (moved.length) problems.push(`it moved while hidden: ${moved.map(property => `${property} ${round(hidden.values[property])} → ${round(later.values[property])}`).join(", ")}`);
       } finally {
         await driven("assertPaused", () => client().simulateOcclusion(id, true));

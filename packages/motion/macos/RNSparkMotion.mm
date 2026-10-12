@@ -59,6 +59,27 @@ RCT_EXPORT_MODULE(NativeSparkMotion)
   [SparkMotionCoordinator.shared environment:(NSInteger)tag resolve:resolve reject:^(NSString *code, NSString *message) { reject(code, message, nil); }];
 }
 
+- (void)playSymbolEffect:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+  [self withRequest:json reject:reject run:^(NSDictionary *request, SparkMotionReject failure) { [SparkMotionCoordinator.shared playSymbolEffect:request resolve:resolve reject:failure]; }];
+}
+- (void)removeSymbolEffect:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+  [self withRequest:json reject:reject run:^(NSDictionary *request, SparkMotionReject failure) { [SparkMotionCoordinator.shared removeSymbolEffect:request resolve:resolve reject:failure]; }];
+}
+/** Whether an SF Symbol exists, cached per name: MotionSymbol checks it on every render, on the JavaScript thread. */
+- (NSNumber *)hasSymbol:(NSString *)name
+{
+  static NSCache<NSString *, NSNumber *> *known = [NSCache new];  // thread-safe
+  NSNumber *exists = [known objectForKey:name];
+  if (!exists) {
+    exists = @([NSImage imageWithSystemSymbolName:name accessibilityDescription:nil] != nil);
+    [known setObject:exists forKey:name];
+  }
+  return exists;
+}
+- (NSNumber *)supportsSymbolEffect:(NSString *)name { return @(SparkSymbolEffectSupported(name)); }
+
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params
 {
   return std::make_shared<facebook::react::NativeSparkMotionSpecJSI>(params);

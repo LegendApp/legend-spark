@@ -594,6 +594,76 @@ int main() {
     try { hide.setHidden(99, true, 0, done); CHECK(false); } catch (const Failure &failure) { CHECK(failure.code == "E_NOT_FOUND"); }
   }
 
+  {
+    // Visual effects (docs/motion.md#visual-effects): every property bakes into its own channel; a bake evaluates only
+    // its channel's properties.
+    CHECK(channelOf(BorderRadius) == Channel::BorderRadius && channelOf(BackgroundColorH) == Channel::BackgroundColor && channelOf(ShadowOffsetY) == Channel::Shadow);
+    CHECK(channelOf(Blur) == Channel::Blur && channelOf(MaskInsetStart) == Channel::Mask && channelOf(RotateY) == Channel::Transform && channelOf(Perspective) == Channel::Transform);
+    CHECK(propertyFromName("maskRadius") == MaskRadius && propertyFromName("backgroundColorAlpha") == BackgroundColorAlpha && !propertyFromName("backgroundColor"));
+    CHECK(kIdentity[Opacity] == 1 && kIdentity[ScaleX] == 1 && kIdentity[BackgroundColorAlpha] == 0 && kIdentity[Blur] == 0);
+    CHECK(travels(RotateX) && travels(MaskInsetEnd) && !travels(BackgroundColorL) && !travels(ShadowRadius) && !travels(Blur) && !travels(BorderRadius));
+    Engine effects;
+    std::vector<Settled> done;
+    std::vector<int64_t> views;
+    effects.addView(1, kIdentity);
+    effects.run(plan("radius", 1, BorderRadius, timingTo(20, 1, {0, 0, 1, 1})), 0, done, views);
+    effects.run(plan("move", 1, TranslateX, timingTo(100, 1, {0, 0, 1, 1})), 0, done, views);
+    const ChannelBake corners = effects.bake(1, Channel::BorderRadius, 0.5);
+    CHECK(corners.lead && near(corners.lead->samples.front()[BorderRadius], 10, 1e-6) && corners.model[BorderRadius] == 20);
+    CHECK(corners.lead->samples.front()[TranslateX] == 0);  // another channel keeps its model value
+    CHECK(!effects.bake(1, Channel::Blur, 0.5).lead && !effects.bake(1, Channel::Mask, 0.5).lead);
+
+    // Colors: the hue takes the shorter way round, from where it is.
+    Engine color;
+    Values blue = kIdentity;
+    blue[BackgroundColorL] = 0.55; blue[BackgroundColorC] = 0.2; blue[BackgroundColorH] = 350; blue[BackgroundColorAlpha] = 1;
+    color.addView(1, blue);
+    Plan hue{"hue", {{1, {{BackgroundColorH, timingTo(10, 1, {0, 0, 1, 1})}}, false, 0}}};
+    color.run(hue, 0, done, views);
+    CHECK(near(color.state(1, BackgroundColorH, 0.5).value, 360, 1e-9) && near(color.state(1, BackgroundColorH, 1).value, 370, 1e-9));
+    // Keyframes and sequences shift as a whole: their first stop is the nearest turn of the wheel.
+    Spec wheel;
+    wheel.kind = Spec::Kind::Keyframes;
+    wheel.duration = 1;
+    wheel.values = {-160, -100};
+    wheel.offsets = {0.5, 1};
+    wheel.easings = {{0, 0, 1, 1}};
+    color.run(plan("wheel", 1, BackgroundColorH, wheel), 2, done, views);
+    CHECK(near(color.state(1, BackgroundColorH, 2.5).value, 200, 1e-9) && near(color.state(1, BackgroundColorH, 3).value, 260, 1e-9));
+    // A gray's hue does not show: it starts at the target hue (the nearer turn of it, -110 for 250 from 40) instead of turning.
+    Values gray = kIdentity;
+    gray[BackgroundColorL] = 0.6; gray[BackgroundColorAlpha] = 1; gray[BackgroundColorH] = 40;
+    color.addView(2, gray);
+    Plan tint{"tint", {{2, {{BackgroundColorC, timingTo(0.15, 1)}, {BackgroundColorH, timingTo(250, 1)}}, false, 0}}};
+    color.run(tint, 0, done, views);
+    CHECK(color.state(2, BackgroundColorH, 0).value == -110 && color.state(2, BackgroundColorH, 0.5).value == -110 && near(color.state(2, BackgroundColorC, 1).value, 0.15, 1e-12));
+    // A transparent color shows nothing: lightness, chroma and hue start at the target, only alpha animates.
+    Values clear = kIdentity;
+    color.addView(3, clear);
+    Plan appear{"appear", {{3, {{BackgroundColorL, timingTo(0.7, 1)}, {BackgroundColorC, timingTo(0.1, 1)}, {BackgroundColorH, timingTo(120, 1)}, {BackgroundColorAlpha, timingTo(1, 1)}}, false, 0}}};
+    color.run(appear, 0, done, views);
+    CHECK(color.state(3, BackgroundColorL, 0.5).value == 0.7 && color.state(3, BackgroundColorH, 0).value == 120 && near(color.state(3, BackgroundColorAlpha, 0.5).value, 0.5, 1e-6));
+    // OKLCH to sRGB: white, black, the sRGB primaries' OKLCH coordinates, and alpha.
+    const Rgba white = oklchToSrgb(1, 0, 0, 1), black = oklchToSrgb(0, 0, 0, 0.5);
+    CHECK(near(white.red, 1, 1e-6) && near(white.green, 1, 1e-6) && near(white.blue, 1, 1e-6) && near(black.red, 0, 1e-9) && black.alpha == 0.5);
+    const Rgba red = oklchToSrgb(0.627955, 0.257683, 29.2339, 2), blue2 = oklchToSrgb(0.452014, 0.313214, 264.052, 1);
+    CHECK(near(red.red, 1, 1e-4) && near(red.green, 0, 1e-4) && near(red.blue, 0, 1e-4) && red.alpha == 1);
+    CHECK(near(blue2.red, 0, 1e-4) && near(blue2.green, 0, 1e-4) && near(blue2.blue, 1, 1e-4));
+    // Out of the sRGB gamut stays out (extended sRGB), and lightness is clamped.
+    CHECK(oklchToSrgb(0.7, 0.4, 145, 1).red < 0 && near(oklchToSrgb(1.3, 0, 0, 1).red, 1, 1e-6));
+
+    // Reduce Motion's fade alternate: 3D rotation and mask edges travel (they change at once, and the view fades in);
+    // colors, corners, shadows and blur fade over 200 ms.
+    Engine reduce;
+    reduce.addView(1, kIdentity);
+    Plan lift{"lift", {{1, {{RotateY, springTo(180)}, {ShadowRadius, springTo(14)}, {BackgroundColorAlpha, springTo(1)}, {MaskInsetEnd, timingTo(50, 1)}}, false, 0}}};
+    lift.reduceMotion = true;
+    const Started reduced = reduce.run(lift, 0, done, views);
+    CHECK(reduced.reduced && near(reduced.end, kReducedFade, 1e-9));
+    CHECK(reduce.state(1, RotateY, 0).value == 180 && reduce.state(1, MaskInsetEnd, 0).value == 50 && reduce.state(1, Opacity, 0).value == 0);
+    CHECK(near(reduce.state(1, ShadowRadius, kReducedFade / 2).value, 7, 1e-6) && near(reduce.state(1, BackgroundColorAlpha, kReducedFade / 2).value, 0.5, 1e-6));
+  }
+
   if (failures) { std::printf("%d motion engine checks failed\n", failures); return 1; }
   std::puts("Motion engine tests passed");
 }

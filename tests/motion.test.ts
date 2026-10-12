@@ -28,7 +28,10 @@ import { spring, timing, keyframes, decay, sequence, animate, stagger, timeline,
 const a = {} as any, b = {} as any, c = {} as any;
 const sent = (mock: { mock: { calls: unknown[][] } }, call = -1) => JSON.parse(mock.mock.calls.at(call)![0] as string);
 const code = (run: () => unknown) => { try { run(); } catch (error) { return (error as { code?: string }).code; } return "none"; };
-const values = (value: number) => ({ opacity: value, translateX: value, translateY: value, scaleX: value, scaleY: value, rotate: value });
+const CHANNELS = ["opacity", "translateX", "translateY", "scaleX", "scaleY", "rotate", "rotateX", "rotateY", "perspective", "borderRadius", "shadowOpacity", "shadowRadius",
+  "shadowOffsetX", "shadowOffsetY", "blur", "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius",
+  "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha"];
+const values = (value: number) => Object.fromEntries(CHANNELS.map(property => [property, value]));
 
 beforeEach(() => {
   platform.OS = "macos"; registered.mockReturnValue(true);
@@ -37,8 +40,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-test("the public entry exports the imperative API, builders, MotionView and MotionPresence, and no hooks", () => {
-  expect(Object.keys(motion).sort()).toEqual(["MotionPresence", "MotionView", "animate", "decay", "getMotionAvailability", "getMotionEnvironment", "getMotionState", "keyframes", "linkScroll", "recordMotionFrames", "sequence", "setMotionValues", "spring", "stagger", "stopMotion", "timeline", "timing"]);
+test("the public entry exports the imperative API, builders, the components, and no hooks", () => {
+  expect(Object.keys(motion).sort()).toEqual(["MotionNumber", "MotionPresence", "MotionSymbol", "MotionText", "MotionView", "animate", "decay", "getMotionAvailability", "getMotionEnvironment", "getMotionState",
+    "getSymbolEffectAvailability", "keyframes", "linkScroll", "motionPath", "playSymbolEffect", "recordMotionFrames", "sequence", "setMotionValues", "spring", "stagger", "stopMotion", "stopSymbolEffects", "timeline", "timing"]);
 });
 
 test("springs: macOS presets and SwiftUI's response/bounce conversion, or physical parameters", () => {
@@ -178,13 +182,15 @@ test("set, stop, state, scroll links and frame reports validate input and native
   expect(sent(native.set)).toEqual({ tag: 11, values: { scaleX: 2, scaleY: 2, translateX: -4 } });
   await expect(setMotionValues(a, { opacity: Number.NaN })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   await stopMotion(a);
-  expect(sent(native.stop)).toEqual({ tag: 11, properties: ["opacity", "translateX", "translateY", "scaleX", "scaleY", "rotate"] });
+  expect(sent(native.stop).tag).toBe(11);
+  expect([...sent(native.stop).properties].sort()).toEqual([...CHANNELS].sort());
   await stopMotion(b, ["scale", "rotate"]);
   expect(sent(native.stop)).toEqual({ tag: 12, properties: ["scaleX", "scaleY", "rotate"] });
 
-  const state = { values: values(1), velocities: values(0), animating: ["translateX"] };
+  const state = { values: { ...values(1), backgroundColorL: 0.627955, backgroundColorC: 0.257683, backgroundColorH: 389.2339, backgroundColorAlpha: 1 }, velocities: values(0), animating: ["translateX"] };
   native.getState.mockResolvedValueOnce(JSON.stringify(state));
-  await expect(getMotionState(a)).resolves.toEqual(state);
+  // Colors are reported as CSS OKLCH, the hue back on the wheel.
+  await expect(getMotionState(a)).resolves.toEqual({ ...state, colors: { backgroundColor: "oklch(0.628 0.2577 29.23 / 1)" } });
   expect(native.getState).toHaveBeenCalledWith(11);
   native.getState.mockResolvedValueOnce(JSON.stringify({ ...state, animating: ["width"] }));
   await expect(getMotionState(a)).rejects.toMatchObject({ code: "E_INVALID_DATA" });
@@ -227,7 +233,48 @@ test("availability is truthful; unavailable targets throw typed errors and rende
   expect(Object.values(native).every(fn => fn.mock.calls.length === 0)).toBe(true);
 });
 
-test("MotionView passes validated initial values once and refuses style opacity or transform", async () => {
+test("visual effects: number properties, OKLCH color animations split into components, and colors where numbers belong are rejected", async () => {
+  await animate(a, { rotateY: 180, perspective: timing(600), borderRadius: spring(12), shadowRadius: 8, blur: timing(4), maskInsetStart: keyframes([10, 0], { durationMs: 300 }) }).finished;
+  expect(Object.keys(sent(native.run).groups[0].tracks)).toEqual(["rotateY", "perspective", "borderRadius", "shadowRadius", "blur", "maskInsetStart"]);
+  // One color animation is four component animations: lightness, chroma, hue and alpha, each with the spec's timing.
+  await animate(a, { backgroundColor: timing("#ff0000", { durationMs: 400 }) }).finished;
+  const red = sent(native.run).groups[0].tracks;
+  expect(Object.keys(red)).toEqual(["backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha"]);
+  expect(red.backgroundColorL.to).toBeCloseTo(0.627955, 5); expect(red.backgroundColorC.to).toBeCloseTo(0.257683, 5);
+  expect(red.backgroundColorH.to).toBeCloseTo(29.2339, 3); expect(red.backgroundColorAlpha).toEqual({ ...red.backgroundColorL, to: 1 });
+  expect(red.backgroundColorL).toMatchObject({ type: "timing", durationMs: 400 });
+  // A gray leaves the hue alone; a transparent target only fades alpha; a bare color is a default spring.
+  await animate(a, { backgroundColor: "rgb(128 128 128 / 50%)" }).finished;
+  const gray = sent(native.run).groups[0].tracks;
+  expect(Object.keys(gray)).toEqual(["backgroundColorL", "backgroundColorC", "backgroundColorAlpha"]);
+  expect(gray.backgroundColorAlpha).toMatchObject({ type: "spring", to: 0.5 });
+  await animate(a, { backgroundColor: timing("transparent") }).finished;
+  expect(sent(native.run).groups[0].tracks).toEqual({ backgroundColorAlpha: expect.objectContaining({ to: 0 }) });
+  // Keyframes unwrap the hue the shorter way round between stops; a gray stop takes its neighbour's hue.
+  await animate(a, { backgroundColor: keyframes(["oklch(0.7 0.1 350)", "oklch(0.7 0 0)", "oklch(0.7 0.1 20)"], { durationMs: 600 }) }).finished;
+  expect(sent(native.run).groups[0].tracks.backgroundColorH.values).toEqual([350, 350, 380]);
+  await animate(a, { backgroundColor: sequence([timing("#00f"), spring("#ff0")]) }).finished;
+  expect(sent(native.run).groups[0].tracks.backgroundColorL).toMatchObject({ type: "sequence", steps: [{ type: "timing" }, { type: "spring" }] });
+  for (const bad of [
+    () => animate(a, { backgroundColor: 1 as never }), () => animate(a, { opacity: spring("#fff") as never }), () => animate(a, { backgroundColor: decay({ velocity: 1 }) as never }),
+    () => spring("red"), () => timing("#ggg"), () => keyframes([1, "#fff"] as never, { durationMs: 1 }), () => sequence([timing(1), timing("#fff")] as never),
+    () => animate(a, { backgroundColor: "color(display-p3 1 0 0)" }),
+  ]) expect(code(bad)).toBe("E_INVALID_ARGUMENT");
+  expect(code(() => spring("#fff", { velocity: 2 }))).toBe("E_UNSUPPORTED_OPTION");
+  expect(code(() => timing("#fff", { restDelta: 0.1 }))).toBe("E_UNSUPPORTED_OPTION");
+  // Set, stop and scroll links take colors too.
+  await setMotionValues(a, { backgroundColor: "#ffffff", borderRadius: 6 });
+  const white = sent(native.set).values;
+  expect(white.backgroundColorL).toBeCloseTo(1, 5); expect(white.backgroundColorC).toBeCloseTo(0, 5); expect(white).toMatchObject({ backgroundColorAlpha: 1, borderRadius: 6 });
+  await stopMotion(a, ["backgroundColor", "blur"]);
+  expect(sent(native.stop).properties).toEqual(["backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha", "blur"]);
+  await linkScroll(a, { source: { nativeID: "list" }, input: [0, 100], output: { backgroundColor: ["#ffffff", "#2563eb"] } });
+  expect(Object.keys(sent(native.link).output)).toEqual(["backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha"]);
+  expect(sent(native.link).output.backgroundColorH[0]).toBe(sent(native.link).output.backgroundColorH[1]);  // white takes blue's hue
+  await expect(linkScroll(a, { source: { nativeID: "list" }, input: [0, 100], output: { backgroundColor: ["#fff", 2] as never } })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+});
+
+test("MotionView passes validated initial values once, refuses style opacity or transform, and a property set by both initial and style", async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   let rendered: any;
   await act(async () => { rendered = create(React.createElement(MotionView, { initial: { opacity: 0, scale: 0.5 }, style: { width: 10 }, testID: "card" })); });
@@ -238,4 +285,20 @@ test("MotionView passes validated initial values once and refuses style opacity 
   expect(code(() => MotionView({ style: { opacity: 0.5 } }))).toBe("E_INVALID_ARGUMENT");
   expect(code(() => MotionView({ style: [{ width: 1 }, { transform: [{ scale: 2 }] }] }))).toBe("E_INVALID_ARGUMENT");
   expect(code(() => MotionView({ initial: { rotate: Infinity } }))).toBe("E_INVALID_ARGUMENT");
+  // The style may set the background, corners and shadow (motion takes them over when it first drives them), but not
+  // a property `initial` sets too.
+  const styled = { backgroundColor: "red", borderTopStartRadius: 4, shadowOpacity: 0.2, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } };
+  await act(async () => { rendered = create(React.createElement(MotionView, { style: styled })); });
+  expect(rendered.root.findByType("SparkMotionView").props.style).toEqual(styled);
+  await act(async () => rendered.unmount());
+  for (const [initial, style] of [[{ backgroundColor: "#fff" }, { backgroundColor: "red" }], [{ borderRadius: 2 }, { borderTopStartRadius: 4 }], [{ shadowOffsetY: 2 }, { shadowOffset: { width: 0, height: 1 } }]] as const)
+    expect(code(() => MotionView({ initial, style } as never)), JSON.stringify(style)).toBe("E_INVALID_ARGUMENT");
+  await act(async () => { rendered = create(React.createElement(MotionView, { initial: { backgroundColor: "#000", maskRadius: 4 }, style: { shadowColor: "#000", borderRadius: 3 } })); });
+  expect(JSON.parse(rendered.root.findByType("SparkMotionView").props.initialValues)).toEqual({ backgroundColorL: 0, backgroundColorC: 0, backgroundColorH: 0, backgroundColorAlpha: 1, maskRadius: 4 });
+  await act(async () => rendered.unmount());
+  expect(code(() => MotionView({ initial: { backgroundColor: "blue" } }))).toBe("E_INVALID_ARGUMENT");
+  // Style React Native draws on other layers (its own borders, a clip mask) cannot be driven by `initial`.
+  for (const [initial, style] of [[{ backgroundColor: "#fff" }, { borderWidth: 1, borderColor: "#000" }], [{ borderRadius: 4 }, { borderTopColor: "red" }],
+    [{ backgroundColor: "#fff" }, { borderStyle: "dashed" }], [{ maskRadius: 2 }, { overflow: "hidden", borderTopLeftRadius: 8 }]] as const)
+    expect(code(() => MotionView({ initial, style } as never)), JSON.stringify(style)).toBe("E_UNSUPPORTED_OPTION");
 });

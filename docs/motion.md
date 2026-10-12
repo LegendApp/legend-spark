@@ -46,8 +46,15 @@ when rendered. There is no JavaScript-driven fallback.
 | `recordMotionFrames(target, { durationMs })` | Frame telemetry | `Promise<MotionFrameReport>` |
 | `getMotionEnvironment(target?)` | Reduce Motion, Low Power Mode, frame rate, window visibility | `Promise<MotionEnvironment>` |
 | `getMotionAvailability()` | | `Availability` |
+| `motionPath(d, options)` | Path keyframes (pure) | `{ translateX, translateY, rotate? }` keyframes |
 | `MotionView` | Component: `initial`, `enter`, `exit`, `layout`, `sharedId`, `transition` | |
 | `MotionPresence` | Component: keeps removed children mounted while they exit | |
+| `MotionNumber` | Component: a formatted number whose changed digits roll | |
+| `MotionText` | Component: per-character crossfade or typewriter | |
+| `MotionSymbol` | Component: an SF Symbol that plays symbol effects | |
+| `playSymbolEffect(target, effect, options)` | Plays an SF Symbol effect | `Promise<SymbolEffectPlayback>` |
+| `stopSymbolEffects(target)` | Removes a symbol's effects | `Promise<void>` |
+| `getSymbolEffectAvailability(effect)` | | `Availability` |
 
 A target is a mounted `MotionView`, as received through its `ref`. `animate`,
 `stagger` and `timeline` validate synchronously and throw `SparkError`
@@ -64,9 +71,9 @@ not settle within 60 s, infinite loops whose shared cycle exceeds 20 s
 ([Hidden windows](#hidden-windows)) and `cues` ([Cues](#cues)). Unknown option names are
 `E_INVALID_ARGUMENT`.
 
-The API is imperative and works from any code holding a `MotionView` ref.
-`MotionView` and `MotionPresence` are the only React-specific exports (components). There
-are no hooks.
+The API is imperative and works from any code holding a `MotionView` (or `MotionSymbol`) ref.
+`MotionView`, `MotionPresence`, `MotionNumber`, `MotionText` and `MotionSymbol` are the only
+React-specific exports (components). There are no hooks.
 
 ## Layout, presence and shared elements
 
@@ -134,7 +141,7 @@ JS: validate and normalize  ── one JSON plan ──▶  RNSparkMotion (Turbo
   exception into a rejection. `tests/motion-engine.native.cpp` tests it directly.
 * **Compositor ownership.** Each start, interruption or completion bakes the affected
   channel once into `CAKeyframeAnimation`s on the `MotionView`'s own layer
-  (`transform` and `opacity`) at the display's frame rate (at most 120 samples per second;
+  (`transform`, `opacity` and the [visual effects](#visual-effects)' key paths) at the display's frame rate (at most 120 samples per second;
   [Frame rate and power](#frame-rate-and-power)), linearly interpolated. The
   window server plays them, so neither the JavaScript thread nor the app's main thread
   produces frames. Completion uses one one-shot timer for the next settle time; nothing
@@ -155,8 +162,11 @@ JS: validate and normalize  ── one JSON plan ──▶  RNSparkMotion (Turbo
 ## Properties and units
 
 `opacity`, `translateX`, `translateY` (points), `scale`, `scaleX`, `scaleY`,
-`rotate` (degrees, clockwise). `scale` drives both axes and cannot be combined
-with `scaleX`/`scaleY`. Velocities are units per second (multiply React Native
+`rotate` (degrees, clockwise), and the [visual effects](#visual-effects): `rotateX`, `rotateY`
+(degrees), `perspective` (points), `backgroundColor` (a color), `borderRadius`, `shadowOpacity`,
+`shadowRadius`, `shadowOffsetX`, `shadowOffsetY`, `blur` (points), and the mask's `maskInsetTop`,
+`maskInsetBottom`, `maskInsetStart`, `maskInsetEnd` and `maskRadius` (points). `scale` drives both
+axes and cannot be combined with `scaleX`/`scaleY`. Velocities are units per second (multiply React Native
 gesture velocities, which are per millisecond, by 1000). Durations and delays are
 milliseconds. A bare number in `animate()` means `spring(value)` with the platform
 default preset.
@@ -190,6 +200,167 @@ speed are both below `restDelta` and `restSpeed`. The defaults are per property:
 0.01 pt (or degree) and 0.1 per second for translation and rotation, 0.0005 and
 0.005 per second for opacity and scale, so opacity never visibly snaps at the end.
 The final value is then exact.
+
+## Visual effects
+
+```tsx
+<MotionView ref={card} initial={{ backgroundColor: '#2563eb', borderRadius: 8, perspective: 500 }} style={styles.card} />
+
+animate(card.current, { backgroundColor: timing('#facc15', { durationMs: 400 }) });   // in OKLCH
+animate(card.current, { borderRadius: spring(20), shadowOpacity: spring(0.4), shadowRadius: spring(14), shadowOffsetY: spring(8) });
+animate(card.current, { blur: timing(6), rotateY: spring(180, { preset: 'smooth' }) });
+animate(card.current, { maskInsetEnd: timing(0, { durationMs: 600 }) });              // wipe in from the leading edge
+animate(arrow.current, motionPath('M0 0 C40 -36 120 36 160 0', { durationMs: 900, rotate: true }));
+```
+
+Every effect is one or more engine properties, solved, interrupted, reduced and recorded like the
+transform, and baked into Core Animation keyframe animations on its own layer key path:
+
+| Properties | Layer | Notes |
+| --- | --- | --- |
+| `rotateX`, `rotateY`, `perspective` | `transform` | Composed as `translate · perspective · rotateX · rotateY · rotate · scale` about the centre. `perspective` below 1 is none. |
+| `backgroundColor` | `backgroundColor` | Four engine properties, its [OKLCH components](#colors). |
+| `borderRadius` | `cornerRadius` | The uniform corner radius. |
+| `shadowOpacity`, `shadowRadius`, `shadowOffsetX`, `shadowOffsetY` | `shadowOpacity`, `shadowRadius`, `shadowOffset` | The shadow color is the style's (`shadowColor`, black by default). |
+| `blur` | `filters.sparkBlur.inputRadius` | A `CIGaussianBlur` layer filter, installed while the blur shows or animates and removed once it settles at 0 (with the view's Core Image filter support, when no other filter remains). |
+| `maskInset*`, `maskRadius` | the mask layer's `bounds`, `position`, `cornerRadius` | A rounded-rectangle mask inset from the view's edges; start and end follow the layout direction. Installed while it masks or animates. |
+
+**Who owns a property.** Motion always owns `opacity` and `transform`: `style` must not set them.
+The background color, corner radius and shadow belong to the view's `style` until motion first
+drives them, through `initial`, `animate`, `stagger`, `timeline`, `setMotionValues` or a scroll
+link (`stopMotion` takes nothing). Until then the engine follows what the style puts on the layer,
+so an animation starts from what the view shows and `getMotionState` reports it; afterwards motion
+owns that channel (the background, the corners, or the whole shadow), and later style changes to
+it are not applied. `initial` and `style` setting the same property is `E_INVALID_ARGUMENT`. Motion
+owns the shadow's shape too: once it drives the corners or the shadow, the shadow follows the layer
+instead of the path React Native builds from the style's radii.
+
+**Style drawn on other layers.** React Native draws some styles on layers motion does not drive, so
+animating them would do nothing; motion rejects them with `E_UNSUPPORTED_OPTION` instead:
+
+* `backgroundColor` and `borderRadius` when React Native draws the border itself and the background
+  on a sublayer: a visible border without `overflow: 'hidden'`, per-side border colors, widths or
+  styles, a non-solid `borderStyle`, or per-corner radii. Put the border on a child, or clip with
+  `overflow: 'hidden'`.
+* The mask properties when the style clips with a mask: `overflow: 'hidden'` with per-corner radii.
+
+The native view decides this from the style React Native resolved, for `animate`, `stagger`,
+`timeline`, `setMotionValues` and scroll links (the whole plan is rejected before anything
+changes). `MotionView` rejects an `initial` that sets them when it renders, by the same rules read
+from `style` (conservatively: a per-side or per-corner key counts even if all sides are equal). A
+style that changes into one of these after motion took the property is not detected.
+
+**Captures.** Driver captures render in-process, which shows colors, corners, masks and 2D
+transforms, but not shadows, layer filters (blur) or 3D perspective; flows check those through the
+values the engine reports.
+
+**Reduce Motion.** The `fade` alternate changes the 3D rotation, perspective and mask edges at once
+(they travel) and fades colors, corners, shadows and blur over 200 ms without overshoot.
+
+### Colors
+
+`backgroundColor` takes `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()` (comma or space
+syntax, percentages), `oklch(L C H / A)` (chroma 100% is 0.4) or `transparent`; anything else (named
+colors, platform colors, `color()`) is `E_INVALID_ARGUMENT`. JavaScript converts a color once to
+OKLCH and sends lightness, chroma, hue and alpha as four engine properties
+(`backgroundColorL`, `backgroundColorC`, `backgroundColorH`, `backgroundColorAlpha`) with the
+spec's timing; the native engine converts every sample back to extended sRGB, so colors outside
+sRGB survive on wide-gamut displays. Interpolating in OKLCH keeps lightness and saturation even:
+halfway from blue to yellow is a saturated green, where an sRGB blend is gray.
+
+* The hue takes the shorter way round, from where it is; keyframes and sequences unwrap each stop
+  from the previous one.
+* A component that does not show does not travel: the hue of a gray starts at the target's hue,
+  and lightness, chroma and hue of a transparent color start at the target's, so only alpha fades.
+  A gray stop takes the hue of the nearest colored stop, a transparent stop the color of the
+  nearest visible one.
+* `spring`, `timing`, `keyframes` and `sequence` take colors (all stops of one spec are colors);
+  `decay` cannot. `velocity`, `restDelta` and `restSpeed` are `E_UNSUPPORTED_OPTION` on a color
+  animation: each component has its own. Scroll links take colors as `output` stops.
+* `getMotionState` reports `colors.backgroundColor` as CSS `oklch(L C H / A)`; `values` carries the
+  four components. `stopMotion(target, ['backgroundColor'])` stops all four.
+
+### Path animation
+
+`motionPath(d, { durationMs, easing = 'easeInOut', rotate, delayMs, repeat, reverse })` turns an
+SVG path (`M`, `L`, `H`, `V`, `C`, `S`, `Q`, `T`, `Z`, absolute and relative) into `translateX`
+and `translateY` keyframes, in points from where the view rests (start the path at `M0 0`), and
+with `rotate: true` a `rotate` track that turns the view to the path's heading (degrees, 0 along
++x, unwrapped). Keyframes sit at even distances along the flattened path (at most 240), and land
+when the easing has covered that share of the length, so the view moves along the path at the
+easing's pace. Spread the result into `animate`; the engine plays it like any keyframes. Arcs
+(`A`) and easings whose control points leave [0, 1] are `E_UNSUPPORTED_OPTION`. The path is not
+mirrored in right-to-left layouts.
+
+## Text transitions
+
+```tsx
+<MotionNumber value={count} locale="en" style={{ fontSize: 28 }} />
+<MotionText text={status} />
+<MotionText text={reply} transition={{ type: 'typewriter', characterMs: 30 }} />
+```
+
+* `MotionNumber` (`value`, `locale`, `format`: `Intl.NumberFormat` options, `style`, `transition`)
+  shows a formatted number. Each digit is a column of the locale's ten digits in its own
+  `MotionView`; a changed digit rolls its column to the new digit with `transition` (default: the
+  `snappy` spring). Digits are matched from the right, so 999 → 1,000 rolls the last three and
+  adds the leading one. The number reads as one accessibility element; it lays out left to right
+  at the leading edge.
+* `MotionText` (`text`, `style`, `transition`) shows text a character at a time, each in its own
+  `MotionView`. `{ type: 'crossfade', durationMs = 200 }`: a changed character fades in while the
+  old one fades out where the new one stands, characters past a shorter text fade out in place,
+  and new ones fade in. `{ type: 'typewriter', characterMs = 40 }`: characters the text keeps from
+  the previous text stay, and the rest fade in one after another, `characterMs` apart and each over
+  `characterMs`; the first text is typed too.
+  A character is what a reader sees (a base with its combining marks, an emoji sequence, a flag);
+  scripts whose letters join or form conjuncts (Arabic, Syriac, N'Ko, Mongolian, Indic, Southeast
+  Asian, Tibetan) animate a word at a time so they keep their shapes. Characters lay out in a
+  wrapping row in the layout direction; bidirectional text is not reordered. With a proportional
+  font the old glyph of a crossfading character fades at the new one's place, so the crossfade
+  suits tabular digits and monospaced labels.
+* With a `testID`, each digit's `MotionView` is `<testID>-digit-<n>` (`n` from 1 at the units digit)
+  and each character's `<testID>-char-<index>`, so flows can read their motion telemetry.
+* Both run on the engine like any animation: interruptible, recorded, and under Reduce Motion a
+  roll jumps and fades in (the `fade` alternate) and fades play as written.
+
+## Symbol effects
+
+```tsx
+const bell = useRef<MotionSymbolTarget>(null);
+<MotionSymbol ref={bell} name={muted ? 'bell.slash.fill' : 'bell.fill'} size={32} color="#f59e0b" replaceTransition="downUp" />
+
+const { played, remove } = await playSymbolEffect(bell.current, 'bounce', { direction: 'up', repeat: Infinity });
+await remove();
+```
+
+`MotionSymbol` (`name`, `size` in points, default 24, `color`, `replaceTransition`) shows an SF
+Symbol in an `NSImageView`; a name this macOS does not have is `E_NOT_FOUND`. A change of `name`
+animates with `replaceTransition` (`replace`, `downUp`, `upUp`, `offUp`; AppKit's
+`NSSymbolReplaceContentTransition`), or at once without one.
+
+`playSymbolEffect(target, effect, { repeat = 0, speed = 1, byLayer, direction, reducedMotion })`
+adds AppKit's `NSSymbolEffect` to the image view: `bounce` (`up`, `down`), `pulse`, `wiggle` (`up`,
+`down`, `left`, `right`, `forward`, `backward`, `clockwise`, `counterClockwise`; forward and
+backward follow the layout direction), `rotate` (`clockwise`, `counterClockwise`), `breathe`,
+`drawOn`, `drawOff`. `repeat` is extra plays (`Infinity` until removed); drawing on or off plays once
+(`E_UNSUPPORTED_OPTION` with `repeat`). It resolves `{ played, remove() }`, where `played` is what
+played and `remove()` removes an effect that keeps playing. `stopSymbolEffects(target)` removes all
+of them.
+
+| Effect | Needs |
+| --- | --- |
+| `bounce`, `pulse`, `replace` transitions | macOS 14 |
+| `wiggle`, `rotate`, `breathe` | macOS 15, and an app built with the macOS 15 SDK |
+| `drawOn`, `drawOff` | macOS 26, and an app built with the macOS 26 SDK |
+
+`getSymbolEffectAvailability(effect)` asks the native side, so it is `{ available: true }` only when
+both the app's SDK and the running macOS have the effect (`host-restriction` otherwise;
+`unsupported-platform` or `missing-module` like motion). An unavailable effect rejects with
+`E_UNAVAILABLE`. Under Reduce Motion (read when the effect starts), nothing travels: the `fade`
+alternate (default) plays `pulse` instead and fades drawing on or off over 200 ms, `instant` plays
+nothing and shows or hides a drawn symbol at once (`played: 'none'`), and `play` plays as written; a
+name change cross-fades instead of its transition. Symbol effects run on AppKit's clock, not the
+engine's: the virtual clock does not hold them, and captures show the symbol at rest.
 
 ## Interruption and velocity
 
@@ -289,7 +460,8 @@ timeline step's), else the plan's `reducedMotion` alternate:
 
 Timeline steps after `previous` start when the alternate of the previous step ends, so a
 reduced timeline is as short as its alternates. The setting is read once per plan, when it
-starts: a running animation is not changed when the user toggles it. `getMotionEnvironment()`
+starts: a running animation is not changed when the user toggles it. Only the properties that play are taken
+from the view's style ([Who owns a property](#visual-effects)): a step's own `reducedValues` replace its values. `getMotionEnvironment()`
 reports the setting for code that chooses different content rather than different motion. The
 engine marks changes made at once as kind `jump` in [motion telemetry](#motion-telemetry).
 Layout and shared-element hand-offs follow the same rule with the `fade` alternate: under
@@ -440,6 +612,14 @@ The accessibility, power and lifecycle rules of this page (Reduce Motion through
 `UISettings.AnimationsEnabled`, Energy Saver through `PowerManager.EnergySaverStatus`, window
 visibility, cues) are part of that issue.
 
+The visual effects, `MotionNumber`, `MotionText`, `MotionSymbol` and the symbol effects are typed
+unsupported the same way (`getSymbolEffectAvailability` reports `unsupported-platform`). The engine
+side carries over unchanged; the Windows glue maps `backgroundColor` onto a `ColorKeyFrameAnimation`
+of a `CompositionColorBrush` (converting each sample, as on macOS), `borderRadius` and the mask onto
+a `CompositionRoundedRectangleGeometry` clip, the shadow onto a `DropShadow`, `blur` onto a
+`GaussianBlurEffect` brush, and `rotateX`/`rotateY`/`perspective` onto `TransformMatrix`. SF Symbols do
+not exist on Windows; symbol effects there need their own design (#237).
+
 `MotionPresence` and `MotionView`'s layout, presence and shared-element props are typed
 unsupported the same way: both components throw `E_UNSUPPORTED_PLATFORM` when rendered.
 Layout and shared elements will reuse `Engine::handoff` with the Windows glue comparing layout
@@ -457,6 +637,7 @@ boxes around each mounting transaction (#376).
   presentation.
 * Layout boxes are layout geometry: transforms of ancestors (other than a layout-animated
   ancestor `MotionView`) are not part of them.
-* Visual effects belong to the follow-up motion task #176.
+* Shader effects (ripple, dissolve, distortion, glass specular) and particles (#405), shape
+  morphing and stroke drawing (#406), and animated vibrancy (#407) are not part of motion yet.
 * Reduce Motion, the hidden-window rule and cues apply per plan; a plan with several views
   plays its cues by its first view's state.
