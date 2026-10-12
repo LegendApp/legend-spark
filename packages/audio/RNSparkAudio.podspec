@@ -15,4 +15,5 @@ Pod::Spec.new do |s|
   s.frameworks = "AVFoundation", "MediaPlayer"
   s.dependency "React-Core"
   s.dependency "ReactCodegen"
+  s.dependency "RNDesktopApp"
 end

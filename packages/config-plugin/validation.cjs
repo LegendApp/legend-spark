@@ -16,6 +16,11 @@ function validateOwned(value) {
     for (const key of ["entitlements", "infoPlist"]) if (value.macos[key] !== undefined) object(value.macos[key], `macos.${key}`);
     require("./lifecycle.cjs").validateLifecycle(value.macos.lifecycle);
   }
+  if (value.localizations !== undefined) {
+    const languages = value.localizations;
+    if (!Array.isArray(languages) || !languages.length || new Set(languages).size !== languages.length || languages.some(language => typeof language !== "string" || !/^[A-Za-z]{2,3}([-_][A-Za-z0-9]+)*$/.test(language))) throw new Error("localizations must list unique language identifiers such as en, ar or pt-BR");
+    if (value.macos?.infoPlist?.CFBundleLocalizations !== undefined || value.macos?.infoPlist?.CFBundleDevelopmentRegion !== undefined) throw new Error("Declare the app's languages with localizations, not macos.infoPlist");
+  }
   if (value.documentTypes !== undefined) {
     if (!Array.isArray(value.documentTypes)) throw new Error("documentTypes must be an array");
     for (const document of value.documentTypes) object(document, "documentType", ["name", "contentTypes", "role"]);

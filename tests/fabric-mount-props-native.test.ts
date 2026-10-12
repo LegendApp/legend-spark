@@ -12,7 +12,7 @@ test.skipIf(process.platform !== "darwin")("split view, motion view and drag vie
     const source = ["ui/macos/appkit-split-view/RNSidebarSplitViewComponent.mm", "motion/macos/RNSparkMotionView.mm", "drag-drop/macos/RNDesktopDragView.mm"]
       .map(name => readFileSync(path.join(root, "packages", name), "utf8").split("\n").filter(line => !line.startsWith("#import")).join("\n")).join("\n");
     const input = path.join(directory, "test.mm"), output = path.join(directory, "test");
-    writeFileSync(input, readFileSync(path.join(root, "tests/fabric-mount-props.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", source));
+    writeFileSync(input, readFileSync(path.join(root, "tests/fabric-mount-props.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", "static NSString *SparkLocalizedString(NSString *key) { return key; }\n" + source));
     await runOk("clang++", [
       "-fobjc-arc", "-fblocks", "-std=c++20", "-mmacosx-version-min=14.0", "-I", path.join(motion, "macos"), "-I", path.join(motion, "cpp"),
       "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "CoreImage", "-framework", "UniformTypeIdentifiers",

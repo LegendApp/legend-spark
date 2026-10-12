@@ -2,7 +2,7 @@
 
 Import from `@legendapp/spark/app`. Spark owns this desktop lifecycle contract; document history and file/URL launch requests live in `/app/documents`.
 
-`getAppAvailability()` reports unsupported platforms and missing optional native modules without throwing during import. Operations reject with `SparkError` when unavailable. Every feature on this page, including the single-instance lock, `relaunch()` and safe mode, is implemented on both macOS and Windows, so this one result covers them; there is no per-feature difference to report. `getAppContext()` returns project identity (`projectId`, `name`, `version`), runtime mode/module versions, the initial process arguments and `launch`:
+`getAppAvailability()` reports unsupported platforms and missing optional native modules without throwing during import. Operations reject with `SparkError` when unavailable. Every feature on this page except [languages](#languages), including the single-instance lock, `relaunch()` and safe mode, is implemented on both macOS and Windows, so this one result covers them. Languages report their own availability. `getAppContext()` returns project identity (`projectId`, `name`, `version`), runtime mode/module versions, the initial process arguments and `launch`:
 
 | `launch` field | Values |
 | --- | --- |
@@ -77,3 +77,36 @@ Launch with `--spark-safe-mode`, or hold Shift while the app launches, to start 
 Safe mode skips Spark's native restoration. On macOS that is the main window's saved frame and `mainWindow.autosaveName`, managed windows' saved frames, `restoreOnLaunch` startup windows and the saved startup split-view layout; on Windows, saved window frames. Nothing is saved over them during the session, so the next normal launch restores them. State your app restores itself (open documents, navigation) should check `launch.safeMode` too. `relaunch({ arguments: [] })` leaves safe mode.
 
 Validation: `tests/app-instance-native.test.ts` compiles the macOS instance module with a process harness and runs real processes: forwarding of arguments, files and URLs after acknowledgment, six simultaneous launches electing one owner, a SIGKILLed owner's lock and stale socket being replaced, malformed payloads being refused, an approved relaunch child taking over only after its parent exits, and a vetoed one being killed. `tests/windows-launch-native.test.ts` runs the Windows host's forwarding payload, argument classification, command-line quoting and safe-mode helpers (`packages/desktop-host/windows/launch.inc`). The Windows host itself has not been compiled in this repository. JavaScript tests exercise independent guards, stale replies, concurrent quit calls, invalid native output, and cleanup retries. A native macOS coordinator fixture exercises all-handler approval, joins, vetoes, guard changes and timeouts. The changed macOS bridge/transport passes an Objective-C++ syntax check with RN declarations stubbed. Actual application shutdown and Windows compilation remain pending.
+
+## Languages
+
+Menus, dialog buttons, the About panel, the find bar, toolbar customization, window tabs, Services and the open and save panels come from AppKit and from Spark, not from your JavaScript. On macOS they all use one language per launch: the first of the user's languages for this app that the app lists, else the app's development language. List the languages your app is translated into in `desktop.config.json`; the first is the development language:
+
+```json
+{ "localizations": ["en", "ar", "fr"] }
+```
+
+Spark writes them to `CFBundleLocalizations` and `CFBundleDevelopmentRegion`. An app that lists only English, or nothing, shows AppKit's and Spark's strings in English even for a user whose language is Arabic. Once it lists several, System Settings › General › Language & Region › Applications offers it a per-app language. `getSystemInfo().locale` follows the same choice, so JavaScript that picks its strings from it agrees with the native ones. Declared localizations need an app-specific runtime: the shared Spark Runner cannot carry them.
+
+Spark's own native strings are translated into English, Arabic and French (`framework` below): the desktop template's main menu (File, Edit, Format, View, Window and Help, and the app menu's About, Hide and Quit items, retitled at launch), [menu role items](menus.md#application-menus) published without a label, the default title and buttons of `confirm()`, `showMessage()` and `showPrompt()`, the default placeholder of a toolbar search field, a managed window's fallback title, the drag image's accessibility description and the default Now Playing title. In another listed language they are English, while AppKit's strings still follow it. `packages/desktop-app/macos/Localization` holds them, keyed by their English text.
+
+```ts
+import { getAppLanguages, relaunch, setAppLanguage } from '@legendapp/spark/app';
+
+const { supported, current, override, framework } = await getAppLanguages();
+await setAppLanguage('ar'); // or null to follow the system again
+await relaunch();
+```
+
+| `getAppLanguages()` field | Value |
+| --- | --- |
+| `supported` | The languages the app lists, such as `["en", "ar", "fr"]`. |
+| `current` | The language this launch chose. Native strings use it; a launch argument such as `-AppleLanguages "(ar)"` takes precedence. |
+| `override` | The per-app language stored by `setAppLanguage` or System Settings, or `null` when the app follows the system. |
+| `framework` | The languages Spark's own strings are translated into. |
+
+`setAppLanguage(language)` stores the app's language in its own defaults (`AppleLanguages`, the key System Settings writes); `null` removes it. It applies at the next launch: AppKit chooses a bundle's language once. A language the app does not list rejects with `E_INVALID_ARGUMENT`, as does a value that is not a language identifier or `null`.
+
+`getAppLanguageAvailability()` is available on macOS. On Windows it reports `unsupported-platform` and the functions reject with `E_UNSUPPORTED_PLATFORM`: an unpackaged Win32 app has no per-app language for Spark to set, and Spark's Windows host shows its own strings, including the dialog defaults, in English ([#329](https://github.com/LegendApp/legend-spark/issues/329)).
+
+Validation: `tests/framework-strings.test.ts` checks that every title in the template's main menu, every role title and every string native code or JavaScript asks for exists, with the same keys and placeholders in every language. `tests/app-languages.test.ts` and `tests/dialog-features.test.ts` cover the JavaScript contract and the dialog defaults against a mocked bridge. The Kitchen Sink's Internationalization › Native strings screen and `e2e/flows/internationalization/native-strings.yaml` and `app-language.yaml` check the menus and languages in the running app.

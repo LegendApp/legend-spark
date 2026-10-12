@@ -1,6 +1,7 @@
 #import "RNDesktopApp.h"
 #import "SparkDesktop.h"
 #import "SparkDevTools.h"
+#import "SparkLocalization.h"
 @implementation RNDesktopApp { NSMutableSet<NSString *> *_guardIds; }
 - (instancetype)init { if ((self = [super init])) _guardIds = [NSMutableSet new]; return self; }
 RCT_EXPORT_MODULE(NativeDesktopApp)
@@ -36,6 +37,20 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
       SparkSetQuitGuard(identifier, enabled); resolve(@"null");
     }
     else if ([method isEqual:@"replyQuit"]) { SparkReplyQuit(args[@"id"], [args[@"allow"] boolValue], [args[@"requestId"] unsignedIntegerValue]); resolve(@"null"); }
+    else if ([method isEqual:@"languages"]) resolve(SparkJSON(SparkAppLanguages()));
+    else if ([method isEqual:@"setLanguage"]) {
+      id language = args[@"language"];
+      if (language == NSNull.null) language = nil;
+      if ((language && ![language isKindOfClass:NSString.class]) || !SparkSetAppLanguage(language)) { SparkInvalid(reject, @"The app does not list this language in its localizations"); return; }
+      resolve(@"null");
+    }
+    else if ([method isEqual:@"strings"]) {
+      NSArray *keys = args[@"keys"]; NSMutableDictionary *strings = [NSMutableDictionary new];
+      if (![keys isKindOfClass:NSArray.class] || [keys indexOfObjectPassingTest:^BOOL(id key, NSUInteger index, BOOL *stop) { return ![key isKindOfClass:NSString.class]; }] != NSNotFound) { SparkInvalid(reject, @"Expected string keys"); return; }
+      @try { for (id key in keys) strings[key] = SparkLocalizedString(key); }
+      @catch (NSException *exception) { SparkInvalid(reject, exception.reason); return; }
+      resolve(SparkJSON(strings));
+    }
     else if ([method isEqual:@"hide"]) { [NSApp hide:nil]; resolve(@"null"); }
     else if ([method isEqual:@"activate"]) { [NSApp activateIgnoringOtherApps:YES]; resolve(@"null"); }
 #if RCT_DEV

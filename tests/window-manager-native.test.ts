@@ -14,7 +14,7 @@ test.skipIf(process.platform !== "darwin")("AppKit window manager compiles and e
     const registry = readFileSync(path.join(base, "LegendWindowRegistry.mm"), "utf8").replace('#import "LegendWindowRegistry.h"', "");
     const input = path.join(directory, "test.mm"), output = path.join(directory, executable);
     mkdirSync(path.join(directory, "RNDesktopApp")); writeFileSync(path.join(directory, "RNDesktopApp/SparkDesktop.h"), "");
-    writeFileSync(input, `#import "${path.join(base, "LegendWindowRegistry.h")}"\n` + readFileSync(path.join(root, "tests/window-manager.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", registry + "\nstatic BOOL SparkSafeMode(void) { return NO; }\n" + source));
+    writeFileSync(input, `#import "${path.join(base, "LegendWindowRegistry.h")}"\n` + readFileSync(path.join(root, "tests/window-manager.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", registry + "\nstatic BOOL SparkSafeMode(void) { return NO; }\nstatic NSString *SparkLocalizedString(NSString *key) { return key; }\n" + source));
     await runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-I", directory, "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "CoreImage", input, "-o", output], { timeout: 60000 });
     const result = await runOk(output, [], { timeout: 30000 });
     expect(result).toContain("Toolbar customization, display modes, overflow and sidebar item passed");

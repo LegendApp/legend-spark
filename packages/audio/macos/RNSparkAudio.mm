@@ -1,6 +1,7 @@
 #import "RNSparkAudio.h"
 #import <AVFoundation/AVFoundation.h>
 #import <MediaPlayer/MediaPlayer.h>
+#import <RNDesktopApp/SparkLocalization.h>
 /** Native observation exists only while the corresponding public status stream is observed. */
 @interface SparkAudioObservation : NSObject
 @property AVPlayer *player;
@@ -185,7 +186,7 @@ RCT_EXPORT_MODULE(NativeSparkAudio)
       NSString *uri = args[@"uri"]; NSURL *url = [uri hasPrefix:@"/"] ? [NSURL fileURLWithPath:uri] : [NSURL URLWithString:uri];
       if (!url || (!url.isFileURL && ![@[@"https", @"http"] containsObject:url.scheme])) { reject(@"E_AUDIO", @"Expected a local file or HTTP audio URL", nil); return; }
       if (url.isFileURL && ![NSFileManager.defaultManager isReadableFileAtPath:url.path]) { reject(@"E_NOT_FOUND", @"Audio file is not readable", nil); return; }
-      self.players[identifier] = [AVPlayer playerWithURL:url]; self.metadata[identifier] = @{@"title": args[@"title"] ?: @"Music"};
+      self.players[identifier] = [AVPlayer playerWithURL:url]; self.metadata[identifier] = @{@"title": args[@"title"] ?: SparkLocalizedString(@"Music")};
       __weak RNSparkAudio *weakSelf = self;
       self.endObservers[identifier] = [NSNotificationCenter.defaultCenter addObserverForName:AVPlayerItemDidPlayToEndTimeNotification object:self.players[identifier].currentItem queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *event) { [weakSelf publishPlayer:identifier]; }];
       if (!self.sessionID) { self.activeID = identifier; [self publishMetadata:self.metadata[identifier]]; }

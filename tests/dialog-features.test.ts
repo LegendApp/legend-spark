@@ -3,11 +3,17 @@ import { beforeEach, expect, test, vi } from "vitest";
 const calls: { method: string; args: any }[] = [];
 let reply: (method: string, args: any) => unknown = () => null;
 const platform = { OS: "macos" };
-const native = (method: string, args: string) => { calls.push({ method, args: JSON.parse(args) }); return Promise.resolve(JSON.stringify(reply(method, JSON.parse(args)))); };
+// NativeDesktopApp's "strings": Spark's own labels in the app's language (Arabic here), recorded apart.
+const SPARK_STRINGS: Record<string, string> = { OK: "موافق", Cancel: "إلغاء", Continue: "متابعة", Confirm: "تأكيد" };
+const stringRequests: string[][] = [];
+const native = (method: string, args: string) => {
+  if (method === "strings") { const { keys } = JSON.parse(args); stringRequests.push(keys); return Promise.resolve(JSON.stringify(Object.fromEntries(keys.map((key: string) => [key, SPARK_STRINGS[key]])))); }
+  calls.push({ method, args: JSON.parse(args) }); return Promise.resolve(JSON.stringify(reply(method, JSON.parse(args))));
+};
 vi.doMock("react-native", () => ({ Platform: platform, TurboModuleRegistry: { get: (name: string) => name === "NativeFileDialog" ? { open: (args: string) => native("open", args), save: (args: string) => native("save", args) } : { call: native } } }));
 const files = await import("../packages/file-dialog/src/index.ts");
 const messages = await import("../packages/message-dialog/src/index.ts");
-beforeEach(() => { platform.OS = "macos"; calls.length = 0; reply = () => null; });
+beforeEach(() => { platform.OS = "macos"; calls.length = 0; stringRequests.length = 0; reply = () => null; });
 
 const accessory = [
   { type: "popup", id: "format", label: "Format:", options: [{ value: "txt", label: "Plain text" }, { value: "md", label: "Markdown" }] },
@@ -79,7 +85,7 @@ test("the suppression checkbox state returns with the selected button", async ()
 test("prompts return the confirmed value or a distinct cancellation", async () => {
   reply = () => ({ button: 0, checked: false, value: "Draft" });
   expect(await messages.showPrompt({ title: "Rename", placeholder: "Name", defaultValue: "Untitled", confirmLabel: "Rename", windowId: "main" })).toEqual({ canceled: false, value: "Draft" });
-  expect(calls[0]).toEqual({ method: "show", args: { title: "Rename", windowId: "main", buttons: ["Rename", "Cancel"], defaultButton: 0, cancelButton: 1, input: { placeholder: "Name", defaultValue: "Untitled", secure: false } } });
+  expect(calls[0]).toEqual({ method: "show", args: { title: "Rename", windowId: "main", buttons: ["Rename", "إلغاء"], defaultButton: 0, cancelButton: 1, input: { placeholder: "Name", defaultValue: "Untitled", secure: false } } });
   reply = () => ({ button: 0, checked: false, value: "" });
   expect(await messages.showPrompt({ title: "Password", secure: true })).toEqual({ canceled: false, value: "" });
   expect(calls[1]!.args.input).toEqual({ defaultValue: "", secure: true });
@@ -112,4 +118,31 @@ test("the About panel forwards only supplied overrides", async () => {
   expect(calls).toHaveLength(0);
   reply = () => 1;
   await expect(messages.showAboutPanel()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+});
+
+test("omitted titles and button labels are Spark's own strings in the app's language", async () => {
+  reply = () => ({ button: 1, checked: false });
+  expect(await messages.confirm("Discard the draft?")).toBe(true);
+  expect(stringRequests).toEqual([["Confirm", "Cancel", "Continue"]]);
+  expect(calls[0]!.args).toMatchObject({ title: "تأكيد", message: "Discard the draft?", buttons: ["إلغاء", "متابعة"], defaultButton: 1, cancelButton: 0 });
+  reply = () => ({ button: 0, checked: false });
+  await messages.showMessage({ title: "Saved" });
+  expect(calls[1]!.args.buttons).toEqual(["موافق"]);
+  reply = () => ({ button: 0, checked: false, value: "x" });
+  await messages.showPrompt({ title: "Name" });
+  expect(calls[2]!.args.buttons).toEqual(["موافق", "إلغاء"]);
+  expect(stringRequests).toEqual([["Confirm", "Cancel", "Continue"], ["OK"], ["OK", "Cancel"]]);
+  // Labels the caller supplies need no native strings.
+  stringRequests.length = 0;
+  reply = () => ({ button: 1, checked: false });
+  await messages.confirm("Discard?", { title: "Discard", confirmLabel: "Discard", cancelLabel: "Keep" });
+  reply = () => ({ button: 0, checked: false });
+  await messages.showMessage({ title: "Saved", buttons: [{ id: "ok", label: "Fine" }] });
+  expect(stringRequests).toEqual([]);
+  // Spark's Windows host has no localized strings yet: Windows keeps the English labels, without a native call.
+  platform.OS = "windows"; calls.length = 0;
+  reply = () => ({ button: 1, checked: false });
+  await messages.confirm("Discard?");
+  expect(calls[0]!.args).toMatchObject({ title: "Confirm", buttons: ["Cancel", "Continue"] });
+  expect(stringRequests).toEqual([]);
 });

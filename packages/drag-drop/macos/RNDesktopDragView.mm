@@ -1,4 +1,5 @@
 #import "RNDesktopDragView.h"
+#import <RNDesktopApp/SparkLocalization.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <react/renderer/components/RNDesktopDragSpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNDesktopDragSpec/EventEmitters.h>
@@ -80,7 +81,7 @@ static NSArray *PasteboardTypes(NSArray *types) {
   NSMutableArray *items = [NSMutableArray new];
   for (id<NSPasteboardWriting> writer in writers) {
     NSDraggingItem *item = [[NSDraggingItem alloc] initWithPasteboardWriter:writer];
-    NSImage *image = [NSImage imageWithSystemSymbolName:@"doc" accessibilityDescription:@"Dragged item"];
+    NSImage *image = [NSImage imageWithSystemSymbolName:@"doc" accessibilityDescription:SparkLocalizedString(@"Dragged item")];
     [item setDraggingFrame:NSMakeRect(0, 0, 32, 32) contents:image]; [items addObject:item];
   }
   _dragging = YES; [self beginDraggingSessionWithItems:items event:event source:self];

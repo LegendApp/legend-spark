@@ -12,14 +12,13 @@
   },
   "macos": {
     "bundleIdentifier": "so.legend.spark.examples.kitchensink",
-    "testDriverPrivateEvents": true,
-    "infoPlist": {
-      "CFBundleLocalizations": [
-        "en",
-        "ar"
-      ]
-    }
+    "testDriverPrivateEvents": true
   },
+  "localizations": [
+    "en",
+    "ar",
+    "fr"
+  ],
   "platforms": [
     "macos",
     "windows"

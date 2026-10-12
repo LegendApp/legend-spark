@@ -10,6 +10,8 @@ Pod::Spec.new do |s|
   s.source = { :path => "." }
   s.platforms = { :osx => "14.0" }
   s.source_files = "macos/**/*.{h,m,mm}", "cpp/**/*.hpp"
+  # Spark-owned native strings (SparkLocalization.h); every language holds the same keys.
+  s.resource_bundles = { "SparkStrings" => ["macos/Localization/*.lproj"] }
   # The test driver's gesture and extra mouse button synthesis uses private CoreGraphics event functions. They compile
   # only in apps that set macos.testDriverPrivateEvents (the Spark config plugin exports this variable to the Podfile),
   # so other apps' binaries never name them (docs/test-driver.md#private-event-functions).

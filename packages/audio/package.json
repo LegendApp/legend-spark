@@ -43,7 +43,9 @@
       "android",
       "web"
     ],
-    "requires": []
+    "requires": [
+      "@legendapp/spark-desktop-app"
+    ]
   },
   "private": true,
   "dependencies": {
