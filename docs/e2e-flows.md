@@ -465,6 +465,8 @@ fails with `invalid`.
 | `setClock`, `advanceClock` | The motion engine's `setClock` and `advanceClock` driver commands ([motion.md](motion.md#virtual-clock-for-the-test-driver)); `advanceClock` sends `duration` in milliseconds |
 | `captureMotion`, `assertMotion`, `interruptAt` | Motion telemetry: `motionState`, `waitForMotion` and `sampleMotion` ([Motion and frames](#motion-and-frames)). The target needs a testID. |
 | `assertFrames` | `startFrames`, the `during` command, `stopFrames` ([Motion and frames](#motion-and-frames)) |
+| `assertStartup`, `assertState` | `startup` and `state` ([App inspection](#app-inspection)) |
+| `assertNoLayoutThrash`, `assertNoFlicker`, `assertNoLeaks`, `assertMemory` | `startCommits`/`stopCommits`, `counters` and `listeners`, `memory` ([Layout, flicker and leaks](#layout-flicker-and-leaks)) |
 | `takeScreenshot`, `assertScreenshot`, failure screenshot | `capture` of the main window, or of the window `window` selects (`id:<identifier>`), its frame view (the content view's superview, title bar included). Element frames are points from the window's top-left, the capture's origin, so masks line up. |
 | failure evidence | Each launch's app log, and a capture of the main window while the app runs |
 
@@ -511,6 +513,31 @@ run after `onFlowComplete`, outside the flow and run time limits, so a failed, t
 flow still runs them: the restore quits the app, then `defaults write`s each previous value or
 `defaults delete`s a key that was absent. It refuses (`invalid`) while any process with that bundle
 identifier runs, a copy someone is using included, and for any domain but the flow's app or its `.driver` copy.
+
+#### App inspection
+
+| Command | What it does |
+|---|---|
+| `assertStartup: { coldMs, firstPaintMs, id }` | Reads the startup phases of the running launch ([docs/test-driver.md](test-driver.md#startup-phases)), waiting for its first rendered UI to settle (30 s, or the command's `timeout`), and records `startup.coldMs` (process start to the first UI settled; with `id`, to the first settled UI showing the element with that testID) and `startup.firstPaintMs` (process start to its first mount) as [metrics](#metrics). Each takes `{ min, max }` in milliseconds; the failure lists every phase. The gate's [budgets](#budgets) hold the reference baselines. |
+| `assertState: { path, equals }` | The JSON value at `path` of the state the app exposes with `exposeTestState` ([docs/test-driver.md](test-driver.md#exposed-state)), polled until it deeply equals `equals`. A name or key the app does not have is `not-found`; an app whose JavaScript never answers fails with `timeout`. Prefer checks of what a user sees; use it for state the UI does not show. |
+
+```yaml
+- launchApp
+- assertStartup: { id: infra-shell-home, coldMs: { max: 30000 } }
+- assertState: { path: navigation.kind, equals: catalog }
+```
+
+#### Layout, flicker and leaks
+
+| Command | What it does |
+|---|---|
+| `assertNoLayoutThrash: { during }` | Watches every commit of the app's main run loop while `during` runs and until mounted UI updates settle ([docs/test-driver.md](test-driver.md#layout-thrash-and-flicker)), and fails when a view's frame changed in more than one commit: it was laid out again after the frame that showed it. Use one input as `during`: typing a word lays out a growing label once per key. |
+| `assertNoFlicker: { during }` | Watches the same way and fails when an element (a view with a testID) visible before went missing for one or more commits and came back (a partial frame), or a window that showed elements showed none (a blank frame). |
+| `assertNoLeaks: { run, repeat, since }` | Compares the leak counters (`windows`, `views`, `fileDescriptors`, `listeners`; [docs/test-driver.md](test-driver.md#leak-counters)) after running `run` `repeat` times (default 1) with those before it, or with `since: flowStart` with those taken before the flow's first command on the launch other than `launchApp`, once the UI settled: the app as the flow found it (only flows with that command take them, so it must be in the flow file, not a `runFlow` file). Fails when any counter grew. Run the commands once before, so one-time caches are in the baseline. `since: mark` is `unsupported`: no command sets a mark. |
+| `assertMemory: { maxMB }` | The app process's memory footprint (`memory.mb` [metric](#metrics)) must be at most `maxMB`. `window` is `unsupported`: it measures the process. |
+
+A failed `assertNoLayoutThrash` or `assertNoFlicker` writes the driver's report to
+`output/<command>-line<line>.commits.json`.
 
 #### App state
 
@@ -610,8 +637,8 @@ input opens is closed at once and the command fails.
 
 Everything else is `unsupported`, never skipped: other black-box commands (menus, windows,
 OS state) need [#50](https://github.com/LegendApp/legend-spark/issues/50), and the other
-driver commands (`assertPaused`, `assertNoLayoutThrash`, `assertNoFlicker`, `assertStartup`
-and the other performance commands, `assertState`) are not in the driver protocol yet
+driver commands (`assertPaused`, `measure`, `assertIdleCpu`, `startTrace`, `stopTrace` and
+`assertEnergy`) are not in the driver protocol yet
 ([#52](https://github.com/LegendApp/legend-spark/issues/52)).
 `tests/e2e-driver-backend.test.ts` covers the mapping with a fake driver
 (`tests/e2e-driver-fake.ts`), `tests/test-driver.native.mm` the driver's input on real
@@ -986,7 +1013,7 @@ base 14-inch MacBook Pro for 120 Hz frame rate (target
 
 Backends record measurements with `context.metric(name, value)`. They appear in the
 run report as `metrics: { name: [values…] }` on each flow result. Budgets refer to
-these names, so backends use them for the performance commands (the driver backend does not implement them yet):
+these names, so backends use them for the performance commands (the driver backend records `startup.*`, `memory.mb` and `frames.*`):
 
 | Command | Metrics |
 |---|---|

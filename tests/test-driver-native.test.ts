@@ -6,7 +6,7 @@ import { outcome, run, runOk } from "./subprocess.ts";
 const darwin = process.platform === "darwin";
 const root = path.resolve(import.meta.dirname, "..");
 const native = path.join(root, "packages/desktop-app/macos");
-const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm"].map(file => path.join(native, file));
+const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm", "SparkTestDriverCommits.mm"].map(file => path.join(native, file));
 const compile = (sources: string[], output: string, include: string[] = [], flags: string[] = []) => runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore",
   ...flags, "-I", native, ...include.flatMap(directory => ["-I", directory]), ...sources, "-o", output], { timeout: 120_000 });
 // Gesture and extra mouse button synthesis use private CoreGraphics functions, compiled only on request
@@ -19,14 +19,14 @@ beforeAll(async () => {
   directory = mkdtempSync("/tmp/spark-driver-test-");
   harness = path.join(directory, "test-driver");
   withoutPrivateEvents = path.join(directory, "test-driver-without-private-events");
-  // SparkWindow.mm includes SparkDesktop.h, which needs one React Native type.
+  // SparkWindow.mm and SparkDriverState.mm include SparkDesktop.h, which needs one React Native type.
   const shim = path.join(directory, "include/React");
   mkdirSync(shim, { recursive: true });
   writeFileSync(path.join(shim, "RCTBridgeModule.h"), "typedef void (^RCTPromiseRejectBlock)(NSString *code, NSString *message, NSError *error);\n");
   windowState = path.join(directory, "driver-window-state");
   await Promise.all([
-    compile([...driverSources, path.join(root, "tests/test-driver.native.mm")], harness, [], PRIVATE_EVENTS),
-    compile([...driverSources, path.join(root, "tests/test-driver.native.mm")], withoutPrivateEvents, [], ["-O2"]),
+    compile([...driverSources, path.join(native, "SparkDriverState.mm"), path.join(root, "tests/test-driver.native.mm")], harness, [path.join(directory, "include")], PRIVATE_EVENTS),
+    compile([...driverSources, path.join(native, "SparkDriverState.mm"), path.join(root, "tests/test-driver.native.mm")], withoutPrivateEvents, [path.join(directory, "include")], ["-O2"]),
     compile([...driverSources, path.join(native, "SparkWindow.mm"), path.join(root, "tests/driver-window-state.native.mm")], windowState, [path.join(directory, "include")]),
   ]);
 }, 240_000);
@@ -58,6 +58,15 @@ test.skipIf(!darwin)("a client that disconnects before its reply cannot kill the
 }, 90_000);
 test.skipIf(!darwin)("protocol: ping, navigate, openFile, waitFor, appearance, settled private captures and quit", async () => {
   await passes("session");
+}, 90_000);
+test.skipIf(!darwin)("startup phases from the kernel's process start to the end of the first UI's mounting", async () => {
+  await passes("startup");
+}, 90_000);
+test.skipIf(!darwin)("commit watching reports views laid out in more than one commit, elements missing for a commit and blank windows; counters and memory", async () => {
+  await passes("commits");
+}, 90_000);
+test.skipIf(!darwin)("state and listeners ask the app's JavaScript through a desktop event and relay its answer, its error or a timeout", async () => {
+  await passes("state");
 }, 90_000);
 test.skipIf(!darwin)("driver mode keeps the configured window size although a frame was saved, and saves none", async () => {
   const seed = ["-NSWindow Frame spark.test.main", "100 100 1040 720 0 0 1728 1084 "];

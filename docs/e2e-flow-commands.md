@@ -23,7 +23,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | `assertCrashRecovery` | bare | — | black-box | Assert the app recovers after crashApp. |
 | `relaunchApp` | bare | `preserveState` | black-box | Quit and relaunch the app. |
 | `assertAppState` | — | `running`, `active`, `hidden`, `dockIconVisible` (at least one) | black-box | Assert process and activation state. |
-| `assertStartup` | — | `coldMs`, `firstPaintMs` (at least one) | driver | Assert startup phase timings in milliseconds. |
+| `assertStartup` | — | `coldMs`, `firstPaintMs`, `id`; at least one of `coldMs`, `firstPaintMs` | driver | Assert startup phase timings in milliseconds. With `id`, coldMs ends when the element with that testID first shows in a settled UI. |
 
 ## Windows / multiwindow
 

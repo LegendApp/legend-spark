@@ -11,7 +11,7 @@ import * as windows from "@legendapp/spark/windows";
 import { eventEntry, type Entry } from "../EventResults";
 import { argument, reportLaunch, SIGNOFF_FLAG } from "../launch";
 import { MESSAGES, isRTL, resolveLocale, type Locale, type Messages } from "./i18n";
-import { listenForDeepLinks, navigate } from "./navigation";
+import { getLocation, listenForDeepLinks, navigate } from "./navigation";
 
 // The Kitchen Sink's app-wide state and registrations: the Document menu, ⌘⇧K, the unsaved-changes
 // prompts on quit and main-window close, and deep links. They live for the process; screens observe them.
@@ -81,6 +81,9 @@ export async function startAppController(): Promise<void> {
     if (reportLaunch(context.launchArguments)) return;
     update({ locale: resolveLocale((await getSystemInfo()).locale) });
     if (argument(context.launchArguments, SIGNOFF_FLAG)) navigate({ kind: "screen", area: "infra", screen: "sign-off" });
+    // What flows check with assertState (docs/test-driver.md#exposed-state); read only by a test-driver session.
+    app.exposeTestState("navigation", getLocation);
+    app.exposeTestState("app", getAppState);
   } catch (error) { fail(error); return; }
   const t = strings();
   listenForDeepLinks(fail);

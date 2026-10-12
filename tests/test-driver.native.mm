@@ -1,11 +1,13 @@
 #import <AppKit/AppKit.h>
 #import "SparkTestDriverPrivate.h"
+#import "SparkDesktop.h"
 #include <atomic>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 
+NSString *const SparkDesktopEvent = @"SparkDesktopEvent"; // SparkDesktop.mm's, which the harness does not link.
 // Usage: test-driver <mode> <parent>. Each mode is one app launch with a fresh run directory in <parent>.
 static NSString *directory;
 static NSMutableArray<NSURL *> *openedURLs;
@@ -374,7 +376,14 @@ int main(int argc, char **argv) { @autoreleasepool {
     @try { SparkTestDriverRegisterCommand(taken, ^(NSDictionary *, SparkTestDriverReply reply) { reply(@{ @"ok": @NO }); }); } @catch (NSException *) { refused = YES; }
     Check(refused, [NSString stringWithFormat:@"%@ cannot be registered twice", taken]);
   }
-  SparkTestDriverDidMount(); // The host's first UI mount.
+  if ([mode isEqual:@"startup"]) {
+    // The host's launch: AppKit finishes launching, then React Native runs the bundle on its JavaScript thread.
+    [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidFinishLaunchingNotification object:NSApp];
+    NSThread *javascript = [[NSThread alloc] initWithBlock:^{ [NSNotificationCenter.defaultCenter postNotificationName:@"RCTInstanceDidLoadBundle" object:nil]; }];
+    [javascript start];
+    Pump(^{ return javascript.finished; }, 5);
+  }
+  if (![mode isEqual:@"startup"]) SparkTestDriverDidMount(); // The host's first UI mount.
   Check(!getenv("SPARK_TEST_DRIVER_DIR"), @"driver mode is not inherited by child processes");
   Check(access([directory stringByAppendingPathComponent:@"token"].fileSystemRepresentation, F_OK) != 0, @"token is one-time");
   struct stat info;
@@ -753,6 +762,171 @@ int main(int argc, char **argv) { @autoreleasepool {
       NSDictionary *blocked = Request(fd, @{ @"command": @"stopFrames" });
       Check([blocked[@"ok"] boolValue] && [blocked[@"droppedFrames"] doubleValue] >= 0.2 * [started[@"refreshRate"] doubleValue] && [blocked[@"maxFrameGapMs"] doubleValue] >= 240,
         [NSString stringWithFormat:@"a blocked main thread drops frames: %@", blocked]);
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
+  else if ([mode isEqual:@"startup"]) {
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+      NSDictionary *early = Request(fd, @{ @"command": @"startup", @"timeoutMs": @0 });
+      Check([Code(early) isEqual:@"E_TIMEOUT"] && [early[@"error"][@"message"] isEqual:@"The app has not mounted UI before the timeout"], [NSString stringWithFormat:@"startup waits for the first UI: %@", early]);
+      // A quiet UI without elements (views with a testID) has not finished starting.
+      NSView *probe = OnMain(^{ return SparkTestDriverFindView(@"probe-layer"); });
+      __block CFTimeInterval emptyMount = 0;
+      dispatch_sync(dispatch_get_main_queue(), ^{ probe.hidden = YES; SparkTestDriverDidMount(); emptyMount = CACurrentMediaTime(); });
+      usleep(200000);
+      NSDictionary *empty = Request(fd, @{ @"command": @"startup", @"timeoutMs": @0 });
+      Check([Code(empty) isEqual:@"E_TIMEOUT"], [NSString stringWithFormat:@"startup waits for an element: %@", empty]);
+      dispatch_sync(dispatch_get_main_queue(), ^{ probe.hidden = NO; });
+      // Then the first UI mounts in three transactions 20 ms apart. A loaded machine may space them by more than the 100 ms
+      // that ends startup, so the end is one of them; later mounts never move it.
+      NSMutableArray<NSNumber *> *mounts = [NSMutableArray new];
+      for (int index = 0; index < 3; index++) {
+        if (index) usleep(20000);
+        dispatch_sync(dispatch_get_main_queue(), ^{ SparkTestDriverDidMount(); [mounts addObject:@(CACurrentMediaTime())]; });
+      }
+      NSDictionary *startup = Request(fd, @{ @"command": @"startup" });
+      NSDictionary *phases = startup[@"phases"];
+      Check([startup[@"ok"] boolValue] && phases.count == 5, [NSString stringWithFormat:@"startup reports every phase: %@", startup]);
+      double launching = [phases[@"willFinishLaunching"] doubleValue], launched = [phases[@"didFinishLaunching"] doubleValue], bundle = [phases[@"bundleLoaded"] doubleValue],
+        mounted = [phases[@"firstMount"] doubleValue], settled = [phases[@"settled"] doubleValue];
+      Check(launching > 0 && launching < 60000, [NSString stringWithFormat:@"phases count from the kernel's process start: %@", phases]);
+      Check(launching <= launched && launched <= bundle && bundle <= mounted && mounted + 200 <= settled, [NSString stringWithFormat:@"phases are in launch order: %@", phases]);
+      // firstMount is the empty UI's mount, 200 ms or more before the ones that show the element.
+      BOOL atMount = NO;
+      for (NSNumber *mount in mounts) atMount = atMount || fabs((settled - mounted) - (mount.doubleValue - emptyMount) * 1000) < 1;
+      Check(atMount, [NSString stringWithFormat:@"the end of startup is a mount of the first UI: %@ (mounts %@)", phases, mounts]);
+      // An element that shows at a later quiet point is ready then; one that never shows times out.
+      NSDictionary *probeReady = Request(fd, @{ @"command": @"startup", @"testID": @"probe-layer" });
+      Check([probeReady[@"phases"][@"ready"] isEqual:phases[@"settled"]], [NSString stringWithFormat:@"ready for an element of the first settled UI: %@", probeReady]);
+      __block CFTimeInterval lateMount = 0;
+      dispatch_sync(dispatch_get_main_queue(), ^{
+        NSView *late = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 10, 10)]; late.accessibilityIdentifier = @"late-element";
+        [window.contentView addSubview:late];
+        SparkTestDriverDidMount(); lateMount = CACurrentMediaTime();
+      });
+      NSDictionary *lateReady = Request(fd, @{ @"command": @"startup", @"testID": @"late-element" });
+      Check(fabs([lateReady[@"phases"][@"ready"] doubleValue] - mounted - (lateMount - emptyMount) * 1000) < 1, [NSString stringWithFormat:@"ready when the element first showed: %@", lateReady]);
+      NSDictionary *never = Request(fd, @{ @"command": @"startup", @"testID": @"never", @"timeoutMs": @0 });
+      Check([Code(never) isEqual:@"E_TIMEOUT"] && [never[@"error"][@"message"] hasPrefix:@"never was not shown"], [NSString stringWithFormat:@"startup times out for an element that never shows: %@", never]);
+      dispatch_sync(dispatch_get_main_queue(), ^{ SparkTestDriverDidMount(); });
+      Check([Request(fd, @{ @"command": @"startup" })[@"phases"] isEqual:phases], @"later mounts do not change startup");
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
+  else if ([mode isEqual:@"commits"]) {
+    // Views the client changes in separate run-loop turns (each turn commits once); `row` and `badge` are elements.
+    NSView *content = window.contentView, *row = [[NSView alloc] initWithFrame:NSMakeRect(10, 10, 100, 20)], *badge = [[NSView alloc] initWithFrame:NSMakeRect(120, 10, 20, 20)];
+    row.accessibilityIdentifier = @"row"; badge.accessibilityIdentifier = @"badge";
+    [content addSubview:row]; [content addSubview:badge];
+    NSView *probe = SparkTestDriverFindView(@"probe-layer");
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+      auto turn = ^(dispatch_block_t change) { dispatch_async(dispatch_get_main_queue(), change); usleep(50000); };
+      auto ok = ^(NSDictionary *request) {
+        NSDictionary *reply = Request(fd, request);
+        Check([reply[@"ok"] boolValue], [NSString stringWithFormat:@"%@: %@", request, reply]);
+        return reply;
+      };
+      Check([Code(Request(fd, @{ @"command": @"stopCommits" })) isEqual:@"E_INVALID_STATE"], @"stopCommits needs startCommits");
+      // One change per view, as one input causes: nothing to report.
+      ok(@{ @"command": @"startCommits" });
+      Check([Code(Request(fd, @{ @"command": @"startCommits" })) isEqual:@"E_BUSY"], @"one watch at a time");
+      turn(^{ row.frame = NSMakeRect(10, 10, 120, 20); badge.frame = NSMakeRect(140, 10, 20, 20); });
+      NSDictionary *clean = ok(@{ @"command": @"stopCommits" });
+      Check([clean[@"commits"] intValue] == 1 && ![clean[@"relayouts"] count] && ![clean[@"gaps"] count] && ![clean[@"blanks"] count], [NSString stringWithFormat:@"a single relayout is not thrash: %@", clean]);
+      // A view laid out in two commits, an element missing for one commit, and a view mounted then laid out once.
+      ok(@{ @"command": @"startCommits" });
+      __block NSView *late = nil;
+      turn(^{ probe.frame = NSMakeRect(0, 200, 110, 100); badge.hidden = YES; late = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 5, 5)]; [content addSubview:late]; });
+      turn(^{ probe.frame = NSMakeRect(0, 200, 100, 100); badge.hidden = NO; late.frame = NSMakeRect(0, 0, 6, 6); });
+      NSDictionary *busy = ok(@{ @"command": @"stopCommits" });
+      NSArray *relayouts = busy[@"relayouts"];
+      Check(relayouts.count == 1 && [relayouts[0][@"view"] isEqual:@"probe-layer"] && [relayouts[0][@"changes"] isEqual:@2] && [relayouts[0][@"window"] isEqual:@"spark.main"]
+        && [relayouts[0][@"frames"] count] == 3 && [relayouts[0][@"frames"][1][@"width"] isEqual:@110], [NSString stringWithFormat:@"a view laid out in two commits is thrash: %@", busy]);
+      Check([busy[@"gaps"] isEqual:(@[@{ @"id": @"badge", @"window": @"spark.main", @"commits": @1 }])] && ![busy[@"blanks"] count], [NSString stringWithFormat:@"an element missing for one commit is a gap: %@", busy]);
+      // A window showing none of its elements for a commit is blank; an element that leaves for good is no gap.
+      ok(@{ @"command": @"startCommits" });
+      turn(^{ content.hidden = YES; });
+      turn(^{ content.hidden = NO; [row removeFromSuperview]; });
+      NSDictionary *blank = ok(@{ @"command": @"stopCommits" });
+      NSSet *gapped = [NSSet setWithArray:[blank[@"gaps"] valueForKey:@"id"]];
+      Check([blank[@"blanks"] isEqual:(@[@{ @"window": @"spark.main", @"commits": @1 }])] && [gapped isEqual:([NSSet setWithArray:@[@"probe-layer", @"badge"]])], [NSString stringWithFormat:@"a blank commit: %@", blank]);
+      // Watching ends when the UI never settles.
+      ok(@{ @"command": @"startCommits" });
+      mounting = true;
+      dispatch_sync(dispatch_get_main_queue(), ^{
+        SparkTestDriverDidMount();
+        [NSTimer scheduledTimerWithTimeInterval:0.02 repeats:YES block:^(NSTimer *timer) { if (mounting) SparkTestDriverDidMount(); else [timer invalidate]; }];
+      });
+      Check([Code(Request(fd, @{ @"command": @"stopCommits", @"timeoutMs": @200 })) isEqual:@"E_NOT_SETTLED"], @"stopCommits waits for the UI to settle");
+      mounting = false;
+      ok(@{ @"command": @"startCommits" });
+      ok(@{ @"command": @"stopCommits" });
+      // Leak counters follow windows, views and file descriptors.
+      NSDictionary *before = ok(@{ @"command": @"counters" });
+      Check([before[@"windows"] intValue] >= 1 && [before[@"views"] intValue] >= 8 && [before[@"fileDescriptors"] intValue] >= 3, [NSString stringWithFormat:@"counters: %@", before]);
+      __block NSWindow *extra = nil;
+      int file = open("/dev/null", O_RDONLY);
+      dispatch_sync(dispatch_get_main_queue(), ^{
+        extra = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 50, 50) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:YES];
+        extra.releasedWhenClosed = NO;
+        [extra.contentView addSubview:[[NSView alloc] initWithFrame:NSMakeRect(0, 0, 5, 5)]];
+      });
+      NSDictionary *more = ok(@{ @"command": @"counters" });
+      Check([more[@"windows"] intValue] == [before[@"windows"] intValue] + 1 && [more[@"views"] intValue] > [before[@"views"] intValue] + 1
+        && [more[@"fileDescriptors"] intValue] == [before[@"fileDescriptors"] intValue] + 1, [NSString stringWithFormat:@"counters grow: %@ then %@", before, more]);
+      close(file);
+      dispatch_sync(dispatch_get_main_queue(), ^{ @autoreleasepool { [extra close]; extra = nil; } });
+      NSDictionary *after = ok(@{ @"command": @"counters" });
+      NSArray *keys = @[@"windows", @"views", @"fileDescriptors"];
+      Check([[after dictionaryWithValuesForKeys:keys] isEqual:[before dictionaryWithValuesForKeys:keys]], [NSString stringWithFormat:@"counters return to the baseline: %@ then %@", before, after]);
+      NSDictionary *memory = ok(@{ @"command": @"memory" });
+      Check([memory[@"footprintMB"] doubleValue] > 1 && [memory[@"residentMB"] doubleValue] > 1, [NSString stringWithFormat:@"memory: %@", memory]);
+      Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
+      finished = YES;
+    });
+  }
+  else if ([mode isEqual:@"state"]) {
+    // The app's JavaScript, as exposeTestState answers: a value, an error, or (for "silent") nothing.
+    __block NSDictionary *late = nil;
+    [NSNotificationCenter.defaultCenter addObserverForName:SparkDesktopEvent object:nil queue:nil usingBlock:^(NSNotification *note) {
+      NSDictionary *event = note.userInfo;
+      if ([event[@"type"] isEqual:@"driverListeners"]) { dispatch_async(dispatch_get_main_queue(), ^{ SparkReplyDriverState(@{ @"requestId": event[@"requestId"], @"value": @7 }); }); return; }
+      if (![event[@"type"] isEqual:@"driverState"]) return;
+      Check(NSThread.isMainThread, @"state requests are emitted on the main thread");
+      NSString *path = event[@"path"];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if ([path isEqual:@"silent"]) { late = @{ @"requestId": event[@"requestId"], @"value": @1 }; return; }
+        BOOL known = [path isEqual:@"store.items"];
+        Check(SparkReplyDriverState(known ? @{ @"requestId": event[@"requestId"], @"value": @[@1, @{ @"done": @YES }] }
+          : @{ @"requestId": event[@"requestId"], @"error": @{ @"code": @"E_NOT_FOUND", @"message": [NSString stringWithFormat:@"No state named %@", path] } }), @"a waiting request takes the answer");
+      });
+    }];
+    Client(^{
+      int fd = Connect();
+      SendRaw(fd, [NSString stringWithFormat:@"{\"token\":\"%s\"}\n", token]);
+      Check([Receive(fd)[@"ok"] boolValue], @"authenticated");
+      NSDictionary *value = Request(fd, @{ @"command": @"state", @"path": @"store.items" });
+      Check([value[@"ok"] boolValue] && [value[@"value"] isEqual:(@[@1, @{ @"done": @YES }])], [NSString stringWithFormat:@"state relays the value: %@", value]);
+      NSDictionary *missing = Request(fd, @{ @"command": @"state", @"path": @"nope" });
+      Check([Code(missing) isEqual:@"E_NOT_FOUND"] && [missing[@"error"][@"message"] isEqual:@"No state named nope"], [NSString stringWithFormat:@"state relays the app's error: %@", missing]);
+      Check([Code(Request(fd, @{ @"command": @"state", @"path": @"" })) isEqual:@"E_INVALID_ARGUMENT"], @"state needs a path");
+      Check([Code(Request(fd, @{ @"command": @"state", @"path": @"silent", @"timeoutMs": @200 })) isEqual:@"E_TIMEOUT"], @"state times out when the JavaScript never answers");
+      Check(late && ![OnMain(^{ return @(SparkReplyDriverState(late)); }) boolValue], @"an answer after the timeout is dropped");
+      Check(![OnMain(^{ return @(SparkReplyDriverState(@{ @"requestId": @999, @"value": @1 })); }) boolValue], @"an answer nobody asked for is dropped");
+      // listeners: none while no JavaScript observes desktop events, else what it answers.
+      NSDictionary *none = Request(fd, @{ @"command": @"listeners" });
+      Check([none[@"ok"] boolValue] && [none[@"listeners"] isEqual:@0], [NSString stringWithFormat:@"listeners without observers: %@", none]);
+      dispatch_sync(dispatch_get_main_queue(), ^{ SparkSetDesktopObserved(YES); });
+      NSDictionary *some = Request(fd, @{ @"command": @"listeners" });
+      Check([some[@"ok"] boolValue] && [some[@"listeners"] isEqual:@7], [NSString stringWithFormat:@"listeners the JavaScript reports: %@", some]);
       Check([Request(fd, @{ @"command": @"quit" })[@"ok"] boolValue], @"quit");
       finished = YES;
     });

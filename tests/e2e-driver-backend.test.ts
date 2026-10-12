@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import { DriverError } from "../scripts/e2e/driver.ts";
 import { runFlows } from "../scripts/e2e/runner/executor.ts";
 import { DriverBackend } from "../scripts/e2e/runner/driver-backend.ts";
-import { FakeApp, fakeMotion, fakeSamples, FRAME, FRAMES } from "./e2e-driver-fake.ts";
+import { COMMITS, COUNTERS, FakeApp, fakeMotion, fakeSamples, FRAME, FRAMES, STARTUP } from "./e2e-driver-fake.ts";
 import { VirtualClock } from "./e2e-runner-backend.ts";
 
 const HEADER = "appId: so.legend.spark.examples.kitchensink\nname: Driver flow\nintent: The test intent.\n";
@@ -397,6 +397,107 @@ describe("motion and frames", () => {
   });
 });
 
+describe("app inspection", () => {
+  const inspectLog = (app: FakeApp) => app.log.filter(line => /^(startup|state)/.test(line));
+
+  test("assertStartup reads the launch's startup phases, records the gate metrics and checks the bounds", async () => {
+    const { result, app } = await run("- launchApp\n- assertStartup: { coldMs: { max: 800 }, firstPaintMs: { min: 100, max: 600 } }");
+    expect(result.status).toBe("passed");
+    expect(result.metrics).toEqual({ "startup.coldMs": [690], "startup.firstPaintMs": [510] });
+    // The first UI can take longer than a command's default wait; an explicit timeout wins.
+    expect(inspectLog(app)).toEqual(["startup 30000"]);
+    expect(inspectLog((await run("- launchApp\n- assertStartup: { coldMs: { max: 800 }, timeout: 2s }")).app)).toEqual(["startup 2000"]);
+    // With `id`, the cold launch ends when that element first shows in a settled UI.
+    const ready = await run("- launchApp\n- assertStartup: { id: catalog, coldMs: { max: 1000 } }");
+    expect([ready.result.status, ready.result.metrics, inspectLog(ready.app)]).toEqual(["passed", { "startup.coldMs": [900], "startup.firstPaintMs": [510] }, ["startup 30000 catalog"]]);
+    expect((await run("- launchApp\n- assertStartup: { coldMs: { max: 600 }, firstPaintMs: { min: 600 } }")).result.failure).toMatchObject({
+      kind: "assertion", message: "coldMs 690 is above 600; firstPaintMs 510 is below 600 (willFinishLaunching 120 ms, didFinishLaunching 180 ms, bundleLoaded 420 ms, firstMount 510 ms, settled 690 ms)",
+    });
+    const unsettled = new FakeApp();
+    unsettled.startup = new DriverError("E_TIMEOUT", "The first UI kept mounting changes until the timeout");
+    const failed = await run("- launchApp\n- assertStartup: { coldMs: { max: 800 } }", unsettled);
+    expect(failed.result.failure).toMatchObject({ kind: "timeout", message: "assertStartup: E_TIMEOUT: The first UI kept mounting changes until the timeout" });
+    expect(failed.result.metrics).toEqual({});
+    expect(STARTUP.settled).toBe(690);
+  });
+
+  test("assertState polls the exposed state until the JSON value at the path equals the expected one", async () => {
+    const app = new FakeApp();
+    let reads = 0;
+    app.state = { get "documents.open.length"() { return ++reads < 3 ? 1 : 2; }, navigation: { kind: "screen", area: "infra", screen: "launch-state" } };
+    const { result } = await run("- launchApp\n- assertState: { path: documents.open.length, equals: 2 }\n- assertState: { path: navigation, equals: { kind: screen, area: infra, screen: launch-state } }", app);
+    expect(result.status).toBe("passed");
+    expect(inspectLog(app)).toEqual(["state documents.open.length", "state documents.open.length", "state documents.open.length", "state navigation"]);
+    expect((await run("- launchApp\n- assertState: { path: navigation, equals: { kind: catalog }, timeout: 200ms }", app)).result.failure).toMatchObject({
+      kind: "assertion", message: 'state navigation is {"kind":"screen","area":"infra","screen":"launch-state"}, not {"kind":"catalog"}',
+    });
+    expect((await run("- launchApp\n- assertState: { path: nope, equals: 1, timeout: 200ms }", app)).result.failure).toMatchObject({ kind: "not-found", message: "assertState nope: E_NOT_FOUND: No test state at nope" });
+  });
+});
+
+describe("layout, flicker, leaks and memory", () => {
+  const renderLog = (app: FakeApp) => app.log.filter(line => /^(startCommits|stopCommits|counters|memory|tap)/.test(line));
+
+  test("assertNoLayoutThrash and assertNoFlicker watch commits around their command until the UI settles", async () => {
+    const { result, app } = await run("- launchApp\n- assertNoLayoutThrash: { during: { tapOn: { id: go } } }\n- assertNoFlicker: { during: { tapOn: { id: go } }, timeout: 2s }", new FakeApp({ go: 1 }));
+    expect(result.status).toBe("passed");
+    expect(renderLog(app)).toEqual(["startCommits", "tap go+50,20 {}", "stopCommits 5000", "startCommits", "tap go+50,20 {}", "stopCommits 2000"]);
+    // A failing command still stops watching.
+    const broken = await run("- launchApp\n- assertNoFlicker: { during: { tapOn: { id: missing, timeout: 100ms } } }", new FakeApp({ go: 1 }));
+    expect(broken.result.failure?.kind).toBe("not-found");
+    expect(renderLog(broken.app)).toEqual(["startCommits", "stopCommits undefined"]);
+  });
+
+  test("relayouts, gaps and blank windows fail with the views and elements, and the report as an artifact", async () => {
+    const app = new FakeApp({ go: 1 });
+    app.commits = { ...COMMITS, commits: 4,
+      relayouts: [{ view: "RCTParagraphComponentView in row", window: "spark.main", changes: 2, frames: [{ x: 0, y: 0, width: 10, height: 20 }, { x: 0, y: 0, width: 12, height: 20 }, { x: 0, y: 0, width: 10, height: 20 }] }],
+      gaps: [{ id: "row", window: "spark.main", commits: 1 }], blanks: [{ window: "spark.main", commits: 2 }] };
+    const thrash = await run("- launchApp\n- assertNoLayoutThrash: { during: { tapOn: { id: go } } }", app);
+    expect(thrash.result.failure).toMatchObject({ kind: "assertion", message: "1 views were laid out in more than one commit: RCTParagraphComponentView in row (spark.main) 0,0 10×20 → 0,0 12×20 → 0,0 10×20 (4 commits)" });
+    const artifact = thrash.result.failure!.artifacts!.find(item => item.path.endsWith(".commits.json"))!;
+    expect(JSON.parse(readFileSync(artifact.path, "utf8"))).toEqual(app.commits);
+    expect((await run("- launchApp\n- assertNoFlicker: { during: { tapOn: { id: go } } }", app)).result.failure).toMatchObject({
+      kind: "assertion", message: "elements disappeared and came back: row (spark.main) for 1 commit; windows showed no elements: spark.main for 2 commits (4 commits)",
+    });
+    const busy = new FakeApp({ go: 1 });
+    busy.commits = new DriverError("E_NOT_SETTLED", "The UI kept mounting changes until the timeout");
+    expect((await run("- launchApp\n- assertNoFlicker: { during: { tapOn: { id: go } } }", busy)).result.failure).toMatchObject({ kind: "error", message: "assertNoFlicker: E_NOT_SETTLED: The UI kept mounting changes until the timeout" });
+  });
+
+  test("assertNoLeaks compares the leak counters after running `run` `repeat` times with those before it", async () => {
+    const app = new FakeApp({ go: 1 });
+    const { result } = await run("- launchApp\n- assertNoLeaks: { repeat: 3, run: [{ tapOn: { id: go } }] }", app);
+    expect(result.status).toBe("passed");
+    expect(renderLog(app)).toEqual(["counters 5000", "tap go+50,20 {}", "tap go+50,20 {}", "tap go+50,20 {}", "counters 5000"]);
+    const leaking = new FakeApp({ go: 1 });
+    let calls = 0;
+    leaking.counters = () => ({ ...COUNTERS, views: COUNTERS.views + 10 * calls, listeners: COUNTERS.listeners + calls++ });
+    expect((await run("- launchApp\n- assertNoLeaks: { repeat: 2, run: [{ tapOn: { id: go } }] }", leaking)).result.failure).toMatchObject({
+      kind: "assertion", message: "leak counters grew after running 2 times: views 400 → 410, listeners 12 → 13",
+    });
+  });
+
+  test("since: flowStart compares with the counters taken before the flow's first command on the launch, only when a flow asks", async () => {
+    const app = new FakeApp({ go: 1 });
+    let calls = 0;
+    app.counters = () => ({ ...COUNTERS, windows: COUNTERS.windows + (calls++ === 0 ? 0 : 1) });
+    const { result } = await run("- launchApp\n- assertVisible: { id: go }\n- tapOn: { id: go }\n- runFlow: { commands: [{ assertNoLeaks: { since: flowStart } }] }", app);
+    expect(result.failure).toMatchObject({ kind: "assertion", message: "leak counters grew: windows 2 → 3" });
+    expect(renderLog(app)).toEqual(["counters undefined", "tap go+50,20 {}", "counters 5000"]);
+    const plain = await run("- launchApp\n- assertNoLeaks: { run: [{ tapOn: { id: go } }] }", new FakeApp({ go: 1 }));
+    expect(renderLog(plain.app)[0]).toBe("counters 5000");
+    expect((await run("- launchApp\n- assertNoLeaks: { since: mark }")).result.failure).toMatchObject({ kind: "unsupported" });
+  });
+
+  test("assertMemory records the app's footprint as memory.mb and checks maxMB", async () => {
+    const { result } = await run("- launchApp\n- assertMemory: { maxMB: 400 }");
+    expect([result.status, result.metrics]).toEqual(["passed", { "memory.mb": [300] }]);
+    expect((await run("- launchApp\n- assertMemory: { maxMB: 200 }")).result.failure).toMatchObject({ kind: "assertion", message: "the app's memory footprint is 300 MB, more than 200 MB" });
+    expect((await run("- launchApp\n- assertMemory: { window: main, maxMB: 400 }")).result.failure).toMatchObject({ kind: "unsupported" });
+  });
+});
+
 describe("unsupported and invalid", () => {
   test.each([
     ["- assertA11y: { id: save, hint: Saves }", "assertA11y hint is not supported by backend driver"],
@@ -415,7 +516,7 @@ describe("unsupported and invalid", () => {
     ["- pressKey: MediaPlayPause", "backend driver cannot press MediaPlayPause"],
     ["- pressKey: capslock+a", "backend driver cannot press capslock+a"],
     ["- killApp", "killApp is not supported by backend driver"],
-    ["- assertStartup: { coldMs: { max: 900 } }", "assertStartup is not supported by backend driver"],
+    ["- assertEnergy: low", "assertEnergy is not supported by backend driver"],
     ["- launchApp: { appId: com.example.other, from: dock }", "launchApp appId, from is not supported by backend driver"],
   ])("%s fails as unsupported", async (command, message) => {
     const views = { list: 1, row: 1 };

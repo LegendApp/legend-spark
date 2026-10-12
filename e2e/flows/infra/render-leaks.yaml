@@ -1,0 +1,29 @@
+appId: so.legend.spark.examples.kitchensink
+name: Layout thrash, flicker, leak counters and memory through the in-app driver
+intent: >
+  In the Kitchen Sink catalog, a click on the Split view card navigates to that screen with no view laid out in
+  more than one commit, and a click on the sidebar's All screens navigates back with no element missing for a commit
+  and no blank window. Going to Split view and back three times leaves the leak counters (windows, views, file
+  descriptors and desktop event listeners) where they were after the first round trip and where the flow started. The
+  screen opens no stores, so nothing it caches once belongs in the flowStart baseline (Launch state, which opens the
+  settings store on first visit, would grow fileDescriptors by 3). The app's memory footprint is recorded (the bound is
+  a sanity cap; the gate's budgets hold the reference baseline).
+checks: [INFRA-DRIVER-09, INFRA-DRIVER-10]
+tags: [infra]
+platforms: [macos]
+---
+- launchApp
+- assertVisible: { id: infra-shell-home }
+- assertNoLayoutThrash: { during: { tapOn: { id: infra-shell-screen-native-controls-split-view } } }
+- assertVisible: { id: native-controls-split-view-content }
+- assertNoFlicker: { during: { tapOn: { id: infra-shell-catalog } } }
+- assertVisible: { id: infra-shell-home }
+- assertNoLeaks:
+    repeat: 3
+    run:
+      - tapOn: { id: infra-shell-screen-native-controls-split-view }
+      - assertVisible: { id: native-controls-split-view-content }
+      - tapOn: { id: infra-shell-catalog }
+      - assertVisible: { id: infra-shell-home }
+- assertNoLeaks: { since: flowStart }
+- assertMemory: { maxMB: 2000 }

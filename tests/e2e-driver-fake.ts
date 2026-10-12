@@ -3,10 +3,13 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent } from "../scripts/e2e/driver.ts";
+import { DriverError, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
+export const STARTUP: StartupPhases = { willFinishLaunching: 120, didFinishLaunching: 180, bundleLoaded: 420, firstMount: 510, settled: 690 };
+export const COMMITS: CommitReport = { commits: 3, relayouts: [], gaps: [], blanks: [] };
+export const COUNTERS: Counters = { windows: 2, views: 400, fileDescriptors: 40, listeners: 12 };
 export const FRAMES: FrameReport = { frames: 61, droppedFrames: 0, maxFrameGapMs: 8.4, durationMs: 500, fps: 120, refreshRate: 120 };
 
 /** A scripted motion for a testID: the telemetry the driver reports once it has settled, its samples, and the motion clock. */
@@ -33,7 +36,9 @@ export class FakeDriver implements DriverClient {
   private readonly directory = mkdtempSync(path.join(tmpdir(), "fake-driver-"));
   constructor(private readonly log: string[], private readonly views: Record<string, number>, private readonly extra: () => DriverElement[] = () => [], private readonly menuBar: DriverMenuItem[] = [],
     private readonly motions: () => Record<string, FakeMotion> = () => ({}), private readonly frames: () => FrameReport | DriverError = () => FRAMES,
-    private readonly cursorAt: () => DriverCursor = () => ({ cursor: "arrow", hiddenUntilMoved: false })) {}
+    private readonly cursorAt: () => DriverCursor = () => ({ cursor: "arrow", hiddenUntilMoved: false }),
+    private readonly inspected: () => { startup: StartupPhases | DriverError; state: Record<string, unknown> } = () => ({ startup: STARTUP, state: {} }),
+    private readonly rendered: () => { commits: CommitReport | DriverError; counters: () => Counters; memoryMB: number } = () => ({ commits: COMMITS, counters: () => COUNTERS, memoryMB: 300 })) {}
 
   async navigate(url: string) { this.log.push(`navigate ${url}`); }
   async openFile(file: string) { this.log.push(`openFile ${file}`); }
@@ -72,6 +77,27 @@ export class FakeDriver implements DriverClient {
     return frames;
   }
   async simulateDisplays(displays: readonly object[] | null) { this.log.push(`simulateDisplays ${JSON.stringify(displays)}`); }
+  async startup(timeoutMs?: number, testID?: string) {
+    this.log.push(`startup ${timeoutMs}${testID === undefined ? "" : ` ${testID}`}`);
+    const startup = this.inspected().startup;
+    if (startup instanceof DriverError) throw startup;
+    return testID === undefined ? startup : { ...startup, ready: 900 };
+  }
+  async state(path: string) {
+    this.log.push(`state ${path}`);
+    const state = this.inspected().state;
+    if (!(path in state)) throw new DriverError("E_NOT_FOUND", `No test state at ${path}`);
+    return state[path];
+  }
+  async startCommits() { this.log.push("startCommits"); }
+  async stopCommits(timeoutMs?: number) {
+    this.log.push(`stopCommits ${timeoutMs}`);
+    const commits = this.rendered().commits;
+    if (commits instanceof DriverError) throw commits;
+    return commits;
+  }
+  async counters(timeoutMs?: number) { this.log.push(`counters ${timeoutMs}`); return this.rendered().counters(); }
+  async memory() { this.log.push("memory"); return { footprintMB: this.rendered().memoryMB, residentMB: 500 }; }
   async elements() {
     this.log.push("elements");
     const calls = ++this.calls;
@@ -102,6 +128,13 @@ export class FakeApp implements DriverApp {
   frames: FrameReport | DriverError = FRAMES;
   /** What the driver's `cursor` command reports; tests may change it while a flow runs. */
   cursor: DriverCursor = { cursor: "arrow", hiddenUntilMoved: false };
+  /** Startup phases (or a driver failure) and exposed state by path, as the app reports them. */
+  startup: StartupPhases | DriverError = STARTUP;
+  state: Record<string, unknown> = {};
+  /** The next commit report (or driver failure), the leak counters each `counters` call returns, and the memory footprint. */
+  commits: CommitReport | DriverError = COMMITS;
+  counters: () => Counters = () => COUNTERS;
+  memoryMB = 300;
   constructor(private readonly views: Record<string, number> = {}, private readonly bundleId = "so.legend.spark.examples.kitchensink", readonly menuBar: DriverMenuItem[] = []) {}
 
   readonly reserved = { arguments: ["-RCT_jsLocation"], env: ["SPARK_TEST_DRIVER_DIR", "SPARK_BUNDLE_URL"], locale: ["-AppleLanguages", "-AppleLocale"] };
@@ -119,7 +152,8 @@ export class FakeApp implements DriverApp {
     const extra = [...(options.arguments.length ? [`args=${options.arguments.join(" ")}`] : []), ...(Object.keys(options.env).length ? [`env=${JSON.stringify(options.env)}`] : [])];
     this.log.push([`launch locale=${options.locale ?? "-"}`, ...extra, `log=${path.basename(options.log.file)}`].join(" "));
     writeFileSync(options.log.file, "app log");
-    const driver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar, () => this.motions, () => this.frames, () => this.cursor);
+    const driver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar, () => this.motions, () => this.frames, () => this.cursor,
+      () => ({ startup: this.startup, state: this.state }), () => ({ commits: this.commits, counters: this.counters, memoryMB: this.memoryMB }));
     this.drivers.push(driver);
     return driver;
   }
@@ -157,6 +191,13 @@ const server = net.createServer(socket => {
       else if (message.command === "waitForMotion") Object.assign(reply, { clock: "virtual", timeMs: 1100, echo: { testID: message.testID, progress: message.progress, timeoutMs: message.timeoutMs } });
       else if (message.command === "sampleMotion") Object.assign(reply, { fromMs: message.fromMs, toMs: 1100, intervalMs: message.intervalMs, truncated: false, samples: [] });
       else if (message.command === "startFrames") reply.refreshRate = 120;
+      else if (message.command === "startup") reply.phases = { firstMount: 510, settled: 690, echo: [message.timeoutMs, message.testID] };
+      else if (message.command === "state" && message.path === "missing") Object.assign(reply, { ok: false, error: { code: "E_NOT_FOUND", message: "No test state named missing" } });
+      else if (message.command === "state") reply.value = { path: message.path, timeoutMs: message.timeoutMs };
+      else if (message.command === "stopCommits") Object.assign(reply, { commits: 2, relayouts: [], gaps: [], blanks: [], echo: message.timeoutMs });
+      else if (message.command === "counters") Object.assign(reply, { windows: 1, views: 10, fileDescriptors: 30 });
+      else if (message.command === "listeners") reply.listeners = 4;
+      else if (message.command === "memory") Object.assign(reply, { footprintMB: 120.5, residentMB: 200 });
       else if (message.command === "stopFrames") Object.assign(reply, { frames: 61, droppedFrames: 0, maxFrameGapMs: 8.3, durationMs: 500, fps: 120, refreshRate: 120 });
       else if (message.command === "capture") { fs.writeFileSync(path.join(dir, message.name + ".png"), "png", { mode: 0o600 }); Object.assign(reply, { file: message.name + ".png", width: 2000, height: 1400, scale: 2 }); }
       send(reply);

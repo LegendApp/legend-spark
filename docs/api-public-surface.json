@@ -42,6 +42,7 @@
     "activate",
     "addAppListener",
     "beforeQuit",
+    "exposeTestState",
     "finishWindowRestoration",
     "getAppAvailability",
     "getAppContext",

@@ -7,14 +7,14 @@ const spark = vi.hoisted(() => ({
   args: [] as string[],
   locale: undefined as unknown as () => Promise<string>,
   menu: undefined as unknown as () => Promise<{ remove(): Promise<void> }>,
-  createMenu: undefined as any, registerShortcut: undefined as any, beforeQuit: undefined as any, beforeWindowClose: undefined as any,
+  createMenu: undefined as any, registerShortcut: undefined as any, beforeQuit: undefined as any, exposeTestState: undefined as any, beforeWindowClose: undefined as any,
   alert: undefined as any, openFileDialog: undefined as any, saveFileDialog: undefined as any, readText: undefined as any, writeText: undefined as any,
 }));
 function resetSpark() {
   const registration = () => Promise.resolve({ remove: async () => {} });
   Object.assign(spark, {
     args: [], locale: async () => "en_US", menu: registration,
-    createMenu: vi.fn(() => spark.menu()), registerShortcut: vi.fn(registration), beforeQuit: vi.fn(registration), beforeWindowClose: vi.fn(registration),
+    createMenu: vi.fn(() => spark.menu()), registerShortcut: vi.fn(registration), beforeQuit: vi.fn(registration), exposeTestState: vi.fn(() => ({ remove() {} })), beforeWindowClose: vi.fn(registration),
     alert: vi.fn(), openFileDialog: vi.fn(async () => ({ canceled: false, paths: ["/tmp/notes.txt"] })), saveFileDialog: vi.fn(),
     readText: vi.fn(async () => "Saved text"), writeText: vi.fn(async () => {}),
   });
@@ -22,7 +22,7 @@ function resetSpark() {
 vi.mock("react-native", () => ({ View: "View", Text: "Text", Pressable: "Pressable", ScrollView: "ScrollView", Alert: { alert: (...args: unknown[]) => spark.alert(...args) } }));
 vi.mock("uniwind", () => ({ Uniwind: { setTheme: () => {} }, useUniwind: () => ({ theme: "light", hasAdaptiveThemes: true }) }));
 vi.mock("@legendapp/spark/ui/uniwind", () => ({ Button: "Button" }));
-vi.mock("@legendapp/spark/app", () => ({ getAppContext: async () => ({ launchArguments: spark.args }), beforeQuit: (handler: unknown) => spark.beforeQuit(handler) }));
+vi.mock("@legendapp/spark/app", () => ({ getAppContext: async () => ({ launchArguments: spark.args }), beforeQuit: (handler: unknown) => spark.beforeQuit(handler), exposeTestState: (name: string, read: () => unknown) => spark.exposeTestState(name, read) }));
 vi.mock("@legendapp/spark/app/documents", () => ({ noteRecentDocument: async () => {} }));
 vi.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: (options: unknown) => spark.openFileDialog(options), saveFileDialog: (options: unknown) => spark.saveFileDialog(options) }));
 vi.mock("@legendapp/spark/files", () => ({ readText: (path: string) => spark.readText(path), writeText: (path: string, text: string) => spark.writeText(path, text) }));
@@ -136,6 +136,11 @@ test("app-wide registrations install at startup, localized, and failures reach t
   expect(spark.registerShortcut).toHaveBeenCalledWith("Command+Shift+K", expect.any(Function));
   expect(spark.beforeQuit).toHaveBeenCalledTimes(1);
   expect(spark.beforeWindowClose).toHaveBeenCalledWith("main", spark.beforeQuit.mock.calls[0][0]);
+  // Navigation and the app state are exposed to the test driver's assertState, read when asked.
+  const exposed = Object.fromEntries(spark.exposeTestState.mock.calls.map(([name, read]: [string, () => unknown]) => [name, read]));
+  expect(Object.keys(exposed)).toEqual(["navigation", "app"]);
+  expect(exposed.navigation()).toEqual({ kind: "catalog" });
+  expect(exposed.app()).toMatchObject({ locale: "ar", errors: ["Menu owner kitchen-sink already exists"] });
   await mount(Shell);
   expect(text(host("infra-shell-error")[0])).toBe("تعذّر إعداد Kitchen Sink: Menu owner kitchen-sink already exists");
 });

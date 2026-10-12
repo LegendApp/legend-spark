@@ -2,7 +2,7 @@
 
 Import from `@legendapp/spark/app`. Spark owns this desktop lifecycle contract; document history and file/URL launch requests live in `/app/documents`.
 
-`getAppAvailability()` reports unsupported platforms and missing optional native modules without throwing during import. Operations reject with `SparkError` when unavailable. Every feature on this page except [languages](#languages), including the single-instance lock, `relaunch()` and safe mode, is implemented on both macOS and Windows, so this one result covers them. Languages report theirs as `getAppAvailability('languages')`. `getAppContext()` returns project identity (`projectId`, `name`, `version`), runtime mode/module versions, the initial process arguments and `launch`:
+`getAppAvailability()` reports unsupported platforms and missing optional native modules without throwing during import. Operations reject with `SparkError` when unavailable. Every feature on this page except [languages](#languages), including the single-instance lock, `relaunch()` and safe mode, is implemented on both macOS and Windows, so this one result covers them; the one other difference is that only the macOS test driver reads `exposeTestState`. Languages report theirs as `getAppAvailability('languages')`. `getAppContext()` returns project identity (`projectId`, `name`, `version`), runtime mode/module versions, the initial process arguments and `launch`:
 
 | `launch` field | Values |
 | --- | --- |
@@ -69,6 +69,19 @@ if (!result.quitRequested) showUnsavedWork();
 ```
 
 Unknown options reject with `E_UNSUPPORTED_OPTION`; non-string arguments or arguments containing NUL reject with `E_INVALID_ARGUMENT`. Failure to start the new process rejects with `E_NATIVE` and does not quit.
+
+## Test state
+
+`exposeTestState(name, read)` exposes app state to the in-app test driver, for flows that check it with `assertState`
+([docs/test-driver.md](test-driver.md#exposed-state)). `read` runs only when a driver session asks for a path under
+`name`, and returns JSON data. It returns a `Subscription`; `remove()` stops exposing the name. Only macOS has the
+test driver: on Windows the call registers the name, and nothing reads it.
+
+```ts
+import { exposeTestState } from '@legendapp/spark/app';
+
+exposeTestState('documents', () => documentStore.get()); // assertState: { path: documents.open.length, equals: 2 }
+```
 
 ## Safe mode
 

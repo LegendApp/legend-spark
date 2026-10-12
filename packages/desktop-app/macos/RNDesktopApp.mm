@@ -2,14 +2,14 @@
 #import "SparkDesktop.h"
 #import "SparkDevTools.h"
 #import "SparkLocalization.h"
-@implementation RNDesktopApp { NSMutableSet<NSString *> *_guardIds; }
+@implementation RNDesktopApp { NSMutableSet<NSString *> *_guardIds; BOOL _observing; }
 - (instancetype)init { if ((self = [super init])) _guardIds = [NSMutableSet new]; return self; }
 RCT_EXPORT_MODULE(NativeDesktopApp)
 + (BOOL)requiresMainQueueSetup { return YES; }
 - (dispatch_queue_t)methodQueue { return dispatch_get_main_queue(); }
 - (NSArray<NSString *> *)supportedEvents { return @[@"desktop"]; }
-- (void)startObserving { [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(event:) name:SparkDesktopEvent object:nil]; }
-- (void)stopObserving { [NSNotificationCenter.defaultCenter removeObserver:self]; }
+- (void)startObserving { if (!_observing) SparkSetDesktopObserved(_observing = YES); [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(event:) name:SparkDesktopEvent object:nil]; }
+- (void)stopObserving { if (_observing) SparkSetDesktopObserved(_observing = NO); [NSNotificationCenter.defaultCenter removeObserver:self]; }
 - (void)event:(NSNotification *)note { [self sendEventWithName:@"desktop" body:note.userInfo]; }
 - (void)invalidate { [self stopObserving]; dispatch_async(dispatch_get_main_queue(), ^{ for (NSString *identifier in self->_guardIds) SparkSetQuitGuard(identifier, NO); [self->_guardIds removeAllObjects]; }); [super invalidate]; }
 - (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
@@ -51,6 +51,7 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
       @catch (NSException *exception) { SparkInvalid(reject, exception.reason); return; }
       resolve(SparkJSON(strings));
     }
+    else if ([method isEqual:@"replyDriverState"]) { SparkReplyDriverState(args); resolve(@"null"); }
     else if ([method isEqual:@"hide"]) { [NSApp hide:nil]; resolve(@"null"); }
     else if ([method isEqual:@"activate"]) { [NSApp activateIgnoringOtherApps:YES]; resolve(@"null"); }
 #if RCT_DEV

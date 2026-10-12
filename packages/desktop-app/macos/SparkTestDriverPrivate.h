@@ -34,3 +34,9 @@ NSEvent *SparkDriverLocated(CGEventRef prototype, NSEvent *mouse);
 // Why this build has no gesture or extra mouse button synthesis (built without SPARK_TEST_DRIVER_PRIVATE_EVENTS), or nil.
 NSString *SparkDriverPrivateEventsMissing(void);
 NSString *SparkDriverCheckGesture(NSEvent *event, NSWindow *window, NSPoint location, int64_t hidType, NSEventPhase phase, NSDictionary<NSNumber *, NSNumber *> *values);
+
+// Waits until mounted UI updates have settled (100 ms without a mount), at most `timeoutMs` (a number, else 5 s).
+void SparkDriverWhenSettled(id timeoutMs, void (^done)(BOOL settled));
+// Commit watching, leak counters and memory (SparkTestDriverCommits.mm): startCommits, stopCommits, counters, memory.
+NSArray<NSString *> *SparkDriverCommitCommandNames(void);
+void SparkDriverCommits(NSString *command, NSDictionary *request, SparkTestDriverReply reply);
