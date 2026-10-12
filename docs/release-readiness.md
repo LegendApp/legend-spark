@@ -9,7 +9,7 @@ exports as supported on every platform. Record new evidence in a completed
 [release dossier](release-test-dossier.md) tied to an immutable source revision
 and exact archive digest.
 
-The package currently declares **63 export paths**. Sixty-one are functional
+The package currently declares **64 export paths**. Sixty-two are functional
 or tooling entry paths and two expose package/schema metadata. An export is a
 public import boundary; it is not evidence that every platform implements or
 passes that feature. Platform-specific support is determined by native package
@@ -19,7 +19,7 @@ availability and the evidence for that platform.
 
 | Group | Export paths |
 | --- | --- |
-| Application and desktop APIs | `./app`, `./app/documents`, `./audio`, `./auth-session`, `./clipboard`, `./context-menu`, `./dialogs`, `./displays`, `./drag-drop`, `./files`, `./global-shortcuts`, `./links`, `./logging`, `./menus`, `./motion`, `./notifications`, `./permissions`, `./pointer`, `./printing`, `./processes`, `./secure-storage`, `./settings`, `./settings/observable`, `./settings/window`, `./shortcuts`, `./shortcuts/commands`, `./shortcuts/keyboard`, `./sqlite`, `./system`, `./tray`, `./updates`, `./webview`, `./windows`, `./windows/macos` |
+| Application and desktop APIs | `./app`, `./app/documents`, `./audio`, `./auth-session`, `./biometrics`, `./clipboard`, `./context-menu`, `./dialogs`, `./displays`, `./drag-drop`, `./files`, `./global-shortcuts`, `./links`, `./logging`, `./menus`, `./motion`, `./notifications`, `./permissions`, `./pointer`, `./printing`, `./processes`, `./secure-storage`, `./settings`, `./settings/observable`, `./settings/window`, `./shortcuts`, `./shortcuts/commands`, `./shortcuts/keyboard`, `./sqlite`, `./system`, `./tray`, `./updates`, `./webview`, `./windows`, `./windows/macos` |
 | UI | `./ui`, `./ui/classnames`, `./ui/glass`, `./ui/popover`, `./ui/search`, `./ui/sidebar`, `./ui/split-view`, `./ui/symbol`, `./ui/swipe`, `./ui/tab-view`, `./ui/table`, `./ui/uniwind` |
 | AI and diagnostics | `./ai`, `./ai/codex`, `./diagnostics`, `./contracts` |
 | Configuration and build integration | `./config`, `./config-plugin`, `./expo-config`, `./metro`, `./runtime-entry`, `./metro-gate`, `./init-template`, `./native`, `./cli` |
@@ -27,7 +27,7 @@ availability and the evidence for that platform.
 
 ## Target capability map
 
-The [63-row support matrix](release-support-matrix.md) shows every import path,
+The [64-row support matrix](release-support-matrix.md) shows every import path,
 its provider, intended targets, target-specific acceptance status, related
 source tests, and exact platform command. The corresponding
 [machine-readable matrix](release-support-matrix.json) is checked against the

@@ -82,6 +82,7 @@
     "./displays",
     "./logging",
     "./pointer",
-    "./permissions"
+    "./permissions",
+    "./biometrics"
   ]
 }

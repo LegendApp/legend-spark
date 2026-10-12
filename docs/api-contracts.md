@@ -403,6 +403,21 @@ addPermissionListener(listener: (event: { kind; permission; previous }) => void,
 
 Permissions borrow Expo's `status`/`granted`/`canAskAgain` vocabulary, like notification permissions, and keep the native state as `macos.authorization`, so restricted, write-only calendar access and an unknown future state are never folded away. Screen recording and accessibility report only granted or not (`notGranted`, `canAskAgain: null`). A request without the Info.plist usage description macOS requires rejects `E_UNAVAILABLE` instead of ending the app; automation of an app that is not running rejects `E_NOT_FOUND`. Change events come from request completion, app activation and location authorization callbacks, observed only while a listener holds them; automation has none because it is per target app. In the test driver every call goes to simulated state and never reaches TCC or System Settings. macOS only for now; Windows reports `unsupported-platform` (#378). Details: [permissions](permissions.md).
 
+### Biometrics
+
+```ts
+// /biometrics
+getBiometricAvailability(): Availability;
+getBiometricStatus(): Promise<{ biometryType; biometrics: BiometricState; password: BiometricState }>; // never prompts
+authenticateWithBiometrics(options: { reason; fallback?: "none" | "password" | "app"; fallbackLabel?; cancelLabel?; signal? }): Promise<BiometricAuthResult>;
+setBiometricSecret(key: string, value: string, options?: { access?: "biometryCurrentSet" | "biometryAny" | "biometryOrPassword" }): Promise<void>;
+getBiometricSecret(key: string, options: { reason; cancelLabel? }): Promise<BiometricSecretResult>; // value null: none stored
+deleteBiometricSecret(key: string): Promise<void>;
+// BiometricAuthResult: { success: true } | { success: false, reason: userCancel | systemCancel | userFallback | authenticationFailed }.
+```
+
+The person's answers resolve; a prompt that cannot run or that the app ended rejects a `BiometricError` (a `SparkError` with `reason`): unavailable states, `notInteractive` and `missingEntitlement` are `E_UNAVAILABLE`, `appCancel` (abort) `E_ABORTED`, `invalidContext` `E_CLOSED`; another pending prompt is `E_BUSY`; an LAError or Keychain status the SDK does not name is `E_NATIVE`. The fallback defaults to `none`: the login password is offered only with `fallback: "password"` or a `biometryOrPassword` secret. Secrets live in the data protection keychain with biometry access control; storing and deleting never prompt. In the test driver every call goes to simulated state and never reaches LocalAuthentication or a keychain. macOS only for now; Windows Hello reports `unsupported-platform` (#389). Details: [biometrics](biometrics.md).
+
 ### Audio and auth
 
 ```ts

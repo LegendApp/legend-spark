@@ -131,6 +131,28 @@
     "validateDigest",
     "validateRedirect"
   ],
+  "./biometrics": [
+    "Availability",
+    "BiometricAuthOptions",
+    "BiometricAuthResult",
+    "BiometricError",
+    "BiometricErrorReason",
+    "BiometricFallback",
+    "BiometricOutcome",
+    "BiometricPromptOptions",
+    "BiometricSecretAccess",
+    "BiometricSecretOptions",
+    "BiometricSecretResult",
+    "BiometricState",
+    "BiometricStatus",
+    "BiometryType",
+    "authenticateWithBiometrics",
+    "deleteBiometricSecret",
+    "getBiometricAvailability",
+    "getBiometricSecret",
+    "getBiometricStatus",
+    "setBiometricSecret"
+  ],
   "./clipboard": [
     "ClipboardChangeEvent",
     "ClipboardChangeOptions",
