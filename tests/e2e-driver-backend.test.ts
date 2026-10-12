@@ -140,6 +140,19 @@ describe("command mapping", () => {
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("biometrics prompts is 0, expected 1") });
   });
 
+  test("simulateSharing drives the sharing simulation; assertSharing checks what it recorded", async () => {
+    const { result, app } = await run("- launchApp\n- simulateSharing: { shareAnswer: Mail, services: [Show] }\n- simulateSharing: { invokeService: { name: Show, text: hi } }\n- assertSharing: { shares: 0, invocations: 1, indexed: [], registered: [] }");
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => line.includes("Sharing"))).toEqual(['simulateSharing {"shareAnswer":"Mail","services":["Show"]}', 'simulateSharing {"invokeService":{"name":"Show","text":"hi"}}', "testSharing"]);
+    const app2 = new FakeApp();
+    app2.sharing.shares = [{ items: [{ type: "text", text: "Hi" }], anchored: true, service: "Mail" }];
+    app2.sharing.indexed = { b: {}, a: {} };
+    const passed = await run("- launchApp\n- assertSharing: { shares: 1, lastShare: { items: [{ text: Hi, type: text }], service: Mail }, indexed: [b, a] }", app2);
+    expect(passed.result.status).toBe("passed");
+    const failed = await run("- launchApp\n- assertSharing: { lastShare: { service: null }, timeout: 200ms }", app2);
+    expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('the last share\'s service is "Mail", expected null') });
+  });
+
   test("dragAndDrop runs a Spark drag source's drag in process: begin, move, a hold for spring loading, drop", async () => {
     const app = new FakeApp({ source: 1, target: 1 });
     app.dragSources = { source: {} };

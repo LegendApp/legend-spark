@@ -83,7 +83,10 @@ existing bounded queue until JavaScript can subscribe. Use `onOpen` from
 `getInitialURL` and `addEventListener` for Linking-compatible URL handling. Native
 packages can observe `SparkDesktopEvent` and read `SparkPendingURLs()`; deduplicate
 by event id when combining live and queued delivery. Do not install competing
-Apple-event handlers. Recent-document menu actions should call `SparkOpenURLs`.
+Apple-event handlers. Recent-document menu actions should call `SparkOpenURLs`. A custom
+application delegate forwards `application:continueUserActivity:restorationHandler:` to
+`SparkContinueUserActivity`, which delivers universal links as URLs and Core Spotlight item openings to
+`@legendapp/spark/sharing`.
 
 ## Local development signing
 

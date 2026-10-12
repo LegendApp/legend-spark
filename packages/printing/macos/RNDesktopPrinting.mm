@@ -2,21 +2,6 @@
 #import "SparkPrinting.h"
 #import <RNDesktopApp/SparkDesktop.h>
 
-// React Native macOS sets reactTag on every mounted component view (UIView+ComponentViewProtocol.h).
-@interface NSView (SparkPrintingReactTag)
-- (NSNumber *)reactTag;
-@end
-
-static NSView *SparkViewWithTag(NSView *view, NSInteger tag)
-{
-  if ([view respondsToSelector:@selector(reactTag)] && view.reactTag.integerValue == tag) return view;
-  for (NSView *child in view.subviews) {
-    NSView *match = SparkViewWithTag(child, tag);
-    if (match) return match;
-  }
-  return nil;
-}
-
 @implementation RNDesktopPrinting {
   BOOL _presenting; // One print or page setup panel at a time.
   void (^_printed)(BOOL success);
@@ -28,11 +13,8 @@ RCT_EXPORT_MODULE(NativeDesktopPrinting)
 - (SparkPrintView *)viewForContent:(NSDictionary *)content failure:(SparkPrintFailure)failure
 {
   if (![content[@"type"] isEqual:@"view"]) return [SparkPrintView viewWithContent:content failure:failure];
-  NSInteger tag = [content[@"tag"] integerValue];
-  for (NSWindow *window in NSApp.windows) {
-    NSView *view = SparkViewWithTag(window.contentView, tag);
-    if (view) return [SparkPrintView viewWithSnapshotOf:view failure:failure];
-  }
+  NSView *view = SparkFindReactView([content[@"tag"] integerValue]);
+  if (view) return [SparkPrintView viewWithSnapshotOf:view failure:failure];
   failure(@"E_NOT_FOUND", @"The view is not mounted in a window (a flattened View needs collapsable={false})");
   return nil;
 }

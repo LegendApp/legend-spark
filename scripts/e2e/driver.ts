@@ -36,6 +36,12 @@ export type TestBiometrics = {
   lastPrompt: { operation: string; reason: string; fallback: string; cancelLabel?: string; fallbackLabel?: string } | null; secrets: Record<string, string>;
 };
 export type SimulatedBiometrics = { biometryType?: string; biometrics?: string; password?: string; answer?: string | null; enrollmentChanged?: true };
+/** What the @legendapp/spark/sharing simulation recorded (the `testSharing` driver command). */
+export type TestSharing = {
+  shares: { items: Record<string, unknown>[]; anchored: boolean; service: string | null }[];
+  indexed: Record<string, Record<string, unknown>>; services: string[]; registered: string[]; invocations: number; answer: string | null;
+};
+export type SimulatedSharing = { shareAnswer?: string | null; services?: string[]; invokeService?: { name: string; text: string }; openSpotlightItem?: string; openUniversalLink?: string };
 /** A `simulateSystemEvent` flow command: an event type plus the state it implies (scripts/e2e/format/commands.ts). */
 export type SimulatedSystemEvent = {
   type: string; thermal?: string; lowPower?: boolean; source?: "battery" | "ac"; network?: "online" | "offline"; level?: string;
@@ -315,6 +321,10 @@ export class Driver {
   async simulateBiometrics(state: SimulatedBiometrics) { return body<{ biometrics: TestBiometrics }>(await this.request({ command: "simulateBiometrics", ...state }, 10000)).biometrics; }
   /** The simulated biometric state: sensor, policy states, answer, prompts shown and pending, the last prompt and stored secrets. */
   async testBiometrics() { return body<{ biometrics: TestBiometrics }>(await this.request({ command: "testBiometrics" }, 10000)).biometrics; }
+  /** Drives the @legendapp/spark/sharing simulation (docs/sharing.md#testing); no picker, Spotlight index or pbs is reached. */
+  async simulateSharing(request: SimulatedSharing) { return body<{ sharing: TestSharing }>(await this.request({ command: "simulateSharing", ...request }, 10000)).sharing; }
+  /** What the sharing simulation recorded: shares, the simulated Spotlight index, declared and registered services, invocations. */
+  async testSharing() { return body<{ sharing: TestSharing }>(await this.request({ command: "testSharing" }, 10000)).sharing; }
   /** Startup phases of this launch, once its first rendered UI has settled; with `testID`, `ready` once that element first showed settled. */
   async startup(timeoutMs = 30000, testID?: string) {
     return (await this.request({ command: "startup", timeoutMs, ...(testID === undefined ? {} : { testID }) }, timeoutMs + 10000)).phases as StartupPhases;

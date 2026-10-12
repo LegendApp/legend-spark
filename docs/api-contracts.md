@@ -417,6 +417,23 @@ deleteBiometricSecret(key: string): Promise<void>;
 ```
 
 The person's answers resolve; a prompt that cannot run or that the app ended rejects a `BiometricError` (a `SparkError` with `reason`): unavailable states, `notInteractive` and `missingEntitlement` are `E_UNAVAILABLE`, `appCancel` (abort) `E_ABORTED`, `invalidContext` `E_CLOSED`; another pending prompt is `E_BUSY`; an LAError or Keychain status the SDK does not name is `E_NATIVE`. The fallback defaults to `none`: the login password is offered only with `fallback: "password"` or a `biometryOrPassword` secret. Secrets live in the data protection keychain with biometry access control; storing and deleting never prompt. In the test driver every call goes to simulated state and never reaches LocalAuthentication or a keychain. macOS only for now; Windows Hello reports `unsupported-platform` (#389). Details: [biometrics](biometrics.md).
+### Sharing, Services and Spotlight
+
+```ts
+// /sharing
+getSharingAvailability(feature: "share" | "services" | "spotlight"): Availability;
+share(items: ShareItem[], options?: { anchor?: ViewRef }): Promise<{ service: string | null }>; // text, web URL or file items
+addServiceListener(name: string, listener: (invocation: { name; text; files; urls }) => void, options?: { onError? }): Promise<AsyncRegistration>;
+indexSpotlightItems(items: { id; title; domain?; description?; keywords?; expiresAt? }[]): Promise<void>;
+deleteSpotlightItems(target: { ids } | { domains } | { all: true }): Promise<void>;
+addSpotlightListener(listener: (event: { id }) => void, options?: { onError? }): Subscription;
+// /links
+getDefaultURLHandlerAvailability(): Availability;
+isDefaultURLHandler(scheme: string): Promise<boolean>;
+setDefaultURLHandler(scheme: string): Promise<void>;
+```
+
+`share` resolves when the person picks a service (its localized title) or dismisses the picker (`null`); it does not wait for the service, whose outcome macOS does not report for every service, so neither Expo Sharing's `shareAsync` (one file) nor React Native's `Share` (resolves after completion) is borrowed. Services are declared in Info.plist (`NSMessage` `sparkService`, `NSUserData` the name) and receive only: a service with `NSReturnTypes` rejects `E_UNSUPPORTED_OPTION`, because AppKit needs its result synchronously. Spotlight openings and universal links arrive through the host's `application:continueUserActivity:`; universal links become ordinary `url` events. Default URL handlers accept only schemes the app declares. In the test driver nothing reaches the picker, pbs, the Spotlight index or LaunchServices. App Intents and Shortcuts have no API: their metadata must be compiled into the app (#393). macOS only for now; Windows reports `unsupported-platform` (#392). Details: [sharing](sharing.md), [links](links-and-documents.md#default-url-handler).
 
 ### Audio and auth
 

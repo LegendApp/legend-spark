@@ -83,7 +83,8 @@
     "./logging": "./logging.ts",
     "./pointer": "./pointer.ts",
     "./permissions": "./permissions.ts",
-    "./biometrics": "./biometrics.ts"
+    "./biometrics": "./biometrics.ts",
+    "./sharing": "./sharing.ts"
   },
   "files": [
     "*.ts",
@@ -134,7 +135,8 @@
     "@legendapp/spark-logging": "0.0.1-next.3",
     "@legendapp/spark-diagnostics": "0.0.1-next.3",
     "@legendapp/spark-permissions": "0.0.1-next.3",
-    "@legendapp/spark-biometrics": "0.0.1-next.3"
+    "@legendapp/spark-biometrics": "0.0.1-next.3",
+    "@legendapp/spark-sharing": "0.0.1-next.3"
   },
   "description": "Legend Spark \u2014 native applications with React Native and Expo",
   "bin": {

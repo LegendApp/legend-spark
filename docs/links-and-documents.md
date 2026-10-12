@@ -2,6 +2,20 @@
 
 `@legendapp/spark/links` exposes the selected Expo Linking methods: `openURL`, `canOpenURL`, `getInitialURL`, and `addEventListener('url', listener)`. Mobile adapters use Expo's implementation. Desktop `openURL` resolves `true` when the OS accepts the launch; `canOpenURL` returns a boolean. The initial URL is stable for the native process, and the live listener excludes launch replay and file-open events. Spark also provides `openPath(path)` on desktop to open an absolute native path or local file URL with its associated application. Unsupported platforms reject this extension explicitly.
 
+## Default URL handler
+
+```ts
+import { getDefaultURLHandlerAvailability, isDefaultURLHandler, setDefaultURLHandler } from '@legendapp/spark/links';
+
+if (!(await isDefaultURLHandler('myapp'))) await setDefaultURLHandler('myapp');
+```
+
+`isDefaultURLHandler(scheme)` reports whether LaunchServices opens `scheme:` URLs with this app, compared by bundle identifier (`NSWorkspace URLForApplicationToOpenURL:`). `setDefaultURLHandler(scheme)` makes this app the default (`setDefaultApplicationAtURL:toOpenURLsWithScheme:completionHandler:`, completing once, on the main thread). The scheme is bare (`myapp`, no colon) and compared lowercased. Only a scheme the app declares in `CFBundleURLTypes` (the config's `scheme`) can be set, else `E_UNAVAILABLE`. For `http` and `https` macOS asks the person to confirm the new browser; keeping the current one rejects `E_ABORTED`. In driver mode ([test-driver.md](test-driver.md)) both use an in-memory set of schemes that starts empty, so LaunchServices is never read or changed; the declaration check still applies. macOS only; Windows reports `unsupported-platform` (#392).
+
+## Universal links
+
+An `https` link to a domain the app is associated with opens the app instead of the browser. The host app delegate delivers it (`application:continueUserActivity:restorationHandler:` with `NSUserActivityTypeBrowsingWeb`) as an ordinary URL request: `addEventListener('url')` receives the `https://` URL, and `/app/documents` open requests include it. It is not reported by `getInitialURL`, because macOS continues the activity after launch finishes. The app needs the `com.apple.developer.associated-domains` entitlement with `applinks:<domain>` entries (`macos.entitlements` in the config; the entitlement requires a provisioning profile) and an `apple-app-site-association` file on each domain naming its team and bundle identifier. Driver flows deliver the activity in process with `simulateSharing: { openUniversalLink }` ([sharing.md](sharing.md#testing)).
+
 Document behavior lives under `@legendapp/spark/app/documents`:
 
 ```ts

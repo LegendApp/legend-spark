@@ -19,4 +19,6 @@
 - assertSimulatedPermission: { kind: camera, authorization: authorized, requests: 1, prompts: 1, settingsOpened: 0 }
 - simulateBiometrics: { biometrics: lockout, answer: userCancel }   # driver; never shows a Touch ID prompt
 - assertSimulatedBiometrics: { prompts: 1, lastFallback: password, secrets: { vault: biometryCurrentSet } }
+- simulateSharing: { shareAnswer: Mail, services: [Show], invokeService: { name: Show, text: hi }, openSpotlightItem: recipe-1, openUniversalLink: "https://example.com/a" }   # driver; no picker, index or pbs
+- assertSharing: { shares: 1, lastShare: { items: [{ type: text, text: Hi }], anchored: true, service: Mail }, indexed: [recipe-1], registered: [Show], invocations: 1 }
 - setFocusMode: doNotDisturb

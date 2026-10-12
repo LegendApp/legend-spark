@@ -1,10 +1,45 @@
 #import "RNDesktopLinks.h"
 #import <RNDesktopApp/SparkDesktop.h>
+#import <RNDesktopApp/SparkTestDriver.h>
 #import <Security/Security.h>
 #import <CommonCrypto/CommonDigest.h>
 #include "../common/AuthLoopback.h"
 #include <map>
 #include <memory>
+// Schemes this app is the default handler for in a test-driver run, which never changes LaunchServices (docs/links-and-documents.md#default-url-handler).
+static NSMutableSet<NSString *> *SimulatedDefaults(void) {
+  static NSMutableSet *schemes;
+  if (!schemes) schemes = [NSMutableSet set];
+  return schemes;
+}
+static BOOL DeclaresScheme(NSString *scheme) {
+  for (NSDictionary *type in NSBundle.mainBundle.infoDictionary[@"CFBundleURLTypes"] ?: @[])
+    for (NSString *declared in [type isKindOfClass:NSDictionary.class] ? type[@"CFBundleURLSchemes"] : nil)
+      if ([declared isKindOfClass:NSString.class] && [declared caseInsensitiveCompare:scheme] == NSOrderedSame) return YES;
+  return NO;
+}
+static void DefaultHandler(NSString *method, NSString *scheme, RCTPromiseResolveBlock resolve, RCTPromiseRejectBlock reject) {
+  NSURL *probe = scheme.length ? [NSURL URLWithString:[scheme stringByAppendingString:@":"]] : nil;
+  if (!probe) { SparkInvalid(reject, @"Expected a URL scheme"); return; }
+  if ([method isEqual:@"isDefaultHandler"]) {
+    if (SparkTestDriverActive()) { resolve(SparkJSON(@([SimulatedDefaults() containsObject:scheme]))); return; }
+    NSURL *handler = [NSWorkspace.sharedWorkspace URLForApplicationToOpenURL:probe];
+    NSString *identifier = handler ? [NSBundle bundleWithURL:handler].bundleIdentifier : nil;
+    resolve(SparkJSON(@(identifier != nil && [identifier isEqual:NSBundle.mainBundle.bundleIdentifier])));
+    return;
+  }
+  if (!DeclaresScheme(scheme)) { reject(@"E_UNAVAILABLE", [NSString stringWithFormat:@"The app's Info.plist declares no %@ scheme in CFBundleURLTypes", scheme], nil); return; }
+  if (SparkTestDriverActive()) { [SimulatedDefaults() addObject:scheme]; resolve(@"null"); return; }
+  // macOS asks the person to confirm a new web browser; the handler runs once, on any queue.
+  [NSWorkspace.sharedWorkspace setDefaultApplicationAtURL:NSBundle.mainBundle.bundleURL toOpenURLsWithScheme:scheme completionHandler:^(NSError *error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (!error) resolve(@"null");
+      else if ([error.domain isEqual:NSCocoaErrorDomain] && error.code == NSUserCancelledError) reject(@"E_ABORTED", @"The person kept the current default", error);
+      else reject(@"E_NATIVE", error.localizedDescription, error);
+    });
+  }];
+}
+
 @implementation RNDesktopLinks {
   std::map<std::string, std::unique_ptr<spark::AuthLoopback>> _authSessions;
 }
@@ -37,6 +72,10 @@ RCT_EXPORT_MODULE(NativeDesktopLinks)
         } else if ([method isEqual:@"authClose"]) { _authSessions.erase(key); resolve(@"null"); }
         else throw std::invalid_argument("Unknown auth operation");
       } catch (std::exception const &error) { reject(@"E_AUTH", [NSString stringWithUTF8String:error.what()], nil); }
+      return;
+    }
+    if ([method isEqual:@"isDefaultHandler"] || [method isEqual:@"setDefaultHandler"]) {
+      DefaultHandler(method, [args[@"scheme"] isKindOfClass:NSString.class] ? [args[@"scheme"] lowercaseString] : @"", resolve, reject);
       return;
     }
     if ([method isEqual:@"recent"]) {

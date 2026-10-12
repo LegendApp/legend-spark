@@ -385,13 +385,17 @@
     "registerGlobalShortcut"
   ],
   "./links": [
+    "Availability",
     "Subscription",
     "URLListener",
     "addEventListener",
     "canOpenURL",
+    "getDefaultURLHandlerAvailability",
     "getInitialURL",
+    "isDefaultURLHandler",
     "openPath",
-    "openURL"
+    "openURL",
+    "setDefaultURLHandler"
   ],
   "./logging": [
     "DiagnosticsExport",
@@ -635,6 +639,26 @@
     "VirtualizedSettingsWindow",
     "VirtualizedSettingsWindowProps",
     "createSettingsWindowOptions"
+  ],
+  "./sharing": [
+    "AsyncRegistration",
+    "Availability",
+    "ListenerOptions",
+    "ServiceInvocation",
+    "ShareItem",
+    "ShareOptions",
+    "ShareResult",
+    "SharingFeature",
+    "SpotlightDeletion",
+    "SpotlightItem",
+    "SpotlightOpenEvent",
+    "Subscription",
+    "addServiceListener",
+    "addSpotlightListener",
+    "deleteSpotlightItems",
+    "getSharingAvailability",
+    "indexSpotlightItems",
+    "share"
   ],
   "./shortcuts": [
     "Accelerator",
