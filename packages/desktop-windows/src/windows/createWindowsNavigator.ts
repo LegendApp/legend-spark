@@ -8,7 +8,7 @@ import { addTitleListener } from "../title-changes";
 import type { CloseResult, DisplayInfo, WindowBounds, WindowInfo, WindowOpenOptions } from "../types";
 import { APPEARANCE_OPTIONS, bounds as validBounds, keys, object, validateOptions, windowId as validWindowId } from "../validation";
 import { instanceRecord, jsonCopy, registerInstance, restorableStates, windowStates, type InstanceRecord } from "./instances";
-import { createWindowPools, generatedId, validatePerformance } from "./pool";
+import { createWindowPools, generatedId, poolable, validatePerformance } from "./pool";
 import { DefaultErrorFallback, createWindowRoot, type RootContent, type RootHost, type ThrottleStore, type WindowRootProps } from "./root";
 import { createUndoStack } from "./undo";
 import type { DuplicateWindowOptions, IsolatedRuntime, NavigatorWindowOptions, NewWindowTab, NewWindowTabRequest, SavedWindow, UndoMenuLabels, WindowComponentProps, WindowConfigEntry, WindowErrorEvent, WindowInstance, WindowPoolState, WindowSession, WindowSessionFeature, WindowsConfig, WindowsNavigatorOptions } from "./types";
@@ -569,7 +569,8 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
       } catch (error) { dispose(record); throw error; }
       try {
         await installServices(record);
-        if (entry.pool) await pools.track(name, id, info);
+        // Only windows a plain open could have produced join the pool; others (sheets, tabs, restored IDs) close for real.
+        if (entry.pool && poolable(request.options) && restore?.id === undefined) await pools.track(name, id, info);
         record.open = true; observe(record); emit();
       } catch (error) {
         // No partially configured windows: close it, then report the original failure.
@@ -583,9 +584,10 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     })()).then(() => ({ instance: record.instance, info }));
   };
   /**
-   * Opens a warm pooled window: its root gets the props natively and mounts the content, the window gets the entry's
-   * and the open's options, title and frame (resetting what its last use changed), and it shows once the content has
-   * committed, so the first paint is the content.
+   * Opens a warm pooled window: its root gets the props natively and mounts the content (the app gets windowOpened), the
+   * window gets the entry's and the open's appearance options, its creation title and the open's or its creation size,
+   * and it shows once the content has committed, so the first paint is the content. A window whose options a use changed
+   * never comes back warm (it closes for real), so nothing else needs resetting.
    */
   const claim = (id: string, name: string, entry: WindowConfigEntry, request: OpenRequest, restore?: Pick<WindowRecord, "seeds" | "restored">): Promise<Opened> => {
     const record = createRecord(id, name, entry, request.props as WindowRecord["props"], restore);
@@ -600,15 +602,22 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     });
     return track(record, (async () => {
       try {
-        await windowPoolCommand("rootProps", { id, props: { props: request.props as WindowRootProps["props"], sparkWindow: { id, use: record.use } } satisfies WindowRootProps });
+        await windowPoolCommand("reuse", { id, props: { ...(request.props !== undefined ? { props: request.props as WindowRootProps["props"] } : {}), sparkWindow: { id, use: record.use } } satisfies WindowRootProps });
         await installServices(record);
         const created = pools.created(id)!;
         const appearance = Object.fromEntries(Object.entries(options).filter(([key]) => APPEARANCE_OPTIONS.includes(key)));
         const toolbar = entry.macos?.toolbar ? entry.macos.toolbar(record.instance) : undefined;
         await setWindowOptions(id, { title: created.title, ...appearance, ...(toolbar ? { macos: { toolbar } } : {}) });
+        pools.settled(id);
         const size = options.size ?? { width: created.bounds.width, height: created.bounds.height };
-        await setWindowBounds(id, { ...(options.position ?? created.bounds), ...size });
-        if (!options.position) await centerWindow(id, { displayId: created.bounds.displayId });
+        if (options.position) await setWindowBounds(id, { ...options.position, ...size });
+        else {
+          // Centered on the display it was created on, or the primary display once that one is disconnected.
+          const displays = await getDisplays();
+          const display = displays.find(item => item.id === created.bounds.displayId) ?? displays.find(item => item.primary)!;
+          await setWindowBounds(id, { displayId: display.id, x: display.workArea.x, y: display.workArea.y, ...size });
+          await centerWindow(id, { displayId: display.id });
+        }
         await committed;
         if (options.show !== false) await showWindow(id, { focus: true });
         info = await getWindow(id);
@@ -820,9 +829,11 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     records.clear();
     for (const record of owned) { record.disposed = true; record.open = false; }
     await Promise.all(owned.map(cleanup));
-    await pools.remove();
-    const pending = menu; menu = undefined;
-    if (pending) await (await pending.catch(() => undefined))?.remove();
+    try { await pools.remove(); }
+    finally {
+      const pending = menu; menu = undefined;
+      if (pending) await (await pending.catch(() => undefined))?.remove();
+    }
   });
 
   return {
@@ -853,7 +864,7 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     getSession,
     restoreSession,
     duplicate,
-    async prewarm(name, count) { live(); entryOf(name); return pools.prewarm(name, count, [...records.values()].filter(record => record.open && record.instance.name === name).map(record => record.instance.id)); },
+    async prewarm(name, count) { live(); entryOf(name); return pools.prewarm(name, count); },
     getPool(name) { live(); entryOf(name); return pools.state(name); },
     async trimPool(name) { live(); if (name !== undefined) entryOf(name); await pools.trim(name); },
     subscribeToSession(listener) {

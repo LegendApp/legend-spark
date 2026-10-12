@@ -70,12 +70,14 @@ interface WindowServices {
   macos?: WindowMacOS;
   /**
    * Keep hidden, already rendered windows of this entry ready, so `open` only hands them props and shows them.
-   * Needs an entry without `id` in the shared runtime. macOS only for now; see `getWindowPerformanceAvailability('pool')`.
+   * Needs an entry without `id` in the shared runtime. macOS only for now (Windows throws E_UNSUPPORTED_OPTION, so shared
+   * configurations add it conditionally); see `getWindowPerformanceAvailability('pool')`.
    */
   pool?: WindowPoolOptions;
   /**
    * Background render throttling: while the window is hidden, minimized or fully covered, its content does not re-render;
-   * state is kept and pending updates render once when it is visible again. macOS only for now.
+   * its views are hidden and layout effects cleaned up, state is kept, and pending updates render once when it is visible
+   * again. macOS only for now: Windows throws E_UNSUPPORTED_OPTION, so shared configurations add it conditionally.
    */
   throttle?: boolean;
 }
@@ -87,7 +89,7 @@ export interface WindowPoolOptions {
   max?: number;
   /**
    * The most memory this entry's warm windows may hold, in MB (1–1024; default 64). Each warm window's cost is the growth
-   * of the process footprint while it was created; the pool keeps no more warm windows than fit the largest cost measured.
+   * of the process footprint while it was created; the pool keeps no more warm windows than fit the median recent cost.
    */
   memoryBudgetMB?: number;
 }
@@ -99,7 +101,7 @@ export interface WindowPoolState {
   target: number;
   max: number;
   memoryBudgetMB: number;
-  /** The largest footprint growth measured for one warm window, in MB; null before the first. */
+  /** The median footprint growth of the last five warm windows created, in MB; null before the first (or since prewarm or trimPool). */
   measuredWindowMB: number | null;
   /** True between memory pressure (warning or critical) and its return to normal: no warm windows are kept. */
   memoryPressure: boolean;

@@ -185,7 +185,7 @@ Use `macos` option groups, with named public types, for features that are genuin
 
 `MacOSToolbarItem` is a discriminated union of button, menu, label, search, segmented and sidebarToggle items. Menu entries use the shared action/checkbox/separator/slider schema; this surface rejects submenus, shortcuts, semantic roles and image files. `addMacOSWindowListener` returns an acknowledged registration for typed title-bar, toolbar, search and menu events; slider actions carry a numeric value. Search focus may optionally replace its text, including an empty string. Segmented values may be empty strings; `null` represents no selection.
 
-Use `/app` events `windowOpened` and `windowClosed` for application-wide registry changes across reused IDs. `usePrimaryWindowLifecycle` uses those events and initializes once per owning ID under React Strict Mode. Instance-specific listeners belong to `/windows`.
+Use `/app` events `windowOpened` and `windowClosed` for application-wide registry changes across reused IDs (a pooled window emits one pair per use; see [Window pools](#window-pools)). `usePrimaryWindowLifecycle` uses those events and initializes once per owning ID under React Strict Mode. Instance-specific listeners belong to `/windows`.
 
 `/windows/macos` exposes `setWindowBlur`, `focusToolbarSearch`, `setToolbarItemText`, `getToolbarState`, `showToolbarCustomizationPalette` and `addMacOSWindowListener`; animated bounds are an option group on the portable `/windows` `setWindowBounds`, not a second export. `/app` owns `finishWindowRestoration`; `/diagnostics` owns startup timing. The old window-manager, window-controls and React-only import paths are removed without aliases.
 
@@ -550,8 +550,15 @@ Spark's validated Runtimes support yet.
 
 A pooled entry keeps hidden windows whose React root is already mounted, so opening one only hands
 it props and shows it. Pools need an entry without `id` in the shared runtime, and macOS for now:
-on Windows a `pool` or `throttle: true` registration throws `E_UNSUPPORTED_OPTION` and
-`getWindowPerformanceAvailability('pool' | 'throttle')` reports `unsupported-platform` (#414).
+on Windows `createWindowsNavigator` throws `E_UNSUPPORTED_OPTION` for a configuration with a `pool`
+or `throttle: true` entry, and `getWindowPerformanceAvailability('pool' | 'throttle')` reports
+`unsupported-platform` (#414). A configuration shared across platforms adds those fields only where
+they are available:
+
+```ts
+const pooled = getWindowPerformanceAvailability('pool').available;
+createWindowsNavigator({ editor: { component: Editor, ...(pooled ? { pool: {} } : {}) } });
+```
 
 ```ts
 const windows = createWindowsNavigator({
@@ -571,26 +578,33 @@ await windows.trimPool();                  // close every warm window for real
 - **Opening a warm window.** The root receives the open's props natively (the window keeps its
   NSWindow and React surface), mounts fresh content and commits it; the window gets the entry's and
   the open's appearance options, its creation title unless one is given, the open's `size` and
-  `position` or its creation size centered, and the entry's toolbar, and is shown only after the
-  content committed, so its first paint is the content. Opens that pass other options (`kind`,
+  `position` or its creation size centered on its creation display (the primary display once that
+  one is disconnected), and the entry's toolbar, and is shown only after the content committed, so
+  its first paint is the content. Opens that pass other options (`kind`,
   `parentId`, `modal`, `tabbedWith`, `restoreBounds`, `macos`) or a saved ID (`restoreSession`) open
   a new window; `getPool` counts them as misses. A warm window that does not render within 10
   seconds is closed for real and the open rejects `E_TIMEOUT`.
-- **Pooling.** Once the pool has started, its windows park when they close (by `close()`, the
-  close button or `closeWindow`): close guards run as usual, then the instance ends exactly as on
-  close (`close()` resolves `{ closed: true }`, `closed` listeners run, guards and the new-tab
-  handler are removed), the window is hidden, its content unmounts and the next use gets a new
-  native instance. It is warm again while the pool is under `max` (0–8, default 2) and its memory
-  budget, else it closes for real. A window in fullscreen, minimized or attached as a sheet closes
-  for real. A pooled window is reset to its entry's options, the open's options and its creation
-  title and frame; other changes a use made with `setWindowOptions` stay, so do not pool entries
-  whose windows you restyle at run time. Warm windows are hidden windows: `listWindows()` reports
-  them, `navigator.list()` and sessions do not.
+- **Pooling.** Once the pool has started, windows of plain opens (only options a warm window takes,
+  no saved ID) park when they close (by `close()`, the close button or `closeWindow`): close guards
+  run as usual, then the instance ends exactly as on close (`close()` resolves `{ closed: true }`,
+  `closed` listeners run, guards and the new-tab handler are removed), the window is hidden, its
+  content unmounts and the next use gets a new native instance. It is warm again while the pool is
+  under `max` (0–8, default 2) and its memory budget, else it closes for real. Windows opened with
+  other options or by `restoreSession`, windows already open when the pool started, and windows in
+  fullscreen, minimized or attached as a sheet close for real. A window whose options changed
+  during a use (`setWindowOptions`, `setWindowBlur`, `setToolbarItemText`, including
+  `refreshToolbar`) also closes for real, so no use inherits another's changes; the options the
+  pool itself applies when it opens a warm window do not count. Warm windows are hidden windows:
+  `listWindows()` reports them, `navigator.list()` and sessions do not.
+- **Application events.** `/app` `windowOpened` and `windowClosed` stay paired per use of a pooled
+  window: a warm window being created emits neither, opening it emits `windowOpened`, parking emits
+  `windowClosed`, and closing a parked or warm window for real emits nothing more.
 - **Memory budgets.** `pool.memoryBudgetMB` (1–1024, default 64) bounds the memory an entry's warm
   windows hold. Each warm window is measured as the growth of the process footprint
   (`phys_footprint`, what Activity Monitor shows) from before it is created to its root's first
-  render; the pool keeps no more warm windows than fit the largest cost measured, releasing the
-  oldest. The Kitchen Sink's 480×320 note measured about 2 MB per warm window in driver mode (never
+  render; the pool keeps no more warm windows than fit the median of the last five costs measured,
+  releasing the oldest, so one outlier cannot empty it. `prewarm` and `trimPool` start measuring
+  afresh. The Kitchen Sink's 480×320 note measured about 2 MB per warm window in driver mode (never
   drawn, so no backing store) on an M4 Max; a window that has been on screen also holds its backing
   store, about width × height × scale² × 4 bytes (1.2 MB for that note at 2x). The defaults (two
   warm windows, 64 MB) are chosen to leave room for heavier windows on the reference machine, an
@@ -608,9 +622,12 @@ await windows.trimPool();                  // close every warm window for real
 `throttle: true` stops an entry's content from re-rendering while its window is hidden, minimized or
 fully covered (AppKit occlusion, also exposed as the `occlusionChanged` window event): its root
 suspends with the committed content kept, so state survives and pending updates render once, when
-the window is visible again. Effects keep running; pause timers with `visibilityChanged` and
-`occlusionChanged` listeners. Driver mode never puts a window on screen, so it reports no occlusion
-and only hidden windows are throttled there.
+the window is visible again. While throttled, the content's views are hidden and its layout effects
+are cleaned up; they run again when it renders. Passive effects keep running; pause timers with
+`visibilityChanged` and `occlusionChanged` listeners. AppKit reports visibility and occlusion after
+the change, so a window that becomes visible can show its background for a frame before the content
+renders again (checked by hand in `performance-manual`). Driver mode never puts a window on screen,
+so it reports no occlusion and only hidden windows are throttled there.
 
 #### Shared and scoped state
 

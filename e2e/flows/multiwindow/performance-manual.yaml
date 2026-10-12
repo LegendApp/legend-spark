@@ -22,6 +22,6 @@ timeout: 15m
 - tapOn: { id: multiwindow-performance-clock-button }
 - manualStep:
     instruction: 'Move the Kitchen Sink main window so it covers the Throttled clock window completely. Press Advance clock 5 times, wait a second, then move the main window off the clock.'
-    expect: 'While covered, the clock row reads the same number of renders after advancing (the value grows). Once uncovered, the clock window shows the latest value and the render count grows by one or two.'
+    expect: 'While covered, the clock row reads the same number of renders after advancing (the value grows). Once uncovered, the clock window shows the latest value and the render count grows by one or two. At most one frame of empty window background may show as it is uncovered; anything longer, or flicker afterwards, fails.'
     evidence: none
     signoff: required

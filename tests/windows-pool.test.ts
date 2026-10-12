@@ -6,7 +6,7 @@ const { create } = createRequire(import.meta.url)("react-test-renderer");
 // A simulated native side: each window renders its registered root with its current root props, as the host does;
 // pooled windows park on close (new instance token, hidden) and `rootProps` re-renders the root.
 type Listener = { id: string; token: number; type: string; listener: (event: object) => void; removed: boolean };
-type NativeWindow = { token: number; props: object; component: string; visible: boolean; pooled: boolean; title: string; renderer?: any };
+type NativeWindow = { token: number; props: object; component: string; visible: boolean; pooled: boolean; parked: boolean; title: string; renderer?: any };
 const mocks = vi.hoisted(() => ({
   platform: { OS: "macos" },
   roots: new Map<string, () => any>(),
@@ -22,6 +22,10 @@ const mocks = vi.hoisted(() => ({
   calls: [] as string[],
   openWindow: vi.fn(), windowPoolCommand: vi.fn(), closeWindow: vi.fn(), showWindow: vi.fn(), getWindow: vi.fn(),
   setWindowOptions: vi.fn(), setWindowBounds: vi.fn(), centerWindow: vi.fn(), addWindowListener: vi.fn(),
+  pooledWindows: new Map<string, boolean>(),
+  /** App-level windowOpened/windowClosed as native emits them: "+id" and "-id". */
+  appEvents: [] as string[],
+  displays: [{ id: "1", primary: true, workArea: { x: 0, y: 25, width: 1440, height: 875 } }] as object[],
 }));
 vi.mock("react-native", () => ({
   Platform: mocks.platform, NativeModules: {},
@@ -33,10 +37,10 @@ vi.mock("react-native", () => ({
 }));
 vi.mock("../packages/desktop-windows/src/api", () => ({
   getWindowAvailability: () => mocks.windowAvailability,
-  openWindow: mocks.openWindow, closeWindow: mocks.closeWindow, showWindow: mocks.showWindow, getWindow: mocks.getWindow,
+  openWindow: mocks.openWindow, openWarmWindow: (options: object) => mocks.openWindow({ ...options, warm: true }), pooledWindows: mocks.pooledWindows, closeWindow: mocks.closeWindow, showWindow: mocks.showWindow, getWindow: mocks.getWindow,
   setWindowOptions: mocks.setWindowOptions, setWindowBounds: mocks.setWindowBounds, centerWindow: mocks.centerWindow,
   addWindowListener: mocks.addWindowListener, windowPoolCommand: mocks.windowPoolCommand,
-  processFootprint: async () => mocks.footprint, handleWindowNewTab: vi.fn(), listWindowTabGroups: vi.fn(), selectWindowTab: vi.fn(), getDisplays: vi.fn(),
+  processFootprint: async () => mocks.footprint, handleWindowNewTab: vi.fn(), listWindowTabGroups: vi.fn(), selectWindowTab: vi.fn(), getDisplays: async () => mocks.displays,
 }));
 vi.mock("../packages/desktop-windows/src/macos", () => ({ addMacOSWindowListener: vi.fn() }));
 vi.mock("@legendapp/spark-system", () => ({
@@ -65,8 +69,9 @@ async function render(id: string) {
 /** The user's close button: a pooled window parks, any other closes. */
 async function nativeClose(id: string) {
   const window = mocks.windows.get(id)!, token = window.token;
-  if (window.pooled) { window.token = ++mocks.token; window.visible = false; }
+  if (window.pooled) { window.token = ++mocks.token; window.visible = false; window.parked = true; }
   else { mocks.windows.delete(id); window.renderer?.unmount(); }
+  mocks.appEvents.push(`-${id}`);
   deliver(id, token, "closed", {});
   await tick();
 }
@@ -78,11 +83,13 @@ function track<T extends { remove(): Promise<void> }>(value: T) { removers.push(
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = false;
   mocks.platform.OS = "macos"; mocks.turbo = new Set(["NativeDesktopSystem"]); mocks.windowAvailability = { available: true };
-  mocks.windows.clear(); mocks.listeners = []; mocks.footprint = 100 * MB; mocks.windowCost = 20 * MB; mocks.pressure = undefined; mocks.calls = [];
-  mocks.openWindow.mockReset().mockImplementation(async (options: { id: string; component: string; props: object; show?: boolean; title?: string }) => {
+  mocks.windows.clear(); mocks.listeners = []; mocks.footprint = 100 * MB; mocks.windowCost = 20 * MB; mocks.pressure = undefined; mocks.calls = []; mocks.appEvents = []; mocks.pooledWindows.clear();
+  mocks.displays = [{ id: "1", primary: true, workArea: { x: 0, y: 25, width: 1440, height: 875 } }];
+  mocks.openWindow.mockReset().mockImplementation(async (options: { id: string; component: string; props: object; show?: boolean; title?: string; warm?: boolean }) => {
     if (mocks.windows.has(options.id)) throw failure("E_ALREADY_EXISTS");
     mocks.calls.push(`open ${options.id}`);
-    mocks.windows.set(options.id, { token: ++mocks.token, props: options.props, component: options.component, visible: options.show !== false, pooled: false, title: options.title ?? "" });
+    mocks.windows.set(options.id, { token: ++mocks.token, props: options.props, component: options.component, visible: options.show !== false, pooled: false, parked: !!options.warm, title: options.title ?? "" });
+    if (!options.warm) mocks.appEvents.push(`+${options.id}`);
     mocks.footprint += mocks.windowCost;
     await render(options.id);
     return info(options.id);
@@ -92,8 +99,9 @@ beforeEach(() => {
     if (!window) throw failure("E_NOT_FOUND");
     mocks.calls.push(`${method} ${args.id}`);
     if (method === "pool") window.pooled = args.enabled!;
-    if (method === "rootProps") { window.props = args.props!; void render(args.id); }
-    if (method === "discard") { mocks.windows.delete(args.id); mocks.footprint -= mocks.windowCost; window.renderer?.unmount(); deliver(args.id, window.token, "closed", {}); }
+    if (method === "rootProps" || method === "reuse") { window.props = args.props!; void render(args.id); }
+    if (method === "reuse") { if (!window.parked) throw failure("E_BUSY"); window.parked = false; mocks.appEvents.push(`+${args.id}`); }
+    if (method === "discard") { mocks.windows.delete(args.id); mocks.footprint -= mocks.windowCost; window.renderer?.unmount(); if (!window.parked) mocks.appEvents.push(`-${args.id}`); deliver(args.id, window.token, "closed", {}); }
   });
   mocks.closeWindow.mockReset().mockImplementation(async (id: string) => {
     if (!mocks.windows.has(id)) throw failure("E_NOT_FOUND");
@@ -101,7 +109,10 @@ beforeEach(() => {
   });
   mocks.showWindow.mockReset().mockImplementation(async (id: string) => { mocks.calls.push(`show ${id}`); setVisible(id, true); });
   mocks.getWindow.mockReset().mockImplementation(async (id: string) => info(id));
-  mocks.setWindowOptions.mockReset().mockImplementation(async (id: string, options: { title?: string }) => { info(id); if (options.title !== undefined) mocks.windows.get(id)!.title = options.title; });
+  mocks.setWindowOptions.mockReset().mockImplementation(async (id: string, options: { title?: string }) => {
+    info(id); if (options.title !== undefined) mocks.windows.get(id)!.title = options.title;
+    if (mocks.pooledWindows.has(id)) mocks.pooledWindows.set(id, true);
+  });
   mocks.setWindowBounds.mockReset().mockResolvedValue(undefined); mocks.centerWindow.mockReset().mockResolvedValue(undefined);
   mocks.addWindowListener.mockReset().mockImplementation(async (id: string, type: string, listener: (event: object) => void) => {
     const window = mocks.windows.get(id);
@@ -171,9 +182,9 @@ test("prewarm creates measured warm windows that render nothing; an open takes o
   expect(note.id).toBe(warm);
   expect(contents(warm)).toMatchObject({ type: "Note", props: { title: "First", window: warm } });
   // Props first, then the window is shown only after the content committed.
-  expect(mocks.calls.slice(0, 2)).toEqual([`rootProps ${warm}`, `show ${warm}`]);
+  expect(mocks.calls.slice(0, 2)).toEqual([`reuse ${warm}`, `show ${warm}`]);
   expect(mocks.setWindowOptions).toHaveBeenCalledWith(warm, { title: "First" });
-  expect(mocks.setWindowBounds).toHaveBeenCalledWith(warm, expect.objectContaining({ width: 640, height: 480 }));
+  expect(mocks.setWindowBounds).toHaveBeenCalledWith(warm, { displayId: "1", x: 0, y: 25, width: 640, height: 480 });
   expect(mocks.centerWindow).toHaveBeenCalledWith(warm, { displayId: "1" });
   await tick();
   // The pool refills to its target after the open.
@@ -209,16 +220,20 @@ test("windows past max are closed for real when they close", async () => {
   expect(mocks.windows.has(a.id)).toBe(true); expect(mocks.windows.has(b.id)).toBe(false);
 });
 
-test("the memory budget limits warm windows to what fits the largest measured cost", async () => {
+test("the memory budget limits warm windows by the median recent cost; one spike does not empty the pool, and prewarm or trimPool starts measuring again", async () => {
   mocks.windowCost = 40 * MB;
   const windows = track(createWindowsNavigator(pooled({ prewarm: 3, max: 3, memoryBudgetMB: 100 })));
   // 100 MB holds two 40 MB windows, not three.
   expect(await windows.prewarm("note")).toMatchObject({ warm: 2, measuredWindowMB: 40 });
-  // A costlier window measured by the refill lowers the limit to one: the oldest warm window is released.
-  mocks.windowCost = 60 * MB;
+  // A 300 MB spike measured by the refill after an open: the median stays 40 MB, so the pool keeps two.
+  mocks.windowCost = 300 * MB;
   await windows.openInstance("note", { props: { title: "Open" } });
   await tick();
-  expect(windows.getPool("note")).toMatchObject({ warm: 1, measuredWindowMB: 60, released: 1 });
+  expect(windows.getPool("note")).toMatchObject({ warm: 2, measuredWindowMB: 40, released: 0 });
+  // trimPool forgets the samples; windows now cost 60 MB, so only one fits.
+  await windows.trimPool("note");
+  mocks.windowCost = 60 * MB;
+  expect(await windows.prewarm("note")).toMatchObject({ warm: 1, measuredWindowMB: 60 });
 });
 
 test("memory pressure releases every warm window and stops refilling until it returns to normal", async () => {
@@ -234,6 +249,71 @@ test("memory pressure releases every warm window and stops refilling until it re
   mocks.pressure!({ type: "memoryPressure", level: "normal" }); await tick();
   expect(windows.getPool("note")).toMatchObject({ warm: 2, memoryPressure: false });
   expect(windows.getPool("other").warm).toBe(1);
+});
+
+test("windows opened with options a warm window cannot take, or restored with a saved ID, close for real and never join the pool", async () => {
+  const windows = track(createWindowsNavigator(pooled({ prewarm: 0 })));
+  await windows.prewarm("note");
+  const plain = await windows.openInstance("note", { props: { title: "Plain" } });
+  const sheet = await windows.openInstance("note", { props: { title: "Sheet" }, options: { kind: "window", parentId: plain.id, modal: true } });
+  expect(mocks.windows.get(sheet.id)!.pooled).toBe(false);
+  await nativeClose(sheet.id);
+  expect(mocks.windows.has(sheet.id)).toBe(false);
+  expect(windows.getPool("note").warm).toBe(0);
+  const [restored] = await windows.restoreSession({ version: 1, tabGroups: [], keyWindowId: null, windows: [
+    { id: "note-saved", name: "note", props: { title: "Saved" }, title: "Saved", visible: true, bounds: { displayId: "1", x: 10, y: 10, width: 640, height: 480, persistentDisplayId: null }, state: {} },
+  ] });
+  expect(mocks.windows.get(restored!.id)!.pooled).toBe(false);
+  await nativeClose(restored!.id);
+  expect(mocks.windows.has(restored!.id)).toBe(false);
+  // A plain open's window still parks and becomes warm.
+  await nativeClose(plain.id);
+  expect(windows.getPool("note").warm).toBe(1);
+});
+
+test("a window whose options changed during a use closes for real instead of becoming warm", async () => {
+  const windows = track(createWindowsNavigator(pooled({ prewarm: 1 })));
+  await windows.prewarm("note");
+  const note = await windows.openInstance("note", { props: { title: "Styled" } });
+  await tick();
+  expect(windows.getPool("note").warm).toBe(1);
+  // The pool's own reset at open does not count; the app's change does.
+  const { setWindowOptions } = await import("../packages/desktop-windows/src/api");
+  await setWindowOptions(note.id, { opacity: 0.5 });
+  await nativeClose(note.id);
+  expect(mocks.windows.has(note.id)).toBe(false);
+  expect(windows.getPool("note")).toMatchObject({ warm: 1, released: 1 });
+  // An untouched use comes back warm.
+  const next = await windows.openInstance("note", { props: { title: "Plain" } });
+  await nativeClose(next.id);
+  expect(mocks.windows.has(next.id)).toBe(true);
+});
+
+test("app-level windowOpened and windowClosed pair per use: none for warm windows, opened on reuse, closed on park, none when a warm window is released", async () => {
+  const windows = track(createWindowsNavigator(pooled({ prewarm: 1, max: 1 })));
+  await windows.prewarm("note");
+  const warm = [...mocks.windows.keys()][0]!;
+  expect(mocks.appEvents).toEqual([]);
+  const first = await windows.openInstance("note", { props: { title: "One" } });
+  await tick();
+  await nativeClose(first.id);
+  const second = await windows.openInstance("note", { props: { title: "Two" } });
+  expect(second.id).toBe(warm === first.id ? [...mocks.windows.keys()].find(id => id !== warm) : warm);
+  await nativeClose(second.id); await tick();
+  await windows.trimPool();
+  const opened = mocks.appEvents.filter(event => event.startsWith("+")).map(event => event.slice(1));
+  const closed = mocks.appEvents.filter(event => event.startsWith("-")).map(event => event.slice(1));
+  expect(opened).toEqual([first.id, second.id]);
+  expect(closed).toEqual([first.id, second.id]);
+});
+
+test("a warm window created on a display that was disconnected opens centered on the primary display", async () => {
+  const windows = track(createWindowsNavigator(pooled()));
+  await windows.prewarm("note");
+  mocks.displays = [{ id: "2", primary: true, workArea: { x: 0, y: 25, width: 1920, height: 1055 } }];
+  const note = await windows.openInstance("note", { props: { title: "Moved" } });
+  expect(mocks.setWindowBounds).toHaveBeenCalledWith(note.id, { displayId: "2", x: 0, y: 25, width: 640, height: 480 });
+  expect(mocks.centerWindow).toHaveBeenCalledWith(note.id, { displayId: "2" });
 });
 
 test("opens whose options a warm window cannot take open a new window and count a miss", async () => {
@@ -266,12 +346,12 @@ test("trimPool closes warm windows for real; remove releases them and stops park
 
 test("after a reload, warm roots are released and parked windows no pool owns close for real", async () => {
   const windows = track(createWindowsNavigator(pooled()));
-  mocks.windows.set("note-orphan", { token: ++mocks.token, props: { sparkWindow: { id: "note-orphan", use: 0 } }, component: "spark.window.note", visible: false, pooled: true, title: "Note" });
+  mocks.windows.set("note-orphan", { token: ++mocks.token, props: { sparkWindow: { id: "note-orphan", use: 0 } }, component: "spark.window.note", visible: false, pooled: true, parked: true, title: "Note" });
   await render("note-orphan"); await tick();
   expect(mocks.windows.has("note-orphan")).toBe(false);
   expect(windows.list()).toEqual([]);
   // An open pooled window restarted after a reload is adopted; when it parks on close, no pool owns it, so it closes for real.
-  mocks.windows.set("note-open", { token: ++mocks.token, props: { props: { title: "Kept" }, sparkWindow: { id: "note-open", use: 3 } }, component: "spark.window.note", visible: true, pooled: true, title: "Kept" });
+  mocks.windows.set("note-open", { token: ++mocks.token, props: { props: { title: "Kept" }, sparkWindow: { id: "note-open", use: 3 } }, component: "spark.window.note", visible: true, pooled: true, parked: false, title: "Kept" });
   await render("note-open"); await tick();
   expect(windows.list().map(window => window.id)).toEqual(["note-open"]);
   expect(contents("note-open")).toMatchObject({ props: { title: "Kept" } });

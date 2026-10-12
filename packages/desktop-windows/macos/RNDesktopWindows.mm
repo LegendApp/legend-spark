@@ -64,6 +64,8 @@ static void SetTrafficLightPosition(NSWindow *window, id position);
 @property NSDictionary *restoringTabs;
 // A window pool keeps this window: closing hides it and ends its instance instead (docs/api-window-contract.md#window-pools).
 @property BOOL parkOnClose;
+// Warm or parked: no use is open, so the app saw no windowOpened for it (or already saw windowClosed).
+@property BOOL parked;
 - (void)finishClose:(BOOL)closed;
 - (void)finishFullscreen:(BOOL)success;
 
@@ -270,7 +272,8 @@ static char TabObservation;
   NSWindow *closing = note.object;
   if (closing.sheetParent) [closing.sheetParent endSheet:closing];
   if (closing.parentWindow) [closing.parentWindow removeChildWindow:closing];
-  Event(@"closed", self.windowID);
+  // A parked window's use already ended with its closed event.
+  if (!self.parked) Event(@"closed", self.windowID);
   if (![self.windowID isEqual:@"main"] && !managed) {
     NSWindow *window = note.object;
     NSView *root = [window.contentView isKindOfClass:NSVisualEffectView.class] ? window.contentView.subviews.firstObject : window.contentView;
@@ -330,7 +333,7 @@ static BOOL Park(NSWindow *window, NSString *key) {
   Hide(window);
   if (window.parentWindow) [window.parentWindow removeChildWindow:window];
   window.documentEdited = NO;
-  Event(@"closed", key);
+  Event(@"closed", key); delegate.parked = YES;
   delegate.instanceId = NSUUID.UUID.UUIDString;
   objc_setAssociatedObject(window, NSSelectorFromString(@"sparkWindowInstanceId"), delegate.instanceId, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   delegate.guarded = NO; delegate.guardId = nil; delegate.pending = NO; delegate.request++; delegate.tabHandlerId = nil;
@@ -741,10 +744,14 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
     if ([method isEqual:@"tabGroup"]) { resolve(SparkJSON(TabGroup(window))); return; }
     // Window pools: park on close instead of closing, and hand a warm window's React root its next props.
     if ([method isEqual:@"pool"]) { delegate.parkOnClose = [args[@"enabled"] boolValue]; resolve(@"null"); return; }
-    if ([method isEqual:@"rootProps"]) {
+    // `reuse` starts a use of a warm window: new root props and the app's windowOpened.
+    if ([method isEqual:@"rootProps"] || [method isEqual:@"reuse"]) {
       RCTRootView *root = LegendWindowRegistry.sharedRegistry.rootViews[key];
       if (![root respondsToSelector:@selector(setAppProperties:)] || ![args[@"props"] isKindOfClass:NSDictionary.class]) { reject(@"E_NOT_FOUND", @"Window has no React root", nil); return; }
-      root.appProperties = args[@"props"]; resolve(@"null"); return;
+      if ([method isEqual:@"reuse"] && !delegate.parked) { reject(@"E_BUSY", @"Window is in use", nil); return; }
+      root.appProperties = args[@"props"];
+      if ([method isEqual:@"reuse"]) { delegate.parked = NO; Event(@"opened", key); }
+      resolve(@"null"); return;
     }
     if (InSimpleFullscreen(window) && [@[@"bounds", @"fullscreen", @"maximize", @"unmaximize", @"center"] containsObject:method]) { reject(@"E_BUSY", @"Leave simple fullscreen first", nil); return; }
     if ([method isEqual:@"completeOpen"]) {
@@ -793,7 +800,10 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       delegate.restoringTabs = restoreBounds && !tabTarget && [saved[@"tabs"] isKindOfClass:NSArray.class] ? saved : nil;
       if (![args[@"show"] isEqual:@NO]) Present(window, delegate, YES, [args[@"modal"] boolValue] ? parent : nil); else Hide(window);
       if (tabTarget) SelectTab(window);
-      Event(@"opened", key); Event(@"visibilityChanged", key); resolve(SparkJSON(Info(key, window))); return;
+      // A warm pooled window is no use of the window yet: its windowOpened comes with `reuse`.
+      delegate.parked = [args[@"sparkWarm"] boolValue];
+      if (!delegate.parked) Event(@"opened", key);
+      Event(@"visibilityChanged", key); resolve(SparkJSON(Info(key, window))); return;
     }
     if ([method isEqual:@"discard"]) { delegate.guarded = NO; if (SparkTestDriverActive()) DetachTab(window); [window close]; return resolve(@"null"); }
     if ([method isEqual:@"close"]) { [delegate.closeWaiters addObject:[resolve copy]]; RequestClose(window, key); return; }

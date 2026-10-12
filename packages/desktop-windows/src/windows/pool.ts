@@ -1,6 +1,6 @@
 import { Platform, TurboModuleRegistry } from "react-native";
 import { SparkError, nativeError, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
-import { getWindow, getWindowAvailability, openWindow, processFootprint, windowPoolCommand } from "../api";
+import { getWindow, getWindowAvailability, openWarmWindow, pooledWindows, processFootprint, windowPoolCommand } from "../api";
 import type { WindowBounds, WindowOpenOptions } from "../types";
 import { APPEARANCE_OPTIONS, keys, object } from "../validation";
 import type { NavigatorWindowOptions, WindowConfigEntry, WindowErrorEvent, WindowPerformanceFeature, WindowPoolOptions, WindowPoolState } from "./types";
@@ -12,6 +12,10 @@ const DEFAULTS: Required<WindowPoolOptions> = { prewarm: 1, max: 2, memoryBudget
 const MOUNT_TIMEOUT_MS = 10000;
 /** Options a warm window takes when it is opened; anything else needs a new window. */
 const TAKEN_OPTIONS = [...APPEARANCE_OPTIONS, "size", "position", "show"];
+/** Whether a pooled window could be opened with these options: only such windows are taken from, and returned to, a pool. */
+export const poolable = (options: object | undefined) => Object.keys(options ?? {}).every(key => TAKEN_OPTIONS.includes(key));
+/** The measured cost is the median of this many recent warm windows, so one outlier cannot empty the pool for good. */
+const SAMPLES = 5;
 
 /**
  * `pool`: prewarmed and reused windows with memory budgets; needs @legendapp/spark-system, which reports memory pressure.
@@ -63,7 +67,8 @@ interface Pool {
   warm: string[];
   /** Title and frame each warm window was created with, restored when it is opened. */
   created: Map<string, { title: string; bounds: WindowBounds }>;
-  measured: number | null;
+  /** Recent warm-window costs in bytes, newest last; reset by `prewarm` and `trimPool`. */
+  samples: number[];
   hits: number;
   misses: number;
   released: number;
@@ -85,7 +90,7 @@ export type WindowPools = ReturnType<typeof createWindowPools>;
 export function createWindowPools(entries: readonly (readonly [string, WindowConfigEntry])[], host: PoolHost) {
   const pools = new Map<string, Pool>();
   for (const [name, entry] of entries) if (entry.pool) pools.set(name, {
-    name, entry, limits: { ...DEFAULTS, ...entry.pool }, started: false, target: 0, warm: [], created: new Map(), measured: null, hits: 0, misses: 0, released: 0,
+    name, entry, limits: { ...DEFAULTS, ...entry.pool }, started: false, target: 0, warm: [], created: new Map(), samples: [], hits: 0, misses: 0, released: 0,
   });
   /** Every window a started pool owns: warm, being created, or open and parking on close. */
   const known = new Map<string, Pool>();
@@ -101,13 +106,21 @@ export function createWindowPools(entries: readonly (readonly [string, WindowCon
     if (!pool) throw new SparkError("E_INVALID_ARGUMENT", `${String(name)} has no pool`);
     return pool;
   };
-  const allowed = (pool: Pool) => pressure || removed ? 0
-    : Math.min(pool.limits.max, pool.measured ? Math.floor(pool.limits.memoryBudgetMB * MB / pool.measured) : pool.limits.max);
+  const measured = (pool: Pool) => {
+    if (!pool.samples.length) return null;
+    const sorted = [...pool.samples].sort((a, b) => a - b), middle = sorted.length >> 1;
+    return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+  };
+  const allowed = (pool: Pool) => {
+    if (pressure || removed) return 0;
+    const cost = measured(pool);
+    return Math.min(pool.limits.max, cost ? Math.floor(pool.limits.memoryBudgetMB * MB / cost) : pool.limits.max);
+  };
   const cleanupFailed = (pool: Pool, id: string) => (error: unknown) => host.report({ windowId: id, name: pool.name, phase: "cleanup", error });
 
   /** Closes a pooled window for real; its React surface stops with it. */
   const release = async (pool: Pool, id: string) => {
-    known.delete(id); pool.created.delete(id);
+    known.delete(id); pool.created.delete(id); pooledWindows.delete(id);
     try { await windowPoolCommand("discard", { id }); pool.released++; }
     catch (error) { if (nativeError(error).code !== "E_NOT_FOUND") throw error; }
   };
@@ -128,21 +141,20 @@ export function createWindowPools(entries: readonly (readonly [string, WindowCon
   };
   /** Warm windows are created one at a time across all pools, so each measurement sees only its own window. */
   const createWarm = (pool: Pool) => { const run = creations.then(() => createMeasured(pool)); creations = run.catch(() => {}); return run; };
-  /** One warm window, measured: the footprint growth from before creating it to its root's first render. */
+  /** One warm window, measured: the footprint growth from before creating it to its root's first render. Its first use emits windowOpened. */
   const createMeasured = async (pool: Pool) => {
     await host.load(pool.name);
     const id = generatedId(pool.name), mount = waitForMount(id);
-    known.set(id, pool);
+    known.set(id, pool); pooledWindows.set(id, false);
     const before = await processFootprint();
     let info;
     try {
-      info = await openWindow({ ...pool.entry.options, show: false, id, component: host.moduleName(pool.name), props: { sparkWindow: { id, use: 0 } } } as WindowOpenOptions);
-    } catch (error) { mount.cancel(); known.delete(id); throw error; }
+      info = await openWarmWindow({ ...pool.entry.options, show: false, id, component: host.moduleName(pool.name), props: { sparkWindow: { id, use: 0 } } } as WindowOpenOptions);
+    } catch (error) { mount.cancel(); known.delete(id); pooledWindows.delete(id); throw error; }
     try {
       await windowPoolCommand("pool", { id, enabled: true });
       await mount.promise;
-      const cost = Math.max(0, await processFootprint() - before);
-      pool.measured = Math.max(pool.measured ?? 0, cost);
+      pool.samples = [...pool.samples, Math.max(0, await processFootprint() - before)].slice(-SAMPLES);
     } catch (error) {
       mount.cancel();
       await release(pool, id).catch(cleanupFailed(pool, id));
@@ -177,14 +189,14 @@ export function createWindowPools(entries: readonly (readonly [string, WindowCon
   })().catch(error => { observing = undefined; throw error; });
   const state = (pool: Pool): WindowPoolState => ({
     warm: pool.warm.length, target: pool.target, max: pool.limits.max, memoryBudgetMB: pool.limits.memoryBudgetMB,
-    measuredWindowMB: pool.measured === null ? null : Math.round(pool.measured / MB * 10) / 10, memoryPressure: pressure,
+    measuredWindowMB: measured(pool) === null ? null : Math.round(measured(pool)! / MB * 10) / 10, memoryPressure: pressure,
     hits: pool.hits, misses: pool.misses, released: pool.released,
   });
   const live = () => { if (removed) throw new SparkError("E_CLOSED", "The windows navigator was removed"); };
 
   return {
-    /** Starts the entry's pool and fills it to `count` (default `pool.prewarm`). Its `open` windows park on close from now on. */
-    async prewarm(name: unknown, requested: unknown, open: readonly string[]): Promise<WindowPoolState> {
+    /** Starts the entry's pool and fills it to `count` (default `pool.prewarm`). Windows already open stay outside the pool. */
+    async prewarm(name: unknown, requested: unknown): Promise<WindowPoolState> {
       live();
       const pool = poolOf(name);
       count(requested, "count", pool.limits.max);
@@ -192,10 +204,8 @@ export function createWindowPools(entries: readonly (readonly [string, WindowCon
       await settle();
       live();
       pool.target = (requested as number | undefined) ?? pool.limits.prewarm;
-      if (!pool.started) {
-        pool.started = true;
-        await Promise.all(open.map(async id => this.track(pool.name, id, await getWindow(id))));
-      }
+      pool.samples = [];
+      pool.started = true;
       await fill(pool);
       return state(pool);
     },
@@ -204,7 +214,7 @@ export function createWindowPools(entries: readonly (readonly [string, WindowCon
     async trim(name?: unknown) {
       live();
       const targets = name === undefined ? [...pools.values()] : [poolOf(name)];
-      for (const pool of targets) pool.target = 0;
+      for (const pool of targets) { pool.target = 0; pool.samples = []; }
       await settle();
       await Promise.all(targets.map(async pool => {
         await pool.filling?.catch(() => {});
@@ -218,17 +228,19 @@ export function createWindowPools(entries: readonly (readonly [string, WindowCon
     take(name: string, options: NavigatorWindowOptions | undefined): string | undefined {
       const pool = pools.get(name);
       if (!pool?.started || removed) return undefined;
-      const id = Object.keys(options ?? {}).every(key => TAKEN_OPTIONS.includes(key)) ? pool.warm.shift() : undefined;
+      const id = poolable(options) ? pool.warm.shift() : undefined;
       if (id) pool.hits++; else pool.misses++;
       return id;
     },
+    /** The pool has just set this window's options for a new use: changes from here on are the use's own. */
+    settled(id: string) { if (pooledWindows.has(id)) pooledWindows.set(id, false); },
     /** The title and frame a warm window was created with. */
     created(id: string) { return known.get(id)?.created.get(id); },
     /** A window opened cold for a started pool parks on close from now on; `opened` is its title and frame to restore on reuse. */
     async track(name: string, id: string, opened: { title: string; bounds: WindowBounds }) {
       const pool = pools.get(name);
       if (!pool?.started || removed) return;
-      known.set(id, pool); pool.created.set(id, { title: opened.title, bounds: opened.bounds });
+      known.set(id, pool); pooledWindows.set(id, false); pool.created.set(id, { title: opened.title, bounds: opened.bounds });
       await windowPoolCommand("pool", { id, enabled: true });
     },
     /** After an open: tops the entry's pool back up to its target. */
@@ -237,11 +249,12 @@ export function createWindowPools(entries: readonly (readonly [string, WindowCon
     recycle(id: string): Promise<void> {
       const pool = known.get(id);
       // Parked but no pool owns it (opened before a JavaScript reload): close it for real.
-      if (!pool) return getWindow(id).then(() => windowPoolCommand("discard", { id }), error => { if (nativeError(error).code !== "E_NOT_FOUND") throw error; });
+      if (!pool) { pooledWindows.delete(id); return getWindow(id).then(() => windowPoolCommand("discard", { id }), error => { if (nativeError(error).code !== "E_NOT_FOUND") throw error; }); }
       const run = (async () => {
         try { await getWindow(id); }
-        catch (error) { if (nativeError(error).code === "E_NOT_FOUND") { known.delete(id); return; } throw error; }
-        if (pool.warm.length >= allowed(pool)) { await release(pool, id); return; }
+        catch (error) { if (nativeError(error).code === "E_NOT_FOUND") { known.delete(id); pool.created.delete(id); pooledWindows.delete(id); return; } throw error; }
+        // A use that changed the window's options (setWindowOptions, blur, toolbar text) would hand them to the next: close it.
+        if (pooledWindows.get(id) || pool.warm.length >= allowed(pool)) { await release(pool, id); return; }
         // Unmounts the closed use's content now, so a warm window holds no app state.
         await windowPoolCommand("rootProps", { id, props: { sparkWindow: { id, use: 0 } } });
         pool.warm.push(id);
@@ -271,6 +284,7 @@ export function createWindowPools(entries: readonly (readonly [string, WindowCon
         ...[...pools.values()].flatMap(pool => pool.warm.splice(0).map(id => release(pool, id))),
         ...[...known.keys()].map(id => windowPoolCommand("pool", { id, enabled: false }).catch(error => { if (nativeError(error).code !== "E_NOT_FOUND") throw error; })),
       ]);
+      for (const id of known.keys()) pooledWindows.delete(id);
       known.clear();
       const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
       if (failed) throw failed.reason;

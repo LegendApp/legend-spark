@@ -463,8 +463,21 @@ static void TestWindowPools(RNDesktopWindows *api) {
     [(id)window.delegate windowDidChangeOcclusionState:[NSNotification notificationWithName:NSWindowDidChangeOcclusionStateNotification object:window]];
     assert(events.count == 1 && [events[0][@"type"] isEqual:@"occlusionChanged"] && [events[0][@"occluded"] isEqual:@YES]);
     driverActive = YES;
-    // Discarding closes for real: the registry lets go and the window is freed.
+    // Discarding closes for real: the registry lets go and the window is freed. Its use already ended, so no second closed.
+    [events removeAllObjects];
     Call(api, @"discard", @{ @"id": @"pooled" }); assert(!failure && !windows[@"pooled"]);
+    for (NSDictionary *event in events) assert(![event[@"type"] isEqual:@"closed"]);
+    // A warm window emits no opened until it is reused; reusing one in use is refused.
+    NSWindow *warm = RealWindow(@"warm"); (void)warm;
+    [events removeAllObjects];
+    Call(api, @"completeOpen", @{ @"id": @"warm", @"show": @NO, @"sparkWarm": @YES }); assert(!failure);
+    for (NSDictionary *event in events) assert(![event[@"type"] isEqual:@"opened"]);
+    LegendWindowRegistry.sharedRegistry.rootViews[@"warm"] = [RCTRootView new];
+    Call(api, @"reuse", @{ @"id": @"warm", @"props": @{ @"use": @1 } }); assert(!failure && [events.lastObject[@"type"] isEqual:@"opened"]);
+    Call(api, @"reuse", @{ @"id": @"warm", @"props": @{ @"use": @2 } }); assert([failure isEqual:@"E_BUSY"]);
+    [events removeAllObjects];
+    Call(api, @"discard", @{ @"id": @"warm" }); assert(!failure && [events.lastObject[@"type"] isEqual:@"closed"]);
+    [LegendWindowRegistry.sharedRegistry.rootViews removeObjectForKey:@"warm"];
     [LegendWindowRegistry.sharedRegistry.rootViews removeObjectForKey:@"pooled"];
     Call(api, @"footprint", @{}); assert(!failure && [SparkArgs(reply)[@"bytes"] longLongValue] > 0);
     Pump();

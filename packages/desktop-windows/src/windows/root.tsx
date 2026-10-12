@@ -67,8 +67,10 @@ function openedProps({ rootTag: _rootTag, ...props }: Props): Props | undefined 
   return Object.keys(props).length ? props : undefined;
 }
 
-// Background render throttling: suspending with a thenable that never settles hides the committed content and keeps
-// its state; updates inside wait until it renders again. A bare thenable keeps no callbacks, so freezing retains nothing.
+// Background render throttling: suspending with a thenable that never settles hides the committed content's views and
+// keeps its state; its layout effects are cleaned up and run again when it renders, and updates inside wait until then.
+// The window can show its background for a frame when it becomes visible, before that render (AppKit reports
+// visibility after the change). A bare thenable keeps no callbacks, so freezing retains nothing.
 const never = { then() {} };
 function Freeze({ frozen, children }: { frozen: boolean; children: ReactNode }) {
   if (frozen) throw never;

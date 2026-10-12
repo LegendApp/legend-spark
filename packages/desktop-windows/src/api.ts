@@ -35,7 +35,10 @@ function publicInfo(value: NativeWindowInfo): WindowInfo {
   const { id, kind, title, parentId, modal, visible, focused, minimized, maximized, fullscreen, bounds: { displayId, x, y, width, height } } = value;
   return { id, kind, title, parentId, modal, visible, focused, minimized, maximized, fullscreen, bounds: { displayId, x, y, width, height } };
 }
-export async function openWindow(options: WindowOpenOptions): Promise<WindowInfo> {
+export function openWindow(options: WindowOpenOptions): Promise<WindowInfo> { return open(options, false); }
+/** A window pool's warm window: no use of it is open yet, so the app gets no windowOpened until it is taken. Not public. */
+export function openWarmWindow(options: WindowOpenOptions): Promise<WindowInfo> { return open(options, true); }
+async function open(options: WindowOpenOptions, warm: boolean): Promise<WindowInfo> {
   validateOptions(options, Platform.OS, true);
   // Optional undefined fields may be omitted; props have already undergone strict JSON validation.
   const snapshot = JSON.parse(JSON.stringify(options)) as WindowOpenOptions;
@@ -50,7 +53,7 @@ export async function openWindow(options: WindowOpenOptions): Promise<WindowInfo
       // Simple fullscreen hides the chrome applied below, so it is entered last.
       const simpleFullscreen = snapshot.macos?.simpleFullscreen;
       if (simpleFullscreen !== undefined) delete snapshot.macos!.simpleFullscreen;
-      const info = await windowCall("completeOpen", snapshot, isInfo);
+      const info = await windowCall("completeOpen", warm ? { ...snapshot, sparkWarm: true } : snapshot, isInfo);
       // Common chrome is applied first; explicit AppKit groups own their corresponding fields.
       const appKit = appKitOptions(snapshot.macos);
       if (!appKit && !simpleFullscreen) return publicInfo(info);
@@ -72,8 +75,15 @@ export async function listWindows(): Promise<WindowInfo[]> { return (await windo
 export async function getDisplays(): Promise<DisplayInfo[]> { return getNativeDisplays(); }
 /** Pointer position in Spark's coordinate vocabulary: logical units relative to the containing display's top-left corner. */
 export async function getCursorPoint(): Promise<CursorPoint> { return windowCall("cursorPoint", {}, (value): value is CursorPoint => record(value) && typeof value.displayId === "string" && Number.isFinite(value.x) && Number.isFinite(value.y)); }
+/**
+ * Pooled windows, and whether their options changed since their pool last set them. A pooled window that was changed
+ * closes for real instead of being reused, so no use inherits another's changes. Not public.
+ */
+export const pooledWindows = new Map<string, boolean>();
+export const noteWindowChanged = (id: string) => { if (pooledWindows.has(id)) pooledWindows.set(id, true); };
 export async function setWindowOptions(id: string, options: WindowUpdateOptions): Promise<void> {
   windowId(id); validateOptions(options, Platform.OS, false);
+  noteWindowChanged(id);
   const snapshot = JSON.parse(JSON.stringify(options)) as WindowUpdateOptions;
   // Publish each field to the module that owns it. The window module also checks title-bar
   // changes against simple fullscreen, so any titleBar group goes through it first.
@@ -128,7 +138,7 @@ export interface WindowListenerOptions { onError?: (error: SparkError) => void }
 function report(options: WindowListenerOptions, cause: unknown) { try { (options.onError ?? console.error)(nativeError(cause)); } catch (error) { console.error(error); } }
 const TAB_EVENTS: readonly string[] = ["tabGroupChanged", "tabSelectionChanged"];
 /** Window pools (`windows/pool.ts`): park on close, hand a warm root new props, close for real. Not public. */
-export async function windowPoolCommand(method: "pool" | "rootProps" | "discard", args: { id: string } & Record<string, unknown>): Promise<void> { await windowCommand(method, args); }
+export async function windowPoolCommand(method: "pool" | "rootProps" | "reuse" | "discard", args: { id: string } & Record<string, unknown>): Promise<void> { await windowCommand(method, args); }
 /** The process's physical footprint in bytes. Not public. */
 export async function processFootprint(): Promise<number> { return (await windowCall("footprint", {}, (value): value is { bytes: number } => record(value) && Number.isSafeInteger(value.bytes) && (value.bytes as number) >= 0)).bytes; }
 /** Registration acknowledges the live native instance. Removal stops callbacks immediately. */

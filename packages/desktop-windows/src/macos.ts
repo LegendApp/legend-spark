@@ -2,7 +2,7 @@ import { SparkError, invokeNative, nativeError, parseNativeResult, type AsyncReg
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { macosCommand, macosNative } from "./macos-adapter";
 import { subscribeToWindowInstance } from "./transport";
-import { type WindowListenerOptions } from "./api";
+import { noteWindowChanged, type WindowListenerOptions } from "./api";
 import { keys, number, object, text, windowId } from "./validation";
 import type { MacOSToolbarState, MacOSWindowBlurOptions, MacOSWindowEvent } from "./types";
 export type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSToolbarDisplayMode, MacOSToolbarItem, MacOSToolbarOptions, MacOSToolbarState, MenuAction } from "./types";
@@ -10,6 +10,7 @@ export type { MacOSWindowBlurOptions, MacOSWindowEvent, MacOSToolbarDisplayMode,
 export async function setWindowBlur(id: string, options: MacOSWindowBlurOptions): Promise<void> {
   const native = macosNative(); windowId(id); object(options, "blur options"); keys(options, ["radius", "durationMs"]);
   number(options.radius, "radius", 0, 1000); if (options.durationMs !== undefined) number(options.durationMs, "durationMs", 0, 60000);
+  noteWindowChanged(id);
   await macosCommand(() => native.setWindowBlur(id, options.radius, options.durationMs ?? 0));
 }
 export interface FocusToolbarSearchOptions { value?: string }
@@ -20,6 +21,7 @@ export async function focusToolbarSearch(id: string, itemId: string, options: Fo
 }
 export async function setToolbarItemText(id: string, itemId: string, value: string): Promise<void> {
   const native = macosNative(); windowId(id); text(itemId, "toolbar item ID", false); text(value, "toolbar text");
+  noteWindowChanged(id);
   await macosCommand(() => native.setWindowToolbarItemText(id, itemId, value));
 }
 const ids = (value: unknown): value is string[] => Array.isArray(value) && value.every(id => typeof id === "string");
