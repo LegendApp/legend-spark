@@ -55,4 +55,11 @@ FOUNDATION_EXPORT void SparkTestDriverObserveInput(dispatch_block_t observer);
 // Motion uses it to render the presented frame of running animations rather than their final values.
 typedef void (^SparkTestDriverRenderWrapper)(dispatch_block_t render);
 FOUNDATION_EXPORT void SparkTestDriverWrapRender(SparkTestDriverRenderWrapper wrapper);
+// System state a driver command simulates (simulateSystemEvent's state fields, such as reduceMotion and lowPowerMode, and
+// simulateDisplays' maximumFramesPerSecond, NSNull when restored): the module that simulates it reports the fields, and
+// every observer receives them, so modules that read the same OS state natively (motion) follow the simulation. The OS
+// is untouched.
+typedef void (^SparkTestDriverStateObserver)(NSDictionary *values);
+FOUNDATION_EXPORT void SparkTestDriverObserveSimulatedState(SparkTestDriverStateObserver observer);
+FOUNDATION_EXPORT void SparkTestDriverDidSimulateState(NSDictionary *values);
 #endif

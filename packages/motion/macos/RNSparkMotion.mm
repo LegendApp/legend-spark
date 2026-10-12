@@ -54,6 +54,11 @@ RCT_EXPORT_MODULE(NativeSparkMotion)
   [self withRequest:json reject:reject run:^(NSDictionary *request, SparkMotionReject failure) { [SparkMotionCoordinator.shared recordFrames:request resolve:resolve reject:failure]; }];
 }
 
+- (void)environment:(double)tag resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+  [SparkMotionCoordinator.shared environment:(NSInteger)tag resolve:resolve reject:^(NSString *code, NSString *message) { reject(code, message, nil); }];
+}
+
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params
 {
   return std::make_shared<facebook::react::NativeSparkMotionSpecJSI>(params);

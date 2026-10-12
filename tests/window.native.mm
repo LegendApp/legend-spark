@@ -35,6 +35,8 @@ typedef void (^SparkTestDriverReply)(NSDictionary *reply);
 typedef void (^SparkTestDriverHandler)(NSDictionary *request, SparkTestDriverReply reply);
 static NSMutableDictionary<NSString *, SparkTestDriverHandler> *driverCommands;
 static void SparkTestDriverRegisterCommand(NSString *name, SparkTestDriverHandler handler) { if (!driverCommands) driverCommands = [NSMutableDictionary new]; driverCommands[name] = handler; }
+static NSDictionary *simulatedState;  // the last SparkTestDriverDidSimulateState report (motion follows it)
+static void SparkTestDriverDidSimulateState(NSDictionary *values) { simulatedState = values; }
 // ACTUAL_IMPLEMENTATION
 @interface TestWindow : NSObject
 @property (weak) id<NSWindowDelegate> delegate;
@@ -370,11 +372,15 @@ static void TestDisplays(RNDesktopWindows *api) {
   assert([snapshot[@"displays"] count] == NSScreen.screens.count);
   NSArray *simulated = @[@{ @"id": @"901", @"primary": @YES }];
   assert([DriverCommand(@"simulateDisplays", @{ @"displays": simulated })[@"ok"] boolValue]);
+  assert([simulatedState isEqual:@{ @"maximumFramesPerSecond": NSNull.null }]);  // no refresh rate given
+  NSArray *promotion = @[@{ @"id": @"902", @"primary": @NO, @"refreshRate": @{ @"maximum": @60 } }, @{ @"id": @"901", @"primary": @YES, @"refreshRate": @{ @"maximum": @120 } }];
+  assert([DriverCommand(@"simulateDisplays", @{ @"displays": promotion })[@"ok"] boolValue] && [simulatedState isEqual:@{ @"maximumFramesPerSecond": @120 }]);
+  assert([DriverCommand(@"simulateDisplays", @{ @"displays": simulated })[@"ok"] boolValue]);
   NSDictionary *event = events.lastObject;
   assert([event[@"type"] isEqual:@"displayDetailsChanged"] && [event[@"displays"] isEqual:simulated] && [event[@"sequence"] doubleValue] > sequence);
   Call(api, @"displayDetails", @{}); assert([SparkArgs(reply) isEqual:simulated]);
   assert([DriverCommand(@"simulateDisplays", @{ @"displays": NSNull.null })[@"ok"] boolValue]);
-  assert([events.lastObject[@"displays"] count] == NSScreen.screens.count);
+  assert([events.lastObject[@"displays"] count] == NSScreen.screens.count && [simulatedState isEqual:@{ @"maximumFramesPerSecond": NSNull.null }]);
   for (id invalid in @[@[], @"901", @[@1]]) assert([DriverCommand(@"simulateDisplays", @{ @"displays": invalid })[@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
   assert([DriverCommand(@"simulateDisplays", @{})[@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
   Call(api, @"unobserveDisplays", @{}); assert(!failure);

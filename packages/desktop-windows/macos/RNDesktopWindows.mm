@@ -568,6 +568,11 @@ static void EmitDisplays(void) { SparkEmit(@{ @"type": @"displayDetailsChanged",
     for (id display in valid && displays != NSNull.null ? displays : @[]) valid = valid && [display isKindOfClass:NSDictionary.class];
     if (!valid) { reply(@{ @"ok": @NO, @"error": @{ @"code": @"E_INVALID_ARGUMENT", @"message": @"simulateDisplays expects a non-empty list of displays, or null" } }); return; }
     SparkSimulateDisplays(displays == NSNull.null ? nil : displays);
+    // Motion's frame rate follows the simulated primary display's refresh rate (docs/motion.md#frame-rate-and-power).
+    id primary = nil;
+    for (NSDictionary *display in displays == NSNull.null ? @[] : displays) if ([display[@"primary"] isEqual:@YES]) primary = display;
+    id maximum = [primary[@"refreshRate"] isKindOfClass:NSDictionary.class] ? primary[@"refreshRate"][@"maximum"] : nil;
+    SparkTestDriverDidSimulateState(@{ @"maximumFramesPerSecond": [maximum isKindOfClass:NSNumber.class] ? maximum : NSNull.null });
     reply(@{ @"ok": @YES, @"displays": SparkDisplayDetails() });
   });
 }

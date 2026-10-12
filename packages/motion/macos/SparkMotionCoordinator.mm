@@ -212,6 +212,25 @@ static NSString *SparkJSONString(id object)
 @end
 @implementation SparkMotionSharedMark @end
 
+/** A haptic or sound cue of a running plan, due at an engine time (docs/motion.md#cues). */
+@interface SparkMotionCue : NSObject
+@property (nonatomic, copy) NSString *batch;
+@property (nonatomic) NSInteger tag;
+@property (nonatomic) double time;
+@property (nonatomic, strong) id at;  // milliseconds, or "end"
+@property (nonatomic, copy, nullable) NSString *haptic;
+@property (nonatomic, copy, nullable) NSString *sound;
+@end
+@implementation SparkMotionCue @end
+
+#if SPARK_TEST_DRIVER
+static const NSUInteger SparkMotionCueLogLimit = 256;
+#endif
+static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
+{
+  return @{ @"generic": @(NSHapticFeedbackPatternGeneric), @"alignment": @(NSHapticFeedbackPatternAlignment), @"levelChange": @(NSHapticFeedbackPatternLevelChange) };
+}
+
 @interface SparkMotionCoordinator ()
 - (BOOL)isAnimating:(NSInteger)tag;
 @end
@@ -228,6 +247,16 @@ static NSString *SparkJSONString(id object)
   NSHashTable<NSView *> *_mounting;  // registered, not yet past their first mounting transaction
   NSUInteger _sweepGeneration;
   uint64_t _inputEvent;
+  NSHashTable<NSWindow *> *_hiddenWindows;     // windows whose occlusion state last said not visible
+  NSMutableArray<SparkMotionCue *> *_cues;     // pending, in no particular order
+  CADisplayLink *_cueLink;                     // only within two frames of the next cue
+  NSUInteger _cueGeneration;
+#if SPARK_TEST_DRIVER
+  BOOL _driven;                                // a driver run: cues are recorded, not played; windows count as visible
+  NSMutableDictionary *_simulated;             // driver overrides of reduceMotion, lowPowerMode, maximumFramesPerSecond
+  NSMutableArray<NSDictionary *> *_cueLog;     // cues a driver run recorded instead of playing
+#endif
+  NSArray *_observers;                         // system and window observers, while a MotionView is registered
 }
 
 + (instancetype)shared
@@ -249,16 +278,171 @@ static NSString *SparkJSONString(id object)
     _layoutMarks = [NSMapTable weakToStrongObjectsMapTable];
     _sharedMarks = [NSMutableDictionary new];
     _mounting = [NSHashTable weakObjectsHashTable];
+    _hiddenWindows = [NSHashTable weakObjectsHashTable];
+    _cues = [NSMutableArray new];
+#if SPARK_TEST_DRIVER
+    _simulated = [NSMutableDictionary new];
+    _cueLog = [NSMutableArray new];
+#endif
   }
   return self;
 }
 
 - (double)now { return _engine.time(CACurrentMediaTime()); }
 
+#pragma mark - Environment
+
+/** A driver run's simulated value of `key` (docs/motion.md#simulation-in-the-test-driver); nil in apps. */
+- (nullable id)simulated:(NSString *)key
+{
+#if SPARK_TEST_DRIVER
+  return _simulated[key];
+#else
+  return nil;
+#endif
+}
+- (BOOL)driven
+{
+#if SPARK_TEST_DRIVER
+  return _driven;
+#else
+  return NO;
+#endif
+}
+- (BOOL)reduceMotion
+{
+  id simulated = [self simulated:@"reduceMotion"];
+  return simulated ? [simulated boolValue] : NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion;
+}
+- (BOOL)lowPower
+{
+  id simulated = [self simulated:@"lowPowerMode"];
+  return simulated ? [simulated boolValue] : NSProcessInfo.processInfo.lowPowerModeEnabled;
+}
+/** The refresh rate of the display showing `view`'s window (the main display without one); 0 without a display. */
+- (NSInteger)maximumFrameRate:(nullable NSView *)view
+{
+  if (id simulated = [self simulated:@"maximumFramesPerSecond"]) return [simulated integerValue];
+  NSScreen *screen = view.window.screen ?: NSScreen.mainScreen;
+  return screen ? screen.maximumFramesPerSecond : 0;
+}
+/** What motion bakes and asks the compositor for: the display's rate, at most 120 Hz, and at most 60 Hz in Low Power Mode. */
+- (double)frameRate:(nullable NSView *)view
+{
+  const double cap = self.lowPower ? 60 : Engine::kSampleRate;
+  const NSInteger maximum = [self maximumFrameRate:view];
+  return maximum > 0 ? MIN((double)maximum, cap) : cap;
+}
+- (BOOL)windowHidden:(nullable NSWindow *)window { return window && [_hiddenWindows containsObject:window]; }
+
+/**
+ * Brings the engine's hidden state of a view in line with its window, re-baking and settling what changed. Operations
+ * call it first: a view can mount into, or move to, an already hidden window.
+ */
+- (void)syncHidden:(NSInteger)tag
+{
+  NSView<SparkMotionHost> *host = [_hosts objectForKey:@(tag)];
+  if (!host || !_engine.hasView(tag)) return;
+  const BOOL hidden = [self windowHidden:host.window];
+  if (hidden == _engine.hidden(tag)) return;
+  std::vector<Settled> concealed;
+  const double shift = _engine.setHidden(tag, hidden, self.now, concealed);
+  if (shift > 0) for (SparkMotionCue *cue in _cues) if (cue.tag == tag) cue.time += shift;
+  // A finished animation of a hidden window has no cue to play.
+  for (const Settled &item : concealed) [self dropCues:@(item.id.c_str())];
+  [self applyAll:tag];
+  [self settle:concealed];
+}
+
+/** Applies a window's visibility to its views: hidden ones complete or pause, shown ones resume. */
+- (void)window:(NSWindow *)window visible:(BOOL)visible
+{
+  if (visible != [self windowHidden:window]) return;
+  if (visible) [_hiddenWindows removeObject:window]; else [_hiddenWindows addObject:window];
+  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects]) if (host.window == window) [self syncHidden:host.motionTag];
+  [self scheduleSweep];
+  [self scheduleCues];
+}
+
+/** A closing window's motion is cancelled: animations stop where they are (finished false), links and recordings end. */
+- (void)windowWillClose:(NSWindow *)window
+{
+  std::vector<Settled> settled;
+  std::vector<Property> all;
+  for (int i = 0; i < PropertyCount; i++) all.push_back(Property(i));
+  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects]) {
+    if (host.window != window) continue;
+    const NSInteger tag = host.motionTag;
+    for (NSString *identifier in [_links allKeys]) if (_links[identifier].tag == tag) [self removeLink:identifier];
+    for (SparkMotionFrameRecorder *recorder in [_recorders allObjects]) if (recorder.host == host) [self finishRecorder:recorder failure:@"The MotionView's window closed during recording"];
+    _engine.stop(tag, all, self.now, settled);
+    [self applyAll:tag];
+  }
+  [_hiddenWindows removeObject:window];
+  [self settle:settled];
+  [self scheduleSweep];
+  [self scheduleCues];
+}
+
+/** Re-bakes running animations, for example at a new frame rate; `window` nil means every window. */
+- (void)rebake:(nullable NSWindow *)window
+{
+  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects])
+    if ((!window || host.window == window) && [self isAnimating:host.motionTag]) [self applyAll:host.motionTag];
+}
+
+/** Observes what motion follows while a MotionView is registered, and stops with the last one. */
+- (void)observeSystem:(BOOL)observe
+{
+  if (observe == (_observers != nil)) return;
+  NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+  if (!observe) {
+    for (id observer in _observers) [center removeObserver:observer];
+    _observers = nil;
+    return;
+  }
+  __weak SparkMotionCoordinator *weakSelf = self;
+  NSOperationQueue *main = NSOperationQueue.mainQueue;
+  _observers = @[
+    // Process info notifications arrive on arbitrary threads; the main queue owns the engine.
+    [center addObserverForName:NSProcessInfoPowerStateDidChangeNotification object:nil queue:main usingBlock:^(NSNotification *) {
+      SparkMotionCoordinator *coordinator = weakSelf;
+      if (coordinator && ![coordinator simulated:@"lowPowerMode"]) [coordinator rebake:nil];
+    }],
+    [center addObserverForName:NSApplicationDidChangeScreenParametersNotification object:nil queue:main usingBlock:^(NSNotification *) { [weakSelf rebake:nil]; }],
+    [center addObserverForName:NSWindowDidChangeScreenNotification object:nil queue:main usingBlock:^(NSNotification *note) { [weakSelf rebake:note.object]; }],
+    [center addObserverForName:NSWindowDidChangeOcclusionStateNotification object:nil queue:main usingBlock:^(NSNotification *note) {
+      SparkMotionCoordinator *coordinator = weakSelf;
+      NSWindow *window = note.object;
+      // A driven app's windows are never on screen; their visibility is simulated.
+      if (coordinator && !coordinator.driven) [coordinator window:window visible:(window.occlusionState & NSWindowOcclusionStateVisible) != 0];
+    }],
+    [center addObserverForName:NSWindowWillCloseNotification object:nil queue:main usingBlock:^(NSNotification *note) { [weakSelf windowWillClose:note.object]; }],
+  ];
+}
+
+- (void)environment:(NSInteger)tag resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
+{
+  [self perform:^{
+    NSView<SparkMotionHost> *host = nil;
+    if (tag != 0) {
+      host = [self->_hosts objectForKey:@(tag)];
+      if (!host) throw SparkMotionUnmounted(tag);
+    }
+    const NSInteger maximum = [self maximumFrameRate:host];
+    resolve(SparkJSONString(@{
+      @"reduceMotion": @(self.reduceMotion), @"lowPowerMode": @(self.lowPower),
+      @"maximumFrameRate": maximum > 0 ? @(maximum) : (id)NSNull.null, @"frameRate": @([self frameRate:host]),
+      @"windowVisible": host.window ? @(![self windowHidden:host.window]) : (id)NSNull.null,
+    }));
+  } reject:reject];
+}
+
 #pragma mark - Hosts
 
 - (void)registerHost:(NSView<SparkMotionHost> *)host initial:(const Values &)initial
 {
+  [self observeSystem:YES];
   _engine.addView(host.motionTag, initial);
   [_hosts setObject:host forKey:@(host.motionTag)];
   [host applyMotionModel:initial];
@@ -284,6 +468,8 @@ static NSString *SparkJSONString(id object)
   [_hosts removeObjectForKey:@(tag)];
   [self settle:settled];
   [self scheduleSweep];
+  [self scheduleCues];
+  if (![_hosts.objectEnumerator nextObject]) [self observeSystem:NO];
 }
 
 - (void)hostDidResize:(NSView<SparkMotionHost> *)host
@@ -304,7 +490,7 @@ static NSString *SparkJSONString(id object)
 
 #pragma mark - Baking
 
-- (CAKeyframeAnimation *)animation:(const Bake &)bake channel:(Channel)channel host:(NSView *)host begin:(double)begin
+- (CAKeyframeAnimation *)animation:(const Bake &)bake channel:(Channel)channel host:(NSView *)host begin:(double)begin rate:(double)rate
 {
   CAKeyframeAnimation *animation = [CAKeyframeAnimation animationWithKeyPath:channel == Channel::Transform ? @"transform" : @"opacity"];
   NSMutableArray *values = [NSMutableArray arrayWithCapacity:bake.samples.size()];
@@ -314,6 +500,8 @@ static NSString *SparkJSONString(id object)
   animation.duration = bake.duration;
   animation.beginTime = begin;
   animation.calculationMode = kCAAnimationLinear;
+  // ProMotion displays run motion at 120 Hz only when asked; others (and Low Power Mode) cap it (docs/motion.md#frame-rate-and-power).
+  animation.preferredFrameRateRange = CAFrameRateRangeMake(rate / 2, rate, rate);
   return animation;
 }
 
@@ -322,8 +510,8 @@ static NSString *SparkJSONString(id object)
 {
   NSView<SparkMotionHost> *host = [_hosts objectForKey:@(tag)];
   if (!host) return;
-  const double now = self.now;
-  const ChannelBake bake = _engine.bake(tag, channel, now);
+  const double now = self.now, rate = [self frameRate:host];
+  const ChannelBake bake = _engine.bake(tag, channel, now, rate);
   const BOOL transform = channel == Channel::Transform;
   CALayer *layer = host.layer;
   [CATransaction begin];
@@ -335,12 +523,12 @@ static NSString *SparkJSONString(id object)
   [host applyMotionModel:model];
   const double local = [layer convertTime:CACurrentMediaTime() fromLayer:nil];
   if (bake.loop) {
-    CAKeyframeAnimation *loop = [self animation:*bake.loop channel:channel host:host begin:local + bake.loop->begin - now];
+    CAKeyframeAnimation *loop = [self animation:*bake.loop channel:channel host:host begin:local + bake.loop->begin - now rate:rate];
     loop.repeatCount = HUGE_VALF;
     [layer addAnimation:loop forKey:transform ? kTransformLoop : kOpacityLoop];
   }
   // Added last so it wins over the loop until the loop's begin time.
-  if (bake.lead) [layer addAnimation:[self animation:*bake.lead channel:channel host:host begin:local + bake.lead->begin - now] forKey:transform ? kTransformLead : kOpacityLead];
+  if (bake.lead) [layer addAnimation:[self animation:*bake.lead channel:channel host:host begin:local + bake.lead->begin - now rate:rate] forKey:transform ? kTransformLead : kOpacityLead];
   auto rotates = [](const std::optional<Bake> &part) {
     if (part) for (const Values &sample : part->samples) if (sample[Rotate] != 0) return true;
     return false;
@@ -363,6 +551,8 @@ static NSString *SparkJSONString(id object)
     NSString *identifier = @(item.id.c_str());
     SparkMotionResolve resolve = _completions[identifier];
     [_completions removeObjectForKey:identifier];
+    // An interrupted, stopped or unmounted animation plays none of its remaining cues; a finished one plays its end cue.
+    if (!item.finished) [self dropCues:identifier];
     if (resolve) resolve(SparkJSONString(@{ @"finished": @(item.finished) }));
   }
 }
@@ -428,6 +618,37 @@ static NSString *SparkJSONString(id object)
   });
 }
 
+static Tracks SparkTracks(id value, NSString *name)
+{
+  Tracks parsed;
+  NSDictionary *tracks = SparkObject(value, name);
+  for (id property in tracks) parsed.emplace_back(SparkProperty(property), SparkSpec(tracks[property], SparkProperty(property)));
+  return parsed;
+}
+static NSString *SparkOneOf(NSDictionary *object, NSString *key, NSArray<NSString *> *values)
+{
+  id value = object[key] ?: values.firstObject;
+  if (![values containsObject:value]) throw SparkMotionInvalid([NSString stringWithFormat:@"%@ is %@", key, [values componentsJoinedByString:@", "]]);
+  return value;
+}
+/** A cue's shape; its time is checked against the plan by the engine. */
+static SparkMotionCue *SparkCue(id value)
+{
+  NSDictionary *object = SparkObject(value, @"A cue");
+  SparkMotionCue *cue = [SparkMotionCue new];
+  cue.at = [object[@"at"] isEqual:@"end"] ? @"end" : @(SparkRequiredNumber(object, @"at"));
+  if (id haptic = object[@"haptic"]) {
+    if (!SparkHapticPatterns()[haptic]) throw SparkMotionInvalid(@"haptic is generic, alignment or levelChange");
+    cue.haptic = haptic;
+  }
+  if (object[@"sound"]) {
+    cue.sound = SparkString(object, @"sound");
+    if (![NSSound soundNamed:cue.sound]) throw Failure{"E_NOT_FOUND", std::string("No sound is named ") + cue.sound.UTF8String};
+  }
+  if (!cue.haptic && !cue.sound) throw SparkMotionInvalid(@"A cue needs a haptic or a sound");
+  return cue;
+}
+
 - (void)run:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
 {
   [self perform:^{
@@ -442,20 +663,38 @@ static NSString *SparkJSONString(id object)
       if (after != nil && ![after isEqual:@"previous"] && ![after isEqual:@"start"]) throw SparkMotionInvalid(@"after is start or previous");
       parsed.afterPrevious = [after isEqual:@"previous"];
       parsed.offset = SparkNumber(group, @"offsetMs", 0) / 1000;
-      NSDictionary *tracks = SparkObject(group[@"tracks"], @"tracks");
-      for (id name in tracks) {
-        const Property property = SparkProperty(name);
-        parsed.tracks.emplace_back(property, SparkSpec(tracks[name], property));
-      }
+      parsed.tracks = SparkTracks(group[@"tracks"], @"tracks");
+      if (group[@"reducedTracks"]) parsed.reduced = SparkTracks(group[@"reducedTracks"], @"reducedTracks");
       plan.groups.push_back(parsed);
     }
+    NSString *reduce = SparkOneOf(request, @"reducedMotion", @[@"fade", @"instant", @"play"]);
+    plan.reduce = [reduce isEqual:@"fade"] ? Reduce::Fade : [reduce isEqual:@"instant"] ? Reduce::Instant : Reduce::Play;
+    plan.pauseWhenHidden = [SparkOneOf(request, @"whenHidden", @[@"complete", @"pause"]) isEqual:@"pause"];
+    plan.reduceMotion = self.reduceMotion;
+    NSMutableArray<SparkMotionCue *> *cues = [NSMutableArray new];
+    for (id value in request[@"cues"] ? SparkArray(request[@"cues"], @"cues") : @[]) {
+      SparkMotionCue *cue = SparkCue(value);
+      plan.cues.push_back([cue.at isEqual:@"end"] ? std::nullopt : std::optional<double>([cue.at doubleValue] / 1000));
+      [cues addObject:cue];
+    }
+    for (const Group &group : plan.groups) [self syncHidden:group.view];
     std::vector<Settled> settled;
     std::vector<int64_t> touched;
-    self->_engine.run(plan, self.now, settled, touched);
+    const double now = self.now;
+    const Started started = self->_engine.run(plan, now, settled, touched);
     self->_completions[identifier] = resolve;
+    for (NSUInteger i = 0; i < cues.count; i++) {
+      cues[i].batch = identifier;
+      cues[i].tag = plan.groups.front().view;
+      cues[i].time = now + started.cues[i];
+      [self->_cues addObject:cues[i]];
+    }
     for (int64_t tag : touched) [self applyAll:tag];
+    // Cues of an animation that finished at once in a hidden window are not played.
+    for (const Settled &item : settled) if (item.id == plan.id) [self dropCues:identifier];
     [self settle:settled];
     [self scheduleSweep];
+    [self scheduleCues];
   } reject:reject];
 }
 
@@ -479,6 +718,7 @@ static NSString *SparkJSONString(id object)
     std::vector<std::pair<Property, double>> values;
     NSDictionary *input = SparkObject(request[@"values"], @"values");
     for (id name in input) values.emplace_back(SparkProperty(name), SparkNumberValue(input[name], name));
+    [self syncHidden:tag];
     std::vector<Settled> settled;
     self->_engine.set(tag, values, self.now, settled);
     [self applyAll:tag];
@@ -494,6 +734,7 @@ static NSString *SparkJSONString(id object)
     const NSInteger tag = SparkTag(request);
     std::vector<Property> properties;
     for (id name in SparkArray(request[@"properties"], @"properties")) properties.push_back(SparkProperty(name));
+    [self syncHidden:tag];
     std::vector<Settled> settled;
     self->_engine.stop(tag, properties, self.now, settled);
     [self applyAll:tag];
@@ -517,6 +758,76 @@ static NSString *SparkJSONString(id object)
     }
     resolve(SparkJSONString(@{ @"values": SparkValuesObject(values), @"velocities": SparkValuesObject(velocities), @"animating": animating }));
   } reject:reject];
+}
+
+#pragma mark - Cues
+
+- (void)dropCues:(NSString *)batch
+{
+  [_cues filterUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(SparkMotionCue *cue, NSDictionary *) { return ![cue.batch isEqual:batch]; }]];
+}
+
+/**
+ * Cues play on the display frame that first shows their time (the link's target timestamp), so a haptic or sound lands
+ * with the frame it belongs to. Haptics are performed when that frame's drawing completes. On the virtual clock they
+ * play as the clock passes them. A cue of a paused view waits; one of a hidden window's finished animation is dropped.
+ */
+- (void)scheduleCues
+{
+  NSUInteger generation = ++_cueGeneration;
+  SparkMotionCue *next = nil;
+  NSView *host = nil;
+  for (SparkMotionCue *cue in _cues) {
+    NSView *owner = [_hosts objectForKey:@(cue.tag)];
+    if (owner && !_engine.paused(cue.tag) && (!next || cue.time < next.time)) { next = cue; host = owner; }
+  }
+  // A display link runs only within two frames of the next cue; until then one one-shot timer waits (nothing polls).
+  const double lead = next ? next.time - self.now - 2 / [self frameRate:host] : 0;
+  if (!next || _engine.virtualClock() || lead > 0) { [_cueLink invalidate]; _cueLink = nil; }
+  if (!next || _engine.virtualClock()) return;
+  if (lead > 0) {
+    __weak SparkMotionCoordinator *weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(lead * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+      SparkMotionCoordinator *coordinator = weakSelf;
+      if (coordinator && coordinator->_cueGeneration == generation) [coordinator scheduleCues];
+    });
+    return;
+  }
+  if (_cueLink) return;
+  // As for frame recording: a window that is not on screen has no display link of its own.
+  NSScreen *screen = host.window.isVisible ? nil : host.window.screen ?: NSScreen.mainScreen;
+  if (!host.window.isVisible && !screen) return;
+  _cueLink = screen ? [screen displayLinkWithTarget:self selector:@selector(cueFrame:)] : [host displayLinkWithTarget:self selector:@selector(cueFrame:)];
+  const double rate = [self frameRate:host];
+  _cueLink.preferredFrameRateRange = CAFrameRateRangeMake(rate / 2, rate, rate);
+  [_cueLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+}
+
+- (void)cueFrame:(CADisplayLink *)link
+{
+  [self playCuesUntil:link.targetTimestamp frame:link.targetTimestamp];
+  [self scheduleCues];
+}
+
+/** Plays the cues due by `time`; `frame` is the presentation time of the frame they play on (nil: the cue's own time). */
+- (void)playCuesUntil:(double)time frame:(double)frame
+{
+  NSMutableArray<SparkMotionCue *> *due = [NSMutableArray new];
+  for (SparkMotionCue *cue in _cues) if (cue.time <= time + 1e-6 && !_engine.paused(cue.tag)) [due addObject:cue];
+  [due sortUsingComparator:^NSComparisonResult(SparkMotionCue *a, SparkMotionCue *b) { return [@(a.time) compare:@(b.time)]; }];
+  [_cues removeObjectsInArray:due];
+  for (SparkMotionCue *cue in due) {
+#if SPARK_TEST_DRIVER
+    if (_driven) {
+      [_cueLog addObject:@{ @"tag": @(cue.tag), @"animation": cue.batch, @"at": cue.at, @"haptic": cue.haptic ?: NSNull.null, @"sound": cue.sound ?: NSNull.null,
+        @"timeMs": @(cue.time * 1000), @"frameMs": @((std::isnan(frame) ? cue.time : frame) * 1000), @"played": @NO }];
+      if (_cueLog.count > SparkMotionCueLogLimit) [_cueLog removeObjectAtIndex:0];
+      continue;
+    }
+#endif
+    if (cue.haptic) [NSHapticFeedbackManager.defaultPerformer performFeedbackPattern:(NSHapticFeedbackPattern)SparkHapticPatterns()[cue.haptic].integerValue performanceTime:NSHapticFeedbackPerformanceTimeDrawCompleted];
+    if (cue.sound) [[[NSSound soundNamed:cue.sound] copy] play];
+  }
 }
 
 #pragma mark - Scroll links
@@ -746,11 +1057,13 @@ static NSRect SparkLayoutRect(NSView *view, NSView *reference)
     }
   } else {
     for (NSView *host in _hosts.objectEnumerator) { host.layer.speed = 1; host.layer.timeOffset = 0; }
-    _engine.setVirtualClock(false, CACurrentMediaTime());
+    const double shift = _engine.setVirtualClock(false, CACurrentMediaTime());
+    for (SparkMotionCue *cue in _cues) cue.time += shift;
     for (NSView<SparkMotionHost> *host in _hosts.objectEnumerator) [self applyAll:host.motionTag];
   }
   [CATransaction commit];
   [self scheduleSweep];
+  [self scheduleCues];
   resolve(nil);
 }
 
@@ -770,6 +1083,7 @@ static NSRect SparkLayoutRect(NSView *view, NSView *reference)
   [CATransaction setDisableActions:YES];
   for (NSView *host in _hosts.objectEnumerator) host.layer.timeOffset += seconds;
   [CATransaction commit];
+  [self playCuesUntil:self.now frame:NAN];
   [self sweep];
 }
 
@@ -793,7 +1107,24 @@ static NSDictionary *SparkStateObject(const State &state) { return @{ @"value": 
   return nil;
 }
 
-- (void)recordTelemetry { _engine.setTelemetry(true); }
+- (void)recordTelemetry
+{
+  _engine.setTelemetry(true);
+  _driven = YES;
+}
+
+- (void)simulate:(NSDictionary *)values
+{
+  // null stops simulating a value (simulateDisplays' restore).
+  for (NSString *key in @[@"reduceMotion", @"lowPowerMode", @"maximumFramesPerSecond"]) {
+    if (values[key] == NSNull.null) [_simulated removeObjectForKey:key];
+    else if (values[key]) _simulated[key] = values[key];
+  }
+  [self rebake:nil];
+  [self scheduleCues];
+}
+
+- (void)simulateWindow:(NSWindow *)window visible:(BOOL)visible { [self window:window visible:visible]; }
 - (void)noteInput { _inputEvent = _engine.events(); }
 
 - (NSDictionary *)telemetry:(NSInteger)tag now:(double)now
@@ -807,9 +1138,16 @@ static NSDictionary *SparkStateObject(const State &state) { return @{ @"value": 
     velocities[i] = state.velocity;
     if (_engine.animating(tag, Property(i), now)) [animating addObject:@(propertyName(Property(i)))];
   }
-  NSMutableDictionary *reply = [@{ @"tag": @(tag), @"clock": _engine.virtualClock() ? @"virtual" : @"real", @"timeMs": @(now * 1000),
-    @"values": SparkValuesObject(values), @"velocities": SparkValuesObject(velocities), @"animating": animating, @"motion": NSNull.null } mutableCopy];
+  NSMutableArray *cues = [NSMutableArray new];
   const Episode *episode = _engine.episode(tag);
+  for (NSDictionary *cue in _cueLog) if ([cue[@"tag"] integerValue] == tag && (!episode || [cue[@"timeMs"] doubleValue] >= episode->start * 1000 - 1e-6)) [cues addObject:cue];
+  for (SparkMotionCue *cue in _cues)
+    if (cue.tag == tag) [cues addObject:@{ @"tag": @(tag), @"animation": cue.batch, @"at": cue.at, @"haptic": cue.haptic ?: NSNull.null, @"sound": cue.sound ?: NSNull.null,
+      @"timeMs": @(cue.time * 1000), @"frameMs": NSNull.null, @"played": @NO }];
+  NSView<SparkMotionHost> *host = [_hosts objectForKey:@(tag)];
+  NSMutableDictionary *reply = [@{ @"tag": @(tag), @"clock": _engine.virtualClock() ? @"virtual" : @"real", @"timeMs": @(now * 1000),
+    @"values": SparkValuesObject(values), @"velocities": SparkValuesObject(velocities), @"animating": animating, @"motion": NSNull.null,
+    @"frameRate": @([self frameRate:host]), @"hidden": @(_engine.hidden(tag)), @"paused": @(_engine.paused(tag)), @"cues": cues } mutableCopy];
   if (!episode) return reply;
   const BOOL settled = animating.count == 0;
   NSMutableDictionary *kinds = [NSMutableDictionary new];

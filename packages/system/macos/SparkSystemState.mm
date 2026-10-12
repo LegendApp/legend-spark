@@ -249,6 +249,7 @@ static BOOL IsHex(id value) {
     if ([type isEqual:@"memoryPressure"]) { SparkEmit(@{ @"type": type, @"level": values[@"level"] }); reply(@{ @"ok": @YES }); return; }
     if ([@[@"appearanceChanged", @"systemColorsChanged", @"accessibilityDisplayChanged"] containsObject:type]) SparkSimulateAppearancePreferences(values);
     else if (values.count) { if (!overrides) overrides = [NSMutableDictionary new]; [overrides addEntriesFromDictionary:values]; }
+    if (values.count) SparkTestDriverDidSimulateState(values);
     SparkEmit(@{ @"type": type });
     reply(@{ @"ok": @YES });
   });
