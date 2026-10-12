@@ -1,0 +1,33 @@
+appId: so.legend.spark.examples.kitchensink
+name: The video player plays, seeks, changes rate and volume and plays to the end, reporting each change
+intent: >
+  Media > Video loads the bundled three-second test clip (160x90, no audio track, written to a temporary file; no
+  network) paused, through @legendapp/spark/video. Seeking resolves at exactly 1.5 s with a seek event; rate, volume and
+  mute report rateChange and volumeChange; Play reports playingChange and, at twice the rate, the clip plays to the end
+  (end and playingChange false, in either order). Playback is real in driver mode and silent: the clip has no sound and is muted.
+checks: [MEDIA-VIDEO-01, MEDIA-VIDEOPLAY-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://media/video" }
+- assertText: { id: media-video-availability, equals: '{"available":true}' }
+- extendedWaitUntil: { visible: { id: media-video-view }, timeout: 10s }
+- assertText: { id: media-video-status, equals: "paused · 0.00/3.00 s · rate 1 · volume 1 · 160×90 · fullscreen off · picture in picture off" }
+- tapOn: { id: media-video-seek }
+- assertText: { id: media-video-result, equals: "seek: done" }
+- assertText: { id: media-video-event-0, equals: "seek 1.50" }
+- assertText: { id: media-video-status, equals: "paused · 1.50/3.00 s · rate 1 · volume 1 · 160×90 · fullscreen off · picture in picture off" }
+- tapOn: { id: media-video-rate }
+- assertText: { id: media-video-event-0, equals: "rateChange 2" }
+- tapOn: { id: media-video-volume }
+- assertText: { id: media-video-event-0, equals: "volumeChange 0.5" }
+- tapOn: { id: media-video-mute }
+- assertText: { id: media-video-event-0, equals: "volumeChange 0.5 muted" }
+- assertText: { id: media-video-status, equals: "paused · 1.50/3.00 s · rate 2 · volume 0.5 muted · 160×90 · fullscreen off · picture in picture off" }
+- tapOn: { id: media-video-play }
+- assertText: { id: media-video-result, equals: "play: done" }
+- assertText: { id: media-video-status, equals: "ended · 3.00/3.00 s · rate 2 · volume 0.5 muted · 160×90 · fullscreen off · picture in picture off", timeout: 10s }
+- assertVisible: { text: end, within: { id: media-video-events } }
+- assertVisible: { text: playingChange false, within: { id: media-video-events } }
+- assertVisible: { text: playingChange true, within: { id: media-video-events } }
+- takeScreenshot: video-playback

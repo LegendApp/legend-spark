@@ -29,6 +29,9 @@ int main() { @autoreleasepool {
   CHECK([SparkPhotosAuthorization(4) isEqual:@"unknown"]);    // Limited is iOS only.
   CHECK([SparkLocationAuthorization(3) isEqual:@"authorized"] && [SparkLocationAuthorization(4) isEqual:@"unknown"]);
   CHECK([SparkContactsAuthorization(4) isEqual:@"unknown"]);
+  // SFSpeechRecognizerAuthorizationStatus orders denied before restricted.
+  CHECK([SparkSpeechRecognitionAuthorization(0) isEqual:@"notDetermined"] && [SparkSpeechRecognitionAuthorization(1) isEqual:@"denied"]);
+  CHECK([SparkSpeechRecognitionAuthorization(2) isEqual:@"restricted"] && [SparkSpeechRecognitionAuthorization(3) isEqual:@"authorized"] && [SparkSpeechRecognitionAuthorization(4) isEqual:@"unknown"]);
   CHECK([SparkInputMonitoringAuthorization(0) isEqual:@"authorized"] && [SparkInputMonitoringAuthorization(1) isEqual:@"denied"]);
   CHECK([SparkInputMonitoringAuthorization(2) isEqual:@"notDetermined"] && [SparkInputMonitoringAuthorization(3) isEqual:@"unknown"]);
   NSError *error = nil;
@@ -48,6 +51,7 @@ int main() { @autoreleasepool {
   CHECK([SparkPermissionSettingsURL(@"inputMonitoring").absoluteString hasSuffix:@"Privacy_ListenEvent"]);
   CHECK(!SparkPermissionSettingsURL(@"bluetooth") && SparkPermissionAuthorizations(@"bluetooth").count == 0);
   CHECK(SparkPermissionUsageKeys(@"screenRecording").count == 0 && [SparkPermissionUsageKeys(@"location") isEqual:@[@"NSLocationWhenInUseUsageDescription"]]);
+  CHECK([SparkPermissionSettingsURL(@"speechRecognition").absoluteString hasSuffix:@"Privacy_SpeechRecognition"] && [SparkPermissionUsageKeys(@"speechRecognition") isEqual:@[@"NSSpeechRecognitionUsageDescription"]]);
 
   // A real instance: requests without their usage description, bad kinds and targets fail before any TCC call.
   SparkPermissions *real = [[SparkPermissions alloc] initWithInfo:@{} simulated:NO];
@@ -70,7 +74,7 @@ int main() { @autoreleasepool {
   __block int changes = 0;
   simulated.changeHandler = ^{ changes++; };
   NSDictionary *snapshot = simulated.snapshot;
-  CHECK(snapshot.count == 9 && !snapshot[@"automation"]);
+  CHECK(snapshot.count == 10 && !snapshot[@"automation"] && [snapshot[@"speechRecognition"] isEqual:@"notDetermined"]);
   CHECK([snapshot[@"camera"] isEqual:@"notDetermined"] && [snapshot[@"screenRecording"] isEqual:@"notGranted"] && [snapshot[@"accessibility"] isEqual:@"notGranted"]);
   Outcome status = {};
   [simulated status:@"automation" target:@"com.apple.finder" completion:Record(&status)];

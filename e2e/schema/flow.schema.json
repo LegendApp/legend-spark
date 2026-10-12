@@ -5158,7 +5158,8 @@
                     "contacts",
                     "calendar",
                     "photos",
-                    "location"
+                    "location",
+                    "speechRecognition"
                   ]
                 },
                 "authorization": {
@@ -5227,7 +5228,8 @@
                     "contacts",
                     "calendar",
                     "photos",
-                    "location"
+                    "location",
+                    "speechRecognition"
                   ]
                 },
                 "authorization": {
@@ -5664,6 +5666,202 @@
                 {
                   "required": [
                     "invocations"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
+          "simulateSpeech": {
+            "description": "[driver] Set the simulated state @legendapp/spark/speech reports, in-process: how long a simulated word takes (wordMs), whether the recognizer is available and recognizes on device, the partial transcripts a recognition reports while listening (one per word time) and its final transcript once stopped (null: nobody spoke). Never speaks aloud, listens to a microphone or reaches a recognizer or TCC.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "wordMs": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "recognizerAvailable": {
+                  "type": "boolean"
+                },
+                "onDeviceSupported": {
+                  "type": "boolean"
+                },
+                "recognitionPartials": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 0
+                },
+                "recognitionTranscript": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "wordMs"
+                  ]
+                },
+                {
+                  "required": [
+                    "recognizerAvailable"
+                  ]
+                },
+                {
+                  "required": [
+                    "onDeviceSupported"
+                  ]
+                },
+                {
+                  "required": [
+                    "recognitionPartials"
+                  ]
+                },
+                {
+                  "required": [
+                    "recognitionTranscript"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
+          "assertSimulatedSpeech": {
+            "description": "[driver] Assert the simulated speech state: how many utterances were spoken (recorded, never heard) and the last one's text, voice, rate, pitch and volume; whether speech is speaking or paused; how many recognitions ran, whether one is listening, and the last one's locale and onDevice option.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "utterances": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "lastText": {
+                  "type": "string"
+                },
+                "lastVoice": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "lastRate": {
+                  "type": "number"
+                },
+                "lastPitch": {
+                  "type": "number"
+                },
+                "lastVolume": {
+                  "type": "number"
+                },
+                "speaking": {
+                  "type": "boolean"
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "recognitions": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "listening": {
+                  "type": "boolean"
+                },
+                "lastLocale": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "lastOnDevice": {
+                  "type": "boolean"
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "utterances"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastText"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastVoice"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastRate"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastPitch"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastVolume"
+                  ]
+                },
+                {
+                  "required": [
+                    "speaking"
+                  ]
+                },
+                {
+                  "required": [
+                    "paused"
+                  ]
+                },
+                {
+                  "required": [
+                    "recognitions"
+                  ]
+                },
+                {
+                  "required": [
+                    "listening"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastLocale"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastOnDevice"
                   ]
                 }
               ]

@@ -35,6 +35,7 @@ FOUNDATION_EXPORT NSString *SparkContactsAuthorization(NSInteger status);       
 FOUNDATION_EXPORT NSString *SparkCalendarAuthorization(NSInteger status);       // EKAuthorizationStatus
 FOUNDATION_EXPORT NSString *SparkPhotosAuthorization(NSInteger status);         // PHAuthorizationStatus
 FOUNDATION_EXPORT NSString *SparkLocationAuthorization(NSInteger status);       // CLAuthorizationStatus
+FOUNDATION_EXPORT NSString *SparkSpeechRecognitionAuthorization(NSInteger status); // SFSpeechRecognizerAuthorizationStatus
 FOUNDATION_EXPORT NSString *SparkInputMonitoringAuthorization(NSInteger access); // IOHIDAccessType
 // AEDeterminePermissionToAutomateTarget's result: noErr, errAEEventNotPermitted, errAEEventWouldRequireUserConsent.
 // procNotFound (the target app is not running) is E_NOT_FOUND; any other status is E_NATIVE.

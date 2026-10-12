@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: Speech pauses after a word, resumes and stops unfinished (simulated)
+intent: >
+  With simulated words slowed to 400 ms, Media > Speech starts speaking; Pause after word pauses it (a pause event,
+  getSpeakingStatus paused), Resume continues (a resume event), and Stop ends it: speak resolves stopped (finished
+  false) and nothing is speaking. Driver simulation only: nothing is heard.
+checks: [MEDIA-TTSCTRL-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://media/speech" }
+- assertText: { id: media-speech-speaking, equals: "speaking false · paused false" }
+- simulateSpeech: { wordMs: 400 }
+- tapOn: { id: media-speech-speak-normal }
+- assertVisible: { text: "word Spark", within: { id: media-speech-events } }
+- tapOn: { id: media-speech-pause }
+- assertText: { id: media-speech-event-0, equals: pause }
+- assertText: { id: media-speech-speaking, equals: "speaking true · paused true" }
+- assertSimulatedSpeech: { speaking: true, paused: true }
+- tapOn: { id: media-speech-resume }
+- assertVisible: { text: resume, within: { id: media-speech-events } }
+- assertSimulatedSpeech: { speaking: true, paused: false }
+- tapOn: { id: media-speech-stop }
+- assertText: { id: media-speech-spoken, equals: "normal: stopped" }
+- assertText: { id: media-speech-speaking, equals: "speaking false · paused false" }
+- assertSimulatedSpeech: { utterances: 1, speaking: false, paused: false }
+- takeScreenshot: speech-controls

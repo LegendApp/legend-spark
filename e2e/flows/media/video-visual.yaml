@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: Video screen matches its golden
+intent: >
+  Media > Video opens from spark-ks://media/video with the test clip loaded paused and no events yet. The main window
+  matches the approved golden for the appearance and locale (light and dark, English and Arabic), with the shell sidebar
+  and the video frame itself masked (an in-process capture does not draw AVPlayerLayer content reliably).
+checks: [MEDIA-VISUAL-01]
+tags: [media]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://media/video" }
+- assertText: { id: media-video-status, equals: "paused · 0.00/3.00 s · rate 1 · volume 1 · 160×90 · fullscreen off · picture in picture off" }
+- assertText: { id: media-video-pip-availability, equals: '{"available":true}' }
+- assertScreenshot: { golden: media-video, mask: [{ id: infra-shell-sidebar }, { id: media-video-view }] }

@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: Fullscreen and picture in picture change the player's status and report it (simulated)
+intent: >
+  Media > Video reports picture in picture available as AVKit says (this Mac supports it). In driver mode fullscreen and
+  picture in picture only change the status: no window opens and nothing takes focus. Fullscreen on and off report
+  fullscreenChange; picture in picture of the player shown in the screen's VideoView reports pictureInPictureChange.
+checks: [MEDIA-VIDEOWIN-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://media/video" }
+- assertText: { id: media-video-pip-availability, equals: '{"available":true}' }
+- assertText: { id: media-video-status, equals: "paused · 0.00/3.00 s · rate 1 · volume 1 · 160×90 · fullscreen off · picture in picture off" }
+- tapOn: { id: media-video-enterFullscreen }
+- assertText: { id: media-video-result, equals: "enterFullscreen: done" }
+- assertText: { id: media-video-event-0, equals: "fullscreenChange true" }
+- assertText: { id: media-video-status, equals: "paused · 0.00/3.00 s · rate 1 · volume 1 · 160×90 · fullscreen on · picture in picture off" }
+- tapOn: { id: media-video-exitFullscreen }
+- assertText: { id: media-video-event-0, equals: "fullscreenChange false" }
+- tapOn: { id: media-video-startPip }
+- assertText: { id: media-video-result, equals: "startPip: done" }
+- assertText: { id: media-video-event-0, equals: "pictureInPictureChange true" }
+- assertText: { id: media-video-status, equals: "paused · 0.00/3.00 s · rate 1 · volume 1 · 160×90 · fullscreen off · picture in picture on" }
+- tapOn: { id: media-video-stopPip }
+- assertText: { id: media-video-event-0, equals: "pictureInPictureChange false" }
+- assertText: { id: media-video-status, equals: "paused · 0.00/3.00 s · rate 1 · volume 1 · 160×90 · fullscreen off · picture in picture off" }
+- takeScreenshot: video-window

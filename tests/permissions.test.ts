@@ -11,7 +11,7 @@ class NativeEventEmitter { addListener(_name: string, listener: (event: unknown)
 vi.doMock("react-native", () => ({ Platform: platform, TurboModuleRegistry: { get: () => module }, NativeEventEmitter }));
 const permissions = await import("../packages/permissions/src/index.ts");
 const emit = (event: object) => emitted.forEach(listener => listener(event));
-const ALL = { camera: "notDetermined", microphone: "notDetermined", screenRecording: "notGranted", accessibility: "notGranted", inputMonitoring: "notDetermined", contacts: "notDetermined", calendar: "notDetermined", photos: "notDetermined", location: "notDetermined" };
+const ALL = { camera: "notDetermined", microphone: "notDetermined", screenRecording: "notGranted", accessibility: "notGranted", inputMonitoring: "notDetermined", contacts: "notDetermined", calendar: "notDetermined", photos: "notDetermined", location: "notDetermined", speechRecognition: "notDetermined" };
 beforeEach(() => { platform.OS = "macos"; call = record; reply = () => null; calls.length = 0; });
 
 test("availability reports macOS and other platforms; unsupported calls reject after validation", async () => {

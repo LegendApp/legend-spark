@@ -1,0 +1,26 @@
+appId: so.legend.spark.examples.kitchensink
+name: Speaking reports start and word events, with the requested rate, pitch and volume (simulated)
+intent: >
+  Media > Speech speaks "Spark speaks every word" through @legendapp/spark/speech. In driver mode the utterance is
+  recorded and timed word by word, never spoken. Speak resolves finished after a start event and one word event per
+  word (with its range); the recorded utterance keeps the rate, pitch and volume asked for (1, 1, 1, then 1.5, 1.2, 0.5).
+checks: [MEDIA-TTS-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://media/speech" }
+- assertText: { id: media-speech-availability, equals: '{"available":true}' }
+- assertText: { id: media-speech-speaking, equals: "speaking false · paused false" }
+- assertSimulatedSpeech: { utterances: 0, speaking: false }
+- tapOn: { id: media-speech-speak-normal }
+- assertText: { id: media-speech-spoken, equals: "normal: finished" }
+- assertText: { id: media-speech-word, equals: "word (19+4)" }
+- assertText: { id: media-speech-event-0, equals: "word word" }
+- assertText: { id: media-speech-event-3, equals: "word Spark" }
+- assertText: { id: media-speech-event-4, equals: "start" }
+- assertText: { id: media-speech-speaking, equals: "speaking false · paused false" }
+- assertSimulatedSpeech: { utterances: 1, lastText: Spark speaks every word, lastRate: 1, lastPitch: 1, lastVolume: 1, speaking: false }
+- tapOn: { id: media-speech-speak-fast }
+- assertText: { id: media-speech-spoken, equals: "fast: finished" }
+- assertSimulatedSpeech: { utterances: 2, lastText: Spark speaks every word, lastRate: 1.5, lastPitch: 1.2, lastVolume: 0.5 }
+- takeScreenshot: speech-synthesis

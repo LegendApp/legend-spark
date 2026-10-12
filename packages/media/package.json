@@ -1,0 +1,49 @@
+{
+  "name": "@legendapp/spark-media",
+  "version": "0.0.1-next.3",
+  "license": "MIT",
+  "main": "src/video.tsx",
+  "react-native": "src/video.tsx",
+  "files": [
+    "src",
+    "macos",
+    "*.podspec",
+    "react-native.config.js"
+  ],
+  "peerDependencies": {
+    "react": "19.1.4",
+    "react-native": "0.81.6"
+  },
+  "codegenConfig": {
+    "name": "RNDesktopMediaSpec",
+    "type": "all",
+    "jsSrcsDir": "src",
+    "ios": {
+      "modulesProvider": {
+        "NativeDesktopMedia": "RNDesktopMedia"
+      },
+      "componentProvider": {
+        "DesktopVideoView": "RNDesktopVideoView"
+      }
+    }
+  },
+  "spark": {
+    "sdk": true,
+    "nativeModules": [
+      "NativeDesktopMedia"
+    ],
+    "pod": "RNDesktopMedia",
+    "platforms": [
+      "macos"
+    ],
+    "requires": [
+      "@legendapp/spark-desktop-app",
+      "@legendapp/spark-permissions"
+    ]
+  },
+  "dependencies": {
+    "@legendapp/spark-desktop-app": "0.0.1-next.3",
+    "@legendapp/spark-permissions": "0.0.1-next.3"
+  },
+  "private": true
+}

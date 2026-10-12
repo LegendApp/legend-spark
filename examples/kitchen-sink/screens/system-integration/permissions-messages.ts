@@ -21,7 +21,7 @@ const en: PermissionsMessages = {
   failed: "Failed:", reading: "Reading…",
   kinds: {
     camera: "Camera", microphone: "Microphone", screenRecording: "Screen recording", accessibility: "Accessibility", inputMonitoring: "Input monitoring",
-    automation: "Automation (Finder)", contacts: "Contacts", calendar: "Calendar", photos: "Photos", location: "Location",
+    automation: "Automation (Finder)", contacts: "Contacts", calendar: "Calendar", photos: "Photos", location: "Location", speechRecognition: "Speech recognition",
   },
 };
 
@@ -36,7 +36,7 @@ const ar: PermissionsMessages = {
   failed: "فشل:", reading: "جارٍ القراءة…",
   kinds: {
     camera: "الكاميرا", microphone: "الميكروفون", screenRecording: "تسجيل الشاشة", accessibility: "تسهيلات الاستخدام", inputMonitoring: "مراقبة الإدخال",
-    automation: "الأتمتة (Finder)", contacts: "جهات الاتصال", calendar: "التقويم", photos: "الصور", location: "الموقع",
+    automation: "الأتمتة (Finder)", contacts: "جهات الاتصال", calendar: "التقويم", photos: "الصور", location: "الموقع", speechRecognition: "التعرف على الكلام",
   },
 };
 

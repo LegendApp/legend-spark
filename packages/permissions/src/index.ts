@@ -7,7 +7,7 @@ export type { AsyncRegistration, Availability } from "@legendapp/spark-desktop-a
 /** Privacy permissions macOS asks the person to grant (TCC). */
 export type PermissionKind =
   | "camera" | "microphone" | "screenRecording" | "accessibility" | "inputMonitoring"
-  | "automation" | "contacts" | "calendar" | "photos" | "location";
+  | "automation" | "contacts" | "calendar" | "photos" | "location" | "speechRecognition";
 /**
  * The native state. `notGranted`: screen recording and accessibility, which macOS reports only as granted or not.
  * `writeOnly`: calendar access to add events but not read them. `unknown`: a state this SDK does not know (a newer macOS).
@@ -34,7 +34,7 @@ export interface PermissionListenerOptions {
   onError?: (error: SparkError) => void;
 }
 
-const KINDS: readonly PermissionKind[] = ["camera", "microphone", "screenRecording", "accessibility", "inputMonitoring", "automation", "contacts", "calendar", "photos", "location"];
+const KINDS: readonly PermissionKind[] = ["camera", "microphone", "screenRecording", "accessibility", "inputMonitoring", "automation", "contacts", "calendar", "photos", "location", "speechRecognition"];
 const OBSERVED = KINDS.filter((kind): kind is Exclude<PermissionKind, "automation"> => kind !== "automation");
 const AUTHORIZATIONS: Record<PermissionKind, readonly MacOSPermissionAuthorization[]> = {
   camera: ["notDetermined", "restricted", "denied", "authorized", "unknown"],
@@ -47,6 +47,7 @@ const AUTHORIZATIONS: Record<PermissionKind, readonly MacOSPermissionAuthorizati
   calendar: ["notDetermined", "restricted", "denied", "authorized", "writeOnly", "unknown"],
   photos: ["notDetermined", "restricted", "denied", "authorized", "unknown"],
   location: ["notDetermined", "restricted", "denied", "authorized", "unknown"],
+  speechRecognition: ["notDetermined", "restricted", "denied", "authorized", "unknown"],
 };
 
 /** macOS only. Windows reports `unsupported-platform` (#378). */

@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: Accessibility audit of the media screens
+intent: >
+  Every media screen of the Kitchen Sink catalog (Video, Speech) opens from its spark-ks:// link in the running app, its
+  root renders, and the accessibility audit of the main window finds no errors: every control and image has a label or
+  title, every control takes keyboard focus, and all enabled text meets the HIG contrast ratio against what is rendered
+  behind it. Runs in light and dark, in English and Arabic (right to left).
+checks: [A11Y-AUDIT-01]
+tags: [accessibility]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: media, SCREEN: video } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: media, SCREEN: speech } }
