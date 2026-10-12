@@ -5587,6 +5587,41 @@
                     "golden": {
                       "type": "string",
                       "minLength": 1
+                    },
+                    "mask": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/definitions/selector"
+                      },
+                      "minItems": 1
+                    },
+                    "maskRects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          },
+                          "w": {
+                            "type": "number"
+                          },
+                          "h": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y",
+                          "w",
+                          "h"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1
                     }
                   },
                   "required": [
