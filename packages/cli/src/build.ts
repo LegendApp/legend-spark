@@ -2,6 +2,7 @@ import { restoreNativeMetadata } from "./native-metadata.ts";
 import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
 import { missingNativeFrameworks, preparationChanges, preserveMacOSPods, type NativePreparation } from "./native-preparation.ts";
 import { collectDsyms, macOSReleasePathSettings, macOSReleaseSettings, relativeHermesCompiler } from "./macos-release.ts";
+import { checkReleaseTestDriver } from "./release-driver.ts";
 import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
 import { buildWindows } from "./windows.ts";
@@ -397,6 +398,7 @@ async function buildUnlocked(
     !existsSync(path.join(destination, "Contents/Resources/main.jsbundle"))
   )
     throw new Error("Standalone build is missing its JavaScript bundle.");
+  if (mode === "release") checkReleaseTestDriver(destination, nativeConfig.macos?.testDriverInRelease === true);
   const result = {
     app: destination,
     // Older receipts may record a stale bundle selected from DerivedData.

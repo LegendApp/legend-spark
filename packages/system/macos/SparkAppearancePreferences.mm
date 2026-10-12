@@ -34,7 +34,9 @@ NSDictionary *SparkAppearancePreferences(NSString **error) {
   return preferences;
 }
 
+#if SPARK_TEST_DRIVER
 void SparkSimulateAppearancePreferences(NSDictionary *values) {
   if (!simulated) simulated = [NSMutableDictionary new];
   [simulated addEntriesFromDictionary:values];
 }
+#endif

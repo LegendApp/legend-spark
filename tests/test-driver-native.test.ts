@@ -19,14 +19,14 @@ beforeAll(async () => {
   directory = mkdtempSync("/tmp/spark-driver-test-");
   harness = path.join(directory, "test-driver");
   withoutPrivateEvents = path.join(directory, "test-driver-without-private-events");
-  // SparkWindow.mm and SparkDriverState.mm include SparkDesktop.h, which needs one React Native type.
+  // SparkWindow.mm and SparkTestDriverState.mm include SparkDesktop.h, which needs one React Native type.
   const shim = path.join(directory, "include/React");
   mkdirSync(shim, { recursive: true });
   writeFileSync(path.join(shim, "RCTBridgeModule.h"), "typedef void (^RCTPromiseRejectBlock)(NSString *code, NSString *message, NSError *error);\n");
   windowState = path.join(directory, "driver-window-state");
   await Promise.all([
-    compile([...driverSources, path.join(native, "SparkDriverState.mm"), path.join(root, "tests/test-driver.native.mm")], harness, [path.join(directory, "include")], PRIVATE_EVENTS),
-    compile([...driverSources, path.join(native, "SparkDriverState.mm"), path.join(root, "tests/test-driver.native.mm")], withoutPrivateEvents, [path.join(directory, "include")], ["-O2"]),
+    compile([...driverSources, path.join(native, "SparkTestDriverState.mm"), path.join(root, "tests/test-driver.native.mm")], harness, [path.join(directory, "include")], PRIVATE_EVENTS),
+    compile([...driverSources, path.join(native, "SparkTestDriverState.mm"), path.join(root, "tests/test-driver.native.mm")], withoutPrivateEvents, [path.join(directory, "include")], ["-O2"]),
     compile([...driverSources, path.join(native, "SparkWindow.mm"), path.join(root, "tests/driver-window-state.native.mm")], windowState, [path.join(directory, "include")]),
   ]);
 }, 240_000);

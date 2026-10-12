@@ -7,5 +7,8 @@
 // differentiateWithoutColor, invertColors, keyboardNavigation }, with any simulated values in place of the real ones.
 // nil, with `error` set, when a system color has no sRGB form.
 FOUNDATION_EXPORT NSDictionary *SparkAppearancePreferences(NSString **error);
-// Test driver only: replaces the reported value of these fields until the process quits. The OS is untouched.
+#if SPARK_TEST_DRIVER
+// Test driver only (docs/test-driver.md#builds): replaces the reported value of these fields until the process quits.
+// The OS is untouched.
 FOUNDATION_EXPORT void SparkSimulateAppearancePreferences(NSDictionary *values);
+#endif

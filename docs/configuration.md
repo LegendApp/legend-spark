@@ -35,6 +35,11 @@ limits. AppKit content background materials are explicitly
 `window.macos.titleBar.trafficLights`. Private flat native transport fields are not
 accepted in public configuration.
 
+`macos.testDriverInRelease: true` compiles the in-app test driver into release builds too; Debug
+builds always have it. It is off by default, and `spark build` then fails a release build that contains
+driver code. Turn it on only for apps that the release gate drives and that are never distributed, such as
+the Kitchen Sink ([test driver](test-driver.md#builds)).
+
 `macos.testDriverPrivateEvents: true` compiles the test driver's trackpad gesture and
 extra mouse button synthesis, which uses private CoreGraphics functions. It is off by
 default. Turn it on only for apps that are tested and never distributed, such as the

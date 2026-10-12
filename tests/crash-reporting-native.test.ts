@@ -13,7 +13,8 @@ const NAME = "spark-crash-reporting-test";
 const REPORTS = path.join(os.homedir(), "Library/Logs/DiagnosticReports");
 
 const SOURCES = [path.join(root, "tests/crash-reporting.native.mm"), path.join(macos, "SparkCrashReporter.mm"), path.join(macos, "SparkStack.mm")];
-const compile = (flags: string[]) => [...flags, "-fobjc-arc", "-fblocks", "-std=c++20", "-Wall", "-Werror", "-mmacosx-version-min=14.0", "-I", macos];
+// Simulated crashes compile only with the test driver (docs/diagnostics.md#checking-your-reporting).
+const compile = (flags: string[]) => [...flags, "-DSPARK_TEST_DRIVER=1", "-fobjc-arc", "-fblocks", "-std=c++20", "-Wall", "-Werror", "-mmacosx-version-min=14.0", "-I", macos];
 async function build(binary: string, flags: string[]) {
   await runOk("clang++", [...compile(flags), "-framework", "Foundation", ...SOURCES, "-o", binary], { timeout: 120_000 });
 }

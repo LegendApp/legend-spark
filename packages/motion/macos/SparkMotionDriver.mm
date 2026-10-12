@@ -2,6 +2,8 @@
 #import <RNDesktopApp/SparkTestDriver.h>
 #import "SparkMotionCoordinator.h"
 
+#if SPARK_TEST_DRIVER
+
 // The in-app test driver's virtual clock and motion telemetry (docs/motion.md#virtual-clock-for-the-test-driver,
 // docs/motion.md#motion-telemetry). They are reachable only through an authenticated driver session.
 //   {"command": "setClock", "mode": "virtual" | "real"}, {"command": "advanceClock", "durationMs": n} → {"mode", "timeMs"}
@@ -82,3 +84,4 @@ static NSInteger SparkMotionDriverTarget(NSDictionary *request, SparkTestDriverR
   });
 }
 @end
+#endif

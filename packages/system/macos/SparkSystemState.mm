@@ -202,6 +202,7 @@ static void ProxiesChanged(SCDynamicStoreRef, CFArrayRef, void *) { SparkEmit(@{
 - (void)stop { [self observeTypes:[NSSet set] error:nil]; }
 @end
 
+#if SPARK_TEST_DRIVER
 // Test driver: {"command": "simulateSystemEvent", "type", ...} delivers a system event through the same
 // emitter as the OS observers, so a flow can exercise events it must not cause (sleep, lock, thermal
 // pressure, accessibility settings). The state fields listed for an event type go with it and override what
@@ -253,3 +254,4 @@ static BOOL IsHex(id value) {
   });
 }
 @end
+#endif

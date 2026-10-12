@@ -18,6 +18,12 @@ export interface MacOSConfiguration {
   infoPlist?: Record<string, JsonValue>;
   entitlements?: Record<string, JsonValue>;
   /**
+   * Compile the in-app test driver into release builds too; Debug builds always have it. Default false: release builds
+   * contain no driver code, which the CLI checks after each release build. For apps the release gate drives, such as
+   * the Kitchen Sink; never for apps you distribute (docs/test-driver.md#builds).
+   */
+  testDriverInRelease?: boolean;
+  /**
    * Compile the test driver's trackpad gesture and extra mouse button synthesis, which uses private CoreGraphics
    * event functions (SPARK_TEST_DRIVER_PRIVATE_EVENTS). Default false: the functions' names are then absent from the
    * binary, as App Store review requires. Test builds only (docs/test-driver.md#private-event-functions).

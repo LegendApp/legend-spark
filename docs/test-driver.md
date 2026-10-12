@@ -4,9 +4,53 @@ The release gate drives and screenshots Spark apps from inside the app process. 
 running the gate have no Screen Recording, Accessibility or input-synthesis (TCC)
 permissions, so `screencapture`, ScreenCaptureKit, AX and CGEvent are not options.
 
-The driver ships in every macOS Spark app (`packages/desktop-app/macos/SparkTestDriver.mm`,
-started by the `@legendapp/spark-desktop-host` app delegate). It is inert unless the gate
+The driver (`packages/desktop-app/macos/SparkTestDriver*.mm`, started by the
+`@legendapp/spark-desktop-host` app delegate) is compiled into Debug builds of every macOS Spark app,
+and into release builds only of apps that opt in ([Builds](#builds)). It is inert unless the gate
 runner launches the app with the contract below. Windows has no driver yet.
+
+## Builds
+
+| Build | Driver |
+| --- | --- |
+| Debug (`spark dev`, `spark build --dev`, the Spark Runner) | Compiled in |
+| Release (`spark build`), default | Compiled out: no driver code, no driver commands from other packages |
+| Release with `"macos": { "testDriverInRelease": true }` in `desktop.config.json` | Compiled in. The Kitchen Sink sets it, so the gate drives the exact release artifact |
+
+Never set `testDriverInRelease` for an app you distribute. How it works:
+
+- The config plugin writes `ENV['SPARK_TEST_DRIVER_RELEASE'] = '1'` into the generated Podfile when the
+  option is set. Every Spark pod that includes `SparkTestDriver.h` (`RNDesktopApp`, `RNSparkUI`,
+  `RNSparkMotion`, `RNDesktopSystem`, `RNDesktopWindows`), and `RNDesktopDiagnostics`, sets the build setting
+  `SPARK_TEST_DRIVER` to 1 in the Debug configuration, and in other configurations to 1 with that variable or 0
+  without it, and passes it to the preprocessor. `RNDesktopApp` also gives it to the app target, for the host's
+  app delegate.
+- At 0, `RNDesktopApp` excludes `SparkTestDriver*.mm` from the build (`EXCLUDED_SOURCE_FILE_NAMES`): the
+  driver, its commit watching and accessibility audit, and the `state` and `listeners` commands.
+  `SparkTestDriver.h` declares `SparkTestDriverStart`, `Active`, `DidMount` and `Ending` as inline no-ops and
+  leaves the hooks for other modules undeclared. Code that registers driver commands
+  (`SparkTestDriverRegisterCommand` and the other hooks) sits inside `#if SPARK_TEST_DRIVER`; outside it, the
+  build fails to compile. So does code that serves only the driver: motion's virtual clock and telemetry,
+  `simulateSystemEvent`'s appearance overrides, the host's `replyDriverState` operation (the `exposeTestState`
+  answer), and diagnostics' native simulated crashes (the `SPARK_SIMULATE_CRASH` launch hook; `simulateCrash`
+  rejects native kinds with `E_UNAVAILABLE` without it). A file that includes the header without the setting
+  gets the driver declarations, so a release build without the driver fails to link rather than ship driver
+  code.
+- A build without the driver that is launched with `SPARK_TEST_DRIVER_DIR` logs
+  `Spark: this build has no test driver; SPARK_TEST_DRIVER_DIR is ignored` and starts normally.
+- After every macOS release build, `spark build` reads the app's code (`Contents/MacOS` and
+  `Contents/Frameworks`) for strings only driver code contains: the socket name `driver.sock`, the log
+  prefix `Spark test driver:`, the commands `startCommits`, `accessibilityAudit`, `simulateSystemEvent`,
+  `simulateDisplays`, `advanceClock` and `waitForMotion`, the `driverListeners` request and `replyDriverState`
+  operation, and `SPARK_SIMULATE_CRASH`. Without `testDriverInRelease` it fails if it finds any; with it, it
+  fails unless it finds the socket name and log prefix (`packages/cli/src/release-driver.ts`).
+
+`tests/test-driver-builds.test.ts` checks the configuration, the Podfile lines and every podspec's build
+settings. It also compiles a stripped, dead-stripped binary each way and runs the release check on both:
+the one without the driver has no driver strings or `SparkTestDriver` symbols, logs and starts normally
+with `SPARK_TEST_DRIVER_DIR` set, ignores `SPARK_SIMULATE_CRASH`, and has `SparkSimulateCrash` fail
+`E_UNAVAILABLE`. It also checks that every `SparkTestDriverRegisterCommand` call outside the excluded
+sources sits after `#if SPARK_TEST_DRIVER`.
 
 ## Kitchen Sink screenshots
 
@@ -271,10 +315,9 @@ What AppKit does with in-process events, measured in `tests/test-driver.native.m
 
 Gestures (`gesture`) and the back and forward buttons (`tap` with `button: back` or `forward`) need
 the private CoreGraphics functions `CGEventGetWindowLocation` and `CGEventSetWindowLocation` (see
-the table above). The driver ships in every Spark app (`RNDesktopApp` compiles
-`packages/desktop-app/macos`, release builds included). Mac App Store review flags
-private API names found in a binary, even when they are never called. So these
-functions compile only with the preprocessor flag `SPARK_TEST_DRIVER_PRIVATE_EVENTS=1`:
+the table above). Mac App Store review flags private API names found in a binary, even when they are
+never called. So these functions compile only with the preprocessor flag
+`SPARK_TEST_DRIVER_PRIVATE_EVENTS=1`, in builds that have the driver ([Builds](#builds)):
 
 - **Off (the default)**: the code and the functions' names are absent from the binary.
   `gesture`, and `tap` with `back` or `forward`, fail with `E_UNSUPPORTED`: "The app was built
@@ -288,7 +331,7 @@ functions compile only with the preprocessor flag `SPARK_TEST_DRIVER_PRIVATE_EVE
 
 `tests/test-driver-native.test.ts` builds the driver both ways. It checks that the build without
 the flag does not contain the names and fails these commands typed, and that the opted-in build
-contains them. `tests/test-driver-private-events.test.ts` checks the configuration, the Podfile
+contains them. `tests/test-driver-builds.test.ts` checks the configuration, the Podfile
 line and the podspec's build settings.
 
 ## Cursor

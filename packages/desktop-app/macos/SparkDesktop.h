@@ -16,6 +16,7 @@ FOUNDATION_EXPORT NSDictionary *SparkContext(void);
 FOUNDATION_EXPORT NSDictionary *SparkInitialProps(NSString *windowID, NSDictionary *props);
 FOUNDATION_EXPORT NSString *SparkNamespace(void);
 FOUNDATION_EXPORT void SparkEmit(NSDictionary *event);
+// Test driver only (SparkTestDriverState.mm), so callers sit inside #if SPARK_TEST_DRIVER (docs/test-driver.md#builds).
 // The JavaScript answer to the test driver's `state` request: { requestId, value } or { requestId, error: { code, message } }.
 // NO when no request with that ID is waiting (it timed out).
 FOUNDATION_EXPORT BOOL SparkReplyDriverState(NSDictionary *answer);

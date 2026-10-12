@@ -42,9 +42,9 @@ static void SparkAskJavaScript(NSDictionary *event, NSDictionary *request, Spark
   });
 }
 
-@interface SparkDriverState : NSObject
+@interface SparkTestDriverState : NSObject
 @end
-@implementation SparkDriverState
+@implementation SparkTestDriverState
 + (void)load {
   pending = [NSMutableDictionary new];
   SparkTestDriverRegisterCommand(@"state", ^(NSDictionary *request, SparkTestDriverReply reply) {
