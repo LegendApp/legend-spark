@@ -1,0 +1,34 @@
+appId: so.legend.spark.examples.kitchensink
+name: A per-app language applies at the next launch
+intent: >
+  Launched without a language argument, the Kitchen Sink follows the system (English on the gate hosts).
+  "Use ar" on Internationalization > Native strings stores Arabic as the app's own language. The next launch,
+  still without a language argument, is Arabic: getAppLanguages() reports current ar and override ar, and the
+  Edit menu reads تعديل > تراجع. "Follow the system" removes the choice, and the launch after that is English
+  again. onFlowComplete removes the choice even when the flow fails, so the app's defaults end as they began.
+checks: [I18N-LANG-02]
+tags: [internationalization]
+platforms: [macos]
+timeout: 120s
+onFlowComplete:
+  - launchApp: { openUrl: "spark-ks://internationalization/native-strings" }
+  - tapOn: { id: internationalization-native-strings-follow-system }
+  - assertVisible: { id: internationalization-native-strings-status }
+---
+- launchApp: { openUrl: "spark-ks://internationalization/native-strings" }
+- assertText: { id: internationalization-native-strings-current, equals: en }
+- assertText: { id: internationalization-native-strings-override, equals: "None: follows the system" }
+- tapOn: { id: internationalization-native-strings-use-ar }
+- assertText: { id: internationalization-native-strings-status, equals: "Saved ar for the next launch." }
+- assertText: { id: internationalization-native-strings-override, equals: ar }
+- assertAppMenu: { path: "Edit > Undo" }
+- launchApp: { openUrl: "spark-ks://internationalization/native-strings" }
+- assertText: { id: internationalization-native-strings-current, equals: ar }
+- assertText: { id: internationalization-native-strings-override, equals: ar }
+- assertAppMenu: { path: "تعديل > تراجع", shortcut: "cmd+z" }
+- tapOn: { id: internationalization-native-strings-follow-system }
+- assertText: { id: internationalization-native-strings-status, equals: "حُفظ: سيتبع التشغيل التالي النظام." }
+- launchApp: { openUrl: "spark-ks://internationalization/native-strings" }
+- assertText: { id: internationalization-native-strings-current, equals: en }
+- assertText: { id: internationalization-native-strings-override, equals: "None: follows the system" }
+- assertAppMenu: { path: "Edit > Undo", shortcut: "cmd+z" }

@@ -1,0 +1,64 @@
+appId: so.legend.spark.examples.kitchensink
+name: Native menus and app languages follow the launch language
+intent: >
+  The Kitchen Sink lists en, ar and fr. Launched in each language, Internationalization > Native strings
+  reports the app's languages, Spark's translated languages and the language the launch chose, with no
+  per-app language stored. The standard main menu that Spark retitles at launch (the desktop template's
+  File, Edit, Format, View, Window and Help items, and the app menu's About and Quit items with the app
+  name) is in that language: Spark's Arabic and French titles, English titles in English. Items AppKit
+  provides itself (Settings…, which AppKit makes of the template's Preferences…, and Emoji & Symbols) follow
+  the same language.
+checks: [I18N-NATIVE-01, I18N-NATIVE-02, I18N-LANG-01]
+tags: [internationalization]
+platforms: [macos]
+matrix:
+  locale: [en, ar, fr]
+---
+- launchApp: { openUrl: "spark-ks://internationalization/native-strings" }
+- assertVisible: { id: internationalization-native-strings-root }
+- assertText: { id: internationalization-native-strings-availability, equals: '{"available":true}' }
+- assertText: { id: internationalization-native-strings-supported, equals: "en, ar, fr" }
+- assertText: { id: internationalization-native-strings-framework, equals: "ar, en, fr" }
+# English
+- assertText: { id: internationalization-native-strings-current, equals: en, when: { matrix: { locale: en } } }
+- assertText: { id: internationalization-native-strings-override, equals: "None: follows the system", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "KitchenSink > About KitchenSink", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "KitchenSink > Quit KitchenSink", shortcut: "cmd+q", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "File > Page Setup…", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "Edit > Undo", shortcut: "cmd+z", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "Edit > Select All", shortcut: "cmd+a", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "Format > Font > Show Fonts", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "View > Enter Full Screen", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "Window > Minimize", shortcut: "cmd+m", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "Help > KitchenSink Help", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "KitchenSink > Settings…", shortcut: "cmd+,", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "Edit > Emoji & Symbols", when: { matrix: { locale: en } } }
+# Arabic: AppKit appends a left-to-right mark to the app name in Hide and Quit, as in its own menus.
+- assertText: { id: internationalization-native-strings-current, equals: ar, when: { matrix: { locale: ar } } }
+- assertText: { id: internationalization-native-strings-override, equals: "لا شيء: يتبع النظام", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "KitchenSink > حول KitchenSink", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "KitchenSink > إنهاء KitchenSink‎", shortcut: "cmd+q", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "ملف > إعداد الصفحة…", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "تعديل > تراجع", shortcut: "cmd+z", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "تعديل > تحديد الكل", shortcut: "cmd+a", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "التنسيق > الخط > إظهار الخطوط", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "عرض > الدخول إلى وضع ملء الشاشة", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "نافذة > تصغير", shortcut: "cmd+m", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "مساعدة > مساعدة KitchenSink", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "KitchenSink > الإعدادات…", shortcut: "cmd+,", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "تعديل > إيموجي والرموز", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "Edit > Undo", exists: false, when: { matrix: { locale: ar } } }
+# French: the Kitchen Sink's own strings are English, Spark's and AppKit's are French.
+- assertText: { id: internationalization-native-strings-current, equals: fr, when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "KitchenSink > À propos de KitchenSink", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "KitchenSink > Quitter KitchenSink", shortcut: "cmd+q", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "Fichier > Format d’impression…", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "Édition > Annuler", shortcut: "cmd+z", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "Édition > Tout sélectionner", shortcut: "cmd+a", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "Format > Police > Afficher les polices", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "Présentation > Activer le mode plein écran", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "Fenêtre > Minimiser", shortcut: "cmd+m", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "Aide > Aide KitchenSink", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "KitchenSink > Réglages…", shortcut: "cmd+,", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "Édition > Emoji et symboles", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "Edit > Undo", exists: false, when: { matrix: { locale: fr } } }

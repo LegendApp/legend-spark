@@ -1,0 +1,41 @@
+appId: so.legend.spark.examples.kitchensink
+name: Dialog defaults are Spark's strings in the launch language
+intent: >
+  "Confirm with Spark's labels" on Internationalization > Native strings calls confirm() with only a message.
+  The alert's title and buttons are Spark's own: Confirm, Cancel and Continue in English, تأكيد, إلغاء and
+  متابعة in Arabic, Confirmer, Annuler and Continuer in French. Cancel closes it and confirm() resolves false,
+  which the screen shows in its own language (English in French). Dialogs > Panels' standard About panel
+  then shows AppKit's own strings in the same language: الإصدار and أيقونة التطبيق in Arabic, icône de
+  l’application in French.
+checks: [I18N-DIALOG-01, I18N-NATIVE-03]
+tags: [internationalization]
+platforms: [macos]
+matrix:
+  locale: [en, ar, fr]
+---
+- launchApp: { openUrl: "spark-ks://internationalization/native-strings" }
+- tapOn: { id: internationalization-native-strings-confirm }
+# English
+- assertVisible: { text: Confirm, role: staticText, when: { matrix: { locale: en } } }
+- assertVisible: { role: button, label: Continue, when: { matrix: { locale: en } } }
+- tapOn: { role: button, label: Cancel, when: { matrix: { locale: en } } }
+- assertText: { id: internationalization-native-strings-confirm-result, equals: Cancel, when: { matrix: { locale: en } } }
+# Arabic
+- assertVisible: { text: تأكيد, role: staticText, when: { matrix: { locale: ar } } }
+- assertVisible: { role: button, label: متابعة, when: { matrix: { locale: ar } } }
+- tapOn: { role: button, label: إلغاء, when: { matrix: { locale: ar } } }
+- assertText: { id: internationalization-native-strings-confirm-result, equals: إلغاء, when: { matrix: { locale: ar } } }
+# French
+- assertVisible: { text: Confirmer, role: staticText, when: { matrix: { locale: fr } } }
+- assertVisible: { role: button, label: Continuer, when: { matrix: { locale: fr } } }
+- tapOn: { role: button, label: Annuler, when: { matrix: { locale: fr } } }
+- assertText: { id: internationalization-native-strings-confirm-result, equals: Cancel, when: { matrix: { locale: fr } } }
+# The standard About panel: AppKit's strings
+- launchApp: { openUrl: "spark-ks://dialogs/panels" }
+- tapOn: { id: dialogs-panels-about }
+- assertVisible: { text: "/^Version \\S+/", role: staticText, when: { matrix: { locale: en } } }
+- assertVisible: { role: image, label: "application icon", when: { matrix: { locale: en } } }
+- assertVisible: { text: "/^الإصدار \\S+/", role: staticText, when: { matrix: { locale: ar } } }
+- assertVisible: { role: image, label: أيقونة التطبيق, when: { matrix: { locale: ar } } }
+- assertVisible: { text: "/^Version \\S+/", role: staticText, when: { matrix: { locale: fr } } }
+- assertVisible: { role: image, label: icône de l’application, when: { matrix: { locale: fr } } }
