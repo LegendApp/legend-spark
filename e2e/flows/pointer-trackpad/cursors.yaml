@@ -1,0 +1,31 @@
+appId: so.legend.spark.examples.kitchensink
+name: Cursors and hiding the cursor while typing
+intent: >
+  Over each swatch, the cursor style shows AppKit's cursor: pointer the pointing hand, text the I-beam, crosshair
+  the crosshair, grab the open hand and not-allowed the operation-not-allowed cursor. The PointerView's custom
+  cursor (SF Symbol pencil.tip) covers it, and its child's own pointer cursor wins inside it. Typing in the text
+  input hides the cursor until the pointer moves, as AppKit text views do, and so does Hide cursor until moved;
+  moving the pointer shows it again. The driver reports the cursor AppKit would show and records the hiding
+  instead of hiding the real cursor (docs/test-driver.md#cursor).
+checks: [PTR-CURSOR-01, PTR-HIDE-01]
+tags: [pointer-trackpad]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://pointer-trackpad/pointer" }
+- extendedWaitUntil: { visible: { id: pointer-trackpad-pointer-root }, timeout: 10s }
+- assertCursor: { cursor: pointingHand, on: { id: pointer-trackpad-pointer-cursor-pointer } }
+- assertCursor: { cursor: IBeam, on: { id: pointer-trackpad-pointer-cursor-text } }
+- assertCursor: { cursor: crosshair, on: { id: pointer-trackpad-pointer-cursor-crosshair } }
+- assertCursor: { cursor: openHand, on: { id: pointer-trackpad-pointer-cursor-grab } }
+- assertCursor: { cursor: operationNotAllowed, on: { id: pointer-trackpad-pointer-cursor-not-allowed } }
+- assertCursor: { cursor: "custom(pencil.tip)", on: { point: "50%,10%", within: { id: pointer-trackpad-pointer-cursor-custom } } }
+- assertCursor: { cursor: pointingHand, on: { id: pointer-trackpad-pointer-cursor-custom-child } }
+- tapOn: { id: pointer-trackpad-pointer-typing }
+- typeText: abc
+- assertCursor: hidden
+- hoverOn: { id: pointer-trackpad-pointer-cursor-pointer }
+- assertCursor: pointingHand
+- tapOn: { id: pointer-trackpad-pointer-hide }
+- assertText: { id: pointer-trackpad-pointer-hide-result, equals: resolved }
+- assertCursor: hidden
+- assertCursor: { cursor: pointingHand, on: { id: pointer-trackpad-pointer-cursor-pointer } }

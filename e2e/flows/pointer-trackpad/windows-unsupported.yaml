@@ -1,0 +1,24 @@
+appId: so.legend.spark.examples.kitchensink
+name: Pointer features are typed unsupported on Windows
+intent: >
+  On Windows the Pointer screen reports the module and every feature as unsupported-platform and shows no
+  PointerView. Hide cursor until moved and each haptic pattern reject SparkError:E_UNSUPPORTED_PLATFORM.
+  Implementation: #331.
+checks: [PTR-UNSUP-01]
+tags: [pointer-trackpad]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://pointer-trackpad/pointer" }
+- extendedWaitUntil: { visible: { id: pointer-trackpad-pointer-root }, timeout: 10s }
+- assertText: { id: pointer-trackpad-pointer-availability-pointer, equals: 'pointer: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: pointer-trackpad-pointer-availability-custom-cursors, equals: 'custom-cursors: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: pointer-trackpad-pointer-availability-hide-cursor, equals: 'hide-cursor: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: pointer-trackpad-pointer-availability-gestures, equals: 'gestures: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: pointer-trackpad-pointer-availability-pressure, equals: 'pressure: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: pointer-trackpad-pointer-availability-mouse-buttons, equals: 'mouse-buttons: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: pointer-trackpad-pointer-availability-haptics, equals: 'haptics: {"available":false,"reason":"unsupported-platform"}' }
+- assertNotVisible: { id: pointer-trackpad-pointer-canvas }
+- tapOn: { id: pointer-trackpad-pointer-hide }
+- assertText: { id: pointer-trackpad-pointer-hide-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: pointer-trackpad-pointer-haptic-generic }
+- assertText: { id: pointer-trackpad-pointer-haptic-generic-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }

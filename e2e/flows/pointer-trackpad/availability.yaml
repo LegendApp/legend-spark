@@ -1,0 +1,19 @@
+appId: so.legend.spark.examples.kitchensink
+name: Pointer availability on macOS
+intent: >
+  The Pointer screen lists each getPointerAvailability query as JSON. On macOS the module and every feature
+  report available. Gestures, pressure and haptics need trackpad hardware that macOS cannot detect, so
+  availability reports the API path, not the device.
+checks: [PTR-AVAIL-01]
+tags: [pointer-trackpad]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://pointer-trackpad/pointer" }
+- extendedWaitUntil: { visible: { id: pointer-trackpad-pointer-root }, timeout: 10s }
+- assertText: { id: pointer-trackpad-pointer-availability-pointer, equals: 'pointer: {"available":true}' }
+- assertText: { id: pointer-trackpad-pointer-availability-custom-cursors, equals: 'custom-cursors: {"available":true}' }
+- assertText: { id: pointer-trackpad-pointer-availability-hide-cursor, equals: 'hide-cursor: {"available":true}' }
+- assertText: { id: pointer-trackpad-pointer-availability-gestures, equals: 'gestures: {"available":true}' }
+- assertText: { id: pointer-trackpad-pointer-availability-pressure, equals: 'pressure: {"available":true}' }
+- assertText: { id: pointer-trackpad-pointer-availability-mouse-buttons, equals: 'mouse-buttons: {"available":true}' }
+- assertText: { id: pointer-trackpad-pointer-availability-haptics, equals: 'haptics: {"available":true}' }
