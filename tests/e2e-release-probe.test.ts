@@ -87,7 +87,7 @@ test("JavaScript that contains the network inspector or the profiler is a findin
     "Contents/Resources/worker.js contains the profiler (spark-profiler)",
   ]);
   const empty = appBundle({});
-  expect(codeProblems(empty)).toEqual([`no JavaScript bundle found in ${empty} to check for the network inspector and the profiler`]);
+  expect(codeProblems(empty)).toEqual([`no JavaScript bundle found in ${empty} to check for the network inspector, the profiler, the React DevTools backend and the React DevTools Select element fix`]);
 });
 
 test("native code that contains the profiler is a finding, in any Mach-O file; an app without native code fails closed (DEVT-REL-05)", () => {

@@ -632,7 +632,7 @@ A failed `assertNoLayoutThrash` or `assertNoFlicker` writes the driver's report 
 #### Release-safety probe
 
 `assertNoDebugSurface: { for }` checks that a running release build has no debug surface (#274; `DEVT-REL-01`
-to `05`, `e2e/flows/devtools/release-probe.yaml`). It quits the app if it runs, starts a decoy development server (a
+to `06`, `e2e/flows/devtools/release-probe.yaml`). It quits the app if it runs, starts a decoy development server (a
 TCP listener on 127.0.0.1 the runner owns) and launches the app pointed at it, with `-RCT_jsLocation <decoy>` and
 `SPARK_BUNDLE_URL=http://<decoy>/index.bundle?…`, the settings a development build reads. Once its first rendered UI
 has settled (up to 30 s) and `for` (default 2s) more, it takes one snapshot and fails with every finding:
@@ -649,9 +649,13 @@ has settled (up to 30 s) and `for` (default 2s) more, it takes one snapshot and 
 - **JavaScript:** every bundle and script in the app (`.jsbundle`, `.bundle`, `.hbc`, `.js`, `.cjs`, `.mjs`, at any
   depth) is searched for the network inspector's marker (`spark-network-inspector`,
   `packages/desktop-app/src/network-inspector/marker.ts`) and the profiler's (`spark-profiler`,
-  `packages/desktop-app/src/profiler/marker.ts`), which Hermes bytecode keeps as strings. An app with no JavaScript to
-  search is a finding too ([devtools.md](devtools.md#network-inspector), #271; [devtools.md](devtools.md#profiling),
-  #272).
+  `packages/desktop-app/src/profiler/marker.ts`), and for React DevTools: its backend (React Native's dispatcher for the
+  DevTools frontend, `__FUSEBOX_REACT_DEVTOOLS_DISPATCHER__`, and `react-devtools-core`'s entry point,
+  `connectWithCustomMessagingProtocol`) and Spark's Select element fix (`spark-react-devtools`,
+  `packages/desktop-app/src/react-devtools/marker.ts`). Hermes bytecode keeps them as strings; the list is
+  `SCRIPT_MARKERS` in `scripts/e2e/runner/driver-release.ts`. An app with no JavaScript to search is a finding too
+  ([devtools.md](devtools.md#network-inspector), #271; [devtools.md](devtools.md#profiling), #272;
+  [devtools.md](devtools.md#react-devtools), `DEVT-REL-06`, #269).
 - **Native code:** every Mach-O file in the app, at any depth, is searched for the profiler's marker, which its native
   half (`SparkProfiler.mm`) holds as a string. An app with no Mach-O file is a finding too (#272).
 

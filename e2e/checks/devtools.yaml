@@ -90,6 +90,79 @@ checks:
     spec: "#268"
     covers:
       - ./devtools#openDevTools
+  DEVT-REACT-01:
+    title: React Native DevTools' Components panel connects to each JavaScript runtime's React DevTools backend through React Native's dispatcher; the backend lists the runtime's roots (one per window) and a known component's props, state and hooks (custom hooks by name)
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md React DevTools; #269"
+    covers:
+      - ./devtools
+  DEVT-REACT-02:
+    title: Editing a function component's prop and a useState hook's state from React DevTools re-renders the app with the new values
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md React DevTools; #269"
+    covers:
+      - ./devtools
+  DEVT-REACT-03:
+    title: With highlight updates on, a state update outlines the re-rendered views in the window (React Native's debugging overlay)
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md React DevTools; #269"
+    covers:
+      - ./devtools
+  DEVT-REACT-04:
+    title: The React Profiler records each commit with its duration, the components it rendered and what changed (the hook that updated)
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md React DevTools; #269"
+    covers:
+      - ./devtools
+  DEVT-REACT-05:
+    title: Select element covers every window of the runtime; a click in any window selects the component under it, within that window's root, and ends inspecting in every window
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md React DevTools; #269"
+    covers:
+      - ./devtools
+  DEVT-REACT-06:
+    title: An isolated runtime is its own target with its own React DevTools backend, listing only its own root; Select element works in its window
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md React DevTools; #269"
+    covers:
+      - ./devtools
+  DEVT-REACT-07:
+    title: With a development bundle on macOS the React DevTools screen shows the ReactDevToolsSample component, Open DevTools, and buttons for a second window and an isolated-runtime window
+    platforms: [macos]
+    blocking: true
+    spec: "#269"
+    covers:
+      - ./devtools#getDevToolsAvailability
+      - ./devtools#getDevToolsAvailability().available
+      - ./devtools#openDevTools
+  DEVT-REACT-08:
+    title: Without a development bundle (release builds included) the React DevTools screen reports development-only and offers no component or DevTools actions
+    platforms: [macos]
+    blocking: true
+    spec: "#269"
+    covers:
+      - ./devtools#getDevToolsAvailability
+      - ./devtools#getDevToolsAvailability().available
+  DEVT-UNSUP-04:
+    title: On Windows the React DevTools screen reports getDevToolsAvailability unsupported-platform and offers no actions
+    platforms: [windows]
+    blocking: true
+    spec: "#269"
+    covers:
+      - ./devtools#getDevToolsAvailability
+  DEVT-VISUAL-04:
+    title: The React DevTools screen matches its goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#269"
+    covers:
+      - ./devtools
   DEVT-VISUAL-01:
     title: The DevTools screen matches its goldens in light and dark, English and Arabic
     platforms: [macos]
@@ -252,5 +325,12 @@ checks:
     platforms: [macos]
     blocking: true
     spec: "#272, #274"
+    covers:
+      - ./devtools
+  DEVT-REL-06:
+    title: A release build's JavaScript (its Hermes bundles and scripts) contains no React DevTools backend (React Native's DevTools dispatcher, react-devtools-core, Spark's Select element fix)
+    platforms: [macos]
+    blocking: true
+    spec: "#269, #274"
     covers:
       - ./devtools

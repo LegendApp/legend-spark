@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: The React DevTools screen matches its goldens
+intent: >
+  DevTools > React DevTools opens from its spark-ks:// deep link in the running Kitchen Sink and the main window matches
+  the approved golden for the appearance (light and dark, English and Arabic), with the shell sidebar masked. The gate's
+  builds have no development server and run JavaScript without __DEV__, so the screen shows its unavailable state.
+checks: [DEVT-VISUAL-04]
+tags: [devtools]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://devtools/react-devtools" }
+- assertVisible: { id: devtools-react-devtools-unavailable }
+- assertScreenshot: { golden: devtools-react-devtools, mask: [{ id: infra-shell-sidebar }] }

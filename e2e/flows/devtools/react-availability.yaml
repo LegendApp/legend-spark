@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: React DevTools is absent without development JavaScript
+intent: >
+  The gate's release build, like a dev build running bundled JavaScript without __DEV__, has no React DevTools backend.
+  The React DevTools screen reports getDevToolsAvailability as development-only and renders no sample component, Open
+  DevTools or window actions.
+checks: [DEVT-REACT-08]
+tags: [devtools]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://devtools/react-devtools" }
+- assertVisible: { id: devtools-react-devtools-root }
+- assertText: { id: devtools-react-devtools-availability, equals: '{"available":false,"reason":"development-only"}' }
+- assertVisible: { id: devtools-react-devtools-unavailable }
+- assertNotVisible: { id: devtools-react-devtools-sample }
+- assertNotVisible: { id: devtools-react-devtools-open }
+- assertNotVisible: { id: devtools-react-devtools-open-isolated }

@@ -1,0 +1,24 @@
+appId: so.legend.spark.examples.kitchensink
+name: React DevTools is available with a development bundle
+intent: >
+  With development JavaScript (__DEV__) on macOS, getDevToolsAvailability reports available and the React DevTools
+  screen shows the component React DevTools inspects (its label and count, which Increment updates), Open DevTools, and
+  the buttons that open a second window and an isolated-runtime window, the roots DevTools lists.
+checks: [DEVT-REACT-07]
+tags: [devtools]
+platforms: [macos]
+build: dev
+timeout: 120s
+---
+- launchApp: { openUrl: "spark-ks://devtools/react-devtools" }
+- assertVisible: { id: devtools-react-devtools-root, timeout: 30s }
+- assertText: { id: devtools-react-devtools-availability, equals: '{"available":true}' }
+- assertVisible: { id: devtools-react-devtools-shortcut }
+- assertText: { id: devtools-react-devtools-label, equals: Sample label }
+- assertText: { id: devtools-react-devtools-count, equals: "Count: 0" }
+- tapOn: { id: devtools-react-devtools-increment }
+- assertText: { id: devtools-react-devtools-count, equals: "Count: 1" }
+- assertVisible: { id: devtools-react-devtools-open }
+- assertVisible: { id: devtools-react-devtools-open-note }
+- assertVisible: { id: devtools-react-devtools-open-isolated }
+- assertNotVisible: { id: devtools-react-devtools-unavailable }

@@ -3722,13 +3722,14 @@
           "tests/devtools-targets.test.ts",
           "tests/network-inspector.test.ts",
           "tests/profiler.test.ts",
+          "tests/react-devtools.test.ts",
           "tests/developer-menu-release.test.ts"
         ],
         "portableCommand": "bun run test",
         "platformAcceptance": {
           "macos-arm64": {
             "status": "not-tested",
-            "acceptanceCommand": "bun run test:platform --platform macos; bun scripts/test-devtools.ts; bun scripts/test-network-inspector.ts; bun scripts/test-profiler.ts"
+            "acceptanceCommand": "bun run test:platform --platform macos; bun scripts/test-devtools.ts; bun scripts/test-network-inspector.ts; bun scripts/test-profiler.ts; bun scripts/test-react-devtools.ts"
           },
           "macos-x64": {
             "status": "not-tested",
