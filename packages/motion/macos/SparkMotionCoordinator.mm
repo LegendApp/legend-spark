@@ -1111,6 +1111,10 @@ static NSDictionary *SparkStateObject(const State &state) { return @{ @"value": 
 {
   _engine.setTelemetry(true);
   _driven = YES;
+  // Pinned like the driver's other host settings: flows behave the same on a Mac with Reduce Motion or Low Power Mode
+  // on, until simulateSystemEvent changes them.
+  _simulated[@"reduceMotion"] = @NO;
+  _simulated[@"lowPowerMode"] = @NO;
 }
 
 - (void)simulate:(NSDictionary *)values

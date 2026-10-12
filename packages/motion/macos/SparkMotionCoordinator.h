@@ -63,8 +63,9 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 - (nullable NSView<SparkMotionHost> *)hostForView:(NSView *)view;
 /**
  * The driver calls it when it starts. Records each view's latest motion (the engine's telemetry is off by default) and
- * every cue, which no longer plays (docs/motion.md#cues), and stops following the real occlusion of windows the driver
- * never shows: they count as visible unless simulateWindow:visible: hides them.
+ * every cue, which no longer plays (docs/motion.md#cues), stops following the real occlusion of windows the driver
+ * never shows (they count as visible unless simulateWindow:visible: hides them), and pins Reduce Motion and Low Power
+ * Mode off until simulate: changes them.
  */
 - (void)recordTelemetry;
 /** Overrides what motion reads of the system: reduceMotion and lowPowerMode (simulateSystemEvent's fields) and maximumFramesPerSecond. */

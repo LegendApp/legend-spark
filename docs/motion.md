@@ -399,7 +399,9 @@ flow never makes a sound.
 
 ### Simulation in the test driver
 
-The driver never changes the Mac's settings. Motion follows the simulated state other driver
+The driver never changes the Mac's settings. A driver run pins Reduce Motion and Low Power Mode
+off for motion, like the driver's other [pinned host settings](test-driver.md#pinned-host-settings),
+so flows and goldens do not depend on the Mac's settings. Motion follows the simulated state other driver
 commands set: `simulateSystemEvent`'s `reduceMotion` (`accessibilityDisplayChanged`) and
 `lowPowerMode` (`lowPowerChanged`), and `simulateDisplays`' primary display's
 `refreshRate.maximum` (`restore` stops simulating it). They reach motion through
