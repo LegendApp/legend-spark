@@ -34,7 +34,7 @@ struct SidebarSplitViewProps : Props {
   double sidebarMinWidth = 0, sidebarTitlebarOverlayOpacity = 0, sidebarWidth = 0;
   bool hasList = false, sidebarCollapsed = false;
 };
-struct SparkMotionViewProps : Props { std::string initialValues; };
+struct SparkMotionViewProps : Props { std::string initialValues, layout, sharedId, transition; };
 struct DesktopDragViewProps : Props { std::string sourceJson, optionsJson; bool disabled = false; };
 struct EventEmitter { using Shared = std::shared_ptr<EventEmitter const>; virtual ~EventEmitter() = default; };
 struct SidebarSplitViewEventEmitter : EventEmitter {
@@ -62,6 +62,12 @@ struct SidebarSplitViewComponentDescriptor {};
 struct SparkMotionViewComponentDescriptor {};
 struct DesktopDragViewComponentDescriptor {};
 using ComponentDescriptorProvider = int;
+struct MountingTransaction {
+  int surfaceId = 0; long long number = 0;
+  int getSurfaceId() const { return surfaceId; }
+  long long getNumber() const { return number; }
+};
+struct SurfaceTelemetry {};
 template <class T> int concreteComponentDescriptorProvider() { return 0; }
 }
 using namespace facebook::react;
@@ -72,6 +78,11 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
 - (void)finalizeUpdates:(NSUInteger)mask;
 @end
 @protocol RCTSidebarSplitViewViewProtocol @end
+@protocol RCTMountingTransactionObserving <NSObject>
+@optional
+- (void)mountingTransactionWillMount:(const MountingTransaction &)transaction withSurfaceTelemetry:(const SurfaceTelemetry &)surfaceTelemetry;
+- (void)mountingTransactionDidMount:(const MountingTransaction &)transaction withSurfaceTelemetry:(const SurfaceTelemetry &)surfaceTelemetry;
+@end
 @interface RCTUIView : NSView
 @property (nonatomic, copy) NSNumber *reactTag;
 @property (nonatomic, strong) NSColor *backgroundColor;
@@ -86,6 +97,7 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
 @public
   Props::Shared _props;
   EventEmitter::Shared _eventEmitter;
+  LayoutMetrics _layoutMetrics;
 }
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps;
 - (void)updateEventEmitter:(EventEmitter::Shared const &)emitter;
@@ -99,6 +111,7 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps { _props = props; }
 - (void)updateEventEmitter:(EventEmitter::Shared const &)emitter { _eventEmitter = emitter; }
 - (void)updateLayoutMetrics:(const LayoutMetrics &)metrics oldLayoutMetrics:(const LayoutMetrics &)old {
+  _layoutMetrics = metrics;
   self.frame = NSMakeRect(metrics.frame.origin.x, metrics.frame.origin.y, metrics.frame.size.width, metrics.frame.size.height);
 }
 - (void)finalizeUpdates:(NSUInteger)mask {}
@@ -198,12 +211,15 @@ int main() { @autoreleasepool {
   CHECK(NSMaxX(paneFrame(sidebarPane, mirrored)) == 1000 && NSWidth(paneFrame(sidebarPane, mirrored)) == 240 && NSMinX(paneFrame(contentPane, mirrored)) == 0);
   CHECK(emitter->events.back().contentX == 0);
 
-  // Motion: `initial` values are applied at mount.
+  // Motion: `initial` values, the layout mode, shared id and transition are applied at mount.
   RNSparkMotionView *motion = [[RNSparkMotionView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];
   motion.reactTag = @41;
   auto motionProps = std::make_shared<SparkMotionViewProps>(); motionProps->initialValues = R"({"opacity":0.25})";
+  motionProps->layout = "frame"; motionProps->sharedId = "photo"; motionProps->transition = R"({"type":"timing","durationMs":200})";
   [motion updateProps:motionProps oldProps:nullptr];
   CHECK(motion.layer.opacity == 0.25f);
+  CHECK([[motion valueForKey:@"motionLayout"] isEqual:@"frame"] && [[motion valueForKey:@"motionSharedId"] isEqual:@"photo"]);
+  CHECK([[motion valueForKey:@"motionTransition"] isEqual:(@{ @"type": @"timing", @"durationMs": @200 })]);
 
   // Drag view: drag source, accepted types and enabled state come from the mount.
   RNDesktopDragView *drag = [[RNDesktopDragView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];

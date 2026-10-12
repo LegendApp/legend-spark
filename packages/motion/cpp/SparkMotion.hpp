@@ -38,6 +38,7 @@ struct Spec {
   double to = 0;
   SpringParams spring;
   std::optional<double> velocity;  // explicit velocity overrides the inherited one
+  std::optional<State> from;  // start state instead of the current one (layout and shared-element hand-offs)
   double restDelta = 0.01, restSpeed = 0.1;
   double duration = 0.25;
   Easing easing{0.25, 0.1, 0.25, 1};
@@ -176,6 +177,15 @@ public:
   void set(int64_t view, const std::vector<std::pair<Property, double>> &values, double now, std::vector<Settled> &settled);
   void stop(int64_t view, const std::vector<Property> &properties, double now, std::vector<Settled> &settled);
   void stopBatch(const std::string &id, double now, std::vector<Settled> &settled, std::vector<int64_t> &touched);
+  /**
+   * Layout and shared-element hand-off (docs/motion.md#layout-presence-and-shared-elements): each property jumps to
+   * `from` (value and velocity) and runs `transition` to the value it was heading for (its animation's end, or its
+   * value at rest). Animations it replaces settle unfinished. A property driven by a scroll link or repeating forever
+   * is left alone. Returns false when no property was handed off.
+   */
+  bool handoff(int64_t view, const std::vector<std::pair<Property, State>> &from, const Spec &transition, double now, std::vector<Settled> &settled);
+  /** The value a property settles at: its animation's end, or its value at rest; none while it repeats forever. */
+  std::optional<double> target(int64_t view, Property property) const;
   /** Settles tracks that ended by `now`. */
   void sweep(double now, std::vector<Settled> &settled);
   std::optional<double> nextCompletion() const;
@@ -212,6 +222,7 @@ private:
   std::unordered_map<std::string, Batch> batches_;
   std::unordered_map<int64_t, Episode> episodes_;
   uint64_t events_ = 0;
+  uint64_t handoffs_ = 0;
   bool telemetry_ = false;
   bool virtual_ = false;
   double virtualTime_ = 0;

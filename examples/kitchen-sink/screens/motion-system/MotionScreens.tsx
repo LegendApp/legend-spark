@@ -13,13 +13,13 @@ type Ref = RefObject<MotionTarget | null>;
 const SIZE = 36;
 
 /** Shows a render-time SparkError (E_UNSUPPORTED_PLATFORM on Windows) where the motion views would be. */
-class Boundary extends Component<PropsWithChildren<{ id: string }>, { error?: unknown }> {
+export class Boundary extends Component<PropsWithChildren<{ id: string }>, { error?: unknown }> {
   state: { error?: unknown } = {};
   static getDerivedStateFromError(error: unknown) { return { error }; }
   render() { return this.state.error ? <Text selectable className="text-xs text-danger" testID={`${this.props.id}-error`}>{describeError(this.state.error)}</Text> : this.props.children; }
 }
 
-function Page({ screen, children }: PropsWithChildren<{ screen: string }>) {
+export function Page({ screen, children }: PropsWithChildren<{ screen: string }>) {
   const t = useMotionMessages();
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-6">
     <View className="flex-row items-center gap-2">
@@ -30,7 +30,7 @@ function Page({ screen, children }: PropsWithChildren<{ screen: string }>) {
   </ScrollView>;
 }
 
-function Section({ title, hint, children }: PropsWithChildren<{ title: string; hint?: string }>) {
+export function Section({ title, hint, children }: PropsWithChildren<{ title: string; hint?: string }>) {
   return <View className="gap-2 rounded-lg border border-border bg-surface p-3">
     <Text className="text-base font-semibold text-foreground" accessibilityRole="header">{title}</Text>
     {hint && <Text className="text-xs text-muted">{hint}</Text>}
@@ -51,11 +51,11 @@ function Box({ target, testID, label, tone = "bg-success", children }: PropsWith
   </View>;
 }
 
-function Readout({ testID, text }: { testID: string; text: string }) {
+export function Readout({ testID, text }: { testID: string; text: string }) {
   return text ? <Text selectable className="font-mono text-xs text-muted" testID={testID}>{text}</Text> : null;
 }
 
-function Actions({ children }: { children: ReactNode }) { return <View className="flex-row flex-wrap gap-2">{children}</View>; }
+export function Actions({ children }: { children: ReactNode }) { return <View className="flex-row flex-wrap gap-2">{children}</View>; }
 
 function useTargets(count: number) {
   const refs = useRef<Ref[]>([]);

@@ -88,12 +88,34 @@ checks:
     blocking: true
     spec: "#174 MOT.core, #52 INFRA.driver"
   MOT-UNSUP-01:
-    title: On Windows motion is typed unsupported (unsupported-platform, SparkError E_UNSUPPORTED_PLATFORM) with no substitute
+    title: On Windows motion is typed unsupported (unsupported-platform, SparkError E_UNSUPPORTED_PLATFORM) with no substitute, layout and presence included
     platforms: [windows]
     blocking: true
-    spec: "#174 MOT.core, follow-up #237"
+    spec: "#174 MOT.core, #175 MOT.layout, follow-ups #237 and #376"
+  MOT-PRESENCE-01:
+    title: An added MotionView plays enter; a removed MotionPresence child stays mounted while its exit plays and unmounts once it settles
+    platforms: [macos]
+    blocking: true
+    spec: "#175 MOT.layout"
+    covers:
+      - ./motion#MotionPresence
+      - ./motion#MotionView
+  MOT-LAYOUT-01:
+    title: Siblings reflow with a layout spring when a row is removed or reordered, and a frame layout scales from its previous size, with no JavaScript per frame
+    platforms: [macos]
+    blocking: true
+    spec: "#175 MOT.layout"
+    covers:
+      - ./motion#MotionView
+  MOT-SHARED-01:
+    title: A MotionView mounting with a shared id animates from the box where the MotionView it replaces showed, in the same window, and back
+    platforms: [macos]
+    blocking: true
+    spec: "#175 MOT.layout"
+    covers:
+      - ./motion#MotionView
   MOT-VISUAL-01:
-    title: The Springs, Keyframes and timelines, and Scroll link and JS block screens match their approved goldens in light and dark, English and Arabic, with MotionViews at rest or paused by the virtual clock
+    title: The Springs, Keyframes and timelines, Scroll link and JS block, and Layout, presence and shared elements screens match their approved goldens in light and dark, English and Arabic, with MotionViews at rest or paused by the virtual clock
     platforms: [macos]
     blocking: true
     spec: "docs/e2e-flows.md Visual goldens; #227"

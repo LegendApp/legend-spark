@@ -36,8 +36,8 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-test("the public entry exports the imperative API, builders and MotionView, and no hooks", () => {
-  expect(Object.keys(motion).sort()).toEqual(["MotionView", "animate", "decay", "getMotionAvailability", "getMotionState", "keyframes", "linkScroll", "recordMotionFrames", "sequence", "setMotionValues", "spring", "stagger", "stopMotion", "timeline", "timing"]);
+test("the public entry exports the imperative API, builders, MotionView and MotionPresence, and no hooks", () => {
+  expect(Object.keys(motion).sort()).toEqual(["MotionPresence", "MotionView", "animate", "decay", "getMotionAvailability", "getMotionState", "keyframes", "linkScroll", "recordMotionFrames", "sequence", "setMotionValues", "spring", "stagger", "stopMotion", "timeline", "timing"]);
 });
 
 test("springs: macOS presets and SwiftUI's response/bounce conversion, or physical parameters", () => {

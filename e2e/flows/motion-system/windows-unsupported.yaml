@@ -3,7 +3,8 @@ name: Motion is typed unsupported on Windows
 intent: >
   On Windows, every motion screen reports unsupported-platform from getMotionAvailability and shows
   SparkError:E_UNSUPPORTED_PLATFORM where its MotionViews would render, with no JavaScript-driven
-  substitute. The Windows engine is tracked in #237.
+  substitute; that includes the Layout, presence and shared elements screen (MotionPresence and MotionView). The
+  Windows engine is tracked in #237, its layout and presence support in #376.
 checks: [MOT-UNSUP-01]
 tags: [motion-system]
 platforms: [windows]
@@ -20,3 +21,7 @@ platforms: [windows]
 - extendedWaitUntil: { visible: { id: motion-system-scroll-and-frames-root }, timeout: 10s }
 - assertText: { id: motion-system-scroll-and-frames-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
 - assertText: { id: motion-system-scroll-and-frames-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- launchApp: { stopApp: false, openUrl: "spark-ks://motion-system/layout" }
+- extendedWaitUntil: { visible: { id: motion-system-layout-root }, timeout: 10s }
+- assertText: { id: motion-system-layout-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: motion-system-layout-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }

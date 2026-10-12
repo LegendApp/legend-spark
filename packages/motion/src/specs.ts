@@ -185,6 +185,25 @@ export function sequence(steps: readonly MotionSpec[], sequenceOptions?: Sequenc
   return seal({ type: "sequence", steps: [...steps], ...common(value, !steps.some(hasDecay)) });
 }
 
+/**
+ * How layout changes and shared elements animate: a spring (the default, `{ preset: "smooth" }`) or a timing curve.
+ * Each property animates to the value it was heading for, so there is no target.
+ */
+export type MotionTransition =
+  | ({ type?: "spring" } & Omit<SpringOptions, keyof AnimationOptions>)
+  | ({ type: "timing" } & Omit<TimingOptions, keyof AnimationOptions>);
+
+/** The transition's spec without a target, as the native hand-off receives it. */
+export function transitionSpec(value: MotionTransition = { preset: "smooth" }): Omit<SpringSpec, "to"> | Omit<TimingSpec, "to"> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) invalid("transition options must be an object");
+  const { type = "spring", ...rest } = value;
+  if (type !== "spring" && type !== "timing") invalid("transition type is spring or timing");
+  const { to: _to, ...spec } = type === "spring"
+    ? spring(0, options(rest as SpringOptions, SPRING, "spring transition"))
+    : timing(0, options(rest as TimingOptions, ["durationMs", "easing"], "timing transition"));
+  return spec;
+}
+
 /** Expands `scale` and validates property names, keeping caller order. */
 export function channels<T>(values: Partial<Record<MotionProperty, T>>, name: string): [MotionChannelProperty, T][] {
   if (!values || typeof values !== "object" || Array.isArray(values)) invalid(`${name} must be an object of motion properties`);

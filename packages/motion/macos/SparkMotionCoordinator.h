@@ -8,6 +8,14 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) NSInteger motionTag;
 @property (nonatomic, readonly) spark::motion::Values motionModel;
 - (void)applyMotionModel:(const spark::motion::Values &)values;
+/** `position` or `frame` when layout changes animate (docs/motion.md#layout-presence-and-shared-elements), else nil. */
+@property (nonatomic, readonly, nullable) NSString *motionLayout;
+/** Shared-element id: a host mounting with it animates from where another host with it was. */
+@property (nonatomic, readonly, nullable) NSString *motionSharedId;
+/** The validated transition (`spring` or `timing` JSON from JavaScript) for layout and shared-element hand-offs. */
+@property (nonatomic, readonly, nullable) NSDictionary *motionTransition;
+/** Right-to-left layout: `position` keeps the top-right corner instead of the top-left one. */
+@property (nonatomic, readonly) BOOL motionRightToLeft;
 @end
 
 typedef void (^SparkMotionResolve)(id _Nullable result);
@@ -24,6 +32,12 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 /** Called from the host's dealloc; its weak entry may already be gone. */
 - (void)unregisterTag:(NSInteger)tag;
 - (void)hostDidResize:(NSView<SparkMotionHost> *)host;
+/**
+ * Mounting-transaction hooks for hosts with a layout mode or shared id, before a transaction's first mutation and after
+ * its last (a host mounted by the transaction gets only the second). `surface` and `transaction` identify it.
+ */
+- (void)hostWillMount:(NSView<SparkMotionHost> *)host surface:(NSInteger)surface transaction:(NSInteger)transaction;
+- (void)hostDidMount:(NSView<SparkMotionHost> *)host surface:(NSInteger)surface transaction:(NSInteger)transaction;
 
 - (void)run:(NSDictionary *)plan resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)stopAnimation:(NSString *)identifier resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;

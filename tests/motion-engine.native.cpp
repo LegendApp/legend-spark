@@ -411,6 +411,55 @@ int main() {
   telemetry.setTelemetry(false);
   CHECK(!telemetry.episode(5));
 
+  // Layout and shared-element hand-offs: each property starts from the given state and runs the transition to where it
+  // was heading; the animation it replaces settles unfinished; scroll-linked and forever-repeating properties are left alone.
+  {
+    Engine layout;
+    layout.setTelemetry(true);
+    Values start = kIdentity;
+    start[TranslateX] = 10;
+    layout.addView(9, start);
+    CHECK(layout.target(9, TranslateX) == 10.0);
+    // A resting view whose layout moved 40 pt right shows where it was: it starts at -30 (its 10 minus 40) and springs back to 10.
+    std::vector<Settled> handed;
+    CHECK(layout.handoff(9, {{TranslateX, {-30, 0}}, {ScaleX, {0.5, 0}}}, springTo(0), 0, handed));
+    CHECK(layout.state(9, TranslateX, 0).value == -30 && layout.state(9, ScaleX, 0).value == 0.5);
+    CHECK(layout.target(9, TranslateX) == 10.0 && layout.target(9, ScaleX) == 1.0);
+    CHECK(layout.animating(9, TranslateX, 0.1) && near(layout.state(9, TranslateX, 3).value, 10, 0.01));
+    const Episode *moved = layout.episode(9);
+    CHECK(moved && moved->kinds[TranslateX] == Spec::Kind::Spring && near(moved->at(TranslateX, 0).value, -30, 1e-9));
+    // A second layout change mid-flight keeps the velocity it hands over and replaces only the properties it names.
+    const State mid = layout.state(9, TranslateX, 0.1);
+    CHECK(mid.velocity > 0);
+    CHECK(layout.handoff(9, {{TranslateX, {mid.value - 20, mid.velocity}}}, timingTo(0, 0.3), 0.1, handed));
+    CHECK(handed.empty() && layout.animating(9, ScaleX, 0.1));
+    CHECK(near(layout.state(9, TranslateX, 0.1).value, mid.value - 20, 1e-9) && near(layout.state(9, TranslateX, 0.1).velocity, mid.velocity, 1e-6));
+    CHECK(near(layout.state(9, TranslateX, 0.4).value, 10, 1e-9));
+    // A timing transition from rest plays its own easing (no inherited velocity term).
+    layout.sweep(1, handed);
+    CHECK(layout.handoff(9, {{TranslateY, {-50, 0}}}, timingTo(0, 0.2, {0, 0, 1, 1}), 1, handed));
+    CHECK(near(layout.state(9, TranslateY, 1.1).value, -25, 1e-9));
+    // An animation's target survives a hand-off on its property: it ends where the animation was going.
+    std::vector<int64_t> touched2;
+    layout.run(plan("slide", 9, TranslateX, timingTo(100, 1)), 2, handed, touched2);
+    CHECK(layout.handoff(9, {{TranslateX, {layout.state(9, TranslateX, 2.5).value - 5, layout.state(9, TranslateX, 2.5).velocity}}}, springTo(0), 2.5, handed));
+    CHECK(handed.back().id == "slide" && !handed.back().finished);
+    CHECK(near(layout.state(9, TranslateX, 6).value, 100, 0.01));
+    // Scroll-linked and forever-repeating properties keep their motion; with nothing to hand off, nothing runs.
+    layout.link(9, Rotate, true);
+    Spec forever = timingTo(1.2, 0.5);
+    forever.repeat = std::numeric_limits<double>::infinity();
+    layout.run(plan("pulse", 9, ScaleY, forever), 7, handed, touched2);
+    CHECK(!layout.target(9, ScaleY));
+    CHECK(!layout.handoff(9, {{Rotate, {5, 0}}, {ScaleY, {2, 0}}}, springTo(0), 7.1, handed));
+    CHECK(layout.state(9, Rotate, 7.1).value == 0 && layout.animating(9, ScaleY, 7.1));
+    Spec bad = springTo(0);
+    bad.from = State{std::nan(""), 0};
+    bool rejected = false;
+    try { layout.run(plan("bad from", 9, Opacity, bad), 8, handed, touched2); } catch (const Failure &failure) { rejected = failure.code == "E_INVALID_ARGUMENT"; }
+    CHECK(rejected);
+  }
+
   if (failures) { std::printf("%d motion engine checks failed\n", failures); return 1; }
   std::puts("Motion engine tests passed");
 }
