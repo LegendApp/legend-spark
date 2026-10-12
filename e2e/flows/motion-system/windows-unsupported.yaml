@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: Motion is typed unsupported on Windows
+intent: >
+  On Windows, every motion screen reports unsupported-platform from getMotionAvailability and shows
+  SparkError:E_UNSUPPORTED_PLATFORM where its MotionViews would render, with no JavaScript-driven
+  substitute. The Windows engine is tracked in #237.
+checks: [MOT-UNSUP-01]
+tags: [motion-system]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/springs" }
+- extendedWaitUntil: { visible: { id: motion-system-springs-root }, timeout: 10s }
+- assertText: { id: motion-system-springs-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: motion-system-springs-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- launchApp: { stopApp: false, openUrl: "spark-ks://motion-system/timelines" }
+- extendedWaitUntil: { visible: { id: motion-system-timelines-root }, timeout: 10s }
+- assertText: { id: motion-system-timelines-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: motion-system-timelines-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- launchApp: { stopApp: false, openUrl: "spark-ks://motion-system/scroll-and-frames" }
+- extendedWaitUntil: { visible: { id: motion-system-scroll-and-frames-root }, timeout: 10s }
+- assertText: { id: motion-system-scroll-and-frames-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: motion-system-scroll-and-frames-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }

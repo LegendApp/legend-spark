@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: A 500 ms JavaScript block drops no more motion frames than an idle main thread
+intent: >
+  On Motion system > Scroll link and JS block, the runner loops on the compositor from mount. Block JS
+  for 500 ms busy-waits the JavaScript thread while recording 1.5 s of the runner's frames; the display
+  link keeps an idle main thread's cadence (at most 6 dropped frames, see below) and the presented
+  transform changes on every animated frame (no stalled frames). Real clock only.
+checks: [MOT-JSBLOCK-01]
+tags: [motion-system, performance]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/scroll-and-frames" }
+- extendedWaitUntil: { visible: { id: motion-system-scroll-and-frames-root }, timeout: 10s }
+- assertText: { id: motion-system-scroll-and-frames-loop, equals: '"running"' }
+# Frames are counted from the press for 2 s, which spans the block and the screen's 1.5 s recording. The runner sends
+# the app nothing after the press until then: a poll walks the view tree on the main thread and could drop frames itself.
+# Budget: zero is not reachable even idle. Measured on a 120 Hz MacBook Pro (Mac16,5, shared with other builds) with
+# the dev build, 2 s windows without any input dropped 1, 2, 0 and 1 frames; with the block, 2, 2 and 3, and the
+# screen's own 1.5 s report 2, 2 and 1. A main thread held for the 500 ms block would drop about 60.
+- assertFrames: { during: { tapOn: { id: motion-system-scroll-and-frames-block } }, for: 2s, dropped: 6 }
+- extendedWaitUntil: { visible: { id: motion-system-scroll-and-frames-report, text: '/^\{"blockedMs":5\d\d,"frames":\d+,"animatedFrames":\d+,"droppedFrames":[0-6],"stalledFrames":0,/' }, timeout: 5s }

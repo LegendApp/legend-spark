@@ -38,7 +38,7 @@ module.exports = config => {
       SPARK_PROJECT_VERSION: expo.version, SPARK_WINDOW_CONFIG: JSON.stringify(nativeWindowOptions(expo.extra.spark.window ?? {})),
       SPARK_SESSION_FILE: statePath(root, 'windows-connection.json', 'windows'),
     } : {};
-    mod.modResults.contents = patchHost(mod.modResults.contents, fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/runtime.inc'), 'utf8') + '\n' + fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/application.inc'), 'utf8') + '\n' + fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/notifications.inc'), 'utf8') + (Object.hasOwn(metadata.modules ?? {}, '@react-native-runtimes/core') ? '\n' + fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/runtimes.inc'), 'utf8') : ''), metadata, defaults);
+    mod.modResults.contents = patchHost(mod.modResults.contents, fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/runtime.inc'), 'utf8') + '\n' + fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/launch.inc'), 'utf8') + '\n' + fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/application.inc'), 'utf8') + '\n' + fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/notifications.inc'), 'utf8') + (Object.hasOwn(metadata.modules ?? {}, '@react-native-runtimes/core') ? '\n' + fs.readFileSync(require.resolve('@legendapp/spark-desktop-host/windows/runtimes.inc'), 'utf8') : ''), metadata, defaults);
     return mod;
   });
   const { withMod } = require('@expo/config-plugins');

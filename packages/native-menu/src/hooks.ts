@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createMenu, type Menu, type MenuOptions, type MenuAction } from "./api";
+import { createMenu, type Menu, type MenuOptions, type MenuAction, type MenuLifecycleEvent } from "./api";
 export interface UseMenuOptions extends MenuOptions { onError?: (error: unknown) => void; onCleanupError?: (error: unknown, menu: Menu) => void }
 export type MenuState = { status: "loading" } | { status: "ready"; menu: Menu } | { status: "error"; error: unknown };
 interface Lifetime { menu?: Menu; removing?: Promise<void>; blocker?: Lifetime; items: MenuOptions["items"]; disposed: boolean; completion: Promise<void> }
@@ -9,6 +9,7 @@ export function useMenu(options: UseMenuOptions): MenuState {
   const [state, setState] = useState<MenuState>({ status: "loading" });
   const callbacks = useRef(options);
   useLayoutEffect(() => { callbacks.current = options; });
+  const observesLifecycle = options.onOpen !== undefined || options.onClose !== undefined;
   const current = useRef<Lifetime | undefined>(undefined);
   useEffect(() => {
     const previous = lifetimes.get(options.id);
@@ -62,7 +63,12 @@ export function useMenu(options: UseMenuOptions): MenuState {
       const initial = owner.items;
       let menu: Menu;
       try {
-        menu = await createMenu({ id: options.id, items: initial, onAction: (event: MenuAction) => { if (!owner.disposed) callbacks.current.onAction?.(event); } });
+        menu = await createMenu({ id: options.id, items: initial, onAction: (event: MenuAction) => { if (!owner.disposed) callbacks.current.onAction?.(event); },
+          ...(observesLifecycle ? {
+            onOpen: (event: MenuLifecycleEvent) => { if (!owner.disposed) callbacks.current.onOpen?.(event); },
+            onClose: (event: MenuLifecycleEvent) => { if (!owner.disposed) callbacks.current.onClose?.(event); },
+          } : {}),
+        });
         owner.menu = menu;
       } catch (error) {
         report(error);
@@ -77,7 +83,7 @@ export function useMenu(options: UseMenuOptions): MenuState {
       if (owner.disposed) await remove(owner).catch(() => {});
     }).catch(report);
     return () => { owner.disposed = true; end(); };
-  }, [options.id]);
+  }, [options.id, observesLifecycle]);
   useEffect(() => {
     const owner = current.current;
     if (!owner || owner.disposed || owner.items === options.items) return;

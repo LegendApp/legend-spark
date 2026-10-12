@@ -1,5 +1,7 @@
 #import "RNDesktopSystem.h"
 #import <RNDesktopApp/SparkDesktop.h>
+#import "SparkDockTile.h"
+#import "SparkSystemState.h"
 #import <ServiceManagement/ServiceManagement.h>
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <IOKit/ps/IOPowerSources.h>
@@ -23,7 +25,8 @@ static NSDictionary *Power(void) {
 static void PowerChanged(void *context) { SparkEmit(@{ @"type": @"powerChanged" }); }
 @interface RNDesktopSystem ()
 @property NSMutableArray *observers;
-@property NSMutableSet *subscriptions;
+@property NSMutableDictionary<NSString *, NSSet<NSString *> *> *subscriptions;
+@property SparkSystemStateObserver *state;
 @property NSMutableSet *assertions;
 @property NSMutableSet *attention;
 @property CFRunLoopSourceRef powerSource;
@@ -33,7 +36,12 @@ static void PowerChanged(void *context) { SparkEmit(@{ @"type": @"powerChanged" 
 @implementation RNDesktopSystem
 RCT_EXPORT_MODULE(NativeDesktopSystem)
 + (BOOL)requiresMainQueueSetup { return YES; }
-- (instancetype)init { if (self = [super init]) { _observers = [NSMutableArray new]; _subscriptions = [NSMutableSet new]; _assertions = [NSMutableSet new]; _attention = [NSMutableSet new]; } return self; }
+- (instancetype)init { if (self = [super init]) { _observers = [NSMutableArray new]; _subscriptions = [NSMutableDictionary new]; _state = [SparkSystemStateObserver new]; _assertions = [NSMutableSet new]; _attention = [NSMutableSet new]; } return self; }
+static NSSet<NSString *> *ObservedTypes(NSDictionary<NSString *, NSSet<NSString *> *> *subscriptions) {
+  NSMutableSet *types = [NSMutableSet new];
+  for (NSSet *set in subscriptions.allValues) [types unionSet:set];
+  return types;
+}
 - (void)observe {
   if (self.observing) return; self.observing = YES;
   NSArray *definitions = @[
@@ -87,10 +95,27 @@ RCT_EXPORT_MODULE(NativeDesktopSystem)
         @"locale": NSLocale.currentLocale.localeIdentifier,
         @"dark": @([[NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]] isEqual:NSAppearanceNameDarkAqua]),
         @"idleSeconds": @(CGEventSourceSecondsSinceLastEventType(kCGEventSourceStateCombinedSessionState, kCGAnyInputEventType)) }];
+      NSString *error; NSDictionary *state = SparkSystemStateInfo(&error);
+      if (!state) { reject(@"E_NATIVE", error, nil); return; }
+      [value addEntriesFromDictionary:state];
       resolve(SparkJSON(value)); return;
     }
-    if ([method isEqual:@"observe"]) { [self.subscriptions addObject:args[@"id"]]; [self observe]; }
-    else if ([method isEqual:@"unobserve"]) { [self.subscriptions removeObject:args[@"id"]]; if (!self.subscriptions.count) [self stopObserving]; }
+    if ([method isEqual:@"network"]) {
+      SparkSystemNetworkStatus(5, ^(NSDictionary *status, NSString *code, NSString *error) { if (status) resolve(SparkJSON(status)); else reject(code, error, nil); });
+      return;
+    }
+    if ([method isEqual:@"observe"]) {
+      NSMutableDictionary *next = [self.subscriptions mutableCopy];
+      next[args[@"id"]] = [NSSet setWithArray:args[@"types"]];
+      NSString *error;
+      if (![self.state observeTypes:ObservedTypes(next) error:&error]) { reject(@"E_NATIVE", error, nil); return; }
+      self.subscriptions = next; [self observe];
+    }
+    else if ([method isEqual:@"unobserve"]) {
+      // Fewer types only removes sources, which cannot fail.
+      [self.subscriptions removeObjectForKey:args[@"id"]]; [self.state observeTypes:ObservedTypes(self.subscriptions) error:nil];
+      if (!self.subscriptions.count) [self stopObserving];
+    }
     else if ([method isEqual:@"loginStatus"] || [method isEqual:@"login"]) {
       BOOL available = [SparkContext()[@"runtime"][@"mode"] isEqual:@"release"];
       if ([method isEqual:@"loginStatus"]) {
@@ -103,7 +128,12 @@ RCT_EXPORT_MODULE(NativeDesktopSystem)
       BOOL success = [args[@"enabled"] boolValue] ? [SMAppService.mainAppService registerAndReturnError:&error] : [SMAppService.mainAppService unregisterAndReturnError:&error];
       if (!success) { SparkReject(reject, error); return; }
     }
-    else if ([method isEqual:@"badge"]) NSApp.dockTile.badgeLabel = args[@"label"];
+    else if ([method isEqual:@"badge"]) {
+      NSNumber *count = args[@"count"];
+      NSString *label = count ? (count.integerValue ? [NSNumberFormatter localizedStringFromNumber:count numberStyle:NSNumberFormatterDecimalStyle] : nil) : args[@"label"];
+      NSApp.dockTile.badgeLabel = label.length ? label : nil;
+    }
+    else if ([method isEqual:@"progress"]) SparkSetDockProgress(NSApp.dockTile, [args[@"state"] isEqual:@"none"] ? nil : args);
     else if ([method isEqual:@"attention"]) { NSInteger token = [NSApp requestUserAttention:[args[@"critical"] boolValue] ? NSCriticalRequest : NSInformationalRequest]; [self.attention addObject:@(token)]; resolve(SparkJSON(@(token))); return; }
     else if ([method isEqual:@"cancelAttention"]) { if ([self.attention containsObject:args[@"id"]]) [NSApp cancelUserAttentionRequest:[args[@"id"] integerValue]]; [self.attention removeObject:args[@"id"]]; }
     else if ([method isEqual:@"clearDockMenu"]) { if ([self.dockOwner isEqual:args[@"owner"]]) { SparkDockMenu = nil; self.dockOwner = nil; } }
@@ -124,10 +154,10 @@ RCT_EXPORT_MODULE(NativeDesktopSystem)
   });
 }
 - (void)invalidate { dispatch_async(dispatch_get_main_queue(), ^{
-  [self stopObserving]; [self.subscriptions removeAllObjects];
+  [self stopObserving]; [self.state stop]; [self.subscriptions removeAllObjects];
   for (NSNumber *value in self.assertions) IOPMAssertionRelease(value.unsignedIntValue); [self.assertions removeAllObjects];
   for (NSNumber *value in self.attention) [NSApp cancelUserAttentionRequest:value.integerValue]; [self.attention removeAllObjects];
-  SparkDockMenu = nil; NSApp.dockTile.badgeLabel = nil;
+  SparkDockMenu = nil; NSApp.dockTile.badgeLabel = nil; SparkSetDockProgress(NSApp.dockTile, nil);
 }); }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeDesktopSystemSpecJSI>(params); }
 @end

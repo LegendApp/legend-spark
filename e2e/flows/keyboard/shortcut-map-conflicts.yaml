@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: Conflicts and reserved shortcuts
+intent: >
+  Rebinding Find to ⌘S reports a conflict with the Document menu's Save item (menu scope). Rebinding
+  Find to ⌘Tab is rejected with SparkError:E_BUSY because macOS reserves it, and the reserved list is
+  shown. Reset all clears the conflict.
+checks: [KEY-MAPCONFLICT-01, KEY-MAPRESERVED-01]
+tags: [keyboard]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://keyboard/shortcut-map" }
+- extendedWaitUntil: { visible: { id: keyboard-shortcut-map-commands }, timeout: 15s }
+- assertText: { id: keyboard-shortcut-map-reserved, equals: "⌘ + Tab   ⌘ + ⇧ + Tab   ⌘ + ⌥ + Esc   ⌘ + ⌃ + Q   ⌘ + ⇧ + Q" }
+- tapOn: { id: keyboard-shortcut-map-example-conflict }
+- assertText: { id: keyboard-shortcut-map-result, equals: "Last change: ok" }
+- assertVisible: { id: keyboard-shortcut-map-find-conflict-menu }
+- tapOn: { id: keyboard-shortcut-map-example-reserved }
+- assertText: { id: keyboard-shortcut-map-result, equals: "Last change: SparkError:E_BUSY" }
+- tapOn: { id: keyboard-shortcut-map-reset-all }
+- assertNotVisible: { id: keyboard-shortcut-map-find-conflict-menu }

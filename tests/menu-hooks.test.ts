@@ -226,3 +226,34 @@ test("inline items across re-renders do not republish once ready", async () => {
   for (let i = 0; i < 5; i++) await act(async () => { rendered!.update(React.createElement(Component, { id: "churn", items: [{ type: "submenu", id: "file", label: "File", items: [] }], onAction: () => {} })); });
   expect(publish.mock.calls.length).toBe(afterReady);
 });
+
+test("menu lifecycle callbacks use latest committed handlers and dispose on unmount", async () => {
+  const first = vi.fn(), second = vi.fn(), close = vi.fn();
+  await act(async () => { rendered = create(React.createElement(StrictMode, null, React.createElement(Component, { id: "lifecycle", items, onOpen: first, onClose: close }))); });
+  expect(latest.status).toBe("ready");
+  expect(listeners.size).toBe(2);
+  await act(async () => { rendered!.update(React.createElement(StrictMode, null, React.createElement(Component, { id: "lifecycle", items, onOpen: second, onClose: close }))); });
+  const ownerId = JSON.parse(publish.mock.calls.at(-1)![0])[0]._sparkOwner;
+  for (const listener of listeners) listener({ ownerId, itemId: "file", type: "open" });
+  for (const listener of listeners) listener({ ownerId, itemId: "file", type: "close" });
+  expect(first).not.toHaveBeenCalled();
+  expect(second).toHaveBeenCalledWith({ menuId: "file" });
+  expect(close).toHaveBeenCalledWith({ menuId: "file" });
+  expect(publish).toHaveBeenCalledTimes(1);
+  await act(async () => { rendered!.unmount(); rendered = undefined; });
+  expect(listeners.size).toBe(0);
+});
+
+test("adding and removing lifecycle observation replaces its owner without leaking subscriptions", async () => {
+  await act(async () => { rendered = create(React.createElement(Component, { id: "lifecycle-toggle", items })); });
+  expect(listeners.size).toBe(1);
+  const onOpen = vi.fn();
+  await act(async () => { rendered!.update(React.createElement(Component, { id: "lifecycle-toggle", items, onOpen })); });
+  expect(latest.status).toBe("ready");
+  expect(listeners.size).toBe(2);
+  expect(publish).toHaveBeenCalledTimes(3);
+  await act(async () => { rendered!.update(React.createElement(Component, { id: "lifecycle-toggle", items })); });
+  expect(latest.status).toBe("ready");
+  expect(listeners.size).toBe(1);
+  expect(publish).toHaveBeenCalledTimes(5);
+});

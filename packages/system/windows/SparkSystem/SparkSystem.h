@@ -12,15 +12,18 @@
 #include <propkey.h>
 #include <propvarutil.h>
 #include <winrt/Windows.Data.Json.h>
+#include <winrt/Windows.Globalization.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.System.Profile.h>
 #include <winrt/Windows.Security.Cryptography.h>
 #include <winrt/Windows.Security.Cryptography.Core.h>
+#include "taskbar.inc"
 #pragma comment(lib, "PowrProf.lib")
 #pragma comment(lib, "Wtsapi32.lib")
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Propsys.lib")
 #pragma comment(lib, "Gdi32.lib")
+static_assert(int(SparkTaskbar::Progress::None) == TBPF_NOPROGRESS && int(SparkTaskbar::Progress::Indeterminate) == TBPF_INDETERMINATE && int(SparkTaskbar::Progress::Normal) == TBPF_NORMAL && int(SparkTaskbar::Progress::Error) == TBPF_ERROR && int(SparkTaskbar::Progress::Paused) == TBPF_PAUSED);
 namespace winrt::SparkSystem {
 namespace React = Microsoft::ReactNative;
 namespace Json = Windows::Data::Json;
@@ -44,7 +47,7 @@ struct SystemState {
   std::map<uint64_t, std::pair<handle, POWER_REQUEST_TYPE>> requests;
   std::map<uint64_t, bool> attention;
   std::wstring dockOwner;
-  bool badge = false;
+  bool badge = false, progress = false;
   void Emit(char const *type) { if (observing) context.EmitJSEvent(L"RCTDeviceEventEmitter", L"desktop", React::JSValueObject{{"type", type}}); }
   static LRESULT CALLBACK Proc(HWND hwnd, UINT message, WPARAM w, LPARAM l) noexcept {
     auto self = reinterpret_cast<SystemState *>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -53,7 +56,13 @@ struct SystemState {
         if (w == PBT_APMSUSPEND) self->Emit("sleep");
         else if (w == PBT_APMRESUMEAUTOMATIC) self->Emit("wake");
         else if (w == PBT_APMPOWERSTATUSCHANGE) self->Emit("powerChanged");
-      } else if (message == WM_WTSSESSION_CHANGE) { if (w == WTS_SESSION_LOCK) self->Emit("lock"); else if (w == WTS_SESSION_UNLOCK) self->Emit("unlock"); }
+      } else if (message == WM_WTSSESSION_CHANGE) {
+        if (w == WTS_SESSION_LOCK) self->Emit("lock"); else if (w == WTS_SESSION_UNLOCK) self->Emit("unlock");
+        // Fast user switching connects and disconnects this session from the console.
+        else if (w == WTS_CONSOLE_CONNECT) self->Emit("sessionActive"); else if (w == WTS_CONSOLE_DISCONNECT) self->Emit("sessionInactive");
+      }
+      else if (message == WM_TIMECHANGE) self->Emit("clockChanged");
+      else if (message == WM_SETTINGCHANGE && l && wcscmp(reinterpret_cast<wchar_t const *>(l), L"intl") == 0) self->Emit("localeChanged");
       else if (message == WM_SETTINGCHANGE || message == WM_THEMECHANGED) self->Emit("appearanceChanged");
       else if (message == WM_DISPLAYCHANGE) self->Emit("displaysChanged");
     } catch (...) {}
@@ -74,13 +83,21 @@ struct SystemState {
     if (!color || !mask || !dc) { if (color) DeleteObject(color); if (mask) DeleteObject(mask); if (dc) DeleteDC(dc); throw_last_error(); }
     auto old = SelectObject(dc, color); memset(pixels, 0, size * size * 4);
     auto brush = CreateSolidBrush(RGB(190, 0, 30)); auto oldBrush = SelectObject(dc, brush); auto oldPen = SelectObject(dc, GetStockObject(NULL_PEN)); Ellipse(dc, 0, 0, size, size);
-    auto font = CreateFontW(-20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI"); auto oldFont = SelectObject(dc, font);
+    auto font = CreateFontW(-SparkTaskbar::BadgeFontHeight(label.size()), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI"); auto oldFont = SelectObject(dc, font);
     SetTextColor(dc, RGB(255, 255, 255)); SetBkMode(dc, TRANSPARENT); RECT rect{0, 0, size, size}; DrawTextW(dc, label.c_str(), static_cast<int>(label.size()), &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     auto bytes = static_cast<DWORD *>(pixels); for (int i = 0; i < size * size; ++i) if (bytes[i] & 0xffffff) bytes[i] |= 0xff000000;
     SelectObject(dc, oldFont); SelectObject(dc, oldBrush); SelectObject(dc, oldPen); SelectObject(dc, old); DeleteObject(font); DeleteObject(brush); DeleteDC(dc);
     ICONINFO icon{}; icon.fIcon = TRUE; icon.hbmColor = color; icon.hbmMask = mask; auto result = CreateIconIndirect(&icon); DeleteObject(color); DeleteObject(mask); if (!result) throw_last_error(); return result;
   }
-  void ClearDock() { auto list = create_instance<ICustomDestinationList>(CLSID_DestinationList); check_hresult(list->SetAppID(AppId().c_str())); UINT slots; com_ptr<IObjectArray> removed; check_hresult(list->BeginList(&slots, IID_PPV_ARGS(removed.put()))); check_hresult(list->CommitList()); dockOwner.clear(); }
+  // Deleting the custom list restores the Jump List Windows shows by default (with its Recent category).
+  void ClearDock() { auto list = create_instance<ICustomDestinationList>(CLSID_DestinationList); check_hresult(list->DeleteList(AppId().c_str())); dockOwner.clear(); }
+  void Progress(Json::JsonObject const &args) {
+    SparkTaskbar::Progress state; if (!SparkTaskbar::ParseProgress(std::wstring(args.GetNamedString(L"state")), state)) throw hresult_invalid_argument(L"Unknown progress state");
+    auto taskbar = Taskbar(); auto window = MainWindow();
+    // A value switches indeterminate progress to normal, so it goes first and the state second.
+    if (SparkTaskbar::HasValue(state)) check_hresult(taskbar->SetProgressValue(window, SparkTaskbar::ProgressCompleted(args.GetNamedNumber(L"value")), SparkTaskbar::ProgressTotal));
+    check_hresult(taskbar->SetProgressState(window, static_cast<TBPFLAG>(state))); progress = state != SparkTaskbar::Progress::None;
+  }
   void DockMenu(Json::JsonObject const &args) {
     auto list = create_instance<ICustomDestinationList>(CLSID_DestinationList); check_hresult(list->SetAppID(AppId().c_str()));
     UINT slots; com_ptr<IObjectArray> removed; check_hresult(list->BeginList(&slots, IID_PPV_ARGS(removed.put())));
@@ -100,12 +117,13 @@ struct SystemState {
         auto properties = link.as<IPropertyStore>(); PROPVARIANT titleValue{}; check_hresult(InitPropVariantFromString(title.c_str(), &titleValue));
         auto result = properties->SetValue(PKEY_Title, titleValue); PropVariantClear(&titleValue); check_hresult(result); check_hresult(properties->Commit()); check_hresult(tasks->AddObject(link.get()));
       }
+      if (args.GetNamedBoolean(L"recent", false)) check_hresult(list->AppendKnownCategory(KDC_RECENT));
       auto array = tasks.as<IObjectArray>(); check_hresult(list->AddUserTasks(array.get())); check_hresult(list->CommitList()); dockOwner = std::wstring(owner);
     } catch (...) { list->AbortList(); throw; }
   }
   void Close() noexcept {
     for (auto &[id, request] : requests) { PowerClearRequest(request.first.get(), request.second); if (request.second == PowerRequestDisplayRequired) PowerClearRequest(request.first.get(), PowerRequestSystemRequired); } requests.clear();
-    try { FLASHWINFO flash{sizeof(FLASHWINFO), MainWindow(), FLASHW_STOP, 0, 0}; FlashWindowEx(&flash); if (badge) Taskbar()->SetOverlayIcon(MainWindow(), nullptr, L""); if (!dockOwner.empty()) ClearDock(); } catch (...) {}
+    try { FLASHWINFO flash{sizeof(FLASHWINFO), MainWindow(), FLASHW_STOP, 0, 0}; FlashWindowEx(&flash); if (badge) Taskbar()->SetOverlayIcon(MainWindow(), nullptr, L""); if (progress) Taskbar()->SetProgressState(MainWindow(), TBPF_NOPROGRESS); if (!dockOwner.empty()) ClearDock(); } catch (...) {}
     if (hwnd) { WTSUnRegisterSessionNotification(hwnd); DestroyWindow(hwnd); hwnd = nullptr; }
   }
   static Json::JsonObject Info() {
@@ -118,6 +136,12 @@ struct SystemState {
     LASTINPUTINFO input{sizeof(LASTINPUTINFO)}; if (!GetLastInputInfo(&input)) throw_last_error(); number(L"idleSeconds", static_cast<DWORD>(GetTickCount() - input.dwTime) / 1000.0);
     SYSTEM_POWER_STATUS power{}; if (!GetSystemPowerStatus(&power)) throw_last_error(); result.SetNamedValue(L"onBattery", Json::JsonValue::CreateBooleanValue(power.ACLineStatus == 0));
     if (power.BatteryLifePercent <= 100 && !(power.BatteryFlag & 128)) number(L"batteryLevel", power.BatteryLifePercent / 100.0); else result.SetNamedValue(L"batteryLevel", Json::JsonValue::CreateNullValue());
+    result.SetNamedValue(L"lowPowerMode", Json::JsonValue::CreateBooleanValue(power.SystemStatusFlag == 1)); // Battery saver.
+    result.SetNamedValue(L"thermalState", Json::JsonValue::CreateNullValue()); // Windows has no public thermal-state API.
+    result.SetNamedValue(L"timeZone", Json::JsonValue::CreateStringValue(Windows::Globalization::Calendar().GetTimeZone()));
+    // Emulation exists only on Arm64: x86 reports its WOW64 machine, x64 reports none but GetSystemInfo sees x64.
+    USHORT process = 0, host = 0; if (!IsWow64Process2(GetCurrentProcess(), &process, &host)) throw_last_error();
+    result.SetNamedValue(L"translated", Json::JsonValue::CreateBooleanValue(host == IMAGE_FILE_MACHINE_ARM64 && (process != IMAGE_FILE_MACHINE_UNKNOWN || info.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_ARM64)));
     return result;
   }
 };
@@ -136,7 +160,14 @@ struct SparkSystem {
         else if (method == "unobserve") { current->subscriptions.erase(to_string(args.GetNamedString(L"id"))); current->observing = !current->subscriptions.empty(); if (!current->observing && current->hwnd) { WTSUnRegisterSessionNotification(current->hwnd); DestroyWindow(current->hwnd); current->hwnd = nullptr; } }
         else if (method == "loginStatus") { promise.Resolve("\"unavailable\""); return; }
         else if (method == "login") { promise.Reject(React::ReactError{"E_UNAVAILABLE", "Login startup requires a standalone distribution app"}); return; }
-        else if (method == "badge") { auto label = args.GetNamedString(L"label"); HICON icon = label.empty() ? nullptr : SystemState::Badge(std::wstring(label)); auto result = SystemState::Taskbar()->SetOverlayIcon(MainWindow(), icon, label.c_str()); if (icon) DestroyIcon(icon); check_hresult(result); current->badge = !label.empty(); }
+        else if (method == "badge") {
+          // The overlay draws at most "99+" for a count; its description (read by screen readers) keeps the number.
+          auto count = args.HasKey(L"count") ? static_cast<uint64_t>(args.GetNamedNumber(L"count")) : 0;
+          auto label = args.HasKey(L"count") ? SparkTaskbar::BadgeCountText(count) : std::wstring(args.GetNamedString(L"label"));
+          auto description = args.HasKey(L"count") && count ? std::to_wstring(count) : label;
+          HICON icon = label.empty() ? nullptr : SystemState::Badge(label); auto result = SystemState::Taskbar()->SetOverlayIcon(MainWindow(), icon, description.c_str()); if (icon) DestroyIcon(icon); check_hresult(result); current->badge = !label.empty();
+        }
+        else if (method == "progress") current->Progress(args);
         else if (method == "attention") { auto id = ++current->sequence; bool critical = args.GetNamedBoolean(L"critical", false); current->attention[id] = critical; FLASHWINFO flash{sizeof(FLASHWINFO), MainWindow(), static_cast<DWORD>(FLASHW_TRAY | (critical ? FLASHW_TIMERNOFG : 0)), critical ? 0u : 3u, 0}; FlashWindowEx(&flash); promise.Resolve(std::to_string(id)); return; }
         else if (method == "cancelAttention") { current->attention.erase(static_cast<uint64_t>(args.GetNamedNumber(L"id"))); if (current->attention.empty()) { FLASHWINFO flash{sizeof(FLASHWINFO), MainWindow(), FLASHW_STOP, 0, 0}; FlashWindowEx(&flash); } }
         else if (method == "preventSleep") {

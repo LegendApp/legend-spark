@@ -49,11 +49,11 @@ The earlier API passed packed macOS Settings/kitchen-sink checks and iPhone 17 s
 
 ## Specialized macOS views
 
-Search, sidebar, split view, swipe actions, glass and SF Symbols keep capability-specific subpaths. They expose named props and owned events, layout refs and `onError`; generated native components are private. Availability queries are synchronous and use the shared result: `getSearchAvailability`, `getSidebarAvailability`, `getSplitViewAvailability`, `getGlassAvailability`, `getSFSymbolAvailability`, and `getSwipeActionsAvailability`. Unsupported hosts preserve ordinary view content/layout and report through `onError`. These native implementations currently target macOS; a missing implementation is not advertised as platform parity.
+Search, sidebar, split view, swipe actions, glass, SF Symbols, popover and tab view keep capability-specific subpaths. They expose named props and owned events, layout refs and `onError`; generated native components are private. Availability queries are synchronous and use the shared result: `getSearchAvailability`, `getSidebarAvailability`, `getSplitViewAvailability`, `getGlassAvailability`, `getSFSymbolAvailability`, `getSwipeActionsAvailability`, `getPopoverAvailability` and `getTabViewAvailability`. Unsupported hosts preserve ordinary view content/layout and report through `onError`, except `Popover` and `TabView`: they have no substitute and throw a `SparkError` during render (`E_UNSUPPORTED_PLATFORM`, `E_MODULE_UNAVAILABLE`, or `E_UNAVAILABLE` before macOS 14). These native implementations currently target macOS; a missing implementation is not advertised as platform parity.
 
 `TextInputSearch` under `/ui/search` is an AppKit search field with the same controlled/default-value distinction and disabled behavior as TextInput. It adds `placeholder`, explicit `appearance`, and a `TextInputSearchRef` with `focus`, `blur`, and measurement. Empty controlled values clear the field, and stale native edit counts cannot overwrite newer typing. Native arrow-key handling is left to the search field instead of unconditionally swallowing arrows. Retained refs reject after unmount.
 
-`Sidebar` under `/ui/sidebar` takes either `items: readonly { id, label, selectable? }[]` or direct `SidebarItem` children (fragments are allowed), never both. IDs are unique nonempty strings. `selectedId` is controlled and nullable; it must reference a selectable row, and `onSelectionChange({ id })` — required, since a controlled selection needs its write path — reports a requested choice or `null` for deselection. `onContentLayout({ width, height })` reports native content size separately from the standard RN `onLayout` event. Custom rows use `SidebarItem` with `id`, optional numeric/`'auto'` row height, and `onContextMenu({ id, position, windowPosition, modifiers })`. Positions use logical top-left coordinates; windowPosition is relative to the owning window's content, suitable for a context menu with that window's explicit ID.
+`Sidebar` under `/ui/sidebar` takes either `items: readonly { id, label, selectable? }[]` or direct `SidebarItem` children (fragments are allowed), never both. IDs are unique nonempty strings. `selectedId` is controlled and nullable; it must reference a selectable row, and `onSelectionChange({ id })` — required, since a controlled selection needs its write path — reports a requested choice or `null` for deselection. `onContentLayout({ width, height })` reports native content size separately from the standard RN `onLayout` event. Custom rows use `SidebarItem` with `id`, optional numeric/`'auto'` row height, and `onContextMenu({ id, position, windowPosition, modifiers })`. Each row takes the width of the native list's cell (inside the source-list insets and any scroller), applied after the first native layout; `'auto'` measures the row's React height at that width. Rows mirror with the React layout direction. Positions use logical top-left coordinates; windowPosition is relative to the owning window's content, suitable for a context menu with that window's explicit ID.
 
 `SidebarSplitView` under `/ui/split-view` uses named `sidebar` and `content` panes, rather than interpreting child positions. It retains width/minimum/collapsed settings and initial pane metrics. Title-bar customization is grouped:
 
@@ -101,6 +101,76 @@ Phased trackpad events lock to an axis; buffered vertical events pass through to
 A non-dismissing action reports as the row begins springing closed. A dismissing action reports after the row slides away and leaves that native view dismissed. The caller must remove the row, or remount it with a new React key to recover after failure or undo. In a JS-recycling list, key `SwipeActions` by the logical item ID so another item gets a fresh native owner; increment a reset revision to restore the same item. Fabric recycling and replacing action definitions reset native position and invalidate delayed completions, preventing an obsolete action from reaching a replacement owner.
 
 The swipe AppKit fixture runs the actual implementation for axis replay, rest/arm/cancel, clicks, accessibility presses, clipping ownership, child coordinates, recycling and delayed callbacks. Its Fabric transport declarations are substituted; it is distinct from full Fabric integration and platform release acceptance.
+
+### Popover
+
+`Popover` under `/ui/popover` is an AppKit `NSPopover` that hosts React content. `open` is controlled: `onClose` (required) reports any close, including one the user caused by clicking outside; keep `open` true and the popover shows again. `onShow` reports that it appeared and `onDetach` that the user dragged it off into its own window (`detachable`, default false). Native events are counted and JavaScript echoes the count back, as the controls do, so an `open` value rendered before a close was processed never reopens it.
+
+```tsx
+const anchor = useRef<View>(null);
+const [open, setOpen] = useState(false);
+<View ref={anchor} collapsable={false}><Button onPress={() => setOpen(true)}>Details</Button></View>
+<Popover open={open} anchor={{ ref: anchor }} behavior="transient" preferredEdge="bottom" onClose={() => setOpen(false)}>
+  <View style={{ width: 260, padding: 16, gap: 8 }}><Text>Details</Text><TextInput defaultValue="" /></View>
+</Popover>
+```
+
+- `anchor` is `{ ref, rect? }`, a React Native host view and an optional rect within it (default: its bounds), or `{ rect }` in the owning window's content. Rects are logical points from the top-left. The anchor is resolved each time the popover shows. A flattened view has no native view: give the anchor `collapsable={false}`, or anchoring reports `E_NOT_FOUND` through `onError`. A Spark `Button` ref is a layout ref, not a host view, so wrap the button.
+- `behavior` is AppKit's: `transient` (default) closes on interaction anywhere outside the popover, `semi-transient` only on interaction with the anchor's window (not other apps), `application-defined` only when `open` becomes false.
+- `preferredEdge` is `top`, `bottom` (default), `leading` or `trailing`, in the layout direction. AppKit uses another edge when the preferred one has no room.
+- Content stays mounted while the `Popover` is, so its state survives closing and its size is known before it shows. The popover takes the size of the content's layout: give the content a width when its text should wrap. The content view is flipped, so React children are laid out top-down in React order, and it has its own touch handler, because the popover is a separate window. When it shows, keyboard focus moves to the first key view in the content (the popover window becomes key only while the app is active); AppKit returns focus to the parent window on close.
+- A popover needs its anchor's window on screen: AppKit silently ignores a show from any other window. Spark then keeps it closed, reports `E_UNAVAILABLE` through `onError`, and shows it once that window comes on screen (ordered front, deminiaturized or the app unhidden) if `open` is still true. Driver-mode apps never order windows on screen ([test driver](test-driver.md)), so there the popover never opens and no capture can contain it. `e2e/flows/native-controls/popover.yaml` checks that refusal and the configuration on the driver; `popover-black-box.yaml` opens, closes and detaches it, and needs the black-box backend ([#50](https://github.com/LegendApp/legend-spark/issues/50)). `tests/ui-popover-tab-view.native.mm` drives the real component view with a recording `NSPopover`.
+
+### Tab view
+
+`TabView` under `/ui/tab-view` is an AppKit `NSTabView`. Its children are `Tab` elements (fragments are allowed) with unique nonempty `id`s and `label`s; each tab's React content stays mounted and is sized to AppKit's content area inside the tabs and border, which the native view measures. `selectedId` is controlled and must name a tab; `onSelectionChange({ id })` (required) reports the user's choice, and every native selection count is echoed, so a selection the parent does not adopt is restored natively.
+
+```tsx
+<TabView selectedId={tab} onSelectionChange={({ id }) => setTab(id)} tabPosition="top" style={{ height: 240 }}>
+  <Tab id="general" label={t.general}><GeneralPane /></Tab>
+  <Tab id="advanced" label={t.advanced}><AdvancedPane /></Tab>
+</TabView>
+```
+
+`tabPosition` is `top` (default), `bottom`, `leading`, `trailing` or `none` (tabless, switched by `selectedId` only); `leading` and `trailing` follow the layout direction. `tabBorder` is `bezel` (default), `line` or `none`; AppKit draws tabs on a bezel, so `line` and `none` require `tabPosition: "none"` and otherwise throw `E_UNSUPPORTED_OPTION`. In right-to-left layouts the first tab is on the right: AppKit orders a tab row by the app's direction, so the native view reverses the row when React's direction differs. Side tabs run top to bottom in both directions.
+
+In-process captures (the test driver's `capture`, so Kitchen Sink goldens) do not show the tab row as the window server draws it. Measured on macOS 27 with a plain `NSTabView` in a window captured through `cacheDisplayInRect:`, whether or not the window was ever on screen: in light appearance the selected tab's label is missing, and in dark appearance the row is a white bar with no labels. An `NSSegmentedControl` in the same capture draws normally. The goldens still compare the tab row's position, the selected segment and the tab content; checking the labels visually needs an out-of-process capture ([#50](https://github.com/LegendApp/legend-spark/issues/50)).
+
+Windows is typed unsupported for both: `getPopoverAvailability()` and `getTabViewAvailability()` report `unsupported-platform` and rendering throws `E_UNSUPPORTED_PLATFORM`. [#299](https://github.com/LegendApp/legend-spark/issues/299) tracks the WinUI mapping (Flyout, TabView).
+
+## Tables and outlines
+
+`@legendapp/spark/ui/table` exports `Table` (AppKit `NSTableView`), `Outline` (`NSOutlineView`), `getTableAvailability()` and their named types. Both are available on macOS 14 and later. Windows, iOS, Android and web report `unsupported-platform`, and rendering either view there throws `E_UNSUPPORTED_PLATFORM` (`E_MODULE_UNAVAILABLE` when the macOS view is absent). No substitute is rendered. Windows is tracked in [#294](https://github.com/LegendApp/legend-spark/issues/294).
+
+```tsx
+import { Table, type TableSortDescriptor } from '@legendapp/spark/ui/table';
+
+const columns = [
+  { id: 'name', title: 'Name', width: 220, sortable: true },
+  { id: 'size', title: 'Size', width: 100, alignment: 'trailing', sortable: true },
+] as const;
+
+function Files({ files }: { files: readonly { id: string; cells: { name: string; size: string } }[] }) {
+  const [sort, setSort] = useState<TableSortDescriptor[]>([{ columnId: 'name', direction: 'ascending' }]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const rows = useMemo(() => sortFiles(files, sort), [files, sort]);
+  return <Table columns={columns} rows={rows} sort={sort} onSortChange={setSort} selectionMode="multiple"
+    selectedIds={selectedIds} onSelectionChange={setSelectedIds} onActivate={({ ids }) => open(ids)} style={{ flex: 1 }} />;
+}
+```
+
+- **Columns:** `id`, `title`, `width` (default 120), `minWidth`, `maxWidth`, `resizable` (default true), `sortable` (default false) and `alignment` (`leading`, `center`, `trailing`; leading is the right edge in right-to-left layouts). A width prop applies when the column is created or the prop changes; until then a user resize stays.
+- **Rows:** `{ id, cells }`, where `cells` maps column IDs to text. Outline rows add `children`; a row with `children` is expandable even when it is empty. IDs are unique across the whole tree. Rows are immutable: replace a row object to change it. Each row object is serialized once and cached by identity, rows travel to native in JSON chunks of 256, and native re-parses only chunks whose text changed. Sorting the same row objects serializes nothing again. AppKit's cell reuse virtualizes the rows, so 10,000 rows render only the visible cells.
+- **Cells are native text.** React-rendered cells are not supported: AppKit asks for cell views synchronously while it scrolls, and React Native cannot render a component synchronously on that thread, so React cells would appear blank until JavaScript caught up, and every reused cell would need its own mounted React tree. For short lists of rich React rows, use `Sidebar` with `SidebarItem` children.
+- **Sorting is controlled and done by the application.** `sort` is an array of `{ columnId, direction }`, primary key first. A header click calls `onSortChange` with AppKit's new descriptors (the clicked column first; earlier keys follow as tie-breakers). Sortable columns require `sort` and `onSortChange`.
+- **Selection is controlled.** `selectionMode` is `single` (default), `multiple` or `none`. `selectedIds` and `onSelectionChange(ids)` are required unless the mode is `none`. AppKit handles click, Shift-click ranges, Command-click toggles and arrow keys with and without Shift; Command-A selects every row while the view has focus. Type-select matches the first column. Selected rows inside a collapsed outline row are not shown as selected.
+- **Column layout:** users drag headers to reorder (`columnReordering`, default true) and drag edges to resize. Without `columnLayout`, the view owns widths and order and reports changes through `onColumnLayoutChange`. With `columnLayout` (an array of `{ id, width }` in display order), the layout is controlled: persist what `onColumnLayoutChange` reports, for example with `@legendapp/spark/settings`, and pass it back. Columns without an entry follow the listed ones.
+- **Outline expansion is controlled:** `expandedIds` and `onExpandedChange(ids)` (IDs in display order). Option-click expands or collapses a whole branch and is reported once. An expanded row inside a collapsed parent stays in `expandedIds` and reopens with its parent.
+- **Events:** `onActivate({ ids })` for a double-click or Return, and `onContextMenu({ rowId, ids, position })` for a right- or Control-click; the view shows no menu of its own, the click does not reach ancestor views, and it leaves the selection unchanged. `ids` is the selection when the clicked row is selected, otherwise only that row. `position` is in logical points from the window content's top-left, as `showContextMenu` takes it. `rowId` is `null` below the last row.
+
+Controlled state uses the event-count acknowledgment of the control primitives: native counts the changes it reports and reconciles `selectedIds`, `sort`, `columnLayout` and `expandedIds` only once JavaScript has processed every one of them. Props rendered before a user change never undo it, and a change the parent does not accept is restored. Native events may name rows that JavaScript has just replaced; those IDs are dropped. Invalid props throw `E_INVALID_ARGUMENT`, unknown column, row, sort and layout keys throw `E_UNSUPPORTED_OPTION`, and malformed native data is reported to `onError` as `E_INVALID_DATA`.
+
+`tests/ui-table-native.test.ts` compiles the actual AppKit view against substituted Fabric types and checks the null-oldProps mount, columns, chunked parsing, keyboard selection ranges, sort, layout, expansion (including a user collapse that keeps expanded descendants), context menus and right-to-left layout. It is not full Fabric integration. The Kitchen Sink `native-controls/table` and `native-controls/outline` screens are, and `e2e/flows/native-controls/table*.yaml` and `outline-interaction.yaml` drive them with in-app driver input (white-box).
 
 ## Settings windows
 

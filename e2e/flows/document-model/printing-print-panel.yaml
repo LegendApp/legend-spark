@@ -1,0 +1,40 @@
+appId: so.legend.spark.examples.kitchensink
+name: Print panel with preview, cancel and save as PDF
+intent: >
+  "Print report…" opens the print panel as a sheet on the main window, with a preview of the
+  report's first page. Cancel resolves {"canceled":true}. Printing again and choosing "Save as
+  PDF" from the panel's PDF menu saves the job to a file (no printer is used) and resolves
+  canceled false with the panel's page setup (A4 portrait, 54-point margins, the app default after
+  clearState). "Print this window…" and "Print receipt card…" preview the window and the white
+  receipt card before Cancel. manual: true keeps the gate from running it: a wrong click on Print
+  would reach the Mac's real default printer. Run it by hand only with a fake or virtual default
+  printer, checking `lpstat -o` shows no new job before and after.
+checks: [DOC-PRINT-01, DOC-PRINT-02]
+tags: [document-model]
+platforms: [macos]
+manual: true
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://document-model/printing" }
+- extendedWaitUntil: { visible: { id: document-model-printing-root }, timeout: 10s }
+- tapOn: { id: document-model-printing-print-report }
+- assertDialog: { kind: sheet, buttons: [Cancel, Print], default: Print, attachedTo: main }
+- assertVisible: { text: "/Page 1 of \\d+/", window: key }
+- tapOn: { text: Cancel, window: key }
+- assertText: { id: document-model-printing-print-report-result, equals: '{"canceled":true}' }
+- tapOn: { id: document-model-printing-print-report }
+- tapOn: { text: PDF, role: popUpButton, window: key }
+- tapOn: { text: "Save as PDF", role: menuItem }
+- handleDialog: { kind: save, name: Report.pdf, path: "${TMP}" }
+- assertFile: { path: "${TMP}/Report.pdf", exists: true }
+- assertText: { id: document-model-printing-print-report-result, equals: '{"canceled":false,"pageSetup":{"paperSize":{"width":595.28,"height":841.89},"orientation":"portrait","margins":{"top":54,"right":54,"bottom":54,"left":54}}}' }
+# A window and a single view
+- tapOn: { id: document-model-printing-print-window }
+- assertDialog: { kind: sheet, buttons: [Cancel, Print], attachedTo: main }
+- takeScreenshot: print-window-preview
+- tapOn: { text: Cancel, window: key }
+- assertText: { id: document-model-printing-print-window-result, equals: '{"canceled":true}' }
+- tapOn: { id: document-model-printing-print-card }
+- assertDialog: { kind: sheet, buttons: [Cancel, Print], attachedTo: main }
+- takeScreenshot: print-card-preview
+- tapOn: { text: Cancel, window: key }
+- assertText: { id: document-model-printing-print-card-result, equals: '{"canceled":true}' }

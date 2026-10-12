@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: The hang watchdog is typed unsupported on Windows
+intent: >
+  On Windows the Hang watchdog screen reports unsupported-platform. Its watchdog fails to start with
+  SparkError:E_UNSUPPORTED_PLATFORM, and blocking rejects the same way without blocking anything.
+  Implementation: #304.
+checks: [REL-HANG-04]
+tags: [reliability-diagnostics]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/hang-watchdog" }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-hang-watchdog-root }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-hang-watchdog-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: reliability-diagnostics-hang-watchdog-state, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: reliability-diagnostics-hang-watchdog-block-1000 }
+- assertText: { id: reliability-diagnostics-hang-watchdog-block-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }

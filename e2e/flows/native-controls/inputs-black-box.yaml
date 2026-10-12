@@ -1,0 +1,50 @@
+appId: so.legend.spark.examples.kitchensink
+name: Value inputs that need real input
+intent: >
+  On Native controls > Value inputs, in all four sizes, a ticked slider (continuous=false) that
+  a click has focused steps by 1 with each Up arrow press: twenty presses move it by twenty (the
+  click is mirrored in Arabic). An option chosen from the regular combo box's list becomes its
+  value. Black-box only: AppKit controls take arrow keys only in the key window, and the combo box
+  list is a window of its own, neither of which the in-app driver provides, so this flow never
+  runs white-box.
+checks: [CTRL-SLIDER-03, CTRL-COMBO-02]
+tags: [native-controls, black-box]
+platforms: [macos]
+matrix:
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/inputs" }
+- extendedWaitUntil: { visible: { id: native-controls-inputs-root }, timeout: 10s }
+# mini
+- tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-mini } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-mini-value, text: "/^(1[89]|2[0-9]|3[0-2])$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-mini-value, text: "/^(6[89]|7[0-9]|8[0-2])$/", when: { matrix: { locale: ar } } }
+- repeat: { times: 20, commands: [pressKey: Up] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-mini-value, text: "/^(3[89]|4[0-9]|5[0-2])$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-mini-value, text: "/^(8[89]|9[0-9]|100)$/", when: { matrix: { locale: ar } } }
+# small
+- tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-small } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-small-value, text: "/^(1[89]|2[0-9]|3[0-2])$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-small-value, text: "/^(6[89]|7[0-9]|8[0-2])$/", when: { matrix: { locale: ar } } }
+- repeat: { times: 20, commands: [pressKey: Up] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-small-value, text: "/^(3[89]|4[0-9]|5[0-2])$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-small-value, text: "/^(8[89]|9[0-9]|100)$/", when: { matrix: { locale: ar } } }
+# regular
+- tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-regular } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-regular-value, text: "/^(1[89]|2[0-9]|3[0-2])$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-regular-value, text: "/^(6[89]|7[0-9]|8[0-2])$/", when: { matrix: { locale: ar } } }
+- repeat: { times: 20, commands: [pressKey: Up] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-regular-value, text: "/^(3[89]|4[0-9]|5[0-2])$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-regular-value, text: "/^(8[89]|9[0-9]|100)$/", when: { matrix: { locale: ar } } }
+# large
+- tapOn: { point: "25%,50%", within: { id: native-controls-inputs-slider-ticks-large } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-large-value, text: "/^(1[89]|2[0-9]|3[0-2])$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-large-value, text: "/^(6[89]|7[0-9]|8[0-2])$/", when: { matrix: { locale: ar } } }
+- repeat: { times: 20, commands: [pressKey: Up] }
+- assertVisible: { id: native-controls-inputs-slider-ticks-large-value, text: "/^(3[89]|4[0-9]|5[0-2])$/", when: { matrix: { locale: en-US } } }
+- assertVisible: { id: native-controls-inputs-slider-ticks-large-value, text: "/^(8[89]|9[0-9]|100)$/", when: { matrix: { locale: ar } } }
+# Choose an option from the combo box list (its button is on the trailing edge)
+- tapOn: { point: "94%,50%", within: { id: native-controls-inputs-combo-box-regular }, when: { matrix: { locale: en-US } } }
+- tapOn: { point: "6%,50%", within: { id: native-controls-inputs-combo-box-regular }, when: { matrix: { locale: ar } } }
+- tapOn: Avenir
+- assertText: { id: native-controls-inputs-combo-box-regular-value, equals: '"Avenir"' }

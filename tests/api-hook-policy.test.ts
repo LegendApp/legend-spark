@@ -11,15 +11,20 @@ const policy: Record<string, Record<string, { imperative: string } | { reactOnly
   "./shortcuts/commands": {
     useRoutedHotkeys: { imperative: "createHotkeyRouter" },
     useHotkeySuspension: { imperative: "createHotkeyRouter" },
+    useShortcutMap: { imperative: "createShortcutMap" },
   },
   "./windows": {
     usePrimaryWindowLifecycle: { imperative: "createPrimaryWindowLifecycle" },
     useWindowFocusEffect: { imperative: "addWindowListener" },
     useWindowId: { reactOnly: "Reads the nearest WindowProvider; imperative callers already supply explicit window IDs." },
+    useWindowInstance: { reactOnly: "Reads the navigator root context; imperative callers hold the instance returned by open()." },
+    useUndoState: { imperative: "createWindowsNavigator" },
+    useWindowState: { imperative: "createWindowState" },
   },
   "./app/documents": {
     useDocumentAppController: { imperative: "createDocumentAppController" },
     useWatchedDocumentReload: { imperative: "watchDocumentReload" },
+    useDocumentSessionState: { imperative: "createDocumentSession" },
   },
 };
 

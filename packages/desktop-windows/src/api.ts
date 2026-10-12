@@ -3,16 +3,20 @@ import { SparkError, asyncRegistration, nativeError, type AsyncRegistration, typ
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import Native from "./NativeDesktopWindowManager";
-import { createMacOSWindow, macosNative, updateMacOSWindow } from "./macos-adapter";
+import { COMMON_MACOS, appKitOptions, createMacOSWindow, macosNative, updateMacOSWindow } from "./macos-adapter";
 import { bounds, keys, number, object, text, validateOptions, windowId } from "./validation";
 import { getNativeDisplays, isBounds, isInfo, record, subscribeToWindowInstance, windowCall, windowCommand, type NativeWindowInfo } from "./transport";
-import type { CenterWindowOptions, CloseResult, CursorPoint, DisplayInfo, SetWindowBoundsOptions, ShowWindowOptions, WindowBounds, WindowEventMap, WindowInfo, WindowOpenOptions, WindowUpdateOptions } from "./types";
+import type { CenterWindowOptions, CloseResult, CursorPoint, DisplayInfo, SetWindowBoundsOptions, ShowWindowOptions, WindowBounds, WindowEventMap, WindowInfo, WindowNewTabEvent, WindowOpenOptions, WindowOption, WindowTabGroup, WindowUpdateOptions } from "./types";
 export type * from "./types";
 
-export function getWindowAvailability(): Availability {
+const WINDOW_OPTIONS: readonly WindowOption[] = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "tabbing", "spaces", "simpleFullscreen", "documentEdited", "backgroundMaterial", "subtitle", "trafficLightPosition"];
+/** With an option, reports whether this platform implements it. Every listed option is macOS-only today; unlisted options work wherever windows do. */
+export function getWindowAvailability(option?: WindowOption): Availability {
+  if (option !== undefined && !WINDOW_OPTIONS.includes(option)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown window option");
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
   if (!Native) return { available: false, reason: "missing-module" };
   if (Platform.OS === "macos") try { macosNative(); } catch { return { available: false, reason: "missing-module" }; }
+  if (option !== undefined && Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };
   return { available: true };
 }
 function publicInfo(value: NativeWindowInfo): WindowInfo {
@@ -31,10 +35,15 @@ export async function openWindow(options: WindowOpenOptions): Promise<WindowInfo
     }
     await createMacOSWindow(snapshot);
     try {
+      // Simple fullscreen hides the chrome applied below, so it is entered last.
+      const simpleFullscreen = snapshot.macos?.simpleFullscreen;
+      if (simpleFullscreen !== undefined) delete snapshot.macos!.simpleFullscreen;
       const info = await windowCall("completeOpen", snapshot, isInfo);
       // Common chrome is applied first; explicit AppKit groups own their corresponding fields.
-      if (!snapshot.macos) return publicInfo(info);
-      await updateMacOSWindow(snapshot.id, snapshot.macos);
+      const appKit = appKitOptions(snapshot.macos);
+      if (!appKit && !simpleFullscreen) return publicInfo(info);
+      if (appKit) await updateMacOSWindow(snapshot.id, appKit);
+      if (simpleFullscreen) await windowCommand("options", { id: snapshot.id, options: { macos: { simpleFullscreen } } });
       // The window now exists: reflect the applied chrome, but a transient read-back
       // failure must not discard a window that opened successfully, so fall back to info.
       try { return await getWindow(snapshot.id); } catch { return publicInfo(info); }
@@ -54,10 +63,13 @@ export async function getCursorPoint(): Promise<CursorPoint> { return windowCall
 export async function setWindowOptions(id: string, options: WindowUpdateOptions): Promise<void> {
   windowId(id); validateOptions(options, Platform.OS, false);
   const snapshot = JSON.parse(JSON.stringify(options)) as WindowUpdateOptions;
-  if (!snapshot.macos || Object.keys(snapshot).some(key => key !== "macos")) {
+  // Publish each field to the module that owns it. The window module also checks title-bar
+  // changes against simple fullscreen, so any titleBar group goes through it first.
+  const appKit = appKitOptions(snapshot.macos);
+  if (!snapshot.macos || Object.keys(snapshot).some(key => key !== "macos") || snapshot.macos.titleBar || Object.keys(snapshot.macos).some(key => COMMON_MACOS.includes(key))) {
     await windowCommand("options", { id, options: snapshot });
   }
-  if (snapshot.macos) await updateMacOSWindow(id, snapshot.macos);
+  if (appKit) await updateMacOSWindow(id, appKit);
 }
 /** Portable frame change. Animated moves are macOS-only: pass `macos.durationMs` and the call rejects on Windows rather than ignoring the request. */
 export async function setWindowBounds(id: string, value: WindowBounds, options: SetWindowBoundsOptions = {}): Promise<void> {
@@ -101,17 +113,63 @@ export async function closeWindow(id: string): Promise<CloseResult> {
 }
 export interface WindowListenerOptions { onError?: (error: SparkError) => void }
 function report(options: WindowListenerOptions, cause: unknown) { try { (options.onError ?? console.error)(nativeError(cause)); } catch (error) { console.error(error); } }
+const TAB_EVENTS: readonly string[] = ["tabGroupChanged", "tabSelectionChanged"];
 /** Registration acknowledges the live native instance. Removal stops callbacks immediately. */
 export async function addWindowListener<K extends keyof WindowEventMap>(id: string, type: K, listener: (event: WindowEventMap[K]) => void, options: WindowListenerOptions = {}): Promise<AsyncRegistration> {
   windowId(id); object(options, "listener options"); keys(options, ["onError"]);
-  if (!["focusChanged", "boundsChanged", "visibilityChanged", "fullscreenChanged", "closed"].includes(type) || typeof listener !== "function" || (options.onError !== undefined && typeof options.onError !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Invalid window listener");
+  if (!["focusChanged", "boundsChanged", "visibilityChanged", "fullscreenChanged", "closed", ...TAB_EVENTS].includes(type) || typeof listener !== "function" || (options.onError !== undefined && typeof options.onError !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Invalid window listener");
+  if (TAB_EVENTS.includes(type)) tabsSupported();
   return subscribeToWindowInstance(id, event => {
     if (event.type !== type) return;
-    const valid = type === "closed" || (type === "boundsChanged" ? isBounds(event.bounds) : typeof event[type === "focusChanged" ? "focused" : type === "visibilityChanged" ? "visible" : "fullscreen"] === "boolean");
+    const valid = type === "closed" || (type === "boundsChanged" ? isBounds(event.bounds) : type === "tabGroupChanged" ? isTabGroup(event.tabGroup) : type === "tabSelectionChanged" ? nullableId(event.selectedWindowId) : typeof event[type === "focusChanged" ? "focused" : type === "visibilityChanged" ? "visible" : "fullscreen"] === "boolean");
     if (!valid) { report(options, new SparkError("E_INVALID_DATA", "Malformed window event")); return; }
-    const payload = { windowId: id, ...(type === "boundsChanged" ? { bounds: event.bounds } : type === "focusChanged" ? { focused: event.focused } : type === "visibilityChanged" ? { visible: event.visible } : type === "fullscreenChanged" ? { fullscreen: event.fullscreen } : {}) };
+    const payload = { windowId: id, ...(type === "boundsChanged" ? { bounds: event.bounds } : type === "focusChanged" ? { focused: event.focused } : type === "visibilityChanged" ? { visible: event.visible } : type === "fullscreenChanged" ? { fullscreen: event.fullscreen } : type === "tabGroupChanged" ? { tabGroup: tabGroup(event.tabGroup as WindowTabGroup) } : type === "tabSelectionChanged" ? { selectedWindowId: event.selectedWindowId } : {}) };
     try { listener(payload as WindowEventMap[K]); } catch (cause) { report(options, cause); }
   }, [type]);
+}
+
+// Native window tabs (docs/api-window-contract.md#window-tabs). macOS only; Windows follow-up #295.
+function tabsSupported() { if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "Native window tabs require macOS"); }
+const nullableId = (value: unknown): value is string | null => value === null || (typeof value === "string" && !!value);
+const isTabGroup = (value: unknown): value is WindowTabGroup => record(value) && Array.isArray(value.windowIds) && value.windowIds.every(id => typeof id === "string" && !!id) && nullableId(value.selectedWindowId) && typeof value.tabBarVisible === "boolean";
+const tabGroup = ({ windowIds, selectedWindowId, tabBarVisible }: WindowTabGroup): WindowTabGroup => ({ windowIds, selectedWindowId, tabBarVisible });
+/** The Spark windows that share this window's tab group, in tab order. */
+export async function getWindowTabGroup(id: string): Promise<WindowTabGroup> { windowId(id); tabsSupported(); return tabGroup(await windowCall("tabGroup", { id }, isTabGroup)); }
+/** Every Spark window's tab group, each once, in no particular order. */
+export async function listWindowTabGroups(): Promise<WindowTabGroup[]> { tabsSupported(); return (await windowCall("tabGroups", {}, (value): value is WindowTabGroup[] => Array.isArray(value) && value.every(isTabGroup))).map(tabGroup); }
+/** Makes this window the selected tab of its group. */
+export async function selectWindowTab(id: string): Promise<void> { windowId(id); tabsSupported(); await windowCommand("selectTab", { id }); }
+/** Moves this tab out of its group into a window of its own (Window ▸ Move Tab to New Window). */
+export async function moveTabToNewWindow(id: string): Promise<void> { windowId(id); tabsSupported(); await windowCommand("moveTabToNewWindow", { id }); }
+/** Moves every shown window with this window's tabbing identifier into its tab group (Window ▸ Merge All Windows). */
+export async function mergeAllWindows(id: string): Promise<void> { windowId(id); tabsSupported(); await windowCommand("mergeAllWindows", { id }); }
+/** Shows or hides the tab bar of a window that has no other tabs; a group of several tabs always shows it and rejects E_BUSY. */
+export async function setWindowTabBarVisible(id: string, visible: boolean): Promise<void> {
+  windowId(id); if (typeof visible !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "visible must be boolean");
+  tabsSupported(); await windowCommand("tabBar", { id, visible });
+}
+let tabHandlerSequence = 0;
+/**
+ * Shows the tab bar's + button on this window; a click, or the `newTab` menu role while the window is key,
+ * calls the handler, which opens the new tab (`openWindow({ ..., tabbedWith: windowId })`). One handler per
+ * window: a second registration rejects E_BUSY until the first is removed. Removal hides the button.
+ */
+export async function handleWindowNewTab(id: string, handler: (event: WindowNewTabEvent) => unknown, options: WindowListenerOptions = {}): Promise<AsyncRegistration> {
+  windowId(id); object(options, "handler options"); keys(options, ["onError"]);
+  if (typeof handler !== "function" || (options.onError !== undefined && typeof options.onError !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Expected new-tab callbacks");
+  tabsSupported();
+  const handlerId = `tab-${Date.now()}-${++tabHandlerSequence}`;
+  const subscription = await subscribeToWindowInstance(id, event => {
+    if (event.type !== "newTabRequested" || event.handlerId !== handlerId) return;
+    void Promise.resolve().then(() => handler({ windowId: id })).catch(cause => report(options, cause));
+  }, ["newTabRequested"]);
+  const disable = async () => {
+    try { await windowCommand("newTab", { id, handlerId, enabled: false }); }
+    catch (cause) { if (nativeError(cause).code !== "E_NOT_FOUND") throw cause; }
+  };
+  try { await windowCommand("newTab", { id, handlerId, enabled: true }); }
+  catch (cause) { await subscription.remove(); throw cause; }
+  return asyncRegistration(() => { void subscription.remove(); }, disable);
 }
 const guards = new Map<string, AsyncRegistration>();
 const creatingGuards = new Set<string>();

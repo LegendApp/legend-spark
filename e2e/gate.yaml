@@ -1,0 +1,23 @@
+# Kitchen Sink release gate. `bun run gate` runs it for this machine's target; see docs/e2e-flows.md#release-gate.
+suite: release-gate
+appId: so.legend.spark.examples.kitchensink
+build:
+  # `cd examples/kitchen-sink && bun run build` (Release, embedded bundle, ad-hoc signed). The CLI has no Windows release build yet.
+  macos: { artifact: "examples/kitchen-sink/.spark/platforms/macos/products/macos-${ARCH}/release/KitchenSink.app", verifySignature: true }
+targets:
+  - { os: macos-14, arch: arm64, machine: macbook-air-m1-8gb }   # oldest supported macOS on the slowest reference Mac: startup, memory, 60 fps
+  - { os: macos-15, arch: arm64 }
+  - { os: macos-26, arch: arm64 }
+  - { os: macos-27, arch: arm64 }
+  - { os: macos-27, arch: arm64, machine: macbook-pro-14-base }  # 120 Hz frame budgets
+  - { os: macos-15, arch: x64 }
+  - { os: windows-11, arch: x64 }
+  - { os: windows-11, arch: arm64 }
+include: [flows/**]
+blocking: { tags: [blocking], default: true }
+retries: 0
+timeBudget: 45m
+budgets: budgets.yaml
+coverage: { checks: checks/, exports: true, availability: true }
+signoffs: artifacts/gate/signoffs.yaml
+report: { json: artifacts/gate/report.json, html: artifacts/gate/index.html }

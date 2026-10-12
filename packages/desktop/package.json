@@ -63,15 +63,24 @@
     "./ui/glass": "./ui-glass.ts",
     "./ui/swipe": "./ui-swipe.ts",
     "./ui/symbol": "./ui-symbol.ts",
+    "./ui/table": "./ui-table.ts",
     "./ui/search": "./ui-search.ts",
+    "./ui/text-services": "./ui-text-services.ts",
+    "./ui/popover": "./ui-popover.ts",
+    "./ui/tab-view": "./ui-tab-view.ts",
     "./settings/window": "./settings-window.ts",
     "./settings/observable": "./settings-observable.ts",
     "./ui/classnames": "./ui-classnames.ts",
     "./contracts": "./contracts.ts",
     "./windows/macos": "./windows-macos.ts",
     "./diagnostics": "./diagnostics.ts",
+    "./devtools": "./devtools.ts",
     "./ai": "./ai.ts",
-    "./ai/codex": "./ai-codex.ts"
+    "./ai/codex": "./ai-codex.ts",
+    "./motion": "./motion.ts",
+    "./printing": "./printing.ts",
+    "./displays": "./displays.ts",
+    "./logging": "./logging.ts"
   },
   "files": [
     "*.ts",
@@ -116,7 +125,11 @@
     "@legendapp/spark-settings-ui": "0.0.1-next.3",
     "@react-native-community/cli-types": "20.1.3",
     "@legendapp/spark-ai": "0.0.1-next.3",
-    "@legendapp/spark-codex": "0.0.1-next.3"
+    "@legendapp/spark-codex": "0.0.1-next.3",
+    "@legendapp/spark-motion": "0.0.1-next.3",
+    "@legendapp/spark-printing": "0.0.1-next.3",
+    "@legendapp/spark-logging": "0.0.1-next.3",
+    "@legendapp/spark-diagnostics": "0.0.1-next.3"
   },
   "description": "Legend Spark \u2014 native applications with React Native and Expo",
   "bin": {

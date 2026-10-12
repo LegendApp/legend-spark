@@ -1,0 +1,103 @@
+appId: so.legend.spark.examples.kitchensink
+name: Control primitives are typed unsupported on Windows
+intent: >
+  On Windows, every control primitive reports unsupported-platform from getControlAvailability
+  and rendering it shows SparkError:E_UNSUPPORTED_PLATFORM in place of the control, with no
+  substitute. AppKit-only button styles are unsupported too; a button without a variant still
+  works. WinUI implementations are tracked in #228.
+checks: [CTRL-UNSUP-01]
+tags: [native-controls]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/toggles" }
+- extendedWaitUntil: { visible: { id: native-controls-toggles-root }, timeout: 10s }
+- assertText: { id: native-controls-toggles-disabled-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-checkbox-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-toggles-checkbox-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-checkbox-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-checkbox-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-checkbox-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-checkbox-mixed-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-toggles-checkbox-mixed-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-checkbox-mixed-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-checkbox-mixed-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-checkbox-mixed-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-radio-group-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-toggles-radio-group-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-radio-group-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-radio-group-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-radio-group-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-switch-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-toggles-switch-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-switch-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-switch-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-switch-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-disclosure-triangle-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-toggles-disclosure-triangle-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-disclosure-triangle-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-disclosure-triangle-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-toggles-disclosure-triangle-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- launchApp: { stopApp: false, openUrl: "spark-ks://native-controls/inputs" }
+- extendedWaitUntil: { visible: { id: native-controls-inputs-root }, timeout: 10s }
+- assertText: { id: native-controls-inputs-disabled-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-slider-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-inputs-slider-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-slider-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-slider-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-slider-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-slider-ticks-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-inputs-slider-ticks-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-slider-ticks-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-slider-ticks-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-slider-ticks-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-stepper-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-inputs-stepper-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-stepper-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-stepper-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-stepper-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-combo-box-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-inputs-combo-box-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-combo-box-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-combo-box-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-combo-box-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-token-field-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-inputs-token-field-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-token-field-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-token-field-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-token-field-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-path-control-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-inputs-path-control-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-path-control-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-path-control-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-inputs-path-control-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- launchApp: { stopApp: false, openUrl: "spark-ks://native-controls/indicators" }
+- extendedWaitUntil: { visible: { id: native-controls-indicators-root }, timeout: 10s }
+- assertText: { id: native-controls-indicators-disabled-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-indicators-progress-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-indeterminate-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-indicators-progress-indeterminate-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-indeterminate-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-indeterminate-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-indeterminate-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-spinner-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-indicators-progress-spinner-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-spinner-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-spinner-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-progress-spinner-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-level-indicator-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-indicators-level-indicator-mini-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-level-indicator-small-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-level-indicator-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-indicators-level-indicator-large-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- launchApp: { stopApp: false, openUrl: "spark-ks://native-controls/buttons" }
+- extendedWaitUntil: { visible: { id: native-controls-buttons-root }, timeout: 10s }
+- assertText: { id: native-controls-buttons-plain-availability, equals: '{"available":true}' }
+- assertText: { id: native-controls-buttons-push-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-buttons-push-regular-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+# The plain button keeps its Windows implementation
+- tapOn: { id: native-controls-buttons-keyboard-plain }
+- assertText: { id: native-controls-buttons-keyboard-plain-value, equals: '1' }

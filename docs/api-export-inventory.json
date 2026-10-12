@@ -69,8 +69,17 @@
     "./contracts",
     "./windows/macos",
     "./diagnostics",
+    "./devtools",
     "./ai",
     "./ai/codex",
-    "./ui/swipe"
+    "./ui/swipe",
+    "./motion",
+    "./printing",
+    "./ui/text-services",
+    "./ui/table",
+    "./ui/popover",
+    "./ui/tab-view",
+    "./displays",
+    "./logging"
   ]
 }

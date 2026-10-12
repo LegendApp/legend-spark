@@ -57,7 +57,7 @@ const tick = () => sleep(1);
 function nativeError(code: string) { return Object.assign(new Error(code), { code }); }
 
 test("app context, activation, hide and quit call the native host", async () => {
-  handlers.set("NativeDesktopApp.context", () => ({ projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: {} } }));
+  handlers.set("NativeDesktopApp.context", () => ({ projectId: "a", name: "App", version: "1", launchArguments: [], runtime: { mode: "dev", modules: {} }, launch: { safeMode: null, relaunched: false, instance: "primary" } }));
   handlers.set("NativeDesktopApp.quit", () => ({ quitRequested: true }));
   expect((await app.getAppContext()).projectId).toBe("a");
   await app.activate(); await app.hide(); await app.quit();
@@ -229,20 +229,22 @@ test("tray scopes actions, serializes updates and waits before removing", async 
   await expect(item.update({ title: "Late" })).rejects.toThrow("removed");
 });
 test("updates expose availability without starting and preserve native errors", async () => {
-  handlers.set("NativeDesktopUpdates.status", () => ({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null }));
+  handlers.set("NativeDesktopUpdates.status", () => ({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null, skippedBuild: null, skippedMajorBuild: null, lastCheckedAt: null }));
   expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "go", started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null });
-  expect(calls.map(call => call.method)).toEqual(["status"]);
+  expect(await updates.getUpdateAvailability()).toEqual({ available: false, reason: "go" });
+  expect(calls.map(call => call.method)).toEqual(["status", "status"]);
   handlers.set("NativeDesktopUpdates.check", () => { throw nativeError("E_UNAVAILABLE"); });
   await expect(updates.checkForUpdates()).rejects.toThrow("E_UNAVAILABLE");
   await updates.startUpdates(); await updates.configureUpdates({ automaticallyChecks: true });
   const events: unknown[] = []; const sub = updates.onUpdateEvent(event => events.push(event));
-  emit("NativeDesktopApp", "desktop", { type: "update", state: "available", version: "2" });
+  emit("NativeDesktopApp", "desktop", { type: "update", state: "available", version: "2", build: "2" });
   emit("NativeDesktopApp", "desktop", { type: "trayClick" }); expect(events).toHaveLength(1); sub.remove();
 });
 
 const processes = await import("../packages/processes/src/index.ts");
 const globalShortcuts = await import("../packages/global-shortcuts/src/index.ts");
 const system = await import("../packages/system/src/index.ts");
+const displays = await import("../packages/desktop-windows/src/displays.ts");
 const messages = await import("../packages/message-dialog/src/index.ts");
 test("global hotkey conflicts clean subscriptions and distinct registrations dispose independently", async () => {
   let hits = 0;
@@ -255,6 +257,19 @@ test("global hotkey conflicts clean subscriptions and distinct registrations dis
   handlers.set("NativeDesktopGlobalShortcuts.register", () => { throw nativeError("E_BUSY"); });
   await expect(globalShortcuts.registerGlobalShortcut("Cmd+Shift+K", () => {})).rejects.toThrow("E_BUSY");
   expect(subscriptions.get("NativeDesktopApp.desktop")?.size).toBe(1); await second.remove();
+});
+test("shortcut surfaces publish their live bindings for shortcut-map conflict reporting", async () => {
+  const { getShortcutInventory } = await import("../packages/desktop-app/src/contracts/shortcut-inventory.ts");
+  const local = await shortcuts.registerShortcut("Cmd+K", () => {}, { windowId: "editor" });
+  const global = await globalShortcuts.registerGlobalShortcut("Cmd+Shift+J", () => {});
+  const menu = await menus.createMenu({ id: "inventory", items: [{ type: "submenu", id: "file", label: "File", items: [{ type: "action", id: "save", label: "Save", shortcut: "Cmd+S", disabled: true }] }] });
+  expect(getShortcutInventory()).toEqual([
+    { accelerator: { key: "k", modifiers: 1 << 20 }, owner: { source: "shortcut", windowId: "editor" } },
+    { accelerator: { key: "j", modifiers: (1 << 20) | (1 << 17) }, owner: { source: "global-shortcut" } },
+    { accelerator: { key: "s", modifiers: 1 << 20 }, owner: { source: "menu", menuId: "inventory", itemId: "save" } },
+  ]);
+  await local.remove(); await global.remove(); await menu.remove();
+  expect(getShortcutInventory()).toEqual([]);
 });
 test("process subscriptions exist before launch and survive immediate exit", async () => {
   handlers.set("NativeDesktopProcesses.spawn", args => {
@@ -297,6 +312,22 @@ test("sleep assertions release once and system events filter unrelated traffic",
   expect(calls.filter(call => call.method === "allowSleep")).toHaveLength(1);
   const events: string[] = []; const subscription = await system.onSystemEvent(event => events.push(event.type));
   emit("NativeDesktopApp", "desktop", { type: "wake" }); emit("NativeDesktopApp", "desktop", { type: "activate" }); expect(events).toEqual(["wake"]); await subscription.remove();
+});
+test("display detail events and /system displaysChanged events never reach each other's listeners", async () => {
+  const display = { id: "1", persistentId: null, name: "Display", primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 0, width: 1512, height: 982 }, scaleFactor: 2,
+    safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: null, gamut: "srgb" }, edrHeadroom: { current: 1, potential: 1, reference: null } };
+  handlers.set("NativeDesktopWindowManager.observeDisplays", () => ({ sequence: 1, displays: [display] }));
+  const systemEvents: string[] = [], displayEvents: unknown[] = [], errors: unknown[] = [];
+  const systemSubscription = await system.onSystemEvent(event => systemEvents.push(event.type));
+  const displayRegistration = await displays.addDisplayListener(event => displayEvents.push(event), { onError: error => errors.push(error) });
+  const changed = [{ ...display, scaleFactor: 1 }];
+  emit("NativeDesktopApp", "desktop", { type: "displayDetailsChanged", sequence: 2, displays: changed });
+  expect(systemEvents).toEqual([]);
+  expect(displayEvents).toMatchObject([{ changed: [{ id: "1", fields: ["scaleFactor"] }] }]);
+  emit("NativeDesktopApp", "desktop", { type: "displaysChanged" });
+  expect(systemEvents).toEqual(["displaysChanged"]);
+  expect(displayEvents).toHaveLength(1); expect(errors).toEqual([]);
+  await displayRegistration.remove(); await systemSubscription.remove();
 });
 test("Dock menus identify their owner and remove only once", async () => {
   const selected: string[] = [];
@@ -514,7 +545,8 @@ test("rich clipboard keeps binary transport private and preserves coexisting OS 
 
 
 test("updater configuration validates every option before native side effects", async () => {
-  for (const config of [{ automaticallyChecks: "yes" }, { checkIntervalSeconds: 0 }, { checkIntervalSeconds: Infinity }, { unknown: true }]) {
+  // Sparkle clamps Release intervals below one hour; Spark rejects them instead of silently changing them.
+  for (const config of [{ automaticallyChecks: "yes" }, { checkIntervalSeconds: 0 }, { checkIntervalSeconds: 3599 }, { checkIntervalSeconds: Infinity }, { unknown: true }]) {
     await expect(updates.configureUpdates(config as never)).rejects.toThrow();
   }
   await expect(updates.checkForUpdates({ mode: "unknown" } as never)).rejects.toThrow();
@@ -522,6 +554,34 @@ test("updater configuration validates every option before native side effects", 
   await updates.configureUpdates({ automaticallyChecks: false, checkIntervalSeconds: 7200 });
   expect(calls.at(-1)?.args).toEqual({ automaticallyChecks: false, checkIntervalSeconds: 7200 });
   await updates.checkForUpdates({ mode: "background" }); expect(calls.at(-1)?.method).toBe("background");
+  await updates.configureUpdates({ checkIntervalSeconds: updates.MINIMUM_UPDATE_CHECK_INTERVAL_SECONDS });
+  expect(calls.at(-1)?.args).toEqual({ checkIntervalSeconds: 3600 });
+});
+
+test("updater reports skipped builds, check history and availability, and clears skips natively", async () => {
+  const status = { available: true, started: true, canCheck: true, automaticallyChecks: true, checkIntervalSeconds: 86400, feedURL: "https://example.com/appcast.xml", skippedBuild: "20", skippedMajorBuild: "30", lastCheckedAt: "2026-10-10T12:00:00Z" };
+  handlers.set("NativeDesktopUpdates.status", () => status);
+  expect(await updates.getUpdateStatus()).toEqual(status);
+  expect(await updates.getUpdateAvailability()).toEqual({ available: true });
+  for (const invalid of [{ skippedBuild: 2 }, { skippedMajorBuild: 3 }, { lastCheckedAt: 0 }, { skippedBuild: undefined }, { skippedMajorBuild: undefined }]) {
+    handlers.set("NativeDesktopUpdates.status", () => ({ ...status, ...invalid }));
+    await expect(updates.getUpdateStatus()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  await updates.clearSkippedUpdate(); expect(calls.at(-1)).toMatchObject({ method: "clearSkipped", args: {} });
+  const cause = nativeError("E_UNAVAILABLE");
+  handlers.set("NativeDesktopUpdates.clearSkipped", () => { throw cause; });
+  await expect(updates.clearSkippedUpdate()).rejects.toMatchObject({ code: "E_UNAVAILABLE", cause });
+});
+
+test("updater events carry display version and build, delta downloads and skipped major upgrades", async () => {
+  const listener = vi.fn(); const sub = updates.onUpdateEvent(listener);
+  const item = { type: "update", version: "1.3", build: "3" };
+  for (const event of [{ ...item, state: "downloading" }, { ...item, state: "downloading", delta: "yes" }, { ...item, state: "skipped" }, { type: "update", state: "skipped", version: "1.3", major: false }, { type: "update", state: "available", version: "1.3" }, { ...item, state: "available", build: 3 }]) emit("NativeDesktopApp", "desktop", event);
+  expect(listener).not.toHaveBeenCalled();
+  const valid = [{ ...item, state: "downloading", delta: true }, { ...item, state: "downloading", delta: false }, { ...item, state: "skipped", major: false }, { ...item, state: "skipped", major: true }];
+  for (const event of valid) emit("NativeDesktopApp", "desktop", event);
+  expect(listener.mock.calls.map(([event]) => event)).toEqual(valid);
+  sub.remove();
 });
 
 test("updater rejects malformed native status/results and preserves busy causes", async () => {
@@ -538,14 +598,16 @@ test("updater rejects malformed native status/results and preserves busy causes"
 
 test("updater subscriptions filter invalid events and unsupported platforms do not call native", async () => {
   const listener = vi.fn(); const sub = updates.onUpdateEvent(listener);
-  for (const event of [null, {}, { type: "update", state: "bogus" }, { type: "update", state: "available", version: 1 }]) emit("NativeDesktopApp", "desktop", event);
+  for (const event of [null, {}, { type: "update", state: "bogus" }, { type: "update", state: "available", version: 1, build: "1" }]) emit("NativeDesktopApp", "desktop", event);
   expect(listener).not.toHaveBeenCalled();
-  emit("NativeDesktopApp", "desktop", { type: "update", state: "available", version: "2" });
+  emit("NativeDesktopApp", "desktop", { type: "update", state: "available", version: "2", build: "2" });
   expect(listener).toHaveBeenCalledTimes(1); sub.remove(); sub.remove();
   emit("NativeDesktopApp", "desktop", { type: "update", state: "checking" }); expect(listener).toHaveBeenCalledTimes(1);
   platform.OS = "windows";
   expect(await updates.getUpdateStatus()).toMatchObject({ available: false, reason: "unsupported-platform" });
-  await expect(updates.startUpdates()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  expect(await updates.getUpdateAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
+  for (const operation of [updates.startUpdates, updates.checkForUpdates, () => updates.configureUpdates({}), updates.clearSkippedUpdate]) await expect(operation()).rejects.toMatchObject({ name: "SparkError", code: "E_UNSUPPORTED_PLATFORM" });
+  expect(() => updates.onUpdateEvent(() => {})).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
   expect(calls).toHaveLength(0);
 });
 
@@ -725,6 +787,42 @@ test("launcher menus stop callbacks on failed removal and enforce surface suppor
   await expect(system.createTaskbarMenu({ items: [{ type: "submenu", id: "sub", label: "Sub", items: [] }], onAction: () => {} } as any)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
 });
 
+test("app badges take text or a count, and progress validates before reaching native code", async () => {
+  await system.setAppBadge("New"); await system.setAppBadge(3); await system.setAppBadge(0); await system.setAppBadge("");
+  expect(calls.map(call => call.args)).toEqual([{ label: "New" }, { count: 3 }, { count: 0 }, { label: "" }]);
+  for (const value of [-1, 1.5, Number.NaN, 2 ** 53, "a\0b"]) await expect(system.setAppBadge(value as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  calls.length = 0;
+  await system.setAppProgress({ state: "normal", value: 0.35 }); await system.setAppProgress({ state: "indeterminate" });
+  await system.setAppProgress({ state: "paused", value: 0 }); await system.setAppProgress({ state: "error", value: 1 }); await system.setAppProgress(null);
+  expect(calls.map(call => [call.method, call.args])).toEqual([["progress", { state: "normal", value: 0.35 }], ["progress", { state: "indeterminate" }], ["progress", { state: "paused", value: 0 }], ["progress", { state: "error", value: 1 }], ["progress", { state: "none" }]]);
+  calls.length = 0;
+  for (const value of [{ state: "normal", value: 1.01 }, { state: "normal", value: -0.1 }, { state: "normal", value: Number.NaN }, { state: "normal" }, { state: "busy", value: 0.5 }, undefined, 0.5])
+    await expect(system.setAppProgress(value as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(system.setAppProgress({ state: "indeterminate", value: 0.5 } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(system.setAppProgress({ state: "normal", value: 0.5, color: "red" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toHaveLength(0);
+});
+test("system feature availability is truthful per platform", () => {
+  const report = () => Object.fromEntries((["appBadge", "appProgress", "attention", "dockMenu", "taskbarMenu"] as const).map(feature => [feature, system.getSystemAvailability(feature).available]));
+  expect(system.getSystemAvailability()).toEqual({ available: true });
+  expect(report()).toEqual({ appBadge: true, appProgress: true, attention: true, dockMenu: true, taskbarMenu: false });
+  platform.OS = "windows";
+  expect(report()).toEqual({ appBadge: true, appProgress: true, attention: true, dockMenu: false, taskbarMenu: true });
+  platform.OS = "web";
+  expect(system.getSystemAvailability("appBadge")).toEqual({ available: false, reason: "unsupported-platform" });
+  expect(() => system.getSystemAvailability("dock" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+});
+test("Jump Lists add the Recent category only when asked", async () => {
+  platform.OS = "windows";
+  const menu = await system.createTaskbarMenu({ items: [{ type: "action", id: "new", label: "New window" }], onAction: () => {}, recentDocuments: true });
+  expect(calls.at(-1)?.args).toMatchObject({ recent: true }); await menu.remove();
+  const plain = await system.createTaskbarMenu({ items: [], onAction: () => {} });
+  expect(calls.at(-1)?.args).not.toHaveProperty("recent"); await plain.remove();
+  await expect(system.createTaskbarMenu({ items: [], onAction: () => {}, recentDocuments: "yes" } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  platform.OS = "macos";
+  await expect(system.createDockMenu({ items: [], onAction: () => {}, recentDocuments: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+});
+
 test("application menu updates snapshot inputs, serialize and retain last successful owners", async () => {
   const received: unknown[] = [];
   const item = await menus.createMenu({ id: "queued", items: [], onAction: event => received.push(event) });
@@ -804,4 +902,66 @@ test("tray image inputs are portable and delayed actions cannot reach a reused I
   await next.remove(); expect(calls.at(-1)!.args).toEqual({ id: "image", instanceId: current });
   platform.OS = "windows";
   const windows = await tray.createTray({ id: "windows", image: { path: "C:\\Icons\\tray.png" } }); await windows.remove();
+});
+
+const SYSTEM_INFO = { osVersion: "15", architecture: "x64", translated: true, locale: "en_US", timeZone: "America/New_York", dark: false, idleSeconds: 3, onBattery: true, batteryLevel: 0.5, lowPowerMode: true, thermalState: "serious" };
+test("system info reports Rosetta, time zone, Low Power Mode and thermal state, and rejects malformed values", async () => {
+  handlers.set("NativeDesktopSystem.info", () => SYSTEM_INFO);
+  expect(await system.getSystemInfo()).toEqual(SYSTEM_INFO);
+  handlers.set("NativeDesktopSystem.info", () => ({ ...SYSTEM_INFO, thermalState: null }));
+  expect((await system.getSystemInfo()).thermalState).toBeNull();
+  for (const bad of [{ thermalState: "hot" }, { translated: undefined }, { timeZone: "" }, { lowPowerMode: 1 }]) {
+    handlers.set("NativeDesktopSystem.info", () => ({ ...SYSTEM_INFO, ...bad }));
+    await expect(system.getSystemInfo()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+});
+test("network status validates the native path and is unsupported on Windows before any native call", async () => {
+  const status = { status: "online", interfaces: ["wifi", "loopback"], expensive: false, constrained: true, proxies: { http: "proxy.local:8080", https: null, socks: null, autoConfigURL: "http://wpad/wpad.dat" } };
+  handlers.set("NativeDesktopSystem.network", () => status);
+  expect(await system.getNetworkStatus()).toEqual(status);
+  for (const bad of [{ status: "maybe" }, { interfaces: ["bluetooth"] }, { proxies: { http: "" } }, { proxies: null }]) {
+    handlers.set("NativeDesktopSystem.network", () => ({ ...status, ...bad }));
+    await expect(system.getNetworkStatus()).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  platform.OS = "windows"; calls.length = 0;
+  await expect(system.getNetworkStatus()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  expect(calls).toHaveLength(0);
+});
+test("system feature availability is per platform and rejects unknown features", () => {
+  for (const feature of ["thermalState", "networkStatus", "memoryPressure", "lowPowerChanges", "timeZoneChanges"] as const) expect(system.getSystemAvailability(feature)).toEqual({ available: true });
+  expect(() => system.getSystemAvailability("bluetooth" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  platform.OS = "windows";
+  expect(system.getSystemAvailability()).toEqual({ available: true });
+  expect(system.getSystemAvailability("thermalState")).toEqual({ available: false, reason: "unsupported-platform" });
+  platform.OS = "web";
+  expect(system.getSystemAvailability("networkStatus")).toEqual({ available: false, reason: "unsupported-platform" });
+});
+test("system events cover session, power, thermal, network, locale, clock and memory pressure; a pressure event without a valid level is E_INVALID_DATA", async () => {
+  const events: unknown[] = [], errors: unknown[] = [];
+  const subscription = await system.onSystemEvent(event => events.push(event), { onError: error => errors.push(error) });
+  expect(calls.at(-1)!.args.types).toHaveLength(17);
+  const types = ["sessionActive", "sessionInactive", "lowPowerChanged", "thermalChanged", "networkChanged", "proxyChanged", "localeChanged", "timeZoneChanged", "clockChanged"];
+  for (const type of types) emit("NativeDesktopApp", "desktop", { type });
+  emit("NativeDesktopApp", "desktop", { type: "memoryPressure", level: "critical", extra: 1 });
+  emit("NativeDesktopApp", "desktop", { type: "memoryPressure", level: "severe" });
+  emit("NativeDesktopApp", "desktop", { type: "memoryPressure" });
+  expect(events).toEqual([...types.map(type => ({ type })), { type: "memoryPressure", level: "critical" }]);
+  expect(errors).toEqual([expect.objectContaining({ code: "E_INVALID_DATA" }), expect.objectContaining({ code: "E_INVALID_DATA" })]);
+  await subscription.remove();
+  emit("NativeDesktopApp", "desktop", { type: "thermalChanged" }); expect(events).toHaveLength(types.length + 1);
+});
+test("system event subscriptions name the types native observers are installed for", async () => {
+  const events: unknown[] = [];
+  const subscription = await system.onSystemEvent(event => events.push(event), { types: ["displaysChanged", "displaysChanged"] });
+  expect(calls.at(-1)).toMatchObject({ method: "observe", args: { types: ["displaysChanged"] } });
+  emit("NativeDesktopApp", "desktop", { type: "networkChanged" }); emit("NativeDesktopApp", "desktop", { type: "displaysChanged" });
+  expect(events).toEqual([{ type: "displaysChanged" }]);
+  await subscription.remove(); calls.length = 0;
+  for (const options of [{ types: [] }, { types: ["bluetooth"] }, { types: "sleep" }, { onError: 1 }, { typo: true }]) await expect(system.onSystemEvent(() => {}, options as never)).rejects.toMatchObject({ code: expect.stringMatching(/E_INVALID_ARGUMENT|E_UNSUPPORTED_OPTION/) });
+  expect(calls).toHaveLength(0);
+});
+test("a failed native observe rejects and leaves no listener", async () => {
+  handlers.set("NativeDesktopSystem.observe", () => { throw nativeError("E_NATIVE"); });
+  await expect(system.onSystemEvent(() => {})).rejects.toMatchObject({ code: "E_NATIVE" });
+  expect(subscriptions.get("NativeDesktopApp.desktop")?.size ?? 0).toBe(0);
 });

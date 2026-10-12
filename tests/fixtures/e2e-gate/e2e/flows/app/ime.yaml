@@ -1,0 +1,11 @@
+appId: so.legend.kitchensink
+name: IME candidate window tracks the caret
+intent: A person confirms the candidate window sits under the caret.
+checks: [APP-IME-01]
+manual: true
+---
+- manualStep:
+    instruction: Type "nihongo" with the Japanese Romaji input source.
+    expect: The candidate window sits directly under the caret and overlaps no text.
+    evidence: screenshot
+    signoff: required

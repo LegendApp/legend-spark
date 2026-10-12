@@ -1,0 +1,26 @@
+appId: so.legend.spark.examples.kitchensink
+name: Pickers and system panels are typed unsupported on Windows
+intent: >
+  On Windows, Native controls > Pickers shows unsupported-platform for the date picker, color well,
+  color panel, eyedropper and font panel; each picker shows SparkError:E_UNSUPPORTED_PLATFORM in
+  place of the control, with no substitute, and the color and font panel buttons report the same error. The eyedropper button is never pressed in a flow. WinUI
+  work is tracked in #298.
+checks: [CTRL-UNSUP-03]
+tags: [native-controls]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/pickers" }
+- extendedWaitUntil: { visible: { id: native-controls-pickers-root }, timeout: 10s }
+- assertText: { id: native-controls-pickers-availability-date-picker, equals: 'date-picker: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-pickers-availability-color-well, equals: 'color-well: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-pickers-availability-color-panel, equals: 'color-panel: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-pickers-availability-sampler, equals: 'sampler: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-pickers-availability-font-panel, equals: 'font-panel: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: native-controls-pickers-date-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-pickers-calendar-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-pickers-well-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- assertText: { id: native-controls-pickers-well-alpha-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: native-controls-pickers-color-panel }
+- assertText: { id: native-controls-pickers-color-panel-state, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: native-controls-pickers-font-panel }
+- assertText: { id: native-controls-pickers-font-panel-state, equals: SparkError:E_UNSUPPORTED_PLATFORM }

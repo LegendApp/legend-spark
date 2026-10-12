@@ -57,6 +57,11 @@ static uint64_t generation = 0, quitRequest = 0;
 static Json::JsonArray pendingURLs{nullptr};
 static std::string initialURL;
 static Json::JsonArray launchArguments{nullptr};
+// Latched in ForwardLaunch, before any window exists: "flag", "modifier" or empty.
+static std::wstring safeModeTrigger;
+static bool relaunched = false;
+// A relaunch started before the quit decision; killed if that decision is a veto.
+static HANDLE relaunchChild = nullptr;
 static bool appActive = false;
 static std::set<std::string> hiddenByApp;
 static std::string hiddenFocus;
@@ -233,7 +238,8 @@ static std::filesystem::path SparkFile(std::string const &id) {
   return dataDirectory / (id == "main" ? L"window.json" : L"window-" + std::wstring(to_hstring(id)) + L".json");
 }
 static void RestoreFrame(std::string const &id) {
-  auto &window = windows.at(id); if (!window.restoreFrame) return;
+  // Safe mode neither reads nor saves frames, so saved ones survive for the next normal launch.
+  auto &window = windows.at(id); if (!window.restoreFrame || !safeModeTrigger.empty()) return;
   try {
     std::ifstream stream(SparkFile(id)); std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
     auto saved = Json::JsonObject::Parse(to_hstring(text)); if (saved.GetNamedNumber(L"version", 0) != 1) return;
@@ -303,14 +309,12 @@ static void ApplyOptions(Window &window, Json::JsonObject const &options) {
   }
   if (window.app.Presenter().Kind() != UI::AppWindowPresenterKind::FullScreen) window.app.Resize({static_cast<int32_t>(std::round(width * scale)), static_cast<int32_t>(std::round(height * scale))});
 }
-static void QueueLaunch(std::wstring const &commandLine, bool initial) {
+static void QueueLaunch(std::wstring const &commandLine, bool initial, std::wstring const &directory = {}) {
   int count = 0; auto argv = CommandLineToArgvW(commandLine.c_str(), &count);
   if (!argv) return;
   if (initial) for (int i = 0; i < count; ++i) launchArguments.Append(Json::JsonValue::CreateStringValue(argv[i]));
-  else {
-    RNW::JSValueArray arguments; for (int i = 0; i < count; ++i) arguments.push_back(to_string(argv[i]));
-    Emit({{"type", "secondInstance"}, {"arguments", std::move(arguments)}});
-  }
+  RNW::JSValueArray arguments, files, urls; std::vector<RNW::JSValueObject> opens;
+  for (int i = 0; i < count; ++i) arguments.push_back(to_string(argv[i]));
   for (int i = 1; i < count; ++i) {
     std::wstring candidate(argv[i]);
     if (candidate.rfind(L"--spark-dock-action=", 0) == 0) {
@@ -318,16 +322,19 @@ static void QueueLaunch(std::wstring const &commandLine, bool initial) {
       if (separator != std::wstring::npos) try { Emit({{"type", "dockAction"}, {"owner", to_string(winrt::Windows::Foundation::Uri::UnescapeComponent(payload.substr(0, separator)))}, {"id", to_string(winrt::Windows::Foundation::Uri::UnescapeComponent(payload.substr(separator + 1)))}}); } catch (...) {}
       continue;
     }
-    if (candidate.empty() || candidate[0] == L'-') continue;
-    bool file = std::filesystem::path(candidate).is_absolute();
-    if (file) { wchar_t uri[32768]; DWORD length = 32768; if (FAILED(UrlCreateFromPathW(candidate.c_str(), uri, &length, 0))) continue; candidate = uri; }
-    else { auto colon = candidate.find(L':'); if (colon == std::wstring::npos || colon < 2) continue; }
+    auto target = SparkLaunch::Classify(candidate);
+    if (target == SparkLaunch::Target::None) continue;
+    bool file = target == SparkLaunch::Target::File;
+    if (file) { files.push_back(to_string(candidate)); wchar_t uri[32768]; DWORD length = 32768; if (FAILED(UrlCreateFromPathW(candidate.c_str(), uri, &length, 0))) continue; candidate = uri; }
+    else urls.push_back(to_string(candidate));
     auto url = to_string(candidate); auto eventId = std::to_string(++generation);
     Json::JsonObject item; item.SetNamedValue(L"type", Json::JsonValue::CreateStringValue(file ? L"openFile" : L"openURL")); item.SetNamedValue(L"url", Json::JsonValue::CreateStringValue(candidate)); item.SetNamedValue(L"id", Json::JsonValue::CreateStringValue(to_hstring(eventId)));
     pendingURLs.Append(item); if (pendingURLs.Size() > 200) pendingURLs.RemoveAt(0); if (initial && initialURL.empty()) initialURL = url;
-    Emit({{"type", file ? "openFile" : "openURL"}, {"id", eventId}, {"url", url}, {"initial", initial}});
+    opens.push_back({{"type", file ? "openFile" : "openURL"}, {"id", eventId}, {"url", url}, {"initial", initial}});
   }
   LocalFree(argv);
+  if (!initial) Emit({{"type", "secondInstance"}, {"arguments", std::move(arguments)}, {"workingDirectory", to_string(directory)}, {"files", std::move(files)}, {"urls", std::move(urls)}});
+  for (auto &event : opens) Emit(std::move(event));
 }
 // Retained for the process lifetime. An abandoned owner can be replaced after a
 // crash; a slow/hung owner must never cause us to start a second notebook writer.
@@ -340,9 +347,22 @@ static std::wstring ProjectKey() {
   return std::wstring(winrt::Windows::Security::Cryptography::CryptographicBuffer::EncodeToHexString(algorithm.HashData(bytes)));
 }
 static bool ForwardLaunch() {
+  {
+    int count = 0; auto argv = CommandLineToArgvW(GetCommandLineW(), &count); if (!argv) winrt::throw_last_error();
+    std::vector<std::wstring> arguments(argv, argv + count); LocalFree(argv);
+    safeModeTrigger = SparkLaunch::SafeModeTrigger(arguments, (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
+  }
   auto key = L"Spark.Project." + ProjectKey();
   instanceMutex.attach(CreateMutexW(nullptr, FALSE, (L"Local\\" + key).c_str()));
   if (!instanceMutex) winrt::throw_last_error();
+  auto parent = SparkWindowsEnv(SparkLaunch::RelaunchParent);
+  if (!parent.empty()) {
+    // The previous instance owns the mutex until it exits; it terminates this process if its quit is vetoed.
+    SetEnvironmentVariableW(SparkLaunch::RelaunchParent, nullptr); relaunched = true;
+    const auto wait = WaitForSingleObject(instanceMutex.get(), INFINITE);
+    if (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED) return false;
+    winrt::throw_last_error();
+  }
   const auto deadline = GetTickCount64() + 60000;
   for (;;) {
     const auto wait = WaitForSingleObject(instanceMutex.get(), 0);
@@ -352,7 +372,8 @@ static bool ForwardLaunch() {
     EnumWindows([](HWND hwnd, LPARAM param) -> BOOL { auto data = reinterpret_cast<Search *>(param); if (GetPropW(hwnd, data->key.c_str())) { data->target = hwnd; return FALSE; } return TRUE; }, reinterpret_cast<LPARAM>(&search));
     if (search.target) {
       DWORD process = 0; GetWindowThreadProcessId(search.target, &process); AllowSetForegroundWindow(process);
-      auto text = GetCommandLineW(); COPYDATASTRUCT data{0x4C47, static_cast<DWORD>((wcslen(text) + 1) * sizeof(wchar_t)), text}; DWORD_PTR result = 0;
+      auto payload = SparkLaunch::EncodeForward(std::filesystem::current_path().wstring(), GetCommandLineW());
+      COPYDATASTRUCT data{0x4C47, static_cast<DWORD>(payload.size() * sizeof(wchar_t)), payload.data()}; DWORD_PTR result = 0;
       if (!SendMessageTimeoutW(search.target, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&data), SMTO_ABORTIFHUNG | SMTO_BLOCK, 5000, &result) || !result)
         throw winrt::hresult_error(HRESULT_FROM_WIN32(ERROR_TIMEOUT), L"The existing Spark app did not accept this launch. Close it before retrying.");
       return true;
@@ -364,7 +385,7 @@ static bool ForwardLaunch() {
   }
 }
 static void SaveFrame(std::string const &id, HWND hwnd) {
-  if (dataDirectory.empty() || !windows.at(id).restoreFrame || IsIconic(hwnd) || IsZoomed(hwnd) || windows.at(id).fullscreen) return;
+  if (dataDirectory.empty() || !safeModeTrigger.empty() || !windows.at(id).restoreFrame || IsIconic(hwnd) || IsZoomed(hwnd) || windows.at(id).fullscreen) return;
   auto file = SparkFile(id), temporary = file; temporary += L".pending";
   RECT frame{}; if (!GetWindowRect(hwnd, &frame)) return;
   Json::JsonObject saved; saved.SetNamedValue(L"version", Json::JsonValue::CreateNumberValue(1)); saved.SetNamedValue(L"bounds", Info(id).GetNamedObject(L"bounds")); saved.SetNamedValue(L"persistentId", Json::JsonValue::CreateStringValue(OwningDisplay(frame).persistentId));
@@ -374,6 +395,7 @@ static void SaveFrame(std::string const &id, HWND hwnd) {
 static void FinishQuit(bool allow) {
   if (!quitPending) return;
   quitPending = false; pendingQuitGuards.clear(); if (!allow) FinishClose("main", false);
+  if (relaunchChild) { if (!allow) TerminateProcess(relaunchChild, 1); CloseHandle(relaunchChild); relaunchChild = nullptr; }
   if (windows.count("main")) KillTimer(Hwnd(windows.at("main")), 0x4C48);
   auto waiters = std::move(quitWaiters); quitWaiters.clear();
   const auto result = allow ? "{\"quitRequested\":true}" : "{\"quitRequested\":false,\"reason\":\"vetoed\"}";
@@ -404,7 +426,7 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
         auto text = static_cast<wchar_t const *>(notification->lpData); if (text[notification->cbData / sizeof(wchar_t) - 1]) return FALSE;
         try { QueueNotificationResponse(to_string(text)); return TRUE; } catch (...) { return FALSE; }
       }
- auto data = reinterpret_cast<COPYDATASTRUCT *>(lParam); if (data && data->dwData == 0x4C47 && data->cbData >= sizeof(wchar_t) && data->cbData <= 65536 && data->cbData % sizeof(wchar_t) == 0) { auto text = static_cast<wchar_t *>(data->lpData); if (text && text[data->cbData / sizeof(wchar_t) - 1] == 0) { QueueLaunch(text, false);
+ auto data = reinterpret_cast<COPYDATASTRUCT *>(lParam); std::wstring directory, commandLine; if (data && data->dwData == 0x4C47 && data->cbData <= 65536 && data->cbData % sizeof(wchar_t) == 0) { if (SparkLaunch::DecodeForward(static_cast<wchar_t const *>(data->lpData), data->cbData / sizeof(wchar_t), directory, commandLine)) { QueueLaunch(commandLine, false, directory);
         bool visible = false; for (auto const &[key, window] : windows) if (IsWindowVisible(Hwnd(window)) && !window.overlay) visible = true;
         Emit({{"type", "reopen"}, {"hasVisibleWindows", visible}, {"mainWindowWasVisible", !!IsWindowVisible(Hwnd(windows.at("main")))}}); ActivateApplication(); return TRUE; } } return FALSE; }
     if (message == WM_GETMINMAXINFO) {
@@ -621,6 +643,24 @@ struct SparkDesktopApp {
           if (args.GetNamedBoolean(L"enabled")) quitGuards.insert(id); else quitGuards.erase(id);
           FinishQuit(false);
         } else if (method == "quit") { quitWaiters.push_back(promise); RequestQuit(); return; }
+        else if (method == "relaunch") {
+          if (!relaunchChild) {
+            std::vector<std::wstring> arguments;
+            if (args.HasKey(L"arguments")) for (auto const &item : args.GetNamedArray(L"arguments")) arguments.push_back(std::wstring(item.GetString()));
+            else for (uint32_t i = 1; i < launchArguments.Size(); ++i) arguments.push_back(std::wstring(launchArguments.GetStringAt(i)));
+            wchar_t executable[32768]; const auto length = GetModuleFileNameW(nullptr, executable, 32768);
+            if (!length || length >= 32768) winrt::throw_last_error();
+            auto commandLine = SparkLaunch::CommandLine(executable, arguments);
+            STARTUPINFOW startup{sizeof(startup)}; PROCESS_INFORMATION process{};
+            SetEnvironmentVariableW(SparkLaunch::RelaunchParent, std::to_wstring(GetCurrentProcessId()).c_str());
+            const auto started = CreateProcessW(executable, commandLine.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &process);
+            const auto error = GetLastError();
+            SetEnvironmentVariableW(SparkLaunch::RelaunchParent, nullptr);
+            if (!started) winrt::throw_hresult(HRESULT_FROM_WIN32(error));
+            CloseHandle(process.hThread); relaunchChild = process.hProcess;
+          }
+          quitWaiters.push_back(promise); RequestQuit(); return;
+        }
         else if (method == "replyQuit") {
           auto id = to_string(args.GetNamedString(L"id"));
           if (quitPending && args.GetNamedNumber(L"requestId") == quitRequest && pendingQuitGuards.erase(id)) {
@@ -630,7 +670,9 @@ struct SparkDesktopApp {
         } else if (method == "hide") HideApplication();
         else if (method == "activate") ActivateApplication();
         else if (method == "context") {
-          Json::JsonObject result; result.SetNamedValue(L"projectId", Json::JsonValue::CreateStringValue(SparkWindowsEnv(L"SPARK_PROJECT_ID"))); result.SetNamedValue(L"name", Json::JsonValue::CreateStringValue(SparkWindowsEnv(L"SPARK_PROJECT_NAME"))); result.SetNamedValue(L"version", Json::JsonValue::CreateStringValue(SparkWindowsEnv(L"SPARK_PROJECT_VERSION"))); result.SetNamedValue(L"runtime", Json::JsonObject::Parse(to_hstring(NativeSparkRuntime{}.describe()))); result.SetNamedValue(L"launchArguments", launchArguments); promise.Resolve(to_string(result.Stringify())); return;
+          Json::JsonObject result; result.SetNamedValue(L"projectId", Json::JsonValue::CreateStringValue(SparkWindowsEnv(L"SPARK_PROJECT_ID"))); result.SetNamedValue(L"name", Json::JsonValue::CreateStringValue(SparkWindowsEnv(L"SPARK_PROJECT_NAME"))); result.SetNamedValue(L"version", Json::JsonValue::CreateStringValue(SparkWindowsEnv(L"SPARK_PROJECT_VERSION"))); result.SetNamedValue(L"runtime", Json::JsonObject::Parse(to_hstring(NativeSparkRuntime{}.describe()))); result.SetNamedValue(L"launchArguments", launchArguments);
+          Json::JsonObject launch; launch.SetNamedValue(L"safeMode", safeModeTrigger.empty() ? Json::JsonValue::CreateNullValue() : Json::JsonValue::CreateStringValue(safeModeTrigger)); launch.SetNamedValue(L"relaunched", Json::JsonValue::CreateBooleanValue(relaunched)); launch.SetNamedValue(L"instance", Json::JsonValue::CreateStringValue(L"primary")); result.SetNamedValue(L"launch", launch);
+          promise.Resolve(to_string(result.Stringify())); return;
         } else if (method == "pendingURLs") { promise.Resolve(to_string(pendingURLs.Stringify())); return; }
         else if (method == "initialURL") { promise.Resolve(initialURL.empty() ? "null" : to_string(Json::JsonValue::CreateStringValue(to_hstring(initialURL)).Stringify())); return; }
         else throw winrt::hresult_invalid_argument(L"Unsupported application operation");

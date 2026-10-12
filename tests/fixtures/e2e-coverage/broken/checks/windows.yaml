@@ -1,0 +1,15 @@
+area: windows
+prefix: WIN
+checks:
+  WIN-OPEN-01:
+    title: openWindow opens a second window
+    covers: [./windows#openWindow]
+  WIN-ORPHAN-01:
+    title: No flow lists this check
+    covers: [./config]
+  WIN-TYPO-01:
+    title: Covers an export that does not exist
+    covers: [./windows#openWindw]
+  WIN-EXPORT-01:
+    title: Covers the availability export but not its flag
+    covers: [./windows#getWindowAvailability]

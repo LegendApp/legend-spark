@@ -1,0 +1,81 @@
+appId: so.legend.spark.examples.kitchensink
+name: macOS window options apply at open and on the live window
+intent: >
+  Open child window opens Window Options Child with its options already applied: overlay title
+  bar, traffic lights moved to 20,18, subtitle Draft and the edited dot. Each Next press changes
+  one option on the live child and its row shows the new value. Level and the edited dot are
+  checked through the window state; the title bar chrome through screenshots.
+checks: [WIN-OPEN-01, WIN-OPTIONS-01, WIN-LEVEL-01, WIN-EDITED-01, WIN-CHROME-01]
+tags: [windows]
+platforms: [macos]
+build: release
+manual: partial
+timeout: 120s
+matrix:
+  appearance: [light, dark]
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://windows/window-options" }
+- tapOn: { id: windows-window-options-open }
+- assertVisible: { text: Opened child, within: { id: windows-window-options-status } }
+- assertVisible: { id: secondary-window, window: { id: windows-window-options-child } }
+- assertWindow: { window: { id: windows-window-options-child }, edited: true, level: normal }
+- takeScreenshot: { name: window-options-child-opened, window: { id: windows-window-options-child } }
+- manualStep:
+    instruction: Look at the child window in window-options-child-opened.
+    expect: The title bar is transparent over the content, the traffic lights sit 20 points from the left and 18 from the top, the close button shows the edited dot, and the subtitle reads Draft.
+    evidence: screenshot
+    signoff: required
+- focusWindow: { id: spark.main }
+- tapOn: { id: windows-window-options-level }
+- assertText: { id: windows-window-options-level-value, equals: floating }
+- assertWindow: { window: { id: windows-window-options-child }, level: floating }
+- tapOn: { id: windows-window-options-level }
+- assertWindow: { window: { id: windows-window-options-child }, level: normal }
+- tapOn: { id: windows-window-options-edited }
+- assertText: { id: windows-window-options-edited-value, equals: "no" }
+- assertWindow: { window: { id: windows-window-options-child }, edited: false }
+- tapOn: { id: windows-window-options-aspect-ratio }
+- assertText: { id: windows-window-options-aspect-ratio-value, equals: free }
+- tapOn: { id: windows-window-options-resizable }
+- assertText: { id: windows-window-options-resizable-value, equals: "off" }
+- tapOn: { id: windows-window-options-closable }
+- assertText: { id: windows-window-options-closable-value, equals: "off" }
+- tapOn: { id: windows-window-options-minimizable }
+- assertText: { id: windows-window-options-minimizable-value, equals: "off" }
+- tapOn: { id: windows-window-options-size-limits }
+- assertText: { id: windows-window-options-size-limits-value, equals: 400x300 to 900x700 }
+- tapOn: { id: windows-window-options-spaces }
+- assertText: { id: windows-window-options-spaces-value, equals: all }
+- tapOn: { id: windows-window-options-opacity }
+- assertText: { id: windows-window-options-opacity-value, equals: "0.6" }
+- tapOn: { id: windows-window-options-background }
+- assertText: { id: windows-window-options-background-value, equals: "#3366CC" }
+- tapOn: { id: windows-window-options-shadow }
+- assertText: { id: windows-window-options-shadow-value, equals: "off" }
+- tapOn: { id: windows-window-options-material }
+- assertText: { id: windows-window-options-material-value, equals: sidebar }
+- tapOn: { id: windows-window-options-content-protection }
+- assertText: { id: windows-window-options-content-protection-value, equals: "on" }
+- tapOn: { id: windows-window-options-click-through }
+- assertText: { id: windows-window-options-click-through-value, equals: "on" }
+- tapOn: { id: windows-window-options-click-through }
+- assertText: { id: windows-window-options-click-through-value, equals: "off" }
+- tapOn: { id: windows-window-options-traffic-lights }
+- assertText: { id: windows-window-options-traffic-lights-value, equals: AppKit }
+- tapOn: { id: windows-window-options-subtitle }
+- assertText: { id: windows-window-options-subtitle-value, equals: none }
+- tapOn: { id: windows-window-options-represented-file }
+- assertText: { id: windows-window-options-represented-file-value, equals: /Applications }
+- tapOn: { id: windows-window-options-toolbar }
+- assertText: { id: windows-window-options-toolbar-value, equals: unified }
+- tapOn: { id: windows-window-options-title-bar }
+- assertText: { id: windows-window-options-title-bar-value, equals: hidden }
+- takeScreenshot: { name: window-options-child-changed, window: { id: windows-window-options-child } }
+- manualStep:
+    instruction: Look at the child window in window-options-child-changed.
+    expect: The window is 60% opaque with a #3366CC background and no traffic lights or title; the unified toolbar shows. AppKit renders the sidebar vibrancy flat in in-process captures.
+    evidence: screenshot
+    signoff: required
+- tapOn: { id: windows-window-options-close }
+- assertWindow: { count: 1 }

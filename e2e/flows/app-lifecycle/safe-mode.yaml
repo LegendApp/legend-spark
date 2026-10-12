@@ -1,0 +1,23 @@
+appId: so.legend.spark.examples.kitchensink
+name: Safe mode skips the saved frame and keeps it
+intent: >
+  After the main window is resized and the app quits, a launch with Shift held reports safe mode
+  from the modifier and opens the window at its configured 1000x700 size. A safe-mode launch saves
+  nothing, so the next normal launch restores the resized frame.
+checks: [LIFE-SAFE-01, LIFE-SAFE-02]
+tags: [app-lifecycle]
+platforms: [macos, windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://app-lifecycle/launch" }
+- resizeWindow: { window: main, to: { w: 820, h: 560 }, edge: bottomRight }
+- assertWindow: { window: main, frame: { w: 820, h: 560 } }
+- quitApp: { via: shortcut }
+- holdKey: shift
+- launchApp: { stopApp: false, openUrl: "spark-ks://app-lifecycle/launch" }
+- releaseKey: shift
+- assertText: { id: app-lifecycle-launch-safe-mode, equals: "On: Shift held at launch" }
+- assertWindow: { window: main, frame: { w: 1000, h: 700 } }
+- quitApp: { via: shortcut }
+- launchApp: { stopApp: false, openUrl: "spark-ks://app-lifecycle/launch" }
+- assertText: { id: app-lifecycle-launch-safe-mode, equals: "Off" }
+- assertWindow: { window: main, frame: { w: 820, h: 560 } }

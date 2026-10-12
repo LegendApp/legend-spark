@@ -1,4 +1,5 @@
 #import "RNNativeMenu.h"
+#import "SparkDeveloperMenu.h"
 #import <React/RCTUtils.h>
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
@@ -7,7 +8,10 @@ static char RoleKey, LocationKey;
 static NSDictionary<NSString *, NSString *> *RoleSelectors(void) {
   return @{ @"new": @"newDocument:", @"open": @"openDocument:", @"save": @"saveDocument:", @"saveAs": @"saveDocumentAs:", @"clearRecentDocuments": @"clearRecentDocuments:",
     @"about": @"orderFrontStandardAboutPanel:", @"settings": @"showPreferencesWindow:", @"hide": @"hide:", @"hideOthers": @"hideOtherApplications:", @"showAll": @"unhideAllApplications:", @"quit": @"terminate:",
-    @"undo": @"undo:", @"redo": @"redo:", @"cut": @"cut:", @"copy": @"copy:", @"paste": @"paste:", @"selectAll": @"selectAll:", @"minimize": @"performMiniaturize:", @"zoom": @"performZoom:", @"close": @"performClose:", @"toggleFullscreen": @"toggleFullScreen:" };
+    @"undo": @"undo:", @"redo": @"redo:", @"cut": @"cut:", @"copy": @"copy:", @"paste": @"paste:", @"selectAll": @"selectAll:", @"minimize": @"performMiniaturize:", @"zoom": @"performZoom:", @"close": @"performClose:", @"toggleFullscreen": @"toggleFullScreen:",
+    // Window tabs: AppKit adds these to the Window and View menus while windows can tab; newTab is the tab bar's + button.
+    @"newTab": @"newWindowForTab:", @"toggleTabBar": @"toggleTabBar:", @"showAllTabs": @"toggleTabOverview:", @"selectPreviousTab": @"selectPreviousTab:",
+    @"selectNextTab": @"selectNextTab:", @"moveTabToNewWindow": @"moveTabToNewWindow:", @"mergeAllWindows": @"mergeAllWindows:" };
 }
 static NSString *Role(NSMenuItem *item) {
   NSString *role = objc_getAssociatedObject(item, &RoleKey);
@@ -31,16 +35,44 @@ static NSMenuItem *Find(NSMenu *menu, NSDictionary *target, BOOL recursive) {
 }
 static void Fail(NSString *code, NSString *message) { @throw [NSException exceptionWithName:code reason:message userInfo:nil]; }
 
+// Wraps a submenu's existing delegate: every NSMenuDelegate call (menuNeedsUpdate:, lazy
+// population, highlighting) still reaches it, and menuWillOpen:/menuDidClose: also report
+// lifecycle. Delegate callbacks fire per submenu; NSMenu tracking notifications fire once per
+// tracking session, so they cannot identify which submenu opened.
+@interface SparkMenuLifecycleDelegate : NSObject <NSMenuDelegate>
+@property (weak) id<NSMenuDelegate> original;
+@property (copy) void (^lifecycle)(NSMenu *, NSString *);
+@end
+@implementation SparkMenuLifecycleDelegate
+- (BOOL)respondsToSelector:(SEL)selector { return [super respondsToSelector:selector] || [self.original respondsToSelector:selector]; }
+- (id)forwardingTargetForSelector:(SEL)selector { return [self.original respondsToSelector:selector] ? self.original : [super forwardingTargetForSelector:selector]; }
+- (void)menuWillOpen:(NSMenu *)menu {
+  if ([self.original respondsToSelector:_cmd]) [self.original menuWillOpen:menu];
+  if (menu.delegate == self) self.lifecycle(menu, @"open");
+}
+- (void)menuDidClose:(NSMenu *)menu {
+  if ([self.original respondsToSelector:_cmd]) [self.original menuDidClose:menu];
+  if (menu.delegate == self) self.lifecycle(menu, @"close");
+}
+@end
+
 @interface RNNativeMenu ()
 @property NSMutableArray<void (^)(void)> *undo;
 @property NSArray *published;
+@property BOOL observing;
 - (void)restore;
 @end
 @implementation RNNativeMenu
 RCT_EXPORT_MODULE(NativeMenu)
 + (BOOL)requiresMainQueueSetup { return YES; }
 - (instancetype)init { if (self = [super init]) { _undo = [NSMutableArray new]; _published = @[]; } return self; }
-- (NSArray<NSString *> *)supportedEvents { return @[@"NativeMenuAction"]; }
+#if RCT_DEV
+- (NSArray<NSString *> *)supportedEvents { return @[@"NativeMenuAction", @"NativeMenuLifecycle", @"NativeDeveloperMenu"]; }
+#else
+- (NSArray<NSString *> *)supportedEvents { return @[@"NativeMenuAction", @"NativeMenuLifecycle"]; }
+#endif
+- (void)startObserving { self.observing = YES; }
+- (void)stopObserving { self.observing = NO; }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeMenuSpecJSI>(params); }
 - (void)restore { for (void (^undo)(void) in self.undo.reverseObjectEnumerator) undo(); [self.undo removeAllObjects]; }
 - (void)identifyNativeMenus {
@@ -68,12 +100,12 @@ RCT_EXPORT_MODULE(NativeMenu)
   NSMenu *menu = item.menu; NSInteger index = [menu indexOfItem:item];
   NSString *title = item.title, *key = item.keyEquivalent, *identifier = item.identifier;
   id target = item.target, represented = item.representedObject, role = objc_getAssociatedObject(item, &RoleKey);
-  SEL action = item.action; BOOL enabled = item.enabled, hidden = item.hidden;
+  SEL action = item.action; BOOL enabled = item.enabled, hidden = item.hidden, alternate = item.alternate;
   NSControlStateValue state = item.state; NSEventModifierFlags modifiers = item.keyEquivalentModifierMask;
   NSImage *image = item.image;
   [self.undo addObject:^{
     item.title = title; item.keyEquivalent = key; item.identifier = identifier; item.target = target; item.action = action;
-    item.representedObject = represented; item.enabled = enabled; item.hidden = hidden; item.state = state; item.keyEquivalentModifierMask = modifiers; item.image = image;
+    item.representedObject = represented; item.enabled = enabled; item.hidden = hidden; item.state = state; item.alternate = alternate; item.keyEquivalentModifierMask = modifiers; item.image = image;
     objc_setAssociatedObject(item, &RoleKey, role, OBJC_ASSOCIATION_COPY_NONATOMIC);
     if (item.menu == menu && index >= 0 && [menu indexOfItem:item] != index) { [menu removeItem:item]; [menu insertItem:item atIndex:MIN(index, menu.numberOfItems)]; }
   }];
@@ -83,13 +115,34 @@ RCT_EXPORT_MODULE(NativeMenu)
   if (config[@"enabled"]) item.enabled = [config[@"enabled"] boolValue];
   if (config[@"hidden"]) item.hidden = [config[@"hidden"] boolValue];
   if (config[@"checked"]) item.state = [config[@"checked"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+  if ([config[@"mixed"] boolValue]) item.state = NSControlStateValueMixed;
   NSDictionary *shortcut = config[@"shortcut"];
   if (shortcut) { item.keyEquivalent = shortcut[@"key"]; item.keyEquivalentModifierMask = [shortcut[@"modifiers"] unsignedIntegerValue]; }
+  // JavaScript guarantees a keyed alternate differs from its primary's modifiers; a keyless pair
+  // differs by Option, the mask AppKit compares when folding alternates without key equivalents.
+  if (config[@"alternate"]) {
+    item.alternate = [config[@"alternate"] boolValue];
+    if (item.alternate && !item.keyEquivalent.length) item.keyEquivalentModifierMask = NSEventModifierFlagOption;
+  }
   if (config[@"systemImageName"] || config[@"imagePath"]) {
     NSImage *image = config[@"systemImageName"] ? [NSImage imageWithSystemSymbolName:config[@"systemImageName"] accessibilityDescription:item.title] : [[NSImage alloc] initWithContentsOfFile:config[@"imagePath"]];
     if (!image) Fail(@"E_INVALID_ARGUMENT", @"Menu image could not be loaded");
     item.image = image;
   }
+}
+- (void)observeMenu:(NSMenu *)menu config:(NSDictionary *)config {
+  id<NSMenuDelegate> previous = menu.delegate;
+  SparkMenuLifecycleDelegate *delegate = [SparkMenuLifecycleDelegate new];
+  delegate.original = [previous isKindOfClass:SparkMenuLifecycleDelegate.class] ? ((SparkMenuLifecycleDelegate *)previous).original : previous;
+  __weak RNNativeMenu *weakSelf = self;
+  NSString *ownerId = config[@"_sparkOwner"], *itemId = config[@"id"];
+  delegate.lifecycle = ^(NSMenu *openedMenu, NSString *type) {
+    RNNativeMenu *module = weakSelf;
+    if (module.observing) [module sendEventWithName:@"NativeMenuLifecycle" body:@{ @"ownerId": ownerId, @"itemId": itemId, @"type": type }];
+  };
+  menu.delegate = delegate;
+  // NSMenu holds its delegate weakly; the restoration block retains both owners.
+  [self.undo addObject:^{ if (menu.delegate == delegate) menu.delegate = previous; }];
 }
 - (void)install:(NSArray *)configs into:(NSMenu *)menu root:(BOOL)root {
   for (NSDictionary *config in configs) {
@@ -112,6 +165,12 @@ RCT_EXPORT_MODULE(NativeMenu)
     if (config[@"items"]) {
       if (existing && !item.submenu) Fail(@"E_INVALID_ARGUMENT", @"Submenu target is not a submenu");
       if (!item.submenu) item.submenu = [[NSMenu alloc] initWithTitle:item.title];
+      if (root && [target[@"menu"] isEqual:@"help"] && NSApp.helpMenu != item.submenu) {
+        NSMenu *previousHelp = NSApp.helpMenu, *helpMenu = item.submenu;
+        NSApp.helpMenu = helpMenu;
+        [self.undo addObject:^{ if (NSApp.helpMenu == helpMenu) NSApp.helpMenu = previousHelp; }];
+      }
+      if ([config[@"_sparkLifecycle"] boolValue]) [self observeMenu:item.submenu config:config];
       [self apply:config to:item];
       [self install:config[@"items"] into:item.submenu root:NO];
     } else {
@@ -128,6 +187,10 @@ RCT_EXPORT_MODULE(NativeMenu)
       } else {
         item.action = @selector(selected:); item.target = self;
         item.representedObject = @{ @"ownerId": config[@"_sparkOwner"], @"itemId": config[@"id"] };
+#if RCT_DEV
+        NSDictionary *developer = config[@"_sparkDev"];
+        if (developer) { item.representedObject = @{ @"ownerId": config[@"_sparkOwner"], @"itemId": config[@"id"], @"developer": developer }; SparkDeveloperConfigure(item, developer); }
+#endif
       }
       [self apply:config to:item];
       if (config[@"role"] && !item.enabled) item.action = nil;
@@ -158,7 +221,23 @@ RCT_EXPORT_MODULE(NativeMenu)
     }
   });
 }
-- (void)selected:(NSMenuItem *)sender { if (sender.enabled && !sender.hidden) [self sendEventWithName:@"NativeMenuAction" body:sender.representedObject]; }
-- (BOOL)validateMenuItem:(NSMenuItem *)item { return item.enabled; }
+- (void)selected:(NSMenuItem *)sender {
+#if RCT_DEV
+  NSDictionary *developer = sender.representedObject[@"developer"];
+  if (developer) {
+    __weak RNNativeMenu *weakSelf = self;
+    SparkDeveloperPerform(sender, developer, ^(NSDictionary *body) { RNNativeMenu *module = weakSelf; if (module.observing) [module sendEventWithName:@"NativeDeveloperMenu" body:body]; });
+    return;
+  }
+#endif
+  if (sender.enabled && !sender.hidden) [self sendEventWithName:@"NativeMenuAction" body:sender.representedObject];
+}
+- (BOOL)validateMenuItem:(NSMenuItem *)item {
+#if RCT_DEV
+  NSDictionary *developer = [item.representedObject isKindOfClass:NSDictionary.class] ? item.representedObject[@"developer"] : nil;
+  if (developer) return SparkDeveloperValidate(item, developer);
+#endif
+  return item.enabled;
+}
 - (void)invalidate { RCTExecuteOnMainQueue(^{ [self restore]; self.published = @[]; }); [super invalidate]; }
 @end

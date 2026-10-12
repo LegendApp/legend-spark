@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: Table and Outline render 10k native rows and match their goldens
+intent: >
+  Native controls > Table shows an NSTableView of 10,000 rows sorted by Name (ascending indicator),
+  File 2 selected, sizes trailing-aligned, and the availability, selection, sort and column-layout
+  readouts. Native controls > Outline shows an NSOutlineView of 10,010 rows with Group 1 and
+  Folder 1.1 expanded and File 2 inside it selected. Both match their goldens in light and dark,
+  English and Arabic, where the columns and disclosure triangles mirror. The shell sidebar is masked.
+checks: [CTRL-TABLE-01, CTRL-OUTLINE-01]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://native-controls/table" }
+- assertVisible: { id: native-controls-table-list }
+- assertScreenshot: { golden: native-controls-table, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/outline", stopApp: false }
+- assertVisible: { id: native-controls-outline-list }
+- assertScreenshot: { golden: native-controls-outline, mask: [{ id: infra-shell-sidebar }] }

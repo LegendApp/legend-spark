@@ -48,6 +48,7 @@ async function prepareKitchenSinkConsumer(root: string, packageManifest?: string
 export function copyKitchenSinkScreens(source: string, root: string) {
   for (const entry of readdirSync(source, { withFileTypes: true })) {
     if (entry.isFile() && (/\.tsx?$/.test(entry.name) || ["global.css", "metro.config.js"].includes(entry.name))) cpSync(path.join(source, entry.name), path.join(root, entry.name));
+    if (entry.isDirectory() && ["shell", "screens"].includes(entry.name)) cpSync(path.join(source, entry.name), path.join(root, entry.name), { recursive: true });
   }
   cpSync(path.join(source, "../sidecar/client.ts"), path.join(root, "sidecar-client.ts"));
 }

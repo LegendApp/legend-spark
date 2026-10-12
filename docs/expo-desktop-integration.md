@@ -81,6 +81,72 @@ compatibility. Existing runtimes need a native rebuild. Review/remove this patch
 when upgrading RN macOS. `bun scripts/test-keyboard-events.ts` builds and exercises
 the native regression; see [macOS evidence](macos-readiness-2026-09-18.md#webview-keyboard-follow-up).
 
+## RN macOS RTL ScrollView patch
+
+In RTL, `react-native-macos@0.81.7` Fabric flips every ScrollView's content container
+with a `scale(-1, 1)` layer transform. The matching flip of the scroll view itself,
+which cancels it on iOS, is iOS-only, so scroll content renders mirrored on macOS.
+Mirroring the NSScrollView as well is not an option: AppKit scrolls `NSClipView` by its
+bounds origin and routes clicks, wheel deltas and scroller drags without layer transforms.
+
+`rtl-scroll-view.cjs` flips nothing on macOS. Yoga already places RTL content. Scroll
+offsets are reported and applied as plain left-edge offsets, with no RTL conversion. A
+scroll view that becomes RTL starts at its content's right end (the RTL leading edge), and
+keeps its distance from that end when its content or viewport size changes, as the mirrored
+iOS offset does. Like the
+other patches, it checks the version and exact source, is idempotent, and replaces the
+file atomically. Existing runtimes need a native rebuild. `tests/rtl-scroll-view-native.test.ts`
+compiles the patched methods against AppKit.
+
+## RN macOS RTL text alignment patch
+
+`react-native-macos@0.81.7` Fabric passes natural `textAlign` (`"auto"` or unset) to TextKit
+as `NSTextAlignmentNatural`. TextKit resolves that from the user's language and the app's
+localization, not from the Yoga layout direction. So in an RTL subtree of an app that isn't
+localized for an RTL language (such as `direction: "rtl"`), text in a full-width box aligns
+left, even when it's Arabic.
+
+`rtl-text-alignment.cjs` resolves natural alignment from the text's layout direction: right in
+RTL, left in LTR. `"left"` and `"right"` keep the upstream behavior, which iOS shares: they
+swap in RTL. `"center"` and `"justify"` are unchanged. Text attributes without a layout
+direction, such as TextInput's, are unchanged too. Like the other patches, it checks the
+version and exact source, is idempotent, and replaces the file atomically. Existing runtimes
+need a native rebuild. `tests/rtl-text-alignment-native.test.ts` compiles the patched and the
+upstream code and lays text out with TextKit.
+
+## RN macOS DevTools targets patch
+
+`react-native-macos@0.81.7` lists every JavaScript runtime as the same React Native DevTools target, titled
+`<bundle id> ()`. `devtools-targets.cjs` titles each by its runtime, `<CFBundleName> (shared runtime)` or
+`<CFBundleName> (isolated runtime: <name>)`, registering an isolated runtime's target once its runtime is named.
+Like the other patches, it checks the version and exact source, is idempotent, and replaces files atomically.
+Existing runtimes need a native rebuild. `tests/devtools-targets.test.ts` covers the patch; see [DevTools](devtools.md).
+
+## RN macOS TextInput text services patch
+
+A multiline `react-native-macos@0.81.7` TextInput is an `NSTextView` in a scroll view, but it
+leaves the find bar off, so Edit > Find (⌘F) is disabled in it. Writing Tools has no per-input
+control. Both belong to the TextInput's native view, beside its other AppKit text traits
+(`spellCheck`, `grammarCheck`), so `text-services.cjs` patches TextInput rather than wrapping it:
+
+- `RCTUITextView` turns on `usesFindBar` and incremental search. AppKit then shows the
+  NSTextFinder find bar in the input's scroll view for Edit > Find, Find Next and Use Selection
+  for Find. Single-line inputs keep the window's field editor and have no find bar.
+- A `writingToolsBehavior` trait (`"default"`, `"complete"`, `"limited"`, `"none"`) goes from the
+  view config through `TextInputTraits` to `NSTextView.writingToolsBehavior` (macOS 15+). A
+  multiline input applies it to its text view, also after a multiline or secure-entry change
+  replaces the backed view. A single-line input applies it to the window's shared field editor
+  when it starts editing. When it stops, the field editor gets back its AppKit value (field
+  editors default to limited), unless another field already took it. An unknown value logs an
+  RN error and acts as `"default"`.
+
+`@legendapp/spark/ui/text-services` adds the `writingToolsBehavior` prop to React Native's
+`TextInputProps` type. Services and Look Up already work in RN and Spark text inputs through
+AppKit's own text views. Like the other patches, it checks the version and exact sources,
+validates every file before changing any, is idempotent, and replaces files atomically.
+Existing runtimes need a native rebuild. `tests/text-services-native.test.ts` compiles the
+patched initializer and Writing Tools helpers against AppKit.
+
 ## Expo development terminal patch
 
 `spark dev` launches the app's installed `expo start` under Node, inheriting stdin/stdout/stderr. Its Node supervisor retains desktop runtime discovery, compatibility enforcement, native builds and owned app processes. It has no keyboard interface. Desktop actions and results travel over a private JSON IPC channel; no HTTP command endpoint is exposed.
@@ -89,15 +155,16 @@ frame consumes its own `--project`, `--platform`, `--runner-binary`, and `--no-o
 
 The shared development config advertises all declared platforms and omits native build overlays. Expo Desktop supplies multi-platform Metro defaults; the desktop runtime gate is selected per request and does not block mobile/web. `desktop.config.json` remains separate. Native builds keep target-specific config and state.
 
-`src/expo-dev-patch.cjs` pins `@expo/cli@54.0.27` and verifies SHA-256 hashes for three upstream modules before loading replacements in memory:
+`src/expo-dev-patch.cjs` pins `@expo/cli@54.0.27` and verifies SHA-256 hashes for four upstream modules before loading replacements in memory:
 
 - `commandsTable.js`: place desktop runtime switching after Expo's runtime switch, and desktop opening/building after its platform launch actions, in both compact and expanded help.
 - `startInterface.js`: dispatch `d`, `g`, and `b` through the desktop extension; log action failures without ending the session. Existing keys remain Expo's.
 - `startAsync.js`: notify the supervisor of the actual native server port and bundle options after startup, including noninteractive sessions.
+- `JsInspector.js`: title each `j` prompt choice by its debug target, so a desktop app's JavaScript runtimes are distinguishable ([DevTools](devtools.md)).
 
-`expo-dev-preload.cjs` changes module loading only inside this Expo process and restores the loader after the three modules load. Installed files are never rewritten. Forked Metro workers inherit Node's preload arguments but skip the extension. Templates pin the CLI version; an unexpected version or modified source produces an explicit startup error rather than silently losing desktop controls. Projects declaring no desktop platforms and direct `expo start` do not load the patch. Selecting `dev --platform ios`, Android, or web in a desktop-capable project keeps the patch and host desktop keys.
+`expo-dev-preload.cjs` changes module loading only inside this Expo process and restores the loader after the four modules load. Installed files are never rewritten. Forked Metro workers inherit Node's preload arguments but skip the extension. Templates pin the CLI version; an unexpected version or modified source produces an explicit startup error rather than silently losing desktop controls. Projects declaring no desktop platforms and direct `expo start` do not load the patch. Selecting `dev --platform ios`, Android, or web in a desktop-capable project keeps the patch and host desktop keys.
 
-On upgrade, review upstream changes, update the three source hashes and insertion points, and run `bun run test -- tests/expo-dev.test.ts` plus a real packed-consumer session. Verify opening/switching, build failures, reload/debugger, Fast Refresh, compatibility invalidation, restart and Ctrl+C. Windows native actions additionally need a Windows host.
+On upgrade, review upstream changes, update the four source hashes and insertion points, and run `bun run test -- tests/expo-dev.test.ts` plus a real packed-consumer session. Verify opening/switching, build failures, reload/debugger, Fast Refresh, compatibility invalidation, restart and Ctrl+C. Windows native actions additionally need a Windows host.
 
 Noninteractive sessions still start Expo and can auto-open a compatible runtime, but they do not accept keyboard commands over a pipe. Automation should use explicit build commands and restart the session; `scripts/test-windows.ts` follows that path.
 

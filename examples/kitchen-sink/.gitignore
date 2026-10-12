@@ -2,8 +2,8 @@ node_modules/
 .spark/
 .expo/
 .threaded-runtime/
-macos/
-windows/
+/macos/
+/windows/
 app.json
-ios/
-android/
+/ios/
+/android/

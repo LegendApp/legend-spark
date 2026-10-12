@@ -1,0 +1,25 @@
+appId: so.legend.spark.examples.kitchensink
+name: Logging is typed unsupported on Windows
+intent: >
+  On Windows the Logging screen reports logging and each feature as unsupported-platform, and its
+  configureLogging call fails typed. Writing entries (createLogger), flushing, the write failure demo and exporting fail
+  with SparkError:E_UNSUPPORTED_PLATFORM without showing a panel. Implementation: #319.
+checks: [REL-LOG-06]
+tags: [reliability-diagnostics]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/logging" }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-root }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-logging-availability-logging, equals: 'logging: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: reliability-diagnostics-logging-availability-system-log, equals: 'system-log: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: reliability-diagnostics-logging-availability-files, equals: 'files: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: reliability-diagnostics-logging-availability-diagnostics, equals: 'diagnostics: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: reliability-diagnostics-logging-setup-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: reliability-diagnostics-logging-write-entries }
+- assertText: { id: reliability-diagnostics-logging-write-entries-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: reliability-diagnostics-logging-flush }
+- assertText: { id: reliability-diagnostics-logging-flush-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: reliability-diagnostics-logging-write-failure }
+- assertText: { id: reliability-diagnostics-logging-write-failure-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: reliability-diagnostics-logging-export }
+- assertText: { id: reliability-diagnostics-logging-export-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }

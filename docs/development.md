@@ -26,6 +26,8 @@ On Windows, the actions target Windows. They are disabled when the target cannot
 
 Expo retains `r` for reload, `j` for debugging, `m` for the dev menu, `w` for web, `o` for your editor, and `s` for the **mobile** Expo Go/development-client switch. `?` shows the current command table. **Ctrl+C** exits Expo and closes the native app owned by this session. Metro output appears directly in the terminal; native build logs remain in `.spark/logs/`.
 
+`j` opens React Native DevTools; with several JavaScript runtimes it lists each by title. In a macOS development build, ⌥⌘I opens it for the shared runtime. See [DevTools](devtools.md).
+
 The extension uses a process-local patch to `@expo/cli@54.0.27`, verified against the exact upstream source before startup. It does not modify installed Expo files or affect ordinary `expo start` calls. See [Expo Desktop integration](expo-desktop-integration.md#expo-development-terminal-patch) for patch maintenance.
 
 A universal project's single dev session serves iOS, Android, web, macOS, and Windows. Use Expo's `i`, `a`, and `w` keys alongside spark's `d`. `--platform ios` requests an initial iOS launch while keeping the host desktop keys. LAN is Expo's default, so a phone and the local desktop app can use the same server. The declared `platforms` list controls availability; dev does not add platform support to a desktop-only application.

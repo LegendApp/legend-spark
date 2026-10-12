@@ -92,6 +92,126 @@ nonnegative integer. Conflicts compare equivalent accelerators on the active
 platform and remain visible to the application rather than silently overwriting
 one command with another.
 
+## Shortcut map
+
+`createShortcutMap` makes command shortcuts user-editable. It reuses the command model
+above: each command is a `HotkeyDefinition` with an optional `scope` of `application`
+(default), `window`, `view` or `global`. The map persists user changes, reports conflicts
+and switches live registrations and menu key equivalents together.
+
+```ts
+import { createShortcutMap } from '@legendapp/spark/shortcuts/commands';
+
+const map = await createShortcutMap({
+  commands: [
+    { id: 'new-note', title: 'New note', defaultBindings: ['CmdOrCtrl+N'] },
+    { id: 'find', title: 'Find', defaultBindings: ['CmdOrCtrl+F'], scope: 'window' },
+    { id: 'capture', title: 'Quick capture', defaultBindings: ['CmdOrCtrl+Shift+Space'], scope: 'global' },
+  ],
+  // store defaults to the project `settings` store; key defaults to 'shortcut-map'.
+});
+const live = await map.register({ windowId: 'main', handlers: { 'new-note': () => createNote(), find: () => showFind() } });
+await map.attachMenu(menu, shortcut => ({ items: buildMenu(shortcut) })); // shortcut('new-note') → 'CmdOrCtrl+N'
+const { conflicts } = map.validate('find', 'CmdOrCtrl+S'); // Check before applying.
+await map.rebind('find', ['CmdOrCtrl+Shift+F']);
+await map.unbind('new-note');
+await map.reset('find'); // or map.reset() for every command
+const subscription = map.addListener(change => render(change.snapshot));
+```
+
+`register({ handlers, windowId? })` registers the commands that have handlers, through
+`map.router` (a command router you can pass in or that the map creates). Application commands
+use priority 0, window commands 100 and view commands 200 in `windowId`, so a view's commands
+outrank its window's, which outrank the application's. Window and view commands require
+`windowId`. Global commands register with `registerGlobalShortcut`. Handlers receive
+`{ commandId, binding, scope, keyboard? }`; `keyboard` is the router context for local scopes.
+
+`attachMenu(menu, build)` republishes the menu whenever bindings change. `build` receives
+`shortcut(commandId)`, the command's first binding. Give each command's menu item the command
+ID so its key equivalent is not reported as a conflict with its own command.
+
+### Atomic rebinding
+
+`rebind`, `unbind` and `reset` run one at a time. Each change stages every surface, persists,
+then switches at one synchronous JavaScript commit:
+
+1. Router registrations publish native rules that consume both the old and new bindings, while
+   JavaScript still dispatches the old ones. New global hotkeys register with a handler that only
+   runs for committed bindings.
+2. Attached menus republish with the new key equivalents. Both binding sets are consumed by the
+   keyboard manager before AppKit's key-equivalent pass, so neither menu state can fire.
+3. The settings store writes the new overrides.
+4. The commit switches dispatch. Then the router publishes only the new rules and the old global
+   hotkeys are removed.
+
+Every keydown is therefore handled by exactly one binding set: the old one until the commit,
+the new one after. A key pressed between the commit and the final publication can be consumed
+without firing. If a stage fails, every surface rolls back and the promise rejects; the old
+bindings stay live throughout. If only the final release fails, the new bindings are live and
+saved and the promise rejects with that release error. The router offers the same switch for a
+single registration as `registration.setBindings(bindings)`, and `useRoutedHotkeys` uses it when
+its `bindings` change instead of replacing the registration.
+
+### Validation and reserved shortcuts
+
+Bindings are parsed by the shared accelerator parser: local commands allow unmodified keys and
+extended keys, global commands use the strict global-shortcut rules. Invalid accelerators reject
+`E_INVALID_ARGUMENT` (or `E_UNSUPPORTED_OPTION` for keys a surface lacks), unknown commands
+`E_NOT_FOUND`. `getReservedShortcuts(platform?)` lists the shortcuts each OS owns. `reserved`
+entries reject with `E_BUSY`, including in a command's defaults. `warning` entries are accepted
+and appear as conflicts with `source: 'system'`.
+
+| Platform | Rejected (`reserved`) | Accepted with a conflict (`warning`) |
+| --- | --- | --- |
+| macOS | ⌘Tab, ⌘⇧Tab, ⌘⌥Esc (Force Quit), ⌘⌃Q (Lock Screen), ⌘⇧Q (Log Out) | ⌘Space (Spotlight), ⌃Space and ⌘⌃Space (input sources, Character Viewer), ⌘⇧3/4/5 (screenshots), ⌃↑ ⌃↓ ⌃← ⌃→ (Mission Control and Spaces), ⌘Q, ⌘H, ⌘⌥H, ⌘M, ⌘` (standard app commands) |
+| Windows (Cmd is the Windows key) | Ctrl+Alt+Delete, Alt+Tab, Alt+Shift+Tab, Ctrl+Shift+Esc, Ctrl+Esc, Win+L, Win+D, Win+Tab, Win+R, Win+E | Alt+F4, Alt+Space, Win+arrow keys (snapping) |
+
+Comparison uses the active platform, so `CmdOrCtrl+Tab` is rejected on macOS but allowed on
+Windows.
+
+### Conflicts and change events
+
+A conflict is `{ commandId, scope, binding, with }`. `with` names the other party:
+another command (`source: 'command'` with its scope and ID), a `registerShortcut` registration
+(`source: 'shortcut'`, scope `application` or `window` with its window ID), a
+`registerGlobalShortcut` registration (`source: 'global-shortcut'`), an application menu item
+(`source: 'menu'` with menu and item IDs) or a system warning (`source: 'system'`). The map's
+own global hotkeys and attached menu items are not reported. Conflicts are reported, never
+resolved by overwriting a binding.
+
+`getSnapshot()` returns `{ commands, conflicts }`; each command has `bindings`,
+`defaultBindings`, `customized` and its own `conflicts`. The snapshot keeps its identity
+until something it reports changes. `addListener` delivers `{ reason, commandIds, snapshot }`
+with reason `rebind`, `unbind`, `reset`, or `external` when a registration elsewhere changes
+the conflicts. Live registrations are observed only while a listener exists.
+`useShortcutMap(map)` observes a caller-owned map for rendering; unmounting removes only its
+subscription. `close()` removes the map's registrations and listeners.
+
+### Persistence
+
+The map stores only user changes, in its settings key:
+
+```json
+{ "version": 2, "overrides": { "find": ["CmdOrCtrl+Shift+F"], "new-note": [] } }
+```
+
+A missing command uses its current defaults, so changed defaults reach users who never
+customized them. An empty array unbinds. Rebinding to exactly the defaults removes the
+override. Overrides for commands an app no longer declares are dropped. Version 1 files
+(`createHotkeyStore`'s full binding lists) migrate on load: bindings equal to the defaults are
+dropped, the rest become overrides, and the version 2 file is written before the map resolves.
+Other versions, malformed values, invalid accelerators and reserved bindings reject
+`E_INVALID_DATA` without changing the stored bytes.
+
+### Platform support
+
+The map itself, persistence, validation and conflicts are platform-independent.
+`getShortcutMapAvailability(scope)` reports live dispatch: application, window and view
+commands need the keyboard manager (`getKeyboardAvailability`, macOS only today); global
+commands need global shortcuts (macOS and Windows). On Windows, registering a local command
+rejects `E_UNSUPPORTED_PLATFORM`; global commands and attached menus work. Windows keyboard
+manager support is tracked in [#259](https://github.com/LegendApp/legend-spark/issues/259).
+
 ## Low-level keyboard events
 
 `addKeyboardListener('down' | 'up', listener, { windowIds? })` under

@@ -1,0 +1,31 @@
+appId: so.legend.spark.examples.kitchensink
+name: macOS simple fullscreen
+intent: >
+  Turning Simple fullscreen on makes the child cover its screen in the current Space (no native
+  fullscreen Space), with the Dock and menu bar auto-hidden. While it is on, changing the title
+  bar style rejects E_BUSY. Turning it off puts the child back at its windowed frame.
+checks: [WIN-SIMPLEFS-01]
+tags: [windows]
+platforms: [macos]
+build: release
+manual: partial
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://windows/window-options" }
+- tapOn: { id: windows-window-options-open }
+- assertVisible: { text: Opened child, within: { id: windows-window-options-status } }
+- tapOn: { id: windows-window-options-simple-fullscreen }
+- assertText: { id: windows-window-options-simple-fullscreen-value, equals: "on" }
+- assertWindow: { window: { id: windows-window-options-child }, fullscreen: false }
+- takeScreenshot: { name: window-options-simple-fullscreen, window: { id: windows-window-options-child } }
+- manualStep:
+    instruction: Look at the child window in window-options-simple-fullscreen.
+    expect: The child fills the whole display with no title bar or traffic lights, and no new fullscreen Space opened.
+    evidence: screenshot
+    signoff: required
+- tapOn: { id: windows-window-options-title-bar }
+- assertVisible: { text: "/E_BUSY/", within: { id: windows-window-options-title-bar-error } }
+- tapOn: { id: windows-window-options-simple-fullscreen }
+- assertText: { id: windows-window-options-simple-fullscreen-value, equals: "off" }
+- assertVisible: { id: secondary-window, window: { title: Window Options Child } }
+- tapOn: { id: windows-window-options-close }

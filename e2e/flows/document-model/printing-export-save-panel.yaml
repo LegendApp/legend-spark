@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: Export the report through a save panel
+intent: >
+  "Export report as PDF…" asks for a destination with a save panel (sheet on the main window,
+  suggested name "Quarterly report.pdf"), then exportPDF writes the report there with the current
+  page setup (A4 portrait after clearState): three 595 x 842 point pages. Canceling the save panel
+  resolves {"canceled":true} and writes nothing.
+checks: [DOC-PDF-02]
+tags: [document-model]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://document-model/printing" }
+- extendedWaitUntil: { visible: { id: document-model-printing-root }, timeout: 10s }
+- tapOn: { id: document-model-printing-export }
+- handleDialog: { kind: save, cancel: true }
+- assertText: { id: document-model-printing-export-result, equals: '{"canceled":true}' }
+- tapOn: { id: document-model-printing-export }
+- assertDialog: { kind: save }
+- handleDialog: { kind: save, name: Report.pdf, path: "${TMP}" }
+- assertFile: { path: "${TMP}/Report.pdf", exists: true }
+- assertText: { id: document-model-printing-export-result, equals: '{"numberOfPages":3,"pageSetup":{"paperSize":{"width":595.28,"height":841.89},"orientation":"portrait","margins":{"top":54,"right":54,"bottom":54,"left":54}}}' }
+- assertVisible: { id: document-model-printing-exported-report-3-pages-595x842 }

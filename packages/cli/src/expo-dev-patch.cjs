@@ -19,6 +19,11 @@ const patches = [
     // Dependency validation can wait on the network after Metro is listening.
     // Report actual server readiness before those optional startup checks.
     `    await (0, _profile.profile)(devServerManager.startAsync.bind(devServerManager))(startOptions);\n    require(${extension}).ready(devServerManager.getNativeDevServerPort(), { dev: options.dev, minify: options.minify, https: options.https });`],
+  // A Spark app lists one debug target per JS runtime on one device: the `j` prompt shows their titles
+  // ("<app> (shared runtime)", "<app> (isolated runtime: <name>)"), not the shared device name.
+  ['server/middleware/inspector/JsInspector.js', '5d075c4383476dab180e8e21ea8faff8a8d69459b426f0a2e351d08a565f8823',
+    "        const name = app.deviceName ?? 'Unknown device';",
+    "        const name = app.title ?? app.deviceName ?? 'Unknown device';"],
 ];
 
 function preparePatch(root) {

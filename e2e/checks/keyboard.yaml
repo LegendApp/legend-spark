@@ -1,0 +1,70 @@
+area: keyboard
+prefix: KEY
+checks:
+  KEY-MAPLIST-01:
+    title: The Shortcut map screen lists every declared command with its scope and default bindings, observed through useShortcutMap
+    platforms: [macos, windows]
+    blocking: true
+    spec: "#79 KEY.api"
+    covers:
+      - ./shortcuts/commands#createShortcutMap
+      - ./shortcuts/commands#useShortcutMap
+  KEY-MAPAVAIL-01:
+    title: getShortcutMapAvailability reports application, window and view dispatch (keyboard manager) and global hotkeys as available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#79 KEY.api"
+    covers:
+      - ./shortcuts/commands#getShortcutMapAvailability
+      - ./shortcuts/commands#getShortcutMapAvailability(application).available
+      - ./shortcuts/commands#getShortcutMapAvailability(window).available
+      - ./shortcuts/commands#getShortcutMapAvailability(view).available
+      - ./shortcuts/commands#getShortcutMapAvailability(global).available
+  KEY-MAPUNSUP-01:
+    title: On Windows application, window and view dispatch report unsupported-platform while global hotkeys, the map, persistence and conflicts work
+    platforms: [windows]
+    blocking: true
+    spec: "#79 KEY.api"
+    covers:
+      - ./shortcuts/commands#getShortcutMapAvailability
+  KEY-MAPREBIND-01:
+    title: Rebinding a command shows the new binding and a Customized badge, its menu key equivalent follows, and Reset restores the default
+    platforms: [macos]
+    blocking: true
+    spec: "#79 KEY.api"
+    covers:
+      - ./shortcuts/commands#createShortcutMap
+  KEY-MAPPERSIST-01:
+    title: A rebinding survives relaunch through Spark settings storage
+    platforms: [macos]
+    blocking: true
+    spec: "#79 KEY.api"
+    covers:
+      - ./shortcuts/commands#createShortcutMap
+  KEY-MAPLIVE-01:
+    title: After a rebinding the new binding fires the command and the old binding no longer does
+    platforms: [macos]
+    blocking: true
+    spec: "#79 KEY.api"
+    covers:
+      - ./shortcuts/commands#createShortcutMap
+  KEY-MAPCONFLICT-01:
+    title: Conflicts name the other party and its scope, including an app shortcut registered with registerShortcut and a menu key equivalent
+    platforms: [macos]
+    blocking: true
+    spec: "#79 KEY.api"
+    covers:
+      - ./shortcuts/commands#createShortcutMap
+      - ./shortcuts/commands#useShortcutMap
+  KEY-MAPRESERVED-01:
+    title: The screen lists the shortcuts the system reserves, and rebinding to one is rejected with SparkError E_BUSY
+    platforms: [macos]
+    blocking: true
+    spec: "#79 KEY.api"
+    covers:
+      - ./shortcuts/commands#getReservedShortcuts
+  KEY-VISUAL-01:
+    title: The Keyboard monitor and Shortcut map screens match their approved goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #227"

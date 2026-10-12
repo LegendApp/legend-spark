@@ -1,0 +1,33 @@
+# Performance budgets per reference machine; see docs/e2e-flows.md#budgets.
+# A baseline is a value measured on that machine with the release build. Until it is measured it is
+# `not-measured`, and a blocking budget fails the gate on that machine's target.
+machines:
+  macbook-air-m1-8gb:
+    name: MacBook Air (M1, 2020), 8 GB, 60 Hz display
+    model: MacBookAir10,1
+    memoryGB: 8
+  macbook-pro-14-base:
+    name: 14-inch MacBook Pro (M4, 2024), base configuration, 120 Hz ProMotion display
+    model: Mac16,1
+    memoryGB: 16
+budgets:
+  - metric: startup.coldMs
+    description: Cold launch to the first frame of the catalog
+    better: lower
+    tolerance: 10%
+    baselines: { macbook-air-m1-8gb: not-measured }
+  - metric: startup.firstPaintMs
+    description: Launch to first paint
+    better: lower
+    tolerance: 10%
+    baselines: { macbook-air-m1-8gb: not-measured }
+  - metric: memory.mb
+    description: Resident memory of the key window after the flow
+    better: lower
+    tolerance: 10%
+    baselines: { macbook-air-m1-8gb: not-measured }
+  - metric: frames.fps
+    description: Frame rate while scrolling and animating, on a 60 Hz and a 120 Hz display
+    better: higher
+    tolerance: 2%
+    baselines: { macbook-air-m1-8gb: not-measured, macbook-pro-14-base: not-measured }

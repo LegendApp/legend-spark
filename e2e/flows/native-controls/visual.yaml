@@ -1,0 +1,88 @@
+appId: so.legend.spark.examples.kitchensink
+name: Native controls screens match their goldens
+intent: >
+  Native controls screens open from their spark-ks:// deep links in the running Kitchen Sink and their roots render.
+  Split view, SF Symbols, Search field, Glass, Pickers and the four size grids (Toggles, Value inputs, Indicators, Button
+  styles) match the approved golden for the appearance (light and dark) and locale, with the shell sidebar masked: SF
+  Symbols, Glass, Pickers and the size grids in English and Arabic, Split view and Search field in English only until they
+  mirror in right-to-left layouts. The animated progress indicators are masked. The three Sidebar screens (data items,
+  dynamic heights, React rows) match their goldens in light and dark, English and Arabic: rows fit inside the Sidebar and
+  mirror in Arabic (#264), and the selected row shows the unemphasized selection color (#265). Popover
+  and Tab view match their goldens in English and Arabic. Driver-mode windows are never on screen, so the popover cannot
+  open: the flow checks that its native host mounts beside its anchor and that its closed content is not in the main
+  window (popover-black-box.yaml opens it on the black-box backend). The tab view shows only the selected tab's
+  content. In-process captures draw AppKit's tab row without the selected label in light and as a blank white bar in
+  dark (docs/ui.md, Tab view), so these goldens cannot check the tab labels.
+checks: [CTRL-VISUAL-01, CTRL-SIDEBAR-01, CTRL-VISUAL-02, CTRL-POPOVER-02, CTRL-TABVIEW-02]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://native-controls/split-view" }
+- assertVisible: { id: native-controls-split-view-root }
+# Arabic: no golden until the view mirrors in RTL (#256).
+- assertScreenshot: { golden: native-controls-split-view, mask: [{ id: infra-shell-sidebar }], when: { matrix: { locale: en } } }
+- launchApp: { openUrl: "spark-ks://native-controls/symbol", stopApp: false }
+- assertVisible: { id: native-controls-symbol-root }
+- assertScreenshot: { golden: native-controls-symbol, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/search", stopApp: false }
+- assertVisible: { id: native-controls-search-root }
+# Arabic: no golden until the view mirrors in RTL (#256).
+- assertScreenshot: { golden: native-controls-search, mask: [{ id: infra-shell-sidebar }], when: { matrix: { locale: en } } }
+- launchApp: { openUrl: "spark-ks://native-controls/glass", stopApp: false }
+- assertVisible: { id: native-controls-glass-root }
+- assertScreenshot: { golden: native-controls-glass, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/pickers", stopApp: false }
+- assertVisible: { id: native-controls-pickers-root }
+- assertScreenshot: { golden: native-controls-pickers, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/toggles", stopApp: false }
+- assertVisible: { id: native-controls-toggles-root }
+- assertScreenshot: { golden: native-controls-toggles, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/inputs", stopApp: false }
+- assertVisible: { id: native-controls-inputs-root }
+- assertScreenshot: { golden: native-controls-inputs, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/indicators", stopApp: false }
+- assertVisible: { id: native-controls-indicators-root }
+# The indeterminate bar and the spinner animate.
+- assertScreenshot:
+    golden: native-controls-indicators
+    mask:
+      - { id: infra-shell-sidebar }
+      - { id: native-controls-indicators-progress-indeterminate-mini }
+      - { id: native-controls-indicators-progress-indeterminate-small }
+      - { id: native-controls-indicators-progress-indeterminate-regular }
+      - { id: native-controls-indicators-progress-indeterminate-large }
+      - { id: native-controls-indicators-progress-spinner-mini }
+      - { id: native-controls-indicators-progress-spinner-small }
+      - { id: native-controls-indicators-progress-spinner-regular }
+      - { id: native-controls-indicators-progress-spinner-large }
+- launchApp: { openUrl: "spark-ks://native-controls/buttons", stopApp: false }
+- assertVisible: { id: native-controls-buttons-root }
+- assertScreenshot: { golden: native-controls-buttons, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/sidebar-data-items", stopApp: false }
+- assertVisible: { id: native-controls-sidebar-data-items-list }
+- assertScreenshot: { golden: native-controls-sidebar-data-items, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/sidebar-dynamic-heights", stopApp: false }
+- assertVisible: { id: native-controls-sidebar-dynamic-heights-list }
+- assertScreenshot: { golden: native-controls-sidebar-dynamic-heights, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/sidebar-react-rows", stopApp: false }
+- assertVisible: { id: native-controls-sidebar-react-rows-list }
+- assertScreenshot: { golden: native-controls-sidebar-react-rows, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/popover", stopApp: false }
+- assertVisible: { id: native-controls-popover-root }
+- assertVisible: { id: native-controls-popover-host }
+- assertNotVisible: { id: native-controls-popover-host-error }
+- assertVisible: { id: native-controls-popover-anchor }
+- assertNotVisible: { id: native-controls-popover-content }
+- assertNotVisible: { id: native-controls-popover-error }
+- assertScreenshot: { golden: native-controls-popover, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://native-controls/tab-view", stopApp: false }
+- assertVisible: { id: native-controls-tab-view-root }
+- assertVisible: { id: native-controls-tab-view-tabs }
+- assertNotVisible: { id: native-controls-tab-view-tabs-error }
+- assertVisible: { id: native-controls-tab-view-content-general }
+- assertNotVisible: { id: native-controls-tab-view-content-appearance }
+- assertNotVisible: { id: native-controls-tab-view-content-advanced }
+- assertScreenshot: { golden: native-controls-tab-view, mask: [{ id: infra-shell-sidebar }] }

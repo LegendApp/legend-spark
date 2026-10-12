@@ -33,7 +33,7 @@
   },
   "codegenConfig": {
     "name": "RNSparkUISpec",
-    "type": "components",
+    "type": "all",
     "jsSrcsDir": "src",
     "ios": {
       "componentProvider": {
@@ -46,9 +46,17 @@
         "SwipeActions": "RNSwipeActions",
         "NativeSelect": "RNNativeSelect",
         "NativeSegmentedControl": "RNNativeSegmentedControl",
-        "TextInputSearch": "RNTextInputSearch"
+        "TextInputSearch": "RNTextInputSearch",
+        "SparkPrimitive": "RNSparkPrimitive",
+        "SparkTable": "RNSparkTable",
+        "SparkPopover": "RNSparkPopover",
+        "SparkTabView": "RNSparkTabView",
+        "SparkTab": "RNSparkTab"
       },
-      "modulesProvider": {}
+      "modulesProvider": {
+        "NativeSparkTextServices": "RNSparkTextServices",
+        "NativeSparkPanels": "RNSparkPanels"
+      }
     },
     "windows": {
       "namespace": "FrameUICodegen",
@@ -58,11 +66,17 @@
   },
   "spark": {
     "sdk": true,
-    "nativeModules": [],
+    "nativeModules": [
+      "NativeSparkTextServices",
+      "NativeSparkPanels"
+    ],
     "pod": "RNSparkUI",
     "platforms": [
       "macos",
       "windows"
+    ],
+    "requires": [
+      "@legendapp/spark-desktop-app"
     ]
   },
   "private": true,

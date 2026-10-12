@@ -1,0 +1,40 @@
+appId: so.legend.spark.examples.kitchensink
+name: Pickers and panels in driver mode
+intent: >
+  On Native controls > Pickers (every picker in UTC, starting at 2026-03-14T09:30:00Z), with the
+  in-app driver: the date pickers, color wells, color panel, eyedropper and font panel report
+  available (the app's capability) and the pickers show their initial readouts. Nothing may reach
+  the screen in driver mode, so clicking the color well reports SparkError E_UNAVAILABLE and keeps
+  its value, and Show color panel and Show font panel each report SparkError E_UNAVAILABLE; the font
+  readout keeps the requested Helvetica Neue 15 regular. The eyedropper button is never pressed: it
+  would take over the real pointer (manual pickers-sampler.yaml). Driver clicks do not reach
+  NSDatePicker's mouse tracking (a calendar day click leaves the selection unchanged) and AppKit
+  takes keys only in the key window, so editing dates, the well popovers and the panel sessions are
+  in pickers-black-box.yaml.
+checks: [CTRL-PANELS-02]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/pickers" }
+- extendedWaitUntil: { visible: { id: native-controls-pickers-root }, timeout: 10s }
+- assertText: { id: native-controls-pickers-availability-date-picker, equals: 'date-picker: {"available":true}' }
+- assertText: { id: native-controls-pickers-availability-color-well, equals: 'color-well: {"available":true}' }
+- assertText: { id: native-controls-pickers-availability-color-panel, equals: 'color-panel: {"available":true}' }
+- assertText: { id: native-controls-pickers-availability-sampler, equals: 'sampler: {"available":true}' }
+- assertText: { id: native-controls-pickers-availability-font-panel, equals: 'font-panel: {"available":true}' }
+- assertText: { id: native-controls-pickers-date-value, equals: "1773480600000 2026-03-14T09:30:00.000Z" }
+- assertText: { id: native-controls-pickers-umm-al-qura-value, equals: "1773480600000 2026-03-14T09:30:00.000Z" }
+- assertText: { id: native-controls-pickers-well-alpha-value, equals: '"#3366cc80"' }
+# The color well cannot show the shared panel in driver mode, and says so
+- assertNotVisible: { id: native-controls-pickers-well-error }
+- tapOn: { id: native-controls-pickers-well }
+- extendedWaitUntil: { visible: { id: native-controls-pickers-well-error, text: "SparkError:E_UNAVAILABLE" }, timeout: 5s }
+- assertText: { id: native-controls-pickers-well-value, equals: '"#3366cc"' }
+# Neither panel reaches the screen
+- tapOn: { id: native-controls-pickers-color-panel }
+- assertText: { id: native-controls-pickers-color-panel-state, equals: SparkError:E_UNAVAILABLE }
+- tapOn: { id: native-controls-pickers-font-panel }
+- assertText: { id: native-controls-pickers-font-panel-state, equals: SparkError:E_UNAVAILABLE }
+- assertText: { id: native-controls-pickers-font-panel-value, equals: '{"family":"Helvetica Neue","size":15,"weight":400,"italic":false}' }

@@ -1,0 +1,24 @@
+appId: so.legend.spark.examples.kitchensink
+name: React Native DevTools in a development session
+intent: >
+  DevTools needs a development build with JavaScript from the development server's inspector proxy, which neither
+  the release gate nor the driver's own bundle server provides. bun scripts/test-devtools.ts drives it headlessly: it starts spark dev, launches the dev build in driver mode,
+  checks the named targets at /json/list and drives them over CDP (evaluation, console, a breakpoint in
+  screens/devtools/probe.ts through the source map, pause on uncaught exceptions, openDevTools, Fast Refresh and a
+  full reload). ⌥⌘I needs a person at the keyboard.
+checks: [DEVT-TARGETS-01, DEVT-DEBUG-01, DEVT-RELOAD-01, DEVT-OPEN-01]
+tags: [devtools]
+platforms: [macos]
+build: dev
+manual: true
+---
+- manualStep:
+    instruction: After cd examples/kitchen-sink && bun run rebuild:macos, run bun scripts/test-devtools.ts from the repository root.
+    expect: It prints PASS for the targets, console and evaluation, source maps, the breakpoint, the worker runtime, one debugger per app process, openDevTools, source edits, pause on uncaught exceptions and the reload, and exits 0.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: Run bun run macos in examples/kitchen-sink, open DevTools › React Native DevTools, and press ⌥⌘I.
+    expect: 'React Native DevTools opens for "KitchenSink (shared runtime)". The Open DevTools button of the ks-devtools worker opens a second window for "KitchenSink (isolated runtime: ks-devtools)".' 
+    evidence: screenshot
+    signoff: required

@@ -1,0 +1,53 @@
+appId: so.legend.spark.examples.kitchensink
+name: Tab view switching, veto and positions
+intent: >
+  On Native controls > Tab view, clicking a tab (an AppKit tab button) shows its React content and updates the selected ID;
+  the Select radio group selects tabs programmatically. With Keep the selected tab on, a clicked tab
+  is reported but the parent keeps the old one, and the native tab view restores it. Every tab position
+  draws, and the line and borderless styles draw a tabless view. The tab buttons are found by role and
+  localized title, as a user finds them. Right-to-left tab order is compared by the Arabic golden in
+  visual.yaml.
+checks: [CTRL-TABVIEW-01]
+tags: [native-controls]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://native-controls/tab-view" }
+- extendedWaitUntil: { visible: { id: native-controls-tab-view-root }, timeout: 10s }
+- assertText: { id: native-controls-tab-view-availability, equals: '{"available":true}' }
+- assertVisible: { id: native-controls-tab-view-content-general }
+- tapOn: { role: radioButton, text: Advanced, within: { id: native-controls-tab-view-tabs }, when: { matrix: { locale: en-US } } }
+- tapOn: { role: radioButton, text: متقدم, within: { id: native-controls-tab-view-tabs }, when: { matrix: { locale: ar } } }
+- assertVisible: { id: native-controls-tab-view-content-advanced }
+- assertNotVisible: { id: native-controls-tab-view-content-general }
+- assertText: { id: native-controls-tab-view-selected, equals: '{"selectedId":"advanced"}' }
+- tapOn: { id: native-controls-tab-view-select.appearance }
+- assertVisible: { id: native-controls-tab-view-content-appearance }
+# Vetoed: the click is reported and the native view restores the parent's tab.
+- tapOn: { id: native-controls-tab-view-lock }
+- tapOn: { role: radioButton, text: General, within: { id: native-controls-tab-view-tabs }, when: { matrix: { locale: en-US } } }
+- tapOn: { role: radioButton, text: عام, within: { id: native-controls-tab-view-tabs }, when: { matrix: { locale: ar } } }
+- assertText: { id: native-controls-tab-view-requests, equals: '["advanced","general"]' }
+- assertVisible: { id: native-controls-tab-view-content-appearance }
+- assertText: { id: native-controls-tab-view-selected, equals: '{"selectedId":"appearance"}' }
+- tapOn: { id: native-controls-tab-view-lock }
+- tapOn: { id: native-controls-tab-view-position.bottom }
+- assertText: { id: native-controls-tab-view-style, equals: '{"tabPosition":"bottom","tabBorder":"bezel"}' }
+- takeScreenshot: tab-view-bottom
+- tapOn: { id: native-controls-tab-view-position.leading }
+- assertText: { id: native-controls-tab-view-style, equals: '{"tabPosition":"leading","tabBorder":"bezel"}' }
+- takeScreenshot: tab-view-leading
+- tapOn: { id: native-controls-tab-view-position.trailing }
+- assertText: { id: native-controls-tab-view-style, equals: '{"tabPosition":"trailing","tabBorder":"bezel"}' }
+- takeScreenshot: tab-view-trailing
+- tapOn: { id: native-controls-tab-view-position.none }
+- assertText: { id: native-controls-tab-view-style, equals: '{"tabPosition":"none","tabBorder":"bezel"}' }
+- tapOn: { id: native-controls-tab-view-border.line }
+- assertText: { id: native-controls-tab-view-style, equals: '{"tabPosition":"none","tabBorder":"line"}' }
+- takeScreenshot: tab-view-line
+- tapOn: { id: native-controls-tab-view-border.none }
+- assertText: { id: native-controls-tab-view-style, equals: '{"tabPosition":"none","tabBorder":"none"}' }
+- takeScreenshot: tab-view-borderless
+- assertVisible: { id: native-controls-tab-view-content-appearance }

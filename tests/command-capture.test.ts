@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import React, { act } from "react";
 const { create } = createRequire(import.meta.url)("react-test-renderer");
 const mocks = vi.hoisted(() => ({ down: new Set<(event: any) => void>(), up: new Set<(event: any) => void>(), capture: vi.fn(async () => ({ async remove() {} })) }));
-vi.mock("react-native", () => ({ Platform: { OS: "macos" }, Pressable: "Pressable", ScrollView: "ScrollView", Text: "Text", View: "View", StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1 } }));
+vi.mock("react-native", () => ({ Platform: { OS: "macos" }, TurboModuleRegistry: { get: () => null }, Pressable: "Pressable", ScrollView: "ScrollView", Text: "Text", View: "View", StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1 } }));
 vi.mock("@legendapp/spark-desktop-shortcuts/src/keyboard-manager", () => ({ createKeyboardConsumption: mocks.capture, addKeyboardListener: async (type: "down" | "up", handler: (event: any) => void) => { mocks[type].add(handler); return { async remove() { mocks[type].delete(handler); } }; } }));
 import { HotkeyCapture, HotkeyBindingsSettingsContent } from "../packages/commands/src/index";
 let rendered: any;

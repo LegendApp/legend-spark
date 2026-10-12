@@ -1,0 +1,57 @@
+appId: so.legend.spark.examples.kitchensink
+name: Keyframes, sequence, stagger, timeline and decay settle natively
+intent: >
+  On Motion system > Keyframes and timelines, each Run plays its animation on the
+  compositor and its readout reports finished true once the virtual clock passes its end: keyframes
+  through four positions, a timing-then-spring sequence that repeats reversed, five dots staggered
+  from the center, a timeline whose second box starts after the first box's spring settles, and a
+  decay fling that springs onto the end of the track and back.
+checks: [MOT-KEYFRAMES-01, MOT-SEQUENCE-01, MOT-STAGGER-01, MOT-TIMELINE-01, MOT-DECAY-01]
+tags: [motion-system]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en-US, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/timelines" }
+- extendedWaitUntil: { visible: { id: motion-system-timelines-root }, timeout: 10s }
+- assertText: { id: motion-system-timelines-availability, equals: '{"available":true}' }
+- setClock: virtual
+# Each run shows … once the press is handled; the virtual clock advances only after that, so no time is lost.
+- tapOn: { id: motion-system-timelines-keyframes-run }
+- assertText: { id: motion-system-timelines-keyframes-result, equals: "…" }
+- advanceClock: 600ms
+- assertText: { id: motion-system-timelines-keyframes-result, equals: "…" }
+- advanceClock: 700ms
+- assertText: { id: motion-system-timelines-keyframes-result, equals: '{"finished":true}' }
+- tapOn: { id: motion-system-timelines-sequence-run }
+- assertText: { id: motion-system-timelines-sequence-result, equals: "…" }
+- advanceClock: 4s
+- assertText: { id: motion-system-timelines-sequence-result, equals: '{"finished":true}' }
+- tapOn: { id: motion-system-timelines-stagger-run }
+- assertText: { id: motion-system-timelines-stagger-result, equals: "…" }
+- advanceClock: 3s
+- assertText: { id: motion-system-timelines-stagger-result, equals: '{"finished":true}' }
+- tapOn: { id: motion-system-timelines-timeline-run }
+- assertText: { id: motion-system-timelines-timeline-result, equals: "…" }
+- advanceClock: 200ms
+- assertText: { id: motion-system-timelines-timeline-result, equals: "…" }
+- advanceClock: 4s
+- assertText: { id: motion-system-timelines-timeline-result, equals: '{"finished":true}' }
+- tapOn: { id: motion-system-timelines-decay-run }
+- assertText: { id: motion-system-timelines-decay-result, equals: "…" }
+# Still in flight 200 ms into the fling: the virtual clock makes this exact.
+- advanceClock: 200ms
+- assertText: { id: motion-system-timelines-decay-result, equals: "…" }
+- advanceClock: 4s
+- assertText: { id: motion-system-timelines-decay-result, equals: '{"finished":true}' }
+- tapOn: { id: motion-system-timelines-decay-back }
+- assertText: { id: motion-system-timelines-decay-result, equals: "…" }
+- advanceClock: 200ms
+- assertText: { id: motion-system-timelines-decay-result, equals: "…" }
+- advanceClock: 4s
+- assertText: { id: motion-system-timelines-decay-result, equals: '{"finished":true}' }
+- setClock: real
+- tapOn: { id: motion-system-timelines-decay-run }
+- assertMotion: { target: { id: motion-system-timelines-decay }, settlesWithin: 3s }
+- takeScreenshot: timelines-settled

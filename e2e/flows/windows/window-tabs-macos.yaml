@@ -1,0 +1,52 @@
+appId: so.legend.spark.examples.kitchensink
+name: Native window tabs on screen
+intent: >
+  On screen, the tab windows of Windows > Window tabs show AppKit's tab bar. The + button and Window ▸ New Tab (⌘T)
+  open a new tab of the same type through the navigator's newTab callback. Window ▸ Merge All Windows, Window ▸ Move
+  Tab to New Window, dragging a tab out, and View ▸ Show/Hide Tab Bar change the groups the screen's readout reports.
+  Only a person can see the tab bar itself; the readout and window count are asserted.
+checks: [WIN-NEWTAB-01, WIN-TABNATIVE-01, WIN-TABMERGE-01, WIN-TABMOVE-01, WIN-TABBAR-01]
+tags: [windows]
+platforms: [macos]
+build: release
+manual: partial
+timeout: 180s
+matrix:
+  appearance: [light, dark]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://windows/window-tabs?run=open,tab-1" }
+- assertVisible: { id: windows-window-tabs-group-1-2-selected-2-bar-shown }
+- assertWindow: { count: 3 }
+- focusWindow: { title: Tab 2 }
+- takeScreenshot: { name: window-tabs-bar, window: { title: Tab 2 } }
+- manualStep:
+    instruction: Look at window-tabs-bar.
+    expect: One window shows a tab bar with the tabs "Tab 1" and "Tab 2", "Tab 2" selected, and a + button at the trailing end.
+    evidence: screenshot
+    signoff: required
+- shortcut: cmd+t
+- assertVisible: { id: windows-window-tabs-group-1-2-3-selected-3-bar-shown }
+- manualStep:
+    instruction: Click the + button at the end of the tab bar.
+    expect: A fourth tab "Tab 4" opens and is selected; the readout shows 1 2 3 [4].
+    evidence: screenshot
+    signoff: required
+- assertVisible: { id: windows-window-tabs-group-1-2-3-4-selected-4-bar-shown }
+- selectMenu: Window > Move Tab to New Window
+- assertVisible: { id: windows-window-tabs-group-4-selected-4-bar-hidden }
+- assertWindow: { count: 3 }
+- selectMenu: Window > Merge All Windows
+- assertVisible: { id: windows-window-tabs-group-1-2-3-4-selected-4-bar-shown }
+- tearOff: { tab: Tab 1, to: "200,200" }
+- assertVisible: { id: windows-window-tabs-group-1-selected-1-bar-hidden }
+- focusWindow: { title: Tab 1 }
+- selectMenu: View > Show Tab Bar
+- assertVisible: { id: windows-window-tabs-group-1-selected-1-bar-shown }
+- manualStep:
+    instruction: Look at the window "Tab 1".
+    expect: It shows a tab bar with its single tab, as View ▸ Show Tab Bar requested.
+    evidence: screenshot
+    signoff: required
+- focusWindow: { id: spark.main }
+- tapOn: { id: windows-window-tabs-close }
+- assertWindow: { count: 1 }

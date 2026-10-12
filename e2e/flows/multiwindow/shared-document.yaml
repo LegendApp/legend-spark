@@ -1,0 +1,13 @@
+appId: so.legend.spark.examples.kitchensink
+name: Shared document across windows
+intent: Two note windows and the main window show the same app-scoped document; typing in one note window updates the other note window and the main window.
+checks: [MW-STATE-01]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/windows" }
+- tapOn: { id: multiwindow-windows-open-note }
+- focusWindow: { id: spark.main }
+- tapOn: { id: multiwindow-windows-open-note }
+- tapOn: { id: multiwindow-note-document, window: { title: "Note 1" } }
+- inputText: { text: " Shared!", into: { id: multiwindow-note-document, window: { title: "Note 1" } } }
+- assertText: { id: multiwindow-windows-document, equals: "Edit me in any window. Shared!" }
+- assertVisible: { text: "Edit me in any window. Shared!", window: { title: "Note 2" } }

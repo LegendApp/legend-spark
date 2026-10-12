@@ -1,0 +1,147 @@
+area: windows
+prefix: WIN
+checks:
+  WIN-AVAIL-01:
+    title: getWindowAvailability(option) reports every listed option available on macOS and unsupported-platform on Windows; an unknown option throws
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#getWindowAvailability
+      - ./windows#getWindowAvailability().available
+  WIN-OPEN-01:
+    title: "openWindow applies every supported option when the window opens (macOS: 16:10 aspect ratio, overlay title bar, traffic lights at 20,18, subtitle, edited dot)"
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#openWindow
+  WIN-OPTIONS-01:
+    title: setWindowOptions changes one option on the live window per request, and each row shows the value it applied
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-LEVEL-01:
+    title: alwaysOnTop raises the window to the floating level and false returns it to normal
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-EDITED-01:
+    title: macos.documentEdited shows and clears the edited dot
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#openWindow
+      - ./windows#setWindowOptions
+  WIN-CHROME-01:
+    title: Title bar chrome follows the options (traffic-light position, subtitle, title bar and toolbar styles, represented file proxy icon)
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-SIMPLEFS-01:
+    title: macos.simpleFullscreen covers the screen without a new Space, rejects title bar and size changes with E_BUSY, and restores the windowed frame on exit
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-INVALID-01:
+    title: Out-of-range option values reject E_INVALID_ARGUMENT before any native change
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-UNSUP-01:
+    title: Windows rejects aspectRatio, opacity, contentProtection, ignoreMouseEvents and the macos group with E_UNSUPPORTED_OPTION before any native change
+    platforms: [windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window options audit; #65, #243"
+    covers:
+      - ./windows#setWindowOptions
+  WIN-TABAVAIL-01:
+    title: getWindowAvailability("tabbing") reports available on macOS and unsupported-platform on Windows, where every tab operation rejects E_UNSUPPORTED_PLATFORM
+    platforms: [macos, windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs; #64, #295"
+    covers:
+      - ./windows#getWindowAvailability
+      - ./windows#listWindowTabGroups
+  WIN-TABGROUP-01:
+    title: A window opened with tabbedWith becomes the last, selected tab of that window's group; listWindowTabGroups reports each group's windows in tab order, its selected tab and its tab bar
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs; #64"
+    covers:
+      - ./windows#openWindow
+      - ./windows#createWindowsNavigator
+      - ./windows#listWindowTabGroups
+  WIN-TABSELECT-01:
+    title: selectWindowTab selects a tab and getWindowTabGroup reports the group's selection, so the next tab can be selected
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs; #64"
+    covers:
+      - ./windows#selectWindowTab
+      - ./windows#getWindowTabGroup
+  WIN-TABEVENTS-01:
+    title: tabGroupChanged and tabSelectionChanged reach a window's listeners when its group gains, loses or reorders tabs and when another tab is selected
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs; #64"
+    covers:
+      - ./windows#addWindowListener
+  WIN-TABMERGE-01:
+    title: mergeAllWindows moves every shown window with the same tabbing identifier into the window's group, and leaves windows whose tabbing is disallowed alone
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs; #64"
+    covers:
+      - ./windows#mergeAllWindows
+  WIN-TABMOVE-01:
+    title: moveTabToNewWindow moves a tab out of its group into a window of its own, and closing a tab leaves the rest of its group
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs; #64"
+    covers:
+      - ./windows#moveTabToNewWindow
+      - ./windows#closeWindow
+  WIN-TABBAR-01:
+    title: setWindowTabBarVisible shows and hides the tab bar of a window without other tabs, and rejects hiding it for a group of several tabs with E_BUSY
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs; #64"
+    covers:
+      - ./windows#setWindowTabBarVisible
+  WIN-TABINVALID-01:
+    title: Opening a tab next to a window whose tabbing is disallowed rejects E_INVALID_ARGUMENT before the window joins any group
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs; #64"
+    covers:
+      - ./windows#openWindow
+  WIN-NEWTAB-01:
+    title: The tab bar's + button and Window ▸ New Tab (the newTab menu role) open a window of the entry's type as a new tab through handleWindowNewTab
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs; docs/menus.md; #64"
+    covers:
+      - ./windows#handleWindowNewTab
+      - ./windows#createWindowsNavigator
+  WIN-TABNATIVE-01:
+    title: On screen, the tab bar, Window ▸ Merge All Windows, Move Tab to New Window and View ▸ Show/Hide Tab Bar match what the Window tabs readout reports
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs; #64"
+  WIN-VISUAL-01:
+    title: The Window manager, Window options, Window tabs and Window controls screens match their approved goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #227"

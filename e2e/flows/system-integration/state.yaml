@@ -1,0 +1,29 @@
+appId: so.legend.spark.examples.kitchensink
+name: System information, network status and feature availability
+intent: >
+  System integration > System state opens from spark-ks://system-integration/state and shows what
+  @legendapp/spark/system reports for this Mac: every macOS feature is available, getSystemInfo fills each
+  field (values differ per machine, so the flow asserts they rendered rather than what they are) and
+  getNetworkStatus reports the path. Nothing on the Mac is changed.
+checks: [SYS-STATEAVAIL-01, SYS-INFO-01, SYS-NET-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/state" }
+- assertVisible: { id: system-integration-state-root }
+- assertText: { id: system-integration-state-availability-thermalState, equals: '{"available":true}' }
+- assertText: { id: system-integration-state-availability-networkStatus, equals: '{"available":true}' }
+- assertText: { id: system-integration-state-availability-memoryPressure, equals: '{"available":true}' }
+- assertText: { id: system-integration-state-availability-lowPowerChanges, equals: '{"available":true}' }
+- assertText: { id: system-integration-state-availability-timeZoneChanges, equals: '{"available":true}' }
+- assertVisible: { text: "/\\d+\\.\\d+/", within: { id: system-integration-state-os-version } }
+- assertVisible: { text: "/^(arm64|x64)$/", within: { id: system-integration-state-architecture } }
+- assertVisible: { text: "/^(Yes|No)$/", within: { id: system-integration-state-translated } }
+- assertVisible: { text: "/^[A-Za-z]+(\\/[A-Za-z_+-]+)*$/", within: { id: system-integration-state-time-zone } }
+- assertVisible: { text: "/^\\d+ s$/", within: { id: system-integration-state-idle } }
+- assertVisible: { text: "/^(Battery|Power adapter)$/", within: { id: system-integration-state-power-source } }
+- assertVisible: { text: "/^(Yes|No)$/", within: { id: system-integration-state-low-power } }
+- assertVisible: { text: "/^(nominal|fair|serious|critical)$/", within: { id: system-integration-state-thermal } }
+- assertVisible: { text: "/^(online|offline|requiresConnection)$/", within: { id: system-integration-state-network-status } }
+- assertVisible: { id: system-integration-state-network-proxies }
+- assertNotVisible: { id: system-integration-state-error }

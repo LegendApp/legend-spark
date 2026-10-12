@@ -1,0 +1,12 @@
+appId: so.legend.kitchensink
+name: Quit with three unsaved documents
+checks: [LIFE-QUIT-04, DOC-UNSAVED-02]
+---
+- launchApp: { clearState: true }
+- repeat: { times: 3, commands: [ { shortcut: cmd+n }, { typeText: draft } ] }
+- quitApp: { via: shortcut }
+- assertDialog: { text: "/3 documents with unsaved changes/", buttons: ["Review Changes…", "Discard Changes", Cancel] }
+- tapOn: "Review Changes…"
+- assertDialog: { kind: sheet, attachedTo: key, buttons: [Save, "Don't Save", Cancel] }
+- tapOn: Cancel
+- assertAppState: { running: true }

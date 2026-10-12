@@ -1,0 +1,199 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Spark e2e gate manifest",
+  "description": "e2e/gate.yaml: the release-gate suite. Paths in include, budgets and coverage.checks are relative to e2e/; build, signoffs and report paths are relative to the repository root. See docs/e2e-flows.md#release-gate.",
+  "type": "object",
+  "properties": {
+    "suite": {
+      "type": "string",
+      "minLength": 1
+    },
+    "appId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "build": {
+      "type": "object",
+      "properties": {
+        "macos": {
+          "type": "object",
+          "properties": {
+            "artifact": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The release build to test, relative to the repository root. ${ARCH} becomes the target's arch (arm64 or x64)."
+            },
+            "verifySignature": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "artifact"
+          ],
+          "additionalProperties": false
+        },
+        "windows": {
+          "type": "object",
+          "properties": {
+            "artifact": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The release build to test, relative to the repository root. ${ARCH} becomes the target's arch (arm64 or x64)."
+            },
+            "verifySignature": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "artifact"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "os": {
+            "type": "string",
+            "pattern": "^(macos|windows)-\\d+$"
+          },
+          "arch": {
+            "enum": [
+              "arm64",
+              "x64"
+            ]
+          },
+          "machine": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "description": "A reference machine from the budgets file: this target runs on that hardware and checks its budgets."
+          }
+        },
+        "required": [
+          "os",
+          "arch"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "description": "Globs of gate flows, such as flows/**."
+    },
+    "blocking": {
+      "type": "object",
+      "properties": {
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0,
+          "description": "A flow with one of these tags blocks the release when it fails."
+        },
+        "default": {
+          "type": "boolean",
+          "description": "Whether every other flow blocks too. A flow listing a check registered `blocking: true` always blocks."
+        }
+      },
+      "required": [
+        "tags",
+        "default"
+      ],
+      "additionalProperties": false
+    },
+    "retries": {
+      "enum": [
+        0
+      ],
+      "description": "Flaky = failed: the gate never retries."
+    },
+    "timeBudget": {
+      "type": [
+        "string",
+        "integer"
+      ],
+      "pattern": "^\\d+(\\.\\d+)?(ms|s|m)$",
+      "minimum": 0,
+      "description": "The longest the whole gate run may take; flows still running then fail."
+    },
+    "budgets": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The performance budgets file (per reference machine)."
+    },
+    "coverage": {
+      "type": "object",
+      "properties": {
+        "checks": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The check registry directory."
+        },
+        "exports": {
+          "type": "boolean"
+        },
+        "availability": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "checks",
+        "exports",
+        "availability"
+      ],
+      "additionalProperties": false
+    },
+    "signoffs": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Manual sign-offs for this build (see docs/e2e-flows.md#manual-sign-offs)."
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "json": {
+          "type": "string",
+          "minLength": 1
+        },
+        "html": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "json",
+        "html"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "suite",
+    "appId",
+    "build",
+    "targets",
+    "include",
+    "blocking",
+    "retries",
+    "timeBudget",
+    "budgets",
+    "coverage",
+    "signoffs",
+    "report"
+  ],
+  "additionalProperties": false
+}

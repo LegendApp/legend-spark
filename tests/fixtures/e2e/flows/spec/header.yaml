@@ -1,0 +1,24 @@
+# Spec "Flow header" example, verbatim; the one command is added because a flow needs at least one.
+appId: so.legend.kitchensink
+name: Tear off tab, edit in both windows, merge back
+intent: >                       # plain English; agents use this to repair broken flows
+  Dragging a tab out makes a live window; both windows show the same document state.
+checks: [MW-TEAR-01, MW-STATE-02, MOT-SHARED-03]   # every ID must exist in e2e/checks/*.yaml
+tags: [multiwindow, motion, blocking]
+platforms: [macos, windows]
+build: release                  # release | dev — the gate rejects dev
+manual: false                   # false | partial | true
+timeout: 60s
+matrix:                         # flow runs once per combination
+  appearance: [light, dark]
+  locale: [en-US, ar]
+  reduceMotion: [false, true]
+env:
+  DOC: ${FIXTURES}/docs/notes.md     # ${VAR} stays literal until the runner substitutes it; quote it inside { } or [ ]
+onFlowStart:
+  - runFlow: subflows/reset-state.yaml
+onFlowComplete:
+  - assertNoLeaks: { since: flowStart }
+---
+# commands
+- launchApp

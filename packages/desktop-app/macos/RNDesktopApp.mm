@@ -1,5 +1,6 @@
 #import "RNDesktopApp.h"
 #import "SparkDesktop.h"
+#import "SparkDevTools.h"
 @implementation RNDesktopApp { NSMutableSet<NSString *> *_guardIds; }
 - (instancetype)init { if ((self = [super init])) _guardIds = [NSMutableSet new]; return self; }
 RCT_EXPORT_MODULE(NativeDesktopApp)
@@ -13,7 +14,7 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
 - (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   dispatch_async(dispatch_get_main_queue(), ^{
     NSDictionary *args = SparkArgs(json);
-    if ([method isEqual:@"context"]) resolve(SparkJSON(SparkContext()));
+    if ([method isEqual:@"context"]) { NSMutableDictionary *context = [SparkContext() mutableCopy]; context[@"launch"] = SparkLaunchState(); resolve(SparkJSON(context)); }
     else if ([method isEqual:@"initialURL"]) resolve(SparkJSON(SparkInitialURL()));
     else if ([method isEqual:@"pendingURLs"]) resolve(SparkJSON(SparkPendingURLs()));
     else if ([method isEqual:@"quit"]) {
@@ -21,6 +22,12 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
       // AppKit can enter a modal run loop while awaiting the JS decision. Do
       // not hold the main GCD queue that must deliver that decision.
       [NSRunLoop.mainRunLoop performBlock:^{ [NSApp terminate:nil]; }]; }
+    else if ([method isEqual:@"relaunch"]) {
+      NSArray *process = NSProcessInfo.processInfo.arguments;
+      NSArray *arguments = args[@"arguments"] ?: [process subarrayWithRange:NSMakeRange(1, process.count - 1)];
+      if (![arguments isKindOfClass:NSArray.class] || [arguments indexOfObjectPassingTest:^BOOL(id item, NSUInteger index, BOOL *stop) { return ![item isKindOfClass:NSString.class]; }] != NSNotFound) { SparkInvalid(reject, @"Expected relaunch arguments"); return; }
+      SparkRelaunch(arguments, ^(NSDictionary *result, NSError *error) { if (error) SparkReject(reject, error); else resolve(SparkJSON(result)); });
+    }
     else if ([method isEqual:@"quitGuard"]) {
       NSString *identifier = args[@"id"];
       if (![identifier isKindOfClass:NSString.class] || !identifier.length) { SparkInvalid(reject, @"Expected quit guard ID"); return; }
@@ -31,6 +38,13 @@ RCT_EXPORT_MODULE(NativeDesktopApp)
     else if ([method isEqual:@"replyQuit"]) { SparkReplyQuit(args[@"id"], [args[@"allow"] boolValue], [args[@"requestId"] unsignedIntegerValue]); resolve(@"null"); }
     else if ([method isEqual:@"hide"]) { [NSApp hide:nil]; resolve(@"null"); }
     else if ([method isEqual:@"activate"]) { [NSApp activateIgnoringOtherApps:YES]; resolve(@"null"); }
+#if RCT_DEV
+    else if ([method isEqual:@"openDevTools"]) {
+      id runtime = args[@"runtime"];
+      if (runtime && (![runtime isKindOfClass:NSString.class] || ![runtime length])) { SparkInvalid(reject, @"Expected an isolated runtime name"); return; }
+      SparkOpenDevTools(runtime, ^(NSString *code, NSString *message) { if (code) reject(code, message, nil); else resolve(@"null"); });
+    }
+#endif
     else SparkInvalid(reject, @"Unknown app operation");
   });
 }

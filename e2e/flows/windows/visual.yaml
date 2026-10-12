@@ -1,0 +1,28 @@
+appId: so.legend.spark.examples.kitchensink
+name: Windows screens match their goldens
+intent: >
+  Windows > Window manager, Window options, Window tabs and Window controls open from their spark-ks:// deep links in the running Kitchen Sink,
+  their roots render, and the main window matches the approved golden for the appearance (light and dark, English and Arabic).
+  Masked: the shell sidebar, and the row of the main window frame readout (display ID and position depend on the Mac). No child
+  window is opened, so Window options shows its availability lines and each row's initial value, and Window tabs
+  shows no tab groups.
+checks: [WIN-VISUAL-01]
+tags: [windows]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://windows/window-manager" }
+- assertVisible: { id: windows-window-manager-root }
+# The frame readout is centered and its length changes with the display ID and position, so its whole row is masked.
+- assertScreenshot: { golden: windows-window-manager, mask: [{ id: infra-shell-sidebar }], maskRects: [{ x: 0, y: 196, w: 1000, h: 22 }] }
+- launchApp: { openUrl: "spark-ks://windows/window-options", stopApp: false }
+- assertVisible: { id: windows-window-options-root }
+- assertScreenshot: { golden: windows-window-options, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://windows/window-tabs", stopApp: false }
+- assertVisible: { id: windows-window-tabs-root }
+- assertScreenshot: { golden: windows-window-tabs, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://windows/window-controls", stopApp: false }
+- assertVisible: { id: windows-window-controls-root }
+- assertScreenshot: { golden: windows-window-controls, mask: [{ id: infra-shell-sidebar }] }

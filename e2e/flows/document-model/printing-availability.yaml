@@ -1,0 +1,15 @@
+appId: so.legend.spark.examples.kitchensink
+name: Printing availability on macOS
+intent: >
+  The Printing screen lists each getPrintingAvailability query as JSON. On macOS printing, the
+  print panel, page setup and PDF export all report available.
+checks: [DOC-AVAIL-01]
+tags: [document-model]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://document-model/printing" }
+- extendedWaitUntil: { visible: { id: document-model-printing-root }, timeout: 10s }
+- assertText: { id: document-model-printing-availability-printing, equals: 'printing: {"available":true}' }
+- assertText: { id: document-model-printing-availability-print-panel, equals: 'print-panel: {"available":true}' }
+- assertText: { id: document-model-printing-availability-page-setup, equals: 'page-setup: {"available":true}' }
+- assertText: { id: document-model-printing-availability-pdf-export, equals: 'pdf-export: {"available":true}' }

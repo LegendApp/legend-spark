@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: clearState, launch arguments and openFile through the in-app driver
+intent: >
+  A launch with clearState and the --ks-mark-state argument finds no saved setting and no recent document,
+  then saves a Spark setting (Application Support), notes a recent document (the app's defaults domain) and
+  resizes the main window. A plain relaunch finds the setting and the document, and the main window at its
+  configured size, because a driven launch never saves window frames. A relaunch with clearState finds
+  neither. A file opened in the running app (application:openURLs: with a file URL) is listed.
+checks: [INFRA-DRIVER-03, INFRA-DRIVER-04, INFRA-DRIVER-05, INFRA-DRIVER-06]
+tags: [infra]
+platforms: [macos]
+---
+- launchApp: { clearState: true, arguments: ["--ks-mark-state"], openUrl: "spark-ks://infra/launch-state" }
+- assertVisible: { id: infra-launch-state-marked }
+- assertVisible: { id: infra-launch-state-setting-absent }
+- assertVisible: { id: infra-launch-state-recent-absent }
+- launchApp: { openUrl: "spark-ks://infra/launch-state" }
+- assertVisible: { id: infra-launch-state-setting-found }
+- assertVisible: { id: infra-launch-state-recent-found }
+- assertVisible: { id: infra-launch-state-frame-default }
+- assertNotVisible: { id: infra-launch-state-marked }
+- launchApp: { clearState: true, openUrl: "spark-ks://infra/launch-state" }
+- assertVisible: { id: infra-launch-state-setting-absent }
+- assertVisible: { id: infra-launch-state-recent-absent }
+- assertVisible: { id: infra-launch-state-no-files }
+- launchApp: { stopApp: false, openFile: "${FIXTURES}/docs/notes.md" }
+- assertVisible: { id: infra-launch-state-opened-files }

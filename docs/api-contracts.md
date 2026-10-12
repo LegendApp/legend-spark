@@ -119,13 +119,20 @@ noteRecentDocument(path: string): Promise<void>;
 getRecentDocuments(): Promise<RecentDocument[]>;
 clearRecentDocuments(): Promise<void>;
 subscribeToOpenRequests(listener): Promise<Subscription>;
+createDocumentSession(options: DocumentSessionOptions): DocumentSession; // macOS; see links-and-documents.md
+findDocumentSession(path: string): DocumentSession | undefined;
+getDocumentSessionAvailability(): Availability;
+listDocumentVersions(path: string): Promise<DocumentVersion[]>; // NSFileVersion
+addDocumentVersion(path: string): Promise<DocumentVersion>;
+restoreDocumentVersion(path: string, versionId: string): Promise<void>;
+getDocumentVersionsAvailability(): Availability;
 ```
 
 Process termination cannot acknowledge completed shutdown through a JavaScript promise. Define `quit` success as native acceptance after guards, not proof that the process exited. One coherent quit coordinator replaces request/complete/listen duplicates. App context exposes typed runtime information rather than arbitrary bridge data.
 
 Keep document-controller/reload/transition helpers with document APIs. Typed open requests distinguish file paths from URL activation. Subscribe before draining queued launch requests and deduplicate the overlap; document replay semantics. General path manipulation belongs in files, not document orchestration.
 
-`/windows` includes `openWindow`, state commands, events, guards, `createWindowsNavigator`, `WindowProvider`, and hooks. Use one ID/options/result model with explicit ownership. Keep useful native restoration and toolbar features. The [window appendix](./api-window-contract.md) contains signatures, coordinates and lifecycle decisions. Remove `/windows/react`, `/windows/managed`, and `/windows/controls`; retain internal source separation as useful.
+`/windows` includes `openWindow`, state commands, events, guards, `createWindowsNavigator` (window types, singletons, per-window services), `createWindowState`, `WindowProvider`, and hooks. Use one ID/options/result model with explicit ownership. Keep useful native restoration and toolbar features. The [window appendix](./api-window-contract.md) contains signatures, coordinates and lifecycle decisions. Remove `/windows/react`, `/windows/managed`, and `/windows/controls`; retain internal source separation as useful.
 
 ### Menus, context menus, tray, Dock, and shortcuts
 
@@ -142,12 +149,13 @@ type MenuItem =
 
 // Feature entrypoints expose only the item shapes their native surface accepts.
 type MenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean; icon?: MenuIcon; target?: MenuTarget; placement?: MenuPlacement };
+// `alternate` and `checked: 'mixed'` are macOS application-menu only; other surfaces and Windows reject them.
 type AppMenuItem =
   | { type: 'separator' }
-  | (MenuEntry & { type: 'action'; shortcut?: string })
-  | (MenuEntry & { type: 'checkbox'; checked: boolean; shortcut?: string })
+  | (MenuEntry & { type: 'action'; shortcut?: string; alternate?: boolean })
+  | (MenuEntry & { type: 'checkbox'; checked: boolean | 'mixed'; shortcut?: string; alternate?: boolean })
   | (MenuEntry & { type: 'submenu'; items: readonly AppMenuItem[] })
-  | (Omit<MenuEntry, 'label'> & { type: 'role'; role: MenuRole; label?: string; shortcut?: string });
+  | (Omit<MenuEntry, 'label'> & { type: 'role'; role: MenuRole; label?: string; shortcut?: string; alternate?: boolean });
 type MenuRootItem = Extract<AppMenuItem, { type: 'submenu' }>;
 type ContextMenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean };
 type ContextMenuItem = { type: 'separator' } | (ContextMenuEntry & { type: 'action' }) | (ContextMenuEntry & { type: 'checkbox'; checked: boolean });
@@ -162,8 +170,17 @@ type ToolbarMenuItem =
   | (ToolbarEntry & { type: 'slider'; min: number; max: number; value: number; suffix?: string });
 
 // /menus: imperative ownership plus useMenu in the same module.
-createMenu(options: { id: string; items: readonly MenuRootItem[]; onAction: MenuActionHandler }): Promise<Menu>;
+createMenu(options: {
+  id: string;
+  items: readonly MenuRootItem[];
+  onAction?: MenuActionHandler;
+  onOpen?: (event: { menuId: string }) => void; // macOS only; Windows rejects E_UNSUPPORTED_OPTION.
+  onClose?: (event: { menuId: string }) => void;
+}): Promise<Menu>;
+getMenuAvailability(feature?: 'alternates' | 'lifecycle' | 'helpSearch' | 'mixedState' | 'icons' | 'hiddenItems'): Availability;
 // Menu: update(options), remove(). Semantic roles target native responders.
+// An alternate must follow a visible non-alternate command with the same shortcut key and different modifiers.
+// `target: { menu: 'help' }` merges into Help on both platforms; on macOS it also registers AppKit Help search.
 // Application menus accept recursive action, checkbox, separator, submenu, and role items; sliders are toolbar-only.
 
 // /context-menu
@@ -189,7 +206,7 @@ registerGlobalShortcut(accelerator, handler, options?: { repeat?: boolean }): Pr
 // (console.error) on both surfaces; they never break delivery to other registrations.
 ```
 
-Use portable accelerator strings and one parser. Numeric physical key codes remain an explicitly low-level keyboard API. Preserve local/global distinction, conflict failures, owner/window scope and repeat behavior. Command routing adds named actions and persisted bindings on top of the same shortcut concepts; it is not a second key syntax. Put callbacks into creation options when a resource has multiple callbacks. Use semantic role/ID targeting instead of translated menu-title matching.
+Use portable accelerator strings and one parser. Numeric physical key codes remain an explicitly low-level keyboard API. Preserve local/global distinction, conflict failures, owner/window scope and repeat behavior. Command routing adds named actions and persisted bindings on top of the same shortcut concepts; it is not a second key syntax. `createShortcutMap` makes those bindings user-editable: it persists overrides (versioned, with migration), reports typed conflicts across commands, local and global shortcuts, menu key equivalents and OS-reserved shortcuts, and switches router, global-hotkey and menu bindings at one commit point ([commands](./commands.md#shortcut-map)). Put callbacks into creation options when a resource has multiple callbacks. Use semantic role/ID targeting instead of translated menu-title matching.
 
 Local command registrations publish native matching rules and explicit boolean enablement. Await `setEnabled` and suspension updates for native acknowledgment. Low-level keyboard callbacks observe events; their return values do not control native propagation. Never block the native event loop waiting for JavaScript handlers.
 
@@ -206,10 +223,15 @@ openFileDialog(options?: {
   filters?: readonly FileFilter[]; // { name?: string; extensions } — Windows labels each group; macOS flattens.
   windowId?: string;
   title?: string;
-}): Promise<{ canceled: true } | { canceled: false; paths: string[] }>;
+  accessory?: readonly DialogAccessoryControl[]; // Data-driven checkboxes and pop-ups (macOS); values return with the result.
+}): Promise<{ canceled: true } | { canceled: false; paths: string[]; accessory?: DialogAccessoryValues }>;
 saveFileDialog(options?: SaveFileDialogOptions): Promise<SaveFileDialogResult>;
-showMessage(options: MessageDialogOptions): Promise<MessageDialogResult>;
+showMessage(options: MessageDialogOptions): Promise<MessageDialogResult>; // checkbox state returns as `checked`; persistence is the caller's.
 confirm(message: string, options?: ConfirmOptions): Promise<boolean>;
+showPrompt(options: PromptOptions): Promise<{ canceled: true } | { canceled: false; value: string }>;
+showAboutPanel(options?: AboutPanelOptions): Promise<void>;
+getFileDialogAvailability(feature?: "accessory"): Availability;
+getMessageDialogAvailability(feature?: "checkbox" | "prompt" | "aboutPanel"): Availability;
 
 // /files
 readText(path, options?): Promise<string>;
@@ -224,7 +246,7 @@ remove(path, options?): Promise<void>;
 trash(path): Promise<void>;
 copy(source, destination, options?): Promise<void>;
 move(source, destination, options?): Promise<void>;
-writeTextIfUnchanged(path, expected, contents): Promise<{ written: boolean }>;
+writeTextIfUnchanged(path, expected, contents, options?: { coordinated?: boolean }): Promise<{ written: boolean }>;
 openFile(path, options?): Promise<FileHandle>;
 readChunks(path, options?): AsyncIterable<Uint8Array>;
 writeChunks(path, chunks, options?): Promise<number>;
@@ -237,6 +259,45 @@ Open/save share directory/filter/owner vocabulary. Prefer stable button IDs in m
 Preserve conditional write semantics. Define overwrite/symlink behavior, absent-file errors, and missing removal (recommend idempotent absence); distinguish permission errors from nonexistence. Keep efficient chunk IO and positional handles. Use direct native buffers for binary transport; do not encode ordinary byte IO as base64 or JSON. Snapshot mutable input once at submission and return views over freshly owned native output. Watch means invalidation, not a perfect change log. Scanner options carry operation-scoped progress/batch callbacks and a signal; no uncorrelated global scan events. Keep specialized event watching only if its stronger semantics can be specified and tested.
 
 `readChunks` returns its async iterator synchronously: unknown option keys reject during iterator construction, while chunk-range and path validation happen when iteration first starts, before native open. `writeChunks` always returns a promise; option and path validation failures reject that promise before native file dispatch, and native IO failures reject it as well. Preserve this boundary rather than changing the iterator factory into an async function.
+
+### Printing
+
+```ts
+// /printing
+print(content: PrintContent, options?: { pageSetup?: PageSetup; windowId?: string; title?: string }): Promise<{ canceled: true } | { canceled: false; pageSetup: PageSetup }>;
+showPageSetup(options?: { pageSetup?: PageSetup; windowId?: string }): Promise<{ canceled: true } | { canceled: false; pageSetup: PageSetup }>;
+getDefaultPageSetup(): Promise<PageSetup>;
+exportPDF(content: PrintContent, path: string, options?: { pageSetup?: PageSetup; title?: string }): Promise<{ path: string; numberOfPages: number; pageSetup: PageSetup }>;
+getPrintingAvailability(feature?: "printPanel" | "pageSetup" | "pdfExport"): Availability;
+// PrintContent: text | html | pdf (path) | window (windowId) | view (a mounted View ref).
+// PageSetup: { paperSize (portrait sheet, points), orientation, margins (points) }, plain JSON the caller persists.
+```
+
+Printing is its own capability path: it applies to windows and views as well as documents, and its native module (AppKit printing, PDFKit) loads only when imported. Cancellation resolves `{ canceled: true }` like the dialogs; failures reject. PDF export renders the print layout directly and never reaches the printing system, so it is headless. Window and view content is a raster render of what they draw now. Details: [printing](printing.md).
+
+### Displays
+
+```ts
+// /displays
+getDisplayDetails(): Promise<DisplayDetails[]>; // DisplayInfo + origin, safeArea, refreshRate, colorSpace, edrHeadroom
+addDisplayListener(listener: (event: { displays; added; removed; changed: { id; fields }[] }) => void, options?: { onError? }): Promise<AsyncRegistration>;
+getDisplayAvailability(): Availability;
+```
+
+Display details have their own path rather than widening `getDisplays()` in `/windows`, which stays the portable geometry subset that both hosts implement. Refresh rate is a `{ minimum, maximum, variable }` range so ProMotion and adaptive-sync displays are not reported as one fixed rate. Change events carry the whole new list plus a computed difference; native observation runs only while a listener holds it. These events are separate from `onSystemEvent`'s payload-free `displaysChanged` in `/system`, which remains the portable "displays may have changed" signal; the two never reach each other's listeners. macOS only for now; Windows is typed unsupported (#318). Details: [displays](displays.md).
+
+### Diagnostics
+
+```ts
+// /diagnostics
+startHangWatchdog(options: { thresholdMs?: number; onHang: (report: HangReport) => void }): Promise<AsyncRegistration>;
+simulateHang(durationMs: number): Promise<void>;
+getHangWatchdogAvailability(): Availability;
+getStartupTiming(): StartupTiming;
+// HangReport: { durationMs, thresholdMs, startedAt, stack: { address, image?, imageAddress?, imageOffset?, imageUUID?, symbol?, symbolOffset? }[] }.
+```
+
+The hang watchdog is application-owned: a controller with `remove()`, no hook. Reports arrive after the main thread recovers, because events reach JavaScript through it; each watchdog has its own thread and threshold, and nothing runs while none is started. `simulateHang` blocks the main thread on purpose so apps can check their reporting end to end. macOS only for now; Windows reports `unsupported-platform` (#304). Details: [diagnostics](diagnostics.md).
 
 ### Settings, persistence, and secure storage
 
@@ -269,14 +330,14 @@ Secure storage follows the selected Expo missing/null and options behavior where
 | `/clipboard` | Keep `getStringAsync(options?)`, `setStringAsync(text, options?)`, `hasStringAsync()`. Remove redundant text aliases. Rich `readClipboard`/`writeClipboard` use owned payload types with exclusive file-list vs text/image alternatives; no hidden encoding ambiguity. |
 | `/links` | Keep `openURL`, `canOpenURL`, `getInitialURL`, `addEventListener('url', listener)` semantics for the selected Expo subset. Keep `openPath(path)` as an explicit OS-opening extension; file reveal belongs in `/files`. Recent documents move to documents. |
 | `/notifications` | `getNotificationPermission()`, `requestNotificationPermission(options?)`, `showNotification({ id, content })`, `scheduleNotification({ id, content, trigger })`, cancel/list operations, and typed response subscription. Immediate vs scheduled is explicit; cancellation of pending vs removal of delivered notifications is explicit. |
-| `/updates` | One `getUpdateStatus`, `startUpdates`, `checkForUpdates(options?)`, `configureUpdates(options)`, typed event contract. Remove overlapping `AutoUpdater` facade. Checking returns when initiated; progress/completion arrives through events. Native app updater only. |
+| `/updates` | One `getUpdateStatus`, `getUpdateAvailability`, `startUpdates`, `checkForUpdates(options?)`, `configureUpdates(options)`, `clearSkippedUpdate`, typed event contract (delta downloads, skipped versions). Remove overlapping `AutoUpdater` facade. Checking returns when initiated; progress/completion arrives through events. Native app updater only. |
 | `/system` | Keep information/events. Group login startup and power operations by named types, without forcing a new subpath for every function. `requestAttention({ kind })` and `preventSleep({ reason, kind })` return owned registrations. Dock and taskbar menus use feature-local, platform-supported item trees. |
 
 Notification permissions distinguish status from ability to ask again where the backend provides it; do not fabricate a portable guarantee. Notification content carries portable tone names (`message`, `mail`, `reminder`, `call`, `error`) plus `default`/silent, each host mapping tones to its system sounds; 1–4 typed action buttons report their id through the response's `action` alongside `open`/`dismiss`. Unsupported system options reject rather than returning “disabled.” URL initial/live/replay rules are documented separately. [Expo Linking reference for the adopted subset](https://docs.expo.dev/versions/v54.0.0/sdk/linking/)
 
-Retain these implemented details alongside the family-level signatures: notification response setup is asynchronous because it subscribes and drains retained launch responses, but the returned subscription removes synchronously. System events are invalidations; query `getSystemInfo()` again when current values are needed. Clipboard text keeps Expo's `getStringAsync`/`setStringAsync` names and `plainText`/`html` string-format values, while `getClipboardFormats()` exposes the host's raw format identifiers. `configureUpdates({})` starts a configured updater and leaves preferences unchanged; it is not a no-op. Status queries remain asynchronous and report `go`, development, or unconfigured reasons without starting Sparkle.
+Retain these implemented details alongside the family-level signatures: notification response setup is asynchronous because it subscribes and drains retained launch responses, but the returned subscription removes synchronously. System events are invalidations; query `getSystemInfo()` or `getNetworkStatus()` again when current values are needed. Only `memoryPressure` carries data (its level), since pressure cannot be queried afterwards; platform-limited events and fields are reported by `getSystemAvailability(feature)`. Clipboard text keeps Expo's `getStringAsync`/`setStringAsync` names and `plainText`/`html` string-format values, while `getClipboardFormats()` exposes the host's raw format identifiers. `configureUpdates({})` starts a configured updater and leaves preferences unchanged; it is not a no-op. Status queries remain asynchronous and report `go`, development, or unconfigured reasons without starting Sparkle.
 
-Dock menus accept recursive action, checkbox and separator items, without shortcuts, icons, targeting, placement, hidden entries, roles or sliders. Taskbar menus accept only flat action and checkbox items, with the same excluded fields; disabled taskbar entries are omitted by the native adapter, so the type allows only `disabled: false`. Their public `DockMenuItem` and `TaskbarMenuItem` types reflect those limits. `createDockMenu` and `createTaskbarMenu` still enforce native platform availability at runtime.
+Dock menus accept recursive action, checkbox and separator items, without shortcuts, icons, targeting, placement, hidden entries, roles or sliders. Taskbar menus accept only flat action and checkbox items, with the same excluded fields; disabled taskbar entries are omitted by the native adapter, so the type allows only `disabled: false`. Their public `DockMenuItem` and `TaskbarMenuItem` types reflect those limits. `createDockMenu` and `createTaskbarMenu` still enforce native platform availability at runtime. `setAppBadge` takes text or a count; `setAppProgress(progress | null)` drives the Dock tile or taskbar button progress with `normal`, `paused`, `error` and `indeterminate` states; `getSystemAvailability(feature)` reports each launcher feature per platform.
 
 ### Processes
 
@@ -287,6 +348,21 @@ resolveCommand(command: string): Promise<string | null>;
 ```
 
 Use a discriminated executable target: absolute executable/helper reference vs PATH-resolved command. Put environment, cwd, input, timeout, signal, output callbacks and output limits in named options. Keep direct argument arrays, not implicit shell parsing. A handle supports write, closeInput, terminate and exited. Result distinguishes exit code, termination, timeout and truncation; no ambiguous `signal: boolean`. Stream bytes; optionally decode text according to a declared encoding. Command-runner convenience and mocks use the same sequential/concurrent and failure policy. No separate public command-runner abstraction unless injection actually needs it.
+
+### Logging
+
+```ts
+// /logging
+createLogger(category: string, options?: { publicMessages?: boolean }): Logger; // debug/info/notice/error/fault(message, fields?): void
+configureLogging(options: { level?: LogLevel; files?: { directory?: string; maxFileBytes?: number; maxFiles?: number } | null }): Promise<void>;
+flushLogs(): Promise<void>; // Rejects LogWriteError { code, dropped } for the first failure since the last flush.
+addLoggingErrorListener(listener: (event: { code; message; dropped: number; recovered: boolean }) => void): Subscription;
+getLogFiles(): Promise<{ path: string; bytes: number; modifiedAt: number }[]>;
+exportDiagnostics(path: string, options?: { info?: LogFields }): Promise<{ path: string; bytes: number; entries: string[] }>;
+getLoggingAvailability(feature?: "systemLog" | "files" | "diagnostics"): Availability;
+```
+
+Logging is application-wide, so there is no hook. An entry call returns at once and never waits for native; entries below the level stay in JavaScript (a new level applies from the next call, and a rejected configuration restores the old one), and the rest reach one native serial queue in call order, which also orders configuration, flushes and exports. Over 10,000 waiting entries, new ones are dropped and counted. Each entry goes to the unified log (os_log: the bundle identifier as subsystem, the logger's category; message and fields private unless the logger asks for public messages) and, while files are on (the default), as one JSON line to `app.log`, rotated to `app.1.log` and on before an entry would pass `maxFileBytes`. Files hold every message and field in full. A file write failure is never thrown from the entry call nor dropped silently: it is logged once to the unified log, reported to error listeners with a count of entries lost, and rejected by the next `flushLogs`. `exportDiagnostics` zips `diagnostics.json` and the log files to a local path, replacing only a regular file, and sends nothing anywhere. macOS only for now; Windows (ETW) reports `unsupported-platform` (#319). Details: [logging](logging.md).
 
 ### Audio and auth
 
@@ -312,6 +388,8 @@ Auth keeps success/cancel/dismiss/timeout outcomes and a prepared state/redirect
 One `/drag-drop` component handles files/text/URLs/custom MIME payloads. Use consumer-facing event payloads consistently, explicit operations/coordinates, and `onError`/availability behavior instead of hard-coded English fallback UI. Remove the competing `/drag-drop/views` component and move music-specific track models out of the framework.
 
 `/ui` owns the small common controls. `Button`, `TextInput`, `Select` share disabled/accessibility/testID/style/ref conventions; input-specific `onChangeText` and value-specific `onValueChange` remain recognizable. Controlled and uncontrolled input modes are explicitly typed. `NativeSelect` should not be a second ordinary selector with `enabled/onChange` vocabulary. Keep segmented control as a distinct control.
+
+`/ui` also owns `DatePicker` (Unix-millisecond values, `min`/`max`, locale, Unicode calendar and IANA zone) and `ColorWell` (sRGB hex) on the same controlled, event-count-acknowledged primitive boundary, plus the imperative system panels: `showColorPanel` and `showFontPanel` return one session per singleton panel (`onChange`, `onClose` with `dismissed`/`replaced`, `close()`), `sampleScreenColor()` is the eyedropper, and `getColorPanelAvailability(feature?: 'sampler')`/`getFontPanelAvailability()` are synchronous. Windows is typed unsupported (#298). See `packages/ui/README.md`.
 
 Keep coherent capability subpaths for split view, sidebar, glass, symbols, and search if their native cost or specialization warrants them. They use the same React Native baseline props and typed consumer events. Group AppKit chrome options; name pane composition and layout readiness. Apple symbols stay explicitly Apple-specific. Raw generated native components are internal.
 
@@ -397,7 +475,7 @@ This map accounts for all 63 original umbrella entries. “Fold” means update 
 | `/drag-drop`, `/drag-drop/views` | `/drag-drop`; generic payloads, one component contract. |
 | `/sqlite`, `/webview` | Keep only as real Spark-owned contracts, replacing passthrough backend types. |
 | `/ui`, `/ui/select-controls`, `/ui/search` | Common controls in `/ui`; retain a specialized search import only if native loading cost warrants it. Remove duplicate Select contracts. |
-| `/ui/split-view`, `/ui/sidebar`, `/ui/glass`, `/ui/symbol` | Keep coherent specialized UI capabilities; own types and availability behavior. |
+| `/ui/split-view`, `/ui/sidebar`, `/ui/glass`, `/ui/symbol`, `/ui/text-services` | Keep coherent specialized UI capabilities; own types and availability behavior. Text services act on mounted React Native text views and add the `writingToolsBehavior` TextInput trait. |
 | `/ui/uniwind`, `/ui/classnames` | Keep explicit styling integrations. |
 | `/config`, `/schema.json`, `/config-plugin`, `/expo-config` | Keep typed app configuration/plugin roles; one documented composition path per project mode. |
 | `/metro`, `/expo-metro`, `/universal`, `/native` | Consolidate documented Metro setup under `/metro`; retain native config integration as `/native`. Remove duplicate orchestration exports after generated configs are updated. |

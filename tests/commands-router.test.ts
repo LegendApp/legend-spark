@@ -3,7 +3,7 @@ vi.mock("react-native", () => ({
   NativeEventEmitter: class { addListener() { return { remove() {} }; } },
   Platform: { OS: "macos" }, Pressable: "Pressable", ScrollView: "ScrollView", Text: "Text", View: "View",
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
-  TurboModuleRegistry: { getEnforcing: () => ({ startMonitoringKeyboard: async () => true, stopMonitoringKeyboard: async () => true, setConsumption: async () => true }) },
+  TurboModuleRegistry: { get: () => null, getEnforcing: () => ({ startMonitoringKeyboard: async () => true, stopMonitoringKeyboard: async () => true, setConsumption: async () => true }) },
 }));
 vi.mock("@legendapp/spark-ui/src/sf-symbol", () => ({ SFSymbol: "SFSymbol" }));
 const { mockKeyDownListeners, mockKeyUpListeners, consumption } = vi.hoisted(() => ({

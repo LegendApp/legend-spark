@@ -1,9 +1,13 @@
-import { execFileSync, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { chmodSync, mkdtempSync, mkdirSync, readdirSync, symlinkSync, rmSync, readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { promisify } from "node:util";
 import { expect, test } from "vitest";
-test.skipIf(process.platform !== "darwin")("Codex supervisor and generated bindings compile against the pinned Nitro headers", () => {
+// One clang++ syntax pass over Foundation and the Nitro headers: 1.3-6.4 s across 65 macos-latest CI runs
+// (p95 4.6 s), so the 5 s default timed out twice. 20 s is about 3x the slowest run seen.
+const headerCompileTimeoutMs = 20_000;
+test.skipIf(process.platform !== "darwin")("Codex supervisor and generated bindings compile against the pinned Nitro headers", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-codex-headers-"));
   const headers = path.join(root, "NitroModules"); mkdirSync(headers);
   function gather(directory: string) {
@@ -15,9 +19,9 @@ test.skipIf(process.platform !== "darwin")("Codex supervisor and generated bindi
   }
   try {
     gather("node_modules/react-native-nitro-modules/cpp");
-    expect(() => execFileSync("clang++", ["-fsyntax-only", "-fobjc-arc", "-fblocks", "-std=c++20", "-I", root, "-I", "node_modules/react-native/ReactCommon/jsi", "packages/codex/cpp/HybridCodexAppServer.mm"], { stdio: "pipe" })).not.toThrow();
+    await promisify(execFile)("clang++", ["-fsyntax-only", "-fobjc-arc", "-fblocks", "-std=c++20", "-I", root, "-I", "node_modules/react-native/ReactCommon/jsi", "packages/codex/cpp/HybridCodexAppServer.mm"]);
   } finally { rmSync(root, { recursive: true, force: true }); }
-});
+}, headerCompileTimeoutMs);
 
 test.skipIf(process.platform !== "darwin")("Codex cancellation and turn lifecycle stay bounded with a fake app-server", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "spark-codex-harness-"));
@@ -29,7 +33,7 @@ test.skipIf(process.platform !== "darwin")("Codex cancellation and turn lifecycl
     execFileSync("clang++", ["-DSPARK_CODEX_TESTING", "-fobjc-arc", "-fblocks", "-std=c++20", "packages/codex/cpp/HybridCodexAppServer.mm", "tests/codex-supervisor-harness.mm", "-framework", "Foundation", "-o", binary], { stdio: "pipe" });
     const runMode = (mode: string) => new Promise<{ code: number | null; output: string }>((resolve, reject) => {
       const modeMarker = path.join(root, `marker-${mode}`);
-      const child = spawn(binary, [mode], { cwd, detached: true, env: { ...process.env, CODEX_PATH: fake, CODEX_HOME: root, CODEX_TEST_MODE: mode, CODEX_TEST_MARKER: modeMarker, CODEX_TEST_DELAY_AFTER_TURN_RESPONSE_MS: mode === "postack" ? "100" : "0" }, stdio: ["ignore", "pipe", "pipe"] });
+      const child = spawn(binary, [mode], { cwd, detached: true, env: { ...process.env, CODEX_PATH: fake, CODEX_HOME: root, CODEX_TEST_MODE: mode, CODEX_TEST_MARKER: modeMarker, ...(mode === "preack" || mode === "postack" ? { CODEX_TEST_ACCEPT_TURN_AFTER_EXIT: "1" } : {}) }, stdio: ["ignore", "pipe", "pipe"] });
       let output = "";
       child.stdout.on("data", (chunk) => { output += chunk.toString(); });
       child.stderr.on("data", (chunk) => { output += chunk.toString(); });

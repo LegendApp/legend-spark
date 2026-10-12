@@ -169,6 +169,11 @@ Framework-owned capabilities are imported from `@legendapp/spark/<feature>`. Use
 | OS integration | `links`, `notifications`, `tray`, `system`: URLs/documents, local notifications, menu-bar items, Dock/startup/power integration |
 | Processes and distribution | `processes`, `updates`: child process I/O, timeouts and managed target-specific helper bundles, signed whole-app update integration |
 | Native controls and styling | `@legendapp/spark/ui`: native buttons, text inputs and selects; optional Uniwind bindings and system/light/dark themes |
+| Diagnostics | `@legendapp/spark/diagnostics`: main-thread hang watchdog with stacks, startup timing ([guide](docs/diagnostics.md)) |
+| Printing | `@legendapp/spark/printing`: print panel with preview for text, HTML, PDFs, windows and views; page setup; headless PDF export ([guide](docs/printing.md)) |
+| Displays | `@legendapp/spark/displays`: arrangement, safe area (notch), refresh rate (fixed or variable), color space and EDR headroom per display; change events ([guide](docs/displays.md)) |
+| Motion | `@legendapp/spark/motion`: compositor-run springs, timing, keyframes, sequences, staggers, decay and scroll links with velocity-preserving interruption ([guide](docs/motion.md)) |
+| Logging | `@legendapp/spark/logging`: structured entries to the unified log (os_log) and rotating JSON-lines files; a one-call diagnostics zip written locally ([guide](docs/logging.md)) |
 | Audio and authentication | `@legendapp/spark/audio`, `@legendapp/spark/auth-session`: playback and system media controls, external-browser authentication callback transport |
 | External libraries | React Native WebView, OP-SQLite, and Margelo Runtimes; see [integrated external libraries](docs/external-libraries.md) |
 
@@ -242,10 +247,10 @@ CLI. It does not create a second app, pack SDK archives, or compile native code.
 Edit the screens and CSS directly for Fast Refresh. `bun run kitchen-sink` from the
 repository root is a shortcut for this app's `dev` command.
 
-A matching native Spark Runner must be registered. There is no hosted download
-service yet. If you do not have one, explicitly run `bun run rebuild:macos` or
-`bun run rebuild:windows` from the app directory with the native toolchain installed.
-That builds and registers its reusable runtime; repeat only after native changes.
+The app registers the `spark-ks://` URL scheme, so it needs a custom development
+runtime. Run `bun run rebuild:macos` or `bun run rebuild:windows` from the app
+directory once with the native toolchain installed (`spark build --dev`), and again
+only after native changes.
 See the [Kitchen Sink guide](examples/kitchen-sink/README.md) for registration and
 startup options.
 

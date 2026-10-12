@@ -1,0 +1,8 @@
+area: windows
+prefix: WIN
+checks:
+  WIN-FRAME-01:
+    title: Frame autosave restores per window ID
+    platforms: [macos, windows]
+    blocking: true
+    spec: "Spec §2 Windows"

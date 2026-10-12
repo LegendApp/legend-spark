@@ -1,0 +1,42 @@
+appId: so.legend.spark.examples.kitchensink
+name: System events reach onSystemEvent
+intent: >
+  With the System state screen subscribed to onSystemEvent, the driver's simulateSystemEvent delivers
+  sleep, wake, lock, unlock, user-switch, locale, time zone, clock, proxy, appearance and display events
+  through the system module's native emitter, and the screen logs each one, newest first. The flow never
+  sleeps or locks the Mac or changes its settings; the OS observers that produce these events for real are
+  installed but not triggered.
+checks: [SYS-EVENTS-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/state" }
+- assertVisible: { id: system-integration-state-listening }
+- assertVisible: { id: system-integration-state-no-events }
+- simulateSystemEvent: sleep
+- assertText: { id: system-integration-state-event-0, equals: sleep }
+- simulateSystemEvent: wake
+- assertText: { id: system-integration-state-event-0, equals: wake }
+- assertText: { id: system-integration-state-event-1, equals: sleep }
+- simulateSystemEvent: lock
+- simulateSystemEvent: unlock
+- assertText: { id: system-integration-state-event-1, equals: lock }
+- assertText: { id: system-integration-state-event-0, equals: unlock }
+- simulateSystemEvent: sessionInactive
+- simulateSystemEvent: sessionActive
+- assertText: { id: system-integration-state-event-1, equals: sessionInactive }
+- assertText: { id: system-integration-state-event-0, equals: sessionActive }
+- simulateSystemEvent: localeChanged
+- simulateSystemEvent: timeZoneChanged
+- simulateSystemEvent: clockChanged
+- simulateSystemEvent: proxyChanged
+- simulateSystemEvent: appearanceChanged
+- simulateSystemEvent: displaysChanged
+- assertText: { id: system-integration-state-event-5, equals: localeChanged }
+- assertText: { id: system-integration-state-event-4, equals: timeZoneChanged }
+- assertText: { id: system-integration-state-event-3, equals: clockChanged }
+- assertText: { id: system-integration-state-event-2, equals: proxyChanged }
+- assertText: { id: system-integration-state-event-1, equals: appearanceChanged }
+- assertText: { id: system-integration-state-event-0, equals: displaysChanged }
+- assertNotVisible: { id: system-integration-state-no-events }
+- assertNotVisible: { id: system-integration-state-error }

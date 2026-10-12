@@ -1,0 +1,326 @@
+area: native-controls
+prefix: CTRL
+checks:
+  CTRL-CHECKBOX-01:
+    title: Checkbox toggles natively in every size, a mixed checkbox leaves the mixed state on click, and getControlAvailability('checkbox') reports available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Checkbox
+      - ./ui#getControlAvailability(checkbox).available
+  CTRL-RADIO-01:
+    title: RadioGroup selects the clicked option in every size and reports its value
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#RadioGroup
+      - ./ui#getControlAvailability(radio-group).available
+  CTRL-SWITCH-01:
+    title: Switch toggles in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Switch
+      - ./ui#getControlAvailability(switch).available
+  CTRL-DISCLOSURE-01:
+    title: DisclosureTriangle expands and collapses in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#DisclosureTriangle
+      - ./ui#getControlAvailability(disclosure-triangle).available
+  CTRL-SLIDER-01:
+    title: A continuous Slider drag reports intermediate values and is never reset by a stale controlled value
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Slider
+      - ./ui#getControlAvailability(slider).available
+  CTRL-SLIDER-02:
+    title: A Slider with ticks and continuous=false jumps to a click in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Slider
+  CTRL-SLIDER-03:
+    title: A focused Slider with ticks steps by 1 with the arrow keys in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Slider
+  CTRL-STEPPER-01:
+    title: Stepper increments and decrements by its step in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Stepper
+      - ./ui#getControlAvailability(stepper).available
+  CTRL-COMBO-01:
+    title: ComboBox keeps every typed character (free text outside its options)
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#ComboBox
+      - ./ui#getControlAvailability(combo-box).available
+  CTRL-COMBO-02:
+    title: ComboBox selects an option from its list
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#ComboBox
+      - ./ui#getControlAvailability(combo-box).available
+  CTRL-TOKEN-01:
+    title: TokenField commits a typed token and reports the token array
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#TokenField
+      - ./ui#getControlAvailability(token-field).available
+  CTRL-PATH-01:
+    title: PathControl proposes the file URL of the clicked path component
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#PathControl
+      - ./ui#getControlAvailability(path-control).available
+  CTRL-PROGRESS-01:
+    title: Determinate Progress follows its value; indeterminate and spinner Progress render in every size, including while disabled
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Progress
+      - ./ui#getControlAvailability(progress).available
+  CTRL-LEVEL-01:
+    title: LevelIndicator follows its value in every size
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#LevelIndicator
+      - ./ui#getControlAvailability(level-indicator).available
+  CTRL-DATE-01:
+    title: DatePicker in date, time and date-and-time modes, text-field-stepper, text-field and clock-calendar variants, reports Unix milliseconds for keyboard and stepper edits, and getControlAvailability('date-picker') reports available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#DatePicker
+      - ./ui#getControlAvailability(date-picker).available
+  CTRL-DATE-02:
+    title: A DatePicker never proposes a value outside min/max, and explicit locales and calendars (ar-SA Umm al-Qura, ja-JP Japanese) show their own digits, field order and eras
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#DatePicker
+  CTRL-COLOR-01:
+    title: ColorWell in default, minimal and expanded variants, with and without opacity, reports lowercase sRGB hex, and getControlAvailability('color-well') reports available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#ColorWell
+      - ./ui#getControlAvailability(color-well).available
+  CTRL-COLORPANEL-01:
+    title: showColorPanel opens the system color panel, streams chosen colors, ends with replaced when a ColorWell takes the panel and dismissed when the user closes it, and close() hides it
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#showColorPanel
+      - ./ui#getColorPanelAvailability
+      - ./ui#getColorPanelAvailability().available
+  CTRL-SAMPLER-01:
+    title: sampleScreenColor shows the system eyedropper without a Screen Recording prompt, returns the picked opaque color, and reports Escape as canceled (manual run only; it takes over the real pointer)
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#sampleScreenColor
+      - ./ui#getColorPanelAvailability
+  CTRL-FONTPANEL-01:
+    title: showFontPanel opens the system font panel at the given font, reports each change as a resolved font (family, PostScript name, size, weight, italic), and close() hides it
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers"
+    covers:
+      - ./ui#showFontPanel
+      - ./ui#getFontPanelAvailability
+      - ./ui#getFontPanelAvailability().available
+  CTRL-PANELS-02:
+    title: In test driver mode showColorPanel and showFontPanel reject with SparkError E_UNAVAILABLE and an activated ColorWell reports E_UNAVAILABLE through onError, so no panel reaches the screen, while getControlAvailability, getColorPanelAvailability (including the sampler) and getFontPanelAvailability still report available
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers; docs/test-driver.md Focus and window state"
+    covers:
+      - ./ui#showColorPanel
+      - ./ui#showFontPanel
+      - ./ui#ColorWell
+      - ./ui#getColorPanelAvailability
+      - ./ui#getColorPanelAvailability().available
+      - ./ui#getFontPanelAvailability
+      - ./ui#getFontPanelAvailability().available
+      - ./ui#getControlAvailability(date-picker).available
+      - ./ui#getControlAvailability(color-well).available
+  CTRL-VISUAL-02:
+    title: The Pickers screen renders its date pickers, calendar, clock and color wells and matches its approved golden in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#92 CTRL.api-pickers; docs/e2e-flows.md Visual goldens"
+    covers:
+      - ./ui#DatePicker
+      - ./ui#ColorWell
+  CTRL-UNSUP-03:
+    title: On Windows DatePicker, ColorWell and the color and font panels report unsupported-platform, rendering a picker throws SparkError E_UNSUPPORTED_PLATFORM, and panel calls reject with it (WinUI work is #298)
+    platforms: [windows]
+    blocking: true
+    spec: "#92 CTRL.api-pickers; #298"
+    covers:
+      - ./ui#getColorPanelAvailability
+      - ./ui#getFontPanelAvailability
+  CTRL-DISABLED-01:
+    title: Disabled primitives and buttons ignore clicks and keep their controlled values
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+  CTRL-A11Y-01:
+    title: Primitive accessibility labels are localized (en, ar) and layout mirrors in Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+  CTRL-BUTTON-01:
+    title: Plain, push, bevel, toolbar, help and destructive Buttons press in every size, and getButtonAvailability reports them available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#91 CTRL.api-primitives"
+    covers:
+      - ./ui#Button
+      - ./ui#getButtonAvailability().available
+  CTRL-BUTTON-02:
+    title: Only an explicit variant="default" Button answers Return and only variant="cancel" answers Escape, in every size; a Button without a variant ignores Return
+    platforms: [macos]
+    blocking: true
+    spec: "#91 decision comment"
+    covers:
+      - ./ui#Button
+  CTRL-SIDEBAR-01:
+    title: The Sidebar data items, dynamic heights and React rows screens mount and match their approved goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #252; #264; #265"
+    covers:
+      - ./ui/sidebar#Sidebar
+      - ./ui/sidebar#SidebarItem
+  CTRL-TABLE-01:
+    title: Table renders 10,000 native rows with a sorted, resizable header, a selected row and trailing-aligned sizes in light and dark, mirrored in Arabic, and getTableAvailability() reports available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "#93 CTRL.api-table"
+    covers:
+      - ./ui/table#Table
+      - ./ui/table#getTableAvailability().available
+  CTRL-OUTLINE-01:
+    title: Outline renders 10,010 native rows in three levels with the controlled rows expanded and a nested row selected in light and dark, mirrored in Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#93 CTRL.api-table"
+    covers:
+      - ./ui/table#Outline
+  CTRL-TABLE-03:
+    title: Table selection follows click, Shift-click range, Command-click toggle and Command-A; double-click and Return report activation; a right-click outside the selection reports a context menu for that row alone
+    platforms: [macos]
+    blocking: true
+    spec: "#93 CTRL.api-table"
+    covers:
+      - ./ui/table#Table
+  CTRL-TABLE-04:
+    title: Clicking a sortable Table header reports ascending then descending sort descriptors and the application's sorted rows appear; dragging a header edge resizes and dragging a header reorders columns, reported in the controlled column layout
+    platforms: [macos]
+    blocking: true
+    spec: "#93 CTRL.api-table"
+    covers:
+      - ./ui/table#Table
+  CTRL-OUTLINE-02:
+    title: Outline triangles collapse and expand rows, collapsed rows keep their expanded descendants, Option-click collapses or expands a whole branch reported once, and selection and context menus report outline rows
+    platforms: [macos]
+    blocking: true
+    spec: "#93 CTRL.api-table"
+    covers:
+      - ./ui/table#Outline
+  CTRL-TABLE-02:
+    title: On Windows getTableAvailability() reports unsupported-platform and Table and Outline show SparkError E_UNSUPPORTED_PLATFORM in place of the view (Windows work is #294)
+    platforms: [windows]
+    blocking: true
+    spec: "#93 CTRL.api-table; #294"
+    covers:
+      - ./ui/table#getTableAvailability().available
+  CTRL-UNSUP-01:
+    title: On Windows every primitive reports unsupported-platform and rendering one throws SparkError E_UNSUPPORTED_PLATFORM (WinUI work is #228)
+    platforms: [windows]
+    blocking: true
+    spec: "#91 CTRL.api-primitives; #228"
+    covers:
+      - ./ui#getControlAvailability
+  CTRL-VISUAL-01:
+    title: The Split view, SF Symbols, Search field, Glass and size grid screens match their approved goldens in light and dark (SF Symbols, Glass and the size grids also in Arabic; Split view and Search field wait for #256)
+    platforms: [macos]
+    blocking: true
+    spec: "docs/e2e-flows.md Visual goldens; #227; #253; #254"
+    covers:
+      - ./ui/split-view#SidebarSplitView
+      - ./ui/symbol#SFSymbol
+      - ./ui/search#TextInputSearch
+      - ./ui/glass#GlassView
+  CTRL-POPOVER-01:
+    title: Popover opens from its anchor view or a window rect at the preferred edge, hosts its React content top-down with keyboard focus in its first field, closes on outside clicks per behavior (transient, semi-transient, application-defined), detaches when detachable, and reports shown, closed and detached events
+    platforms: [macos]
+    blocking: true
+    spec: "#94 CTRL.api-popover"
+    covers:
+      - ./ui/popover#Popover
+      - ./ui/popover#getPopoverAvailability().available
+  CTRL-POPOVER-02:
+    title: In driver mode (no window on screen) the Popover screen mounts the native popover host beside its anchor and matches its golden in light and dark, English and Arabic; showing it reports SparkError E_UNAVAILABLE and no shown event, because AppKit shows a popover only from a window on screen, and its content never appears in the main window
+    platforms: [macos]
+    blocking: true
+    spec: "#94; docs/test-driver.md Focus and window state"
+    covers:
+      - ./ui/popover#Popover
+  CTRL-TABVIEW-01:
+    title: TabView switches tabs on click and programmatically, restores a vetoed native selection, and draws every tab position and the tabless borders
+    platforms: [macos]
+    blocking: true
+    spec: "#94 CTRL.api-tab-view"
+    covers:
+      - ./ui/tab-view#TabView
+      - ./ui/tab-view#Tab
+      - ./ui/tab-view#getTabViewAvailability().available
+  CTRL-TABVIEW-02:
+    title: In driver mode the Tab view screen shows only the selected tab's React content and matches its golden in light and dark, English and Arabic, with the first tab on the right in Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#94; docs/e2e-flows.md Visual goldens"
+    covers:
+      - ./ui/tab-view#TabView
+      - ./ui/tab-view#Tab
+  CTRL-UNSUP-02:
+    title: On Windows getPopoverAvailability and getTabViewAvailability report unsupported-platform and rendering Popover or TabView shows SparkError E_UNSUPPORTED_PLATFORM with no substitute (WinUI work is #299)
+    platforms: [windows]
+    blocking: true
+    spec: "#94; #299"
+    covers:
+      - ./ui/popover#getPopoverAvailability
+      - ./ui/tab-view#getTabViewAvailability

@@ -9,7 +9,7 @@ test.skipIf(process.platform !== "darwin")("AppKit menu publication binds semant
   try {
     const root = path.resolve(import.meta.dirname, "..");
     // Exercise the real implementation, replacing only the RN bridge declarations/dispatch.
-    const source = readFileSync(path.join(root, "packages/native-menu/ios/RNNativeMenu.mm"), "utf8").split("\n").filter(line => !line.startsWith('#import "RNNativeMenu.h"') && !line.startsWith("#import <React/") && !line.startsWith("- (std::shared_ptr")).join("\n");
+    const source = readFileSync(path.join(root, "packages/native-menu/ios/RNNativeMenu.mm"), "utf8").split("\n").filter(line => !line.startsWith('#import "RNNativeMenu.h"') && !line.startsWith('#import "SparkDeveloperMenu.h"') && !line.startsWith("#import <React/") && !line.startsWith("- (std::shared_ptr")).join("\n");
     const stubs = `#import <AppKit/AppKit.h>
 typedef void (^RCTPromiseResolveBlock)(id);
 typedef void (^RCTPromiseRejectBlock)(NSString *, NSString *, NSError *);

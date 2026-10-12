@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
+import { validateButtonOptions } from "./button";
 import type { ButtonProps, ControlProps, ControlRef, TextInputProps } from "./types";
 export type MeasureTarget = ControlRef | null;
 export function useControl(props: ControlProps, availability: Availability = { available: true }) {
@@ -30,13 +31,26 @@ export function useControl(props: ControlProps, availability: Availability = { a
   return { ref, disabled, failed: failed || !availability.available, error, unavailable, active: () => mounted.current && !disabled && !failed && availability.available };
 }
 export function validateButton(props: ButtonProps) {
-  if (typeof props.children !== "string" || !props.children.length || (props.onPress !== undefined && typeof props.onPress !== "function") || (props.variant !== undefined && !["default", "bordered", "borderless"].includes(props.variant))) throw new SparkError("E_INVALID_ARGUMENT", "Invalid button options");
+  validateButtonOptions(props);
+  if (typeof props.children !== "string" || !props.children.length || (props.onPress !== undefined && typeof props.onPress !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Invalid button options");
 }
 export function useTextValue(props: TextInputProps) {
   const controlled = props.value !== undefined;
-  const initialMode = useRef(controlled), initialText = useRef(props.defaultValue ?? ""), latestCount = useRef(0);
+  const initialMode = useRef(controlled), initialText = useRef(props.defaultValue ?? "");
   if (initialMode.current !== controlled) throw new SparkError("E_INVALID_ARGUMENT", "TextInput cannot switch controlled mode; remount it instead");
   if ((controlled && (typeof props.value !== "string" || props.defaultValue !== undefined)) || (props.defaultValue !== undefined && typeof props.defaultValue !== "string") || (props.onChangeText !== undefined && typeof props.onChangeText !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "TextInput requires a string value or defaultValue, not both");
-  const [eventCount, setEventCount] = useState(0);
-  return { controlled, text: props.value ?? "", defaultText: initialText.current, eventCount, acknowledge(count: number) { if (count <= latestCount.current) return false; latestCount.current = count; if (controlled) setEventCount(count); return true; } };
+  const events = useEventAcknowledgment(controlled);
+  return { controlled, text: props.value ?? "", defaultText: initialText.current, ...events };
 }
+/**
+ * Native views count their change events and reconcile a controlled value only once JS echoes
+ * the latest count, so in-flight edits are never overwritten by stale props. `acknowledge`
+ * returns false for a stale (already acknowledged) count.
+ */
+export function useEventAcknowledgment(controlled = true) {
+  const latestCount = useRef(0);
+  const [eventCount, setEventCount] = useState(0);
+  return { eventCount, acknowledge(count: number) { if (count <= latestCount.current) return false; latestCount.current = count; if (controlled) setEventCount(count); return true; } };
+}
+/** Native event counts are positive Int32 values. */
+export function isEventCount(count: unknown): count is number { return Number.isSafeInteger(count) && (count as number) >= 1 && (count as number) <= 2147483647; }

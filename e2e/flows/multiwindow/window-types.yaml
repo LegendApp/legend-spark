@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window types and a singleton
+intent: Each "Open note window" press opens a separate note window with its own ID; "Open Settings" twice leaves exactly one Settings window and focuses it.
+checks: [MW-TYPE-01, MW-SINGLE-01]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/windows" }
+- tapOn: { id: multiwindow-windows-open-note }
+- assertVisible: { id: multiwindow-note-title, window: { title: "Note 1" } }
+- focusWindow: { id: spark.main }
+- tapOn: { id: multiwindow-windows-open-note }
+- assertVisible: { id: multiwindow-note-title, window: { title: "Note 2" } }
+- assertWindow: { count: 3 }
+- assertVisible: "/^Open windows: 2 · key: note-/"
+- focusWindow: { id: spark.main }
+- tapOn: { id: multiwindow-windows-open-settings }
+- assertWindow: { key: { id: multiwindow-settings } }
+- focusWindow: { title: "Note 1" }
+- focusWindow: { id: spark.main }
+- tapOn: { id: multiwindow-windows-open-settings }
+- assertWindow: { count: 4 }
+- assertWindow: { key: { id: multiwindow-settings } }

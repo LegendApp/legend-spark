@@ -49,7 +49,8 @@ Dev options such as `--no-open` and `--port 8082` pass through.
 
 If no compatible runtime is available, run `bun run rebuild:macos` (or
 `bun run rebuild:windows` on Windows) from `examples/kitchen-sink` with the
-native toolchain installed. This builds and registers the reusable runtime.
+native toolchain installed. Its URL scheme needs a custom runtime, so this builds
+one with `spark build --dev` for the next session.
 Ordinary app edits need no native rebuild. Native source and checked host
 configuration changes require a rebuilt binary, and the CLI checks compatibility
 before serving desktop JavaScript.
@@ -141,8 +142,9 @@ pending. Window frames and display work areas use macOS screen points with a
 bottom-left origin. Closing all windows does not automatically quit the app.
 
 The host permits one running instance per project ID. A second launch forwards
-its arguments through the `secondInstance` app event, activates the existing app,
-and exits. Different projects using the Spark Runner remain independent processes.
+its arguments, working directory, files and URLs through the `secondInstance` app
+event, activates the existing app, and exits. Different projects using the Spark
+Runner remain independent processes. `relaunch()` and safe mode are in [app.md](app.md).
 
 ## Menus and shortcuts
 

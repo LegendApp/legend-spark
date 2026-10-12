@@ -127,7 +127,7 @@ npx --no-install spark updates init https://example.com/updates/appcast.xml
 
 The command downloads checksum-pinned Sparkle tools, creates or reuses a
 project-specific signing key in the login Keychain, and writes only `feedURL` and
-`publicKey` into `expo.extra.spark.updates`. Back up the signing key using
+`publicKey` into `expo.extra.spark.updates` (re-running it keeps other update fields). Back up the signing key using
 Sparkle's documented export/import process; keep private keys out of the repo and
 out of the update server. An existing configured key is never silently replaced.
 
@@ -186,8 +186,50 @@ and alternate spellings of the same number (such as `1` and `1.0`) cannot reuse
 one release identity. An exact retry with the same spelling and archive bytes is
 allowed, including when feed signing needs to be retried; different bytes under
 that number are rejected. Keep `dist/updates/` between releases so the feed
-retains existing versions. Initial support uses full ZIP updates, without delta
-archives, custom channels, or Mac App Store distribution.
+retains existing versions. Custom channels and Mac App Store distribution are not
+supported.
+
+### Delta updates
+
+Set `expo.extra.spark.updates.maximumDeltas` (integer 0–10, default 0) to have
+`spark package` generate signed Sparkle delta archives to the new build from that
+many previous builds retained in `dist/updates/`. Sparkle only uses deltas of the
+newest feed item, so each release keeps, references and reports only its own
+deltas; older `.delta` files are removed from `dist/updates/` and may be deleted
+from the server. Upload the reported `.delta` files with the ZIP before the
+appcast. Sparkle downloads the delta whose source is the installed build, with
+`downloading` reporting `delta: true`; if that download or its application fails,
+Sparkle falls back to the full ZIP and a second `downloading` event reports
+`delta: false`.
+
+### Downgrade protection
+
+Downgrades are refused at three layers. Publication rejects any build number not
+greater than every recorded build, using Sparkle's numeric ordering. Sparkle only
+offers appcast items whose `CFBundleVersion` is newer than the installed one, so a
+feed offering only older signed builds reports `notAvailable` to background and
+interactive checks. Sparkle's installer also refuses to replace the app with a
+lower `CFBundleVersion` (`SUDowngradeError`); Spark's tests do not exercise that
+installer path. Spark installs no custom version comparator, so none of these can
+be bypassed from JavaScript.
+
+### Skip This Version and check interval
+
+Sparkle's update alert offers **Skip This Version**. The choice emits a `skipped`
+event whose `build` (the CFBundleVersion) appears as
+`getUpdateStatus().skippedBuild`. If the item was a major upgrade (its
+`minimumAutoupdateVersion` is above the installed build) the event has
+`major: true` and the build appears as `skippedMajorBuild` instead. Background and
+scheduled checks stop offering skipped builds. Interactive `checkForUpdates()`
+offers them again and, as Sparkle does for every user-initiated check, clears the
+skip choice. `clearSkippedUpdate()` also clears it. Item events carry `version`
+(the display version) and `build`.
+
+`configureUpdates({ checkIntervalSeconds })` requires at least
+`MINIMUM_UPDATE_CHECK_INTERVAL_SECONDS` (3600): Sparkle silently clamps shorter
+Release intervals, so Spark rejects them with `E_INVALID_ARGUMENT`. Status reports
+the persisted interval and automatic-check preference before the updater starts
+(Sparkle's default interval is 86400 seconds), and `lastCheckedAt` once it has.
 
 ## Automated checks
 
@@ -201,7 +243,13 @@ bun run test:all           # Also includes the complete SDK/XCTest acceptance su
 ```
 
 `test:sparkle` verifies real Ed25519 archive signing, signed-feed generation and
-verification, successive releases, retry behavior and conflicting build numbers.
+verification, successive releases, signed delta archives for only the newest
+build, retry behavior, conflicting and downgraded build numbers, and parity with
+Sparkle's version comparator. It then runs a real `SPUUpdater` (headless
+`tests/sparkle-updater.m`) against the signed feeds over loopback HTTP, using
+Spark's native event and skip-status mapping: delta selection and full-archive
+fallback, no offer from an older-only feed, and Skip This Version, skip-major and
+clearing. Downloads are redirected to a missing file, so it installs nothing.
 `test:integrations` checks notifications according to current permission: schedules
 and cancels a delayed notification when authorized, otherwise verifies refusal to
 post; it never prompts or intentionally displays a banner. It also exercises tray
@@ -213,4 +261,4 @@ Banner presentation/clicks, tray interaction, and the complete install/relaunch
 flow still require an unlocked GUI session and a distribution acceptance run.
 Those must not be inferred from API tests or successful feed generation.
 
-Updater preferences use `configureUpdates({ automaticallyChecks?, checkIntervalSeconds? })`; omitted fields stay unchanged. All options are validated before starting/configuring the native updater. `checkForUpdates({ mode: "background" })` starts a background check; the default `"interactive"` uses the native updater UI. Commands resolve void when accepted; use `getUpdateStatus()` to read state and `onUpdateEvent()` for progress. `E_BUSY` reports an active update session, and native failures retain their cause. This is a native macOS application updater, not JavaScript OTA updates. Other targets report unavailable.
+`getUpdateAvailability()` reports whether this app can self-update (`unsupported-platform` on Windows and other targets, `missing-module`, `go`, `development` or `unconfigured`) without starting Sparkle. Windows is unsupported because Spark's Windows target is development-only, with no release build or distribution packaging ([Windows guide](windows-slice.md)), so there is no installed release to update; Sparkle is macOS-only. Every update command rejects with a typed `SparkError` where unavailable. Updater preferences use `configureUpdates({ automaticallyChecks?, checkIntervalSeconds? })`; omitted fields stay unchanged. All options are validated before starting/configuring the native updater. `checkForUpdates({ mode: "background" })` starts a background check; the default `"interactive"` uses the native updater UI. Commands resolve void when accepted; use `getUpdateStatus()` to read state and `onUpdateEvent()` for progress. `E_BUSY` reports an active update session, and native failures retain their cause. This is a native macOS application updater, not JavaScript OTA updates. Other targets report unavailable.

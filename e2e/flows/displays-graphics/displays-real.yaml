@@ -1,0 +1,19 @@
+appId: so.legend.spark.examples.kitchensink
+name: Real display details on macOS
+intent: >
+  Without a simulated source, the Displays screen reads this Mac's displays with getDisplayDetails.
+  Availability is {"available":true}, no error shows, and a card shows a refresh rate whose range
+  is consistent with its variable flag (24-120 Hz variable on a ProMotion panel, one rate on a
+  fixed-rate panel) and a color space with an sRGB or P3 gamut. The values depend on the Mac, so
+  only their shape is asserted; the screenshot records them.
+checks: [DISP-AVAIL-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://displays-graphics/displays" }
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-root }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-availability, equals: '{"available":true}' }
+- extendedWaitUntil: { visible: { text: '/^\{"minimum":(\d+(\.\d+)?),"maximum":\d+(\.\d+)?,"variable":(true|false)\}$/' }, timeout: 10s }
+- assertVisible: { text: '/^\{"name":(".*"|null),"gamut":"(srgb|p3)"\}$/' }
+- assertNotVisible: { id: displays-graphics-displays-error }
+- takeScreenshot: displays-real

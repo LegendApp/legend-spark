@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: Write failures are reported with a count, never lost silently
+intent: >
+  "Simulate a write failure" moves logging to a temporary folder, puts a file where that folder
+  was and logs two errors that cannot reach it. The error listener hears the failure once
+  (dropped 1), then hears that writing works again, with 2 dropped, once the file is removed and
+  the next entry is written. flushLogs rejects a LogWriteError counting the 2 entries. The screen
+  then goes back to its own log folder.
+checks: [REL-LOG-07]
+tags: [reliability-diagnostics]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://reliability-diagnostics/logging" }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-file-0-name }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-logging-error-events, equals: "[]" }
+- tapOn: { id: reliability-diagnostics-logging-write-failure }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-write-failure-result, text: '{"error":"E_ALREADY_EXISTS","dropped":2}' }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: reliability-diagnostics-logging-error-events, text: '[{"code":"E_ALREADY_EXISTS","dropped":1,"recovered":false},{"code":"E_ALREADY_EXISTS","dropped":2,"recovered":true}]' }, timeout: 10s }
+- assertText: { id: reliability-diagnostics-logging-file-0-name, equals: app.log }
+- takeScreenshot: logging-write-failure

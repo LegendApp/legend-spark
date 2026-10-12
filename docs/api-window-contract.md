@@ -48,6 +48,11 @@ interface WindowAppearanceOptions {
   minimizable?: boolean;
   minSize?: Size | null;
   maxSize?: Size | null;
+  aspectRatio?: number | null; // content width ÷ height, 0.05–20; null removes it
+  opacity?: number;            // 0–1
+  contentProtection?: boolean; // excluded from screenshots, recordings and screen sharing
+  ignoreMouseEvents?: boolean; // click-through
+  tabbing?: { mode?: 'automatic' | 'preferred' | 'disallowed'; identifier?: string }; // native window tabs
 }
 
 type WindowOpenOptions = WindowKind & WindowAppearanceOptions & {
@@ -57,7 +62,8 @@ type WindowOpenOptions = WindowKind & WindowAppearanceOptions & {
   size?: Size;
   position?: { displayId: DisplayId; x: number; y: number };
   show?: boolean; // Defaults to true.
-  restoreBounds?: boolean; // Defaults to false.
+  restoreBounds?: boolean; // Defaults to false. Also restores the window's place in its tab group.
+  tabbedWith?: WindowId; // Opens as the last, selected tab of that window's group.
   macos?: MacOSWindowOptions;
 };
 
@@ -81,7 +87,7 @@ interface WindowInfo {
 
 type CloseResult = { closed: true } | { closed: false; reason: 'vetoed' };
 
-getWindowAvailability(): Availability;
+getWindowAvailability(option?: WindowOption): Availability;
 openWindow(options: WindowOpenOptions): Promise<WindowInfo>;
 getWindow(id: WindowId): Promise<WindowInfo>;
 listWindows(): Promise<WindowInfo[]>;
@@ -134,6 +140,8 @@ interface WindowEventMap {
   boundsChanged: { windowId: WindowId; bounds: WindowBounds };
   visibilityChanged: { windowId: WindowId; visible: boolean };
   fullscreenChanged: { windowId: WindowId; fullscreen: boolean };
+  tabGroupChanged: { windowId: WindowId; tabGroup: WindowTabGroup };
+  tabSelectionChanged: { windowId: WindowId; selectedWindowId: WindowId | null };
   closed: { windowId: WindowId };
 }
 
@@ -164,7 +172,8 @@ Use `macos` option groups, with named public types, for features that are genuin
 | Style masks | Translate ordinary bits to common booleans/title-bar options; keep native panel styles under creation-only `macos.panelStyle`. |
 | Represented URL | `macos.representedUri`, nullable for clearing. |
 | Window level | `macos.level`; reject conflicting `alwaysOnTop` requests. |
-| Content layout guide, title visibility, material/blending/state, traffic lights | `macos.titleBar` group. |
+| Content layout guide, title visibility, material/blending/state, traffic lights and their position, subtitle | `macos.titleBar` group. |
+| Spaces, simple fullscreen, edited dot, window vibrancy | `macos.spaces`, `macos.simpleFullscreen`, `macos.documentEdited`, `macos.backgroundMaterial`. |
 | Toolbar style, items, titlebar controls | Typed `macos.toolbar` and `macos.titleBar.controls`. |
 | Startup split-view shell | `macos.startupSplitView`, nullable for clearing; preserve pre-React rendering. |
 | Shell restoration across launches | `macos.restoreOnLaunch`, separate from common saved bounds restoration. |
@@ -180,37 +189,352 @@ Use `/app` events `windowOpened` and `windowClosed` for application-wide registr
 
 `/windows/macos` exposes `setWindowBlur`, `focusToolbarSearch`, `setToolbarItemText` and `addMacOSWindowListener`; animated bounds are an option group on the portable `/windows` `setWindowBounds`, not a second export. `/app` owns `finishWindowRestoration`; `/diagnostics` owns startup timing. The old window-manager, window-controls and React-only import paths are removed without aliases.
 
-### React registration and navigation
+### Window options audit
 
-Retain `createWindowsNavigator` with these semantics:
+Audit of `openWindow`/`setWindowOptions` against the Windows epic (#12), done in #65. Every
+option below can be set when opening and changed later; an update publishes only the fields it
+names, to the native module that owns them. "Windows" means the Windows host in
+`packages/desktop-host/windows/application.inc`; this audit ran on macOS only, so the Windows
+column is from reading that code, not from running it. Windows work is tracked in #243.
 
-- Exactly one of `component` or `loadComponent` per entry.
-- `id` in registration; callers cannot override identity in `open`.
-- `open(name, { props, options })` infers props from that named component.
-- `options` excludes identity, registered component and props; native component names stay internal to registration.
-- `close(name)` returns the same `CloseResult` as imperative close.
-- `getId(name)`, `prefetch(name)`, and `show(name)` remain simple conveniences.
-- Distinguish named singleton windows from any future multi-instance navigator explicitly.
-- `useWindowId()` requires a provider and reports the actual root owner.
-- Focus/close hooks use fresh handlers and dispose on root changes/unmount.
+| Epic item | Spark option | macOS | Windows | Gap |
+|---|---|---|---|---|
+| Aspect ratio | `aspectRatio` (added) | `contentAspectRatio` | Rejects `E_UNSUPPORTED_OPTION` | Windows: `WM_SIZING` (#243) |
+| Closable | `closable` | Style mask | System menu Close disabled, close command ignored | None |
+| Minimizable | `minimizable` | Style mask | `OverlappedPresenter.IsMinimizable` | None |
+| Resizable | `resizable` | Style mask | `OverlappedPresenter.IsResizable` | None |
+| Min/max size | `minSize`, `maxSize` | `minSize`/`maxSize` | `WM_GETMINMAXINFO` track sizes | None |
+| Levels: normal, floating, always on top | `alwaysOnTop`; `macos.level` (`normal`, `floating`, `modalPanel`, `mainMenu`, `status`, `screenSaver`) | `level` | `alwaysOnTop` only (`IsAlwaysOnTop`) | Other levels have no Windows equivalent |
+| All Spaces vs active Space | `macos.spaces` (added): `default`, `all`, `active` | `collectionBehavior` | Not applicable | No public API pins a window to every virtual desktop |
+| Opacity | `opacity` (added) | `alphaValue` | Rejects `E_UNSUPPORTED_OPTION` | Windows: layered window alpha (#243) |
+| Background colour, transparency | `backgroundColor`, `transparent` | `backgroundColor`, `opaque` | Root composition brush, `WS_EX_NOREDIRECTIONBITMAP` | None |
+| Shadow | `hasShadow` | `hasShadow` | DWM non-client rendering policy | None |
+| Vibrancy / material | `macos.backgroundMaterial` (added, whole window); `macos.titleBar.material` (title bar) | `NSVisualEffectView` below the React surface | Not applicable | Windows backdrops are the Mica/Acrylic row |
+| Content protection | `contentProtection` (added) | `sharingType` none / read-only | Rejects `E_UNSUPPORTED_OPTION` | Windows: `SetWindowDisplayAffinity` (#243) |
+| Click-through | `ignoreMouseEvents` (added) | `ignoresMouseEvents` | Rejects `E_UNSUPPORTED_OPTION` | Windows: `WS_EX_TRANSPARENT` (#243) |
+| Simple fullscreen | `macos.simpleFullscreen` (added) | Covers the screen in the current Space | Not applicable | `setWindowFullscreen` is the portable fullscreen |
+| Traffic-light position | `macos.titleBar.trafficLightPosition` (added) | Moves the standard buttons | Not applicable | None |
+| Title bar styles: standard, hidden, hidden-inset, unified, compact | `titleBarStyle` (`default`, `overlay`, `hidden`, `borderless`); `macos.toolbar.style` (`unified`, `unifiedCompact`, `expanded`, `preference`, `automatic`) | Style mask, title bar transparency, toolbar style | `default`, `hidden`, `borderless`; `overlay` rejects | None: standard is `default`, Electron's hidden is `overlay`, hidden-inset is `overlay` with a unified toolbar or a traffic-light position, unified/compact are toolbar styles |
+| Subtitle | `macos.titleBar.subtitle` (added) | `subtitle` | Not applicable | None |
+| Represented file (proxy icon) | `macos.representedUri` | `representedURL` | Not applicable | None |
+| Edited dot | `macos.documentEdited` (added) | `documentEdited` | Not applicable | None |
+| Mica / Acrylic | None | Not applicable | Missing | Needs a typed `windows` backdrop option (#243) |
 
-Example of the intended consumer experience:
+`getWindowAvailability(option)` reports, for `WindowOption` (`aspectRatio`, `opacity`,
+`contentProtection`, `ignoreMouseEvents`, `tabbing`, `spaces`, `simpleFullscreen`, `documentEdited`,
+`backgroundMaterial`, `subtitle`, `trafficLightPosition`), whether the current platform
+implements it: all of them on macOS, none on Windows (`unsupported-platform`). An unknown option
+throws `E_INVALID_ARGUMENT`. Options not in the list work wherever windows do, except where the
+table says otherwise. On Windows the four portable additions reject with
+`E_UNSUPPORTED_OPTION` (`Windows does not support <option> yet`) before any native call, and the
+`macos` group rejects as before.
 
-```tsx
-import { createWindowsNavigator, useWindowId } from '@legendapp/spark/windows';
+Option details:
 
-const windows = createWindowsNavigator({
-  editor: {
-    id: 'editor',
-    component: Editor,
-    options: { title: 'Editor', size: { width: 960, height: 720 } },
-  },
-});
+- `aspectRatio` constrains user resizing of the content area; it does not resize the window.
+- `contentProtection: false` restores the default read-only sharing. AppKit's `sharingType`
+  getter can keep reporting none afterwards; the window server's sharing state is correct, and the
+  native test reads that.
+- `trafficLightPosition` is the close button's offset from the window's leading top corner (top
+  right in right-to-left title bars). The title bar container grows to center the buttons at that
+  inset. It is reapplied when AppKit lays the title bar out again (resize, toolbar and title
+  changes, leaving fullscreen, buttons recreated after `closable`, `minimizable` and `resizable`
+  were all off) and left alone in native fullscreen. It needs a title bar; `null` restores
+  AppKit's layout.
+- `backgroundMaterial` adds behind-window vibrancy under the React surface, so it shows only
+  where the React content is transparent. The in-process test driver renders it as flat gray (see
+  [the test driver](test-driver.md#what-a-capture-contains)).
+- `simpleFullscreen` sizes the window to its screen in the current Space, hides the title bar,
+  traffic lights and toolbar, makes the window unmovable and not resizable, and auto-hides the Dock
+  and menu bar while the app is active. While it is on, `titleBarStyle`, `resizable`, `minSize`,
+  `maxSize` and `macos.titleBar` changes other than `subtitle`, and `setWindowBounds`,
+  `setWindowFullscreen`, `maximizeWindow`, `unmaximizeWindow` and `centerWindow`, reject
+  `E_BUSY`; turning it on while in native fullscreen rejects `E_BUSY`. Turning it off restores the
+  windowed frame and the hidden chrome. `restoreBounds` and frame autosave (`restoreOnLaunch`, the
+  host's `restoreFrame`) keep the windowed frame throughout. Closing the window ends it, and the
+  presentation options return to their previous value when the last such window ends it.
+  `WindowInfo.fullscreen` and `fullscreenChanged` report native fullscreen only. `openWindow`
+  enters it after all other options are applied.
 
-await windows.open('editor', { props: { documentId: 'notes' } });
-await windows.show('editor');
-const result = await windows.close('editor');
+Two fixes came out of this audit: a window opened without `appearance` follows the app
+(`system`, as the contract says) instead of being forced dark, and an update that sets only
+`macos.representedUri` keeps the window's title instead of replacing it with the file name.
+
+The Kitchen Sink `windows/window-options` screen opens a child window with options applied and
+changes each row on the live window; its flows are in `e2e/flows/windows/`. The native tests
+(`tests/window.native.mm`, run by `tests/window-native.test.ts` in left-to-right and right-to-left
+title bars, and `tests/window-manager.native.mm`) assert each option's `NSWindow` property after
+opening and after an update. The host configuration for the main window
+(`window` in `desktop.config.json`) does not take the added options yet; set them on the main
+window at run time with `setWindowOptions('main', …)`.
+
+### Window tabs
+
+Native macOS window tabs (#64), part of `/windows`. Every operation addresses a Spark window by ID;
+AppKit owns the groups, so a window that is not tabbed is a group of one.
+
+```ts
+interface WindowTabGroup {
+  windowIds: WindowId[];           // Spark windows of the group, in tab order
+  selectedWindowId: WindowId | null; // null when the selected tab is not a Spark window
+  tabBarVisible: boolean;
+}
+getWindowTabGroup(id: WindowId): Promise<WindowTabGroup>;
+listWindowTabGroups(): Promise<WindowTabGroup[]>; // every Spark window in exactly one group, in no particular order
+selectWindowTab(id: WindowId): Promise<void>;
+moveTabToNewWindow(id: WindowId): Promise<void>;  // Window ▸ Move Tab to New Window
+mergeAllWindows(id: WindowId): Promise<void>;     // Window ▸ Merge All Windows, into this window's group
+setWindowTabBarVisible(id: WindowId, visible: boolean): Promise<void>; // View ▸ Show/Hide Tab Bar
+handleWindowNewTab(id: WindowId, handler: (event: { windowId: WindowId }) => unknown, options?: { onError? }): Promise<AsyncRegistration>;
 ```
 
-Type-level acceptance: `documentId` is checked against `Editor` props, required props cannot be omitted, and an identifier override fails compilation. Separate roots still do not inherit arbitrary React providers; the navigator must not imply that they do.
+- **Tabbing mode and identifier.** `tabbing.mode` is AppKit's `tabbingMode`: `automatic` (the
+  default) follows the system "Prefer tabs when opening documents" setting, `preferred` joins a tab
+  group when the window is shown, `disallowed` never tabs. Windows tab together only when their
+  `tabbing.identifier` (`tabbingIdentifier`, 1–200 characters) matches. Both can be set at open and
+  changed later; a mode change does not move a window that is already in a group. Per window type,
+  put `tabbing` in the navigator entry's `options`.
+- **New tabs.** `openWindow({ ..., tabbedWith })` opens the window as the last tab of that window's
+  group, with its frame and tabbing identifier, and selects it. Both windows must be shown (AppKit
+  keeps only shown windows in tab groups), the new one ordinary (no `parentId`, not an overlay), and
+  tabbing allowed on both. `show: false`, a hidden window to join, a different `tabbing.identifier`,
+  or `disallowed` on either window rejects `E_INVALID_ARGUMENT`; a missing window rejects `E_NOT_FOUND`.
+- **The + button.** AppKit shows the tab bar's + button while something in the responder chain
+  answers `newWindowForTab:`. `handleWindowNewTab` makes the window answer it: a click, or the
+  `newTab` menu role while the window is key, calls the handler, which opens the tab with
+  `tabbedWith`. One handler per window (`E_BUSY` for a second until the first is removed); removal
+  hides the button; handler failures go to `onError` (default `console.error`). In the navigator, an
+  entry's `newTab(instance)` returns `{ name, props?, options? }`, checked against the configuration
+  like `open`, and the navigator opens that entry as a tab of the window whose + was clicked. The
+  entry it names must not have a fixed `id`.
+- **Select, move, merge.** `selectWindowTab` selects the window's tab. `moveTabToNewWindow` moves a
+  tab out into a window of its own; for a window without other tabs it resolves without change.
+  `mergeAllWindows` moves every shown window whose identifier matches, and whose tabbing is not
+  `disallowed`, into the window's group; hidden windows stay. It rejects `E_INVALID_ARGUMENT` for a
+  window whose own tabbing is `disallowed`.
+- **Tab bar.** A group of several tabs always shows its tab bar: hiding it rejects `E_BUSY`. A window
+  without other tabs shows or hides it; `disallowed` rejects `E_INVALID_ARGUMENT`.
+- **Hiding and closing.** As in AppKit, `hideWindow` and closing take a window out of its group.
+- **Events.** `addWindowListener(id, 'tabGroupChanged')` fires when the window's group gains, loses
+  or reorders windows (including the window moving to another group) or shows or hides its tab bar;
+  `tabSelectionChanged` when another tab of its group is selected. Both carry the window's own ID and
+  arrive at most once per main-loop turn, after the change. AppKit has no tab notifications, so the
+  window module observes each Spark window's `tabGroup` (`windows`, `selectedWindow`,
+  `tabBarVisible`) with key-value observation for the window's lifetime.
+- **Restoration.** With `restoreBounds`, each window's saved record (the same per-window record as
+  its frame) keeps the window IDs of its tab group in tab order and whether it was the selected tab.
+  When such a window is next shown, it rejoins the first open, shown window of that saved group whose
+  identifier matches, after the saved tabs that precede it; it is selected only if it was the selected
+  tab, otherwise the group keeps its selection. So the group comes back in its saved order whatever
+  order the application reopens its windows in. Closing a window removes it from its saved group;
+  quitting keeps every group. Driver mode neither reads nor saves these records. Across a JavaScript
+  reload, native windows and their groups stay as they are.
+- **Menus.** The menu roles `toggleTabBar`, `showAllTabs`, `selectPreviousTab`, `selectNextTab`,
+  `moveTabToNewWindow` and `mergeAllWindows` are AppKit's tab actions: `target: { role }` finds the
+  items AppKit adds to the Window and View menus, and `type: 'role'` items keep AppKit's validation
+  (for example the Show/Hide Tab Bar title). `newTab` is the + button's `newWindowForTab:`
+  ([menus](menus.md)).
+- **Platforms.** macOS only. `getWindowAvailability('tabbing')` is `unsupported-platform` on Windows;
+  there every function above rejects `E_UNSUPPORTED_PLATFORM`, the two listener types too, `tabbing`
+  and `tabbedWith` reject `E_UNSUPPORTED_OPTION` before any native call, and a navigator entry with
+  `newTab` rejects `E_UNSUPPORTED_OPTION`. Win32 has no system window tabbing; the Windows design and
+  implementation are tracked in #295 (blocked on the Windows backend, #51).
 
+**Driver mode** never shows a window (docs/test-driver.md), and several AppKit tab actions order
+windows on screen. There, Spark regroups windows with the tab group's own `addWindow:`/
+`removeWindow:` instead: `moveTabToNewWindow` leaves the moved window where it is, `mergeAllWindows`
+joins every driver-shown window that qualifies in creation order, and when AppKit's selected window
+leaves a group the other tabs leave and regroup behind the first of them, so AppKit never orders the
+next tab front. Selecting a tab orders it on screen, so the driver records each selection (opening,
+showing or selecting a tab) and reports the group's most recently selected tab; when that tab leaves,
+the previously selected one is reported, where AppKit would select a neighbouring tab. AppKit's
+automatic tabbing on show (`preferred`, or `automatic` with "Always") never runs, because nothing is
+ordered front: use `tabbedWith` or `mergeAllWindows`. Group membership, order and the tab bar are
+AppKit's in both modes. What only a person can check on screen: the tab bar itself, the + button, the
+menu items' titles and enabled state, dragging tabs, the cascaded frame of a moved tab, and automatic
+tabbing.
+
+`tests/window.native.mm` (run by `tests/window-native.test.ts`) opens tabbed windows that never
+reach the screen and asserts `NSWindow.tabGroup` membership, order and selection, the published
+events and the reported groups after each operation, the restored order and selection, and that no
+window was ever on screen. The Kitchen Sink `windows/window-tabs` screen runs the operations from
+`spark-ks://windows/window-tabs?run=…` and its readout encodes the groups and events in test IDs
+(`e2e/flows/windows/window-tabs-*.yaml`).
+
+### Navigator: window types, singletons and multiwindow state
+
+`createWindowsNavigator(config, options?)` is the one registration API for React window roots.
+Every window it opens is an ordinary `openWindow` window with an explicit ID, the same events,
+close guards and options. There is no separate multiwindow path and no Spark router.
+
+```tsx
+import { createWindowsNavigator, createWindowState, useWindowInstance } from '@legendapp/spark/windows';
+
+export const windows = createWindowsNavigator({
+  editor: {
+    component: Editor,                      // no `id`: a new window per open()
+    options: { title: 'Untitled', size: { width: 900, height: 640 } },
+    undoMenu: true,
+    menus: instance => [{ type: 'submenu', id: 'format', label: 'Format', items: [
+      { type: 'action', id: 'bold', label: 'Bold', shortcut: 'CmdOrCtrl+B' },
+    ] }],
+    onMenuAction: (action, instance) => applyFormat(instance.id, action.itemId),
+  },
+  settings: { id: 'settings', loadComponent: () => import('./Settings'), options: { title: 'Settings' } },
+});
+
+const editor = await windows.openInstance('editor', { props: { documentId: 'notes' } });
+await windows.openInstance('settings'); // focuses the live Settings window if one exists
+await editor.close();                   // CloseResult, as closeWindow
+```
+
+The original navigator contract is unchanged and still works as before:
+
+- `open(name, { props, options })` resolves the native `WindowInfo`. For an `id` entry it rejects
+  `E_ALREADY_EXISTS` while that window is open (apps use this to show the existing window instead).
+- `close(name)` resolves the `CloseResult` of `closeWindow`; `show(name)` shows and focuses;
+  `getId(name)` returns the entry's ID; `prefetch(name)` loads a lazy component.
+- `id` entries register their root as `spark.window.<id>` and receive their props directly.
+- `close`, `show` and `getId` need an `id` entry; for other entries they fail `E_INVALID_ARGUMENT`.
+
+Added:
+
+- Exactly one of `component` or `loadComponent`. Loaders run before native creation; a failed
+  loader leaves no native window and stays retryable.
+- `id` is optional. With `id` the entry is a singleton: `openInstance` on a live window shows and
+  focuses it and returns the same handle; props are not re-applied; concurrent calls share one
+  native open. Without `id`, each `open`/`openInstance` creates a window with a generated ID
+  (`<name>-<suffix>`), and the root is registered as `spark.window.<name>`.
+- Both open methods infer props from the registered component; required props cannot be omitted.
+  `options` excludes identity, component and props.
+- `openInstance` resolves a `WindowInstance` once the window exists and its services are
+  installed: `id`, `name`, `runtime`, `undo`, `isOpen()`, `focus()`, `close()`, `refreshMenus()`,
+  `refreshToolbar()`. A closed instance rejects `focus`/`close`/`refreshToolbar` with `E_CLOSED`,
+  so a stale handle never acts on a later window that reuses its ID. Windows opened with `open`
+  get the same per-window services.
+- `get(windowId)`, `list(name?)`, `getKeyWindowId()` and `subscribe(listener)` observe the
+  navigator's open windows. `remove()` stops the navigator's listeners and menus without closing
+  windows; afterwards every method except `getId` rejects or throws `E_CLOSED`.
+- `useWindowId()` works in every navigator root. `useWindowInstance()` returns the owning
+  instance. Separate roots do not inherit arbitrary React providers.
+- `newTab(instance)` returns the entry, props and options to open as a new tab of the window whose
+  + button (or `newTab` menu role) was used; see [Window tabs](#window-tabs).
+- `@legendapp/spark-native-menu` is an optional peer. It is loaded only when an entry declares
+  `menus` or `undoMenu`; if it is missing then, opening that window rejects `E_MODULE_UNAVAILABLE`
+  and leaves no window. Windows without menus never load it.
+
+**Instance lifetime.** Closure is tracked per native window instance (`addWindowListener(id,
+'closed')`, which binds to the instance token), never from the ID-only `/app` `windowClosed`
+event. `close()` that resolves `{ closed: true }` ends the instance immediately. Opening a
+singleton whose window closed natively before its event arrived detects the missing window and
+opens a new one. A late close event of the earlier instance cannot dispose the new one.
+
+After a JavaScript reload, native restarts each window's root with its original props. The root
+re-adopts its instance: the navigator confirms the native window, reinstalls services and
+continues. A singleton `openInstance` during that adoption waits for it and never replaces the
+adopted window; `open` rejects `E_ALREADY_EXISTS` as for any open window. Generated IDs give up stable per-instance frame autosave; use `restoreBounds` on singletons.
+
+#### Runtime model
+
+All windows share the main JavaScript runtime by default. An entry may opt into an isolated
+runtime; heavy computation belongs in workers (`ThreadedRuntime.run`, see [Runtimes](runtimes.md)).
+
+| | Shared runtime (default) | Isolated runtime (opt-in per entry) |
+|---|---|---|
+| Heap | One heap; module state is shared by every window root | A named `@react-native-runtimes/core` runtime |
+| State | Any observable is live in every window | Only serialized props cross the boundary |
+| Spark APIs | All, in every window | Window/menu/OS UI APIs stay on the main runtime |
+| Failure scope | Render errors are contained per window; uncaught async errors and long synchronous work are runtime-wide | Contained in that runtime |
+| Use for | Documents, inspectors, settings, palettes | Untrusted or plugin content |
+
+```ts
+import * as Runtimes from '@react-native-runtimes/core';
+createWindowsNavigator({
+  plugin: { component: PluginPanel /* threadedComponent('plugin-panel', Impl) */, runtime: { isolated: 'plugins', module: Runtimes } },
+});
+```
+
+The native window still belongs to the main runtime; its root renders the upstream
+`Runtimes.Threaded` surface. Entries naming the same runtime share its heap. A window holds its
+runtime from the moment opening starts, so the runtime is destroyed only after the last window
+using it, in any navigator, has closed; a destroy still in flight completes before the next window
+uses the name. Do not use a window runtime name for workers. The application passes the Runtimes
+module, so apps without isolated windows keep Runtimes [pruned from production](runtimes.md#development-and-production).
+`getIsolatedRuntimeAvailability()` reports whether the Runtimes native module and its surface view
+are present; opening an isolated entry without them rejects `E_MODULE_UNAVAILABLE` (or
+`E_UNSUPPORTED_PLATFORM`) before a native window exists. Upstream threaded surfaces are not part of
+Spark's validated Runtimes support yet.
+
+#### Shared and scoped state
+
+In the shared runtime the same observable is live in every window: a document opened in two
+windows is one Legend State object, and an edit in one renders in the other. `createWindowState`
+adds a per-window scope and promotion:
+
+```ts
+const drafts = createWindowState<Draft>({ initial: window => ({ text: '' }) });
+
+drafts.get(editor);              // private to this window instance; freed with it
+drafts.promote(editor, 'notes'); // the same observable becomes app-scoped under 'notes'
+drafts.attach(other, 'notes');   // another window reads and writes the same value
+drafts.release('notes');         // E_BUSY while an open window is attached
+```
+
+- Values are keyed by window instance, so a later window reusing an ID starts fresh.
+- Calls for a closed window throw `E_CLOSED`; nothing is recreated for it.
+- `promote` keeps the observable's identity. App-scoped values outlive their windows until
+  released; there is no reference counting that could delete data when the last window closes.
+- `useWindowState(state)` returns the current window's observable and re-renders when its binding
+  changes, not on value changes. Read values with Legend State's `useValue`.
+- Isolated windows cannot participate; they receive props.
+
+#### Per-window routing and deep links
+
+Spark does not own a router. Each window is its own React root, so a window renders its own
+upstream navigator (for example a React Navigation container) with independent state. Deep links
+use the application's routing configuration: receive the URL with `/links`, choose or open the
+window, and hand the path to that window's upstream linking configuration through props.
+
+```ts
+links.addEventListener('url', event => {
+  const path = routeFor(event.url);  // the app's own parsing
+  if (path) void windows.openInstance('editor', { props: { initialPath: path } });
+});
+```
+
+#### Undo, keyboard, menus and toolbar per window
+
+- Every instance owns an undo stack (`instance.undo`: `push({ label, undo, redo })`, `undo()`,
+  `redo()`, `clear()`, `getState()`, `subscribe`), capped at 100 entries. `useUndoState()`
+  observes the current window's stack.
+- The menu bar follows the key window. The navigator tracks focus for its windows and publishes
+  one menu contribution: the key window's `menus(instance)` items, plus Edit ▸ Undo/Redo bound to
+  its stack when `undoMenu: true` (native `undo`/`redo` roles on macOS, accelerator actions on
+  Windows). Actions go to `onMenuAction(action, instance)` of the window whose items are published.
+  With no key window the contribution is withdrawn. Changes are coalesced to at most one menu
+  update per tick, and the menu skips unchanged trees.
+- Keyboard scope uses `/shortcuts/commands`: pass the hotkey router as `options.hotkeys`; an
+  entry's `hotkeys.definitions` and `handlers(instance)` register with
+  `scope: { kind: 'window', windowId }` and are removed when the window closes.
+- `macos.toolbar(instance)` supplies the toolbar at open, `instance.refreshToolbar()` re-applies
+  it, and `macos.onToolbarEvent(event, instance)` receives that window's toolbar events. Skipped on
+  Windows by definition.
+
+#### Error isolation
+
+Each root has its own error boundary. A render error replaces only that window's content with a
+fallback offering **Try again** (remounts the content) and **Close window**, and reports
+`{ windowId, name, phase, error }` to `options.onError` (default `console.error`). Menu, toolbar,
+hotkey and `newTab` handler failures are reported the same way. Pass `errorFallback` to localize the fallback;
+the default renders English strings. Setup is not partial: if a window's services cannot be
+installed, the window is closed and `open` rejects with the original failure. An uncaught async
+error or a synchronous infinite loop in the shared runtime still affects every window; use an
+isolated runtime when that matters.
+
+#### Status
+
+The navigator, state, undo, menu, hotkey, toolbar and error-boundary behavior is implemented in
+shared JavaScript and covered by unit tests against mocked native modules
+(`tests/windows-navigator.test.ts`, including the original navigator contract; `tests/windows-navigator-menuless.test.ts` without the menu module). The Kitchen Sink `multiwindow` screen and its flows
+(`e2e/flows/multiwindow/`) exercise it, but no flow backend exists yet, so native acceptance on
+macOS and Windows is pending. The commands router behind window hotkeys requires macOS.

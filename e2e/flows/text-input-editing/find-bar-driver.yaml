@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: showFindBar shows the find bar of a multiline TextInput
+intent: >
+  Show the find bar calls showFindBar on the note (a multiline RN TextInput). It resolves only when the
+  NSTextFinder find bar is visible in the note's scroll view, which the Spark patch enables in RN multiline
+  inputs. Searching from the bar, Escape and Edit > Find need the key window: find-bar.yaml, black-box.
+checks: [TEXT-FINDBAR-01]
+tags: [text-input-editing]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://text-input-editing/text-services" }
+- extendedWaitUntil: { visible: { id: text-input-editing-text-services-root }, timeout: 15s }
+- tapOn: { id: text-input-editing-text-services-show-find-bar }
+- assertText: { id: text-input-editing-text-services-result, equals: "Result: ok" }
+- scroll: { on: { id: text-input-editing-text-services-root }, direction: up, amount: 2000, precise: true }
+- takeScreenshot: find-bar-shown

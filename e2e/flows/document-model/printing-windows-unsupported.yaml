@@ -1,0 +1,24 @@
+appId: so.legend.spark.examples.kitchensink
+name: Printing is typed unsupported on Windows
+intent: >
+  On Windows the Printing screen reports printing and each feature as unsupported-platform. Page
+  setup, printing the report, the window or the card, and exporting reject
+  SparkError:E_UNSUPPORTED_PLATFORM without showing a panel. Implementation: #275.
+checks: [DOC-UNSUP-01]
+tags: [document-model]
+platforms: [windows]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://document-model/printing" }
+- extendedWaitUntil: { visible: { id: document-model-printing-root }, timeout: 10s }
+- assertText: { id: document-model-printing-availability-printing, equals: 'printing: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: document-model-printing-availability-print-panel, equals: 'print-panel: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: document-model-printing-availability-page-setup, equals: 'page-setup: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: document-model-printing-availability-pdf-export, equals: 'pdf-export: {"available":false,"reason":"unsupported-platform"}' }
+- tapOn: { id: document-model-printing-page-setup }
+- assertText: { id: document-model-printing-page-setup-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: document-model-printing-print-report }
+- assertText: { id: document-model-printing-print-report-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: document-model-printing-print-window }
+- assertText: { id: document-model-printing-print-window-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- tapOn: { id: document-model-printing-print-card }
+- assertText: { id: document-model-printing-print-card-result, equals: SparkError:E_UNSUPPORTED_PLATFORM }

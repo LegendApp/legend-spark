@@ -1,0 +1,11 @@
+appId: so.legend.spark.examples.kitchensink
+name: Isolated runtime window
+intent: The screen reports isolated runtimes as available, and the isolated-runtime window renders in the "ks-plugins" runtime rather than the main runtime.
+checks: [MW-RUNTIME-01]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/windows" }
+- assertVisible: { id: multiwindow-windows-isolated-availability, text: "Isolated runtimes: available" }
+- tapOn: { id: multiwindow-windows-open-isolated }
+- assertVisible: { text: "Runtime: ks-plugins · main: false", window: { title: Isolated runtime } }
+- tapOn: { id: multiwindow-isolated-increment, window: { title: Isolated runtime } }
+- assertVisible: { text: "Local count: 1", window: { title: Isolated runtime } }

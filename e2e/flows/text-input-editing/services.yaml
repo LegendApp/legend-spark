@@ -1,0 +1,33 @@
+appId: so.legend.spark.examples.kitchensink
+name: Services on selected text in RN and Spark text inputs
+intent: >
+  Selecting "Writing Tools" in the note (a multiline RN TextInput) and opening its context menu offers the
+  Services submenu, through AppKit's requestor protocol on the text view. A text-returning service replaces the
+  selection. The Spark TextInput's field editor offers Services the same way. Which services appear depends on
+  the Mac's Services settings, so choosing one and checking its result is a manual step.
+checks: [TEXT-SERVICES-01]
+tags: [text-input-editing, black-box]
+platforms: [macos]
+build: release
+manual: partial
+timeout: 120s
+---
+- launchApp: { openUrl: "spark-ks://text-input-editing/text-services" }
+- extendedWaitUntil: { visible: { id: text-input-editing-text-services-root }, timeout: 15s }
+- assertText: { id: text-input-editing-text-services-availability-services, equals: 'services: {"available":true}' }
+- selectText: { in: { id: text-input-editing-text-services-note }, range: [45, 58] }
+- openContextMenu: { on: { id: text-input-editing-text-services-note } }
+- assertVisible: Services
+- manualStep:
+    instruction: In the open context menu choose Services > Convert Text to Traditional Chinese (enable it in System Settings > Keyboard > Keyboard Shortcuts > Services > Text if it is missing), or another service that returns text.
+    expect: The selected text in the note is replaced by the service's result, and the rest of the note is unchanged.
+    evidence: screenshot
+    signoff: required
+- selectText: { in: { id: text-input-editing-text-services-spark-input }, range: [0, 8] }
+- openContextMenu: { on: { id: text-input-editing-text-services-spark-input } }
+- assertVisible: Services
+- manualStep:
+    instruction: In the open context menu choose the same text-returning service.
+    expect: The Spark text input shows the service's result in place of "Services".
+    evidence: screenshot
+    signoff: required

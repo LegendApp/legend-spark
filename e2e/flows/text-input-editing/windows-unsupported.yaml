@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: Text services are typed unsupported on Windows
+intent: >
+  On Windows every text service reports unsupported-platform (follow-up #293, blocked on #51), and the find
+  and Look Up buttons report the SparkError code E_UNSUPPORTED_PLATFORM instead of doing anything.
+checks: [TEXT-SVCUNSUP-01]
+tags: [text-input-editing]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://text-input-editing/text-services" }
+- extendedWaitUntil: { visible: { id: text-input-editing-text-services-root }, timeout: 15s }
+- assertText: { id: text-input-editing-text-services-availability-services, equals: 'services: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: text-input-editing-text-services-availability-lookUp, equals: 'lookUp: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: text-input-editing-text-services-availability-writingTools, equals: 'writingTools: {"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: text-input-editing-text-services-availability-findBar, equals: 'findBar: {"available":false,"reason":"unsupported-platform"}' }
+- tapOn: { id: text-input-editing-text-services-find-next }
+- assertText: { id: text-input-editing-text-services-result, equals: "Result: E_UNSUPPORTED_PLATFORM" }
+- tapOn: { id: text-input-editing-text-services-show-find-bar }
+- assertText: { id: text-input-editing-text-services-result, equals: "Result: E_UNSUPPORTED_PLATFORM" }
+- tapOn: { id: text-input-editing-text-services-look-up }
+- assertText: { id: text-input-editing-text-services-result, equals: "Result: E_UNSUPPORTED_PLATFORM" }

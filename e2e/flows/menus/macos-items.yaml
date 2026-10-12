@@ -1,0 +1,37 @@
+appId: so.legend.spark.examples.kitchensink
+name: macOS menu alternates, mixed state, icons, hidden items and open/close events
+intent: >
+  The Menu Audit menu is a real AppKit menu. Holding Option swaps Close Sample for
+  Close All Samples, Mixed selection shows a dash, Starred sample shows a star and
+  Hidden sample is absent. Opening and closing the menu and choosing items appear in
+  the screen's event list.
+checks: [MENU-CREATE-01, MENU-HOOK-01, MENU-ALT-01, MENU-LIFECYCLE-01, MENU-MIXED-01, MENU-HIDDEN-01, MENU-ICON-01]
+tags: [menus]
+platforms: [macos]
+build: release
+manual: partial
+timeout: 60s
+matrix:
+  appearance: [light, dark]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://menus/audit" }
+- assertVisible: { text: Menu ready, within: { id: menus-audit-status } }
+- assertMenuItem: { path: "Menu Audit > Close Sample", enabled: true, shortcut: "cmd+shift+j" }
+- assertMenuAlternate: { path: "Menu Audit > Close Sample", modifier: option, becomes: "Close All Samples" }
+- tapOn: { role: menuBarItem, label: Menu Audit }
+- assertVisible: Mixed selection
+- assertVisible: Starred sample
+- assertNotVisible: Hidden sample
+- takeScreenshot: menus-audit-open
+- manualStep:
+    instruction: Look at the open Menu Audit menu in the screenshot.
+    expect: Mixed selection shows a dash, not a checkmark. Starred sample shows a filled star. Hidden sample is absent. Text and marks are legible in this appearance.
+    evidence: screenshot
+    signoff: required
+- pressKey: Escape
+- assertVisible: { text: "/Opened audit-menu/", within: { id: menus-audit-events } }
+- assertVisible: { text: "/Closed audit-menu/", within: { id: menus-audit-events } }
+- selectMenu: Menu Audit > Close Sample
+- assertVisible: { text: "/Action close-sample/", within: { id: menus-audit-events } }
+- shortcut: cmd+alt+shift+j
+- assertVisible: { text: "/Action close-all-samples/", within: { id: menus-audit-events } }

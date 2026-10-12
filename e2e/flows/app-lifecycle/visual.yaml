@@ -1,0 +1,18 @@
+appId: so.legend.spark.examples.kitchensink
+name: Launch and single instance screen matches its golden
+intent: >
+  App lifecycle > Launch & single instance opens from spark-ks://app-lifecycle/launch in the running Kitchen Sink and
+  shows the launch context (app-lifecycle-launch-instance renders once it is read). The main window matches the
+  approved golden for the appearance (light and dark, English and Arabic). Masked: the shell sidebar, and the launch arguments,
+  which carry the driver run's port and locale.
+checks: [LIFE-VISUAL-01]
+tags: [app-lifecycle]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://app-lifecycle/launch" }
+- assertVisible: { id: app-lifecycle-launch-root }
+- assertVisible: { id: app-lifecycle-launch-instance }
+- assertScreenshot: { golden: app-lifecycle-launch, mask: [{ id: infra-shell-sidebar }, { id: app-lifecycle-launch-arguments }] }

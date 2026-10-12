@@ -1,0 +1,48 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window option availability and rejected requests
+intent: The window options screen lists each option's availability for this platform, and its probe shows each invalid or unsupported request rejecting with the expected SparkError code.
+checks: [WIN-AVAIL-01, WIN-INVALID-01, WIN-UNSUP-01]
+tags: [windows]
+platforms: [macos, windows]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://windows/window-options" }
+- assertVisible: { id: windows-window-options-root }
+- runFlow:
+    when: { platform: macos }
+    commands:
+      - assertText: { id: windows-window-options-availability-aspectRatio, equals: "aspectRatio: available" }
+      - assertText: { id: windows-window-options-availability-opacity, equals: "opacity: available" }
+      - assertText: { id: windows-window-options-availability-contentProtection, equals: "contentProtection: available" }
+      - assertText: { id: windows-window-options-availability-ignoreMouseEvents, equals: "ignoreMouseEvents: available" }
+      - assertText: { id: windows-window-options-availability-spaces, equals: "spaces: available" }
+      - assertText: { id: windows-window-options-availability-simpleFullscreen, equals: "simpleFullscreen: available" }
+      - assertText: { id: windows-window-options-availability-documentEdited, equals: "documentEdited: available" }
+      - assertText: { id: windows-window-options-availability-backgroundMaterial, equals: "backgroundMaterial: available" }
+      - assertText: { id: windows-window-options-availability-subtitle, equals: "subtitle: available" }
+      - assertText: { id: windows-window-options-availability-trafficLightPosition, equals: "trafficLightPosition: available" }
+      - tapOn: { id: windows-window-options-probe }
+      - assertVisible: { text: "/opacity 2: E_INVALID_ARGUMENT/", within: { id: windows-window-options-probe-result } }
+      - assertVisible: { text: "/aspectRatio 0: E_INVALID_ARGUMENT/", within: { id: windows-window-options-probe-result } }
+      - assertVisible: { text: "/spaces every: E_INVALID_ARGUMENT/", within: { id: windows-window-options-probe-result } }
+      - assertVisible: { text: "/trafficLightPosition -1: E_INVALID_ARGUMENT/", within: { id: windows-window-options-probe-result } }
+- runFlow:
+    when: { platform: windows }
+    commands:
+      - assertText: { id: windows-window-options-availability-aspectRatio, equals: "aspectRatio: unsupported-platform" }
+      - assertText: { id: windows-window-options-availability-opacity, equals: "opacity: unsupported-platform" }
+      - assertText: { id: windows-window-options-availability-contentProtection, equals: "contentProtection: unsupported-platform" }
+      - assertText: { id: windows-window-options-availability-ignoreMouseEvents, equals: "ignoreMouseEvents: unsupported-platform" }
+      - assertText: { id: windows-window-options-availability-spaces, equals: "spaces: unsupported-platform" }
+      - assertText: { id: windows-window-options-availability-simpleFullscreen, equals: "simpleFullscreen: unsupported-platform" }
+      - assertText: { id: windows-window-options-availability-documentEdited, equals: "documentEdited: unsupported-platform" }
+      - assertText: { id: windows-window-options-availability-backgroundMaterial, equals: "backgroundMaterial: unsupported-platform" }
+      - assertText: { id: windows-window-options-availability-subtitle, equals: "subtitle: unsupported-platform" }
+      - assertText: { id: windows-window-options-availability-trafficLightPosition, equals: "trafficLightPosition: unsupported-platform" }
+      - tapOn: { id: windows-window-options-probe }
+      - assertVisible: { text: "/aspectRatio: E_UNSUPPORTED_OPTION/", within: { id: windows-window-options-probe-result } }
+      - assertVisible: { text: "/opacity: E_UNSUPPORTED_OPTION/", within: { id: windows-window-options-probe-result } }
+      - assertVisible: { text: "/contentProtection: E_UNSUPPORTED_OPTION/", within: { id: windows-window-options-probe-result } }
+      - assertVisible: { text: "/ignoreMouseEvents: E_UNSUPPORTED_OPTION/", within: { id: windows-window-options-probe-result } }
+      - assertVisible: { text: "/macos group: E_UNSUPPORTED_OPTION/", within: { id: windows-window-options-probe-result } }

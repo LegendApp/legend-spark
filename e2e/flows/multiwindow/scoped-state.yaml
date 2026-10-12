@@ -1,0 +1,18 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window-scoped state and promotion
+intent: Stars added in Note 1 stay private to Note 1 until promoted; after Note 2 attaches to the promoted stars, both windows show and change the same count.
+checks: [MW-STATE-02]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/windows" }
+- tapOn: { id: multiwindow-windows-open-note }
+- focusWindow: { id: spark.main }
+- tapOn: { id: multiwindow-windows-open-note }
+- tapOn: { id: multiwindow-note-star, window: { title: "Note 1" } }
+- assertVisible: { text: "Stars: 1 · this window", window: { title: "Note 1" } }
+- assertVisible: { text: "Stars: 0 · this window", window: { title: "Note 2" } }
+- tapOn: { id: multiwindow-note-promote, window: { title: "Note 1" } }
+- assertVisible: { text: "Stars: 1 · app scope (pinned-stars)", window: { title: "Note 1" } }
+- tapOn: { id: multiwindow-note-attach, window: { title: "Note 2" } }
+- assertVisible: { text: "Stars: 1 · app scope (pinned-stars)", window: { title: "Note 2" } }
+- tapOn: { id: multiwindow-note-star, window: { title: "Note 2" } }
+- assertVisible: { text: "Stars: 2 · app scope (pinned-stars)", window: { title: "Note 1" } }
