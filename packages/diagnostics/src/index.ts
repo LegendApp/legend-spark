@@ -5,6 +5,8 @@ import Native, { type Spec } from "./NativeDesktopDiagnostics";
 import { isFrame, type StackFrame } from "./stack";
 
 export type { StackFrame } from "./stack";
+/** @deprecated Use StackFrame. */
+export type HangStackFrame = StackFrame;
 export * from "./crash-reporting";
 
 export interface HangReport {
