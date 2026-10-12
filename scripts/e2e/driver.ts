@@ -34,7 +34,7 @@ export type Gesture =
 /** The cursor AppKit would show (docs/test-driver.md#cursor). */
 export type DriverCursor = { cursor: string; hiddenUntilMoved: boolean };
 /** One entry of `elements`: a visible view with a testID, or an accessibility element, in waitFor frame coordinates. */
-export type DriverElement = { key: string; parent?: string; window: string; id?: string; role?: string; label?: string; text?: string; value?: string; frame: Frame };
+export type DriverElement = { key: string; parent?: string; window: string; id?: string; role?: string; label?: string; text?: string; value?: string; enabled?: boolean; selected?: boolean; frame: Frame };
 export type DriverWindowInfo = { id: string; title: string; key: boolean; main: boolean; frame: Frame };
 /** One application menu item as AppKit holds it (`menus`). `shortcut.modifiers` are NSEventModifierFlags bits. */
 export type DriverMenuItem =

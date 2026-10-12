@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const { create } = createRequire(import.meta.url)("react-test-renderer");
 
 const state = vi.hoisted(() => ({ locale: "en" as "en" | "ar", available: true }));
-vi.mock("react-native", () => ({ View: "View", Text: "Text", ScrollView: "ScrollView" }));
+vi.mock("react-native", () => ({ View: "View", Text: "Text", ScrollView: "ScrollView", Pressable: "Pressable" }));
 vi.mock("../examples/kitchen-sink/shell/app-controller", () => ({ useI18n: () => ({ locale: state.locale, rtl: state.locale === "ar" }) }));
 vi.mock("@legendapp/spark/contracts", () => ({ SparkError: class SparkError extends Error { constructor(public code: string, message: string) { super(message); } } }));
 vi.mock("@legendapp/spark/ui", async () => {
@@ -75,6 +75,25 @@ test("buttons: plain rows omit the variant; the keyboard section has one default
   expect(byID("native-controls-buttons-keyboard-cancel").props).toMatchObject({ variant: "cancel", size: "mini" });
   await act(async () => byID("native-controls-buttons-keyboard-default").props.onPress());
   expect(text("native-controls-buttons-keyboard-default-value")).toBe("1");
+});
+
+test("buttons: the React Native Pressables follow the page's and their own disabled state, and the selectable one toggles its selected state", async () => {
+  await mount(Buttons);
+  const pressable = "native-controls-buttons-pressable", selectable = `${pressable}-selectable`;
+  expect(byID(pressable).props).toMatchObject({ accessibilityRole: "button", accessibilityLabel: "Pressable", disabled: false });
+  await act(async () => byID(pressable).props.onPress());
+  expect(text(`${pressable}-value`)).toBe("1");
+  expect(byID(selectable).props.accessibilityState).toEqual({ selected: false });
+  await act(async () => byID(selectable).props.onPress());
+  expect(byID(selectable).props.accessibilityState).toEqual({ selected: true });
+  await act(async () => byID(`${pressable}-disable`).props.onPress());
+  expect(byID(`${pressable}-disable`).props.accessibilityState).toEqual({ checked: true });
+  expect(byID(pressable).props.disabled).toBe(true);
+  expect(byID(selectable).props.disabled).toBe(true);
+  await act(async () => byID(`${pressable}-disable`).props.onPress());
+  expect(byID(pressable).props.disabled).toBe(false);
+  await act(async () => byID("native-controls-buttons-disabled").props.onValueChange(true));
+  for (const each of [pressable, selectable, `${pressable}-disable`]) expect(byID(each).props.disabled).toBe(true);
 });
 
 test("unsupported platforms show the typed error in place of each control, never a substitute", async () => {

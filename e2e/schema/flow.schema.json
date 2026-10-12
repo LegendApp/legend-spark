@@ -6257,6 +6257,12 @@
                 "hint": {
                   "$ref": "#/definitions/text"
                 },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "selected": {
+                  "type": "boolean"
+                },
                 "when": {
                   "$ref": "#/definitions/condition"
                 },
@@ -6287,6 +6293,16 @@
                 {
                   "required": [
                     "hint"
+                  ]
+                },
+                {
+                  "required": [
+                    "enabled"
+                  ]
+                },
+                {
+                  "required": [
+                    "selected"
                   ]
                 }
               ]

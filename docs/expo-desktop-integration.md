@@ -136,6 +136,23 @@ exact source, is idempotent, and replaces the file atomically; existing runtimes
 `tests/text-input-accessibility.test.ts` covers the patch; the Kitchen Sink accessibility audit
 ([e2e-flows.md](e2e-flows.md#accessibility-audit)) checks the labels in the running app.
 
+## RN macOS accessibility state patch
+
+`react-native-macos@0.81.7` Fabric applies `accessibilityState` only on iOS: in `RCTViewComponentView.mm` it is inside
+`#if !TARGET_OS_OSX`. So a disabled `Pressable` (`disabled`, `accessibilityState.disabled`) with an
+`accessibilityRole` told VoiceOver it was enabled, a selected one (`accessibilityState.selected`) that it was not
+selected, and a view without a role reported `isAccessibilityEnabled` NO, as a plain `NSView` does, enabled or not.
+`accessibility-state.cjs` adds `isAccessibilityEnabled` and `isAccessibilitySelected` to `RCTViewComponentView` on
+macOS, answered from the view's current props: enabled unless `accessibilityState.disabled` or the not-enabled
+accessibility trait, selected when `accessibilityState.selected`. Reading the props covers the first mount, recycled
+views and every update. Like the other patches, it checks the version and exact source, is idempotent, and replaces
+the file atomically. Existing runtimes need a native rebuild. `tests/accessibility-state-native.test.ts` compiles the
+patched methods against AppKit. In the Kitchen Sink, `e2e/flows/native-controls/buttons.yaml` checks the Pressables
+on Button styles with `assertA11y` (`enabled`, `selected`) as they are disabled, selected and enabled again. The
+accessibility audit ([e2e-flows.md](e2e-flows.md#accessibility-audit)) exempts disabled React Native text as it does
+disabled AppKit controls; `e2e/flows/accessibility/audit-native-controls.yaml` audits Button styles again with the
+Pressables disabled.
+
 ## RN macOS DevTools targets patch
 
 `react-native-macos@0.81.7` lists every JavaScript runtime as the same React Native DevTools target, titled
