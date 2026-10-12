@@ -75,7 +75,7 @@ beforeEach(() => {
 
 afterEach(() => { vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); });
 
-test.each(["dev", "preview", "release"] as const)("%s builds select the renamed scheme product and clear only that output directory", async mode => {
+test.each(["dev", "preview", "release"] as const)("%s builds select the renamed scheme product, replace only that output directory and clear a crashed build's staging copy", async mode => {
   configure(true);
   const first = await build(root, mode);
   // A release lists its third-party notices in the app and keeps its debug symbols next to it.
@@ -108,7 +108,11 @@ test.each(["dev", "preview", "release"] as const)("%s builds select the renamed 
   const otherArch = path.join(root, ".spark/products", `macos-${first.runtime.arch === "arm64" ? "x64" : "arm64"}`, mode, "keep");
   write(otherMode, "other mode");
   write(otherArch, "other architecture");
+  // A build that crashed before publishing left its staging copy behind.
+  write(path.join(`${output}.staging`, "Fixture.app/Contents/Resources/main.jsbundle"), "crashed build");
   const renamed = await build(root, mode);
+  expect(existsSync(`${output}.staging`)).toBe(false);
+  expect(existsSync(path.join(output, "dSYMs"))).toBe(mode === "release");
   expect(renamed.app).toBe(path.join(output, "RenamedFixture.app"));
   expect(readFileSync(path.join(renamed.app, "Contents/Resources/main.jsbundle"), "utf8")).toBe("renamed bundle");
   // Only release builds drop the development server's local networking exemption.

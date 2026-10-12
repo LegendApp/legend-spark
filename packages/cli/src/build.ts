@@ -7,6 +7,7 @@ import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
 import { buildWindows } from "./windows.ts";
 import { copyHelpers } from "./helpers.ts";
+import { publishDirectory } from "./publish-directory.ts";
 import { acknowledgementsFile, collectNotices, formatNotices, NOTICES_FILE, podNotices } from "./notices.ts";
 import { readAppConfig } from "./project.ts";
 import {
@@ -389,16 +390,21 @@ async function buildUnlocked(
   // The scheme's product, not the first .app: a renamed app leaves its old bundle in DerivedData.
   const product = `${name}.app`;
   if (!existsSync(path.join(products, product))) throw new Error(`Build completed without ${product}.`);
-  const destination = stateFile(root, `products/macos-${runtime.arch}/${mode}/${product}`);
-  rmSync(path.dirname(destination), { recursive: true, force: true });
-  mkdirSync(path.dirname(destination), { recursive: true });
-  cpSync(path.join(products, product), destination, { recursive: true, verbatimSymlinks: true });
+  const output = stateFile(root, `products/macos-${runtime.arch}/${mode}`);
+  const destination = path.join(output, product);
+  // The app and its dSYMs are finished in a sibling and swapped in together, so a reader (a driver session cloning
+  // the app, a launch) sees the previous or the new product, never a partial one. This also clears a crashed build's.
+  const staging = `${output}.staging`;
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging, { recursive: true });
+  const app = path.join(staging, product);
+  cpSync(path.join(products, product), app, { recursive: true, verbatimSymlinks: true });
   if (
     mode === "release" &&
-    !existsSync(path.join(destination, "Contents/Resources/main.jsbundle"))
+    !existsSync(path.join(app, "Contents/Resources/main.jsbundle"))
   )
     throw new Error("Standalone build is missing its JavaScript bundle.");
-  if (mode === "release") checkReleaseTestDriver(destination, nativeConfig.macos?.testDriverInRelease === true);
+  if (mode === "release") checkReleaseTestDriver(app, nativeConfig.macos?.testDriverInRelease === true);
   const result = {
     app: destination,
     // Older receipts may record a stale bundle selected from DerivedData.
@@ -413,10 +419,10 @@ async function buildUnlocked(
     );
   // prebuild can update package/config fields; cache the actual post-generation inputs.
   writeJson(
-    path.join(destination, "Contents/Resources/spark-runtime.json"),
+    path.join(app, "Contents/Resources/spark-runtime.json"),
     result.runtime,
   );
-  copyHelpers(root, destination, readAppConfig(root).expo?.extra?.spark?.helpers);
+  copyHelpers(root, app, readAppConfig(root).expo?.extra?.spark?.helpers);
   if (mode === "release") {
     await removeLocalNetworking(destination, args => run(root, ["plutil", ...args], { capture: true }));
     const sources = metroSourceFiles(path.resolve(root, entryFile(root)), readJson(stateFile(root, "analysis/app.map")).sources);
@@ -425,28 +431,28 @@ async function buildUnlocked(
     const notices = collectNotices(root, sources, linked, pods);
     const unknown = notices.filter(notice => notice.license === "UNKNOWN").map(notice => `${notice.name}@${notice.version}`);
     if (unknown.length) console.warn(`${unknown.join(", ")} declare${unknown.length === 1 ? "s" : ""} no license and ship${unknown.length === 1 ? "s" : ""} no license file; ${NOTICES_FILE} lists ${unknown.length === 1 ? "it" : "them"} as License: UNKNOWN.`);
-    writeFileSync(path.join(destination, "Contents/Resources", NOTICES_FILE), formatNotices(name, notices));
+    writeFileSync(path.join(app, "Contents/Resources", NOTICES_FILE), formatNotices(name, notices));
     // Debug symbols ship next to the app, never in it: the build's dSYMs and those vendors ship in their pods.
-    const symbols = path.join(path.dirname(destination), "dSYMs");
-    rmSync(symbols, { recursive: true, force: true });
+    const symbols = path.join(staging, "dSYMs");
     mkdirSync(symbols, { recursive: true });
     // Hermes is prebuilt, so Xcode's app/Pod compiler settings cannot strip it. Its dSYM keeps the symbol table that
     // strip removes (React Native publishes no DWARF for it, so dsymutil warns about every object file).
-    const hermes = path.join(destination, "Contents/Frameworks/hermes.framework/Versions/Current/hermes");
+    const hermes = path.join(app, "Contents/Frameworks/hermes.framework/Versions/Current/hermes");
     if (existsSync(hermes)) {
       await run(root, ["dsymutil", hermes, "-o", path.join(symbols, "hermes.framework.dSYM")], { capture: true });
       await run(root, ["strip", "-S", "-x", hermes], { capture: true });
     }
-    const unmatched = collectDsyms(destination, [products, path.join(nativeRoot, "Pods")], symbols);
+    const unmatched = collectDsyms(app, [products, path.join(nativeRoot, "Pods")], symbols);
     if (unmatched.length) console.warn(`No dSYM for ${unmatched.join(", ")}; crash reports from ${unmatched.length === 1 ? "it" : "them"} cannot be symbolicated.`);
   }
   // Development apps can opt into a local identity for same-team native plugins.
   // Standalone outputs remain ad-hoc until `spark package` signs its staging copy.
   await run(
     root,
-    ["codesign", "--force", "--deep", "--sign", localSigningIdentity(root, mode), destination],
+    ["codesign", "--force", "--deep", "--sign", localSigningIdentity(root, mode), app],
     { capture: true },
   );
+  publishDirectory(staging, output);
   writeJson(resultFile, result);
   console.log(`Built ${destination}`);
   return result;
