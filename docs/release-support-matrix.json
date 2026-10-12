@@ -3649,7 +3649,9 @@
         "unitTests": [
           "tests/sdk-api.test.ts",
           "tests/hang-watchdog.test.ts",
-          "tests/hang-watchdog-native.test.ts"
+          "tests/hang-watchdog-native.test.ts",
+          "tests/crash-reporting.test.ts",
+          "tests/crash-reporting-native.test.ts"
         ],
         "portableCommand": "bun run test",
         "platformAcceptance": {

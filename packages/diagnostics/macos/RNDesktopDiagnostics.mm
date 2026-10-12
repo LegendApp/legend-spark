@@ -1,5 +1,7 @@
 #import "RNDesktopDiagnostics.h"
+#import "SparkCrashReporter.h"
 #import "SparkHangWatchdog.h"
+#import <RNDesktopApp/SparkDesktopError.h>
 #import <RNDesktopApp/SparkDesktop.h>
 
 @implementation RNDesktopDiagnostics {
@@ -37,8 +39,44 @@ RCT_EXPORT_MODULE(NativeDesktopDiagnostics)
     NSNumber *duration = args[@"durationMs"];
     if (![duration isKindOfClass:NSNumber.class]) { SparkInvalid(reject, @"Expected durationMs"); return; }
     SparkSimulateHang(duration.unsignedIntegerValue);
+  } else if ([method isEqual:@"getConsent"]) {
+    resolve(SparkJSON(@(SparkCrashConsent()))); return;
+  } else if ([method isEqual:@"setConsent"]) {
+    NSNumber *granted = args[@"granted"];
+    if (![granted isKindOfClass:NSNumber.class]) { SparkInvalid(reject, @"Expected granted"); return; }
+    SparkSetCrashConsent(granted.boolValue);
+    // On the main thread, which gets the alternate signal stack.
+    if (granted.boolValue) SparkInstallCrashHandlers(SparkDefaultCrashDirectory());
+    SparkSetCrashRecording(granted.boolValue);
+  } else if ([method isEqual:@"getReports"] || [method isEqual:@"deleteReports"] || [method isEqual:@"simulateCrash"]) {
+    NSArray *ids = args[@"ids"];
+    NSString *kind = args[@"kind"];
+    if ((ids && ![ids isKindOfClass:NSArray.class]) || ([method isEqual:@"simulateCrash"] && ![kind isKindOfClass:NSString.class])) { SparkInvalid(reject, @"Expected ids or a kind"); return; }
+    // File work, and a helper process that can take seconds to crash: off the main thread.
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      NSString *directory = SparkDefaultCrashDirectory();
+      NSError *error = nil;
+      id result = [method isEqual:@"getReports"] ? SparkCrashReports(directory, &error)
+        : [method isEqual:@"simulateCrash"] ? SparkSimulateCrash(directory, kind, &error)
+        : SparkDeleteCrashReports(directory, ids, &error) ? NSNull.null : nil;
+      if (result) resolve(SparkJSON(result));
+      else reject(error.userInfo[SparkCrashCodeKey] ?: SparkDesktopErrorCode(error), error.localizedDescription ?: @"Crash reporting failed", error);
+    });
+    return;
   } else { SparkInvalid(reject, @"Unknown diagnostics operation"); return; }
   resolve(SparkJSON(NSNull.null));
+}
+
+// Synchronous, on the JavaScript thread: the report is on disk before React Native's fatal handler runs.
+// Returns the report's id, or "" when crash reporting is off.
+- (NSString *)recordJavaScriptError:(NSString *)json
+{
+  if (!SparkCrashRecording()) return @"";
+  NSDictionary *error = SparkArgs(json);
+  NSError *failure = nil;
+  NSString *identifier = SparkRecordJavaScriptCrash(SparkDefaultCrashDirectory(), error, &failure);
+  if (!identifier) NSLog(@"Spark crash reporting: could not write a JavaScript crash report: %@", failure.localizedDescription);
+  return identifier ?: @"";
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { SparkError } from "@legendapp/spark/contracts";
-import { getHangWatchdogAvailability, simulateHang, startHangWatchdog, type HangReport, type HangStackFrame } from "@legendapp/spark/diagnostics";
+import { getHangWatchdogAvailability, simulateHang, startHangWatchdog, type HangReport, type StackFrame } from "@legendapp/spark/diagnostics";
 import { useRegistrations } from "../../shell/registrations";
 
 export const THRESHOLDS = [100, 250, 1000] as const;
@@ -16,7 +16,7 @@ const describe = (value: unknown) => value instanceof SparkError ? `SparkError:$
 const isSimulated = (report: HangReport) => report.stack.some(frame => frame.symbol === "SparkSimulateHang");
 
 /** A frame as a crash log shows it: the symbol when known, else image+offset. */
-export function frameText(frame: HangStackFrame) {
+export function frameText(frame: StackFrame) {
   const image = frame.image?.split("/").pop();
   const place = frame.symbol ? `${frame.symbol} + ${frame.symbolOffset ?? 0}` : image ? `${image} + ${frame.imageOffset}` : frame.address;
   return `${image ?? "?"}  ${frame.address}  ${place}`;

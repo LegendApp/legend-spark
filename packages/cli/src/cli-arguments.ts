@@ -7,7 +7,7 @@ const options = {
   device: { type: "string" }, project: { type: "string" }, platform: { type: "string" },
   packages: { type: "string" }, port: { type: "string" }, runner: { type: "boolean" },
   dev: { type: "boolean" }, release: { type: "boolean" }, preview: { type: "boolean" },
-  force: { type: "boolean" }, "submission-id": { type: "string" }, help: { type: "boolean", short: "h" },
+  force: { type: "boolean" }, dsym: { type: "string", multiple: true }, "submission-id": { type: "string" }, help: { type: "boolean", short: "h" },
 } as const;
 const commands: Record<string, { flags: readonly string[]; arguments: readonly [number, number] }> = {
   create: { flags: ["example", "package-manager", "universal", "platform", "packages"], arguments: [1, 1] },
@@ -26,6 +26,7 @@ const commands: Record<string, { flags: readonly string[]; arguments: readonly [
   package: { flags: ["project", "platform", "force", "submission-id"], arguments: [0, 0] },
   analyze: { flags: ["project", "platform"], arguments: [0, 0] },
   open: { flags: ["project", "platform", "port"], arguments: [0, 1] },
+  symbolicate: { flags: ["dsym"], arguments: [1, 1] },
 };
 /** Validate the command grammar before resolving a project or performing side effects. */
 export function cliArguments(args: string[]) {
