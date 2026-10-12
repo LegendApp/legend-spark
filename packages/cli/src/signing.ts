@@ -155,3 +155,12 @@ export async function validateApp(root: string, app: string, credentials: Signin
     await execute(root, ["spctl", "--assess", "--type", "execute", "--verbose=4", app], { capture: true });
   }
 }
+
+/** A Developer ID signed, notarized DMG: its signature (signer, team, secure timestamp), stapled ticket, and Gatekeeper's verdict on opening it. */
+export async function validateDmg(root: string, dmg: string, credentials: SigningCredentials, execute: Runner = run) {
+  await execute(root, ["codesign", "--verify", "--strict", "--verbose=2", dmg], { capture: true });
+  const signature = await execute(root, ["codesign", "-dvvv", dmg], { capture: true });
+  if (!signature.includes(`Authority=${credentials.name}\n`) || !signature.includes(`TeamIdentifier=${credentials.teamId}\n`) || !/^Timestamp=/m.test(signature)) throw new Error(`Invalid Developer ID signature or timestamp: ${dmg}`);
+  await execute(root, ["xcrun", "stapler", "validate", dmg], { capture: true });
+  await execute(root, ["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", dmg], { capture: true });
+}

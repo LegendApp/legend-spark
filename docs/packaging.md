@@ -1,6 +1,6 @@
 # Packaging a macOS app
 
-`spark package` builds a standalone release, signs it with your Developer ID Application identity, submits it to Apple for notarization, staples the ticket, and verifies the final ZIP. It writes the verified archive to `dist/<slug>-<version>-<arch>.zip`, and the release's debug symbols next to it as `dist/<slug>-<version>-<arch>-dSYMs.zip`. Keep both for each release: the dSYMs symbolicate its crash reports. Archives store no extended attributes (`ditto --norsrc`), so none of the build machine's, such as `com.apple.provenance`, ship. It does not publish artifacts. Apps configured for updates also get a signed Sparkle feed; see [desktop updates](desktop-integrations.md#signed-application-updates).
+`spark package` builds a standalone release, signs it with your Developer ID Application identity, submits it to Apple for notarization, staples the ticket, and verifies the final ZIP. It writes the verified archive to `dist/<slug>-<version>-<arch>.zip`, a disk image of the same stapled app to `dist/<slug>-<version>-<arch>.dmg`, and the release's debug symbols next to them as `dist/<slug>-<version>-<arch>-dSYMs.zip`. Keep both for each release: the dSYMs symbolicate its crash reports. Archives store no extended attributes (`ditto --norsrc`), so none of the build machine's, such as `com.apple.provenance`, ship. It does not publish artifacts. Apps configured for updates also get a signed Sparkle feed; see [desktop updates](desktop-integrations.md#signed-application-updates).
 
 In a newly created app:
 
@@ -25,9 +25,13 @@ A standalone build (`spark build`, macOS) also:
 
 The release gate's [bundle audit](e2e-flows.md#audits) checks all of this on the built app, and its package audit checks the `spark package` output.
 
+## Disk image
+
+The DMG holds the stapled app and a link to `/Applications`, in a compressed, read-only (UDZO) image named after the app, so a person drags the app into Applications. The image stores no extended attributes of the build machine: `hdiutil makehybrid` writes its HFS+ filesystem itself instead of copying files into a mounted volume, so neither the source's attributes nor the `com.apple.provenance` macOS attaches to every file a tracked process creates reach it, and the Finder info it gives each file (which `codesign --verify --strict` rejects) is cleared on a writable copy, mounted with `-nobrowse`, before the image is compressed. After Apple accepts the app, spark staples it, makes the DMG from it, signs the DMG with the same Developer ID (with a secure timestamp), and notarizes the DMG as its own submission; then it staples a copy and checks its signature, ticket and Gatekeeper's verdict on opening it before it writes the ZIP and the DMG to `dist/`. The release harness's `--local` mode makes its DMG the same way. A Runner package (`spark sdk package-runner`) is only a ZIP.
+
 ## Ad-hoc test packages
 
-`spark package --ad-hoc` makes the same package without credentials: it signs the staging copy ad-hoc (hardened runtime, the release entitlements, no timestamp), skips notarization, stapling and the update feed, and writes `dist/ad-hoc/<slug>-<version>-<arch>.zip` with its `-dSYMs.zip`. Use it to check the package layout locally; Gatekeeper rejects it as a download, so it is never a release.
+`spark package --ad-hoc` makes the same package without credentials: it signs the staging copy ad-hoc (hardened runtime, the release entitlements, no timestamp), skips notarization, stapling and the update feed, and writes `dist/ad-hoc/<slug>-<version>-<arch>.zip` with its `-dSYMs.zip` and an unsigned `.dmg` of the ad-hoc app. Use it to check the package layout locally; Gatekeeper rejects it as a download, so it is never a release.
 
 ## First-run setup
 
@@ -103,7 +107,7 @@ Unknown targets fail. Helpers use their own entitlements; libraries receive no p
 
 ## Notarization and retries
 
-The command saves the signed upload and submission ID under `.spark/packaging/`. It polls Apple for up to two minutes. If processing is still pending, it exits with code **2** and prints instructions to run `spark package` again. Unchanged inputs reuse the build and submission. A successful completed package exits with code **0**; failures exit with code **1**.
+The command saves the signed upload and submission ID under `.spark/packaging/`, and after the app is accepted, the signed DMG and its submission ID. It polls Apple for up to two minutes per submission. If processing is still pending, it exits with code **2** and prints instructions to run `spark package` again. Unchanged inputs reuse the build and submission. A successful completed package exits with code **0**; failures exit with code **1**.
 
 If Apple rejects the app, spark saves the notarization log and reports its path. Fix the reported issue and package a new build. Repeating an unchanged rejected submission does not upload it again.
 
@@ -113,13 +117,13 @@ If a connection drops before Apple returns the submission ID, spark records the 
 npx --no-install spark package --submission-id <submission-id>
 ```
 
-Recovery checks the unique upload filename, and acceptance checks Apple's recorded SHA-256 against the exact uploaded ZIP. Keep the `.spark/packaging/` artifacts while a submission is pending. A changed staged artifact is rejected.
+Until Apple accepts the app, `--submission-id` recovers the app's submission; after that, the DMG's (its upload is `<slug>-<version>-<arch>-<key>.dmg`). Recovery checks the unique upload filename, and acceptance checks Apple's recorded SHA-256 against the exact uploaded ZIP or DMG. Keep the `.spark/packaging/` artifacts while a submission is pending. A changed staged artifact is rejected.
 
-After acceptance, spark staples a fresh final copy. The original signed upload stays immutable so an interrupted staple or validation can be retried safely. Final validation checks bundle metadata, the selected binary architecture, nested Developer ID signatures, signing team, hardened runtime, secure timestamps, exact entitlements, stapling, and Gatekeeper. The ZIP is extracted and validated again before it appears in `dist/`.
+After acceptance, spark staples a fresh final copy. The original signed upload stays immutable so an interrupted staple or validation can be retried safely; so does the signed DMG, and a changed staged ZIP or DMG is rejected. Final validation checks bundle metadata, the selected binary architecture, nested Developer ID signatures, signing team, hardened runtime, secure timestamps, exact entitlements, stapling, and Gatekeeper. The ZIP is extracted and validated again before it appears in `dist/`.
 
 ## Validation status
 
-The orchestration is covered by simulated signing/notarization tests for pending, accepted, rejected, interrupted, and tampered-artifact cases. Signing order was also exercised with real Apple tools and ad-hoc signing on a copy of the local Hello World app. Generated entitlements were checked through a real expo-desktop prebuild. `spark package --ad-hoc` was run on the Kitchen Sink, and the gate's package audit passed on its output except the Developer ID and notarization check.
+The orchestration is covered by simulated signing/notarization tests for pending, accepted, rejected, interrupted, and tampered-artifact cases. Signing order was also exercised with real Apple tools and ad-hoc signing on a copy of the local Hello World app. Generated entitlements were checked through a real expo-desktop prebuild. `spark package --ad-hoc` was run on the Kitchen Sink, and the gate's package audit passed on its output, including its DMG's layout, except the Developer ID and notarization checks of the app and the DMG.
 
 A real Developer ID-signed, notarized distribution has not yet been submitted or validated. That acceptance check requires an explicitly selected signing identity and notarization profile. Public prebuilt distribution, provisioning profiles, Sparkle update signing, and publishing remain separate work.
 

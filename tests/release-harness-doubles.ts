@@ -56,11 +56,12 @@ export class FakeMac {
     const [command, ...args] = argv;
     if (command === "xattr" && args[0] === "-w") { this.attributes.set(args[3]!, args[2]!); return ok(); }
     if (command === "xattr" && args[0] === "-d" && args[1] === "-r") { this.attributes.delete(args[3]!); return ok(); }
+    if (command === "xattr" && args[0] === "-c") return ok();
     if (command === "xattr" && args[0] === "-p") {
       const value = this.attributes.get(args[2]!);
       return value ? ok(`${value}\n`) : { code: 1, stdout: "", stderr: `xattr: ${args[2]}: No such xattr: ${args[1]}` };
     }
-    if (command === "hdiutil" && args[0] === "create") { writeFileSync(args[args.indexOf("-o") + 1]!, "disk image"); return ok(); }
+    if (command === "hdiutil" && (args[0] === "makehybrid" || args[0] === "convert")) { writeFileSync(args[args.indexOf("-o") + 1]!, "disk image"); return ok(); }
     if (command === "hdiutil" && args[0] === "attach") {
       const volume = args[args.indexOf("-mountpoint") + 1]!;
       this.app(path.join(volume, APP));
