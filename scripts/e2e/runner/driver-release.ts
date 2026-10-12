@@ -1,7 +1,11 @@
 // The release-safety probe of the driver backend (docs/e2e-flows.md#release-safety-probe, #274): what `assertNoDebugSurface`
 // judges in a running app. A driven release build listens on nothing but the driver's channel, holds no network socket,
-// never contacts the development server it is pointed at, and has no Developer menu or other debug items in its menus.
+// never contacts the development server it is pointed at, has no Developer menu or other debug items in its menus, and
+// its JavaScript contains no network inspector.
+import { readFileSync } from "node:fs";
 import net from "node:net";
+import { NETWORK_INSPECTOR_MARKER } from "../../../packages/desktop-app/src/network-inspector/marker.ts";
+import { isScript, walk } from "../audit/bundle.ts";
 import { developerMenuMessages } from "../../../packages/native-menu/src/developer-menu-messages.ts";
 import type { DriverMenuItem, ProcessSocket } from "../driver.ts";
 
@@ -56,4 +60,14 @@ export async function decoyServer() {
     problems: () => connections.length ? [`connected ${connections.length} time${connections.length === 1 ? "" : "s"} to the development server it was given (${host}; from ${connections.join(", ")})`] : [],
     close: () => new Promise<void>(resolve => server.close(() => resolve())),
   };
+}
+
+/**
+ * Every JavaScript file of the app (bundles and scripts, by extension, at any depth) that contains the network inspector
+ * (its marker, which Hermes bytecode keeps as a string). An app with no JavaScript to check is a finding too.
+ */
+export function scriptProblems(app: string): string[] {
+  const scripts = walk(app).filter(isScript);
+  if (!scripts.length) return [`no JavaScript bundle found in ${app} to check for the network inspector`];
+  return scripts.filter(entry => readFileSync(entry.abs).includes(NETWORK_INSPECTOR_MARKER)).map(entry => `${entry.rel} contains the network inspector (${NETWORK_INSPECTOR_MARKER})`);
 }

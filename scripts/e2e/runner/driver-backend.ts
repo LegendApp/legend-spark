@@ -17,7 +17,7 @@ import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
 import { inspectCommands, type InspectClient, type InspectedApp } from "./driver-inspect.ts";
 import { driven, motionCommands, type MotionClient } from "./driver-motion.ts";
-import { debugMenuItems, decoyServer, socketProblems } from "./driver-release.ts";
+import { debugMenuItems, decoyServer, scriptProblems, socketProblems } from "./driver-release.ts";
 import { renderCommands, type RenderClient } from "./driver-render.ts";
 import { ms } from "./executor.ts";
 import { matchesText, parseSelector } from "./selectors.ts";
@@ -301,7 +301,8 @@ export class DriverBackend implements Backend {
   /**
    * Relaunches the app pointed at a decoy development server (driver-release.ts), waits for its first settled UI and
    * then `for` (default 2s), and fails with everything it finds: connections to the decoy, network sockets and bound
-   * Unix sockets other than the driver's, and debug menu items. One snapshot, never retried.
+   * Unix sockets other than the driver's, debug menu items, and JavaScript that contains the network inspector. One
+   * snapshot, never retried.
    */
   private async assertNoDebugSurface(args: Record<string, unknown>) {
     const decoy = await decoyServer();
@@ -311,7 +312,7 @@ export class DriverBackend implements Backend {
       await driven("assertNoDebugSurface startup", () => client.startup(STARTUP_TIMEOUT_MS));
       await delay(ms((args.for ?? "2s") as string | number));
       const menus = debugMenuItems(await driven("assertNoDebugSurface menus", () => client.menus())).map(item => `menu item ${item}`);
-      const problems = [...decoy.problems(), ...socketProblems(client.sockets(), path.join(client.directory, "driver.sock")), ...menus];
+      const problems = [...decoy.problems(), ...socketProblems(client.sockets(), path.join(client.directory, "driver.sock")), ...menus, ...scriptProblems(this.opened!.app)];
       if (problems.length) throw new Failure("assertion", `the app has a debug surface (${problems.length} finding${problems.length === 1 ? "" : "s"}):\n${problems.map(problem => `  ${problem}`).join("\n")}`);
     } finally { await decoy.close(); }
   }

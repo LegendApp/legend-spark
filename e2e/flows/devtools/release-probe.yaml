@@ -3,9 +3,9 @@ name: A running release build has no debug surface
 intent: >
   The release-safety probe relaunches the release build pointed at a decoy development server, waits for its first
   settled UI, and checks the running process: it never connected to the decoy, lsof finds no network socket and no
-  bound Unix socket but the driver's channel, and its menus have no Developer menu or
-  other debug item.
-checks: [DEVT-REL-01, DEVT-REL-02, DEVT-REL-03]
+  bound Unix socket but the driver's channel, its menus have no Developer menu or
+  other debug item, and none of its JavaScript contains the network inspector.
+checks: [DEVT-REL-01, DEVT-REL-02, DEVT-REL-03, DEVT-REL-04]
 tags: [devtools, security]
 platforms: [macos]
 build: release
