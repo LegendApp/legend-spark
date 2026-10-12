@@ -27,8 +27,8 @@ void SparkDriverCursorMoved(void);
 // The cursor AppKit would show at `location` (window coordinates): {cursor: name, hiddenUntilMoved}.
 NSDictionary *SparkDriverCursorAt(NSWindow *window, NSPoint location);
 
-// Gesture events (SparkTestDriverInput.mm): the gesture event a retyped copy of an AppKit mouse event makes at that
-// mouse event's location (nil when AppKit's location is off, or this macOS lacks the private functions), and why `event`
+// Copied events (SparkTestDriverInput.mm): the event a changed copy of an AppKit mouse event (a gesture, another mouse
+// button) makes at that mouse event's location (nil when AppKit's location is off, or this macOS lacks the private functions), and why `event`
 // is not the gesture with these private fields (HID type, phase, values) at `location`, or nil when it is.
-NSEvent *SparkDriverLocatedGesture(CGEventRef prototype, NSEvent *mouse);
+NSEvent *SparkDriverLocated(CGEventRef prototype, NSEvent *mouse);
 NSString *SparkDriverCheckGesture(NSEvent *event, NSWindow *window, NSPoint location, int64_t hidType, NSEventPhase phase, NSDictionary<NSNumber *, NSNumber *> *values);

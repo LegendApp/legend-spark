@@ -119,7 +119,8 @@ static NSEvent *SparkScroll(NSWindow *window, NSPoint location, NSEventModifierF
   return result;
 }
 // A press or release of mouse button `button` (0 left, 1 right, 2 middle, 3 back, 4 forward). AppKit's factory
-// numbers every other-mouse event button 2, so other buttons are a copy with the button number set.
+// numbers every other-mouse event button 2, so other buttons are a copy with the button number set, located as
+// gestures are (macOS 26 moves a copy's location). nil when AppKit's location stays off.
 static NSEvent *SparkButton(BOOL down, NSInteger button, NSWindow *window, NSPoint location, NSEventModifierFlags flags, NSInteger clicks) {
   NSEventType type = button == 0 ? (down ? NSEventTypeLeftMouseDown : NSEventTypeLeftMouseUp) : button == 1 ? (down ? NSEventTypeRightMouseDown : NSEventTypeRightMouseUp)
     : (down ? NSEventTypeOtherMouseDown : NSEventTypeOtherMouseUp);
@@ -127,21 +128,21 @@ static NSEvent *SparkButton(BOOL down, NSInteger button, NSWindow *window, NSPoi
   if (button < 2) return event;
   CGEventRef copy = CGEventCreateCopy(event.CGEvent);
   CGEventSetIntegerValueField(copy, kCGMouseEventButtonNumber, button);
-  event = [NSEvent eventWithCGEvent:copy];
+  NSEvent *located = SparkDriverLocated(copy, event);
   CFRelease(copy);
-  return event;
+  return located.buttonNumber == button && located.type == event.type ? located : nil;
 }
 // Gesture events: CGEvent type 29 with these private fields, as +[NSEvent eventWithCGEvent:] reads them. The HID type
 // selects the NSEvent: 8 magnify, 5 rotate, 16 swipe, 22 smart magnify, 32 pressure.
 enum : uint32_t { SparkGestureHIDType = 110, SparkGestureMagnification = 113, SparkGestureRotation = 114, SparkGestureSwipe = 115,
   SparkGesturePhase = 132, SparkGestureStage = 143, SparkGestureStageTransition = 147, SparkGesturePressure = 148 };
-// A gesture event at a point in its window, from `prototype` (a retyped copy of `mouse`, an AppKit mouse event there).
-// AppKit takes a gesture's locationInWindow from the event's window-local location (top-left origin), which CoreGraphics
+// The event `prototype` (a changed copy of `mouse`, an AppKit mouse event at a point in its window) makes at that point.
+// AppKit takes a gesture's (and a copied event's) locationInWindow from the event's window-local location (top-left origin), which CoreGraphics
 // keeps in a private field and clears when the global location is set, and macOS versions map them differently (macOS 26
 // lands a constant offset away). So the event gets both locations of `mouse`, and when AppKit's location is off, the
 // offset is taken out of the window-local location, else out of the global one. nil when AppKit's location is still off,
 // or this macOS lacks the private functions.
-NSEvent *SparkDriverLocatedGesture(CGEventRef prototype, NSEvent *mouse) {
+NSEvent *SparkDriverLocated(CGEventRef prototype, NSEvent *mouse) {
   static auto get = (CGPoint (*)(CGEventRef))dlsym(RTLD_DEFAULT, "CGEventGetWindowLocation");
   static auto set = (void (*)(CGEventRef, CGPoint))dlsym(RTLD_DEFAULT, "CGEventSetWindowLocation");
   if (!get || !set) return nil;
@@ -182,7 +183,7 @@ static NSEvent *SparkGesture(NSWindow *window, NSPoint location, NSEventModifier
     else CGEventSetDoubleValueField(event, (CGEventField)field.unsignedIntValue, value.doubleValue);
   }];
   // Without a located event (the check below reports why), the event AppKit makes from the copy as it is.
-  NSEvent *result = SparkDriverLocatedGesture(event, mouse) ?: [NSEvent eventWithCGEvent:event];
+  NSEvent *result = SparkDriverLocated(event, mouse) ?: [NSEvent eventWithCGEvent:event];
   CFRelease(event);
   NSString *problem = SparkDriverCheckGesture(result, window, location, hidType, phase, values);
   if (!problem) return result;
@@ -450,11 +451,16 @@ static void SparkDeliver(NSWindow *window, NSArray<NSEvent *> *events, void (^do
   finish(menu ? [NSString stringWithFormat:@"The input opened the native menu \"%@\", which the driver closed: menus need the black-box backend", menu.title] : nil);
 }
 
-static NSArray<NSEvent *> *SparkClick(NSWindow *window, NSPoint location, NSInteger button, NSInteger clicks, NSEventModifierFlags flags) {
+static NSArray<NSEvent *> *SparkClick(NSWindow *window, NSPoint location, NSInteger button, NSInteger clicks, NSEventModifierFlags flags, NSDictionary **failure) {
   NSMutableArray<NSEvent *> *events = [SparkMove(window, location, NSEventTypeMouseMoved, flags) mutableCopy];
   for (NSInteger click = 1; click <= clicks; click++) {
-    [events addObject:SparkButton(YES, button, window, location, flags, click)];
-    [events addObject:SparkButton(NO, button, window, location, flags, click)];
+    NSEvent *down = SparkButton(YES, button, window, location, flags, click), *up = SparkButton(NO, button, window, location, flags, click);
+    if (!down || !up) {
+      *failure = SparkDriverFailure(@"E_UNSUPPORTED", [NSString stringWithFormat:@"Mouse button %ld synthesis is unsupported on macOS %@: AppKit's event is not at the target", (long)button, NSProcessInfo.processInfo.operatingSystemVersionString]);
+      return nil;
+    }
+    [events addObject:down];
+    [events addObject:up];
   }
   return events;
 }
@@ -537,7 +543,7 @@ void SparkDriverInput(NSString *command, NSDictionary *request, SparkTestDriverR
     NSNumber *button = @{ @"left": @0, @"right": @1, @"back": @3, @"forward": @4 }[request[@"button"] ?: @"left"];
     if (!button) { invalid(@"button is left, right, back or forward"); return; }
     if (!SparkInteger(request[@"clickCount"], 1, 1, 3, &clicks)) { invalid(@"clickCount is 1, 2 or 3"); return; }
-    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkClick(window, location, button.integerValue, clicks, flags);
+    if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkClick(window, location, button.integerValue, clicks, flags, &failure);
   } else if ([command isEqual:@"hover"]) {
     if ((window = SparkTarget(request, request[@"window"], YES, &location, &failure))) events = SparkMove(window, location, NSEventTypeMouseMoved, flags);
   } else if ([command isEqual:@"drag"]) {

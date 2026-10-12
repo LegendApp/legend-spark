@@ -112,12 +112,32 @@ static NSEvent *Gesture(NSWindow *window, NSPoint location, int64_t hidType, int
       (unsigned long)result.type, (long)result.windowNumber, NSStringFromPoint(result.locationInWindow), NSStringFromPoint(location), (unsigned long)result.phase]);
   return result;
 }
+// Back (3) and forward (4) presses: copies of AppKit's other-mouse event with the button number set, located as gestures
+// are (a copy's location moves on macOS 26).
 static NSEvent *Button(NSWindow *window, NSPoint location, BOOL down, int64_t button) {
+  static auto getWindowLocation = (CGPoint (*)(CGEventRef))dlsym(RTLD_DEFAULT, "CGEventGetWindowLocation");
+  static auto setWindowLocation = (void (*)(CGEventRef, CGPoint))dlsym(RTLD_DEFAULT, "CGEventSetWindowLocation");
   NSEvent *base = [NSEvent mouseEventWithType:down ? NSEventTypeOtherMouseDown : NSEventTypeOtherMouseUp location:location modifierFlags:0 timestamp:1 windowNumber:window.windowNumber context:nil eventNumber:1 clickCount:1 pressure:down];
-  CGEventRef event = CGEventCreateCopy(base.CGEvent);
-  CGEventSetIntegerValueField(event, kCGMouseEventButtonNumber, button);
-  NSEvent *result = [NSEvent eventWithCGEvent:event];
-  CFRelease(event);
+  auto make = ^NSEvent *(CGPoint global, CGPoint inWindow) {
+    CGEventRef event = CGEventCreateCopy(base.CGEvent);
+    CGEventSetIntegerValueField(event, kCGMouseEventButtonNumber, button);
+    CGEventSetLocation(event, global);
+    setWindowLocation(event, inWindow);
+    NSEvent *result = [NSEvent eventWithCGEvent:event];
+    CFRelease(event);
+    return result;
+  };
+  auto off = ^BOOL(NSEvent *event) { return !event || hypot(event.locationInWindow.x - location.x, event.locationInWindow.y - location.y) > 0.5; };
+  CGPoint global = CGEventGetLocation(base.CGEvent), inWindow = getWindowLocation(base.CGEvent);
+  NSEvent *result = make(global, inWindow);
+  if (off(result) && result) {
+    CGFloat dx = result.locationInWindow.x - location.x, dy = result.locationInWindow.y - location.y;
+    NSEvent *corrected = make(global, CGPointMake(inWindow.x - dx, inWindow.y + dy));
+    result = off(corrected) ? make(CGPointMake(global.x - dx, global.y + dy), inWindow) : corrected;
+  }
+  Check(!off(result) && result.buttonNumber == button && result.windowNumber == window.windowNumber,
+    [NSString stringWithFormat:@"AppKit makes the button %lld event asked for on macOS %@ (button %ld, window %ld, location %@ for %@)", button, NSProcessInfo.processInfo.operatingSystemVersionString,
+      (long)result.buttonNumber, (long)result.windowNumber, NSStringFromPoint(result.locationInWindow), NSStringFromPoint(location)]);
   return result;
 }
 static NSWindow *MakeWindow(void) {
