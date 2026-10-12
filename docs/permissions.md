@@ -18,6 +18,9 @@ await registration.remove();
 
 ## Kinds and states
 
+`PermissionKind` gained `speechRecognition` (for `@legendapp/spark/speech`, [speech.md](speech.md)). Code that switches
+exhaustively over `PermissionKind`, or keeps a `Record<PermissionKind, …>`, needs a case for it.
+
 Each call resolves a `PermissionResponse`: `status` (`granted`, `denied`, `undetermined` or `unknown`),
 `granted`, `canAskAgain` (whether `requestPermission` can still show the system prompt; `null` when macOS
 does not say) and `macos.authorization`, the native state.
