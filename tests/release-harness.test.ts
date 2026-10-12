@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -19,7 +20,9 @@ const COMMIT = "0123456789abcdef0123456789abcdef01234567";
 const AIR: Host = { os: "macos-14", arch: "arm64", model: "MacBookAir10,1", memoryGB: 8 };
 const SEQUOIA: Host = { os: "macos-15", arch: "arm64", model: "VirtualMac2,1", memoryGB: 8 };
 const SURFACE: SdkSurface = { "./app": { values: ["launch", "setTheme"], types: [], flags: {} } };
-const SEQUOIA_SIGNOFF = `  - { flow: flows/app/ime, target: macos-15/arm64, commit: ${COMMIT}, verdict: pass, by: QA, at: "2026-10-10T12:00:00Z" }\n`;
+/** The fixture's manual flow runs no subflows, so its flow hash is the SHA-256 of its file. */
+const IME_HASH = createHash("sha256").update(readFileSync("tests/fixtures/e2e-gate/e2e/flows/app/ime.yaml")).digest("hex");
+const SEQUOIA_SIGNOFF = `  - { flow: flows/app/ime, target: macos-15/arm64, commit: ${COMMIT}, flowHash: ${IME_HASH}, verdict: pass, by: QA, machine: qa-vm, at: "2026-10-10T12:00:00Z" }\n`;
 
 /** A copy of the green gate fixture (tests/fixtures/e2e-gate) with its release build, as a git checkout unless `git: false`. */
 function repo({ git = true } = {}): string {

@@ -24,7 +24,7 @@ matrix:
 - manualStep:
     instruction: Look at the child window in window-options-child-opened.
     expect: The title bar is transparent over the content, the traffic lights sit 20 points from the left and 18 from the top, the close button shows the edited dot, and the subtitle reads Draft.
-    evidence: screenshot
+    screenshot: window-options-child-opened
     signoff: required
 - focusWindow: { id: spark.main }
 - tapOn: { id: windows-window-options-level }
@@ -74,8 +74,8 @@ matrix:
 - takeScreenshot: { name: window-options-child-changed, window: { id: windows-window-options-child } }
 - manualStep:
     instruction: Look at the child window in window-options-child-changed.
-    expect: The window is 60% opaque with a #3366CC background and no traffic lights or title; the unified toolbar shows. AppKit renders the sidebar vibrancy flat in in-process captures.
-    evidence: screenshot
+    expect: The window has a #3366CC background and no traffic lights or title; the unified toolbar shows. Opacity and sidebar vibrancy are window effects an in-process capture may not show; the automated steps check the opacity value.
+    screenshot: window-options-child-changed
     signoff: required
 - tapOn: { id: windows-window-options-close }
 - assertWindow: { count: 1 }

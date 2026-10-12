@@ -5,6 +5,8 @@ import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { macOSArchitecture, windowsArchitecture } from "../../../packages/cli/src/platform.ts";
 import { readSdkSurface } from "../../api-surface.ts";
+import { runningApps } from "../app-state.ts";
+import { plist } from "../kitchen-sink.ts";
 import { BACKENDS } from "../runner/run.ts";
 import type { GateEnv } from "./gate.ts";
 import type { Signer, SignoffEnv } from "./signoff.ts";
@@ -57,9 +59,15 @@ async function ask(question: string): Promise<string> {
   try { return await prompt.question(question); } finally { prompt.close(); }
 }
 
-/** Opens a new instance of the app through LaunchServices, so it is a normal, focused app, and waits for it to quit. */
+/**
+ * Opens a new instance of the app through LaunchServices, so it is a normal, focused app, and waits for it to quit. The
+ * release build runs with its real state and its single-instance lock (docs/app.md#single-instance): a second launch
+ * would forward itself to a running one and quit, so this refuses while one runs.
+ */
 async function launch(app: string, session: string) {
   if (process.platform !== "darwin") throw new Error("gate:signoff opens the app on macOS only; Windows has no sign-off launcher yet");
+  const bundleId = plist(app, "CFBundleIdentifier"), running = runningApps(bundleId);
+  if (running.length) throw new Error(`quit the running ${bundleId} first: a second launch of it forwards itself to the running one and quits, so the checklist would not open (running: ${running.join(", ")})`);
   const result = spawnSync("open", ["-W", "-n", "-a", app, "--args", "--ks-signoff", session], { stdio: "inherit" });
   if (result.status !== 0) throw new Error(`open exited ${result.status ?? result.signal}`);
 }

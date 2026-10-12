@@ -1,5 +1,6 @@
 // The manual sign-off contract (docs/e2e-flows.md#manual-sign-offs), shared by the runner, the gate, `bun run gate:signoff`
-// and the Kitchen Sink checklist (screens/infra/sign-off.ts imports these types). Types only: the app bundles none of the tooling.
+// and the Kitchen Sink checklist (screens/infra/sign-off.ts imports these types). Types only: the app bundles none of the
+// tooling, and Metro cannot resolve a value import from outside the app (the shared rule is in the app's sign-off-rule.ts).
 
 /** One entry of the sign-off file (`signoffs` in e2e/gate.yaml; schema e2e/schema/signoffs.schema.json). */
 export type Signoff = {
@@ -28,8 +29,10 @@ export type ManualStep = {
   signoff: "required" | "optional";
   /** file:line:column of the manualStep. */
   location: string;
-  /** `evidence: screenshot`: the in-process capture taken when the runner reached the step. */
+  /** `evidence: screenshot`: the capture the step names, taken by an earlier takeScreenshot of this run. */
   screenshot?: string;
+  /** What `screenshot` shows: the takeScreenshot's name and window, such as `window-options-child-opened (window {"id":"child"})`. */
+  capture?: string;
 };
 
 /** One flow run that needs (or may have) a sign-off. */
@@ -66,3 +69,4 @@ export type SignoffSession = {
 
 /** What the checklist writes after every decision: every sign-off made in this session, latest per run. */
 export type SignoffDecisions = { version: 1; signoffs: Signoff[] };
+

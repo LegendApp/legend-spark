@@ -252,7 +252,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   runScript: single("control", "Run a sandboxed JS file; for fixture generation only.", "file", str, { env: dict(anyStr) }, { maestro: true }),
 
   // Manual steps
-  manualStep: spec("manual", "A step a person performs and signs off. The runner records it as awaiting sign-off, with an in-process capture for `evidence: screenshot`, and runs on; `bun run gate:signoff` collects the sign-off. Only in `manual: partial` or `manual: true` flows.", { instruction: str, expect: str, evidence: oneOf("screenshot", "recording", "none"), signoff: oneOf("required", "optional") }, { required: ["instruction", "expect"] }),
+  manualStep: spec("manual", "A step a person checks and signs off. The runner records it as awaiting sign-off and runs on; `bun run gate:signoff` collects the sign-off. `screenshot` names the earlier takeScreenshot that shows what to check (`evidence: screenshot` needs one); with no screenshot, a pass needs a note. Only in `manual: partial` or `manual: true` flows.", { instruction: str, expect: str, evidence: oneOf("screenshot", "recording", "none"), screenshot: fileName, signoff: oneOf("required", "optional") }, { required: ["instruction", "expect"] }),
 };
 
 /** Commands that may be written with no value at all: `- launchApp`. */

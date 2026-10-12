@@ -21,3 +21,13 @@ manual: true
 - assertText: { id: system-integration-dock-attention-critical-result, equals: requested, timeout: 10s }
 - tapOn: { id: system-integration-dock-attention-stop }
 - assertText: { id: system-integration-dock-attention-stop-result, equals: removed }
+- manualStep:
+    instruction: >-
+      In the release build, open System integration > Dock & taskbar and do the steps above by hand. After Informational
+      attention, switch to another app within 3 seconds; after Critical attention, switch away too, then come back and
+      press Stop attention.
+    expect: >-
+      Informational attention bounces the Dock icon once; Critical attention bounces it until the app is activated; each
+      reports "requested", and Stop attention reports "removed" and stops the bouncing.
+    evidence: none
+    signoff: required

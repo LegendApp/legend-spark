@@ -126,6 +126,9 @@ describe("command mapping", () => {
     await backend.start({ flow: { header: { appId: "so.legend.spark.examples.kitchensink" } } as never, matrix: {}, platform: "macos", dir });
     await backend.commands.launchApp!({}, {} as never);
     expect(await backend.screenshot(path.join(dir, "a.png"))).toEqual({ frame: { x: 0, y: 0, width: 1000, height: 700 }, scale: 2 });
+    // A window selector captures that window (takeScreenshot { window } evidence for a manualStep), not the main one.
+    await backend.screenshot(path.join(dir, "b.png"), { id: "windows-window-options-child", title: "Child", key: false, main: false, frame: FRAME });
+    expect(app.log.filter(line => line.startsWith("capture"))).toEqual(["capture main capture-1", "capture id:windows-window-options-child capture-2"]);
     expect(await backend.elements()).toEqual([{ key: "root", window: "spark.main", id: "root", frame: FRAME }]);
     expect(await backend.windows()).toEqual([{ id: "spark.main", title: "Kitchen Sink", key: false, main: true, frame: { x: 0, y: 0, width: 1000, height: 700 } }]);
     await backend.stop();

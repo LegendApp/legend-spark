@@ -251,4 +251,4 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 
 | Command | Short form | Keys | Backend | Summary |
 |---|---|---|---|---|
-| `manualStep` | — | `instruction`*, `expect`*, `evidence`, `signoff` | black-box | A step a person performs and signs off. The runner records it as awaiting sign-off, with an in-process capture for `evidence: screenshot`, and runs on; `bun run gate:signoff` collects the sign-off. Only in `manual: partial` or `manual: true` flows. |
+| `manualStep` | — | `instruction`*, `expect`*, `evidence`, `screenshot`, `signoff` | black-box | A step a person checks and signs off. The runner records it as awaiting sign-off and runs on; `bun run gate:signoff` collects the sign-off. `screenshot` names the earlier takeScreenshot that shows what to check (`evidence: screenshot` needs one); with no screenshot, a pass needs a note. Only in `manual: partial` or `manual: true` flows. |

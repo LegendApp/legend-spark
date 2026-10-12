@@ -28,8 +28,8 @@ export type PlannedFlow = {
   manual: boolean | "partial";
   name?: string;
   intent?: string;
-  /** SHA-256 of the flow file (manual flows' sign-offs name it). */
-  hash: string;
+  /** Manual flows: SHA-256 of the flow file and the runFlow files it reaches (their sign-offs name it); unset when one cannot be read. */
+  hash?: string;
   /** `manual: true`: the manualSteps each run ID would reach, in `ids` order. A `partial` flow's come from its run. */
   manualSteps?: ManualStep[][];
 };
@@ -170,17 +170,20 @@ export function plan(root: string, host: Host, { target: override, only, artifac
     const id = relative.replace(/\.ya?ml$/, "");
     const parsed = checkFlow(readFileSync(file, "utf8"), path.relative(process.cwd(), file)).value, header = parsed?.header;
     // An invalid flow still runs, so the runner reports it as a `format` failure; lint reports it too.
-    if (!header) { flows.push({ path: relative, file, ids: [id], blocking: true, manual: false, hash: flowHash(file) }); continue; }
+    if (!header) { flows.push({ path: relative, file, ids: [id], blocking: true, manual: false }); continue; }
     if (header.platforms && !header.platforms.includes(target!.platform)) { excluded.push({ path: relative, reason: `platforms: ${header.platforms.join(", ")}` }); continue; }
     const matrices = expandMatrix(header.matrix), suffixes = matrices.map(matrix => Object.entries(matrix).map(([dimension, value]) => `${dimension}=${value}`).join(","));
-    let manualSteps: ManualStep[][] | undefined;
-    try { if (header.manual === true) manualSteps = matrices.map(matrix => plannedManualSteps(parsed!, file, matrix, target!.platform)); } catch (error) {
+    let manualSteps: ManualStep[][] | undefined, hash: string | undefined;
+    try {
+      if (header.manual) hash = flowHash(parsed!, file);
+      if (header.manual === true) manualSteps = matrices.map(matrix => plannedManualSteps(parsed!, file, matrix, target!.platform));
+    } catch (error) {
       problems.push({ check: "signoffs", message: `${relative}: ${(error as Error).message}` });
     }
     flows.push({
       path: relative, file, ids: suffixes.map(suffix => suffix ? `${id}[${suffix}]` : id),
       blocking: manifest.blocking.default || (header.tags ?? []).some(tag => manifest.blocking.tags.includes(tag)) || (header.checks ?? []).some(check => blocking.has(check)),
-      manual: header.manual ?? false, hash: flowHash(file), name: header.name, intent: header.intent, ...(manualSteps ? { manualSteps } : {}),
+      manual: header.manual ?? false, ...(hash ? { hash } : {}), name: header.name, intent: header.intent, ...(manualSteps ? { manualSteps } : {}),
     });
   }
   const planned = machine ? (budgets?.budgets ?? []).flatMap(budget => machine.id in budget.baselines ? [{ ...budget, baseline: budget.baselines[machine.id]! }] : []) : [];

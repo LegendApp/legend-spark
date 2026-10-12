@@ -14,12 +14,20 @@
       "ready": true,
       "steps": [
         {
-          "instruction": "Look at the open Menu Audit menu in the screenshot.",
-          "expect": "Mixed selection shows a dash, not a checkmark. Starred sample shows a filled star. Hidden sample is absent. Text and marks are legible in this appearance.",
+          "instruction": "Look at the Menu Audit screen in menus-audit.",
+          "expect": "The status reads Menu ready and the event list is empty.",
           "evidence": "screenshot",
           "signoff": "required",
-          "location": "e2e/flows/menus/macos-items.yaml:26:3",
-          "screenshot": "../../golden/macos/light/en/menus-audit.png"
+          "location": "e2e/flows/menus/macos-items.yaml:20:3",
+          "screenshot": "../../golden/macos/light/en/menus-audit.png",
+          "capture": "menus-audit (the main window)"
+        },
+        {
+          "instruction": "In the Kitchen Sink, open Menus > Menu audit, then open the Menu Audit menu in the menu bar. In-process captures do not include menus, so there is no screenshot.",
+          "expect": "Mixed selection shows a dash, not a checkmark. Starred sample shows a filled star. Hidden sample is absent.",
+          "evidence": "none",
+          "signoff": "required",
+          "location": "e2e/flows/menus/macos-items.yaml:28:3"
         }
       ]
     },
@@ -34,7 +42,7 @@
         {
           "instruction": "Type \"nihongo\" with the Japanese Romaji input source.",
           "expect": "The candidate window sits directly under the caret and overlaps no text.",
-          "evidence": "screenshot",
+          "evidence": "none",
           "signoff": "required",
           "location": "e2e/flows/text-input-editing/ime-candidates.yaml:8:3"
         }

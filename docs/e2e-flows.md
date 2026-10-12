@@ -259,9 +259,10 @@ bun run e2e:run e2e/flows/infra/catalog-driver.yaml --backend driver
 - **`repeat`** checks `while` before each iteration and stops after `times`. With only
   `while`, the flow timeout bounds it.
 - **`manualStep`.** The runner never performs it. It records the step as awaiting sign-off (step status
-  `awaiting-signoff`, and an entry in the flow's `manual`), captures the main window in-process for
-  `evidence: screenshot` (on the driver backend, into `<run>/manual/step-<n>.png`), and runs the next command. Defaults
-  are `evidence: none` and `signoff: required`. `evidence: recording` is `unsupported`: no backend records the screen.
+  `awaiting-signoff`, and an entry in the flow's `manual`) and runs the next command. Its evidence is the capture of
+  an earlier `takeScreenshot` that `screenshot` names (with `window` for another window than the main one); a name no
+  takeScreenshot of this run captured before it is `invalid`. Defaults are `signoff: required` and `evidence:
+  screenshot` with `screenshot`, else `none`. `evidence: recording` is `unsupported`: no backend records the screen.
   A manualStep is valid only in a flow with `manual: partial` or `manual: true` (validation reports an inline one; one in
   a subflow fails with `invalid`), because only those flows get a sign-off. See [Manual sign-offs](#manual-sign-offs).
 - **Restoration.** Commands that change OS or app state register an undo. When the flow
@@ -311,7 +312,7 @@ restoration change anything.
 has `id`, `file`, `name`, `intent`, `checks`, `tags`, `matrix`, `status`, `skipReason`,
 `durationMs`, `steps` (every command run, with `depth`, `status` and duration), `failure`,
 `bundle` (the [failure bundle](#failure-bundles) of a failed run), `errors` (problems after the first failure), `artifacts`, `goldens` (see [Visual goldens](#visual-goldens)), `metrics` (see [Metrics](#metrics)) `whiteBox`
-(the black-box commands a driver backend ran in-process, sorted; such steps have `whiteBox: true`) and `manual` (each manualStep reached: `instruction`, `expect`, `evidence`, `signoff`, `location`, `stack` and `screenshot`).
+(the black-box commands a driver backend ran in-process, sorted; such steps have `whiteBox: true`) and `manual` (each manualStep reached: `instruction`, `expect`, `evidence`, `signoff`, `location`, `stack`, and `screenshot` with `capture`: the takeScreenshot's name and window).
 A run with manual steps still passes; the console prints each one as `awaiting sign-off`. A `failure` has `kind`,
 `message`, `command`, `args` (that command's arguments after `${VAR}` substitution, when it
 got that far), `location`, `stack`, `candidates`, `matches`, `artifacts` and, for
@@ -463,7 +464,7 @@ fails with `invalid`.
 | `setClock`, `advanceClock` | The motion engine's `setClock` and `advanceClock` driver commands ([motion.md](motion.md#virtual-clock-for-the-test-driver)); `advanceClock` sends `duration` in milliseconds |
 | `captureMotion`, `assertMotion`, `interruptAt` | Motion telemetry: `motionState`, `waitForMotion` and `sampleMotion` ([Motion and frames](#motion-and-frames)). The target needs a testID. |
 | `assertFrames` | `startFrames`, the `during` command, `stopFrames` ([Motion and frames](#motion-and-frames)) |
-| `takeScreenshot`, `assertScreenshot`, failure screenshot | `capture` of the main window. Element frames are points from the window's top-left, the capture's origin, so masks line up. The `window` key is `unsupported` (the driver cannot list windows). |
+| `takeScreenshot`, `assertScreenshot`, failure screenshot | `capture` of the main window, or of the window `window` selects (`id:<identifier>`), its frame view (the content view's superview, title bar included). Element frames are points from the window's top-left, the capture's origin, so masks line up. |
 | failure evidence | Each launch's app log, and a capture of the main window while the app runs |
 
 #### Motion and frames
@@ -989,8 +990,8 @@ the caret, VoiceOver reads in order. A flow marks them with `manualStep`, and it
 the rest runs:
 
 - `manual: partial`: the automated steps run. At each `manualStep` the runner records the
-  instruction and, for `evidence: screenshot`, captures the window in-process, then runs on.
-  A person signs off what the capture (or the running app) shows.
+  instruction and the screenshot it names, then runs on. A person signs off what the capture shows,
+  or checks the step live in the app.
 - `manual: true`: nothing runs. The gate plans the flow's manual steps (following `runFlow` files
   and `when: { platform, matrix }`; steps behind a `visible` condition are listed) and a person
   performs them.
@@ -998,20 +999,28 @@ the rest runs:
 ```yaml
 manual: partial
 ---
-- launchApp: { openUrl: "spark-ks://menus/audit" }
-- tapOn: { role: menuBarItem, label: Menu Audit }
+- launchApp: { openUrl: "spark-ks://windows/window-options" }
+- tapOn: { id: windows-window-options-open }
+- takeScreenshot: { name: child-opened, window: { id: windows-window-options-child } }
 - manualStep:
-    instruction: Look at the open Menu Audit menu in the screenshot.
-    expect: Mixed selection shows a dash, not a checkmark.
-    evidence: screenshot      # screenshot | recording | none (default none; recording is unsupported)
+    instruction: Look at the child window in child-opened.
+    expect: The title bar is transparent and the subtitle reads Draft.
+    screenshot: child-opened  # the earlier takeScreenshot that shows what to check
     signoff: required         # required | optional (default required)
-- pressKey: Escape
 ```
 
-A run needs one passing sign-off for this target, this commit **and this content of the flow file**
-when it reaches a step with `signoff: required`. A run whose steps are all `optional` may have one. A
-`manual: true` flow with no required step fails the gate, because nothing would verify it. A `partial`
-run that fails before its manual step fails as a flow and needs no sign-off until it passes.
+Name the capture that shows the thing to check: a `takeScreenshot` with `window` for a child window.
+In-process captures show one window of the app, never menus, context menus, system panels (Look Up,
+Writing Tools), the Dock, the menu bar or Spaces. For those, write the step as a live check (where to
+go in the Kitchen Sink and what to do, saying why there is no screenshot) with `evidence: none`. A
+pass of a step without a screenshot needs a note saying what the person saw.
+
+A run needs one passing sign-off for this target, this commit **and this content of the flow** when it
+reaches a step with `signoff: required`. A run whose steps are all `optional` may have one. A manual flow
+needs a `signoff: required` step in its own file (`e2e:lint`), and the gate fails a `manual: true` flow
+that reaches none and a passed `partial` run that reached none (a `when` can skip one), because no person
+would verify it. A `partial` run that fails before its manual step fails as a flow and needs no
+sign-off until it passes.
 
 #### Running a manual flow (people)
 
@@ -1028,25 +1037,27 @@ target or another commit than HEAD, when a manual flow file changed since, or wh
 uncommitted changes. It writes a session to
 `<sign-off file's directory>/manual/<first 12 of the commit>/session.json`, copies the runner's
 screenshots next to it (the next gate run deletes its run directory), and opens a new instance of the
-release build with `--ks-signoff <session.json>` (`open -W -n`). Quit any running Kitchen Sink first:
-its single-instance lock would take the session instead, and the command then reports that no
-sign-offs were recorded.
+release build with `--ks-signoff <session.json>` (`open -W -n`). The release build runs with its real
+state and its single-instance lock, so a second launch would forward itself to a running Kitchen Sink
+and quit: the command refuses while one runs (driver sessions run isolated clones, which do not count).
 
 The app opens **Gate infrastructure > Manual sign-off** (`spark-ks://infra/sign-off`). It shows the
 target, commit and who is signing (`git config user.name` and `user.email`, and the host name and
-model), then each run with its name, intent, steps (`instruction`, `expect`, the screenshot the
-in-app driver captured at that step, without screen-recording permission) and a note field. For a
-`manual: true` step, do it in the app (the checklist keeps its state while you visit other screens),
-then come back. **Pass** or **Fail** records the decision at once in the session's `decisions.json`:
+model), then each run with its name, intent, steps (`instruction`, `expect`, and the screenshot the
+step names with what it shows, such as `child-opened (window {"id":"windows-window-options-child"})`)
+and a note field. For a step without a screenshot, do it in the app (the checklist keeps its state
+while you visit other screens), then come back. **Pass** or **Fail** records the decision at once in
+the session's `decisions.json`, and the app's quit guard waits for that write:
 
 - **Fail** needs a note that says what was wrong.
-- **Pass** needs evidence: the runner's screenshots, or a note when a step asks for evidence that was
-  not captured (a `manual: true` flow never runs, so it has none). A step with `evidence: none` needs neither.
+- **Pass** needs a screenshot for every step, or a note saying what you saw (a live check, or a
+  `manual: true` flow, which never runs).
 - A `partial` run whose automated steps did not pass is listed as not ready, with the failure, and
   cannot be signed off.
 
-When the app quits, the command checks the decisions (each must be a ready run of the session, with
-its target, commit, flow hash and signer), prints them, and asks you to type your `user.name` to sign
+When the app quits, the command checks the decisions again (each must be a ready run of the session,
+with its target, commit, flow hash and signer, follow the note rules above, and name evidence only
+inside the session's `evidence/` folder, with no `..` or symlink out of it), prints them, and asks you to type your `user.name` to sign
 them. Only then does it replace any earlier sign-off of the same run on this target and write the
 sign-off file, validated against its schema. Any other answer writes nothing.
 
@@ -1083,7 +1094,7 @@ signoffs:
   - flow: flows/menus/macos-items[appearance=dark]   # the run ID from the gate report
     target: macos-15/arm64
     commit: 0123456789abcdef0123456789abcdef01234567  # git rev-parse HEAD
-    flowHash: 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae  # SHA-256 of the flow file
+    flowHash: 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae  # SHA-256 of the flow and its subflows
     verdict: pass                                     # pass | fail
     by: Jane Doe <jane@example.com>                   # git user.name <user.email>, confirmed at the terminal
     machine: qa-mac (Mac16,5)                         # host name (model)
@@ -1092,13 +1103,16 @@ signoffs:
     note: required with verdict fail
 ```
 
-`flowHash` is the SHA-256 of the flow file's bytes (the gate report has it per manual run as
-`flowHash`). It covers the flow file only, not the subflows it runs; those are covered by `commit`. The
+`flowHash` is the SHA-256 of the flow file's bytes followed by each `runFlow` file it can reach (path and
+bytes, whatever their `when`), so editing a subflow also makes the sign-off stale (the gate report has it
+per manual run as `flowHash`). `flowHash` and `machine` are required: a sign-off file written before they
+were must be signed again. The
 gate fails with `signoffs` when the file is missing or invalid, a required sign-off is missing, a run
 has more than one sign-off for this commit and flow content, the only sign-off is stale (for another
 commit or flow content: the reason names both and says when the flow changed), the verdict is `fail`
-(the reason carries the note), or evidence is missing. A manual `true` run without a valid sign-off is
-`unsigned` in the report.
+(the reason carries the note), or evidence is missing. In the report, a `manual: true` run is
+`signed-off`, `failed` (signed off as failed), `unsigned` (it needs a sign-off and has no valid one) or
+`not-run` (it needs none and has none).
 
 `tests/e2e-gate.test.ts` covers each case with fixture gate runs and drives the checklist service
 (`examples/kitchen-sink/screens/infra/sign-off.ts`) end to end through `gate:signoff`, with test doubles

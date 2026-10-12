@@ -30,8 +30,10 @@ export type ManualStepResult = {
   location: SourceLocation;
   /** The runFlow / repeat call sites that led to it. */
   stack: SourceLocation[];
-  /** `evidence: screenshot`: the in-process capture of the main window when the runner reached the step. */
+  /** `evidence: screenshot`: the file of the earlier takeScreenshot the step names. */
   screenshot?: string;
+  /** What that screenshot shows: its name and window. */
+  capture?: string;
 };
 export type FailureReport = {
   kind: FailureKind;
@@ -198,6 +200,8 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
   const deadline = began + flowTimeout;
   const steps: StepResult[] = [], errors: string[] = [], outputs: Artifact[] = [], goldens: GoldenResult[] = [], manual: ManualStepResult[] = [];
   const metrics: Record<string, number[]> = {};
+  /** takeScreenshot names this run captured, and what each shows; a manualStep's `screenshot` names one. */
+  const shots = new Map<string, string>();
   const restores: Array<{ label: string; undo: () => Promise<void> }> = [];
   const result = (status: FlowResult["status"], extra: Partial<FlowResult> = {}): FlowResult => ({
     ...base, matrix, status, durationMs: Math.round(clock.now() - began), steps, errors, artifacts: outputs, goldens, metrics, manual,
@@ -313,30 +317,29 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
         (metrics[name] ??= []).push(value);
       },
     };
-    if (command.name === "takeScreenshot") return takeScreenshot(backend, args, context);
+    if (command.name === "takeScreenshot") {
+      await takeScreenshot(backend, args, context);
+      shots.set(String(args.name), args.window === undefined ? "the main window" : `window ${describe(args.window)}`);
+      return;
+    }
     if (command.name === "assertScreenshot") return assertScreenshot(backend, args, context, { root: rootOf(absolute), dir, record: result => goldens.push(result) });
     await backend.commands[command.name]!(args, context);
   }
 
-  /** Records a manualStep for sign-off, with an in-process capture for `evidence: screenshot`, and lets the flow run on. */
-  async function awaitSignoff(command: FlowCommand, args: Record<string, unknown>, scope: Scope) {
+  /**
+   * Records a manualStep for sign-off and lets the flow run on. Its screenshot evidence is the capture an earlier
+   * takeScreenshot of this run made, so the flow says which window shows what the person checks.
+   */
+  function awaitSignoff(command: FlowCommand, args: Record<string, unknown>, scope: Scope) {
     if (!flow.header.manual) throw new Failure("invalid", "manualStep needs `manual: partial` or `manual: true` in the flow header, so the gate asks for its sign-off");
-    const evidence = (args.evidence as ManualStepResult["evidence"] | undefined) ?? "none";
-    const step: ManualStepResult = {
-      instruction: String(args.instruction), expect: String(args.expect), evidence, signoff: (args.signoff as ManualStepResult["signoff"] | undefined) ?? "required",
-      location: command.location, stack: scope.stack,
-    };
+    const name = args.screenshot as string | undefined, evidence = (args.evidence as ManualStepResult["evidence"] | undefined) ?? (name ? "screenshot" : "none");
     if (evidence === "recording") throw new Failure("unsupported", "manualStep evidence: recording: no backend records the screen");
-    if (evidence === "screenshot") {
-      const backend = backends.find(candidate => candidate.kind === "driver" && candidate.screenshot);
-      if (!backend) throw new Failure("unsupported", `manualStep evidence: screenshot needs a driver backend with screenshot() (active: ${backends.map(candidate => `${candidate.name} (${candidate.kind})`).join(", ")})`);
-      const file = path.join(dir, "manual", `step-${manual.length + 1}.png`);
-      mkdirSync(path.dirname(file), { recursive: true });
-      await backend.screenshot!(file, undefined);
-      step.screenshot = file;
-      outputs.push({ kind: "screenshot", path: file, backend: backend.name });
-    }
-    manual.push(step);
+    const capture = name === undefined ? undefined : shots.get(name);
+    if (name !== undefined && !capture) throw new Failure("invalid", `manualStep screenshot: ${name}: no takeScreenshot named ${name} ran before it in this flow`);
+    manual.push({
+      instruction: String(args.instruction), expect: String(args.expect), evidence, signoff: (args.signoff as ManualStepResult["signoff"] | undefined) ?? "required",
+      location: command.location, stack: scope.stack, ...(name ? { screenshot: path.join(outputDir, `${name}.png`), capture: `${name} (${capture})` } : {}),
+    });
   }
 
   async function exec(command: FlowCommand, scope: Scope) {
@@ -348,7 +351,7 @@ async function executeFlow(flow: FlowAst, absolute: string, matrix: Matrix, base
       live();
       if (command.when && (command.when.visible !== undefined || command.when.notVisible !== undefined) && observer().kind === "driver") step.whiteBox = true;
       if (command.when && !(await holds(interpolate(command.when, scope.env)))) step.status = "skipped";
-      else if (command.name === "manualStep") { await awaitSignoff(command, args = interpolateArgs(command, scope.env), scope); step.status = "awaiting-signoff"; }
+      else if (command.name === "manualStep") { awaitSignoff(command, args = interpolateArgs(command, scope.env), scope); step.status = "awaiting-signoff"; }
       else await dispatch(command, args = interpolateArgs(command, scope.env), scope, step);
     } catch (error) {
       step.status = "failed";

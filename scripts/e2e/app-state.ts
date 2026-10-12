@@ -292,6 +292,13 @@ function entries(dir: string, depth: number): string[] {
 
 const LSREGISTER = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
 
+/** Running processes of an app, by bundle identifier (LaunchServices' `lsappinfo`). */
+export function runningApps(bundleId: string): string[] {
+  const result = spawnSync("lsappinfo", ["find", `bundleid=${bundleId}`], { encoding: "utf8" });
+  if (result.error) throw result.error;
+  return result.stdout.split("\n").map(line => line.trim()).filter(Boolean);
+}
+
 export function macHost(): StateHost {
   const run = (command: string, args: string[], env: NodeJS.ProcessEnv = process.env) => {
     const result = spawnSync(command, args, { encoding: "utf8", env });
@@ -305,7 +312,7 @@ export function macHost(): StateHost {
     temp: run("getconf", ["DARWIN_USER_TEMP_DIR"], env).stdout.trim(),
     cache: run("getconf", ["DARWIN_USER_CACHE_DIR"], env).stdout.trim(),
     roots: os.tmpdir(),
-    running: bundleId => run("lsappinfo", ["find", `bundleid=${bundleId}`]).stdout.split("\n").map(line => line.trim()).filter(Boolean),
+    running: runningApps,
     deleteDefaults(domain) {
       // `defaults export` prints the domain as an XML property list (an empty dictionary when it has no keys) on every
       // macOS release; the messages of `defaults read` and `defaults delete` for a missing domain differ between releases.

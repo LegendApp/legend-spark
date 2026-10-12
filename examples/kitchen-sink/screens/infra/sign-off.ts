@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import * as app from "@legendapp/spark/app";
 import * as files from "@legendapp/spark/files";
 import type { Signoff, SignoffDecisions, SignoffItem, SignoffSession } from "../../../../scripts/e2e/format/signoff";
+import { signOffProblem, type SignOffProblem } from "../../sign-off-rule";
 import { argument, SIGNOFF_FLAG } from "../../launch";
 
 // The manual sign-off checklist (docs/e2e-flows.md#manual-sign-offs). `bun run gate:signoff` launches the release build
@@ -13,8 +14,7 @@ export type SignOffState =
   | { status: "no-session" }
   | { status: "error"; error: string }
   | { status: "ready"; session: SignoffSession; dir: string; decisions: Readonly<Record<string, Signoff>>; saveError?: string };
-/** Why a decision cannot be recorded. */
-export type SignOffProblem = "not-ready" | "fail-needs-note" | "evidence-needs-note";
+export type { SignOffProblem };
 
 let state: SignOffState = { status: "loading" };
 const listeners = new Set<() => void>();
@@ -59,22 +59,13 @@ export function loadSignOff(): Promise<void> {
       const dir = file.slice(0, file.lastIndexOf("/"));
       const decisionsFile = resolvePath(dir, session.decisions);
       const made = await files.exists(decisionsFile) ? (JSON.parse(await files.readText(decisionsFile)) as SignoffDecisions).signoffs : [];
+      // A quit right after a decision must not lose it: bun run gate:signoff reads the decisions file once the app exits.
+      await app.beforeQuit(async () => { await flushSignOff(); return true; });
       set({ status: "ready", session, dir, decisions: Object.fromEntries(made.map(signoff => [signoff.flow, signoff])) });
     } catch (error) {
       set({ status: "error", error: describe(error) });
     }
   })();
-}
-
-/**
- * A failed sign-off needs a note saying what was wrong. A pass needs evidence: the runner's screenshots, or a note when a
- * step asks for evidence that was not captured (a `manual: true` flow never runs, so it has no screenshot).
- */
-export function signOffProblem(item: SignoffItem, verdict: Verdict, note: string): SignOffProblem | undefined {
-  if (!item.ready) return "not-ready";
-  if (note.trim()) return undefined;
-  if (verdict === "fail") return "fail-needs-note";
-  if (item.steps.some(step => step.evidence !== "none" && !step.screenshot)) return "evidence-needs-note";
 }
 
 let writing = Promise.resolve();
@@ -111,7 +102,7 @@ export function decide(flow: string, verdict: Verdict, note: string): SignOffPro
   void save();
 }
 
-/** Resolves when every decision so far has been written (or failed to write; see `saveError`). */
+/** Resolves when every decision so far has been written (or failed to write; see `saveError`). The quit guard waits for it. */
 export function flushSignOff(): Promise<void> { return writing; }
 
 /** The sign-off a run has now: one made in this session, else the one already in the sign-off file. */

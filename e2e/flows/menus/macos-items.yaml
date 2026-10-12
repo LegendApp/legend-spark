@@ -22,11 +22,12 @@ matrix:
 - assertVisible: Mixed selection
 - assertVisible: Starred sample
 - assertNotVisible: Hidden sample
-- takeScreenshot: menus-audit-open
 - manualStep:
-    instruction: Look at the open Menu Audit menu in the screenshot.
+    instruction: >-
+      In-process captures do not include menus, so check it live. With the Mac in this run's appearance, open Menus >
+      Menu audit in the Kitchen Sink and click Menu Audit in the menu bar.
     expect: Mixed selection shows a dash, not a checkmark. Starred sample shows a filled star. Hidden sample is absent. Text and marks are legible in this appearance.
-    evidence: screenshot
+    evidence: none
     signoff: required
 - pressKey: Escape
 - assertVisible: { text: "/Opened audit-menu/", within: { id: menus-audit-events } }

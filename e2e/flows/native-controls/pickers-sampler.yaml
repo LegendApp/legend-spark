@@ -20,3 +20,12 @@ manual: true
 - tapOn: { id: native-controls-pickers-sampler }
 - tapOn: { id: native-controls-pickers-well }
 - assertVisible: { id: native-controls-pickers-sampler-result, text: '/^\{"canceled":false,"color":"#3[0-9a-f]6[0-9a-f]c[0-9a-f]"\}$/' }
+- manualStep:
+    instruction: >-
+      In the release build, open Native controls > Pickers and do the steps above by hand: Sample screen color, then
+      Escape; Sample screen color again, then click the "Color well" swatch.
+    expect: >-
+      No Screen Recording prompt appears. Escape reports {"canceled":true}; the click reports {"canceled":false} with a
+      color within one digit of #3366cc.
+    evidence: none
+    signoff: required

@@ -7,7 +7,8 @@ import type { Locale } from "../../shell/i18n";
 import { currentSignoff, decide, resolvePath, useSignOff, type SignOffProblem, type SignOffState, type Verdict } from "./sign-off";
 
 // Test IDs: infra-sign-off-{loading,no-session,error,session,save-error}; per run i: infra-sign-off-item-<i>, its status
-// infra-sign-off-item-<i>-{pending,passed,failed,not-ready}, -screenshot-<step>, -note, -pass, -fail and -problem.
+// infra-sign-off-item-<i>-{pending,passed,failed,not-ready}, -capture-<step>, -screenshot-<step>, -no-screenshot-<step>, -note,
+// -pass, -fail and -problem.
 const ID = "infra-sign-off";
 type Ready = Extract<SignOffState, { status: "ready" }>;
 type Status = "pending" | "passed" | "failed" | "not-ready";
@@ -17,7 +18,7 @@ type Messages = {
   target: string; commit: string; signer: string; progress(signed: string, total: string): string;
   kind: Record<SignoffItem["kind"], string>; status: Record<Status, string>;
   step(number: string): string; instruction: string; expect: string; optional: string;
-  noScreenshot: string; noEvidence: string; note: string; notePlaceholder: string; pass: string; fail: string;
+  captured(what: string): string; noScreenshot: string; note: string; notePlaceholder: string; pass: string; fail: string;
   signed(verdict: Verdict, by: string, machine: string, at: string): string; problems: Record<SignOffProblem, string>; saveFailed: string;
 };
 const MESSAGES: Record<Locale, Messages> = {
@@ -32,13 +33,14 @@ const MESSAGES: Record<Locale, Messages> = {
     kind: { manual: "Manual", partial: "Run + sign-off" },
     status: { pending: "Pending", passed: "Passed", failed: "Failed", "not-ready": "Not ready" },
     step: number => `Step ${number}`, instruction: "Do", expect: "Expect", optional: "Optional",
-    noScreenshot: "No screenshot was captured: describe what you saw in the note.", noEvidence: "No evidence is asked for.",
+    captured: what => `Screenshot: ${what}`,
+    noScreenshot: "No screenshot shows this step: do it yourself in the app, and a pass needs a note saying what you saw.",
     note: "Note", notePlaceholder: "What you saw. Required for a failure.", pass: "Pass", fail: "Fail",
     signed: (verdict, by, machine, at) => `Signed off as ${verdict === "pass" ? "passed" : "failed"} by ${by} on ${machine}, ${at}`,
     problems: {
       "not-ready": "This run cannot be signed off yet.",
       "fail-needs-note": "A failed sign-off needs a note that says what was wrong.",
-      "evidence-needs-note": "No screenshot was captured, so describe what you saw in the note.",
+      "evidence-needs-note": "A step has no screenshot, so a pass needs a note saying what you saw.",
     },
     saveFailed: "Decisions could not be saved",
   },
@@ -53,13 +55,14 @@ const MESSAGES: Record<Locale, Messages> = {
     kind: { manual: "يدوي", partial: "تشغيل ثم توقيع" },
     status: { pending: "بانتظار التوقيع", passed: "ناجح", failed: "فاشل", "not-ready": "غير جاهز" },
     step: number => `الخطوة ${number}`, instruction: "نفّذ", expect: "المتوقع", optional: "اختياري",
-    noScreenshot: "لم تُلتقط لقطة شاشة: صِف ما رأيته في الملاحظة.", noEvidence: "لا يُطلب دليل.",
+    captured: what => `لقطة الشاشة: ${what}`,
+    noScreenshot: "لا تُظهر أي لقطة شاشة هذه الخطوة: نفّذها بنفسك في التطبيق، ويتطلب اعتمادها ناجحة ملاحظة تصف ما رأيته.",
     note: "ملاحظة", notePlaceholder: "ما رأيته. مطلوبة عند الفشل.", pass: "ناجح", fail: "فاشل",
     signed: (verdict, by, machine, at) => `وُقّع ${verdict === "pass" ? "ناجحًا" : "فاشلًا"} بواسطة ${by} على ${machine}، ${at}`,
     problems: {
       "not-ready": "لا يمكن توقيع هذا التشغيل بعد.",
       "fail-needs-note": "يتطلب التوقيع بالفشل ملاحظة توضح الخطأ.",
-      "evidence-needs-note": "لم تُلتقط لقطة شاشة، لذا صِف ما رأيته في الملاحظة.",
+      "evidence-needs-note": "إحدى الخطوات بلا لقطة شاشة، لذا يتطلب اعتماد التشغيل ناجحًا ملاحظة تصف ما رأيته.",
     },
     saveFailed: "تعذّر حفظ القرارات",
   },
@@ -83,9 +86,12 @@ function Step({ step, index, dir, testID, t }: { step: ManualStep; index: number
     <Text className="text-sm text-foreground"><Text className="font-semibold">{`${t.instruction}: `}</Text>{step.instruction}</Text>
     <Text className="text-sm text-foreground"><Text className="font-semibold">{`${t.expect}: `}</Text>{step.expect}</Text>
     {step.screenshot
-      ? <Image testID={`${testID}-screenshot-${index}`} accessibilityLabel={step.instruction} resizeMode="contain" style={{ width: "100%", height: 220 }}
-        source={{ uri: `file://${encodeURI(resolvePath(dir, step.screenshot))}` }} />
-      : <Text className="text-xs text-muted">{step.evidence === "none" ? t.noEvidence : t.noScreenshot}</Text>}
+      ? <>
+        <Text selectable className="text-xs text-muted" testID={`${testID}-capture-${index}`}>{t.captured(step.capture ?? step.screenshot)}</Text>
+        <Image testID={`${testID}-screenshot-${index}`} accessibilityLabel={step.instruction} resizeMode="contain" style={{ width: "100%", height: 220 }}
+          source={{ uri: `file://${encodeURI(resolvePath(dir, step.screenshot))}` }} />
+      </>
+      : <Text className="text-xs text-muted" testID={`${testID}-no-screenshot-${index}`}>{t.noScreenshot}</Text>}
   </View>;
 }
 

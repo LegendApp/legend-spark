@@ -2,8 +2,8 @@ signoffs:
   - flow: flows/app/ime
     target: macos-14/arm64@air-m1
     commit: 0123456789abcdef0123456789abcdef01234567
-    # SHA-256 of e2e/flows/app/ime.yaml
-    flowHash: 937d8a7d2c43e5b40492d1717160bdb79605c0be02ed3fe27a17057331c6d004
+    # SHA-256 of e2e/flows/app/ime.yaml (it runs no subflows)
+    flowHash: 3b808e0b75a9e4eb79f5989e96545e5f7079b06ba00e203e86181886f243bbd9
     verdict: pass
     by: Release Captain <captain@example.com>
     machine: qa-mac (MacBookAir10,1)

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import { Failure, type Backend, type Element } from "../scripts/e2e/runner/backend.ts";
+import { Failure, type Backend, type Element, type WindowInfo } from "../scripts/e2e/runner/backend.ts";
 import { expandMatrix, ms, runFlows, type FlowResult, type RunOptions } from "../scripts/e2e/runner/executor.ts";
 import { buildReport, html, junit } from "../scripts/e2e/runner/report.ts";
 import { printer, runCommand } from "../scripts/e2e/runner/run.ts";
@@ -341,28 +341,51 @@ describe("dispatch", () => {
 });
 
 describe("manual steps", () => {
-  const capture = (backend: { log: string[] }) => async (file: string) => { backend.log.push("capture"); writeFileSync(file, "png"); return { frame: WINDOW.frame, scale: 2 }; };
-  const step = "- manualStep: { instruction: Look at the open menu., expect: Mixed shows a dash., evidence: screenshot }";
+  const CHILD: WindowInfo = { id: "child", title: "Child", key: false, main: false, frame: { x: 0, y: 0, width: 400, height: 300 } };
+  const capture = (backend: { log: string[] }) => async (file: string, window?: WindowInfo) => { backend.log.push(`capture ${window?.id ?? "main"}`); writeFileSync(file, "png"); return { frame: WINDOW.frame, scale: 2 }; };
+  const step = "- manualStep: { instruction: Look at the open menu., expect: Mixed shows a dash., evidence: screenshot, screenshot: child-open }";
 
-  test("a manualStep in a partial flow awaits sign-off with an in-process screenshot, and the automated steps run on", async () => {
+  test("a manualStep in a partial flow awaits sign-off with the earlier takeScreenshot it names, and the automated steps run on", async () => {
     const app = memory({ elements: [element("menu", { text: "Menu" })] });
-    const driver = new MemoryBackend(app.clock, { name: "driver", kind: "driver", collect: false });
+    const driver = new MemoryBackend(app.clock, { name: "driver", kind: "driver", collect: false, windows: [WINDOW, CHILD] });
     Object.assign(driver, { screenshot: capture(driver) });
-    const { result, dir } = await run(flow(`${step}\n- tapOn: Menu`, "manual: partial\n"), [app, driver]);
+    const { result, dir } = await run(flow(`- takeScreenshot: { name: child-open, window: { id: child } }\n${step}\n- tapOn: Menu`, "manual: partial\n"), [app, driver]);
     expect(result.status).toBe("passed");
-    expect(result.steps.map(entry => [entry.command, entry.status])).toEqual([["manualStep", "awaiting-signoff"], ["tapOn", "passed"]]);
+    expect(result.steps.map(entry => [entry.command, entry.status])).toEqual([["takeScreenshot", "passed"], ["manualStep", "awaiting-signoff"], ["tapOn", "passed"]]);
     expect(result.manual).toEqual([{
       instruction: "Look at the open menu.", expect: "Mixed shows a dash.", evidence: "screenshot", signoff: "required",
-      location: expect.objectContaining({ line: 6, column: 3 }), stack: [], screenshot: path.join(dir, "run/flows/area/test/run/manual/step-1.png"),
+      location: expect.objectContaining({ line: 7, column: 3 }), stack: [], screenshot: path.join(dir, "run/flows/area/test/run/output/child-open.png"), capture: 'child-open (window {"id":"child"})',
     }]);
-    expect(driver.log).toEqual(["start", "capture", "stop"]);
+    expect(driver.log).toEqual(["start", "capture child", "stop"]);
     expect(app.log).toContain("tapOn menu");
     expect(result.artifacts).toEqual([{ kind: "screenshot", path: result.manual[0]!.screenshot, backend: "driver" }]);
     const report = buildReport([result], { startedAt: new Date(), durationMs: 1, backends: [app, driver], runDir: path.join(dir, "run"), interrupted: false });
     expect(report.summary).toMatchObject({ passed: 1, awaitingSignoff: 1 });
-    expect(report.flows[0]!.manual[0]!.screenshot).toBe("flows/area/test/run/manual/step-1.png");
+    expect(report.flows[0]!.manual[0]!.screenshot).toBe("flows/area/test/run/output/child-open.png");
     expect(html(report)).toContain("awaiting sign-off (");
     expect(junit(report)).toContain("Look at the open menu. Expect: Mixed shows a dash.");
+    const main = await run(flow("- takeScreenshot: shot\n- manualStep: { instruction: Look., expect: A dash., screenshot: shot }", "manual: partial\n"), [app, driver]);
+    expect(main.result.manual).toEqual([expect.objectContaining({ evidence: "screenshot", capture: "shot (the main window)" })]);
+  });
+
+  test("screenshot evidence must name a takeScreenshot that ran before the step: validation and the runner check it", async () => {
+    const driver = new MemoryBackend(new VirtualClock(), { name: "driver", kind: "driver", collect: false });
+    Object.assign(driver, { screenshot: capture(driver) });
+    const later = await run(flow(`${step}\n- takeScreenshot: child-open`, "manual: partial\n"), [driver]);
+    expect(later.result.failure).toMatchObject({ kind: "invalid", command: "manualStep", message: "manualStep screenshot: child-open: no takeScreenshot named child-open ran before it in this flow" });
+    const unnamed = await run(flow("- manualStep: { instruction: Look., expect: A dash., evidence: screenshot }", "manual: partial\n"), [driver]);
+    expect(unnamed.result.failure).toMatchObject({ kind: "format", diagnostics: [expect.stringMatching(/test\.yaml:6:3: evidence: screenshot needs `screenshot`: the name of the earlier takeScreenshot .*\[schema\]$/)] });
+    const contradicts = await run(flow("- manualStep: { instruction: Look., expect: A dash., evidence: none, screenshot: shot }", "manual: partial\n"), [driver]);
+    expect(contradicts.result.failure).toMatchObject({ kind: "format", diagnostics: [expect.stringMatching(/test\.yaml:6:3: screenshot names a capture, but evidence is none \[schema\]$/)] });
+  });
+
+  test("a manual flow needs a required manualStep in its file", async () => {
+    for (const manual of ["partial", "true"]) {
+      const optional = await run(flow("- manualStep: { instruction: Look., expect: A dash., signoff: optional }", `manual: ${manual}\n`), [memory()]);
+      expect(optional.result.failure).toMatchObject({ kind: "format", diagnostics: [expect.stringMatching(new RegExp(`test\\.yaml:1:1: manual: ${manual} needs a manualStep with signoff: required in this file: without one, no person verifies the flow \\[schema\\]$`))] });
+    }
+    const none = await run(flow("- launchApp", "manual: partial\n"), [memory()]);
+    expect(none.result.failure).toMatchObject({ kind: "format" });
   });
 
   test("evidence: none needs no capture; signoff and evidence default to required and none; when skips the step", async () => {
@@ -373,9 +396,7 @@ describe("manual steps", () => {
     expect(result.steps.map(entry => entry.status)).toEqual(["awaiting-signoff", "skipped"]);
   });
 
-  test("evidence the backends cannot capture is unsupported, never skipped", async () => {
-    const { result } = await run(flow(step, "manual: partial\n"), [memory()]);
-    expect(result.failure).toMatchObject({ kind: "unsupported", command: "manualStep", message: "manualStep evidence: screenshot needs a driver backend with screenshot() (active: memory (black-box))" });
+  test("evidence no backend can capture is unsupported, never skipped", async () => {
     const recording = await run(flow("- manualStep: { instruction: Watch., expect: Smooth., evidence: recording }", "manual: partial\n"), [memory()]);
     expect(recording.result.failure).toMatchObject({ kind: "unsupported", message: "manualStep evidence: recording: no backend records the screen" });
   });

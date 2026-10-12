@@ -177,12 +177,26 @@ function matrixDiagnostics(flow: FlowAst): Diagnostic[] {
   }));
 }
 
-/** A manualStep only reaches the gate's sign-offs in a `manual: partial` or `manual: true` flow (docs/e2e-flows.md#manual-sign-offs). */
+/**
+ * A manualStep only reaches the gate's sign-offs in a `manual: partial` or `manual: true` flow, which needs a required one;
+ * screenshot evidence names the capture that shows what to check (docs/e2e-flows.md#manual-sign-offs).
+ */
 function manualDiagnostics(flow: FlowAst): Diagnostic[] {
-  if (flow.header.manual) return [];
   const all = [...flow.header.onFlowStart ?? [], ...flow.commands, ...flow.header.onFlowComplete ?? []];
-  return [...walk(all)].filter(command => command.name === "manualStep")
-    .map(command => ({ ...command.location, rule: "schema", message: "manualStep needs `manual: partial` (the automated steps run, then a person signs off) or `manual: true` in the header" }));
+  const steps = [...walk(all)].filter(command => command.name === "manualStep");
+  const at = (command: FlowCommand, message: string): Diagnostic => ({ ...command.location, rule: "schema", message });
+  if (!flow.header.manual) return steps.map(command => at(command, "manualStep needs `manual: partial` (the automated steps run, then a person signs off) or `manual: true` in the header"));
+  const problems = steps.flatMap(command => {
+    const { evidence, screenshot } = command.args;
+    if (evidence === "screenshot" && screenshot === undefined) return [at(command, "evidence: screenshot needs `screenshot`: the name of the earlier takeScreenshot that shows what to check (only that capture shows the right window)")];
+    if (screenshot !== undefined && evidence !== undefined && evidence !== "screenshot") return [at(command, `screenshot names a capture, but evidence is ${evidence}`)];
+    return [];
+  });
+  // Without a required step, a manual flow passes the gate with no person involved. Steps in runFlow files do not count here.
+  if (!steps.some(command => (command.args.signoff ?? "required") === "required")) {
+    problems.push({ file: flow.file, line: 1, column: 1, rule: "schema", message: `manual: ${flow.header.manual} needs a manualStep with signoff: required in this file: without one, no person verifies the flow` });
+  }
+  return problems;
 }
 
 /** A golden's path needs the appearance and locale it was rendered in (docs/e2e-flows.md#visual-goldens). */

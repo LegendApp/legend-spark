@@ -2,10 +2,11 @@
 // manual flow runs into a checklist session, opens the release build on its sign-off screen (infra/sign-off), and, once the
 // person at the terminal confirms them, merges their decisions into the sign-off file. It is a local tool, not a
 // cryptographic one: what keeps agents from signing off is that it needs a terminal and a typed confirmation.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stringify } from "yaml";
 import { checkSignoffs, FlowFormatError, formatDiagnostic, type Signoff } from "../format/parser.ts";
+import { signOffProblem, type SignOffProblem } from "../../../examples/kitchen-sink/sign-off-rule.ts";
 import type { SignoffDecisions, SignoffItem, SignoffSession } from "../format/signoff.ts";
 import { plural, type GateEnv, type GateReport } from "./gate.ts";
 import { plan, reportFiles, UsageError, type GatePlan } from "./plan.ts";
@@ -74,20 +75,37 @@ export function writeSession(report: GateReport, gatePlan: GatePlan, signer: Pic
   return session;
 }
 
+const PROBLEMS: Record<SignOffProblem, string> = {
+  "not-ready": "this run cannot be signed off",
+  "fail-needs-note": "a failed sign-off needs a note",
+  "evidence-needs-note": "a pass without a screenshot for every step needs a note",
+};
+
 /**
  * Merges the checklist's decisions into the sign-off file: each replaces any earlier sign-off of its run on this target.
- * Decisions must belong to the session (its runs, target, commit, flow content and signer); evidence becomes
- * repository-relative.
+ * The decisions file is only as trustworthy as the checklist that wrote it, so the rules are checked again here: decisions
+ * must belong to the session (its runs, target, commit, flow content and signer), follow signOffProblem, and name evidence
+ * inside the session's evidence/ folder (no `..` or symlink out of it). Evidence becomes repository-relative.
  */
 export function mergeDecisions(session: SignoffSession, dir: string, repo: string, existing: Signoff[], decisions: SignoffDecisions): Signoff[] {
   const ready = new Map(session.items.filter(item => item.ready).map(item => [item.flow, item]));
+  const evidenceDir = realpathSync(path.join(dir, "evidence"));
   const made = decisions.signoffs.map(signoff => {
     const item = ready.get(signoff.flow);
     if (!item) throw new Error(`the decisions name ${signoff.flow}, which this session cannot sign off`);
     const expected = { target: session.target, commit: session.commit, flowHash: item.flowHash, by: session.by, machine: session.machine };
     const foreign = (Object.keys(expected) as Array<keyof typeof expected>).find(key => signoff[key] !== expected[key]);
     if (foreign) throw new Error(`the decision for ${signoff.flow} has ${foreign} ${JSON.stringify(signoff[foreign])}; the session's is ${JSON.stringify(expected[foreign])}`);
-    return { ...signoff, ...(signoff.evidence ? { evidence: signoff.evidence.map(file => path.relative(repo, path.resolve(dir, file))) } : {}) };
+    const problem = signOffProblem(item, signoff.verdict, signoff.note);
+    if (problem) throw new Error(`the decision for ${signoff.flow} is a ${signoff.verdict} without a note: ${PROBLEMS[problem]}`);
+    const evidence = signoff.evidence?.map(file => {
+      const resolved = path.resolve(dir, file);
+      let real: string;
+      try { real = realpathSync(resolved); } catch { throw new Error(`the decision for ${signoff.flow} names evidence ${file}, which does not exist`); }
+      if (path.dirname(real) !== evidenceDir) throw new Error(`the decision for ${signoff.flow} names evidence ${file}, which is not in the session's evidence/ folder`);
+      return path.relative(repo, resolved);
+    });
+    return { ...signoff, ...(evidence ? { evidence } : {}) };
   });
   if (new Set(made.map(signoff => signoff.flow)).size !== made.length) throw new Error("the decisions sign off a run twice");
   const replaced = new Set(made.map(signoff => signoff.flow));
@@ -107,7 +125,7 @@ function describe(session: SignoffSession, stdout: (line: string) => void) {
   stdout(`Sign-off session for ${session.target} at commit ${session.commit.slice(0, 12)}, as ${session.by} on ${session.machine}:`);
   for (const item of session.items) {
     stdout(`  ${item.signoff ? `signed ${item.signoff.verdict}` : item.ready ? "pending" : "not ready"}: ${item.flow} (${item.kind === "manual" ? "manual" : "run + sign-off"})${item.reason ? `: ${item.reason}` : ""}`);
-    for (const step of item.steps) stdout(`    ${step.location}: ${step.instruction} Expect: ${step.expect}${step.screenshot ? ` [${step.screenshot}]` : ""}${step.signoff === "optional" ? " (optional)" : ""}`);
+    for (const step of item.steps) stdout(`    ${step.location}: ${step.instruction} Expect: ${step.expect}${step.screenshot ? ` [${step.screenshot}: ${step.capture}]` : " [no screenshot: a pass needs a note]"}${step.signoff === "optional" ? " (optional)" : ""}`);
   }
 }
 
@@ -128,8 +146,8 @@ export async function signoffCommand(args: string[], root: string, env: SignoffE
     throw error;
   }
   try { signer = env.signer(); } catch (error) { return fail((error as Error).message); }
-  const targetProblem = gatePlan.problems.find(problem => problem.check === "target");
-  if (!gatePlan.target || targetProblem) return fail(targetProblem?.message ?? "this machine is not a gate target");
+  const planProblem = gatePlan.problems.find(problem => problem.check === "target" || problem.check === "signoffs");
+  if (!gatePlan.target || planProblem) return fail(planProblem?.message ?? "this machine is not a gate target");
   // reportFiles puts a scoped run's report under scoped/; any scope selects it.
   const reportFile = reportFiles({ ...gatePlan, scope: scoped ? [] : undefined }).json;
   if (!existsSync(reportFile)) return fail(`no gate report at ${path.relative(process.cwd(), reportFile)}. Run bun run gate${scoped ? " --flow <flow>" : ""} first`);
@@ -150,9 +168,9 @@ export async function signoffCommand(args: string[], root: string, env: SignoffE
 
   if (!gatePlan.artifact || !existsSync(gatePlan.artifact)) return fail(`the release build ${gatePlan.artifact ? path.relative(gatePlan.repo, gatePlan.artifact) : "for this target"} does not exist`);
   env.stdout(`Opening the sign-off checklist in ${path.relative(process.cwd(), gatePlan.artifact)}. Sign off each run, then quit the app.`);
-  await env.launch(gatePlan.artifact, path.join(dir, "session.json"));
+  try { await env.launch(gatePlan.artifact, path.join(dir, "session.json")); } catch (error) { return fail((error as Error).message); }
   const decisionsFile = path.join(dir, DECISIONS);
-  if (!existsSync(decisionsFile)) return fail("the checklist recorded no sign-offs. If a Kitchen Sink was already running, the session opened in it: quit it and run bun run gate:signoff again");
+  if (!existsSync(decisionsFile)) return fail("the checklist recorded no sign-offs: nothing to write");
   try {
     const decisions: SignoffDecisions = JSON.parse(readFileSync(decisionsFile, "utf8"));
     if (!decisions.signoffs?.length) return fail("the checklist recorded no sign-offs: nothing to write");

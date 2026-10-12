@@ -20,5 +20,5 @@ manual: true
 - manualStep:
     instruction: Run bun run macos in examples/kitchen-sink, open DevTools › React Native DevTools, and press ⌥⌘I.
     expect: 'React Native DevTools opens for "KitchenSink (shared runtime)". The Open DevTools button of the ks-devtools worker opens a second window for "KitchenSink (isolated runtime: ks-devtools)".' 
-    evidence: screenshot
+    evidence: none
     signoff: required
