@@ -2,6 +2,7 @@
 #import <objc/runtime.h>
 #include <cassert>
 #include <memory>
+#include <mach/mach.h>
 typedef void (^RCTPromiseResolveBlock)(id);
 typedef void (^RCTPromiseRejectBlock)(NSString *, NSString *, NSError *);
 #define RCT_EXPORT_MODULE(...)
@@ -23,6 +24,10 @@ struct NativeDesktopWindowManagerSpecJSI : TurboModule { NativeDesktopWindowMana
 @property TestSurface *surface;
 @end
 @implementation RCTSurfaceHostingView @end
+@interface RCTRootView : NSView
+@property (copy) NSDictionary *appProperties;
+@end
+@implementation RCTRootView @end
 static NSMutableArray *events;
 static void SparkEmit(NSDictionary *event) { [events addObject:event]; }
 static NSString *SparkNamespace() { return @"window-tests"; }
@@ -423,6 +428,65 @@ static void TestSessionFrames(RNDesktopWindows *api) {
 }
 // Special window types (docs/api-window-contract.md#special-window-types): collection behaviors, and in driver mode
 // window geometry on simulated displays and corner snapping. Windows are never on screen.
+// Window pools: a pooled window parks on close (its instance ends as on close, the window stays hidden with a new
+// instance), its React root takes new props, and discarding it closes and frees it.
+static void TestWindowPools(RNDesktopWindows *api) {
+  driverActive = YES;
+  __weak NSWindow *weakWindow = nil;
+  @autoreleasepool {
+    NSWindow *window = RealWindow(@"pooled"); weakWindow = window;
+    Call(api, @"completeOpen", @{ @"id": @"pooled", @"size": @{ @"width": @480, @"height": @320 } }); assert(!failure && ReportedVisible(api, @"pooled"));
+    Call(api, @"rootProps", @{ @"id": @"pooled", @"props": @{ @"use": @1 } }); assert([failure isEqual:@"E_NOT_FOUND"]);
+    RCTRootView *root = [RCTRootView new]; LegendWindowRegistry.sharedRegistry.rootViews[@"pooled"] = root;
+    Call(api, @"rootProps", @{ @"id": @"pooled", @"props": @{ @"use": @1 } }); assert(!failure && [root.appProperties isEqual:@{ @"use": @1 }]);
+    Call(api, @"observe", @{ @"id": @"pooled" }); NSString *first = SparkArgs(reply)[@"instanceId"];
+    // Without the pool flag a close is a real close; with it, the guard still decides first.
+    Call(api, @"pool", @{ @"id": @"pooled", @"enabled": @YES }); assert(!failure);
+    Call(api, @"closeGuard", @{ @"id": @"pooled", @"instanceId": first, @"guardId": @"g", @"enabled": @YES }); assert(!failure);
+    [events removeAllObjects];
+    Call(api, @"close", @{ @"id": @"pooled" }); assert(!reply && [events.lastObject[@"type"] isEqual:@"beforeClose"]);
+    Call(api, @"replyClose", @{ @"id": @"pooled", @"instanceId": first, @"guardId": @"g", @"requestId": events.lastObject[@"requestId"], @"allow": @YES });
+    assert(windows[@"pooled"] == window && !ReportedVisible(api, @"pooled"));
+    NSUInteger closed = [events indexOfObjectPassingTest:^BOOL(NSDictionary *event, NSUInteger, BOOL *) { return [event[@"type"] isEqual:@"closed"]; }];
+    assert(closed != NSNotFound && [events[closed][@"instanceId"] isEqual:first]);
+    Call(api, @"observe", @{ @"id": @"pooled" }); NSString *second = SparkArgs(reply)[@"instanceId"]; assert(second.length && ![second isEqual:first]);
+    Call(api, @"info", @{ @"id": @"pooled", @"instanceId": first }); assert([failure isEqual:@"E_NOT_FOUND"]);
+    // The guard ended with its instance: the close button parks again at once.
+    Call(api, @"show", @{ @"id": @"pooled" }); assert(ReportedVisible(api, @"pooled"));
+    [events removeAllObjects];
+    assert(![window.delegate windowShouldClose:window] && windows[@"pooled"] == window && !ReportedVisible(api, @"pooled"));
+    assert(events.count == 1 && [events[0][@"type"] isEqual:@"closed"] && [events[0][@"instanceId"] isEqual:second]);
+    // Occlusion is reported only off the driver, where windows are on screen.
+    [events removeAllObjects];
+    [(id)window.delegate windowDidChangeOcclusionState:[NSNotification notificationWithName:NSWindowDidChangeOcclusionStateNotification object:window]]; assert(!events.count);
+    driverActive = NO;
+    [(id)window.delegate windowDidChangeOcclusionState:[NSNotification notificationWithName:NSWindowDidChangeOcclusionStateNotification object:window]];
+    assert(events.count == 1 && [events[0][@"type"] isEqual:@"occlusionChanged"] && [events[0][@"occluded"] isEqual:@YES]);
+    driverActive = YES;
+    // Discarding closes for real: the registry lets go and the window is freed. Its use already ended, so no second closed.
+    [events removeAllObjects];
+    Call(api, @"discard", @{ @"id": @"pooled" }); assert(!failure && !windows[@"pooled"]);
+    for (NSDictionary *event in events) assert(![event[@"type"] isEqual:@"closed"]);
+    // A warm window emits no opened until it is reused; reusing one in use is refused.
+    NSWindow *warm = RealWindow(@"warm"); (void)warm;
+    [events removeAllObjects];
+    Call(api, @"completeOpen", @{ @"id": @"warm", @"show": @NO, @"sparkWarm": @YES }); assert(!failure);
+    for (NSDictionary *event in events) assert(![event[@"type"] isEqual:@"opened"]);
+    LegendWindowRegistry.sharedRegistry.rootViews[@"warm"] = [RCTRootView new];
+    Call(api, @"reuse", @{ @"id": @"warm", @"props": @{ @"use": @1 } }); assert(!failure && [events.lastObject[@"type"] isEqual:@"opened"]);
+    Call(api, @"reuse", @{ @"id": @"warm", @"props": @{ @"use": @2 } }); assert([failure isEqual:@"E_BUSY"]);
+    [events removeAllObjects];
+    Call(api, @"discard", @{ @"id": @"warm" }); assert(!failure && [events.lastObject[@"type"] isEqual:@"closed"]);
+    [LegendWindowRegistry.sharedRegistry.rootViews removeObjectForKey:@"warm"];
+    [LegendWindowRegistry.sharedRegistry.rootViews removeObjectForKey:@"pooled"];
+    Call(api, @"footprint", @{}); assert(!failure && [SparkArgs(reply)[@"bytes"] longLongValue] > 0);
+    Pump();
+  }
+  Pump();
+  assert(!weakWindow);
+  driverActive = NO;
+  printf("Window pools passed\n");
+}
 static void TestSpecialWindows(RNDesktopWindows *api) {
   driverActive = YES;
   NSPanel *panel = (NSPanel *)RealWindow(@"special-panel", NSPanel.class);
@@ -511,9 +575,9 @@ int main(int argc, char **argv) { @autoreleasepool {
     @"driver": ^(RNDesktopWindows *a) { TestDriverMode(a); }, @"tabs": ^(RNDesktopWindows *a) { TestWindowTabs(a); },
     @"shown-tabs": ^(RNDesktopWindows *a) { TestShownTabs(a); }, @"tab-restoration": ^(RNDesktopWindows *a) { TestTabRestoration(a); },
     @"displays": ^(RNDesktopWindows *a) { TestDisplays(a); }, @"session-frames": ^(RNDesktopWindows *a) { TestSessionFrames(a); },
-    @"special": ^(RNDesktopWindows *a) { TestSpecialWindows(a); },
+    @"special": ^(RNDesktopWindows *a) { TestSpecialWindows(a); }, @"pools": ^(RNDesktopWindows *a) { TestWindowPools(a); },
   };
   NSString *only = argc > 1 && argv[1][0] != '-' ? @(argv[1]) : nil;
   if (only && !suites[only]) { fprintf(stderr, "Unknown suite %s\n", argv[1]); return 2; }
-  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration", @"displays", @"session-frames", @"special"]) if (!only || [only isEqual:name]) suites[name](api);
+  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration", @"displays", @"session-frames", @"special", @"pools"]) if (!only || [only isEqual:name]) suites[name](api);
 } }

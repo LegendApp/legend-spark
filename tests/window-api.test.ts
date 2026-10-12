@@ -142,6 +142,12 @@ test("macOS toolbar-only updates bypass portable window geometry", async () => {
   expect(call).toHaveBeenCalledWith("options", expect.any(String));
   await windows.setWindowOptions("editor", {});
   expect(call).toHaveBeenCalledTimes(2);
+  // Window pools close a pooled window for real when its options changed during a use; other windows are not tracked.
+  expect(windows.pooledWindows.has("editor")).toBe(false);
+  windows.pooledWindows.set("editor", false);
+  await windows.setWindowOptions("editor", { title: "Changed" });
+  expect(windows.pooledWindows.get("editor")).toBe(true);
+  windows.pooledWindows.delete("editor");
 });
 
 test("option availability is truthful per platform and rejects unknown options", () => {

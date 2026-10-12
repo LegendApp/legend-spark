@@ -100,6 +100,8 @@ export interface WindowEventMap {
   focusChanged: { windowId: WindowId; focused: boolean };
   boundsChanged: { windowId: WindowId; bounds: WindowBounds };
   visibilityChanged: { windowId: WindowId; visible: boolean };
+  /** Whether any part of the window is visible on screen (AppKit occlusion). macOS only; never sent in test driver mode, where no window is on screen. */
+  occlusionChanged: { windowId: WindowId; occluded: boolean };
   fullscreenChanged: { windowId: WindowId; fullscreen: boolean };
   /** The window's tab group gained, lost or reordered windows, or showed or hid its tab bar. */
   tabGroupChanged: { windowId: WindowId; tabGroup: WindowTabGroup };

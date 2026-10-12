@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window performance on screen, by hand
+intent: >
+  What only the window server shows, checked by a person: a warm window's first frame on screen is its content, not an
+  empty window, and a throttled window fully covered by another window stops rendering (AppKit occlusion) and catches up
+  when uncovered. The driver never shows windows, so it reports no occlusion and this does not run in-process.
+checks: [MW-PERF-06]
+tags: [multiwindow]
+platforms: [macos]
+build: release
+manual: true
+timeout: 15m
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/performance" }
+- tapOn: { id: multiwindow-performance-prewarm-button }
+- tapOn: { id: multiwindow-performance-warm-button }
+- manualStep:
+    instruction: 'Watch the screen while the pooled note opens (press Open pooled note again if you missed it).'
+    expect: 'The note window appears with its title and window ID already drawn; no empty or white window shows first. The readout shows a warm open under 100 ms.'
+    evidence: none
+    signoff: required
+- tapOn: { id: multiwindow-performance-clock-button }
+- manualStep:
+    instruction: 'Move the Kitchen Sink main window so it covers the Throttled clock window completely. Press Advance clock 5 times, wait a second, then move the main window off the clock.'
+    expect: 'While covered, the clock row reads the same number of renders after advancing (the value grows). Once uncovered, the clock window shows the latest value and the render count grows by one or two. At most one frame of empty window background may show as it is uncovered; anything longer, or flicker afterwards, fails.'
+    evidence: none
+    signoff: required

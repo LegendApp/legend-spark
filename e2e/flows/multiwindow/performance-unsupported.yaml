@@ -1,0 +1,20 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window pools and throttling are typed unsupported on Windows
+intent: >
+  On Windows, getWindowPerformanceAvailability reports unsupported-platform for pools and throttling, and the screen's
+  navigator, which registers pooled and throttled entries, rejects E_UNSUPPORTED_OPTION when the first step creates it,
+  so no window opens (implementation: #414).
+checks: [MW-PERF-07]
+tags: [multiwindow]
+platforms: [windows]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/performance" }
+- extendedWaitUntil: { visible: { id: multiwindow-performance-root }, timeout: 10s }
+- assertVisible: { id: multiwindow-performance-availability-pool-unsupported-platform }
+- assertVisible: { id: multiwindow-performance-availability-throttle-unsupported-platform }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/performance?run=prewarm" }
+- assertVisible: { id: multiwindow-performance-run-1-steps-1 }
+- assertVisible: { id: multiwindow-performance-error-E_UNSUPPORTED_OPTION }
+- assertWindow: { count: 1 }

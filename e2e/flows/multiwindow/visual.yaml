@@ -5,7 +5,8 @@ intent: >
   and the main window matches the approved golden for the appearance (light and dark, English and Arabic), with the shell
   sidebar masked. No window is opened, so the open-window list is empty. Multiwindow > Special windows then opens from
   spark-ks://multiwindow/special-windows and matches its golden the same way, with no special window open (every row
-  reads closed).
+  reads closed). Multiwindow > Window performance then opens from spark-ks://multiwindow/performance and matches its
+  golden with nothing run yet (every readout row empty).
 checks: [MW-VISUAL-01]
 tags: [multiwindow]
 platforms: [macos]
@@ -19,3 +20,6 @@ matrix:
 - launchApp: { openUrl: "spark-ks://multiwindow/special-windows", stopApp: false }
 - assertVisible: { id: multiwindow-special-windows-root }
 - assertScreenshot: { golden: multiwindow-special-windows, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance", stopApp: false }
+- assertVisible: { id: multiwindow-performance-root }
+- assertScreenshot: { golden: multiwindow-performance, mask: [{ id: infra-shell-sidebar }] }

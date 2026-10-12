@@ -57,7 +57,9 @@ export function jsonSnapshot(value: unknown, active = new Set<object>()): unknow
 }
 /** Portable options implemented on macOS; Windows rejects them until its native host implements them. */
 const MACOS_ONLY_OPTIONS = ["aspectRatio", "opacity", "contentProtection", "ignoreMouseEvents", "tabbing"] as const;
-const common = ["title", "appearance", "titleBarStyle", "backgroundColor", "transparent", "hasShadow", "alwaysOnTop", "resizable", "closable", "minimizable", "minSize", "maxSize", ...MACOS_ONLY_OPTIONS, "macos"];
+/** Options both `openWindow` and `setWindowOptions` take, apart from `macos`. */
+export const APPEARANCE_OPTIONS: readonly string[] = ["title", "appearance", "titleBarStyle", "backgroundColor", "transparent", "hasShadow", "alwaysOnTop", "resizable", "closable", "minimizable", "minSize", "maxSize", ...MACOS_ONLY_OPTIONS];
+const common = [...APPEARANCE_OPTIONS, "macos"];
 export function validateOptions(options: WindowOpenOptions | WindowUpdateOptions, platform: string, opening: boolean): void {
   object(options, "window options"); keys(options, [...common, ...(opening ? ["id", "component", "props", "size", "position", "show", "restoreBounds", "tabbedWith", "kind", "parentId", "modal"] : [])]);
   if (platform === "windows") for (const key of [...MACOS_ONLY_OPTIONS, "tabbedWith"] as const) if ((options as WindowOpenOptions)[key] !== undefined) throw new SparkError("E_UNSUPPORTED_OPTION", `Windows does not support ${key} yet`);

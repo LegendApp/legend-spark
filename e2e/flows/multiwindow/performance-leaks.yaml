@@ -1,0 +1,24 @@
+appId: so.legend.spark.examples.kitchensink
+name: Pooled windows leave nothing behind
+intent: >
+  Each cycle opens a note from the pool, closes it (its window parks and becomes warm again), trims the pool (every warm
+  window closes for real, with its React surface) and prewarms one window again. Three cycles after a warm-up cycle
+  leave the driver's window, view, file descriptor and listener counters where they were, so parked windows unmount
+  their content and released windows are freed. Runs alternate tags so each wait sees its own run finish.
+checks: [MW-PERF-03]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 180s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/performance" }
+- assertVisible: { id: multiwindow-performance-root }
+- launchApp: { openUrl: "spark-ks://multiwindow/performance?run=prewarm&tag=start", stopApp: false }
+- assertVisible: { id: multiwindow-performance-done-start }
+- assertNoLeaks:
+    repeat: 3
+    run:
+      - launchApp: { openUrl: "spark-ks://multiwindow/performance?run=keep,warm,close,trim,prewarm&tag=a", stopApp: false }
+      - assertVisible: { id: multiwindow-performance-done-a }
+      - launchApp: { openUrl: "spark-ks://multiwindow/performance?run=keep,warm,close,trim,prewarm&tag=b", stopApp: false }
+      - assertVisible: { id: multiwindow-performance-done-b }
+- assertVisible: { id: multiwindow-performance-pooled-warm-1-hits-6-misses-0-released-12 }

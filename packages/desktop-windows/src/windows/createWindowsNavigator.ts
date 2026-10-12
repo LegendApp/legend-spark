@@ -2,15 +2,16 @@ import { AppRegistry, NativeModules, Platform, UIManager } from "react-native";
 import { SparkError, asyncRegistration, nativeError, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import type { Menu, MenuAction, MenuRootItem } from "@legendapp/spark-native-menu";
 import type { RoutedHotkeyHandlers } from "@legendapp/spark-commands/src/router";
-import { addWindowListener, closeWindow, getDisplays, getWindow, getWindowAvailability, handleWindowNewTab, listWindowTabGroups, openWindow, selectWindowTab, setWindowOptions, showWindow } from "../api";
+import { addWindowListener, centerWindow, closeWindow, getDisplays, getWindow, getWindowAvailability, handleWindowNewTab, listWindowTabGroups, openWindow, selectWindowTab, setWindowBounds, setWindowOptions, showWindow, windowPoolCommand } from "../api";
 import { addMacOSWindowListener } from "../macos";
 import { addTitleListener } from "../title-changes";
 import type { CloseResult, DisplayInfo, WindowBounds, WindowInfo, WindowOpenOptions } from "../types";
-import { bounds as validBounds, keys, object, validateOptions, windowId as validWindowId } from "../validation";
+import { APPEARANCE_OPTIONS, bounds as validBounds, keys, object, validateOptions, windowId as validWindowId } from "../validation";
 import { instanceRecord, jsonCopy, registerInstance, restorableStates, windowStates, type InstanceRecord } from "./instances";
-import { DefaultErrorFallback, createWindowRoot, type RootContent, type RootHost, type WindowRootProps } from "./root";
+import { createWindowPools, generatedId, poolable, validatePerformance } from "./pool";
+import { DefaultErrorFallback, createWindowRoot, type RootContent, type RootHost, type ThrottleStore, type WindowRootProps } from "./root";
 import { createUndoStack } from "./undo";
-import type { DuplicateWindowOptions, IsolatedRuntime, NavigatorWindowOptions, NewWindowTab, NewWindowTabRequest, SavedWindow, UndoMenuLabels, WindowComponentProps, WindowConfigEntry, WindowErrorEvent, WindowInstance, WindowSession, WindowSessionFeature, WindowsConfig, WindowsNavigatorOptions } from "./types";
+import type { DuplicateWindowOptions, IsolatedRuntime, NavigatorWindowOptions, NewWindowTab, NewWindowTabRequest, SavedWindow, UndoMenuLabels, WindowComponentProps, WindowConfigEntry, WindowErrorEvent, WindowInstance, WindowPoolState, WindowSession, WindowSessionFeature, WindowsConfig, WindowsNavigatorOptions } from "./types";
 
 export type NavigatorOpenOptions<P> = { props: P; options?: NavigatorWindowOptions };
 type OpenArguments<P> = {} extends P ? [options?: { props?: P; options?: NavigatorWindowOptions }] : [options: NavigatorOpenOptions<P>];
@@ -67,6 +68,16 @@ export interface WindowsNavigator<T extends WindowsConfig> extends AsyncRegistra
    * from here to survive a crash, and from `beforeQuit`. Native observation runs only while a listener exists.
    */
   subscribeToSession(listener: () => void): { remove(): void };
+  /**
+   * Starts a `pool` entry's window pool and creates warm windows up to `count` (default `pool.prewarm`) within its
+   * limits, one at a time. From then on its windows park on close and become warm again, and opens use warm windows.
+   * Resolves the pool's state; rejects `E_MODULE_UNAVAILABLE` without @legendapp/spark-system.
+   */
+  prewarm(name: keyof T, count?: number): Promise<WindowPoolState>;
+  /** A `pool` entry's warm windows, limits, measured cost and counters. */
+  getPool(name: keyof T): WindowPoolState;
+  /** Closes the warm windows of one `pool` entry, or all, for real, and stops refilling until the next `prewarm`. */
+  trimPool(name?: keyof T): Promise<void>;
 }
 
 interface WindowRecord extends InstanceRecord {
@@ -85,10 +96,18 @@ interface WindowRecord extends InstanceRecord {
   subscriptions: { remove(): void }[];
   /** Frame and tab listeners, installed while `subscribeToSession` has listeners. */
   observing?: Promise<AsyncRegistration[]>;
+  /** A pooled window's use, matched by its root. */
+  use?: number;
+  /** Resolves when the content first commits. */
+  committed?: () => void;
+  /** Background render throttling: hidden or minimized, and fully covered. */
+  hidden: boolean;
+  occluded: boolean;
+  throttle?: ThrottleStore & { notify(): void };
 }
 
 const namePattern = /^[a-zA-Z0-9_-]{1,48}$/;
-const entryKeys = ["id", "component", "loadComponent", "options", "runtime", "undoMenu", "menus", "onMenuAction", "hotkeys", "newTab", "macos"];
+const entryKeys = ["id", "component", "loadComponent", "options", "runtime", "undoMenu", "menus", "onMenuAction", "hotkeys", "newTab", "macos", "pool", "throttle"];
 const UNDO_ID = "spark-windows-undo", REDO_ID = "spark-windows-redo", EDIT_ID = "spark-windows-edit";
 const defaultUndoLabels: UndoMenuLabels = { edit: "Edit", undo: label => label ? `Undo ${label}` : "Undo", redo: label => label ? `Redo ${label}` : "Redo" };
 /** Registered root module names: `spark.window.<id>` for `id` entries, `spark.window.<name>` otherwise. */
@@ -96,7 +115,9 @@ const reservedModules = new Set<string>();
 // Isolated runtimes are counted across navigators: one is destroyed only when no window, or window
 // being opened, of any navigator uses it.
 const runtimeUsers = new Map<string, number>(), runtimeDestroys = new Map<string, Promise<void>>();
-let sequence = 0, navigators = 0;
+let navigators = 0, uses = 0;
+/** How long a taken warm window's content may take to render before the open fails. */
+const COMMIT_TIMEOUT_MS = 10000;
 
 function isComponent(value: unknown) {
   return typeof value === "function" || (!!value && typeof value === "object" && [Symbol.for("react.memo"), Symbol.for("react.forward_ref"), Symbol.for("react.lazy")].includes((value as { $$typeof?: symbol }).$$typeof!));
@@ -177,6 +198,7 @@ function validateEntry(name: string, entry: WindowConfigEntry, options: WindowsN
     object(entry.macos, "macos"); keys(entry.macos, ["toolbar", "onToolbarEvent"]);
     fn(entry.macos.toolbar, "macos.toolbar"); fn(entry.macos.onToolbarEvent, "macos.onToolbarEvent");
   }
+  validatePerformance(name, entry);
 }
 type RootComponent = Awaited<ReturnType<RootContent["load"]>>;
 function contentOf(entry: WindowConfigEntry): RootContent {
@@ -184,6 +206,7 @@ function contentOf(entry: WindowConfigEntry): RootContent {
   let pending: Promise<RootComponent> | undefined;
   return {
     runtime: isolated(entry),
+    throttle: entry.throttle === true,
     resolved: () => resolved,
     async load() {
       if (resolved) return resolved;
@@ -242,6 +265,7 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     return config[name];
   };
   const closedError = (cause?: unknown) => new SparkError("E_CLOSED", "The window has closed", { cause });
+  const pools = createWindowPools(entries, { moduleName: name => moduleName(name, config[name]), load: name => contents.get(name)!.load(), report });
 
   // The menu bar follows the key window: one menu owner whose contribution is the key window's.
   const menuItemsFor = (windowId: string | null): MenuRootItem[] => {
@@ -358,6 +382,11 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     emit();
     // A closing window can be the last change before quitting: save without waiting.
     if (wasOpen) flushSession();
+    // A pooled window parked instead of closing: warm again, or closed for real.
+    if (wasOpen && record.entry.pool) pools.recycle(id).catch(error => report({ windowId: id, name: record.instance.name, phase: "cleanup", error }));
+  };
+  const setVisibility = (record: WindowRecord, change: Partial<Pick<WindowRecord, "hidden" | "occluded">>) => {
+    Object.assign(record, change); record.throttle?.notify();
   };
 
   /** Closure tracking first, bound to this native instance; then focus, undo menu, hotkeys and toolbar events. */
@@ -374,6 +403,10 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     keep(await addWindowListener(id, "focusChanged", event => {
       if (event.focused) setKey(id); else if (keyWindowId === id) setKey(null);
     }, { onError: fail("runtime") }));
+    if (entry.throttle) {
+      keep(await addWindowListener(id, "visibilityChanged", event => setVisibility(record, { hidden: !event.visible }), { onError: fail("runtime") }));
+      keep(await addWindowListener(id, "occlusionChanged", event => setVisibility(record, { occluded: event.occluded }), { onError: fail("runtime") }));
+    }
     if (entry.undoMenu) {
       const subscription = instance.undo.subscribe(() => { if (keyWindowId === id) requestPublish(); });
       if (record.disposed) subscription.remove(); else record.subscriptions.push(subscription);
@@ -428,7 +461,7 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
       },
     };
     const record: WindowRecord = {
-      instance, entry, props, open: false, disposed: false, registrations: [], subscriptions: [],
+      instance, entry, props, open: false, disposed: false, registrations: [], subscriptions: [], hidden: false, occluded: false,
       closeListeners: new Set(), seeds: seeds?.seeds ?? new Map(), restored: seeds?.restored ?? new Map(), sessionChanged,
     };
     registerInstance(instance, record);
@@ -443,17 +476,18 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
   };
 
   const host: RootHost = {
-    adopt({ id, name, props }) {
+    adopt({ id, name, props, use }) {
       validWindowId(id);
       const existing = records.get(id);
       if (existing) return existing.instance;
       // A root restarted by native after a JavaScript reload: rebuild its record from root props.
       if (removed) throw new SparkError("E_CLOSED", "The windows navigator was removed");
       const record = createRecord(id, name, entryOf(name), props);
+      record.use = use;
       records.set(id, record);
       void track(record, (async () => {
         let focused = false;
-        try { focused = (await getWindow(id)).focused; await installServices(record); }
+        try { const info = await getWindow(id); focused = info.focused; setVisibility(record, { hidden: !info.visible }); await installServices(record); }
         catch (error) {
           if (record.disposed) return;
           if (nativeError(error).code !== "E_NOT_FOUND") {
@@ -466,6 +500,21 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
         if (focused) setKey(id);
       })());
       return record.instance;
+    },
+    warm: id => pools.warm(id),
+    committed(instance) { const record = records.get(instance.id); if (record?.instance === instance) record.committed?.(); },
+    throttle(instance) {
+      const record = records.get(instance.id);
+      if (record?.instance !== instance) return { subscribe: () => () => {}, get: () => false };
+      if (!record.throttle) {
+        const listeners = new Set<() => void>();
+        record.throttle = {
+          subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+          get: () => record.entry.throttle === true && (record.hidden || record.occluded),
+          notify: () => notify(listeners),
+        };
+      }
+      return record.throttle;
     },
     report,
     fallback: options.errorFallback ?? DefaultErrorFallback,
@@ -493,11 +542,14 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
       const availability = getIsolatedRuntimeAvailability();
       if (!availability.available) return Promise.reject(new SparkError(availability.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : "E_MODULE_UNAVAILABLE", "Isolated window runtimes are unavailable"));
     }
-    const id = entry.id ?? restore?.id ?? `${name}-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
+    const warm = restore?.id === undefined ? pools.take(name, request.options) : undefined;
+    if (warm) return claim(warm, name, entry, request, restore);
+    const id = entry.id ?? restore?.id ?? generatedId(name);
     // A saved or fixed ID can have been taken since it was checked (a concurrent open, adoption or restore).
     if (records.has(id)) return Promise.reject(new SparkError("E_ALREADY_EXISTS", `Window is already open: ${id}`));
     // Registered and holding its runtime before the first await, so concurrent opens and closes see it.
     const record = createRecord(id, name, entry, request.props as WindowRecord["props"], restore);
+    if (entry.pool) record.use = ++uses;
     records.set(id, record);
     let info!: WindowInfo;
     return track(record, (async () => {
@@ -507,24 +559,75 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
         const windowOptions = { ...entry.options, ...request.options } as WindowOpenOptions;
         const toolbar = Platform.OS === "macos" && entry.macos?.toolbar ? entry.macos.toolbar(record.instance) : undefined;
         // `id` entries keep their props as root props; generated IDs travel with the props.
-        const props = entry.id ? request.props : { props: request.props as WindowRootProps["props"], sparkWindow: { id } } satisfies WindowRootProps;
+        const props = entry.id ? request.props : { ...(request.props !== undefined ? { props: request.props as WindowRootProps["props"] } : {}), sparkWindow: { id, ...(record.use ? { use: record.use } : {}) } } satisfies WindowRootProps;
         info = await openWindow({
           ...windowOptions,
           ...(toolbar ? { macos: { ...windowOptions.macos, toolbar } } : {}),
           id, component: moduleName(name, entry), props,
         } as WindowOpenOptions);
+        setVisibility(record, { hidden: !info.visible });
       } catch (error) { dispose(record); throw error; }
       try {
         await installServices(record);
+        // Only windows a plain open could have produced join the pool; others (sheets, tabs, restored IDs) close for real.
+        if (entry.pool && poolable(request.options) && restore?.id === undefined) await pools.track(name, id, info);
         record.open = true; observe(record); emit();
       } catch (error) {
         // No partially configured windows: close it, then report the original failure.
         if (!record.disposed) {
-          await closeWindow(id).catch(cleanupError => report({ windowId: id, name, phase: "cleanup", error: cleanupError }));
+          await (entry.pool ? pools.release(id) : closeWindow(id)).catch(cleanupError => report({ windowId: id, name, phase: "cleanup", error: cleanupError }));
           dispose(record);
         }
         throw error;
       }
+      if (entry.pool) pools.refill(name);
+    })()).then(() => ({ instance: record.instance, info }));
+  };
+  /**
+   * Opens a warm pooled window: its root gets the props natively and mounts the content (the app gets windowOpened), the
+   * window gets the entry's and the open's appearance options, its creation title and the open's or its creation size,
+   * and it shows once the content has committed, so the first paint is the content. A window whose options a use changed
+   * never comes back warm (it closes for real), so nothing else needs resetting.
+   */
+  const claim = (id: string, name: string, entry: WindowConfigEntry, request: OpenRequest, restore?: Pick<WindowRecord, "seeds" | "restored">): Promise<Opened> => {
+    const record = createRecord(id, name, entry, request.props as WindowRecord["props"], restore);
+    const options = { ...entry.options, ...request.options } as NavigatorWindowOptions & { size?: { width: number; height: number }; position?: { displayId: string; x: number; y: number }; show?: boolean };
+    record.use = ++uses;
+    record.hidden = options.show === false;
+    records.set(id, record);
+    let info!: WindowInfo, timer: ReturnType<typeof setTimeout> | undefined;
+    const committed = new Promise<void>((resolve, reject) => {
+      record.committed = resolve;
+      timer = setTimeout(() => reject(new SparkError("E_TIMEOUT", "The window's content did not render")), COMMIT_TIMEOUT_MS);
+    });
+    return track(record, (async () => {
+      try {
+        await windowPoolCommand("reuse", { id, props: { ...(request.props !== undefined ? { props: request.props as WindowRootProps["props"] } : {}), sparkWindow: { id, use: record.use } } satisfies WindowRootProps });
+        await installServices(record);
+        const created = pools.created(id)!;
+        const appearance = Object.fromEntries(Object.entries(options).filter(([key]) => APPEARANCE_OPTIONS.includes(key)));
+        const toolbar = entry.macos?.toolbar ? entry.macos.toolbar(record.instance) : undefined;
+        await setWindowOptions(id, { title: created.title, ...appearance, ...(toolbar ? { macos: { toolbar } } : {}) });
+        pools.settled(id);
+        const size = options.size ?? { width: created.bounds.width, height: created.bounds.height };
+        if (options.position) await setWindowBounds(id, { ...options.position, ...size });
+        else {
+          // Centered on the display it was created on, or the primary display once that one is disconnected.
+          const displays = await getDisplays();
+          const display = displays.find(item => item.id === created.bounds.displayId) ?? displays.find(item => item.primary)!;
+          await setWindowBounds(id, { displayId: display.id, x: display.workArea.x, y: display.workArea.y, ...size });
+          await centerWindow(id, { displayId: display.id });
+        }
+        await committed;
+        if (options.show !== false) await showWindow(id, { focus: true });
+        info = await getWindow(id);
+        record.open = true; observe(record); emit();
+      } catch (error) {
+        if (!record.disposed) dispose(record);
+        await pools.release(id).catch(cleanupError => report({ windowId: id, name, phase: "cleanup", error: cleanupError }));
+        throw error;
+      } finally { clearTimeout(timer); record.committed = undefined; }
+      pools.refill(name);
     })()).then(() => ({ instance: record.instance, info }));
   };
   const fixedId = (name: unknown) => {
@@ -726,8 +829,11 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     records.clear();
     for (const record of owned) { record.disposed = true; record.open = false; }
     await Promise.all(owned.map(cleanup));
-    const pending = menu; menu = undefined;
-    if (pending) await (await pending.catch(() => undefined))?.remove();
+    try { await pools.remove(); }
+    finally {
+      const pending = menu; menu = undefined;
+      if (pending) await (await pending.catch(() => undefined))?.remove();
+    }
   });
 
   return {
@@ -758,6 +864,9 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     getSession,
     restoreSession,
     duplicate,
+    async prewarm(name, count) { live(); entryOf(name); return pools.prewarm(name, count); },
+    getPool(name) { live(); entryOf(name); return pools.state(name); },
+    async trimPool(name) { live(); if (name !== undefined) entryOf(name); await pools.trim(name); },
     subscribeToSession(listener) {
       live();
       if (typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a listener");

@@ -4,6 +4,7 @@ export {
   type WindowRequestHandler, type WindowBroadcastListener, type WindowRequestOptions, type WindowBroadcastOptions, type WindowBroadcastListenerOptions,
 } from "./messages";
 export { createWindowState, type WindowState, type WindowStateOptions } from "./state";
+export { getWindowPerformanceAvailability } from "./pool";
 export { useWindowInstance, useUndoState, useWindowState } from "./hooks";
 export { DefaultErrorFallback } from "./root";
 export type * from "./types";

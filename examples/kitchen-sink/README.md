@@ -82,6 +82,13 @@ them, and `spark-ks://multiwindow/special-windows?run=pip,pip-move,…` runs a s
 (steps in `screens/multiwindow/special-windows.ts`). See
 [the window contract](../../docs/api-window-contract.md#special-window-types).
 
+`multiwindow/performance` prewarms a pooled note entry and times warm and cold opens to their first paint, shows each
+pool's warm windows, hits, misses, releases and measured cost per window (one pool's 1 MB budget keeps none), and opens
+a throttled clock window that renders nothing while hidden. `spark-ks://multiwindow/performance?run=prewarm,warm,…`
+runs steps (in `screens/multiwindow/window-performance.ts`; a first step `keep` keeps the open windows, and `&tag=`
+names the run so repeated runs can wait for their own end). See
+[the window contract](../../docs/api-window-contract.md#window-pools).
+
 `windows/window-options` opens a child window with options applied at open, then
 changes each option from the Windows epic on the live child (one row per option),
 lists `getWindowAvailability(option)` and probes rejected requests. The audit is in

@@ -1,4 +1,4 @@
-import { Component, Fragment, Suspense, createContext, lazy, useState, type ComponentType, type ReactNode } from "react";
+import { Component, Fragment, Suspense, createContext, lazy, useLayoutEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 import type { ThreadedComponent } from "@react-native-runtimes/core";
 import { WindowProvider } from "./WindowProvider";
@@ -7,17 +7,25 @@ import type { ErrorFallbackProps, IsolatedRuntime, WindowErrorEvent, WindowInsta
 type Props = Record<string, unknown>;
 /**
  * Root props of entries without a fixed ID; entries with `id` receive their props directly, as before.
- * Native restarts root props unchanged after a JavaScript reload.
+ * Native restarts root props unchanged after a JavaScript reload. Pooled windows also carry `use`: 0 while warm
+ * (no instance, nothing rendered), then a new number for each open, set natively when the window is taken.
  */
-export interface WindowRootProps { props?: Props; sparkWindow: { id: string } }
+export interface WindowRootProps { props?: Props; sparkWindow: { id: string; use?: number } }
+/** Whether a window's content is throttled (hidden, minimized or fully covered). */
+export interface ThrottleStore { subscribe(listener: () => void): () => void; get(): boolean }
 export interface RootHost {
   /** Idempotent: the live instance, or one recreated for a root restarted after a reload. */
   /** `props`: what the window was opened with, undefined when it had none. */
-  adopt(window: { id: string; name: string; props: Props | undefined }): WindowInstance;
+  adopt(window: { id: string; name: string; props: Props | undefined; use?: number }): WindowInstance;
+  /** A pooled window's root rendered with nothing to show: the window is warm. */
+  warm(id: string): void;
+  /** The window's content committed its first render. */
+  committed(instance: WindowInstance): void;
+  throttle(instance: WindowInstance): ThrottleStore;
   report(event: WindowErrorEvent): void;
   fallback: ComponentType<ErrorFallbackProps>;
 }
-export interface RootContent { resolved(): ComponentType<Props> | undefined; load(): Promise<ComponentType<Props>>; runtime?: IsolatedRuntime }
+export interface RootContent { resolved(): ComponentType<Props> | undefined; load(): Promise<ComponentType<Props>>; runtime?: IsolatedRuntime; throttle?: boolean }
 
 export const WindowInstanceContext = createContext<WindowInstance | null>(null);
 
@@ -59,24 +67,49 @@ function openedProps({ rootTag: _rootTag, ...props }: Props): Props | undefined 
   return Object.keys(props).length ? props : undefined;
 }
 
+// Background render throttling: suspending with a thenable that never settles hides the committed content's views and
+// keeps its state; its layout effects are cleaned up and run again when it renders, and updates inside wait until then.
+// The window can show its background for a frame when it becomes visible, before that render (AppKit reports
+// visibility after the change). A bare thenable keeps no callbacks, so freezing retains nothing.
+const never = { then() {} };
+function Freeze({ frozen, children }: { frozen: boolean; children: ReactNode }) {
+  if (frozen) throw never;
+  return children;
+}
+function useThrottled(store: ThrottleStore) { return useSyncExternalStore(store.subscribe, store.get); }
+function useCommitted(host: RootHost, instance: WindowInstance) { useLayoutEffect(() => host.committed(instance), [host, instance]); }
+function useWarm(host: RootHost, id: string) { useLayoutEffect(() => host.warm(id), [host, id]); }
+function Warm({ host, id }: { host: RootHost; id: string }) { useWarm(host, id); return null; }
+
 export function createWindowRoot(host: RootHost, content: RootContent, name: string, fixedId?: string): ComponentType<Props> {
   const { runtime } = content;
   // A root restarted after a reload can render before open() or prefetch() loaded the component.
   const Loaded = lazy(async () => ({ default: await content.load() }));
-  function WindowRoot(rootProps: Props) {
+  function WindowBody({ rootProps }: { rootProps: Props }) {
     const wrapped = rootProps as Partial<WindowRootProps>;
     const props = fixedId ? rootProps : wrapped.props ?? {};
-    // Adopt once per mount, so a late re-render can never pick up a later window reusing the ID.
-    const [instance] = useState(() => host.adopt({ id: fixedId ?? wrapped.sparkWindow?.id ?? "", name, props: fixedId ? openedProps(rootProps) : wrapped.props }));
+    // Adopt once per mount (and pooled use), so a late re-render can never pick up a later window reusing the ID.
+    const [instance] = useState(() => host.adopt({ id: fixedId ?? wrapped.sparkWindow?.id ?? "", name, props: fixedId ? openedProps(rootProps) : wrapped.props, use: wrapped.sparkWindow?.use }));
+    const [throttle] = useState(() => host.throttle(instance));
+    const frozen = useThrottled(throttle);
+    useCommitted(host, instance);
     const Content = content.resolved();
     const body = runtime
       ? <runtime.module.Threaded component={Content as ThreadedComponent<Props>} props={props} runtimeName={runtime.isolated} style={styles.fill} surfaceKey={instance.id} testID={`spark-window-surface-${instance.id}`} />
       : Content ? <Content {...props} /> : <Suspense fallback={null}><Loaded {...props} /></Suspense>;
     return <WindowProvider id={instance.id}>
       <WindowInstanceContext.Provider value={instance}>
-        <WindowErrorBoundary host={host} instance={instance}>{body}</WindowErrorBoundary>
+        <WindowErrorBoundary host={host} instance={instance}>
+          {content.throttle ? <Suspense fallback={null}><Freeze frozen={frozen}>{body}</Freeze></Suspense> : body}
+        </WindowErrorBoundary>
       </WindowInstanceContext.Provider>
     </WindowProvider>;
+  }
+  function WindowRoot(rootProps: Props) {
+    const window = fixedId ? undefined : (rootProps as Partial<WindowRootProps>).sparkWindow;
+    // A warm pooled window renders nothing; each use mounts fresh content.
+    if (window?.use === 0) return <Warm host={host} id={window.id} />;
+    return <Fragment key={window?.use}><WindowBody rootProps={rootProps} /></Fragment>;
   }
   return WindowRoot;
 }
