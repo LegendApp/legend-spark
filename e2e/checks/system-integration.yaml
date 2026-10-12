@@ -158,3 +158,76 @@ checks:
     spec: "#126 SYS.api-perms"
     covers:
       - ./permissions#getPermissionAvailability().available
+  SYS-SHAREAVAIL-01:
+    title: "getSharingAvailability reports share, services and spotlight available on macOS, and getDefaultURLHandlerAvailability reports the default URL handler available"
+    platforms: [macos]
+    blocking: true
+    spec: "#125 SYS.api-services"
+    covers:
+      - ./sharing
+      - ./sharing#getSharingAvailability
+      - ./sharing#getSharingAvailability(share).available
+      - ./sharing#getSharingAvailability(services).available
+      - ./sharing#getSharingAvailability(spotlight).available
+      - ./links#getDefaultURLHandlerAvailability
+      - ./links#getDefaultURLHandlerAvailability().available
+  SYS-SHARE-01:
+    title: "share sends text, a web link and an existing file to the picker from an anchor view and resolves the chosen service or dismissed; with no answer it rejects SparkError:E_UNAVAILABLE (driver simulation; no picker appears)"
+    platforms: [macos]
+    blocking: true
+    spec: "#125 SYS.api-services"
+    covers:
+      - ./sharing#share
+  SYS-SERVICES-01:
+    title: "addServiceListener rejects SparkError:E_UNAVAILABLE for an undeclared service, registers a declared one, and receives the text a Services menu invocation sends (driver simulation; pbs and the Services menu are untouched)"
+    platforms: [macos]
+    blocking: true
+    spec: "#125 SYS.api-services"
+    covers:
+      - ./sharing#addServiceListener
+  SYS-SPOTLIGHT-01:
+    title: "indexSpotlightItems adds three items to the app's index and deleteSpotlightItems removes them by domain; an opened Spotlight item reaches addSpotlightListener with its id (driver simulation; the real index is untouched)"
+    platforms: [macos]
+    blocking: true
+    spec: "#125 SYS.api-services"
+    covers:
+      - ./sharing#indexSpotlightItems
+      - ./sharing#deleteSpotlightItems
+      - ./sharing#addSpotlightListener
+  SYS-DEFHANDLER-01:
+    title: "isDefaultURLHandler reports spark-ks not default, setDefaultURLHandler makes the app its default, and a universal link arrives as an https url event (driver simulation; LaunchServices is untouched)"
+    platforms: [macos]
+    blocking: true
+    spec: "#125 SYS.api-services"
+    covers:
+      - ./links#isDefaultURLHandler
+      - ./links#setDefaultURLHandler
+  SYS-SHAREREAL-01:
+    title: "Real system paths: the share picker shows the services for text, a link and a file and reports the chosen one or a dismissal; Spotlight finds the indexed recipes and opening one reaches the app; Make default makes the Kitchen Sink the spark-ks handler"
+    platforms: [macos]
+    blocking: true
+    spec: "#125 SYS.api-services"
+    covers:
+      - ./sharing#share
+      - ./sharing#indexSpotlightItems
+      - ./sharing#deleteSpotlightItems
+      - ./sharing#addSpotlightListener
+      - ./links#setDefaultURLHandler
+      - ./links#isDefaultURLHandler
+  SYS-SHAREUNSUP-01:
+    title: "On Windows getSharingAvailability and getDefaultURLHandlerAvailability report unsupported-platform and the sharing calls reject SparkError:E_UNSUPPORTED_PLATFORM (#392)"
+    platforms: [windows]
+    blocking: true
+    spec: "#125 SYS.api-services; Windows implementation #392"
+    covers:
+      - ./sharing#getSharingAvailability(share).available
+      - ./sharing#share
+      - ./sharing#addServiceListener
+      - ./links#getDefaultURLHandlerAvailability().available
+  SYS-SHAREVISUAL-01:
+    title: "The Sharing & Spotlight screen matches its golden in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#125 SYS.api-services"
+    covers:
+      - ./sharing#getSharingAvailability(share).available

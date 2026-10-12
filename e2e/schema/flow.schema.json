@@ -5435,6 +5435,212 @@
               "type": "object"
             }
           },
+          "simulateSharing": {
+            "description": "[driver] Drive the in-process simulation of @legendapp/spark/sharing: how the simulated share picker answers (a service title, or dismiss; null makes share reject), the services the app's Info.plist would declare, a run of a registered service as the Services menu would (text on a private pasteboard), and opening a Spotlight item or an https universal link through the app delegate as macOS does. Never shows a picker, writes the Spotlight index or reaches pbs.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "shareAnswer": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "services": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 0
+                },
+                "invokeService": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                "openSpotlightItem": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "openUniversalLink": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "shareAnswer"
+                  ]
+                },
+                {
+                  "required": [
+                    "services"
+                  ]
+                },
+                {
+                  "required": [
+                    "invokeService"
+                  ]
+                },
+                {
+                  "required": [
+                    "openSpotlightItem"
+                  ]
+                },
+                {
+                  "required": [
+                    "openUniversalLink"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
+          "assertSharing": {
+            "description": "[driver] Assert what the @legendapp/spark/sharing simulation recorded: the number of shares, the last share (its items, whether it had an anchor view, the service it got), the ids in the simulated Spotlight index (sorted), the services with a listener, and the number of service invocations.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "shares": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "lastShare": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "enum": [
+                              "text",
+                              "url",
+                              "file"
+                            ]
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "path": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1
+                    },
+                    "anchored": {
+                      "type": "boolean"
+                    },
+                    "service": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "minProperties": 1
+                },
+                "indexed": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 0
+                },
+                "registered": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 0
+                },
+                "invocations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "shares"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastShare"
+                  ]
+                },
+                {
+                  "required": [
+                    "indexed"
+                  ]
+                },
+                {
+                  "required": [
+                    "registered"
+                  ]
+                },
+                {
+                  "required": [
+                    "invocations"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "permission": {
             "description": "Grant, revoke or reset a privacy permission.",
             "if": {

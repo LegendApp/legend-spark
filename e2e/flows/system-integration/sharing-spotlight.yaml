@@ -1,0 +1,27 @@
+appId: so.legend.spark.examples.kitchensink
+name: Spotlight items are indexed, opened and deleted (simulated)
+intent: >
+  In driver mode @legendapp/spark/sharing keeps the app's Spotlight index in memory and never writes the real one.
+  An item opened before any listener exists (as when an opening launches the app) is held and reaches the screen's
+  listener once it opens. Index recipes adds the three sample recipes; opening one from Spotlight (a simulated
+  CSSearchableItemActionType activity delivered to the app delegate) reaches the listener with its id; Delete
+  recipes removes the ks-recipes domain.
+checks: [SYS-SPOTLIGHT-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { clearState: true }
+- simulateSharing: { openSpotlightItem: ks-recipe-held }
+- launchApp: { stopApp: false, openUrl: "spark-ks://system-integration/sharing" }
+- assertText: { id: system-integration-sharing-event-0, equals: "spotlight: ks-recipe-held" }
+- tapOn: { id: system-integration-sharing-spotlight-index }
+- assertText: { id: system-integration-sharing-spotlight-result, equals: indexed 3 }
+- assertSharing: { indexed: [ks-recipe-1, ks-recipe-2, ks-recipe-3] }
+- simulateSharing: { openSpotlightItem: ks-recipe-2 }
+- assertText: { id: system-integration-sharing-event-0, equals: "spotlight: ks-recipe-2" }
+- assertText: { id: system-integration-sharing-event-1, equals: "spotlight: ks-recipe-held" }
+- tapOn: { id: system-integration-sharing-spotlight-delete }
+- assertText: { id: system-integration-sharing-spotlight-result, equals: deleted }
+- assertSharing: { indexed: [] }
+- takeScreenshot: sharing-spotlight
+- assertNotVisible: { id: system-integration-sharing-error }

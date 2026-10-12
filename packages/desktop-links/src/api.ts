@@ -2,9 +2,10 @@ import { Platform } from "react-native";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { callAppNative } from "@legendapp/spark-desktop-app/src/transport";
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
-import { SparkError, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
-export type { Subscription } from "@legendapp/spark-desktop-app/src/contracts";
+import { SparkError, type Availability, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
+export type { Availability, Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 import { callLinks, linksCommand } from "./native";
+import Native from "./NativeDesktopLinks";
 export type URLListener = (event: { url: string }) => void;
 function url(value: string) {
   if (typeof value !== "string" || !/^[a-z][a-z0-9+.-]*:/i.test(value) || value.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "URL must include a scheme and contain no NUL");
@@ -28,4 +29,33 @@ export function addEventListener(type: "url", listener: URLListener): Subscripti
   return onDesktopEvent(event => {
     if (event.type === "openURL" && event.initial !== true && typeof event.url === "string" && /^[a-z][a-z0-9+.-]*:/i.test(event.url) && !event.url.includes("\0")) listener({ url: event.url });
   }, { types: ["openURL"] });
+}
+
+function scheme(value: string) {
+  if (typeof value !== "string" || !/^[a-z][a-z0-9+.-]*$/i.test(value)) throw new SparkError("E_INVALID_ARGUMENT", "Expected a URL scheme such as myapp, without a colon");
+  return value.toLowerCase();
+}
+/** Default URL handler registration: macOS. Windows reports `unsupported-platform` (#392). */
+export function getDefaultURLHandlerAvailability(): Availability {
+  if (Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };
+  return Native ? { available: true } : { available: false, reason: "missing-module" };
+}
+function requireDefaultHandlers() {
+  const availability = getDefaultURLHandlerAvailability();
+  if (!availability.available) throw new SparkError(availability.reason === "unsupported-platform" ? "E_UNSUPPORTED_PLATFORM" : "E_MODULE_UNAVAILABLE", "Default URL handlers require macOS with NativeDesktopLinks installed");
+}
+/** Whether this app (by bundle identifier) opens `scheme` URLs by default. */
+export async function isDefaultURLHandler(value: string): Promise<boolean> {
+  const checked = scheme(value);
+  requireDefaultHandlers();
+  return callLinks("isDefaultHandler", { scheme: checked }, (result): result is boolean => typeof result === "boolean");
+}
+/**
+ * Makes this app the default handler for `scheme` URLs. The scheme must be one the app declares (CFBundleURLTypes),
+ * else E_UNAVAILABLE. For http and https macOS asks the person to confirm; keeping the current browser rejects E_ABORTED.
+ */
+export async function setDefaultURLHandler(value: string): Promise<void> {
+  const checked = scheme(value);
+  requireDefaultHandlers();
+  await linksCommand("setDefaultHandler", { scheme: checked });
 }

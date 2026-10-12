@@ -33,6 +33,7 @@
         "@legendapp/spark-processes": "0.0.1-next.3",
         "@legendapp/spark-secure-storage": "0.0.1-next.3",
         "@legendapp/spark-settings": "0.0.1-next.3",
+        "@legendapp/spark-sharing": "0.0.1-next.3",
         "@legendapp/spark-sqlite": "0.0.1-next.3",
         "@legendapp/spark-system": "0.0.1-next.3",
         "@legendapp/spark-tray": "0.0.1-next.3",
@@ -305,6 +306,7 @@
         "@legendapp/spark-secure-storage": "0.0.1-next.3",
         "@legendapp/spark-settings": "0.0.1-next.3",
         "@legendapp/spark-settings-ui": "0.0.1-next.3",
+        "@legendapp/spark-sharing": "0.0.1-next.3",
         "@legendapp/spark-sqlite": "0.0.1-next.3",
         "@legendapp/spark-system": "0.0.1-next.3",
         "@legendapp/spark-tray": "0.0.1-next.3",
@@ -582,6 +584,17 @@
       },
       "peerDependencies": {
         "@legendapp/list": ">=3.3.0",
+        "react": "19.1.4",
+        "react-native": "0.81.6",
+      },
+    },
+    "packages/sharing": {
+      "name": "@legendapp/spark-sharing",
+      "version": "0.0.1-next.3",
+      "dependencies": {
+        "@legendapp/spark-desktop-app": "0.0.1-next.3",
+      },
+      "peerDependencies": {
         "react": "19.1.4",
         "react-native": "0.81.6",
       },
@@ -1039,6 +1052,8 @@
     "@legendapp/spark-settings": ["@legendapp/spark-settings@workspace:packages/settings"],
 
     "@legendapp/spark-settings-ui": ["@legendapp/spark-settings-ui@workspace:packages/settings-ui"],
+
+    "@legendapp/spark-sharing": ["@legendapp/spark-sharing@workspace:packages/sharing"],
 
     "@legendapp/spark-sqlite": ["@legendapp/spark-sqlite@workspace:packages/sqlite"],
 

@@ -25,6 +25,14 @@ FOUNDATION_EXPORT void SparkSetDesktopObserved(BOOL observed);
 FOUNDATION_EXPORT void SparkOpenURLs(NSArray<NSURL *> *urls);
 FOUNDATION_EXPORT NSArray *SparkPendingURLs(void);
 FOUNDATION_EXPORT NSString *SparkInitialURL(void);
+// NSApplicationDelegate application:continueUserActivity:restorationHandler:. A web-browsing activity (a universal link)
+// opens its webpageURL as SparkOpenURLs does; a Core Spotlight item emits spotlightItemOpened { identifier, held }: until
+// JavaScript first takes them (SparkTakeSpotlightItems) it is also held, and held is true. NO for any other activity.
+FOUNDATION_EXPORT BOOL SparkContinueUserActivity(NSUserActivity *activity);
+// The Spotlight items opened before the first call, oldest first (at most 20). Later openings are only emitted.
+FOUNDATION_EXPORT NSArray<NSString *> *SparkTakeSpotlightItems(void);
+// The mounted React Native view with this React tag in any window, or nil.
+FOUNDATION_EXPORT NSView *SparkFindReactView(NSInteger tag);
 FOUNDATION_EXPORT void SparkMarkLaunchComplete(void);
 FOUNDATION_EXPORT NSApplicationTerminateReply SparkShouldQuit(void);
 FOUNDATION_EXPORT void SparkObserveQuitDecision(SparkQuitReply observer);

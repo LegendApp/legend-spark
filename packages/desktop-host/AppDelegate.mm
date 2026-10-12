@@ -179,6 +179,10 @@
   return NO;
 }
 - (void)application:(NSApplication *)sender openURLs:(NSArray<NSURL *> *)urls { SparkOpenURLs(urls); }
+// Universal links and Core Spotlight results (docs/links-and-documents.md#universal-links, docs/sharing.md#spotlight).
+- (BOOL)application:(NSApplication *)application continueUserActivity:(NSUserActivity *)activity restorationHandler:(void (^)(NSArray<id<NSUserActivityRestoring>> *))restorationHandler {
+  return SparkContinueUserActivity(activity);
+}
 - (void)application:(NSApplication *)sender openFiles:(NSArray<NSString *> *)files {
   NSMutableArray *urls = [NSMutableArray new];
   for (NSString *file in files) [urls addObject:[NSURL fileURLWithPath:file]];

@@ -86,6 +86,43 @@ void SparkOpenURLs(NSArray<NSURL *> *urls) {
   }
 }
 NSArray *SparkPendingURLs(void) { return [pendingURLs copy] ?: @[]; }
+// CSSearchableItemActionType and CSSearchableItemActivityIdentifier, without linking Core Spotlight into every app
+// (tests/sharing.native.mm checks them against the framework's constants).
+static NSString *const SpotlightActivity = @"com.apple.corespotlightitem", *const SpotlightIdentifier = @"kCSSearchableItemActivityIdentifier";
+static NSMutableArray<NSString *> *heldSpotlightItems;
+static BOOL spotlightTaken = NO;
+BOOL SparkContinueUserActivity(NSUserActivity *activity) {
+  if ([activity.activityType isEqual:NSUserActivityTypeBrowsingWeb] && activity.webpageURL) { SparkOpenURLs(@[activity.webpageURL]); return YES; }
+  NSString *identifier = activity.userInfo[SpotlightIdentifier];
+  if (![activity.activityType isEqual:SpotlightActivity] || ![identifier isKindOfClass:NSString.class]) return NO;
+  if (!spotlightTaken) {
+    if (!heldSpotlightItems) heldSpotlightItems = [NSMutableArray new];
+    [heldSpotlightItems addObject:identifier];
+    if (heldSpotlightItems.count > 20) [heldSpotlightItems removeObjectAtIndex:0];
+  }
+  // held: the first SparkTakeSpotlightItems returns it, so a listener waiting for that ignores the event.
+  SparkEmit(@{ @"type": @"spotlightItemOpened", @"identifier": identifier, @"held": @(!spotlightTaken) });
+  return YES;
+}
+NSArray<NSString *> *SparkTakeSpotlightItems(void) {
+  NSArray *held = [heldSpotlightItems copy] ?: @[];
+  heldSpotlightItems = nil;
+  spotlightTaken = YES;
+  return held;
+}
+// React Native macOS sets reactTag on every mounted component view (UIView+ComponentViewProtocol.h).
+@interface NSView (SparkReactTag)
+- (NSNumber *)reactTag;
+@end
+static NSView *SparkReactViewIn(NSView *view, NSInteger tag) {
+  if ([view respondsToSelector:@selector(reactTag)] && view.reactTag.integerValue == tag) return view;
+  for (NSView *child in view.subviews) { NSView *match = SparkReactViewIn(child, tag); if (match) return match; }
+  return nil;
+}
+NSView *SparkFindReactView(NSInteger tag) {
+  for (NSWindow *window in NSApp.windows) { NSView *view = SparkReactViewIn(window.contentView, tag); if (view) return view; }
+  return nil;
+}
 static SparkQuitCoordinator *SparkQuitCoordinatorInstance(void) {
   static SparkQuitCoordinator *coordinator;
   static dispatch_once_t once;

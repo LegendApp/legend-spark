@@ -1,0 +1,21 @@
+appId: so.legend.spark.examples.kitchensink
+name: The default spark-ks handler is set and universal links arrive as URL events (simulated)
+intent: >
+  In driver mode @legendapp/spark/links keeps default URL handlers in memory and never reads or changes
+  LaunchServices, so the Kitchen Sink starts as not the default for spark-ks, which it declares. Make default sets it
+  and the status reads default. A universal link (a simulated NSUserActivityTypeBrowsingWeb activity delivered to the
+  app delegate) reaches addEventListener('url') as its https URL; the catalog does not navigate for it.
+checks: [SYS-DEFHANDLER-01]
+tags: [system-integration]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://system-integration/sharing" }
+- assertText: { id: system-integration-sharing-default-status, equals: not default }
+- tapOn: { id: system-integration-sharing-make-default }
+- assertText: { id: system-integration-sharing-default-result, equals: set }
+- assertText: { id: system-integration-sharing-default-status, equals: default }
+- simulateSharing: { openUniversalLink: "https://legendapp.com/spark/recipes/1" }
+- assertText: { id: system-integration-sharing-event-0, equals: "link: https://legendapp.com/spark/recipes/1" }
+- assertVisible: { id: system-integration-sharing-content }
+- takeScreenshot: sharing-links
+- assertNotVisible: { id: system-integration-sharing-error }

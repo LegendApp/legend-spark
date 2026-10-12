@@ -7,11 +7,12 @@ import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "no
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 import { processLog, type ProcessLog } from "../../../packages/cli/src/process.ts";
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type TestSharing, type SimulatedSharing,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
@@ -46,6 +47,8 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   testPermission(kind: string): Promise<TestPermission>;
   simulateBiometrics(state: SimulatedBiometrics): Promise<TestBiometrics>;
   testBiometrics(): Promise<TestBiometrics>;
+  simulateSharing(request: SimulatedSharing): Promise<TestSharing>;
+  testSharing(): Promise<TestSharing>;
   testDrag(request: TestDragRequest): Promise<TestDragReply>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
   tap(target: InputTarget, options?: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
@@ -117,6 +120,9 @@ export class DriverBackend implements Backend {
     // Simulated @legendapp/spark/biometrics state, never LocalAuthentication or a keychain (docs/biometrics.md#testing).
     simulateBiometrics: async args => { await this.client().simulateBiometrics(args as SimulatedBiometrics); },
     assertSimulatedBiometrics: (args, context) => context.eventually(async () => assertSimulatedBiometrics(await this.client().testBiometrics(), args)),
+    // Simulated @legendapp/spark/sharing: no picker, Spotlight index or pbs (docs/sharing.md#testing).
+    simulateSharing: async args => { await this.client().simulateSharing(args as SimulatedSharing); },
+    assertSharing: (args, context) => context.eventually(async () => assertSharing(await this.client().testSharing(), args)),
     // Startup phases and the state the app exposes (docs/e2e-flows.md#app-inspection).
     ...inspectCommands(() => this.client(), () => this.opened!),
     // Layout thrash, flicker, leak counters and memory (docs/e2e-flows.md#layout-flicker-and-leaks).
@@ -525,11 +531,26 @@ export function assertSimulatedBiometrics(biometrics: TestBiometrics, args: Reco
     if (got !== expected) throw new Failure("assertion", `biometrics ${key} is ${JSON.stringify(actual[key])}, expected ${JSON.stringify(args[key])}`);
   }
 }
-/** Every listed type is on the test pasteboard (others may be too), and its plain text is exactly `text`. */
+/** Each given field matches the sharing simulation: lastShare compares the fields it lists, indexed the sorted ids. */
+export function assertSharing(sharing: TestSharing, args: Record<string, unknown>) {
+  const fail = (what: string, actual: unknown, expected: unknown) => { throw new Failure("assertion", `${what} is ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`); };
+  if (args.shares !== undefined && sharing.shares.length !== args.shares) fail("shares", sharing.shares.length, args.shares);
+  if (args.lastShare !== undefined) {
+    const last = sharing.shares.at(-1);
+    if (!last) fail("the last share", null, args.lastShare);
+    for (const [key, value] of Object.entries(args.lastShare as Record<string, unknown>))
+      if (!isDeepStrictEqual(last![key as keyof typeof last], value)) fail(`the last share's ${key}`, last![key as keyof typeof last], value);
+  }
+  const indexed = Object.keys(sharing.indexed).sort();
+  if (args.indexed !== undefined && JSON.stringify(indexed) !== JSON.stringify([...args.indexed as string[]].sort())) fail("the Spotlight index", indexed, args.indexed);
+  if (args.registered !== undefined && JSON.stringify(sharing.registered) !== JSON.stringify([...args.registered as string[]].sort())) fail("the registered services", sharing.registered, args.registered);
+  if (args.invocations !== undefined && sharing.invocations !== args.invocations) fail("service invocations", sharing.invocations, args.invocations);
+}
 export function assertSimulatedPermission(permission: TestPermission, args: Record<string, unknown>) {
   for (const key of ["authorization", "requests", "prompts", "settingsOpened"] as const)
     if (args[key] !== undefined && permission[key] !== args[key]) throw new Failure("assertion", `${String(args.kind)} ${key} is ${JSON.stringify(permission[key])}, expected ${JSON.stringify(args[key])}`);
 }
+/** Every listed type is on the test pasteboard (others may be too), and its plain text is exactly `text`. */
 export function assertClipboard(clipboard: TestClipboard, args: Record<string, unknown>) {
   const missing = ((args.types as string[] | undefined) ?? []).filter(type => !clipboard.types.includes(type));
   if (missing.length) throw new Failure("assertion", `clipboard lacks ${missing.join(", ")}; it has [${clipboard.types.join(", ")}]`);
