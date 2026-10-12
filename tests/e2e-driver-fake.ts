@@ -70,6 +70,7 @@ export class FakeDriver implements DriverClient {
     if (frames instanceof DriverError) throw frames;
     return frames;
   }
+  async simulateDisplays(displays: readonly object[] | null) { this.log.push(`simulateDisplays ${JSON.stringify(displays)}`); }
   async elements() {
     this.log.push("elements");
     const calls = ++this.calls;

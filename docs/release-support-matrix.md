@@ -66,6 +66,7 @@ Package: `@legendapp/spark@0.0.1-next.3`. This matrix is generated from `package
 | [`./ai/codex`](../packages/desktop/ai-codex.ts) | [codex/package.json](../packages/codex/package.json)<br>no platform-specific source file | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/codex.test.ts](../tests/codex.test.ts)<br>[tests/codex-native.test.ts](../tests/codex-native.test.ts)<br>No mapped shared runtime case |
 | [`./motion`](../packages/desktop/motion.ts) | [motion/package.json](../packages/motion/package.json)<br>macos: `packages/motion/macos/`, `packages/motion/cpp/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/motion.test.ts](../tests/motion.test.ts)<br>[tests/motion-native.test.ts](../tests/motion-native.test.ts)<br>No mapped shared runtime case |
 | [`./printing`](../packages/desktop/printing.ts) | [printing/package.json](../packages/printing/package.json)<br>macos: `packages/printing/macos/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/printing.test.ts](../tests/printing.test.ts)<br>[tests/printing-native.test.ts](../tests/printing-native.test.ts)<br>No mapped shared runtime case |
+| [`./displays`](../packages/desktop/displays.ts) | [desktop-windows/package.json](../packages/desktop-windows/package.json)<br>macos: `packages/desktop-windows/macos/` | not-tested | not-tested | N/A | N/A | N/A | N/A | N/A | [tests/displays.test.ts](../tests/displays.test.ts)<br>[tests/displays-native.test.ts](../tests/displays-native.test.ts)<br>No mapped shared runtime case |
 
 ## Build and configuration exports
 

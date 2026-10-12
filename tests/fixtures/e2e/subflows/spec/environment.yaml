@@ -6,6 +6,7 @@
 - setTimeZone: Asia/Tokyo
 - setSystemClock: "+3d"
 - setDisplays: [{ id: 1, scale: 2 }, { id: 2, scale: 1.5, refresh: 60, arrangement: rightOf }]
+- simulateDisplays: { restore: true }        # driver; displays: [DisplayDetails…] replaces what @legendapp/spark/displays reports
 - unplugDisplay: 2
 - sleepSystem: { for: 30s }
 - simulatePower: { source: battery, lowPower: true, thermal: serious }

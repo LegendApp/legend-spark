@@ -244,6 +244,7 @@ test("updates expose availability without starting and preserve native errors", 
 const processes = await import("../packages/processes/src/index.ts");
 const globalShortcuts = await import("../packages/global-shortcuts/src/index.ts");
 const system = await import("../packages/system/src/index.ts");
+const displays = await import("../packages/desktop-windows/src/displays.ts");
 const messages = await import("../packages/message-dialog/src/index.ts");
 test("global hotkey conflicts clean subscriptions and distinct registrations dispose independently", async () => {
   let hits = 0;
@@ -311,6 +312,22 @@ test("sleep assertions release once and system events filter unrelated traffic",
   expect(calls.filter(call => call.method === "allowSleep")).toHaveLength(1);
   const events: string[] = []; const subscription = await system.onSystemEvent(event => events.push(event.type));
   emit("NativeDesktopApp", "desktop", { type: "wake" }); emit("NativeDesktopApp", "desktop", { type: "activate" }); expect(events).toEqual(["wake"]); await subscription.remove();
+});
+test("display detail events and /system displaysChanged events never reach each other's listeners", async () => {
+  const display = { id: "1", persistentId: null, name: "Display", primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 0, width: 1512, height: 982 }, scaleFactor: 2,
+    safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: null, gamut: "srgb" }, edrHeadroom: { current: 1, potential: 1, reference: null } };
+  handlers.set("NativeDesktopWindowManager.observeDisplays", () => ({ sequence: 1, displays: [display] }));
+  const systemEvents: string[] = [], displayEvents: unknown[] = [], errors: unknown[] = [];
+  const systemSubscription = await system.onSystemEvent(event => systemEvents.push(event.type));
+  const displayRegistration = await displays.addDisplayListener(event => displayEvents.push(event), { onError: error => errors.push(error) });
+  const changed = [{ ...display, scaleFactor: 1 }];
+  emit("NativeDesktopApp", "desktop", { type: "displayDetailsChanged", sequence: 2, displays: changed });
+  expect(systemEvents).toEqual([]);
+  expect(displayEvents).toMatchObject([{ changed: [{ id: "1", fields: ["scaleFactor"] }] }]);
+  emit("NativeDesktopApp", "desktop", { type: "displaysChanged" });
+  expect(systemEvents).toEqual(["displaysChanged"]);
+  expect(displayEvents).toHaveLength(1); expect(errors).toEqual([]);
+  await displayRegistration.remove(); await systemSubscription.remove();
 });
 test("Dock menus identify their owner and remove only once", async () => {
   const selected: string[] = [];

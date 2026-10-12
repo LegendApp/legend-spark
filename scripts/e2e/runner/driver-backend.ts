@@ -25,6 +25,7 @@ export type DriverClient = MotionClient & {
   setClock(mode: "virtual" | "real"): Promise<unknown>;
   advanceClock(durationMs: number): Promise<unknown>;
   simulateSystemEvent(event: SimulatedSystemEvent): Promise<void>;
+  simulateDisplays(displays: readonly object[] | null): Promise<void>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
   tap(target: InputTarget, options?: { button?: "left" | "right"; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
   hover(target: InputTarget): Promise<void>;
@@ -74,6 +75,8 @@ export class DriverBackend implements Backend {
     simulateSystemEvent: async args => { await this.client().simulateSystemEvent(args as SimulatedSystemEvent); },
     // Motion telemetry and frame counters (docs/e2e-flows.md#motion-and-frames).
     ...motionCommands(() => this.client()),
+    // The display source of @legendapp/spark/displays (docs/displays.md#simulated-displays).
+    simulateDisplays: async args => { await this.client().simulateDisplays(args.restore ? null : args.displays as object[]); },
     // Black-box commands, run here in-process (white-box) only when no black-box backend is active.
     tapOn: (args, context) => this.click(args, context, {}),
     doubleClickOn: (args, context) => this.click(args, context, { clickCount: 2 }),

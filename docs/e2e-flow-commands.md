@@ -137,6 +137,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | `setTimeZone` | value → `timeZone` | `timeZone`* | black-box | Set the OS time zone. |
 | `setSystemClock` | value → `offset` | `offset`* | black-box | Shift or set the OS clock. |
 | `setDisplays` | value → `displays` | `displays`* | black-box | Configure virtual displays. |
+| `simulateDisplays` | — | `displays`, `restore` (exactly one) | driver | Report these displays through @legendapp/spark/displays instead of the real ones, in-process; `restore: true` reports the real ones again. The OS display configuration is untouched (setDisplays changes it). |
 | `unplugDisplay` | value → `display` | `display`* | black-box | Disconnect a display. |
 | `sleepSystem` | — | `for`* | black-box | Put the OS to sleep and wake it. |
 | `simulatePower` | — | `source`, `lowPower`, `thermal` (at least one) | black-box | Simulate power source and thermal state. |

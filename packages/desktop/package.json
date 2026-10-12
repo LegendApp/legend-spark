@@ -78,7 +78,8 @@
     "./ai": "./ai.ts",
     "./ai/codex": "./ai-codex.ts",
     "./motion": "./motion.ts",
-    "./printing": "./printing.ts"
+    "./printing": "./printing.ts",
+    "./displays": "./displays.ts"
   },
   "files": [
     "*.ts",

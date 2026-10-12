@@ -1,0 +1,45 @@
+appId: so.legend.spark.examples.kitchensink
+name: Display details from a simulated display set
+intent: >
+  The driver replaces the displays @legendapp/spark/displays reports (simulateDisplays; the OS
+  display configuration is untouched), then opens the Displays screen, which reads them with
+  getDisplayDetails. Display 901 is modeled on the 14-inch MacBook Pro's notched ProMotion panel:
+  a 32-point top safe area, 24-120 Hz variable refresh, P3 and EDR headroom up to 16. Display 902
+  is a 60 Hz fixed-rate panel, the rate of the M1 MacBook Air, to the right. Display 903 is a 1x
+  sRGB panel to the left, 200 points lower. Each card shows the values as given; only 901 is
+  primary. The flow restores the real displays at the end.
+checks: [DISP-INFO-01, DISP-SAFE-01, DISP-REFRESH-01, DISP-COLOR-01]
+tags: [displays-graphics]
+platforms: [macos]
+---
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+      - { id: "902", persistentId: SIM-902, name: Studio Display, primary: false, origin: { x: 1512, y: 0 }, size: { width: 2560, height: 1440 }, workArea: { x: 0, y: 0, width: 2560, height: 1440 }, scaleFactor: 2, safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: Studio Display, gamut: p3 }, edrHeadroom: { current: 1, potential: 1, reference: null } }
+      - { id: "903", persistentId: null, name: HD Monitor, primary: false, origin: { x: -1920, y: 200 }, size: { width: 1920, height: 1080 }, workArea: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1, safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: sRGB IEC61966-2.1, gamut: srgb }, edrHeadroom: { current: 1, potential: 1, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://displays-graphics/displays" }
+- extendedWaitUntil: { visible: { id: displays-graphics-displays-display-901 }, timeout: 10s }
+- assertText: { id: displays-graphics-displays-display-901-name, equals: Built-in Retina Display }
+- assertVisible: { id: displays-graphics-displays-display-901-primary }
+- assertNotVisible: { id: displays-graphics-displays-display-902-primary }
+- assertNotVisible: { id: displays-graphics-displays-display-903-primary }
+- assertText: { id: displays-graphics-displays-display-901-persistentId, equals: '"SIM-901"' }
+- assertText: { id: displays-graphics-displays-display-903-persistentId, equals: "null" }
+- assertText: { id: displays-graphics-displays-display-901-origin, equals: '{"x":0,"y":0}' }
+- assertText: { id: displays-graphics-displays-display-902-origin, equals: '{"x":1512,"y":0}' }
+- assertText: { id: displays-graphics-displays-display-903-origin, equals: '{"x":-1920,"y":200}' }
+- assertText: { id: displays-graphics-displays-display-901-size, equals: '{"width":1512,"height":982}' }
+- assertText: { id: displays-graphics-displays-display-901-workArea, equals: '{"x":0,"y":32,"width":1512,"height":950}' }
+- assertText: { id: displays-graphics-displays-display-901-scaleFactor, equals: "2" }
+- assertText: { id: displays-graphics-displays-display-903-scaleFactor, equals: "1" }
+- assertText: { id: displays-graphics-displays-display-901-safeArea, equals: '{"top":32,"left":0,"bottom":0,"right":0}' }
+- assertText: { id: displays-graphics-displays-display-902-safeArea, equals: '{"top":0,"left":0,"bottom":0,"right":0}' }
+- assertText: { id: displays-graphics-displays-display-901-refreshRate, equals: '{"minimum":24,"maximum":120,"variable":true}' }
+- assertText: { id: displays-graphics-displays-display-902-refreshRate, equals: '{"minimum":60,"maximum":60,"variable":false}' }
+- assertText: { id: displays-graphics-displays-display-901-colorSpace, equals: '{"name":"Color LCD","gamut":"p3"}' }
+- assertText: { id: displays-graphics-displays-display-903-colorSpace, equals: '{"name":"sRGB IEC61966-2.1","gamut":"srgb"}' }
+- assertText: { id: displays-graphics-displays-display-901-edrHeadroom, equals: '{"current":1,"potential":16,"reference":null}' }
+- assertText: { id: displays-graphics-displays-display-902-edrHeadroom, equals: '{"current":1,"potential":1,"reference":null}' }
+- takeScreenshot: displays-simulated
+- simulateDisplays: { restore: true }

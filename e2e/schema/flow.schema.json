@@ -4399,6 +4399,232 @@
               "minItems": 1
             }
           },
+          "simulateDisplays": {
+            "description": "[driver] Report these displays through @legendapp/spark/displays instead of the real ones, in-process; `restore: true` reports the real ones again. The OS display configuration is untouched (setDisplays changes it).",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "displays": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "persistentId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "primary": {
+                        "type": "boolean"
+                      },
+                      "origin": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "size": {
+                        "type": "object",
+                        "properties": {
+                          "width": {
+                            "type": "number"
+                          },
+                          "height": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "width",
+                          "height"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "workArea": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "height": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y",
+                          "width",
+                          "height"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "scaleFactor": {
+                        "type": "number"
+                      },
+                      "safeArea": {
+                        "type": "object",
+                        "properties": {
+                          "top": {
+                            "type": "number"
+                          },
+                          "left": {
+                            "type": "number"
+                          },
+                          "bottom": {
+                            "type": "number"
+                          },
+                          "right": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "top",
+                          "left",
+                          "bottom",
+                          "right"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "refreshRate": {
+                        "type": "object",
+                        "properties": {
+                          "minimum": {
+                            "type": "number"
+                          },
+                          "maximum": {
+                            "type": "number"
+                          },
+                          "variable": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "minimum",
+                          "maximum",
+                          "variable"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "colorSpace": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "gamut": {
+                            "enum": [
+                              "srgb",
+                              "p3"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "gamut"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "edrHeadroom": {
+                        "type": "object",
+                        "properties": {
+                          "current": {
+                            "type": "number"
+                          },
+                          "potential": {
+                            "type": "number"
+                          },
+                          "reference": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "current",
+                          "potential",
+                          "reference"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "persistentId",
+                      "name",
+                      "primary",
+                      "origin",
+                      "size",
+                      "workArea",
+                      "scaleFactor",
+                      "safeArea",
+                      "refreshRate",
+                      "colorSpace",
+                      "edrHeadroom"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1
+                },
+                "restore": {
+                  "enum": [
+                    true
+                  ]
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "required": [
+                    "displays"
+                  ]
+                },
+                {
+                  "required": [
+                    "restore"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "unplugDisplay": {
             "description": "Disconnect a display.",
             "if": {

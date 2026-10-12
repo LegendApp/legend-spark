@@ -36,6 +36,9 @@ export async function subscribeToWindowInstance(id: string, listener: (event: De
   catch (cause) { stopped = true; subscription.remove(); throw cause; }
   return asyncRegistration(() => { stopped = true; subscription.remove(); }, async () => {});
 }
+export const isDisplayInfo = (item: unknown): item is DisplayInfo => record(item) && typeof item.id === "string" && !!item.id && (item.persistentId === null || typeof item.persistentId === "string") && typeof item.name === "string" && typeof item.primary === "boolean" && isSize(item.size) && isSize(item.workArea) && finite(item.workArea.x) && finite(item.workArea.y) && finite(item.scaleFactor) && item.scaleFactor > 0;
+/** A display list as the native layers report it: non-empty, unique IDs, exactly one primary display. */
+export const isDisplayList = <T extends DisplayInfo>(value: unknown, item: (value: unknown) => value is T): value is T[] => Array.isArray(value) && value.length > 0 && value.every(item) && value.filter(display => display.primary).length === 1 && new Set(value.map(display => display.id)).size === value.length;
 export async function getNativeDisplays(): Promise<DisplayInfo[]> {
-  return windowCall("displays", {}, (value): value is DisplayInfo[] => Array.isArray(value) && value.length > 0 && value.every(item => record(item) && typeof item.id === "string" && !!item.id && (item.persistentId === null || typeof item.persistentId === "string") && typeof item.name === "string" && typeof item.primary === "boolean" && isSize(item.size) && isSize(item.workArea) && finite(item.workArea.x) && finite(item.workArea.y) && finite(item.scaleFactor) && item.scaleFactor > 0) && value.filter(item => item.primary).length === 1 && new Set(value.map(item => item.id)).size === value.length);
+  return windowCall("displays", {}, (value): value is DisplayInfo[] => isDisplayList(value, isDisplayInfo));
 }
