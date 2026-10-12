@@ -73,6 +73,12 @@ test.skipIf(process.platform !== "darwin")("crash reporter core: signals and exc
     expect(symbolicated.stack[0]).toMatchObject({ symbol: "SparkCrashNow", location: expect.stringMatching(/^SparkCrashReporter\.mm:\d+$/) });
     expect(symbolicated.stack.map((frame: { symbol?: string }) => frame.symbol)).toEqual(expect.arrayContaining(["SparkTestCrash", "main"]));
     chained.push(Number(report.id.split("-").at(-1)));
+    // abort() never returns, so the return address after its call is already the next function's; the frame names its caller.
+    const aborts = path.join(directory, "stripped-aborts");
+    await runOk(stripped, ["crash", "abort", aborts]).catch(() => undefined); // It dies of SIGABRT.
+    const [aborted] = JSON.parse(await runOk(stripped, ["report", aborts]));
+    expect(symbolicateReport(aborted, findDwarf([path.dirname(stripped)])).stack.map((frame: { symbol?: string }) => frame.symbol)).toEqual(expect.arrayContaining(["SparkCrashNow", "SparkTestCrash", "main"]));
+    chained.push(Number(aborted.id.split("-").at(-1)));
   } finally {
     rmSync(directory, { recursive: true, force: true });
     // The system crash reporter writes a little after each process dies; wait until it has settled.

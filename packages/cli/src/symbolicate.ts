@@ -38,21 +38,25 @@ const ATOS_LINE = /^(.*) \(in [^()]+\)(?: \(([^()]+:\d+)\)| \+ (\d+))?$/;
 export function symbolicateReport<T extends Report>(report: T, dwarf: Map<string, Dwarf>): T {
   if (!Array.isArray(report.stack)) return report;
   const stack = (report.stack as Frame[]).map(frame => ({ ...frame }));
-  const groups = new Map<string, Frame[]>();
-  for (const frame of stack) {
-    if (!frame.imageUUID || !frame.imageAddress || !dwarf.has(frame.imageUUID)) continue;
+  // Every frame but the first is a return address, just after its call; the call is what belongs to the caller (after
+  // a call to a noreturn function such as abort(), the return address is already the next function's), so atos is
+  // asked about the byte before it, as the in-process symbols are.
+  const groups = new Map<string, Array<{ frame: Frame; back: number }>>();
+  stack.forEach((frame, depth) => {
+    if (!frame.imageUUID || !frame.imageAddress || !dwarf.has(frame.imageUUID)) return;
     const key = `${frame.imageUUID} ${frame.imageAddress}`;
-    groups.set(key, [...groups.get(key) ?? [], frame]);
-  }
+    groups.set(key, [...groups.get(key) ?? [], { frame, back: depth > 0 ? 1 : 0 }]);
+  });
   for (const frames of groups.values()) {
-    const { file, arch } = dwarf.get(frames[0]!.imageUUID!)!;
-    const lines = execFileSync("atos", ["-o", file, "-arch", arch, "-l", frames[0]!.imageAddress!, ...frames.map(frame => frame.address)], { encoding: "utf8" }).trimEnd().split("\n");
-    frames.forEach((frame, index) => {
+    const { file, arch } = dwarf.get(frames[0]!.frame.imageUUID!)!;
+    const lookups = frames.map(({ frame, back }) => `0x${(BigInt(frame.address) - BigInt(back)).toString(16)}`);
+    const lines = execFileSync("atos", ["-o", file, "-arch", arch, "-l", frames[0]!.frame.imageAddress!, ...lookups], { encoding: "utf8" }).trimEnd().split("\n");
+    frames.forEach(({ frame, back }, index) => {
       const match = ATOS_LINE.exec(lines[index] ?? "");
       if (!match) return;
       frame.symbol = match[1]!;
       if (match[2]) { frame.location = match[2]; delete frame.symbolOffset; }
-      else if (match[3]) frame.symbolOffset = Number(match[3]);
+      else if (match[3]) frame.symbolOffset = Number(match[3]) + back;
     });
   }
   return { ...report, stack };
