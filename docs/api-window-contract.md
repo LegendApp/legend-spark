@@ -827,6 +827,67 @@ await windows.duplicate(editor, { tab: true });   // as the next tab (macOS)
   anything (window tabs on Windows: #295).
 - Driver mode applies explicit frames, so restored and duplicated frames are exact there too.
 
+#### Workspaces
+
+A workspace is a named, saved window layout: a navigator session plus the displays it was saved on. Apps save
+and restore them from Window ▸ Workspaces and its shortcuts; restoring adapts the layout to the displays
+connected now (#191).
+
+```ts
+const workspaces = await createWindowWorkspaces(windows, {
+  menu: { requestName: () => promptForName(), saveShortcut: 'CmdOrCtrl+Alt+S', restoreShortcuts: ['Ctrl+CmdOrCtrl+1', 'Ctrl+CmdOrCtrl+2'] },
+});
+await workspaces.save('Writing');            // the open windows and the connected displays
+const result = await workspaces.restore('Writing');
+// { restored: true, windows, placements: [{ windowId, displayId, layout: 'exact' | 'moved' | 'scaled' }] }
+// or { restored: false, reason: 'vetoed' | 'interrupted', windowId }
+await workspaces.list(); await workspaces.rename('Writing', 'Draft'); await workspaces.delete('Draft');
+```
+
+- **Storage.** `<getDirectory('data')>/workspaces.json` in the app's container, written atomically through
+  `@legendapp/spark/files`, as `{ version: 1, workspaces: WindowWorkspace[] }`. Each `WindowWorkspace` is
+  `{ name, savedAt, displays, session, fullscreenWindowIds }`; `displays` records each display's `id`,
+  `persistentId`, `primary` and `workArea`. Reads validate the whole file: JSON that does not parse, another
+  version, missing or extra keys, a window on a display the workspace does not record, a fullscreen ID that is
+  not one of its windows or a name used twice rejects `E_INVALID_DATA` with the file's path. A corrupt file is
+  never overwritten: every operation keeps rejecting until `clear()` deletes it. A missing file is an empty list.
+- **Names.** 1–100 characters, no control characters or surrounding spaces (`E_INVALID_ARGUMENT`). Saving a
+  name again replaces that workspace in place; `list()` keeps first-save order. `rename` to a taken name rejects
+  `E_ALREADY_EXISTS`; unknown names reject `E_NOT_FOUND`. Operations run one at a time in call order.
+- **Restore.** The navigator first checks the saved session as `restoreSession` does (entries, data, tab
+  support), so a workspace of a removed entry rejects before anything closes. Then it closes the navigator's open
+  windows in opening order, each through its close guard: a vetoed or interrupted close stops the restore with
+  `restored: false`, and the windows closed before it stay closed. Then `restoreSession` opens the adapted
+  session, and windows saved in native fullscreen enter fullscreen again (on macOS each gets its own Space). If a
+  window fails to open or enter fullscreen, the windows it opened are closed and it rejects with that failure.
+- **Displays.** Each saved display maps to a connected one: the display with the same `persistentId`; else, for
+  the saved primary, the primary display; else the first display not yet taken; else the primary display.
+  On the same display with the same work area a frame is `exact`. On a display whose work area has the same
+  size it keeps its place (`moved`). Otherwise it keeps its proportions: position and size scale with the work
+  area, then it is fitted into it (`scaled`), so a window on the right half of a disconnected monitor lands on the
+  right half of the laptop display.
+- **Menu.** With `menu`, a Window ▸ Workspaces submenu: Save Workspace… (asks `requestName`; `null` cancels)
+  and, after a separator, one item per workspace in list order with `restoreShortcuts[i]`. It is published
+  before `createWindowWorkspaces` resolves and updated after every change; failures go to `onError` (default
+  `console.error`). Labels are English unless `labels` is passed. Needs `@legendapp/spark-native-menu`
+  (`E_MODULE_UNAVAILABLE` without it). `remove()` withdraws the menu; later calls reject `E_CLOSED`.
+  Pick shortcuts the app's menus do not use: in the Kitchen Sink an item with ⌃⌘S (the standard Show Sidebar
+  shortcut) had no key equivalent in the driver's menu snapshot, while ⌥⌘S and ⌃⌘1–9 did (#446).
+- **Spaces, Stage Manager.** macOS has no public API to read or set which Space a window is on, to place a
+  window on another Space, or to read or change Stage Manager's state or sets; Spark does not use private
+  window-server API for them. What is possible: windows restore on the active Space, Stage Manager arranges
+  them as it does any new windows, windows whose entry sets `macos.spaces` (join all Spaces, move to the active
+  Space) keep that behavior because the entry's options apply again, and fullscreen windows come back in
+  fullscreen in Spaces of their own.
+- **Platforms.** macOS only. `getWindowWorkspaceAvailability()` reports `missing-module` without the
+  file-system native module; on Windows it reports `unsupported-platform` and `createWindowWorkspaces` rejects
+  `E_UNSUPPORTED_PLATFORM` before any native call. Windows virtual desktops have a public API
+  (`IVirtualDesktopManager`) and Snap Layouts do not; both are part of the Windows task (#445).
+
+Testing: `tests/windows-workspaces.test.ts` covers storage, validation, display adaptation, close vetoes, fullscreen and
+the menu over mocked modules. The Kitchen Sink screen is `multiwindow/workspaces`; its flows are
+`e2e/flows/multiwindow/workspaces-*.yaml`.
+
 #### Undo, keyboard, menus and toolbar per window
 
 - Every instance owns an undo stack (`instance.undo`: `push({ label, undo, redo })`, `undo()`,
