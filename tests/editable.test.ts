@@ -1,16 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { copySource, copyDependencies, githubAsset, fileHash, publishEditable } from '../packages/cli/src/editable-artifacts.ts';
+import { copySource, copyDependencies, prepareSource, githubAsset, fileHash, publishEditable } from '../packages/cli/src/editable-artifacts.ts';
 const require = createRequire(import.meta.url);
 const { validateEditable } = require('../packages/config-plugin/editable.cjs');
 const worker = require('../packages/cli/src/editable-worker.cjs');
 const ai = require('../packages/cli/src/editable-ai.cjs');
 const b64 = (text: string) => Buffer.from(text).toString('base64');
 let root: string;
-beforeEach(() => { root = mkdtempSync(path.join(os.tmpdir(), 'spark-editable-test-')); });
+beforeEach(() => { root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'spark-editable-test-'))); });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 function file(name: string, value: string) { const target = path.join(root, name); mkdirSync(path.dirname(target), { recursive: true }); writeFileSync(target, value); return target; }
 const asset = { url: 'https://github.com/owner/app/releases/download/v1/source.tgz', sha256: 'a'.repeat(64), size: 100 };
@@ -31,6 +32,7 @@ describe('editable release inputs', () => {
     expect(() => copySource(root, path.join(root, 'out'), ['src'])).toThrow('credentials');
     symlinkSync(path.join(root, 'src'), path.join(root, 'linked'));
     expect(() => copySource(root, path.join(root, 'out'), ['linked'])).toThrow('symlink');
+    expect(() => copySource(root, path.join(root, 'out'), ['linked/index.js'])).toThrow('symlink');
   });
   it('preserves nested conflicting dependency versions after relocation', async () => {
     file('project/package.json', JSON.stringify({ dependencies: { a: '1', x: '1' } }));
@@ -45,6 +47,77 @@ describe('editable release inputs', () => {
     rmSync(path.join(root, 'project'), { recursive: true });
     const req = createRequire(path.join(target, 'package.json'));
     expect(req('a')).toBe(2); expect(req('x')).toBe(1);
+  });
+});
+describe('repository source snapshots', () => {
+  function project(entry = 'import App from ' + JSON.stringify(path.join(root, 'repo/apps/demo/src/App.js')) + ';') {
+    file('repo/.legend/demo/package.json', JSON.stringify({ main: 'index.ts' }));
+    file('repo/.legend/demo/desktop.config.json', '{}');
+    file('repo/.legend/demo/index.ts', entry);
+    file('repo/.legend/demo/babel.config.js', 'module.exports = require(' + JSON.stringify(path.join(root, 'repo/shell/babel.config.js')) + ');');
+    file('repo/.legend/demo/metro.config.js', 'module.exports = { watchFolders: [' + JSON.stringify(path.join(root, 'repo')) + '], app: ' + JSON.stringify(path.join(root, 'repo/apps/demo/src')) + ' };');
+    file('repo/shell/babel.config.js', 'const path = require("node:path"); const appId = "demo"; const appConfigPath = appId && path.join(__dirname, "../apps", appId, "babel.config.cjs"); module.exports = require(appConfigPath);');
+    file('repo/apps/demo/babel.config.cjs', 'module.exports = { plugins: [] };');
+    file('repo/apps/demo/src/App.js', 'module.exports = 1;');
+    file('repo/packages/shared/index.js', 'module.exports = 2;');
+    return path.join(root, 'repo/.legend/demo');
+  }
+  it('validates ancestor source roots without permitting arbitrary external layouts', () => {
+    expect(validateEditable({ repository: 'owner/app', files: ['apps/demo/src'], sourceRoot: '../..', githubClientId: 'Ov23test' })).toBeTruthy();
+    for (const sourceRoot of ['/tmp', '../another-repo', '', 'a/..']) expect(() => validateEditable({ repository: 'owner/app', files: ['src'], sourceRoot })).toThrow('sourceRoot');
+    expect(() => validateEditable({ repository: 'owner/app', files: ['src'], githubClientId: '' })).toThrow('githubClientId');
+  });
+  it('preserves shared source paths and relocates generated imports and build config', () => {
+    const app = project(), target = path.join(root, 'snapshot');
+    const layout = prepareSource(app, target, ['apps/demo', 'shell', 'packages/shared'], '../..');
+    expect(layout).toEqual({ sourceRoot: path.join(root, 'repo'), projectRoot: '.legend/demo', entry: 'index.ts' });
+    const entry = readFileSync(path.join(target, '.legend/demo/index.ts'), 'utf8');
+    expect(entry).toContain('"../../apps/demo/src/App.js"'); expect(entry).not.toContain(root);
+    rmSync(path.join(root, 'repo'), { recursive: true });
+    const req = createRequire(path.join(target, '.legend/demo/package.json'));
+    expect(req('./babel.config.js')).toEqual({ plugins: [] });
+    expect(req('./metro.config.js')).toEqual({ watchFolders: [target], app: path.join(target, 'apps/demo/src') });
+    expect(existsSync(path.join(target, 'packages/shared/index.js'))).toBe(true);
+    const trusted = require('../packages/cli/src/editable-policy.cjs').collectTrustedFiles(target);
+    expect(trusted).toContain('shell/babel.config.js');
+    expect(trusted).toContain('apps/demo/babel.config.cjs');
+    expect(trusted).not.toContain('apps/demo/src/App.js');
+  });
+  it('rejects publisher paths outside the snapshot and interpolated absolute paths', () => {
+    const app = project('import App from "/Users/publisher/elsewhere/App.js";');
+    expect(() => prepareSource(app, path.join(root, 'outside'), ['apps/demo/src', 'shell'], '../..')).toThrow('outside sourceRoot');
+    writeFileSync(path.join(app, 'index.ts'), 'const location = `' + path.join(root, 'repo') + '/${name}`;');
+    expect(() => prepareSource(app, path.join(root, 'dynamic'), ['apps/demo/src', 'shell'], '../..')).toThrow('literal paths');
+    writeFileSync(path.join(app, 'index.ts'), 'const location = ' + JSON.stringify(path.join(root, 'repo/apps/demo/src')) + ';');
+    expect(() => prepareSource(app, path.join(root, 'runtime-path'), ['apps/demo', 'shell'], '../..')).toThrow('absolute runtime paths');
+    writeFileSync(path.join(app, 'index.ts'), 'import App from ' + JSON.stringify(path.join(root, 'repo/apps/demo/src/App.js')) + ';');
+    expect(() => prepareSource(app, path.join(root, 'missing'), ['shell'], '../..')).toThrow('Missing import');
+  });
+  it('keeps ESM Metro config portable when a snapshot path contains spaces', async () => {
+    const app = project(), target = path.join(root, 'snapshot with spaces');
+    rmSync(path.join(app, 'metro.config.js'));
+    file('repo/.legend/demo/metro.config.mjs', 'export default { root: ' + JSON.stringify(path.join(root, 'repo')) + ' };');
+    prepareSource(app, target, ['apps/demo', 'shell'], '../..');
+    expect((await import(pathToFileURL(path.join(target, '.legend/demo/metro.config.mjs')).href)).default).toEqual({ root: target });
+  });
+  it('builds a relocated nested project using shared source and the toolkit dependency tree', async () => {
+    const app = project(), source = path.join(root, 'source');
+    const layout = prepareSource(app, source, ['apps/demo', 'shell'], '../..');
+    const toolkit = path.join(root, 'toolkit');
+    file('toolkit/node_modules/expo/package.json', JSON.stringify({ name: 'expo', bin: { expo: 'cli.cjs' } }));
+    file('toolkit/node_modules/expo/cli.cjs', `const fs = require('node:fs'), path = require('node:path');
+const args = process.argv; const output = args[args.indexOf('--bundle-output') + 1], map = args[args.indexOf('--sourcemap-output') + 1];
+if (!fs.existsSync(path.resolve('../../apps/demo/src/App.js'))) throw new Error('Shared source missing');
+if (!require(path.resolve('babel.config.js')).plugins) throw new Error('Config missing');
+fs.writeFileSync(output, 'compiled'); fs.writeFileSync(map, JSON.stringify({ sources: ['../../apps/demo/src/App.js'] }));`);
+    const compiler = file('toolkit/hermesc', '#!/bin/sh\ncp "$5" "$4"\n'); chmodSync(compiler, 0o755);
+    file('toolkit/toolkit.json', JSON.stringify({ arch: process.arch, framework: '1', compiler: fileHash(compiler) }));
+    const dir = worker.prepare({ ...manifest(), projectRoot: layout.projectRoot }, source, toolkit, path.join(root, 'support'));
+    rmSync(path.join(root, 'repo'), { recursive: true });
+    const result = await worker.build(dir);
+    expect(existsSync(path.join(dir, 'builds', result.build, 'main.jsbundle'))).toBe(true);
+    expect(worker.verify(dir).candidate).toBe('work');
+    expect(worker.read(path.join(dir, 'builds', result.build, 'runtime-sources.json')).roots).toEqual([path.join(dir, 'work/apps/demo/src/App.js')]);
   });
 });
 describe('three-way migrations', () => {

@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 // Every public hook must be either an adapter over a public imperative API or
 // inherently tied to React context/rendering. Adding a hook requires this review.
 const policy: Record<string, Record<string, { imperative: string } | { reactOnly: string }>> = {
+  "./editable": { useEditingState: { imperative: "getEditingState" } },
   "./camera": {
     useCamera: { imperative: "VisionCamera.createCameraSession" },
     useCameraDevice: { imperative: "getCameraDevice" },

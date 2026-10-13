@@ -16,7 +16,7 @@ function manifest() {
     execFileSync('/usr/bin/tar', ['-czf', archive, '-C', root, kind]);
     return [kind, { url: `https://github.com/local/test/releases/download/v1/${kind}.tgz`, sha256: fileHash(archive), size: readFileSync(archive).length }];
   }));
-  return { schema: 1, project: 'test', version: '1', release: 'a'.repeat(64), runtime: { platform: 'macos', mode: 'release' }, ...assets } as any;
+  return { schema: 1, project: 'test', version: '1', entry: 'fixture.txt', release: 'a'.repeat(64), runtime: { platform: 'macos', mode: 'release' }, ...assets } as any;
 }
 describe.skipIf(process.platform !== 'darwin')('local editing cache', () => {
   it('installs pinned archives once without changing the app manifest', async () => {

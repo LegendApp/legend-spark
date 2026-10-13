@@ -11,7 +11,7 @@ import { installEditableLocally } from './helpers/editable-local.ts';
 
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
-  console.log('npm run test:editable:app -- [--version 1|2] [--prepare-only] [--no-open] [--real-ai] [--custom-ui]\nBuild a local editable demo, seed its pinned download cache, and open it.\nUse version 2 after applying edits to test migration. Uses a local fake AI provider by default; --real-ai uses your configured provider. --custom-ui demonstrates app-owned prompt/buttons.');
+  console.log('bun run test:editable:app [--version 1|2] [--prepare-only] [--no-open] [--real-ai] [--custom-ui]\nBuild a local editable demo, seed its pinned download cache, and open it.\nUse version 2 after applying edits to test migration. Uses a local fake AI provider by default; --real-ai uses your configured provider. --custom-ui demonstrates app-owned prompt/buttons.');
 } else {
   if (process.platform !== 'darwin' || process.arch !== 'arm64') throw new Error('This demo requires Apple Silicon macOS');
   let version = '1';
@@ -43,7 +43,7 @@ if (args.includes('--help')) {
   writeJson(path.join(root, 'desktop.config.json'), config);
   copyFileSync(path.join(framework, 'scripts/helpers/editable-controls.cjs'), path.join(root, 'EditingControls.js'));
   const sources: Record<string, string> = {
-    'metro.config.js': 'const path=require("node:path"); const { makeMetroConfig } = require("expo-desktop-metro-config"); const { withDesktop } = require("@legendapp/spark/metro"); const config=withDesktop(makeMetroConfig(__dirname), { runtimes: false }); config.watchFolders=[...config.watchFolders,require("node:fs").realpathSync(path.join(__dirname,"node_modules")),...["@legendapp/spark","@legendapp/spark-desktop-app"].map(name=>path.dirname(require.resolve(name+"/package.json")))]; module.exports=config;\n',
+    'metro.config.js': 'const path=require("node:path"); const { makeMetroConfig } = require("expo-desktop-metro-config"); const { withDesktop } = require("@legendapp/spark/metro"); const config=withDesktop(makeMetroConfig(__dirname), { runtimes: false }); config.watchFolders=[...config.watchFolders,require("node:fs").realpathSync(path.join(__dirname,"node_modules")),path.dirname(require.resolve("@legendapp/spark/package.json")),path.dirname(require.resolve("@legendapp/spark-desktop-app/package.json"))]; module.exports=config;\n',
     'index.js': 'const { AppRegistry } = require("react-native"); AppRegistry.registerComponent("main", () => require("./App"));\n',
     'App.js': `const React = require('react');
 const { View, Text, Pressable } = require('react-native');

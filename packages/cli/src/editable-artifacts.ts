@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, lutimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import ts from 'typescript';
 import { run } from './commands.ts';
 import { entryFile, readAppConfig, readJson, stateFile, VERSION, writeJson, type Runtime } from './project.ts';
 const require = createRequire(import.meta.url);
@@ -9,8 +11,9 @@ const { validateEditable } = require('@legendapp/spark-desktop-config/editable.c
 export type EditableAsset = { url: string; sha256: string; size: number };
 export type EditableManifest = {
   schema: 1; project: string; version: string; release: string; runtime: Runtime;
+  repository: string; repositoryDirectory: string; projectRoot: string;
   entry: string; source: EditableAsset; toolkit: EditableAsset;
-  editing?: { ui: 'default' | 'custom'; provider?: { kind: 'cli'; tool: 'codex' | 'claude'; model?: string } | { kind: 'local' | 'remote'; endpoint: string; model: string } };
+  editing?: { ui: 'default' | 'custom'; githubClientId?: string; trustedFiles: string[]; provider?: { kind: 'cli'; tool: 'codex' | 'claude'; model?: string } | { kind: 'local' | 'remote'; endpoint: string; model: string } };
 };
 export function fileHash(file: string) { return createHash('sha256').update(readFileSync(file)).digest('hex'); }
 const jsonHash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -20,8 +23,13 @@ export function githubAsset(repository: string, tag: string, file: string) {
 }
 export function copySource(root: string, destination: string, files: string[]) {
   function copy(relative: string) {
+    if (path.isAbsolute(relative) || relative.split(/[\\/]/).some(part => !part || part === '.' || part === '..')) throw new Error('Editable source paths must stay inside their source root');
+    let current = root;
+    for (const part of relative.split(/[\\/]/)) {
+      current = path.join(current, part);
+      if (lstatSync(current).isSymbolicLink()) throw new Error(`Editable source must be self-contained, not a symlink: ${relative}`);
+    }
     const file = path.join(root, relative), stat = lstatSync(file);
-    if (stat.isSymbolicLink()) throw new Error(`Editable source must be self-contained, not a symlink: ${relative}`);
     if (stat.isDirectory()) {
       for (const name of readdirSync(file).sort()) {
         if (name.startsWith('.') || ['node_modules', 'Pods', 'build', 'dist', 'macos', 'ios', 'android', 'windows'].includes(name)) continue;
@@ -34,6 +42,60 @@ export function copySource(root: string, destination: string, files: string[]) {
     } else throw new Error(`Unsupported source file: ${relative}`);
   }
   for (const file of files) copy(file);
+}
+/** Preserve repository paths while making generated entry/config absolute paths portable. */
+export function prepareSource(root: string, destination: string, files: string[], sourceRoot = '.') {
+  const sourcePath = path.resolve(root, sourceRoot), source = realpathSync(sourcePath);
+  root = realpathSync(root);
+  const projectRoot = path.relative(source, root);
+  if (projectRoot.startsWith('..') || path.isAbsolute(projectRoot)) throw new Error('editable.sourceRoot must contain the app project');
+  copySource(source, destination, files);
+  const entry = entryFile(root);
+  if (path.isAbsolute(entry) || entry.split(/[\\/]/).includes('..')) throw new Error('Editable entry must be inside the app project');
+  if (sourceRoot !== '.') {
+    // Generated projects sit outside the source allowlist, but these publisher-owned
+    // build files are required to reproduce the shell and will be frozen at runtime.
+    const buildFiles = readdirSync(root).filter(file => /^(?:package\.json|desktop\.config\.json|app\.json|.*\.config\.[cm]?[jt]s|\.babelrc(?:\.[cm]?js|\.json)?)$/.test(file));
+    copySource(root, path.join(destination, projectRoot), [...buildFiles, entry]);
+  }
+  const project = path.join(destination, projectRoot);
+  if (!existsSync(path.join(project, 'package.json'))) throw new Error('Include package.json in editable.files');
+  if (!['metro.config.js', 'metro.config.cjs', 'metro.config.mjs'].some(file => existsSync(path.join(project, file)))) throw new Error('Include metro.config.js, metro.config.cjs or metro.config.mjs in editable.files');
+  if (!existsSync(path.join(project, 'desktop.config.json')) && !existsSync(path.join(project, 'app.json'))) throw new Error('Include desktop.config.json or app.json in editable.files');
+  if (!existsSync(path.join(project, entry))) throw new Error('Editable entry must be inside the published source snapshot');
+  function relocate(folder: string) {
+    for (const name of readdirSync(folder)) {
+      const file = path.join(folder, name);
+      if (lstatSync(file).isDirectory()) { relocate(file); continue; }
+      if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+      const content = readFileSync(file, 'utf8'), ast = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true);
+      const replacements: { start: number; end: number; text: string }[] = [];
+      function visit(node: ts.Node) {
+        if (ts.isTemplateExpression(node) && [source, sourcePath].some(base => node.getText(ast).includes(base))) throw new Error(`Editable source must use literal paths: ${path.relative(destination, file)}`);
+        if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+          const value = node.text, parent = node.parent;
+          const imported = (ts.isImportDeclaration(parent) || ts.isExportDeclaration(parent)) && parent.moduleSpecifier === node || ts.isCallExpression(parent) && parent.arguments[0] === node && ['require', 'require.resolve', 'import'].includes(parent.expression.getText(ast));
+          const base = [source, sourcePath].find(base => value === base || value.startsWith(base + path.sep));
+          if (path.isAbsolute(value) && base) {
+            if (!imported && !require('./editable-policy.cjs').isBuildConfig(path.relative(destination, file).split(path.sep).join('/'))) throw new Error(`Editable app source must use relative imports rather than absolute runtime paths: ${path.relative(destination, file)}`);
+            const target = path.join(destination, path.relative(base, value));
+            if (imported && !['', '.js', '.jsx', '.ts', '.tsx', '.json', '.mjs', '.cjs', '.macos.js', '.macos.tsx', '.native.js', '.native.tsx'].some(extension => existsSync(target + extension))) throw new Error(`Missing import in editable.files: ${path.relative(base, value)}`);
+            const relative = path.relative(path.dirname(file), target).split(path.sep).join('/') || '.';
+            const literal = JSON.stringify(relative.startsWith('.') ? relative : './' + relative);
+            const expression = file.endsWith('.mjs') || file.endsWith('.mts') ? `decodeURIComponent(new URL(${literal}, import.meta.url).pathname).replace(/\\/$/, "")` : `require("node:path").resolve(__dirname, ${literal})`;
+            replacements.push({ start: node.getStart(ast), end: node.end, text: imported ? literal : expression });
+          } else if (path.isAbsolute(value) && (imported || /^\/(?:Users|home|private|tmp|var)\//.test(value))) throw new Error(`Editable source contains a path outside sourceRoot: ${path.relative(destination, file)}`);
+        }
+        ts.forEachChild(node, visit);
+      }
+      visit(ast);
+      let relocated = content;
+      for (const replacement of replacements.sort((a, b) => b.start - a.start)) relocated = relocated.slice(0, replacement.start) + replacement.text + relocated.slice(replacement.end);
+      if (relocated !== content) writeFileSync(file, relocated);
+    }
+  }
+  relocate(destination);
+  return { sourceRoot: source, projectRoot: projectRoot.split(path.sep).join('/') || '.', entry };
 }
 /** Preserve each resolved dependency edge (including duplicate versions), without installing on users' machines. */
 export async function copyDependencies(root: string, destination: string, extra: Record<string, string> = {}) {
@@ -116,21 +178,22 @@ export async function prepareEditableArtifacts(root: string, runtime: Runtime, a
   if (!options) return;
   if (runtime.platform !== 'macos' || runtime.mode !== 'release') throw new Error('Editable apps require a macOS release build');
   if (config.macos?.entitlements?.['com.apple.security.app-sandbox']) throw new Error('Editable apps require direct distribution without App Sandbox');
+  if (!config.macos?.bundleIdentifier || !config.version) throw new Error('Editable apps require a bundle identifier and version');
   const output = stateFile(root, 'editable');
   mkdirSync(output, { recursive: true });
   const stage = mkdtempSync(path.join(output, '.stage-'));
   try {
     const source = path.join(stage, 'source'), toolkit = path.join(stage, 'toolkit');
     mkdirSync(source); mkdirSync(toolkit);
-    copySource(root, source, options.files);
-    // App configuration and build transforms must be included explicitly and reviewable.
-    for (const file of ['package.json', 'metro.config.js']) if (!existsSync(path.join(source, file))) throw new Error(`Include ${file} in editable.files`);
-    if (!existsSync(path.join(source, 'desktop.config.json')) && !existsSync(path.join(source, 'app.json'))) throw new Error('Include desktop.config.json or app.json in editable.files');
-    const entry = entryFile(root);
-    if (entry.startsWith('..') || path.isAbsolute(entry) || !existsSync(path.join(source, entry))) throw new Error('Editable entry must be inside the published source snapshot');
+    const layout = prepareSource(root, source, options.files, options.sourceRoot);
+    const repository = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' });
+    const repositoryDirectory = repository.status === 0 ? path.relative(realpathSync(repository.stdout.trim()), layout.sourceRoot).split(path.sep).join('/') : '';
+    if (repositoryDirectory.startsWith('..') || path.isAbsolute(repositoryDirectory)) throw new Error('editable.sourceRoot must stay within the Git repository');
+    const trustedFiles = require('./editable-policy.cjs').collectTrustedFiles(source);
     const appRequire = createRequire(path.join(root, 'package.json'));
     await copyDependencies(root, toolkit, { diff: path.dirname(require.resolve('diff/package.json')), 'react-native-macos': path.dirname(appRequire.resolve('react-native-macos/package.json')) });
-    for (const file of ['editable-worker.cjs', 'editable-ai.cjs', 'editable-cli.cjs', 'js-runtime.cjs', 'runtime-bootstrap.sh', 'runtime-downloads.tsv']) cpSync(path.join(import.meta.dirname, file), path.join(toolkit, file));
+    for (const file of ['editable-worker.cjs', 'editable-ai.cjs', 'editable-cli.cjs', 'editable-policy.cjs', 'editable-github.cjs', 'js-runtime.cjs', 'runtime-bootstrap.sh', 'runtime-downloads.tsv']) cpSync(path.join(import.meta.dirname, file), path.join(toolkit, file));
+    cpSync(createRequire(appRequire.resolve('@legendapp/spark/ai')).resolve('@legendapp/spark-ai/src/invocation-command.cjs'), path.join(toolkit, 'ai-invocation.cjs'));
     cpSync(require.resolve('@legendapp/spark-desktop-config/editable-provider.cjs'), path.join(toolkit, 'editable-provider.cjs'));
     const rn = path.dirname(appRequire.resolve('react-native/package.json'));
     const hermesc = [path.join(root, 'macos/Pods/hermes-engine/destroot/bin/hermesc'), path.join(rn, 'sdks/hermesc/osx-bin/hermesc')].find(existsSync);
@@ -157,8 +220,9 @@ export async function prepareEditableArtifacts(root: string, runtime: Runtime, a
     const sourceAsset = await archive('source', options.repository, options.tag ?? `v${config.version}`);
     const toolkitAsset = await archive('toolkit', options.toolkitRepository ?? 'LegendApp/legend-spark', options.toolkitTag ?? `editable-v${VERSION}`);
     const manifest: EditableManifest = { schema: 1, project: config.macos.bundleIdentifier, version: config.version,
-      release: jsonHash({ runtime, source: sourceAsset.sha256, toolkit: toolkitAsset.sha256 }), runtime, entry, source: sourceAsset, toolkit: toolkitAsset,
-      editing: { ui: options.ui ?? 'default', ...(options.provider ? { provider: require('@legendapp/spark-desktop-config/editable-provider.cjs').validateProvider(options.provider) } : {}) } };
+      release: jsonHash({ runtime, source: sourceAsset.sha256, toolkit: toolkitAsset.sha256 }), runtime, entry: layout.entry, projectRoot: layout.projectRoot,
+      repository: options.repository, repositoryDirectory, source: sourceAsset, toolkit: toolkitAsset,
+      editing: { ui: options.ui ?? 'default', trustedFiles, ...(options.githubClientId ? { githubClientId: options.githubClientId } : {}), ...(options.provider ? { provider: require('@legendapp/spark-desktop-config/editable-provider.cjs').validateProvider(options.provider) } : {}) } };
     const filename = `spark-editable-${manifest.release}.json`;
     writeJson(path.join(output, filename), manifest);
     writeJson(path.join(app, 'Contents/Resources/spark-editable.json'), manifest);

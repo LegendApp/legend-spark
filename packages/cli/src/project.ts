@@ -329,6 +329,8 @@ export function runtimeFor(
       ].includes(p.name),
     )
     .map((p) => [p.name, p.json.version]);
+  const config = readAppConfig(root);
+  const editable = config.expo?.extra?.spark?.editable;
   return {
     schema: 1,
     framework: VERSION,
@@ -345,10 +347,12 @@ export function runtimeFor(
         ...(platform === "macos" && mode === "release" ? { releaseSettings: macOSReleaseSettings } : {}),
         modules,
         pins,
-        config: readAppConfig(root),
-        editable: readAppConfig(root).expo?.extra?.spark?.editable ? {
-          source: hashFiles(root, readAppConfig(root).expo.extra.spark.editable.files),
-          tooling: hashFiles(import.meta.dirname, ["editable-artifacts.ts", "editable-artifacts.js", "editable-worker.cjs", "editable-ai.cjs", "editable-cli.cjs", "editable-provider.cjs", "js-runtime.cjs", "runtime-bootstrap.sh", "runtime-downloads.tsv"]),
+        config,
+        editable: platform === "macos" && mode === "release" && editable ? {
+          source: hashFiles(path.resolve(root, editable.sourceRoot ?? "."), editable.files),
+          project: hashFiles(root, ["package.json", entryFile(root), ...readdirSync(root).filter(file => /(?:config\.|^\.babelrc)/.test(file))]),
+          tooling: hashFiles(import.meta.dirname, [...readdirSync(import.meta.dirname).filter(file => file.startsWith("editable-")), "js-runtime.cjs", "runtime-bootstrap.sh", "runtime-downloads.tsv"]),
+          ai: digest(readFileSync(createRequire(createRequire(path.join(root, "package.json")).resolve("@legendapp/spark/ai")).resolve("@legendapp/spark-ai/src/invocation-command.cjs"), "utf8")),
         } : undefined,
         helpers: resolveHelpers(root, readAppConfig(root).expo?.extra?.spark?.helpers, platform).map(helper => ({ name: helper.name, contents: hashFiles(root, helper.files), modes: helper.modes, directories: helper.directories })),
         adapter: hostSourceSignature(root),

@@ -19,14 +19,37 @@ function workspace(name = "a") {
   return worker.prepare({ schema: 1, project: "test", version: "1", release: name.repeat(64), runtime: { platform: "macos", mode: "release", fingerprint: "native", modules: {} }, entry: "index.js", source: asset, toolkit: asset }, source, path.join(root, "toolkit"), root);
 }
 describe("editing provider configuration", () => {
-  it("invalidates editable release caches when CLI or runtime tooling changes", async () => {
+  it("invalidates editable release caches without rebuilding development hosts for source or tooling edits", async () => {
     const source = path.join(root, "cli"), app = path.join(root, "app"); mkdirSync(source); mkdirSync(app);
-    for (const file of ["project.ts", "platform.ts", "helpers.ts", "macos-release.ts"]) copyFileSync(path.resolve("packages/cli/src", file), path.join(source, file));
+    for (const file of ["project.ts", "platform.ts", "helpers.ts", "macos-release.ts", "json.ts"]) copyFileSync(path.resolve("packages/cli/src", file), path.join(source, file));
     symlinkSync(path.resolve("node_modules"), path.join(root, "node_modules"));
     writeFileSync(path.join(app, "package.json"), JSON.stringify({ name: "cache-test", dependencies: {} }));
     writeFileSync(path.join(app, "index.js"), "original");
     const script = path.join(root, "cache.mjs");
-    writeFileSync(script, `import {runtimeFor,writeJson} from './cli/project.ts';import {writeFileSync} from 'node:fs';import assert from 'node:assert/strict';const app=${JSON.stringify(app)},source=${JSON.stringify(source)};const config={expo:{name:'Test',platforms:['macos'],extra:{spark:{editable:{repository:'test/app',files:['index.js']}}}}};writeJson(app+'/app.json',config);for(const file of ['editable-cli.cjs','editable-provider.cjs','runtime-bootstrap.sh']){const before=runtimeFor(app,[],'release').fingerprint;writeFileSync(source+'/'+file,'changed');assert.notEqual(runtimeFor(app,[],'release').fingerprint,before);}delete config.expo.extra.spark.editable;writeJson(app+'/app.json',config);const before=runtimeFor(app,[],'release').fingerprint;writeFileSync(source+'/editable-cli.cjs','changed again');assert.equal(runtimeFor(app,[],'release').fingerprint,before);`);
+    writeFileSync(script, `
+      import { runtimeFor, writeJson } from './cli/project.ts';
+      import { writeFileSync } from 'node:fs';
+      import assert from 'node:assert/strict';
+      const app = ${JSON.stringify(app)}, source = ${JSON.stringify(source)};
+      const config = { expo: { name: 'Test', platforms: ['macos'], extra: { spark: { editable: { repository: 'test/app', files: ['index.js'] } } } } };
+      writeJson(app + '/app.json', config);
+      const fingerprint = mode => runtimeFor(app, [], mode).fingerprint;
+      const assertReleaseOnly = edit => {
+        const development = fingerprint('dev'), release = fingerprint('release');
+        edit();
+        assert.equal(fingerprint('dev'), development, 'editable changes must preserve the development host');
+        assert.notEqual(fingerprint('release'), release, 'editable release artifacts must be refreshed');
+      };
+      assertReleaseOnly(() => writeFileSync(app + '/index.js', 'changed app source'));
+      for (const file of ['editable-cli.cjs', 'editable-provider.cjs', 'runtime-bootstrap.sh']) {
+        assertReleaseOnly(() => writeFileSync(source + '/' + file, 'changed'));
+      }
+      delete config.expo.extra.spark.editable;
+      writeJson(app + '/app.json', config);
+      const before = fingerprint('release');
+      writeFileSync(source + '/editable-cli.cjs', 'changed again');
+      assert.equal(fingerprint('release'), before);
+    `);
     await run(root, [process.execPath, script], { capture: true });
   });
   it("supports installed CLI defaults, custom UI and keyless loopback models", () => {
@@ -42,7 +65,13 @@ describe("editing provider configuration", () => {
     const dir = workspace(); let calls = 0;
     const server = createServer(async (req, res) => {
       expect(req.headers.authorization).toBeUndefined(); let body = ""; for await (const chunk of req) body += chunk;
-      expect(JSON.parse(body).model).toBe("local-test");
+      const request = JSON.parse(body);
+      expect(request.model).toBe("local-test");
+      if (calls) {
+        const assistant = request.messages.find((message: { role: string }) => message.role === "assistant");
+        expect(assistant.tool_calls[0].type).toBe("function");
+        expect(request.messages.at(-1)).toMatchObject({ role: "tool", tool_call_id: "write" });
+      }
       res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ choices: [{ message: ++calls === 1 ? { tool_calls: [{ id: "write", function: { name: "write_file", arguments: JSON.stringify({ path: "index.js", content: "local edit\n" }) } }] } : { content: "Changed locally" } }] }));
     });
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -82,5 +111,56 @@ describe("installed CLI editing", () => {
     const previous = process.env.PATH; process.env.PATH = bin;
     try { await expect(cli.complete({ kind: "cli", tool: "claude" }, { messages: [], tools: [] }, AbortSignal.timeout(100))).rejects.toThrow("canceled"); }
     finally { process.env.PATH = previous; }
+  });
+});
+
+describe("editing build trust boundary", () => {
+  const policy = require("../packages/cli/src/editable-policy.cjs");
+  it("freezes nested configs, scripts and locally imported build transforms", () => {
+    mkdirSync(path.join(root, "src")); mkdirSync(path.join(root, "apps", "demo"), { recursive: true });
+    writeFileSync(path.join(root, "metro.config.js"), "require('./src/transform'); module.exports={plugins:['./src/plugin']}; if(require('fs').existsSync('./optional.js')) req('./optional.js');");
+    writeFileSync(path.join(root, "src/plugin.js"), "module.exports = {};");
+    writeFileSync(path.join(root, "src/transform.js"), "require('./compiler');");
+    writeFileSync(path.join(root, "src/compiler.js"), "module.exports = {};");
+    writeFileSync(path.join(root, "apps/demo/babel.config.json"), JSON.stringify({ plugins: ["../../src/compiler"] }));
+    const trusted = policy.collectTrustedFiles(root);
+    expect(trusted).toContain("src/compiler.js"); expect(trusted).toContain("src/transform.js"); expect(trusted).toContain("src/plugin.js");
+    for (const file of ["metro.config.js", "babel.config.cjs", "apps/demo/webpack.config.ts", "apps/demo/.babelrc", "scripts/build.js", "packages/shared/package.json", "bun.lock", "src/transform.js", "optional.js"]) {
+      expect(() => ai.operate(root, "write_file", { path: file, content: "bad" }, trusted)).toThrow();
+      expect(() => policy.assertEditableChanges({ [file]: "before" }, { [file]: "after" }, trusted)).toThrow();
+      expect(() => policy.assertEditableChanges({}, { [file]: "new" }, trusted)).toThrow();
+    }
+    ai.operate(root, "write_file", { path: "src/App.tsx", content: "export const App = 1" }, trusted);
+  });
+  it("follows JSON Babel plugins and accepts bounded monorepo config selection", () => {
+    mkdirSync(path.join(root, "src")); mkdirSync(path.join(root, "apps", "demo"), { recursive: true });
+    writeFileSync(path.join(root, ".babelrc"), '{ // local plugin\n"plugins": ["./src/plugin",], }');
+    writeFileSync(path.join(root, "src/plugin.js"), "module.exports = {};");
+    writeFileSync(path.join(root, "babel.config.js"), "const path=require('node:path'); const id=process.env.APP_ID; const config=id && path.join(__dirname,'apps',id,'babel.config.cjs'); module.exports=require(config);");
+    writeFileSync(path.join(root, "apps/demo/babel.config.cjs"), "module.exports = require('../../src/plugin');");
+    expect(policy.collectTrustedFiles(root)).toContain("src/plugin.js");
+  });
+  it("rejects unbounded executable config imports before publication", () => {
+    writeFileSync(path.join(root, "metro.config.js"), "require(process.env.BUILD_TRANSFORM);");
+    expect(() => policy.collectTrustedFiles(root)).toThrow("static imports");
+  });
+  it("does not freeze runtime imports of a hidden generated entry as build transforms", () => {
+    mkdirSync(path.join(root, ".legend")); mkdirSync(path.join(root, "src"));
+    writeFileSync(path.join(root, ".legend/index.js"), "require('../src/App');");
+    writeFileSync(path.join(root, "src/App.js"), "module.exports = {};");
+    expect(policy.collectTrustedFiles(root)).not.toContain("src/App.js");
+  });
+  it("rejects changed build config before starting the production compiler", async () => {
+    const directory = workspace(); const toolkit = path.join(root, "toolkit"); mkdirSync(toolkit);
+    writeFileSync(path.join(toolkit, "hermesc"), "compiler");
+    worker.write(path.join(toolkit, "toolkit.json"), { arch: process.arch, compiler: require("node:crypto").createHash("sha256").update("compiler").digest("hex") });
+    worker.restore(path.join(directory, "candidates", "edit"), worker.snapshot(path.join(directory, "base")));
+    writeFileSync(path.join(directory, "candidates", "edit", "metro.config.js"), "throw new Error('must not execute');");
+    await expect(worker.build(directory, "edit")).rejects.toThrow("configuration is fixed: metro.config.js");
+  });
+  it("uses the shared invocation defaults and disables Codex execution and unrestricted disk access", () => {
+    const command = cli.invocation("codex", "model", root);
+    expect(command.args).toContain("model_reasoning_effort=low");
+    for (const value of ['default_permissions="spark-editable"', 'permissions.spark-editable.filesystem={":minimal"="read",":workspace_roots"="read"}', 'permissions.spark-editable.network.enabled=false', "shell_tool", "unified_exec", "view_image", "--strict-config"]) expect(command.args).toContain(value);
   });
 });

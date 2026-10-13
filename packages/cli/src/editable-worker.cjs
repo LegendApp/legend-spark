@@ -112,6 +112,8 @@ function merge(base, ours, theirs) {
 function validateManifest(manifest) {
   if (manifest.schema !== 1 || !/^[a-f0-9]{64}$/.test(manifest.release) || manifest.runtime?.platform !== 'macos' || manifest.runtime?.mode !== 'release' || !manifest.project || !manifest.version) throw new Error('Invalid editable manifest');
   for (const asset of [manifest.source, manifest.toolkit]) if (!asset || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/releases\/download\/[\w.-]+\/[\w.-]+$/.test(asset.url) || !/^[a-f0-9]{64}$/.test(asset.sha256) || !Number.isSafeInteger(asset.size) || asset.size <= 0) throw new Error('Invalid editable asset');
+  if (manifest.projectRoot !== undefined && manifest.projectRoot !== '.') safe('/snapshot', manifest.projectRoot);
+  safe('/snapshot', manifest.entry);
   return manifest;
 }
 function prepare(manifest, source, toolkit, support) {
@@ -181,13 +183,11 @@ async function build(directory, candidate = 'work') {
   const workspace = candidate === 'work' ? path.join(directory, 'work') : safe(path.join(directory, 'candidates'), candidate);
   const toolkit = state.toolkit, metadata = read(path.join(toolkit, 'toolkit.json'));
   if (metadata.arch !== process.arch || metadata.framework !== manifest.runtime.framework || hash(fs.readFileSync(path.join(toolkit, 'hermesc'))) !== metadata.compiler) throw new Error('Incompatible editing toolkit');
-  // The shell's native configuration and dependency versions cannot change through an edit.
-  for (const file of ['package.json', 'desktop.config.json', 'app.json', 'app.config.js', 'app.config.ts', 'react-native.config.js']) {
-    const original = path.join(directory, 'base', file), changed = path.join(workspace, file);
-    if (fs.existsSync(original) !== fs.existsSync(changed) || (fs.existsSync(original) && !fs.readFileSync(original).equals(fs.readFileSync(changed)))) throw new Error(`Native/dependency configuration is fixed: ${file}`);
-  }
+  require('./editable-policy.cjs').assertEditableChanges(snapshot(path.join(directory, 'base')), snapshot(workspace), manifest.editing?.trustedFiles);
   attachDependencies(workspace, toolkit);
-  const req = createRequire(path.join(workspace, 'package.json'));
+  const project = !manifest.projectRoot || manifest.projectRoot === '.' ? workspace : safe(workspace, manifest.projectRoot);
+  attachDependencies(project, toolkit);
+  const req = createRequire(path.join(project, 'package.json'));
   const expoPackage = req.resolve('expo/package.json'), expo = read(expoPackage);
   const bin = path.resolve(path.dirname(expoPackage), typeof expo.bin === 'string' ? expo.bin : expo.bin.expo);
   const id = crypto.randomUUID(), output = path.join(directory, 'builds', id);
@@ -196,16 +196,16 @@ async function build(directory, candidate = 'work') {
   // Discover worker roots using the same two-pass pipeline as Spark's release build.
   // One worker avoids Bun's jest-worker fork/IPC incompatibility and keeps memory bounded.
   const args = ['export:embed', '--platform', 'macos', '--entry-file', manifest.entry, '--bundle-output', path.join(output, 'app.js'), '--sourcemap-output', path.join(output, 'app.map'), '--assets-dest', output, '--dev', 'false', '--minify', 'true', '--max-workers', '1'];
-  await execute(process.execPath, [bin, ...args], { cwd: workspace, env: { ...env, SPARK_RUNTIME_DISCOVERY: '1' } });
+  await execute(process.execPath, [bin, ...args], { cwd: project, env: { ...env, SPARK_RUNTIME_DISCOVERY: '1' } });
   const sources = read(path.join(output, 'app.map')).sources;
-  const roots = sources.map(source => fs.existsSync(path.resolve(workspace, source)) ? path.resolve(workspace, source) : path.resolve(workspace, source.replace(/^\//, ''))).filter(file => fs.existsSync(file) && /\.[jt]sx?$/.test(file) && !file.endsWith('.d.ts'));
+  const roots = sources.map(source => fs.existsSync(path.resolve(project, source)) ? path.resolve(project, source) : path.resolve(project, source.replace(/^\//, ''))).filter(file => fs.existsSync(file) && /\.[jt]sx?$/.test(file) && !file.endsWith('.d.ts'));
   const runtimeSources = path.join(output, 'runtime-sources.json');
   write(runtimeSources, { enabled: sources.some(source => source.includes('@react-native-runtimes/core/') && !source.endsWith('secondary-runtime-polyfill.js')), roots });
-  await execute(process.execPath, [bin, ...args], { cwd: workspace, env: { ...env, SPARK_RUNTIME_SOURCES: runtimeSources } });
+  await execute(process.execPath, [bin, ...args], { cwd: project, env: { ...env, SPARK_RUNTIME_SOURCES: runtimeSources } });
   // A production edit may only import native modules present in the frozen shell.
   const selected = manifest.runtime.modules;
   for (const source of read(path.join(output, 'app.map')).sources) {
-    const file = fs.existsSync(path.resolve(workspace, source)) ? path.resolve(workspace, source) : path.resolve(workspace, source.replace(/^\//, ''));
+    const file = fs.existsSync(path.resolve(project, source)) ? path.resolve(project, source) : path.resolve(project, source.replace(/^\//, ''));
     if (!fs.existsSync(file)) continue;
     let folder = path.dirname(fs.realpathSync(file));
     while (folder !== path.dirname(folder)) {

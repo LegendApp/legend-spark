@@ -2,7 +2,7 @@
 
 Spark can ship a normal release app with an opt-in native customization window. The source, Bun/Node tooling, Metro dependencies and Hermes compiler download on first use. Users describe changes in a prompt, review a compiled candidate, and apply it without rebuilding the native app.
 
-This first implementation targets directly distributed macOS apps. Spark's native release builder currently targets Apple Silicon. App Store distribution, Intel native release builds, automatic data migration, and a bundled model engine are outside this feature.
+This first implementation targets directly distributed macOS apps. App Store distribution, automatic data migration, and a bundled model engine are outside this feature. Editing toolkits match the architecture and native fingerprint of their release; platform acceptance is recorded in the release support matrix.
 
 ## Opt in
 
@@ -57,6 +57,34 @@ subscription.remove();
 
 `prepareEditMigration()` prepares/compiles a three-way merge and returns its candidate/conflicts, or `status: "none"` if there is no earlier customization. To resolve conflicts, call `generateEdit(prompt, { migration: true, allowSourceSharing: true })`. `cancelEdit()` stops owned editing work, retaining partial candidates/history; wait for the current operation to settle before starting another. Mutating operations reject `E_BUSY` while work is in progress. `restoreOriginal()` reloads the embedded app without deleting prompt/source history. Public preview/apply methods do not show Spark's confirmation dialogs: custom UI owns those dialogs and saving app work. Recovery remains native.
 
+## Monorepo source layouts
+
+Set `editable.sourceRoot` to the repository ancestor relative to the app project, for example `"../.."` for `apps/demo`. `files` then selects paths relative to that ancestor, such as `apps/demo`, `shell`, and `packages/shared`. Spark copies the app project's entry and build configuration, preserves repository paths, and relocates literal imports/config paths inside the selected snapshot. Include the app and shell Babel configs and every referenced local build helper. Source paths outside the selected ancestor reject preparation.
+
+The worker runs Metro from the published app project and attaches the frozen toolkit dependencies at the snapshot and project roots. Shared source remains editable; packaged dependencies stay fixed. PR paths preserve the snapshot's directory within the Git repository.
+
+## Submit a customization as a PR
+
+Configure `editable.githubClientId` with a GitHub OAuth app client ID whose device flow is enabled. The target is `editable.repository`; users authenticate with their own GitHub account. Spark requests `public_repo` access and stores the token in the app's macOS Keychain, separate from provider keys. Tokens never enter editing state, history, source, or the AI process.
+
+```ts
+import {
+  beginEditingGitHubAuth, completeEditingGitHubAuth, signOutEditingGitHub,
+  submitEditPullRequest, useEditingState,
+} from '@legendapp/spark/editable';
+
+const authorization = await beginEditingGitHubAuth();
+// Display authorization.userCode and link authorization.verificationUri.
+await completeEditingGitHubAuth(); // cancelEdit() stops waiting
+// After the user's explicit Submit action and review of the public prompt/patch:
+const pr = await submitEditPullRequest({ title: 'Customize the greeting' });
+await signOutEditingGitHub(); // removes the local Keychain token
+```
+
+`useEditingState()` observes the same native session used by imperative calls. It returns loading/ready/error state, subscribes before requesting a snapshot, and removes only its observation on unmount. Shared app components can render the prompt, review, progress, provider settings, auth, and submission controls while Spark owns all behavior. The default native editor adds one **Submit as PR** button when a GitHub client ID is configured.
+
+Submission uses the exact compiled candidate, carries all contributing prompts and its cumulative patch, and creates a branch in the user's fork when needed. It preserves other repository files. If affected upstream files changed since the app release, or the prompt/patch exceeds GitHub's PR body limit, submission rejects before writing a branch. GitHub device polling respects its interval, slowdown, and expiration responses. A network failure after publication starts can leave a fork or branch; Spark does not delete user repositories or branches on retry.
+
 ## AI providers
 
 Installed **Codex or Claude CLI** tools are supported using their existing login; Spark needs no API key for them. The developer can select a default:
@@ -74,7 +102,7 @@ Installed **Codex or Claude CLI** tools are supported using their existing login
 
 `tool` can be `"codex"` or `"claude"`; `model` is optional for CLI providers. Users install a recent CLI and sign in through that tool first. Spark looks on the app's PATH plus common macOS user/Homebrew directories. The CLI may contact its cloud service and use account limits; locally running a CLI does not imply offline inference.
 
-The worker uses noninteractive structured output to obtain source-tool calls, feeding each result and compiler diagnostics into subsequent turns. Claude built-in/MCP tools are disabled; Codex runs with a read-only sandbox and without user configuration/rules. Spark applies requested edits through its existing path/file/config validation rather than permitting agent writes into the installed app. Sessions are ephemeral, while Spark keeps its own prompts/patches. CLI login/install failures reject without activating a candidate. This transport uses the invocation patterns from `@legend-apps/ai`; it is self-contained in the downloaded toolkit and does not depend on legend-apps or its native Codex package.
+The worker uses noninteractive structured output to obtain source-tool calls, feeding each result and compiler diagnostics into subsequent turns. Claude built-in/MCP tools are disabled. Codex uses a strict permission profile granting only system runtime files and its empty per-request directory; command execution, MCP/apps and web search are disabled. Unsupported CLI versions reject the request. See the [Codex permissions reference](https://learn.chatgpt.com/docs/config-file/config-reference). Spark applies requested edits through its existing path/file/config validation rather than permitting agent writes into the installed app. Sessions are ephemeral, while Spark keeps its own prompts/patches. CLI login/install failures reject without activating a candidate. The transport reuses Spark’s shared AI invocation builder, publicly exported from `@legendapp/spark/ai`. The downloaded toolkit includes that same builder and does not depend on the publishing app’s installation.
 
 Keyless local model servers are also supported, using tool-capable OpenAI-compatible chat completions:
 
@@ -132,26 +160,26 @@ The old workspaces remain available if migration fails. This implementation migr
 
 **Original**, holding **Option** at launch, or launching with `--spark-original` bypasses custom code. Activation records a pending launch before loading custom bytecode. A first React render acknowledges startup; an interrupted first launch rolls back to the previous bundle. A candidate that does not render within 30 seconds restores the embedded original. A first render is a startup check, not a guarantee against later application bugs.
 
-Checksums and native fingerprints guard against corruption and incompatible bundles. Custom code executes with the app's existing permissions; this is not an untrusted-code sandbox. AI tools cannot change dependencies, native configuration or files outside the candidate workspace.
+Checksums and native fingerprints guard against corruption and incompatible bundles. Custom code executes with the app's existing permissions; this is not an untrusted-code sandbox. AI tools cannot change dependencies, native configuration or files outside the candidate workspace. Metro, Babel and other build configuration, scripts, local build plugins, and their imported helpers stay fixed. Spark records those trusted files while preparing the signed release and checks them again before running compilation. Build configuration must use static local imports or a fixed config basename; unsupported dynamic loading rejects artifact preparation.
 
 ## Local interactive editing test
 
 From the Spark repository on Apple Silicon macOS:
 
 ```sh
-npm run test:editable:app
+bun run test:editable:app
 ```
 
 This builds a small release app, verifies and seeds its source/toolkit archives into the normal download cache, and launches it with a local fake AI provider. No GitHub release, AI account, API key, or paid request is needed. The first run needs the normal native build prerequisites and may download native dependencies. Later runs reuse the build. The fake provider's certificate is trusted only by the launched process and its workers; nothing is installed in your system trust store.
 
 Open **Customize app…** or press **Command–Shift–E**. The endpoint and model are set automatically. Generate “Make the greeting blue”, then “Make the greeting larger”. Review should include both changes. Preview, Apply, quit, and rerun the command to verify persistence. Unsupported prompts produce no edits; this is a deterministic fixture, not a language model. Approve the normal source-sharing dialog when it appears; requests stay on this machine.
 
-Run `npm run test:editable:app -- --custom-ui` to exercise app-owned prompt, progress, review and activation controls through the public API. **Provider settings** opens the built-in editor, including migration controls. Add `--real-ai` to select an installed Codex/Claude CLI with its existing login; this makes real provider requests.
+Run `bun run test:editable:app --custom-ui` to exercise app-owned prompt, progress, review and activation controls through the public API. **Provider settings** opens the built-in editor, including migration controls. Add `--real-ai` to select an installed Codex/Claude CLI with its existing login; this makes real provider requests.
 
 To test a major update, quit the demo and run:
 
 ```sh
-npm run test:editable:app -- --version 2
+bun run test:editable:app --version 2
 ```
 
 Choose **Migrate edits**, Review, and Apply. The greeting customizations should survive alongside version 2's new footer. **Original** returns to the shipped demo. Quit the app or press Ctrl+C to stop the test server.
@@ -163,10 +191,10 @@ Use `--prepare-only` to generate source without building, `--no-open` to build a
 ## Verification
 
 ```sh
-npm run build:cli
-npm run typecheck
-npm test
-npm run test:editable
+bun run build:cli
+bun run typecheck
+bun run test
+bun run test:editable
 ```
 
 The opt-in integration test creates real release archives, relocates the toolkit away from the publisher, compiles production Hermes bundles using both Node and Bun, and exercises deterministic HTTP and installed-CLI edits. Provider tests cover both CLI contracts on both runtimes, cancellation, failures and keyless loopback requests. They do not call a paid AI service. The macOS native test compiles the actual host implementation and checks the public API, progress, custom/default UI, loading, corruption, interrupted activation and original-bundle recovery.

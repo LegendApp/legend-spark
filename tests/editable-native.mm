@@ -1,10 +1,28 @@
 #import "../packages/desktop-host/SparkEditable.mm"
+#import <objc/runtime.h>
 static int checks;
 static void check(BOOL value, NSString *message) { checks++;if (!value) { NSLog(@"FAIL: %@",message); exit(1); } }
+static int installedMonitors;
+@interface NSEvent (SparkEditableTest)
++ (id)sparkFixtureMonitor:(NSEventMask)mask handler:(NSEvent *(^)(NSEvent *))handler;
+@end
+@implementation NSEvent (SparkEditableTest)
++ (id)sparkFixtureMonitor:(NSEventMask)mask handler:(NSEvent *(^)(NSEvent *))handler {
+  installedMonitors++;return [self sparkFixtureMonitor:mask handler:handler];
+}
+@end
 @interface FixtureEditingController : SparkEditableController
 @property NSString *receivedKey;
+@property NSString *githubToken;
 @end
 @implementation FixtureEditingController
+- (NSString *)githubCredential:(NSString *)value { if(value)self.githubToken=value;return self.githubToken ?: @""; }
+- (BOOL)githubAuthenticated { return self.githubToken.length>0; }
+- (NSDictionary *)github:(NSString *)command request:(NSDictionary *)request {
+  if([command isEqual:@"begin"])return @{@"userCode":@"CODE",@"verificationUri":@"https://github.com/login/device",@"expiresIn":@900,@"deviceCode":@"private-device-code",@"clientId":@"client",@"interval":@5};
+  if([command isEqual:@"complete"])return @{@"token":@"private-token"};
+  return @{@"url":@"https://github.com/owner/app/pull/1",@"number":@1,@"repository":@"owner/app",@"branch":@"spark-customize-test"};
+}
 - (void)prepare {}
 - (NSString *)worker:(NSArray *)args key:(NSString *)key {
   self.receivedKey=key;
@@ -16,6 +34,11 @@ static void check(BOOL value, NSString *message) { checks++;if (!value) { NSLog(
   }
   return @"{}";
 }
+@end
+@interface FixtureGitHubTransport : SparkEditableController
+@end
+@implementation FixtureGitHubTransport
+- (NSString *)download:(NSDictionary *)asset kind:(NSString *)kind { return self.toolkit; }
 @end
 static NSDictionary *call(NSString *method,NSDictionary *args) {
   __block BOOL handled=NO,finished=NO;__block NSDictionary *result;
@@ -31,7 +54,15 @@ static NSDictionary *call(NSString *method,NSDictionary *args) {
 }
 int main(int argc, const char **argv) { @autoreleasepool {
   [NSApplication sharedApplication];
+  Method originalMonitor=class_getClassMethod(NSEvent.class,@selector(addLocalMonitorForEventsMatchingMask:handler:));
+  Method fixtureMonitor=class_getClassMethod(NSEvent.class,@selector(sparkFixtureMonitor:handler:));
+  method_exchangeImplementations(originalMonitor,fixtureMonitor);
   SparkEditableController *controller=[SparkEditableController new];
+  check(controller.manifest.count==0 && installedMonitors==0,@"App without editing manifest does not install a key monitor");
+  method_exchangeImplementations(originalMonitor,fixtureMonitor);
+  SEController=controller;NSMenu *existingMenu=[NSMenu new];[existingMenu addItemWithTitle:@"Existing item" action:nil keyEquivalent:@""];
+  check(SparkEditableDockMenu(existingMenu)==existingMenu && existingMenu.numberOfItems==1,@"App without editing manifest preserves its Dock menu");
+  check(SparkEditableDockMenu(nil)==nil,@"App without editing manifest does not add a Dock menu");
   NSString *folder=[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
   controller.support=folder;controller.directory=[folder stringByAppendingPathComponent:@"release"];
   controller.manifest=@{@"schema":@1,@"release":@"release-1",@"runtime":@{@"fingerprint":@"native-1"}};
@@ -58,7 +89,7 @@ int main(int argc, const char **argv) { @autoreleasepool {
   // Switch the notification owner, then exercise the actual asynchronous native
   // API used by custom React UI, without downloading tools or calling a model.
   [NSNotificationCenter.defaultCenter removeObserver:controller];
-  FixtureEditingController *api=[FixtureEditingController new];api.manifest=@{@"release":@"release-1",@"editing":@{@"ui":@"custom",@"provider":@{@"kind":@"cli",@"tool":@"codex"}}};api.support=folder;api.directory=controller.directory;SEController=api;
+  FixtureEditingController *api=[FixtureEditingController new];api.manifest=@{@"release":@"release-1",@"repository":@"owner/app",@"editing":@{@"ui":@"custom",@"githubClientId":@"client",@"provider":@{@"kind":@"cli",@"tool":@"codex"}}};api.support=folder;api.directory=controller.directory;SEController=api;
   NSDictionary *savedProvider=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"SparkEditableProvider"];
   [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SparkEditableProvider"];
   __block int events=0;id observer=[NSNotificationCenter.defaultCenter addObserverForName:@"SparkDesktopEvent" object:nil queue:nil usingBlock:^(NSNotification *note){if([note.userInfo[@"type"] isEqual:@"editingState"])events++;}];
@@ -66,12 +97,26 @@ int main(int argc, const char **argv) { @autoreleasepool {
   check([[call(@"state",@{})[@"provider"] objectForKey:@"kind"] isEqual:@"cli"],@"Published CLI defaults are available");
   check([call(@"configure",@{@"provider":@{@"kind":@"cli",@"tool":@"claude"}}) count]==0,@"Configures CLI without an API key");
   check([call(@"configure",@{@"provider":@{@"kind":@"local",@"endpoint":@"http://evil.test/chat",@"model":@"test"}})[@"error"] isEqual:@"E_INVALID_ARGUMENT"],@"Rejects non-loopback local provider");
-  check([call(@"prompt",@{@"prompt":@"Make it blue"})[@"error"] isEqual:@"E_PERMISSION"],@"CLI needs source-sharing consent");
+  check([call(@"prompt",@{@"prompt":@"Make it blue"})[@"error"] isEqual:@"E_PERMISSION_DENIED"],@"CLI needs source-sharing consent");
   NSDictionary *generated=call(@"prompt",@{@"prompt":@"Make it blue",@"allowSourceSharing":@YES});
   check([generated[@"candidate"] isEqual:@"fixture"],@"Custom UI gets compiled candidate result");check(api.receivedKey==nil,@"CLI never receives a Keychain API key");
   check(![NSFileManager.defaultManager fileExistsAtPath:[api path:@"request.json"]],@"Per-request input removed after completion");
   NSDictionary *review=call(@"review",@{});check([review[@"text"] isEqual:@"Complete candidate review"],@"Custom UI receives full review");check([review[@"prompts"] count]==1,@"Custom UI receives saved prompt history");
   check(review[@"prompts"][0][@"patch"]==nil,@"Review metadata does not duplicate stored file contents");
+  NSDictionary *authorization=call(@"githubBegin",@{});check([authorization[@"userCode"] isEqual:@"CODE"],@"UI gets GitHub user code");check(authorization[@"deviceCode"]==nil,@"Device grant stays native");
+  check([call(@"githubComplete",@{}) count]==0,@"Authorization completion exposes no token");check([api.githubToken isEqual:@"private-token"],@"Authorization token goes to credential store");
+  NSDictionary *authorized=call(@"state",@{});check([authorized[@"githubAuthenticated"] boolValue],@"UI gets auth availability");check(authorized[@"token"]==nil,@"State exposes no token");
+  check([call(@"submitPR",@{@"title":@"Blue greeting"})[@"number"] intValue]==1,@"UI can submit reviewed PR");
+  call(@"githubSignOut",@{});check(!api.githubToken.length,@"Sign out removes token");
+  check([call(@"submitPR",@{@"title":@"Title",@"unknown":@YES})[@"error"] isEqual:@"E_UNSUPPORTED_OPTION"],@"Editing API rejects unsupported options");
+  FixtureGitHubTransport *transport=[FixtureGitHubTransport new];[NSNotificationCenter.defaultCenter removeObserver:transport];transport.toolkit=folder;transport.directory=controller.directory;transport.manifest=@{};
+  [@"exec /bin/sh \"$@\"\n" writeToFile:[folder stringByAppendingPathComponent:@"runtime-bootstrap.sh"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+  for(NSString *code in @[@"E_PERMISSION_DENIED",@"E_INVALID_DATA",@"E_TIMEOUT"]){
+    NSString *script=[NSString stringWithFormat:@"printf '%%s\\n' '{\"error\":\"%@\",\"message\":\"Safe failure\"}'\nexit 1\n",code];
+    [script writeToFile:[folder stringByAppendingPathComponent:@"editable-github.cjs"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    @try{[transport github:@"begin" request:@{}];check(NO,@"Failed subprocess must reject");}
+    @catch(NSException *failure){check([failure.name isEqual:code] && [failure.reason isEqual:@"Safe failure"],@"Native GitHub subprocess retains typed error without exposing process output");}
+  }
   api.busy=YES;check([call(@"original",@{})[@"error"] isEqual:@"E_BUSY"],@"Recovery action cannot race an ongoing operation");api.busy=NO;
   check(events>=3,@"Native progress reaches public event transport");
   check(SparkEditableDockMenu(nil).numberOfItems==0,@"Custom UI disables automatic Dock button");

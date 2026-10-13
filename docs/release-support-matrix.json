@@ -3748,6 +3748,69 @@
         ],
         "web": []
       }
+    },
+    {
+      "path": "./editable",
+      "sourceTarget": "./editable.ts",
+      "kind": "runtime-api",
+      "scope": "macos-only",
+      "provider": "@legendapp/spark-desktop-app",
+      "intendedTargets": [
+        "macos"
+      ],
+      "relatedCatalogCases": [],
+      "providerSources": [
+        "packages/desktop-app/src/editable.ts",
+        "packages/desktop-host/SparkEditable.mm"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/desktop-host/SparkEditable.mm"
+        ],
+        "windows": [],
+        "ios": [],
+        "android": [],
+        "web": []
+      },
+      "verification": {
+        "unitTests": [
+          "tests/editable-api.test.ts",
+          "tests/editable-hooks.test.ts",
+          "tests/editable-github.test.ts",
+          "tests/editable-native.test.ts"
+        ],
+        "portableCommand": "bun run test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; docs/editable-apps.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; docs/editable-apps.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "End-user editing is supported only by opted-in macOS release apps."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "End-user editing is supported only by opted-in macOS release apps."
+          },
+          "ios": {
+            "status": "not-applicable",
+            "reason": "End-user editing is supported only by opted-in macOS release apps."
+          },
+          "android": {
+            "status": "not-applicable",
+            "reason": "End-user editing is supported only by opted-in macOS release apps."
+          },
+          "web": {
+            "status": "not-applicable",
+            "reason": "End-user editing is supported only by opted-in macOS release apps."
+          }
+        }
+      }
     }
   ]
 }

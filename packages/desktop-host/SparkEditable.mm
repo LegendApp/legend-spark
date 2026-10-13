@@ -48,10 +48,10 @@ static NSDictionary *SEProvider(NSDictionary *value) {
   NSString *kind=value[@"kind"],*model=value[@"model"];
   if([kind isEqual:@"cli"]) {
     if(![@[@"codex",@"claude"] containsObject:value[@"tool"]] || (model && (![model isKindOfClass:NSString.class] || !model.length)))@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"CLI provider requires codex or claude" userInfo:nil];
-    for(NSString *key in value)if(![@[@"kind",@"tool",@"model"] containsObject:key])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Unknown CLI provider option" userInfo:nil];
+    for(NSString *key in value)if(![@[@"kind",@"tool",@"model"] containsObject:key])@throw [NSException exceptionWithName:@"E_UNSUPPORTED_OPTION" reason:@"Unknown CLI provider option" userInfo:nil];
     NSMutableDictionary *result=[@{@"kind":kind,@"tool":value[@"tool"]} mutableCopy];if(model)result[@"model"]=model;return result;
   }
-  for(NSString *key in value)if(![@[@"kind",@"endpoint",@"model",@"apiKey"] containsObject:key])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Unknown editing provider option" userInfo:nil];
+  for(NSString *key in value)if(![@[@"kind",@"endpoint",@"model",@"apiKey"] containsObject:key])@throw [NSException exceptionWithName:@"E_UNSUPPORTED_OPTION" reason:@"Unknown editing provider option" userInfo:nil];
   if(![model isKindOfClass:NSString.class] || !model.length || ![value[@"endpoint"] isKindOfClass:NSString.class])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Enter an endpoint and provider model" userInfo:nil];
   NSURLComponents *url=[NSURLComponents componentsWithString:value[@"endpoint"]];
   BOOL local=[kind isEqual:@"local"],remote=[kind isEqual:@"remote"];
@@ -72,7 +72,7 @@ static NSString *SERun(NSString *executable, NSArray *arguments, NSDictionary *e
   @synchronized(NSTask.class) { [SETasks removeObject:task]; }
   NSString *output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"";
   if(SECancelRequested)@throw [NSException exceptionWithName:@"E_ABORTED" reason:@"Editing canceled; partial changes are retained" userInfo:nil];
-  if (task.terminationStatus) @throw [NSException exceptionWithName:@"SparkEditable" reason:[NSString stringWithFormat:@"%@ failed (%d). %@", executable.lastPathComponent, task.terminationStatus, output] userInfo:nil];
+  if (task.terminationStatus) @throw [NSException exceptionWithName:@"SparkEditable" reason:[NSString stringWithFormat:@"%@ failed (%d). %@", executable.lastPathComponent, task.terminationStatus, output] userInfo:@{@"output":output}];
   return output;
 }
 @interface SparkEditableController : NSObject
@@ -95,6 +95,7 @@ static NSString *SERun(NSString *executable, NSArray *arguments, NSDictionary *e
 @property BOOL started;
 @property BOOL forceOriginal;
 @property NSWindow *reviewWindow;
+@property NSDictionary *githubSession;
 @end
 static SparkEditableController *SEController;
 @implementation SparkEditableController
@@ -109,13 +110,36 @@ static SparkEditableController *SEController;
     _forceOriginal = [NSProcessInfo.processInfo.arguments containsObject:@"--spark-original"] || ([NSEvent modifierFlags] & NSEventModifierFlagOption);
     [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationWillTerminateNotification object:nil queue:nil usingBlock:^(NSNotification *note) { @synchronized(NSTask.class) { for(NSTask *task in SETasks) if(task.running)[task terminate]; } }];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(healthy:) name:@"RCTContentDidAppearNotification" object:nil];
-    [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *event) {
-      if ((event.modifierFlags & (NSEventModifierFlagCommand|NSEventModifierFlagShift)) == (NSEventModifierFlagCommand|NSEventModifierFlagShift) && ![self.manifest[@"editing"][@"ui"] isEqual:@"custom"] && [event.charactersIgnoringModifiers.lowercaseString isEqual:@"e"]) { [self show:nil]; return nil; }
+    if(_manifest.count && ![_manifest[@"editing"][@"ui"] isEqual:@"custom"])[NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *event) {
+      if ((event.modifierFlags & (NSEventModifierFlagCommand|NSEventModifierFlagShift)) == (NSEventModifierFlagCommand|NSEventModifierFlagShift) && [event.charactersIgnoringModifiers.lowercaseString isEqual:@"e"]) { [self show:nil]; return nil; }
       return event;
     }];
   } return self;
 }
 - (NSString *)path:(NSString *)name { return [self.directory stringByAppendingPathComponent:name]; }
+- (NSString *)githubCredential:(NSString *)newValue {
+  NSDictionary *query=@{(__bridge id)kSecClass:(__bridge id)kSecClassGenericPassword,(__bridge id)kSecAttrService:@"SparkEditableGitHub",(__bridge id)kSecAttrAccount:NSBundle.mainBundle.bundleIdentifier};
+  if(newValue){
+    OSStatus status;
+    if(!newValue.length){status=SecItemDelete((__bridge CFDictionaryRef)query);if(status==errSecItemNotFound)status=errSecSuccess;}
+    else{
+      NSDictionary *update=@{(__bridge id)kSecValueData:[newValue dataUsingEncoding:NSUTF8StringEncoding]};
+      status=SecItemUpdate((__bridge CFDictionaryRef)query,(__bridge CFDictionaryRef)update);
+      if(status==errSecItemNotFound){NSMutableDictionary *item=[query mutableCopy];[item addEntriesFromDictionary:update];status=SecItemAdd((__bridge CFDictionaryRef)item,NULL);}
+    }
+    if(status!=errSecSuccess)@throw [NSException exceptionWithName:@"E_PERMISSION_DENIED" reason:@"Could not update the GitHub token in Keychain" userInfo:nil];
+    return newValue;
+  }
+  NSMutableDictionary *lookup=[query mutableCopy];lookup[(__bridge id)kSecReturnData]=@YES;CFTypeRef data=NULL;
+  OSStatus status=SecItemCopyMatching((__bridge CFDictionaryRef)lookup,&data);
+  if(status==errSecItemNotFound)return @"";
+  if(status!=errSecSuccess)@throw [NSException exceptionWithName:@"E_PERMISSION_DENIED" reason:@"Could not read the GitHub token from Keychain" userInfo:nil];
+  return [[NSString alloc] initWithData:CFBridgingRelease(data) encoding:NSUTF8StringEncoding] ?: @"";
+}
+- (BOOL)githubAuthenticated {
+  NSDictionary *query=@{(__bridge id)kSecClass:(__bridge id)kSecClassGenericPassword,(__bridge id)kSecAttrService:@"SparkEditableGitHub",(__bridge id)kSecAttrAccount:NSBundle.mainBundle.bundleIdentifier,(__bridge id)kSecUseAuthenticationUI:(__bridge id)kSecUseAuthenticationUIFail};
+  return SecItemCopyMatching((__bridge CFDictionaryRef)query,NULL)==errSecSuccess;
+}
 - (NSString *)credential:(NSString *)newValue {
   NSDictionary *query = @{(__bridge id)kSecClass:(__bridge id)kSecClassGenericPassword, (__bridge id)kSecAttrService:@"SparkEditableAI", (__bridge id)kSecAttrAccount:NSBundle.mainBundle.bundleIdentifier};
   if (newValue) {
@@ -158,10 +182,11 @@ static SparkEditableController *SEController;
     for (NSUInteger i=0;i<titles.count;i++) {
       NSButton *button = [NSButton buttonWithTitle:titles[i] target:self action:NSSelectorFromString(selectors[i])]; button.frame=NSMakeRect(20+(i%3)*215,145-(i/3)*40,205,32); [view addSubview:button]; [self.buttons addObject:button];
     }
+    if(self.manifest[@"editing"][@"githubClientId"]){NSButton *button=[NSButton buttonWithTitle:@"Submit as PR" target:self action:@selector(submitPR:)];button.frame=NSMakeRect(20,66,205,30);[view addSubview:button];[self.buttons addObject:button];}
     self.status = [NSTextField wrappingLabelWithString:@"Tools download on first use. AI requests send relevant source to your chosen provider and may incur charges. Hold Option at launch to use the original app."];
     long long bytes=[self.manifest[@"source"][@"size"] longLongValue]+[self.manifest[@"toolkit"][@"size"] longLongValue];
     if(bytes>0)self.status.stringValue=[NSString stringWithFormat:@"First-use source and tools: %@, plus Bun if needed. AI sends relevant source to your chosen provider. Hold Option at launch for the original app.",[NSByteCountFormatter stringFromByteCount:bytes countStyle:NSByteCountFormatterCountStyleFile]];
-    self.status.frame=NSMakeRect(20,20,640,85); [view addSubview:self.status]; [self.panel center];
+    self.status.frame=NSMakeRect(20,10,640,self.manifest[@"editing"][@"githubClientId"] ? 50 : 85); [view addSubview:self.status]; [self.panel center];
   }
   [self.panel makeKeyAndOrderFront:nil]; [NSApp activateIgnoringOtherApps:YES];
   if(self.busy){for(NSButton *button in self.buttons)button.enabled=NO;self.buttons.firstObject.title=@"Cancel";self.buttons.firstObject.enabled=YES;self.providerChoice.enabled=NO;self.endpoint.enabled=NO;self.model.enabled=NO;self.key.enabled=NO;}
@@ -204,7 +229,7 @@ static SparkEditableController *SEController;
   }return previous;
 }
 - (NSDictionary *)state {
-  return @{@"enabled":@(self.manifest.count>0),@"busy":@(self.busy),@"phase":self.phase ?: @"idle",@"message":self.message ?: @"",@"ready":@(SERead([self path:@"ready.json"]).count>0),@"customized":@(!self.forceOriginal && SERead([self path:@"active.json"]).count>0),@"previewing":@(self.previewRecord!=nil),@"migrationAvailable":@([self previousRelease]!=nil),@"provider":[self provider]};
+  return @{@"enabled":@(self.manifest.count>0),@"busy":@(self.busy),@"phase":self.phase ?: @"idle",@"message":self.message ?: @"",@"ready":@(SERead([self path:@"ready.json"]).count>0),@"customized":@(!self.forceOriginal && SERead([self path:@"active.json"]).count>0),@"previewing":@(self.previewRecord!=nil),@"migrationAvailable":@([self previousRelease]!=nil),@"provider":[self provider],@"githubAuthenticated":@([self githubAuthenticated]),@"repository":self.manifest[@"repository"] ?: @""};
 }
 - (void)emitState {
   self.status.stringValue=self.message;
@@ -260,10 +285,59 @@ static SparkEditableController *SEController;
   NSMutableDictionary *env=[NSProcessInfo.processInfo.environment mutableCopy];
   env[@"PATH"]=SEPath();
   [env removeObjectForKey:@"SPARK_EDITABLE_AI_KEY"];
+  [env removeObjectForKey:@"SPARK_EDITABLE_GITHUB_TOKEN"];[env removeObjectForKey:@"SPARK_EDITABLE_GITHUB_REQUEST"];
   env[@"SPARK_HOME"]=[[self.support stringByDeletingLastPathComponent].stringByDeletingLastPathComponent stringByAppendingPathComponent:@"Legend Spark"];
   if(key.length)env[@"SPARK_EDITABLE_AI_KEY"]=key;
   NSArray *args=[@[[self.toolkit stringByAppendingPathComponent:@"runtime-bootstrap.sh"],[self.toolkit stringByAppendingPathComponent:@"editable-worker.cjs"]] arrayByAddingObjectsFromArray:arguments];
   return SERun(@"/bin/sh",args,env);
+}
+- (NSDictionary *)github:(NSString *)command request:(NSDictionary *)request {
+  // GitHub credentials go only to the trusted submission process, never to the AI worker.
+  NSMutableDictionary *env=[NSProcessInfo.processInfo.environment mutableCopy];env[@"PATH"]=SEPath();
+  env[@"SPARK_HOME"]=[[self.support stringByDeletingLastPathComponent].stringByDeletingLastPathComponent stringByAppendingPathComponent:@"Legend Spark"];
+  [env removeObjectForKey:@"SPARK_EDITABLE_AI_KEY"];[env removeObjectForKey:@"SPARK_EDITABLE_GITHUB_TOKEN"];
+  env[@"SPARK_EDITABLE_GITHUB_REQUEST"]=[[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:request options:0 error:nil] encoding:NSUTF8StringEncoding];
+  if([command isEqual:@"submit"])env[@"SPARK_EDITABLE_GITHUB_TOKEN"]=[self githubCredential:nil];
+  self.toolkit=[self download:self.manifest[@"toolkit"] kind:@"toolkit"];
+  NSArray *args=@[[self.toolkit stringByAppendingPathComponent:@"runtime-bootstrap.sh"],[self.toolkit stringByAppendingPathComponent:@"editable-github.cjs"],command,self.directory];
+  @try{return SEResult(SERun(@"/bin/sh",args,env));}
+  @catch(NSException *error){
+    if([error.name hasPrefix:@"E_"])@throw;
+    NSDictionary *failure;
+    @try{failure=SEResult(error.userInfo[@"output"] ?: @"");} @catch(NSException *ignored){}
+    if([@[@"E_INVALID_ARGUMENT",@"E_UNSUPPORTED_OPTION",@"E_INVALID_DATA",@"E_PERMISSION_DENIED",@"E_TIMEOUT",@"E_NATIVE"] containsObject:failure[@"error"]] && [failure[@"message"] isKindOfClass:NSString.class])@throw [NSException exceptionWithName:failure[@"error"] reason:failure[@"message"] userInfo:nil];
+    // Do not propagate unknown process output to UI: a credential response must stay native.
+    @throw [NSException exceptionWithName:@"E_NATIVE" reason:@"GitHub operation failed. Check authorization and whether the source matches the repository." userInfo:nil];
+  }
+}
+- (NSDictionary *)beginGitHub {
+  NSString *client=self.manifest[@"editing"][@"githubClientId"];
+  if(![client isKindOfClass:NSString.class] || !client.length)@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"The developer must configure editable.githubClientId for GitHub device authorization" userInfo:nil];
+  self.githubSession=[self github:@"begin" request:@{@"clientId":client}];
+  return @{@"userCode":self.githubSession[@"userCode"],@"verificationUri":self.githubSession[@"verificationUri"],@"expiresIn":self.githubSession[@"expiresIn"]};
+}
+- (void)completeGitHub {
+  if(!self.githubSession)@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Start GitHub authorization first" userInfo:nil];
+  NSDictionary *result=[self github:@"complete" request:self.githubSession];
+  if(![result[@"token"] isKindOfClass:NSString.class] || ![result[@"token"] length])@throw [NSException exceptionWithName:@"E_INVALID_DATA" reason:@"GitHub returned no authorization token" userInfo:nil];
+  [self githubCredential:result[@"token"]];self.githubSession=nil;
+}
+- (void)submitPR:(id)sender {
+  if(self.busy)return;
+  if(![self githubAuthenticated]){
+    [self perform:@"authenticating" message:@"Starting GitHub authorization…" block:^id{return [self beginGitHub];} completion:^(id result,NSException *error){
+      if(error)return;
+      NSAlert *alert=[NSAlert new];alert.messageText=@"Authorize with GitHub";alert.informativeText=[NSString stringWithFormat:@"Open %@ and enter %@. GitHub will ask permission to create a fork, branch and pull request in a public repository.",result[@"verificationUri"],result[@"userCode"]];[alert addButtonWithTitle:@"Open GitHub and wait"];[alert addButtonWithTitle:@"Cancel"];
+      if([alert runModal]!=NSAlertFirstButtonReturn){self.githubSession=nil;return;}
+      [NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:result[@"verificationUri"]]];
+      [self perform:@"authenticating" message:@"Waiting for GitHub authorization…" block:^id{[self completeGitHub];return @"GitHub connected. Choose Submit as PR to review and submit.";} completion:nil];
+    }];return;
+  }
+  NSAlert *alert=[NSAlert new];alert.messageText=@"Submit this customization as a pull request?";alert.informativeText=[NSString stringWithFormat:@"Your saved prompts and reviewed patch will be public in %@. Spark creates a branch in your repository or fork. The app developer decides whether to accept it.",self.manifest[@"repository"] ?: @""];
+  NSTextField *title=[[NSTextField alloc] initWithFrame:NSMakeRect(0,0,400,24)];title.stringValue=@"Customize app";alert.accessoryView=title;[alert addButtonWithTitle:@"Submit as PR"];[alert addButtonWithTitle:@"Cancel"];
+  if([alert runModal]!=NSAlertFirstButtonReturn)return;
+  NSDictionary *request=@{@"title":title.stringValue};
+  [self perform:@"submitting" message:@"Submitting customization to GitHub…" block:^id{return [self github:@"submit" request:request];} completion:^(id result,NSException *error){if(!error){self.message=[@"Pull request submitted: " stringByAppendingString:result[@"url"]];[self emitState];}}];
 }
 - (void)prepare {
   self.toolkit=[self download:self.manifest[@"toolkit"] kind:@"toolkit"];
@@ -286,7 +360,7 @@ static SparkEditableController *SEController;
   NSString *prompt=args[@"prompt"];
   if(![prompt isKindOfClass:NSString.class] || ![prompt stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length || prompt.length>32000)@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Enter a prompt of at most 32000 characters" userInfo:nil];
   NSDictionary *raw=args[@"provider"] ?: [self provider],*provider=SEProvider(raw);
-  if(![provider[@"kind"] isEqual:@"local"] && ![args[@"allowSourceSharing"] isEqual:@YES])@throw [NSException exceptionWithName:@"E_PERMISSION" reason:@"Explain source sharing and obtain consent before generating edits" userInfo:nil];
+  if(![provider[@"kind"] isEqual:@"local"] && ![args[@"allowSourceSharing"] isEqual:@YES])@throw [NSException exceptionWithName:@"E_PERMISSION_DENIED" reason:@"Explain source sharing and obtain consent before generating edits" userInfo:nil];
   if([args[@"migration"] boolValue] && !SERead([self path:@"state.json"])[@"migration"])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Prepare an edit migration first" userInfo:nil];
   [self configure:raw];
   NSMutableDictionary *request=[provider mutableCopy];request[@"provider"]=request[@"kind"];[request removeObjectForKey:@"kind"];request[@"prompt"]=prompt;request[@"allowSourceSharing"]=@YES;request[@"migration"]=@([args[@"migration"] boolValue]);return request;
@@ -373,12 +447,18 @@ static SparkEditableController *SEController;
   };
   NSString *method=note.userInfo[@"method"];NSDictionary *args=note.userInfo[@"args"];
   @try {
+    NSArray *allowed=[method isEqual:@"prompt"] ? @[@"prompt",@"provider",@"allowSourceSharing",@"migration"] : ([method isEqual:@"configure"] ? @[@"provider"] : ([method isEqual:@"submitPR"] ? @[@"title"] : @[]));
+    for(NSString *key in args)if(![allowed containsObject:key])@throw [NSException exceptionWithName:@"E_UNSUPPORTED_OPTION" reason:@"Unknown editing option" userInfo:nil];
     if([method isEqual:@"state"]){done([self state],nil);return;}
     if([method isEqual:@"cancel"]){[self cancel];done(nil,nil);return;}
     if([method isEqual:@"show"]){[self show:nil];done(nil,nil);return;}
     if(self.busy)@throw [NSException exceptionWithName:@"E_BUSY" reason:@"An editing operation is already running" userInfo:nil];
     if([method isEqual:@"configure"]){[self configure:args[@"provider"]];[self emitState];done(nil,nil);}
     else if([method isEqual:@"review"])done([self editReview],nil);
+    else if([method isEqual:@"githubBegin"])[self perform:@"authenticating" message:@"Starting GitHub authorization…" block:^id{return [self beginGitHub];} completion:done];
+    else if([method isEqual:@"githubComplete"])[self perform:@"authenticating" message:@"Waiting for GitHub authorization…" block:^id{[self completeGitHub];return nil;} completion:done];
+    else if([method isEqual:@"githubSignOut"]){self.githubSession=nil;[self githubCredential:@""];[self emitState];done(nil,nil);}
+    else if([method isEqual:@"submitPR"])[self perform:@"submitting" message:@"Submitting customization to GitHub…" block:^id{return [self github:@"submit" request:args];} completion:done];
     else if([method isEqual:@"prompt"]){NSDictionary *request=[self generateRequest:args];NSString *key=[request[@"provider"] isEqual:@"remote"] ? [self credential:nil] : nil;[self perform:@"generating" message:@"Generating customization…" block:^id{return [self runPrompt:request key:key];} completion:done];}
     else if([method isEqual:@"migrate"])[self perform:@"migrating" message:@"Preparing migration…" block:^id{return [self prepareMigration];} completion:done];
     else if([method isEqual:@"preview"] || [method isEqual:@"apply"]){BOOL preview=[method isEqual:@"preview"];[self perform:preview ? @"previewing" : @"applying" message:@"Activating customization…" block:^id{[self activateCandidate:preview];return nil;} completion:^(id result,NSException *error){done(result,error);if(!error)[self reload];}];}
@@ -429,8 +509,9 @@ static void SparkEditableStart(void) {
 }
 static NSURL *SparkEditableBundleURL(void) { @try { SparkEditableStart();return [SEController bundleURL]; } @catch(NSException *exception) { return [NSBundle.mainBundle URLForResource:@"main" withExtension:@"jsbundle"]; } }
 static NSMenu *SparkEditableDockMenu(NSMenu *existing) {
-  SparkEditableStart(); NSMenu *menu=existing ? [existing copy] : [NSMenu new];
-  if([SEController.manifest[@"editing"][@"ui"] isEqual:@"custom"])return menu;
+  SparkEditableStart();
+  if(!SEController.manifest.count || [SEController.manifest[@"editing"][@"ui"] isEqual:@"custom"])return existing;
+  NSMenu *menu=existing ? [existing copy] : [NSMenu new];
   NSMenuItem *item=[[NSMenuItem alloc] initWithTitle:@"Customize app…" action:@selector(show:) keyEquivalent:@""];
   item.target=SEController;[menu addItem:item];return menu;
 }

@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { buildInvocationCommand } = require(fs.existsSync(path.join(__dirname, 'ai-invocation.cjs')) ? './ai-invocation.cjs' : '@legendapp/spark-ai/src/invocation-command.cjs');
 
 // Use the installed agent's login, but keep file mutations in Spark's validated
 // file tools. A CLI returns the next assistant message rather than editing disk.
@@ -10,10 +11,23 @@ const schema = { type: 'object', additionalProperties: false, required: ['conten
     id: { type: 'string' }, function: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: { name: { type: 'string', enum: ['list_files', 'read_file', 'write_file', 'delete_file'] }, arguments: { type: 'string' } } },
   } } },
 } };
-function invocation(tool, model, directory) {
-  const modelArgs = model ? ['--model', model] : [];
-  if (tool === 'codex') return ['exec', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--sandbox', 'read-only', '--output-schema', path.join(directory, 'schema.json'), '--output-last-message', path.join(directory, 'response.json'), ...modelArgs, '-'];
-  return ['-p', '--output-format', 'json', '--json-schema', JSON.stringify(schema), '--tools', '', '--disallowedTools', 'mcp__*', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--setting-sources', '', '--no-session-persistence', ...modelArgs];
+function invocation(tool, model, directory, input = 'Editing response') {
+  const command = buildInvocationCommand(tool, input, tool === 'codex' && model ? { codex: { model } } : {});
+  if (tool === 'codex') {
+    const args = [...command.args]; args.pop();
+    // Disable execution tools as well as broad disk-read access. Unsupported
+    // configuration fails closed instead of falling back to an unrestricted CLI.
+    args.push('--strict-config', '--config', 'default_permissions="spark-editable"',
+      '--config', 'permissions.spark-editable.filesystem={":minimal"="read",":workspace_roots"="read"}',
+      '--config', 'permissions.spark-editable.network.enabled=false',
+      '--disable', 'shell_tool', '--disable', 'unified_exec', '--disable', 'shell_snapshot',
+      '--config', 'web_search="disabled"', '--disable', 'view_image', '--config', 'mcp_servers={}',
+      '--config', 'features.remote_plugin=false', '--config', 'features.apps=false',
+      '--config', 'project_doc_max_bytes=0',
+      '--output-schema', path.join(directory, 'schema.json'), '--output-last-message', path.join(directory, 'response.json'), '-');
+    return { ...command, args };
+  }
+  return { command: command.command, input, args: [...command.args.slice(0, -1), '--output-format', 'json', '--json-schema', JSON.stringify(schema), '--tools', '', '--disallowedTools', 'mcp__*', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--setting-sources', '', '--no-session-persistence', ...(model ? ['--model', model] : [])] };
 }
 async function complete(provider, body, signal) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'spark-editable-cli-'));
@@ -22,7 +36,10 @@ async function complete(provider, body, signal) {
   try {
     const output = await new Promise((resolve, reject) => {
       if (signal?.aborted) { reject(new Error('AI CLI request canceled or timed out')); return; }
-      const child = spawn(provider.tool, invocation(provider.tool, provider.model, directory), { cwd: directory, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+      const command = invocation(provider.tool, provider.model, directory, input);
+      const env = { ...process.env };
+      delete env.SPARK_EDITABLE_GITHUB_TOKEN; delete env.SPARK_EDITABLE_GITHUB_REQUEST; delete env.SPARK_EDITABLE_AI_KEY;
+      const child = spawn(command.command, command.args, { env, cwd: directory, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
       let stdout = '', stderr = '', failure, killTimer;
       const stop = () => {
         failure ??= new Error('AI CLI request canceled or timed out');
@@ -39,7 +56,7 @@ async function complete(provider, body, signal) {
         clearTimeout(killTimer); signal?.removeEventListener('abort', stop); process.removeListener('SIGTERM', stop); process.removeListener('SIGINT', stop);
         if (failure || code !== 0) reject(failure ?? new Error(`${provider.tool} exited ${code}. ${stderr}`)); else resolve(stdout);
       });
-      child.stdin.end(input);
+      child.stdin.end(command.input);
     });
     let message;
     if (provider.tool === 'codex') {

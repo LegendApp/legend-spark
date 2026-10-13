@@ -543,6 +543,15 @@
                   }
                 }
               ]
+            },
+            "sourceRoot": {
+              "type": "string",
+              "description": "Relative ancestor of the app project. files are relative to this source snapshot root."
+            },
+            "githubClientId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_]+$",
+              "description": "GitHub OAuth app client ID with device flow enabled."
             }
           }
         }
