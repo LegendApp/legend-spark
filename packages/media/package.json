@@ -23,7 +23,8 @@
         "NativeDesktopMedia": "RNDesktopMedia"
       },
       "componentProvider": {
-        "DesktopVideoView": "RNDesktopVideoView"
+        "DesktopVideoView": "RNDesktopVideoView",
+        "DesktopCameraView": "RNDesktopCameraView"
       }
     }
   },

@@ -56,6 +56,12 @@ export type TestSpeech = {
   utterances: { text: string; voice: string | null; language: string | null; rate: number; pitch: number; volume: number }[]; speaking: boolean; paused: boolean;
   recognitions: number; listening: boolean; lastRecognition: { locale: string; onDevice: boolean; partialResults: boolean; punctuation: boolean; contextualStrings: string[] } | null;
 };
+/** The simulated state of @legendapp/spark/capture (the `testCapture` driver command). */
+export type TestCapture = {
+  cameras: boolean; microphones: boolean; cameraEntitled: boolean; microphoneEntitled: boolean; recordingAudio: boolean; cameraRunning: boolean; recordingScreen: boolean;
+  frames: number; levels: number; photos: number; screenshots: number; recordings: number;
+};
+export type SimulatedCapture = { cameras?: boolean; microphones?: boolean; cameraEntitled?: boolean; microphoneEntitled?: boolean };
 export type SimulatedSpeech = { wordMs?: number; recognizerAvailable?: boolean; onDeviceSupported?: boolean; recognitionPartials?: string[]; recognitionTranscript?: string | null };
 /** What the @legendapp/spark/app-intents simulation recorded (the `testAppIntents` driver command). */
 export type TestAppIntents = {
@@ -369,6 +375,10 @@ export class Driver {
   async simulateAppIntents(request: SimulatedAppIntents) { return body<{ appIntents: TestAppIntents }>(await this.request({ command: "simulateAppIntents", ...request }, 10000)).appIntents; }
   /** What the App Intents simulation recorded: declared and handled intents, completed invocations, pending ones, donations. */
   async testAppIntents() { return body<{ appIntents: TestAppIntents }>(await this.request({ command: "testAppIntents" }, 10000)).appIntents; }
+  /** Sets the simulated capture devices @legendapp/spark/capture sees (docs/capture.md#testing); no device or TCC is reached. */
+  async simulateCapture(state: SimulatedCapture) { return body<{ capture: TestCapture }>(await this.request({ command: "simulateCapture", ...state }, 10000)).capture; }
+  /** The simulated capture state: devices, running sessions and what they produced. */
+  async testCapture() { return body<{ capture: TestCapture }>(await this.request({ command: "testCapture" }, 10000)).capture; }
   /** Startup phases of this launch, once its first rendered UI has settled; with `testID`, `ready` once that element first showed settled. */
   async startup(timeoutMs = 30000, testID?: string) {
     return (await this.request({ command: "startup", timeoutMs, ...(testID === undefined ? {} : { testID }) }, timeoutMs + 10000)).phases as StartupPhases;

@@ -22,12 +22,22 @@ function authenticationEntitlements(authentication) {
   return result;
 }
 
+// macos.capture: the hardened-runtime entitlements the camera and microphone need (docs/capture.md#entitlements), only
+// when the app asks for them.
+function captureEntitlements(capture) {
+  const result = {};
+  if (capture?.camera) result["com.apple.security.device.camera"] = true;
+  if (capture?.microphone) result["com.apple.security.device.audio-input"] = true;
+  return result;
+}
+
 function resolveEntitlements(config, packages) {
   const expo = config.expo ?? config;
   return mergeEntitlements(
     ...packages.map((pkg) => pkg.spark?.entitlements?.macos ?? {}),
     authenticationEntitlements(expo.macos?.authentication),
+    captureEntitlements(expo.macos?.capture),
     expo.macos?.entitlements ?? {},
   );
 }
-module.exports = { mergeEntitlements, resolveEntitlements, authenticationEntitlements };
+module.exports = { mergeEntitlements, resolveEntitlements, authenticationEntitlements, captureEntitlements };

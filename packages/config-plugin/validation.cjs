@@ -27,9 +27,21 @@ function validateAuthentication(value) {
   if (domains !== undefined && (!Array.isArray(domains) || new Set(domains).size !== domains.length || domains.some((domain) => typeof domain !== "string" || !PASSKEY_DOMAIN.test(domain))))
     throw new Error("macos.authentication.passkeyDomains must list unique lowercase domains such as example.com (optionally with ?mode=developer)");
 }
+// macos.capture adds the camera and microphone entitlements; macOS ends an app that uses either without its usage description.
+const CAPTURE_USAGE = { camera: "NSCameraUsageDescription", microphone: "NSMicrophoneUsageDescription" };
+function validateCapture(macos) {
+  if (macos.capture === undefined) return;
+  object(macos.capture, "macos.capture", Object.keys(CAPTURE_USAGE));
+  for (const [kind, key] of Object.entries(CAPTURE_USAGE)) {
+    const enabled = macos.capture[kind];
+    if (enabled !== undefined && typeof enabled !== "boolean") throw new Error(`macos.capture.${kind} must be a boolean`);
+    const usage = macos.infoPlist?.[key];
+    if (enabled && (typeof usage !== "string" || !usage.trim())) throw new Error(`macos.capture.${kind} needs macos.infoPlist.${key}: the reason macOS shows when it asks for the ${kind}`);
+  }
+}
 function validateOwned(value) {
   if (value.macos !== undefined) {
-    object(value.macos, "macos", ["bundleIdentifier", "buildNumber", "icon", "entitlements", "infoPlist", "testDriverInRelease", "testDriverPrivateEvents", "lifecycle", "appIntents", "authentication"]);
+    object(value.macos, "macos", ["bundleIdentifier", "buildNumber", "icon", "entitlements", "infoPlist", "testDriverInRelease", "testDriverPrivateEvents", "lifecycle", "appIntents", "authentication", "capture"]);
     if (typeof value.macos.bundleIdentifier !== "string" || !/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(value.macos.bundleIdentifier)) throw new Error("macos.bundleIdentifier must be a reverse-DNS identifier");
     if (value.macos.buildNumber !== undefined && typeof value.macos.buildNumber !== "string") throw new Error("macos.buildNumber must be a string");
     if (value.macos.icon !== undefined && (typeof value.macos.icon !== "string" || !value.macos.icon.trim())) throw new Error("macos.icon must be a path to a PNG or an Icon Composer .icon document");
@@ -38,6 +50,7 @@ function validateOwned(value) {
     require("./lifecycle.cjs").validateLifecycle(value.macos.lifecycle);
     if (value.macos.appIntents !== undefined) require("./app-intents.cjs").validateAppIntents(value.macos.appIntents);
     validateAuthentication(value.macos.authentication);
+    validateCapture(value.macos);
   }
   if (value.localizations !== undefined) {
     const languages = value.localizations;

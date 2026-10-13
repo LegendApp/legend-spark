@@ -1,0 +1,34 @@
+appId: so.legend.spark.examples.kitchensink
+name: Screen capture needs the permission, then lists sources, takes a screenshot and records (simulated)
+intent: >
+  Media > Capture reports that this macOS records the screen (macOS 15 and later). Listing displays and windows, a
+  screenshot and a screen recording each reject SparkError:E_PERMISSION_DENIED with screen recording not granted, and no
+  prompt happens. With it granted, the simulated display and window are listed, the screenshot is a 1440×900 PNG, and a
+  recording of synthetic frames stops as a .mov. Driver simulation only: no ScreenCaptureKit or TCC prompt is reached.
+checks: [MEDIA-SCREEN-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://media/capture" }
+- assertText: { id: media-capture-screen-recording-availability, equals: '{"available":true}' }
+- tapOn: { id: media-capture-list-sources }
+- assertText: { id: media-capture-sources, equals: "SparkError:E_PERMISSION_DENIED" }
+- tapOn: { id: media-capture-screenshot }
+- assertText: { id: media-capture-screenshot-result, equals: "SparkError:E_PERMISSION_DENIED" }
+- tapOn: { id: media-capture-record-screen }
+- assertText: { id: media-capture-screen-recording, equals: "SparkError:E_PERMISSION_DENIED" }
+- assertSimulatedPermission: { kind: screenRecording, requests: 0, prompts: 0 }
+- assertSimulatedCapture: { screenshots: 0, recordingScreen: false, recordings: 0 }
+- simulatePermission: { kind: screenRecording, authorization: authorized }
+- tapOn: { id: media-capture-list-sources }
+- assertText: { id: media-capture-sources, equals: "1 displays · 1 windows" }
+- tapOn: { id: media-capture-screenshot }
+- assertText: { id: media-capture-screenshot-result, equals: "screenshot .png · 1440×900" }
+- assertSimulatedCapture: { screenshots: 1 }
+- tapOn: { id: media-capture-record-screen }
+- assertText: { id: media-capture-screen-recording, equals: recording }
+- assertSimulatedCapture: { recordingScreen: true, minFrames: 5 }
+- tapOn: { id: media-capture-stop-screen }
+- assertText: { id: media-capture-screen-recording, equals: "recorded .mov" }
+- assertSimulatedCapture: { recordingScreen: false, recordings: 1 }
+- takeScreenshot: capture-screen

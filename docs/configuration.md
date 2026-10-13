@@ -56,6 +56,12 @@ compiles them into the app; JavaScript handles them with `@legendapp/spark/app-i
 your team with a provisioning profile that grants them; see
 [authentication](authentication.md#entitlements).
 
+`macos.capture` opts in to the hardened-runtime entitlements the camera and microphone
+need: `"camera": true` adds `com.apple.security.device.camera` and `"microphone": true` adds
+`com.apple.security.device.audio-input` (also for speech recognition). Each needs its usage
+description in `macos.infoPlist` (`NSCameraUsageDescription`, `NSMicrophoneUsageDescription`), or
+configuration fails. Nothing is added without it; see [capture](capture.md#entitlements).
+
 `localizations` lists the languages the app is translated into, development
 language first. On macOS AppKit and Spark show native strings (menus, dialogs,
 panels) in the first of the user's languages listed there; see

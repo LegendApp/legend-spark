@@ -1,4 +1,5 @@
 #import "SparkSpeech.h"
+#import "SparkCapture.h"
 #import <AVFoundation/AVFoundation.h>
 #import <Speech/Speech.h>
 
@@ -387,6 +388,8 @@ static NSError *ValidRecognition(NSDictionary *options) {
   // Never prompts: starting the microphone or a recognition task undetermined would.
   if (SFSpeechRecognizer.authorizationStatus != SFSpeechRecognizerAuthorizationStatusAuthorized)
     return done(nil, Failure(@"E_PERMISSION_DENIED", @"Speech recognition is not authorized; request the speechRecognition permission first"));
+  if (SparkCaptureEntitlementMissing(@"microphone"))
+    return done(nil, Failure(@"E_UNAVAILABLE", @"This build has the hardened runtime without the com.apple.security.device.audio-input entitlement the microphone needs; set macos.capture.microphone in the app config"));
   if ([AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio] != AVAuthorizationStatusAuthorized)
     return done(nil, Failure(@"E_PERMISSION_DENIED", @"The microphone is not authorized; request the microphone permission first"));
   SFSpeechRecognizer *recognizer = [[SFSpeechRecognizer alloc] initWithLocale:options[@"locale"] ? [NSLocale localeWithLocaleIdentifier:options[@"locale"]] : NSLocale.currentLocale];

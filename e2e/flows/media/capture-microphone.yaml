@@ -1,0 +1,50 @@
+appId: so.legend.spark.examples.kitchensink
+name: Microphone recording needs the permission, then records with levels, stops, cancels and ends when unplugged (simulated)
+intent: >
+  Media > Capture reads availability (with the camera and microphone entitlements simulated, so a hardened-runtime
+  release build behaves as an entitled app would), the simulated camera and microphone, and the microphone, camera and screen recording
+  permissions without prompting. Record rejects SparkError:E_PERMISSION_DENIED and no prompt or recording happens.
+  Request permissions asks for all three (simulated prompts, allowed). Then Record runs with synthetic levels and Stop
+  writes an .m4a file; Discard ends a recording cancelled; unplugging the simulated microphone ends one
+  SparkError:E_UNAVAILABLE and a new one cannot start. Driver simulation only: no microphone or TCC prompt is reached.
+checks: [MEDIA-MIC-01]
+tags: [media]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://media/capture" }
+- simulateCapture: { cameraEntitled: true, microphoneEntitled: true }
+- tapOn: { id: media-capture-refresh }
+- assertText: { id: media-capture-availability, equals: "camera available · microphone available · screen available" }
+- assertText: { id: media-capture-devices, equals: "cameras: Simulated Camera (default) · microphones: Simulated Microphone (default)" }
+- assertText: { id: media-capture-permissions, equals: "microphone undetermined · camera undetermined · screenRecording denied" }
+- tapOn: { id: media-capture-record }
+- assertText: { id: media-capture-audio, equals: "SparkError:E_PERMISSION_DENIED" }
+- assertSimulatedPermission: { kind: microphone, requests: 0, prompts: 0 }
+- assertSimulatedCapture: { recordingAudio: false, recordings: 0 }
+- simulatePermission: { kind: microphone, answer: allow }
+- simulatePermission: { kind: camera, answer: allow }
+- simulatePermission: { kind: screenRecording, answer: allow }
+- tapOn: { id: media-capture-request }
+- assertText: { id: media-capture-permissions, equals: "microphone granted · camera granted · screenRecording granted" }
+- assertSimulatedPermission: { kind: microphone, authorization: authorized, prompts: 1 }
+- assertSimulatedPermission: { kind: screenRecording, authorization: authorized, prompts: 1 }
+- tapOn: { id: media-capture-record }
+- assertText: { id: media-capture-audio, equals: recording }
+- assertSimulatedCapture: { recordingAudio: true, minLevels: 3 }
+- takeScreenshot: capture-microphone-recording
+- tapOn: { id: media-capture-stop }
+- assertText: { id: media-capture-audio, equals: "recorded .m4a" }
+- assertSimulatedCapture: { recordingAudio: false, recordings: 1 }
+- tapOn: { id: media-capture-record }
+- assertText: { id: media-capture-audio, equals: recording }
+- tapOn: { id: media-capture-cancel }
+- assertText: { id: media-capture-audio, equals: cancelled }
+- assertSimulatedCapture: { recordingAudio: false, recordings: 1 }
+- tapOn: { id: media-capture-record }
+- assertText: { id: media-capture-audio, equals: recording }
+- simulateCapture: { microphones: false }
+- assertText: { id: media-capture-audio, equals: "SparkError:E_UNAVAILABLE" }
+- tapOn: { id: media-capture-record }
+- assertText: { id: media-capture-audio, equals: "SparkError:E_UNAVAILABLE" }
+- assertSimulatedCapture: { microphones: false, recordingAudio: false, recordings: 1 }
+- simulateCapture: { microphones: true }

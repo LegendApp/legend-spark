@@ -36,6 +36,13 @@ export interface MacOSConfiguration {
    * provisioning profile; without them the APIs report `missing-entitlement` (docs/authentication.md#entitlements).
    */
   authentication?: { signInWithApple?: boolean; passkeyDomains?: string[] };
+  /**
+   * Opt in to the hardened-runtime entitlements `@legendapp/spark/capture` and speech recognition need: `camera` adds
+   * `com.apple.security.device.camera`, `microphone` adds `com.apple.security.device.audio-input`. Each needs its usage
+   * description in `infoPlist` (NSCameraUsageDescription, NSMicrophoneUsageDescription). Without them a hardened-runtime
+   * build reports `missing-entitlement` (docs/capture.md#entitlements).
+   */
+  capture?: { camera?: boolean; microphone?: boolean };
   /** App Intents for Shortcuts, Spotlight and Siri, compiled into the app by spark build (docs/app-intents.md). */
   appIntents?: AppIntentConfiguration[];
 }

@@ -90,6 +90,7 @@
     "./speech",
     "./app-intents",
     "./apple-authentication",
-    "./passkeys"
+    "./passkeys",
+    "./capture"
   ]
 }

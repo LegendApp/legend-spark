@@ -90,7 +90,8 @@
     "./plugins": "./plugins.ts",
     "./video": "./video.ts",
     "./speech": "./speech.ts",
-    "./app-intents": "./app-intents.ts"
+    "./app-intents": "./app-intents.ts",
+    "./capture": "./capture.ts"
   },
   "files": [
     "*.ts",

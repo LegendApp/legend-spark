@@ -195,6 +195,16 @@ describe("command mapping", () => {
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('the last invocation\'s error is "E_TIMEOUT", expected null') });
   });
 
+  test("simulateCapture sets the simulated devices; assertSimulatedCapture checks sessions, outputs and flowing frames", async () => {
+    const app = new FakeApp();
+    const { result } = await run("- launchApp\n- simulateCapture: { cameras: false }\n- assertSimulatedCapture: { cameras: false, microphones: true, cameraRunning: false, photos: 0, minFrames: 0 }", app);
+    expect(result.status).toBe("passed");
+    expect(app.log.filter(line => line.includes("Capture"))).toEqual(['simulateCapture {"cameras":false}', "testCapture"]);
+    expect(app.drivers[0]!.captureState).toMatchObject({ cameras: false, microphones: true });
+    const failed = await run("- launchApp\n- assertSimulatedCapture: { minFrames: 3, timeout: 200ms }");
+    expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("capture frames is 0, expected at least 3") });
+  });
+
   test("dragAndDrop runs a Spark drag source's drag in process: begin, move, a hold for spring loading, drop", async () => {
     const app = new FakeApp({ source: 1, target: 1 });
     app.dragSources = { source: {} };

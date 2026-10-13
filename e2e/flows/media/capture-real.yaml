@@ -1,0 +1,54 @@
+appId: so.legend.spark.examples.kitchensink
+name: Real microphone, camera and screen capture
+intent: >
+  The real AVFoundation and ScreenCaptureKit paths of @legendapp/spark/capture, which no automated run may reach: they
+  show TCC prompts and use the microphone, the camera and the screen. manual: true keeps the gate from running it. Run it
+  by hand on a Mac with a microphone and a camera, in the development build: the Kitchen Sink sets no macos.capture, so
+  its hardened-runtime release build reports missing-entitlement for the camera and microphone; reset the permissions afterwards if needed (tccutil reset Microphone
+  so.legend.spark.examples.kitchensink, and Camera and ScreenCapture).
+checks: [MEDIA-CAPREAL-01]
+tags: [media]
+platforms: [macos]
+manual: true
+---
+- launchApp: { openUrl: "spark-ks://media/capture" }
+- extendedWaitUntil: { visible: { id: media-capture-root }, timeout: 10s }
+- manualStep:
+    instruction: >-
+      Open Media > Capture with the permissions not yet granted. Press Record, Start camera, List displays and windows,
+      Screenshot and Record screen.
+    expect: >-
+      Each shows SparkError:E_PERMISSION_DENIED and no system prompt appears. The availability line says camera available ·
+      microphone available · screen available, and the devices line names this Mac's cameras and microphones, the default
+      ones marked.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Request permissions and allow the microphone and camera prompts; for screen recording, allow the app in System
+      Settings and relaunch it if macOS asks. Press Record, speak for a few seconds, and press Stop; open the file named on
+      the detail line.
+    expect: >-
+      The permissions line says granted for all three. While recording the level line moves with your voice; Stop shows
+      recorded .m4a, and the file plays back what you said.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Start camera, move in front of it, press Take photo, then Stop camera.
+    expect: >-
+      The camera's light turns on and the preview shows it live and upright, with the camera line giving its size; the photo
+      line shows photo .jpg with that size; Stop camera shows stopped, the preview goes empty and the light turns off.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press List displays and windows, then Screenshot. Press Record screen, wait a few seconds, and press Stop recording;
+      open the screenshot and the recording named on the detail line.
+    expect: >-
+      The sources line counts this Mac's displays and on-screen windows. The screenshot is a PNG of the main display at its
+      pixel size. The recording shows recorded .mov and plays back the main display (macOS 15 and later; earlier, the
+      availability line says host-restriction and Record screen shows SparkError:E_UNAVAILABLE). On macOS 15 and later,
+      macOS may later ask whether to keep allowing the app to record the screen; that alert is macOS's, not the app's.
+    evidence: none
+    signoff: required

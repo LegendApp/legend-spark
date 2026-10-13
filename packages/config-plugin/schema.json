@@ -221,6 +221,21 @@
           "type": "boolean",
           "description": "Compile the test driver's trackpad gesture and extra mouse button synthesis, which uses private CoreGraphics event functions. Test builds only: keep it off for apps you distribute (docs/test-driver.md#private-event-functions)."
         },
+        "capture": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Opt in to the hardened-runtime entitlements the camera and microphone need (@legendapp/spark/capture, speech recognition); each needs its usage description in infoPlist (docs/capture.md#entitlements).",
+          "properties": {
+            "camera": {
+              "type": "boolean",
+              "description": "Adds com.apple.security.device.camera; needs infoPlist.NSCameraUsageDescription."
+            },
+            "microphone": {
+              "type": "boolean",
+              "description": "Adds com.apple.security.device.audio-input; needs infoPlist.NSMicrophoneUsageDescription."
+            }
+          }
+        },
         "lifecycle": {
           "type": "object",
           "additionalProperties": false,
