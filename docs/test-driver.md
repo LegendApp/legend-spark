@@ -242,7 +242,9 @@ send one request at a time; each reply echoes `id`. Failures are
 Optional modules add commands with `SparkTestDriverRegisterCommand` (main thread; built-in
 names, including the input commands, and duplicate names are refused), because the driver cannot link them itself. The motion
 package registers its virtual clock, `setClock` and `advanceClock`
-([motion.md](motion.md#virtual-clock-for-the-test-driver)), and its telemetry, `motionState`,
+([motion.md](motion.md#virtual-clock-for-the-test-driver)), and reports each change through
+`SparkTestDriverDidChangeClock` to the modules that observe it with `SparkTestDriverObserveClock` (window choreography's
+frame animations), and its telemetry, `motionState`,
 `waitForMotion` and `sampleMotion` ([motion.md](motion.md#motion-telemetry)). An app without
 that module answers them with `E_UNKNOWN_COMMAND`. The system package registers `simulateSystemEvent`
 ([system.md](system.md#testing-system-events)). The window package registers `simulateDisplays`, the

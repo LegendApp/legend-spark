@@ -129,7 +129,7 @@ export async function closeWindow(id: string): Promise<CloseResult> {
   windowId(id);
   let pending = closing.get(id);
   if (!pending) {
-    pending = windowCall("close", { id }, (value): value is CloseResult => record(value) && (value.closed === true || (value.closed === false && value.reason === "vetoed"))).finally(() => closing.delete(id));
+    pending = windowCall("close", { id }, (value): value is CloseResult => record(value) && (value.closed === true || (value.closed === false && (value.reason === "vetoed" || value.reason === "interrupted")))).finally(() => closing.delete(id));
     closing.set(id, pending);
   }
   return pending;

@@ -609,7 +609,9 @@ exact frame for that instant, and driver captures render each `MotionView` at th
 value for it ([Motion telemetry](#motion-telemetry)), so captures and state reads are
 deterministic; the flow commands `setClock` and `advanceClock` map onto them. A paused layer
 also pauses its subviews' own Core Animation, such as a spinner inside a `MotionView`.
-`recordMotionFrames` rejects with `E_UNAVAILABLE` on the virtual clock.
+`recordMotionFrames` rejects with `E_UNAVAILABLE` on the virtual clock. Each successful `setClock` and `advanceClock`
+is reported through the driver's clock hook (`SparkTestDriverDidChangeClock`), so animations outside motion follow the
+same clock: [window choreography](api-window-contract.md#window-choreography) steps window frames by the advanced time.
 
 ## Motion telemetry
 

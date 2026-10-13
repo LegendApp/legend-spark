@@ -113,6 +113,20 @@ void SparkTestDriverDidSimulateState(NSDictionary *values) {
   NSCAssert(NSThread.isMainThread, @"Simulated state is reported on the main thread");
   for (SparkTestDriverStateObserver observer in SparkStateObservers()) observer(values);
 }
+static NSMutableArray<SparkTestDriverClockObserver> *SparkClockObservers(void) {
+  static NSMutableArray *observers;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ observers = [NSMutableArray new]; });
+  return observers;
+}
+void SparkTestDriverObserveClock(SparkTestDriverClockObserver observer) {
+  NSCAssert(NSThread.isMainThread, @"Driver hooks are registered on the main thread");
+  [SparkClockObservers() addObject:[observer copy]];
+}
+void SparkTestDriverDidChangeClock(BOOL virtualClock, double advancedMs) {
+  NSCAssert(NSThread.isMainThread, @"Clock changes are reported on the main thread");
+  for (SparkTestDriverClockObserver observer in SparkClockObservers()) observer(virtualClock, advancedMs);
+}
 // Runs `render` inside every registered wrapper, the first registered outermost.
 static void SparkWrapped(NSUInteger index, dispatch_block_t render) {
   if (index == SparkRenderWrappers().count) { render(); return; }

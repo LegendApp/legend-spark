@@ -12,7 +12,7 @@
 //   {"command": "sampleMotion", "testID", "fromMs", "toMs", "intervalMs"} → {"samples": [{"tMs", "values", "velocities"}]}
 //   {"command": "simulateOcclusion", "testID", "visible"} → {"mode", "timeMs"}: the window of that view counts as hidden or visible
 // simulateSystemEvent's reduceMotion and lowPowerMode, and simulateDisplays' primary refresh rate, reach motion through
-// SparkTestDriverObserveSimulatedState.
+// SparkTestDriverObserveSimulatedState. Clock changes go to SparkTestDriverDidChangeClock, which window choreography follows.
 static SparkMotionReject SparkMotionDriverFailure(SparkTestDriverReply reply)
 {
   return ^(NSString *code, NSString *message) { reply(@{ @"ok": @NO, @"error": @{ @"code": code, @"message": message } }); };
@@ -62,12 +62,14 @@ static NSInteger SparkMotionDriverTarget(NSDictionary *request, SparkTestDriverR
   SparkTestDriverRegisterCommand(@"setClock", ^(NSDictionary *request, SparkTestDriverReply reply) {
     id mode = request[@"mode"];
     if (![mode isKindOfClass:NSString.class]) { SparkMotionDriverFailure(reply)(@"E_INVALID_ARGUMENT", @"setClock expects mode real or virtual"); return; }
-    [motion setClock:mode resolve:SparkMotionDriverSuccess(reply) reject:SparkMotionDriverFailure(reply)];
+    SparkMotionResolve success = SparkMotionDriverSuccess(reply);
+    [motion setClock:mode resolve:^(id result) { SparkTestDriverDidChangeClock([mode isEqual:@"virtual"], 0); success(result); } reject:SparkMotionDriverFailure(reply)];
   });
   SparkTestDriverRegisterCommand(@"advanceClock", ^(NSDictionary *request, SparkTestDriverReply reply) {
     id duration = request[@"durationMs"];
     if (!SparkMotionDriverNumber(duration)) { SparkMotionDriverFailure(reply)(@"E_INVALID_ARGUMENT", @"advanceClock expects durationMs"); return; }
-    [motion advanceClock:[duration doubleValue] resolve:SparkMotionDriverSuccess(reply) reject:SparkMotionDriverFailure(reply)];
+    SparkMotionResolve success = SparkMotionDriverSuccess(reply);
+    [motion advanceClock:[duration doubleValue] resolve:^(id result) { SparkTestDriverDidChangeClock(YES, [duration doubleValue]); success(result); } reject:SparkMotionDriverFailure(reply)];
   });
   SparkTestDriverRegisterCommand(@"motionState", ^(NSDictionary *request, SparkTestDriverReply reply) {
     NSInteger tag = SparkMotionDriverTarget(request, reply);

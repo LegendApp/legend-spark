@@ -93,7 +93,8 @@ export interface WindowInfo {
   fullscreen: boolean;
   bounds: WindowBounds;
 }
-export type CloseResult = { closed: true } | { closed: false; reason: "vetoed" };
+/** `interrupted`: another animation of the window cancelled its close transition (docs/api-window-contract.md#window-choreography). */
+export type CloseResult = { closed: true } | { closed: false; reason: "vetoed" | "interrupted" };
 export interface ShowWindowOptions { focus?: boolean }
 export interface CenterWindowOptions { displayId?: DisplayId }
 export interface WindowEventMap {

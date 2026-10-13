@@ -41,7 +41,15 @@ typedef void (^SparkTestDriverHandler)(NSDictionary *request, SparkTestDriverRep
 static NSMutableDictionary<NSString *, SparkTestDriverHandler> *driverCommands;
 static void SparkTestDriverRegisterCommand(NSString *name, SparkTestDriverHandler handler) { if (!driverCommands) driverCommands = [NSMutableDictionary new]; driverCommands[name] = handler; }
 static NSDictionary *simulatedState;  // the last SparkTestDriverDidSimulateState report (motion follows it)
-static void SparkTestDriverDidSimulateState(NSDictionary *values) { simulatedState = values; }
+typedef void (^SparkTestDriverStateObserver)(NSDictionary *values);
+static NSMutableArray<SparkTestDriverStateObserver> *stateObservers;
+static void SparkTestDriverObserveSimulatedState(SparkTestDriverStateObserver observer) { if (!stateObservers) stateObservers = [NSMutableArray new]; [stateObservers addObject:observer]; }
+static void SparkTestDriverDidSimulateState(NSDictionary *values) { simulatedState = values; for (SparkTestDriverStateObserver observer in stateObservers) observer(values); }
+// Motion's virtual clock, as the driver reports it to window choreography.
+typedef void (^SparkTestDriverClockObserver)(BOOL virtualClock, double advancedMs);
+static NSMutableArray<SparkTestDriverClockObserver> *clockObservers;
+static void SparkTestDriverObserveClock(SparkTestDriverClockObserver observer) { if (!clockObservers) clockObservers = [NSMutableArray new]; [clockObservers addObject:observer]; }
+static void DriverClock(BOOL virtualClock, double advancedMs) { for (SparkTestDriverClockObserver observer in clockObservers) observer(virtualClock, advancedMs); }
 // ACTUAL_IMPLEMENTATION
 @interface TestWindow : NSObject
 @property (weak) id<NSWindowDelegate> delegate;
@@ -515,18 +523,20 @@ static void TestSpecialWindows(RNDesktopWindows *api) {
   Call(api, @"info", @{ @"id": @"special-controller" }); assert([SparkArgs(reply)[@"bounds"] isEqual:(@{ @"displayId": @"901", @"x": @256, @"y": @157, @"width": @1000, @"height": @700 })]);
   Call(api, @"center", @{ @"id": @"special-controller", @"displayId": @"902" }); assert(!failure);
   Call(api, @"info", @{ @"id": @"special-controller" }); assert([SparkArgs(reply)[@"bounds"] isEqual:(@{ @"displayId": @"902", @"x": @460, @"y": @190, @"width": @1000, @"height": @700 })]);
-  // A window that is not on screen moves at once: an animated move resolves without AppKit's on-screen animation.
+  // An animated move animates windows that are not on screen too (driven windows never are), and resolves when it ends.
   Call(api, @"bounds", @{ @"id": @"special-controller", @"durationMs": @200, @"bounds": @{ @"displayId": @"902", @"x": @10, @"y": @20, @"width": @1000, @"height": @700 } });
+  assert(!failure && !reply);
+  for (int i = 0; i < 50 && !reply; ++i) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
   assert(!failure && [reply isEqual:@"null"]); assert([SparkWindowBounds(controller) isEqual:(@{ @"displayId": @"902", @"x": @10, @"y": @20, @"width": @1000, @"height": @700 })]);
   Call(api, @"bounds", @{ @"id": @"special-controller", @"bounds": @{ @"displayId": @"903", @"x": @0, @"y": @0, @"width": @400, @"height": @300 } }); assert([failure isEqual:@"E_NOT_FOUND"]);
 
   // Corner snapping: a move ends at the nearest corner of the work area, inset by the margin.
   Call(api, @"options", @{ @"id": @"special-controller", @"options": @{ @"macos": @{ @"cornerSnapping": @{ @"margin": @16 } } } }); assert(!failure);
   Call(api, @"bounds", @{ @"id": @"special-controller", @"bounds": @{ @"displayId": @"901", @"x": @100, @"y": @80, @"width": @400, @"height": @300 } }); assert(!failure);
-  for (int i = 0; i < 50 && ![SparkWindowBounds(controller)[@"x"] isEqual:@16]; ++i) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  for (int i = 0; i < 50 && (Animating(controller) || ![SparkWindowBounds(controller)[@"x"] isEqual:@16]); ++i) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
   assert([SparkWindowBounds(controller) isEqual:(@{ @"displayId": @"901", @"x": @16, @"y": @48, @"width": @400, @"height": @300 })]);
   Call(api, @"bounds", @{ @"id": @"special-controller", @"bounds": @{ @"displayId": @"902", @"x": @1500, @"y": @700, @"width": @400, @"height": @300 } }); assert(!failure);
-  for (int i = 0; i < 50 && ![SparkWindowBounds(controller)[@"x"] isEqual:@1504]; ++i) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  for (int i = 0; i < 50 && (Animating(controller) || ![SparkWindowBounds(controller)[@"x"] isEqual:@1504]); ++i) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
   assert([SparkWindowBounds(controller) isEqual:(@{ @"displayId": @"902", @"x": @1504, @"y": @764, @"width": @400, @"height": @300 })]);
   Call(api, @"options", @{ @"id": @"special-controller", @"options": @{ @"macos": @{ @"cornerSnapping": NSNull.null } } }); assert(!failure);
   Call(api, @"bounds", @{ @"id": @"special-controller", @"bounds": @{ @"displayId": @"902", @"x": @700, @"y": @300, @"width": @400, @"height": @300 } }); assert(!failure);
@@ -539,6 +549,110 @@ static void TestSpecialWindows(RNDesktopWindows *api) {
   for (NSWindow *window in @[panel, audience, controller]) [window close];
   Pump(); driverActive = NO;
   puts("Special windows passed");
+}
+// Window choreography on the virtual clock: zooms, frame animations, interruption, close transitions and focus handoff,
+// Reduce Motion, and attached windows. Driver mode: nothing is shown.
+static NSDictionary *Bounds(NSWindow *window) { return SparkWindowBounds(window); }
+static BOOL Near(NSDictionary *bounds, double x, double y, double width, double height) {
+  return fabs([bounds[@"x"] doubleValue] - x) < 0.01 && fabs([bounds[@"y"] doubleValue] - y) < 0.01 && fabs([bounds[@"width"] doubleValue] - width) < 0.01 && fabs([bounds[@"height"] doubleValue] - height) < 0.01;
+}
+static BOOL Result(NSString *json, BOOL finished, BOOL reduced) { return json && [SparkArgs(json) isEqual:(@{ @"finished": @(finished), @"reducedMotion": @(reduced) })]; }
+static NSArray<NSDictionary *> *AttachmentEvents(void) { return [events filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"type == 'attachmentChanged'"]]; }
+static void Begin(RNDesktopWindows *api, NSString *method, NSDictionary *args, NSString *__strong *result) {
+  *result = nil; failure = nil;
+  [api call:method args:SparkJSON(args) resolve:^(id value) { *result = value; } reject:^(NSString *code, NSString *, NSError *) { failure = code; }]; Pump();
+}
+static void TestChoreography(RNDesktopWindows *api) {
+  driverActive = YES;
+  assert([DriverCommand(@"simulateDisplays", @{ @"displays": @[SimulatedDisplay(@"901", YES, 0, 0, 1512, 982, 32)] })[@"ok"] boolValue]);
+  DriverClock(YES, 0);
+  __weak NSWindow *weakWindow = nil;
+  @autoreleasepool {
+    NSWindow *window = RealWindow(@"choreo"); weakWindow = window;
+    Call(api, @"completeOpen", @{ @"id": @"choreo", @"size": @{ @"width": @400, @"height": @300 }, @"position": @{ @"displayId": @"901", @"x": @100, @"y": @100 }, @"show": @NO }); assert(!failure);
+    // Zoom: shown at once at the source, transparent; halfway (linear) at 100 ms; at its frame, opaque, at 200 ms.
+    NSString *zoom = nil;
+    Begin(api, @"zoomIn", @{ @"id": @"choreo", @"from": @{ @"displayId": @"901", @"x": @0, @"y": @50, @"width": @40, @"height": @30 }, @"durationMs": @200, @"easing": @"linear" }, &zoom);
+    assert(!failure && !zoom && ReportedVisible(api, @"choreo") && window.alphaValue == 0 && Near(Bounds(window), 0, 50, 40, 30));
+    DriverClock(YES, 100); assert(!zoom && Near(Bounds(window), 50, 75, 220, 165) && fabs(window.alphaValue - 0.5) < 0.01);
+    DriverClock(YES, 100); assert(Result(zoom, YES, NO) && Near(Bounds(window), 100, 100, 400, 300) && window.alphaValue == 1);
+    // A second animation interrupts the first where it is; stopAnimation leaves the window where it is.
+    NSString *first = nil, *second = nil;
+    Begin(api, @"animate", @{ @"id": @"choreo", @"bounds": @{ @"displayId": @"901", @"x": @300, @"y": @100, @"width": @400, @"height": @300 }, @"durationMs": @200, @"easing": @"linear" }, &first);
+    DriverClock(YES, 50); assert(!first && Near(Bounds(window), 150, 100, 400, 300));
+    Begin(api, @"animate", @{ @"id": @"choreo", @"bounds": @{ @"displayId": @"901", @"x": @150, @"y": @200, @"width": @400, @"height": @300 }, @"durationMs": @100, @"easing": @"easeInOut" }, &second);
+    assert(Result(first, NO, NO) && !second);
+    DriverClock(YES, 50); assert(Near(Bounds(window), 150, 150, 400, 300));
+    Call(api, @"stopAnimation", @{ @"id": @"choreo" }); assert(!failure && Result(second, NO, NO) && Near(Bounds(window), 150, 150, 400, 300));
+    Call(api, @"animate", @{ @"id": @"choreo", @"bounds": @{ @"displayId": @"901", @"x": @0, @"y": @0, @"width": @50, @"height": @50 }, @"durationMs": @100 }); assert([failure isEqual:@"E_INVALID_ARGUMENT"]);
+    // Close transition into a rectangle of another window: the shrink hands focus to that window; another animation
+    // interrupts the shrink and cancels the close; the next close shrinks all the way and closes.
+    NSWindow *home = RealWindow(@"choreo-home");
+    Call(api, @"completeOpen", @{ @"id": @"choreo-home", @"size": @{ @"width": @600, @"height": @400 }, @"position": @{ @"displayId": @"901", @"x": @700, @"y": @300 } }); assert(!failure);
+    NSDictionary *transition = @{ @"to": @{ @"windowId": @"choreo-home", @"x": @10, @"y": @20, @"width": @100, @"height": @50 }, @"durationMs": @100, @"easing": @"linear" };
+    assert(HandoffTarget(window, transition) == home && !HandoffTarget(window, @{}) && HandoffTarget(home, @{ @"focus": @"choreo" }) == window);
+    Call(api, @"closeTransition", @{ @"id": @"choreo", @"transition": transition }); assert(!failure);
+    NSString *closed = nil;
+    Begin(api, @"close", @{ @"id": @"choreo" }, &closed); assert(!closed && windows[@"choreo"] == window);
+    DriverClock(YES, 50); assert(fabs(window.alphaValue - 0.5) < 0.01 && !closed);
+    Begin(api, @"animate", @{ @"id": @"choreo", @"bounds": @{ @"displayId": @"901", @"x": @100, @"y": @100, @"width": @400, @"height": @300 }, @"durationMs": @100, @"easing": @"linear" }, &first);
+    assert([closed isEqual:@"{\"closed\":false,\"reason\":\"interrupted\"}"] && windows[@"choreo"] == window);
+    DriverClock(YES, 100); assert(Result(first, YES, NO) && window.alphaValue == 1 && Near(Bounds(window), 100, 100, 400, 300));
+    Begin(api, @"close", @{ @"id": @"choreo" }, &closed);
+    DriverClock(YES, 100); Pump();
+    assert([closed isEqual:@"{\"closed\":true}"] && !windows[@"choreo"]);
+    // Reduce Motion: a zoom is a fade at the window's frame, and a move is immediate.
+    SparkTestDriverDidSimulateState(@{ @"reduceMotion": @YES });
+    NSWindow *calm = RealWindow(@"choreo-calm");
+    Call(api, @"completeOpen", @{ @"id": @"choreo-calm", @"size": @{ @"width": @400, @"height": @300 }, @"position": @{ @"displayId": @"901", @"x": @100, @"y": @100 }, @"show": @NO }); assert(!failure);
+    Begin(api, @"zoomIn", @{ @"id": @"choreo-calm", @"from": @{ @"displayId": @"901", @"x": @0, @"y": @50, @"width": @40, @"height": @30 }, @"durationMs": @200, @"easing": @"linear" }, &zoom);
+    assert(!zoom && Near(Bounds(calm), 100, 100, 400, 300) && calm.alphaValue == 0);
+    DriverClock(YES, 100); assert(fabs(calm.alphaValue - 0.5) < 0.01);
+    DriverClock(YES, 100); assert(Result(zoom, YES, YES));
+    Call(api, @"animate", @{ @"id": @"choreo-calm", @"bounds": @{ @"displayId": @"901", @"x": @200, @"y": @100, @"width": @400, @"height": @300 }, @"durationMs": @200 });
+    assert(Result(reply, YES, YES) && Near(Bounds(calm), 200, 100, 400, 300));
+    SparkTestDriverDidSimulateState(@{ @"reduceMotion": NSNull.null });
+    [calm close];
+    // Attached window: docked at the parent's trailing edge, top-aligned, 8 points out; it follows the parent's moves and
+    // resizes; a move within the magnetic distance docks it again, a farther one undocks it, and back near docks it.
+    NSWindow *inspector = RealWindow(@"choreo-inspector");
+    Call(api, @"completeOpen", @{ @"id": @"choreo-inspector", @"size": @{ @"width": @240, @"height": @300 }, @"position": @{ @"displayId": @"901", @"x": @0, @"y": @500 } }); assert(!failure);
+    Call(api, @"attach", @{ @"id": @"choreo-inspector", @"parentId": @"choreo-home", @"token": @"t1", @"edge": @"trailing", @"gap": @8, @"magnetic": @24, @"hideWhenInactive": @YES, @"durationMs": @100, @"easing": @"linear" });
+    assert(!reply); DriverClock(YES, 100);
+    assert(Result(reply, YES, NO) && inspector.parentWindow == home && inspector.hidesOnDeactivate && Near(Bounds(inspector), 1308, 300, 240, 300));
+    Call(api, @"attachment", @{ @"id": @"choreo-inspector" }); assert([reply isEqual:@"{\"attached\":true,\"hidesWhenInactive\":true}"]);
+    Call(api, @"bounds", @{ @"id": @"choreo-home", @"bounds": @{ @"displayId": @"901", @"x": @600, @"y": @250, @"width": @500, @"height": @400 } }); assert(!failure);
+    assert(Near(Bounds(inspector), 1108, 250, 240, 300));
+    [events removeAllObjects];
+    Call(api, @"bounds", @{ @"id": @"choreo-inspector", @"bounds": @{ @"displayId": @"901", @"x": @1120, @"y": @260, @"width": @240, @"height": @300 } }); assert(!failure);
+    DriverClock(YES, 150); assert(Near(Bounds(inspector), 1108, 250, 240, 300) && inspector.parentWindow == home && !AttachmentEvents().count);
+    Call(api, @"bounds", @{ @"id": @"choreo-inspector", @"bounds": @{ @"displayId": @"901", @"x": @1200, @"y": @250, @"width": @240, @"height": @300 } }); assert(!failure);
+    assert(!inspector.parentWindow && AttachmentEvents().count == 1 && [AttachmentEvents()[0][@"attached"] isEqual:@NO]);
+    Call(api, @"bounds", @{ @"id": @"choreo-home", @"bounds": @{ @"displayId": @"901", @"x": @500, @"y": @250, @"width": @500, @"height": @400 } });
+    assert(Near(Bounds(inspector), 1200, 250, 240, 300));
+    Call(api, @"bounds", @{ @"id": @"choreo-inspector", @"bounds": @{ @"displayId": @"901", @"x": @1010, @"y": @240, @"width": @240, @"height": @300 } });
+    assert(inspector.parentWindow == home && AttachmentEvents().count == 2 && [AttachmentEvents()[1][@"attached"] isEqual:@YES]);
+    DriverClock(YES, 150); assert(Near(Bounds(inspector), 1008, 250, 240, 300));
+    Call(api, @"detach", @{ @"id": @"choreo-inspector", @"token": @"stale" }); assert(inspector.parentWindow == home);
+    Call(api, @"detach", @{ @"id": @"choreo-inspector", @"token": @"t1" }); assert(!inspector.parentWindow && !inspector.hidesOnDeactivate);
+    Call(api, @"attachment", @{ @"id": @"choreo-inspector" }); assert([reply isEqual:@"null"]);
+    // The parent closing ends the attachment.
+    Call(api, @"attach", @{ @"id": @"choreo-inspector", @"parentId": @"choreo-home", @"token": @"t2", @"edge": @"bottom", @"align": @"center", @"magnetic": @0 }); assert(!failure);
+    assert(Near(Bounds(inspector), 630, 650, 240, 300));
+    Call(api, @"attach", @{ @"id": @"choreo-inspector", @"parentId": @"choreo-inspector", @"edge": @"left" }); assert([failure isEqual:@"E_INVALID_ARGUMENT"]);
+    [events removeAllObjects];
+    Call(api, @"close", @{ @"id": @"choreo-home" }); assert(!windows[@"choreo-home"] && !inspector.parentWindow);
+    assert(AttachmentEvents().count == 1 && [AttachmentEvents()[0][@"windowId"] isEqual:@"choreo-inspector"] && [AttachmentEvents()[0][@"token"] isEqual:@"t2"] && [AttachmentEvents()[0][@"attached"] isEqual:@NO]);
+    assert(!OnScreen(inspector) && !OnScreen(home));
+    [inspector close];
+    Pump();
+  }
+  Pump();
+  assert(!weakWindow && !Animations.count && !AnimationTimer);
+  DriverClock(NO, 0);
+  assert([DriverCommand(@"simulateDisplays", @{ @"displays": NSNull.null })[@"ok"] boolValue]);
+  driverActive = NO;
+  puts("Window choreography passed");
 }
 static void TestGuards(RNDesktopWindows *api) {
   TestWindow *window = [TestWindow new]; windows[@"editor"] = (NSWindow *)window;
@@ -576,8 +690,9 @@ int main(int argc, char **argv) { @autoreleasepool {
     @"shown-tabs": ^(RNDesktopWindows *a) { TestShownTabs(a); }, @"tab-restoration": ^(RNDesktopWindows *a) { TestTabRestoration(a); },
     @"displays": ^(RNDesktopWindows *a) { TestDisplays(a); }, @"session-frames": ^(RNDesktopWindows *a) { TestSessionFrames(a); },
     @"special": ^(RNDesktopWindows *a) { TestSpecialWindows(a); }, @"pools": ^(RNDesktopWindows *a) { TestWindowPools(a); },
+    @"choreography": ^(RNDesktopWindows *a) { TestChoreography(a); },
   };
   NSString *only = argc > 1 && argv[1][0] != '-' ? @(argv[1]) : nil;
   if (only && !suites[only]) { fprintf(stderr, "Unknown suite %s\n", argv[1]); return 2; }
-  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration", @"displays", @"session-frames", @"special", @"pools"]) if (!only || [only isEqual:name]) suites[name](api);
+  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration", @"displays", @"session-frames", @"special", @"pools", @"choreography"]) if (!only || [only isEqual:name]) suites[name](api);
 } }

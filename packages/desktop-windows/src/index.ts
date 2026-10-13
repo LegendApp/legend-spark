@@ -2,3 +2,4 @@ export { getWindowAvailability, getToolbarAvailability, openWindow, getWindow, l
 export type * from "./types";
 export * from "./windows";
 export * from "./special";
+export * from "./choreography";

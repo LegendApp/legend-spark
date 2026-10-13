@@ -177,7 +177,7 @@ Use `macos` option groups, with named public types, for features that are genuin
 | Toolbar style, items, titlebar controls | Typed `macos.toolbar` and `macos.titleBar.controls`. |
 | Startup split-view shell | `macos.startupSplitView`, nullable for clearing; preserve pre-React rendering. |
 | Shell restoration across launches | `macos.restoreOnLaunch`, separate from common saved bounds restoration. |
-| Frame animation | `macos.durationMs` group on the single `setWindowBounds` operation, with explicit duration units; the group rejects `E_UNSUPPORTED_OPTION` on Windows rather than being silently ignored. There is no second macOS bounds export. |
+| Frame animation | `macos.durationMs` group on the single `setWindowBounds` operation, with explicit duration units; the group rejects `E_UNSUPPORTED_OPTION` on Windows rather than being silently ignored. It runs on the [window choreography](#window-choreography) animator; `animateWindowBounds` is the choreography operation that also takes an easing and reports interruption and Reduce Motion. |
 | Blur and toolbar focus/text commands | Explicit targeted macOS operations under `/windows/macos`. |
 | Finish window restoration | Application restoration coordinator operation, not an ordinary window setter. |
 | Startup timing | Diagnostics entry point, not window options. |
@@ -331,8 +331,8 @@ The window options the types use are public and work on any window (macOS; Windo
 - `macos.cornerSnapping: { margin } | null`: from the next move on, every move, by the user or by
   `setWindowBounds`, ends at the nearest corner of the owning display's work area, inset by
   `margin` (0–500), animated on screen; a drag snaps when the mouse button comes up.
-- `setWindowBounds(id, bounds, { macos: { durationMs } })` moves a window that is not on screen at
-  once (AppKit animates only on-screen frames).
+- `setWindowBounds(id, bounds, { macos: { durationMs } })` animates windows that are not on screen
+  too, on the [window choreography](#window-choreography) animator.
 - `Tray.getBounds()` (`@legendapp/spark/tray`) returns the item's `DisplayRect` in the menu bar, for a
   popover anchor; `E_UNAVAILABLE` while the menu bar does not show it, `E_CLOSED` after `remove()`,
   `E_UNSUPPORTED_PLATFORM` on Windows (#394).
@@ -348,6 +348,76 @@ bar, popover) is covered by `tests/special-windows.test.ts`, not by a flow. The 
 `tests/window.native.mm` (collection behaviors, simulated-display geometry, corner snapping),
 `tests/window-manager.native.mm` (HUD panel, desktop level, non-activating panels),
 `tests/tray.native.mm` (tray bounds) and `tests/global-shortcuts.native.mm` (driver hotkeys).
+
+### Window choreography
+
+`@legendapp/spark/windows` animates windows in and out of the elements they belong to (#189): a window
+zooms out of a list row, thumbnail or panel and shrinks back into it when it closes, frames change with an
+animation, closing hands key focus to the right window, and palettes and inspectors dock to a parent window.
+
+```ts
+type WindowSourceRect = DisplayRect | { windowId: WindowId; x: number; y: number; width: number; height: number };
+interface WindowTransition { durationMs?: number; easing?: "linear" | "easeIn" | "easeOut" | "easeInOut" } // 0–5000, default 250 and easeInOut
+interface WindowAnimationResult { finished: boolean; reducedMotion: boolean }
+getWindowChoreographyAvailability(feature: "zoom" | "frame" | "closeTransition" | "attach"): Availability;
+animateWindowBounds(id, bounds: WindowBounds, transition?): Promise<WindowAnimationResult>;
+stopWindowAnimation(id): Promise<void>;
+openWindowFrom(options: WindowOpenOptions, zoom: { from: WindowSourceRect; closeTo?: WindowSourceRect | null; focusOnClose?: WindowId; transition? }): Promise<WindowZoom>; // { id, bounds, finished }
+setWindowCloseTransition(id, value: { to: WindowSourceRect | null; focus?: WindowId; transition? } | null): Promise<void>;
+attachWindow(id, parentId, options: { edge, align?, gap?, magnetic?, hideWhenInactive?, transition?, onChange?, onError? }): Promise<WindowAttachment>; // { id, parentId, attached, remove }
+```
+
+- **Sources.** A `DisplayRect` is in display coordinates. `{ windowId, x, y, width, height }` is a rectangle in that
+  window's React root view from its top-left corner, what `measureInWindow` reports for a row or panel; it is read when
+  the animation starts, so a window that moved since is followed. The Dock tile has no public position, so a window
+  cannot zoom from the Dock icon.
+- **Animator.** The native window module animates the frame and opacity on the main thread, setting each frame itself,
+  so windows that are not on screen animate too. Easings are cubic (`easeIn` t³, `easeOut` 1 − (1 − t)³, `easeInOut`
+  their halves). A new animation of a window, by any of these operations, `setWindowBounds` or corner snapping,
+  interrupts the running one where it is: that one resolves `finished: false`, and the next starts from the current
+  frame and opacity. `stopWindowAnimation` stops it where it is; closing the window stops it too.
+- **Reduce Motion.** With the system setting on, frames change at once and only the opacity fades: a zoom and a close
+  transition are cross-fades at the window's frame, and `animateWindowBounds` is immediate. Results say so with
+  `reducedMotion: true`. Corner snapping, attachment docking and `setWindowBounds`' `macos.durationMs` follow it too.
+- **Zoom.** `openWindowFrom` opens the window as `openWindow` does, hidden at its frame, then shows it with key focus
+  at `from`, transparent, and grows it to its frame while it fades in. It resolves once the window is shown, with the
+  frame it lands on; `finished` resolves when the zoom ends. `show: false`, `modal` and `tabbedWith` reject
+  `E_INVALID_ARGUMENT`. If the zoom cannot start (the source's window or display is gone) the window closes again
+  and `finished` rejects with the cause. By default the window shrinks back into `from` when it closes
+  (`closeTo: null` turns that off).
+- **Close transitions and focus handoff.** With a close transition, every close (`closeWindow`, the close button, ⌘W,
+  the navigator's `close`) first runs the window's close guard, then shrinks the window into `to` while it fades out
+  (`to: null` fades it where it is; a `to` in a window that has closed does the same), then closes it. As the shrink
+  starts, key focus moves to `focus`, else the window `to` is in, else the parent window, if it is shown: never to the
+  departing window, so typing goes where the content returns. Another animation of the window during the shrink
+  cancels the close: `closeWindow` resolves `{ closed: false, reason: "interrupted" }` and the window stays open. A
+  minimized, fullscreen, hidden or sheet window closes at once. A pooled window that shrank is parked at its frame
+  and opacity from before the shrink, without the transition. Tearing a panel off into a window is `openWindowFrom`
+  out of its slot; merging it back is its close transition into the slot.
+- **Attached windows.** `attachWindow` docks the window at `edge` of the parent (`leading` and `trailing` follow the
+  app's layout direction), aligned `start` (the top, or the leading end), `center` or `end`, `gap` points out (0–200),
+  moving it there with `transition`, and resolves once it is in place. Docked, it is an AppKit child window: it moves
+  with the parent as a group and follows the parent's resizes. A move of the window that ends within `magnetic`
+  points (0–200, default 24) of its docked frame (a drag, when the mouse button comes up, or `setWindowBounds`) docks
+  it there; one that ends farther undocks it; `onChange` and `attached` report each change. `hideWhenInactive` hides
+  it while the app is inactive (`hidesOnDeactivate`). One attachment per window: attaching again replaces it, and the
+  replaced handle's `remove()` does nothing. `remove()` undocks it where it is; the attachment ends when either window
+  closes (the parent closing reports `attached: false`). A window cannot attach to itself, its child or its sheet
+  (`E_INVALID_ARGUMENT`). An inspector that follows the parent's selection is an attached window whose content reads
+  the shared selection: windows share one JavaScript runtime by default.
+- **Virtual clock.** In a driver run the animator follows motion's virtual clock while it is on (`setClock`,
+  `advanceClock`; the motion package reports clock changes through the driver's clock hook), so flows read exact
+  frames at exact times. On the real clock it steps on a 120 Hz timer in the run loop's common modes.
+- **Platforms.** macOS only. On Windows `getWindowChoreographyAvailability` reports `unsupported-platform` for every
+  feature and every operation rejects `E_UNSUPPORTED_PLATFORM` before any native call (#434). An unknown feature
+  throws `E_INVALID_ARGUMENT`; unknown option keys reject `E_UNSUPPORTED_OPTION` and invalid values
+  `E_INVALID_ARGUMENT` before any native call. Tab groups across windows (#435) and drag-driven tear-off, merge
+  preview and cross-window drag (#436) are separate tasks.
+
+Testing: `tests/window-choreography.test.ts` covers validation, ordering and results over a mocked transport;
+`tests/window.native.mm` (choreography suite) covers the animator on the virtual clock, interruption, close transitions,
+focus handoff targets, Reduce Motion and attachments on real `NSWindow`s in driver mode. The Kitchen Sink screen is
+`multiwindow/choreography`; its flows are `e2e/flows/multiwindow/choreography-*.yaml`.
 
 ### Window tabs
 
