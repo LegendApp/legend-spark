@@ -561,25 +561,18 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   }
   __weak SparkMotionCoordinator *weakSelf = self;
   NSOperationQueue *main = NSOperationQueue.mainQueue;
-  // A driver run simulates Reduce Motion (simulate:) instead of following the Mac's setting.
-  if (!self.driven)
-    _accessibilityObserver = [workspace addObserverForName:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification object:nil queue:main usingBlock:^(NSNotification *) { [weakSelf reduceMotionChanged]; }];
-  _observers = @[
+  _observers = @[[center addObserverForName:NSWindowWillCloseNotification object:nil queue:main usingBlock:^(NSNotification *note) { [weakSelf windowWillClose:note.object]; }]];
+  // A driver run follows simulated Reduce Motion, Low Power Mode, frame rate and window visibility (simulate:,
+  // simulateWindow:visible:) instead of the Mac's settings, displays and occlusion: their changes never reach it.
+  if (self.driven) return;
+  _accessibilityObserver = [workspace addObserverForName:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification object:nil queue:main usingBlock:^(NSNotification *) { [weakSelf reduceMotionChanged]; }];
+  _observers = [_observers arrayByAddingObjectsFromArray:@[
     // Process info notifications arrive on arbitrary threads; the main queue owns the engine.
-    [center addObserverForName:NSProcessInfoPowerStateDidChangeNotification object:nil queue:main usingBlock:^(NSNotification *) {
-      SparkMotionCoordinator *coordinator = weakSelf;
-      if (coordinator && ![coordinator simulated:@"lowPowerMode"]) [coordinator rebake:nil];
-    }],
+    [center addObserverForName:NSProcessInfoPowerStateDidChangeNotification object:nil queue:main usingBlock:^(NSNotification *) { [weakSelf rebake:nil]; }],
     [center addObserverForName:NSApplicationDidChangeScreenParametersNotification object:nil queue:main usingBlock:^(NSNotification *) { [weakSelf rebake:nil]; }],
     [center addObserverForName:NSWindowDidChangeScreenNotification object:nil queue:main usingBlock:^(NSNotification *note) { [weakSelf rebake:note.object]; }],
-    [center addObserverForName:NSWindowDidChangeOcclusionStateNotification object:nil queue:main usingBlock:^(NSNotification *note) {
-      SparkMotionCoordinator *coordinator = weakSelf;
-      NSWindow *window = note.object;
-      // A driven app's windows are never on screen; their visibility is simulated (windowHidden:).
-      if (coordinator && !coordinator.driven) [coordinator windowVisibilityChanged:window];
-    }],
-    [center addObserverForName:NSWindowWillCloseNotification object:nil queue:main usingBlock:^(NSNotification *note) { [weakSelf windowWillClose:note.object]; }],
-  ];
+    [center addObserverForName:NSWindowDidChangeOcclusionStateNotification object:nil queue:main usingBlock:^(NSNotification *note) { [weakSelf windowVisibilityChanged:note.object]; }],
+  ]];
 }
 
 - (void)environment:(NSInteger)tag resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
@@ -1817,22 +1810,27 @@ static NSDictionary *SparkStateObject(const State &state) { return @{ @"value": 
   return nil;
 }
 
+/**
+ * What a driver run reports until a simulation changes it, like the driver's other pinned host settings: Reduce Motion,
+ * Reduce Transparency and Low Power Mode off and a 60 Hz display, so flows behave the same on any Mac.
+ */
+static NSDictionary *DriverDefaults(void)
+{
+  return @{ @"reduceMotion": @NO, @"reduceTransparency": @NO, @"lowPowerMode": @NO, @"maximumFramesPerSecond": @60 };
+}
+
 - (void)recordTelemetry
 {
   _engine.setTelemetry(true);
   _driven = YES;
-  // Pinned like the driver's other host settings: flows behave the same on a Mac with Reduce Motion, Reduce
-  // Transparency or Low Power Mode on, until simulateSystemEvent changes them.
-  _simulated[@"reduceMotion"] = @NO;
-  _simulated[@"reduceTransparency"] = @NO;
-  _simulated[@"lowPowerMode"] = @NO;
+  [_simulated addEntriesFromDictionary:DriverDefaults()];
 }
 
 - (void)simulate:(NSDictionary *)values
 {
-  // null stops simulating a value (simulateDisplays' restore).
-  for (NSString *key in @[@"reduceMotion", @"reduceTransparency", @"lowPowerMode", @"maximumFramesPerSecond"]) {
-    if (values[key] == NSNull.null) [_simulated removeObjectForKey:key];
+  // null returns a value to the driver's default (simulateDisplays' restore).
+  for (NSString *key in DriverDefaults()) {
+    if (values[key] == NSNull.null) _simulated[key] = DriverDefaults()[key];
     else if (values[key]) _simulated[key] = values[key];
   }
   [self rebake:nil];

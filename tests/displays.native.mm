@@ -1,9 +1,12 @@
 // Display details and change observation (packages/desktop-windows/macos/SparkDisplays.mm) against the
-// real screens of this Mac. Notifications are posted in this process only: no display setting changes.
+// real screens of this Mac, outside and inside a driver run. Notifications are posted in this process only: no
+// display setting changes.
 #import <AppKit/AppKit.h>
 #import "SparkDisplays.h"
 #include <cstdio>
 #include <cstdlib>
+static BOOL driverActive = NO;
+extern "C" BOOL SparkTestDriverActive(void) { return driverActive; }
 
 #define CHECK(...) do { if (!(__VA_ARGS__)) { fprintf(stderr, "FAILED %s:%d %s\n", __FILE__, __LINE__, #__VA_ARGS__); exit(1); } } while (0)
 static void Drain(void) { [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]]; }
@@ -44,5 +47,18 @@ int main() { @autoreleasepool {
   [observer stop];
   [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidChangeScreenParametersNotification object:NSApp]; Drain();
   CHECK(calls == 4);
+
+  // A driver run: the Mac's screen parameter and color space changes never reach the handler; simulation changes do.
+  driverActive = YES;
+  __block int driven = 0;
+  SparkDisplayObserver *simulatedOnly = [[SparkDisplayObserver alloc] initWithHandler:^{ driven++; }];
+  CHECK([[simulatedOnly valueForKey:@"tokens"] count] == 1 && ![[simulatedOnly valueForKey:@"followsHost"] boolValue]);
+  [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidChangeScreenParametersNotification object:NSApp]; Drain();
+  [NSNotificationCenter.defaultCenter postNotificationName:NSScreenColorSpaceDidChangeNotification object:NSScreen.mainScreen]; Drain();
+  CHECK(driven == 0);
+  SparkSimulateDisplays(simulated); Drain();
+  SparkSimulateDisplays(nil); Drain();
+  CHECK(driven == 2);
+  [simulatedOnly stop];
   puts("Display native tests passed");
 } }

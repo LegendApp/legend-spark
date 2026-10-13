@@ -35,7 +35,8 @@ static NSString *SparkJSON(id value) { return [[NSString alloc] initWithData:[NS
 static NSDictionary *SparkArgs(NSString *json) { return [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil]; }
 static void SparkInvalid(RCTPromiseRejectBlock reject, NSString *message) { reject(@"E_INVALID_ARGUMENT", message, nil); }
 static BOOL driverActive = NO;
-static BOOL SparkTestDriverActive(void) { return driverActive; }
+// C linkage: SparkDisplays.mm, compiled on its own, asks it too.
+extern "C" BOOL SparkTestDriverActive(void) { return driverActive; }
 typedef void (^SparkTestDriverReply)(NSDictionary *reply);
 typedef void (^SparkTestDriverHandler)(NSDictionary *request, SparkTestDriverReply reply);
 static NSMutableDictionary<NSString *, SparkTestDriverHandler> *driverCommands;

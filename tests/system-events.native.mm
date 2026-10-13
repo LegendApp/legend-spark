@@ -1,7 +1,8 @@
-// System event sources (packages/system/macos/SparkSystemState.mm). tests/system-events-native.test.ts inlines the
-// implementation after this prelude. Outside a driver run the observer installs the OS sources and forwards their
-// notifications; in a driver run it installs none, so only simulateSystemEvent's events arrive. Notifications are
-// posted only to this process's own centers: nothing reaches the system.
+// System event sources and state reads (packages/system/macos/SparkSystemState.mm). tests/system-events-native.test.ts
+// inlines the implementation after this prelude. Outside a driver run the observer installs the OS sources and forwards
+// their notifications, and the state reads report the host; in a driver run no source is installed, so only
+// simulateSystemEvent's events arrive, and the reads report fixed values until a simulation changes them. Notifications
+// are posted only to this process's own centers: nothing reaches the system.
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 static NSMutableArray<NSString *> *events;
@@ -13,6 +14,8 @@ typedef void (^SparkTestDriverHandler)(NSDictionary *request, SparkTestDriverRep
 static NSMutableDictionary<NSString *, SparkTestDriverHandler> *driverCommands;
 static void SparkTestDriverRegisterCommand(NSString *name, SparkTestDriverHandler handler) { if (!driverCommands) driverCommands = [NSMutableDictionary new]; driverCommands[name] = handler; }
 static void SparkTestDriverDidSimulateState(NSDictionary *) {}
+static NSMutableArray<dispatch_block_t> *startObservers;
+static void SparkTestDriverObserveStart(dispatch_block_t observer) { if (!startObservers) startObservers = [NSMutableArray new]; [startObservers addObject:observer]; }
 // ACTUAL_IMPLEMENTATION
 static int failures = 0;
 #define CHECK(...) do { if (!(__VA_ARGS__)) { fprintf(stderr, "FAILED line %d: %s\n", __LINE__, #__VA_ARGS__); failures++; } } while (0)
@@ -37,6 +40,13 @@ static NSArray<NSString *> *PostOSNotifications() {
   Pump();
   return [events copy];
 }
+static NSDictionary *Network() {
+  __block NSDictionary *result; __block BOOL done = NO;
+  SparkSystemNetworkStatus(5, ^(NSDictionary *status, NSString *, NSString *) { result = status; done = YES; });
+  for (int i = 0; i < 500 && !done; ++i) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+  return result;
+}
+static NSDictionary *Preferences() { NSString *error; return SparkAppearancePreferences(&error); }
 static NSDictionary *Simulate(NSDictionary *request) {
   __block NSDictionary *answer; driverCommands[@"simulateSystemEvent"](request, ^(NSDictionary *value) { answer = value; }); return answer;
 }
@@ -62,9 +72,27 @@ int main() { @autoreleasepool {
   CHECK(Sources(real) == 0);
   CHECK(PostOSNotifications().count == 0);
 
+  // Outside a driver run the reads report the host.
+  NSDictionary *info = SparkSystemStateInfo(&error);
+  [NSTimeZone resetSystemTimeZone];
+  CHECK([info[@"timeZone"] isEqual:NSTimeZone.systemTimeZone.name] && [info[@"lowPowerMode"] isEqual:@(NSProcessInfo.processInfo.lowPowerModeEnabled)]);
+  CHECK(!info[@"batteryLevel"] && !info[@"idleSeconds"] && !info[@"onBattery"]); // getSystemInfo reads those itself
+  NSDictionary *network = Network();
+  CHECK([@[@"online", @"offline", @"requiresConnection"] containsObject:network[@"status"]] && [network[@"interfaces"] isKindOfClass:NSArray.class]);
+  CHECK([Preferences()[@"invertColors"] isEqual:@(NSWorkspace.sharedWorkspace.accessibilityDisplayShouldInvertColors)]
+    && [Preferences()[@"keyboardNavigation"] isEqual:@(NSApp.isFullKeyboardAccessEnabled)]);
+
   // A driver run: the types are observed with no OS source behind them, so OS notifications never arrive,
   // and simulateSystemEvent still reaches the observer.
   driverActive = YES;
+  for (dispatch_block_t observer in startObservers) observer();
+  // The reads report fixed values, whatever the host's power, thermal state, time zone, network and settings are.
+  info = SparkSystemStateInfo(&error);
+  NSDictionary *fixed = @{ @"lowPowerMode": @NO, @"thermalState": @"nominal", @"onBattery": @NO, @"batteryLevel": NSNull.null, @"idleSeconds": @0, @"timeZone": @"UTC" };
+  CHECK([[info dictionaryWithValuesForKeys:fixed.allKeys] isEqual:fixed]);
+  NSDictionary *proxies = @{ @"http": NSNull.null, @"https": NSNull.null, @"socks": NSNull.null, @"autoConfigURL": NSNull.null };
+  CHECK([Network() isEqual:(@{ @"status": @"online", @"interfaces": @[@"wired"], @"expensive": @NO, @"constrained": @NO, @"proxies": proxies })]);
+  CHECK([Preferences()[@"invertColors"] isEqual:@NO] && [Preferences()[@"keyboardNavigation"] isEqual:@NO]);
   SparkSystemStateObserver *driven = [SparkSystemStateObserver new];
   CHECK([driven observeTypes:all error:&error]);
   CHECK(Sources(driven) == 0);
@@ -74,6 +102,10 @@ int main() { @autoreleasepool {
   CHECK([Simulate(@{ @"type": @"sleep" })[@"ok"] isEqual:@YES]);
   NSArray *simulated = @[@"networkChanged", @"sleep"];
   CHECK([events isEqual:simulated]);
+  // Simulated state replaces the fixed values.
+  CHECK([Network() isEqual:(@{ @"status": @"offline", @"interfaces": @[], @"expensive": @NO, @"constrained": @NO, @"proxies": proxies })]);
+  CHECK([Simulate(@{ @"type": @"thermalChanged", @"thermalState": @"serious" })[@"ok"] isEqual:@YES]);
+  CHECK([SparkSystemStateInfo(&error)[@"thermalState"] isEqual:@"serious"]);
   [driven stop];
   CHECK([Simulate(@{ @"type": @"sleep" })[@"error"][@"code"] isEqual:@"E_NO_OBSERVER"]);
 

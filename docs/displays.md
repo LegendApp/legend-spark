@@ -107,6 +107,9 @@ display sleep. Every display needs a unique `id`, `primary` (exactly one), `orig
 window geometry (`@legendapp/spark/windows`: `getDisplays`, `getCursorPoint`, window bounds, `position`,
 `setWindowBounds` and `centerWindow`) uses them as well, placing windows by each display's `origin` and work
 area, so special windows such as presenter mode can be tested on two displays. Driven windows are never on screen.
+A driver run's listeners receive only simulated changes: the observer installs no screen parameter, color space or
+Core Graphics reconfiguration source there, so connecting a display or changing its mode during a run reaches no
+listener (`tests/displays.native.mm`). Without a simulation, `getDisplayDetails` still reports the real displays.
 
 ## Platforms
 

@@ -7,7 +7,7 @@ intent: >
   process only (docs/test-driver.md#pinned-host-settings), so the real read path reports them while the Mac's
   settings stay untouched. The colors' exact shades depend on the macOS version, so the flow asserts they are
   sRGB hex; tests/appearance-preferences-native.test.ts checks that these settings change them. Invert colors
-  and keyboard navigation cannot be set this way and are not asserted.
+  and keyboard navigation cannot be set this way; a driver run reports them false (docs/system.md#testing-system-events).
 checks: [APPR-PREFS-01]
 tags: [appearance-theming]
 platforms: [macos]
@@ -27,7 +27,7 @@ platforms: [macos]
 - assertText: { id: appearance-theming-preferences-reduceTransparency, equals: "true" }
 - assertText: { id: appearance-theming-preferences-reduceMotion, equals: "true" }
 - assertText: { id: appearance-theming-preferences-differentiateWithoutColor, equals: "true" }
-- assertVisible: { text: "/^(true|false)$/", within: { id: appearance-theming-preferences-invertColors } }
-- assertVisible: { text: "/^(true|false)$/", within: { id: appearance-theming-preferences-keyboardNavigation } }
+- assertText: { id: appearance-theming-preferences-invertColors, equals: "false" }
+- assertText: { id: appearance-theming-preferences-keyboardNavigation, equals: "false" }
 - takeScreenshot: appearance-preferences-real
 - assertNotVisible: { id: appearance-theming-preferences-error }

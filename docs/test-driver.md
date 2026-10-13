@@ -120,11 +120,17 @@ transparency rows):
 | `-differentiateWithoutColor NO` | Differentiate without colour off. | `YES` turns on `accessibilityDisplayShouldDifferentiateWithoutColor`. |
 | `-AppleShowScrollBars WhenScrolling` | Overlay scroll bars. Automatic would show legacy scroll bars while a mouse is connected. | `Always` makes `NSScroller.preferredScrollerStyle` legacy. |
 | `-AppleFontSmoothing 2` | Font smoothing on. | `0` changes text pixels; `1`, `2` and `3` render like the default. |
+| `-reduceMotion NO` | Reduce motion off. | `YES` turns on `accessibilityDisplayShouldReduceMotion` (`tests/appearance-preferences-native.test.ts`). |
+| `-AppleInterfaceStyle Light`, `-AppleInterfaceStyleSwitchesAutomatically NO` | The appearance setting Spark reports (`getAppearancePreferences()`) and the Dock tile's progress bar follows: light, not automatic. AppKit's rendering does not read them in the argument domain (below). | `Dark` and `YES` make `getAppearancePreferences()` report dark and automatic (`tests/appearance-preferences-native.test.ts`). |
 
 Not pinned this way:
 
-- `AppleInterfaceStyle` and `AppleInterfaceStyleSwitchesAutomatically` have no effect in the
-  argument domain. `NSRequiresAquaSystemAppearance` pins the system appearance instead.
+- `AppleInterfaceStyle` and `AppleInterfaceStyleSwitchesAutomatically` have no effect on AppKit's
+  rendering in the argument domain. `NSRequiresAquaSystemAppearance` pins the system appearance instead.
+- Invert colors and keyboard navigation cannot be set from the argument domain. The system module
+  reports them `false` in a driver run, with the other host state it fixes there
+  ([system.md](system.md#testing-system-events)); motion pins its own system state and a 60 Hz
+  frame rate ([motion.md](motion.md#simulation-in-the-test-driver)).
 - The display's colour space and backing scale, fonts and the macOS version depend on the Mac
   ([Determinism](e2e-flows.md#determinism)).
 

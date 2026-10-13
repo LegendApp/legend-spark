@@ -3,8 +3,8 @@ name: Motion screens match their goldens
 intent: >
   Each Motion system screen opens from its spark-ks:// deep link in the running Kitchen Sink, its root renders, and
   the main window matches the approved golden for the appearance (light and dark, English and Arabic), with the shell sidebar
-  masked. Springs, Keyframes and timelines, and Accessibility, power and lifecycle are at rest; the last masks its
-  environment readout, which reports the Mac's display. Scroll link and JS block starts a looping runner on mount,
+  masked. Springs, Keyframes and timelines, and Accessibility, power and lifecycle are at rest; the last shows its
+  environment readout unmasked, since a driver run pins motion's system state and a 60 Hz frame rate. Scroll link and JS block starts a looping runner on mount,
   so the motion clock is switched to virtual before that screen opens: the runner mounts paused at its start. Layout,
   presence and shared elements is at rest (its rows' enter animations start where they are). Visual effects is at rest.
   Backdrop materials is at rest, its within-window material over the stripes; its Liquid Glass availability readout,
@@ -53,4 +53,4 @@ matrix:
 - assertScreenshot: { golden: motion-system-text-and-symbols, mask: [{ id: infra-shell-sidebar }, { id: motion-system-text-and-symbols-symbol-availability }] }
 - launchApp: { openUrl: "spark-ks://motion-system/accessibility-power", stopApp: false }
 - assertVisible: { id: motion-system-accessibility-power-root }
-- assertScreenshot: { golden: motion-system-accessibility-power, mask: [{ id: infra-shell-sidebar }, { id: motion-system-accessibility-power-environment }] }
+- assertScreenshot: { golden: motion-system-accessibility-power, mask: [{ id: infra-shell-sidebar }] }

@@ -7,7 +7,8 @@ intent: >
   fields) lists: replacing the real displays with 901; connecting 902; moving 902 above 901;
   making 902 primary; a new 902 resolution at 1x; 901 set to a fixed 60 Hz; 901 switched to an
   sRGB profile while EDR content raises its current headroom; unplugging 902, which makes 901
-  primary again; and restoring the real displays.
+  primary again; and restoring the real displays. A driver run's listener receives only simulated changes,
+  so a real display change during the run adds no entry.
 checks: [DISP-EVTCONNECT-01, DISP-EVTARRANGE-01, DISP-EVTMODE-01, DISP-EVTCOLOR-01]
 tags: [displays-graphics]
 platforms: [macos]
