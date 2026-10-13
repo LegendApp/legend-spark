@@ -1,0 +1,56 @@
+appId: so.legend.spark.examples.kitchensink
+name: An inspector and a palette docked to the main window
+intent: >
+  On Multiwindow > Window choreography with the virtual clock and one simulated display (901), the main window is put
+  at 220,100 (1000 × 700). The inspector, a navigator window, attaches at the main window's trailing edge, 8 points
+  out and top-aligned, docked at 1228,100. It shows the item selected in the
+  main window's list and follows the selection. The palette attaches at the leading edge, at 12,100. A move 12 points
+  off its docked frame snaps it back in 150 ms and it stays docked; a move 200 points off undocks it where it is; a
+  move back to 4 points off docks it again and snaps it into place.
+checks: [MW-CHOREO-08, MW-CHOREO-09]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+---
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography" }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-root }, timeout: 10s }
+- setClock: virtual
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=main-place,inspector" }
+- assertVisible: { id: multiwindow-choreography-run-1-steps-2 }
+- assertVisible: { id: multiwindow-choreography-inspector-attached-true }
+- assertVisible: { id: multiwindow-choreography-inspector-shown-901-1228-100-260x360 }
+- assertVisible: { id: multiwindow-choreography-inspector-item-inbox }
+- tapOn: { id: multiwindow-choreography-row-drafts }
+- assertVisible: { id: multiwindow-choreography-inspector-item-drafts }
+- tapOn: { id: multiwindow-choreography-row-archive }
+- assertVisible: { id: multiwindow-choreography-inspector-item-archive }
+- takeScreenshot: { name: choreography-inspector, window: { id: ks-choreo-inspector } }
+# The palette at the leading edge, and its magnetic docking.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,palette" }
+- assertVisible: { id: multiwindow-choreography-run-2-steps-2 }
+- assertVisible: { id: multiwindow-choreography-palette-attached-true }
+- assertVisible: { id: multiwindow-choreography-palette-shown-901-12-100-200x300 }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,palette-nudge" }
+- assertVisible: { id: multiwindow-choreography-run-3-steps-2 }
+- advanceClock: 150ms
+- tapOn: { id: multiwindow-choreography-refresh }
+- assertVisible: { id: multiwindow-choreography-palette-shown-901-12-100-200x300 }
+- assertVisible: { id: multiwindow-choreography-palette-attached-true }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,palette-away" }
+- assertVisible: { id: multiwindow-choreography-run-4-steps-2 }
+- assertVisible: { id: multiwindow-choreography-palette-attached-false }
+- assertVisible: { id: multiwindow-choreography-palette-shown-901--188-100-200x300 }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,palette-back" }
+- assertVisible: { id: multiwindow-choreography-run-5-steps-2 }
+- assertVisible: { id: multiwindow-choreography-palette-attached-true }
+- advanceClock: 150ms
+- tapOn: { id: multiwindow-choreography-refresh }
+- assertVisible: { id: multiwindow-choreography-palette-shown-901-12-100-200x300 }
+- assertVisible: { id: multiwindow-choreography-inspector-attached-true }
+- assertNotVisible: { id: multiwindow-choreography-error-other }
+- setClock: real
+- simulateDisplays: { restore: true }

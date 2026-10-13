@@ -17,3 +17,4 @@ matrix:
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: multiwindow, SCREEN: windows } }
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: multiwindow, SCREEN: special-windows } }
 - runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: multiwindow, SCREEN: performance } }
+- runFlow: { file: subflows/accessibility/audit-screen.yaml, env: { AREA: multiwindow, SCREEN: choreography } }

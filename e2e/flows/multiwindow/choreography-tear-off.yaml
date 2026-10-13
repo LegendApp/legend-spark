@@ -1,0 +1,39 @@
+appId: so.legend.spark.examples.kitchensink
+name: Tear the notes panel off into a window and merge it back
+intent: >
+  On Multiwindow > Window choreography with the virtual clock and one simulated display (901), the main window is put
+  at 220,100 (1000 × 700). Tearing the notes panel off opens a window at the panel's place on the display (708,401, 488 × 149)
+  and leaves a placeholder in the main window; after its 300 ms zoom the window is at 556,357 (400 × 300). Merging sets
+  a close transition into the panel's slot and closes the window: it shrinks back into the slot (halfway, 632,379 at 444 × 225, at
+  150 ms), closes at 300 ms, and the panel returns.
+checks: [MW-CHOREO-07]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+---
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography" }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-root }, timeout: 10s }
+- assertVisible: { id: multiwindow-choreography-panel-docked }
+- setClock: virtual
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=main-place,tear-off" }
+- assertVisible: { id: multiwindow-choreography-run-1-steps-2 }
+- assertVisible: { id: multiwindow-choreography-panel-torn-off }
+- assertVisible: { id: multiwindow-choreography-torn-shown-901-708-401-488x149 }
+- advanceClock: 300ms
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-torn-shown-901-556-357-400x300 }, timeout: 5s }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,merge" }
+- assertVisible: { id: multiwindow-choreography-run-2-steps-2 }
+- advanceClock: 150ms
+- tapOn: { id: multiwindow-choreography-refresh }
+- assertVisible: { id: multiwindow-choreography-torn-shown-901-632-379-444x225 }
+- advanceClock: 150ms
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-close-closed }, timeout: 5s }
+- assertVisible: { id: multiwindow-choreography-torn-closed }
+- assertVisible: { id: multiwindow-choreography-panel-docked }
+- assertNotVisible: { id: multiwindow-choreography-error-other }
+- setClock: real
+- simulateDisplays: { restore: true }

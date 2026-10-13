@@ -1,0 +1,33 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window choreography on screen, by hand
+intent: >
+  What only the window server and a person show: zooms and shrinks are continuous on screen, closing hands key focus
+  to the main window, a palette dragged by its title bar docks magnetically and then moves with the main window, it
+  hides while another app is active, and the system Reduce Motion setting (not the driver's) turns zooms into fades.
+  The driver never shows windows, takes no key focus and never deactivates the app, so this does not run in-process.
+checks: [MW-CHOREO-10]
+tags: [multiwindow]
+platforms: [macos]
+build: release
+manual: true
+timeout: 15m
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/choreography" }
+- tapOn: { id: multiwindow-choreography-row-drafts }
+- tapOn: { id: multiwindow-choreography-zoom-button }
+- manualStep:
+    instruction: 'Watch the Drafts row while the detail window opens, then press ⌘W in the detail window and type a few letters.'
+    expect: 'The window grows smoothly out of the Drafts row and fades in, without jumps or a blank frame; on ⌘W it shrinks back into the row and fades out; the main window is key as soon as the shrink starts (its title bar turns active) and the letters you type go to it, not to the closing window.'
+    evidence: none
+    signoff: required
+- tapOn: { id: multiwindow-choreography-palette-button }
+- manualStep:
+    instruction: 'Drag the Palette window a little away from the main window and let go; then drag it far away and let go; then drag it back near its docked place and let go. Move the main window by its title bar. Then click another app.'
+    expect: 'A small drag snaps it back to its docked place; a far drag leaves it where you dropped it and the readout says undocked; dropping it near docks it again (docked). Docked, it moves with the main window. While the other app is active the palette is hidden, and it comes back when you click the Kitchen Sink.'
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: 'Turn on System Settings › Accessibility › Display › Reduce motion, return to the Kitchen Sink, press Open from thumbnail and then Close detail. Turn Reduce motion off again.'
+    expect: 'The detail window fades in at its place and fades out on close, without growing or shrinking; Last animation reads Reduce Motion: faded.'
+    evidence: none
+    signoff: required

@@ -1,0 +1,68 @@
+appId: so.legend.spark.examples.kitchensink
+name: Animated frame changes, interruption, and a close cancelled by another animation
+intent: >
+  On Multiwindow > Window choreography with the virtual clock and one simulated display (901), the detail window opens
+  from the thumbnail and settles at 556,357 (400 × 300). Full size animates it to 720 × 480 over 300 ms, keeping its
+  top-left corner: 560 × 390 at 150 ms. Compact at that moment interrupts it (the full-size animation reports
+  interrupted) and animates back from where it is; stopping halfway leaves it at 480 × 345. The Settings pane resizes
+  animate to 560 × 320 and 560 × 520. Closing starts the shrink into the thumbnail; Full size 150 ms into it cancels
+  the close (interrupted), the window stays open and grows to 720 × 480 from where the shrink left it; the next close
+  shrinks it and closes it.
+checks: [MW-CHOREO-04, MW-CHOREO-05]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+---
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography" }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-root }, timeout: 10s }
+- setClock: virtual
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=zoom-thumb" }
+- assertVisible: { id: multiwindow-choreography-run-1-steps-1 }
+- advanceClock: 300ms
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-detail-shown-901-556-357-400x300 }, timeout: 5s }
+# Compact↔full: halfway at half the duration; a second animation interrupts the first; stop leaves it where it is.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,full" }
+- assertVisible: { id: multiwindow-choreography-run-2-steps-2 }
+- advanceClock: 150ms
+- tapOn: { id: multiwindow-choreography-refresh }
+- assertVisible: { id: multiwindow-choreography-detail-shown-901-556-357-560x390 }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,compact" }
+- assertVisible: { id: multiwindow-choreography-run-3-steps-2 }
+- advanceClock: 150ms
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,stop" }
+- assertVisible: { id: multiwindow-choreography-run-4-steps-2 }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-animation-interrupted }, timeout: 5s }
+- assertVisible: { id: multiwindow-choreography-detail-shown-901-556-357-480x345 }
+# Settings pane resizes.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,pane-general" }
+- assertVisible: { id: multiwindow-choreography-run-5-steps-2 }
+- advanceClock: 300ms
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-detail-shown-901-556-357-560x320 }, timeout: 5s }
+- assertVisible: { id: multiwindow-choreography-animation-finished }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,pane-advanced" }
+- assertVisible: { id: multiwindow-choreography-run-6-steps-2 }
+- advanceClock: 300ms
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-detail-shown-901-556-357-560x520 }, timeout: 5s }
+# A close cancelled by another animation, then a close that completes.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,close" }
+- assertVisible: { id: multiwindow-choreography-run-7-steps-2 }
+- advanceClock: 150ms
+- tapOn: { id: multiwindow-choreography-refresh }
+- assertVisible: { id: multiwindow-choreography-detail-shown-901-278-207-300x275 }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,full" }
+- assertVisible: { id: multiwindow-choreography-run-8-steps-2 }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-close-interrupted }, timeout: 5s }
+- advanceClock: 300ms
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-detail-shown-901-278-207-720x480 }, timeout: 5s }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,close" }
+- assertVisible: { id: multiwindow-choreography-run-9-steps-2 }
+- advanceClock: 300ms
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-close-closed }, timeout: 5s }
+- assertVisible: { id: multiwindow-choreography-detail-closed }
+- assertNotVisible: { id: multiwindow-choreography-error-other }
+- setClock: real
+- simulateDisplays: { restore: true }

@@ -89,6 +89,14 @@ runs steps (in `screens/multiwindow/window-performance.ts`; a first step `keep` 
 names the run so repeated runs can wait for their own end). See
 [the window contract](../../docs/api-window-contract.md#window-pools).
 
+`multiwindow/choreography` zooms a detail window out of the selected list row (or a thumbnail) and back into it,
+resizes it compact↔full and between Settings pane heights, tears the notes panel off into a window and merges it
+back into its slot, and docks an inspector (which follows the list selection) and a palette to the main window. Its
+readout shows each window's state and bounds and the latest animation's and close's result.
+`spark-ks://multiwindow/choreography?run=zoom-thumb,…` runs steps (in `screens/multiwindow/window-choreography.ts`; a
+first step `keep` keeps the open windows). Steps do not wait for animations, so flows on the virtual clock advance
+time and press Refresh. See [the window contract](../../docs/api-window-contract.md#window-choreography).
+
 `windows/window-options` opens a child window with options applied at open, then
 changes each option from the Windows epic on the live child (one row per option),
 lists `getWindowAvailability(option)` and probes rejected requests. The audit is in

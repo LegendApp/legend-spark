@@ -1,0 +1,34 @@
+appId: so.legend.spark.examples.kitchensink
+name: A detail window zooms out of a list row and back into it
+intent: >
+  On Multiwindow > Window choreography with the virtual clock and one simulated display (901), the main window is put
+  at 220,100 (1000 × 700) and Drafts is selected in the list. Opening the selected mailbox shows the detail window over
+  the Drafts row, at the row's place on the display (509,471, 174 × 33), and after its 300 ms zoom it is at its frame, 556,357
+  (400 × 300). Closing it shrinks it back into the row: at 300 ms it has closed.
+checks: [MW-CHOREO-03]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+---
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography" }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-root }, timeout: 10s }
+- setClock: virtual
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=main-place,select-drafts,zoom" }
+- assertVisible: { id: multiwindow-choreography-run-1-steps-3 }
+- assertVisible: { id: multiwindow-choreography-row-drafts-selected }
+- assertVisible: { id: multiwindow-choreography-detail-shown-901-509-471-174x33 }
+- advanceClock: 300ms
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-animation-finished }, timeout: 5s }
+- assertVisible: { id: multiwindow-choreography-detail-shown-901-556-357-400x300 }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,close" }
+- assertVisible: { id: multiwindow-choreography-run-2-steps-2 }
+- advanceClock: 300ms
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-close-closed }, timeout: 5s }
+- assertVisible: { id: multiwindow-choreography-detail-closed }
+- assertNotVisible: { id: multiwindow-choreography-error-other }
+- setClock: real
+- simulateDisplays: { restore: true }
