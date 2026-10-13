@@ -623,9 +623,10 @@ stops the emitters that were not started with `play`.
 virtual clock pauses; the dissolve renders a frame when an animation starts and each time the clock advances, at the
 engine's value; the emitter is a sublayer of the paused layer, so the clock holds and advances it. Driver captures
 render the layer tree with `CARenderer` ([test-driver.md](test-driver.md#what-a-capture-contains)), which draws the
-ripple and distortion filters, the sweep, the Metal mask mid-dissolve and the particles at the frozen instant. A
-seeded emitter (`seed`) places the same particles on every run, so `assertMotion` `frames` and screenshots after
-`advanceClock` compare mid-effect frames with goldens.
+ripple and distortion filters, the sweep, the Metal mask mid-dissolve and the particles at the frozen instant. Start from rest
+also starts the emitter's own clock, so a seeded emitter (`seed`) places the same particles at a given time after Start
+on every run. `assertMotion` `frames` and screenshots after `advanceClock` therefore compare mid-effect frames with
+goldens.
 
 ## Text transitions
 

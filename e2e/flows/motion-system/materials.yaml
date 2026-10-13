@@ -7,9 +7,8 @@ intent: >
   menu material fades in over the sidebar one as far as it got. Fade animates the material's intensity to 0 and
   back on a timing curve, and Tint springs the tint's opacity in. Where this Mac has Liquid Glass (macOS 26 and its
   SDK), Glass crossfades to it; elsewhere it reports E_UNAVAILABLE and the material stays; the availability readouts report every visual effect material and both Liquid Glass
-  styles. Goldens are captured at rest only, with
-  the material faded out and with it tinted: captures render in-process, where every material draws as the same flat
-  fill without blur, so materials and the crossfade are checked through the values the engine reports
+  styles. Captures render the layer tree with Core Animation's renderer, which blurs the within-window material over
+  the stripes, so the crossfade is compared with goldens halfway, and the material faded out and tinted at rest
   (docs/motion.md#backdrop-materials). With Reduce Motion on (simulated), the spring crossfade plays as a 200 ms fade;
   Reduce Transparency (simulated) is reported by the environment readout.
 checks: [MOT-MATERIAL-01, MOT-MATREDUCE-01, MOT-CLOCK-01]
@@ -28,7 +27,7 @@ matrix:
 - setClock: virtual
 # A crossfade from the HUD material to the popover one.
 - tapOn: { id: motion-system-materials-next }
-- assertMotion: { target: { id: motion-system-materials-panel }, kind: spring, settlesWithin: 1200ms }
+- assertMotion: { target: { id: motion-system-materials-panel }, kind: spring, settlesWithin: 1200ms, frames: { at: [50], golden: materials-crossfade, mask: [{ id: infra-shell-sidebar }, { id: motion-system-materials-glass-availability }, { id: motion-system-materials-material }] } }
 - assertText: { id: motion-system-materials-material, equals: '{"material":"popover"}' }
 # Interrupted halfway by the next material, which fades in over it and settles.
 - tapOn: { id: motion-system-materials-next }

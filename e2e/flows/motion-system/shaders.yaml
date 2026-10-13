@@ -7,9 +7,9 @@ intent: >
   card; Dissolve times dissolveProgress to 1 (the precompiled Metal mask, rendered on each frame of the virtual clock)
   and the dissolved card is hidden at rest, which a golden shows, then Dissolve brings it back. The availability
   readout reports every effect and particles. The panel is a MotionEmitter: Start reports particles, Stop stops them,
-  Burst emits for 600 ms. Driver captures render in-process, where Core Image filters, the Metal mask mid-dissolve and
-  particles do not draw, so the effects are checked through the values the engine reports and goldens are at rest
-  (docs/motion.md#shader-effects-and-particles). With Reduce Motion on (simulated), the ripple changes at once and its
+  Burst emits for 600 ms. Driver captures render the layer tree with Core Animation's renderer at the frozen instant, so
+  the ripple ring, the sweep and the Metal mask are compared with goldens halfway through, and the seeded particles one
+  second after Start (docs/motion.md#shader-effects-and-particles). With Reduce Motion on (simulated), the ripple changes at once and its
   card fades in (a crossfade), a dissolve plays as the 200 ms fade, and Start emits nothing.
 checks: [MOT-SHADER-01, MOT-PARTICLE-01, MOT-SHADREDUCE-01, MOT-CLOCK-01]
 tags: [motion-system]
@@ -26,7 +26,7 @@ matrix:
 - setClock: virtual
 # The ripple's ring travels out on a timing curve and the filter comes off once it settles.
 - tapOn: { id: motion-system-shaders-ripple-play }
-- assertMotion: { target: { id: motion-system-shaders-ripple }, kind: timing, settlesWithin: 750ms }
+- assertMotion: { target: { id: motion-system-shaders-ripple }, kind: timing, settlesWithin: 750ms, frames: { at: [50], golden: shaders-ripple, mask: [{ id: infra-shell-sidebar }, { id: motion-system-shaders-effect-result }] } }
 - assertText: { id: motion-system-shaders-effect-result, equals: '{"finished":true,"rippleProgress":1}' }
 # A bulge springs in; Bulge again halfway springs it back out from where it is, with its velocity.
 - tapOn: { id: motion-system-shaders-distortion-play }
@@ -35,11 +35,11 @@ matrix:
 - assertText: { id: motion-system-shaders-effect-result, equals: '{"finished":true,"distortion":0}' }
 # The specular band sweeps across.
 - tapOn: { id: motion-system-shaders-specular-play }
-- assertMotion: { target: { id: motion-system-shaders-specular }, kind: timing, settlesWithin: 1250ms }
+- assertMotion: { target: { id: motion-system-shaders-specular }, kind: timing, settlesWithin: 1250ms, frames: { at: [50], golden: shaders-sweep, mask: [{ id: infra-shell-sidebar }, { id: motion-system-shaders-effect-result }] } }
 - assertText: { id: motion-system-shaders-effect-result, equals: '{"finished":true,"specularProgress":1}' }
 # The dissolve, rendered with Metal on the clock's frames; at rest at 1 the card is hidden.
 - tapOn: { id: motion-system-shaders-dissolve-play }
-- assertMotion: { target: { id: motion-system-shaders-dissolve }, kind: timing, settlesWithin: 950ms }
+- assertMotion: { target: { id: motion-system-shaders-dissolve }, kind: timing, settlesWithin: 950ms, frames: { at: [50], golden: shaders-dissolve, mask: [{ id: infra-shell-sidebar }, { id: motion-system-shaders-effect-result }] } }
 - assertText: { id: motion-system-shaders-effect-result, equals: '{"finished":true,"dissolveProgress":1}' }
 - assertScreenshot: { golden: shaders-dissolved, mask: [{ id: infra-shell-sidebar }] }
 - tapOn: { id: motion-system-shaders-dissolve-play }
@@ -48,6 +48,8 @@ matrix:
 # Particles: start, stop, and a burst.
 - tapOn: { id: motion-system-shaders-particles-start }
 - assertText: { id: motion-system-shaders-particles-result, equals: '{"played":"particles"}' }
+- advanceClock: 1000ms
+- assertScreenshot: { golden: shaders-particles, mask: [{ id: infra-shell-sidebar }] }
 - tapOn: { id: motion-system-shaders-particles-stop }
 - assertText: { id: motion-system-shaders-particles-result, equals: '"stopped"' }
 - tapOn: { id: motion-system-shaders-particles-burst }
