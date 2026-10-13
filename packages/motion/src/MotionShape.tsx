@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { motionModule } from "./motion";
 import { shapeConfig, type MotionShapeStyle } from "./shapes";
 import { useMotionView, type MotionViewProps } from "./MotionView";
@@ -20,5 +21,11 @@ export interface MotionShapeProps extends Omit<MotionViewProps, "children">, Mot
 export function MotionShape({ paths, lineCap, lineJoin, fillRule, ...props }: MotionShapeProps) {
   motionModule();  // where motion is unavailable, that is the error, whatever the paths
   if ((props as { children?: unknown }).children != null) invalid("MotionShape has no children; put content in a sibling");
-  return useMotionView(props, { shape: JSON.stringify(shapeConfig(paths, { lineCap, lineJoin, fillRule })) });
+  // Parsed and subdivided once per change of the path contents or the stroke style, not on every render.
+  const key = JSON.stringify([paths, lineCap, lineJoin, fillRule]);
+  const shape = useMemo(() => {
+    const [source, cap, join, rule] = JSON.parse(key);
+    return JSON.stringify(shapeConfig(source, { lineCap: cap ?? undefined, lineJoin: join ?? undefined, fillRule: rule ?? undefined }));
+  }, [key]);
+  return useMotionView(props, { shape });
 }

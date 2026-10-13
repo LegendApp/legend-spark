@@ -659,8 +659,22 @@ int main()
     // Halfway the corners are at (0,0), (30,0), (45,15) and (15,30); past the last path the pair continues (a spring's
     // overshoot): at 1.5 they are at (0,0), (30,0), (75,-15) and (45,30).
     CHECK(CGRectEqualToRect(box(halfwayPath), CGRectMake(0, 0, 45, 30)) && CGRectEqualToRect(box(beyond), CGRectMake(0, -15, 75, 45)));
+    // Below 0 the first pair continues backwards: at -0.5 the corners are at (0,0), (30,0), (15,45) and (-15,30).
+    CGPathRef before = [shapeView copyPathAt:-0.5];
+    CHECK(CGRectEqualToRect(box(before), CGRectMake(-15, 0, 45, 45)));
+    CGPathRelease(before);
     CGPathRelease(halfwayPath);
     CGPathRelease(beyond);
+    // Three paths: 1.5 is halfway along the interior pair, from the triangle to the square moved 100 points right.
+    NSMutableArray *movedSquare = [NSMutableArray new];
+    for (NSUInteger i = 0; i < squarePath.count; i++) [movedSquare addObject:@([squarePath[i] doubleValue] + (i % 2 == 0 ? 100 : 0))];
+    SparkMotionShapeView *three = [[SparkMotionShapeView alloc] initWithFrame:NSMakeRect(0, 0, 80, 40)];
+    CHECK([three setConfig:withShapeKey(shapeConfig, @"paths", @[squarePath, trianglePath, movedSquare]) error:&shapeError] && three.pathCount == 3);
+    CGPathRef interior = [three copyPathAt:1.5], last = [three copyPathAt:2];
+    CHECK(CGRectEqualToRect(box(interior), CGRectMake(50, 0, 45, 30)) && CGRectEqualToRect(box(last), CGRectMake(100, 0, 30, 30)));
+    CGPathRelease(interior);
+    CGPathRelease(last);
+    CHECK(![three setConfig:withShapeKey(shapeConfig, @"subpaths", @[@[@1e300, @YES]]) error:&shapeError] && three.pathCount == 3);
     ShapeHost *shaped = [[ShapeHost alloc] initWithFrame:NSMakeRect(0, 0, 80, 40)];
     shaped.wantsLayer = YES;
     shaped.motionTag = 18;

@@ -349,6 +349,12 @@ test("MotionMaterial: truthful availability, validated material props, a crossfa
 
 test("MotionShape: strict SVG path data, compatible paths subdivided to one structure, and shape properties only on a shape", async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  /** The SparkError code MotionShape throws while it renders (it validates its paths in a memo, inside React). */
+  const shapeCode = (props: unknown) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    try { act(() => { create(React.createElement(MotionShape, props as never)); }); } catch (error) { return (error as { code?: string }).code; } finally { vi.mocked(console.error).mockRestore(); }
+    return "none";
+  };
   const render = async (props: Parameters<typeof MotionShape>[0]) => {
     let rendered: any;
     await act(async () => { rendered = create(React.createElement(MotionShape, props)); });
@@ -381,19 +387,21 @@ test("MotionShape: strict SVG path data, compatible paths subdivided to one stru
   expect(curves.subpaths).toEqual([[4, false]]);
   // Strict path data: every character is a command, a number or a separator.
   for (const bad of ["M0 0 L10 10 !", "M0 0 L10", "L1 1", "M0 0", "M0 0 L1 1 M5 5", "10 10", "M0 0 L1e 2", "M0 0 X1 1", "M0 0 L1 1,,2 2", "", 7 as never])
-    expect(code(() => MotionShape({ paths: [bad] })), String(bad)).toBe("E_INVALID_ARGUMENT");
-  expect(code(() => MotionShape({ paths: ["M0 0 A5 5 0 0 1 10 0"] }))).toBe("E_UNSUPPORTED_OPTION");
+    expect(shapeCode({ paths: [bad] }), String(bad)).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: ["M0 0 A5 5 0 0 1 10 0"] })).toBe("E_UNSUPPORTED_OPTION");
+  // Z after Z closes nothing more: the shape still has one closed subpath.
+  expect(JSON.parse((await render({ paths: ["M0 0 L10 0 L10 10 Z Z"] })).shape).subpaths).toEqual([[3, true]]);
   // Paths morph only into paths with the same subpaths, each open or closed alike.
-  expect(code(() => MotionShape({ paths: ["M0 0 L10 0 Z", "M0 0 L10 0"] }))).toBe("E_UNSUPPORTED_OPTION");
-  expect(code(() => MotionShape({ paths: ["M0 0 L10 0", "M0 0 L10 0 M20 0 L30 0"] }))).toBe("E_UNSUPPORTED_OPTION");
+  expect(shapeCode({ paths: ["M0 0 L10 0 Z", "M0 0 L10 0"] })).toBe("E_UNSUPPORTED_OPTION");
+  expect(shapeCode({ paths: ["M0 0 L10 0", "M0 0 L10 0 M20 0 L30 0"] })).toBe("E_UNSUPPORTED_OPTION");
   // Bounded sizes: paths, segments per path, characters per path.
-  expect(code(() => MotionShape({ paths: [] }))).toBe("E_INVALID_ARGUMENT");
-  expect(code(() => MotionShape({ paths: Array(17).fill("M0 0 L1 1") }))).toBe("E_INVALID_ARGUMENT");
-  expect(code(() => MotionShape({ paths: [`M0 0 ${"L1 1 ".repeat(129)}`] }))).toBe("E_INVALID_ARGUMENT");
-  expect(code(() => MotionShape({ paths: [`M0 0 L1 1 ${" ".repeat(10000)}`] }))).toBe("E_INVALID_ARGUMENT");
-  expect(code(() => MotionShape({ paths: [square], lineJoin: "sharp" as never }))).toBe("E_INVALID_ARGUMENT");
-  expect(code(() => MotionShape({ paths: [square], fillRule: "odd" as never }))).toBe("E_INVALID_ARGUMENT");
-  expect(code(() => MotionShape({ paths: [square], children: "text" } as never))).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: [] })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: Array(17).fill("M0 0 L1 1") })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: [`M0 0 ${"L1 1 ".repeat(129)}`] })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: [`M0 0 L1 1 ${" ".repeat(10000)}`] })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: [square], lineJoin: "sharp" as never })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: [square], fillRule: "odd" as never })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: [square], children: "text" })).toBe("E_INVALID_ARGUMENT");
   // The shape properties animate like any property, colors in OKLCH; a MotionView without a shape cannot start with them.
   await animate(a, { morph: spring(1), strokeEnd: timing(1), strokeWidth: 2, strokeColor: timing("#0000ff") }).finished;
   expect(Object.keys(sent(native.run).groups[0].tracks)).toEqual(["morph", "strokeEnd", "strokeWidth", "strokeColorL", "strokeColorC", "strokeColorH", "strokeColorAlpha"]);

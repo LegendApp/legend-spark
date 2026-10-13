@@ -302,10 +302,22 @@ mirrored in right-to-left layouts.
 ### Path data
 
 `motionPath` and `MotionShape` read SVG path data: `M`, `L`, `H`, `V`, `C`, `S`, `Q`, `T` and `Z`, absolute (upper case)
-and relative (lower case), with numbers in SVG's syntax (`-1.5e2`, `.5`, `10-5` is two numbers) separated by whitespace
-and at most one comma. Parsing is strict: any other character, a missing number or data that does not start with `M` is
-`E_INVALID_ARGUMENT` with the offending character's position. Arcs (`A`) are `E_UNSUPPORTED_OPTION`; draw them with
-cubic curves. Lines and quadratic curves become the cubic Bézier curves that draw them exactly.
+and relative (lower case). Numbers use SVG's syntax: an optional sign, digits with an optional fraction and an exponent
+in either case (`-1.5E2`, `+.5`; `1-2` and `.5.5` are two numbers each). Tokens are separated by whitespace, and two
+numbers also by at most one comma. Lines and quadratic curves become the cubic Bézier curves that draw them exactly; `S`
+reflects the previous `C` or `S` control point and `T` the previous `Q` or `T` one, otherwise their first control point
+is the current point. `Z` right after `Z` does nothing. Parsing is strict, and each error names the character it is at:
+
+* any other character, a comma before a command or not between two numbers, and data that does not start with `M` are
+  `E_INVALID_ARGUMENT`;
+* so is a command missing a number (the error names the command, and the token or end of data where a number belongs),
+  and a number after `Z`, which takes none;
+* arcs (`A`) are `E_UNSUPPORTED_OPTION`; draw them with cubic curves.
+
+Before #406, `motionPath` read path data more loosely: it skipped characters it did not recognize (commas anywhere
+included), rejected an upper-case exponent (`1E2`) as an unknown command, and let `S` and `T` reflect the previous
+curve's control point whichever kind it was. Those inputs now fail or follow the rules above; other paths give the
+same keyframes as before, up to floating-point rounding.
 
 ## Shapes
 
@@ -344,12 +356,19 @@ drawing order from each subpath's `M`, so start the shapes at corresponding poin
 twist. Beyond 0 and the last path, `morph` continues the nearest pair, so a spring's overshoot overshoots the shape.
 
 **Limits and cost.** At most 16 paths of at most 10,000 characters and 128 cubic segments each after subdivision
-(`E_INVALID_ARGUMENT` beyond). JavaScript parses and subdivides the paths once per change of `paths` and sends the
-points as one JSON prop; the native view keeps them in one flat array and builds a path only for the model value (when
-`morph` changes) and for each baked sample of a running morph. A bake of the morph holds one path per sample (at most 120
-per second, [Frame rate and power](#frame-rate-and-power)), each about 50 bytes per segment (three 16-byte points): a one-second morph of a
-128-segment path holds about 750 KB until it ends. The window server interpolates between samples; nothing runs per
-frame. A change of `paths` applies at once, at the current `morph`; a running morph continues on the new paths.
+(`E_INVALID_ARGUMENT` beyond). JavaScript parses and subdivides the paths when their contents or the stroke style
+change (not on every render) and sends the points as one JSON prop; the native view keeps them in one flat array and
+builds a path only for the model value (when `morph` changes) and for each baked sample of a running morph. Since each
+sample of the morph is a whole path, the morph bakes at most 60 samples a second (the other shape properties bake at the
+display's rate, [Frame rate and power](#frame-rate-and-power)) and at most 240 per part: one for the finite part and one
+for a loop. A morph longer than 4 s (a long spring, a 20 s loop) is sampled more coarsely, linearly interpolated by the
+compositor between samples. A sample path takes about 50 bytes per segment (three 16-byte points), so a morph holds at
+most 482 paths: about 3.1 MB for a 128-segment shape, 60 KB for a 2-segment checkmark, until the bake is replaced or
+ends. Nothing runs per frame.
+
+A change of `paths` applies at once, at the current `morph`; a running morph continues on the new paths. With fewer
+paths, a `morph` beyond the new last path is not clamped: it continues the last pair as an overshoot does, so set or
+animate `morph` back into range with the change.
 
 **Who owns the shape properties.** Only a `MotionShape` has them: in `initial`, `animate`, `stagger`, `timeline`,
 `setMotionValues` or a scroll link on another `MotionView` they are `E_UNSUPPORTED_OPTION`.

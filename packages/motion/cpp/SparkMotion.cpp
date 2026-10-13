@@ -946,7 +946,9 @@ const char *kindName(Spec::Kind kind) {
 
 ChannelBake Engine::bake(int64_t view, Channel channel, double now, double rate) const {
   require(positive(rate), "The bake rate must be positive");
-  rate = std::min(rate, kSampleRate);
+  const bool paths = channel == Channel::ShapePath;
+  rate = std::min(rate, paths ? kPathSampleRate : kSampleRate);
+  const int cap = paths ? kMaxPathSamples : kMaxSamples;
   const Slots &target = views_.at(view);
   // Only the channel's own properties are evaluated; the others keep their model values.
   auto valuesAt = [&](double time) {
@@ -956,7 +958,7 @@ ChannelBake Engine::bake(int64_t view, Channel channel, double now, double rate)
   };
   auto sample = [&](double begin, double duration) {
     Bake bake{begin, duration, {}};
-    const int count = std::clamp(int(std::ceil(duration * rate)), 1, kMaxSamples) + 1;
+    const int count = std::clamp(int(std::ceil(duration * rate)), 1, cap) + 1;
     bake.samples.reserve(count);
     for (int i = 0; i < count; i++) bake.samples.push_back(valuesAt(begin + duration * i / (count - 1)));
     return bake;

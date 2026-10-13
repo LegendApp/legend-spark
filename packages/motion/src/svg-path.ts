@@ -10,26 +10,34 @@ export type Cubic = readonly [x1: number, y1: number, x2: number, y2: number, x:
 /** A subpath: where it starts, its segments, and whether it closes back to its start. */
 export interface Subpath { start: Point; segments: Cubic[]; closed: boolean }
 
-/** A command letter or a number, after optional whitespace and at most one comma. */
-const TOKEN = /\s*(?:,\s*)?(?:([MmLlHhVvCcSsQqTtZzAa])|([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?))/y;
+/** A command letter or a number, after optional whitespace and (between two numbers) at most one comma. */
+const TOKEN = /\s*(,\s*)?(?:([MmLlHhVvCcSsQqTtZzAa])|([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?))/y;
+/** A token and the character (1-based) it starts at. */
+type Token = { text: string; at: number };
+const isCommand = (token: Token | undefined) => !!token && /^[a-zA-Z]/.test(token.text);
 const line = (from: Point, to: Point): Cubic =>
   [from[0] + (to[0] - from[0]) / 3, from[1] + (to[1] - from[1]) / 3, from[0] + 2 * (to[0] - from[0]) / 3, from[1] + 2 * (to[1] - from[1]) / 3, to[0], to[1]];
 /** A quadratic Bézier as the cubic that draws it exactly. */
 const quadratic = (from: Point, control: Point, to: Point): Cubic =>
   [from[0] + 2 * (control[0] - from[0]) / 3, from[1] + 2 * (control[1] - from[1]) / 3, to[0] + 2 * (control[0] - to[0]) / 3, to[1] + 2 * (control[1] - to[1]) / 3, to[0], to[1]];
 
-function tokenize(d: string, name: string): string[] {
-  const tokens: string[] = [];
+function tokenize(d: string, name: string): Token[] {
+  const tokens: Token[] = [];
+  const unexpected = (index: number): never => invalid(`${name} has an unexpected ${JSON.stringify(d[index])} at character ${index + 1}`);
   TOKEN.lastIndex = 0;
   while (TOKEN.lastIndex < d.length) {
     const at = TOKEN.lastIndex;
     const match = TOKEN.exec(d);
     if (!match) {
-      const rest = d.slice(at), skipped = rest.length - rest.trimStart().length;
+      const rest = d.slice(at);
       if (!rest.trim()) break;
-      return invalid(`${name} has an unexpected ${JSON.stringify(rest[skipped])} at character ${at + skipped + 1}`);
+      return unexpected(at + rest.length - rest.trimStart().length);
     }
-    tokens.push(match[1] ?? match[2]!);
+    const [whole, comma, command, number] = match;
+    const token = { text: command ?? number!, at: at + whole.length - (command ?? number!).length + 1 };
+    // A comma separates two numbers; before a command, or with no number before it, it is out of place.
+    if (comma && (command || !tokens.length || isCommand(tokens.at(-1)))) unexpected(at + whole.indexOf(","));
+    tokens.push(token);
   }
   return tokens;
 }
@@ -43,8 +51,10 @@ export function parseSvgPath(d: unknown, name: string): Subpath[] {
   let open: Subpath | undefined;
   const number = () => {
     const token = tokens[index++];
-    const value = Number(token);
-    if (token === undefined || !Number.isFinite(value) || /[a-zA-Z]/.test(token[0]!)) invalid(`${name} needs a number near ${token ?? "its end"}`);
+    if (!token) return invalid(`${name} needs another number for ${command} at its end`);
+    if (isCommand(token)) return invalid(`${name} needs another number for ${command} before ${token.text} at character ${token.at}`);
+    const value = Number(token.text);
+    if (!Number.isFinite(value)) invalid(`${name} has a number out of range at character ${token.at}`);
     return value;
   };
   const point = (relative: boolean): Point => { const x = number(), y = number(); return relative ? [current[0] + x, current[1] + y] : [x, y]; };
@@ -55,7 +65,9 @@ export function parseSvgPath(d: unknown, name: string): Subpath[] {
     return open;
   };
   while (index < tokens.length) {
-    if (/[a-zA-Z]/.test(tokens[index]!)) command = tokens[index++]!;
+    const token = tokens[index]!;
+    if (isCommand(token)) { command = token.text; index++; }
+    else if (subpaths.length && !command) invalid(`${name} has a number after Z at character ${token.at}: Z takes no numbers; start the next segment with a command`);
     else if (!command) invalid(`${name} starts with M`);
     const relative = command === command.toLowerCase(), kind = command.toUpperCase();
     if (!subpaths.length && kind !== "M") invalid(`${name} starts with M`);
@@ -85,7 +97,8 @@ export function parseSvgPath(d: unknown, name: string): Subpath[] {
         break;
       }
       case "Z": {
-        const closing = subpath();
+        if (!open) { command = ""; continue; }  // Z right after Z (or a closed subpath) closes nothing more
+        const closing = open;
         next = closing.start;
         if (next[0] !== current[0] || next[1] !== current[1]) closing.segments.push(line(current, next));
         closing.closed = true;

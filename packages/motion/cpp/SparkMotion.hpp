@@ -227,6 +227,12 @@ public:
   /** The highest rate samples are baked at; the glue passes the display's rate (docs/motion.md#frame-rate-and-power). */
   static constexpr double kSampleRate = 120;
   static constexpr double kMaxLoop = 20;
+  /**
+   * A shape's path channel bakes a whole path per sample (docs/motion.md#shapes): it samples at most 60 times a second and
+   * at most kMaxPathSamples times per bake part (the finite lead, and the loop), however long the animation.
+   */
+  static constexpr double kPathSampleRate = 60;
+  static constexpr int kMaxPathSamples = 240;
 
   void addView(int64_t view, const Values &initial);
   /** Forgets a view; its animations settle unfinished. */

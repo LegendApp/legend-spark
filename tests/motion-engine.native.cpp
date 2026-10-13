@@ -676,6 +676,21 @@ int main() {
     CHECK(reduced.reduced && near(reduced.end, kReducedFade, 1e-9));
     CHECK(reduce.state(1, RotateY, 0).value == 180 && reduce.state(1, MaskInsetEnd, 0).value == 50 && reduce.state(1, Opacity, 0).value == 0);
     CHECK(near(reduce.state(1, ShadowRadius, kReducedFade / 2).value, 7, 1e-6) && near(reduce.state(1, BackgroundColorAlpha, kReducedFade / 2).value, 0.5, 1e-6));
+    // A shape's path bake holds a whole path per sample: at most 60 per second and 240 per part, however long the
+    // animation (a 60 s spring, a 20 s loop); other shape properties sample at the display rate.
+    Engine paths;
+    paths.addView(1, kIdentity);
+    paths.run(plan("short", 1, Morph, timingTo(1, 1)), 0, done, views);
+    paths.run(plan("stroke", 1, StrokeEnd, timingTo(0, 1)), 0, done, views);
+    CHECK(paths.bake(1, Channel::ShapePath, 0, 120).lead->samples.size() == 61 && paths.bake(1, Channel::Shape, 0, 120).lead->samples.size() == 121);
+    paths.run(plan("long", 1, Morph, timingTo(2, 60)), 0, done, views);
+    CHECK(paths.bake(1, Channel::ShapePath, 0, 120).lead->samples.size() == size_t(Engine::kMaxPathSamples) + 1);
+    Spec breathe = timingTo(1, 10);
+    breathe.repeat = INFINITY;
+    breathe.reverse = true;
+    paths.run(plan("loop", 1, Morph, breathe), 0, done, views);
+    const ChannelBake looping = paths.bake(1, Channel::ShapePath, 0, 120);
+    CHECK(looping.loop && looping.loop->samples.size() == size_t(Engine::kMaxPathSamples) + 1 && near(looping.loop->duration, 20, 1e-9));
     // A shape's morph and drawn stroke jump and the view fades in where they land; its stroke width fades.
     reduce.addView(2, kIdentity);
     Plan draw{"draw", {{2, {{Morph, springTo(1)}, {StrokeEnd, timingTo(0, 1)}, {StrokeWidth, springTo(5)}}, false, 0}}};

@@ -13,7 +13,6 @@ static BOOL SparkShapeNumber(id value) { return [value isKindOfClass:NSNumber.cl
   double _shown;  // the morph the model path shows; NaN when it must be rebuilt
 }
 
-+ (Class)layerClass { return CAShapeLayer.class; }
 - (CALayer *)makeBackingLayer { return [CAShapeLayer layer]; }
 
 - (instancetype)initWithFrame:(NSRect)frame
@@ -43,8 +42,9 @@ static BOOL SparkShapeNumber(id value) { return [value isKindOfClass:NSNumber.cl
   NSUInteger stride = 0, segments = 0;
   for (id subpath in subpaths) {
     if (![subpath isKindOfClass:NSArray.class] || [subpath count] != 2 || !SparkShapeNumber(subpath[0]) || ![subpath[1] isKindOfClass:NSNumber.class]) { *error = @"A subpath is [segments, closed]"; return NO; }
+    // Range-checked as a double first: only then does it fit an NSUInteger.
     const double count = [subpath[0] doubleValue];
-    if (count < 1 || count != std::floor(count) || (segments += (NSUInteger)count) > kSparkMotionShapeSegmentLimit) {
+    if (count < 1 || count > kSparkMotionShapeSegmentLimit || count != std::floor(count) || (segments += (NSUInteger)count) > kSparkMotionShapeSegmentLimit) {
       *error = [NSString stringWithFormat:@"A shape path has 1 to %lu cubic segments", (unsigned long)kSparkMotionShapeSegmentLimit];
       return NO;
     }
