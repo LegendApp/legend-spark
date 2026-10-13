@@ -9,7 +9,8 @@
 #import <RNDesktopApp/SparkTestDriver.h>
 #include <sys/sysctl.h>
 
-// State set by the test driver's simulateSystemEvent (docs/system.md#testing-system-events); empty outside driver runs.
+// A driver run's system state (docs/system.md#testing-system-events): fixed values from driver start, which
+// simulateSystemEvent's state fields replace. nil outside driver runs.
 static NSMutableDictionary *overrides;
 
 static NSString *Thermal(NSProcessInfoThermalState state) {
@@ -33,7 +34,7 @@ NSDictionary *SparkSystemStateInfo(NSString **error) {
   [NSTimeZone resetSystemTimeZone];
   NSMutableDictionary *info = [@{ @"translated": @(Translated()), @"timeZone": NSTimeZone.systemTimeZone.name,
     @"lowPowerMode": @(process.isLowPowerModeEnabled), @"thermalState": thermal } mutableCopy];
-  for (NSString *key in @[@"lowPowerMode", @"thermalState", @"onBattery"]) if (overrides[key]) info[key] = overrides[key];
+  for (NSString *key in @[@"lowPowerMode", @"thermalState", @"onBattery", @"batteryLevel", @"idleSeconds", @"timeZone"]) if (overrides[key]) info[key] = overrides[key];
   return info;
 }
 
@@ -55,17 +56,21 @@ static NSDictionary *NetworkStatus(nw_path_t path, NSString **error) {
     @"socks": Proxy(settings, kCFNetworkProxiesSOCKSEnable, kCFNetworkProxiesSOCKSProxy, kCFNetworkProxiesSOCKSPort),
     @"autoConfigURL": autoConfig.length ? autoConfig : NSNull.null,
   };
-  // A driver-run override replaces the whole path: an offline path has no interfaces.
-  if ([overrides[@"network"] isEqual:@"offline"]) return @{ @"status": @"offline", @"interfaces": @[], @"expensive": @NO, @"constrained": @NO, @"proxies": proxies };
   NSMutableArray *interfaces = [NSMutableArray new];
   NSArray *types = @[@[@(nw_interface_type_wifi), @"wifi"], @[@(nw_interface_type_wired), @"wired"], @[@(nw_interface_type_cellular), @"cellular"],
     @[@(nw_interface_type_loopback), @"loopback"], @[@(nw_interface_type_other), @"other"]];
   for (NSArray *type in types) if (nw_path_uses_interface_type(path, (nw_interface_type_t)[type[0] intValue])) [interfaces addObject:type[1]];
-  NSString *reported = [overrides[@"network"] isEqual:@"online"] ? @"online"
-    : status == nw_path_status_satisfied ? @"online" : status == nw_path_status_satisfiable ? @"requiresConnection" : @"offline";
+  NSString *reported = status == nw_path_status_satisfied ? @"online" : status == nw_path_status_satisfiable ? @"requiresConnection" : @"offline";
   return @{ @"status": reported, @"interfaces": interfaces, @"expensive": @(nw_path_is_expensive(path)), @"constrained": @(nw_path_is_constrained(path)), @"proxies": proxies };
 }
 void SparkSystemNetworkStatus(NSTimeInterval timeout, void (^completion)(NSDictionary *, NSString *, NSString *)) {
+  // A driver run reports a fixed path and no proxies instead of the Mac's; an offline one has no interfaces.
+  if (overrides) {
+    BOOL online = [overrides[@"network"] isEqual:@"online"];
+    completion(@{ @"status": overrides[@"network"], @"interfaces": online ? @[@"wired"] : @[], @"expensive": @NO, @"constrained": @NO,
+      @"proxies": @{ @"http": NSNull.null, @"https": NSNull.null, @"socks": NSNull.null, @"autoConfigURL": NSNull.null } }, nil, nil);
+    return;
+  }
   // A path monitor delivers the current path first; this one stops after it, or at the timeout.
   nw_path_monitor_t probe = nw_path_monitor_create();
   if (!probe) { completion(nil, @"E_NATIVE", @"Could not create a network path monitor"); return; }
@@ -239,6 +244,14 @@ static BOOL IsHex(id value) {
 @end
 @implementation SparkSystemStateDriver
 + (void)load {
+  // What a driver run reports for the host state no simulateSystemEvent has set: an idle, cool Mac on AC power with no
+  // battery, in UTC, on a wired network without proxies, with invert colors and keyboard navigation off. The other
+  // appearance preferences are pinned by launch arguments (docs/test-driver.md#pinned-host-settings).
+  SparkTestDriverObserveStart(^{
+    overrides = [@{ @"lowPowerMode": @NO, @"thermalState": @"nominal", @"onBattery": @NO, @"batteryLevel": NSNull.null, @"idleSeconds": @0,
+      @"timeZone": @"UTC", @"network": @"online" } mutableCopy];
+    SparkSimulateAppearancePreferences(@{ @"invertColors": @NO, @"keyboardNavigation": @NO });
+  });
   SparkTestDriverRegisterCommand(@"simulateSystemEvent", ^(NSDictionary *request, SparkTestDriverReply reply) {
     NSArray *plain = @[@"sleep", @"wake", @"lock", @"unlock", @"sessionActive", @"sessionInactive", @"proxyChanged", @"localeChanged",
       @"timeZoneChanged", @"clockChanged", @"displaysChanged"];
@@ -270,7 +283,7 @@ static BOOL IsHex(id value) {
     if (!observed) { reply(DriverFailure(@"E_NO_OBSERVER", [NSString stringWithFormat:@"No onSystemEvent registration receives %@", type])); return; }
     if ([type isEqual:@"memoryPressure"]) { SparkEmit(@{ @"type": type, @"level": values[@"level"] }); reply(@{ @"ok": @YES }); return; }
     if ([@[@"appearanceChanged", @"systemColorsChanged", @"accessibilityDisplayChanged"] containsObject:type]) SparkSimulateAppearancePreferences(values);
-    else if (values.count) { if (!overrides) overrides = [NSMutableDictionary new]; [overrides addEntriesFromDictionary:values]; }
+    else [overrides addEntriesFromDictionary:values];
     if (values.count) SparkTestDriverDidSimulateState(values);
     SparkEmit(@{ @"type": type });
     reply(@{ @"ok": @YES });

@@ -1,5 +1,6 @@
 #import "SparkDisplays.h"
 #import "SparkWindowGeometry.h"
+#import <RNDesktopApp/SparkTestDriver.h>
 
 static NSArray<NSDictionary *> *Simulated;
 static NSNotificationName const SimulationChanged = @"SparkDisplaysSimulationChanged";
@@ -156,6 +157,7 @@ static void Reconfigured(CGDirectDisplayID, CGDisplayChangeSummaryFlags flags, v
 @interface SparkDisplayObserver ()
 @property (copy) void (^changed)(void);
 @property NSArray *tokens;
+@property BOOL followsHost; // observes the Mac's displays (not in driver mode)
 @end
 @implementation SparkDisplayObserver
 - (instancetype)initWithHandler:(void (^)(void))changed {
@@ -164,16 +166,20 @@ static void Reconfigured(CGDirectDisplayID, CGDisplayChangeSummaryFlags flags, v
   NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
   __weak SparkDisplayObserver *weak = self;
   void (^notify)(NSNotification *) = ^(NSNotification *) { [weak notify]; };
-  _tokens = @[[center addObserverForName:NSApplicationDidChangeScreenParametersNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:notify],
-    [center addObserverForName:NSScreenColorSpaceDidChangeNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:notify],
-    [center addObserverForName:SimulationChanged object:nil queue:NSOperationQueue.mainQueue usingBlock:notify]];
+  _tokens = @[[center addObserverForName:SimulationChanged object:nil queue:NSOperationQueue.mainQueue usingBlock:notify]];
+  // A driver run follows only simulated displays (docs/displays.md#simulated-displays), whatever the Mac's displays do.
+  if (SparkTestDriverActive()) return self;
+  _tokens = [_tokens arrayByAddingObjectsFromArray:@[
+    [center addObserverForName:NSApplicationDidChangeScreenParametersNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:notify],
+    [center addObserverForName:NSScreenColorSpaceDidChangeNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:notify]]];
   CGDisplayRegisterReconfigurationCallback(Reconfigured, (__bridge void *)self);
+  _followsHost = YES;
   return self;
 }
 - (void)notify { if (self.changed) self.changed(); }
 - (void)stop {
   if (!self.tokens) return;
-  CGDisplayRemoveReconfigurationCallback(Reconfigured, (__bridge void *)self);
+  if (self.followsHost) CGDisplayRemoveReconfigurationCallback(Reconfigured, (__bridge void *)self);
   for (id token in self.tokens) [NSNotificationCenter.defaultCenter removeObserver:token];
   self.tokens = nil; self.changed = nil;
 }

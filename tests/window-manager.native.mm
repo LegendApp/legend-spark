@@ -30,13 +30,14 @@ namespace ReactMarker { struct StartupLogger {
 }
 @interface RCTBridge : NSObject @end
 @implementation RCTBridge @end
+static NSMutableArray<NSString *> *sentEvents;
 @interface RCTEventEmitter : NSObject
 @property RCTBridge *bridge;
 - (void)sendEventWithName:(NSString *)name body:(id)body;
 - (void)invalidate;
 @end
 @implementation RCTEventEmitter
-- (void)sendEventWithName:(NSString *)name body:(id)body {}
+- (void)sendEventWithName:(NSString *)name body:(id)body { [sentEvents addObject:name]; }
 - (void)invalidate {}
 @end
 @interface RCTRootViewFactory : NSObject
@@ -378,5 +379,16 @@ int main() { @autoreleasepool {
   assert(!chrome.visible && SparkDriverShown(chrome));
   driverActive = NO;
   [manager.windows removeObjectForKey:@"chrome"]; [chrome close];
+  // The Mac's display changes reach onDisplaysChanged outside a driver run only.
+  sentEvents = [NSMutableArray new];
+  for (NSNumber *driven in @[@NO, @YES]) {
+    driverActive = driven.boolValue;
+    RNWindowManager *observer = [RNWindowManager new];
+    observer.hasListeners = YES;
+    [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidChangeScreenParametersNotification object:NSApp];
+    assert([sentEvents isEqual:@[@"onDisplaysChanged"]]);
+    [NSNotificationCenter.defaultCenter removeObserver:observer];
+  }
+  driverActive = NO;
   puts("Window manager controls passed");
 } }

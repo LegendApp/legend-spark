@@ -166,6 +166,11 @@ int main()
     initial[Opacity] = 0.5;
     [motion registerHost:host initial:initial];
     CHECK(host.layer.opacity == 0.5f);
+    // A driver run follows only simulated system state: the Mac's Reduce Motion, Low Power Mode, display and occlusion
+    // observers are not installed (only window close is), and the pinned values hold whatever the Mac reports.
+    CHECK([[motion valueForKey:@"observers"] count] == 1 && ![motion valueForKey:@"accessibilityObserver"]);
+    CHECK([JSON(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion environment:7 resolve:resolve reject:reject]; })->value)
+      isEqual:(@{ @"reduceMotion": @NO, @"reduceTransparency": @NO, @"lowPowerMode": @NO, @"maximumFrameRate": @60, @"frameRate": @60, @"windowVisible": @YES })]);
 
     // Malformed requests reject with E_INVALID_ARGUMENT instead of raising.
     NSDictionary *keyframes = @{ @"type": @"keyframes", @"durationMs": @200, @"values": @[@1, @2], @"offsets": @[@0.5, @1], @"easings": @[@[@0, @0, @1, @1]] };
@@ -481,11 +486,10 @@ int main()
     [motion simulate:@{ @"lowPowerMode": @NO, @"maximumFramesPerSecond": @60 }];
     CHECK([environment(9)[@"frameRate"] isEqual:@60] && ((CAKeyframeAnimation *)[lifecycleCard.layer animationForKey:@"spark.motion.transform"]).values.count == 31);
     CHECK([JSON0(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion telemetry:9 resolve:resolve reject:reject]; })->value)[@"frameRate"] isEqual:@60]);
-    // null stops simulating the display's rate (simulateDisplays' restore): the real display's rate, or null without one.
+    // null (simulateDisplays' restore) returns to the driver's 60 Hz, never the real display's rate.
+    [motion simulate:@{ @"maximumFramesPerSecond": @120 }];
     [motion simulate:@{ @"maximumFramesPerSecond": NSNull.null }];
-    NSScreen *screen = other.screen ?: NSScreen.mainScreen;
-    CHECK([environment(9)[@"maximumFrameRate"] isEqual:screen ? (id)@(screen.maximumFramesPerSecond) : NSNull.null]);
-    [motion simulate:@{ @"maximumFramesPerSecond": @60 }];
+    CHECK([environment(9)[@"maximumFrameRate"] isEqual:@60]);
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:500 resolve:resolve reject:reject]; });
     CHECK(fast->resolved && [JSON(fast->value)[@"finished"] isEqual:@YES]);
 
@@ -1150,6 +1154,8 @@ int main()
     [unshown.contentView addSubview:offscreen];
     CHECK((unshown.occlusionState & NSWindowOcclusionStateVisible) == 0);
     [app registerHost:offscreen initial:kIdentity];
+    // Outside a driver run motion follows the Mac: power, screen parameters, window screens, occlusion, close and Reduce Motion.
+    CHECK([[app valueForKey:@"observers"] count] == 5 && [app valueForKey:@"accessibilityObserver"]);
     CHECK([JSON(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [app environment:11 resolve:resolve reject:reject]; })->value)[@"windowVisible"] isEqual:@NO]);
     Outcome *offscreenSlide = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [app run:Request(@"offscreen", 11, @{ @"translateX": Timing(30, 5000) }) resolve:resolve reject:reject]; });
     CHECK(offscreenSlide->resolved && [JSON(offscreenSlide->value)[@"finished"] isEqual:@YES] && offscreen.motionModel[TranslateX] == 30 && offscreen.layer.animationKeys.count == 0);

@@ -18,8 +18,8 @@ export const LOCALE = /^[A-Za-z]{2,3}([-_][A-Za-z0-9]+)*$/;
 
 const JS_LOCATION = "-RCT_jsLocation", BUNDLE_URL = "SPARK_BUNDLE_URL";
 /**
- * Host settings AppKit renders from, pinned for every driver launch in the app's argument domain (launch arguments), so
- * captures do not depend on the Mac's settings. Nothing outside the launched process changes.
+ * Host settings AppKit renders from or Spark reports, pinned for every driver launch in the app's argument domain (launch
+ * arguments), so captures and flows do not depend on the Mac's settings. Nothing outside the launched process changes.
  * docs/test-driver.md#pinned-host-settings lists what each pins and what cannot be pinned.
  */
 const PINNED_DEFAULTS: Readonly<Record<string, string>> = {
@@ -32,6 +32,9 @@ const PINNED_DEFAULTS: Readonly<Record<string, string>> = {
   differentiateWithoutColor: "NO",
   AppleShowScrollBars: "WhenScrolling",
   AppleFontSmoothing: "2",
+  reduceMotion: "NO",
+  AppleInterfaceStyle: "Light",
+  AppleInterfaceStyleSwitchesAutomatically: "NO",
 };
 const PINNED = Object.entries(PINNED_DEFAULTS).flatMap(([key, value]) => [`-${key}`, value]);
 export const plist = (app: string, key: string) =>

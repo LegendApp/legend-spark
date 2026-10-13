@@ -1007,10 +1007,13 @@ RCT_EXPORT_MODULE(NativeWindowManager)
                                            selector:@selector(windowDidBecomeKey:)
                                                name:NSWindowDidBecomeKeyNotification
                                              object:nil];
-    [NSNotificationCenter.defaultCenter addObserver:self
-                                           selector:@selector(screensChanged:)
-                                               name:NSApplicationDidChangeScreenParametersNotification
-                                             object:nil];
+    // A driver run never reports the Mac's display changes (docs/test-driver.md).
+    if (!LegendTestDriverActive()) {
+      [NSNotificationCenter.defaultCenter addObserver:self
+                                             selector:@selector(screensChanged:)
+                                                 name:NSApplicationDidChangeScreenParametersNotification
+                                               object:nil];
+    }
 #endif
   }
   return self;

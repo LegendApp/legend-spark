@@ -137,11 +137,12 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 /**
  * The driver calls it when it starts. Records each view's latest motion (the engine's telemetry is off by default) and
  * every cue, which no longer plays (docs/motion.md#cues), stops following the real occlusion of windows the driver
- * never shows (they count as visible unless simulateWindow:visible: hides them), and pins Reduce Motion and Low Power
- * Mode off until simulate: changes them.
+ * never shows (they count as visible unless simulateWindow:visible: hides them), and pins Reduce Motion, Reduce
+ * Transparency and Low Power Mode off and the frame rate at 60 Hz until simulate: changes them. Views registered after
+ * it follow no change of the Mac's settings, displays or occlusion.
  */
 - (void)recordTelemetry;
-/** Overrides what motion reads of the system: reduceMotion, reduceTransparency and lowPowerMode (simulateSystemEvent's fields) and maximumFramesPerSecond. */
+/** Overrides what motion reads of the system: reduceMotion, reduceTransparency and lowPowerMode (simulateSystemEvent's fields) and maximumFramesPerSecond; null restores the pinned value. */
 - (void)simulate:(NSDictionary *)values;
 /** Treats `window` as hidden or visible, as a change of its occlusion state would. */
 - (void)simulateWindow:(NSWindow *)window visible:(BOOL)visible;

@@ -865,14 +865,16 @@ and for Metal `renderedFrames` and `renderedValue`, the value of the last frame 
 ### Simulation in the test driver
 
 The driver never changes the Mac's settings. A driver run pins Reduce Motion and Low Power Mode
-off for motion, like the driver's other [pinned host settings](test-driver.md#pinned-host-settings),
-so flows and goldens do not depend on the Mac's settings; Reduce Transparency is pinned off for
-`getMotionEnvironment` too. Motion follows the simulated state other driver commands set:
-`simulateSystemEvent`'s `reduceMotion` and `reduceTransparency` (`accessibilityDisplayChanged`) and
-`lowPowerMode` (`lowPowerChanged`), and `simulateDisplays`' primary display's
-`refreshRate.maximum` (`restore` stops simulating it). They reach motion through
-`SparkTestDriverDidSimulateState`. A driven app's windows are never on screen, so motion ignores
-their real occlusion there: they count as visible until `simulateOcclusion` hides them. The flow
+off and the display's frame rate at 60 Hz for motion, like the driver's other
+[pinned host settings](test-driver.md#pinned-host-settings), so flows and goldens do not depend on
+the Mac's settings or displays; Reduce Transparency is pinned off for `getMotionEnvironment` too.
+Motion follows the simulated state other driver commands set: `simulateSystemEvent`'s `reduceMotion`
+and `reduceTransparency` (`accessibilityDisplayChanged`) and `lowPowerMode` (`lowPowerChanged`), and
+`simulateDisplays`' primary display's `refreshRate.maximum` (`restore` returns to 60 Hz). They reach
+motion through `SparkTestDriverDidSimulateState`. A driven app's windows are never on screen, so
+they count as visible until `simulateOcclusion` hides them. Motion installs no observer of the Mac's
+Low Power Mode, Reduce Motion, display configuration, window screens or occlusion in a driver run,
+so none of their changes re-bakes or pauses an animation there (`tests/motion-coordinator.native.mm`). The flow
 command `assertPaused: { target, when: windowHidden }` is built on it.
 
 A capture (the driver's `capture`) renders views in-process with `cacheDisplayInRect:`, which

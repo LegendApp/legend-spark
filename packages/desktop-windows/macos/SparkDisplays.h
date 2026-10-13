@@ -41,7 +41,8 @@ FOUNDATION_EXPORT NSDictionary *SparkPointer(void);
 
 // Calls `changed` on the main thread after AppKit reports new screen parameters (connect, disconnect,
 // arrangement, resolution, scale, work area, EDR headroom), a screen color space change, a Core Graphics
-// display reconfiguration (mode and refresh rate) or a simulation change. Not every call is a change.
+// display reconfiguration (mode and refresh rate) or a simulation change. Not every call is a change. In driver
+// mode only simulation changes call it.
 @interface SparkDisplayObserver : NSObject
 - (instancetype)initWithHandler:(void (^)(void))changed;
 - (void)stop;

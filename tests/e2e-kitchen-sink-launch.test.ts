@@ -76,6 +76,9 @@ test.skipIf(process.platform !== "darwin")("every driver launch pins the host re
       "-differentiateWithoutColor", "NO",
       "-AppleShowScrollBars", "WhenScrolling",
       "-AppleFontSmoothing", "2",
+      "-reduceMotion", "NO",
+      "-AppleInterfaceStyle", "Light",
+      "-AppleInterfaceStyleSwitchesAutomatically", "NO",
       "-AppleLanguages", "(ar)", "-AppleLocale", "ar",
       "-AppleShowScrollBars", "Always",
     ]);
