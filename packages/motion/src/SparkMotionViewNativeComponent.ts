@@ -1,5 +1,6 @@
 import type { HostComponent, ViewProps } from "react-native";
 import codegenNativeComponent from "react-native/Libraries/Utilities/codegenNativeComponent";
+import type { WithDefault } from "react-native/Libraries/Types/CodegenTypes";
 
 export interface NativeProps extends ViewProps {
   /** JSON of the validated `initial` values, applied once at mount. */
@@ -8,6 +9,8 @@ export interface NativeProps extends ViewProps {
   layout?: string;
   /** Shared-element id within the window. */
   sharedId?: string;
+  /** The shared id also matches MotionViews with this flag in other windows. */
+  sharedAcrossWindows?: WithDefault<boolean, false>;
   /** JSON of the validated layout and shared-element transition. */
   transition?: string;
   /** MotionMaterial: JSON of the validated material (`material`, `blendingMode`, `state`, `emphasized`); a change crossfades. */

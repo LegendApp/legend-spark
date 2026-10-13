@@ -121,14 +121,65 @@ The API is imperative and works from any code holding a `MotionView` (or `Motion
   same id showed when the mounting transaction began, in the same window: translation from the
   centre difference, scale from the size ratio. The source must be mounted when the destination
   mounts (React commits both changes together, or the source is still exiting in a
-  `MotionPresence`). Both stay visible if both stay mounted. Cross-window transitions are #179.
+  `MotionPresence`). Both stay visible if both stay mounted. Across windows, see
+  [Cross-window shared elements](#cross-window-shared-elements).
 * **Transition.** `transition` is `{ type?: 'spring', …spring parameters }` (the default is the
   `smooth` preset) or `{ type: 'timing', durationMs, easing }`; animation options such as
   `velocity`, `delayMs` or `repeat` are `E_UNSUPPORTED_OPTION`, and `transition` without `layout`
   or `sharedId` is `E_INVALID_ARGUMENT`.
 * The engine's telemetry records these hand-offs like any animation, so `assertMotion`,
   `captureMotion` and frame captures work on them ([Motion telemetry](#motion-telemetry)).
-* Reduce Motion is not applied yet; motion accessibility is #177.
+* Under Reduce Motion, hand-offs play the `fade` alternate ([Reduce Motion](#reduce-motion)).
+
+## Cross-window shared elements
+
+```tsx
+// The thumbnail, in the main window.
+<MotionView sharedId={`photo-${id}`} sharedAcrossWindows style={styles.thumbnail}>…</MotionView>
+// The photo window's root, opened with openWindowFrom(…, { from: thumbnailRect }) so the window zooms out of it too.
+<MotionView sharedId={`photo-${id}`} sharedAcrossWindows style={styles.photo}>…</MotionView>
+```
+
+`sharedAcrossWindows` lets a `sharedId` match MotionViews in other windows (both views set it; without it an id
+matches only in its own window, as before). It needs `sharedId` (`E_INVALID_ARGUMENT` otherwise).
+
+* **Thumbnail → window.** A MotionView with the flag that mounts without a same-window source, as its window is
+  shown, flies in from the MotionView with its id and the flag in another window that is shown (visible and not
+  minimized) and not closing (the most recently mounted one when there are several). "As its window is shown" means
+  within 2 s after `@legendapp/spark/windows` starts showing the window (`openWindow`, `openWindowFrom`'s zoom,
+  `showWindow`, a pool reuse), or before its first show: a destination that mounts in a window that has not shown yet
+  waits up to 2 s for that show. So a window opened with `openWindowFrom` (which opens it hidden and shows it as its
+  zoom starts) zooms out of the thumbnail while the photo flies out of it, and a view that mounts again in a window
+  that has been showing (a screen change, virtualization, a restore) does not fly.
+* **Window → origin on close.** When a window with such a MotionView starts to leave (its close transition starts
+  shrinking it, it is parked in its pool, or it closes), the element flies back to the view it came from (else the
+  most recently mounted counterpart) as the window shrinks away.
+* **The flight.** It is a hand-off of the destination's translation and scale, started from the source's box (where it
+  shows, with its velocity) in screen coordinates, with the destination's `transition`, so `assertMotion`,
+  `captureMotion` and `getMotionState` report it like an in-window hand-off. A borderless flight window, above both
+  windows, shows a snapshot of the source crossfading into one of the destination while both views are concealed
+  (their layers hide; the test driver still finds them). The window follows the destination's box: if its window moves
+  during the flight (zooming in, dragged), the element still leaves from the source and lands on the destination.
+  Boxes are screen rectangles, so displays with different backing scale factors and right-to-left layouts need nothing
+  more: each snapshot is drawn at its window's backing scale, no larger than the largest box the flight shows, and
+  scaled to the flight's box.
+* **The flight window** never becomes key or main, ignores the mouse, stays out of the Window menu, Mission Control,
+  window cycling and state restoration, and is not a Spark window: window lists, sessions and workspaces never see
+  it. It is ordered out and released when the flight lands. In a driven app it is never shown (the driver never shows windows); it still
+  moves, and flows check the hand-off through motion telemetry on the virtual clock.
+* **Interruption.** One flight per shared id. A flight that starts while another of the id runs (the window closes while
+  its photo is still arriving) starts where the element shows, with its velocity. The source's window closing
+  mid-flight does not stop it (the snapshot flies on). The destination unmounting ends it, and the source shows again.
+  A close that an interruption cancels leaves both views where they landed.
+* **Reduce Motion.** Nothing flies and no snapshot is taken. A destination that arrives plays the hand-off's `fade`
+  alternate (it is at its place at once and fades in there, while the window zooms as a cross-fade), and a view the
+  element would fly back to stays as it shows.
+* **Limits.** A pooled window that is used again with its MotionView still mounted does not fly in (the view does not
+  mount again). Window showing and departure signals come from `@legendapp/spark/windows`
+  (`packages/desktop-app/macos/SparkWindowTransitions.h`); a window that module did not show has no arrivals, and one
+  closed by other means flies its elements back as it closes.
+* **Platforms.** macOS, where motion is available ([Platform support](#platform-support)); on Windows `MotionView`
+  throws `E_UNSUPPORTED_PLATFORM` like every layout and shared-element prop (#376).
 
 ## Architecture
 
@@ -930,7 +981,8 @@ Composition sprite pool, with the same budget and Reduce Motion rules.
 `MotionPresence` and `MotionView`'s layout, presence and shared-element props are typed
 unsupported the same way: both components throw `E_UNSUPPORTED_PLATFORM` when rendered.
 Layout and shared elements will reuse `Engine::handoff` with the Windows glue comparing layout
-boxes around each mounting transaction (#376).
+boxes around each mounting transaction (#376); cross-window shared elements need a WinUI flight window over the
+windows, a `Visual` snapshot (`CompositionVisualSurface`) and the window module's departure signal there too (#376).
 
 ## Tradeoffs and limits
 

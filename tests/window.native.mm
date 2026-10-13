@@ -454,8 +454,11 @@ static void TestWindowPools(RNDesktopWindows *api) {
     Call(api, @"closeGuard", @{ @"id": @"pooled", @"instanceId": first, @"guardId": @"g", @"enabled": @YES }); assert(!failure);
     [events removeAllObjects];
     Call(api, @"close", @{ @"id": @"pooled" }); assert(!reply && [events.lastObject[@"type"] isEqual:@"beforeClose"]);
+    __block NSUInteger parkings = 0;
+    id parkObserver = [NSNotificationCenter.defaultCenter addObserverForName:SparkWindowDepartureNotification object:window queue:nil usingBlock:^(NSNotification *note) { if ([note.userInfo[@"departing"] boolValue]) parkings++; }];
     Call(api, @"replyClose", @{ @"id": @"pooled", @"instanceId": first, @"guardId": @"g", @"requestId": events.lastObject[@"requestId"], @"allow": @YES });
-    assert(windows[@"pooled"] == window && !ReportedVisible(api, @"pooled"));
+    assert(windows[@"pooled"] == window && !ReportedVisible(api, @"pooled") && parkings == 1);
+    [NSNotificationCenter.defaultCenter removeObserver:parkObserver];
     NSUInteger closed = [events indexOfObjectPassingTest:^BOOL(NSDictionary *event, NSUInteger, BOOL *) { return [event[@"type"] isEqual:@"closed"]; }];
     assert(closed != NSNotFound && [events[closed][@"instanceId"] isEqual:first]);
     Call(api, @"observe", @{ @"id": @"pooled" }); NSString *second = SparkArgs(reply)[@"instanceId"]; assert(second.length && ![second isEqual:first]);
@@ -594,20 +597,30 @@ static void TestChoreography(RNDesktopWindows *api) {
     assert(HandoffTarget(window, transition) == home && !HandoffTarget(window, @{}) && HandoffTarget(home, @{ @"focus": @"choreo" }) == window);
     Call(api, @"closeTransition", @{ @"id": @"choreo", @"transition": transition }); assert(!failure);
     NSString *closed = nil;
-    Begin(api, @"close", @{ @"id": @"choreo" }, &closed); assert(!closed && windows[@"choreo"] == window);
+    // The shrink's start announces the window's departure (motion's cross-window shared elements fly out then); an
+    // interrupted shrink takes it back.
+    NSMutableArray<NSNumber *> *departures = [NSMutableArray new];
+    id departureObserver = [NSNotificationCenter.defaultCenter addObserverForName:SparkWindowDepartureNotification object:window queue:nil usingBlock:^(NSNotification *note) { [departures addObject:note.userInfo[@"departing"]]; }];
+    Begin(api, @"close", @{ @"id": @"choreo" }, &closed); assert(!closed && windows[@"choreo"] == window && [departures isEqual:@[@YES]]);
     DriverClock(YES, 50); assert(fabs(window.alphaValue - 0.5) < 0.01 && !closed);
     Begin(api, @"animate", @{ @"id": @"choreo", @"bounds": @{ @"displayId": @"901", @"x": @100, @"y": @100, @"width": @400, @"height": @300 }, @"durationMs": @100, @"easing": @"linear" }, &first);
-    assert([closed isEqual:@"{\"closed\":false,\"reason\":\"interrupted\"}"] && windows[@"choreo"] == window);
+    assert([closed isEqual:@"{\"closed\":false,\"reason\":\"interrupted\"}"] && windows[@"choreo"] == window && [departures isEqual:(@[@YES, @NO])]);
     DriverClock(YES, 100); assert(Result(first, YES, NO) && window.alphaValue == 1 && Near(Bounds(window), 100, 100, 400, 300));
     Begin(api, @"close", @{ @"id": @"choreo" }, &closed);
     DriverClock(YES, 100); Pump();
-    assert([closed isEqual:@"{\"closed\":true}"] && !windows[@"choreo"]);
+    assert([closed isEqual:@"{\"closed\":true}"] && !windows[@"choreo"] && [departures isEqual:(@[@YES, @NO, @YES])]);
+    [NSNotificationCenter.defaultCenter removeObserver:departureObserver];
     // Reduce Motion: a zoom is a fade at the window's frame, and a move is immediate.
     SparkTestDriverDidSimulateState(@{ @"reduceMotion": @YES });
     NSWindow *calm = RealWindow(@"choreo-calm");
     Call(api, @"completeOpen", @{ @"id": @"choreo-calm", @"size": @{ @"width": @400, @"height": @300 }, @"position": @{ @"displayId": @"901", @"x": @100, @"y": @100 }, @"show": @NO }); assert(!failure);
+    // A hidden window that starts to show tells other modules once (motion's cross-window shared elements arrive then).
+    __block NSUInteger showings = 0;
+    id showingObserver = [NSNotificationCenter.defaultCenter addObserverForName:SparkWindowShowingNotification object:calm queue:nil usingBlock:^(NSNotification *) { showings++; }];
     Begin(api, @"zoomIn", @{ @"id": @"choreo-calm", @"from": @{ @"displayId": @"901", @"x": @0, @"y": @50, @"width": @40, @"height": @30 }, @"durationMs": @200, @"easing": @"linear" }, &zoom);
-    assert(!zoom && Near(Bounds(calm), 100, 100, 400, 300) && calm.alphaValue == 0);
+    assert(!zoom && Near(Bounds(calm), 100, 100, 400, 300) && calm.alphaValue == 0 && showings == 1);
+    Call(api, @"show", @{ @"id": @"choreo-calm" }); assert(showings == 1);
+    [NSNotificationCenter.defaultCenter removeObserver:showingObserver];
     DriverClock(YES, 100); assert(fabs(calm.alphaValue - 0.5) < 0.01);
     DriverClock(YES, 100); assert(Result(zoom, YES, YES));
     Call(api, @"animate", @{ @"id": @"choreo-calm", @"bounds": @{ @"displayId": @"901", @"x": @200, @"y": @100, @"width": @400, @"height": @300 }, @"durationMs": @200 });

@@ -6,7 +6,8 @@ intent: >
   masked. Springs, Keyframes and timelines, and Accessibility, power and lifecycle are at rest; the last shows its
   environment readout unmasked, since a driver run pins motion's system state and a 60 Hz frame rate. Scroll link and JS block starts a looping runner on mount,
   so the motion clock is switched to virtual before that screen opens: the runner mounts paused at its start. Layout,
-  presence and shared elements is at rest (its rows' enter animations start where they are). Visual effects is at rest.
+  presence and shared elements is at rest (its rows' enter animations start where they are). Cross-window shared
+  elements is at rest, its photo window closed and its readout showing the thumbnails still. Visual effects is at rest.
   Backdrop materials is at rest, its within-window material over the stripes; its Liquid Glass availability readout,
   which depends on the Mac's macOS, is masked. Shapes is at rest: the circle filled blue, the checkmark not drawn yet and
   the progress ring at a quarter. Shaders and particles is at rest: no effect is
@@ -35,6 +36,10 @@ matrix:
 - assertVisible: { id: motion-system-layout-root }
 - assertVisible: { id: motion-system-layout-thumb-3 }
 - assertScreenshot: { golden: motion-system-layout, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://motion-system/shared-windows", stopApp: false }
+- assertVisible: { id: motion-system-shared-windows-root }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-thumb-3-still-scale-1.00-opacity-1.00 }, timeout: 5s }
+- assertScreenshot: { golden: motion-system-shared-windows, mask: [{ id: infra-shell-sidebar }] }
 - launchApp: { openUrl: "spark-ks://motion-system/visual-effects", stopApp: false }
 - assertVisible: { id: motion-system-visual-effects-root }
 - assertScreenshot: { golden: motion-system-visual-effects, mask: [{ id: infra-shell-sidebar }] }

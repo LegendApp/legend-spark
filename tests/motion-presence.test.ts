@@ -65,7 +65,7 @@ test("transitions: the smooth spring by default, a spring or timing without a ta
   expect(code(() => transitionSpec({ responseMs: -1 }))).toBe("E_INVALID_ARGUMENT");
 });
 
-test("MotionView sends its layout mode, shared id and validated transition to the native view", async () => {
+test("MotionView sends its layout mode, shared id (also across windows) and validated transition to the native view", async () => {
   await render(h(MotionView, { testID: "row", layout: "position" }));
   const row = rendered.root.findByType("SparkMotionView").props;
   expect(row).toMatchObject({ layout: "position", sharedId: undefined });
@@ -74,8 +74,12 @@ test("MotionView sends its layout mode, shared id and validated transition to th
   const photo = rendered.root.findByType("SparkMotionView").props;
   expect(photo).toMatchObject({ layout: undefined, sharedId: "photo-1" });
   expect(JSON.parse(photo.transition)).toEqual({ type: "timing", durationMs: 300, easing: [0.42, 0, 0.58, 1] });
+  await render(h(MotionView, { testID: "flying", sharedId: "photo-1", sharedAcrossWindows: true }));
+  expect(rendered.root.findByType("SparkMotionView").props).toMatchObject({ sharedId: "photo-1", sharedAcrossWindows: true });
   await render(h(MotionView, { testID: "plain" }));
   expect(rendered.root.findByType("SparkMotionView").props.transition).toBeUndefined();
+  expect(code(() => MotionView({ sharedAcrossWindows: true }))).toBe("E_INVALID_ARGUMENT");
+  expect(code(() => MotionView({ sharedId: "photo-1", sharedAcrossWindows: "yes" as never }))).toBe("E_INVALID_ARGUMENT");
   expect(code(() => MotionView({ layout: "size" as never }))).toBe("E_INVALID_ARGUMENT");
   expect(code(() => MotionView({ sharedId: "" }))).toBe("E_INVALID_ARGUMENT");
   expect(code(() => MotionView({ transition: { preset: "snappy" } }))).toBe("E_INVALID_ARGUMENT");

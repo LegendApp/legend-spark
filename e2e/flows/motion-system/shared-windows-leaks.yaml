@@ -1,0 +1,28 @@
+appId: so.legend.spark.examples.kitchensink
+name: Cross-window flights leave nothing behind
+intent: >
+  On Motion system > Cross-window shared elements, on the real clock, the photo window opens out of the first
+  thumbnail and the photo flies in and settles, then the window closes and the photo flies back and settles, three
+  times. The window, view and listener counters return to their baseline: each flight window closes when its flight
+  lands, and the photo window's views go with it.
+checks: [MOT-XWIN-04]
+tags: [motion-system]
+platforms: [macos]
+timeout: 180s
+matrix:
+  appearance: [light]
+  locale: [en]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/shared-windows" }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-root }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-thumb-1-still-scale-1.00-opacity-1.00 }, timeout: 5s }
+- assertNoLeaks:
+    repeat: 3
+    run:
+      - tapOn: { id: motion-system-shared-windows-open-1 }
+      - extendedWaitUntil: { visible: { id: motion-system-shared-windows-window-open }, timeout: 10s }
+      - extendedWaitUntil: { visible: { id: motion-system-shared-windows-photo-still-scale-1.00-opacity-1.00 }, timeout: 10s }
+      - tapOn: { id: motion-system-shared-windows-close }
+      - extendedWaitUntil: { visible: { id: motion-system-shared-windows-window-closed }, timeout: 10s }
+      - extendedWaitUntil: { visible: { id: motion-system-shared-windows-thumb-1-still-scale-1.00-opacity-1.00 }, timeout: 10s }
+- assertNotVisible: { id: motion-system-shared-windows-error }

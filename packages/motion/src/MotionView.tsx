@@ -24,6 +24,11 @@ export interface MotionViewProps extends ViewProps {
   layout?: "position" | "frame";
   /** Shared-element id: a MotionView mounting with it animates from where another MotionView with it showed, in the same window. */
   sharedId?: string;
+  /**
+   * Also match `sharedId` across windows (docs/motion.md#cross-window-shared-elements): mounting flies the element from
+   * the MotionView with the same id and this flag in another window, and closing this view's window flies it back.
+   */
+  sharedAcrossWindows?: boolean;
   /** How `layout` and `sharedId` changes animate. Default: the `smooth` spring. */
   transition?: MotionTransition;
   ref?: Ref<MotionTarget>;
@@ -69,7 +74,7 @@ const CONTENT_PROPERTIES: readonly (readonly [readonly string[], string])[] = [
  * Validates a MotionView's props (it throws while rendering) and renders its native view; a dedicated component passes
  * its content (docs/motion.md#backdrop-materials, #shapes, #shader-effects-and-particles). Internal.
  */
-export function useMotionView({ initial, enter, exit, layout, sharedId, transition, style, ref, ...props }: MotionViewProps, content?: MotionContent) {
+export function useMotionView({ initial, enter, exit, layout, sharedId, sharedAcrossWindows, transition, style, ref, ...props }: MotionViewProps, content?: MotionContent) {
   motionModule();
   const flat = StyleSheet.flatten(style);
   const keys = flat ? Object.keys(flat) : [];
@@ -91,10 +96,12 @@ export function useMotionView({ initial, enter, exit, layout, sharedId, transiti
   if (masked) throw new SparkError("E_UNSUPPORTED_OPTION", `${masked === "style" ? "style clips with a mask (overflow hidden with per-corner radii)" : `initial.${masked}`}: a dissolving MotionShader's mask is its dissolve`);
   if (layout !== undefined && layout !== "position" && layout !== "frame") invalid("layout is position or frame");
   if (sharedId !== undefined && (typeof sharedId !== "string" || !sharedId)) invalid("sharedId must be a non-empty string");
+  if (sharedAcrossWindows !== undefined && typeof sharedAcrossWindows !== "boolean") invalid("sharedAcrossWindows must be a boolean");
+  if (sharedAcrossWindows && sharedId === undefined) invalid("sharedAcrossWindows matches a sharedId; set one");
   if (transition !== undefined && layout === undefined && sharedId === undefined) invalid("transition applies to layout and sharedId changes; set one of them");
   const initialValues = json(initial, values => motionValues(values, "initial"));
   const transitionJson = layout === undefined && sharedId === undefined ? undefined : JSON.stringify(transitionSpec(transition));
   const target = usePresenceMotion(ref, enter, exit);
   const NativeMotionView = getNativeMotionView();
-  return <NativeMotionView {...props} {...content?.native} ref={target} style={style} initialValues={initialValues} layout={layout} sharedId={sharedId} transition={transitionJson} />;
+  return <NativeMotionView {...props} {...content?.native} ref={target} style={style} initialValues={initialValues} layout={layout} sharedId={sharedId} sharedAcrossWindows={sharedAcrossWindows} transition={transitionJson} />;
 }

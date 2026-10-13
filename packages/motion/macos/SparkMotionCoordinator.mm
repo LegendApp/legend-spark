@@ -1,4 +1,5 @@
 #import "SparkMotionCoordinator.h"
+#import "SparkMotionFlight.h"
 #import <CoreImage/CoreImage.h>
 #import <QuartzCore/QuartzCore.h>
 #import <Symbols/Symbols.h>
@@ -319,6 +320,20 @@ static NSString *SparkJSONString(id object)
 @end
 @implementation SparkMotionSharedMark @end
 
+/**
+ * A cross-window shared element in flight (docs/motion.md#cross-window-shared-elements): the destination's hand-off
+ * drives it, and the flight window shows it in screen coordinates while both views are concealed.
+ */
+@interface SparkMotionFlight : NSObject
+@property (nonatomic, copy) NSString *sharedId;
+@property (nonatomic, weak) NSView<SparkMotionHost> *source, *destination;
+@property (nonatomic, strong, nullable) SparkMotionSnapshot *sourceImage, *destinationImage;
+@property (nonatomic, strong) SparkMotionFlightWindow *window;
+/** The destination's layout centre on screen (top-left coordinates) when the flight started. */
+@property (nonatomic) NSPoint anchor;
+@end
+@implementation SparkMotionFlight @end
+
 /** A haptic or sound cue of a running plan, due at an engine time (docs/motion.md#cues). */
 @interface SparkMotionCue : NSObject
 @property (nonatomic, copy) NSString *batch;
@@ -353,6 +368,14 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   NSMapTable<NSView *, SparkMotionLayoutMark *> *_layoutMarks;
   NSMutableDictionary<NSString *, SparkMotionSharedMark *> *_sharedMarks;  // only the latest transaction's
   NSHashTable<NSView *> *_mounting;  // registered, not yet past their first mounting transaction
+  NSMapTable<NSView *, NSNumber *> *_crossHosts;      // hosts with a shared id, by mount order
+  uint64_t _crossMounts;
+  NSMapTable<NSView *, NSView *> *_origins;            // a flight's destination → the view it flew from
+  NSMutableDictionary<NSString *, SparkMotionFlight *> *_flights;  // by shared id: one flight per id
+  NSMapTable<NSView *, NSNumber *> *_awaitingWindow;   // destinations whose window has not shown yet → until when they wait
+  NSMapTable<NSWindow *, NSNumber *> *_showing;        // windows the window module showed → when they started to show
+  NSHashTable<NSWindow *> *_departed;                  // windows whose elements already flew out
+  NSTimer *_flightTimer;                               // steps flights on the real clock
   NSUInteger _sweepGeneration;
   uint64_t _inputEvent;
   NSMutableArray<SparkMotionCue *> *_cues;     // pending, in no particular order
@@ -392,6 +415,20 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     _layoutMarks = [NSMapTable weakToStrongObjectsMapTable];
     _sharedMarks = [NSMutableDictionary new];
     _mounting = [NSHashTable weakObjectsHashTable];
+    _crossHosts = [NSMapTable weakToStrongObjectsMapTable];
+    _origins = [NSMapTable weakToWeakObjectsMapTable];
+    _flights = [NSMutableDictionary new];
+    _awaitingWindow = [NSMapTable weakToStrongObjectsMapTable];
+    _showing = [NSMapTable weakToStrongObjectsMapTable];
+    _departed = [NSHashTable weakObjectsHashTable];
+    // Window departures are window events, not MotionView ones: observed for the coordinator's lifetime.
+    __weak SparkMotionCoordinator *weakSelf = self;
+    [NSNotificationCenter.defaultCenter addObserverForName:SparkWindowDepartureNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+      [weakSelf window:note.object departing:[note.userInfo[@"departing"] boolValue]];
+    }];
+    [NSNotificationCenter.defaultCenter addObserverForName:SparkWindowShowingNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+      [weakSelf windowShowing:note.object];
+    }];
     _cues = [NSMutableArray new];
 #if SPARK_TEST_DRIVER
     _simulated = [NSMutableDictionary new];
@@ -508,6 +545,10 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
 /** A closing window's motion is cancelled: animations stop where they are (finished false), links and recordings end. */
 - (void)windowWillClose:(NSWindow *)window
 {
+  if ([window isKindOfClass:SparkMotionFlightWindow.class]) return;
+  // Its cross-window shared elements fly back first (unless they did as it started to leave), then its motion stops.
+  [self window:window departing:YES];
+  [_departed removeObject:window];
   std::vector<Settled> settled;
   std::vector<Property> all;
   for (int i = 0; i < PropertyCount; i++) all.push_back(Property(i));
@@ -633,6 +674,8 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     [SparkMotionShaderOf(host) removeFrom:host];
   }
   [_hosts removeObjectForKey:@(tag)];
+  // A flight whose destination unmounts ends: the source shows again where it is.
+  for (SparkMotionFlight *flight in _flights.allValues) if (!flight.destination || flight.destination.motionTag == tag) [self endFlight:flight keeping:nil];
   [self settle:settled];
   [self scheduleSweep];
   [self scheduleCues];
@@ -1368,12 +1411,16 @@ static NSRect SparkLayoutRect(NSView *view, NSView *reference)
   [_mounting removeObject:host];
   SparkMotionLayoutMark *before = [_layoutMarks objectForKey:host];
   [_layoutMarks removeObjectForKey:host];
+  // A new window's first transaction can mount its views before its root view is in the window: a cross-window
+  // destination is considered once it is (hostDidMoveToWindow:).
+  if (mounted && !host.window && host.motionSharedId && host.motionSharedAcrossWindows && _engine.hasView(host.motionTag)) { [self awaitWindow:host]; return; }
   if (![self isRegistered:host]) return;
   std::vector<std::pair<Property, State>> from;
   if (mounted) {
+    if (host.motionSharedId) [_crossHosts setObject:@(++_crossMounts) forKey:host];
     // A shared element animates from where another one with its id showed when this transaction began.
     SparkMotionSharedMark *source = host.motionSharedId ? _sharedMarks[host.motionSharedId] : nil;
-    if (!source || source.surface != surface || source.transaction != transaction || source.window != host.window || source.host == host) return;
+    if (!source || source.surface != surface || source.transaction != transaction || source.window != host.window || source.host == host) { [self mountedAcrossWindows:host]; return; }
     const NSRect rect = SparkLayoutRect(host, host.window.contentView);
     if (NSWidth(rect) <= 0 || NSHeight(rect) <= 0) return;
     from = {{TranslateX, {source->box[0] - NSMidX(rect), source->velocity[0]}}, {TranslateY, {source->box[1] - NSMidY(rect), source->velocity[1]}},
@@ -1407,13 +1454,18 @@ static NSRect SparkLayoutRect(NSView *view, NSView *reference)
 /** Starts the host's transition from `from` to where each property was heading. */
 - (void)handoff:(NSView<SparkMotionHost> *)host from:(const std::vector<std::pair<Property, State>> &)from
 {
+  [self handoff:host from:from followHidden:YES];
+}
+/** `followHidden` NO: the hand-off plays even if the view's window counts as hidden now. */
+- (void)handoff:(NSView<SparkMotionHost> *)host from:(const std::vector<std::pair<Property, State>> &)from followHidden:(BOOL)followHidden
+{
   NSDictionary *transition = host.motionTransition;
   if (!transition) return;
   try {
     NSMutableDictionary *template_ = [transition mutableCopy];
     template_[@"to"] = @0;  // each property's own target replaces it
     // A view in a hidden window completes its hand-off at once, like any plan; under Reduce Motion it plays the alternate.
-    [self syncHidden:host.motionTag];
+    if (followHidden) [self syncHidden:host.motionTag];
     std::vector<Settled> settled;
     const BOOL handed = _engine.handoff(host.motionTag, from, SparkSpec(template_, TranslateX), self.now, settled, self.reduceMotion);
     [self moveResumedCues];
@@ -1426,6 +1478,258 @@ static NSRect SparkLayoutRect(NSView *view, NSView *reference)
     // JavaScript validated the transition; only a malformed native prop gets here, and no caller awaits a hand-off.
     NSLog(@"Spark motion: layout transition rejected: %s", failure.message.c_str());
   }
+}
+
+#pragma mark - Cross-window shared elements
+
+/** A box in top-left screen coordinates (y grows downward, like motion's translateY): centre and size. */
+struct SparkBox { double x, y, width, height; };
+/** The view's layout box on screen (motion transforms excluded). */
+static SparkBox SparkScreenBox(NSView *view)
+{
+  const NSRect rect = [view.window convertRectToScreen:[view convertRect:view.bounds toView:nil]];
+  return {NSMidX(rect), -NSMidY(rect), NSWidth(rect), NSHeight(rect)};
+}
+static NSRect SparkScreenFrame(const SparkBox &box)
+{
+  const double width = MAX(1, box.width), height = MAX(1, box.height);
+  return NSMakeRect(box.x - width / 2, -box.y - height / 2, width, height);
+}
+static const Property kFlightProperties[4] = {TranslateX, TranslateY, ScaleX, ScaleY};
+
+/** Where the host shows on screen (its layout box with its translation and scale) and how fast that moves. */
+- (SparkBox)visualBox:(NSView<SparkMotionHost> *)host velocity:(SparkBox *)velocity
+{
+  const SparkBox layout = SparkScreenBox(host);
+  State states[4];
+  for (int i = 0; i < 4; i++) states[i] = _engine.state(host.motionTag, kFlightProperties[i], self.now);
+  *velocity = {states[0].velocity, states[1].velocity, layout.width * states[2].velocity, layout.height * states[3].velocity};
+  return {layout.x + states[0].value, layout.y + states[1].value, layout.width * states[2].value, layout.height * states[3].value};
+}
+
+/** 0 to 1 over the destination's hand-off (its longest running track), 1 once it settled. */
+- (double)flightProgress:(NSInteger)tag
+{
+  double progress = 1;
+  for (Property property : kFlightProperties)
+    if (auto track = _engine.track(tag, property); track && _engine.animating(tag, property, self.now) && track->first->duration() > 0)
+      progress = MIN(progress, MAX(0, (self.now - track->second) / track->first->duration()));
+  return progress;
+}
+- (BOOL)flightMoves:(NSInteger)tag
+{
+  for (Property property : kFlightProperties) if (_engine.animating(tag, property, self.now)) return YES;
+  return NO;
+}
+
+/**
+ * Where a flight shows: the destination's visual box, with the distance its layout moved since the flight started
+ * (its window zooming in, or moved) taken out at the start and back in by the end, so the element leaves from the source
+ * and lands on the destination wherever that is then.
+ */
+- (SparkBox)flightBox:(SparkMotionFlight *)flight velocity:(SparkBox *)velocity
+{
+  NSView<SparkMotionHost> *destination = flight.destination;
+  SparkBox box = [self visualBox:destination velocity:velocity];
+  const SparkBox layout = SparkScreenBox(destination);
+  const double remaining = 1 - [self flightProgress:destination.motionTag];
+  box.x += remaining * (flight.anchor.x - layout.x);
+  box.y += remaining * (flight.anchor.y - layout.y);
+  return box;
+}
+
+/**
+ * The view with the host's shared id and sharedAcrossWindows in another window that is shown and not leaving: the one
+ * the host flew from, else the one that mounted last. nil when there is none.
+ */
+- (nullable NSView<SparkMotionHost> *)crossCounterpart:(NSView<SparkMotionHost> *)host
+{
+  NSView<SparkMotionHost> *found = nil, *origin = (NSView<SparkMotionHost> *)[_origins objectForKey:host];
+  uint64_t latest = 0;
+  for (NSView<SparkMotionHost> *other in [_crossHosts.keyEnumerator allObjects]) {
+    if (other == host || ![self isRegistered:other] || other.window == host.window || !other.motionSharedAcrossWindows || ![other.motionSharedId isEqual:host.motionSharedId]) continue;
+    if (![self windowShown:other.window] || [_departed containsObject:other.window]) continue;
+    if (other == origin) return other;
+    const uint64_t mounted = [[_crossHosts objectForKey:other] unsignedLongLongValue];
+    if (mounted > latest) { latest = mounted; found = other; }
+  }
+  return found;
+}
+
+/** How long a destination waits for its window to show, and how long after a window starts to show its views arrive. */
+static const double kArrivalSeconds = 2;
+
+/** Shown for cross-window shared elements: visible and not minimized (in a driven app, not simulated hidden). */
+- (BOOL)windowShown:(nullable NSWindow *)window
+{
+  if (!window) return NO;
+#if SPARK_TEST_DRIVER
+  if (_driven) return ![_hiddenWindows containsObject:window];
+#endif
+  return window.isVisible && !window.miniaturized;
+}
+
+- (void)awaitWindow:(NSView<SparkMotionHost> *)host { [_awaitingWindow setObject:@(CACurrentMediaTime() + kArrivalSeconds) forKey:host]; }
+
+/**
+ * A host with sharedAcrossWindows mounted without a source in its own window. It is an arrival only while its window
+ * is being shown (the window module showed it within kArrivalSeconds), or when its window has not shown yet: then it
+ * waits up to kArrivalSeconds for the window's first show (openWindowFrom opens its window hidden and shows it as the
+ * zoom starts). A view that mounts again in a window that has been showing (a screen change, virtualization, a
+ * restore) does not fly.
+ */
+- (void)mountedAcrossWindows:(NSView<SparkMotionHost> *)host
+{
+  if (!host.motionSharedAcrossWindows || !host.motionSharedId || !host.window) return;
+  NSNumber *shownAt = [_showing objectForKey:host.window];
+  if (shownAt && CACurrentMediaTime() - shownAt.doubleValue <= kArrivalSeconds) [self arrive:host];
+  else if (!shownAt && !host.window.isVisible) [self awaitWindow:host];
+}
+
+- (void)hostDidMoveToWindow:(NSView<SparkMotionHost> *)host
+{
+  NSNumber *deadline = [_awaitingWindow objectForKey:host];
+  if (!host.window || !deadline || ![self isRegistered:host]) return;
+  [_awaitingWindow removeObjectForKey:host];
+  if (CACurrentMediaTime() > deadline.doubleValue) return;
+  if (![_crossHosts objectForKey:host]) [_crossHosts setObject:@(++_crossMounts) forKey:host];
+  [self mountedAcrossWindows:host];
+}
+
+/** The window module started showing `window`: destinations waiting for it arrive. */
+- (void)windowShowing:(NSWindow *)window
+{
+  if (![window isKindOfClass:NSWindow.class]) return;
+  [_showing setObject:@(CACurrentMediaTime()) forKey:window];
+  const double now = CACurrentMediaTime();
+  for (NSView<SparkMotionHost> *host in [_awaitingWindow.keyEnumerator allObjects]) {
+    if (host.window != window) continue;
+    const double deadline = [[_awaitingWindow objectForKey:host] doubleValue];
+    [_awaitingWindow removeObjectForKey:host];
+    if (now <= deadline) [self arrive:host];
+  }
+}
+
+/** It flies in from another window's view with its id. */
+- (void)arrive:(NSView<SparkMotionHost> *)host
+{
+  if (!host.motionSharedAcrossWindows || !host.motionSharedId || ![self isRegistered:host]) return;
+  NSView<SparkMotionHost> *source = [self crossCounterpart:host];
+  if (!source) return;
+  [_origins setObject:source forKey:host];
+  [self fly:host.motionSharedId from:source to:host arriving:YES];
+}
+
+/**
+ * A window starts leaving (its close transition shrinks it, it is parked, or it closes): each of its cross-window shared
+ * elements flies back to its counterpart, from where it shows. `departing` NO: the window stays after all.
+ */
+- (void)window:(NSWindow *)window departing:(BOOL)departing
+{
+  if (![window isKindOfClass:NSWindow.class]) return;
+  if (!departing) { [_departed removeObject:window]; return; }
+  if ([_departed containsObject:window]) return;
+  [_departed addObject:window];
+  for (NSView<SparkMotionHost> *host in [_crossHosts.keyEnumerator allObjects]) {
+    if (host.window != window || ![self isRegistered:host] || !host.motionSharedAcrossWindows || !host.motionSharedId) continue;
+    SparkMotionFlight *flight = _flights[host.motionSharedId];
+    // A source already in flight leaves with its snapshot; the flight carries on.
+    if (flight.source == host) continue;
+    NSView<SparkMotionHost> *target = [self crossCounterpart:host];
+    if (target) [self fly:host.motionSharedId from:host to:target arriving:NO];
+    else if (flight.destination == host) [self endFlight:flight keeping:nil];
+  }
+}
+
+/**
+ * Flies the element from where `source` shows (or where its running flight shows it) to `destination`: a hand-off of
+ * the destination's translation and scale from the source's box, in screen coordinates, shown in a flight window while
+ * both views are concealed. Under Reduce Motion nothing flies: an arriving destination plays the hand-off's fade
+ * alternate where it is, and a view already showing stays as it is.
+ */
+- (void)fly:(NSString *)sharedId from:(NSView<SparkMotionHost> *)source to:(NSView<SparkMotionHost> *)destination arriving:(BOOL)arriving
+{
+  SparkMotionFlight *previous = _flights[sharedId];
+  const BOOL continues = previous && (previous.source == source || previous.destination == source);
+  if (self.reduceMotion && !arriving) { if (continues) [self endFlight:previous keeping:nil]; return; }
+  SparkBox box, velocity;
+  if (continues && previous.destination) box = [self flightBox:previous velocity:&velocity];
+  else box = [self visualBox:source velocity:&velocity];
+  const SparkBox layout = SparkScreenBox(destination);
+  if (layout.width <= 0 || layout.height <= 0 || box.width <= 0 || box.height <= 0) return;
+  const std::vector<std::pair<Property, State>> from = {{TranslateX, {box.x - layout.x, velocity.x}}, {TranslateY, {box.y - layout.y, velocity.y}},
+    {ScaleX, {box.width / layout.width, velocity.width / layout.width}}, {ScaleY, {box.height / layout.height, velocity.height / layout.height}}};
+  // Under Reduce Motion an arriving destination only fades in where it is: no snapshots, no flight window.
+  if (self.reduceMotion) { if (previous) [self endFlight:previous keeping:nil]; [self handoff:destination from:from followHidden:NO]; return; }
+  // Concealed views draw nothing: a view in the running flight keeps the snapshot taken when it was shown. Snapshots
+  // are no larger than the largest box the flight shows.
+  const CGSize largest = CGSizeMake(MAX(box.width, layout.width), MAX(box.height, layout.height));
+  auto image = [&](NSView<SparkMotionHost> *view) {
+    if (previous && previous.source == view) return previous.sourceImage;
+    if (previous && previous.destination == view) return previous.destinationImage;
+    return [SparkMotionSnapshot snapshotOf:view largest:largest];
+  };
+  SparkMotionSnapshot *sourceImage = image(source), *destinationImage = image(destination);
+  if (previous) [self endFlight:previous keeping:[NSSet setWithObjects:source, destination, nil]];
+  // The flight shows in its own window: the destination's window may only now be ordered on screen (its occlusion is
+  // not reported yet), so the hidden-window rule does not complete the hand-off at once.
+  [self handoff:destination from:from followHidden:NO];
+  if (![self flightMoves:destination.motionTag]) { source.layer.hidden = NO; destination.layer.hidden = NO; return; }
+  SparkMotionFlight *flight = [SparkMotionFlight new];
+  flight.sharedId = sharedId;
+  flight.source = source;
+  flight.destination = destination;
+  flight.sourceImage = sourceImage;
+  flight.destinationImage = destinationImage;
+  flight.anchor = NSMakePoint(layout.x, layout.y);
+  flight.window = [[SparkMotionFlightWindow alloc] initWithFrom:sourceImage to:destinationImage];
+  _flights[sharedId] = flight;
+  source.layer.hidden = YES;
+  destination.layer.hidden = YES;
+  [self stepFlights];
+  // A driven app never shows windows (docs/test-driver.md#focus-and-window-state); the flight window still moves.
+  NSMutableArray<NSWindow *> *windows = [NSMutableArray new];
+  for (NSWindow *window in @[source.window ?: NSNull.null, destination.window ?: NSNull.null]) if ([window isKindOfClass:NSWindow.class]) [windows addObject:window];
+  if (!self.driven && _flights[sharedId] == flight) [flight.window showAbove:windows];
+  [self scheduleFlights];
+}
+
+/** Ends a flight: its window goes away and its views show again, except those in `kept` (a flight that replaces it). */
+- (void)endFlight:(SparkMotionFlight *)flight keeping:(nullable NSSet *)kept
+{
+  if (_flights[flight.sharedId] == flight) [_flights removeObjectForKey:flight.sharedId];
+  for (NSView *view in @[flight.source ?: NSNull.null, flight.destination ?: NSNull.null])
+    if ([view isKindOfClass:NSView.class] && ![kept containsObject:view]) view.layer.hidden = NO;
+  // Ordered out and released, never closed: no window-close notification goes out for it.
+  [flight.window orderOut:nil];
+  flight.window = nil;
+  [self scheduleFlights];
+}
+
+/** Moves every flight window to where its element shows now; a flight whose hand-off settled lands. */
+- (void)stepFlights
+{
+  for (SparkMotionFlight *flight in _flights.allValues) {
+    NSView<SparkMotionHost> *destination = flight.destination;
+    if (!destination || ![self isRegistered:destination] || ![self flightMoves:destination.motionTag]) { [self endFlight:flight keeping:nil]; continue; }
+    SparkBox velocity;
+    [flight.window place:SparkScreenFrame([self flightBox:flight velocity:&velocity]) progress:[self flightProgress:destination.motionTag]];
+  }
+}
+
+/** A timer steps flights on the real clock while any flies; the virtual clock steps them as it advances. */
+- (void)scheduleFlights
+{
+  if (_flights.count && !_engine.virtualClock()) {
+    if (_flightTimer) return;
+    __weak SparkMotionCoordinator *weakSelf = self;
+    _flightTimer = [NSTimer timerWithTimeInterval:1.0 / 120 repeats:YES block:^(NSTimer *) { [weakSelf stepFlights]; }];
+    // Common modes: flights keep moving during live resizes, drags and menu tracking.
+    [NSRunLoop.mainRunLoop addTimer:_flightTimer forMode:NSRunLoopCommonModes];
+    return;
+  }
+  [_flightTimer invalidate];
+  _flightTimer = nil;
 }
 
 #pragma mark - Backdrop materials
@@ -1764,6 +2068,7 @@ static NSSymbolEffectOptions *SparkSymbolOptions(double repeat, double speed)
   [self scheduleSweep];
   [self scheduleCues];
   [self scheduleEffectFrames];
+  [self scheduleFlights];
   resolve(nil);
 }
 
@@ -1787,6 +2092,7 @@ static NSSymbolEffectOptions *SparkSymbolOptions(double repeat, double speed)
   [CATransaction commit];
   [self playCuesUntil:self.now frame:NAN];
   [self sweep];
+  [self stepFlights];
   if (self.clockAdvanced) self.clockAdvanced(seconds * 1000);
 }
 

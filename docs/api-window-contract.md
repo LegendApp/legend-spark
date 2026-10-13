@@ -389,7 +389,8 @@ attachWindow(id, parentId, options: { edge, align?, gap?, magnetic?, hideWhenIna
   the navigator's `close`) first runs the window's close guard, then shrinks the window into `to` while it fades out
   (`to: null` fades it where it is; a `to` in a window that has closed does the same), then closes it. As the shrink
   starts, key focus moves to `focus`, else the window `to` is in, else the parent window, if it is shown: never to the
-  departing window, so typing goes where the content returns. Another animation of the window during the shrink
+  departing window, so typing goes where the content returns. Cross-window shared elements fly out of the window as the
+  shrink starts ([motion](motion.md#cross-window-shared-elements)). Another animation of the window during the shrink
   cancels the close: `closeWindow` resolves `{ closed: false, reason: "interrupted" }` and the window stays open. A
   minimized, fullscreen, hidden or sheet window closes at once. A pooled window that shrank is parked at its frame
   and opacity from before the shrink, without the transition. Tearing a panel off into a window is `openWindowFrom`

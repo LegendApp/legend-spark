@@ -5,6 +5,7 @@
 #import <objc/runtime.h>
 #import <RNDesktopApp/SparkDesktop.h>
 #import <RNDesktopApp/SparkTestDriver.h>
+#import <RNDesktopApp/SparkWindowTransitions.h>
 #import <React-RCTAppDelegate/RCTRootViewFactory.h>
 #import <React/RCTSurfaceHostingView.h>
 #import <React/RCTRootView.h>
@@ -14,10 +15,21 @@ static NSArray<NSWindow *> *TabWindows(NSWindow *window);
 static void SelectTab(NSWindow *window);
 static void DetachTab(NSWindow *window);
 static BOOL Park(NSWindow *window, NSString *key);
+// A window starts leaving the screen (its close transition shrinks it, or it is parked), or stays after all
+// (SparkWindowTransitions.h).
+static void Depart(NSWindow *window, BOOL departing) {
+  [NSNotificationCenter.defaultCenter postNotificationName:SparkWindowDepartureNotification object:window userInfo:@{ @"departing": @(departing) }];
+}
 // Driver mode records the window as shown instead of ordering it on screen (docs/test-driver.md).
 // Ordering a tab front selects it, so the driver records that too.
+static BOOL Visible(NSWindow *window);
+// Other modules learn that a window starts to show (SparkWindowTransitions.h).
+static void Showing(NSWindow *window, BOOL wasShown) {
+  if (!wasShown) [NSNotificationCenter.defaultCenter postNotificationName:SparkWindowShowingNotification object:window];
+}
 static void Show(NSWindow *window, BOOL focus, NSWindow *sheetParent) {
-  if (SparkTestDriverActive()) { SparkSetDriverShown(window, YES); if (TabWindows(window).count > 1) SelectTab(window); return; }
+  const BOOL wasShown = Visible(window);
+  if (SparkTestDriverActive()) { SparkSetDriverShown(window, YES); if (TabWindows(window).count > 1) SelectTab(window); Showing(window, wasShown); return; }
   if (sheetParent) [sheetParent beginSheet:window completionHandler:nil];
   else if (!focus) [window orderFront:nil];
   else if ([window isKindOfClass:NSPanel.class] && (window.styleMask & NSWindowStyleMaskNonactivatingPanel)) {
@@ -27,6 +39,7 @@ static void Show(NSWindow *window, BOOL focus, NSWindow *sheetParent) {
     if (window.canBecomeKeyWindow) [window makeKeyWindow];
   }
   else [window makeKeyAndOrderFront:nil];
+  Showing(window, wasShown);
 }
 static void Hide(NSWindow *window) {
   SparkSetDriverShown(window, NO);
@@ -224,6 +237,7 @@ static char TabObservation;
 }
 // Another animation of the window interrupted its shrink: the close is cancelled.
 - (void)interruptClose {
+  Depart(self.window, NO);
   NSArray *waiters = [self.closeWaiters copy]; [self.closeWaiters removeAllObjects];
   for (RCTPromiseResolveBlock waiter in waiters) waiter(@"{\"closed\":false,\"reason\":\"interrupted\"}");
 }
@@ -350,6 +364,7 @@ static BOOL Park(NSWindow *window, NSString *key) {
   SparkWindowDelegate *delegate = delegates[key];
   if (!delegate.parkOnClose || Terminating || (window.styleMask & NSWindowStyleMaskFullScreen) || InSimpleFullscreen(window) || window.miniaturized || window.sheetParent) return NO;
   [delegate finishClose:YES]; [delegate finishFullscreen:NO];
+  Depart(window, YES);
   Hide(window);
   if (window.parentWindow) [window.parentWindow removeChildWindow:window];
   // The next use starts from the frame and opacity the window had before it shrank, without this use's transition.
@@ -826,6 +841,7 @@ static BOOL ShrinkBeforeClose(NSWindow *window, NSString *key) {
   if (focus && !SparkTestDriverActive()) [focus makeKeyAndOrderFront:nil];
   if (!objc_getAssociatedObject(window, &RestingAlphaKey)) objc_setAssociatedObject(window, &RestingAlphaKey, @(window.alphaValue), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   delegate.shrinking = YES; delegate.frameBeforeShrink = window.frame;
+  Depart(window, YES);
   __weak SparkWindowDelegate *weakDelegate = delegate; __weak NSWindow *weakWindow = window;
   Choreograph(window, target, 0, transition, ^(BOOL finished, BOOL) {
     SparkWindowDelegate *current = weakDelegate; NSWindow *closing = weakWindow;
@@ -1049,7 +1065,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       if (![root respondsToSelector:@selector(setAppProperties:)] || ![args[@"props"] isKindOfClass:NSDictionary.class]) { reject(@"E_NOT_FOUND", @"Window has no React root", nil); return; }
       if ([method isEqual:@"reuse"] && !delegate.parked) { reject(@"E_BUSY", @"Window is in use", nil); return; }
       root.appProperties = args[@"props"];
-      if ([method isEqual:@"reuse"]) { delegate.parked = NO; Event(@"opened", key); }
+      if ([method isEqual:@"reuse"]) { delegate.parked = NO; Depart(window, NO); Event(@"opened", key); }
       resolve(@"null"); return;
     }
     if (InSimpleFullscreen(window) && [@[@"bounds", @"fullscreen", @"maximize", @"unmaximize", @"center", @"animate", @"zoomIn", @"attach"] containsObject:method]) { reject(@"E_BUSY", @"Leave simple fullscreen first", nil); return; }

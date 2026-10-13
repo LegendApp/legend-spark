@@ -11,7 +11,7 @@ test.skipIf(process.platform !== "darwin")("native window guards settle close de
     const root = path.resolve(import.meta.dirname, "..");
     const source = readFileSync(path.join(root, "packages/desktop-windows/macos/RNDesktopWindows.mm"), "utf8").split("\n").filter(line => !line.startsWith("#import")).join("\n");
     const registry = readFileSync(path.join(root, "packages/desktop-windows/macos/window-manager/LegendWindowRegistry.mm"), "utf8").replace('#import "LegendWindowRegistry.h"', "");
-    const prelude = `#import "${path.join(root, "packages/desktop-windows/macos/window-manager/LegendWindowRegistry.h")}"\n#import "${path.join(root, "packages/desktop-windows/macos/SparkWindowGeometry.h")}"\n#import "${path.join(root, "packages/desktop-windows/macos/SparkDisplays.h")}"\n`;
+    const prelude = `#import "${path.join(root, "packages/desktop-windows/macos/window-manager/LegendWindowRegistry.h")}"\n#import "${path.join(root, "packages/desktop-windows/macos/SparkWindowGeometry.h")}"\n#import "${path.join(root, "packages/desktop-windows/macos/SparkDisplays.h")}"\n#import "${path.join(root, "packages/desktop-app/macos/SparkWindowTransitions.h")}"\n`;
     const input = path.join(directory, "test.mm"), output = path.join(directory, executable);
     writeFileSync(input, prelude + readFileSync(path.join(root, "tests/window.native.mm"), "utf8").replace("// ACTUAL_IMPLEMENTATION", registry + "\n" + source));
     // The harness strips the imports, SparkTestDriver.h included; it tests the driver's simulateDisplays command.

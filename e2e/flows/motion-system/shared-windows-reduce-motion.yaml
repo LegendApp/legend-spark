@@ -1,0 +1,33 @@
+appId: so.legend.spark.examples.kitchensink
+name: Under Reduce Motion nothing flies between windows
+intent: >
+  On Motion system > Cross-window shared elements, the driver simulates Reduce Motion (the Mac's setting is untouched)
+  and freezes the virtual clock. Open photo 3 opens the photo window as a cross-fade; the photo does not fly: it is at
+  its place at once (scale 1, not moving) and fades in from opacity 0, reaching 1 after the 200 ms fade. Back on
+  the real clock, Close photo window fades the window out; the thumbnail stays as it shows (still, scale 1, opacity 1).
+checks: [MOT-XWIN-03]
+tags: [motion-system]
+platforms: [macos]
+timeout: 120s
+matrix:
+  appearance: [light]
+  locale: [en]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/shared-windows" }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-root }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-thumb-3-still-scale-1.00-opacity-1.00 }, timeout: 5s }
+- assertVisible: { id: motion-system-shared-windows-reduce-motion-false }
+- simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: true }
+- assertVisible: { id: motion-system-shared-windows-reduce-motion-true }
+- setClock: virtual
+- tapOn: { id: motion-system-shared-windows-open-3 }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-photo-still-scale-1.00-opacity-0.00 }, timeout: 10s }
+- advanceClock: 300ms
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-photo-still-scale-1.00-opacity-1.00 }, timeout: 5s }
+- setClock: real
+- tapOn: { id: motion-system-shared-windows-close }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-window-closed }, timeout: 5s }
+- assertVisible: { id: motion-system-shared-windows-thumb-3-still-scale-1.00-opacity-1.00 }
+- assertNotVisible: { id: motion-system-shared-windows-error }
+- simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: false }
+- assertVisible: { id: motion-system-shared-windows-reduce-motion-false }

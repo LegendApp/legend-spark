@@ -30,6 +30,7 @@ vi.mock("../packages/motion/src/motion-view-host", () => ({ getNativeMotionView:
 vi.mock("../examples/kitchen-sink/shell/app-controller", () => ({ useI18n: () => ({ locale: state.locale, rtl: state.locale === "ar" }) }));
 vi.mock("@legendapp/spark/ui", () => ({ Button: (props: object) => React.createElement("Button", props) }));
 vi.mock("uniwind", () => ({ useResolveClassNames: () => ({}) }));
+vi.mock("@legendapp/spark/windows", () => ({}));
 vi.mock("@legendapp/spark/system", () => ({
   onSystemEvent: async (handler: () => void, options: unknown) => { system.handler = handler; system.options = options; return { remove: async () => { system.removed++; } }; },
 }));
@@ -68,7 +69,7 @@ const plans = () => native.run.mock.calls.map(([json]) => JSON.parse(json));
 test("the motion screens are registered in the motion-system area", async () => {
   const { default: registered } = await import("../examples/kitchen-sink/screens/motion-system/index");
   expect(registered.area).toBe("motion-system");
-  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames", "layout", "visual-effects", "materials", "shapes", "shaders", "text-and-symbols", "accessibility-power"]);
+  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames", "layout", "shared-windows", "visual-effects", "materials", "shapes", "shaders", "text-and-symbols", "accessibility-power"]);
 });
 
 test("springs: preset parameters, playing every preset, and moving with the reading direction", async () => {
@@ -201,6 +202,13 @@ test("visual effects: the swatch animates in OKLCH and reports its color, Lift s
   await mount(VisualEffects);
   await press(id("travel"));
   expect(plans()[0].groups[0].tracks.translateX.values.at(-1)).toBeCloseTo(-160, 9);
+});
+
+test("the cross-window shared elements screen is registered with its Arabic title", () => {
+  const screen = motionScreens.screens.find(entry => entry.id === "shared-windows")!;
+  expect(screen.titles?.ar).toBe("عناصر مشتركة بين النوافذ");
+  expect(screen.summary).toMatch(/flies/);
+  expect(screen.summaries.ar).toMatch(/تطير/);
 });
 
 test("backdrop materials: Next and Glass crossfade the panel's material, Fade and Tint animate its intensity and tint, and the title is localized", async () => {

@@ -1,0 +1,39 @@
+appId: so.legend.spark.examples.kitchensink
+name: A photo flies from its thumbnail into a new window and back into the thumbnail when the window closes
+intent: >
+  On Motion system > Cross-window shared elements, with the virtual clock frozen, Open photo 2 opens the photo window
+  out of the second thumbnail (openWindowFrom). The photo, a MotionView with the thumbnail's sharedId and
+  sharedAcrossWindows, mounts in the new window and starts at the thumbnail's box: the readout, polling what the engine
+  reports, shows it moving at scale 0.2 (the 40-point thumbnail over the 200-point photo). It springs to its place and
+  settles; the landed photo window matches its golden (light and dark, English and Arabic). Close photo window shrinks the window back into the thumbnail,
+  and the element flies back with it: the thumbnail starts at scale 5 (the photo's box) and springs back. The driver
+  never shows windows, so the flight window never shows either; the hand-offs are checked through motion telemetry.
+checks: [MOT-XWIN-01, MOT-CLOCK-01]
+tags: [motion-system]
+platforms: [macos]
+timeout: 120s
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/shared-windows" }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-root }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-thumb-2-still-scale-1.00-opacity-1.00 }, timeout: 5s }
+- assertVisible: { id: motion-system-shared-windows-window-closed }
+- setClock: virtual
+- tapOn: { id: motion-system-shared-windows-open-2 }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-photo-moving-scale-0.20-opacity-1.00 }, timeout: 10s }
+- assertVisible: { id: motion-system-shared-windows-window-open }
+- assertMotion: { target: { id: motion-system-shared-windows-photo }, kind: spring, settlesWithin: 1500ms }
+- captureMotion: { target: { id: motion-system-shared-windows-photo }, name: shared-windows-open }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-photo-still-scale-1.00-opacity-1.00 }, timeout: 5s }
+- assertVisible: { id: motion-system-shared-windows-thumb-2-still-scale-1.00-opacity-1.00 }
+- assertScreenshot: { golden: motion-system-shared-windows-photo, window: { id: ks-shared-photo } }
+- tapOn: { id: motion-system-shared-windows-close }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-thumb-2-moving-scale-5.00-opacity-1.00 }, timeout: 10s }
+- assertMotion: { target: { id: motion-system-shared-windows-thumb-2 }, kind: spring, settlesWithin: 1500ms }
+- captureMotion: { target: { id: motion-system-shared-windows-thumb-2 }, name: shared-windows-close }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-window-closed }, timeout: 5s }
+- assertVisible: { id: motion-system-shared-windows-thumb-2-still-scale-1.00-opacity-1.00 }
+- assertNotVisible: { id: motion-system-shared-windows-error }
+- setClock: real
