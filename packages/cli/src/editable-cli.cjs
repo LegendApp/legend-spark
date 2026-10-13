@@ -49,7 +49,7 @@ async function complete(provider, body, signal) {
       signal?.addEventListener('abort', stop, { once: true });
       process.once('SIGTERM', stop); process.once('SIGINT', stop);
       child.stdin.on('error', () => {});
-      child.stdout.on('data', chunk => { if(failure)return;stdout += chunk; if (Buffer.byteLength(stdout) > 2 * 1024 * 1024) { failure = new Error('AI CLI output is too large'); stop(); } });
+      child.stdout.on('data', chunk => { if (failure) return; stdout += chunk; if (Buffer.byteLength(stdout) > 2 * 1024 * 1024) { failure = new Error('AI CLI output is too large'); stop(); } });
       child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-2000); });
       child.on('error', error => { failure = error.code === 'ENOENT' ? new Error(`Install ${provider.tool} and sign in before using CLI editing`) : error; });
       child.on('close', code => {

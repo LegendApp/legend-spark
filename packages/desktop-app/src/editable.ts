@@ -104,15 +104,14 @@ export const beginEditingGitHubAuth = (): Promise<EditingGitHubAuthorization> =>
 export const completeEditingGitHubAuth = (): Promise<void> => call("githubComplete");
 export const signOutEditingGitHub = (): Promise<void> => call("githubSignOut");
 /** Publishes the reviewed candidate's cumulative patch and saved prompts to editable.repository. */
-export async function submitEditPullRequest(options: EditingPullRequestOptions): Promise<EditingPullRequest> {
-  if (!record(options) || typeof options.title !== "string" || !options.title.trim() || options.title.length > 256) throw new SparkError("E_INVALID_ARGUMENT", "Enter a PR title of at most 256 characters");
-  if (Object.keys(options).some(key => key !== "title")) throw new SparkError("E_UNSUPPORTED_OPTION", "Unknown pull request option");
-  return call("submitPR", options);
+export async function submitEditPullRequest(value: EditingPullRequestOptions): Promise<EditingPullRequest> {
+  options(value, ["title"]);
+  if (typeof value.title !== "string" || !value.title.trim() || value.title.length > 256) throw new SparkError("E_INVALID_ARGUMENT", "Enter a PR title of at most 256 characters");
+  return call("submitPR", value);
 }
 /** Live events only: subscribe before requesting getEditingState() for an initial snapshot. */
 export function onEditingState(listener: (state: EditingState) => void): EditingSubscription {
   if (typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Editing state listener must be a function");
-  const module = native();
-  if (!module) return { remove() {} };
+  if (!native()) return { remove() {} };
   return onDesktopEvent(event => { if (state(event.state)) listener(event.state); }, { types: ["editingState"] });
 }

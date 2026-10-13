@@ -6,10 +6,8 @@ function isBuildConfig(file) {
   return /(?:^|\/)(?:scripts|plugins|transforms)(?:\/|$)/i.test(file) || /(?:^|\.)config(?:\.|$)/i.test(name) || /^(?:app\.json|package\.json|tsconfig.*|jsconfig.*|babel\..*|metro\..*|\.babelrc.*)$/.test(name);
 }
 function isFixed(file, trustedFiles = []) {
-  const name = path.posix.basename(file);
-  return trustedFiles.includes(file) || /(?:^|\/)(?:scripts|plugins|transforms|\.github)(?:\/|$)/i.test(file) ||
-    /(?:^|\/)\.[^/]+/.test(file) || /(?:^|\/)(?:macos|ios|android|windows|Pods)(?:\/|$)/i.test(file) ||
-    /(?:^|\.)config(?:\.|$)/i.test(name) || /^(?:package\.json|desktop\.config\.json|app\.json|\.babelrc.*|babel\..*|metro\..*|tsconfig.*|jsconfig.*|.*lock.*|.*\.(?:sh|bash|zsh|ps1|rb|podspec))$/i.test(name);
+  return trustedFiles.includes(file) || isBuildConfig(file) || /(?:^|\/)(?:\.|(?:macos|ios|android|windows|Pods)(?:\/|$))/i.test(file) ||
+    /^(?:package\.json|app\.json|\.babelrc.*|babel\..*|metro\..*|tsconfig.*|jsconfig.*|.*lock.*|.*\.(?:sh|bash|zsh|ps1|rb|podspec))$/i.test(path.posix.basename(file));
 }
 function assertEditableChanges(before, after, trustedFiles = []) {
   for (const file of Object.keys({ ...before, ...after })) {

@@ -21,7 +21,7 @@ function operate(workspace, name, args, trustedFiles = []) {
     if (bytes.includes(0)) throw new Error('Binary files cannot be read as text');
     return bytes.toString('utf8');
   }
-  if (isFixed(args.path, trustedFiles) || /(?:^|\/)(?:\.env(?:\..*)?|.*\.(?:pem|key|p12|p8))$/i.test(args.path)) throw new Error('Native/dependency configuration and credentials cannot be edited');
+  if (isFixed(args.path, trustedFiles)) throw new Error('Native/dependency configuration and credentials cannot be edited');
   if (name === 'write_file') {
     if (typeof args.content !== 'string' || Buffer.byteLength(args.content) > 256 * 1024) throw new Error('Invalid source content');
     fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, args.content); return 'Written';

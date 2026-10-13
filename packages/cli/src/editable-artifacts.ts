@@ -8,6 +8,7 @@ import { run } from './commands.ts';
 import { entryFile, readAppConfig, readJson, stateFile, VERSION, writeJson, type Runtime } from './project.ts';
 const require = createRequire(import.meta.url);
 const { validateEditable } = require('@legendapp/spark-desktop-config/editable.cjs');
+const { isBuildConfig, collectTrustedFiles } = require('./editable-policy.cjs');
 export type EditableAsset = { url: string; sha256: string; size: number };
 export type EditableManifest = {
   schema: 1; project: string; version: string; release: string; runtime: Runtime;
@@ -77,7 +78,7 @@ export function prepareSource(root: string, destination: string, files: string[]
           const imported = (ts.isImportDeclaration(parent) || ts.isExportDeclaration(parent)) && parent.moduleSpecifier === node || ts.isCallExpression(parent) && parent.arguments[0] === node && ['require', 'require.resolve', 'import'].includes(parent.expression.getText(ast));
           const base = [source, sourcePath].find(base => value === base || value.startsWith(base + path.sep));
           if (path.isAbsolute(value) && base) {
-            if (!imported && !require('./editable-policy.cjs').isBuildConfig(path.relative(destination, file).split(path.sep).join('/'))) throw new Error(`Editable app source must use relative imports rather than absolute runtime paths: ${path.relative(destination, file)}`);
+            if (!imported && !isBuildConfig(path.relative(destination, file).split(path.sep).join('/'))) throw new Error(`Editable app source must use relative imports rather than absolute runtime paths: ${path.relative(destination, file)}`);
             const target = path.join(destination, path.relative(base, value));
             if (imported && !['', '.js', '.jsx', '.ts', '.tsx', '.json', '.mjs', '.cjs', '.macos.js', '.macos.tsx', '.native.js', '.native.tsx'].some(extension => existsSync(target + extension))) throw new Error(`Missing import in editable.files: ${path.relative(base, value)}`);
             const relative = path.relative(path.dirname(file), target).split(path.sep).join('/') || '.';
@@ -189,7 +190,7 @@ export async function prepareEditableArtifacts(root: string, runtime: Runtime, a
     const repository = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' });
     const repositoryDirectory = repository.status === 0 ? path.relative(realpathSync(repository.stdout.trim()), layout.sourceRoot).split(path.sep).join('/') : '';
     if (repositoryDirectory.startsWith('..') || path.isAbsolute(repositoryDirectory)) throw new Error('editable.sourceRoot must stay within the Git repository');
-    const trustedFiles = require('./editable-policy.cjs').collectTrustedFiles(source);
+    const trustedFiles = collectTrustedFiles(source);
     const appRequire = createRequire(path.join(root, 'package.json'));
     await copyDependencies(root, toolkit, { diff: path.dirname(require.resolve('diff/package.json')), 'react-native-macos': path.dirname(appRequire.resolve('react-native-macos/package.json')) });
     for (const file of ['editable-worker.cjs', 'editable-ai.cjs', 'editable-cli.cjs', 'editable-policy.cjs', 'editable-github.cjs', 'js-runtime.cjs', 'runtime-bootstrap.sh', 'runtime-downloads.tsv']) cpSync(path.join(import.meta.dirname, file), path.join(toolkit, file));

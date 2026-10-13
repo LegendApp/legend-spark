@@ -39,8 +39,7 @@ async function complete(session, { fetcher, wait = sleep, now = Date.now } = {})
 function blobHash(base64) { const bytes = Buffer.from(base64, 'base64'); return crypto.createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex'); }
 function repositoryPath(prefix, name) {
   if (typeof name !== 'string' || !name || typeof (prefix ?? '') !== 'string' || [prefix || '', name].some(part => part && (part.startsWith('/') || part.includes('\\') || part.split('/').some(segment => !segment || segment === '.' || segment === '..' || segment === '.git')))) throw fail('E_INVALID_DATA', 'Invalid repository patch path');
-  const value = path.posix.join(prefix || '', name);
-  return value;
+  return path.posix.join(prefix || '', name);
 }
 async function submit(directory, options, token, { fetcher, wait = sleep } = {}) {
   if (!token) throw fail('E_PERMISSION_DENIED', 'Sign in to GitHub before submitting');
