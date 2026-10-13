@@ -38,6 +38,14 @@ static int failures = 0;
 @synthesize motionMaterial = _motionMaterial, motionCrossfade = _motionCrossfade;
 @end
 
+/** A MotionShape: a host with a shape layer view. */
+@interface ShapeHost : TestHost
+@property (nonatomic, strong) SparkMotionShapeView *motionShape;
+@end
+@implementation ShapeHost
+@synthesize motionShape = _motionShape;
+@end
+
 @interface TestSymbol : NSView <SparkMotionSymbolHost>
 @property (nonatomic) NSInteger motionTag;
 @property (nonatomic, strong) NSImageView *symbolImageView;
@@ -625,6 +633,94 @@ int main()
     [motion simulate:@{ @"reduceTransparency": @NO }];
     [motion unregisterTag:15];
     [motion unregisterTag:16];
+
+    // Shapes (docs/motion.md#shapes): the morph bakes whole paths onto the shape layer, which the compositor interpolates
+    // point by point; the trim, width and colors bake onto its other key paths; plain MotionViews reject them.
+    SparkMotionShapeView *shapeView = [[SparkMotionShapeView alloc] initWithFrame:NSMakeRect(0, 0, 80, 40)];
+    NSString *shapeError = nil;
+    // A square, and a triangle whose base is halved: the structure JavaScript sends for paths that morph.
+    NSArray *squarePath = @[@0, @0, @10, @0, @20, @0, @30, @0, @30, @10, @30, @20, @30, @30, @20, @30, @10, @30, @0, @30, @0, @20, @0, @10, @0, @0];
+    NSArray *trianglePath = @[@0, @0, @10, @0, @20, @0, @30, @0, @40, @0, @50, @0, @60, @0, @50, @10, @40, @20, @30, @30, @20, @20, @10, @10, @0, @0];
+    NSDictionary *shapeConfig = @{ @"paths": @[squarePath, trianglePath], @"subpaths": @[@[@4, @YES]], @"lineCap": @"round" };
+    auto withShapeKey = [](NSDictionary *object, NSString *key, id value) { NSMutableDictionary *copy = [object mutableCopy]; copy[key] = value; return (NSDictionary *)copy; };
+    NSMutableArray *tooMany = [NSMutableArray new];
+    for (int i = 0; i < 17; i++) [tooMany addObject:squarePath];
+    for (NSDictionary *bad in @[withShapeKey(shapeConfig, @"paths", @[squarePath, [trianglePath subarrayWithRange:NSMakeRange(0, 20)]]), withShapeKey(shapeConfig, @"paths", tooMany),
+         withShapeKey(shapeConfig, @"subpaths", @[@[@129, @YES]]), withShapeKey(shapeConfig, @"subpaths", @[@[@0, @YES]]), withShapeKey(shapeConfig, @"lineCap", @"pointed"),
+         withShapeKey(shapeConfig, @"paths", @[@[@0, @0, @1, @1, @2, @2, @"x", @3]]), withShapeKey(shapeConfig, @"paths", @[])]) {
+      CHECK(![shapeView setConfig:bad error:&shapeError] && shapeError.length);
+    }
+    CHECK(shapeView.pathCount == 0);
+    CHECK([shapeView setConfig:shapeConfig error:&shapeError] && shapeView.pathCount == 2 && [shapeView.shapeLayer.lineCap isEqual:kCALineCapRound]);
+    // Bounding boxes to a hundredth of a point: curves are evaluated in floating point.
+    auto box = [&](CGPathRef path) { const CGRect r = CGPathGetPathBoundingBox(path); auto round = [](CGFloat v) { return std::round(v * 100) / 100; };
+      return CGRectMake(round(r.origin.x), round(r.origin.y), round(r.size.width), round(r.size.height)); };
+    CGPathRef halfwayPath = [shapeView copyPathAt:0.5], beyond = [shapeView copyPathAt:1.5];
+    // Halfway the corners are at (0,0), (30,0), (45,15) and (15,30); past the last path the pair continues (a spring's
+    // overshoot): at 1.5 they are at (0,0), (30,0), (75,-15) and (45,30).
+    CHECK(CGRectEqualToRect(box(halfwayPath), CGRectMake(0, 0, 45, 30)) && CGRectEqualToRect(box(beyond), CGRectMake(0, -15, 75, 45)));
+    // Below 0 the first pair continues backwards: at -0.5 the corners are at (0,0), (30,0), (15,45) and (-15,30).
+    CGPathRef before = [shapeView copyPathAt:-0.5];
+    CHECK(CGRectEqualToRect(box(before), CGRectMake(-15, 0, 45, 45)));
+    CGPathRelease(before);
+    CGPathRelease(halfwayPath);
+    CGPathRelease(beyond);
+    // Three paths: 1.5 is halfway along the interior pair, from the triangle to the square moved 100 points right.
+    NSMutableArray *movedSquare = [NSMutableArray new];
+    for (NSUInteger i = 0; i < squarePath.count; i++) [movedSquare addObject:@([squarePath[i] doubleValue] + (i % 2 == 0 ? 100 : 0))];
+    SparkMotionShapeView *three = [[SparkMotionShapeView alloc] initWithFrame:NSMakeRect(0, 0, 80, 40)];
+    CHECK([three setConfig:withShapeKey(shapeConfig, @"paths", @[squarePath, trianglePath, movedSquare]) error:&shapeError] && three.pathCount == 3);
+    CGPathRef interior = [three copyPathAt:1.5], last = [three copyPathAt:2];
+    CHECK(CGRectEqualToRect(box(interior), CGRectMake(50, 0, 45, 30)) && CGRectEqualToRect(box(last), CGRectMake(100, 0, 30, 30)));
+    CGPathRelease(interior);
+    CGPathRelease(last);
+    CHECK(![three setConfig:withShapeKey(shapeConfig, @"subpaths", @[@[@1e300, @YES]]) error:&shapeError] && three.pathCount == 3);
+    ShapeHost *shaped = [[ShapeHost alloc] initWithFrame:NSMakeRect(0, 0, 80, 40)];
+    shaped.wantsLayer = YES;
+    shaped.motionTag = 18;
+    shaped.motionShape = shapeView;
+    [shaped addSubview:shapeView];
+    [window.contentView addSubview:shaped];
+    Values drawn = kIdentity;
+    drawn[StrokeEnd] = 0;
+    drawn[StrokeColorL] = 0.6; drawn[StrokeColorC] = 0.2; drawn[StrokeColorH] = 250; drawn[StrokeColorAlpha] = 1;
+    [motion registerHost:shaped initial:drawn];
+    CAShapeLayer *shapeLayer = shapeView.shapeLayer;
+    CHECK(CGRectEqualToRect(box(shapeLayer.path), CGRectMake(0, 0, 30, 30)) && shapeLayer.strokeEnd == 0 && shapeLayer.strokeColor && CGColorGetAlpha(shapeLayer.strokeColor) == 1);
+    CHECK(shapeLayer.fillColor && CGColorGetAlpha(shapeLayer.fillColor) == 0 && shapeLayer.lineWidth == 1);
+    Outcome *morph = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) {
+      [motion run:Request(@"morph", 18, @{ @"morph": Timing(1, 200), @"strokeEnd": Timing(1, 200), @"fillColorAlpha": Timing(1, 200) }) resolve:resolve reject:reject];
+    });
+    CAKeyframeAnimation *paths = (CAKeyframeAnimation *)[shapeLayer animationForKey:@"spark.motion.path"];
+    CHECK(!morph->code && paths.values.count > 2 && CFGetTypeID((__bridge CFTypeRef)paths.values.firstObject) == CGPathGetTypeID());
+    CHECK([shapeLayer animationForKey:@"spark.motion.strokeEnd"] && [shapeLayer animationForKey:@"spark.motion.fillColor"] && ![shaped.layer animationForKey:@"spark.motion.path"]);
+    CHECK(CGRectEqualToRect(box(shapeLayer.path), CGRectMake(0, 0, 60, 30)) && shapeLayer.strokeEnd == 1);  // the model holds the end
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:100 resolve:resolve reject:reject]; });
+    __block CGRect presentedBox = CGRectZero;
+    __block float presentedEnd = 0;
+    [motion presenting:^{ presentedBox = box(shapeLayer.path); presentedEnd = shapeLayer.strokeEnd; }];
+    CHECK(CGRectEqualToRect(presentedBox, CGRectMake(0, 0, 45, 30)) && std::abs(presentedEnd - 0.5) < 1e-6);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:100 resolve:resolve reject:reject]; });
+    CHECK(morph->resolved && [JSON(morph->value)[@"finished"] isEqual:@YES]);
+    // New paths show at the current morph at once.
+    CHECK([shapeView setConfig:withShapeKey(shapeConfig, @"paths", @[trianglePath, squarePath]) error:&shapeError]);
+    [motion hostDidReshape:shaped];
+    CHECK(CGRectEqualToRect(box(shapeLayer.path), CGRectMake(0, 0, 30, 30)));
+    // Under Reduce Motion the morph and the drawn stroke jump, and the shape fades in where they land.
+    [motion simulate:@{ @"reduceMotion": @YES }];
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"reduced-morph", 18, @{ @"morph": Timing(0, 400), @"strokeEnd": Timing(0.5, 400) }) resolve:resolve reject:reject]; });
+    NSDictionary *reducedKinds = JSON0(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion telemetry:18 resolve:resolve reject:reject]; })->value)[@"motion"][@"kinds"];
+    CHECK([reducedKinds[@"morph"] isEqual:@"jump"] && [reducedKinds[@"strokeEnd"] isEqual:@"jump"] && [reducedKinds[@"opacity"] isEqual:@"timing"]);
+    CHECK(CGRectEqualToRect(box(shapeLayer.path), CGRectMake(0, 0, 60, 30)) && shapeLayer.strokeEnd == 0.5f);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    [motion simulate:@{ @"reduceMotion": @NO }];
+    // A view without a shape has no shape properties.
+    [motion registerHost:plain initial:kIdentity];
+    Outcome *unshaped = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"unshaped", 16, @{ @"strokeEnd": Timing(0, 100) }) resolve:resolve reject:reject]; });
+    Outcome *unshapedSet = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @16, @"values": @{ @"morph": @1 } } resolve:resolve reject:reject]; });
+    CHECK([unshaped->code isEqual:@"E_UNSUPPORTED_OPTION"] && [unshapedSet->code isEqual:@"E_UNSUPPORTED_OPTION"]);
+    [motion unregisterTag:16];
+    [motion unregisterTag:18];
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
 
     // Until motion drives them, the background, corners and shadow follow the view's style: the engine takes what the

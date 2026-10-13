@@ -16,6 +16,8 @@ export interface NativeProps extends ViewProps {
   tintColor?: string;
   /** MotionMaterial: JSON of the validated crossfade transition. */
   crossfade?: string;
+  /** MotionShape: JSON of the validated paths (one structure of cubic segments) and stroke style. */
+  shape?: string;
 }
 
 export default codegenNativeComponent<NativeProps>("SparkMotionView") as HostComponent<NativeProps>;

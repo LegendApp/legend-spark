@@ -46,7 +46,7 @@ struct ViewProps : Props {
   bool getClipsContentToBounds() const { return false; }
 };
 struct ReactNativeFeatureFlags { static bool enableIOSViewClipToPaddingBox() { return false; } };
-struct SparkMotionViewProps : ViewProps { std::string initialValues, layout, sharedId, transition, material, tintColor, crossfade; };
+struct SparkMotionViewProps : ViewProps { std::string initialValues, layout, sharedId, transition, material, tintColor, crossfade, shape; };
 struct DesktopDragViewProps : Props { std::string sourceJson, optionsJson; bool disabled = false; };
 struct EventEmitter { using Shared = std::shared_ptr<EventEmitter const>; virtual ~EventEmitter() = default; };
 struct SidebarSplitViewEventEmitter : EventEmitter {
@@ -243,6 +243,15 @@ int main() { @autoreleasepool {
   NSVisualEffectView *effect = (NSVisualEffectView *)stack.incomingLayer.delegate;
   CHECK(stack.materialCount == 1 && [effect isKindOfClass:NSVisualEffectView.class] && effect.blendingMode == NSVisualEffectBlendingModeWithinWindow);
   CHECK(std::abs(stack.materialsLayer.opacity - 0.5) < 1e-6 && stack.tintLayer.backgroundColor && [[material valueForKey:@"motionCrossfade"][@"durationMs"] isEqual:@200]);
+  // A MotionShape: its paths and stroke style are applied at mount, with the `initial` trim and colors.
+  RNSparkMotionView *shaped = [[RNSparkMotionView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];
+  shaped.reactTag = @44;
+  auto shapeProps = std::make_shared<SparkMotionViewProps>(); shapeProps->initialValues = R"({"strokeEnd":0.25,"strokeColorL":0.5,"strokeColorAlpha":1})";
+  shapeProps->shape = R"({"paths":[[0,0,10,0,20,0,30,0]],"subpaths":[[1,false]],"lineCap":"round"})";
+  [shaped updateProps:shapeProps oldProps:nullptr];
+  SparkMotionShapeView *shapeView = [shaped valueForKey:@"motionShape"];
+  CHECK(shapeView.superview == shaped && shapeView.pathCount == 1 && [shapeView.shapeLayer.lineCap isEqual:kCALineCapRound]);
+  CHECK(CGRectEqualToRect(CGPathGetPathBoundingBox(shapeView.shapeLayer.path), CGRectMake(0, 0, 30, 0)) && std::abs(shapeView.shapeLayer.strokeEnd - 0.25) < 1e-6 && shapeView.shapeLayer.strokeColor);
 
   // Drag view: drag source, accepted types and enabled state come from the mount.
   RNDesktopDragView *drag = [[RNDesktopDragView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];

@@ -4,7 +4,7 @@ intent: >
   On Windows, every motion screen reports unsupported-platform from getMotionAvailability and shows
   SparkError:E_UNSUPPORTED_PLATFORM where its MotionViews would render, with no JavaScript-driven
   substitute; that includes the Layout, presence and shared elements screen (MotionPresence and MotionView) and the
-  Backdrop materials screen (MotionMaterial). The Windows engine and its Composition backdrop brushes are tracked in
+  Backdrop materials (MotionMaterial) and Shapes (MotionShape) screens. The Windows engine and its Composition backdrop brushes are tracked in
   #237, its layout and presence support in #376.
 checks: [MOT-UNSUP-01]
 tags: [motion-system]
@@ -30,6 +30,10 @@ platforms: [windows]
 - extendedWaitUntil: { visible: { id: motion-system-materials-root }, timeout: 10s }
 - assertText: { id: motion-system-materials-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
 - assertText: { id: motion-system-materials-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
+- launchApp: { stopApp: false, openUrl: "spark-ks://motion-system/shapes" }
+- extendedWaitUntil: { visible: { id: motion-system-shapes-root }, timeout: 10s }
+- assertText: { id: motion-system-shapes-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- assertText: { id: motion-system-shapes-error, equals: SparkError:E_UNSUPPORTED_PLATFORM }
 - launchApp: { stopApp: false, openUrl: "spark-ks://motion-system/accessibility-power" }
 - extendedWaitUntil: { visible: { id: motion-system-accessibility-power-root }, timeout: 10s }
 - assertText: { id: motion-system-accessibility-power-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }

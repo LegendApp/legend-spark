@@ -36,12 +36,14 @@ import { VisualEffects } from "../examples/kitchen-sink/screens/motion-system/Ef
 import { AccessibilityPower, ScrollAndFrames, Springs, Timelines } from "../examples/kitchen-sink/screens/motion-system/MotionScreens";
 import { TextAndSymbols } from "../examples/kitchen-sink/screens/motion-system/TextSymbolsScreen";
 import { Materials } from "../examples/kitchen-sink/screens/motion-system/MaterialsScreen";
+import { Shapes } from "../examples/kitchen-sink/screens/motion-system/ShapesScreen";
 import motionScreens from "../examples/kitchen-sink/screens/motion-system/index";
 
 let rendered: any, nextTag = 100;
 /** Every engine property at rest (docs/motion.md#properties-and-units), with translateX at `x` moving at `v`. */
 const EFFECTS = ["rotateX", "rotateY", "perspective", "borderRadius", "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha", "shadowOpacity", "shadowRadius",
-  "shadowOffsetX", "shadowOffsetY", "blur", "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius", "materialIntensity", "materialTintOpacity"];
+  "shadowOffsetX", "shadowOffsetY", "blur", "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius", "materialIntensity", "materialTintOpacity",
+  "morph", "strokeStart", "strokeEnd", "strokeWidth", "fillColorL", "fillColorC", "fillColorH", "fillColorAlpha", "strokeColorL", "strokeColorC", "strokeColorH", "strokeColorAlpha"];
 const rest = Object.fromEntries(EFFECTS.map(property => [property, 0]));
 const state0 = (x: number, v: number) => JSON.stringify({ values: { ...rest, opacity: 1, translateX: x, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 }, velocities: { ...rest, opacity: 0, translateX: v, translateY: 0, scaleX: 0, scaleY: 0, rotate: 0 }, animating: v ? ["translateX"] : [] });
 beforeEach(() => {
@@ -62,7 +64,7 @@ const plans = () => native.run.mock.calls.map(([json]) => JSON.parse(json));
 test("the motion screens are registered in the motion-system area", async () => {
   const { default: registered } = await import("../examples/kitchen-sink/screens/motion-system/index");
   expect(registered.area).toBe("motion-system");
-  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames", "layout", "visual-effects", "materials", "text-and-symbols", "accessibility-power"]);
+  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames", "layout", "visual-effects", "materials", "shapes", "text-and-symbols", "accessibility-power"]);
 });
 
 test("springs: preset parameters, playing every preset, and moving with the reading direction", async () => {
@@ -234,6 +236,31 @@ test("backdrop materials: Next and Glass crossfade the panel's material, Fade an
   native.supportsMaterial.mockImplementation(() => true);
 });
 
+test("shapes: Next shape springs the morph and fades the fill, Draw draws the checkmark, Progress springs the ring, Read reports them, and the title is localized", async () => {
+  const screen = motionScreens.screens.find(entry => entry.id === "shapes")!;
+  expect(screen.titles?.ar).toBe("الأشكال");
+  await mount(Shapes);
+  const id = (part: string) => `motion-system-shapes-${part}`;
+  const shape = JSON.parse(byID(id("shape")).props.shape);
+  // A circle (4 curves), a star (10 lines) and a square (5 lines) share one structure of 10 segments.
+  expect(shape.subpaths).toEqual([[10, true]]);
+  expect(shape.paths).toHaveLength(3);
+  expect(JSON.parse(byID(id("check")).props.shape)).toMatchObject({ subpaths: [[2, false]], lineCap: "round", lineJoin: "round" });
+  expect(JSON.parse(byID(id("ring")).props.initialValues)).toMatchObject({ strokeEnd: 0.25, strokeWidth: 8 });
+  const values = (overrides: Record<string, number>) => JSON.stringify({ ...JSON.parse(state0(0, 0)), values: { ...JSON.parse(state0(0, 0)).values, ...overrides } });
+  native.getState.mockResolvedValue(values({ morph: 1, strokeEnd: 1, fillColorL: 0.769, fillColorC: 0.1647, fillColorH: 70.08, fillColorAlpha: 1 }));
+  await press(id("next"));
+  expect(plans()[0].groups[0].tracks).toMatchObject({ morph: { type: "spring", to: 1 }, fillColorAlpha: { type: "spring", to: 1 } });
+  expect(text(id("morph-result"))).toBe('{"finished":true,"morph":1,"fillColor":"oklch(0.769 0.1647 70.08 / 1)"}');
+  await press(id("draw"));
+  expect(plans()[1].groups[0].tracks).toEqual({ strokeEnd: expect.objectContaining({ type: "timing", to: 1, durationMs: 600, easing: [0.42, 0, 0.58, 1] }) });
+  expect(text(id("draw-result"))).toBe('{"finished":true,"strokeEnd":1}');
+  await press(id("progress"));
+  expect(plans()[2].groups[0].tracks).toEqual({ strokeEnd: expect.objectContaining({ type: "spring", to: 0.5 }) });
+  await press(id("read"));
+  expect(text(id("read-result"))).toBe('{"morph":1,"strokeEnd":1}');
+});
+
 test("text and symbols: digits roll, text crossfades and types, and each symbol effect reports what played", async () => {
   await mount(TextAndSymbols);
   const id = (part: string) => `motion-system-text-and-symbols-${part}`;
@@ -261,7 +288,7 @@ test("text and symbols: digits roll, text crossfades and types, and each symbol 
 
 test("Windows shows the typed unsupported error where the motion views would be, and sends nothing", async () => {
   state.os = "windows";
-  for (const [screen, id] of [[Springs, "springs"], [Timelines, "timelines"], [ScrollAndFrames, "scroll-and-frames"], [VisualEffects, "visual-effects"], [Materials, "materials"], [TextAndSymbols, "text-and-symbols"], [AccessibilityPower, "accessibility-power"]] as const) {
+  for (const [screen, id] of [[Springs, "springs"], [Timelines, "timelines"], [ScrollAndFrames, "scroll-and-frames"], [VisualEffects, "visual-effects"], [Materials, "materials"], [Shapes, "shapes"], [TextAndSymbols, "text-and-symbols"], [AccessibilityPower, "accessibility-power"]] as const) {
     await mount(screen);
     expect(text(`motion-system-${id}-availability`)).toBe('{"available":false,"reason":"unsupported-platform"}');
     expect(text(`motion-system-${id}-error`)).toBe("SparkError:E_UNSUPPORTED_PLATFORM");

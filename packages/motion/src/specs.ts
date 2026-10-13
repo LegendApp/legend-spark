@@ -1,5 +1,5 @@
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
-import { COLOR_COMPONENTS, colorStops, parseColor, type ColorComponent, type MotionColor, type Oklch } from "./colors";
+import { COLOR_PROPERTIES, colorStops, parseColor, type ColorComponent, type MotionColor, type MotionColorProperty, type Oklch } from "./colors";
 
 // Animation descriptions. Builders validate their arguments and return frozen, normalized
 // specs: exactly the JSON the native engine receives. Native code validates the same rules
@@ -11,14 +11,18 @@ export type MotionNumberProperty =
   | "borderRadius" | "shadowOpacity" | "shadowRadius" | "shadowOffsetX" | "shadowOffsetY" | "blur"
   | "maskInsetTop" | "maskInsetBottom" | "maskInsetStart" | "maskInsetEnd" | "maskRadius"
   /** A MotionMaterial's material opacity and its tint's opacity, 0-1 (docs/motion.md#backdrop-materials). */
-  | "materialIntensity" | "materialTintOpacity";
-/** Properties that take colors, animated in OKLCH. */
-export type MotionColorProperty = "backgroundColor";
+  | "materialIntensity" | "materialTintOpacity"
+  /**
+   * A MotionShape's morph between its paths (0 is the first; 1.5 halfway from the second to the third), the trimmed
+   * ends of its stroke (0-1 of its length) and its stroke width in points (docs/motion.md#shapes).
+   */
+  | "morph" | "strokeStart" | "strokeEnd" | "strokeWidth";
+export type { MotionColorProperty };
 export type MotionProperty = MotionNumberProperty | MotionColorProperty;
-/** Properties as the engine stores them: `scale` drives `scaleX` and `scaleY`, `backgroundColor` its OKLCH components. */
+/** Properties as the engine stores them: `scale` drives `scaleX` and `scaleY`, a color its OKLCH components. */
 export type MotionChannelProperty = Exclude<MotionNumberProperty, "scale"> | ColorComponent;
 export type MotionValues = Partial<Record<MotionNumberProperty, number> & Record<MotionColorProperty, MotionColor>>;
-/** What an animation of a property animates to: a number, or a color for `backgroundColor`. */
+/** What an animation of a property animates to: a number, or a color for a color property. */
 export type MotionValue = number | MotionColor;
 export type CubicBezier = readonly [x1: number, y1: number, x2: number, y2: number];
 export type Easing = "linear" | "easeIn" | "easeOut" | "easeInOut" | "standard" | CubicBezier;
@@ -77,7 +81,9 @@ export const MOTION_PROPERTIES: readonly MotionProperty[] = [
   "opacity", "translateX", "translateY", "scale", "scaleX", "scaleY", "rotate", "rotateX", "rotateY", "perspective",
   "borderRadius", "backgroundColor", "shadowOpacity", "shadowRadius", "shadowOffsetX", "shadowOffsetY", "blur",
   "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius", "materialIntensity", "materialTintOpacity",
+  "morph", "strokeStart", "strokeEnd", "strokeWidth", "fillColor", "strokeColor",
 ];
+export const isColorProperty = (property: string): property is MotionColorProperty => (COLOR_PROPERTIES as readonly string[]).includes(property);
 const EASINGS: Record<Exclude<Easing, CubicBezier>, CubicBezier> = {
   linear: [0, 0, 1, 1], easeIn: [0.42, 0, 1, 1], easeOut: [0, 0, 0.58, 1], easeInOut: [0.42, 0, 0.58, 1], standard: [0.4, 0, 0.2, 1],
 };
@@ -245,15 +251,12 @@ function component(spec: MotionSpec<MotionValue>, next: () => number): MotionSpe
   if (spec.type === "sequence") return { ...spec, steps: spec.steps.map(step => component(step, next)) };
   return spec;
 }
-/** A color animation as the engine runs it: one animation per OKLCH component, leaving out components that never show (colors.ts). */
-export function colorTracks(spec: MotionSpec<MotionValue>): [ColorComponent, MotionSpec][] {
+/** A color animation of `property` as the engine runs it: one animation per OKLCH component, leaving out components that never show (colors.ts). */
+export function colorTracks(spec: MotionSpec<MotionValue>, property: MotionColorProperty): [ColorComponent, MotionSpec][] {
   const parsed: Oklch[] = stops(spec).map(stop => parseColor(stop));
-  const components = colorStops(parsed);
-  return COLOR_COMPONENTS.flatMap(name => {
-    const values = components[name];
-    if (!values) return [];
+  return colorStops(parsed, property).map(([name, values]) => {
     let index = 0;
-    return [[name, component(spec, () => values[index++]!)]];
+    return [name, component(spec, () => values[index++]!)];
   });
 }
 
@@ -276,7 +279,7 @@ export function transitionSpec(value: MotionTransition = { preset: "smooth" }): 
   return spec;
 }
 
-/** Expands `scale` and validates property names, keeping caller order. `backgroundColor` stays whole: callers expand colors. */
+/** Expands `scale` and validates property names, keeping caller order. Colors stay whole: callers expand them. */
 export function channels<V extends Partial<Record<MotionProperty, unknown>>>(values: V, name: string): [Exclude<MotionProperty, "scale">, V[keyof V]][] {
   type T = V[keyof V];
   if (!values || typeof values !== "object" || Array.isArray(values)) invalid(`${name} must be an object of motion properties`);

@@ -602,6 +602,12 @@ int main() {
     CHECK(propertyFromName("maskRadius") == MaskRadius && propertyFromName("backgroundColorAlpha") == BackgroundColorAlpha && !propertyFromName("backgroundColor"));
     CHECK(kIdentity[Opacity] == 1 && kIdentity[ScaleX] == 1 && kIdentity[BackgroundColorAlpha] == 0 && kIdentity[Blur] == 0);
     CHECK(travels(RotateX) && travels(MaskInsetEnd) && !travels(BackgroundColorL) && !travels(ShadowRadius) && !travels(Blur) && !travels(BorderRadius));
+    // Shapes: the morph is its own channel (each sample is a whole path); the morph and the stroke's ends travel, the
+    // stroke width and colors fade. A shape at rest shows its first path and its whole stroke, 1 point wide.
+    CHECK(channelOf(Morph) == Channel::ShapePath && channelOf(StrokeEnd) == Channel::Shape && channelOf(FillColorH) == Channel::Shape && channelOf(StrokeColorAlpha) == Channel::Shape);
+    CHECK(travels(Morph) && travels(StrokeStart) && travels(StrokeEnd) && !travels(StrokeWidth) && !travels(FillColorL) && !travels(StrokeColorAlpha));
+    CHECK(kIdentity[Morph] == 0 && kIdentity[StrokeStart] == 0 && kIdentity[StrokeEnd] == 1 && kIdentity[StrokeWidth] == 1 && kIdentity[FillColorAlpha] == 0 && kIdentity[StrokeColorAlpha] == 0);
+    CHECK(propertyFromName("morph") == Morph && propertyFromName("strokeColorAlpha") == StrokeColorAlpha && !propertyFromName("fillColor"));
     Engine effects;
     std::vector<Settled> done;
     std::vector<int64_t> views;
@@ -643,6 +649,14 @@ int main() {
     Plan appear{"appear", {{3, {{BackgroundColorL, timingTo(0.7, 1)}, {BackgroundColorC, timingTo(0.1, 1)}, {BackgroundColorH, timingTo(120, 1)}, {BackgroundColorAlpha, timingTo(1, 1)}}, false, 0}}};
     color.run(appear, 0, done, views);
     CHECK(color.state(3, BackgroundColorL, 0.5).value == 0.7 && color.state(3, BackgroundColorH, 0).value == 120 && near(color.state(3, BackgroundColorAlpha, 0.5).value, 0.5, 1e-6));
+    // A shape's fill and stroke colors (docs/motion.md#shapes) follow the same rules, each by its own components.
+    Values shape = kIdentity;
+    shape[FillColorL] = 0.55; shape[FillColorC] = 0.2; shape[FillColorH] = 350; shape[FillColorAlpha] = 1;
+    color.addView(4, shape);
+    Plan fill{"fill", {{4, {{FillColorH, timingTo(10, 1, {0, 0, 1, 1})}, {StrokeColorL, timingTo(0.7, 1)}, {StrokeColorH, timingTo(120, 1)}, {StrokeColorAlpha, timingTo(1, 1)}}, false, 0}}};
+    color.run(fill, 0, done, views);
+    CHECK(near(color.state(4, FillColorH, 0.5).value, 360, 1e-9) && near(color.state(4, FillColorH, 1).value, 370, 1e-9));
+    CHECK(color.state(4, StrokeColorL, 0.5).value == 0.7 && color.state(4, StrokeColorH, 0).value == 120 && near(color.state(4, StrokeColorAlpha, 0.5).value, 0.5, 1e-6));
     // OKLCH to sRGB: white, black, the sRGB primaries' OKLCH coordinates, and alpha.
     const Rgba white = oklchToSrgb(1, 0, 0, 1), black = oklchToSrgb(0, 0, 0, 0.5);
     CHECK(near(white.red, 1, 1e-6) && near(white.green, 1, 1e-6) && near(white.blue, 1, 1e-6) && near(black.red, 0, 1e-9) && black.alpha == 0.5);
@@ -662,6 +676,28 @@ int main() {
     CHECK(reduced.reduced && near(reduced.end, kReducedFade, 1e-9));
     CHECK(reduce.state(1, RotateY, 0).value == 180 && reduce.state(1, MaskInsetEnd, 0).value == 50 && reduce.state(1, Opacity, 0).value == 0);
     CHECK(near(reduce.state(1, ShadowRadius, kReducedFade / 2).value, 7, 1e-6) && near(reduce.state(1, BackgroundColorAlpha, kReducedFade / 2).value, 0.5, 1e-6));
+    // A shape's path bake holds a whole path per sample: at most 60 per second and 240 per part, however long the
+    // animation (a 60 s spring, a 20 s loop); other shape properties sample at the display rate.
+    Engine paths;
+    paths.addView(1, kIdentity);
+    paths.run(plan("short", 1, Morph, timingTo(1, 1)), 0, done, views);
+    paths.run(plan("stroke", 1, StrokeEnd, timingTo(0, 1)), 0, done, views);
+    CHECK(paths.bake(1, Channel::ShapePath, 0, 120).lead->samples.size() == 61 && paths.bake(1, Channel::Shape, 0, 120).lead->samples.size() == 121);
+    paths.run(plan("long", 1, Morph, timingTo(2, 60)), 0, done, views);
+    CHECK(paths.bake(1, Channel::ShapePath, 0, 120).lead->samples.size() == size_t(Engine::kMaxPathSamples) + 1);
+    Spec breathe = timingTo(1, 10);
+    breathe.repeat = INFINITY;
+    breathe.reverse = true;
+    paths.run(plan("loop", 1, Morph, breathe), 0, done, views);
+    const ChannelBake looping = paths.bake(1, Channel::ShapePath, 0, 120);
+    CHECK(looping.loop && looping.loop->samples.size() == size_t(Engine::kMaxPathSamples) + 1 && near(looping.loop->duration, 20, 1e-9));
+    // A shape's morph and drawn stroke jump and the view fades in where they land; its stroke width fades.
+    reduce.addView(2, kIdentity);
+    Plan draw{"draw", {{2, {{Morph, springTo(1)}, {StrokeEnd, timingTo(0, 1)}, {StrokeWidth, springTo(5)}}, false, 0}}};
+    draw.reduceMotion = true;
+    reduce.run(draw, 0, done, views);
+    CHECK(reduce.state(2, Morph, 0).value == 1 && reduce.state(2, StrokeEnd, 0).value == 0 && reduce.state(2, Opacity, 0).value == 0);
+    CHECK(near(reduce.state(2, StrokeWidth, kReducedFade / 2).value, 3, 1e-6) && near(reduce.state(2, Opacity, kReducedFade / 2).value, 0.5, 1e-6));
   }
 
   if (failures) { std::printf("%d motion engine checks failed\n", failures); return 1; }

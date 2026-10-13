@@ -51,14 +51,15 @@ const STYLED: Record<string, RegExp> = { backgroundColor: /^backgroundColor$/, b
 /** A view whose own layer the motion engine animates. Throws a SparkError where motion is unavailable: there is no JavaScript-driven substitute. */
 export function MotionView(props: MotionViewProps) { return useMotionView(props); }
 
-/** A MotionMaterial's validated native material props (JSON); internal. */
-export type MaterialNativeProps = Pick<NativeProps, "material" | "tintColor" | "crossfade">;
+/** A MotionMaterial's or MotionShape's validated native content props (JSON); internal. */
+export type ContentNativeProps = Pick<NativeProps, "material" | "tintColor" | "crossfade"> | Pick<NativeProps, "shape">;
+const SHAPE_PROPERTIES = ["morph", "strokeStart", "strokeEnd", "strokeWidth", "fillColor", "strokeColor"];
 
 /**
  * Validates a MotionView's props (it throws while rendering) and renders its native view; a MotionMaterial passes its
- * material (docs/motion.md#backdrop-materials). Internal.
+ * material (docs/motion.md#backdrop-materials), a MotionShape its shape (docs/motion.md#shapes). Internal.
  */
-export function useMotionView({ initial, enter, exit, layout, sharedId, transition, style, ref, ...props }: MotionViewProps, nativeMaterial?: MaterialNativeProps) {
+export function useMotionView({ initial, enter, exit, layout, sharedId, transition, style, ref, ...props }: MotionViewProps, content?: ContentNativeProps) {
   motionModule();
   const flat = StyleSheet.flatten(style);
   const keys = flat ? Object.keys(flat) : [];
@@ -71,8 +72,10 @@ export function useMotionView({ initial, enter, exit, layout, sharedId, transiti
     const drawn = set.find(property => (elsewhere.borders && (property === "backgroundColor" || property === "borderRadius")) || (elsewhere.mask && property.startsWith("mask")));
     if (drawn) throw new SparkError("E_UNSUPPORTED_OPTION", `initial.${drawn}: React Native draws this view's ${drawn.startsWith("mask") ? "clip as a mask (overflow hidden with per-corner radii)" : "border and background on their own layer"}, which motion cannot drive`);
   }
-  const material = !nativeMaterial && initial && Object.keys(initial).find(property => property.startsWith("material"));
+  const material = !(content && "material" in content) && initial && Object.keys(initial).find(property => property.startsWith("material"));
   if (material) throw new SparkError("E_UNSUPPORTED_OPTION", `initial.${material}: the view has no backdrop material; use a MotionMaterial`);
+  const shape = !(content && "shape" in content) && initial && Object.keys(initial).find(property => SHAPE_PROPERTIES.includes(property));
+  if (shape) throw new SparkError("E_UNSUPPORTED_OPTION", `initial.${shape}: the view has no shape; use a MotionShape`);
   if (layout !== undefined && layout !== "position" && layout !== "frame") invalid("layout is position or frame");
   if (sharedId !== undefined && (typeof sharedId !== "string" || !sharedId)) invalid("sharedId must be a non-empty string");
   if (transition !== undefined && layout === undefined && sharedId === undefined) invalid("transition applies to layout and sharedId changes; set one of them");
@@ -80,5 +83,5 @@ export function useMotionView({ initial, enter, exit, layout, sharedId, transiti
   const transitionJson = layout === undefined && sharedId === undefined ? undefined : JSON.stringify(transitionSpec(transition));
   const target = usePresenceMotion(ref, enter, exit);
   const NativeMotionView = getNativeMotionView();
-  return <NativeMotionView {...props} {...nativeMaterial} ref={target} style={style} initialValues={initialValues} layout={layout} sharedId={sharedId} transition={transitionJson} />;
+  return <NativeMotionView {...props} {...content} ref={target} style={style} initialValues={initialValues} layout={layout} sharedId={sharedId} transition={transitionJson} />;
 }

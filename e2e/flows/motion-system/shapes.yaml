@@ -1,0 +1,53 @@
+appId: so.legend.spark.examples.kitchensink
+name: A shape morphs and draws its stroke on the compositor, following Reduce Motion
+intent: >
+  On Motion system > Shapes, with the virtual clock frozen. The shape is a MotionShape with three paths (a circle, a
+  star and a square, subdivided to one structure). Next shape springs its morph from the circle to the star and its fill
+  from blue to amber in OKLCH; frozen frames at the morph's start and end match their goldens. Draw animates the
+  checkmark's strokeEnd from 0 to 1 on an ease-in-out timing curve: halfway through, Read reports it half drawn (checked
+  as values, not pixels). Progress springs the ring's strokeEnd from a quarter to a half. The screen at rest, star,
+  checkmark and half ring, matches its golden. With Reduce Motion on (simulated), drawing the checkmark off and on again
+  changes the stroke at once and fades the shape in where it lands (a 200 ms crossfade), and the spring morph to the
+  square completes within that fade (docs/motion.md#shapes).
+checks: [MOT-SHAPE-01, MOT-SHAPEREDUCE-01, MOT-CLOCK-01]
+tags: [motion-system]
+platforms: [macos]
+matrix:
+  appearance: [light]
+  locale: [en]
+---
+- launchApp: { openUrl: "spark-ks://motion-system/shapes" }
+- extendedWaitUntil: { visible: { id: motion-system-shapes-root }, timeout: 10s }
+- assertText: { id: motion-system-shapes-availability, equals: '{"available":true}' }
+- assertText: { id: motion-system-shapes-environment, equals: '{"reduceMotion":false}' }
+- setClock: virtual
+# The circle springs into the star, its fill from blue to amber.
+- tapOn: { id: motion-system-shapes-next }
+- assertMotion: { target: { id: motion-system-shapes-shape }, kind: spring, settlesWithin: 1500ms, frames: { at: [0, 100], golden: shapes-morph, mask: [{ id: infra-shell-sidebar }, { id: motion-system-shapes-morph-result }] } }
+- assertText: { id: motion-system-shapes-morph-result, equals: '{"finished":true,"morph":1,"fillColor":"oklch(0.7686 0.1647 70.08 / 1)"}' }
+# The checkmark draws on: half drawn halfway through its ease-in-out timing.
+- tapOn: { id: motion-system-shapes-draw }
+- interruptAt: { target: { id: motion-system-shapes-check }, progress: 0.5, with: { tapOn: { id: motion-system-shapes-read } } }
+- assertText: { id: motion-system-shapes-read-result, equals: '{"morph":1,"strokeEnd":0.5}' }
+- advanceClock: 300ms
+- assertText: { id: motion-system-shapes-draw-result, equals: '{"finished":true,"strokeEnd":1}' }
+# The ring springs from a quarter to a half.
+- tapOn: { id: motion-system-shapes-progress }
+- assertMotion: { target: { id: motion-system-shapes-ring }, kind: spring, settlesWithin: 1500ms }
+- assertText: { id: motion-system-shapes-progress-result, equals: '{"finished":true,"strokeEnd":0.5}' }
+- assertScreenshot: { golden: shapes-drawn, mask: [{ id: infra-shell-sidebar }] }
+# Reduce Motion: the stroke changes at once and the shape fades in where it lands; the morph completes within the fade.
+- simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: true }
+- assertText: { id: motion-system-shapes-environment, equals: '{"reduceMotion":true}' }
+- tapOn: { id: motion-system-shapes-draw }
+- assertMotion: { target: { id: motion-system-shapes-check }, kind: crossfade, settlesWithin: 250ms }
+- assertText: { id: motion-system-shapes-draw-result, equals: '{"finished":true,"strokeEnd":0}' }
+- tapOn: { id: motion-system-shapes-draw }
+- assertMotion: { target: { id: motion-system-shapes-check }, kind: crossfade, settlesWithin: 250ms }
+- assertText: { id: motion-system-shapes-draw-result, equals: '{"finished":true,"strokeEnd":1}' }
+- tapOn: { id: motion-system-shapes-next }
+# The morph jumps and the fill fades: no single kind, so the motion is captured (it waits until it settles).
+- captureMotion: { target: { id: motion-system-shapes-shape }, name: shapes-reduced-morph }
+- assertText: { id: motion-system-shapes-morph-result, equals: '{"finished":true,"morph":2,"fillColor":"oklch(0.6271 0.1699 149.21 / 1)"}' }
+- simulateSystemEvent: { type: accessibilityDisplayChanged, reduceMotion: false }
+- setClock: real

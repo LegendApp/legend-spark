@@ -255,7 +255,9 @@ const char *propertyName(Property property) {
     "borderRadius", "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha",
     "shadowOpacity", "shadowRadius", "shadowOffsetX", "shadowOffsetY", "blur",
     "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius",
-    "materialIntensity", "materialTintOpacity", "materialCrossfade"};
+    "materialIntensity", "materialTintOpacity", "materialCrossfade",
+    "morph", "strokeStart", "strokeEnd", "strokeWidth", "fillColorL", "fillColorC", "fillColorH", "fillColorAlpha",
+    "strokeColorL", "strokeColorC", "strokeColorH", "strokeColorAlpha"};
   static_assert(sizeof(names) / sizeof(names[0]) == PropertyCount);
   return names[property];
 }
@@ -272,14 +274,21 @@ Channel channelOf(Property property) {
     case Blur: return Channel::Blur;
     case MaskInsetTop: case MaskInsetBottom: case MaskInsetStart: case MaskInsetEnd: case MaskRadius: return Channel::Mask;
     case MaterialIntensity: case MaterialTintOpacity: case MaterialCrossfade: return Channel::Material;
+    case Morph: return Channel::ShapePath;
+    case StrokeStart: case StrokeEnd: case StrokeWidth: case FillColorL: case FillColorC: case FillColorH: case FillColorAlpha:
+    case StrokeColorL: case StrokeColorC: case StrokeColorH: case StrokeColorAlpha: return Channel::Shape;
     default: return Channel::Transform;
   }
 }
-bool travels(Property property) { return channelOf(property) == Channel::Transform || channelOf(property) == Channel::Mask; }
+bool travels(Property property) {
+  const Channel channel = channelOf(property);
+  return channel == Channel::Transform || channel == Channel::Mask || property == Morph || property == StrokeStart || property == StrokeEnd;
+}
 Rest restThreshold(Property property) {
   switch (property) {
     case Opacity: case ScaleX: case ScaleY: case BackgroundColorL: case BackgroundColorC: case BackgroundColorAlpha: case ShadowOpacity:
-    case MaterialIntensity: case MaterialTintOpacity: case MaterialCrossfade: return {0.0005, 0.005};
+    case MaterialIntensity: case MaterialTintOpacity: case MaterialCrossfade: case Morph: case StrokeStart: case StrokeEnd:
+    case FillColorL: case FillColorC: case FillColorAlpha: case StrokeColorL: case StrokeColorC: case StrokeColorAlpha: return {0.0005, 0.005};
     default: return {0.01, 0.1};
   }
 }
@@ -580,12 +589,14 @@ Started Engine::start(const Plan &plan, double now, std::vector<Settled> &settle
   // seen (the hue of a gray, every component of a transparent color) starts at its target instead of travelling there.
   std::vector<Group> groups = plan.groups;
   const auto prepareColor = [&](Tracks &tracks, const Slots &live) {
-    const double alpha = slotState(live[BackgroundColorAlpha], now).value, chroma = slotState(live[BackgroundColorC], now).value;
     const double invisible = restThreshold(BackgroundColorAlpha).delta;
-    for (auto &[property, spec] : tracks) {
-      if (property < BackgroundColorL || property > BackgroundColorH || spec.kind == Spec::Kind::Decay || spec.from) continue;
-      if (property == BackgroundColorH) shiftTargets(spec, 360 * std::round((slotState(live[property], now).value - firstTarget(spec)) / 360));
-      if (alpha < invisible || (property == BackgroundColorH && chroma < invisible)) spec.from = State{firstTarget(spec), 0};
+    for (const ColorProperty &color : kColorProperties) {
+      const double alpha = slotState(live[color.alpha], now).value, chroma = slotState(live[color.chroma], now).value;
+      for (auto &[property, spec] : tracks) {
+        if ((property != color.lightness && property != color.chroma && property != color.hue) || spec.kind == Spec::Kind::Decay || spec.from) continue;
+        if (property == color.hue) shiftTargets(spec, 360 * std::round((slotState(live[property], now).value - firstTarget(spec)) / 360));
+        if (alpha < invisible || (property == color.hue && chroma < invisible)) spec.from = State{firstTarget(spec), 0};
+      }
     }
   };
   for (Group &group : groups) {
@@ -935,7 +946,9 @@ const char *kindName(Spec::Kind kind) {
 
 ChannelBake Engine::bake(int64_t view, Channel channel, double now, double rate) const {
   require(positive(rate), "The bake rate must be positive");
-  rate = std::min(rate, kSampleRate);
+  const bool paths = channel == Channel::ShapePath;
+  rate = std::min(rate, paths ? kPathSampleRate : kSampleRate);
+  const int cap = paths ? kMaxPathSamples : kMaxSamples;
   const Slots &target = views_.at(view);
   // Only the channel's own properties are evaluated; the others keep their model values.
   auto valuesAt = [&](double time) {
@@ -945,7 +958,7 @@ ChannelBake Engine::bake(int64_t view, Channel channel, double now, double rate)
   };
   auto sample = [&](double begin, double duration) {
     Bake bake{begin, duration, {}};
-    const int count = std::clamp(int(std::ceil(duration * rate)), 1, kMaxSamples) + 1;
+    const int count = std::clamp(int(std::ceil(duration * rate)), 1, cap) + 1;
     bake.samples.reserve(count);
     for (int i = 0; i < count; i++) bake.samples.push_back(valuesAt(begin + duration * i / (count - 1)));
     return bake;

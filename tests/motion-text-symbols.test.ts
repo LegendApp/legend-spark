@@ -30,6 +30,7 @@ vi.mock("react-native", () => ({
   Text: "Text",
 }));
 vi.mock("../packages/motion/src/motion-view-host", () => ({ getNativeMotionView: () => "SparkMotionView", getNativeMotionSymbol: () => "SparkMotionSymbol" }));
+import { parseSvgPath } from "../packages/motion/src/svg-path";
 import { getSymbolEffectAvailability, motionPath, MotionNumber, MotionSymbol, MotionText, playSymbolEffect, spring, stopSymbolEffects, timing } from "../packages/motion/src/index";
 import { sharedUnits, textUnits } from "../packages/motion/src/text-units";
 
@@ -97,6 +98,35 @@ test("motionPath: keyframes along an SVG path at even distances, paced by the ea
     expect(code(bad)).toBe("E_INVALID_ARGUMENT");
   expect(code(() => motionPath("M0 0 A5 5 0 0 1 10 0", { durationMs: 1 }))).toBe("E_UNSUPPORTED_OPTION");
   expect(code(() => motionPath("M0 0 L1 0", { durationMs: 1, velocity: 2 } as never))).toBe("E_UNSUPPORTED_OPTION");
+  // The strict path data parser (docs/motion.md#path-data): stray characters and commas before commands are rejected
+  // (they were ignored), upper-case exponents and leading plus signs are numbers, and S and T reflect only the previous
+  // C/S or Q/T control point.
+  for (const bad of ["M0 0 L100 0 ;", "M0 0, L100 0", "M0 0 L100 0,"]) expect(code(() => motionPath(bad, { durationMs: 1 })), bad).toBe("E_INVALID_ARGUMENT");
+  expect(motionPath("M0 0 L1E2 +0", { durationMs: 1 }).translateX.values.at(-1)).toBeCloseTo(100, 9);
+  const after = motionPath("M0 0 Q50 50 100 0 S150 0 200 0", { durationMs: 1 });
+  after.translateX.values.forEach((x, index) => { if (x > 100.5) expect(Math.abs(after.translateY.values[index]!), String(x)).toBeLessThan(1e-9); });
+});
+
+test("SVG path data: the number grammar, token positions in errors, commas between numbers only, and Z", () => {
+  const start = (d: string) => parseSvgPath(d, "d")[0]!.start;
+  expect(start("M1-2 L0 0")).toEqual([1, -2]);
+  expect(start("M.5.5 L0 0")).toEqual([0.5, 0.5]);
+  expect(start("M1E5 +.5 L0 0")).toEqual([100000, 0.5]);
+  expect(start("M1e-1,2 L0 0")).toEqual([0.1, 2]);
+  const message = (d: string) => { try { parseSvgPath(d, "d"); } catch (error) { return `${(error as { code: string }).code} ${(error as Error).message}`; } return "none"; };
+  expect(message("M0 0 L10")).toBe("E_INVALID_ARGUMENT d needs another number for L at its end");
+  expect(message("M0 0 L10 Z")).toBe("E_INVALID_ARGUMENT d needs another number for L before Z at character 10");
+  expect(message("M0 0 L1 1 Z 5 5")).toMatch(/^E_INVALID_ARGUMENT d has a number after Z at character 13/);
+  expect(message("M0 0 ,L1 1")).toBe('E_INVALID_ARGUMENT d has an unexpected "," at character 6');
+  expect(message("M,0 0")).toBe('E_INVALID_ARGUMENT d has an unexpected "," at character 2');
+  expect(message("M0 0 L1 1 ?")).toBe('E_INVALID_ARGUMENT d has an unexpected "?" at character 11');
+  // Z right after Z closes nothing more; a closed subpath then starts again from its start.
+  expect(parseSvgPath("M0 0 L10 0 L10 10 Z Z", "d")).toEqual([{ start: [0, 0], segments: expect.any(Array), closed: true }]);
+  const reopened = parseSvgPath("M5 5 L10 5 Z L5 10", "d");
+  expect(reopened).toHaveLength(2);
+  expect(reopened[1]).toMatchObject({ start: [5, 5], closed: false });
+  // T after C does not reflect the cubic's control point: its control is the current point.
+  expect(parseSvgPath("M0 0 C10 10 20 10 30 0 T60 0", "d")[0]!.segments[1]).toEqual([30, 0, 40, 0, 60, 0]);
   expect(code(() => motionPath("M0 0 L1 0", { durationMs: 1, easing: [0.3, -0.5, 0.7, 1.5] }))).toBe("E_UNSUPPORTED_OPTION");
 });
 

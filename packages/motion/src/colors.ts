@@ -7,9 +7,14 @@ import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 export type MotionColor = string;
 /** OKLCH: lightness 0-1, chroma (0 is gray), hue in degrees, alpha 0-1. */
 export type Oklch = readonly [lightness: number, chroma: number, hue: number, alpha: number];
-/** The engine's components of a color property. */
-export const COLOR_COMPONENTS = ["backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha"] as const;
-export type ColorComponent = typeof COLOR_COMPONENTS[number];
+/** Properties that take colors: a view's background, and a MotionShape's fill and stroke (docs/motion.md#shapes). */
+export const COLOR_PROPERTIES = ["backgroundColor", "fillColor", "strokeColor"] as const;
+export type MotionColorProperty = typeof COLOR_PROPERTIES[number];
+/** The engine's components of a color property: lightness, chroma, hue and alpha. */
+export type ColorComponent = `${MotionColorProperty}${"L" | "C" | "H" | "Alpha"}`;
+export const colorComponents = (property: MotionColorProperty) =>
+  [`${property}L`, `${property}C`, `${property}H`, `${property}Alpha`] as const satisfies readonly ColorComponent[];
+export const COLOR_COMPONENTS: readonly ColorComponent[] = COLOR_PROPERTIES.flatMap(colorComponents);
 /** Below this chroma a color is gray (its hue does not show); below this alpha it is transparent. The engine uses the same threshold. */
 const INVISIBLE = 0.0005;
 
@@ -76,13 +81,13 @@ export function formatColor([lightness, chroma, hue, alpha]: readonly number[]):
 }
 
 /**
- * The components of a list of color stops, ready to interpolate in OKLCH: a transparent stop takes the lightness,
- * chroma and hue of the nearest visible stop before it (after it for leading ones), a gray stop the hue of the nearest
- * colored one, and each hue is unwrapped to the shorter way round from the previous stop. A component that never shows
- * is left out (null): the hue of all-gray stops, and everything but alpha of all-transparent stops, so the engine keeps
- * what it has.
+ * The components of a list of color stops of `property`, ready to interpolate in OKLCH: a transparent stop takes the
+ * lightness, chroma and hue of the nearest visible stop before it (after it for leading ones), a gray stop the hue of
+ * the nearest colored one, and each hue is unwrapped to the shorter way round from the previous stop. A component that
+ * never shows is left out: the hue of all-gray stops, and everything but alpha of all-transparent stops, so the engine
+ * keeps what it has.
  */
-export function colorStops(stops: readonly Oklch[]): Record<ColorComponent, number[] | null> {
+export function colorStops(stops: readonly Oklch[], property: MotionColorProperty): [ColorComponent, number[]][] {
   const nearest = (index: number, visible: (stop: Oklch) => boolean) => {
     for (let i = index; i >= 0; i--) if (visible(stops[i]!)) return stops[i]!;
     for (let i = index + 1; i < stops.length; i++) if (visible(stops[i]!)) return stops[i]!;
@@ -93,16 +98,16 @@ export function colorStops(stops: readonly Oklch[]): Record<ColorComponent, numb
   const hues = stops.map((_, index) => nearest(index, colored)?.[2]);
   for (let i = 1; i < hues.length; i++) if (hues[i] !== undefined && hues[i - 1] !== undefined) hues[i] = hues[i - 1]! + ((((hues[i]! - hues[i - 1]!) % 360) + 540) % 360 - 180);
   const anyShown = shown[0] !== undefined;
-  return {
-    backgroundColorL: anyShown ? shown.map(stop => stop![0]) : null,
-    backgroundColorC: anyShown ? shown.map(stop => stop![1]) : null,
-    backgroundColorH: hues[0] === undefined ? null : hues as number[],
-    backgroundColorAlpha: stops.map(stop => stop[3]),
-  };
+  const [lightness, chroma, hue, alpha] = colorComponents(property);
+  return [
+    ...(anyShown ? [[lightness, shown.map(stop => stop![0])], [chroma, shown.map(stop => stop![1])]] as [ColorComponent, number[]][] : []),
+    ...(hues[0] === undefined ? [] : [[hue, hues as number[]]] as [ColorComponent, number[]][]),
+    [alpha, stops.map(stop => stop[3])],
+  ];
 }
 
-/** A color as engine values: all four components (a value that is set does not interpolate). */
-export function colorValues(value: unknown, name: string): Record<ColorComponent, number> {
-  const [l, c, h, alpha] = parseColor(value, name);
-  return { backgroundColorL: l, backgroundColorC: c, backgroundColorH: h, backgroundColorAlpha: alpha };
+/** A color of `property` as engine values: all four components (a value that is set does not interpolate). */
+export function colorValues(value: unknown, name: string, property: MotionColorProperty): [ColorComponent, number][] {
+  const color = parseColor(value, name);
+  return colorComponents(property).map((component, index) => [component, color[index]!]);
 }

@@ -25,14 +25,15 @@ vi.mock("react-native", () => ({
 vi.mock("../packages/motion/src/motion-view-host", () => ({ getNativeMotionView: () => "SparkMotionView" }));
 import * as motion from "../packages/motion/src/index";
 import { spring, timing, keyframes, decay, sequence, animate, stagger, timeline, setMotionValues, stopMotion, getMotionState, linkScroll, recordMotionFrames, getMotionAvailability, getMotionEnvironment, MotionView,
-  MotionMaterial, getMaterialAvailability } from "../packages/motion/src/index";
+  MotionMaterial, getMaterialAvailability, MotionShape } from "../packages/motion/src/index";
 
 const a = {} as any, b = {} as any, c = {} as any;
 const sent = (mock: { mock: { calls: unknown[][] } }, call = -1) => JSON.parse(mock.mock.calls.at(call)![0] as string);
 const code = (run: () => unknown) => { try { run(); } catch (error) { return (error as { code?: string }).code; } return "none"; };
 const CHANNELS = ["opacity", "translateX", "translateY", "scaleX", "scaleY", "rotate", "rotateX", "rotateY", "perspective", "borderRadius", "shadowOpacity", "shadowRadius",
   "shadowOffsetX", "shadowOffsetY", "blur", "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius", "materialIntensity", "materialTintOpacity",
-  "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha"];
+  "morph", "strokeStart", "strokeEnd", "strokeWidth", "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha",
+  "fillColorL", "fillColorC", "fillColorH", "fillColorAlpha", "strokeColorL", "strokeColorC", "strokeColorH", "strokeColorAlpha"];
 const values = (value: number) => Object.fromEntries(CHANNELS.map(property => [property, value]));
 
 beforeEach(() => {
@@ -43,7 +44,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 test("the public entry exports the imperative API, builders, the components, and no hooks", () => {
-  expect(Object.keys(motion).sort()).toEqual(["MotionMaterial", "MotionNumber", "MotionPresence", "MotionSymbol", "MotionText", "MotionView", "animate", "decay", "getMaterialAvailability", "getMotionAvailability", "getMotionEnvironment", "getMotionState",
+  expect(Object.keys(motion).sort()).toEqual(["MotionMaterial", "MotionNumber", "MotionPresence", "MotionShape", "MotionSymbol", "MotionText", "MotionView", "animate", "decay", "getMaterialAvailability", "getMotionAvailability", "getMotionEnvironment", "getMotionState",
     "getSymbolEffectAvailability", "keyframes", "linkScroll", "motionPath", "playSymbolEffect", "recordMotionFrames", "sequence", "setMotionValues", "spring", "stagger", "stopMotion", "stopSymbolEffects", "timeline", "timing"]);
 });
 
@@ -192,7 +193,7 @@ test("set, stop, state, scroll links and frame reports validate input and native
   const state = { values: { ...values(1), backgroundColorL: 0.627955, backgroundColorC: 0.257683, backgroundColorH: 389.2339, backgroundColorAlpha: 1 }, velocities: values(0), animating: ["translateX"] };
   native.getState.mockResolvedValueOnce(JSON.stringify(state));
   // Colors are reported as CSS OKLCH, the hue back on the wheel.
-  await expect(getMotionState(a)).resolves.toEqual({ ...state, colors: { backgroundColor: "oklch(0.628 0.2577 29.23 / 1)" } });
+  await expect(getMotionState(a)).resolves.toEqual({ ...state, colors: { backgroundColor: "oklch(0.628 0.2577 29.23 / 1)", fillColor: "oklch(1 1 1 / 1)", strokeColor: "oklch(1 1 1 / 1)" } });
   expect(native.getState).toHaveBeenCalledWith(11);
   native.getState.mockResolvedValueOnce(JSON.stringify({ ...state, animating: ["width"] }));
   await expect(getMotionState(a)).rejects.toMatchObject({ code: "E_INVALID_DATA" });
@@ -233,6 +234,8 @@ test("availability is truthful; unavailable targets throw typed errors and rende
     expect(code(() => MotionView({ children: null }))).toBe("E_UNSUPPORTED_PLATFORM");
     expect(getMaterialAvailability("hudWindow")).toEqual({ available: false, reason: "unsupported-platform" });
     expect(code(() => MotionMaterial({ material: "hudWindow" }))).toBe("E_UNSUPPORTED_PLATFORM");
+    expect(code(() => MotionShape({ paths: ["M0 0 L10 0"] }))).toBe("E_UNSUPPORTED_PLATFORM");
+    expect(code(() => MotionShape({ paths: ["not a path"] }))).toBe("E_UNSUPPORTED_PLATFORM");
   }
   expect(Object.values(native).every(fn => fn.mock.calls.length === 0)).toBe(true);
 });
@@ -342,4 +345,67 @@ test("MotionMaterial: truthful availability, validated material props, a crossfa
   expect(Object.keys(sent(native.run).groups[0].tracks)).toEqual(["materialIntensity", "materialTintOpacity"]);
   expect(code(() => MotionView({ initial: { materialTintOpacity: 0 } }))).toBe("E_UNSUPPORTED_OPTION");
   expect(code(() => animate(a, { materialCrossfade: 0 } as never))).toBe("E_INVALID_ARGUMENT");
+});
+
+test("MotionShape: strict SVG path data, compatible paths subdivided to one structure, and shape properties only on a shape", async () => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  /** The SparkError code MotionShape throws while it renders (it validates its paths in a memo, inside React). */
+  const shapeCode = (props: unknown) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    try { act(() => { create(React.createElement(MotionShape, props as never)); }); } catch (error) { return (error as { code?: string }).code; } finally { vi.mocked(console.error).mockRestore(); }
+    return "none";
+  };
+  const render = async (props: Parameters<typeof MotionShape>[0]) => {
+    let rendered: any;
+    await act(async () => { rendered = create(React.createElement(MotionShape, props)); });
+    const native = rendered.root.findByType("SparkMotionView").props;
+    await act(async () => rendered.unmount());
+    return native;
+  };
+  // A square (4 lines) and a triangle (3 lines) morph: the triangle's longest side is halved, so both have 4 segments.
+  const square = "M0 0 H30 V30 H0 Z", triangle = "m0 0 l60 0 l-30 30 z";
+  const props = await render({ paths: [square, triangle], lineCap: "round", initial: { fillColor: "#ff0000", strokeEnd: 0, strokeWidth: 3 }, testID: "shape" });
+  const shape = JSON.parse(props.shape);
+  expect(props.testID).toBe("shape");
+  expect(shape.subpaths).toEqual([[4, true]]);
+  expect(shape).toMatchObject({ lineCap: "round" });
+  // Lines are cubics with their control points at thirds; the square's closing line comes from Z.
+  expect(shape.paths[0].slice(0, 8)).toEqual([0, 0, 10, 0, 20, 0, 30, 0]);
+  expect(shape.paths[0].slice(-6)).toEqual([0, 20, 0, 10, 0, 0]);
+  // The triangle's 60-point base is the longest side: halved at 30, it still draws the same triangle.
+  expect(shape.paths[1]).toHaveLength(2 + 6 * 4);
+  expect(shape.paths[1].slice(2, 8)).toEqual([10, 0, 20, 0, 30, 0]);
+  expect(shape.paths[1].slice(8, 14)).toEqual([40, 0, 50, 0, 60, 0]);
+  const initial = JSON.parse(props.initialValues);
+  expect(Object.keys(initial)).toEqual(["fillColorL", "fillColorC", "fillColorH", "fillColorAlpha", "strokeEnd", "strokeWidth"]);
+  expect(initial.fillColorH).toBeCloseTo(29.23, 1);
+  // Curves: quadratics become exact cubics; S and T reflect the previous control point; relative commands add up.
+  const curves = JSON.parse((await render({ paths: ["M0 0 Q30 30 60 0 T120 0 C130 -10 140 -10 150 0 s20 10 30 0"] })).shape);
+  expect(curves.paths[0].slice(0, 8)).toEqual([0, 0, 20, 20, 40, 20, 60, 0]);
+  expect(curves.paths[0].slice(8, 14)).toEqual([80, -20, 100, -20, 120, 0]);
+  expect(curves.paths[0].slice(20, 26)).toEqual([160, 10, 170, 10, 180, 0]);
+  expect(curves.subpaths).toEqual([[4, false]]);
+  // Strict path data: every character is a command, a number or a separator.
+  for (const bad of ["M0 0 L10 10 !", "M0 0 L10", "L1 1", "M0 0", "M0 0 L1 1 M5 5", "10 10", "M0 0 L1e 2", "M0 0 X1 1", "M0 0 L1 1,,2 2", "", 7 as never])
+    expect(shapeCode({ paths: [bad] }), String(bad)).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: ["M0 0 A5 5 0 0 1 10 0"] })).toBe("E_UNSUPPORTED_OPTION");
+  // Z after Z closes nothing more: the shape still has one closed subpath.
+  expect(JSON.parse((await render({ paths: ["M0 0 L10 0 L10 10 Z Z"] })).shape).subpaths).toEqual([[3, true]]);
+  // Paths morph only into paths with the same subpaths, each open or closed alike.
+  expect(shapeCode({ paths: ["M0 0 L10 0 Z", "M0 0 L10 0"] })).toBe("E_UNSUPPORTED_OPTION");
+  expect(shapeCode({ paths: ["M0 0 L10 0", "M0 0 L10 0 M20 0 L30 0"] })).toBe("E_UNSUPPORTED_OPTION");
+  // Bounded sizes: paths, segments per path, characters per path.
+  expect(shapeCode({ paths: [] })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: Array(17).fill("M0 0 L1 1") })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: [`M0 0 ${"L1 1 ".repeat(129)}`] })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: [`M0 0 L1 1 ${" ".repeat(10000)}`] })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: [square], lineJoin: "sharp" as never })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: [square], fillRule: "odd" as never })).toBe("E_INVALID_ARGUMENT");
+  expect(shapeCode({ paths: [square], children: "text" })).toBe("E_INVALID_ARGUMENT");
+  // The shape properties animate like any property, colors in OKLCH; a MotionView without a shape cannot start with them.
+  await animate(a, { morph: spring(1), strokeEnd: timing(1), strokeWidth: 2, strokeColor: timing("#0000ff") }).finished;
+  expect(Object.keys(sent(native.run).groups[0].tracks)).toEqual(["morph", "strokeEnd", "strokeWidth", "strokeColorL", "strokeColorC", "strokeColorH", "strokeColorAlpha"]);
+  expect(code(() => animate(a, { fillColor: 1 } as never))).toBe("E_INVALID_ARGUMENT");
+  expect(code(() => MotionView({ initial: { strokeEnd: 0 } }))).toBe("E_UNSUPPORTED_OPTION");
+  expect(code(() => MotionView({ initial: { fillColor: "#fff" } }))).toBe("E_UNSUPPORTED_OPTION");
 });

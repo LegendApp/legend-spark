@@ -27,11 +27,11 @@ CATransform3D SparkMotionTransform(const Values &values)
   return CATransform3DConcat(transform, CATransform3DMakeTranslation(values[TranslateX], values[TranslateY], 0));
 }
 
-/** The background color of OKLCH values as an extended sRGB CGColor (out-of-gamut components survive for wide-gamut displays). */
-static id SparkMotionColor(const Values &values)
+/** A color property's OKLCH values as an extended sRGB CGColor (out-of-gamut components survive for wide-gamut displays). */
+static id SparkMotionColor(const Values &values, const ColorProperty &property = kBackgroundColor)
 {
   static CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceExtendedSRGB);
-  const Rgba color = oklchToSrgb(values[BackgroundColorL], values[BackgroundColorC], values[BackgroundColorH], values[BackgroundColorAlpha]);
+  const Rgba color = oklchToSrgb(values[property.lightness], values[property.chroma], values[property.hue], values[property.alpha]);
   const CGFloat components[] = {color.red, color.green, color.blue, color.alpha};
   return CFBridgingRelease(CGColorCreate(space, components));
 }
@@ -43,6 +43,8 @@ static BOOL SparkMotionBlurred(NSView *view)
   return NO;
 }
 static SparkMotionMaterialStack *SparkMotionMaterialOf(NSView<SparkMotionHost> *host) { return [host respondsToSelector:@selector(motionMaterial)] ? host.motionMaterial : nil; }
+static SparkMotionShapeView *SparkMotionShapeOf(NSView<SparkMotionHost> *host) { return [host respondsToSelector:@selector(motionShape)] ? host.motionShape : nil; }
+static BOOL SparkMotionShapeChannel(Channel channel) { return channel == Channel::ShapePath || channel == Channel::Shape; }
 /** The mask's frame in layer coordinates: the view's bounds inset by the mask insets; start and end follow the layout direction. */
 static CGRect SparkMotionMaskRect(NSView *view, const Values &values, BOOL rightToLeft)
 {
@@ -78,6 +80,15 @@ void SparkMotionApplyLayer(NSView<SparkMotionHost> *host, const Values &values)
     material.tintLayer.opacity = std::clamp(values[MaterialTintOpacity], 0.0, 1.0);
     material.incomingLayer.opacity = std::clamp(values[MaterialCrossfade], 0.0, 1.0);
     [material setCornerRadius:layer.cornerRadius];
+  }
+  if (SparkMotionShapeView *shape = SparkMotionShapeOf(host)) {
+    CAShapeLayer *layer = shape.shapeLayer;
+    [shape showMorph:values[Morph]];
+    layer.strokeStart = std::clamp(values[StrokeStart], 0.0, 1.0);
+    layer.strokeEnd = std::clamp(values[StrokeEnd], 0.0, 1.0);
+    layer.lineWidth = MAX(0, values[StrokeWidth]);
+    layer.fillColor = (__bridge CGColorRef)SparkMotionColor(values, kFillColor);
+    layer.strokeColor = (__bridge CGColorRef)SparkMotionColor(values, kStrokeColor);
   }
 }
 
@@ -635,8 +646,9 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
 }
 
 /**
- * Throws E_UNSUPPORTED_OPTION for a property whose channel React Native draws for the view's style on another layer, or a
- * material property of a view without a material, and E_INVALID_ARGUMENT for the crossfade, which only material changes drive.
+ * Throws E_UNSUPPORTED_OPTION for a property whose channel React Native draws for the view's style on another layer, a
+ * material property of a view without a material, or a shape property of a view without a shape, and
+ * E_INVALID_ARGUMENT for the crossfade, which only material changes drive.
  */
 - (void)checkOwnable:(NSInteger)tag properties:(const std::vector<Property> &)properties
 {
@@ -649,6 +661,8 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     const Channel channel = channelOf(property);
     if (channel == Channel::Material && !SparkMotionMaterialOf(host))
       throw Failure{"E_UNSUPPORTED_OPTION", std::string(propertyName(property)) + ": the view has no backdrop material; use a MotionMaterial"};
+    if (SparkMotionShapeChannel(channel) && !SparkMotionShapeOf(host))
+      throw Failure{"E_UNSUPPORTED_OPTION", std::string(propertyName(property)) + ": the view has no shape; use a MotionShape"};
     if (!(style & SparkMotionChannelBit(channel))) continue;
     throw Failure{"E_UNSUPPORTED_OPTION", std::string(propertyName(property)) + (channel == Channel::Mask
       ? ": the view's style clips its content with a mask (overflow hidden with per-corner radii), which a motion mask would replace"
@@ -679,7 +693,10 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
 
 #pragma mark - Baking
 
-/** The layer key paths a channel's animations drive; the mask channel's are its mask layer's, the material channel's its material stack's. */
+/**
+ * The layer key paths a channel's animations drive; the mask channel's are its mask layer's, the material channel's its
+ * material stack's, and the shape channels' its shape layer's.
+ */
 static NSArray<NSString *> *SparkMotionKeyPaths(Channel channel)
 {
   switch (channel) {
@@ -691,6 +708,8 @@ static NSArray<NSString *> *SparkMotionKeyPaths(Channel channel)
     case Channel::Blur: return @[@"filters.sparkBlur.inputRadius"];
     case Channel::Mask: return @[@"bounds", @"position", @"cornerRadius"];
     case Channel::Material: return @[@"opacity", @"opacity", @"opacity"];  // the material views' container's, the tint's and the incoming material's layers
+    case Channel::ShapePath: return @[@"path"];
+    case Channel::Shape: return @[@"strokeStart", @"strokeEnd", @"lineWidth", @"fillColor", @"strokeColor"];
     case Channel::Count: break;
   }
   return @[];
@@ -715,6 +734,13 @@ static id SparkMotionSample(Channel channel, NSUInteger index, const Values &sam
       return index == 0 ? [NSValue valueWithRect:NSMakeRect(0, 0, rect.size.width, rect.size.height)] : [NSValue valueWithPoint:NSMakePoint(CGRectGetMidX(rect), CGRectGetMidY(rect))];
     }
     case Channel::Material: return @(std::clamp(sample[index == 0 ? MaterialIntensity : index == 1 ? MaterialTintOpacity : MaterialCrossfade], 0.0, 1.0));
+    // Every sample path has the same elements, so the compositor interpolates them point by point.
+    case Channel::ShapePath: return CFBridgingRelease([SparkMotionShapeOf(host) copyPathAt:sample[Morph]]);
+    case Channel::Shape:
+      if (index == 0) return @(std::clamp(sample[StrokeStart], 0.0, 1.0));
+      if (index == 1) return @(std::clamp(sample[StrokeEnd], 0.0, 1.0));
+      if (index == 2) return @(MAX(0, sample[StrokeWidth]));
+      return SparkMotionColor(sample, index == 3 ? kFillColor : kStrokeColor);
     case Channel::Count: break;
   }
   return nil;
@@ -766,10 +792,13 @@ static BOOL SparkMotionAnimating(Engine &engine, NSInteger tag, Channel channel,
   const double local = [layer convertTime:CACurrentMediaTime() fromLayer:nil];
   for (const auto &[channel, bake] : bakes) {
     SparkMotionMaterialStack *material = SparkMotionMaterialOf(host);
-    if (channel == Channel::Material && !material) continue;  // checkOwnable keeps plain MotionViews from animating it
+    SparkMotionShapeView *shape = SparkMotionShapeOf(host);
+    // checkOwnable keeps plain MotionViews from animating these
+    if ((channel == Channel::Material && !material) || (SparkMotionShapeChannel(channel) && !shape)) continue;
     NSArray<NSString *> *keyPaths = SparkMotionKeyPaths(channel);
     for (NSUInteger index = 0; index < keyPaths.count; index++) {
-      CALayer *target = channel == Channel::Mask ? SparkMotionMask(host) : channel != Channel::Material ? layer : index == 0 ? material.materialsLayer : index == 1 ? material.tintLayer : material.incomingLayer;
+      CALayer *target = channel == Channel::Mask ? SparkMotionMask(host) : SparkMotionShapeChannel(channel) ? shape.shapeLayer : channel != Channel::Material ? layer
+        : index == 0 ? material.materialsLayer : index == 1 ? material.tintLayer : material.incomingLayer;
       if (!target) continue;
       NSString *lead = [@"spark.motion." stringByAppendingString:keyPaths[index]], *loop = [lead stringByAppendingString:@".loop"];
       [target removeAnimationForKey:lead];
@@ -1368,6 +1397,14 @@ static NSRect SparkLayoutRect(NSView *view, NSView *reference)
     NSLog(@"Spark motion: material crossfade rejected: %s", failure.message.c_str());
     [stack push:material replace:YES];
   }
+}
+
+#pragma mark - Shapes
+
+- (void)hostDidReshape:(NSView<SparkMotionHost> *)host
+{
+  // A running morph is baked again on the new paths; at rest the model path shows them.
+  if ([_hosts objectForKey:@(host.motionTag)] == host) [self apply:host.motionTag channels:{Channel::ShapePath}];
 }
 
 #pragma mark - Symbol effects

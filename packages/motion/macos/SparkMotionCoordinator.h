@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import "SparkMotionMaterial.h"
+#import "SparkMotionShape.h"
 #include "SparkMotion.hpp"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -35,6 +36,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly, nullable) SparkMotionMaterialStack *motionMaterial;
 /** The validated crossfade transition (`spring` or `timing` JSON from JavaScript) of a MotionMaterial's material changes. */
 @property (nonatomic, readonly, nullable) NSDictionary *motionCrossfade;
+/** A MotionShape's shape layer view (docs/motion.md#shapes); nil for other MotionViews. */
+@property (nonatomic, readonly, nullable) SparkMotionShapeView *motionShape;
 @end
 
 /** A MotionSymbol: an SF Symbol image view that plays symbol effects (docs/motion.md#symbol-effects). */
@@ -98,6 +101,9 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
  */
 - (void)host:(NSView<SparkMotionHost> *)host crossfadeTo:(NSView *)material;
 
+/** A registered MotionShape's paths changed: its path shows the new ones at the current morph, a running morph continues on them. */
+- (void)hostDidReshape:(NSView<SparkMotionHost> *)host;
+
 /** Reduce Motion, Reduce Transparency, Low Power Mode, and the frame rates and window visibility of `tag`'s view (0: the main display, no window). */
 - (void)environment:(NSInteger)tag resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 
@@ -154,8 +160,8 @@ BOOL SparkSymbolEffectSupported(NSString *name);
 inline uint32_t SparkMotionChannelBit(spark::motion::Channel channel) { return 1u << static_cast<int>(channel); }
 /**
  * Applies every motion value except the transform to the host's layer: opacity, the OKLCH background color, corner
- * radius and shadow of the channels it owns, the blur filter and mask while the coordinator has them installed, and a
- * MotionMaterial's intensity, tint opacity and crossfade.
+ * radius and shadow of the channels it owns, the blur filter and mask while the coordinator has them installed, a
+ * MotionMaterial's intensity, tint opacity and crossfade, and a MotionShape's path, stroke and colors.
  * Hosts call it from applyMotionModel: and after React Native re-applies their style to the layer.
  */
 void SparkMotionApplyLayer(NSView<SparkMotionHost> *host, const spark::motion::Values &values);
