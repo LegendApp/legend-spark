@@ -5,6 +5,7 @@
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 #import "SparkMotionCoordinator.h"
+#import "SparkMotionFlight.h"
 #include <cstdio>
 #include <vector>
 using namespace spark::motion;
@@ -17,6 +18,7 @@ static int failures = 0;
 @property (nonatomic) Values motionModel;
 @property (nonatomic, strong) NSString *motionLayout;
 @property (nonatomic, strong) NSString *motionSharedId;
+@property (nonatomic) BOOL motionSharedAcrossWindows;
 @property (nonatomic, strong) NSDictionary *motionTransition;
 @property (nonatomic) BOOL motionRightToLeft;
 @property (nonatomic) uint32_t motionOwnedChannels;
@@ -450,6 +452,181 @@ int main()
     [motion simulateWindow:window visible:YES];
     for (NSInteger tag : {20, 21, 22, 31, 32}) [motion unregisterTag:tag];
     (void)late2;
+
+    // Cross-window shared elements (docs/motion.md#cross-window-shared-elements), driven: windows are never shown, the
+    // flight window moves without showing. Window A has a 40 × 30 thumbnail at 20,20 on screen; window B, at 600,100,
+    // a 200 × 150 detail at 700,200. Boxes are centres in top-left screen coordinates: the thumbnail's is 40,-35, the
+    // detail's 800,-275.
+    auto crossWindow = [](NSRect frame) {
+      NSWindow *made = [[NSWindow alloc] initWithContentRect:frame styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
+      made.releasedWhenClosed = NO;
+      return made;
+    };
+    NSWindow *windowA = crossWindow(NSMakeRect(0, 0, 400, 300)), *windowB = crossWindow(NSMakeRect(600, 100, 400, 300));
+    NSWindow *windowC = crossWindow(NSMakeRect(600, 100, 400, 300)), *windowD = crossWindow(NSMakeRect(600, 100, 400, 300));
+    auto crossMounted = [&](NSInteger tag, NSWindow *in, NSRect frame) {
+      TestHost *view = [[TestHost alloc] initWithFrame:frame];
+      view.wantsLayer = YES;
+      view.motionTag = tag;
+      view.motionSharedId = @"xwin";
+      view.motionSharedAcrossWindows = YES;
+      view.motionTransition = smooth;
+      [in.contentView addSubview:view];
+      [motion registerHost:view initial:kIdentity];
+      [motion hostDidMount:view surface:tag transaction:tag];
+      return view;
+    };
+    auto flights = [&]() { return (NSDictionary<NSString *, id> *)[motion valueForKey:@"flights"]; };
+    auto flightWindow = [&]() { return (SparkMotionFlightWindow *)[flights()[@"xwin"] valueForKey:@"window"]; };
+    auto advance = [&](double ms) { Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:ms resolve:resolve reject:reject]; }); };
+    auto near = [](double a, double b) { return std::abs(a - b) < 1e-6; };
+    auto depart = [&](NSWindow *leaving, BOOL departing) {
+      [NSNotificationCenter.defaultCenter postNotificationName:SparkWindowDepartureNotification object:leaving userInfo:@{ @"departing": @(departing) }];
+    };
+    // The window module posts this as a window starts to show; destinations arrive only then (or within 2 s after).
+    auto showing = [&](NSWindow *shown) { [NSNotificationCenter.defaultCenter postNotificationName:SparkWindowShowingNotification object:shown]; };
+    auto pixels = [&](NSString *key) { return CGImageGetWidth((__bridge CGImageRef)[[flights()[@"xwin"] valueForKey:key] image]); };
+    __weak SparkMotionFlightWindow *firstFlightWindow = nil;
+    TestHost *crossThumb = crossMounted(40, windowA, NSMakeRect(20, 20, 40, 30));
+    CHECK(flights().count == 0);  // nothing to fly from
+    // A plain shared id in another window does not match: only views with sharedAcrossWindows do.
+    TestHost *unflagged = [[TestHost alloc] initWithFrame:NSMakeRect(0, 0, 10, 10)];
+    unflagged.wantsLayer = YES;
+    unflagged.motionTag = 39;
+    unflagged.motionSharedId = @"xwin";
+    unflagged.motionTransition = smooth;
+    [windowB.contentView addSubview:unflagged];
+    [motion registerHost:unflagged initial:kIdentity];
+    [motion hostDidMount:unflagged surface:39 transaction:39];
+    CHECK(flights().count == 0 && value(39, @"scaleX") == 1);
+    [unflagged removeFromSuperview];
+    [motion unregisterTag:39];
+    CHECK(flights().count == 0 && !crossThumb.layer.hidden);
+    @autoreleasepool {
+      unflagged = nil;
+      // Thumbnail → new window: the detail starts at the thumbnail's box, both views are concealed, and the flight
+      // window shows the element at the thumbnail, never on screen in a driven run, never key, ignoring the mouse.
+      showing(windowB);
+      TestHost *crossDetail = crossMounted(41, windowB, NSMakeRect(100, 100, 200, 150));
+      CHECK(near(value(41, @"translateX"), -760) && near(value(41, @"translateY"), 240) && near(value(41, @"scaleX"), 0.2) && near(value(41, @"scaleY"), 0.2));
+      CHECK(crossThumb.layer.hidden && crossDetail.layer.hidden && flights().count == 1);
+      // Snapshots at each window's backing scale, no larger than the largest box the flight shows (the detail's here).
+      CHECK(pixels(@"sourceImage") == (size_t)ceil(40 * windowA.backingScaleFactor) && pixels(@"destinationImage") == (size_t)ceil(200 * windowB.backingScaleFactor));
+      SparkMotionFlightWindow *overlay = flightWindow();
+      firstFlightWindow = overlay;
+      CHECK(overlay && NSEqualRects(overlay.frame, NSMakeRect(20, 20, 40, 30)) && !overlay.isVisible && !overlay.canBecomeKeyWindow && !overlay.canBecomeMainWindow);
+      CHECK(overlay.ignoresMouseEvents && overlay.excludedFromWindowsMenu && !overlay.isRestorable && (overlay.collectionBehavior & NSWindowCollectionBehaviorTransient) && (overlay.collectionBehavior & NSWindowCollectionBehaviorIgnoresCycle));
+      advance(100);
+      const NSRect partway = flightWindow().frame;
+      CHECK(NSWidth(partway) > 40 && NSWidth(partway) < 200 && NSMinX(partway) > 20 && NSMinX(partway) < 700);
+      // The destination's window moving mid-flight (a zoom, a drag) is followed: the flight lands where the detail is.
+      [windowB setFrameOrigin:NSMakePoint(620, 100)];
+      advance(3000);
+      CHECK(flights().count == 0 && !crossThumb.layer.hidden && !crossDetail.layer.hidden && std::abs(value(41, @"translateX")) < 0.01);
+      // Window → origin: as the detail's window starts to leave, the element flies back into the thumbnail.
+      depart(windowB, YES);
+      CHECK(near(value(40, @"translateX"), 780) && near(value(40, @"translateY"), -240) && near(value(40, @"scaleX"), 5));
+      CHECK(flights().count == 1 && NSEqualRects(flightWindow().frame, NSMakeRect(720, 200, 200, 150)) && crossThumb.layer.hidden && crossDetail.layer.hidden);
+      // Its close then flies nothing more: the window already departed.
+      depart(windowB, YES);
+      CHECK(near(value(40, @"scaleX"), 5));
+      advance(3000);
+      CHECK(flights().count == 0 && !crossThumb.layer.hidden && std::abs(value(40, @"scaleX") - 1) < 0.001);
+      // The close was interrupted: the window stays, and a later departure flies again. Interrupting a flight mid-way
+      // (the window leaves while its element is still arriving) flies back from where the element shows.
+      depart(windowB, NO);
+      [crossDetail removeFromSuperview];
+      [motion unregisterTag:41];
+      TestHost *again = crossMounted(42, windowB, NSMakeRect(100, 100, 200, 150));
+      CHECK(flights().count == 1 && near(value(42, @"scaleX"), 0.2));
+      advance(80);
+      const NSRect midway = flightWindow().frame;
+      depart(windowB, YES);
+      CHECK(flights().count == 1 && [flights()[@"xwin"] valueForKey:@"destination"] == crossThumb);
+      CHECK(std::abs(NSWidth(flightWindow().frame) - NSWidth(midway)) < 1e-6 && std::abs(NSMidX(flightWindow().frame) - NSMidX(midway)) < 1e-6 && std::abs(NSMidY(flightWindow().frame) - NSMidY(midway)) < 1e-6);
+      CHECK(value(40, @"scaleX") > 1 && value(40, @"scaleX") < 5);
+      advance(3000);
+      CHECK(flights().count == 0 && !crossThumb.layer.hidden && !again.layer.hidden);
+      depart(windowB, NO);
+      // A new window's first transaction can mount the destination before its root view is in the window: it arrives
+      // once it is.
+      [again removeFromSuperview];
+      [motion unregisterTag:42];
+      TestHost *outside = [[TestHost alloc] initWithFrame:NSMakeRect(100, 100, 200, 150)];
+      outside.wantsLayer = YES;
+      outside.motionTag = 47;
+      outside.motionSharedId = @"xwin";
+      outside.motionSharedAcrossWindows = YES;
+      outside.motionTransition = smooth;
+      [motion registerHost:outside initial:kIdentity];
+      [motion hostDidMount:outside surface:47 transaction:47];
+      CHECK(flights().count == 0);
+      [windowB.contentView addSubview:outside];
+      [motion hostDidMoveToWindow:outside];
+      CHECK(flights().count == 1 && near(value(47, @"scaleX"), 0.2));
+      advance(3000);
+      CHECK(flights().count == 0 && !outside.layer.hidden);
+      [outside removeFromSuperview];
+      [motion unregisterTag:47];
+      // The destination unmounting mid-flight ends it: the thumbnail shows again.
+      TestHost *dropped = crossMounted(43, windowB, NSMakeRect(100, 100, 200, 150));
+      CHECK(flights().count == 1);
+      [dropped removeFromSuperview];
+      [motion unregisterTag:43];
+      CHECK(flights().count == 0 && !crossThumb.layer.hidden);
+      // A view mounting again in a window that has been showing for a while (a screen change, virtualization, a
+      // restore) does not fly.
+      [[motion valueForKey:@"showing"] setObject:@(CACurrentMediaTime() - 10) forKey:windowB];
+      TestHost *remounted = crossMounted(48, windowB, NSMakeRect(100, 100, 200, 150));
+      CHECK(flights().count == 0 && value(48, @"scaleX") == 1);
+      [remounted removeFromSuperview];
+      [motion unregisterTag:48];
+      // A destination in a window that has not shown yet waits for its first show (openWindowFrom shows it as its zoom
+      // starts), but not for long: one whose wait ran out does not fly.
+      TestHost *waiting = crossMounted(44, windowC, NSMakeRect(100, 100, 200, 150));
+      CHECK(flights().count == 0 && value(44, @"scaleX") == 1);
+      showing(windowC);
+      CHECK(flights().count == 1 && near(value(44, @"scaleX"), 0.2));
+      advance(3000);
+      CHECK(flights().count == 0);
+      TestHost *stale = crossMounted(49, windowD, NSMakeRect(100, 100, 200, 150));
+      [[motion valueForKey:@"awaitingWindow"] setObject:@(CACurrentMediaTime() - 1) forKey:stale];
+      showing(windowD);
+      CHECK(flights().count == 0 && value(49, @"scaleX") == 1);
+      [stale removeFromSuperview];
+      [motion unregisterTag:49];
+      // Under Reduce Motion nothing flies: an arriving detail fades in where it is; a departure leaves the thumbnail as it is.
+      [motion simulate:@{ @"reduceMotion": @YES }];
+      [waiting removeFromSuperview];
+      [motion unregisterTag:44];
+      showing(windowB);
+      TestHost *reduced = crossMounted(45, windowB, NSMakeRect(100, 100, 200, 150));
+      CHECK(flights().count == 0 && value(45, @"translateX") == 0 && value(45, @"scaleX") == 1 && value(45, @"opacity") == 0 && !crossThumb.layer.hidden && !reduced.layer.hidden);
+      depart(windowB, YES);
+      CHECK(flights().count == 0 && value(40, @"opacity") == 1 && value(40, @"scaleX") == 1);
+      depart(windowB, NO);
+      advance(300);
+      [motion simulate:@{ @"reduceMotion": @NO }];
+      // The source's window closing mid-flight: the element flies on with its snapshot and lands.
+      [reduced removeFromSuperview];
+      [motion unregisterTag:45];
+      showing(windowB);
+      TestHost *last = crossMounted(46, windowB, NSMakeRect(100, 100, 200, 150));
+      CHECK(flights().count == 1);
+      [windowA close];
+      [crossThumb removeFromSuperview];
+      [motion unregisterTag:40];
+      CHECK(flights().count == 1);
+      advance(3000);
+      CHECK(flights().count == 0 && !last.layer.hidden);
+      [last removeFromSuperview];
+      [motion unregisterTag:46];
+    }
+    // Every flight window is gone: nothing of a flight outlives it.
+    CHECK(firstFlightWindow == nil);
+    [windowB close];
+    [windowC close];
+    [windowD close];
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
 
     // Unmounting settles in-flight animations unfinished.

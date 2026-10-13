@@ -46,7 +46,7 @@ struct ViewProps : Props {
   bool getClipsContentToBounds() const { return false; }
 };
 struct ReactNativeFeatureFlags { static bool enableIOSViewClipToPaddingBox() { return false; } };
-struct SparkMotionViewProps : ViewProps { std::string initialValues, layout, sharedId, transition, material, tintColor, crossfade, shape, shaderEffect, particleEmitter; };
+struct SparkMotionViewProps : ViewProps { std::string initialValues, layout, sharedId, transition, material, tintColor, crossfade, shape, shaderEffect, particleEmitter; bool sharedAcrossWindows = false; };
 struct DesktopDragViewProps : Props { std::string sourceJson, optionsJson; bool disabled = false; };
 struct EventEmitter { using Shared = std::shared_ptr<EventEmitter const>; virtual ~EventEmitter() = default; };
 struct SidebarSplitViewEventEmitter : EventEmitter {
@@ -227,10 +227,10 @@ int main() { @autoreleasepool {
   RNSparkMotionView *motion = [[RNSparkMotionView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];
   motion.reactTag = @41;
   auto motionProps = std::make_shared<SparkMotionViewProps>(); motionProps->initialValues = R"({"opacity":0.25})";
-  motionProps->layout = "frame"; motionProps->sharedId = "photo"; motionProps->transition = R"({"type":"timing","durationMs":200})";
+  motionProps->layout = "frame"; motionProps->sharedId = "photo"; motionProps->sharedAcrossWindows = true; motionProps->transition = R"({"type":"timing","durationMs":200})";
   [motion updateProps:motionProps oldProps:nullptr];
   CHECK(motion.layer.opacity == 0.25f);
-  CHECK([[motion valueForKey:@"motionLayout"] isEqual:@"frame"] && [[motion valueForKey:@"motionSharedId"] isEqual:@"photo"]);
+  CHECK([[motion valueForKey:@"motionLayout"] isEqual:@"frame"] && [[motion valueForKey:@"motionSharedId"] isEqual:@"photo"] && [[motion valueForKey:@"motionSharedAcrossWindows"] isEqual:@YES]);
   CHECK([[motion valueForKey:@"motionTransition"] isEqual:(@{ @"type": @"timing", @"durationMs": @200 })]);
   // A MotionMaterial: its material, tint and crossfade are applied at mount, under the `initial` intensity.
   RNSparkMotionView *material = [[RNSparkMotionView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];

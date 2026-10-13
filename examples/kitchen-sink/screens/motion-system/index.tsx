@@ -7,6 +7,8 @@ import { AccessibilityPower, ScrollAndFrames, Springs, Timelines } from "./Motio
 import { SHAPES_MESSAGES } from "./shapes-messages";
 import { Shapes } from "./ShapesScreen";
 import { SHADERS_MESSAGES } from "./shaders-messages";
+import { SHARED_WINDOWS_MESSAGES } from "./shared-windows-messages";
+import { SharedWindows } from "./SharedWindowsScreen";
 import { Shaders } from "./ShadersScreen";
 import { TextAndSymbols } from "./TextSymbolsScreen";
 
@@ -15,6 +17,7 @@ export default defineScreens("motion-system", [
   { id: "timelines", title: "Keyframes and timelines", titles: { ar: "الإطارات المفتاحية والخطوط الزمنية" }, summary: "Keyframes, a repeating reversed sequence, a stagger, a timeline step after the previous one, and clamped decay.", summaries: { ar: "إطارات مفتاحية، وتسلسل يتكرر معكوسًا، وتتابع متدرج، وخطوة في خط زمني تبدأ بعد سابقتها، وتباطؤ مقيد." }, component: Timelines },
   { id: "scroll-and-frames", title: "Scroll link and JS block", titles: { ar: "الربط بالتمرير وحظر JS" }, summary: "A scroll-linked badge driven on the native main thread, and frames recorded while JavaScript is blocked for 500 ms.", summaries: { ar: "شارة مرتبطة بالتمرير تتحرك على الخيط الرئيسي الأصلي، وإطارات تُسجَّل أثناء حظر JavaScript لمدة 500 مللي ثانية." }, component: ScrollAndFrames },
   { id: "layout", title: "Layout, presence and shared elements", titles: { ar: "التخطيط والظهور والعناصر المشتركة" }, summary: "Rows that enter, exit and reflow with layout animation, a frame that scales to its new size, and a shared element between a thumbnail and its detail.", summaries: { ar: "صفوف تدخل وتخرج ويُعاد تدفقها بحركة التخطيط، وإطار يتحجّم إلى حجمه الجديد، وعنصر مشترك بين صورة مصغّرة وتفاصيلها." }, component: Layout },
+  { id: "shared-windows", title: SHARED_WINDOWS_MESSAGES.en.title, titles: { ar: SHARED_WINDOWS_MESSAGES.ar.title }, summary: SHARED_WINDOWS_MESSAGES.en.summary, summaries: { ar: SHARED_WINDOWS_MESSAGES.ar.summary }, component: SharedWindows },
   { id: "visual-effects", title: "Visual effects", titles: { ar: "التأثيرات المرئية" }, summary: "Background colors that animate in OKLCH, corner radius, shadow and blur, 3D rotation in perspective, mask reveals and a path, all on the compositor.", summaries: { ar: "ألوان خلفية تتحرك في OKLCH، ونصف قطر الزوايا والظل والتمويه، ودوران ثلاثي الأبعاد بمنظور، وكشف بالقناع، ومسار، وكلها على المُركِّب." }, component: VisualEffects },
   { id: "materials", title: MATERIALS_MESSAGES.en.title, titles: { ar: MATERIALS_MESSAGES.ar.title }, summary: "A backdrop material that crossfades between materials and to Liquid Glass, with its intensity and tint animated on the compositor; Reduce Motion and Reduce Transparency followed.", summaries: { ar: "مادة خلفية تنتقل بتلاشٍ متبادل بين المواد وإلى Liquid Glass، مع تحريك شدتها وتلوينها على المُركِّب؛ وتتبع تقليل الحركة وتقليل الشفافية." }, component: Materials },
   { id: "shapes", title: SHAPES_MESSAGES.en.title, titles: { ar: SHAPES_MESSAGES.ar.title }, summary: "A shape that morphs between a circle, a star and a square with a spring, a checkmark drawn with its stroke, and a progress ring, all on the compositor.", summaries: { ar: "شكل يتحوّل بنابض بين دائرة ونجمة ومربع، وعلامة صح تُرسم بخطها، وحلقة تقدم، وكلها على المُركِّب." }, component: Shapes },

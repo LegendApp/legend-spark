@@ -1,0 +1,29 @@
+appId: so.legend.spark.examples.kitchensink
+name: Closing the photo window mid-flight flies the photo back from where it shows
+intent: >
+  On Motion system > Cross-window shared elements, with the virtual clock frozen, Open photo 1 starts the photo's
+  flight out of the first thumbnail (scale 0.2). 100 ms into it, Close photo window starts the window's shrink while
+  the photo is still arriving: the element flies back from where it shows, so the thumbnail starts between its two
+  scales (neither the thumbnail's 1 nor the photo's 5), springs back and settles, and the window closes.
+checks: [MOT-XWIN-02]
+tags: [motion-system]
+platforms: [macos]
+timeout: 120s
+matrix:
+  appearance: [light]
+  locale: [en]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://motion-system/shared-windows" }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-root }, timeout: 10s }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-thumb-1-still-scale-1.00-opacity-1.00 }, timeout: 5s }
+- setClock: virtual
+- tapOn: { id: motion-system-shared-windows-open-1 }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-photo-moving-scale-0.20-opacity-1.00 }, timeout: 10s }
+- advanceClock: 100ms
+- tapOn: { id: motion-system-shared-windows-close }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-thumb-1-moving-scale-between-opacity-1.00 }, timeout: 10s }
+- assertMotion: { target: { id: motion-system-shared-windows-thumb-1 }, kind: spring, settlesWithin: 1500ms }
+- extendedWaitUntil: { visible: { id: motion-system-shared-windows-window-closed }, timeout: 5s }
+- assertVisible: { id: motion-system-shared-windows-thumb-1-still-scale-1.00-opacity-1.00 }
+- assertNotVisible: { id: motion-system-shared-windows-error }
+- setClock: real

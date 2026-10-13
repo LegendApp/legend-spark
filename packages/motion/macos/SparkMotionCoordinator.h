@@ -29,6 +29,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly, nullable) NSString *motionLayout;
 /** Shared-element id: a host mounting with it animates from where another host with it was. */
 @property (nonatomic, readonly, nullable) NSString *motionSharedId;
+/** `sharedId` also matches hosts with this flag in other windows (docs/motion.md#cross-window-shared-elements). */
+@property (nonatomic, readonly) BOOL motionSharedAcrossWindows;
 /** The validated transition (`spring` or `timing` JSON from JavaScript) for layout and shared-element hand-offs. */
 @property (nonatomic, readonly, nullable) NSDictionary *motionTransition;
 /** Right-to-left layout: `position` keeps the top-right corner instead of the top-left one. */
@@ -78,6 +80,8 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
  */
 - (void)hostWillMount:(NSView<SparkMotionHost> *)host surface:(NSInteger)surface transaction:(NSInteger)transaction;
 - (void)hostDidMount:(NSView<SparkMotionHost> *)host surface:(NSInteger)surface transaction:(NSInteger)transaction;
+/** The host moved into a window (or out of one): a cross-window destination that mounted outside a window arrives now. */
+- (void)hostDidMoveToWindow:(NSView<SparkMotionHost> *)host;
 
 - (void)run:(NSDictionary *)plan resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)stopAnimation:(NSString *)identifier resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;

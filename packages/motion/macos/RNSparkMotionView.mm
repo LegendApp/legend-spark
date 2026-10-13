@@ -25,6 +25,7 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
   NSInteger _tag;
   NSString *_layout;
   NSString *_sharedId;
+  BOOL _sharedAcrossWindows;
   NSDictionary *_transition;
   NSDictionary *_crossfade;
   SparkMotionMaterialStack *_material;
@@ -63,6 +64,7 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
 - (Values)motionModel { return _model; }
 - (NSString *)motionLayout { return _layout; }
 - (NSString *)motionSharedId { return _sharedId; }
+- (BOOL)motionSharedAcrossWindows { return _sharedAcrossWindows; }
 - (NSDictionary *)motionTransition { return _transition; }
 - (SparkMotionMaterialStack *)motionMaterial { return _material; }
 - (NSDictionary *)motionCrossfade { return _crossfade; }
@@ -105,6 +107,7 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
   // JavaScript validates these; the transition JSON is parsed once per change.
   _layout = SparkMotionString(motionProps.layout);
   _sharedId = SparkMotionString(motionProps.sharedId);
+  _sharedAcrossWindows = motionProps.sharedAcrossWindows;
   const auto *old = oldProps ? std::static_pointer_cast<const SparkMotionViewProps>(oldProps).get() : nullptr;
   if (!old || motionProps.transition != old->transition) {
     id transition = SparkMotionJSON(motionProps.transition);
@@ -209,6 +212,12 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
   if (layoutMetrics.frame.size == oldLayoutMetrics.frame.size) return;
   self.transform3D = SparkMotionTransform(_model);
   [SparkMotionCoordinator.shared hostDidResize:self];
+}
+
+- (void)viewDidMoveToWindow
+{
+  [super viewDidMoveToWindow];
+  if (_tag && _sharedAcrossWindows) [SparkMotionCoordinator.shared hostDidMoveToWindow:self];
 }
 
 // Layout and shared-element hand-offs compare where the view was before a mounting transaction with where it is after.
