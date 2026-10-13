@@ -102,7 +102,7 @@ first step `keep` keeps the open windows). Steps do not wait for animations, so 
 time and press Refresh. See [the window contract](../../docs/api-window-contract.md#window-choreography).
 
 `multiwindow/workspaces` saves editor and inspector windows as named workspaces in the app's data directory, from its
-buttons or Window ▸ Workspaces ▸ Save Workspace… (⌥⌘S, under the name typed on the screen), restores them from the list
+buttons or Workspaces ▸ Save Workspace… (⌥⌘S, under the name typed on the screen), restores them from the list
 or with ⌃⌘1–9, and shows the connected displays, the open windows' frames and where the last restore placed each window
 (exact, moved or scaled). `spark-ks://multiwindow/workspaces?run=editor,save-Desk,…` runs steps (in
 `screens/multiwindow/window-workspaces.ts`; `corrupt` damages the file to show the typed error). See

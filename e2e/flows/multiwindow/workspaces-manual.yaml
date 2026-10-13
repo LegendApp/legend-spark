@@ -17,8 +17,8 @@ timeout: 20m
 - tapOn: { id: multiwindow-workspaces-editor-button }
 - tapOn: { id: multiwindow-workspaces-inspector-button }
 - manualStep:
-    instruction: 'Move the editor to the left half and the inspector to the right half of the screen. Choose Window › Workspaces › Save Workspace… (⌥⌘S). Close both windows, switch to another desktop Space with Mission Control, return to the Kitchen Sink and press ⌃⌘1.'
-    expect: 'Desk is listed on the screen and in Window › Workspaces with ⌃⌘1. ⌃⌘1 opens both windows at their saved places on the Space you are on now, not the Space they were saved on.'
+    instruction: 'Move the editor to the left half and the inspector to the right half of the screen. Choose Workspaces › Save Workspace… (⌥⌘S). Close both windows, switch to another desktop Space with Mission Control, return to the Kitchen Sink and press ⌃⌘1.'
+    expect: 'Desk is listed on the screen and in the Workspaces menu with ⌃⌘1. ⌃⌘1 opens both windows at their saved places on the Space you are on now, not the Space they were saved on.'
     evidence: none
     signoff: required
 - manualStep:

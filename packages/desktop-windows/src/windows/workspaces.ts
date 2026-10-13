@@ -33,8 +33,11 @@ export type WorkspaceRestoreResult =
   | { restored: true; windows: WindowInstance[]; placements: WorkspacePlacement[] }
   | { restored: false; reason: Extract<CloseResult, { closed: false }>["reason"]; windowId: WindowId; rolledBack: boolean }
   | { restored: false; reason: "failed"; error: unknown; rolledBack: boolean };
-export interface WorkspaceMenuLabels { window: string; workspaces: string; save: string }
-/** Window ▸ Workspaces: Save Workspace…, then one item per saved workspace that restores it. */
+export interface WorkspaceMenuLabels { workspaces: string; save: string }
+/**
+ * A Workspaces menu, before the Window menu: Save Workspace…, then one item per saved workspace that restores it. Its own
+ * menu rather than an overlay of Window, so the system's localized Window title is never replaced.
+ */
 export interface WorkspaceMenuOptions {
   /** English by default. */
   labels?: WorkspaceMenuLabels;
@@ -66,14 +69,14 @@ export interface WindowWorkspaces extends AsyncRegistration {
   clear(): Promise<void>;
   /** Notifies after a save, rename, delete or clear. */
   subscribe(listener: () => void): { remove(): void };
-  /** Relabels the Window ▸ Workspaces menu, for example after a language change. Rejects without `menu`. */
+  /** Relabels the Workspaces menu, for example after a language change. Rejects without `menu`. */
   setMenuLabels(labels: WorkspaceMenuLabels): Promise<void>;
 }
 
 const FILE = "workspaces.json";
 /** Limits checked when the file is read and when a workspace is saved. */
 export const WORKSPACE_LIMITS = { workspaces: 100, windows: 200, fileBytes: 4 * 1024 * 1024 } as const;
-const defaultLabels: WorkspaceMenuLabels = { window: "Window", workspaces: "Workspaces", save: "Save Workspace…" };
+const defaultLabels: WorkspaceMenuLabels = { workspaces: "Workspaces", save: "Save Workspace…" };
 let controllers = 0;
 
 /**
@@ -203,11 +206,11 @@ async function fileSystem() {
 
 /**
  * Saved, named window layouts for a navigator, persisted in the app's data directory and restored onto the displays
- * connected now. With `menu`, publishes Window ▸ Workspaces: Save Workspace… and one item per workspace, with shortcuts.
+ * connected now. With `menu`, publishes a Workspaces menu: Save Workspace… and one item per workspace, with shortcuts.
  * Resolves once the menu is published. macOS only for now.
  */
 function validLabels(labels: unknown): asserts labels is WorkspaceMenuLabels {
-  if (!plain(labels) || !exactKeys(labels, ["window", "workspaces", "save"]) || Object.values(labels).some(label => typeof label !== "string" || !label.trim())) throw new SparkError("E_INVALID_ARGUMENT", "Workspace menu labels need window, workspaces and save");
+  if (!plain(labels) || !exactKeys(labels, ["workspaces", "save"]) || Object.values(labels).some(label => typeof label !== "string" || !label.trim())) throw new SparkError("E_INVALID_ARGUMENT", "Workspace menu labels need workspaces and save");
 }
 const isGone = (error: unknown) => ["E_NOT_FOUND", "E_CLOSED"].includes(nativeError(error).code);
 /** The windows of `session` with these IDs, with the tab groups and key window that still apply to them. */
@@ -356,7 +359,7 @@ export async function createWindowWorkspaces<T extends WindowsConfig>(navigator:
     changed();
   });
 
-  // Window ▸ Workspaces lists the workspaces from the last successful read. Each name keeps one item ID for this
+  // The Workspaces menu lists the workspaces from the last successful read. Each name keeps one item ID for this
   // controller's lifetime (a renamed workspace gets a new one), so a click always names the workspace its item showed.
   const itemIds = new Map<string, string>(), itemNames = new Map<string, string>();
   const itemId = (name: string) => {
@@ -368,10 +371,10 @@ export async function createWindowWorkspaces<T extends WindowsConfig>(navigator:
   const menuItems = (names: string[]): MenuRootItem[] => {
     const { saveShortcut, restoreShortcuts = [] } = menuOptions!;
     const restoreItems: MenuItem[] = names.map((name, index) => ({ type: "action", id: itemId(name), label: name, ...(restoreShortcuts[index] ? { shortcut: restoreShortcuts[index] } : {}) }));
-    return [{ type: "submenu", id: `${owner}-window`, label: labels.window, target: { menu: "window" }, items: [{ type: "submenu", id: owner, label: labels.workspaces, items: [
+    return [{ type: "submenu", id: owner, label: labels.workspaces, placement: { before: { menu: "window" } }, items: [
       { type: "action", id: saveId, label: labels.save, ...(saveShortcut ? { shortcut: saveShortcut } : {}) },
       ...(restoreItems.length ? [{ type: "separator" } as const, ...restoreItems] : []),
-    ] }] }];
+    ] }];
   };
   const names = async () => {
     try { return (await read()).list.map(item => item.name); }

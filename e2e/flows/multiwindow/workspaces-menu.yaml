@@ -1,7 +1,7 @@
 appId: so.legend.spark.examples.kitchensink
-name: Window ▸ Workspaces saves and restores workspaces with shortcuts
+name: The Workspaces menu saves and restores workspaces with shortcuts
 intent: >
-  Window ▸ Workspaces has Save Workspace… with ⌥⌘S. With the name Morning typed on the screen and an editor at
+  The Workspaces menu has Save Workspace… with ⌥⌘S. With the name Morning typed on the screen and an editor at
   100,80 (640 × 480), ⌥⌘S saves Morning, which the menu then lists with ⌃⌘1. After the editor closes, ⌃⌘1
   restores it at that frame.
 checks: [MW-WORKSPACE-04]
@@ -17,12 +17,12 @@ timeout: 120s
 - extendedWaitUntil: { visible: { id: multiwindow-workspaces-root }, timeout: 10s }
 - launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=editor,frame-E1-901-100-80-640-480,name-Morning" }
 - assertVisible: { id: multiwindow-workspaces-run-1-steps-3 }
-- assertAppMenu: { path: "Window > Workspaces > Save Workspace…", enabled: true, shortcut: cmd+alt+s }
-- assertAppMenu: { path: "Window > Workspaces > Morning", exists: false }
+- assertAppMenu: { path: "Workspaces > Save Workspace…", enabled: true, shortcut: cmd+alt+s }
+- assertAppMenu: { path: "Workspaces > Morning", exists: false }
 - tapOn: { id: multiwindow-workspaces-note }
 - shortcut: cmd+alt+s
 - extendedWaitUntil: { visible: { id: multiwindow-workspaces-saved-Morning-1-windows-1-displays }, timeout: 5s }
-- assertAppMenu: { path: "Window > Workspaces > Morning", enabled: true, shortcut: ctrl+cmd+1 }
+- assertAppMenu: { path: "Workspaces > Morning", enabled: true, shortcut: ctrl+cmd+1 }
 - launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=close" }
 - assertVisible: { id: multiwindow-workspaces-run-2-steps-1 }
 - assertNotVisible: { id: multiwindow-workspaces-window-E1-901-100-80-640x480 }

@@ -831,7 +831,7 @@ await windows.duplicate(editor, { tab: true });   // as the next tab (macOS)
 #### Workspaces
 
 A workspace is a named, saved window layout: a navigator session plus the displays it was saved on. Apps save
-and restore them from Window ▸ Workspaces and its shortcuts; restoring adapts the layout to the displays
+and restore them from the Workspaces menu and its shortcuts; restoring adapts the layout to the displays
 connected now (#191).
 
 ```ts
@@ -844,7 +844,7 @@ const result = await workspaces.restore('Writing');
 // or { restored: false, reason: 'vetoed' | 'interrupted', windowId, rolledBack }
 // or { restored: false, reason: 'failed', error, rolledBack }
 await workspaces.list(); await workspaces.rename('Writing', 'Draft'); await workspaces.delete('Draft');
-await workspaces.setMenuLabels({ window: 'نافذة', workspaces: 'مساحات العمل', save: 'حفظ مساحة العمل…' }); // language change
+await workspaces.setMenuLabels({ workspaces: 'مساحات العمل', save: 'حفظ مساحة العمل…' }); // language change
 ```
 
 - **Storage.** `<getDirectory('data')>/workspaces.json` in the app's container, written atomically through
@@ -884,11 +884,12 @@ await workspaces.setMenuLabels({ window: 'نافذة', workspaces: 'مساحات
   size it keeps its place (`moved`). Otherwise it keeps its proportions: position and size scale with the work
   area, then it is fitted into it (`scaled`), so a window on the right half of a disconnected monitor lands on the
   right half of the laptop display.
-- **Menu.** With `menu`, a Window ▸ Workspaces submenu: Save Workspace… (asks `requestName`; `null` cancels)
+- **Menu.** With `menu`, a Workspaces menu before the Window menu: Save Workspace… (asks `requestName`; `null` cancels)
   and, after a separator, one item per workspace in list order with `restoreShortcuts[i]`. It is published
   before `createWindowWorkspaces` resolves and updated after every change; failures go to `onError` (default
-  `console.error`). Labels are English unless `labels` is passed; `setMenuLabels` relabels it. The item merges into
-  the app's Window menu and sets its title, so `labels.window` must be that menu's title in the app's language.
+  `console.error`). Labels are English unless `labels` is passed; `setMenuLabels` relabels it. It is a menu of its
+  own rather than an overlay of the Window menu: an overlay carries a title, which would replace the system's
+  localized Window title (#449).
   Each workspace name keeps one item ID for the controller's lifetime, so a click names the workspace its item
   showed even while the menu updates, and item IDs carry the controller's owner ID, so two controllers never share
   one. Needs `@legendapp/spark-native-menu`

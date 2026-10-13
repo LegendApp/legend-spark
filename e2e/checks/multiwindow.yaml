@@ -367,7 +367,7 @@ checks:
     covers:
       - ./windows#createWindowWorkspaces
   MW-WORKSPACE-04:
-    title: Window ▸ Workspaces has Save Workspace… (⌥⌘S), which saves under the app's name, and an item per workspace with ⌃⌘1–9; the shortcut restores the workspace
+    title: The Workspaces menu has Save Workspace… (⌥⌘S), which saves under the app's name, and an item per workspace with ⌃⌘1–9; the shortcut restores the workspace
     platforms: [macos]
     blocking: true
     spec: "docs/api-window-contract.md §Workspaces"

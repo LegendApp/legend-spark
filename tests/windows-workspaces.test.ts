@@ -276,8 +276,10 @@ test("the menu lists Save Workspace… and each workspace with its shortcut; its
   const onError = vi.fn();
   const workspaces = track(await createWindowWorkspaces(windows, { menu: { requestName, saveShortcut: "CmdOrCtrl+Alt+S", restoreShortcuts: ["Ctrl+CmdOrCtrl+1"] }, onError }));
   const menu = mocks.menus[0]!;
-  const submenu = () => menu.items[0].items[0];
-  expect(menu.items[0]).toMatchObject({ type: "submenu", label: "Window", target: { menu: "window" } });
+  const submenu = () => menu.items[0];
+  // Its own menu before Window: the system's localized Window title is left alone.
+  expect(menu.items[0]).toMatchObject({ type: "submenu", label: "Workspaces", placement: { before: { menu: "window" } } });
+  expect(menu.items[0].target).toBeUndefined();
   expect(submenu()).toMatchObject({ label: "Workspaces", items: [{ type: "action", id: `${menu.id}-save`, label: "Save Workspace…", shortcut: "CmdOrCtrl+Alt+S" }] });
   menu.onAction({ type: "action", itemId: `${menu.id}-save` });
   await tick(); await tick();
@@ -304,19 +306,19 @@ test("the menu lists Save Workspace… and each workspace with its shortcut; its
   await tick(); await tick();
   expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_NOT_FOUND" }));
   // Labels follow the app's language.
-  await workspaces.setMenuLabels({ window: "نافذة", workspaces: "مساحات العمل", save: "حفظ مساحة العمل…" });
-  expect([menu.items[0].label, submenu().label, submenu().items[0].label]).toEqual(["نافذة", "مساحات العمل", "حفظ مساحة العمل…"]);
-  await expect(workspaces.setMenuLabels({ window: "" } as any)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await workspaces.setMenuLabels({ workspaces: "مساحات العمل", save: "حفظ مساحة العمل…" });
+  expect([submenu().label, submenu().items[0].label]).toEqual(["مساحات العمل", "حفظ مساحة العمل…"]);
+  await expect(workspaces.setMenuLabels({ workspaces: "" } as any)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   // A second controller's items never share IDs with the first's.
   const other = track(await createWindowWorkspaces(windows, { menu: { requestName } }));
   expect(mocks.menus[1]!.id).not.toBe(menu.id);
-  expect(mocks.menus[1]!.items[0].items[0].items[0].id).not.toBe(`${menu.id}-save`);
+  expect(mocks.menus[1]!.items[0].items[0].id).not.toBe(`${menu.id}-save`);
   await other.remove();
   await workspaces.remove();
   expect(menu.removed).toBe(true);
-  await expect(workspaces.setMenuLabels({ window: "W", workspaces: "W", save: "S" })).rejects.toMatchObject({ code: "E_CLOSED" });
+  await expect(workspaces.setMenuLabels({ workspaces: "W", save: "S" })).rejects.toMatchObject({ code: "E_CLOSED" });
   const menuless = track(await createWindowWorkspaces(windows));
-  await expect(menuless.setMenuLabels({ window: "W", workspaces: "W", save: "S" })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(menuless.setMenuLabels({ workspaces: "W", save: "S" })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
 });
 
 test("restore skips windows that already closed and counts a window gone natively as closed", async () => {

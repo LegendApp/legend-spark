@@ -12,7 +12,7 @@ import { WorkspaceWindow } from "./WorkspaceWindow";
 
 /**
  * Multiwindow > Workspaces (docs/api-window-contract.md#workspaces): editor and inspector windows saved as named
- * workspaces in the app's data directory, restored from the screen, from Window ▸ Workspaces or with ⌃⌘1…9, and adapted
+ * workspaces in the app's data directory, restored from the screen, from the Workspaces menu or with ⌃⌘1…9, and adapted
  * to the displays connected now. The readout lists the connected displays, the saved workspaces, the open windows'
  * frames as the window API reports them, and where the last restore placed each window, so driver flows (which never
  * show windows) can check them.
@@ -101,7 +101,7 @@ async function corrupt() {
  * One step: `editor` (opens E1, E2…), `inspector`, `frame-<label>-<displayId>-<x>-<y>-<w>-<h>`, `save-<name>`,
  * `restore-<name>`, `rename-<name>-<new name>`, `delete-<name>`, `close` (every window of this screen), `clear`
  * (deletes the workspaces file), `corrupt` (damages it), `list` (reads it again) and `name-<name>` (types the name
- * Window ▸ Workspaces ▸ Save Workspace… saves under).
+ * Workspaces ▸ Save Workspace… saves under).
  */
 const STEP = /^(editor|inspector|close|clear|corrupt|list|name-[A-Za-z0-9]+|frame-[A-Za-z0-9]+-[A-Za-z0-9]+-\d+-\d+-\d+-\d+|(?:save|restore|delete)-[A-Za-z0-9]+|rename-[A-Za-z0-9]+-[A-Za-z0-9]+)$/;
 async function step(name: string) {
