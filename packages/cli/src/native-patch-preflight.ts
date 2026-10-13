@@ -80,5 +80,5 @@ export function assertNativePatchPreflight(root: string) {
   else {
     errors = validatePackedNativePatches(packages, requirements);
   }
-  if (errors.length) throw new Error(`Native preparation stopped before changing project files:\n${errors.map(error => `- ${error}`).join("\n")}`);
+  if (errors.length) throw new Error(`Native patch preparation stopped before changing project files:\n${errors.map(error => `- ${error}`).join("\n")}`);
 }

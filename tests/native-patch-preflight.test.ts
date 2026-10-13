@@ -136,7 +136,7 @@ test("build rejects missing SDK provenance before creating its preparation lock"
     mkdirSync(path.join(root, "node_modules/@legendapp/spark"), { recursive: true });
     writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "app", dependencies: { "@legendapp/spark": "1.0.0" } }));
     writeFileSync(path.join(root, "node_modules/@legendapp/spark/package.json"), JSON.stringify({ name: "@legendapp/spark", version: "1.0.0" }));
-    await expect(build(root, "dev")).rejects.toThrow("Native preparation stopped before changing project files");
+    await expect(build(root, "dev")).rejects.toThrow("Native patch preparation stopped before changing project files");
     expect(existsSync(path.join(root, ".spark/build.lock"))).toBe(false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

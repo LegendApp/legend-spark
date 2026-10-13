@@ -150,7 +150,7 @@ try {
   const rejected = await spawnProcess([cli, "build", "--dev"], { cwd: consumer, env: { ...process.env, CI: "1" }, stdout: "pipe", stderr: "pipe" });
   const [rejectStatus, rejectOut, rejectErr] = await Promise.all([rejected.exited, new Response(rejected.stdout!).text(), new Response(rejected.stderr!).text()]);
   const rejectOutput = `${rejectOut}\n${rejectErr}`;
-  if (rejectStatus === 0 || !/matching patched Spark SDK package|native patch provenance|native patch/i.test(rejectOutput)) throw new Error(`Installed CLI did not reject missing patch receipts with an actionable preflight error:\n${rejectOutput}`);
+  if (rejectStatus === 0 || !/^Native patch preparation stopped before changing project files:/m.test(rejectOutput)) throw new Error(`Installed CLI did not reject missing patch receipts with an actionable preflight error:\n${rejectOutput}`);
   const after = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name))));
   if ([...after].some(name => !before.has(name))) throw new Error(`Native preflight rejection wrote project state: ${[...after].filter(name => !before.has(name)).join(", ")}`);
 
