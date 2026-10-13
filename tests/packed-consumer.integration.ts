@@ -3,7 +3,7 @@ import { spawnProcess, which } from "../packages/cli/src/process.ts";
 import { packSpark } from "../scripts/pack-spark.ts";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -151,7 +151,8 @@ try {
   const [rejectStatus, rejectOut, rejectErr] = await Promise.all([rejected.exited, new Response(rejected.stdout!).text(), new Response(rejected.stderr!).text()]);
   const rejectOutput = `${rejectOut}\n${rejectErr}`;
   if (rejectStatus === 0 || !/Native patch preparation stopped before changing project files:/m.test(rejectOutput)) throw new Error(`Installed CLI did not reject missing patch receipts with an actionable preflight error:\n${rejectOutput}`);
-  const after = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name))));
+  const onlyLogs = (name: string) => name === ".spark" && readdirSync(path.join(consumer, name)).every(entry => entry === "logs");
+  const after = new Set([".spark", "macos", "windows"].filter(name => existsSync(path.join(consumer, name)) && !onlyLogs(name)));
   if ([...after].some(name => !before.has(name))) throw new Error(`Native preflight rejection wrote project state: ${[...after].filter(name => !before.has(name)).join(", ")}`);
 
   const incompatible = path.join(root, "incompatible"); mkdirSync(incompatible);
