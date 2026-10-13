@@ -494,7 +494,12 @@ or takes focus, and needs no TCC permission; its windows are on screen only duri
 input, fully transparent and ignoring the real pointer. It drives the Kitchen Sink:
 the `--app` bundle (the gate passes its release build), or the last development build.
 A development build loads JavaScript over HTTP, so the backend bundles the current
-source once per run (`expo export:embed`, no Metro) and serves it to each launch; a release
+source once per run (`expo export:embed`, no Metro) and serves it to each launch
+(`scripts/e2e/bundle-server.ts`): the app's bundle, the worker entry isolated runtimes load
+(`/.threaded-runtime/entry.bundle`), their source maps (`/index.map`, `/.threaded-runtime/entry.map`)
+and Metro's `/symbolicate`, which LogBox and the profiler map stacks through. The worker entry is bundled in the
+background once the app's bundle is built; a launch that asks for it sooner waits for that build,
+and if it failed (reported on stderr) the request bundles it again. A release
 build runs its embedded bundle. That bundle is built without `__DEV__`, like a release bundle;
 a `build: dev` flow gets a development bundle (`__DEV__` code such as the Developer menu and
 LogBox) instead, and fails against a release build, which can only run its embedded bundle. A flow whose `appId` is not the app's bundle identifier

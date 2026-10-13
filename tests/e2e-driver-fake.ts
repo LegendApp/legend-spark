@@ -264,7 +264,12 @@ export class FakeApp implements DriverApp {
 
   /** The bundle `open` reports, and whether it is a release build. */
   bundle = { app: "/Apps/KitchenSink.app", release: false };
-  async open(options: { dev: boolean }) { this.log.push(options.dev ? "open dev" : "open"); return { ...this.bundle, bundleId: this.bundleId, launchedBundleId: `${this.bundleId}.driver` }; }
+  async open(options: { dev: boolean; prebundle: boolean }) {
+    // Every driver run prebundles the worker entry isolated runtimes load (scripts/e2e/bundle-server.ts).
+    if (!options.prebundle) throw new Error("the driver backend opened the app without prebundling");
+    this.log.push(options.dev ? "open dev" : "open");
+    return { ...this.bundle, bundleId: this.bundleId, launchedBundleId: `${this.bundleId}.driver` };
+  }
   async clearState() { this.log.push("clearState"); return ["defaults:so.legend.spark.examples.kitchensink"]; }
   /** Set to make preserveDefaults refuse, as it does while the app runs. */
   refusePreserve?: string;

@@ -208,6 +208,8 @@ describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)"
     const home = state.home;
     touch(path.join(home, "Library", "Application Support", DRIVER_NS, "settings", "infra-launch-state.json"));
     touch(path.join(fake.temp, DRIVER.bundleId, `${DRIVER_NS}.lock`));
+    // dirhelper's protected NSItemReplacementDirectory, which nobody but the app can list or delete.
+    mkdirSync(path.join(fake.temp, DRIVER.bundleId, "TemporaryItems"));
     touch(path.join(fake.cache, DRIVER.bundleId, DRIVER.bundleId, "Cache.db"));
     const outside = path.join(base, "outside");
     touch(path.join(outside, "keep.txt"));
@@ -223,7 +225,7 @@ describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)"
       path.join(fake.temp, DRIVER.bundleId, `${DRIVER_NS}.lock`), path.join(fake.cache, DRIVER.bundleId, DRIVER.bundleId),
     ]);
     expect(calls).toEqual([`running ${DRIVER.bundleId}`, `defaults delete ${DRIVER.bundleId}`]);
-    expect([readdirSync(home), readdirSync(path.join(fake.temp, DRIVER.bundleId))]).toEqual([[], []]);
+    expect([readdirSync(home), readdirSync(path.join(fake.temp, DRIVER.bundleId))]).toEqual([[], ["TemporaryItems"]]);
     expect(readFileSync(path.join(outside, "keep.txt"), "utf8")).toBe("state");
     expect(kept.filter(file => existsSync(file))).toEqual(kept);
   });

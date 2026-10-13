@@ -274,9 +274,9 @@ export class DriverState implements AppState {
       const stat = lstatSync(dir, { throwIfNoEntry: false });
       if (!stat) return [];
       if (!stat.isDirectory() || stat.uid !== process.getuid!()) throw new Error(`driver state refuses to empty ${dir}: not a directory owned by this user`);
-      const found = entries(dir, depth);
+      const found = entries(dir, depth).filter(file => !PROTECTED.has(path.basename(file)));
       // A symbolic link inside is removed itself, never followed.
-      for (const entry of readdirSync(dir)) rmSync(path.join(dir, entry), { recursive: true });
+      for (const entry of readdirSync(dir)) if (!PROTECTED.has(entry)) rmSync(path.join(dir, entry), { recursive: true });
       return found;
     });
   }
@@ -297,6 +297,13 @@ export function removeAppIntentsMetadata(app: string): string[] {
 const lockFor = (host: Pick<StateHost, "temp">, bundleId: string) => path.join(host.temp, `spark-driver-${bundleId}.lock`);
 
 /** What a directory holds, `depth` levels down (`home/Library/Application Support/<namespace>`), for the clearState log. */
+/**
+ * What dirhelper creates in an app's temporary directory and protects like the directory itself (System Integrity
+ * Protection): `TemporaryItems`, for NSItemReplacementDirectory. Nobody but the app can list or delete it, so emptying
+ * the directory leaves it.
+ */
+const PROTECTED = new Set(["TemporaryItems"]);
+
 function entries(dir: string, depth: number): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
     const file = path.join(dir, entry.name);
