@@ -734,6 +734,25 @@
     "print",
     "showPageSetup"
   ],
+  "./privileged-helper": [
+    "AdminAuthorization",
+    "AdminAuthorizationOptions",
+    "AdminAuthorizationResult",
+    "Availability",
+    "PrivilegedHelperAvailability",
+    "PrivilegedHelperError",
+    "PrivilegedHelperErrorReason",
+    "PrivilegedHelperMessage",
+    "PrivilegedHelperMessageOptions",
+    "PrivilegedHelperStatus",
+    "getPrivilegedHelperAvailability",
+    "getPrivilegedHelperStatus",
+    "openPrivilegedHelperSettings",
+    "registerPrivilegedHelper",
+    "requestAdminAuthorization",
+    "sendPrivilegedHelperMessage",
+    "unregisterPrivilegedHelper"
+  ],
   "./processes": [
     "ProcessExit",
     "ProcessHandle",

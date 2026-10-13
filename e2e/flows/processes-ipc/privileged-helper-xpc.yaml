@@ -1,0 +1,28 @@
+appId: so.legend.spark.examples.kitchensink
+name: XPC messages reach an enabled helper and come back as JSON; connection failures reject typed errors (simulated)
+intent: >
+  With an enabled helper simulated, Send whoami resolves the helper's JSON reply. A helper that refuses the connection
+  (as it does for a client that is not signed by the app's team) rejects PrivilegedHelperError E_CLOSED
+  connectionInvalid, and one that exits with the request in flight E_CLOSED connectionInterrupted; with the connection
+  accepted again the next message is answered. Driver simulation only: no XPC connection is made. The real XPC path,
+  with each side checking the other's code signature, runs in tests/privileged-helper.native.mm against an anonymous
+  listener in the test process.
+checks: [PROC-XPC-01]
+tags: [processes-ipc]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://processes-ipc/privileged-helper" }
+- simulatePrivilegedHelper: { signed: true, helpers: { privileged-helper: enabled }, connection: accept }
+- tapOn: { id: processes-ipc-privileged-helper-send }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: '{"authorized":false,"received":{"command":"whoami"},"uid":0}' }
+- simulatePrivilegedHelper: { connection: invalid }
+- tapOn: { id: processes-ipc-privileged-helper-send }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: "PrivilegedHelperError:E_CLOSED:connectionInvalid" }
+- simulatePrivilegedHelper: { connection: interrupted }
+- tapOn: { id: processes-ipc-privileged-helper-send }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: "PrivilegedHelperError:E_CLOSED:connectionInterrupted" }
+- simulatePrivilegedHelper: { connection: accept }
+- tapOn: { id: processes-ipc-privileged-helper-send }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: '{"authorized":false,"received":{"command":"whoami"},"uid":0}' }
+- assertSimulatedPrivilegedHelper: { messages: 4, lastHelper: privileged-helper, lastAuthorized: false }
+- takeScreenshot: privileged-helper-xpc

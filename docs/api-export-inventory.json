@@ -91,6 +91,7 @@
     "./app-intents",
     "./apple-authentication",
     "./passkeys",
-    "./capture"
+    "./capture",
+    "./privileged-helper"
   ]
 }

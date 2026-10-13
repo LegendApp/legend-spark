@@ -213,6 +213,16 @@
             }
           }
         },
+        "privilegedHelpers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Helpers (named in helpers) that run as launchd daemons through @legendapp/spark/privileged-helper; spark build writes Contents/Library/LaunchDaemons/<bundleIdentifier>.<name>.plist for each. Nothing is added without it. Needs a team-signed build (docs/privileged-helper.md#configuration).",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          }
+        },
         "testDriverInRelease": {
           "type": "boolean",
           "description": "Compile the in-app test driver into release builds too; Debug builds always have it. For apps the release gate drives: keep it off for apps you distribute (docs/test-driver.md#builds)."

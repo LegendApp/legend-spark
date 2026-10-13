@@ -1,0 +1,19 @@
+appId: so.legend.spark.examples.kitchensink
+name: Privileged helpers are typed unsupported on Windows
+intent: >
+  On Windows the screen reports getPrivilegedHelperAvailability() as unsupported-platform, and Register, Request admin
+  rights and Send reject SparkError:E_UNSUPPORTED_PLATFORM. Not yet run on Windows. An elevated Windows service and UAC:
+  #440.
+checks: [PROC-HELPERUNSUP-01]
+tags: [processes-ipc]
+platforms: [windows]
+---
+- launchApp: { openUrl: "spark-ks://processes-ipc/privileged-helper" }
+- extendedWaitUntil: { visible: { id: processes-ipc-privileged-helper-root }, timeout: 10s }
+- assertText: { id: processes-ipc-privileged-helper-availability, equals: '{"available":false,"reason":"unsupported-platform"}' }
+- tapOn: { id: processes-ipc-privileged-helper-register }
+- assertText: { id: processes-ipc-privileged-helper-registration-result, equals: "SparkError:E_UNSUPPORTED_PLATFORM" }
+- tapOn: { id: processes-ipc-privileged-helper-authorize }
+- assertText: { id: processes-ipc-privileged-helper-authorization-result, equals: "SparkError:E_UNSUPPORTED_PLATFORM" }
+- tapOn: { id: processes-ipc-privileged-helper-send }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: "SparkError:E_UNSUPPORTED_PLATFORM" }

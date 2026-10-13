@@ -1,0 +1,58 @@
+appId: so.legend.spark.examples.kitchensink
+name: Real privileged helper, admin prompt and XPC on a team-signed build
+intent: >
+  The real SMAppService, Authorization Services and XPC paths of @legendapp/spark/privileged-helper, which no automated
+  run may reach: they register a launch daemon that runs as root, show the admin prompt and need the person's approval.
+  manual: true keeps the gate from running it. It needs a Kitchen Sink that opts in to its helper: build it with
+  examples/kitchen-sink/helpers/privileged-helper/build.sh, add "helpers": { "privileged-helper":
+  "helpers/privileged-helper/build/privileged-helper" } and "macos": { "privilegedHelpers": ["privileged-helper"] } to
+  desktop.config.json, and package it signed by Seth's Developer ID team (bun run spark package). Run the packaged app
+  from /Applications. Remove the helper afterwards (Unregister, then check Login Items) and revert desktop.config.json.
+checks: [PROC-HELPERREAL-01]
+tags: [processes-ipc]
+platforms: [macos]
+manual: true
+---
+- launchApp: { openUrl: "spark-ks://processes-ipc/privileged-helper" }
+- extendedWaitUntil: { visible: { id: processes-ipc-privileged-helper-root }, timeout: 10s }
+- manualStep:
+    instruction: >-
+      Open Processes and IPC > Privileged helper in the signed build and press Refresh.
+    expect: >-
+      Availability shows {"available":true} and the status notRegistered. (The development build shows unsigned and
+      notFound.)
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Register. Press Send whoami. Press Open Login Items, find the Kitchen Sink under "Allow in the Background"
+      and allow it (macOS asks for an administrator's password). Return to the Kitchen Sink and press Refresh.
+    expect: >-
+      Register shows registered: requiresApproval and a notification says the Kitchen Sink added a background item.
+      Send whoami shows PrivilegedHelperError:E_PERMISSION_DENIED:requiresApproval. Login Items lists the item with the
+      Kitchen Sink's name and icon. After allowing it the status is enabled.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Press Send whoami. Then press Request admin rights, read the prompt and authenticate as an administrator. Press
+      Send with admin rights, then Release rights. Press Request admin rights again and cancel the prompt.
+    expect: >-
+      whoami answers {"authorized":false,"received":{"command":"whoami"},"uid":0}: the helper runs as root. The prompt
+      shows the Kitchen Sink's reason; the result is authorized, and Send with admin rights answers "authorized":true.
+      Release shows released. Cancelling shows cancel. Request admin rights again, wait more than five minutes and press
+      Send with admin rights: PrivilegedHelperError:E_PERMISSION_DENIED:authorizationExpired.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      Check that only the Kitchen Sink can talk to the helper: in Terminal run
+      `log stream --predicate 'process == "privileged-helper"'` while an unsigned build of the Kitchen Sink (bun run
+      kitchen-sink) presses Send whoami. Then in the signed build press Unregister and press Refresh.
+    expect: >-
+      The unsigned build shows PrivilegedHelperError:E_UNAVAILABLE:unsigned without contacting the helper. (A build of
+      the same team signed with an Apple Development certificate is refused by the Developer ID helper: E_CLOSED
+      connectionInterrupted or connectionInvalid, and the log shows the refusal.) Unregister
+      shows unregistered, the status is notRegistered and the item is gone from Login Items.
+    evidence: none
+    signoff: required

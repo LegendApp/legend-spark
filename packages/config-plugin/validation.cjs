@@ -41,7 +41,7 @@ function validateCapture(macos) {
 }
 function validateOwned(value) {
   if (value.macos !== undefined) {
-    object(value.macos, "macos", ["bundleIdentifier", "buildNumber", "icon", "entitlements", "infoPlist", "testDriverInRelease", "testDriverPrivateEvents", "lifecycle", "appIntents", "authentication", "capture"]);
+    object(value.macos, "macos", ["bundleIdentifier", "buildNumber", "icon", "entitlements", "infoPlist", "testDriverInRelease", "testDriverPrivateEvents", "lifecycle", "appIntents", "authentication", "capture", "privilegedHelpers"]);
     if (typeof value.macos.bundleIdentifier !== "string" || !/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(value.macos.bundleIdentifier)) throw new Error("macos.bundleIdentifier must be a reverse-DNS identifier");
     if (value.macos.buildNumber !== undefined && typeof value.macos.buildNumber !== "string") throw new Error("macos.buildNumber must be a string");
     if (value.macos.icon !== undefined && (typeof value.macos.icon !== "string" || !value.macos.icon.trim())) throw new Error("macos.icon must be a path to a PNG or an Icon Composer .icon document");
@@ -51,6 +51,7 @@ function validateOwned(value) {
     if (value.macos.appIntents !== undefined) require("./app-intents.cjs").validateAppIntents(value.macos.appIntents);
     validateAuthentication(value.macos.authentication);
     validateCapture(value.macos);
+    require("./privileged-helpers.cjs").validatePrivilegedHelpers(value.macos.privilegedHelpers, value.helpers);
   }
   if (value.localizations !== undefined) {
     const languages = value.localizations;

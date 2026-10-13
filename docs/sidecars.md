@@ -76,7 +76,7 @@ On macOS cancellation sends SIGTERM to the process group, followed by SIGKILL
 if it is still running after two seconds. Root-process exit kills remaining group
 members so descendants cannot hold output pipes open forever. Children must not
 escape the group by daemonizing. Abrupt app crashes/SIGKILL do **not** currently
-guarantee macOS cleanup. Do not use this as an OS service manager.
+guarantee macOS cleanup. Do not use this as an OS service manager; a helper that must run as root is a [privileged helper](privileged-helper.md).
 Windows uses a kill-on-close Job Object; root exit and cancellation terminate the
 job, and OS handle cleanup also covers abrupt app death. Descendant behavior and
 runtime teardown still need native Windows acceptance testing.

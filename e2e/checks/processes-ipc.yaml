@@ -1,0 +1,69 @@
+area: processes-ipc
+prefix: PROC
+checks:
+  PROC-HELPERAVAIL-01:
+    title: "getPrivilegedHelperAvailability reports unsigned in a build not signed by a team (the Kitchen Sink) and registering rejects PrivilegedHelperError E_UNAVAILABLE unsigned before SMAppService is reached; signed (simulated), it reports available, a helper the app does not embed is notFound and registering it rejects E_NOT_FOUND notFound"
+    platforms: [macos]
+    blocking: true
+    spec: "#138 PROC.api"
+    covers:
+      - ./privileged-helper
+      - ./privileged-helper#getPrivilegedHelperAvailability
+      - ./privileged-helper#getPrivilegedHelperAvailability().available
+      - ./privileged-helper#getPrivilegedHelperStatus
+      - ./privileged-helper#registerPrivilegedHelper
+      - ./privileged-helper#PrivilegedHelperError
+  PROC-HELPERREG-01:
+    title: "registerPrivilegedHelper leaves a new helper requiresApproval until the person allows it in Login Items (openPrivilegedHelperSettings opens them), messages meanwhile reject E_PERMISSION_DENIED requiresApproval, the status follows the approval to enabled, and unregisterPrivilegedHelper returns it to notRegistered; with approval granted registering enables it at once (driver simulation; nothing reaches launchd)"
+    platforms: [macos]
+    blocking: true
+    spec: "#138 PROC.api"
+    covers:
+      - ./privileged-helper#registerPrivilegedHelper
+      - ./privileged-helper#unregisterPrivilegedHelper
+      - ./privileged-helper#openPrivilegedHelperSettings
+      - ./privileged-helper#getPrivilegedHelperStatus
+  PROC-ADMIN-01:
+    title: "requestAdminAuthorization shows the admin prompt with the app's reason and resolves an AdminAuthorization or cancel; denied and notInteractive reject typed errors; a message sent with the rights reaches the helper as authorized, lapsed rights reject authorizationExpired, and closing them destroys the rights (driver simulation; no prompt, no root; the helper's own check of granted rights is only covered by PROC-HELPERREAL-01)"
+    platforms: [macos]
+    blocking: true
+    spec: "#138 PROC.api"
+    covers:
+      - ./privileged-helper#requestAdminAuthorization
+      - ./privileged-helper#sendPrivilegedHelperMessage
+  PROC-XPC-01:
+    title: "sendPrivilegedHelperMessage delivers JSON to an enabled helper over XPC and resolves its JSON reply; a helper that refuses the connection or exits mid-request rejects PrivilegedHelperError E_CLOSED connectionInvalid or connectionInterrupted (driver simulation; the real XPC path, with each side checking the other's code signature, runs against an anonymous listener in tests/privileged-helper.native.mm)"
+    platforms: [macos]
+    blocking: true
+    spec: "#138 PROC.api"
+    covers:
+      - ./privileged-helper#sendPrivilegedHelperMessage
+      - ./privileged-helper#PrivilegedHelperError
+  PROC-HELPERREAL-01:
+    title: "Real path on a team-signed build that opts in to the Kitchen Sink helper: available and notRegistered; Register leaves it requiresApproval and the helper appears in Login Items under the Kitchen Sink; after allowing it the status is enabled and whoami answers uid 0; the admin prompt shows the reason, its rights reach the helper as authorized, cancel resolves cancel; Unregister removes it"
+    platforms: [macos]
+    blocking: true
+    spec: "#138 PROC.api"
+    covers:
+      - ./privileged-helper#registerPrivilegedHelper
+      - ./privileged-helper#unregisterPrivilegedHelper
+      - ./privileged-helper#openPrivilegedHelperSettings
+      - ./privileged-helper#requestAdminAuthorization
+      - ./privileged-helper#sendPrivilegedHelperMessage
+  PROC-HELPERUNSUP-01:
+    title: "On Windows getPrivilegedHelperAvailability reports unsupported-platform and registering, the admin prompt and messages reject SparkError:E_UNSUPPORTED_PLATFORM (elevated service and UAC: #440)"
+    platforms: [windows]
+    blocking: true
+    spec: "#138 PROC.api; Windows implementation #440"
+    covers:
+      - ./privileged-helper#getPrivilegedHelperAvailability().available
+      - ./privileged-helper#registerPrivilegedHelper
+      - ./privileged-helper#requestAdminAuthorization
+      - ./privileged-helper#sendPrivilegedHelperMessage
+  PROC-HELPERVISUAL-01:
+    title: "The privileged helper screen matches its golden in light and dark, English and Arabic"
+    platforms: [macos]
+    blocking: true
+    spec: "#138 PROC.api"
+    covers:
+      - ./privileged-helper#getPrivilegedHelperAvailability().available

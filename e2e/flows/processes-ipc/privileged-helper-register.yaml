@@ -1,0 +1,37 @@
+appId: so.legend.spark.examples.kitchensink
+name: Registering waits for the person's approval in Login Items; unregistering removes the helper (simulated)
+intent: >
+  With a team signature and an embedded, unregistered helper simulated, Register resolves requiresApproval, as a new
+  launch daemon does until the person allows it, and Send meanwhile rejects PrivilegedHelperError E_PERMISSION_DENIED
+  requiresApproval. Open Login Items opens the (simulated) System Settings pane. Once the person allows it the status
+  is enabled; Unregister returns it to notRegistered. With approval granted, Register enables it at once. Driver
+  simulation only: nothing reaches launchd and System Settings never opens.
+checks: [PROC-HELPERREG-01]
+tags: [processes-ipc]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://processes-ipc/privileged-helper" }
+- simulatePrivilegedHelper: { signed: true, helpers: { privileged-helper: notRegistered } }
+- tapOn: { id: processes-ipc-privileged-helper-refresh }
+- assertText: { id: processes-ipc-privileged-helper-status, equals: notRegistered }
+- tapOn: { id: processes-ipc-privileged-helper-register }
+- assertText: { id: processes-ipc-privileged-helper-registration-result, equals: "registered: requiresApproval" }
+- assertText: { id: processes-ipc-privileged-helper-status, equals: requiresApproval }
+- tapOn: { id: processes-ipc-privileged-helper-send }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: "PrivilegedHelperError:E_PERMISSION_DENIED:requiresApproval" }
+- tapOn: { id: processes-ipc-privileged-helper-open-settings }
+- assertText: { id: processes-ipc-privileged-helper-registration-result, equals: settings opened }
+- assertSimulatedPrivilegedHelper: { registrations: 1, settingsOpened: 1, messages: 0 }
+- simulatePrivilegedHelper: { helpers: { privileged-helper: enabled } }
+- tapOn: { id: processes-ipc-privileged-helper-refresh }
+- assertText: { id: processes-ipc-privileged-helper-status, equals: enabled }
+- tapOn: { id: processes-ipc-privileged-helper-unregister }
+- assertText: { id: processes-ipc-privileged-helper-registration-result, equals: unregistered }
+- assertText: { id: processes-ipc-privileged-helper-status, equals: notRegistered }
+- tapOn: { id: processes-ipc-privileged-helper-send }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: "PrivilegedHelperError:E_UNAVAILABLE:notRegistered" }
+- simulatePrivilegedHelper: { approval: granted }
+- tapOn: { id: processes-ipc-privileged-helper-register }
+- assertText: { id: processes-ipc-privileged-helper-registration-result, equals: "registered: enabled" }
+- assertSimulatedPrivilegedHelper: { registrations: 2, unregistrations: 1, helpers: { privileged-helper: enabled } }
+- takeScreenshot: privileged-helper-register

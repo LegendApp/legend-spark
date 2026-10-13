@@ -1,0 +1,46 @@
+appId: so.legend.spark.examples.kitchensink
+name: The admin prompt grants rights the helper checks, or ends in cancel or a typed error (simulated)
+intent: >
+  With an enabled helper simulated, Request admin rights without a simulated answer rejects SparkError:E_UNAVAILABLE
+  and shows nothing. Answered authorized, the prompt carries the Kitchen Sink's reason and the screen holds the rights;
+  Send with admin rights reaches the helper as authorized, and a plain Send does not. Once the rights lapse (the
+  right's timeout, simulated), Send with admin rights rejects PrivilegedHelperError E_PERMISSION_DENIED
+  authorizationExpired without reaching the helper. Release destroys the rights. A
+  cancelled prompt resolves cancel; denied and notInteractive reject PrivilegedHelperError E_PERMISSION_DENIED denied
+  and E_UNAVAILABLE notInteractive. Driver simulation only: no admin prompt appears and nothing runs as root.
+checks: [PROC-ADMIN-01]
+tags: [processes-ipc]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://processes-ipc/privileged-helper" }
+- simulatePrivilegedHelper: { signed: true, helpers: { privileged-helper: enabled } }
+- tapOn: { id: processes-ipc-privileged-helper-authorize }
+- assertText: { id: processes-ipc-privileged-helper-authorization-result, equals: "SparkError:E_UNAVAILABLE" }
+- assertSimulatedPrivilegedHelper: { prompts: 0 }
+- simulatePrivilegedHelper: { promptAnswer: authorized }
+- tapOn: { id: processes-ipc-privileged-helper-authorize }
+- assertText: { id: processes-ipc-privileged-helper-authorization-result, equals: authorized }
+- assertSimulatedPrivilegedHelper: { prompts: 1, authorizations: 1, lastPrompt: "The Kitchen Sink is checking that its privileged helper verifies administrator rights." }
+- tapOn: { id: processes-ipc-privileged-helper-send-authorized }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: '{"authorized":true,"received":{"command":"whoami"},"uid":0}' }
+- assertSimulatedPrivilegedHelper: { messages: 1, lastHelper: privileged-helper, lastAuthorized: true }
+- tapOn: { id: processes-ipc-privileged-helper-send }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: '{"authorized":false,"received":{"command":"whoami"},"uid":0}' }
+- simulatePrivilegedHelper: { expireAuthorizations: true }
+- tapOn: { id: processes-ipc-privileged-helper-send-authorized }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: "PrivilegedHelperError:E_PERMISSION_DENIED:authorizationExpired" }
+- assertSimulatedPrivilegedHelper: { messages: 2 }
+- tapOn: { id: processes-ipc-privileged-helper-release }
+- assertText: { id: processes-ipc-privileged-helper-authorization-result, equals: released }
+- assertSimulatedPrivilegedHelper: { authorizations: 0 }
+- simulatePrivilegedHelper: { promptAnswer: cancel }
+- tapOn: { id: processes-ipc-privileged-helper-authorize }
+- assertText: { id: processes-ipc-privileged-helper-authorization-result, equals: cancel }
+- simulatePrivilegedHelper: { promptAnswer: denied }
+- tapOn: { id: processes-ipc-privileged-helper-authorize }
+- assertText: { id: processes-ipc-privileged-helper-authorization-result, equals: "PrivilegedHelperError:E_PERMISSION_DENIED:denied" }
+- simulatePrivilegedHelper: { promptAnswer: notInteractive }
+- tapOn: { id: processes-ipc-privileged-helper-authorize }
+- assertText: { id: processes-ipc-privileged-helper-authorization-result, equals: "PrivilegedHelperError:E_UNAVAILABLE:notInteractive" }
+- assertSimulatedPrivilegedHelper: { prompts: 4, authorizations: 0 }
+- takeScreenshot: privileged-helper-authorization

@@ -43,6 +43,12 @@ export interface MacOSConfiguration {
    * build reports `missing-entitlement` (docs/capture.md#entitlements).
    */
   capture?: { camera?: boolean; microphone?: boolean };
+  /**
+   * Helpers (named in `helpers`) that run as launchd daemons through @legendapp/spark/privileged-helper. spark build writes
+   * Contents/Library/LaunchDaemons/<bundleIdentifier>.<name>.plist for each; nothing is added without this option. They
+   * need a team-signed build (docs/privileged-helper.md#configuration).
+   */
+  privilegedHelpers?: string[];
   /** App Intents for Shortcuts, Spotlight and Siri, compiled into the app by spark build (docs/app-intents.md). */
   appIntents?: AppIntentConfiguration[];
 }
