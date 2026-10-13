@@ -283,7 +283,7 @@ static BOOL IsHex(id value) {
     if (!observed) { reply(DriverFailure(@"E_NO_OBSERVER", [NSString stringWithFormat:@"No onSystemEvent registration receives %@", type])); return; }
     if ([type isEqual:@"memoryPressure"]) { SparkEmit(@{ @"type": type, @"level": values[@"level"] }); reply(@{ @"ok": @YES }); return; }
     if ([@[@"appearanceChanged", @"systemColorsChanged", @"accessibilityDisplayChanged"] containsObject:type]) SparkSimulateAppearancePreferences(values);
-    else [overrides addEntriesFromDictionary:values];
+    else { NSCAssert(overrides, @"simulateSystemEvent runs after driver start, which sets the fixed state"); [overrides addEntriesFromDictionary:values]; }
     if (values.count) SparkTestDriverDidSimulateState(values);
     SparkEmit(@{ @"type": type });
     reply(@{ @"ok": @YES });

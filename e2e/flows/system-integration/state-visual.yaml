@@ -4,8 +4,8 @@ intent: >
   System integration > System state opens from spark-ks://system-integration/state, subscribes to system
   events and reads the system information and network path. The main window matches the approved golden
   for the appearance (light and dark, English and Arabic). A driver run reports fixed system and network values
-  (docs/system.md#testing-system-events). Masked: the shell sidebar, and the macOS version, which belongs to the
-  Mac the flow runs on.
+  (docs/system.md#testing-system-events). Masked: the shell sidebar, and the macOS version and architecture, which belong to
+  the Mac and build the flow runs on.
 checks: [SYS-STATEVISUAL-01]
 tags: [system-integration]
 platforms: [macos]
@@ -18,4 +18,4 @@ matrix:
 - assertVisible: { id: system-integration-state-listening }
 - assertVisible: { id: system-integration-state-thermal }
 - assertVisible: { id: system-integration-state-network-status }
-- assertScreenshot: { golden: system-integration-state, mask: [{ id: infra-shell-sidebar }, { id: system-integration-state-os-version }] }
+- assertScreenshot: { golden: system-integration-state, mask: [{ id: infra-shell-sidebar }, { id: system-integration-state-os-version }, { id: system-integration-state-architecture }] }
