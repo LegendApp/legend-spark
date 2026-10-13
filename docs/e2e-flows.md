@@ -1155,8 +1155,8 @@ app launched from its quarantined location.
 
 #### Developer experience audits
 
-Three audit steps, registered in `checks/developer-experience.yaml` (#171), check the developer's side of a release.
-The `templates` step builds apps, so run it under the native build lock on a shared Mac.
+Four audit steps, registered in `checks/developer-experience.yaml` (#170, #171), check the developer's side of a release.
+The `templates` and `dev-loop` steps build and run apps, so run them under the native build lock on a shared Mac.
 
 `api-docs` (`scripts/api-docs.ts`) reads the public surface the way `docs/api-public-surface.json` snapshots it.
 `docs/api-undocumented.json` lists the known gaps. `tests/api-docs-coverage.test.ts` (part of `bun run test`) fails on an
@@ -1188,6 +1188,31 @@ minutes on an M4 Max: the packages come from the npm registry and the two releas
 | `DX-TPL-02` | `spark build` of the macOS template makes a release app with a Hermes bytecode `main.jsbundle` that `codesign --verify --deep --strict` accepts. |
 | `DX-REPRO-01` | A second release build, after deleting `.spark/` and the generated `macos/` project, has byte-identical JavaScript (`*.jsbundle`, `*.hbc`, `*.js`). |
 | `DX-REPRO-02` | Every other file in the app is byte-identical too. Each difference is listed; for a Mach-O file, whether its `LC_UUID` or other load commands differ. See [Reproducible builds](#reproducible-builds). |
+
+`dev-loop` (`scripts/e2e/audit/dev-loop.ts`) runs `spark dev --clear --no-open --max-workers 2` for the Kitchen Sink and
+launches its dev build in driver mode (`scripts/testing/dev-session.ts`; build it first with `cd examples/kitchen-sink &&
+bun run rebuild:macos`). It edits `screens/devtools/FastRefreshMarker.tsx` and `desktop.config.json` and always restores them.
+
+| Check | What it verifies |
+|---|---|
+| `DX-LOOP-01` | From starting `spark dev --clear` (an empty Metro cache) to the dev build's first settled render, within the cold start budget. |
+| `DX-LOOP-02` | Three edits each reach the running runtime within the Fast Refresh budget, as hot updates: a global set before them survives (a reload clears it). |
+| `DX-LOOP-03` | After the edits the dev build is still compatible (`.spark/session.json`) and the same app process runs: no native rebuild. A native configuration change (the app's `version`) makes `spark dev` report "Native configuration or host changed." with a rebuild offered, within the native change budget; reverting it makes the build compatible again. |
+| `DX-LOOP-04` | A syntax error shows React Native's error overlay (LogBox, in the app's window) with the `SyntaxError`; the fix closes it and reaches the app without a reload. |
+
+##### Dev loop budgets
+
+The budgets (`DEV_LOOP_BUDGETS` in `scripts/e2e/audit/dev-loop.ts`) are for the reference MacBook Air (M1, 8 GB) and
+apply on every Mac. They were not measured on the M1: they are three times what a 16-inch MacBook Pro (M4 Max, Mac16,5,
+macOS 27) measured, rounded up. Replace them with values measured on the reference machine.
+
+| Budget | M4 Max measured | M1 budget |
+|---|---|---|
+| Cold start (`DX-LOOP-01`) | 10.8 s, 13.2 s | 45 s |
+| Fast Refresh, per edit (`DX-LOOP-02`) | 0.3 to 0.6 s | 2 s |
+| Native change detected (`DX-LOOP-03`) | 0.8 s | 5 s |
+
+DevTools in the dev loop has its own checks (`checks/devtools.yaml`).
 
 #### Reproducible builds
 

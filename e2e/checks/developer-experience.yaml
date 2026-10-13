@@ -1,7 +1,32 @@
-# Developer experience (#171): gate audit steps, not flows (docs/e2e-flows.md#audits).
+# Developer experience (#170, #171): gate audit steps, not flows (docs/e2e-flows.md#audits). DevTools has its own
+# registry (checks/devtools.yaml, epic #267).
 area: developer-experience
 prefix: DX
 checks:
+  DX-LOOP-01:
+    title: Cold start of the dev loop, spark dev --clear for the Kitchen Sink to the first settled render of its dev build, is within the reference MacBook Air (M1, 8 GB) budget
+    platforms: [macos]
+    blocking: true
+    spec: "#170 Dev loop"
+    audit: dev-loop
+  DX-LOOP-02:
+    title: Fast Refresh delivers each source edit to the running app as a hot update, with no reload of the JavaScript runtime, within the M1 budget per edit
+    platforms: [macos]
+    blocking: true
+    spec: "#170 Fast Refresh"
+    audit: dev-loop
+  DX-LOOP-03:
+    title: JavaScript edits never require a native rebuild (the dev build stays compatible and the same process keeps running); a native configuration change makes spark dev report that the build needs a rebuild, within the M1 budget, and reverting it makes the build compatible again
+    platforms: [macos]
+    blocking: true
+    spec: "#170 Native change detection requires rebuild"
+    audit: dev-loop
+  DX-LOOP-04:
+    title: A syntax error in an edit shows React Native's error overlay in the running app; fixing it dismisses the overlay and Fast Refresh resumes without a reload
+    platforms: [macos]
+    blocking: true
+    spec: "#170 Error overlay"
+    audit: dev-loop
   DX-DOCS-01:
     title: Every public export (docs/api-public-surface.json) has a TSDoc comment on its declaration
     blocking: true
