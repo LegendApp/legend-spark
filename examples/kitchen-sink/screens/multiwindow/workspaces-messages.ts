@@ -15,6 +15,8 @@ export type WorkspacesMessages = {
   editor(label: string): string; inspector: string; windowText: string;
   run(runs: number, steps: number): string;
   note: string;
+  /** Window ▸ Workspaces. `window` is the Window menu's title in this language: the item merges into that menu and retitles it. */
+  menu: { window: string; workspaces: string; save: string };
   buttons: Record<"editor" | "inspector" | "save" | "restore" | "delete" | "close" | "clear" | "corrupt" | "refresh", string>;
 };
 
@@ -32,6 +34,7 @@ const en: WorkspacesMessages = {
   editor: label => `Editor ${label}`, inspector: "Inspector", windowText: "Saved and restored with its workspace.",
   run: (runs, steps) => `Run ${runs}: ${steps} steps`,
   note: "Window ▸ Workspaces saves under this name (⌥⌘S) and restores the first nine workspaces with ⌃⌘1–9. macOS has no public API for Spaces or Stage Manager: windows restore on the active Space and Stage Manager arranges them like any new window; fullscreen windows return to fullscreen in their own Spaces. Driven runs never show these windows.",
+  menu: { window: "Window", workspaces: "Workspaces", save: "Save Workspace…" },
   buttons: { editor: "Open editor", inspector: "Open inspector", save: "Save workspace", restore: "Restore workspace", delete: "Delete workspace", close: "Close windows", clear: "Delete all workspaces", corrupt: "Damage the workspaces file", refresh: "Refresh" },
 };
 
@@ -51,7 +54,8 @@ const ar: WorkspacesMessages = {
   restoreButton: "استعادة",
   editor: label => `المحرر ${label}`, inspector: "المفتش", windowText: "تُحفظ وتُستعاد مع مساحة عملها.",
   run: (runs, steps) => `التشغيل ${n(runs)}: ${n(steps)} خطوات`,
-  note: "النافذة ▸ مساحات العمل تحفظ بهذا الاسم (⌥⌘S) وتستعيد أول تسع مساحات عمل بـ ⌃⌘1–9. لا يوفّر macOS واجهة عامة للمساحات أو لمدير المنصة: تُستعاد النوافذ على المساحة النشطة ويرتّبها مدير المنصة كأي نافذة جديدة؛ وتعود نوافذ ملء الشاشة إلى ملء الشاشة في مساحات خاصة بها. التشغيل الآلي لا يُظهر هذه النوافذ أبدًا.",
+  note: "نافذة ▸ مساحات العمل تحفظ بهذا الاسم (\u2066⌥⌘S\u2069) وتستعيد أول تسع مساحات عمل بـ \u2066⌃⌘1–9\u2069. لا يوفّر macOS واجهة عامة للمساحات أو لمدير المنصة: تُستعاد النوافذ على المساحة النشطة ويرتّبها مدير المنصة كأي نافذة جديدة؛ وتعود نوافذ ملء الشاشة إلى ملء الشاشة في مساحات خاصة بها. التشغيل الآلي لا يُظهر هذه النوافذ أبدًا.",
+  menu: { window: "نافذة", workspaces: "مساحات العمل", save: "حفظ مساحة العمل…" },
   buttons: { editor: "فتح محرر", inspector: "فتح المفتش", save: "حفظ مساحة العمل", restore: "استعادة مساحة العمل", delete: "حذف مساحة العمل", close: "إغلاق النوافذ", clear: "حذف كل مساحات العمل", corrupt: "إتلاف ملف مساحات العمل", refresh: "تحديث" },
 };
 

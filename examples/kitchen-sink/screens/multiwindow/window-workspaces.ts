@@ -6,6 +6,8 @@ import {
   createWindowWorkspaces, createWindowsNavigator, getDisplays, getWindowWorkspaceAvailability, setWindowBounds,
   type WindowWorkspaces, type WorkspacePlacement,
 } from "@legendapp/spark/windows";
+import { getAppState, subscribeToAppState } from "../../shell/app-controller";
+import { WORKSPACES_MESSAGES } from "./workspaces-messages";
 import { WorkspaceWindow } from "./WorkspaceWindow";
 
 /**
@@ -41,12 +43,19 @@ export function availability() {
   const result = getWindowWorkspaceAvailability();
   return result.available ? "available" : result.reason;
 }
-// Created once for the app: Save Workspace… saves under the name typed on this screen.
+// Created once for the app: Save Workspace… saves under the name typed on this screen. The menu follows the app's language.
+const menuLabels = () => WORKSPACES_MESSAGES[getAppState().locale ?? "en"].menu;
 const workspaces: Promise<WindowWorkspaces> = createWindowWorkspaces(navigator, {
-  menu: { requestName: () => state.name.trim() || null, saveShortcut: "CmdOrCtrl+Alt+S", restoreShortcuts: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(digit => `Ctrl+CmdOrCtrl+${digit}`) },
+  menu: { labels: menuLabels(), requestName: () => state.name.trim() || null, saveShortcut: "CmdOrCtrl+Alt+S", restoreShortcuts: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(digit => `Ctrl+CmdOrCtrl+${digit}`) },
   onError: report,
 });
-workspaces.then(controller => controller.subscribe(() => { refresh().catch(report); }), () => {});
+workspaces.then(controller => {
+  controller.subscribe(() => { refresh().catch(report); });
+  let labels = menuLabels();
+  const relabel = () => { const next = menuLabels(); if (next !== labels) { labels = next; controller.setMenuLabels(next).catch(report); } };
+  subscribeToAppState(relabel);
+  relabel();
+}, () => {});
 navigator.subscribe(() => { refresh().catch(report); });
 
 const labelOf = (props: Record<string, unknown> | null) => typeof props?.label === "string" ? props.label : "?";
@@ -75,7 +84,10 @@ async function frame(label: string, displayId: string, x: number, y: number, wid
 }
 async function restore(name: string) {
   const result = await (await workspaces).restore(name);
-  if (!result.restored) return update({ restore: { stopped: `${result.reason}-${result.windowId}` } });
+  if (!result.restored) {
+    if (result.reason === "failed") report(result.error);
+    return update({ restore: { stopped: `${result.reason}-${"windowId" in result ? result.windowId : "none"}-${result.rolledBack ? "rolled-back" : "not-rolled-back"}` } });
+  }
   const labels = new Map((await navigator.getSession()).windows.map(window => [window.id, labelOf(window.props)]));
   update({ restore: { placements: result.placements.map(placement => ({ ...placement, label: labels.get(placement.windowId) ?? "?" })) } });
 }
