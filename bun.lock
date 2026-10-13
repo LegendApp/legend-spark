@@ -411,6 +411,7 @@
       },
       "peerDependencies": {
         "@legendapp/spark-commands": "0.0.1-next.3",
+        "@legendapp/spark-file-system": "0.0.1-next.3",
         "@legendapp/spark-global-shortcuts": "0.0.1-next.3",
         "@legendapp/spark-native-menu": "0.0.1-next.3",
         "@legendapp/spark-system": "0.0.1-next.3",
@@ -420,6 +421,7 @@
       },
       "optionalPeers": [
         "@legendapp/spark-commands",
+        "@legendapp/spark-file-system",
         "@legendapp/spark-global-shortcuts",
         "@legendapp/spark-native-menu",
         "@legendapp/spark-system",

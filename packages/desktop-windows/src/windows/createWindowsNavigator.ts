@@ -163,6 +163,11 @@ function fit(frame: Omit<WindowBounds, "displayId">, display: DisplayInfo): Wind
   const clamp = (value: number, min: number, size: number, extent: number) => Math.min(Math.max(value, min), min + extent - size);
   return { displayId: display.id, x: clamp(frame.x, area.x, width, area.width), y: clamp(frame.y, area.y, height, area.height), width, height };
 }
+/**
+ * Each navigator's check that a session could be restored by it (entries, data, tab support), ignoring which
+ * windows are open now. Internal: workspaces validate before closing the windows a restore replaces.
+ */
+export const sessionChecks = new WeakMap<object, (session: WindowSession) => void>();
 /** How long session changes settle before `subscribeToSession` listeners run. */
 const SESSION_DELAY_MS = 250;
 /** macOS New Window cascades by about a title bar. */
@@ -449,7 +454,10 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
       async focus() { ensureLive(); await showWindow(id, { focus: true }); },
       async close() {
         ensureLive();
-        const result = await closeWindow(id);
+        let result: CloseResult;
+        // Gone natively before its closed event arrived: the instance ends here.
+        try { result = await closeWindow(id); }
+        catch (error) { if (nativeError(error).code === "E_NOT_FOUND") { dispose(record); throw closedError(error); } throw error; }
         if (result.closed) dispose(record);
         return result;
       },
@@ -718,13 +726,16 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
   };
   const invalid = (message: string) => new SparkError("E_INVALID_DATA", `Invalid window session: ${message}`);
   /** Malformed sessions reject E_INVALID_DATA, whichever argument check found the problem. */
-  const validSession = (session: WindowSession) => {
+  const restorable = (session: WindowSession) => {
     try { validSessionData(session); }
     catch (error) {
       if (error instanceof SparkError && (error.code === "E_INVALID_ARGUMENT" || error.code === "E_UNSUPPORTED_OPTION")) throw new SparkError("E_INVALID_DATA", `Invalid window session: ${error.message}`, { cause: error });
       throw error;
     }
     if (session.tabGroups.length && !tabsSupported()) throw new SparkError("E_UNSUPPORTED_OPTION", `${Platform.OS === "windows" ? "Windows" : Platform.OS} does not support window tab groups yet`);
+  };
+  const validSession = (session: WindowSession) => {
+    restorable(session);
     for (const saved of session.windows) if (records.has(saved.id)) throw new SparkError("E_ALREADY_EXISTS", `Window is already open: ${saved.id}`);
   };
   const validSessionData = (session: WindowSession) => {
@@ -772,6 +783,8 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     }
     const opened = new Map<string, WindowInstance>();
     try {
+      // A closed pooled window parks with its ID: release it so the saved window can open with that ID.
+      for (const saved of order) await pools.free(saved.id);
       for (const saved of order) {
         const first = groupOf.get(saved.id)?.windowIds[0];
         const frame = placement(saved.bounds, displays);
@@ -836,7 +849,7 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     }
   });
 
-  return {
+  const navigator: WindowsNavigator<T> = {
     open: open as WindowsNavigator<T>["open"],
     openInstance: openInstance as WindowsNavigator<T>["openInstance"],
     async close(name) {
@@ -880,4 +893,6 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     },
     remove: registration.remove,
   };
+  sessionChecks.set(navigator, session => { live(); restorable(session); });
+  return navigator;
 }

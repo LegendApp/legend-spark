@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   platform: { OS: "macos" },
   roots: new Map<string, () => any>(),
   turbo: new Set(["NativeDesktopSystem"]),
+  files: new Map<string, string>(),
   windowAvailability: { available: true } as object,
   windows: new Map<string, NativeWindow>(),
   token: 0,
@@ -40,13 +41,22 @@ vi.mock("../packages/desktop-windows/src/api", () => ({
   openWindow: mocks.openWindow, openWarmWindow: (options: object) => mocks.openWindow({ ...options, warm: true }), pooledWindows: mocks.pooledWindows, closeWindow: mocks.closeWindow, showWindow: mocks.showWindow, getWindow: mocks.getWindow,
   setWindowOptions: mocks.setWindowOptions, setWindowBounds: mocks.setWindowBounds, centerWindow: mocks.centerWindow,
   addWindowListener: mocks.addWindowListener, windowPoolCommand: mocks.windowPoolCommand,
-  processFootprint: async () => mocks.footprint, handleWindowNewTab: vi.fn(), listWindowTabGroups: vi.fn(), selectWindowTab: vi.fn(), getDisplays: async () => mocks.displays,
+  processFootprint: async () => mocks.footprint, handleWindowNewTab: vi.fn(), listWindowTabGroups: async () => [], selectWindowTab: vi.fn(), setWindowFullscreen: vi.fn(), getDisplays: async () => mocks.displays,
 }));
 vi.mock("../packages/desktop-windows/src/macos", () => ({ addMacOSWindowListener: vi.fn() }));
+vi.mock("@legendapp/spark-file-system", () => ({
+  getDirectory: async () => "/Container/data", mkdir: async () => {},
+  readText: async (path: string) => { const text = mocks.files.get(path); if (text === undefined) throw failure("E_NOT_FOUND"); return text; },
+  writeText: async (path: string, text: string) => { mocks.files.set(path, text); },
+  writeTextIfUnchanged: async (path: string, expected: string, text: string) => { if ((mocks.files.get(path) ?? "") !== expected) return { written: false }; mocks.files.set(path, text); return { written: true }; },
+  remove: async (path: string) => { if (!mocks.files.delete(path)) throw failure("E_NOT_FOUND"); },
+  stat: async (path: string) => { const text = mocks.files.get(path); if (text === undefined) throw failure("E_NOT_FOUND"); return { type: "file", size: text.length, modifiedAt: 0 }; },
+  writeChunks: async (path: string, chunks: Uint8Array[]) => { if (mocks.files.has(path)) throw failure("E_ALREADY_EXISTS"); mocks.files.set(path, new TextDecoder().decode(chunks[0])); return 1; },
+}));
 vi.mock("@legendapp/spark-system", () => ({
   onSystemEvent: async (handler: (event: object) => void) => { mocks.pressure = handler; return { remove: async () => { mocks.pressure = undefined; } }; },
 }));
-import { createWindowsNavigator, getWindowPerformanceAvailability, useWindowInstance, type WindowsConfig } from "../packages/desktop-windows/src/windows";
+import { createWindowWorkspaces, createWindowsNavigator, getWindowPerformanceAvailability, useWindowInstance, type WindowsConfig } from "../packages/desktop-windows/src/windows";
 
 const MB = 1024 * 1024;
 const tick = async () => { for (let n = 0; n < 10; n++) await new Promise(resolve => setTimeout(resolve, 0)); };
@@ -82,9 +92,9 @@ function track<T extends { remove(): Promise<void> }>(value: T) { removers.push(
 
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = false;
-  mocks.platform.OS = "macos"; mocks.turbo = new Set(["NativeDesktopSystem"]); mocks.windowAvailability = { available: true };
+  mocks.platform.OS = "macos"; mocks.turbo = new Set(["NativeDesktopSystem", "NativeDesktopFileSystem"]); mocks.files.clear(); mocks.windowAvailability = { available: true };
   mocks.windows.clear(); mocks.listeners = []; mocks.footprint = 100 * MB; mocks.windowCost = 20 * MB; mocks.pressure = undefined; mocks.calls = []; mocks.appEvents = []; mocks.pooledWindows.clear();
-  mocks.displays = [{ id: "1", primary: true, workArea: { x: 0, y: 25, width: 1440, height: 875 } }];
+  mocks.displays = [{ id: "1", persistentId: null, primary: true, workArea: { x: 0, y: 25, width: 1440, height: 875 } }];
   mocks.openWindow.mockReset().mockImplementation(async (options: { id: string; component: string; props: object; show?: boolean; title?: string; warm?: boolean }) => {
     if (mocks.windows.has(options.id)) throw failure("E_ALREADY_EXISTS");
     mocks.calls.push(`open ${options.id}`);
@@ -141,7 +151,7 @@ const pooled = (pool: object = {}, extra: object = {}) => ({ note: { component: 
 test("availability is local and truthful per feature and platform", () => {
   expect(getWindowPerformanceAvailability("pool")).toEqual({ available: true });
   expect(getWindowPerformanceAvailability("throttle")).toEqual({ available: true });
-  mocks.turbo.clear();
+  mocks.turbo.delete("NativeDesktopSystem");
   expect(getWindowPerformanceAvailability("pool")).toEqual({ available: false, reason: "missing-module" });
   expect(getWindowPerformanceAvailability("throttle")).toEqual({ available: true });
   mocks.windowAvailability = { available: false, reason: "missing-module" };
@@ -418,4 +428,35 @@ test("a throttled window's content stops re-rendering while hidden or covered, k
   expect(contents(clock.id)).toMatchObject({ props: { value: 7 } });
   expect(mocks.addWindowListener).toHaveBeenCalledWith(clock.id, "occlusionChanged", expect.any(Function), expect.anything());
   expect(mocks.addWindowListener).not.toHaveBeenCalledWith(plain.id, "occlusionChanged", expect.any(Function), expect.anything());
+});
+
+test("a saved pooled window restores with its ID: the parked window holding it closes for real first", async () => {
+  const windows = track(createWindowsNavigator(pooled()));
+  await windows.prewarm("note");
+  const note = await windows.openInstance("note", { props: { title: "Kept" }, options: { title: "Kept" } });
+  await tick();
+  const session = await windows.getSession();
+  await note.close();
+  await tick();
+  // Parked with its ID, so a plain open with that ID would fail natively.
+  expect(mocks.windows.get(note.id)).toMatchObject({ parked: true });
+  mocks.calls = [];
+  const [restored] = await windows.restoreSession(session);
+  expect(restored!.id).toBe(note.id);
+  expect(mocks.calls).toContain(`discard ${note.id}`);
+  expect(mocks.calls.indexOf(`discard ${note.id}`)).toBeLessThan(mocks.calls.indexOf(`open ${note.id}`));
+  await tick();
+  expect(contents(note.id)).toMatchObject({ type: "Note", props: { title: "Kept" } });
+
+  // The same through a workspace: a window from the pool is saved, parks when the restore closes it, and comes back.
+  await restored!.close();
+  await tick();
+  const pooledNote = await windows.openInstance("note", { props: { title: "Pooled" }, options: { title: "Pooled" } });
+  await tick();
+  const workspaces = track(await createWindowWorkspaces(windows));
+  await workspaces.save("Desk");
+  const result = await workspaces.restore("Desk");
+  expect(result).toMatchObject({ restored: true });
+  expect(result.restored && result.windows.map(window => window.id)).toEqual([pooledNote.id]);
+  expect(windows.list().map(window => window.id)).toEqual([pooledNote.id]);
 });

@@ -1,0 +1,43 @@
+appId: so.legend.spark.examples.kitchensink
+name: A damaged workspaces file is a typed error until it is cleared
+intent: >
+  After "Desk" is saved, the workspaces file is overwritten with truncated JSON and the app relaunches with its state.
+  Reading the workspaces reports E_INVALID_DATA and lists none, saving another workspace reports E_INVALID_DATA too (the
+  file is not overwritten), and the app keeps running. Deleting all workspaces removes the file; saving Desk then works
+  again.
+checks: [MW-WORKSPACE-05]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 180s
+---
+- launchApp: { clearState: true }
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces" }
+- extendedWaitUntil: { visible: { id: multiwindow-workspaces-root }, timeout: 10s }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=editor,save-Desk,corrupt" }
+- assertVisible: { id: multiwindow-workspaces-run-1-steps-3 }
+- assertNotVisible: { id: multiwindow-workspaces-error-other }
+# Relaunch with the damaged file.
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces" }
+- extendedWaitUntil: { visible: { id: multiwindow-workspaces-root }, timeout: 10s }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=list" }
+- assertVisible: { id: multiwindow-workspaces-run-1-steps-1 }
+- assertVisible: { id: multiwindow-workspaces-error-E_INVALID_DATA }
+- assertVisible: { id: multiwindow-workspaces-saved-count-unreadable }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=save-Other" }
+- assertVisible: { id: multiwindow-workspaces-run-2-steps-1 }
+- assertVisible: { id: multiwindow-workspaces-error-E_INVALID_DATA }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=clear" }
+- assertVisible: { id: multiwindow-workspaces-run-3-steps-1 }
+- assertVisible: { id: multiwindow-workspaces-saved-count-0 }
+- assertNotVisible: { id: multiwindow-workspaces-error-E_INVALID_DATA }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=save-Desk" }
+- assertVisible: { id: multiwindow-workspaces-run-4-steps-1 }
+- assertVisible: { id: multiwindow-workspaces-saved-Desk-0-windows-1-displays }
+- simulateDisplays: { restore: true }

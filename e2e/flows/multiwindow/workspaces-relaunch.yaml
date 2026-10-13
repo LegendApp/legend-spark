@@ -1,0 +1,36 @@
+appId: so.legend.spark.examples.kitchensink
+name: Saved workspaces survive quitting and relaunching
+intent: >
+  An editor at 200,120 (700 × 480) on the simulated display 901 is saved as the workspace "Desk" in the app's data
+  directory. The app quits and relaunches with its state: Desk is listed, no editor is open, and restoring Desk reopens
+  the editor at that frame.
+checks: [MW-WORKSPACE-02]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 180s
+---
+- launchApp: { clearState: true }
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces" }
+- extendedWaitUntil: { visible: { id: multiwindow-workspaces-root }, timeout: 10s }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=editor,frame-E1-901-200-120-700-480,save-Desk" }
+- assertVisible: { id: multiwindow-workspaces-run-1-steps-3 }
+- assertVisible: { id: multiwindow-workspaces-saved-Desk-1-windows-1-displays }
+# Quit and relaunch without clearing state.
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces" }
+- extendedWaitUntil: { visible: { id: multiwindow-workspaces-root }, timeout: 10s }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=list" }
+- assertVisible: { id: multiwindow-workspaces-run-1-steps-1 }
+- assertVisible: { id: multiwindow-workspaces-saved-Desk-1-windows-1-displays }
+- assertNotVisible: { id: multiwindow-workspaces-window-E1-901-200-120-700x480 }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=restore-Desk" }
+- assertVisible: { id: multiwindow-workspaces-run-2-steps-1 }
+- assertVisible: { id: multiwindow-workspaces-restore-E1-901-exact }
+- assertVisible: { id: multiwindow-workspaces-window-E1-901-200-120-700x480 }
+- simulateDisplays: { restore: true }
