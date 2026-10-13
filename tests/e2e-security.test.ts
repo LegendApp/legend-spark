@@ -141,7 +141,8 @@ describe("assertEntitlements", () => {
   });
 });
 
-describe("assertSandboxVariant", () => {
+// It reads Info.plist with plutil, which only macOS has.
+describe.skipIf(process.platform !== "darwin")("assertSandboxVariant", () => {
   const info = (keys: Record<string, string>) => (app: string) => {
     writeFileSync(path.join(app, "Contents/Info.plist"), JSON.stringify({ CFBundleExecutable: "Fake", ...keys }));
     execFileSync("plutil", ["-convert", "xml1", path.join(app, "Contents/Info.plist")]);
