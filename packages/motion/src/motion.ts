@@ -116,7 +116,8 @@ export function motionModule(): Spec {
   return NativeSparkMotion!;
 }
 
-function tagOf(target: MotionTarget | null | undefined): number {
+/** The React tag of a mounted MotionView; internal. */
+export function tagOf(target: MotionTarget | null | undefined): number {
   if (!target || typeof target !== "object") invalid("The motion target is a mounted MotionView ref");
   const tag = findNodeHandle(target);
   if (typeof tag !== "number") throw new SparkError("E_NOT_FOUND", "The MotionView is not mounted");

@@ -6,6 +6,8 @@ import { Materials } from "./MaterialsScreen";
 import { AccessibilityPower, ScrollAndFrames, Springs, Timelines } from "./MotionScreens";
 import { SHAPES_MESSAGES } from "./shapes-messages";
 import { Shapes } from "./ShapesScreen";
+import { SHADERS_MESSAGES } from "./shaders-messages";
+import { Shaders } from "./ShadersScreen";
 import { TextAndSymbols } from "./TextSymbolsScreen";
 
 export default defineScreens("motion-system", [
@@ -16,6 +18,7 @@ export default defineScreens("motion-system", [
   { id: "visual-effects", title: "Visual effects", summary: "Background colors that animate in OKLCH, corner radius, shadow and blur, 3D rotation in perspective, mask reveals and a path, all on the compositor.", component: VisualEffects },
   { id: "materials", title: MATERIALS_MESSAGES.en.title, titles: { ar: MATERIALS_MESSAGES.ar.title }, summary: "A backdrop material that crossfades between materials and to Liquid Glass, with its intensity and tint animated on the compositor; Reduce Motion and Reduce Transparency followed.", component: Materials },
   { id: "shapes", title: SHAPES_MESSAGES.en.title, titles: { ar: SHAPES_MESSAGES.ar.title }, summary: "A shape that morphs between a circle, a star and a square with a spring, a checkmark drawn with its stroke, and a progress ring, all on the compositor.", component: Shapes },
+  { id: "shaders", title: SHADERS_MESSAGES.en.title, titles: { ar: SHADERS_MESSAGES.ar.title }, summary: SHADERS_MESSAGES.en.summary, component: Shaders },
   { id: "text-and-symbols", title: "Text and symbols", summary: "Rolling digits, per-character crossfade and typewriter text, and SF Symbol effects with a replace transition.", component: TextAndSymbols },
   { id: "accessibility-power", title: "Accessibility, power and lifecycle", summary: "Reduce Motion alternates, the frame rate for the display and Low Power Mode, pausing in a hidden window, cancelling on unmount, and haptic and sound cues on frames.", component: AccessibilityPower },
 ]);

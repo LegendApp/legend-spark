@@ -257,7 +257,8 @@ const char *propertyName(Property property) {
     "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius",
     "materialIntensity", "materialTintOpacity", "materialCrossfade",
     "morph", "strokeStart", "strokeEnd", "strokeWidth", "fillColorL", "fillColorC", "fillColorH", "fillColorAlpha",
-    "strokeColorL", "strokeColorC", "strokeColorH", "strokeColorAlpha"};
+    "strokeColorL", "strokeColorC", "strokeColorH", "strokeColorAlpha",
+    "rippleProgress", "dissolveProgress", "distortion", "specularProgress"};
   static_assert(sizeof(names) / sizeof(names[0]) == PropertyCount);
   return names[property];
 }
@@ -277,18 +278,21 @@ Channel channelOf(Property property) {
     case Morph: return Channel::ShapePath;
     case StrokeStart: case StrokeEnd: case StrokeWidth: case FillColorL: case FillColorC: case FillColorH: case FillColorAlpha:
     case StrokeColorL: case StrokeColorC: case StrokeColorH: case StrokeColorAlpha: return Channel::Shape;
+    case RippleProgress: case DissolveProgress: case Distortion: case SpecularProgress: return Channel::Effect;
     default: return Channel::Transform;
   }
 }
 bool travels(Property property) {
   const Channel channel = channelOf(property);
-  return channel == Channel::Transform || channel == Channel::Mask || property == Morph || property == StrokeStart || property == StrokeEnd;
+  return channel == Channel::Transform || channel == Channel::Mask || property == Morph || property == StrokeStart || property == StrokeEnd
+    || property == RippleProgress || property == Distortion || property == SpecularProgress;
 }
 Rest restThreshold(Property property) {
   switch (property) {
     case Opacity: case ScaleX: case ScaleY: case BackgroundColorL: case BackgroundColorC: case BackgroundColorAlpha: case ShadowOpacity:
     case MaterialIntensity: case MaterialTintOpacity: case MaterialCrossfade: case Morph: case StrokeStart: case StrokeEnd:
-    case FillColorL: case FillColorC: case FillColorAlpha: case StrokeColorL: case StrokeColorC: case StrokeColorAlpha: return {0.0005, 0.005};
+    case FillColorL: case FillColorC: case FillColorAlpha: case StrokeColorL: case StrokeColorC: case StrokeColorAlpha: 
+    case RippleProgress: case DissolveProgress: case Distortion: case SpecularProgress: return {0.0005, 0.005};
     default: return {0.01, 0.1};
   }
 }

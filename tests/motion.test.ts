@@ -12,6 +12,8 @@ const { platform, registered, native, tags } = vi.hoisted(() => ({
     getState: vi.fn(async () => ""), link: vi.fn(async () => {}), unlink: vi.fn(async () => {}), recordFrames: vi.fn(async () => ""),
     environment: vi.fn(async (_tag: number) => ""),
     supportsMaterial: vi.fn((_name: string) => true),
+    supportsShaderEffect: vi.fn((_name: string) => true), hasSymbol: vi.fn((_name: string) => true),
+    startParticles: vi.fn(async (_json: string) => JSON.stringify({ played: "particles" })), stopParticles: vi.fn(async (_json: string) => {}),
   },
   tags: new Map<object, number>(),
 }));
@@ -25,14 +27,14 @@ vi.mock("react-native", () => ({
 vi.mock("../packages/motion/src/motion-view-host", () => ({ getNativeMotionView: () => "SparkMotionView" }));
 import * as motion from "../packages/motion/src/index";
 import { spring, timing, keyframes, decay, sequence, animate, stagger, timeline, setMotionValues, stopMotion, getMotionState, linkScroll, recordMotionFrames, getMotionAvailability, getMotionEnvironment, MotionView,
-  MotionMaterial, getMaterialAvailability, MotionShape } from "../packages/motion/src/index";
+  MotionMaterial, getMaterialAvailability, MotionShape, MotionShader, getShaderEffectAvailability, MotionEmitter, getParticleAvailability, startParticles, stopParticles } from "../packages/motion/src/index";
 
 const a = {} as any, b = {} as any, c = {} as any;
 const sent = (mock: { mock: { calls: unknown[][] } }, call = -1) => JSON.parse(mock.mock.calls.at(call)![0] as string);
 const code = (run: () => unknown) => { try { run(); } catch (error) { return (error as { code?: string }).code; } return "none"; };
 const CHANNELS = ["opacity", "translateX", "translateY", "scaleX", "scaleY", "rotate", "rotateX", "rotateY", "perspective", "borderRadius", "shadowOpacity", "shadowRadius",
   "shadowOffsetX", "shadowOffsetY", "blur", "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius", "materialIntensity", "materialTintOpacity",
-  "morph", "strokeStart", "strokeEnd", "strokeWidth", "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha",
+  "morph", "strokeStart", "strokeEnd", "strokeWidth", "rippleProgress", "dissolveProgress", "distortion", "specularProgress", "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha",
   "fillColorL", "fillColorC", "fillColorH", "fillColorAlpha", "strokeColorL", "strokeColorC", "strokeColorH", "strokeColorAlpha"];
 const values = (value: number) => Object.fromEntries(CHANNELS.map(property => [property, value]));
 
@@ -44,8 +46,9 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 test("the public entry exports the imperative API, builders, the components, and no hooks", () => {
-  expect(Object.keys(motion).sort()).toEqual(["MotionMaterial", "MotionNumber", "MotionPresence", "MotionShape", "MotionSymbol", "MotionText", "MotionView", "animate", "decay", "getMaterialAvailability", "getMotionAvailability", "getMotionEnvironment", "getMotionState",
-    "getSymbolEffectAvailability", "keyframes", "linkScroll", "motionPath", "playSymbolEffect", "recordMotionFrames", "sequence", "setMotionValues", "spring", "stagger", "stopMotion", "stopSymbolEffects", "timeline", "timing"]);
+  expect(Object.keys(motion).sort()).toEqual(["MotionEmitter", "MotionMaterial", "MotionNumber", "MotionPresence", "MotionShader", "MotionShape", "MotionSymbol", "MotionText", "MotionView", "animate", "decay", "getMaterialAvailability",
+    "getMotionAvailability", "getMotionEnvironment", "getMotionState", "getParticleAvailability", "getShaderEffectAvailability", "getSymbolEffectAvailability", "keyframes", "linkScroll", "motionPath",
+    "playSymbolEffect", "recordMotionFrames", "sequence", "setMotionValues", "spring", "stagger", "startParticles", "stopMotion", "stopParticles", "stopSymbolEffects", "timeline", "timing"]);
 });
 
 test("springs: macOS presets and SwiftUI's response/bounce conversion, or physical parameters", () => {
@@ -236,6 +239,11 @@ test("availability is truthful; unavailable targets throw typed errors and rende
     expect(code(() => MotionMaterial({ material: "hudWindow" }))).toBe("E_UNSUPPORTED_PLATFORM");
     expect(code(() => MotionShape({ paths: ["M0 0 L10 0"] }))).toBe("E_UNSUPPORTED_PLATFORM");
     expect(code(() => MotionShape({ paths: ["not a path"] }))).toBe("E_UNSUPPORTED_PLATFORM");
+    expect(getShaderEffectAvailability("ripple")).toEqual({ available: false, reason: "unsupported-platform" });
+    expect(getParticleAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
+    expect(code(() => MotionShader({ effect: { type: "dissolve" } }))).toBe("E_UNSUPPORTED_PLATFORM");
+    expect(code(() => MotionEmitter({ emitter: { cells: [{ birthRate: 1, lifetimeMs: 100 }] } }))).toBe("E_UNSUPPORTED_PLATFORM");
+    await expect(startParticles(a)).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
   }
   expect(Object.values(native).every(fn => fn.mock.calls.length === 0)).toBe(true);
 });
@@ -408,4 +416,69 @@ test("MotionShape: strict SVG path data, compatible paths subdivided to one stru
   expect(code(() => animate(a, { fillColor: 1 } as never))).toBe("E_INVALID_ARGUMENT");
   expect(code(() => MotionView({ initial: { strokeEnd: 0 } }))).toBe("E_UNSUPPORTED_OPTION");
   expect(code(() => MotionView({ initial: { fillColor: "#fff" } }))).toBe("E_UNSUPPORTED_OPTION");
+});
+
+test("MotionShader: truthful availability, validated built-in effects, and each effect property only on its effect", async () => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  expect(getShaderEffectAvailability("dissolve")).toEqual({ available: true });
+  expect(native.supportsShaderEffect).toHaveBeenLastCalledWith("dissolve");
+  // Without a Metal device the dissolve reports why and refuses to render; the other effects need none.
+  native.supportsShaderEffect.mockImplementation(name => name !== "dissolve");
+  expect(getShaderEffectAvailability("dissolve")).toEqual({ available: false, reason: "host-restriction" });
+  expect(code(() => MotionShader({ effect: { type: "dissolve" } }))).toBe("E_UNAVAILABLE");
+  expect(getShaderEffectAvailability("ripple")).toEqual({ available: true });
+  native.supportsShaderEffect.mockImplementation(() => true);
+  expect(code(() => getShaderEffectAvailability("plasma" as never))).toBe("E_INVALID_ARGUMENT");
+  let rendered: any;
+  await act(async () => { rendered = create(React.createElement(MotionShader, { effect: { type: "ripple", origin: { x: 10, y: 20 }, width: 30 }, initial: { rippleProgress: 0 }, testID: "card" }, "content")); });
+  const props = rendered.root.findByType("SparkMotionView").props;
+  expect(JSON.parse(props.shaderEffect)).toEqual({ type: "ripple", origin: { x: 10, y: 20 }, width: 30 });
+  expect(props.children).toBe("content");
+  expect(JSON.parse(props.initialValues)).toEqual({ rippleProgress: 0 });
+  await act(async () => rendered.unmount());
+  await act(async () => { rendered = create(React.createElement(MotionShader, { effect: { type: "specular", color: "#ffe08a", angle: 30 } })); });
+  expect(JSON.parse(rendered.root.findByType("SparkMotionView").props.shaderEffect)).toMatchObject({ type: "specular", angle: 30, color: expect.any(Array) });
+  await act(async () => rendered.unmount());
+  for (const effect of [{ type: "ripple", width: 0 }, { type: "ripple", refraction: 0.5 }, { type: "ripple", origin: { x: 1 } }, { type: "dissolve", cellSize: 1 }, { type: "dissolve", softness: 0 },
+    { type: "distortion", radius: 0 }, { type: "distortion", center: [1, 2] }, { type: "specular", intensity: 2 }, { type: "specular", color: "gold" }, { type: "ripple", speed: 2 }, { type: "glow" }])
+    expect(code(() => MotionShader({ effect } as never)), JSON.stringify(effect)).toBe("E_INVALID_ARGUMENT");
+  // An effect property belongs to its effect; the dissolve is the view's mask.
+  expect(code(() => MotionShader({ effect: { type: "ripple" }, initial: { distortion: 0.5 } }))).toBe("E_UNSUPPORTED_OPTION");
+  expect(code(() => MotionView({ initial: { dissolveProgress: 1 } }))).toBe("E_UNSUPPORTED_OPTION");
+  expect(code(() => MotionShader({ effect: { type: "dissolve" }, initial: { maskInsetTop: 4 } }))).toBe("E_UNSUPPORTED_OPTION");
+  expect(code(() => MotionShader({ effect: { type: "dissolve" }, style: { overflow: "hidden", borderTopLeftRadius: 8 } }))).toBe("E_UNSUPPORTED_OPTION");
+  await animate(a, { rippleProgress: timing(1, { durationMs: 600 }), specularProgress: spring(1) }).finished;
+  expect(Object.keys(sent(native.run).groups[0].tracks)).toEqual(["rippleProgress", "specularProgress"]);
+});
+
+test("MotionEmitter and particles: a validated emitter within the particle budget, start and stop, and Reduce Motion's none", async () => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  expect(getParticleAvailability()).toEqual({ available: true });
+  const emitter = { shape: "line", position: { x: 50, y: 0 }, size: { width: 100, height: 0 }, blend: "additive", seed: 3,
+    cells: [{ image: "star", color: "#f59e0b", birthRate: 30, lifetimeMs: 2000, velocity: 80, emissionAngle: 90, emissionRange: 45, spin: 90, acceleration: { x: 0, y: 120 } }, { image: { symbol: "heart.fill" }, birthRate: 2, lifetimeMs: 1000 }] } as const;
+  let rendered: any;
+  await act(async () => { rendered = create(React.createElement(MotionEmitter, { emitter, testID: "confetti" })); });
+  const json = JSON.parse(rendered.root.findByType("SparkMotionView").props.particleEmitter);
+  expect(json).toMatchObject({ shape: "line", blend: "additive", seed: 3, position: { x: 50, y: 0 }, cells: [{ image: "star", birthRate: 30, lifetimeMs: 2000, emissionAngle: 90 }, { image: { symbol: "heart.fill" } }] });
+  expect(json.cells[0].color).toHaveLength(4);
+  expect(native.hasSymbol).toHaveBeenLastCalledWith("heart.fill");
+  await act(async () => rendered.unmount());
+  const cell = { birthRate: 10, lifetimeMs: 1000 };
+  for (const bad of [{ cells: [] }, { cells: [{ ...cell, image: "triangle" }] }, { cells: [{ birthRate: 10 }] }, { cells: [{ ...cell, birthRate: 600 }] }, { cells: [cell], shape: "spiral" },
+    { cells: [cell], seed: -1 }, { cells: [cell], gravity: 1 }, { cells: [{ ...cell, wobble: 1 }] }, { cells: Array(9).fill(cell) }, { cells: [{ birthRate: 500, lifetimeMs: 2500 }] }])
+    expect(code(() => MotionEmitter({ emitter: bad } as never)), JSON.stringify(bad)).toBe("E_INVALID_ARGUMENT");
+  native.hasSymbol.mockReturnValueOnce(false);
+  expect(code(() => MotionEmitter({ emitter: { cells: [{ ...cell, image: { symbol: "no.such" } }] } }))).toBe("E_NOT_FOUND");
+  await expect(startParticles(a, { durationMs: 400 })).resolves.toEqual({ played: "particles" });
+  expect(sent(native.startParticles)).toEqual({ tag: 11, durationMs: 400 });
+  native.startParticles.mockResolvedValueOnce(JSON.stringify({ played: "none" }));
+  await expect(startParticles(a, { reducedMotion: "play" })).resolves.toEqual({ played: "none" });
+  expect(sent(native.startParticles)).toEqual({ tag: 11, reducedMotion: "play" });
+  await stopParticles(b);
+  expect(sent(native.stopParticles)).toEqual({ tag: 12 });
+  await expect(startParticles(a, { durationMs: 0 })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(startParticles(a, { burst: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(startParticles({} as never)).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+  native.startParticles.mockResolvedValueOnce(JSON.stringify({ played: "sparkles" }));
+  await expect(startParticles(a)).rejects.toMatchObject({ code: "E_INVALID_DATA" });
 });

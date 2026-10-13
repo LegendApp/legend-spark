@@ -18,6 +18,10 @@ export interface NativeProps extends ViewProps {
   crossfade?: string;
   /** MotionShape: JSON of the validated paths (one structure of cubic segments) and stroke style. */
   shape?: string;
+  /** MotionShader: JSON of the validated built-in effect (`type` and its options). */
+  shaderEffect?: string;
+  /** MotionEmitter: JSON of the validated emitter (`shape`, `position`, `size`, `blend`, `seed`, `cells`). */
+  particleEmitter?: string;
 }
 
 export default codegenNativeComponent<NativeProps>("SparkMotionView") as HostComponent<NativeProps>;

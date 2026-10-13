@@ -4,6 +4,9 @@ import { shapeConfig, type MotionShapeStyle } from "./shapes";
 import { useMotionView, type MotionViewProps } from "./MotionView";
 import { invalid } from "./specs";
 
+/** The motion properties a MotionShape has (docs/motion.md#shapes). */
+const SHAPE_PROPERTIES = ["morph", "strokeStart", "strokeEnd", "strokeWidth", "fillColor", "strokeColor"];
+
 export interface MotionShapeProps extends Omit<MotionViewProps, "children">, MotionShapeStyle {
   /**
    * The shapes, as SVG path data in points from the view's top-left corner (`M`, `L`, `H`, `V`, `C`, `S`, `Q`, `T`, `Z`):
@@ -27,5 +30,5 @@ export function MotionShape({ paths, lineCap, lineJoin, fillRule, ...props }: Mo
     const [source, cap, join, rule] = JSON.parse(key);
     return JSON.stringify(shapeConfig(source, { lineCap: cap ?? undefined, lineJoin: join ?? undefined, fillRule: rule ?? undefined }));
   }, [key]);
-  return useMotionView(props, { shape });
+  return useMotionView(props, { native: { shape }, properties: SHAPE_PROPERTIES });
 }

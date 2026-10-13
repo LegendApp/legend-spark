@@ -22,6 +22,11 @@ export interface Spec extends TurboModule {
   supportsSymbolEffect(name: string): boolean;
   /** Whether this app's SDK and this macOS have a backdrop material. */
   supportsMaterial(name: string): boolean;
+  /** Whether this Mac can show a shader effect (`dissolve` needs a Metal device). */
+  supportsShaderEffect(name: string): boolean;
+  /** Resolves `{ played }`: `particles`, or `none` under Reduce Motion. */
+  startParticles(requestJson: string): Promise<string>;
+  stopParticles(requestJson: string): Promise<void>;
 }
 
 export default TurboModuleRegistry.get<Spec>("NativeSparkMotion");

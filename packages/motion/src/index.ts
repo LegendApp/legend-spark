@@ -28,4 +28,12 @@ export type { MotionMaterialName, MotionMaterialBlending, MotionMaterialState } 
 export { MotionShape } from "./MotionShape";
 export type { MotionShapeProps } from "./MotionShape";
 export type { MotionShapeLineCap, MotionShapeLineJoin, MotionShapeFillRule } from "./shapes";
+export { MotionShader } from "./MotionShader";
+export type { MotionShaderProps } from "./MotionShader";
+export { getShaderEffectAvailability } from "./shaders";
+export type { ShaderEffect, MotionShaderEffect, MotionPoint, RippleEffect, DissolveEffect, DistortionEffect, SpecularEffect } from "./shaders";
+export { MotionEmitter } from "./MotionEmitter";
+export type { MotionEmitterProps } from "./MotionEmitter";
+export { getParticleAvailability, startParticles, stopParticles } from "./particles";
+export type { ParticleEmitter, ParticleCell, ParticleImage, ParticleOptions, ParticlePlayback } from "./particles";
 export type { MotionSymbolTarget, SymbolEffect, SymbolEffectDirection, SymbolEffectOptions, SymbolEffectPlayback, SymbolReplaceTransition } from "./symbols";

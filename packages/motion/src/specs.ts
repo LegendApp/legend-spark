@@ -16,7 +16,9 @@ export type MotionNumberProperty =
    * A MotionShape's morph between its paths (0 is the first; 1.5 halfway from the second to the third), the trimmed
    * ends of its stroke (0-1 of its length) and its stroke width in points (docs/motion.md#shapes).
    */
-  | "morph" | "strokeStart" | "strokeEnd" | "strokeWidth";
+  | "morph" | "strokeStart" | "strokeEnd" | "strokeWidth"
+  /** A MotionShader's effect: 0-1 progress, and the distortion's strength from -1 to 1 (docs/motion.md#shader-effects-and-particles). */
+  | "rippleProgress" | "dissolveProgress" | "distortion" | "specularProgress";
 export type { MotionColorProperty };
 export type MotionProperty = MotionNumberProperty | MotionColorProperty;
 /** Properties as the engine stores them: `scale` drives `scaleX` and `scaleY`, a color its OKLCH components. */
@@ -82,6 +84,7 @@ export const MOTION_PROPERTIES: readonly MotionProperty[] = [
   "borderRadius", "backgroundColor", "shadowOpacity", "shadowRadius", "shadowOffsetX", "shadowOffsetY", "blur",
   "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius", "materialIntensity", "materialTintOpacity",
   "morph", "strokeStart", "strokeEnd", "strokeWidth", "fillColor", "strokeColor",
+  "rippleProgress", "dissolveProgress", "distortion", "specularProgress",
 ];
 export const isColorProperty = (property: string): property is MotionColorProperty => (COLOR_PROPERTIES as readonly string[]).includes(property);
 const EASINGS: Record<Exclude<Easing, CubicBezier>, CubicBezier> = {

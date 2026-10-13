@@ -29,6 +29,8 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
   NSDictionary *_crossfade;
   SparkMotionMaterialStack *_material;
   SparkMotionShapeView *_shape;
+  SparkMotionShader *_shader;
+  SparkMotionEmitter *_emitter;
   uint32_t _owned;
 }
 
@@ -65,6 +67,8 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
 - (SparkMotionMaterialStack *)motionMaterial { return _material; }
 - (NSDictionary *)motionCrossfade { return _crossfade; }
 - (SparkMotionShapeView *)motionShape { return _shape; }
+- (SparkMotionShader *)motionShader { return _shader; }
+- (SparkMotionEmitter *)motionEmitter { return _emitter; }
 - (BOOL)motionRightToLeft { return _layoutMetrics.layoutDirection == LayoutDirection::RightToLeft; }
 - (uint32_t)motionOwnedChannels { return _owned; }
 - (void)setMotionOwnedChannels:(uint32_t)owned { _owned = owned; }
@@ -112,6 +116,8 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
   }
   if (!old || motionProps.tintColor != old->tintColor || motionProps.material != old->material) [self updateMaterial:motionProps changed:!old || motionProps.material != old->material];
   if (!old || motionProps.shape != old->shape) [self updateShape:motionProps];
+  if (!old || motionProps.shaderEffect != old->shaderEffect) [self updateShader:motionProps];
+  if (!old || motionProps.particleEmitter != old->particleEmitter) [self updateEmitter:motionProps];
   if (_tag) return;
   // `initial` applies once, at mount; later renders never overwrite engine-owned values.
   Values initial = spark::motion::kIdentity;
@@ -171,6 +177,30 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
   // JavaScript validated the paths and the limits; only a malformed native prop gets here.
   if (![_shape setConfig:config error:&error]) { NSLog(@"Spark motion: shape rejected: %@", error); return; }
   [SparkMotionCoordinator.shared hostDidReshape:self];
+}
+
+// A MotionShader's effect and a MotionEmitter's emitter (docs/motion.md#shader-effects-and-particles) are filters,
+// layers and masks on this view's own layer, never subviews: React children mount at their indexes as in any MotionView.
+- (void)updateShader:(const SparkMotionViewProps &)props
+{
+  NSDictionary *config = SparkMotionJSON(props.shaderEffect);
+  if (![config isKindOfClass:NSDictionary.class]) return;
+  NSString *error = nil;
+  SparkMotionShader *shader = [SparkMotionShader shader:config error:&error];
+  // JavaScript validated the effect and its availability; only a malformed native prop (or a lost Metal device) gets here.
+  if (!shader) { NSLog(@"Spark motion: shader effect rejected: %@", error); return; }
+  SparkMotionShader *previous = _shader;
+  _shader = shader;
+  if (_tag) [SparkMotionCoordinator.shared host:self shaderChangedFrom:previous];
+}
+
+- (void)updateEmitter:(const SparkMotionViewProps &)props
+{
+  NSDictionary *config = SparkMotionJSON(props.particleEmitter);
+  if (![config isKindOfClass:NSDictionary.class]) return;
+  NSString *error = nil;
+  if (_emitter ? ![_emitter update:config error:&error] : !(_emitter = [SparkMotionEmitter emitter:config error:&error])) { NSLog(@"Spark motion: particle emitter rejected: %@", error); return; }
+  if (self.layer) [_emitter layout:self];
 }
 
 - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics
