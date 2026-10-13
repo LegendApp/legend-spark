@@ -36,6 +36,8 @@ const PINNED_DEFAULTS: Readonly<Record<string, string>> = {
   AppleInterfaceStyle: "Light",
   AppleInterfaceStyleSwitchesAutomatically: "NO",
 };
+/** The driven process's time zone, so JavaScript's Date and Intl match the system module's fixed `timeZone` (docs/system.md#testing-system-events). */
+const PINNED_ENV: Readonly<Record<string, string>> = { TZ: "UTC" };
 const PINNED = Object.entries(PINNED_DEFAULTS).flatMap(([key, value]) => [`-${key}`, value]);
 export const plist = (app: string, key: string) =>
   execFileSync("plutil", ["-extract", key, "raw", "-o", "-", path.join(app, "Contents/Info.plist")], { encoding: "utf8" }).trim();
@@ -187,7 +189,7 @@ export class KitchenSinkApp {
   readonly reserved = { arguments: [JS_LOCATION], env: [DRIVER_ENV, BUNDLE_URL, ...STATE_ENV], locale: ["-AppleLanguages", "-AppleLocale"] } as const;
 
   /**
-   * Launches the driver session's app in driver mode with its state environment and `PINNED_DEFAULTS`, then the
+   * Launches the driver session's app in driver mode with its state environment, `PINNED_ENV` and `PINNED_DEFAULTS`, then the
    * caller's `arguments` (after its own, so the last value of a key wins) and `env`. `locale` sets the app's language and region formats through launch arguments.
    */
   launch(options: { locale?: string; arguments?: readonly string[]; env?: Readonly<Record<string, string>>; log: ProcessLog }): Promise<Driver> {
@@ -197,7 +199,7 @@ export class KitchenSinkApp {
     const resolved = this.resolved, state = this.state;
     if (!resolved || !state || (!resolved.embedded && !this.served && !this.devServer)) throw new Error("KitchenSinkApp.open() must run before launch()");
     const extra = options.arguments ?? [];
-    const executable = path.join(state.app, path.relative(resolved.app, resolved.executable)), env = { ...options.env, ...state.env };
+    const executable = path.join(state.app, path.relative(resolved.app, resolved.executable)), env = { ...PINNED_ENV, ...options.env, ...state.env };
     if (resolved.embedded) return launchDriver({ executable, args: [...PINNED, ...locale, ...extra], env, log: options.log });
     if (this.devServer) return launchDriver({
       executable,

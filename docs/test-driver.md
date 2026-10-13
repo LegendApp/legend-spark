@@ -134,6 +134,9 @@ Not pinned this way:
 - The display's colour space and backing scale, fonts and the macOS version depend on the Mac
   ([Determinism](e2e-flows.md#determinism)).
 
+The launch environment also sets `TZ=UTC`, so the driven process's time zone (JavaScript's `Date` and `Intl`, and
+`NSTimeZone`) is the same on every Mac and matches the system module's fixed `timeZone`. A flow's `env` can override it.
+
 No capture needs a mask for host settings: every difference measured is pinned above.
 `tests/e2e-kitchen-sink-launch.test.ts` launches a fake app and checks its arguments.
 

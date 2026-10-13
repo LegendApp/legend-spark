@@ -300,7 +300,7 @@ const mode = file => fs.statSync(file).mode & 0o777;
 if (!dir || mode(dir) !== 0o700 || mode(path.join(dir, "token")) !== 0o600) process.exit(2);
 const token = fs.readFileSync(path.join(dir, "token"), "utf8");
 fs.unlinkSync(path.join(dir, "token"));
-fs.writeFileSync(path.join(dir, "launch.json"), JSON.stringify({ argv: process.argv.slice(2), extra: process.env.FAKE_EXTRA, home: process.env.CFFIXED_USER_HOME, suffix: process.env.DIRHELPER_USER_DIR_SUFFIX }));
+fs.writeFileSync(path.join(dir, "launch.json"), JSON.stringify({ argv: process.argv.slice(2), extra: process.env.FAKE_EXTRA, tz: process.env.TZ, home: process.env.CFFIXED_USER_HOME, suffix: process.env.DIRHELPER_USER_DIR_SUFFIX }));
 const server = net.createServer(socket => {
   let buffer = "", authenticated = false;
   // As the real driver does, the session's end (quit, disconnect or failed authentication) quits the app, so a test that

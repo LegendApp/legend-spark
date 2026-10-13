@@ -65,7 +65,8 @@ test.skipIf(process.platform !== "darwin")("every driver launch pins the host re
   await app.open();
   const driver = await app.launch({ locale: "ar", arguments: ["-AppleShowScrollBars", "Always"], log: processLog(path.join(directory, "app.log")) });
   try {
-    const { argv } = JSON.parse(readFileSync(path.join(driver.directory, "launch.json"), "utf8"));
+    const { argv, tz } = JSON.parse(readFileSync(path.join(driver.directory, "launch.json"), "utf8"));
+    expect(tz).toBe("UTC");
     expect(argv).toEqual([
       "-NSRequiresAquaSystemAppearance", "YES",
       "-AppleReduceDesktopTinting", "YES",
