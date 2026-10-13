@@ -21,7 +21,7 @@ manual: true
     signoff: required
 - manualStep:
     instruction: Run bun run macos in examples/kitchen-sink, open DevTools › React DevTools, press Open a note window, then ⌥⌘I and choose Components. Select ReactDevToolsSample and edit its label and count; turn on Highlight updates in the Components settings and press Increment; record in Profiler while pressing Increment; press Select element and click a view in the note window, then click in the main window.
-    expect: The tree lists the main window's and the note window's roots; edits show in the app at once; Increment outlines the changed views; the Profiler shows a commit per press with its duration and that hook 1 changed; the click in the note window selects the component under it, and the next click in the main window reaches the app.
+    expect: The tree lists the main window's and the note window's roots; edits show in the app at once; Increment outlines the changed views; the Profiler shows a commit per press with its duration and that hook 2 changed; the click in the note window selects the component under it, and the next click in the main window reaches the app.
     evidence: none
     signoff: required
 - manualStep:

@@ -11,6 +11,7 @@ import { run, cancelCommands } from "./commands.ts";
 import { build } from "./build.ts";
 import { createRequire } from "node:module";
 const { preparePatch } = createRequire(import.meta.url)("./expo-dev-patch.cjs");
+const { installReactDevToolsHookIdsPatch } = createRequire(import.meta.url)("./react-devtools-hook-ids.cjs");
 import { findGo, readRuntime, registerRuntime } from "./local.ts";
 import { sessionStatus } from "./session-status.ts";
 import { assertNativePatchPreflight } from "./native-patch-preflight.ts";
@@ -109,6 +110,7 @@ export async function dev(
   });
   async function startMetro() {
     prepareConfig(root);
+    installReactDevToolsHookIdsPatch(root);
     const previous = metro;
     metro = undefined;
     if (previous && previous.exitCode === null) {

@@ -94,9 +94,12 @@ choose Components or Profiler. There is no other API: `getDevToolsAvailability()
   it in every window. To select in an isolated-runtime window, open DevTools for that runtime.
 - **Highlight updates** (Components settings) outline the views that re-rendered, through React Native's debugging
   overlay in each window.
-- **Editing hooks:** React DevTools numbers a `useSyncExternalStore` as one hook where React has two, so editing the
-  state of a hook that comes after one (in the same component) changes the wrong hook and can break the component
-  ([#417](https://github.com/LegendApp/legend-spark/issues/417)). Props and hooks before it edit correctly.
+- **Editing hooks:** React keeps two hook objects for a `useSyncExternalStore` or `useTransition` and three for a
+  `useActionState`, and edits a hook by its index among them. `react-devtools-core` (6.1.5 through 8.0.0, and
+  React's main branch) numbers each as one hook, so editing a later hook's state changed the wrong hook and could
+  unmount the window ([#417](https://github.com/LegendApp/legend-spark/issues/417)). `spark dev` patches the app's
+  `react-devtools-core` before starting Metro (`packages/cli/src/react-devtools-hook-ids.cjs`) so hook ids count
+  React's hook objects; it rejects a `react-devtools-core` whose source no longer matches.
 
 React Native's `setUpReactDevTools` connects the backend (`react-devtools-core`) in every development runtime. React
 Native DevTools' frontend reaches it through `__FUSEBOX_REACT_DEVTOOLS_DISPATCHER__`: it adds the dispatcher's CDP
