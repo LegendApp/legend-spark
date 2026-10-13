@@ -61,6 +61,49 @@ test("Sign in with Apple and passkey entitlements are added only when the app op
     expect(() => validateOwned(macos(invalid))).toThrow("macos.authentication");
 });
 
+test("privileged helper launch daemons are written only for helpers the app lists in macos.privilegedHelpers, and signed with their labels", async () => {
+  const { validatePrivilegedHelpers, writePrivilegedHelpers, privilegedHelperPlist, privilegedHelperIdentifiers } = createRequire(import.meta.url)("../packages/config-plugin/privileged-helpers.cjs");
+  const { validateOwned } = createRequire(import.meta.url)("../packages/config-plugin/validation.cjs");
+  const root = temporary();
+  try {
+    const app = path.join(root, "App.app");
+    machO(path.join(app, "Contents/Helpers/tool"));
+    machO(path.join(app, "Contents/Helpers/daemon.helper/bin/daemon"));
+    const helpers = { tool: "bin/tool", daemon: { "macos-arm64": { directory: "helpers/daemon", executable: "bin/daemon" } } };
+    // No option, no plists: apps that do not opt in are unchanged.
+    expect(writePrivilegedHelpers(app, { bundleIdentifier: "com.example.app" }, helpers, "arm64")).toEqual([]);
+    expect(existsSync(path.join(app, "Contents/Library"))).toBe(false);
+    const files = writePrivilegedHelpers(app, { bundleIdentifier: "com.example.app", privilegedHelpers: ["tool", "daemon"] }, helpers, "arm64");
+    expect(files.map((file: string) => path.relative(app, file))).toEqual(["Contents/Library/LaunchDaemons/com.example.app.tool.plist", "Contents/Library/LaunchDaemons/com.example.app.daemon.plist"]);
+    expect(readFileSync(files[1], "utf8")).toBe(privilegedHelperPlist("com.example.app", "daemon", "Contents/Helpers/daemon.helper/bin/daemon"));
+    const plist = readFileSync(files[0], "utf8");
+    for (const entry of ["<key>Label</key>\n  <string>com.example.app.tool</string>", "<key>BundleProgram</key>\n  <string>Contents/Helpers/tool</string>",
+      "<key>MachServices</key>\n  <dict>\n    <key>com.example.app.tool</key>\n    <true/>", "<key>AssociatedBundleIdentifiers</key>\n  <array>\n    <string>com.example.app</string>"])
+      expect(plist).toContain(entry);
+    expect(() => writePrivilegedHelpers(app, { bundleIdentifier: "com.example.app", privilegedHelpers: ["daemon"] }, helpers, "x64")).toThrow("no macos-x64 bundle");
+    rmSync(path.join(app, "Contents/Helpers/tool"));
+    expect(() => writePrivilegedHelpers(app, { bundleIdentifier: "com.example.app", privilegedHelpers: ["tool"] }, helpers, "arm64")).toThrow("not in the app");
+    for (const invalid of [[], ["tool", "tool"], ["a b"], "tool", ["missing"]]) expect(() => validatePrivilegedHelpers(invalid, helpers)).toThrow("macos.privilegedHelpers");
+    expect(() => validatePrivilegedHelpers(["win"], { win: { "windows-x64": { directory: "w", executable: "w.exe" } } })).toThrow("no macOS bundle");
+    // spark package signs each helper with its launchd label as identifier, which the app's requirement pins.
+    machO(path.join(app, "Contents/MacOS/App"));
+    writeJson(path.join(app, "Contents/Info.plist"), { CFBundleExecutable: "App" }); // The mocked plutil reads JSON.
+    machO(path.join(app, "Contents/Helpers/tool"));
+    writePrivilegedHelpers(app, { bundleIdentifier: "com.example.app", privilegedHelpers: ["tool", "daemon"] }, helpers, "arm64");
+    expect(privilegedHelperIdentifiers(app)).toEqual({ "Contents/Helpers/tool": "com.example.app.tool", "Contents/Helpers/daemon.helper/bin/daemon": "com.example.app.daemon" });
+    const calls: string[][] = [];
+    await signApp(root, app, identity, {}, {}, async (_root, args) => { calls.push(args); return args[0] === "plutil" && args.includes("json") ? (existsSync(args.at(-1)!) ? readFileSync(args.at(-1)!, "utf8") : "{}") : ""; });
+    const signed = (file: string) => calls.find(args => args[0] === "codesign" && args.at(-1) === realpathSync(path.join(app, file)))!;
+    expect(signed("Contents/Helpers/tool")).toEqual(expect.arrayContaining(["--identifier", "com.example.app.tool"]));
+    expect(signed("Contents/Helpers/daemon.helper/bin/daemon")).toEqual(expect.arrayContaining(["--identifier", "com.example.app.daemon"]));
+    expect(signed("Contents/MacOS/App")).not.toContain("--identifier");
+    writeFileSync(path.join(app, "Contents/Library/LaunchDaemons/other.plist"), "<plist/>");
+    expect(() => privilegedHelperIdentifiers(app)).toThrow("not a launch daemon plist");
+    validateOwned({ macos: { bundleIdentifier: "com.example.app", privilegedHelpers: ["tool"] }, helpers });
+    expect(() => validateOwned({ macos: { bundleIdentifier: "com.example.app", privilegedHelpers: ["tool"] } })).toThrow("helpers does not declare");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test("packaging entitlements follow the release binary even when the last generated graph was a dev superset", () => {
   const root = temporary();
   try {

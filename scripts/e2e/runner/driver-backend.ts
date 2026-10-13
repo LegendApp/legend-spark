@@ -12,7 +12,7 @@ import { processLog, type ProcessLog } from "../../../packages/cli/src/process.t
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type SimulatedSpeech, type TestSpeech, type SimulatedCapture, type TestCapture,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type SimulatedPrivilegedHelper, type TestPrivilegedHelper, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type SimulatedSpeech, type TestSpeech, type SimulatedCapture, type TestCapture,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
@@ -50,6 +50,8 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   testBiometrics(): Promise<TestBiometrics>;
   simulateAuthorization(state: SimulatedAuthorization): Promise<TestAuthorization>;
   testAuthorization(): Promise<TestAuthorization>;
+  simulatePrivilegedHelper(state: SimulatedPrivilegedHelper): Promise<TestPrivilegedHelper>;
+  testPrivilegedHelper(): Promise<TestPrivilegedHelper>;
   simulateSharing(request: SimulatedSharing): Promise<TestSharing>;
   testSharing(): Promise<TestSharing>;
   simulateSpeech(state: SimulatedSpeech): Promise<TestSpeech>;
@@ -132,6 +134,9 @@ export class DriverBackend implements Backend {
     // Simulated Sign in with Apple and passkeys, never AuthenticationServices, Apple or a relying party (docs/authentication.md#testing).
     simulateAuthorization: async args => { await this.client().simulateAuthorization(args as SimulatedAuthorization); },
     assertSimulatedAuthorization: (args, context) => context.eventually(async () => assertSimulatedAuthorization(await this.client().testAuthorization(), args)),
+    // Simulated privileged helpers: never SMAppService, an admin prompt, launchd or root (docs/privileged-helper.md#testing).
+    simulatePrivilegedHelper: async args => { await this.client().simulatePrivilegedHelper(args as SimulatedPrivilegedHelper); },
+    assertSimulatedPrivilegedHelper: (args, context) => context.eventually(async () => assertSimulatedPrivilegedHelper(await this.client().testPrivilegedHelper(), args)),
     // Simulated @legendapp/spark/sharing: no picker, Spotlight index or pbs (docs/sharing.md#testing).
     simulateSharing: async args => { await this.client().simulateSharing(args as SimulatedSharing); },
     assertSharing: (args, context) => context.eventually(async () => assertSharing(await this.client().testSharing(), args)),
@@ -550,6 +555,14 @@ export function assertSimulatedAuthorization(authorization: TestAuthorization, a
     lastWindow: authorization.lastRequest?.window ?? null, lastRelyingPartyId: authorization.lastRequest?.relyingPartyId ?? null, passkeys: authorization.passkeys.length };
   for (const key of Object.keys(actual))
     if (args[key] !== undefined && actual[key] !== args[key]) throw new Failure("assertion", `authorization ${key} is ${JSON.stringify(actual[key])}, expected ${JSON.stringify(args[key])}`);
+}
+export function assertSimulatedPrivilegedHelper(state: TestPrivilegedHelper, args: Record<string, unknown>) {
+  const actual: Record<string, unknown> = { registrations: state.registrations, unregistrations: state.unregistrations, settingsOpened: state.settingsOpened, prompts: state.prompts,
+    lastPrompt: state.lastPrompt, authorizations: state.authorizations, messages: state.messages, lastHelper: state.lastMessage?.helper ?? null, lastAuthorized: state.lastMessage?.authorized ?? null };
+  for (const key of Object.keys(actual))
+    if (args[key] !== undefined && actual[key] !== args[key]) throw new Failure("assertion", `privileged helper ${key} is ${JSON.stringify(actual[key])}, expected ${JSON.stringify(args[key])}`);
+  for (const [name, status] of Object.entries((args.helpers ?? {}) as Record<string, string>))
+    if (state.helpers[name] !== status) throw new Failure("assertion", `privileged helper ${name} is ${JSON.stringify(state.helpers[name] ?? null)}, expected ${JSON.stringify(status)}`);
 }
 export function assertSimulatedBiometrics(biometrics: TestBiometrics, args: Record<string, unknown>) {
   const actual: Record<string, unknown> = { prompts: biometrics.prompts, pending: biometrics.pending, lastOperation: biometrics.lastPrompt?.operation ?? null,

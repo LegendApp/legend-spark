@@ -158,6 +158,17 @@ describe("command mapping", () => {
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('authorization lastOperation is null, expected "appleId"') });
   });
 
+  test("simulatePrivilegedHelper sets the simulated state; assertSimulatedPrivilegedHelper checks what reached it", async () => {
+    const { result, app } = await run("- launchApp\n- simulatePrivilegedHelper: { signed: true, helpers: { tool: notRegistered }, promptAnswer: authorized }\n- simulatePrivilegedHelper: { helpers: { other: enabled }, connection: invalid }\n- assertSimulatedPrivilegedHelper: { registrations: 0, prompts: 0, messages: 0, helpers: { tool: notRegistered, other: enabled } }");
+    expect(result.status).toBe("passed");
+    expect(app.drivers[0]!.privilegedHelper).toMatchObject({ signed: true, promptAnswer: "authorized", connection: "invalid", helpers: { tool: "notRegistered", other: "enabled" } });
+    expect(app.log.filter(line => line.includes("PrivilegedHelper"))).toEqual(['simulatePrivilegedHelper {"signed":true,"helpers":{"tool":"notRegistered"},"promptAnswer":"authorized"}', 'simulatePrivilegedHelper {"helpers":{"other":"enabled"},"connection":"invalid"}', "testPrivilegedHelper"]);
+    const failed = await run("- launchApp\n- assertSimulatedPrivilegedHelper: { lastAuthorized: true, timeout: 200ms }");
+    expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining("privileged helper lastAuthorized is null, expected true") });
+    const status = await run("- launchApp\n- assertSimulatedPrivilegedHelper: { helpers: { tool: enabled }, timeout: 200ms }");
+    expect(status.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('privileged helper tool is null, expected "enabled"') });
+  });
+
   test("simulateSharing drives the sharing simulation; assertSharing checks what it recorded", async () => {
     const { result, app } = await run("- launchApp\n- simulateSharing: { shareAnswer: Mail, services: [Show] }\n- simulateSharing: { invokeService: { name: Show, text: hi } }\n- assertSharing: { shares: 0, invocations: 1, indexed: [], registered: [] }");
     expect(result.status).toBe("passed");

@@ -373,6 +373,21 @@ resolveCommand(command: string): Promise<string | null>;
 
 Use a discriminated executable target: absolute executable/helper reference vs PATH-resolved command. Put environment, cwd, input, timeout, signal, output callbacks and output limits in named options. Keep direct argument arrays, not implicit shell parsing. A handle supports write, closeInput, terminate and exited. Result distinguishes exit code, termination, timeout and truncation; no ambiguous `signal: boolean`. Stream bytes; optionally decode text according to a declared encoding. Command-runner convenience and mocks use the same sequential/concurrent and failure policy. No separate public command-runner abstraction unless injection actually needs it.
 
+### Privileged helpers, admin prompt and XPC
+
+```ts
+// /privileged-helper
+getPrivilegedHelperAvailability(): PrivilegedHelperAvailability; // Availability | { available: false, reason: "unsigned" }
+getPrivilegedHelperStatus(name: string): Promise<"notRegistered" | "enabled" | "requiresApproval" | "notFound">;
+registerPrivilegedHelper(name: string): Promise<PrivilegedHelperStatus>; // enabled, or requiresApproval until allowed in Login Items
+unregisterPrivilegedHelper(name: string): Promise<void>;
+openPrivilegedHelperSettings(): Promise<void>;
+requestAdminAuthorization(options: { prompt }): Promise<{ type: "authorized", authorization: AdminAuthorization } | { type: "cancel" }>; // AdminAuthorization: { closed; expiresAt; close() }
+sendPrivilegedHelperMessage(name: string, message: PrivilegedHelperMessage, options?: { authorization?; timeoutMs?; signal? }): Promise<PrivilegedHelperMessage>; // JSON
+```
+
+A helper is an app-supplied executable from `helpers` that `macos.privilegedHelpers` opts in to running as a launchd daemon (`SMAppService`); nothing is embedded without it. Approval is a state, not an error: registering resolves `requiresApproval`, and messages to a helper that is not `enabled` reject with its status as the reason. The admin prompt (Authorization Services, `system.privilege.admin`) grants rights the app never uses itself: they travel with a message, and the helper checks them without interaction. Each side checks the other's code signature (team and signing identifier; a Developer ID helper requires a Developer ID app with the hardened runtime and without get-task-allow); the app sends nothing until the helper's verification reply passed its requirement. Failures reject a `PrivilegedHelperError` (a `SparkError` with `reason`): `unsigned` (checked before ServiceManagement or XPC), `notFound`, `notRegistered`, `requiresApproval`, `invalidSignature`, `invalidPlist`, `serviceUnavailable`, `denied`, `notInteractive`, `authorizationExpired` (the rights lapsed after the right's timeout; `AdminAuthorization.expiresAt` reports when), `connectionInvalid`, `connectionInterrupted`, `helperFailed` (the helper's chosen code) and `unknown`. In the test driver every call goes to simulated state and never reaches ServiceManagement, Authorization Services, launchd or root. macOS only for now; Windows reports `unsupported-platform` (#440). Details and the threat model: [privileged helpers](privileged-helper.md).
+
 ### Logging
 
 ```ts

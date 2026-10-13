@@ -9,6 +9,7 @@ import { digest, nativePackages, readJson, stateFile, writeJson } from "./projec
 import type { Runner, SigningCredentials } from "./credentials.ts";
 
 const { resolveEntitlements } = createRequire(import.meta.url)("@legendapp/spark-desktop-config/entitlements.cjs");
+const { privilegedHelperIdentifiers } = createRequire(import.meta.url)("@legendapp/spark-desktop-config/privileged-helpers.cjs");
 export type Entitlements = Record<string, unknown>;
 
 export function distributionEntitlements(value: Entitlements) {
@@ -102,6 +103,8 @@ export async function signApp(root: string, app: string, credentials: SigningCre
     distributionEntitlements(value);
   }
   const targets = await entitlementTargets(root, app, order, entitlements, byPath, execute);
+  // Privileged helpers carry their launchd label as signing identifier: the app's requirement for them pins it.
+  const identifiers: Record<string, string> = privilegedHelperIdentifiers(app);
   for (const file of order) {
     const relative = path.relative(app, file) || ".";
     const value = targets.get(file)!;
@@ -112,7 +115,7 @@ export async function signApp(root: string, app: string, credentials: SigningCre
     await execute(root, ["plutil", "-convert", "xml1", plist], { capture: true });
     // An ad-hoc signature (`-`, spark package --ad-hoc) has no signer to timestamp.
     await execute(root, ["codesign", "--force", "--sign", credentials.hash, "--options", "runtime", credentials.hash === "-" ? "--timestamp=none" : "--timestamp", ...(processTarget ? ["--entitlements", plist] : []),
-      ...(credentials.keychain ? ["--keychain", credentials.keychain] : []), file], { capture: true });
+      ...(identifiers[relative] ? ["--identifier", identifiers[relative]] : []), ...(credentials.keychain ? ["--keychain", credentials.keychain] : []), file], { capture: true });
   }
   return order;
 }
@@ -133,8 +136,11 @@ export async function validateApp(root: string, app: string, credentials: Signin
   await execute(root, ["codesign", "--verify", "--deep", "--strict", "--verbose=2", app], { capture: true });
   const order = signingOrder(app);
   const targets = await entitlementTargets(root, app, order, expected.entitlements, expected.byPath, execute);
+  const identifiers: Record<string, string> = privilegedHelperIdentifiers(app);
   for (const file of order) {
     const signature = await execute(root, ["codesign", "-dvvv", file], { capture: true });
+    const identifier = identifiers[path.relative(app, file)];
+    if (identifier && !signature.includes(`Identifier=${identifier}\n`)) throw new Error(`Privileged helper is not signed with the identifier ${identifier}: ${file}`);
     const signer = credentials.hash === "-" ? /^Signature=adhoc$/m.test(signature)
       : signature.includes(`Authority=${credentials.name}\n`) && signature.includes(`TeamIdentifier=${credentials.teamId}\n`) && /^Timestamp=/m.test(signature);
     if (!signer || !/flags=.*\bruntime\b/.test(signature)) throw new Error(`Invalid ${credentials.hash === "-" ? "ad-hoc" : "Developer ID"} signature, hardened runtime, or timestamp: ${file}`);

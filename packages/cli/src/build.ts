@@ -6,6 +6,7 @@ import { checkReleaseTestDriver } from "./release-driver.ts";
 import { macOSXcodeArchitecture, projectPlatform } from "./platform.ts";
 import { isUniversal, isExpoProject } from "@legendapp/spark-desktop-config/config.cjs";
 import { checkAppIntentsMetadata } from "@legendapp/spark-desktop-config/app-intents.cjs";
+import { privilegedHelperIdentifiers, writePrivilegedHelpers } from "@legendapp/spark-desktop-config/privileged-helpers.cjs";
 import { buildWindows } from "./windows.ts";
 import { copyHelpers } from "./helpers.ts";
 import { publishDirectory } from "./publish-directory.ts";
@@ -424,7 +425,10 @@ async function buildUnlocked(
     path.join(app, "Contents/Resources/spark-runtime.json"),
     result.runtime,
   );
-  copyHelpers(root, app, readAppConfig(root).expo?.extra?.spark?.helpers);
+  const helpers = readAppConfig(root).expo?.extra?.spark?.helpers;
+  copyHelpers(root, app, helpers, "macos", runtime.arch);
+  // Launch daemon plists only for helpers the app lists in macos.privilegedHelpers (docs/privileged-helper.md).
+  writePrivilegedHelpers(app, nativeConfig.macos, helpers, runtime.arch);
   if (mode === "release") {
     await removeLocalNetworking(app, args => run(root, ["plutil", ...args], { capture: true }));
     const sources = metroSourceFiles(path.resolve(root, entryFile(root)), readJson(stateFile(root, "analysis/app.map")).sources);
@@ -454,6 +458,12 @@ async function buildUnlocked(
     ["codesign", "--force", "--deep", "--sign", localSigningIdentity(root, mode), app],
     { capture: true },
   );
+  // Privileged helpers carry their launchd label as signing identifier, which a re-signature would replace with one
+  // derived from the file, so they are signed again with it and the app is sealed over them once more.
+  const identifiers: Record<string, string> = privilegedHelperIdentifiers(app);
+  for (const [program, identifier] of Object.entries(identifiers))
+    await run(root, ["codesign", "--force", "--sign", localSigningIdentity(root, mode), "--identifier", identifier, path.join(app, program)], { capture: true });
+  if (Object.keys(identifiers).length) await run(root, ["codesign", "--force", "--sign", localSigningIdentity(root, mode), "--preserve-metadata=entitlements", app], { capture: true });
   publishDirectory(staging, output, stateFile(root, "tools"));
   writeJson(resultFile, result);
   console.log(`Built ${destination}`);

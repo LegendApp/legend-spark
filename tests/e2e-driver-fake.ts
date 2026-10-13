@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type TestSpeech, type SimulatedSpeech, type TestCapture, type SimulatedCapture } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type SimulatedPrivilegedHelper, type TestPrivilegedHelper, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type TestSpeech, type SimulatedSpeech, type TestCapture, type SimulatedCapture } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -124,6 +124,14 @@ export class FakeDriver implements DriverClient {
     return this.authorization = { ...this.authorization, ...state };
   }
   async testAuthorization() { this.log.push("testAuthorization"); return this.authorization; }
+  /** The fake's simulated privileged helper state, as the app's simulatePrivilegedHelper and testPrivilegedHelper commands keep it. */
+  privilegedHelper: TestPrivilegedHelper = { signed: false, helpers: {}, approval: "required", promptAnswer: null, connection: "accept", registrations: 0, unregistrations: 0,
+    settingsOpened: 0, prompts: 0, lastPrompt: null, authorizations: 0, messages: 0, lastMessage: null };
+  async simulatePrivilegedHelper(state: SimulatedPrivilegedHelper) {
+    this.log.push(`simulatePrivilegedHelper ${JSON.stringify(state)}`);
+    return this.privilegedHelper = { ...this.privilegedHelper, ...state, helpers: { ...this.privilegedHelper.helpers, ...state.helpers } };
+  }
+  async testPrivilegedHelper() { this.log.push("testPrivilegedHelper"); return this.privilegedHelper; }
   /** The sharing simulation (FakeApp.sharing), as the app's simulateSharing and testSharing commands keep it. */
   sharing: TestSharing = { shares: [], indexed: {}, services: [], registered: [], invocations: 0, answer: null };
   async simulateSharing(request: SimulatedSharing) {

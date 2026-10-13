@@ -34,6 +34,7 @@
         "@legendapp/spark-permissions": "0.0.1-next.3",
         "@legendapp/spark-plugins": "0.0.1-next.3",
         "@legendapp/spark-printing": "0.0.1-next.3",
+        "@legendapp/spark-privileged-helper": "0.0.1-next.3",
         "@legendapp/spark-processes": "0.0.1-next.3",
         "@legendapp/spark-secure-storage": "0.0.1-next.3",
         "@legendapp/spark-settings": "0.0.1-next.3",
@@ -332,6 +333,7 @@
         "@legendapp/spark-permissions": "0.0.1-next.3",
         "@legendapp/spark-plugins": "0.0.1-next.3",
         "@legendapp/spark-printing": "0.0.1-next.3",
+        "@legendapp/spark-privileged-helper": "0.0.1-next.3",
         "@legendapp/spark-processes": "0.0.1-next.3",
         "@legendapp/spark-secure-storage": "0.0.1-next.3",
         "@legendapp/spark-settings": "0.0.1-next.3",
@@ -411,6 +413,7 @@
         "@legendapp/spark-commands": "0.0.1-next.3",
         "@legendapp/spark-global-shortcuts": "0.0.1-next.3",
         "@legendapp/spark-native-menu": "0.0.1-next.3",
+        "@legendapp/spark-system": "0.0.1-next.3",
         "@react-native-runtimes/core": "0.1.0-alpha.2",
         "react": "19.1.4",
         "react-native": "0.81.6",
@@ -419,6 +422,7 @@
         "@legendapp/spark-commands",
         "@legendapp/spark-global-shortcuts",
         "@legendapp/spark-native-menu",
+        "@legendapp/spark-system",
         "@react-native-runtimes/core",
       ],
     },
@@ -589,6 +593,17 @@
     },
     "packages/printing": {
       "name": "@legendapp/spark-printing",
+      "version": "0.0.1-next.3",
+      "dependencies": {
+        "@legendapp/spark-desktop-app": "0.0.1-next.3",
+      },
+      "peerDependencies": {
+        "react": "19.1.4",
+        "react-native": "0.81.6",
+      },
+    },
+    "packages/privileged-helper": {
+      "name": "@legendapp/spark-privileged-helper",
       "version": "0.0.1-next.3",
       "dependencies": {
         "@legendapp/spark-desktop-app": "0.0.1-next.3",
@@ -1109,6 +1124,8 @@
     "@legendapp/spark-plugins": ["@legendapp/spark-plugins@workspace:packages/plugins"],
 
     "@legendapp/spark-printing": ["@legendapp/spark-printing@workspace:packages/printing"],
+
+    "@legendapp/spark-privileged-helper": ["@legendapp/spark-privileged-helper@workspace:packages/privileged-helper"],
 
     "@legendapp/spark-processes": ["@legendapp/spark-processes@workspace:packages/processes"],
 

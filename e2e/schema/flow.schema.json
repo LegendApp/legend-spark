@@ -5626,6 +5626,216 @@
               "type": "object"
             }
           },
+          "simulatePrivilegedHelper": {
+            "description": "[driver] Set the simulated state @legendapp/spark/privileged-helper reports, in-process: whether the app is signed by a team (the simulation starts from the build's real signature), each named helper's launchd status (unset helpers are notFound unless the build embeds their plist), whether registering needs the person's approval (required: requiresApproval; granted: enabled), how the next admin prompts end (null: they reject E_UNAVAILABLE) and how the simulated helper's connection behaves (accept: it echoes the message; invalid: it refuses the connection; interrupted: it exits mid-request); expireAuthorizations: true lapses every held admin authorization, as the right's timeout does. Never calls SMAppService, shows an admin prompt, reaches launchd or runs anything as root.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "signed": {
+                  "type": "boolean"
+                },
+                "helpers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "enum": [
+                      "notRegistered",
+                      "enabled",
+                      "requiresApproval",
+                      "notFound"
+                    ]
+                  }
+                },
+                "approval": {
+                  "enum": [
+                    "required",
+                    "granted"
+                  ]
+                },
+                "promptAnswer": {
+                  "enum": [
+                    "authorized",
+                    "cancel",
+                    "denied",
+                    "notInteractive",
+                    null
+                  ]
+                },
+                "connection": {
+                  "enum": [
+                    "accept",
+                    "invalid",
+                    "interrupted"
+                  ]
+                },
+                "expireAuthorizations": {
+                  "const": true
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "signed"
+                  ]
+                },
+                {
+                  "required": [
+                    "helpers"
+                  ]
+                },
+                {
+                  "required": [
+                    "approval"
+                  ]
+                },
+                {
+                  "required": [
+                    "promptAnswer"
+                  ]
+                },
+                {
+                  "required": [
+                    "connection"
+                  ]
+                },
+                {
+                  "required": [
+                    "expireAuthorizations"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
+          "assertSimulatedPrivilegedHelper": {
+            "description": "[driver] Assert what the @legendapp/spark/privileged-helper simulation recorded: registrations and unregistrations that reached it, times Login Items settings were opened (never really opened), admin prompts shown and the last prompt's text, admin authorizations held, messages sent, the last message's helper and whether admin rights came with it, and helper statuses (each listed one exactly).",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "registrations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "unregistrations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "settingsOpened": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "prompts": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "lastPrompt": {
+                  "type": "string"
+                },
+                "authorizations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "messages": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "lastHelper": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "lastAuthorized": {
+                  "type": "boolean"
+                },
+                "helpers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "enum": [
+                      "notRegistered",
+                      "enabled",
+                      "requiresApproval",
+                      "notFound"
+                    ]
+                  }
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "registrations"
+                  ]
+                },
+                {
+                  "required": [
+                    "unregistrations"
+                  ]
+                },
+                {
+                  "required": [
+                    "settingsOpened"
+                  ]
+                },
+                {
+                  "required": [
+                    "prompts"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastPrompt"
+                  ]
+                },
+                {
+                  "required": [
+                    "authorizations"
+                  ]
+                },
+                {
+                  "required": [
+                    "messages"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastHelper"
+                  ]
+                },
+                {
+                  "required": [
+                    "lastAuthorized"
+                  ]
+                },
+                {
+                  "required": [
+                    "helpers"
+                  ]
+                }
+              ]
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "simulateSharing": {
             "description": "[driver] Drive the in-process simulation of @legendapp/spark/sharing: how the simulated share picker answers (a service title, or dismiss; null makes share reject), the services the app's Info.plist would declare, a run of a registered service as the Services menu would (text on a private pasteboard), and opening a Spotlight item or an https universal link through the app delegate as macOS does. Never shows a picker, writes the Spotlight index or reaches pbs.",
             "if": {

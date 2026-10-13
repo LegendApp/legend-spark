@@ -44,6 +44,13 @@ export type TestAuthorization = {
 };
 export type SimulatedAuthorization = { appleId?: boolean; webCredentials?: string[]; answer?: string | null; credentialState?: string | null };
 export type SimulatedBiometrics = { biometryType?: string; biometrics?: string; password?: string; answer?: string | null; enrollmentChanged?: true };
+/** The simulated state of @legendapp/spark/privileged-helper (the `testPrivilegedHelper` driver command). */
+export type TestPrivilegedHelper = {
+  signed: boolean; helpers: Record<string, string>; approval: string; promptAnswer: string | null; connection: string;
+  registrations: number; unregistrations: number; settingsOpened: number; prompts: number; lastPrompt: string | null; authorizations: number;
+  messages: number; lastMessage: { helper: string; message: unknown; authorized: boolean } | null;
+};
+export type SimulatedPrivilegedHelper = { signed?: boolean; helpers?: Record<string, string>; approval?: string; promptAnswer?: string | null; connection?: string; expireAuthorizations?: true };
 /** What the @legendapp/spark/sharing simulation recorded (the `testSharing` driver command). */
 export type TestSharing = {
   shares: { items: Record<string, unknown>[]; anchored: boolean; service: string | null }[];
@@ -363,6 +370,10 @@ export class Driver {
   async simulateAuthorization(state: SimulatedAuthorization) { return body<{ authorization: TestAuthorization }>(await this.request({ command: "simulateAuthorization", ...state }, 10000)).authorization; }
   /** The simulated authorization state: entitlements, answer, requests shown and pending, the last request and simulated passkeys. */
   async testAuthorization() { return body<{ authorization: TestAuthorization }>(await this.request({ command: "testAuthorization" }, 10000)).authorization; }
+  /** Sets the simulated state of privileged helpers (docs/privileged-helper.md#testing); nothing is registered, prompted or run as root. */
+  async simulatePrivilegedHelper(state: SimulatedPrivilegedHelper) { return body<{ privilegedHelper: TestPrivilegedHelper }>(await this.request({ command: "simulatePrivilegedHelper", ...state }, 10000)).privilegedHelper; }
+  /** The simulated privileged helper state: signature, statuses, answers and what reached the simulation. */
+  async testPrivilegedHelper() { return body<{ privilegedHelper: TestPrivilegedHelper }>(await this.request({ command: "testPrivilegedHelper" }, 10000)).privilegedHelper; }
   /** Drives the @legendapp/spark/sharing simulation (docs/sharing.md#testing); no picker, Spotlight index or pbs is reached. */
   async simulateSharing(request: SimulatedSharing) { return body<{ sharing: TestSharing }>(await this.request({ command: "simulateSharing", ...request }, 10000)).sharing; }
   /** What the sharing simulation recorded: shares, the simulated Spotlight index, declared and registered services, invocations. */

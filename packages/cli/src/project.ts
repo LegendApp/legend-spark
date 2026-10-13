@@ -194,6 +194,8 @@ export function nativePackages(root: string): NativePackage[] {
         "cpp",
         "src",
         "common", "nitrogen/generated", "nitro.json",
+        // The privileged helper pod compiles helper/SparkPrivilegedHelperProtocol.h.
+        "helper",
         "expo-module.config.json",
         "react-native.config.js",
         ...readdirSync(pkg.root).filter((name) => name.endsWith(".podspec")),

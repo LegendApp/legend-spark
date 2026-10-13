@@ -21,6 +21,8 @@
 - assertSimulatedBiometrics: { prompts: 1, lastFallback: password, secrets: { vault: biometryCurrentSet } }
 - simulateAuthorization: { appleId: true, webCredentials: [example.com], answer: success }   # driver; never presents a sheet
 - assertSimulatedAuthorization: { requests: 1, lastOperation: appleId, lastWindow: spark.main, passkeys: 0 }
+- simulatePrivilegedHelper: { signed: true, helpers: { tool: notRegistered }, approval: granted, promptAnswer: authorized, connection: accept }   # driver; nothing is registered, prompted or run as root
+- assertSimulatedPrivilegedHelper: { registrations: 1, unregistrations: 0, settingsOpened: 0, prompts: 1, lastPrompt: Why, authorizations: 1, messages: 1, lastHelper: tool, lastAuthorized: true, helpers: { tool: enabled } }
 - simulateSharing: { shareAnswer: Mail, services: [Show], invokeService: { name: Show, text: hi }, openSpotlightItem: recipe-1, openUniversalLink: "https://example.com/a" }   # driver; no picker, index or pbs
 - assertSharing: { shares: 1, lastShare: { items: [{ type: text, text: Hi }], anchored: true, service: Mail }, indexed: [recipe-1], registered: [Show], invocations: 1 }
 - simulateSpeech: { wordMs: 50, recognitionPartials: [hello], recognitionTranscript: hello world }   # driver; nothing is spoken or heard

@@ -62,6 +62,11 @@ need: `"camera": true` adds `com.apple.security.device.camera` and `"microphone"
 description in `macos.infoPlist` (`NSCameraUsageDescription`, `NSMicrophoneUsageDescription`), or
 configuration fails. Nothing is added without it; see [capture](capture.md#entitlements).
 
+`macos.privilegedHelpers` lists helpers (from `helpers`) that run as launchd daemons through
+`@legendapp/spark/privileged-helper`: `spark build` writes `Contents/Library/LaunchDaemons/<bundle identifier>.<name>.plist`
+for each. Nothing is added without it. They need a build signed by your team; see
+[privileged helpers](privileged-helper.md#configuration).
+
 `localizations` lists the languages the app is translated into, development
 language first. On macOS AppKit and Spark show native strings (menus, dialogs,
 panels) in the first of the user's languages listed there; see
