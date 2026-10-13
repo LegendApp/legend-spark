@@ -19,6 +19,12 @@ static void Wait(BOOL (^done)(void), double seconds) {
   while (!done() && deadline.timeIntervalSinceNow > 0) Drain(0.01);
 }
 
+// Whether a status the player reported since event `from` matches.
+static BOOL Reported(NSArray<NSDictionary *> *events, NSUInteger from, BOOL (^match)(NSDictionary *status)) {
+  for (NSUInteger i = from; i < events.count; i++) if (events[i][@"status"] && match(events[i][@"status"])) return YES;
+  return NO;
+}
+
 @interface Box : NSObject
 @property int calls;
 @property id result;
@@ -94,10 +100,13 @@ int main(int argc, const char *argv[]) { @autoreleasepool {
   CHECK(second.calls == 1 && !second.code && fabs([second.result[@"currentTime"] doubleValue] - 1.5) < 0.01);
   CHECK([events.lastObject[@"type"] isEqual:@"seeked"]);
 
-  // Playing advances time at the rate set (the clip is silent and muted besides).
+  // Playing advances time at the rate set (the clip is silent and muted besides). Everything below waits on the player's
+  // own clock and events, not the wall clock: under load playback starts late and seeks land late.
   [player play];
   CHECK([player.status[@"playing"] boolValue]);
-  Drain(0.4);
+  Wait(^{ return (BOOL)(CMTimebaseGetRate(player.player.currentItem.timebase) != 0); }, 10);
+  CHECK(CMTimebaseGetRate(player.player.currentItem.timebase) == 2);
+  Wait(^{ return (BOOL)([player.status[@"currentTime"] doubleValue] > 1.6); }, 10);
   [player pause];
   status = player.status;
   CHECK(![status[@"playing"] boolValue] && [status[@"currentTime"] doubleValue] > 1.6);
@@ -112,8 +121,13 @@ int main(int argc, const char *argv[]) { @autoreleasepool {
   [player play];
   Wait(^{ return [player.status[@"ended"] boolValue]; }, 10);
   CHECK([player.status[@"ended"] boolValue] && ![player.status[@"playing"] boolValue]);
+  NSUInteger restart = events.count;
   [player play];
-  CHECK(![player.status[@"ended"] boolValue] && [player.status[@"currentTime"] doubleValue] < 0.5);
+  CHECK(![player.status[@"ended"] boolValue] && [player.status[@"playing"] boolValue]);
+  // The seek back to the start lands asynchronously; the player reports the jump.
+  Wait(^{ return Reported(events, restart, ^(NSDictionary *s) { return (BOOL)([s[@"currentTime"] doubleValue] < 0.5); }); }, 10);
+  CHECK(Reported(events, restart, ^(NSDictionary *s) { return (BOOL)([s[@"currentTime"] doubleValue] < 0.5); }));
+  CHECK(!Reported(events, restart, ^(NSDictionary *s) { return [s[@"ended"] boolValue]; }));
   [player pause];
 
   // Simulated fullscreen opens no window; it changes the status and reports it.
@@ -151,8 +165,12 @@ int main(int argc, const char *argv[]) { @autoreleasepool {
   Box *loopEnd = [Box new];
   [player seekTo:2.85 completion:Record(loopEnd)];
   Wait(^{ return (BOOL)(loopEnd.calls > 0); }, 10);
+  NSUInteger looping = events.count;
   [player play];
-  Drain(0.6);
+  // Past the end the player reports the jump back to the start, never `ended`, and keeps playing.
+  Wait(^{ return Reported(events, looping, ^(NSDictionary *s) { return (BOOL)([s[@"currentTime"] doubleValue] < 1); }); }, 10);
+  CHECK(Reported(events, looping, ^(NSDictionary *s) { return (BOOL)([s[@"currentTime"] doubleValue] < 1); }));
+  CHECK(!Reported(events, looping, ^(NSDictionary *s) { return [s[@"ended"] boolValue]; }));
   CHECK(![player.status[@"ended"] boolValue] && [player.status[@"playing"] boolValue]);
   [player pause];
 
