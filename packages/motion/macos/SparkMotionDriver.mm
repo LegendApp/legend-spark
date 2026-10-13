@@ -56,6 +56,8 @@ static NSInteger SparkMotionDriverTarget(NSDictionary *request, SparkTestDriverR
   SparkMotionCoordinator *motion = SparkMotionCoordinator.shared;
   SparkTestDriverObserveStart(^{ [motion recordTelemetry]; });
   SparkTestDriverObserveInput(^{ [motion noteInput]; });
+  // Every advance of virtual time (advanceClock, waitForMotion) moves window choreography by the same time.
+  motion.clockAdvanced = ^(double milliseconds) { SparkTestDriverDidChangeClock(YES, milliseconds); };
   SparkTestDriverObserveSimulatedState(^(NSDictionary *values) { [motion simulate:values]; });
   // Captures render the presented frame of running animations: the compositor plays them, in-process rendering does not.
   SparkTestDriverWrapRender(^(dispatch_block_t render) { [motion presenting:render]; });
@@ -69,7 +71,7 @@ static NSInteger SparkMotionDriverTarget(NSDictionary *request, SparkTestDriverR
     id duration = request[@"durationMs"];
     if (!SparkMotionDriverNumber(duration)) { SparkMotionDriverFailure(reply)(@"E_INVALID_ARGUMENT", @"advanceClock expects durationMs"); return; }
     SparkMotionResolve success = SparkMotionDriverSuccess(reply);
-    [motion advanceClock:[duration doubleValue] resolve:^(id result) { SparkTestDriverDidChangeClock(YES, [duration doubleValue]); success(result); } reject:SparkMotionDriverFailure(reply)];
+    [motion advanceClock:[duration doubleValue] resolve:success reject:SparkMotionDriverFailure(reply)];
   });
   SparkTestDriverRegisterCommand(@"motionState", ^(NSDictionary *request, SparkTestDriverReply reply) {
     NSInteger tag = SparkMotionDriverTarget(request, reply);

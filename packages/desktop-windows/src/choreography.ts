@@ -117,7 +117,8 @@ export interface WindowZoom {
 }
 /**
  * Opens a window that grows from `from` to its frame while it fades in, with key focus, and by default shrinks back
- * into `from` when it closes. Resolves once the window is shown; `finished` resolves when the zoom ends. Under Reduce
+ * into `from` when it closes. Resolves once the window is opened (hidden at its frame) and the zoom is requested; the
+ * window shows at `from` as the zoom starts, and `finished` resolves when the zoom ends. Under Reduce
  * Motion both are cross-fades at the window's frame. The window opens as `openWindow` opens it, so `show: false`,
  * sheets (`modal`) and tabs (`tabbedWith`) are rejected.
  */
@@ -136,6 +137,8 @@ export async function openWindowFrom(options: WindowOpenOptions, zoom: WindowZoo
   if (close) await windowCommand("closeTransition", { id: options.id, transition: close }).catch(discard);
   // The native zoom shows the window at once; it can only fail before that (the source's window or display is gone).
   const finished = animation("zoomIn", { id: options.id, from, ...timing }).catch(discard);
+  // A caller that ignores `finished` gets no unhandled rejection; one that awaits it still gets the failure.
+  finished.catch(() => {});
   return { id: options.id, bounds: info.bounds, finished };
 }
 

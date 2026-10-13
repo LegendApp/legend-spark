@@ -161,7 +161,8 @@ const STEPS: Record<string, () => Promise<unknown>> = {
 async function closeAll() {
   for (const window of ["inspector", "palette"] as const) { await attachments[window]?.remove(); delete attachments[window]; }
   const results = await Promise.allSettled(WINDOWS.map(async window => {
-    try { await closeWindow(id(window)); } catch (error) { if (!(error instanceof SparkError && error.code === "E_NOT_FOUND")) throw error; }
+    try { await setWindowCloseTransition(id(window), null); await closeWindow(id(window)); }
+    catch (error) { if (!(error instanceof SparkError && error.code === "E_NOT_FOUND")) throw error; }
   }));
   inspector = undefined;
   update({ tornOff: false, attached: { inspector: null, palette: null }, animation: "none", close: "none", selected: "inbox" });

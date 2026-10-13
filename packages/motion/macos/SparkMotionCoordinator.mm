@@ -1566,6 +1566,7 @@ static NSSymbolEffectOptions *SparkSymbolOptions(double repeat, double speed)
   [CATransaction commit];
   [self playCuesUntil:self.now frame:NAN];
   [self sweep];
+  if (self.clockAdvanced) self.clockAdvanced(seconds * 1000);
 }
 
 - (void)clock:(SparkMotionResolve)resolve

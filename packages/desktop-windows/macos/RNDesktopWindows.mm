@@ -551,7 +551,8 @@ static void StopAnimation(NSWindow *window) {
 }
 // Animates the window's frame and opacity from where they are now; `completion` runs exactly once.
 static void AnimateWindow(NSWindow *window, NSRect frame, CGFloat alpha, double durationMs, NSString *easing, void (^completion)(BOOL finished)) {
-  StopAnimation(window);
+  // A stopped animation's completion may start another one: stop until none runs.
+  while (Animating(window)) StopAnimation(window);
   if (durationMs <= 0 || (NSEqualRects(frame, window.frame) && alpha == window.alphaValue)) {
     [window setFrame:frame display:YES]; window.alphaValue = alpha; PlaceAttached(window); completion(YES); return;
   }
@@ -781,7 +782,7 @@ static BOOL SetBounds(NSWindow *window, NSDictionary *bounds, double durationMs,
   if (frame.size.width < window.minSize.width || frame.size.height < window.minSize.height || frame.size.width > window.maxSize.width || frame.size.height > window.maxSize.height) { reject(@"E_INVALID_ARGUMENT", @"Bounds are outside window constraints", nil); return NO; }
   // AppKit reports moves of a window that is not on screen late or not at all, so a commanded move settles here.
   // macos.durationMs is a choreographed move (Reduce Motion, the virtual clock); it resolves when the move ends or is interrupted.
-  Choreograph(window, frame, RestingAlpha(window), @{ @"durationMs": @(durationMs) }, ^(BOOL, BOOL) { resolve(@"null"); Moved(window); });
+  Choreograph(window, frame, RestingAlpha(window), @{ @"durationMs": @(durationMs) }, ^(BOOL finished, BOOL) { resolve(@"null"); if (finished) Moved(window); });
   return YES;
 }
 // A choreography source or target as a global AppKit frame: a display rectangle ({displayId, x, y, width, height}) or a
@@ -805,7 +806,8 @@ static BOOL SourceFrame(NSDictionary *rect, NSRect *frame, NSString **failure) {
 // The window that takes key focus as a window shrinks away: the transition's `focus`, else the window its target
 // rectangle is in, else its parent. Never the departing window, and only a shown one.
 static NSWindow *HandoffTarget(NSWindow *window, NSDictionary *transition) {
-  id key = transition[@"focus"] ?: transition[@"to"][@"windowId"];
+  NSDictionary *to = [transition[@"to"] isKindOfClass:NSDictionary.class] ? transition[@"to"] : nil;  // NSNull: fade where it is
+  id key = transition[@"focus"] ?: to[@"windowId"];
   NSWindow *target = [key isKindOfClass:NSString.class] ? Window(key) : window.parentWindow;
   return target && target != window && Visible(target) ? target : nil;
 }
@@ -840,7 +842,7 @@ static BOOL ShrinkBeforeClose(NSWindow *window, NSString *key) {
 // the mouse button comes up, or setWindowBounds) that ends within `magnetic` points of the docked frame docks it there; one
 // that ends farther undocks it. Main thread only; the attachment belongs to the child window (associated object).
 @interface SparkAttachment : NSObject
-@property (nonatomic, weak) NSWindow *window, *parent;
+@property (nonatomic, weak) NSWindow *window, *parent, *previousParent;
 @property (nonatomic, copy) NSString *key, *token, *edge, *align;
 @property (nonatomic) CGFloat gap, magnetic;
 @property (nonatomic) BOOL docked, placing, hidesOnDeactivate, hideWhenInactive;
@@ -918,20 +920,25 @@ static void PlaceAttached(NSWindow *parent) {
     attachment.placing = YES; [child setFrame:frame display:YES]; attachment.placing = NO;
   }
 }
-static void EndAttachment(NSWindow *window, BOOL report) {
+// `restore`: the window becomes a child of the parent it had before it attached again (a window opened with parentId).
+static void EndAttachment(NSWindow *window, BOOL report, BOOL restore) {
   SparkAttachment *attachment = objc_getAssociatedObject(window, &AttachmentKey);
   if (!attachment) return;
   [attachment stopWaiting];
   if (attachment.docked) { [attachment.parent removeChildWindow:window]; attachment.docked = NO; if (report) EmitAttachment(attachment); }
+  NSWindow *previous = attachment.previousParent;
+  if (restore && previous && previous != attachment.parent && previous.parentWindow != window) [previous addChildWindow:window ordered:NSWindowAbove];
+  // After addChildWindow:, which resets it.
   window.hidesOnDeactivate = attachment.hidesOnDeactivate;
   objc_setAssociatedObject(window, &AttachmentKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 // A closing window ends its own attachment and those of the windows attached to it (they report attached: false).
 static void EndAttachments(NSWindow *window) {
-  EndAttachment(window, NO);
+  EndAttachment(window, NO, NO);
   for (NSWindow *other in windows.allValues) {
     SparkAttachment *attachment = [other isKindOfClass:NSWindow.class] ? objc_getAssociatedObject(other, &AttachmentKey) : nil;
-    if (attachment.parent == window) EndAttachment(other, YES);
+    if (attachment.parent == window) EndAttachment(other, YES, YES);
+    else if (attachment.previousParent == window) attachment.previousParent = nil;
   }
 }
 // After any move of a window settles: corner snapping, its attachment, and the windows attached to it.
@@ -1075,11 +1082,14 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       NSWindow *parent = [args[@"parentId"] isKindOfClass:NSString.class] ? Window(args[@"parentId"]) : nil;
       if (!parent) { reject(@"E_NOT_FOUND", @"The parent window was not found", nil); return; }
       if (![Edges() containsObject:args[@"edge"]] || parent == window || window.sheetParent || window.attachedSheet || [window.childWindows containsObject:parent] || parent.parentWindow == window) { reject(@"E_INVALID_ARGUMENT", @"A window attaches to another window that is not its child, sheet or itself, at an edge", nil); return; }
-      EndAttachment(window, NO);
+      // A replaced attachment hands on the parent the window had before it (restored when this one ends).
+      SparkAttachment *replaced = objc_getAssociatedObject(window, &AttachmentKey);
+      NSWindow *previousParent = replaced ? replaced.previousParent : window.parentWindow;
+      EndAttachment(window, NO, NO);
       if (window.parentWindow) [window.parentWindow removeChildWindow:window];
       SparkAttachment *attachment = [SparkAttachment new];
       attachment.window = window; attachment.parent = parent; attachment.key = key; attachment.token = args[@"token"]; attachment.edge = args[@"edge"]; attachment.align = args[@"align"] ?: @"start";
-      attachment.gap = [args[@"gap"] doubleValue]; attachment.magnetic = [args[@"magnetic"] doubleValue]; attachment.hidesOnDeactivate = window.hidesOnDeactivate; attachment.parentFrame = parent.frame;
+      attachment.gap = [args[@"gap"] doubleValue]; attachment.magnetic = [args[@"magnetic"] doubleValue]; attachment.hidesOnDeactivate = window.hidesOnDeactivate; attachment.parentFrame = parent.frame; attachment.previousParent = previousParent;
       objc_setAssociatedObject(window, &AttachmentKey, attachment, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
       attachment.hideWhenInactive = [args[@"hideWhenInactive"] boolValue];
       attachment.docked = YES; [parent addChildWindow:window ordered:NSWindowAbove];
@@ -1090,7 +1100,7 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
     // Only the attachment that `token` names: a replaced attachment's owner cannot end its replacement.
     if ([method isEqual:@"detach"]) {
       SparkAttachment *attachment = objc_getAssociatedObject(window, &AttachmentKey);
-      if ([attachment.token isEqual:args[@"token"]]) EndAttachment(window, NO);
+      if ([attachment.token isEqual:args[@"token"]]) EndAttachment(window, NO, YES);
       resolve(@"null"); return;
     }
     if ([method isEqual:@"attachment"]) {

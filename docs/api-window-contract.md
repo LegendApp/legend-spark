@@ -380,8 +380,8 @@ attachWindow(id, parentId, options: { edge, align?, gap?, magnetic?, hideWhenIna
   transition are cross-fades at the window's frame, and `animateWindowBounds` is immediate. Results say so with
   `reducedMotion: true`. Corner snapping, attachment docking and `setWindowBounds`' `macos.durationMs` follow it too.
 - **Zoom.** `openWindowFrom` opens the window as `openWindow` does, hidden at its frame, then shows it with key focus
-  at `from`, transparent, and grows it to its frame while it fades in. It resolves once the window is shown, with the
-  frame it lands on; `finished` resolves when the zoom ends. `show: false`, `modal` and `tabbedWith` reject
+  at `from`, transparent, and grows it to its frame while it fades in. It resolves once the window is opened and the zoom is
+  requested (the window shows at `from` as the zoom starts), with the frame it lands on; `finished` resolves when the zoom ends. `show: false`, `modal` and `tabbedWith` reject
   `E_INVALID_ARGUMENT`. If the zoom cannot start (the source's window or display is gone) the window closes again
   and `finished` rejects with the cause. By default the window shrinks back into `from` when it closes
   (`closeTo: null` turns that off).

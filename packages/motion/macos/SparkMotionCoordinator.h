@@ -110,6 +110,8 @@ typedef void (^SparkMotionReject)(NSString *code, NSString *message);
 - (void)setClock:(NSString *)mode resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)advanceClock:(double)milliseconds resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject;
 - (void)clock:(SparkMotionResolve)resolve;
+/** Called with the milliseconds each time virtual time advances (advanceClock, and waitForMotion moving it to its target), so the driver can report it to window choreography. */
+@property (nonatomic, copy, nullable) void (^clockAdvanced)(double milliseconds);
 
 // Motion telemetry for the in-app test driver (docs/motion.md#motion-telemetry). Replies are dictionaries.
 /** The registered MotionView that is `view` or its nearest ancestor. */

@@ -95,6 +95,19 @@ test("a zoom that cannot start closes the window it opened and rejects with the 
   expect((error.cause as AggregateError).errors).toHaveLength(2);
 });
 
+test("a failed zoom whose finished promise is ignored raises no unhandled rejection", async () => {
+  const unhandled: unknown[] = [];
+  const listener = (reason: unknown) => { unhandled.push(reason); };
+  process.on("unhandledRejection", listener);
+  try {
+    mocks.failures.set("zoomIn", new SparkError("E_NOT_FOUND", "The window of the rectangle has closed"));
+    await choreography.openWindowFrom({ id: "f", component: "main" }, { from: row });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(unhandled).toEqual([]);
+    expect(calls("discard")).toEqual([{ id: "f" }]);
+  } finally { process.off("unhandledRejection", listener); }
+});
+
 test("zoom and close transition options are validated before anything opens", async () => {
   const open = (options: any, zoom: any) => code(choreography.openWindowFrom({ id: "z", component: "main", ...options }, zoom));
   expect(await open({ show: false }, { from: display })).toBe("E_INVALID_ARGUMENT");

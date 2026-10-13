@@ -645,6 +645,37 @@ static void TestChoreography(RNDesktopWindows *api) {
     assert(AttachmentEvents().count == 1 && [AttachmentEvents()[0][@"windowId"] isEqual:@"choreo-inspector"] && [AttachmentEvents()[0][@"token"] isEqual:@"t2"] && [AttachmentEvents()[0][@"attached"] isEqual:@NO]);
     assert(!OnScreen(inspector) && !OnScreen(home));
     [inspector close];
+    // A close transition with `to: null` (no focus) fades the window out where it is, then closes it.
+    NSWindow *fading = RealWindow(@"choreo-fade");
+    Call(api, @"completeOpen", @{ @"id": @"choreo-fade", @"size": @{ @"width": @400, @"height": @300 }, @"position": @{ @"displayId": @"901", @"x": @100, @"y": @100 } }); assert(!failure);
+    NSDictionary *fade = @{ @"to": NSNull.null, @"durationMs": @100, @"easing": @"linear" };
+    assert(!HandoffTarget(fading, fade));
+    Call(api, @"closeTransition", @{ @"id": @"choreo-fade", @"transition": fade }); assert(!failure);
+    Begin(api, @"close", @{ @"id": @"choreo-fade" }, &closed);
+    DriverClock(YES, 50); assert(!closed && fabs(fading.alphaValue - 0.5) < 0.01 && Near(Bounds(fading), 100, 100, 400, 300));
+    DriverClock(YES, 50); Pump(); assert([closed isEqual:@"{\"closed\":true}"] && !windows[@"choreo-fade"]);
+    // An animated setWindowBounds interrupted by another settles nothing (no corner snap) and leaves one animation running;
+    // the snap starts once the second move ends.
+    NSWindow *snapping = RealWindow(@"choreo-snap");
+    Call(api, @"completeOpen", @{ @"id": @"choreo-snap", @"size": @{ @"width": @400, @"height": @300 }, @"position": @{ @"displayId": @"901", @"x": @600, @"y": @300 }, @"macos": @{ @"cornerSnapping": @{ @"margin": @16 } } }); assert(!failure);
+    NSString *move = nil;
+    Begin(api, @"bounds", @{ @"id": @"choreo-snap", @"durationMs": @200, @"bounds": @{ @"displayId": @"901", @"x": @300, @"y": @200, @"width": @400, @"height": @300 } }, &first);
+    DriverClock(YES, 50); assert(!first);
+    Begin(api, @"bounds", @{ @"id": @"choreo-snap", @"durationMs": @200, @"bounds": @{ @"displayId": @"901", @"x": @400, @"y": @250, @"width": @400, @"height": @300 } }, &move);
+    assert([first isEqual:@"null"] && !move && Animations.count == 1);
+    DriverClock(YES, 200); assert([move isEqual:@"null"] && Near(Bounds(snapping), 400, 250, 400, 300) && Animations.count == 1);
+    DriverClock(YES, 200); assert(Near(Bounds(snapping), 16, 48, 400, 300) && !Animations.count);
+    [snapping close];
+    // Attaching a window opened with a parent elsewhere, then detaching it (or its new parent closing), gives it back its parent.
+    NSWindow *owner = RealWindow(@"choreo-owner"), *other = RealWindow(@"choreo-other"), *child = RealWindow(@"choreo-child");
+    for (NSString *key in @[@"choreo-owner", @"choreo-other"]) { Call(api, @"completeOpen", @{ @"id": key, @"size": @{ @"width": @400, @"height": @300 } }); assert(!failure); }
+    Call(api, @"completeOpen", @{ @"id": @"choreo-child", @"parentId": @"choreo-owner", @"size": @{ @"width": @200, @"height": @200 } }); assert(!failure && child.parentWindow == owner);
+    Call(api, @"attach", @{ @"id": @"choreo-child", @"parentId": @"choreo-other", @"token": @"t3", @"edge": @"left", @"magnetic": @0 }); assert(!failure && child.parentWindow == other);
+    Call(api, @"attach", @{ @"id": @"choreo-child", @"parentId": @"choreo-other", @"token": @"t4", @"edge": @"right", @"magnetic": @0 }); assert(!failure && child.parentWindow == other);
+    Call(api, @"detach", @{ @"id": @"choreo-child", @"token": @"t4" }); assert(child.parentWindow == owner);
+    Call(api, @"attach", @{ @"id": @"choreo-child", @"parentId": @"choreo-other", @"token": @"t5", @"edge": @"top", @"magnetic": @0 }); assert(!failure && child.parentWindow == other);
+    Call(api, @"close", @{ @"id": @"choreo-other" }); assert(!windows[@"choreo-other"] && child.parentWindow == owner);
+    for (NSWindow *window in @[child, owner]) [window close];
     Pump();
   }
   Pump();
