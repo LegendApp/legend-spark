@@ -80,6 +80,15 @@ RCT_EXPORT_MODULE(NativeSparkMotion)
 }
 - (NSNumber *)supportsSymbolEffect:(NSString *)name { return @(SparkSymbolEffectSupported(name)); }
 - (NSNumber *)supportsMaterial:(NSString *)name { return @(SparkMotionMaterialSupported(name)); }
+- (NSNumber *)supportsShaderEffect:(NSString *)name { return @(SparkMotionShaderSupported(name)); }
+- (void)startParticles:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+  [self withRequest:json reject:reject run:^(NSDictionary *request, SparkMotionReject failure) { [SparkMotionCoordinator.shared startParticles:request resolve:resolve reject:failure]; }];
+}
+- (void)stopParticles:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+  [self withRequest:json reject:reject run:^(NSDictionary *request, SparkMotionReject failure) { [SparkMotionCoordinator.shared stopParticles:request resolve:resolve reject:failure]; }];
+}
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params
 {

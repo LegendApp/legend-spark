@@ -27,6 +27,7 @@ enum Property : int {
   MaterialIntensity, MaterialTintOpacity, MaterialCrossfade,
   Morph, StrokeStart, StrokeEnd, StrokeWidth, FillColorL, FillColorC, FillColorH, FillColorAlpha,
   StrokeColorL, StrokeColorC, StrokeColorH, StrokeColorAlpha,
+  RippleProgress, DissolveProgress, Distortion, SpecularProgress,
   PropertyCount
 };
 using Values = std::array<double, PropertyCount>;
@@ -34,10 +35,11 @@ using Values = std::array<double, PropertyCount>;
  * At rest: opaque, untransformed, square corners, a transparent background, no shadow, blur or mask, a backdrop
  * material (docs/motion.md#backdrop-materials) at full intensity, its tint shown, and no crossfade in progress, and a
  * shape (docs/motion.md#shapes) showing its first path, its whole stroke 1 point wide, with transparent fill and stroke.
- * `materialCrossfade` is the opacity of the material a MotionMaterial crossfades to; only the glue drives it.
+ * `materialCrossfade` is the opacity of the material a MotionMaterial crossfades to; only the glue drives it. A
+ * MotionShader's effect (docs/motion.md#shader-effects-and-particles) shows nothing at rest.
  */
 constexpr Values kIdentity = {1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,
-  0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
+  0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 const char *propertyName(Property property);
 std::optional<Property> propertyFromName(const std::string &name);
 
@@ -52,11 +54,11 @@ constexpr ColorProperty kColorProperties[] = {kBackgroundColor, kFillColor, kStr
  * One property's channel on the compositor: the properties of a channel bake together into its layer animations. A
  * shape's path (`morph`) is its own channel, since each of its samples is a whole path.
  */
-enum class Channel { Opacity, Transform, BackgroundColor, BorderRadius, Shadow, Blur, Mask, Material, ShapePath, Shape, Count };
+enum class Channel { Opacity, Transform, BackgroundColor, BorderRadius, Shadow, Blur, Mask, Material, ShapePath, Shape, Effect, Count };
 Channel channelOf(Property property);
 /**
- * Whether a property moves something on screen (transforms, mask edges, a shape's morph and the ends of its stroke): the
- * Reduce Motion `fade` alternate changes it at once.
+ * Whether a property moves something on screen (transforms, mask edges, a shape's morph and the ends of its stroke, and
+ * the ripple, distortion and specular sweep of a shader effect): the Reduce Motion `fade` alternate changes it at once.
  */
 bool travels(Property property);
 
@@ -64,7 +66,7 @@ bool travels(Property property);
 struct Rest { double delta, speed; };
 /**
  * Per-property defaults: points and degrees settle at 0.01; opacity, scale, color lightness, chroma and alpha, shadow
- * opacity, the material's opacities, a shape's morph and the ends of its stroke at 0.0005.
+ * opacity, the material's opacities, a shape's morph, the ends of its stroke and the shader effects at 0.0005.
  */
 Rest restThreshold(Property property);
 

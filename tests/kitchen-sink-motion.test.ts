@@ -13,6 +13,7 @@ const { state, native, tags, system } = vi.hoisted(() => ({
     environment: vi.fn(async (_tag: number) => JSON.stringify({ reduceMotion: false, reduceTransparency: false, lowPowerMode: false, maximumFrameRate: 120, frameRate: 120, windowVisible: true })),
     playSymbolEffect: vi.fn(async (json: string) => JSON.stringify({ played: JSON.parse(json).effect })), removeSymbolEffect: vi.fn(async (_json: string) => {}),
     hasSymbol: vi.fn((_name: string) => true), supportsSymbolEffect: vi.fn((_name: string) => true), supportsMaterial: vi.fn((_name: string) => true),
+    supportsShaderEffect: vi.fn((_name: string) => true), startParticles: vi.fn(async (_json: string) => JSON.stringify({ played: "particles" })), stopParticles: vi.fn(async (_json: string) => {}),
   },
   tags: new WeakMap<object, number>(),
   system: { handler: undefined as undefined | (() => void), options: undefined as unknown, removed: 0 },
@@ -37,13 +38,16 @@ import { AccessibilityPower, ScrollAndFrames, Springs, Timelines } from "../exam
 import { TextAndSymbols } from "../examples/kitchen-sink/screens/motion-system/TextSymbolsScreen";
 import { Materials } from "../examples/kitchen-sink/screens/motion-system/MaterialsScreen";
 import { Shapes } from "../examples/kitchen-sink/screens/motion-system/ShapesScreen";
+import { Shaders } from "../examples/kitchen-sink/screens/motion-system/ShadersScreen";
 import motionScreens from "../examples/kitchen-sink/screens/motion-system/index";
 
 let rendered: any, nextTag = 100;
 /** Every engine property at rest (docs/motion.md#properties-and-units), with translateX at `x` moving at `v`. */
 const EFFECTS = ["rotateX", "rotateY", "perspective", "borderRadius", "backgroundColorL", "backgroundColorC", "backgroundColorH", "backgroundColorAlpha", "shadowOpacity", "shadowRadius",
   "shadowOffsetX", "shadowOffsetY", "blur", "maskInsetTop", "maskInsetBottom", "maskInsetStart", "maskInsetEnd", "maskRadius", "materialIntensity", "materialTintOpacity",
-  "morph", "strokeStart", "strokeEnd", "strokeWidth", "fillColorL", "fillColorC", "fillColorH", "fillColorAlpha", "strokeColorL", "strokeColorC", "strokeColorH", "strokeColorAlpha"];
+  "morph", "strokeStart", "strokeEnd", "strokeWidth", "fillColorL", "fillColorC", "fillColorH", "fillColorAlpha", "strokeColorL", "strokeColorC", "strokeColorH", "strokeColorAlpha",
+
+  "rippleProgress", "dissolveProgress", "distortion", "specularProgress"];
 const rest = Object.fromEntries(EFFECTS.map(property => [property, 0]));
 const state0 = (x: number, v: number) => JSON.stringify({ values: { ...rest, opacity: 1, translateX: x, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 }, velocities: { ...rest, opacity: 0, translateX: v, translateY: 0, scaleX: 0, scaleY: 0, rotate: 0 }, animating: v ? ["translateX"] : [] });
 beforeEach(() => {
@@ -64,7 +68,7 @@ const plans = () => native.run.mock.calls.map(([json]) => JSON.parse(json));
 test("the motion screens are registered in the motion-system area", async () => {
   const { default: registered } = await import("../examples/kitchen-sink/screens/motion-system/index");
   expect(registered.area).toBe("motion-system");
-  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames", "layout", "visual-effects", "materials", "shapes", "text-and-symbols", "accessibility-power"]);
+  expect(registered.screens.map(screen => screen.id)).toEqual(["springs", "timelines", "scroll-and-frames", "layout", "visual-effects", "materials", "shapes", "shaders", "text-and-symbols", "accessibility-power"]);
 });
 
 test("springs: preset parameters, playing every preset, and moving with the reading direction", async () => {
@@ -261,6 +265,50 @@ test("shapes: Next shape springs the morph and fades the fill, Draw draws the ch
   expect(text(id("read-result"))).toBe('{"morph":1,"strokeEnd":1}');
 });
 
+test("shaders and particles: each card plays its effect property, the panel starts, bursts and stops particles, and the title and summary are localized", async () => {
+  const screen = motionScreens.screens.find(entry => entry.id === "shaders")!;
+  expect(screen.titles?.ar).toBe("المُظلِّلات والجسيمات");
+  await mount(Shaders);
+  const id = (part: string) => `motion-system-shaders-${part}`;
+  expect(text(id("effect-availability"))).toBe('{"ripple":true,"dissolve":true,"distortion":true,"specular":true,"particles":true}');
+  expect(JSON.parse(byID(id("ripple")).props.shaderEffect)).toEqual({ type: "ripple", origin: { x: 40, y: 28 }, width: 22 });
+  expect(JSON.parse(byID(id("dissolve")).props.shaderEffect)).toMatchObject({ type: "dissolve" });
+  expect(JSON.parse(byID(id("emitter")).props.particleEmitter)).toMatchObject({ shape: "line", seed: 7, cells: [{ image: "star" }, { image: "spark" }] });
+  const settledAt = (values: Record<string, number>) => native.getState.mockResolvedValue(JSON.stringify({ values: { ...JSON.parse(state0(0, 0)).values, ...values }, velocities: JSON.parse(state0(0, 0)).velocities, animating: [] }));
+  settledAt({ rippleProgress: 1, dissolveProgress: 1, distortion: 0.6, specularProgress: 1 });
+  await press(id("ripple-play"));
+  expect(JSON.parse(native.set.mock.calls.at(-1)![0]).values).toEqual({ rippleProgress: 0 });
+  expect(plans().at(-1).groups[0].tracks).toEqual({ rippleProgress: expect.objectContaining({ type: "timing", to: 1, durationMs: 700 }) });
+  expect(text(id("effect-result"))).toBe('{"finished":true,"rippleProgress":1}');
+  await press(id("dissolve-play"));
+  expect(plans().at(-1).groups[0].tracks).toEqual({ dissolveProgress: expect.objectContaining({ type: "timing", to: 1, durationMs: 900 }) });
+  expect(text(id("effect-result"))).toBe('{"finished":true,"dissolveProgress":1}');
+  await press(id("distortion-play"));
+  expect(plans().at(-1).groups[0].tracks).toEqual({ distortion: expect.objectContaining({ type: "spring", to: 0.6 }) });
+  expect(text(id("effect-result"))).toBe('{"finished":true,"distortion":0.6}');
+  await press(id("specular-play"));
+  expect(plans().at(-1).groups[0].tracks).toEqual({ specularProgress: expect.objectContaining({ type: "timing", to: 1, durationMs: 1200 }) });
+  await press(id("particles-start"));
+  expect(JSON.parse(native.startParticles.mock.calls.at(-1)![0])).toEqual({ tag: expect.any(Number) });
+  expect(text(id("particles-result"))).toBe('{"played":"particles"}');
+  await press(id("particles-burst"));
+  expect(JSON.parse(native.startParticles.mock.calls.at(-1)![0])).toMatchObject({ durationMs: 600 });
+  await press(id("particles-stop"));
+  expect(native.stopParticles).toHaveBeenCalledTimes(1);
+  expect(text(id("particles-result"))).toBe('"stopped"');
+  native.startParticles.mockResolvedValueOnce(JSON.stringify({ played: "none" }));
+  await press(id("particles-start"));
+  expect(text(id("particles-result"))).toBe('{"played":"none"}');
+  await act(async () => rendered.unmount()); rendered = undefined;
+  // Without a Metal device the dissolve card reports why where it would render; the other cards and particles still show.
+  native.supportsShaderEffect.mockImplementation(name => name !== "dissolve");
+  await mount(Shaders);
+  expect(text(id("effect-availability"))).toBe('{"ripple":true,"dissolve":false,"distortion":true,"specular":true,"particles":true}');
+  expect(text(id("dissolve-error"))).toBe("SparkError:E_UNAVAILABLE");
+  expect(byID(id("ripple")).type).toBe("SparkMotionView");
+  native.supportsShaderEffect.mockImplementation(() => true);
+});
+
 test("text and symbols: digits roll, text crossfades and types, and each symbol effect reports what played", async () => {
   await mount(TextAndSymbols);
   const id = (part: string) => `motion-system-text-and-symbols-${part}`;
@@ -288,7 +336,7 @@ test("text and symbols: digits roll, text crossfades and types, and each symbol 
 
 test("Windows shows the typed unsupported error where the motion views would be, and sends nothing", async () => {
   state.os = "windows";
-  for (const [screen, id] of [[Springs, "springs"], [Timelines, "timelines"], [ScrollAndFrames, "scroll-and-frames"], [VisualEffects, "visual-effects"], [Materials, "materials"], [Shapes, "shapes"], [TextAndSymbols, "text-and-symbols"], [AccessibilityPower, "accessibility-power"]] as const) {
+  for (const [screen, id] of [[Springs, "springs"], [Timelines, "timelines"], [ScrollAndFrames, "scroll-and-frames"], [VisualEffects, "visual-effects"], [Materials, "materials"], [Shapes, "shapes"], [Shaders, "shaders"], [TextAndSymbols, "text-and-symbols"], [AccessibilityPower, "accessibility-power"]] as const) {
     await mount(screen);
     expect(text(`motion-system-${id}-availability`)).toBe('{"available":false,"reason":"unsupported-platform"}');
     expect(text(`motion-system-${id}-error`)).toBe("SparkError:E_UNSUPPORTED_PLATFORM");

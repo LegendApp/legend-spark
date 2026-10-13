@@ -608,6 +608,12 @@ int main() {
     CHECK(travels(Morph) && travels(StrokeStart) && travels(StrokeEnd) && !travels(StrokeWidth) && !travels(FillColorL) && !travels(StrokeColorAlpha));
     CHECK(kIdentity[Morph] == 0 && kIdentity[StrokeStart] == 0 && kIdentity[StrokeEnd] == 1 && kIdentity[StrokeWidth] == 1 && kIdentity[FillColorAlpha] == 0 && kIdentity[StrokeColorAlpha] == 0);
     CHECK(propertyFromName("morph") == Morph && propertyFromName("strokeColorAlpha") == StrokeColorAlpha && !propertyFromName("fillColor"));
+    // Shader effects (docs/motion.md#shader-effects-and-particles): one channel; the ripple, distortion and sweep travel,
+    // the dissolve fades; all rest at 0.
+    CHECK(channelOf(RippleProgress) == Channel::Effect && channelOf(DissolveProgress) == Channel::Effect && channelOf(Distortion) == Channel::Effect && channelOf(SpecularProgress) == Channel::Effect);
+    CHECK(travels(RippleProgress) && travels(Distortion) && travels(SpecularProgress) && !travels(DissolveProgress));
+    CHECK(kIdentity[RippleProgress] == 0 && kIdentity[DissolveProgress] == 0 && kIdentity[Distortion] == 0 && kIdentity[SpecularProgress] == 0);
+    CHECK(propertyFromName("dissolveProgress") == DissolveProgress && restThreshold(Distortion).delta == 0.0005);
     Engine effects;
     std::vector<Settled> done;
     std::vector<int64_t> views;

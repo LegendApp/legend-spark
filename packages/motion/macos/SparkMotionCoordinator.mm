@@ -45,6 +45,8 @@ static BOOL SparkMotionBlurred(NSView *view)
 static SparkMotionMaterialStack *SparkMotionMaterialOf(NSView<SparkMotionHost> *host) { return [host respondsToSelector:@selector(motionMaterial)] ? host.motionMaterial : nil; }
 static SparkMotionShapeView *SparkMotionShapeOf(NSView<SparkMotionHost> *host) { return [host respondsToSelector:@selector(motionShape)] ? host.motionShape : nil; }
 static BOOL SparkMotionShapeChannel(Channel channel) { return channel == Channel::ShapePath || channel == Channel::Shape; }
+static SparkMotionShader *SparkMotionShaderOf(NSView<SparkMotionHost> *host) { return [host respondsToSelector:@selector(motionShader)] ? host.motionShader : nil; }
+static SparkMotionEmitter *SparkMotionEmitterOf(NSView<SparkMotionHost> *host) { return [host respondsToSelector:@selector(motionEmitter)] ? host.motionEmitter : nil; }
 /** The mask's frame in layer coordinates: the view's bounds inset by the mask insets; start and end follow the layout direction. */
 static CGRect SparkMotionMaskRect(NSView *view, const Values &values, BOOL rightToLeft)
 {
@@ -90,6 +92,8 @@ void SparkMotionApplyLayer(NSView<SparkMotionHost> *host, const Values &values)
     layer.fillColor = (__bridge CGColorRef)SparkMotionColor(values, kFillColor);
     layer.strokeColor = (__bridge CGColorRef)SparkMotionColor(values, kStrokeColor);
   }
+  if (SparkMotionShader *shader = SparkMotionShaderOf(host)) [shader apply:values[shader.property] host:host];
+  if (SparkMotionEmitter *emitter = SparkMotionEmitterOf(host)) [emitter layout:host];
 }
 
 /** Installs or removes the blur filter and the mask layer; SparkMotionApplyLayer then keeps them in step with the model. */
@@ -353,6 +357,10 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   uint64_t _inputEvent;
   NSMutableArray<SparkMotionCue *> *_cues;     // pending, in no particular order
   CADisplayLink *_cueLink;                     // only within two frames of the next cue
+  CADisplayLink *_effectLink;                  // only while a Metal effect animates in a visible window
+  __weak NSView *_effectLinkHost;              // the view whose display (or screen) the link follows, and its window then
+  __weak NSWindow *_effectLinkWindow;
+  BOOL _effectLinkOnScreen;
   NSUInteger _cueGeneration;
 #if SPARK_TEST_DRIVER
   BOOL _driven;                                // a driver run: cues are recorded, not played; windows count as visible
@@ -361,6 +369,7 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   NSHashTable<NSWindow *> *_hiddenWindows;     // windows simulateWindow:visible: hides (driven windows are never on screen)
 #endif
   NSArray *_observers;                         // system and window observers, while a MotionView is registered
+  id _accessibilityObserver;                   // NSWorkspace's Reduce Motion changes, likewise (not in driver runs)
 }
 
 + (instancetype)shared
@@ -486,9 +495,14 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
 /** Applies a window's visibility to its views: hidden ones complete or pause, shown ones resume. */
 - (void)windowVisibilityChanged:(NSWindow *)window
 {
-  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects]) if (host.window == window) [self syncHidden:host.motionTag];
+  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects]) {
+    if (host.window != window) continue;
+    [self syncHidden:host.motionTag];
+    SparkMotionEmitterOf(host).paused = [self windowHidden:window];  // a hidden window's particles hold where they are
+  }
   [self scheduleSweep];
   [self scheduleCues];
+  [self scheduleEffectFrames];
 }
 
 /** A closing window's motion is cancelled: animations stop where they are (finished false), links and recordings end. */
@@ -502,6 +516,7 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     const NSInteger tag = host.motionTag;
     for (NSString *identifier in [_links allKeys]) if (_links[identifier].tag == tag) [self removeLink:identifier];
     for (SparkMotionFrameRecorder *recorder in [_recorders allObjects]) if (recorder.host == host) [self finishRecorder:recorder failure:@"The MotionView's window closed during recording"];
+    [SparkMotionEmitterOf(host) stop];
     _engine.stop(tag, all, self.now, settled);
     [self applyAll:tag];
   }
@@ -521,18 +536,34 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     if ((!window || host.window == window) && [self isAnimating:host.motionTag]) [self applyAll:host.motionTag];
 }
 
+/** Reduce Motion turned on: particles stop emitting, except those started to play under it. */
+- (void)reduceMotionChanged
+{
+  if (!self.reduceMotion) return;
+  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects]) {
+    SparkMotionEmitter *emitter = SparkMotionEmitterOf(host);
+    if (emitter && !emitter.playsUnderReduceMotion) [emitter stop];
+  }
+}
+
 /** Observes what motion follows while a MotionView is registered, and stops with the last one. */
 - (void)observeSystem:(BOOL)observe
 {
   if (observe == (_observers != nil)) return;
   NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+  NSNotificationCenter *workspace = NSWorkspace.sharedWorkspace.notificationCenter;
   if (!observe) {
     for (id observer in _observers) [center removeObserver:observer];
     _observers = nil;
+    if (_accessibilityObserver) [workspace removeObserver:_accessibilityObserver];
+    _accessibilityObserver = nil;
     return;
   }
   __weak SparkMotionCoordinator *weakSelf = self;
   NSOperationQueue *main = NSOperationQueue.mainQueue;
+  // A driver run simulates Reduce Motion (simulate:) instead of following the Mac's setting.
+  if (!self.driven)
+    _accessibilityObserver = [workspace addObserverForName:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification object:nil queue:main usingBlock:^(NSNotification *) { [weakSelf reduceMotionChanged]; }];
   _observers = @[
     // Process info notifications arrive on arbitrary threads; the main queue owns the engine.
     [center addObserverForName:NSProcessInfoPowerStateDidChangeNotification object:nil queue:main usingBlock:^(NSNotification *) {
@@ -576,6 +607,7 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   _engine.addView(host.motionTag, initial);
   [_hosts setObject:host forKey:@(host.motionTag)];
   SparkMotionInstallEffects(host, initial[Blur] > 0, SparkMotionMasks(initial));
+  if (SparkMotionShader *shader = SparkMotionShaderOf(host)) [shader install:[shader showsAtRest:initial[shader.property]] host:host];
   [host applyMotionModel:initial];
   [_mounting addObject:host];
   if (_engine.virtualClock()) {
@@ -602,10 +634,16 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
     if (!recorder.host || recorder.host.motionTag == tag) [self finishRecorder:recorder failure:@"The MotionView unmounted during recording"];
   std::vector<Settled> settled;
   _engine.removeView(tag, settled);
+  if (NSView<SparkMotionHost> *host = [_hosts objectForKey:@(tag)]) {
+    // Unmounting cancels particles and takes the effect's filter, overlay or Metal mask off the view.
+    [SparkMotionEmitterOf(host) stop];
+    [SparkMotionShaderOf(host) removeFrom:host];
+  }
   [_hosts removeObjectForKey:@(tag)];
   [self settle:settled];
   [self scheduleSweep];
   [self scheduleCues];
+  [self scheduleEffectFrames];
   if (![_hosts.objectEnumerator nextObject]) [self observeSystem:NO];
 }
 
@@ -616,6 +654,13 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
   std::vector<Channel> channels;
   if (SparkMotionAnimating(_engine, host.motionTag, Channel::Transform, self.now)) channels.push_back(Channel::Transform);
   if (SparkMotionMask(host)) channels.push_back(Channel::Mask);
+  if ([SparkMotionShaderOf(host) installedOn:host]) channels.push_back(Channel::Effect);  // a ripple's reach, the sweep and the mask follow the size
+  if (SparkMotionEmitter *emitter = SparkMotionEmitterOf(host)) {
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [emitter layout:host];  // the emitter fills the view, its default position is the centre
+    [CATransaction commit];
+  }
   if (!channels.empty()) [self apply:host.motionTag channels:channels];
 }
 
@@ -663,6 +708,14 @@ static NSDictionary<NSString *, NSNumber *> *SparkHapticPatterns(void)
       throw Failure{"E_UNSUPPORTED_OPTION", std::string(propertyName(property)) + ": the view has no backdrop material; use a MotionMaterial"};
     if (SparkMotionShapeChannel(channel) && !SparkMotionShapeOf(host))
       throw Failure{"E_UNSUPPORTED_OPTION", std::string(propertyName(property)) + ": the view has no shape; use a MotionShape"};
+    SparkMotionShader *shader = SparkMotionShaderOf(host);
+    if (channel == Channel::Effect && shader.property != property)
+      throw Failure{"E_UNSUPPORTED_OPTION", std::string(propertyName(property)) + ": the view has no such shader effect; use a MotionShader with it"};
+    // The dissolve is the view's mask: it cannot share it with a motion mask, or with React Native's clip.
+    if (shader.property == DissolveProgress && channel == Channel::Mask)
+      throw Failure{"E_UNSUPPORTED_OPTION", std::string(propertyName(property)) + ": a dissolving MotionShader's mask is its dissolve"};
+    if (property == DissolveProgress && (style & SparkMotionChannelBit(Channel::Mask)))
+      throw Failure{"E_UNSUPPORTED_OPTION", "dissolveProgress: the view's style clips its content with a mask (overflow hidden with per-corner radii), which the dissolve would replace"};
     if (!(style & SparkMotionChannelBit(channel))) continue;
     throw Failure{"E_UNSUPPORTED_OPTION", std::string(propertyName(property)) + (channel == Channel::Mask
       ? ": the view's style clips its content with a mask (overflow hidden with per-corner radii), which a motion mask would replace"
@@ -710,9 +763,13 @@ static NSArray<NSString *> *SparkMotionKeyPaths(Channel channel)
     case Channel::Material: return @[@"opacity", @"opacity", @"opacity"];  // the material views' container's, the tint's and the incoming material's layers
     case Channel::ShapePath: return @[@"path"];
     case Channel::Shape: return @[@"strokeStart", @"strokeEnd", @"lineWidth", @"fillColor", @"strokeColor"];
-    case Channel::Count: break;
+    case Channel::Effect: case Channel::Count: break;  // a shader effect's are its own (SparkMotionShader)
   }
   return @[];
+}
+static NSArray<NSString *> *SparkMotionKeyPaths(Channel channel, NSView<SparkMotionHost> *host)
+{
+  return channel == Channel::Effect ? SparkMotionShaderOf(host).keyPaths ?: @[] : SparkMotionKeyPaths(channel);
 }
 
 /** The value of a channel's `index`th key path in one sample. */
@@ -741,6 +798,10 @@ static id SparkMotionSample(Channel channel, NSUInteger index, const Values &sam
       if (index == 1) return @(std::clamp(sample[StrokeEnd], 0.0, 1.0));
       if (index == 2) return @(MAX(0, sample[StrokeWidth]));
       return SparkMotionColor(sample, index == 3 ? kFillColor : kStrokeColor);
+    case Channel::Effect: {
+      SparkMotionShader *shader = SparkMotionShaderOf(host);
+      return [shader sample:index value:sample[shader.property] host:host];
+    }
     case Channel::Count: break;
   }
   return nil;
@@ -748,7 +809,7 @@ static id SparkMotionSample(Channel channel, NSUInteger index, const Values &sam
 
 - (CAKeyframeAnimation *)animation:(const Bake &)bake channel:(Channel)channel index:(NSUInteger)index host:(NSView<SparkMotionHost> *)host begin:(double)begin rate:(double)rate
 {
-  CAKeyframeAnimation *animation = [CAKeyframeAnimation animationWithKeyPath:SparkMotionKeyPaths(channel)[index]];
+  CAKeyframeAnimation *animation = [CAKeyframeAnimation animationWithKeyPath:SparkMotionKeyPaths(channel, host)[index]];
   NSMutableArray *values = [NSMutableArray arrayWithCapacity:bake.samples.size()];
   for (const Values &sample : bake.samples) [values addObject:SparkMotionSample(channel, index, sample, host)];
   animation.values = values;
@@ -787,6 +848,9 @@ static BOOL SparkMotionAnimating(Engine &engine, NSInteger tag, Channel channel,
     const BOOL animated = bake.lead || bake.loop;
     if (channel == Channel::Blur) blur = animated || model[Blur] > 0;
     if (channel == Channel::Mask) mask = animated || SparkMotionMasks(model);
+    // A shader effect's filter, overlay or Metal mask exists while it shows something or animates.
+    SparkMotionShader *shader = SparkMotionShaderOf(host);
+    if (channel == Channel::Effect && shader) [shader install:animated || [shader showsAtRest:model[shader.property]] host:host];
   }
   SparkMotionInstallEffects(host, blur, mask);
   const double local = [layer convertTime:CACurrentMediaTime() fromLayer:nil];
@@ -795,9 +859,10 @@ static BOOL SparkMotionAnimating(Engine &engine, NSInteger tag, Channel channel,
     SparkMotionShapeView *shape = SparkMotionShapeOf(host);
     // checkOwnable keeps plain MotionViews from animating these
     if ((channel == Channel::Material && !material) || (SparkMotionShapeChannel(channel) && !shape)) continue;
-    NSArray<NSString *> *keyPaths = SparkMotionKeyPaths(channel);
+    NSArray<NSString *> *keyPaths = SparkMotionKeyPaths(channel, host);
     for (NSUInteger index = 0; index < keyPaths.count; index++) {
-      CALayer *target = channel == Channel::Mask ? SparkMotionMask(host) : SparkMotionShapeChannel(channel) ? shape.shapeLayer : channel != Channel::Material ? layer
+      CALayer *target = channel == Channel::Mask ? SparkMotionMask(host) : SparkMotionShapeChannel(channel) ? shape.shapeLayer
+        : channel == Channel::Effect ? [SparkMotionShaderOf(host) target:index host:host] : channel != Channel::Material ? layer
         : index == 0 ? material.materialsLayer : index == 1 ? material.tintLayer : material.incomingLayer;
       if (!target) continue;
       NSString *lead = [@"spark.motion." stringByAppendingString:keyPaths[index]], *loop = [lead stringByAppendingString:@".loop"];
@@ -813,6 +878,8 @@ static BOOL SparkMotionAnimating(Engine &engine, NSInteger tag, Channel channel,
     }
   }
   [host applyMotionModel:model];
+  // A Metal effect shows the frame for now in this transaction; display frames take it from there.
+  for (const auto &[channel, bake] : bakes) if (channel == Channel::Effect) [self renderEffect:host time:now skip:NO];
   auto turns = [](const std::optional<Bake> &part) {
     if (part) for (const Values &sample : part->samples) if (sample[Rotate] != 0 || sample[RotateX] != 0 || sample[RotateY] != 0) return true;
     return false;
@@ -820,6 +887,7 @@ static BOOL SparkMotionAnimating(Engine &engine, NSInteger tag, Channel channel,
   for (const auto &[channel, bake] : bakes)
     if (channel == Channel::Transform && (model[Rotate] != 0 || model[RotateX] != 0 || model[RotateY] != 0 || turns(bake.lead) || turns(bake.loop))) layer.allowsEdgeAntialiasing = YES;
   [CATransaction commit];
+  [self scheduleEffectFrames];
 }
 
 - (void)applyAll:(NSInteger)tag
@@ -868,7 +936,14 @@ static BOOL SparkMotionAnimating(Engine &engine, NSInteger tag, Channel channel,
     if ((SparkMotionBlurred(host) && host.motionModel[Blur] <= 0 && !SparkMotionAnimating(_engine, host.motionTag, Channel::Blur, self.now)) ||
         (SparkMotionMask(host) && !SparkMotionMasks(host.motionModel) && !SparkMotionAnimating(_engine, host.motionTag, Channel::Mask, self.now)))
       [self apply:host.motionTag channels:{Channel::Blur, Channel::Mask}];
-  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects]) [self dropCoveredMaterials:host];
+  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects]) {
+    [self dropCoveredMaterials:host];
+    // An effect that settled where it shows nothing comes off the view; a Metal one shows its final frame.
+    SparkMotionShader *shader = SparkMotionShaderOf(host);
+    if (!shader || ![shader installedOn:host] || _engine.animating(host.motionTag, shader.property, self.now)) continue;
+    if (![shader showsAtRest:host.motionModel[shader.property]]) [self apply:host.motionTag channels:{Channel::Effect}];
+    else if (shader.rendersFrames && shader.renderedValue != host.motionModel[shader.property]) [self renderEffect:host time:self.now skip:NO];
+  }
   [self settle:settled];
   [self scheduleSweep];
 }
@@ -1407,6 +1482,119 @@ static NSRect SparkLayoutRect(NSView *view, NSView *reference)
   if ([_hosts objectForKey:@(host.motionTag)] == host) [self apply:host.motionTag channels:{Channel::ShapePath}];
 }
 
+#pragma mark - Shader effects and particles
+
+- (void)host:(NSView<SparkMotionHost> *)host shaderChangedFrom:(SparkMotionShader *)previous
+{
+  [previous removeFrom:host];
+  if ([_hosts objectForKey:@(host.motionTag)] == host) [self apply:host.motionTag channels:{Channel::Effect}];
+}
+
+/** Whether a Metal effect's frames would show: its window is visible and some of the view is on screen in it. */
+- (BOOL)effectVisible:(NSView<SparkMotionHost> *)host
+{
+  return host.window && ![self windowHidden:host.window] && !host.isHiddenOrHasHiddenAncestor && !NSIsEmptyRect(host.visibleRect);
+}
+
+/** Renders a host's Metal effect at engine time `time` (offscreen views skip frames; the final one is rendered when it settles). */
+- (void)renderEffect:(NSView<SparkMotionHost> *)host time:(double)time skip:(BOOL)skip
+{
+  SparkMotionShader *shader = SparkMotionShaderOf(host);
+  if (!shader.rendersFrames || ![shader installedOn:host]) return;
+  const double value = _engine.state(host.motionTag, shader.property, time).value;
+  if (value == shader.renderedValue) return;
+  if ([shader render:value host:host skipWhenBusy:skip]) return;
+  // No Metal device came back after a loss: the effect comes off and the content shows (getShaderEffectAvailability reports it).
+  NSLog(@"Spark motion: %@ cannot render without a Metal device; it is removed from MotionView %ld", shader.type, (long)host.motionTag);
+  [shader removeFrom:host];
+}
+
+/**
+ * A display link runs while a Metal effect animates in a visible window and renders each frame at the frame's target
+ * time; nothing runs otherwise. On the virtual clock frames are rendered when the clock moves instead.
+ */
+- (BOOL)animatesEffect:(NSView<SparkMotionHost> *)host
+{
+  SparkMotionShader *shader = SparkMotionShaderOf(host);
+  return shader.rendersFrames && [shader installedOn:host] && host.window && ![self windowHidden:host.window] && _engine.animating(host.motionTag, shader.property, self.now);
+}
+
+/**
+ * The link follows one animating view's display (held weakly). It is made again for another view when that one stops
+ * animating, unmounts, or moves to another window or on or off screen.
+ */
+- (void)scheduleEffectFrames
+{
+  NSView<SparkMotionHost> *animating = nil;
+  if (!_engine.virtualClock()) {
+    NSView<SparkMotionHost> *current = (NSView<SparkMotionHost> *)_effectLinkHost;
+    if (current && [_hosts objectForKey:@(current.motionTag)] == current && [self animatesEffect:current]) animating = current;
+    else for (NSView<SparkMotionHost> *host in _hosts.objectEnumerator) if ([self animatesEffect:host]) { animating = host; break; }
+  }
+  const BOOL followed = _effectLink && animating && animating == _effectLinkHost && animating.window == _effectLinkWindow && animating.window.isVisible == _effectLinkOnScreen;
+  if (followed) return;
+  [_effectLink invalidate];
+  _effectLink = nil;
+  if (!animating) return;
+  // As for cues: a window that is not on screen has no display link of its own.
+  NSScreen *screen = animating.window.isVisible ? nil : animating.window.screen ?: NSScreen.mainScreen;
+  if (!animating.window.isVisible && !screen) return;
+  _effectLinkHost = animating;
+  _effectLinkWindow = animating.window;
+  _effectLinkOnScreen = animating.window.isVisible;
+  _effectLink = screen ? [screen displayLinkWithTarget:self selector:@selector(effectFrame:)] : [animating displayLinkWithTarget:self selector:@selector(effectFrame:)];
+  const double rate = [self frameRate:animating];
+  _effectLink.preferredFrameRateRange = CAFrameRateRangeMake(rate / 2, rate, rate);
+  [_effectLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+}
+
+- (void)effectFrame:(CADisplayLink *)link
+{
+  const double time = _engine.time(link.targetTimestamp);
+  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects])
+    if ([self effectVisible:host]) [self renderEffect:host time:time skip:YES];
+  [self scheduleEffectFrames];
+}
+
+- (NSView<SparkMotionHost> *)emitterHost:(NSDictionary *)request
+{
+  const NSInteger tag = SparkTag(request);
+  NSView<SparkMotionHost> *host = [_hosts objectForKey:@(tag)];
+  if (!host) throw SparkMotionUnmounted(tag);
+  if (!SparkMotionEmitterOf(host)) throw Failure{"E_UNSUPPORTED_OPTION", "The view has no particle emitter; use a MotionEmitter"};
+  return host;
+}
+
+- (void)startParticles:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
+{
+  [self perform:^{
+    NSView<SparkMotionHost> *host = [self emitterHost:request];
+    const double duration = SparkNumber(request, @"durationMs", 0) / 1000;
+    if (!(duration >= 0 && std::isfinite(duration))) throw SparkMotionInvalid(@"durationMs must be a finite number of at least 0");
+    NSString *reduce = SparkOneOf(request, @"reducedMotion", @[@"fade", @"instant", @"play"]);
+    // Particles travel: under Reduce Motion nothing is emitted unless the plan asks to play (docs/motion.md#shader-effects-and-particles).
+    const BOOL plays = !self.reduceMotion || [reduce isEqual:@"play"];
+    SparkMotionEmitter *emitter = SparkMotionEmitterOf(host);
+    if (plays) {
+      [CATransaction begin];
+      [CATransaction setDisableActions:YES];
+      [emitter start:duration host:host];
+      emitter.playsUnderReduceMotion = [reduce isEqual:@"play"];
+      emitter.paused = [self windowHidden:host.window];
+      [CATransaction commit];
+    }
+    resolve(SparkJSONString(@{ @"played": plays ? @"particles" : @"none" }));
+  } reject:reject];
+}
+
+- (void)stopParticles:(NSDictionary *)request resolve:(SparkMotionResolve)resolve reject:(SparkMotionReject)reject
+{
+  [self perform:^{
+    [SparkMotionEmitterOf([self emitterHost:request]) stop];
+    resolve(nil);
+  } reject:reject];
+}
+
 #pragma mark - Symbol effects
 
 - (void)registerSymbol:(NSView<SparkMotionSymbolHost> *)host
@@ -1582,6 +1770,7 @@ static NSSymbolEffectOptions *SparkSymbolOptions(double repeat, double speed)
   [CATransaction commit];
   [self scheduleSweep];
   [self scheduleCues];
+  [self scheduleEffectFrames];
   resolve(nil);
 }
 
@@ -1600,6 +1789,8 @@ static NSSymbolEffectOptions *SparkSymbolOptions(double repeat, double speed)
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
   for (NSView *host in _hosts.objectEnumerator) host.layer.timeOffset += seconds;
+  // Metal effects show the frame for the new time: the virtual clock has no display frames.
+  for (NSView<SparkMotionHost> *host in [_hosts.objectEnumerator allObjects]) [self renderEffect:host time:self.now skip:NO];
   [CATransaction commit];
   [self playCuesUntil:self.now frame:NAN];
   [self sweep];
@@ -1646,6 +1837,7 @@ static NSDictionary *SparkStateObject(const State &state) { return @{ @"value": 
   }
   [self rebake:nil];
   [self scheduleCues];
+  if (values[@"reduceMotion"]) [self reduceMotionChanged];
 }
 
 - (void)simulateWindow:(NSWindow *)window visible:(BOOL)visible
@@ -1676,6 +1868,12 @@ static NSDictionary *SparkStateObject(const State &state) { return @{ @"value": 
   NSMutableDictionary *reply = [@{ @"tag": @(tag), @"clock": _engine.virtualClock() ? @"virtual" : @"real", @"timeMs": @(now * 1000),
     @"values": SparkValuesObject(values), @"velocities": SparkValuesObject(velocities), @"animating": animating, @"motion": NSNull.null,
     @"frameRate": @([self frameRate:host]), @"hidden": @(_engine.hidden(tag)), @"paused": @(_engine.paused(tag)), @"cues": cues } mutableCopy];
+  // A MotionShader's effect: what draws it, and for Metal the frames rendered and the value of the last one.
+  if (SparkMotionShader *shader = SparkMotionShaderOf(host))
+    reply[@"shader"] = @{ @"type": shader.type, @"installed": @([shader installedOn:host]), @"renderer": shader.rendersFrames ? @"metal" : @"coreAnimation",
+      @"renderedFrames": @(shader.renderedFrames), @"renderedValue": std::isnan(shader.renderedValue) ? (id)NSNull.null : @(shader.renderedValue) };
+  if (SparkMotionEmitter *emitter = SparkMotionEmitterOf(host))
+    reply[@"particles"] = @{ @"emitting": @([emitter emitting:host]), @"paused": @(emitter.paused), @"cells": @(emitter.layer.emitterCells.count) };
   if (!episode) return reply;
   const BOOL settled = animating.count == 0;
   NSMutableDictionary *kinds = [NSMutableDictionary new];

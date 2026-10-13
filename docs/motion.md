@@ -58,6 +58,11 @@ when rendered. There is no JavaScript-driven fallback.
 | `MotionMaterial` | Component: a MotionView showing a backdrop material that crossfades and fades | |
 | `getMaterialAvailability(material)` | | `Availability` |
 | `MotionShape` | Component: a MotionView drawing a shape that morphs between paths and draws its stroke | |
+| `MotionShader` | Component: a MotionView with a built-in ripple, dissolve, distortion or specular effect | |
+| `getShaderEffectAvailability(effect)` | | `Availability` |
+| `MotionEmitter` | Component: a MotionView that emits particles over its children | |
+| `startParticles(target, { durationMs, reducedMotion })`, `stopParticles(target)` | Starts or stops a MotionEmitter | `Promise<ParticlePlayback>`, `Promise<void>` |
+| `getParticleAvailability()` | | `Availability` |
 
 A target is a mounted `MotionView`, as received through its `ref`. `animate`,
 `stagger` and `timeline` validate synchronously and throw `SparkError`
@@ -75,8 +80,8 @@ not settle within 60 s, infinite loops whose shared cycle exceeds 20 s
 `E_INVALID_ARGUMENT`.
 
 The API is imperative and works from any code holding a `MotionView` (or `MotionSymbol`) ref.
-`MotionView`, `MotionPresence`, `MotionNumber`, `MotionText`, `MotionSymbol`, `MotionMaterial` and `MotionShape` are
-the only React-specific exports (components). There are no hooks.
+`MotionView`, `MotionPresence`, `MotionNumber`, `MotionText`, `MotionSymbol`, `MotionMaterial`, `MotionShape`,
+`MotionShader` and `MotionEmitter` are the only React-specific exports (components). There are no hooks.
 
 ## Layout, presence and shared elements
 
@@ -171,7 +176,8 @@ JS: validate and normalize  ── one JSON plan ──▶  RNSparkMotion (Turbo
 `maskInsetBottom`, `maskInsetStart`, `maskInsetEnd` and `maskRadius` (points), and a
 [`MotionMaterial`](#backdrop-materials)'s `materialIntensity` and `materialTintOpacity` (0-1), and a
 [`MotionShape`](#shapes)'s `morph`, `strokeStart`, `strokeEnd` (0-1), `strokeWidth` (points), `fillColor` and
-`strokeColor` (colors). `scale` drives both
+`strokeColor` (colors), and a [`MotionShader`](#shader-effects-and-particles)'s `rippleProgress`, `dissolveProgress`,
+`specularProgress` (0-1) and `distortion` (-1 to 1). `scale` drives both
 axes and cannot be combined with `scaleX`/`scaleY`. Velocities are units per second (multiply React Native
 gesture velocities, which are per millisecond, by 1000). Durations and delays are
 milliseconds. A bare number in `animate()` means `spring(value)` with the platform
@@ -449,6 +455,128 @@ panel instead of a faded-in material.
 material draws as the same flat fill, whatever its blending mode. Kitchen Sink goldens use `withinWindow` materials and
 are captured at rest (the material faded out, and tinted); flows check materials, intensity, tint and crossfades
 through the values the engine reports.
+
+## Shader effects and particles
+
+```tsx
+const card = useRef<MotionTarget>(null);
+<MotionShader ref={card} effect={{ type: 'ripple', origin: { x: 40, y: 28 } }} style={styles.card}>…</MotionShader>
+
+await setMotionValues(card.current, { rippleProgress: 0 });
+animate(card.current, { rippleProgress: timing(1, { durationMs: 700, easing: 'easeOut' }) });   // a ring from the origin
+
+const confetti = useRef<MotionTarget>(null);
+<MotionEmitter ref={confetti} emitter={{ shape: 'line', cells: [{ image: 'star', color: '#f59e0b', birthRate: 24, lifetimeMs: 2400, velocity: 90, emissionAngle: 90 }] }}
+  style={StyleSheet.absoluteFill} />
+await startParticles(confetti.current, { durationMs: 600 });                                    // a burst
+```
+
+`MotionShader` is a `MotionView` (every `MotionView` prop, `ref` and operation applies) with one built-in effect over
+the view and its children, set by `effect`. Each effect is one engine property: springs, timing, keyframes,
+interruption, the hidden-window rule, telemetry, scroll links and `waitForMotion` work on it like on any property.
+
+| `effect.type` | Property | Options | Drawn by |
+| --- | --- | --- | --- |
+| `ripple` | `rippleProgress`, 0 to 1: a ring travels from `origin` past the farthest corner | `origin` (default the centre), `width` (points, 1-400, default 24), `refraction` (the ring's refraction index at its strongest, 1-3, default 1.7) | Core Image `CITorusLensDistortion` layer filter |
+| `distortion` | `distortion`, -1 (pinch) to 1 (bulge) | `center` (default the centre), `radius` (points, default half the shorter side) | Core Image `CIBumpDistortion` layer filter |
+| `specular` | `specularProgress`, 0 to 1: a band of light sweeps across | `angle` (degrees: 0 runs left to right, 90 top down; default 20), `width` (the band's half-width as a share of the sweep, 0.01-1, default 0.25), `intensity` (0-1, default 0.6), `color` (default white) | `CAGradientLayer` over the content |
+| `dissolve` | `dissolveProgress`, 0 (shown) to 1 (gone): the view breaks up along a noise pattern | `cellSize` (points, 2-200, default 12), `softness` (of the edge, 0.01-1, default 0.1) | Metal: a `CAMetalLayer` mask that a precompiled shader renders |
+
+`origin` and `center` are `{ x, y }` in points from the view's top-left corner, the coordinates of a press event's
+`locationX` and `locationY`; they are not mirrored in right-to-left layouts. Unknown options, values out of range or
+another type are `E_INVALID_ARGUMENT`. An effect's property on a `MotionShader` with another effect, or on any other
+`MotionView` (in `initial`, `animate`, `stagger`, `timeline`, `setMotionValues` or a scroll link), is
+`E_UNSUPPORTED_OPTION`. Each effect is installed only while it shows something or animates, like the blur: a ripple or
+sweep at 0 or 1 and a distortion at 0 cost nothing. A ripple and a sweep show nothing at both ends, so replay one with
+`setMotionValues(target, { rippleProgress: 0 })` before animating it to 1 again.
+
+**Why these renderers.** Core Image's distortion filters on the view's layer bend whatever Core Animation composites
+there, React Native children included, with no snapshot of the content, and Core Animation plays their baked
+keyframes in the window server: the app does no work per frame, exactly as for the blur. The sweep does not depend on
+the content, so a gradient layer is the cheapest way to draw it, and it renders in driver captures. A noise threshold
+is a per-pixel comparison that no Core Animation property animates, so the dissolve is a Metal mask, rendered by the
+app on display frames while it animates.
+
+**Built-in shaders only.** Spark runs no user-supplied shader source in this version: shader code runs on the GPU in
+the app's process, where a malformed or hostile shader can hang or reset the GPU, read memory it should not, or fail
+to compile at run time on some Mac. Every effect is a fixed, reviewed filter or shader with validated numeric
+options. The Metal source (`packages/motion/macos/SparkMotionShaders.metal`) is compiled ahead of time into
+`SparkMotionShaders.metallib.h` by `bun run motion:shaders` (Metal 2.0, `-std=macos-metal2.0`, so every GPU macOS 14
+supports loads it), which needs Xcode's Metal toolchain; apps, the podspec and CI never compile Metal source. The header
+records the source's and the library's SHA-256 and the compiler that built it; `tests/motion-shaders.test.ts` fails
+when the header was not rebuilt from the current source or its bytes do not match, and on a Mac with that compiler it
+rebuilds the library and compares the bytes (it says why it skips that elsewhere).
+
+**The dissolve's mask.** The dissolve is the view's layer mask: `maskInset*` and `maskRadius` on it, and a style that
+clips with a mask (`overflow: 'hidden'` with per-corner radii), are `E_UNSUPPORTED_OPTION`. At rest at 1 it is an
+empty mask that hides the view without Metal; at 0 there is none. The mask is rendered at point resolution and scaled
+up smoothly: the noise is several points across.
+
+**Metal frames.** A display link runs only while a dissolve animates in a visible window, and renders each frame at
+the engine's value for the frame's target time (at [the frame rate motion uses](#frame-rate-and-power)); nothing runs
+at rest. It follows the display of one animating view, held weakly, and is made again for another when that one stops
+animating, unmounts, or moves to another window or on or off screen. The mask has three drawables, and a display frame
+is skipped while the GPU still has two frames in flight, so the main thread does not wait for a drawable; frames on the
+virtual clock and the frame a dissolve settles on are always rendered. A new drawable size (the view resized) renders
+the frame again. Frames are skipped while the window is hidden, minimized or occluded, the view is hidden, or none of it is on
+screen (scrolled out of view); the final frame is rendered when it settles. Each frame takes one drawable and encodes
+one draw of three vertices with its uniforms passed by value; the device, command queue, pipeline and render-pass
+descriptor are created once, and no buffers or textures are created per frame (the command buffer and encoder are
+Metal's own per-frame objects). The frame is presented with the Core Animation transaction, so the mask moves with the
+view. Unmounting removes the mask and its drawables.
+
+**Device loss.** The removal of the Metal device (`MTLCopyAllDevicesWithObserver`) or a failed command buffer drops
+every Metal object, and the next frame rebuilds them on the default device. Without any device (some virtual
+machines, or none came back), `getShaderEffectAvailability('dissolve')` reports `host-restriction` (it builds the
+library and pipeline a frame would use, so `available: true` means one can be rendered), rendering a
+dissolving `MotionShader` throws `E_UNAVAILABLE`, and a dissolve already mounted is removed from its view, which shows
+its content. A device added or removed makes the next check or frame look again. Ripple, distortion and the sweep need no
+Metal device.
+
+**Particles.** `MotionEmitter` is a `MotionView` with a `CAEmitterLayer` over its children (clip it with
+`overflow: 'hidden'`). The window server simulates and draws the particles; the engine does not solve their state, so
+emission is not a motion plan: `startParticles(target, { durationMs, reducedMotion })` emits until `stopParticles`, or
+for `durationMs` on the view's layer clock, and resolves `{ played }`; particles alive when emission stops finish their
+lifetime. A target that is not a mounted `MotionEmitter` is `E_UNSUPPORTED_OPTION`.
+
+| `emitter` | Values |
+| --- | --- |
+| `shape` | `point` (default), `line` (along `size.width`), `rectangle`, `circle` (inside `size`) |
+| `position`, `size` | The emitter's centre (`{ x, y }` from the top-left corner, default the centre) and size (default the view's) |
+| `blend` | `normal` (default) or `additive` (overlaps brighten, for sparks and glows) |
+| `seed` | The random seed (default 1), so a run's particles repeat |
+| `cells` | One to eight `ParticleCell`s: `image` (`circle`, `square`, `star`, `spark`, or `{ symbol }` of an SF Symbol this macOS has, else `E_NOT_FOUND`), `color`, `birthRate` (per second, 0-500), `lifetimeMs` (1-10000) and `lifetimeRangeMs`, `velocity` and `velocityRange` (points per second), `emissionAngle` (degrees on screen: 0 right, 90 down) and `emissionRange` (default 360), `spin` and `spinRange` (degrees per second, clockwise), `scale`, `scaleRange`, `scaleSpeed`, `alphaSpeed`, `acceleration` (`{ x, y }` in points per second squared) |
+
+An emitter may keep at most 1,000 particles alive (each cell's `birthRate` times its `lifetimeMs` plus
+`lifetimeRangeMs`); more is `E_INVALID_ARGUMENT`, and the native view enforces the same bounds. `getParticleAvailability()` is motion's availability: Core
+Animation's emitter needs nothing else. Unmounting the view or closing its window stops emission; while its window is
+hidden the emitter layer is paused and resumes from that instant. In a visible window, an emitter scrolled out of
+view still costs the window server its simulation: stop it.
+
+**Budget for the reference Mac (M1, 8 GB).** These are design bounds, not measurements on that Mac (this work was
+developed on an M4 Max): a ripple or distortion is one Core Image pass over the view's pixels per composited frame
+while it is installed, in the window server, and is removed at rest; a sweep is one gradient layer; a dissolve's mask
+of a 400 × 300 point view is 120,000 pixels in two drawables (about 1 MB) and one trivial fragment pass per frame,
+plus one draw call encoded on the main thread; particles cost the window server in proportion to the
+particles alive, which the 1,000-particle bound per emitter caps. Keep the particles alive on one screen to a few
+thousand, and animate effects rather than holding many at partial values.
+
+**Reduce Motion.** The ripple, the distortion and the sweep travel: under the `fade` alternate they change at once and
+the view fades in where it is over 200 ms (the [rule](#reduce-motion) for a step that moves a view without driving its
+opacity); `instant` changes them at once without the fade (a ripple or sweep then shows nothing); `play` plays as written. The dissolve
+does not travel: it fades its threshold over 200 ms without overshoot. Particles travel: `startParticles` emits
+nothing under Reduce Motion and resolves `{ played: 'none' }`, unless `reducedMotion` is `play`; turning Reduce Motion on
+stops the emitters that were not started with `play`.
+
+**Virtual clock and captures.** The filters and the sweep are animations of the `MotionView`'s own layer, which the
+virtual clock pauses; the dissolve renders a frame when an animation starts and each time the clock advances, at the
+engine's value; the emitter is a sublayer of the paused layer, so the clock holds and advances it. Driver captures
+render in-process with `cacheDisplayInRect:`, which draws the sweep (at its presented value, mid-sweep too) and the
+dissolve's rest states, but not Core Image filters (the ripple and distortion), the Metal mask mid-dissolve, or
+particles. Kitchen Sink goldens are captured at rest, and flows check the effects through the values the engine reports
+and the readouts of `startParticles`. `tests/motion-coordinator.native.mm` renders frozen virtual-clock frames of the
+ripple, distortion and dissolve with `CARenderer`, Core Animation's in-process renderer, which does draw filters and
+Metal layers; the driver's capture does not use it yet.
 
 ## Text transitions
 
@@ -730,7 +858,9 @@ otherwise). Times are engine milliseconds (media time on the real clock).
 its animations are paused) and `cues`: the view's cues of its latest motion, played (`frameMs`, the
 target timestamp of the frame they played on; on the virtual clock their own time) or pending
 (`frameMs` null). In a driver run cues are recorded there instead of played (`played: false`), so a
-flow never makes a sound.
+flow never makes a sound. A `MotionShader` adds `shader` (`type`, `installed`, `renderer`: `coreAnimation` or `metal`,
+and for Metal `renderedFrames` and `renderedValue`, the value of the last frame rendered), a `MotionEmitter` adds
+`particles` (`emitting`, `paused`, `cells`).
 
 ### Simulation in the test driver
 
@@ -788,6 +918,13 @@ the brush visual's and the tint's `Opacity`, and the crossfade onto two brush vi
 takes the baked sample paths as `PathKeyFrameAnimation` keyframes (the same point structure), with `TrimStart`/`TrimEnd`,
 `StrokeThickness` and the fill and stroke `CompositionColorBrush`es as their own keyframe animations (#237).
 
+`MotionShader` and `MotionEmitter` throw `E_UNSUPPORTED_PLATFORM`, `startParticles` and `stopParticles` reject with
+it, and `getShaderEffectAvailability` and `getParticleAvailability` report `unsupported-platform` until the Composition
+engine lands (#237). The intended glue maps the ripple and distortion onto Win2D `DisplacementMapEffect` brushes over a
+`CompositionVisualSurface` of the element, the sweep onto an animated `CompositionLinearGradientBrush`, the dissolve onto
+a precompiled pixel shader behind a `CompositionEffectBrush` mask (or a Direct2D custom effect), and particles onto a
+Composition sprite pool, with the same budget and Reduce Motion rules.
+
 `MotionPresence` and `MotionView`'s layout, presence and shared-element props are typed
 unsupported the same way: both components throw `E_UNSUPPORTED_PLATFORM` when rendered.
 Layout and shared elements will reuse `Engine::handoff` with the Windows glue comparing layout
@@ -805,7 +942,7 @@ boxes around each mounting transaction (#376).
   presentation.
 * Layout boxes are layout geometry: transforms of ancestors (other than a layout-animated
   ancestor `MotionView`) are not part of them.
-* Shader effects (ripple, dissolve, distortion, glass specular) and particles (#405) are not part of motion yet. Backdrop materials crossfade and fade; their
+* Shader effects are built-ins only ([Shader effects and particles](#shader-effects-and-particles)). Backdrop materials crossfade and fade; their
   blur radius does not animate ([Backdrop materials](#backdrop-materials)).
 * Reduce Motion, the hidden-window rule and cues apply per plan; a plan with several views
   plays its cues by its first view's state.

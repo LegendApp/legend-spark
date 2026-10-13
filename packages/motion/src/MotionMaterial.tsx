@@ -40,5 +40,5 @@ export function MotionMaterial({ material, blendingMode, state, emphasized, tint
     tintColor: tintColor === undefined ? undefined : JSON.stringify(parseColor(tintColor, "tintColor")),
     crossfade: JSON.stringify(transitionSpec(crossfade ?? { type: "timing", durationMs: 250 })),
   };
-  return useMotionView(props, nativeMaterial);
+  return useMotionView(props, { native: nativeMaterial, properties: ["materialIntensity", "materialTintOpacity"] });
 }

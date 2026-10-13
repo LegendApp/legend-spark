@@ -9,7 +9,8 @@ intent: >
   presence and shared elements is at rest (its rows' enter animations start where they are). Visual effects is at rest.
   Backdrop materials is at rest, its within-window material over the stripes; its Liquid Glass availability readout,
   which depends on the Mac's macOS, is masked. Shapes is at rest: the circle filled blue, the checkmark not drawn yet and
-  the progress ring at a quarter.
+  the progress ring at a quarter. Shaders and particles is at rest: no effect is
+  installed and nothing is emitted.
   Text and symbols opens on the virtual clock, which then advances 2 s so its typewriter has typed its first phrase; its
   symbol availability readout, which depends on the Mac's macOS, is masked.
 checks: [MOT-VISUAL-01]
@@ -43,6 +44,9 @@ matrix:
 - launchApp: { openUrl: "spark-ks://motion-system/shapes", stopApp: false }
 - assertVisible: { id: motion-system-shapes-root }
 - assertScreenshot: { golden: motion-system-shapes, mask: [{ id: infra-shell-sidebar }] }
+- launchApp: { openUrl: "spark-ks://motion-system/shaders", stopApp: false }
+- assertVisible: { id: motion-system-shaders-root }
+- assertScreenshot: { golden: motion-system-shaders, mask: [{ id: infra-shell-sidebar }] }
 - launchApp: { openUrl: "spark-ks://motion-system/text-and-symbols", stopApp: false }
 - assertVisible: { id: motion-system-text-and-symbols-root }
 - advanceClock: 2000ms

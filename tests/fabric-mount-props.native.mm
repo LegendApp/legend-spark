@@ -46,7 +46,7 @@ struct ViewProps : Props {
   bool getClipsContentToBounds() const { return false; }
 };
 struct ReactNativeFeatureFlags { static bool enableIOSViewClipToPaddingBox() { return false; } };
-struct SparkMotionViewProps : ViewProps { std::string initialValues, layout, sharedId, transition, material, tintColor, crossfade, shape; };
+struct SparkMotionViewProps : ViewProps { std::string initialValues, layout, sharedId, transition, material, tintColor, crossfade, shape, shaderEffect, particleEmitter; };
 struct DesktopDragViewProps : Props { std::string sourceJson, optionsJson; bool disabled = false; };
 struct EventEmitter { using Shared = std::shared_ptr<EventEmitter const>; virtual ~EventEmitter() = default; };
 struct SidebarSplitViewEventEmitter : EventEmitter {
@@ -252,6 +252,17 @@ int main() { @autoreleasepool {
   SparkMotionShapeView *shapeView = [shaped valueForKey:@"motionShape"];
   CHECK(shapeView.superview == shaped && shapeView.pathCount == 1 && [shapeView.shapeLayer.lineCap isEqual:kCALineCapRound]);
   CHECK(CGRectEqualToRect(CGPathGetPathBoundingBox(shapeView.shapeLayer.path), CGRectMake(0, 0, 30, 0)) && std::abs(shapeView.shapeLayer.strokeEnd - 0.25) < 1e-6 && shapeView.shapeLayer.strokeColor);
+  // A MotionShader and a MotionEmitter: the effect and the emitter come from the mount, on the view's own layer (no subviews).
+  RNSparkMotionView *shaded = [[RNSparkMotionView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];
+  shaded.reactTag = @45;
+  auto shadedProps = std::make_shared<SparkMotionViewProps>(); shadedProps->initialValues = R"({"distortion":0.5})";
+  shadedProps->shaderEffect = R"({"type":"distortion","radius":12})";
+  shadedProps->particleEmitter = R"({"shape":"point","cells":[{"image":"spark","birthRate":10,"lifetimeMs":500}]})";
+  [shaded updateProps:shadedProps oldProps:nullptr];
+  SparkMotionShader *shader = [shaded valueForKey:@"motionShader"];
+  SparkMotionEmitter *particles = [shaded valueForKey:@"motionEmitter"];
+  CHECK([shader.type isEqual:@"distortion"] && [shader installedOn:shaded] && [[shaded.layer valueForKeyPath:@"filters.sparkDistortion.inputScale"] doubleValue] == 0.5);
+  CHECK(particles.layer.superlayer == shaded.layer && particles.layer.emitterCells.count == 1 && shaded.subviews.count == 0);
 
   // Drag view: drag source, accepted types and enabled state come from the mount.
   RNDesktopDragView *drag = [[RNDesktopDragView alloc] initWithFrame:NSMakeRect(0, 0, 100, 40)];

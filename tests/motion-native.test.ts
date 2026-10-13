@@ -21,6 +21,7 @@ test.skipIf(process.platform !== "darwin")("portable motion engine: closed-form 
 }, 90000);
 
 test.skipIf(process.platform !== "darwin")("macOS coordinator rejects malformed requests, bakes onto layers and drives the virtual clock", async () => {
-  const flags = ["-fobjc-arc", "-fblocks", "-mmacosx-version-min=14.0", "-DSPARK_TEST_DRIVER=1", "-I", path.join(motion, "macos"), "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "CoreImage", "-framework", "Symbols"];
-  expect(await compileAndRun([path.join(root, "tests/motion-coordinator.native.mm"), path.join(motion, "macos/SparkMotionCoordinator.mm"), path.join(motion, "macos/SparkMotionMaterial.mm"), path.join(motion, "macos/SparkMotionShape.mm")], flags)).toContain("Motion coordinator tests passed");
+  const flags = ["-fobjc-arc", "-fblocks", "-mmacosx-version-min=14.0", "-DSPARK_TEST_DRIVER=1", "-I", path.join(motion, "macos"), "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "CoreImage", "-framework", "Metal", "-framework", "Symbols"];
+  expect(await compileAndRun([path.join(root, "tests/motion-coordinator.native.mm"), path.join(motion, "macos/SparkMotionCoordinator.mm"), path.join(motion, "macos/SparkMotionMaterial.mm"), path.join(motion, "macos/SparkMotionShape.mm"),
+    path.join(motion, "macos/SparkMotionShader.mm"), path.join(motion, "macos/SparkMotionEmitter.mm")], flags)).toContain("Motion coordinator tests passed");
 }, 90000);

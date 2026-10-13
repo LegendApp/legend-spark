@@ -88,10 +88,10 @@ checks:
     blocking: true
     spec: "#174 MOT.core, #52 INFRA.driver"
   MOT-UNSUP-01:
-    title: On Windows motion is typed unsupported (unsupported-platform, SparkError E_UNSUPPORTED_PLATFORM) with no substitute, layout, presence, backdrop materials and shapes included
+    title: On Windows motion is typed unsupported (unsupported-platform, SparkError E_UNSUPPORTED_PLATFORM) with no substitute, layout, presence, backdrop materials, shapes, shader effects and particles included
     platforms: [windows]
     blocking: true
-    spec: "#174 MOT.core, #175 MOT.layout, follow-ups #237 and #376"
+    spec: "#174 MOT.core, #175 MOT.layout, #405 MOT.shaders, follow-ups #237 and #376"
   MOT-PRESENCE-01:
     title: An added MotionView plays enter; a removed MotionPresence child stays mounted while its exit plays and unmounts once it settles
     platforms: [macos]
@@ -115,7 +115,7 @@ checks:
     covers:
       - ./motion#MotionView
   MOT-VISUAL-01:
-    title: The Springs, Keyframes and timelines, Scroll link and JS block, Layout, presence and shared elements, Visual effects, Backdrop materials, Shapes, Text and symbols, and Accessibility, power and lifecycle screens match their approved goldens in light and dark, English and Arabic, with MotionViews at rest or paused by the virtual clock
+    title: The Springs, Keyframes and timelines, Scroll link and JS block, Layout, presence and shared elements, Visual effects, Backdrop materials, Shapes, Shaders and particles, Text and symbols, and Accessibility, power and lifecycle screens match their approved goldens in light and dark, English and Arabic, with MotionViews at rest or paused by the virtual clock
     platforms: [macos]
     blocking: true
     spec: "docs/e2e-flows.md Visual goldens; #227"
@@ -252,6 +252,38 @@ checks:
     spec: "#406 MOT.shapes, #177 MOT.a11y"
     covers:
       - ./motion#MotionShape
+  MOT-SHADER-01:
+    title: A MotionShader's ripple, dissolve, distortion and specular sweep are engine properties that animate, interrupt and settle like any motion (the ripple, distortion and sweep on the compositor, the dissolve as a precompiled Metal mask rendered on the clock's frames), a dissolved card hides at rest, and getShaderEffectAvailability reports each effect truthfully
+    platforms: [macos]
+    blocking: true
+    spec: "#405 MOT.shaders"
+    covers:
+      - ./motion#MotionShader
+      - ./motion#getShaderEffectAvailability
+      - ./motion#getShaderEffectAvailability(ripple).available
+      - ./motion#getShaderEffectAvailability(dissolve).available
+      - ./motion#getShaderEffectAvailability(distortion).available
+      - ./motion#getShaderEffectAvailability(specular).available
+      - ./motion#animate
+      - ./motion#setMotionValues
+  MOT-PARTICLE-01:
+    title: A MotionEmitter emits from startParticles until stopParticles, or for a burst's duration, reports what played, and getParticleAvailability reports particles truthfully
+    platforms: [macos]
+    blocking: true
+    spec: "#405 MOT.shaders"
+    covers:
+      - ./motion#MotionEmitter
+      - ./motion#startParticles
+      - ./motion#stopParticles
+      - ./motion#getParticleAvailability
+  MOT-SHADREDUCE-01:
+    title: With Reduce Motion on (simulated), a ripple changes at once and its card fades in where it is, a dissolve written as a spring plays as a 200 ms fade, and startParticles emits nothing (played none)
+    platforms: [macos]
+    blocking: true
+    spec: "#405 MOT.shaders, #177 MOT.a11y"
+    covers:
+      - ./motion#MotionShader
+      - ./motion#startParticles
   MOT-PATH-01:
     title: motionPath moves a view along an SVG path as keyframes the engine plays on the compositor, turned to the path's heading, and it settles at the path's end
     platforms: [macos]

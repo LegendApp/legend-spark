@@ -2,9 +2,11 @@
 // (never raise), plans bake onto the host layer, the virtual clock pauses and advances layer time,
 // and completions resolve exactly once. Compiled and run by tests/motion-native.test.ts.
 #import <AppKit/AppKit.h>
+#import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 #import "SparkMotionCoordinator.h"
 #include <cstdio>
+#include <vector>
 using namespace spark::motion;
 
 static int failures = 0;
@@ -45,6 +47,80 @@ static int failures = 0;
 @implementation ShapeHost
 @synthesize motionShape = _motionShape;
 @end
+
+/** A MotionShader or a MotionEmitter: a host with a built-in effect or particles. */
+@interface EffectHost : TestHost
+@property (nonatomic, strong) SparkMotionShader *motionShader;
+@property (nonatomic, strong) SparkMotionEmitter *motionEmitter;
+@end
+@implementation EffectHost
+@synthesize motionShader = _motionShader, motionEmitter = _motionEmitter;
+@end
+
+/**
+ * What Core Animation itself draws for `view`'s layer tree now (filters, Metal layers and paused layer time included), as
+ * BGRA pixels, rendered in-process with CARenderer; empty without a Metal device. The view must have no window.
+ */
+static std::vector<uint8_t> Render(NSView *view)
+{
+  id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+  if (!device) return {};
+  const NSUInteger width = (NSUInteger)NSWidth(view.bounds), height = (NSUInteger)NSHeight(view.bounds);
+  MTLTextureDescriptor *descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:width height:height mipmapped:NO];
+  descriptor.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+  descriptor.storageMode = MTLStorageModeShared;
+  id<MTLTexture> texture = [device newTextureWithDescriptor:descriptor];
+  id<MTLCommandQueue> queue = [device newCommandQueue];
+  CARenderer *renderer = [CARenderer rendererWithMTLTexture:texture options:@{ kCARendererMetalCommandQueue: queue }];
+  // A root of its own: the view's layer keeps its timing (paused by the virtual clock) inside it.
+  CALayer *layer = view.layer, *root = [CALayer layer];
+  const CGPoint position = layer.position;
+  root.frame = CGRectMake(0, 0, width, height);
+  renderer.layer = root;
+  renderer.bounds = root.frame;
+  // The renderer draws what transactions commit after it takes the layer.
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  [root addSublayer:layer];
+  layer.position = CGPointMake(width * layer.anchorPoint.x, height * layer.anchorPoint.y);  // AppKit anchors layers at their corner
+  [CATransaction commit];
+  [CATransaction flush];
+  [renderer beginFrameAtTime:CACurrentMediaTime() timeStamp:NULL];
+  [renderer addUpdateRect:renderer.bounds];
+  [renderer render];
+  [renderer endFrame];
+  id<MTLCommandBuffer> done = [queue commandBuffer];
+  [done commit];
+  [done waitUntilCompleted];
+  std::vector<uint8_t> pixels(width * height * 4);
+  [texture getBytes:pixels.data() bytesPerRow:width * 4 fromRegion:MTLRegionMake2D(0, 0, width, height) mipmapLevel:0];
+  renderer.layer = nil;
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  [layer removeFromSuperlayer];
+  layer.position = position;
+  [CATransaction commit];
+  return pixels;
+}
+/** Pixels that differ between two renders by more than a rounding step. */
+static size_t Changed(const std::vector<uint8_t> &a, const std::vector<uint8_t> &b)
+{
+  size_t changed = 0;
+  for (size_t i = 0; i + 3 < std::min(a.size(), b.size()); i += 4)
+    if (std::abs(a[i] - b[i]) + std::abs(a[i + 1] - b[i + 1]) + std::abs(a[i + 2] - b[i + 2]) + std::abs(a[i + 3] - b[i + 3]) > 12) changed++;
+  return changed;
+}
+/** Black and white stripes 8 points apart, for distortions to bend. */
+static void Stripes(NSView *view)
+{
+  for (CGFloat x = 0; x < NSWidth(view.bounds); x += 8) {
+    CALayer *stripe = [CALayer layer];
+    stripe.frame = CGRectMake(x, 0, 4, NSHeight(view.bounds));
+    stripe.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
+    [view.layer addSublayer:stripe];
+  }
+  view.layer.backgroundColor = CGColorGetConstantColor(kCGColorWhite);
+}
 
 @interface TestSymbol : NSView <SparkMotionSymbolHost>
 @property (nonatomic) NSInteger motionTag;
@@ -721,7 +797,256 @@ int main()
     CHECK([unshaped->code isEqual:@"E_UNSUPPORTED_OPTION"] && [unshapedSet->code isEqual:@"E_UNSUPPORTED_OPTION"]);
     [motion unregisterTag:16];
     [motion unregisterTag:18];
+    // Shader effects (docs/motion.md#shader-effects-and-particles): engine properties baked onto Core Image filters and a
+    // gradient overlay, or rendered by the precompiled Metal dissolve on the clock's frames; each is installed only while
+    // it shows something or animates. Frozen virtual-clock frames are rendered by Core Animation itself (CARenderer).
+    const BOOL metal = MTLCreateSystemDefaultDevice() != nil;
+    if (!metal) std::puts("NOTE no Metal device: dissolve and the rendered-frame checks report the device's absence instead");
+    CHECK(SparkMotionShaderSupported(@"ripple") && SparkMotionShaderSupported(@"distortion") && SparkMotionShaderSupported(@"specular") && !SparkMotionShaderSupported(@"plasma"));
+    CHECK(SparkMotionShaderSupported(@"dissolve") == metal);
+    NSString *shaderError = nil;
+    CHECK(![SparkMotionShader shader:@{ @"type": @"plasma" } error:&shaderError] && [shaderError containsString:@"Unknown shader effect"]);
+    NSDictionary *wide = @{ @"type": @"ripple", @"width": @"wide" }, *offCentre = @{ @"type": @"distortion", @"center": @{ @"x": @1 } };
+    CHECK(![SparkMotionShader shader:wide error:&shaderError] && [shaderError containsString:@"width"]);
+    CHECK(![SparkMotionShader shader:offCentre error:&shaderError] && [shaderError containsString:@"center"]);
+    // Effect hosts have no window, so CARenderer can render their layer trees as their own roots (nothing turns the run
+    // loop, which would drop the animations of windowless layers); particles need the window for its visibility.
+    auto effectHost = [&](NSInteger tag, NSDictionary *config, BOOL inWindow = NO) {
+      EffectHost *effect = [[EffectHost alloc] initWithFrame:NSMakeRect(0, 0, 96, 48)];
+      effect.wantsLayer = YES;
+      effect.motionTag = tag;
+      Stripes(effect);
+      NSString *error = nil;
+      effect.motionShader = config ? [SparkMotionShader shader:config error:&error] : nil;
+      if (inWindow) [window.contentView addSubview:effect];
+      [motion registerHost:effect initial:kIdentity];
+      return effect;
+    };
+    auto telemetryOf = [&](NSInteger tag) { return JSON0(Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion telemetry:tag resolve:resolve reject:reject]; })->value); };
+    auto filterNamed = [](NSView *view, NSString *name) -> CIFilter * { for (CIFilter *filter in view.layer.filters) if ([filter.name isEqual:name]) return filter; return nil; };
+
+    // Ripple: a ring from the origin. At rest nothing is installed; while it travels the filter is, and its radius and
+    // refraction animate on the compositor; once it settles the filter comes off.
+    EffectHost *ripple = effectHost(20, @{ @"type": @"ripple", @"origin": @{ @"x": @24, @"y": @12 }, @"width": @16, @"refraction": @2 });
+    const std::vector<uint8_t> flat = Render(ripple);
+    CHECK(!filterNamed(ripple, @"sparkRipple") && !ripple.layerUsesCoreImageFilters);
+    Outcome *rippled = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"ripple", 20, @{ @"rippleProgress": Timing(1, 400) }) resolve:resolve reject:reject]; });
+    CIFilter *ring = filterNamed(ripple, @"sparkRipple");
+    CHECK(!rippled->code && [ring.attributes[kCIAttributeFilterName] isEqual:@"CITorusLensDistortion"] && ripple.layerUsesCoreImageFilters);
+    CHECK([ripple.layer animationForKey:@"spark.motion.filters.sparkRipple.inputRadius"] && [ripple.layer animationForKey:@"spark.motion.filters.sparkRipple.inputRefraction"]);
+    const CGPoint origin = [ripple convertPointToLayer:NSMakePoint(24, ripple.isFlipped ? 12 : 48 - 12)];
+    CHECK([[ring valueForKey:kCIInputCenterKey] X] == origin.x && [[ring valueForKey:kCIInputCenterKey] Y] == origin.y && [[ring valueForKey:kCIInputWidthKey] doubleValue] == 16);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    __block double halfwayRadius = 0, halfwayRefraction = 0;
+    [motion presenting:^{ halfwayRadius = [[filterNamed(ripple, @"sparkRipple") valueForKey:kCIInputRadiusKey] doubleValue]; halfwayRefraction = [[filterNamed(ripple, @"sparkRipple") valueForKey:@"inputRefraction"] doubleValue]; }];
+    const double reach = std::hypot(96 - 24, 48 - 12) + 16;
+    CHECK(std::abs(halfwayRadius - reach / 2) < 1e-6 && std::abs(halfwayRefraction - 1.5) < 1e-6);  // 1 + (2 − 1) · (1 − ½) at full strength
+    const std::vector<uint8_t> rippling = Render(ripple);
+    CHECK(!metal || Changed(flat, rippling) > 50);  // the frozen frame: the ring bends the stripes
+    NSDictionary *rippleTelemetry = telemetryOf(20);
+    CHECK([rippleTelemetry[@"shader"][@"type"] isEqual:@"ripple"] && [rippleTelemetry[@"shader"][@"renderer"] isEqual:@"coreAnimation"] && [rippleTelemetry[@"shader"][@"installed"] isEqual:@YES]);
+    CHECK(std::abs([rippleTelemetry[@"values"][@"rippleProgress"] doubleValue] - 0.5) < 1e-9);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    CHECK(rippled->resolved && !filterNamed(ripple, @"sparkRipple") && !ripple.layerUsesCoreImageFilters && ripple.motionModel[RippleProgress] == 1);
+    CHECK(!metal || Changed(flat, Render(ripple)) == 0);
+    // Under Reduce Motion the ring does not travel: it changes at once and the view fades in where it is (the fade alternate).
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @20, @"values": @{ @"rippleProgress": @0 } } resolve:resolve reject:reject]; });
+    [motion simulate:@{ @"reduceMotion": @YES }];
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"ripple-reduced", 20, @{ @"rippleProgress": Timing(1, 400) }) resolve:resolve reject:reject]; });
+    NSDictionary *reducedRipple = telemetryOf(20)[@"motion"][@"kinds"];
+    CHECK([reducedRipple[@"rippleProgress"] isEqual:@"jump"] && [reducedRipple[@"opacity"] isEqual:@"timing"]);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:250 resolve:resolve reject:reject]; });
+    CHECK(!filterNamed(ripple, @"sparkRipple") && ripple.layer.opacity == 1);
+    [motion simulate:@{ @"reduceMotion": @NO }];
+    // Effect properties belong to their effect: another effect's, or a plain MotionView's, are E_UNSUPPORTED_OPTION.
+    EffectHost *plainView = effectHost(25, nil);
+    Outcome *wrongEffect = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"wrong", 20, @{ @"distortion": Timing(1, 100) }) resolve:resolve reject:reject]; });
+    Outcome *plainEffect = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @25, @"values": @{ @"dissolveProgress": @0.5 } } resolve:resolve reject:reject]; });
+    CHECK([wrongEffect->code isEqual:@"E_UNSUPPORTED_OPTION"] && [plainEffect->code isEqual:@"E_UNSUPPORTED_OPTION"]);
+
+    // Distortion: a bulge that stays while it is not 0, clamped to ±1; it follows a change of the effect's options.
+    EffectHost *bulge = effectHost(21, @{ @"type": @"distortion" });
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @21, @"values": @{ @"distortion": @3 } } resolve:resolve reject:reject]; });
+    CIFilter *bump = filterNamed(bulge, @"sparkDistortion");
+    CHECK([bump.attributes[kCIAttributeFilterName] isEqual:@"CIBumpDistortion"] && [[bump valueForKey:kCIInputScaleKey] doubleValue] == 1 && [[bump valueForKey:kCIInputRadiusKey] doubleValue] == 24);
+    CHECK(!metal || Changed(flat, Render(bulge)) > 50);
+    // A resize moves the default centre and radius with the view.
+    [bulge setFrameSize:NSMakeSize(120, 60)];
+    [motion hostDidResize:bulge];
+    const CGPoint resized = [bulge convertPointToLayer:NSMakePoint(60, 30)];
+    CIVector *centre = [bulge.layer valueForKeyPath:@"filters.sparkDistortion.inputCenter"];
+    CHECK(centre.X == resized.x && centre.Y == resized.y && [[bulge.layer valueForKeyPath:@"filters.sparkDistortion.inputRadius"] doubleValue] == 30);
+    [bulge setFrameSize:NSMakeSize(96, 48)];
+    [motion hostDidResize:bulge];
+    SparkMotionShader *previousShader = bulge.motionShader;
+    bulge.motionShader = [SparkMotionShader shader:@{ @"type": @"distortion", @"center": @{ @"x": @10, @"y": @10 }, @"radius": @8 } error:&shaderError];
+    [motion host:bulge shaderChangedFrom:previousShader];
+    bump = filterNamed(bulge, @"sparkDistortion");
+    CHECK(bump && [[bump valueForKey:kCIInputRadiusKey] doubleValue] == 8 && bulge.layer.filters.count == 1);
+    Outcome *pinch = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"pinch", 21, @{ @"distortion": Timing(0, 100) }) resolve:resolve reject:reject]; });
+    CHECK([bulge.layer animationForKey:@"spark.motion.filters.sparkDistortion.inputScale"] != nil);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:100 resolve:resolve reject:reject]; });
+    CHECK(pinch->resolved && !filterNamed(bulge, @"sparkDistortion") && !bulge.layer.filters);
+
+    // Specular: a light band sweeps across; an overlay over the content while it travels. A capture renders the band.
+    EffectHost *glass = effectHost(22, @{ @"type": @"specular", @"angle": @0, @"width": @0.2, @"intensity": @1 });
+    glass.layer.cornerRadius = 6;
+    Outcome *swept = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"sweep", 22, @{ @"specularProgress": Timing(1, 400) }) resolve:resolve reject:reject]; });
+    CAGradientLayer *band = nil;
+    for (CALayer *sublayer in glass.layer.sublayers) if ([sublayer isKindOfClass:CAGradientLayer.class]) band = (CAGradientLayer *)sublayer;
+    CHECK(!swept->code && band && band.zPosition > 0 && band.masksToBounds && band.cornerRadius == 6 && [band animationForKey:@"spark.motion.locations"]);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    __block NSArray<NSNumber *> *locations = nil;
+    __block NSBitmapImageRep *capture = nil;
+    [motion presenting:^{
+      locations = band.locations;
+      capture = [glass bitmapImageRepForCachingDisplayInRect:glass.bounds];
+      [glass cacheDisplayInRect:glass.bounds toBitmapImageRep:capture];
+    }];
+    CHECK(std::abs(locations[1].doubleValue - 0.5) < 1e-6 && std::abs(locations[0].doubleValue - 0.3) < 1e-6 && std::abs(locations[2].doubleValue - 0.7) < 1e-6);
+    // At the band's centre a black stripe shows lit; at the edge it stays black (the capture is at the backing scale).
+    const double scale = capture.pixelsWide / 96.0;
+    NSColor *lit = [capture colorAtX:(NSInteger)(49 * scale) y:(NSInteger)(24 * scale)], *dark = [capture colorAtX:(NSInteger)(1 * scale) y:(NSInteger)(24 * scale)];
+    CHECK(lit.brightnessComponent > 0.6 && dark.brightnessComponent < 0.1);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    CHECK(swept->resolved && !band.superlayer);
+
+    // Dissolve: the Metal mask is rendered on each frame of the virtual clock at the engine's value for it; at rest at 1 an
+    // empty mask hides the view without Metal, at 0 there is none. A lost device is rebuilt on the next frame.
+    if (metal) {
+      EffectHost *dust = effectHost(23, @{ @"type": @"dissolve", @"cellSize": @6, @"softness": @0.2 });
+      Outcome *dissolved = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"dissolve", 23, @{ @"dissolveProgress": Timing(1, 400) }) resolve:resolve reject:reject]; });
+      CHECK(!dissolved->code && [dust.layer.mask isKindOfClass:CAMetalLayer.class] && dust.motionShader.renderedFrames == 1 && dust.motionShader.renderedValue == 0);
+      Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+      CHECK(dust.motionShader.renderedFrames == 2 && std::abs(dust.motionShader.renderedValue - 0.5) < 1e-9);
+      const std::vector<uint8_t> half = Render(dust);
+      size_t shown = 0;
+      for (size_t i = 3; i < half.size(); i += 4) shown += half[i] > 128;
+      CHECK(shown > half.size() / 4 / 5 && shown < half.size() / 4 * 4 / 5);  // part of the view shows, part has dissolved
+      NSDictionary *dustTelemetry = telemetryOf(23)[@"shader"];
+      CHECK([dustTelemetry[@"renderer"] isEqual:@"metal"] && [dustTelemetry[@"renderedFrames"] isEqual:@2] && std::abs([dustTelemetry[@"renderedValue"] doubleValue] - 0.5) < 1e-9);
+      // A frozen frame renders once: reading state or capturing does not render again.
+      Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion state:23 resolve:resolve reject:reject]; });
+      CHECK(dust.motionShader.renderedFrames == 2);
+      SparkMotionShaderDeviceLost();
+      Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:100 resolve:resolve reject:reject]; });
+      CHECK(dust.motionShader.renderedFrames == 3 && std::abs(dust.motionShader.renderedValue - 0.75) < 1e-9);
+      // A new drawable size renders the same value again, for that size.
+      [dust setFrameSize:NSMakeSize(120, 60)];
+      [motion hostDidResize:dust];
+      CHECK(dust.motionShader.renderedFrames == 4 && CGSizeEqualToSize(((CAMetalLayer *)dust.layer.mask).drawableSize, CGSizeMake(120, 60)));
+      [dust setFrameSize:NSMakeSize(96, 48)];
+      [motion hostDidResize:dust];
+      CHECK(dust.motionShader.renderedFrames == 5);
+      Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:100 resolve:resolve reject:reject]; });
+      CHECK(dissolved->resolved && dust.layer.mask && ![dust.layer.mask isKindOfClass:CAMetalLayer.class] && ![dust.motionShader installedOn:dust]);
+      Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @23, @"values": @{ @"dissolveProgress": @0 } } resolve:resolve reject:reject]; });
+      CHECK(!dust.layer.mask);
+      // Under Reduce Motion a dissolve is not travel: it plays as the 200 ms fade of its threshold.
+      [motion simulate:@{ @"reduceMotion": @YES }];
+      Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request(@"dissolve-reduced", 23, @{ @"dissolveProgress": @{ @"type": @"spring", @"to": @1, @"mass": @1, @"stiffness": @100, @"damping": @5 } }) resolve:resolve reject:reject]; });
+      CHECK([telemetryOf(23)[@"motion"][@"kinds"][@"dissolveProgress"] isEqual:@"timing"]);
+      Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+      [motion simulate:@{ @"reduceMotion": @NO }];
+      // The dissolve is the view's mask: the motion mask's properties are E_UNSUPPORTED_OPTION on it.
+      Outcome *masked = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @23, @"values": @{ @"maskInsetTop": @4 } } resolve:resolve reject:reject]; });
+      CHECK([masked->code isEqual:@"E_UNSUPPORTED_OPTION"]);
+      [motion unregisterTag:23];
+      CHECK(!dust.layer.mask);
+    } else {
+      CHECK(![SparkMotionShader shader:@{ @"type": @"dissolve" } error:&shaderError] && [shaderError containsString:@"Metal device"]);
+    }
+    [motion unregisterTag:20];
+    [motion unregisterTag:21];
+    [motion unregisterTag:22];
+
+    // Particles: a CAEmitterLayer on the view's layer that emits between start and stop, or for a burst on the layer's
+    // clock; nothing under Reduce Motion unless asked to play; held while the window is hidden; stopped on unmount.
+    NSString *emitterError = nil;
+    CHECK(![SparkMotionEmitter emitter:@{ @"cells": @[] } error:&emitterError] && [emitterError containsString:@"cells"]);
+    NSDictionary *cell = @{ @"birthRate": @10, @"lifetimeMs": @1000 };
+    auto withImage = [&](id image) { NSMutableDictionary *copy = [cell mutableCopy]; copy[@"image"] = image; return @{ @"cells": @[copy] }; };
+    CHECK(![SparkMotionEmitter emitter:withImage(@"triangle") error:&emitterError] && [emitterError containsString:@"image"]);
+    CHECK(![SparkMotionEmitter emitter:withImage(@{ @"symbol": @"no.such.symbol" }) error:&emitterError]);
+    // The budget holds natively too: rates and lifetimes in range, at most 1,000 particles alive and eight cells.
+    NSDictionary *crowded = @{ @"cells": @[@{ @"birthRate": @500, @"lifetimeMs": @1500 }, @{ @"birthRate": @400, @"lifetimeMs": @1000 }] };
+    CHECK(![SparkMotionEmitter emitter:crowded error:&emitterError] && [emitterError containsString:@"at most 1000"]);
+    NSDictionary *speedy = @{ @"cells": @[@{ @"birthRate": @600, @"lifetimeMs": @100 }] }, *full = @{ @"cells": @[@{ @"birthRate": @500, @"lifetimeMs": @2000 }] };
+    NSDictionary *many = @{ @"cells": [NSArray arrayWithObjects:cell, cell, cell, cell, cell, cell, cell, cell, cell, nil] };
+    CHECK(![SparkMotionEmitter emitter:speedy error:&emitterError] && [emitterError containsString:@"birthRate"]);
+    CHECK(![SparkMotionEmitter emitter:many error:&emitterError] && [emitterError containsString:@"eight"]);
+    CHECK([SparkMotionEmitter emitter:full error:&emitterError] != nil);
+    EffectHost *confetti = effectHost(24, nil, YES);
+    confetti.motionEmitter = [SparkMotionEmitter emitter:@{ @"shape": @"line", @"position": @{ @"x": @48, @"y": @0 }, @"size": @{ @"width": @96, @"height": @0 }, @"seed": @7, @"cells": @[
+      @{ @"image": @"star", @"birthRate": @40, @"lifetimeMs": @1500, @"velocity": @60, @"emissionAngle": @90, @"emissionRange": @60, @"spin": @180, @"color": @[@0.7, @0.2, @30, @1], @"acceleration": @{ @"x": @0, @"y": @100 } },
+      @{ @"image": @{ @"symbol": @"heart.fill" }, @"birthRate": @5, @"lifetimeMs": @1000 } ] } error:&emitterError];
+    CHECK(confetti.motionEmitter != nil);
+    auto particles = [&](NSDictionary *request) { return Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion startParticles:request resolve:resolve reject:reject]; }); };
+    Outcome *emitted = particles(@{ @"tag": @24 });
+    CAEmitterLayer *emitterLayer = confetti.motionEmitter.layer;
+    CAEmitterCell *star = emitterLayer.emitterCells.firstObject;
+    CHECK(emitted->resolved && [JSON(emitted->value)[@"played"] isEqual:@"particles"] && emitterLayer.superlayer == confetti.layer && emitterLayer.birthRate == 1);
+    CHECK(emitterLayer.emitterCells.count == 2 && star.birthRate == 40 && std::abs(star.lifetime - 1.5) < 1e-9 && star.contents && emitterLayer.seed == 7 && emitterLayer.emitterShape == kCAEmitterLayerLine);
+    // Angles are on screen: 90° and gravity point down, whichever way the layer's geometry runs.
+    const BOOL down = [confetti convertPointToLayer:NSMakePoint(0, confetti.isFlipped ? 1 : 47)].y > [confetti convertPointToLayer:NSMakePoint(0, confetti.isFlipped ? 0 : 48)].y;
+    CHECK(std::abs(star.emissionLongitude - (down ? 1 : -1) * M_PI / 2) < 1e-9 && star.yAcceleration == (down ? 100 : -100));
+    NSDictionary *emitting = telemetryOf(24)[@"particles"];
+    CHECK([emitting[@"emitting"] isEqual:@YES] && [emitting[@"cells"] isEqual:@2] && [emitting[@"paused"] isEqual:@NO]);
+    [motion simulateWindow:window visible:NO];
+    CHECK(confetti.motionEmitter.paused && [telemetryOf(24)[@"particles"][@"paused"] isEqual:@YES]);
+    [motion simulateWindow:window visible:YES];
+    CHECK(!confetti.motionEmitter.paused);
+    Outcome *quiet = Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion stopParticles:@{ @"tag": @24 } resolve:resolve reject:reject]; });
+    CHECK(quiet->resolved && emitterLayer.birthRate == 0 && [telemetryOf(24)[@"particles"][@"emitting"] isEqual:@NO]);
+    // A burst emits for its duration on the layer's clock, which the virtual clock holds and advances.
+    particles(@{ @"tag": @24, @"durationMs": @300 });
+    CHECK(emitterLayer.birthRate == 0 && [emitterLayer animationForKey:@"spark.particles.burst"] && [confetti.motionEmitter emitting:confetti]);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    CHECK([confetti.motionEmitter emitting:confetti]);
+    Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion advanceClock:200 resolve:resolve reject:reject]; });
+    CHECK(![confetti.motionEmitter emitting:confetti]);
+    // Reduce Motion: nothing is emitted, unless the request asks to play.
+    [motion simulate:@{ @"reduceMotion": @YES }];
+    Outcome *reducedParticles = particles(@{ @"tag": @24 });
+    CHECK([JSON(reducedParticles->value)[@"played"] isEqual:@"none"] && emitterLayer.birthRate == 0);
+    Outcome *playedParticles = particles(@{ @"tag": @24, @"reducedMotion": @"play" });
+    CHECK([JSON(playedParticles->value)[@"played"] isEqual:@"particles"] && emitterLayer.birthRate == 1);
+    [motion simulate:@{ @"reduceMotion": @NO }];
+    // Turning Reduce Motion on stops what was not started to play under it.
+    [motion simulate:@{ @"reduceMotion": @YES }];
+    CHECK(emitterLayer.birthRate == 1);
+    [motion simulate:@{ @"reduceMotion": @NO }];
+    particles(@{ @"tag": @24 });
+    [motion simulate:@{ @"reduceMotion": @YES }];
+    CHECK(emitterLayer.birthRate == 0 && ![confetti.motionEmitter emitting:confetti]);
+    [motion simulate:@{ @"reduceMotion": @NO }];
+    // A resize lays the emitter out again: it fills the view, its default size follows.
+    [confetti setFrameSize:NSMakeSize(120, 60)];
+    [motion hostDidResize:confetti];
+    CHECK(CGRectEqualToRect(emitterLayer.frame, confetti.layer.bounds) && emitterLayer.bounds.size.width == 120);
+    [confetti setFrameSize:NSMakeSize(96, 48)];
+    [motion hostDidResize:confetti];
+    CHECK([particles(@{ @"tag": @24, @"durationMs": @-1 })->code isEqual:@"E_INVALID_ARGUMENT"] && [particles(@{ @"tag": @24, @"reducedMotion": @"skip" })->code isEqual:@"E_INVALID_ARGUMENT"]);
+    CHECK([particles(@{ @"tag": @25 })->code isEqual:@"E_UNSUPPORTED_OPTION"] && plainView.layer.sublayers.count == 12);  // the stripes' layers only
+    [motion unregisterTag:25];
+    [motion unregisterTag:24];
+    CHECK(emitterLayer.birthRate == 0);
     Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion setClock:@"real" resolve:resolve reject:reject]; });
+    // On the real clock a display link renders dissolves while they animate. It follows one of them: when that one stops,
+    // it is made again for the next, and it ends with the last.
+    if (metal) {
+      EffectHost *first = effectHost(26, @{ @"type": @"dissolve" }, YES), *second = effectHost(27, @{ @"type": @"dissolve" }, YES);
+      for (NSNumber *tag in @[@26, @27])
+        Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion run:Request([NSString stringWithFormat:@"link-%@", tag], tag.integerValue, @{ @"dissolveProgress": Timing(1, 5000) }) resolve:resolve reject:reject]; });
+      id link = [motion valueForKey:@"_effectLink"];
+      CHECK([link isKindOfClass:CADisplayLink.class] && [first.motionShader installedOn:first] && [second.motionShader installedOn:second]);
+      Call(^(SparkMotionResolve resolve, SparkMotionReject reject) { [motion set:@{ @"tag": @26, @"values": @{ @"dissolveProgress": @1 } } resolve:resolve reject:reject]; });
+      id next = [motion valueForKey:@"_effectLink"];
+      CHECK([next isKindOfClass:CADisplayLink.class] && next != link);
+      [motion unregisterTag:26];
+      [motion unregisterTag:27];
+      CHECK([motion valueForKey:@"_effectLink"] == nil);
+    }
 
     // Until motion drives them, the background, corners and shadow follow the view's style: the engine takes what the
     // style put on the layer, so an animation starts from it, and motion leaves the layer alone until it owns the channel.
