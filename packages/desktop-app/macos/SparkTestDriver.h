@@ -62,4 +62,9 @@ FOUNDATION_EXPORT void SparkTestDriverWrapRender(SparkTestDriverRenderWrapper wr
 typedef void (^SparkTestDriverStateObserver)(NSDictionary *values);
 FOUNDATION_EXPORT void SparkTestDriverObserveSimulatedState(SparkTestDriverStateObserver observer);
 FOUNDATION_EXPORT void SparkTestDriverDidSimulateState(NSDictionary *values);
+// The virtual clock (motion's setClock and advanceClock): motion reports each change, and modules that animate outside
+// motion (window choreography) follow it. `advancedMs` is 0 for a mode change.
+typedef void (^SparkTestDriverClockObserver)(BOOL virtualClock, double advancedMs);
+FOUNDATION_EXPORT void SparkTestDriverObserveClock(SparkTestDriverClockObserver observer);
+FOUNDATION_EXPORT void SparkTestDriverDidChangeClock(BOOL virtualClock, double advancedMs);
 #endif

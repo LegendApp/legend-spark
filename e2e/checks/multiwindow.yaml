@@ -257,3 +257,89 @@ checks:
     spec: "docs/api-window-contract.md §Window pools"
     covers:
       - ./windows#getWindowPerformanceAvailability
+  MW-CHOREO-01:
+    title: getWindowChoreographyAvailability reports zooms, animated frames, close transitions and attached windows available on macOS
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window choreography"
+    covers:
+      - ./windows#getWindowChoreographyAvailability
+      - ./windows#getWindowChoreographyAvailability(zoom).available
+      - ./windows#getWindowChoreographyAvailability(frame).available
+      - ./windows#getWindowChoreographyAvailability(closeTransition).available
+      - ./windows#getWindowChoreographyAvailability(attach).available
+  MW-CHOREO-02:
+    title: On the virtual clock, a window opened from a thumbnail shows at the thumbnail, is halfway to its frame at half its duration and at its frame at the end; closing it shrinks it back into the thumbnail before it closes
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window choreography"
+    covers:
+      - ./windows#openWindowFrom
+  MW-CHOREO-03:
+    title: A window opened from a list row in the main window grows out of the row to its frame, and closing it returns it into the row
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window choreography"
+    covers:
+      - ./windows#openWindowFrom
+  MW-CHOREO-04:
+    title: Compact↔full and Settings pane resizes animate the frame (halfway at half the duration on the virtual clock); a second animation interrupts the first, which reports interrupted, and stopping leaves the window where it is
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window choreography"
+    covers:
+      - ./windows#animateWindowBounds
+      - ./windows#stopWindowAnimation
+  MW-CHOREO-05:
+    title: Another animation during a close transition's shrink cancels the close (interrupted) and the window stays open; the next close shrinks and closes
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window choreography"
+    covers:
+      - ./windows#openWindowFrom
+      - ./windows#animateWindowBounds
+  MW-CHOREO-06:
+    title: With Reduce Motion on, a zoom is a fade at the window's frame and a resize is immediate, and both report Reduce Motion
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window choreography"
+    covers:
+      - ./windows#openWindowFrom
+      - ./windows#animateWindowBounds
+  MW-CHOREO-07:
+    title: Tearing the notes panel off opens a window out of its slot and leaves a placeholder; merging shrinks the window back into the slot, closes it and the panel returns
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window choreography"
+    covers:
+      - ./windows#openWindowFrom
+      - ./windows#setWindowCloseTransition
+  MW-CHOREO-08:
+    title: An inspector attaches at the main window's trailing edge, docked, and shows the item selected in the main window's list as the selection changes
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window choreography"
+    covers:
+      - ./windows#attachWindow
+  MW-CHOREO-09:
+    title: A palette attaches at the main window's leading edge; a move 12 points off its docked frame snaps it back, a move 200 points off undocks it, and a move back within the magnetic distance docks it again
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window choreography"
+    covers:
+      - ./windows#attachWindow
+  MW-CHOREO-10:
+    title: On screen, zooms and shrinks look continuous at the display's frame rate, closing hands key focus to the main window, a dragged palette docks magnetically and moves with the main window, it hides while the app is inactive, and the system Reduce Motion setting turns zooms into fades
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window choreography"
+    covers:
+      - ./windows#openWindowFrom
+      - ./windows#attachWindow
+  MW-CHOREO-11:
+    title: "On Windows, getWindowChoreographyAvailability reports unsupported-platform for every feature and the operations reject E_UNSUPPORTED_PLATFORM (implementation: #434)"
+    platforms: [windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window choreography"
+    covers:
+      - ./windows#getWindowChoreographyAvailability

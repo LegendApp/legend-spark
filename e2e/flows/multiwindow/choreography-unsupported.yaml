@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window choreography is typed unsupported on Windows
+intent: >
+  On Windows, getWindowChoreographyAvailability reports unsupported-platform for zooms, animated frames, close
+  transitions and attached windows, and opening the detail window from a thumbnail rejects E_UNSUPPORTED_PLATFORM, so
+  no window opens (implementation: #434).
+checks: [MW-CHOREO-11]
+tags: [multiwindow]
+platforms: [windows]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/choreography" }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-root }, timeout: 10s }
+- assertVisible: { id: multiwindow-choreography-availability-zoom-unsupported-platform }
+- assertVisible: { id: multiwindow-choreography-availability-frame-unsupported-platform }
+- assertVisible: { id: multiwindow-choreography-availability-closeTransition-unsupported-platform }
+- assertVisible: { id: multiwindow-choreography-availability-attach-unsupported-platform }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=zoom-thumb" }
+- assertVisible: { id: multiwindow-choreography-run-1-steps-1 }
+- assertVisible: { id: multiwindow-choreography-error-E_UNSUPPORTED_PLATFORM }
+- assertWindow: { count: 1 }
