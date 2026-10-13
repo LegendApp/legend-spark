@@ -34,11 +34,15 @@ import { defineScreens } from "../../shell/registry";
 import { FrameAutosave } from "./FrameAutosave";
 
 export default defineScreens("windows", [
-  { id: "frame-autosave", title: "Frame autosave", summary: "Restores each window's frame.", component: FrameAutosave },
+  { id: "frame-autosave", title: "Frame autosave", titles: { ar: "حفظ الإطار تلقائيًا" }, summary: "Restores each window's frame.", summaries: { ar: "يستعيد إطار كل نافذة." }, component: FrameAutosave },
 ]);
 ```
 
-Screen ids are lowercase kebab-case. Every screen opens from
+Screen ids are lowercase kebab-case. `titles` and `summaries` hold the title and
+summary in every language the shell speaks besides English, for the catalog cards,
+the breadcrumb and their accessibility labels; a screen's `*-messages.ts` can supply
+them. `tests/kitchen-sink-screen-titles.test.ts` fails when a registered screen
+lacks one. Every screen opens from
 `spark-ks://<area>/<screen>`, an area's screen list from `spark-ks://<area>`, and
 the catalog from `spark-ks://`. Links to unknown areas or screens show a
 “No such screen” page instead of silently opening the catalog.
@@ -129,8 +133,8 @@ launches (`--spark-*-report`, see `launch.ts`) install none of it.
 The shell, the Document menu and the unsaved-changes prompt are localized in
 `shell/i18n.ts` (English and Arabic). The locale comes from the system
 (`getSystemInfo().locale`); other languages use English. Arabic lays the shell out
-right to left, including the breadcrumb separator. Screen titles, summaries and
-contents belong to each area. The app declares `en`, `ar` and `fr` in `localizations`,
+right to left, including the breadcrumb separator. Screen titles, summaries (in
+`screens/<area>/index.tsx`) and contents belong to each area. The app declares `en`, `ar` and `fr` in `localizations`,
 so on macOS its menus, dialogs and AppKit panels follow the system language, the
 per-app language (Internationalization > Native strings) or a launch override such as
 `-AppleLanguages "(ar)" -AppleLocale ar_EG`. French is there to verify Spark's and

@@ -27,7 +27,7 @@ const navigation = await import("../examples/kitchen-sink/shell/navigation.ts");
 beforeEach(() => { navigation.navigate({ kind: "catalog" }); links.listener = links.initial = links.fail = undefined; links.removed = 0; });
 
 const Component = () => React.createElement("Screen");
-const screen = (id: string) => ({ id, title: id, summary: id, component: Component });
+const screen = (id: string) => ({ id, title: id, titles: { ar: id }, summary: id, summaries: { ar: id }, component: Component });
 
 test("Kitchen Sink registers the deep-link scheme with native builds", () => {
   const config = JSON.parse(readFileSync(path.join(import.meta.dirname, "../examples/kitchen-sink/desktop.config.json"), "utf8"));

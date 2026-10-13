@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { useAppState, useI18n } from "./app-controller";
 import { catalog } from "./catalog";
 import { navigate, useLocation } from "./navigation";
-import { screenTitle, type CatalogArea, type CatalogScreen } from "./registry";
+import { screenSummary, screenTitle, type CatalogArea, type CatalogScreen } from "./registry";
 import { routeURL, type Location, type Route } from "./routes";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -119,11 +119,13 @@ function AreaScreens({ area }: { area: CatalogArea }) {
 
 function ScreenRow({ area, screen }: { area: CatalogArea; screen: CatalogScreen }) {
   const route: Route = { kind: "screen", area: area.id, screen: screen.id };
-  const title = screenTitle(screen, useI18n().locale);
-  return <Pressable testID={`infra-shell-screen-${area.id}-${screen.id}`} accessibilityRole="button" accessibilityLabel={title} accessibilityHint={screen.summary}
+  const { locale } = useI18n();
+  const title = screenTitle(screen, locale);
+  const summary = screenSummary(screen, locale);
+  return <Pressable testID={`infra-shell-screen-${area.id}-${screen.id}`} accessibilityRole="button" accessibilityLabel={title} accessibilityHint={summary}
     onPress={() => navigate(route)} className="gap-1 rounded-lg border border-border bg-surface p-4">
     <Text className="font-semibold text-foreground">{title}</Text>
-    <Text className="text-sm text-muted">{screen.summary}</Text>
+    <Text className="text-sm text-muted">{summary}</Text>
     <Text className="text-xs text-muted">{routeURL(route)}</Text>
   </Pressable>;
 }
