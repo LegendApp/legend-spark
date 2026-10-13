@@ -38,6 +38,7 @@ int main() { @autoreleasepool {
   NSDictionary *root = @{ @"id": @"editor", @"title": @"Edit", @"target": @{ @"menu": @"edit" }, @"items": @[item], @"enabled": @YES, @"_sparkOwner": @"owner" };
   Check(!Publish(module, @[root]), @"Semantic menu binding failed");
   Check([copy.title isEqual:@"Copy document"] && copy.action == @selector(selected:), @"Native command was not bound");
+  Check([edit.title isEqual:@"Localized Edit"], @"Edit menu lost its localized title");
   [module selected:copy]; Check([CapturedEvent[@"itemId"] isEqual:@"custom-copy"], @"Action identity was lost");
   NSMutableDictionary *missing = [root mutableCopy]; missing[@"target"] = @{ @"id": @"missing" };
   Check([Publish(module, @[missing]) isEqual:@"E_NOT_FOUND"], @"Missing target did not reject");
@@ -154,11 +155,20 @@ int main() { @autoreleasepool {
     @{ @"id": @"new-tab", @"role": @"newTab", @"title": @"New Tab", @"enabled": @YES, @"placement": @{ @"before": @{ @"role": @"mergeAllWindows" } }, @"_sparkOwner": @"tabs-owner" },
     @{ @"id": @"next-tab", @"role": @"selectNextTab", @"enabled": @YES, @"_sparkOwner": @"tabs-owner" } ] };
   Check(!Publish(module, @[tabs]), @"Tab role publication failed");
+  // A located native root keeps its system-localized title; the label names only a root Spark creates (#449).
+  Check([windowItem.title isEqual:@"Localized Window"], [NSString stringWithFormat:@"Window menu lost its localized title (got '%@')", windowItem.title]);
   NSMenuItem *newTab = Find(windowItem.submenu, @{ @"id": @"new-tab" }, NO), *nextTab = Find(windowItem.submenu, @{ @"id": @"next-tab" }, NO);
   Check(newTab.action == @selector(newWindowForTab:) && !newTab.target && [windowItem.submenu indexOfItem:newTab] + 1 == [windowItem.submenu indexOfItem:merge], @"newTab role lost its responder action or placement");
   Check(nextTab.action == @selector(selectNextTab:) && Find(windowItem.submenu, @{ @"role": @"mergeAllWindows" }, NO) == merge, @"Tab roles did not map to AppKit's tab actions");
   Check(!Publish(module, @[]), @"Tab role removal failed");
   Check(windowItem.submenu.numberOfItems == 1 && merge.action == @selector(mergeAllWindows:), @"Tab role removal did not restore the Window menu");
+  NSDictionary *fileRoot = @{ @"id": @"file-root", @"title": @"File", @"target": @{ @"menu": @"file" }, @"_sparkOwner": @"file-owner", @"items": @[] };
+  NSDictionary *fileOverlay = @{ @"id": @"file-overlay", @"title": @"Files", @"target": @{ @"menu": @"file" }, @"_sparkOwner": @"file-overlay-owner", @"items": @[] };
+  Check(!Publish(module, @[fileRoot]), @"Missing semantic root was not created");
+  Check([Find(main, @{ @"menu": @"file" }, NO).title isEqual:@"File"], @"A created semantic root did not use its label");
+  Check(!Publish(module, @[fileRoot, fileOverlay]), @"Overlay of a created semantic root failed");
+  Check([Find(main, @{ @"menu": @"file" }, NO).title isEqual:@"Files"], @"A later owner did not retitle a root Spark created");
+  Check(!Publish(module, @[]), @"Created semantic root removal failed");
   // AppKit withholds a key equivalent that a main-menu item with another action already has: the
   // template's View > Show Sidebar holds Control-Command-S (#446). A published shortcut takes it over.
   NSEventModifierFlags controlCommand = NSEventModifierFlagControl | NSEventModifierFlagCommand;

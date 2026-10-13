@@ -85,12 +85,13 @@ static NSMenuItem *KeyHolder(NSMenu *menu, NSString *identity, NSMenuItem *excep
 @property NSArray *published;
 @property BOOL observing;
 @property NSHashTable<NSMenuItem *> *configured;
+@property NSHashTable<NSMenuItem *> *created;
 - (void)restore;
 @end
 @implementation RNNativeMenu
 RCT_EXPORT_MODULE(NativeMenu)
 + (BOOL)requiresMainQueueSetup { return YES; }
-- (instancetype)init { if (self = [super init]) { _undo = [NSMutableArray new]; _published = @[]; _configured = [NSHashTable weakObjectsHashTable]; } return self; }
+- (instancetype)init { if (self = [super init]) { _undo = [NSMutableArray new]; _published = @[]; _configured = [NSHashTable weakObjectsHashTable]; _created = [NSHashTable weakObjectsHashTable]; } return self; }
 #if RCT_DEV
 - (NSArray<NSString *> *)supportedEvents { return @[@"NativeMenuAction", @"NativeMenuLifecycle", @"NativeDeveloperMenu"]; }
 #else
@@ -99,7 +100,7 @@ RCT_EXPORT_MODULE(NativeMenu)
 - (void)startObserving { self.observing = YES; }
 - (void)stopObserving { self.observing = NO; }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeMenuSpecJSI>(params); }
-- (void)restore { for (void (^undo)(void) in self.undo.reverseObjectEnumerator) undo(); [self.undo removeAllObjects]; [self.configured removeAllObjects]; }
+- (void)restore { for (void (^undo)(void) in self.undo.reverseObjectEnumerator) undo(); [self.undo removeAllObjects]; [self.configured removeAllObjects]; [self.created removeAllObjects]; }
 - (void)identifyNativeMenus {
   NSMenu *main = NSApp.mainMenu;
   for (NSMenuItem *item in main.itemArray) {
@@ -199,6 +200,7 @@ RCT_EXPORT_MODULE(NativeMenu)
       if (root && target[@"menu"]) objc_setAssociatedObject(item, &LocationKey, target[@"menu"], OBJC_ASSOCIATION_COPY_NONATOMIC);
       [menu insertItem:item atIndex:[self index:config[@"placement"] inMenu:menu]];
       [self.undo addObject:^{ if (item.menu) [item.menu removeItem:item]; }];
+      [self.created addObject:item];
     }
     [self.configured addObject:item];
     if (config[@"items"]) {
@@ -210,7 +212,11 @@ RCT_EXPORT_MODULE(NativeMenu)
         [self.undo addObject:^{ if (NSApp.helpMenu == helpMenu) NSApp.helpMenu = previousHelp; }];
       }
       if ([config[@"_sparkLifecycle"] boolValue]) [self observeMenu:item.submenu config:config];
-      [self apply:config to:item];
+      // A native root located by target keeps its title, which the system localizes (#449);
+      // the label names only a root Spark creates.
+      NSMutableDictionary *applied = config.mutableCopy;
+      if (root && target[@"menu"] && ![self.created containsObject:item]) [applied removeObjectForKey:@"title"];
+      [self apply:applied to:item];
       [self install:config[@"items"] into:item.submenu root:NO];
     } else {
       if (item.submenu && ![config[@"role"] isEqual:@"services"]) Fail(@"E_INVALID_ARGUMENT", @"An action cannot replace a submenu; target it with a submenu item");
