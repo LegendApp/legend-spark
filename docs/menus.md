@@ -67,6 +67,15 @@ and different modifiers (for example `Cmd+O` / `Cmd+Alt+O`). Neither item may us
 shortcut, the alternate gets the Option modifier. Other menu surfaces reject `alternate`
 and `'mixed'` with `E_UNSUPPORTED_OPTION`.
 
+AppKit withholds a key equivalent, without any error, while another menu-bar item with a
+different action has it. A published shortcut therefore takes over from a host menu item:
+the template's View ▸ Show Sidebar uses `Ctrl+Cmd+S`, so a Spark item with that shortcut gets
+it and Show Sidebar shows none until the menu is removed. When another published item has the
+shortcut under a different action (a `type: 'role'` item, for example), publication rejects
+`E_BUSY` naming that item and keeps the previous publication. Published action and checkbox
+items share one action, so when two of them use the same shortcut AppKit shows it on both
+and the key runs at most one of them.
+
 `createMenu` and `useMenu` accept `onOpen(event)` and `onClose(event)`. Their
 `MenuLifecycleEvent` contains `menuId`, the contributed submenu item's ID (including
 nested submenus), not the registration's owner ID. Events are scoped to the current

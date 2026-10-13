@@ -139,5 +139,28 @@ int main() { @autoreleasepool {
   Check(NSApp.helpMenu == hostHelp.submenu && Find(hostHelp.submenu, @{ @"id": @"guide" }, NO), @"Existing Help menu was replaced instead of extended");
   Check(!Publish(module, @[]), @"Existing Help cleanup failed");
   Check(NSApp.helpMenu == hostHelp.submenu && [hostHelp.title isEqual:@"Host Help"] && !Find(hostHelp.submenu, @{ @"id": @"guide" }, NO), @"Existing Help menu was not restored");
+  // AppKit withholds a key equivalent that a main-menu item with another action already has: the
+  // template's View > Show Sidebar holds Control-Command-S (#446). A published shortcut takes it over.
+  NSEventModifierFlags controlCommand = NSEventModifierFlagControl | NSEventModifierFlagCommand;
+  NSMenuItem *viewItem = [[NSMenuItem alloc] initWithTitle:@"View" action:nil keyEquivalent:@""]; viewItem.submenu = [NSMenu new]; [main addItem:viewItem];
+  NSMenuItem *sidebar = [viewItem.submenu addItemWithTitle:@"Show Sidebar" action:@selector(toggleSidebar:) keyEquivalent:@"s"];
+  sidebar.keyEquivalentModifierMask = controlCommand;
+  NSDictionary *shortcut = @{ @"key": @"s", @"modifiers": @(controlCommand) };
+  NSDictionary *workspaces = @{ @"id": @"workspaces", @"title": @"Workspaces", @"_sparkOwner": @"workspaces-owner", @"items": @[
+    @{ @"id": @"save-workspace", @"title": @"Save Workspace", @"shortcut": shortcut, @"_sparkOwner": @"workspaces-owner" } ] };
+  Check(!Publish(module, @[workspaces]), @"Shortcut held by a host item failed to publish");
+  NSMenuItem *saveWorkspace = Find(main, @{ @"id": @"save-workspace" }, YES);
+  Check([saveWorkspace.keyEquivalent isEqual:@"s"] && saveWorkspace.keyEquivalentModifierMask == controlCommand && !sidebar.keyEquivalent.length, [NSString stringWithFormat:@"Published shortcut was withheld (got '%@', Show Sidebar has '%@')", saveWorkspace.keyEquivalent, sidebar.keyEquivalent]);
+  NSEvent *press = [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:controlCommand timestamp:0 windowNumber:0 context:nil characters:@"s" charactersIgnoringModifiers:@"s" isARepeat:NO keyCode:1];
+  CapturedEvent = nil;
+  Check([main performKeyEquivalent:press] && [CapturedEvent[@"itemId"] isEqual:@"save-workspace"], @"Control-Command-S did not run the published item");
+  Check(!Publish(module, @[]), @"Shortcut takeover removal failed");
+  Check([sidebar.keyEquivalent isEqual:@"s"] && sidebar.keyEquivalentModifierMask == controlCommand, @"Removal did not give Show Sidebar its shortcut back");
+  // Two published items with different actions cannot share a shortcut: AppKit would withhold one.
+  NSDictionary *clash = @{ @"id": @"clash", @"title": @"Clash", @"_sparkOwner": @"clash-owner", @"items": @[
+    @{ @"id": @"shrink", @"role": @"minimize", @"shortcut": @{ @"key": @"j", @"modifiers": @(controlCommand) }, @"_sparkOwner": @"clash-owner" },
+    @{ @"id": @"jump", @"title": @"Jump", @"shortcut": @{ @"key": @"j", @"modifiers": @(controlCommand) }, @"_sparkOwner": @"clash-owner" } ] };
+  Check([Publish(module, @[clash]) isEqual:@"E_BUSY"], @"A shortcut another published item holds was not rejected E_BUSY");
+  Check(!Find(main, @{ @"id": @"clash" }, NO) && [sidebar.keyEquivalent isEqual:@"s"], @"Rejected publication was not rolled back");
   puts("Application menu tests passed");
 } return 0; }

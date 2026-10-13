@@ -15,6 +15,8 @@ const items: MenuRootItem[] = [{
     { type: "checkbox", id: "mixed-selection", label: "Mixed selection", checked: "mixed" },
     { type: "action", id: "hidden-sample", label: "Hidden sample", hidden: true },
     { type: "action", id: "starred-sample", label: "Starred sample", icon: { type: "symbol", name: "star.fill" } },
+    // The template's View > Show Sidebar also uses Control-Command-S; a published shortcut takes it over (#446).
+    { type: "action", id: "sidebar-sample", label: "Sidebar sample", shortcut: "Ctrl+CmdOrCtrl+S" },
   ] : [
     { type: "action", id: "close-sample", label: "Close Sample", shortcut: "Ctrl+Shift+J" },
     { type: "checkbox", id: "checked-selection", label: "Checked selection", checked: true },
