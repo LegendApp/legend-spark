@@ -14,7 +14,7 @@ manual: true
 ---
 - manualStep:
     instruction: After cd examples/kitchen-sink && bun run rebuild:macos, run bun scripts/test-devtools.ts from the repository root.
-    expect: It prints PASS for the targets, console and evaluation, source maps, the breakpoint, the worker runtime, one debugger per app process, openDevTools, source edits, pause on uncaught exceptions and the reload, and exits 0.
+    expect: It prints PASS for the targets, console and evaluation, source maps, the breakpoint, the worker runtime, one debugger per app process, openDevTools, source edits, runtime discovery, pause on uncaught exceptions and the reload, and exits 0.
     evidence: none
     signoff: required
 - manualStep:
