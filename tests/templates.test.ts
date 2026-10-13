@@ -6,7 +6,12 @@ import { createRequire } from "node:module";
 import { readConfig } from "@legendapp/spark/config";
 const { initializeTemplate } = createRequire(import.meta.url)("../packages/cli/src/init-template.cjs");
 const templates = path.resolve(import.meta.dirname, "../packages/cli/templates");
+const { pointer, claudePointer } = createRequire(import.meta.url)("../packages/cli/src/migrations.cjs");
 for (const folder of ["blank-typescript", "windows", "universal"]) {
+  test(`${folder} ships thin AI pointers to the installed skill`, () => {
+    for (const file of ["AGENTS.md", "CLAUDE.md"]) expect(readFileSync(path.join(templates, folder, file), "utf8")).toBe(pointer + "\n");
+    expect(readFileSync(path.join(templates, folder, ".claude/skills/spark/SKILL.md"), "utf8")).toBe(claudePointer);
+  });
   test(`${folder} initializes upstream identity once and preserves edits`, () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "spark-template-test-"));
     const previous = process.env.SPARK_PLATFORM;

@@ -80,7 +80,8 @@
     "schema.json",
     "bin",
     "*.d.cts",
-    "patches"
+    "patches",
+    "skills"
   ],
   "dependencies": {
     "@legendapp/spark-file-dialog": "0.0.1-next.4",

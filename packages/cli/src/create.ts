@@ -1,3 +1,5 @@
+import { initializeTemplate } from "./init-template.cjs";
+import { installedSparkVersion, migrateProject, refreshPointers } from "./migrations.cjs";
 import { creationManifest } from "./local.ts";
 import { installedRelease, materializeReleasePackages, packageSources, verifyMaterializedReleasePackages } from "./release.ts";
 import { packageManager, managerCommand, applyOverrides, localArchive, type PackageManager } from "./package-manager.ts";
@@ -50,6 +52,7 @@ export async function create(root: string, archiveManifest: string | undefined, 
   // and installs the template. No producer-machine paths enter the SDK bundle.
   try {
     cpSync(source, temporary, { recursive: true });
+    refreshPointers(temporary);
     const pkg = readJson(path.join(temporary, "package.json"));
     const release = archiveManifest ? undefined : installedRelease();
     const archives = packageSources(archiveManifest, release);
@@ -68,7 +71,7 @@ export async function create(root: string, archiveManifest: string | undefined, 
     await packArchive(temporary, templateFile);
     if (release) verifyMaterializedReleasePackages(release, temporary);
     // The upstream CLI owns validation, extraction, app IDs, install, and Git setup.
-    // The templates' postinstall initializes spark configuration once.
+    // Also initialize explicitly below: pnpm/Bun can disable lifecycle scripts.
     const name = path.basename(root);
     // Expo Desktop misreads npm 12's record-shaped pack metadata for a local tarball.
     // Use the compatible npm executable for upstream extraction; the chosen manager installs.
@@ -89,6 +92,8 @@ export async function create(root: string, archiveManifest: string | undefined, 
   }
   // Upstream can report success after an install failure. Require a usable CLI.
   if (!existsSync(path.join(root, "node_modules/@legendapp/spark/package.json"))) throw new Error(`Dependency installation failed. Run ${manager} install in ${root} and retry.`);
+  initializeTemplate(root);
+  migrateProject(root, installedSparkVersion(root));
   if (example) {
     if (!archiveManifest) { const release = installedRelease(); if (release) verifyMaterializedReleasePackages(release, root); }
     await configureExample(root, example);

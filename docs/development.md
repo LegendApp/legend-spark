@@ -146,7 +146,17 @@ Apps must declare exact `react`, `react-native`, `react-native-macos`, and `expo
 
 `catalog:` and `workspace:` specs are skipped with a note and left unchanged; check their resolved versions yourself. Only the app's `package.json` is checked. Workspace-root overrides are not checked, even though npm and pnpm apply overrides only from the workspace root.
 
-Run `spark upgrade --dry-run` to preview fixes, then `spark upgrade` to update mismatched specs and add missing direct pins to `dependencies`. Both commands support `--project <directory>`. Upgrade preserves existing key order and formatting, does not require native tooling, and does not install anything. Afterwards, run your package manager's install command (`npm install`, `pnpm install`, `yarn install`, or `bun install`).
+### Upgrade an app
+
+Run the app's installed `spark upgrade --dry-run` to preview the newest release on the installed version's channel: `next` for `-next` previews, `latest` for stable releases. Dry-run queries the registry and verifies the target package in a temporary directory; it changes no app files and runs no install or migrations.
+
+`spark upgrade` reads that release's own starter compatibility matrix, updates `@legendapp/spark` and existing tested dependency/override specs, adds missing required direct pins, materializes verified patched release inputs in `spark-packages/`, and runs the detected package manager's `install`. Detection uses `packageManager`, existing lockfiles, the invoking manager, then available tools; ambiguous lockfiles require a `packageManager` declaration. After a successful install, the installed release's idempotent migrations run and refresh AI instruction pointers. Existing package key order/formatting and unrelated dependencies are preserved. Both commands support `--project <directory>` and require no native tooling.
+
+If installation fails, the updated manifest and verified release inputs remain for diagnosis and retry; `.spark/version` is not advanced. Fix the manager error and rerun `spark upgrade`. Workspace/catalog specs remain owned by the workspace; update their owner and resolved versions yourself. The updater uses the public npm registry (or `npm_config_registry`) and supports published releases with embedded release metadata; local SDK development continues through the local package refresh workflow below.
+
+The packaged app-development skill lives at `node_modules/@legendapp/spark/skills/spark/SKILL.md`. New apps contain thin pointers in `AGENTS.md`, `CLAUDE.md`, and `.claude/skills/spark/SKILL.md`. Upgrade adds these to existing apps and refreshes only the `<!-- spark:skill:start -->` / `<!-- spark:skill:end -->` sections. User text and custom Claude skill frontmatter remain intact; malformed/duplicate markers produce repair guidance. Do not copy the full skill into an app: the installed package owns it.
+
+`.spark/version` records successful versioned migrations once per app, including universal apps. `spark dev`, `spark build`, and `spark doctor` compare it with the installed SDK, apply pending safe steps without relying on postinstall, and stop with `run spark upgrade` when a pending step requires installation/configuration changes or the recorded version is newer than the installed SDK. An unrecorded app gets the same safe migration path. Create explicitly runs the existing template identity initializer after installation, so disabled lifecycle scripts do not leave a new app uninitialized.
 
 The CLI diagnoses missing tooling; it does not silently install Xcode or accept licenses. Re-run the build or switch after completing setup. No native prerequisites are invoked for a compatible Spark Runner launch.
 
@@ -158,6 +168,7 @@ Do not use workspace symlinks as the sole distribution test. The prebuilt builde
 
 ## Logs and generated outputs
 
+- `.spark/version`: successfully applied Spark migration version (shared across targets).
 - `.spark/commands.jsonl`: invoked build/install commands and working directories.
 - `.spark/logs/`: full command output, including native build logs.
 - `.spark/native-selection.json`: input shared by autolinking and codegen.
@@ -171,7 +182,7 @@ Keep generated files out of version control. Commit application source/configura
 
 Edit the complete templates under `packages/cli/templates/`: `blank-typescript` (macOS), `windows`, or `universal`. Their manifests own dependency pins and scripts. `spark sdk pack` resolves local SDK archives into template dependencies and emits npm tarballs plus `artifacts/packages/templates.json`. Repack after changing a template or SDK package.
 
-`npm create @legendapp/spark@next MyApp` (or the installed `spark create MyApp`) invokes `expo-desktop@1.0.0 create-app --template <archive>`. Expo Desktop validates the directory/name, extracts files, assigns app/native identity, installs dependencies, and initializes Git. A template postinstall initializes spark's configuration once. It does not overwrite an existing project ID or user edits. Project basenames must be alphanumeric, following upstream validation; spaces in parent directories are supported.
+`npm create @legendapp/spark@next MyApp` (or the installed `spark create MyApp`) invokes `expo-desktop@1.0.0 create-app --template <archive>`. Expo Desktop validates the directory/name, extracts files, assigns app/native identity, installs dependencies, and initializes Git. The creator explicitly initializes spark's configuration after installation; the template postinstall also supports direct Expo Desktop creation. It does not overwrite an existing project ID or user edits. Project basenames must be alphanumeric, following upstream validation; spaces in parent directories are supported.
 
 Direct Expo Desktop template creation is also checked by `bun run test:templates`, including a consumer outside the checkout. These local archives reference local SDK tarballs; they are not a published package distribution. The [integration handoff](expo-desktop-integration.md) documents the npm compatibility pin and remaining build/launch limitations.
 
