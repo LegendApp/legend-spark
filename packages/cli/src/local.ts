@@ -21,14 +21,18 @@ export function findFramework(start = import.meta.dirname): string | undefined {
   }
 }
 
-export function findProject(start: string): string {
-  let dir = path.resolve(start);
-  while (true) {
+/** The app that contains `start`, or undefined outside an app. */
+export function appRoot(start: string): string | undefined {
+  for (let dir = path.resolve(start); ; dir = path.dirname(dir)) {
     if ((existsSync(path.join(dir, "app.json")) || existsSync(path.join(dir, "desktop.config.json"))) && existsSync(path.join(dir, "package.json"))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) throw new Error("No spark app found. Run this command inside your app, or create one with spark create MyApp.");
-    dir = parent;
+    if (path.dirname(dir) === dir) return undefined;
   }
+}
+
+export function findProject(start: string): string {
+  const root = appRoot(start);
+  if (!root) throw new Error("No spark app found. Run this command inside your app, or create one with spark create MyApp.");
+  return root;
 }
 
 export function readRuntime(app: string): Runtime | undefined {

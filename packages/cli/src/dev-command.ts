@@ -2,7 +2,7 @@ import { spawnProcess } from "./process.ts";
 import path from "node:path";
 import { prepareConfig, selectTarget, supportedPlatforms } from "@legendapp/spark-desktop-config/config.cjs";
 import { dev } from "./dev.ts";
-import { findProject } from "./local.ts";
+import { appRoot, findProject } from "./local.ts";
 import { hostPlatform } from "./platform.ts";
 import { nodeCommand } from "./windows.ts";
 
@@ -44,7 +44,8 @@ export async function devCommand(args: string[]) {
   const options = devArguments(args);
   const start = path.resolve(options.project ?? process.cwd());
   if (options.expo.includes("--help") || options.expo.includes("-h")) {
-    console.log("spark dev options:\n  --project <directory>    Application directory\n  --platform <platform>    Initial launch target; all declared platforms stay available\n  --runner-binary <path>  Register and use a Spark Runner\n  --app-arg <value>        Pass a desktop launch argument (repeatable)\n  --no-open                Wait for a launch key (explicit Expo launch flags still apply)\n\nAll other options belong to expo start:\n");
+    console.log("spark dev options:\n  --project <directory>    Application directory\n  --platform <platform>    Initial launch target; all declared platforms stay available\n  --runner-binary <path>  Register and use a Spark Runner\n  --app-arg <value>        Pass a desktop launch argument (repeatable)\n  --no-open                Wait for a launch key (explicit Expo launch flags still apply)\n\nAll other options belong to expo start" + (appRoot(start) ? ":\n" : "; run spark dev --help inside an app to list them."));
+    if (!appRoot(start)) return;
     const child = spawnProcess(nodeCommand(start, "expo", "expo", ["start", "--help"]), { cwd: start, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
     process.exitCode = await child.exited;
     return;

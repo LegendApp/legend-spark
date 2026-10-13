@@ -1,0 +1,53 @@
+# Developer experience (#171): gate audit steps, not flows (docs/e2e-flows.md#audits).
+area: developer-experience
+prefix: DX
+checks:
+  DX-DOCS-01:
+    title: Every public export (docs/api-public-surface.json) has a TSDoc comment on its declaration
+    blocking: true
+    spec: "#171 Every export documented"
+    audit: api-docs
+  DX-DOCS-02:
+    title: No public export, parameter or return type is any
+    blocking: true
+    spec: "#171 Every export typed"
+    audit: api-docs
+  DX-DOCS-03:
+    title: Every public subpath has a docs page that imports it
+    blocking: true
+    spec: "#171 Every export documented"
+    audit: api-docs
+  DX-CLI-01:
+    title: spark --help names every command; -h, no arguments and each command's --help exit 0; spark dev --help in an app adds expo start's options; spark --version prints the SDK version
+    blocking: true
+    spec: "#171 CLI commands"
+    audit: cli
+  DX-CLI-02:
+    title: CLI misuse (unknown command or option, missing or extra arguments, a group without its subcommand, invalid values, conflicting modes, no app) exits 1 with one line on stderr that names the problem and no stack trace
+    blocking: true
+    spec: "#171 CLI commands"
+    audit: cli
+  DX-TPL-01:
+    title: spark create makes each template (macOS, Windows, universal) from the packed SDK, headless (CI=1, no TTY), and it installs and type-checks
+    platforms: [macos]
+    blocking: true
+    spec: "#171 Templates build; headless CI"
+    audit: templates
+  DX-TPL-02:
+    title: spark build of the macOS template from the packed SDK makes a release app headless, with Hermes bytecode and a signature codesign verifies
+    platforms: [macos]
+    blocking: true
+    spec: "#171 Templates build; headless CI"
+    audit: templates
+  DX-REPRO-01:
+    title: Two clean release builds of the macOS template have byte-identical JavaScript bundles
+    platforms: [macos]
+    blocking: true
+    spec: "#171 Reproducible builds"
+    audit: templates
+  DX-REPRO-02:
+    title: Two clean release builds of the macOS template are byte-identical apart from what docs/e2e-flows.md#reproducible-builds explains, and each difference is reported
+    platforms: [macos]
+    blocking: true
+    spec: "#171 Reproducible builds"
+    audit: templates

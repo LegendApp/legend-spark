@@ -27,23 +27,33 @@ function availabilityFlags(checker: ts.TypeChecker, symbol: ts.Symbol, at: ts.No
   return args.flatMap(arg => booleans.map(flag => `(${arg}).${flag}`));
 }
 
-/**
- * The public SDK surface: every subpath in packages/desktop/package.json `exports`, and for TypeScript
- * entries every export the type checker sees. docs/api-public-surface.json snapshots the export names.
- */
-export function readSdkSurface(): SdkSurface {
+/** The SDK's TypeScript entries, type-checked with the repository's tsconfig: per subpath, its exports and what each aliases. */
+export function sdkProgram() {
   const exports = JSON.parse(readFileSync(path.join(sdk, "package.json"), "utf8")).exports as Record<string, string>;
   const entries = Object.entries(exports).filter(([, file]) => file.endsWith(".ts"));
   const config = ts.readConfigFile(path.join(repo, "tsconfig.json"), ts.sys.readFile);
   const options = ts.parseJsonConfigFileContent(config.config, ts.sys, repo).options;
   const program = ts.createProgram(entries.map(([, file]) => path.join(sdk, file)), options);
   const checker = program.getTypeChecker();
-  const surface: SdkSurface = Object.fromEntries(Object.keys(exports).sort().map(subpath => [subpath, { values: [], types: [], flags: {} }]));
-  for (const [subpath, file] of entries) {
+  const modules = entries.map(([subpath, file]) => {
     const source = program.getSourceFile(path.join(sdk, file))!;
+    const symbols = checker.getExportsOfModule(checker.getSymbolAtLocation(source)!)
+      .map(symbol => ({ symbol, target: symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol }));
+    return { subpath, source, symbols };
+  });
+  return { exports, checker, modules };
+}
+
+/**
+ * The public SDK surface: every subpath in packages/desktop/package.json `exports`, and for TypeScript
+ * entries every export the type checker sees. docs/api-public-surface.json snapshots the export names.
+ */
+export function readSdkSurface(): SdkSurface {
+  const { exports, modules, checker } = sdkProgram();
+  const surface: SdkSurface = Object.fromEntries(Object.keys(exports).sort().map(subpath => [subpath, { values: [], types: [], flags: {} }]));
+  for (const { subpath, source, symbols } of modules) {
     const entry = surface[subpath]!;
-    for (const symbol of checker.getExportsOfModule(checker.getSymbolAtLocation(source)!)) {
-      const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    for (const { symbol, target } of symbols) {
       if (!(target.flags & ts.SymbolFlags.Value)) { entry.types.push(symbol.name); continue; }
       entry.values.push(symbol.name);
       if (AVAILABILITY.test(symbol.name)) entry.flags[symbol.name] = availabilityFlags(checker, target, source);

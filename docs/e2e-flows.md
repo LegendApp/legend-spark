@@ -1105,9 +1105,10 @@ the same and links to the runner's page.
 
 An audit is a gate step that checks the release artifact itself instead of driving the app. A check registered
 with `audit: <name>` is verified by that step, so no flow lists it (coverage reports `audit-flow` if one does). The
-gate runs each audit step once, after the build check, and judges every audit check for the target's platform: a
+gate runs each audit step once, one at a time, after the build check, and judges every audit check for the target's platform: a
 `failed` or `unsupported` result, or no result, fails a blocking check. A scoped run (`--flow`) runs no audits.
-`bun run e2e:audit [--artifact <app>] [--package <zip or folder>]` runs only the audits for this machine's target and prints each result.
+`bun run e2e:audit [--artifact <app>] [--package <zip or folder>] [--audit <name>]…` runs only the audits for this machine's
+target (with `--audit`, only those steps) and prints each result.
 
 `bundle` (`scripts/e2e/audit/bundle.ts`, registered in `checks/packaging-distribution.yaml`) audits release bundle
 hygiene (#153):
@@ -1151,6 +1152,63 @@ the distribution ZIP, or the folder holding the one `<name>-<version>-<arch>.zip
 
 Spark makes no DMG, so there is no DMG layout check. App translocation at launch is not checked: it needs a notarized
 app launched from its quarantined location.
+
+#### Developer experience audits
+
+Three audit steps, registered in `checks/developer-experience.yaml` (#171), check the developer's side of a release.
+The `templates` step builds apps, so run it under the native build lock on a shared Mac.
+
+`api-docs` (`scripts/api-docs.ts`) reads the public surface the way `docs/api-public-surface.json` snapshots it.
+`docs/api-undocumented.json` lists the known gaps. `tests/api-docs-coverage.test.ts` (part of `bun run test`) fails on an
+undocumented export or page-less subpath that is not listed, and on a listed one that is now documented, so the list only
+shrinks. The audit fails while the list is not empty.
+
+| Check | What it verifies |
+|---|---|
+| `DX-DOCS-01` | Every public export has a TSDoc comment on its declaration (what an editor shows). |
+| `DX-DOCS-02` | No public export, parameter or return type is `any`. |
+| `DX-DOCS-03` | Every public subpath has a `docs/*.md` page that imports it (`@legendapp/spark/<subpath>` in quotes or backticks). |
+
+`cli` (`scripts/e2e/audit/cli.ts`) runs the SDK's `spark` bin (`packages/desktop/bin/spark.cjs`) headless in a scratch
+directory, only with arguments that fail or print help before any side effect.
+
+| Check | What it verifies |
+|---|---|
+| `DX-CLI-01` | `spark --help` names every command of the CLI's grammar (`packages/cli/src/cli-arguments.ts`) and `dev`; `-h`, no arguments and each command's `--help` exit 0; `spark dev --help` in the Kitchen Sink adds `expo start`'s options; `spark --version` prints the SDK version. |
+| `DX-CLI-02` | An unknown command or option, missing or extra arguments, a group without its subcommand (`spark sdk`), invalid values, conflicting build modes and running outside an app each exit 1 with one line on stderr that names the problem, and no stack trace. |
+
+`templates` (`scripts/e2e/audit/templates.ts`) packs the SDK (`scripts/pack.ts`), then works in a scratch directory with
+`CI=1`, no TTY, no stdin and a scratch `SPARK_HOME`, so the developer's registered SDKs and runners are untouched. It
+unregisters every app it built from LaunchServices (`lsregister -u`) and removes the directory. It took 8 to 10
+minutes on an M4 Max: the packages come from the npm registry and the two release builds compile React Native twice.
+
+| Check | What it verifies |
+|---|---|
+| `DX-TPL-01` | `spark create --packages <packed manifest>` makes the macOS, Windows and universal templates; each depends on the packed SDK, installs and type-checks (`tsc --noEmit`). |
+| `DX-TPL-02` | `spark build` of the macOS template makes a release app with a Hermes bytecode `main.jsbundle` that `codesign --verify --deep --strict` accepts. |
+| `DX-REPRO-01` | A second release build, after deleting `.spark/` and the generated `macos/` project, has byte-identical JavaScript (`*.jsbundle`, `*.hbc`, `*.js`). |
+| `DX-REPRO-02` | Every other file in the app is byte-identical too. Each difference is listed; for a Mach-O file, whether its `LC_UUID` or other load commands differ. See [Reproducible builds](#reproducible-builds). |
+
+#### Reproducible builds
+
+`DX-REPRO-01` and `DX-REPRO-02` build the macOS template twice. `spark build` prepares the project in place (it patches
+`node_modules` and writes `macos/`, `ios/`, `react-native.config.js` and configuration), so each build starts from an APFS
+clone of the project as `spark create` left it, at the same path. With identical inputs the JavaScript bundle and
+`spark-runtime.json` are byte-identical. Built from an already-prepared project instead, `spark-runtime.json`'s
+`fingerprint` differs, because the first build changed its inputs.
+
+The native output is not bit-reproducible, because of Apple's tools. On Xcode 27 (macOS 27, arm64), four files differ. For
+each of them, `DX-REPRO-02` checks the parts that should still match:
+
+| File | Why it differs | What must still match |
+|---|---|---|
+| The main executable (`Contents/MacOS/<name>`) | The linker puts two symbol pointers in the other order, so some instructions and `__objc_stubs` refer to other slots. `LC_UUID` is a hash of the output, and the code signature is a hash of the file. | Every load command apart from `LC_UUID`, and the symbols (`nm -m`). |
+| `Assets.car` | `actool` stamps the build time and gives each rendition a unique name, which also changes its digest. | Every rendition's other attributes (`assetutil --info`). |
+| `*.nib` | `ibtool` writes the same objects in another order. | The objects, each with its class and values, with references as the referenced object's class. |
+| `_CodeSignature/CodeResources` | It holds the hashes of the files above. | Nothing more: the files it seals are compared themselves. |
+
+Any other difference, or a difference in what these compare, fails `DX-REPRO-02`. The frameworks' binaries (Hermes and
+the rest) and every other resource are byte-identical.
 
 ### Budgets
 
