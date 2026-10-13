@@ -40,4 +40,29 @@ function resolveEntitlements(config, packages) {
     expo.macos?.entitlements ?? {},
   );
 }
-module.exports = { mergeEntitlements, resolveEntitlements, authenticationEntitlements, captureEntitlements };
+// macos.sandbox: the App Sandbox (Mac App Store style) variant, made by spark build --sandbox (docs/app-sandbox.md).
+const APP_SANDBOX = "com.apple.security.app-sandbox", INHERIT = "com.apple.security.inherit";
+/** What every process of the variant other than the main executable carries: Apple requires exactly these two. */
+const SANDBOX_INHERIT = Object.freeze({ [APP_SANDBOX]: true, [INHERIT]: true });
+/** The native packages the variant leaves out: Sparkle, whose updater the App Store replaces. */
+const SANDBOX_EXCLUDED = Object.freeze(["@legendapp/spark-updates"]);
+const SANDBOX_KEY = /^com\.apple\.security\.[A-Za-z0-9.-]+$/;
+function validateSandbox(sandbox) {
+  if (sandbox === undefined) return;
+  if (!sandbox || typeof sandbox !== "object" || Array.isArray(sandbox)) throw new Error("macos.sandbox must be an object");
+  for (const key of Object.keys(sandbox)) if (key !== "entitlements") throw new Error(`Unknown macos.sandbox field: ${key}`);
+  const entitlements = sandbox.entitlements ?? {};
+  if (!entitlements || typeof entitlements !== "object" || Array.isArray(entitlements)) throw new Error("macos.sandbox.entitlements must be an object");
+  for (const [key, value] of Object.entries(entitlements)) {
+    if (!SANDBOX_KEY.test(key)) throw new Error(`macos.sandbox.entitlements: ${key} is not an App Sandbox entitlement (com.apple.security.*); put other entitlements in macos.entitlements`);
+    if (key === APP_SANDBOX || key === INHERIT) throw new Error(`macos.sandbox.entitlements: ${key} is implied by the sandbox variant; remove it`);
+    if (value === null || !["boolean", "string", "object"].includes(typeof value)) throw new Error(`macos.sandbox.entitlements: invalid value for ${key}`);
+  }
+}
+/** The sandbox variant's main executable: the app's entitlements, macos.sandbox.entitlements, and app-sandbox. */
+function sandboxEntitlements(config, appEntitlements) {
+  const sandbox = (config.expo ?? config).macos?.sandbox;
+  if (!sandbox) throw new Error("A sandboxed build needs macos.sandbox in the app's configuration (docs/app-sandbox.md)");
+  return mergeEntitlements(appEntitlements, sandbox.entitlements ?? {}, { [APP_SANDBOX]: true });
+}
+module.exports = { mergeEntitlements, resolveEntitlements, authenticationEntitlements, captureEntitlements, validateSandbox, sandboxEntitlements, SANDBOX_INHERIT, SANDBOX_EXCLUDED };

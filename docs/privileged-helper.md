@@ -28,7 +28,7 @@ if (getPrivilegedHelperAvailability().available) {
 
 | Function | Result |
 |---|---|
-| `getPrivilegedHelperAvailability()` | `{ available: true }`, or `false` with `unsigned` (no team signature), `missing-module` or `unsupported-platform`. Synchronous. |
+| `getPrivilegedHelperAvailability()` | `{ available: true }`, or `false` with `sandboxed` (the app runs in the App Sandbox, which cannot install a launch daemon; [App Sandbox variant](app-sandbox.md)), `unsigned` (no team signature), `missing-module` or `unsupported-platform`. Synchronous. |
 | `getPrivilegedHelperStatus(name)` | `notRegistered`, `enabled`, `requiresApproval` (registered, waiting for the person in Login Items) or `notFound` (the app embeds no plist for it). Never prompts. |
 | `registerPrivilegedHelper(name)` | Registers the daemon; resolves its status afterwards, `requiresApproval` the first time. Registering again changes nothing. |
 | `unregisterPrivilegedHelper(name)` | Removes the registration, stopping the daemon. Resolves when it is not registered, including when it was not. |
@@ -49,6 +49,7 @@ Failures the system or the helper reports reject a `PrivilegedHelperError` (a `S
 
 | Reason | Code | Meaning |
 |---|---|---|
+| `sandboxed` | `E_UNAVAILABLE` | The app runs in the App Sandbox: registering, unregistering, the admin prompt and messaging fail before ServiceManagement, Authorization Services or XPC is reached, in the test driver's simulation too. |
 | `unsigned` | `E_UNAVAILABLE` | The app is unsigned or ad-hoc signed; nothing reached ServiceManagement or XPC. |
 | `notFound` | `E_NOT_FOUND` | The app embeds no plist for the helper. |
 | `notRegistered`, `requiresApproval` | `E_UNAVAILABLE`, `E_PERMISSION_DENIED` | A message to a helper that is not `enabled`. |

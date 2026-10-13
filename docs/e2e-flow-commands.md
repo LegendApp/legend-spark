@@ -262,6 +262,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 
 | Command | Short form | Keys | Backend | Summary |
 |---|---|---|---|---|
+| `assertSandboxVariant` | value → `app` | `app`* | runner | Assert the App Sandbox (Mac App Store) variant leaves out what a sandboxed app cannot use: no Sparkle code or SU* Info.plist keys, and no launch daemons (privileged helpers) in Contents/Library/LaunchDaemons. |
 | `assertEntitlements` | — | `app`*, `sandbox`*, `allow` | runner | Assert every process of the app is signed with only the entitlements `allow` names, each with its reason, and never get-task-allow; an `allow` entry no process carries fails. `sandbox`: whether this is the sandboxed variant, which sandboxes every process. |
 | `assertCodeSigning` | value → `app` | `app`* | runner | Assert every Mach-O file of the app is signed by the main executable's team (not ad-hoc), every process has the hardened runtime, and none disables library validation. |
 | `assertNoDebugSurface` | bare | `for` | driver | Relaunch the app pointed at a decoy development server (RCT_jsLocation and SPARK_BUNDLE_URL) and, once its first UI settles and `for` (default 2s) more, assert it never connected to it, holds no network socket and no bound Unix socket but the driver's (lsof), has no Developer menu or debug menu item (DevTools, inspector, debugger, profiler), hidden ones included, and that no JavaScript in the app contains the network inspector or the profiler and no native code contains the profiler. For release builds. |

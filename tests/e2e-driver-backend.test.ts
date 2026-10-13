@@ -629,7 +629,7 @@ describe("app inspection", () => {
 
     // A release build: symbolicated with <dir of the app>/dSYMs; without that folder it fails as "no dSYM".
     const dir = mkdtempSync(path.join(tmpdir(), "e2e-crash-symbol-"));
-    app.bundle = { app: path.join(dir, "KitchenSink.app"), release: true };
+    app.bundle = { app: path.join(dir, "KitchenSink.app"), release: true, sandboxed: false };
     expect((await check("crash.stripped")).failure).toMatchObject({ kind: "invalid", message: expect.stringMatching(/^no dSYM: .*KitchenSink\.app is a stripped release build with no dSYMs folder next to it/) });
     mkdirSync(path.join(dir, "dSYMs"));
     // An in-process name never counts for a release build; only what its dSYMs name. Here none covers the app's image.
@@ -759,6 +759,15 @@ describe("unsupported and invalid", () => {
     const { result, app } = await run("- launchApp", new FakeApp({}, "com.example.other"));
     expect(result.failure).toMatchObject({ kind: "invalid", message: "the flow is for so.legend.spark.examples.kitchensink, but /Apps/KitchenSink.app is com.example.other" });
     expect(app.log).toEqual(["open", "app close"]);
+  });
+
+  test("a flow for the App Sandbox variant is invalid against an app that is not sandboxed, and runs against one that is", async () => {
+    const { result, app } = await run("- launchApp", new FakeApp(), "variant: sandbox\n");
+    expect(result.failure).toMatchObject({ kind: "invalid", message: "the flow tests the App Sandbox variant (spark build --sandbox, docs/app-sandbox.md), but /Apps/KitchenSink.app is not sandboxed" });
+    expect(app.log).toEqual(["open", "app close"]);
+    const sandboxed = new FakeApp();
+    sandboxed.bundle = { ...sandboxed.bundle, sandboxed: true };
+    expect((await run("- launchApp", sandboxed, "variant: sandbox\n")).result.status).toBe("passed");
   });
 
   test("other driver failures surface as errors", async () => {

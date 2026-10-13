@@ -91,5 +91,7 @@
 - assertNoDebugSurface: { for: 3s }
 - assertLoadPaths: "${APP_PATH}"
 - assertLoadPaths: { app: "${APP_PATH}" }
+- assertSandboxVariant: "${APP_PATH}"
+- assertSandboxVariant: { app: "${APP_PATH}" }
 - assertAppIcon: "${APP_PATH}"
 - assertAppIcon: { app: "${APP_PATH}", styles: [default, dark, clear, tinted] }

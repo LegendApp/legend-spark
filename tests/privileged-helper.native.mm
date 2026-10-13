@@ -57,7 +57,7 @@ static NSString *OwnRequirement(void) {
   rig.service = [[SparkPrivilegedHelperService alloc] initWithListener:rig.listener clientRequirement:clientRequirement handler:handler];
   [rig.service resume];
   __weak Rig *weak = rig;
-  rig.helpers = [[SparkPrivilegedHelpers alloc] initWithSimulated:NO signed:YES helperRequirement:^NSString *(NSString *) { return helperRequirement; } connector:^NSXPCConnection *(NSString *name) {
+  rig.helpers = [[SparkPrivilegedHelpers alloc] initWithSimulated:NO signed:YES sandboxed:NO helperRequirement:^NSString *(NSString *) { return helperRequirement; } connector:^NSXPCConnection *(NSString *name) {
     CHECK([name isEqual:@"tool"]);
     weak.connections++;
     return [[NSXPCConnection alloc] initWithListenerEndpoint:weak.listener.endpoint];
@@ -123,7 +123,7 @@ int main() { @autoreleasepool {
   AuthorizationFree(empty, kAuthorizationFlagDestroyRights);
 
   // Unsigned: availability says so and nothing reaches ServiceManagement or XPC (the connector fails the test if called).
-  SparkPrivilegedHelpers *unsignedHelpers = [[SparkPrivilegedHelpers alloc] initWithSimulated:NO signed:NO helperRequirement:^NSString *(NSString *) { return nil; } connector:^NSXPCConnection *(NSString *) { CHECK(!"connected"); return nil; }];
+  SparkPrivilegedHelpers *unsignedHelpers = [[SparkPrivilegedHelpers alloc] initWithSimulated:NO signed:NO sandboxed:NO helperRequirement:^NSString *(NSString *) { return nil; } connector:^NSXPCConnection *(NSString *) { CHECK(!"connected"); return nil; }];
   CHECK([unsignedHelpers.availability isEqual:@"unsigned"]);
   Outcome registered = {}, unregistered = {}, sent = {}, released = {};
   [unsignedHelpers registerHelper:@"tool" completion:Record(&registered)];
@@ -132,6 +132,19 @@ int main() { @autoreleasepool {
   [unsignedHelpers send:@{} helper:@"tool" authorization:@"gone" timeoutMs:1000 identifier:@"2" completion:Record(&released)];
   CHECK(Failed(registered, @"E_UNAVAILABLE", @"unsigned") && Failed(unregistered, @"E_UNAVAILABLE", @"unsigned") && Failed(sent, @"E_UNAVAILABLE", @"unsigned"));
   CHECK(Failed(released, @"E_CLOSED", nil));
+  // Sandboxed: availability says so before unsigned, and registering, the admin prompt and messaging fail sandboxed,
+  // simulated or not, without reaching ServiceManagement, Authorization Services or XPC.
+  for (NSNumber *simulate in @[@NO, @YES]) {
+    SparkPrivilegedHelpers *sandboxedHelpers = [[SparkPrivilegedHelpers alloc] initWithSimulated:simulate.boolValue signed:YES sandboxed:YES helperRequirement:^NSString *(NSString *) { return nil; } connector:^NSXPCConnection *(NSString *) { CHECK(!"connected"); return nil; }];
+    CHECK([sandboxedHelpers.availability isEqual:@"sandboxed"]);
+    Outcome sandboxRegistered = {}, sandboxUnregistered = {}, sandboxSent = {}, sandboxAuthorized = {};
+    [sandboxedHelpers registerHelper:@"tool" completion:Record(&sandboxRegistered)];
+    [sandboxedHelpers unregisterHelper:@"tool" completion:Record(&sandboxUnregistered)];
+    [sandboxedHelpers send:@{ @"a": @1 } helper:@"tool" authorization:nil timeoutMs:1000 identifier:@"1" completion:Record(&sandboxSent)];
+    [sandboxedHelpers authorize:@"Install" completion:Record(&sandboxAuthorized)];
+    CHECK(Failed(sandboxRegistered, @"E_UNAVAILABLE", @"sandboxed") && Failed(sandboxUnregistered, @"E_UNAVAILABLE", @"sandboxed"));
+    CHECK(Failed(sandboxSent, @"E_UNAVAILABLE", @"sandboxed") && Failed(sandboxAuthorized, @"E_UNAVAILABLE", @"sandboxed"));
+  }
   Outcome invalid = {};
   [unsignedHelpers send:[NSDate date] helper:@"tool" authorization:nil timeoutMs:1000 identifier:@"3" completion:Record(&invalid)];
   CHECK(Failed(invalid, @"E_INVALID_ARGUMENT", nil));
@@ -190,7 +203,7 @@ int main() { @autoreleasepool {
 
 #if SPARK_TEST_DRIVER
   // The simulation: registration, approval, the admin prompt and the helper's connection, all in memory.
-  SparkPrivilegedHelpers *simulated = [[SparkPrivilegedHelpers alloc] initWithSimulated:YES signed:NO helperRequirement:^NSString *(NSString *) { return nil; } connector:nil];
+  SparkPrivilegedHelpers *simulated = [[SparkPrivilegedHelpers alloc] initWithSimulated:YES signed:NO sandboxed:NO helperRequirement:^NSString *(NSString *) { return nil; } connector:nil];
   CHECK([simulated.availability isEqual:@"unsigned"] && [simulated.simulation[@"signed"] isEqual:@NO]);
   Outcome status = {};
   [simulated status:@"tool" completion:Record(&status)];

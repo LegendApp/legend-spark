@@ -161,7 +161,8 @@ export type CommitReport = {
 export type Counters = { windows: number; views: number; fileDescriptors: number; listeners: number };
 /** A socket the app process holds (lsof): `type` IPv4, IPv6 or unix; `name` its addresses or path; `state` a TCP socket's (LISTEN, ESTABLISHED, …). */
 export type ProcessSocket = { fd: string; type: string; protocol?: string; name: string; state?: string };
-export type LaunchOptions = { executable: string; args?: string[]; env?: Record<string, string>; log?: ProcessLog; startTimeoutMs?: number };
+/** `runs`: where to make the run directory (a sandboxed app's session gives its own); default the temporary directory. */
+export type LaunchOptions = { executable: string; args?: string[]; env?: Record<string, string>; log?: ProcessLog; startTimeoutMs?: number; runs?: string };
 type Reply = { id?: unknown; ok: boolean; error?: { code: string; message: string }; [key: string]: unknown };
 
 /** The environment variable that starts the in-app driver; the launch sets it. */
@@ -173,7 +174,7 @@ export class DriverError extends Error {
 
 /** Launches an app in driver mode: a private run directory, a one-time token file, and the socket the app creates there. */
 export async function launchDriver(options: LaunchOptions): Promise<Driver> {
-  const directory = mkdtempSync(path.join(os.tmpdir(), "spark-driver-")); // mkdtemp creates it 0700.
+  const directory = mkdtempSync(path.join(options.runs ?? os.tmpdir(), "spark-driver-")); // mkdtemp creates it 0700.
   const socket = path.join(directory, "driver.sock");
   if (Buffer.byteLength(socket) >= 104) throw new Error(`Driver socket path is too long for a Unix socket: ${socket}`);
   const token = randomBytes(32).toString("hex");

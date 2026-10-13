@@ -114,7 +114,7 @@ async function probe(app: FakeApp, command = "- assertNoDebugSurface: { for: 0 }
 describe("assertNoDebugSurface", () => {
   test("relaunches the app pointed at a decoy development server, waits for its first settled UI and passes a clean app", async () => {
     const app = new FakeApp({}, undefined, [item("Window", { items: [item("Minimize")] })]);
-    app.bundle = { app: appBundle({ "main.jsbundle": HBC("release") }), release: true };
+    app.bundle = { app: appBundle({ "main.jsbundle": HBC("release") }), release: true, sandboxed: false };
     app.sockets = driver => [{ fd: "3", type: "unix", name: path.join(driver.directory, "driver.sock") }];
     const result = await probe(app, "- launchApp\n- assertNoDebugSurface: { for: 0 }");
     expect(result.status, JSON.stringify(result.failure)).toBe("passed");
@@ -126,7 +126,7 @@ describe("assertNoDebugSurface", () => {
 
   test("fails with every finding: a connection to the decoy, network and bound Unix sockets, debug menu items, the network inspector, the profiler", async () => {
     const app = new FakeApp({}, undefined, [item("Developer", { id: "spark-developer", items: [item("Reload", { id: "spark-developer-reload" })] })]);
-    app.bundle = { app: appBundle({ "main.jsbundle": HBC("spark-network-inspector") }, { KitchenSink: MACHO("spark-profiler") }), release: true };
+    app.bundle = { app: appBundle({ "main.jsbundle": HBC("spark-network-inspector") }, { KitchenSink: MACHO("spark-profiler") }), release: true, sandboxed: false };
     app.onLaunch = async options => {
       const host = options.arguments[options.arguments.indexOf("-RCT_jsLocation") + 1]!.split(":");
       await new Promise<void>((resolve, reject) => net.connect(Number(host[1]), host[0]).on("close", () => resolve()).on("error", reject));

@@ -35,7 +35,7 @@ The DMG holds the stapled app and a link to `/Applications`, in a compressed, re
 
 ## First-run setup
 
-Install a Developer ID Application certificate and its private key through Xcode or Keychain Access. Packaging requires macOS, the native build prerequisites, and access to Apple's notarization service. Mac App Store signing is a separate, unsupported distribution target.
+Install a Developer ID Application certificate and its private key through Xcode or Keychain Access. Packaging requires macOS, the native build prerequisites, and access to Apple's notarization service. Mac App Store signing and submission are not implemented; `spark build --sandbox` makes the App Sandbox variant a Mac App Store build starts from, signed ad hoc for local testing ([App Sandbox variant](app-sandbox.md)).
 
 Interactive setup first lists available matching Developer ID signing certificates for selection, even when only one matches. It then lists saved notarization Keychain profiles, with separate options to enter an existing profile name or create one using Apple's interactive `notarytool store-credentials` command. Creation requires explicitly selecting the create option; pressing Enter never selects it. A signing certificate name is not automatically a notarization profile. If a profile is missing, spark returns to those options. Apple's tool handles secret input directly; spark does not capture it. Credentials are validated before a native build begins. Noninteractive runs still select the only matching certificate automatically and require an existing notarization profile.
 

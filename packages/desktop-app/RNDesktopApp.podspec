@@ -12,6 +12,8 @@ Pod::Spec.new do |s|
   s.source_files = "macos/**/*.{h,m,mm}", "cpp/**/*.hpp"
   # Spark-owned native strings (SparkLocalization.h); every language holds the same keys.
   s.resource_bundles = { "SparkStrings" => ["macos/Localization/*.lproj"] }
+  # SparkSandboxed reads its own entitlements (SecTask).
+  s.frameworks = "Security"
   # The in-app test driver compiles in Debug builds, and in other builds only for apps that set macos.testDriverInRelease
   # (the Spark config plugin exports SPARK_TEST_DRIVER_RELEASE to the Podfile; docs/test-driver.md#builds).
   driver = { "SPARK_TEST_DRIVER" => ENV["SPARK_TEST_DRIVER_RELEASE"] == "1" ? "1" : "0", "SPARK_TEST_DRIVER[config=Debug]" => "1" }

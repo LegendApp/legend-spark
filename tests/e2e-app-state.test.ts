@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { clearAppState, DriverState, driverIdentity, exactState, preserveDefaults, sparkNamespace, statePaths, type AppIdentity, type DefaultsHost, type StateHost } from "../scripts/e2e/app-state.ts";
+import { clearAppState, containerHome, DriverState, driverIdentity, exactState, preserveDefaults, sparkNamespace, statePaths, type AppIdentity, type DefaultsHost, type StateHost } from "../scripts/e2e/app-state.ts";
 
 const BUNDLE_ID = "so.legend.spark.examples.kitchensink";
 const KITCHEN_SINK: AppIdentity = { bundleId: BUNDLE_ID, projectId: "c0bdf12f-0f35-4b71-8363-b83097388d7b", sandboxed: false };
@@ -242,6 +242,19 @@ describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)"
     expect(existsSync(file)).toBe(true);
   });
 
+  test("leaves macOS's protected TemporaryItems in a temporary directory alone: it can be neither listed nor deleted", () => {
+    const { host: fake } = host();
+    const state = create(bundle(), fake);
+    const items = path.join(fake.temp, DRIVER.bundleId, "TemporaryItems");
+    mkdirSync(items, { recursive: true });
+    chmodSync(items, 0o000);
+    try {
+      touch(path.join(fake.temp, DRIVER.bundleId, "other.txt"));
+      expect(state.clear()).toEqual([`defaults:${DRIVER.bundleId}`, path.join(fake.temp, DRIVER.bundleId, "other.txt")]);
+      expect(readdirSync(path.join(fake.temp, DRIVER.bundleId))).toEqual(["TemporaryItems"]);
+    } finally { chmodSync(items, 0o700); }
+  });
+
   test("never empties a session directory that is a symbolic link", () => {
     const { host: fake, base } = host();
     const state = create(bundle(), fake);
@@ -267,15 +280,13 @@ describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)"
     expect(existsSync(first.root)).toBe(false);
   });
 
-  test("refuses a running clone, a sandboxed app, a bad identifier and entitlements an ad hoc copy cannot carry, leaving nothing behind", () => {
+  test("refuses a running clone, a bad identifier and entitlements an ad hoc copy cannot carry, leaving nothing behind", () => {
     const { host: fake, processes } = host();
     const app = bundle();
     const roots = () => readdirSync(fake.roots).length;
     processes[DRIVER.bundleId] = [ASN];
     expect(() => DriverState.create(app, KITCHEN_SINK, fake)).toThrow(`another driver session runs ${DRIVER.bundleId}: ${ASN}`);
     delete processes[DRIVER.bundleId];
-    expect(() => DriverState.create(app, { ...KITCHEN_SINK, sandboxed: true }, fake))
-      .toThrow(`driver launches do not support sandboxed apps: ${BUNDLE_ID} keeps its state in its container, ~/Library/Containers/${BUNDLE_ID}`);
     expect(() => DriverState.create(app, { ...KITCHEN_SINK, bundleId: "com.apple.finder" }, fake)).toThrow('a driver launch refuses bundle identifier "com.apple.finder"');
     expect(() => DriverState.create(bundle({ "keychain-access-groups": ["ABCDE12345.so.legend"], "com.apple.security.app-sandbox": false }), KITCHEN_SINK, fake))
       .toThrow(/an ad hoc signed copy cannot carry its entitlements keychain-access-groups$/);
@@ -308,6 +319,75 @@ describe.skipIf(process.platform !== "darwin")("isolated sessions (DriverState)"
     expect(existsSync(state.app)).toBe(true);
     delete processes[DRIVER.bundleId];
     cleanup.push(state.root);
+  });
+});
+
+describe.skipIf(process.platform !== "darwin")("isolated sessions of a sandboxed app (DriverState)", () => {
+  const SANDBOXED: AppIdentity = { ...KITCHEN_SINK, sandboxed: true };
+  const CLONE = driverIdentity(SANDBOXED);
+  const entitlements = (app: string) => JSON.parse(execFileSync("plutil", ["-convert", "json", "-o", "-", "-"], {
+    input: execFileSync("codesign", ["-d", "--entitlements", "-", "--xml", app], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }), encoding: "utf8" }));
+  function sandboxedBundle() {
+    const dir = mkdtempSync(path.join(tmpdir(), "e2e-app-state-app-")), app = path.join(dir, "Fake.app");
+    cleanup.push(dir);
+    mkdirSync(path.join(app, "Contents/MacOS"), { recursive: true });
+    copyFileSync("/usr/bin/true", path.join(app, "Contents/MacOS/Fake"));
+    const info = path.join(app, "Contents/Info.plist"), plist = path.join(dir, "entitlements.plist");
+    execFileSync("plutil", ["-create", "xml1", info]);
+    execFileSync("plutil", ["-insert", "CFBundleIdentifier", "-string", BUNDLE_ID, info]);
+    execFileSync("plutil", ["-insert", "CFBundleExecutable", "-string", "Fake", info]);
+    writeFileSync(plist, JSON.stringify({ "com.apple.security.app-sandbox": true, "com.apple.security.print": true }));
+    execFileSync("plutil", ["-convert", "xml1", plist]);
+    execFileSync("codesign", ["--force", "-s", "-", "--entitlements", plist, app], { stdio: "ignore" });
+    return app;
+  }
+  const sessions: DriverState[] = [];
+  afterEach(async () => { for (const state of sessions.splice(0)) await state.dispose(0).catch(() => {}); });
+
+  test("the clone keeps its state in its own container, never the app's, and is signed with the app's entitlements plus its run directories", () => {
+    const { host: fake } = host();
+    const state = DriverState.create(sandboxedBundle(), SANDBOXED, fake);
+    sessions.push(state);
+    expect(state.identity).toEqual(CLONE);
+    expect(state.home).toBe(path.join(fake.home, "Library", "Containers", CLONE.bundleId, "Data"));
+    expect(state.home).toBe(containerHome(fake.home, CLONE.bundleId));
+    expect(state.env).toEqual({});
+    expect(path.dirname(state.runs!)).toBe(fake.roots);
+    expect(path.basename(state.runs!)).toMatch(/^sdr-[0-9a-f]{8}$/);
+    expect(existsSync(state.runs!)).toBe(true);
+    execFileSync("codesign", ["--verify", "--strict", state.app]);
+    expect(entitlements(state.app)).toEqual({
+      "com.apple.security.app-sandbox": true, "com.apple.security.print": true,
+      "com.apple.security.temporary-exception.files.absolute-path.read-write": [`${realpathSync(state.runs!)}/`],
+    });
+  });
+
+  test("clearState deletes the clone's defaults and state in its container and leaves the container, the app's container and other files", () => {
+    const { host: fake, calls } = host();
+    const state = DriverState.create(sandboxedBundle(), SANDBOXED, fake);
+    sessions.push(state);
+    calls.length = 0;
+    const support = path.join(state.home, "Library", "Application Support", DRIVER_NS, "settings.json"), temp = path.join(state.home, "tmp", "x");
+    const cache = path.join(fake.cache, CLONE.bundleId, "x");
+    // Containers link the user's folders; the link and its target stay.
+    const desktop = path.join(state.home, "Desktop"), own = path.join(containerHome(fake.home, BUNDLE_ID), "Library", "Application Support", NS, "a");
+    [support, temp, cache, own, path.join(fake.home, "Desktop", "keep.txt")].forEach(file => touch(file));
+    symlinkSync(path.join(fake.home, "Desktop"), desktop);
+    const domain = path.join(state.home, "Library", "Preferences", CLONE.bundleId);
+    expect(state.clear()).toEqual([`defaults:${domain}`, path.join(state.home, "Library", "Application Support", DRIVER_NS), temp, cache]);
+    expect(calls).toEqual([`running ${CLONE.bundleId}`, `defaults delete ${domain}`]);
+    expect([existsSync(support), existsSync(temp), existsSync(cache)]).toEqual([false, false, false]);
+    expect([existsSync(desktop), existsSync(path.join(fake.home, "Desktop", "keep.txt")), existsSync(own)]).toEqual([true, true, true]);
+  });
+
+  test("dispose deletes the state in the container, the root and the run directories; the container stays", async () => {
+    const { host: fake, calls } = host();
+    const state = DriverState.create(sandboxedBundle(), SANDBOXED, fake);
+    touch(path.join(state.home, "Library", "Caches", CLONE.bundleId, "Cache.db"));
+    calls.length = 0;
+    await state.dispose();
+    expect(calls.filter(call => !call.startsWith("running"))).toEqual([`defaults delete ${path.join(state.home, "Library", "Preferences", CLONE.bundleId)}`, `unregister ${state.app}`]);
+    expect([existsSync(state.root), existsSync(state.runs!), existsSync(path.join(state.home, "Library", "Caches", CLONE.bundleId)), existsSync(state.home)]).toEqual([false, false, false, true]);
   });
 });
 

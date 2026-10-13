@@ -13,7 +13,7 @@ export type Condition = { platform?: "macos" | "windows"; visible?: unknown; not
 export type FlowCommand = { name: string; args: Record<string, unknown>; when?: Condition; timeout?: string | number; location: SourceLocation };
 export type FlowHeader = {
   appId: string; name: string; intent?: string; checks?: string[]; tags?: string[]; platforms?: Array<"macos" | "windows">;
-  build?: "release" | "dev"; manual?: boolean | "partial"; timeout?: string | number; matrix?: Record<string, Array<string | boolean>>;
+  build?: "release" | "dev"; variant?: "direct" | "sandbox"; manual?: boolean | "partial"; timeout?: string | number; matrix?: Record<string, Array<string | boolean>>;
   env?: Record<string, string>; onFlowStart?: FlowCommand[]; onFlowComplete?: FlowCommand[];
 };
 export type FlowAst = { file: string; header: FlowHeader; commands: FlowCommand[] };
@@ -252,7 +252,7 @@ export function checkRegistry(source: string, file = "<area>.yaml"): Checked<Che
 export type GateTarget = { os: string; arch: "arm64" | "x64"; machine?: string };
 export type GateManifest = {
   suite: string; appId: string;
-  build: Partial<Record<"macos" | "windows", { artifact: string; verifySignature?: boolean; sizeBudgetMB?: number; symbols?: string; package?: string }>>;
+  build: Partial<Record<"macos" | "windows", { artifact: string; verifySignature?: boolean; sizeBudgetMB?: number; symbols?: string; package?: string; sandbox?: string }>>;
   targets: GateTarget[]; include: string[]; blocking: { tags: string[]; default: boolean }; retries: 0; timeBudget: string | number;
   budgets: string; coverage: { checks: string; exports: boolean; availability: boolean }; signoffs: string; report: { json: string; html: string };
 };

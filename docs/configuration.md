@@ -67,6 +67,12 @@ configuration fails. Nothing is added without it; see [capture](capture.md#entit
 for each. Nothing is added without it. They need a build signed by your team; see
 [privileged helpers](privileged-helper.md#configuration).
 
+`macos.sandbox` describes the App Sandbox (Mac App Store style) variant that `spark build --sandbox` makes:
+`"entitlements"` lists the `com.apple.security.*` entitlements its main executable carries besides the app's own and
+`com.apple.security.app-sandbox` (for example `files.user-selected.read-write`, `files.bookmarks.app-scope`,
+`network.client`, `print`). The variant ships without Sparkle updates and privileged helpers; see
+[the App Sandbox variant](app-sandbox.md).
+
 `localizations` lists the languages the app is translated into, development
 language first. On macOS AppKit and Spark show native strings (menus, dialogs,
 panels) in the first of the user's languages listed there; see

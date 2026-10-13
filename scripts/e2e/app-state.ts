@@ -1,11 +1,12 @@
 // The app state of driver launches (docs/e2e-flows.md#app-state). An `isolated` session (the default) launches an APFS
 // clone of the app with its own bundle and project identifiers, so its defaults domain, Keychain service and Spark
-// namespace are never the app's, and points the app's home and temporary directories at a per-session root. `exact`
-// (the release gate) launches the app itself with its real state. `launchApp: { clearState: true }` deletes the
-// session's state.
+// namespace are never the app's, and points the app's home and temporary directories at a per-session root. A
+// sandboxed app's home is its container, which macOS names by bundle identifier: the clone's container is
+// ~/Library/Containers/<id>.driver, never the app's. `exact` (the release gate) launches the app itself with its real
+// state. `launchApp: { clearState: true }` deletes the session's state.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -28,17 +29,23 @@ export type StateHost = {
 };
 /** `isolated`: a clone with its own identity and state (e2e:run, ks:capture). `exact`: the app itself and its real state (the release gate). */
 export type StateMode = "isolated" | "exact";
-/** What a driver session launches (`app`, as `identity`, with `env`) and how its state is deleted. */
+/**
+ * What a driver session launches (`app`, as `identity`, with `env`) and how its state is deleted. `runs`: where its
+ * launches make their run directories (the driver's private directories), when not the system temporary directory.
+ */
 export type AppState = {
   readonly app: string;
   readonly identity: AppIdentity;
   readonly env: Readonly<Record<string, string>>;
+  readonly runs?: string;
   clear(): string[];
   dispose(): Promise<void>;
 };
 
 const BUNDLE_ID = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+){2,}$/;
 const ROOT_PREFIX = "spark-driver-state-";
+/** The App Sandbox file-access exception the clone of a sandboxed app is signed with: its session's run directories. */
+const FILE_EXCEPTION = "com.apple.security.temporary-exception.files.absolute-path.read-write";
 const EXIT_TIMEOUT_MS = 10000;
 /**
  * Launch environment that moves the app's state: NSHomeDirectory() (and every path under ~/Library that Foundation
@@ -51,6 +58,9 @@ export const sparkNamespace = (projectId: string) => `spark.desktop.${createHash
 
 /** The identity of the driven clone: never the app's own, so no state keyed by it is the app's. */
 export const driverIdentity = ({ bundleId, projectId, sandboxed }: AppIdentity): AppIdentity => ({ bundleId: `${bundleId}.driver`, projectId: `${projectId}.driver`, sandboxed });
+
+/** A sandboxed app's home: its container's Data directory, which containermanagerd creates and owns. */
+export const containerHome = (home: string, bundleId: string) => path.join(home, "Library", "Containers", bundleId, "Data");
 
 /** Where an app keeps state under a home and a temporary directory, besides its `defaults` domain. Found in the Spark, React Native and WebView code. */
 export function statePaths({ bundleId, projectId }: AppIdentity, { home, temp }: { home: string; temp: string }): string[] {
@@ -119,15 +129,17 @@ export function exactState(app: string, identity: AppIdentity, expected: string,
   return { app, identity, env: {}, clear: () => clearAppState(identity, expected, host), dispose: async () => {} };
 }
 
+/** The entitlements `app` is signed with. */
+function signedEntitlements(app: string): Record<string, unknown> {
+  const xml = execFileSync("codesign", ["-d", "--entitlements", "-", "--xml", app], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return xml.trim() ? JSON.parse(execFileSync("plutil", ["-convert", "json", "-o", "-", "-"], { input: xml, encoding: "utf8" })) as Record<string, unknown> : {};
+}
 /**
  * Entitlements an ad hoc signature cannot carry: they need a provisioning profile or a team identifier, so the clone
  * would not launch, or would reach the app's own Keychain items and app group containers.
  */
 function restrictedEntitlements(app: string): string[] {
-  const xml = execFileSync("codesign", ["-d", "--entitlements", "-", "--xml", app], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  if (!xml.trim()) return [];
-  const entitlements = JSON.parse(execFileSync("plutil", ["-convert", "json", "-o", "-", "-"], { input: xml, encoding: "utf8" })) as Record<string, unknown>;
-  return Object.entries(entitlements).filter(([key, value]) =>
+  return Object.entries(signedEntitlements(app)).filter(([key, value]) =>
     key === "keychain-access-groups" || key === "com.apple.application-identifier" || key.startsWith("com.apple.developer.")
     || (key === "com.apple.security.application-groups" && Array.isArray(value) && value.some(group => /^[A-Z0-9]{10}\./.test(String(group))))).map(([key]) => key);
 }
@@ -161,12 +173,15 @@ function isRoot(root: string, bundleId: string, roots: string) {
 /**
  * An `isolated` session's app: a clone of the app with `driverIdentity`, and its state root. `env` is the launch
  * environment that keeps the clone's files under the root. Created by `create()`; `dispose()` deletes it all.
+ * A sandboxed clone's home is its container (`containerHome`), which macOS sets up: `env` is empty, its state there is
+ * deleted (the container itself, which containermanagerd owns, stays), and `runs` holds its launches' run directories.
  */
 export class DriverState implements AppState {
   readonly identity: AppIdentity;
   readonly app: string;
-  readonly env: Readonly<Record<(typeof STATE_ENV)[number], string>>;
+  readonly env: Readonly<Partial<Record<(typeof STATE_ENV)[number], string>>>;
   readonly home: string;
+  readonly runs?: string;
   /** The home, temporary and cache directories, with the depth the clearState log lists. */
   private readonly dirs: Array<[string, number]>;
   private readonly lock: string;
@@ -175,12 +190,20 @@ export class DriverState implements AppState {
     this.identity = driverIdentity(identity);
     if (!isRoot(root, this.identity.bundleId, host.roots)) throw new Error(`driver state refuses root ${root}: not ${host.roots}/${ROOT_PREFIX}${this.identity.bundleId}-*`);
     this.app = path.join(root, path.basename(app));
-    this.home = path.join(root, "home");
     // dirhelper creates `<directory>/<suffix>` protected by System Integrity Protection: its contents can be deleted, it
     // cannot. So every session of an app shares one, named by the clone's identity, one session at a time (the lock).
+    // A sandboxed app's cache directory is the same `<cache>/<bundle id>`; its temporary directory is in its container.
     const suffix = this.identity.bundleId;
-    this.dirs = [[this.home, 3], [path.join(host.temp, suffix), 1], [path.join(host.cache, suffix), 1]];
-    this.env = { CFFIXED_USER_HOME: this.home, DIRHELPER_USER_DIR_SUFFIX: suffix };
+    if (identity.sandboxed) {
+      this.home = containerHome(host.home, suffix);
+      this.dirs = [[path.join(this.home, "tmp"), 1], [path.join(host.cache, suffix), 1]];
+      this.env = {};
+      this.runs = runsFor(host, suffix);
+    } else {
+      this.home = path.join(root, "home");
+      this.dirs = [[this.home, 3], [path.join(host.temp, suffix), 1], [path.join(host.cache, suffix), 1]];
+      this.env = { CFFIXED_USER_HOME: this.home, DIRHELPER_USER_DIR_SUFFIX: suffix };
+    }
     this.lock = lockFor(host, this.identity.bundleId);
   }
 
@@ -188,11 +211,13 @@ export class DriverState implements AppState {
    * Takes the clone identity's session lock, deletes what earlier sessions left (their roots, LaunchServices
    * registrations, defaults domain, and state of the clone's identity outside a root), then creates a 0700 root, clones
    * `app` into it (APFS clonefile) with `driverIdentity`, signs the clone ad hoc keeping its entitlements and flags, and
-   * removes its quarantine. Refuses a sandboxed app, entitlements an ad hoc signature cannot carry, and a running clone.
+   * removes its quarantine. Refuses entitlements an ad hoc signature cannot carry, and a running clone. A sandboxed app's
+   * clone keeps its state in its own container (`containerHome`), and is signed with one App Sandbox file-access
+   * exception besides the app's entitlements: its session's run directories (`runs`), where the driver reads its token
+   * and writes captures, and links its socket (docs/test-driver.md#sandboxed-apps).
    */
   static create(app: string, identity: AppIdentity, host: StateHost = macHost()): DriverState {
     checkIdentity(identity, "a driver launch");
-    if (identity.sandboxed) throw new Error(`driver launches do not support sandboxed apps: ${identity.bundleId} keeps its state in its container, ~/Library/Containers/${identity.bundleId}`);
     checkRoots(host, "a driver launch");
     const restricted = restrictedEntitlements(app);
     if (restricted.length) throw new Error(`driver launches refuse ${app}: an ad hoc signed copy cannot carry its entitlements ${restricted.join(", ")}`);
@@ -211,19 +236,32 @@ export class DriverState implements AppState {
       host.deleteDefaults(bundleId);
       root = mkdtempSync(path.join(host.roots, `${ROOT_PREFIX}${bundleId}-`));
       const state = new DriverState(root, app, identity, host);
+      if (state.runs) {
+        // A crashed session's run directories; the lock says none runs.
+        rmSync(state.runs, { recursive: true, force: true });
+        mkdirSync(state.runs, { mode: 0o700 });
+        state.clearContainer();
+      }
       execFileSync("cp", ["-cR", app, state.app]);
       const plist = path.join(state.app, "Contents/Info.plist");
       execFileSync("plutil", ["-replace", "CFBundleIdentifier", "-string", bundleId, plist]);
       execFileSync("plutil", ["-replace", "SparkProjectIdentifier", "-string", state.identity.projectId, plist]);
       // LaunchServices registers the clone when it launches; it must not offer the app's intents to Shortcuts, Spotlight or Siri.
       removeAppIntentsMetadata(state.app);
-      execFileSync("codesign", ["--force", "--sign", "-", "--preserve-metadata=entitlements,flags", state.app], { stdio: ["ignore", "ignore", "pipe"] });
+      if (state.runs) {
+        // Its signed entitlements and the exception, by real path (the sandbox resolves /var to /private/var).
+        const entitlements = path.join(root, "entitlements.plist");
+        writeFileSync(entitlements, JSON.stringify({ ...signedEntitlements(app), [FILE_EXCEPTION]: [`${realpathSync(state.runs)}/`] }));
+        execFileSync("plutil", ["-convert", "xml1", entitlements]);
+        execFileSync("codesign", ["--force", "--sign", "-", "--entitlements", entitlements, "--preserve-metadata=flags", state.app], { stdio: ["ignore", "ignore", "pipe"] });
+      } else execFileSync("codesign", ["--force", "--sign", "-", "--preserve-metadata=entitlements,flags", state.app], { stdio: ["ignore", "ignore", "pipe"] });
       execFileSync("xattr", ["-dr", "com.apple.quarantine", state.app]);
-      mkdirSync(state.home, { mode: 0o700 });
+      if (!state.runs) mkdirSync(state.home, { mode: 0o700 });
       state.empty();
       return state;
     } catch (error) {
       if (root) rmSync(root, { recursive: true, force: true });
+      if (identity.sandboxed) rmSync(runsFor(host, bundleId), { recursive: true, force: true });
       rmSync(lock, { recursive: true, force: true });
       throw error;
     }
@@ -241,7 +279,17 @@ export class DriverState implements AppState {
     if (running.length) throw new Error(`clearState needs ${bundleId} to be quit first; running: ${running.join(", ")}`);
     const escaped = statePaths(this.identity, host).filter(file => lstatSync(file, { throwIfNoEntry: false }));
     if (escaped.length) throw new Error(`clearState refuses: ${bundleId} kept state outside its driver state root, which it cannot isolate: ${escaped.join(", ")}`);
+    if (this.runs) return this.clearContainer();
     return [...host.deleteDefaults(bundleId) ? [`defaults:${bundleId}`] : [], ...this.empty()];
+  }
+
+  /**
+   * A sandboxed clone's state in its container: its defaults (the container's preferences file), the `statePaths` under
+   * the container's home and temporary directory, and what its temporary and cache directories hold. Returns what existed.
+   */
+  private clearContainer(): string[] {
+    const domain = path.join(this.home, "Library", "Preferences", this.identity.bundleId);
+    return [...this.host.deleteDefaults(domain) ? [`defaults:${domain}`] : [], ...remove(statePaths(this.identity, { home: this.home, temp: path.join(this.home, "tmp") })), ...this.empty()];
   }
 
   /**
@@ -258,11 +306,15 @@ export class DriverState implements AppState {
         running = this.host.running(this.identity.bundleId);
       }
       if (running.length) throw new Error(`the driven clone ${this.identity.bundleId} still runs ${timeoutMs / 1000} s after its session ended, so its state in ${this.root} is kept: ${running.join(", ")}`);
-      this.host.deleteDefaults(this.identity.bundleId);
-      this.empty();
+      if (this.runs) this.clearContainer();
+      else {
+        this.host.deleteDefaults(this.identity.bundleId);
+        this.empty();
+      }
       this.host.unregister(this.app);
       if (!isRoot(this.root, this.identity.bundleId, this.host.roots)) throw new Error(`driver state refuses to delete ${this.root}`);
       rmSync(this.root, { recursive: true, force: true });
+      if (this.runs) rmSync(this.runs, { recursive: true, force: true });
     } finally {
       rmSync(this.lock, { recursive: true, force: true });
     }
@@ -274,9 +326,9 @@ export class DriverState implements AppState {
       const stat = lstatSync(dir, { throwIfNoEntry: false });
       if (!stat) return [];
       if (!stat.isDirectory() || stat.uid !== process.getuid!()) throw new Error(`driver state refuses to empty ${dir}: not a directory owned by this user`);
-      const found = entries(dir, depth);
+      const found = entries(dir, depth, KEPT);
       // A symbolic link inside is removed itself, never followed.
-      for (const entry of readdirSync(dir)) rmSync(path.join(dir, entry), { recursive: true });
+      for (const entry of readdirSync(dir)) if (entry !== KEPT) rmSync(path.join(dir, entry), { recursive: true });
       return found;
     });
   }
@@ -294,13 +346,24 @@ export function removeAppIntentsMetadata(app: string): string[] {
   return found;
 }
 
+/**
+ * NSFileManager's item replacement directory (document saves, file versions) in a temporary directory: macOS creates
+ * `TemporaryItems` there protected, so this user can neither list, rename nor delete it. Sessions leave it alone.
+ */
+const KEPT = "TemporaryItems";
 const lockFor = (host: Pick<StateHost, "temp">, bundleId: string) => path.join(host.temp, `spark-driver-${bundleId}.lock`);
+/**
+ * A sandboxed clone's run directories: short (a Unix socket path holds 104 bytes; the runner connects through
+ * `<runs>/spark-driver-XXXXXX/driver.sock`), and the same for every session of the identity, so the clone's
+ * entitlements, and its signature, stay the same for a given build.
+ */
+const runsFor = (host: Pick<StateHost, "roots">, bundleId: string) => path.join(host.roots, `sdr-${createHash("sha256").update(bundleId).digest("hex").slice(0, 8)}`);
 
-/** What a directory holds, `depth` levels down (`home/Library/Application Support/<namespace>`), for the clearState log. */
-function entries(dir: string, depth: number): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+/** What a directory holds, `depth` levels down (`home/Library/Application Support/<namespace>`), for the clearState log; `skip` is left out. */
+function entries(dir: string, depth: number, skip?: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).filter(entry => entry.name !== skip).flatMap(entry => {
     const file = path.join(dir, entry.name);
-    return depth > 1 && entry.isDirectory() ? entries(file, depth - 1) : [file];
+    return depth > 1 && entry.isDirectory() ? entries(file, depth - 1, skip) : [file];
   });
 }
 

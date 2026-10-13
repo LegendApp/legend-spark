@@ -8,6 +8,8 @@ test("accepts documented command shapes and rejects incompatible build modes", (
   expect(cliArguments(["sdk", "export", "out", "--runtime", "one", "--runtime", "two"]).values.runtime).toEqual(["one", "two"]);
   expect(cliArguments(["build", "--dev", "--platform", "ios", "--device", "Phone", "--port", "8082"]).values.device).toBe("Phone");
   for (const args of [["build", "--dev", "--release"], ["build", "--runner", "--preview"], ["build", "--port", "0"], ["create", "App", "--package-manager", "unknown"]]) expect(() => cliArguments(args)).toThrow();
+  expect(cliArguments(["build", "--sandbox"]).values.sandbox).toBe(true);
+  for (const args of [["build", "--dev", "--sandbox"], ["build", "--runner", "--sandbox"], ["package", "--sandbox"]]) expect(() => cliArguments(args), args.join(" ")).toThrow();
   expect(cliArguments(["create", "--help"]).values.help).toBe(true);
   expect(cliArguments(["sdk", "--help"]).values.help).toBe(true);
 });

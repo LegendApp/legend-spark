@@ -121,7 +121,7 @@ test("the Kitchen Sink, which the gate drives as a release build, opts in", () =
 // Both include the crash reporter and the hang watchdog, whose native simulated crashes and simulated hangs need the driver.
 const native = path.join(root, "packages/desktop-app/macos"), diagnostics = path.join(root, "packages/diagnostics/macos");
 const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm", "SparkTestDriverCommits.mm",
-  "SparkTestDriverAudit.mm", "SparkFrameTimeline.mm"].map(file => path.join(native, file));
+  "SparkTestDriverAudit.mm", "SparkFrameTimeline.mm", "SparkSandbox.mm"].map(file => path.join(native, file));
 const crashSources = ["SparkCrashReporter.mm", "SparkHangWatchdog.mm", "SparkStack.mm"].map(file => path.join(diagnostics, file));
 const host = `#import "SparkTestDriver.h"
 #import "SparkCrashReporter.h"
@@ -150,7 +150,7 @@ beforeAll(async () => {
   writeFileSync(path.join(directory, "host.mm"), host);
   const compile = (name: string, sources: string[], flags: string[]) => {
     mkdirSync(path.join(app(name), "Contents/MacOS"), { recursive: true });
-    return runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-Oz", "-Wl,-dead_strip", "-framework", "AppKit", "-framework", "QuartzCore",
+    return runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-Oz", "-Wl,-dead_strip", "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "Security",
       ...flags, "-I", native, "-I", diagnostics, path.join(directory, "host.mm"), ...sources, ...crashSources, "-o", path.join(app(name), "Contents/MacOS", name)], { timeout: 120_000 });
   };
   await Promise.all([compile("Consumer", [], ["-DSPARK_TEST_DRIVER=0"]), compile("Gate", driverSources, ["-DSPARK_TEST_DRIVER=1"])]);

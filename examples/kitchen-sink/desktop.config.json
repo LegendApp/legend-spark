@@ -15,6 +15,14 @@
     "icon": "./assets/KitchenSink.icon",
     "testDriverInRelease": true,
     "testDriverPrivateEvents": true,
+    "sandbox": {
+      "entitlements": {
+        "com.apple.security.files.user-selected.read-write": true,
+        "com.apple.security.files.bookmarks.app-scope": true,
+        "com.apple.security.network.client": true,
+        "com.apple.security.print": true
+      }
+    },
     "infoPlist": {
       "NSCameraUsageDescription": "The Privacy permissions screen requests camera access to show the prompt, and the Capture screen turns the camera on when you press Start camera.",
       "NSMicrophoneUsageDescription": "The Privacy permissions screen requests microphone access to show the prompt, the Speech screen listens when you press Listen, and the Capture screen records when you press Record.",

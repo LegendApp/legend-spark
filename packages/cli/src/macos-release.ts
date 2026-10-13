@@ -60,6 +60,17 @@ export async function removeLocalNetworking(app: string, plutil: (args: string[]
   await plutil(["-remove", Object.keys(ats).length === 1 ? "NSAppTransportSecurity" : "NSAppTransportSecurity.NSAllowsLocalNetworking", plist]);
 }
 
+/**
+ * Removes Sparkle's Info.plist keys (SUFeedURL, SUPublicEDKey, …) from the App Sandbox variant, which ships without
+ * Sparkle: the App Store updates it (docs/app-sandbox.md). Returns the keys removed.
+ */
+export async function removeUpdaterKeys(app: string, plutil: (args: string[]) => Promise<string>): Promise<string[]> {
+  const plist = path.join(app, "Contents/Info.plist");
+  const keys = Object.keys(JSON.parse(await plutil(["-convert", "json", "-o", "-", plist])) as Record<string, unknown>).filter(key => /^SU[A-Z]/.test(key));
+  for (const key of keys) await plutil(["-remove", key, plist]);
+  return keys;
+}
+
 const MACH_O = new Set([0xfeedfacf, 0xcffaedfe, 0xcafebabe, 0xbebafeca]);
 function isMachO(file: string): boolean {
   const fd = openSync(file, "r"), magic = Buffer.alloc(4);

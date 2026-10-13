@@ -9,7 +9,9 @@
 // Everything that reaches the helper needs this process to be signed by a team: the helper checks its client's
 // signature, and the app checks the helper's (helperRequirement). Without a team (an unsigned or ad-hoc build)
 // availability is "unsigned" and registering and messaging fail with reason unsigned before ServiceManagement or XPC is
-// touched.
+// touched. In the App Sandbox (sandboxed) availability is "sandboxed" and registering, unregistering, the admin prompt
+// and messaging fail with reason sandboxed: a sandboxed app cannot install a launch daemon or gain admin rights
+// (docs/app-sandbox.md). That holds in the simulation too, since the sandbox is the process's, not simulated.
 //
 // Failures the API names end with an error whose userInfo has "code" (a SparkErrorCode) and "reason" (a
 // PrivilegedHelperErrorReason); the JavaScript layer turns them into a PrivilegedHelperError. Other errors carry only a
@@ -46,14 +48,14 @@ typedef NSString *_Nullable (^SparkPrivilegedHelperRequirementProvider)(NSString
 
 // Main thread. Every completion runs exactly once, on the main thread.
 @interface SparkPrivilegedHelpers : NSObject
-// isSigned: this process is signed by a team. helperRequirement: each helper's code signing requirement (in the app,
+// isSigned: this process is signed by a team. sandboxed: it runs in the App Sandbox. helperRequirement: each helper's code signing requirement (in the app,
 // SparkPrivilegedHelperRequirement(this process's team, <bundle identifier>.<name>), the identifier spark package signs
 // the helper with). connector: nil connects to the helper's Mach service as a privileged launchd job and checks
 // SMAppService's status first; a connector skips that status check.
-- (instancetype)initWithSimulated:(BOOL)simulated signed:(BOOL)isSigned helperRequirement:(SparkPrivilegedHelperRequirementProvider)requirement connector:(nullable SparkPrivilegedHelperConnector)connector NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithSimulated:(BOOL)simulated signed:(BOOL)isSigned sandboxed:(BOOL)sandboxed helperRequirement:(SparkPrivilegedHelperRequirementProvider)requirement connector:(nullable SparkPrivilegedHelperConnector)connector NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 @property (nonatomic, readonly) BOOL simulated;
-// "available" or "unsigned". Any thread.
+// "available", "sandboxed" or "unsigned". Any thread.
 - (NSString *)availability;
 // The status name.
 - (void)status:(NSString *)name completion:(SparkPrivilegedHelperCompletion)completion;

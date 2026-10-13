@@ -1,0 +1,23 @@
+appId: so.legend.spark.examples.kitchensink
+name: A driver session isolates the App Sandbox variant's state in the clone's own container
+intent: >
+  The driver runs the App Sandbox variant as a clone (so.legend.spark.examples.kitchensink.driver) whose home is its
+  own container, never the app's. A launch with clearState and --ks-mark-state finds no saved setting and no recent
+  document, then saves a Spark setting and notes a recent document there; a plain relaunch finds both; a relaunch with
+  clearState finds neither.
+checks: [DIST-MAS-04]
+tags: [packaging-distribution]
+platforms: [macos]
+variant: sandbox
+---
+- launchApp: { clearState: true, arguments: ["--ks-mark-state"], openUrl: "spark-ks://infra/launch-state" }
+- assertVisible: { id: infra-launch-state-marked }
+- assertVisible: { id: infra-launch-state-setting-absent }
+- assertVisible: { id: infra-launch-state-recent-absent }
+- launchApp: { openUrl: "spark-ks://infra/launch-state" }
+- assertVisible: { id: infra-launch-state-setting-found }
+- assertVisible: { id: infra-launch-state-recent-found }
+- assertNotVisible: { id: infra-launch-state-marked }
+- launchApp: { clearState: true, openUrl: "spark-ks://infra/launch-state" }
+- assertVisible: { id: infra-launch-state-setting-absent }
+- assertVisible: { id: infra-launch-state-recent-absent }

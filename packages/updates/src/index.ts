@@ -2,9 +2,14 @@ import { Platform } from "react-native";
 import Native from "./NativeDesktopUpdates";
 import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import { SparkError, invokeNative, parseNativeResult, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
+import { getAppAvailability, getAppContext } from "@legendapp/spark-desktop-app/src/api";
 export type { Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 
-export type UpdateUnavailableReason = "unsupported-platform" | "missing-module" | "go" | "development" | "unconfigured";
+/**
+ * `sandboxed`: the app runs in the App Sandbox, the Mac App Store variant, which the App Store updates; it ships
+ * without Sparkle (docs/app-sandbox.md).
+ */
+export type UpdateUnavailableReason = "unsupported-platform" | "sandboxed" | "missing-module" | "go" | "development" | "unconfigured";
 export type UpdateAvailability = { available: true } | { available: false; reason: UpdateUnavailableReason };
 export type UpdateStatus = {
   available: true;
@@ -53,6 +58,14 @@ function native() {
   if (!Native) throw new SparkError("E_MODULE_UNAVAILABLE", "Native app updater is not installed");
   return Native;
 }
+// Whether this process runs in the App Sandbox: fixed for its lifetime, so asked once (a failed answer is asked again).
+// Without Spark's app module there is no Spark host to ask, and no updater module either (missing-module).
+let sandbox: Promise<boolean> | undefined;
+function sandboxed(): Promise<boolean> {
+  if (!getAppAvailability().available) return Promise.resolve(false);
+  sandbox ??= getAppContext().then(context => context.sandboxed, error => { sandbox = undefined; throw error; });
+  return sandbox;
+}
 const unavailable = (reason: UpdateUnavailableReason): UpdateStatus => ({ available: false, reason, started: false, canCheck: false, automaticallyChecks: false, checkIntervalSeconds: null, skippedBuild: null, skippedMajorBuild: null, lastCheckedAt: null });
 const nullableString = (value: unknown) => value === null || typeof value === "string";
 function validStatus(value: unknown): value is UpdateStatus {
@@ -62,11 +75,13 @@ function validStatus(value: unknown): value is UpdateStatus {
   return status.available === true && typeof status.started === "boolean" && typeof status.canCheck === "boolean" && typeof status.automaticallyChecks === "boolean" && Number.isFinite(status.checkIntervalSeconds) && status.checkIntervalSeconds > 0 && typeof status.feedURL === "string" && status.feedURL.startsWith("https://") && nullableString(status.skippedBuild) && nullableString(status.skippedMajorBuild) && nullableString(status.lastCheckedAt);
 }
 async function command(method: string, args: object = {}): Promise<void> {
+  if (Platform.OS === "macos" && await sandboxed()) throw new SparkError("E_UNAVAILABLE", "App updates are unavailable in the App Sandbox; the Mac App Store updates the app");
   parseNativeResult(await invokeNative(() => native().call(method, JSON.stringify(args))), (value): value is null => value === null);
 }
 /** Querying never starts the updater. Missing modules and unsupported targets are reported. */
 export async function getUpdateStatus(): Promise<UpdateStatus> {
   if (Platform.OS !== "macos") return unavailable("unsupported-platform");
+  if (await sandboxed()) return unavailable("sandboxed");
   if (!Native) return unavailable("missing-module");
   return parseNativeResult(await invokeNative(() => native().call("status", "{}")), validStatus);
 }

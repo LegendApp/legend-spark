@@ -1,4 +1,5 @@
 #import "SparkTestDriverPrivate.h"
+#import "SparkSandbox.h"
 #import <QuartzCore/QuartzCore.h>
 #include <atomic>
 #include <fcntl.h>
@@ -10,13 +11,17 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+// libsystem_pthread: sets the calling thread's working directory to `fd` (-1: back to the process's). Not in the SDK headers.
+extern "C" int pthread_fchdir_np(int fd);
+
 // Protocol: newline-delimited JSON over a Unix socket in the run directory. The
 // first message is {"token": "..."}; then one request at a time, each answered
 // with {"id", "ok", ...} or {"id", "ok": false, "error": {"code", "message"}}.
 typedef SparkTestDriverReply SparkDriverReply;
 static BOOL active = NO, ending = NO;
 static int directoryFD = -1, listenFD = -1;
-static NSString *socketPath;
+// Where the socket is bound: the run directory, or for a sandboxed app a private directory in its container (`ownDirectory`).
+static NSString *socketPath, *ownDirectory;
 static NSData *token;
 static id activity;
 static std::atomic<bool> authenticated{false};
@@ -163,16 +168,52 @@ static NSData *SparkConsumeToken(void) {
   // One-time: nothing else can read the token after launch.
   return data && unlinkat(directoryFD, "token", 0) == 0 ? data : nil;
 }
-static int SparkListen(NSString *path) {
+// Binds `name` in `directory` relative to it, on this thread only (a container's path can exceed sun_path's 104 bytes).
+static int SparkListen(int directory, const char *name) {
   struct sockaddr_un address = {};
   address.sun_family = AF_UNIX;
-  if (strlcpy(address.sun_path, path.fileSystemRepresentation, sizeof address.sun_path) >= sizeof address.sun_path) return -1;
+  if (strlcpy(address.sun_path, name, sizeof address.sun_path) >= sizeof address.sun_path) return -1;
   int fd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (fd < 0) return -1;
+  if (pthread_fchdir_np(directory) != 0) { close(fd); return -1; }
   // Nothing can connect before listen(), so tightening the mode after bind() is race-free.
-  if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0 || bind(fd, (struct sockaddr *)&address, sizeof address) != 0 ||
-      chmod(address.sun_path, 0600) != 0 || listen(fd, 1) != 0) { close(fd); return -1; }
+  BOOL listening = fcntl(fd, F_SETFD, FD_CLOEXEC) == 0 && bind(fd, (struct sockaddr *)&address, sizeof address) == 0 &&
+      chmod(address.sun_path, 0600) == 0 && listen(fd, 1) == 0;
+  int saved = errno;
+  pthread_fchdir_np(-1);
+  if (!listening) { close(fd); errno = saved; return -1; }
   return fd;
+}
+// The App Sandbox lets an app bind Unix sockets only inside its container, so a sandboxed app listens in a private
+// directory of its own temporary directory and links the run directory's driver.sock to that socket; the runner
+// connects through the link (docs/test-driver.md#sandboxed-apps). The run directory itself the app reaches through the
+// file-access exception the runner signs its copy of the app with.
+static int SparkListenSandboxed(void) {
+  NSString *pattern = [NSTemporaryDirectory() stringByAppendingPathComponent:@"spark-driver-XXXXXX"];
+  char *buffer = strdup(pattern.fileSystemRepresentation);
+  if (!buffer || !mkdtemp(buffer)) { free(buffer); return -1; } // mkdtemp creates it 0700.
+  ownDirectory = [NSFileManager.defaultManager stringWithFileSystemRepresentation:buffer length:strlen(buffer)];
+  free(buffer);
+  int own = open(ownDirectory.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  int fd = own < 0 ? -1 : SparkListen(own, "driver.sock");
+  int saved = errno;
+  if (own >= 0) close(own);
+  socketPath = [ownDirectory stringByAppendingPathComponent:@"driver.sock"];
+  if (fd >= 0 && symlinkat(socketPath.fileSystemRepresentation, directoryFD, "driver.sock") == 0) return fd;
+  saved = fd < 0 ? saved : errno;
+  if (fd >= 0) close(fd);
+  unlink(socketPath.fileSystemRepresentation);
+  rmdir(ownDirectory.fileSystemRepresentation);
+  errno = saved;
+  return -1;
+}
+static void SparkStopListening(void) {
+  close(listenFD);
+  unlink(socketPath.fileSystemRepresentation);
+  if (ownDirectory) {
+    unlinkat(directoryFD, "driver.sock", 0);
+    rmdir(ownDirectory.fileSystemRepresentation);
+  }
 }
 
 static NSData *SparkReadLine(int fd, NSMutableData *buffer) {
@@ -635,8 +676,7 @@ static void SparkServe(void) {
     else NSLog(@"Spark test driver: rejected a client");
     close(fd);
   }
-  close(listenFD);
-  unlink(socketPath.fileSystemRepresentation);
+  SparkStopListening();
   SparkOnMain(^{ SparkDriverTerminate(); });
 }
 
@@ -652,7 +692,7 @@ BOOL SparkTestDriverStart(void) {
   token = SparkConsumeToken();
   if (!token) SparkDriverRefuse(@"The run directory needs a 0600 token file of 32-256 bytes");
   socketPath = [path stringByAppendingPathComponent:@"driver.sock"];
-  listenFD = SparkListen(socketPath);
+  listenFD = SparkSandboxed() ? SparkListenSandboxed() : SparkListen(directoryFD, "driver.sock");
   if (listenFD < 0) SparkDriverRefuse([NSString stringWithFormat:@"Unable to listen on %@: %s", socketPath, strerror(errno)]);
   active = YES;
   driverStart = CACurrentMediaTime();

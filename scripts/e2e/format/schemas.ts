@@ -36,6 +36,7 @@ export function buildFlowSchema(): Schema {
         tags: list(str, 0),
         platforms: { ...list(oneOf(...PLATFORMS)), uniqueItems: true },
         build: oneOf("release", "dev"),
+        variant: { ...oneOf("direct", "sandbox"), description: "The build the flow tests: direct (default), or sandbox, the App Sandbox variant (gate.yaml build.macos.sandbox; docs/app-sandbox.md)." },
         manual: oneOf(false, "partial", true),
         timeout: duration,
         matrix: obj(Object.fromEntries(Object.entries(MATRIX).map(([key, value]) => [key, { ...list(value), uniqueItems: true }])), [], { minProperties: 1 }),
@@ -95,6 +96,7 @@ export function buildGateSchema(): Schema {
     sizeBudgetMB: { type: "number", exclusiveMinimum: 0, description: "The bundle audit's size budget for the artifact, in MB (10^6 bytes)." },
     symbols: { ...str, description: "The folder of the build's debug symbols (dSYMs), relative to the repository root. ${ARCH} becomes the target's arch." },
     package: { ...str, description: "The spark package output the package audit checks: the distribution ZIP, or the folder holding the one <name>-<version>-<arch>.zip (with its dSYMs archive and updates/ feed), relative to the repository root. ${ARCH} becomes the target's arch." },
+    sandbox: { ...str, description: "The App Sandbox variant of the release build (spark build --sandbox), which `variant: sandbox` flows test, relative to the repository root. ${ARCH} becomes the target's arch (docs/app-sandbox.md)." },
   }, ["artifact"]);
   return {
     $schema: DRAFT,

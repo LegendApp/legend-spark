@@ -19,6 +19,8 @@ test("availability is truthful per platform and signature; Windows calls reject 
   expect(helper.getPrivilegedHelperAvailability()).toEqual({ available: true });
   availabilityAnswer = "unsigned";
   expect(helper.getPrivilegedHelperAvailability()).toEqual({ available: false, reason: "unsigned" });
+  availabilityAnswer = "sandboxed";
+  expect(helper.getPrivilegedHelperAvailability()).toEqual({ available: false, reason: "sandboxed" });
   availabilityAnswer = "maybe";
   expect(() => helper.getPrivilegedHelperAvailability()).toThrow(expect.objectContaining({ code: "E_INVALID_DATA" }));
   platform.OS = "windows";
@@ -39,7 +41,7 @@ test("registration resolves statuses and rejects named ServiceManagement failure
   await helper.unregisterPrivilegedHelper("tool");
   await helper.openPrivilegedHelperSettings();
   expect(calls).toEqual([{ method: "register", args: { name: "tool" } }, { method: "status", args: { name: "tool" } }, { method: "unregister", args: { name: "tool" } }, { method: "openSettings", args: {} }]);
-  for (const [reason, code] of [["unsigned", "E_UNAVAILABLE"], ["notFound", "E_NOT_FOUND"], ["invalidSignature", "E_UNAVAILABLE"], ["invalidPlist", "E_INVALID_DATA"], ["serviceUnavailable", "E_UNAVAILABLE"], ["unknown", "E_NATIVE"]]) {
+  for (const [reason, code] of [["sandboxed", "E_UNAVAILABLE"], ["unsigned", "E_UNAVAILABLE"], ["notFound", "E_NOT_FOUND"], ["invalidSignature", "E_UNAVAILABLE"], ["invalidPlist", "E_INVALID_DATA"], ["serviceUnavailable", "E_UNAVAILABLE"], ["unknown", "E_NATIVE"]]) {
     reply = () => failure(reason!, code!);
     const error = await helper.registerPrivilegedHelper("tool").catch(cause => cause);
     expect(error).toBeInstanceOf(helper.PrivilegedHelperError);

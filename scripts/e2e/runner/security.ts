@@ -1,13 +1,14 @@
 // Security audits of the release build on disk (docs/e2e-flows.md#security-audits): entitlements, signature flags and
 // dylib load paths. The runner runs them over `app` itself, with no backend, so they audit the exact artifact the gate tests.
-import { existsSync, realpathSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { macAppReader, type AppReader, type CodeSignature, type MachOSlice } from "../macho.ts";
 import { Failure, type Platform } from "./backend.ts";
 
 const MH_EXECUTE = 2;
 const GET_TASK_ALLOW = ["com.apple.security.get-task-allow", "get-task-allow"];
-const SANDBOX = "com.apple.security.app-sandbox";
+const SANDBOX = "com.apple.security.app-sandbox", INHERIT = "com.apple.security.inherit";
 /** Hardened runtime exceptions: each lets other code into the process or weakens its memory protections. */
 const RUNTIME_EXCEPTIONS: Record<string, string> = {
   "com.apple.security.cs.disable-library-validation": "loads libraries signed by anyone",
@@ -150,5 +151,33 @@ export const assertLoadPaths: ArtifactCommand = (args, platform, reader = macApp
   verdict("assertLoadPaths", problems);
 };
 
+/**
+ * The App Sandbox (Mac App Store) variant (docs/app-sandbox.md): the main executable is sandboxed without
+ * com.apple.security.inherit, and every other process carries exactly app-sandbox and inherit, as Apple requires of a
+ * sandboxed app's helpers. It leaves out what a sandboxed app cannot use or the App Store replaces: Sparkle code (its
+ * framework, or a library linking it), Sparkle's Info.plist keys (SU*), and launch daemons (Contents/Library/LaunchDaemons:
+ * privileged helpers).
+ */
+export const assertSandboxVariant: ArtifactCommand = (args, platform, reader = macAppReader) => {
+  macOnly("assertSandboxVariant", platform);
+  const { root, main, code } = codeOf(String(args.app), reader), problems: string[] = [];
+  for (const item of code.filter(item => item.process)) {
+    const keys = Object.keys(reader.signature(item.file).entitlements).sort();
+    if (item.file === main) {
+      if (!keys.includes(SANDBOX) || keys.includes(INHERIT)) problems.push(`${item.relative}: the main executable must carry ${SANDBOX} and not ${INHERIT} (it has ${keys.join(", ") || "none"})`);
+    } else if (keys.join() !== [SANDBOX, INHERIT].join()) problems.push(`${item.relative}: a helper process must carry exactly ${SANDBOX} and ${INHERIT} (it has ${keys.join(", ") || "none"})`);
+  }
+  for (const item of code) {
+    if (item.relative.split(path.sep).includes("Sparkle.framework")) problems.push(`${item.relative}: Sparkle code; the App Store updates the sandboxed variant`);
+    else for (const name of new Set(item.slices.flatMap(slice => slice.dylibs.map(dylib => dylib.name)).filter(name => name.includes("Sparkle.framework"))))
+      problems.push(`${item.relative}: links ${name}; the App Store updates the sandboxed variant`);
+  }
+  const info = JSON.parse(execFileSync("plutil", ["-convert", "json", "-o", "-", path.join(root, "Contents/Info.plist")], { encoding: "utf8" })) as Record<string, unknown>;
+  for (const key of Object.keys(info).filter(key => /^SU[A-Z]/.test(key))) problems.push(`Info.plist: ${key} configures Sparkle`);
+  const daemons = path.join(root, "Contents/Library/LaunchDaemons");
+  if (existsSync(daemons)) problems.push(`Contents/Library/LaunchDaemons: ${readdirSync(daemons).join(", ") || "an empty folder"}; a sandboxed app cannot install a launch daemon (privileged helper)`);
+  verdict("assertSandboxVariant", problems);
+};
+
 /** Commands the runner runs over the build on disk; see `runner` in scripts/e2e/format/commands.ts. */
-export const ARTIFACT_COMMANDS: Readonly<Record<string, ArtifactCommand>> = { assertEntitlements, assertCodeSigning, assertLoadPaths };
+export const ARTIFACT_COMMANDS: Readonly<Record<string, ArtifactCommand>> = { assertEntitlements, assertCodeSigning, assertLoadPaths, assertSandboxVariant };

@@ -8,7 +8,7 @@ import { run } from "./commands.ts";
 import { digest, nativePackages, readJson, stateFile, writeJson } from "./project.ts";
 import type { Runner, SigningCredentials } from "./credentials.ts";
 
-const { resolveEntitlements } = createRequire(import.meta.url)("@legendapp/spark-desktop-config/entitlements.cjs");
+const { resolveEntitlements, SANDBOX_INHERIT } = createRequire(import.meta.url)("@legendapp/spark-desktop-config/entitlements.cjs");
 const { privilegedHelperIdentifiers } = createRequire(import.meta.url)("@legendapp/spark-desktop-config/privileged-helpers.cjs");
 export type Entitlements = Record<string, unknown>;
 
@@ -118,6 +118,30 @@ export async function signApp(root: string, app: string, credentials: SigningCre
       ...(identifiers[relative] ? ["--identifier", identifiers[relative]] : []), ...(credentials.keychain ? ["--keychain", credentials.keychain] : []), file], { capture: true });
   }
   return order;
+}
+
+/**
+ * Signs the App Sandbox variant of a local release build ad hoc (docs/app-sandbox.md): every process inside it (nested
+ * bundles and executables) with only app-sandbox and inherit, as Apple requires of a sandboxed app's helpers, then the
+ * app with `entitlements`. Libraries keep the signatures the build gave them.
+ */
+export async function signSandboxed(root: string, app: string, entitlements: Entitlements, execute: Runner = run) {
+  app = realpathSync(app);
+  distributionEntitlements(entitlements);
+  const plist = async (name: string, value: Entitlements) => {
+    const file = stateFile(root, `sandbox/${name}.plist`);
+    writeJson(file, value);
+    await execute(root, ["plutil", "-convert", "xml1", file], { capture: true });
+    return file;
+  };
+  const inherit = await plist("inherit", SANDBOX_INHERIT), main = await plist("app", entitlements);
+  const info = JSON.parse(await execute(root, ["plutil", "-convert", "json", "-o", "-", path.join(app, "Contents/Info.plist")], { capture: true }));
+  const executable = path.join(app, "Contents/MacOS", info.CFBundleExecutable);
+  for (const file of signingOrder(app)) {
+    if (file === app || file === executable) continue;
+    if (/\.(app|xpc|appex)$/.test(file) || (lstatSync(file).isFile() && machOType(file) === 2)) await execute(root, ["codesign", "--force", "--sign", "-", "--entitlements", inherit, file], { capture: true });
+  }
+  await execute(root, ["codesign", "--force", "--sign", "-", "--entitlements", main, app], { capture: true });
 }
 
 export async function validateApp(root: string, app: string, credentials: SigningCredentials, expected: { arch: "arm64" | "x64"; runner?: boolean; bundleId: string; version: string; buildVersion: string; entitlements: Entitlements; byPath: Record<string, Entitlements> }, notarized: boolean, execute: Runner = run) {

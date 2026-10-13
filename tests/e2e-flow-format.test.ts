@@ -194,7 +194,7 @@ describe("flow structure", () => {
     ["appId: a\nname: b\n---\n", "t.yaml:3:4: commands: must be array [schema]"],
     ["appId: a\n---\n- launchApp\n", 't.yaml:1:1: header: missing required key "name" [schema]'],
     ["appId: a\nname: b\nbuild: debug\n---\n- launchApp\n", 't.yaml:3:8: build: must be one of "release", "dev" [schema]'],
-    ["appId: a\nname: b\nretry: 2\n---\n- launchApp\n", 't.yaml:3:1: header: unknown key "retry" (expected appId, name, intent, checks, tags, platforms, build, manual, timeout, matrix, env, onFlowStart, onFlowComplete) [schema]'],
+    ["appId: a\nname: b\nretry: 2\n---\n- launchApp\n", 't.yaml:3:1: header: unknown key "retry" (expected appId, name, intent, checks, tags, platforms, build, variant, manual, timeout, matrix, env, onFlowStart, onFlowComplete) [schema]'],
     ["appId: a\nname: b\nonFlowStart:\n  - wait: 1s\n---\n- launchApp\n", expect.stringMatching(/^t\.yaml:4:5: "wait" is not a command.*\[no-sleep\]$/)],
   ])("%j", (source, expected) => expect(problems(source, "flow")).toEqual([expected]));
 

@@ -8,7 +8,7 @@ import { macAppReader, parseMachO, parseSignature, type AppReader, type CodeSign
 import { COMMANDS } from "../scripts/e2e/format/commands.ts";
 import { Failure } from "../scripts/e2e/runner/backend.ts";
 import { BUILD_AUDITS, runFlows } from "../scripts/e2e/runner/executor.ts";
-import { assertCodeSigning, assertEntitlements, assertLoadPaths } from "../scripts/e2e/runner/security.ts";
+import { assertCodeSigning, assertEntitlements, assertLoadPaths, assertSandboxVariant } from "../scripts/e2e/runner/security.ts";
 import { MemoryBackend, VirtualClock } from "./e2e-runner-backend.ts";
 
 type Spec = Partial<Omit<MachOSlice, "arch">> & { signature?: Partial<CodeSignature> };
@@ -138,6 +138,54 @@ describe("assertEntitlements", () => {
     expect(failure(() => assertEntitlements({ app: partly.app, sandbox: true }, "macos", partly.reader)).message).toContain("Contents/Helpers/Tool: not sandboxed (com.apple.security.app-sandbox)");
     const full = sound({ [MAIN]: { filetype: 2, signature: sandboxed }, "Contents/Helpers/Tool": { filetype: 2, signature: sandboxed } });
     expect(() => assertEntitlements({ app: full.app, sandbox: true }, "macos", full.reader)).not.toThrow();
+  });
+});
+
+describe("assertSandboxVariant", () => {
+  const info = (keys: Record<string, string>) => (app: string) => {
+    writeFileSync(path.join(app, "Contents/Info.plist"), JSON.stringify({ CFBundleExecutable: "Fake", ...keys }));
+    execFileSync("plutil", ["-convert", "xml1", path.join(app, "Contents/Info.plist")]);
+  };
+  const SANDBOX = { "com.apple.security.app-sandbox": true }, INHERIT = { ...SANDBOX, "com.apple.security.inherit": true };
+  test("passes a sandboxed main executable, helpers with only app-sandbox and inherit, and no Sparkle, its Info.plist keys or launch daemons", () => {
+    const { app, reader } = sound({
+      [MAIN]: { filetype: 2, signature: { entitlements: { ...SANDBOX, "com.apple.security.print": true } } },
+      "Contents/Helpers/Tool": { filetype: 2, signature: { entitlements: INHERIT } },
+    });
+    info({})(app);
+    expect(() => assertSandboxVariant({ app }, "macos", reader)).not.toThrow();
+  });
+  test("fails an unsandboxed or inheriting main executable and helpers with other entitlements", () => {
+    const { app, reader } = sound({
+      [MAIN]: { filetype: 2, signature: { entitlements: INHERIT } },
+      "Contents/Helpers/Tool": { filetype: 2, signature: { entitlements: { ...INHERIT, "com.apple.security.network.client": true } } },
+    });
+    info({})(app);
+    expect(failure(() => assertSandboxVariant({ app }, "macos", reader)).message).toBe([
+      "assertSandboxVariant found 2 problems:",
+      `  ${MAIN}: the main executable must carry com.apple.security.app-sandbox and not com.apple.security.inherit (it has com.apple.security.app-sandbox, com.apple.security.inherit)`,
+      "  Contents/Helpers/Tool: a helper process must carry exactly com.apple.security.app-sandbox and com.apple.security.inherit (it has com.apple.security.app-sandbox, com.apple.security.inherit, com.apple.security.network.client)",
+    ].join("\n"));
+  });
+  test("fails Sparkle's framework, code linking it, SU* keys and launch daemons", () => {
+    const { app, reader } = fakeApp({
+      [MAIN]: { filetype: 2, dylibs: [{ kind: "load", name: "@rpath/Sparkle.framework/Versions/B/Sparkle" }], signature: { entitlements: SANDBOX } },
+      "Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle": {},
+      "Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate": { filetype: 2, signature: { entitlements: INHERIT } },
+    }, app => {
+      info({ SUFeedURL: "https://example.com/appcast.xml", SUPublicEDKey: "key", SupportURL: "not Sparkle" })(app);
+      mkdirSync(path.join(app, "Contents/Library/LaunchDaemons"), { recursive: true });
+      writeFileSync(path.join(app, "Contents/Library/LaunchDaemons/so.legend.app.tool.plist"), "");
+    });
+    expect(failure(() => assertSandboxVariant({ app }, "macos", reader)).message).toBe([
+      "assertSandboxVariant found 6 problems:",
+      `  ${MAIN}: links @rpath/Sparkle.framework/Versions/B/Sparkle; the App Store updates the sandboxed variant`,
+      "  Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle: Sparkle code; the App Store updates the sandboxed variant",
+      "  Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate: Sparkle code; the App Store updates the sandboxed variant",
+      "  Info.plist: SUFeedURL configures Sparkle",
+      "  Info.plist: SUPublicEDKey configures Sparkle",
+      "  Contents/Library/LaunchDaemons: so.legend.app.tool.plist; a sandboxed app cannot install a launch daemon (privileged helper)",
+    ].join("\n"));
   });
 });
 

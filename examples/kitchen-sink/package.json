@@ -11,6 +11,7 @@
     "rebuild:macos": "bun ../../scripts/spark.mjs build --dev --platform macos",
     "rebuild:windows": "bun ../../scripts/spark.mjs build --dev --platform windows",
     "build": "bun ../../scripts/spark.mjs build",
+    "build:sandbox": "bun ../../scripts/spark.mjs build --sandbox",
     "package": "bun ../../scripts/spark.mjs package",
     "doctor": "bun ../../scripts/spark.mjs doctor"
   },
