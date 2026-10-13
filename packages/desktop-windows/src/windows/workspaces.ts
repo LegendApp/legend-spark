@@ -25,10 +25,14 @@ export interface WindowWorkspace {
  * same one at another resolution); the frame keeps its proportions within the work area.
  */
 export interface WorkspacePlacement { windowId: WindowId; displayId: DisplayId; layout: "exact" | "moved" | "scaled" }
+/**
+ * `vetoed` / `interrupted`: a window the restore had to close stayed open. `failed`: a workspace window could not open
+ * or enter fullscreen. Either way the windows the restore had closed are reopened as they were (`rolledBack`).
+ */
 export type WorkspaceRestoreResult =
   | { restored: true; windows: WindowInstance[]; placements: WorkspacePlacement[] }
-  /** A window the restore had to close stayed open; windows closed before it stay closed. */
-  | { restored: false; reason: Extract<CloseResult, { closed: false }>["reason"]; windowId: WindowId };
+  | { restored: false; reason: Extract<CloseResult, { closed: false }>["reason"]; windowId: WindowId; rolledBack: boolean }
+  | { restored: false; reason: "failed"; error: unknown; rolledBack: boolean };
 export interface WorkspaceMenuLabels { window: string; workspaces: string; save: string }
 /** Window ▸ Workspaces: Save Workspace…, then one item per saved workspace that restores it. */
 export interface WorkspaceMenuOptions {
@@ -62,10 +66,13 @@ export interface WindowWorkspaces extends AsyncRegistration {
   clear(): Promise<void>;
   /** Notifies after a save, rename, delete or clear. */
   subscribe(listener: () => void): { remove(): void };
+  /** Relabels the Window ▸ Workspaces menu, for example after a language change. Rejects without `menu`. */
+  setMenuLabels(labels: WorkspaceMenuLabels): Promise<void>;
 }
 
 const FILE = "workspaces.json";
-const SAVE_ID = "spark-workspaces-save", MENU_ID = "spark-workspaces", WINDOW_ID = "spark-workspaces-window";
+/** Limits checked when the file is read and when a workspace is saved. */
+export const WORKSPACE_LIMITS = { workspaces: 100, windows: 200, fileBytes: 4 * 1024 * 1024 } as const;
 const defaultLabels: WorkspaceMenuLabels = { window: "Window", workspaces: "Workspaces", save: "Save Workspace…" };
 let controllers = 0;
 
@@ -109,17 +116,22 @@ function session(value: unknown, displays: Set<string>): value is WindowSession 
   return value.windows.every(window => savedWindow(window, displays)) && value.tabGroups.every(group => plain(group) && exactKeys(group, ["windowIds", "selectedWindowId"]) && Array.isArray(group.windowIds) && group.windowIds.every(id => typeof id === "string") && nullableText(group.selectedWindowId));
 }
 function workspace(value: unknown): value is WindowWorkspace {
-  if (!plain(value) || !exactKeys(value, ["name", "savedAt", "displays", "session", "fullscreenWindowIds"]) || !finite(value.savedAt) || !Array.isArray(value.displays) || !Array.isArray(value.fullscreenWindowIds)) return false;
+  if (!plain(value) || !exactKeys(value, ["name", "savedAt", "displays", "session", "fullscreenWindowIds"]) || !finite(value.savedAt) || value.savedAt < 0 || !Array.isArray(value.displays) || !Array.isArray(value.fullscreenWindowIds)) return false;
   try { validName(value.name); } catch { return false; }
   const displays = value.displays;
   if (!displays.every(display => plain(display) && exactKeys(display, ["id", "persistentId", "primary", "workArea"]) && typeof display.id === "string" && nullableText(display.persistentId) && typeof display.primary === "boolean" && isRect(display.workArea, true))) return false;
   const ids = new Set(displays.map(display => (display as SavedDisplay).id));
-  if (ids.size !== displays.length || !session(value.session, ids)) return false;
+  if (ids.size !== displays.length || !session(value.session, ids) || value.session.windows.length > WORKSPACE_LIMITS.windows) return false;
   const windows = new Set(value.session.windows.map(window => window.id));
-  return value.fullscreenWindowIds.every(id => typeof id === "string" && windows.has(id));
+  return new Set(value.fullscreenWindowIds).size === value.fullscreenWindowIds.length && value.fullscreenWindowIds.every(id => typeof id === "string" && windows.has(id));
 }
-/** The workspaces file: `{ version: 1, workspaces }`. Anything else, or JSON that does not parse, rejects `E_INVALID_DATA`. */
+/**
+ * The workspaces file: `{ version: 1, workspaces }`, at most 4 MB, 100 workspaces and 200 windows each. Anything else, or
+ * JSON that does not parse, rejects `E_INVALID_DATA`.
+ */
 export function parseWorkspaces(text: string, path: string): WindowWorkspace[] {
+  // UTF-16 length bounds the UTF-8 size from below; checked before parsing.
+  if (text.length > WORKSPACE_LIMITS.fileBytes) throw new SparkError("E_INVALID_DATA", `The workspaces file is larger than ${WORKSPACE_LIMITS.fileBytes} bytes: ${path}`);
   let value: unknown;
   try { value = JSON.parse(text); }
   catch (cause) { throw new SparkError("E_INVALID_DATA", `The workspaces file is not JSON: ${path}`, { cause }); }
@@ -127,13 +139,15 @@ export function parseWorkspaces(text: string, path: string): WindowWorkspace[] {
   if (value.version !== 1) throw new SparkError("E_INVALID_DATA", `The workspaces file has an unknown version (${JSON.stringify(value.version)}): ${path}`);
   const list = value.workspaces;
   if (!Array.isArray(list)) throw new SparkError("E_INVALID_DATA", `The workspaces file has no workspace list: ${path}`);
+  if (list.length > WORKSPACE_LIMITS.workspaces) throw new SparkError("E_INVALID_DATA", `The workspaces file has more than ${WORKSPACE_LIMITS.workspaces} workspaces: ${path}`);
   list.forEach((item, index) => { if (!workspace(item)) throw new SparkError("E_INVALID_DATA", `Workspace ${index + 1} in the workspaces file is malformed: ${path}`); });
   if (new Set(list.map(item => (item as WindowWorkspace).name)).size !== list.length) throw new SparkError("E_INVALID_DATA", `The workspaces file names a workspace twice: ${path}`);
   return list as WindowWorkspace[];
 }
 
 /**
- * Maps each saved display to a connected one: the display with the same `persistentId`; else, for the saved primary, the
+ * Maps each saved display to a connected one: the display with the same `persistentId` (or, when neither has one, the
+ * same display ID); else, for the saved primary, the
  * primary display if it is not taken; else the first display not taken; else the primary display.
  */
 function mapDisplays(saved: SavedDisplay[], displays: DisplayInfo[]) {
@@ -141,7 +155,8 @@ function mapDisplays(saved: SavedDisplay[], displays: DisplayInfo[]) {
   if (!primary) throw new SparkError("E_UNAVAILABLE", "No display is connected");
   const taken = new Set<string>(), mapped = new Map<string, { display: DisplayInfo; same: boolean }>();
   for (const display of saved) {
-    const found = display.persistentId === null ? undefined : displays.find(item => item.persistentId === display.persistentId && !taken.has(item.id));
+    // Without a persistent ID on either side, the same display ID is the same display.
+    const found = displays.find(item => !taken.has(item.id) && (display.persistentId === null ? item.persistentId === null && item.id === display.id : item.persistentId === display.persistentId));
     if (found) { taken.add(found.id); mapped.set(display.id, { display: found, same: true }); }
   }
   for (const display of [...saved].sort((a, b) => Number(b.primary) - Number(a.primary))) {
@@ -191,6 +206,18 @@ async function fileSystem() {
  * connected now. With `menu`, publishes Window ▸ Workspaces: Save Workspace… and one item per workspace, with shortcuts.
  * Resolves once the menu is published. macOS only for now.
  */
+function validLabels(labels: unknown): asserts labels is WorkspaceMenuLabels {
+  if (!plain(labels) || !exactKeys(labels, ["window", "workspaces", "save"]) || Object.values(labels).some(label => typeof label !== "string" || !label.trim())) throw new SparkError("E_INVALID_ARGUMENT", "Workspace menu labels need window, workspaces and save");
+}
+const isGone = (error: unknown) => ["E_NOT_FOUND", "E_CLOSED"].includes(nativeError(error).code);
+/** The windows of `session` with these IDs, with the tab groups and key window that still apply to them. */
+function subset(session: WindowSession, ids: Set<string>): WindowSession {
+  const windows = session.windows.filter(window => ids.has(window.id));
+  const tabGroups = session.tabGroups.map(group => ({ windowIds: group.windowIds.filter(id => ids.has(id)), selectedWindowId: group.selectedWindowId !== null && ids.has(group.selectedWindowId) ? group.selectedWindowId : null }))
+    .filter(group => group.windowIds.length > 1);
+  return { version: 1, windows, tabGroups, keyWindowId: session.keyWindowId !== null && ids.has(session.keyWindowId) ? session.keyWindowId : null };
+}
+
 export async function createWindowWorkspaces<T extends WindowsConfig>(navigator: WindowsNavigator<T>, options: WindowWorkspacesOptions = {}): Promise<WindowWorkspaces> {
   available();
   const check = sessionChecks.get(navigator);
@@ -200,15 +227,17 @@ export async function createWindowWorkspaces<T extends WindowsConfig>(navigator:
   const menuOptions = options.menu;
   if (menuOptions !== undefined) {
     if (!isObject(menuOptions) || Object.keys(menuOptions).some(key => !["labels", "requestName", "saveShortcut", "restoreShortcuts"].includes(key)) || typeof menuOptions.requestName !== "function") throw new SparkError("E_INVALID_ARGUMENT", "The workspace menu needs requestName and takes labels, saveShortcut and restoreShortcuts");
-    const labels = menuOptions.labels;
-    if (labels !== undefined && (!plain(labels) || !exactKeys(labels, ["window", "workspaces", "save"]) || Object.values(labels).some(label => typeof label !== "string" || !label.trim()))) throw new SparkError("E_INVALID_ARGUMENT", "Workspace menu labels need window, workspaces and save");
+    if (menuOptions.labels !== undefined) validLabels(menuOptions.labels);
     if (menuOptions.saveShortcut !== undefined && typeof menuOptions.saveShortcut !== "string") throw new SparkError("E_INVALID_ARGUMENT", "saveShortcut must be a string");
     if (menuOptions.restoreShortcuts !== undefined && (!Array.isArray(menuOptions.restoreShortcuts) || menuOptions.restoreShortcuts.some(item => typeof item !== "string"))) throw new SparkError("E_INVALID_ARGUMENT", "restoreShortcuts must be strings");
   }
   const report = options.onError ?? ((error: unknown) => console.error(error));
   const files = await fileSystem();
   const listeners = new Set<() => void>();
-  let cache: WindowWorkspace[] | undefined, location: Promise<string> | undefined, removed = false, menu: Menu | undefined;
+  // Menu owner and item IDs are this controller's own, so two controllers never share an item ID.
+  const owner = `spark-workspaces-${++controllers}`;
+  let location: Promise<string> | undefined, removed = false, menu: Menu | undefined;
+  let labels = menuOptions?.labels ?? defaultLabels;
   let queue: Promise<unknown> = Promise.resolve();
   /** One operation at a time, in call order: a restore and a save never interleave. */
   const serial = <R>(operation: () => Promise<R>): Promise<R> => {
@@ -218,19 +247,38 @@ export async function createWindowWorkspaces<T extends WindowsConfig>(navigator:
     return result;
   };
   const path = () => location ??= files.getDirectory("data").then(async root => { await files.mkdir(root); return `${root}/${FILE}`; }).catch(error => { location = undefined; throw error; });
-  /** A corrupt file is never cached, so every operation rejects until `clear()`. */
-  const load = async () => {
-    if (cache) return cache;
+  /**
+   * Reads the file every time (another controller or process may have written it), checking its size before reading
+   * it. `text` is null without a file. A corrupt file rejects every operation until `clear()`.
+   */
+  const read = async (): Promise<{ text: string | null; list: WindowWorkspace[] }> => {
     const file = await path();
     let text: string;
-    try { text = await files.readText(file); }
-    catch (error) { if (nativeError(error).code === "E_NOT_FOUND") return cache = []; throw error; }
-    return cache = parseWorkspaces(text, file);
+    try {
+      if ((await files.stat(file)).size > WORKSPACE_LIMITS.fileBytes) throw new SparkError("E_INVALID_DATA", `The workspaces file is larger than ${WORKSPACE_LIMITS.fileBytes} bytes: ${file}`);
+      text = await files.readText(file);
+    } catch (error) { if (nativeError(error).code === "E_NOT_FOUND") return { text: null, list: [] }; throw error; }
+    return { text, list: parseWorkspaces(text, file) };
   };
-  const write = async (list: WindowWorkspace[]) => {
-    await files.writeText(await path(), `${JSON.stringify({ version: 1, workspaces: list }, null, 2)}\n`);
-    cache = list;
-    changed();
+  /**
+   * Re-reads the file and replaces it only if nobody changed it since (compare and swap; a missing file is created only
+   * if it is still missing). Retries a few times when another writer got in between, then rejects `E_BUSY`.
+   */
+  const mutate = async (change: (list: WindowWorkspace[]) => WindowWorkspace[] | undefined) => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { text, list } = await read();
+      const next = change(list);
+      if (!next) return;
+      if (next.length > WORKSPACE_LIMITS.workspaces) throw new SparkError("E_INVALID_ARGUMENT", `At most ${WORKSPACE_LIMITS.workspaces} workspaces can be saved`);
+      const file = await path(), output = `${JSON.stringify({ version: 1, workspaces: next }, null, 2)}\n`;
+      if (text !== null) {
+        if ((await files.writeTextIfUnchanged(file, text, output)).written) return changed();
+        continue;
+      }
+      try { await files.writeChunks(file, [new TextEncoder().encode(output)], { mode: "createNew" }); return changed(); }
+      catch (error) { if (nativeError(error).code !== "E_ALREADY_EXISTS") throw error; }
+    }
+    throw new SparkError("E_BUSY", "The workspaces file kept changing while it was written; try again");
   };
   const find = (list: WindowWorkspace[], name: string) => {
     validName(name);
@@ -241,11 +289,11 @@ export async function createWindowWorkspaces<T extends WindowsConfig>(navigator:
 
   const save = (name: string) => serial(async () => {
     validName(name);
-    const list = await load();
     const displays = await getDisplays(), current = await navigator.getSession();
+    if (current.windows.length > WORKSPACE_LIMITS.windows) throw new SparkError("E_INVALID_ARGUMENT", `A workspace holds at most ${WORKSPACE_LIMITS.windows} windows`);
     if (current.windows.some(window => !displays.some(display => display.id === window.bounds.displayId))) throw new SparkError("E_BUSY", "The displays changed while the workspace was saved; save it again");
     const fullscreen = await Promise.all(current.windows.map(window => getWindow(window.id).then(info => info.fullscreen, error => {
-      if (nativeError(error).code === "E_NOT_FOUND") return false; // Closed since the session was read.
+      if (isGone(error)) return false; // Closed since the session was read.
       throw error;
     })));
     const saved: WindowWorkspace = {
@@ -253,60 +301,86 @@ export async function createWindowWorkspaces<T extends WindowsConfig>(navigator:
       displays: displays.map(({ id, persistentId, primary, workArea }) => ({ id, persistentId, primary, workArea: { ...workArea } })),
       session: current, fullscreenWindowIds: current.windows.filter((_, index) => fullscreen[index]).map(window => window.id),
     };
-    const index = list.findIndex(item => item.name === name);
-    await write(index < 0 ? [...list, saved] : list.map((item, at) => at === index ? saved : item));
+    await mutate(list => {
+      const index = list.findIndex(item => item.name === name);
+      return index < 0 ? [...list, saved] : list.map((item, at) => at === index ? saved : item);
+    });
     return saved;
   });
+  /** Reopens the windows a restore closed, as they were. Reports a failure and resolves whether it worked. */
+  const rollBack = async (previous: WindowSession, closed: Set<string>) => {
+    if (!closed.size) return true;
+    try { await navigator.restoreSession(subset(previous, closed)); return true; }
+    catch (error) { report(error); return false; }
+  };
   const restore = (name: string) => serial(async (): Promise<WorkspaceRestoreResult> => {
-    const saved = find(await load(), name);
+    const saved = find((await read()).list, name);
     const { session: adapted, placements } = adaptWorkspace(saved, await getDisplays());
     check(adapted);
+    // What is open now, to reopen if the restore stops or fails after closing windows.
+    const previous = await navigator.getSession(), closed = new Set<string>();
     for (const window of navigator.list()) {
-      const result = await window.close();
-      if (!result.closed) return { restored: false, reason: result.reason, windowId: window.id };
+      if (!window.isOpen()) continue;
+      let result: CloseResult;
+      try { result = await window.close(); }
+      catch (error) { if (isGone(error)) { closed.add(window.id); continue; } return { restored: false, reason: "failed", error, rolledBack: await rollBack(previous, closed) }; }
+      if (!result.closed) return { restored: false, reason: result.reason, windowId: window.id, rolledBack: await rollBack(previous, closed) };
+      closed.add(window.id);
     }
-    const windows = await navigator.restoreSession(adapted);
-    try { for (const id of saved.fullscreenWindowIds) await setWindowFullscreen(id, true); }
-    catch (error) {
+    let windows: WindowInstance[] = [];
+    try {
+      windows = await navigator.restoreSession(adapted);
+      for (const id of saved.fullscreenWindowIds) await setWindowFullscreen(id, true);
+    } catch (error) {
       await Promise.allSettled(windows.map(window => window.isOpen() ? window.close() : undefined));
-      throw error;
+      return { restored: false, reason: "failed", error, rolledBack: await rollBack(previous, closed) };
     }
     return { restored: true, windows, placements };
   });
   const rename = (name: string, newName: string) => serial(async () => {
-    const list = await load(), found = find(list, name);
-    validName(newName);
-    if (newName === name) return;
-    if (list.some(item => item.name === newName)) throw new SparkError("E_ALREADY_EXISTS", `A workspace is already named ${newName}`);
-    await write(list.map(item => item === found ? { ...item, name: newName } : item));
+    validName(name); validName(newName);
+    await mutate(list => {
+      const found = find(list, name);
+      if (newName === name) return undefined;
+      if (list.some(item => item.name === newName)) throw new SparkError("E_ALREADY_EXISTS", `A workspace is already named ${newName}`);
+      return list.map(item => item === found ? { ...item, name: newName } : item);
+    });
   });
   const remove = (name: string) => serial(async () => {
-    const list = await load(), found = find(list, name);
-    await write(list.filter(item => item !== found));
+    validName(name);
+    await mutate(list => { const found = find(list, name); return list.filter(item => item !== found); });
   });
   const clear = () => serial(async () => {
     try { await files.remove(await path()); }
     catch (error) { if (nativeError(error).code !== "E_NOT_FOUND") throw error; }
-    cache = [];
     changed();
   });
 
-  // Window ▸ Workspaces lists the workspaces from the last successful read; restore items name the workspace they restore.
-  let shown: string[] = [];
+  // Window ▸ Workspaces lists the workspaces from the last successful read. Each name keeps one item ID for this
+  // controller's lifetime (a renamed workspace gets a new one), so a click always names the workspace its item showed.
+  const itemIds = new Map<string, string>(), itemNames = new Map<string, string>();
+  const itemId = (name: string) => {
+    let id = itemIds.get(name);
+    if (!id) { id = `${owner}-restore-${itemIds.size + 1}`; itemIds.set(name, id); itemNames.set(id, name); }
+    return id;
+  };
+  const saveId = `${owner}-save`;
   const menuItems = (names: string[]): MenuRootItem[] => {
-    const { labels = defaultLabels, saveShortcut, restoreShortcuts = [] } = menuOptions!;
-    const restoreItems: MenuItem[] = names.map((name, index) => ({ type: "action", id: `${MENU_ID}-restore-${index}`, label: name, ...(restoreShortcuts[index] ? { shortcut: restoreShortcuts[index] } : {}) }));
-    return [{ type: "submenu", id: WINDOW_ID, label: labels.window, target: { menu: "window" }, items: [{ type: "submenu", id: MENU_ID, label: labels.workspaces, items: [
-      { type: "action", id: SAVE_ID, label: labels.save, ...(saveShortcut ? { shortcut: saveShortcut } : {}) },
+    const { saveShortcut, restoreShortcuts = [] } = menuOptions!;
+    const restoreItems: MenuItem[] = names.map((name, index) => ({ type: "action", id: itemId(name), label: name, ...(restoreShortcuts[index] ? { shortcut: restoreShortcuts[index] } : {}) }));
+    return [{ type: "submenu", id: `${owner}-window`, label: labels.window, target: { menu: "window" }, items: [{ type: "submenu", id: owner, label: labels.workspaces, items: [
+      { type: "action", id: saveId, label: labels.save, ...(saveShortcut ? { shortcut: saveShortcut } : {}) },
       ...(restoreItems.length ? [{ type: "separator" } as const, ...restoreItems] : []),
     ] }] }];
+  };
+  const names = async () => {
+    try { return (await read()).list.map(item => item.name); }
+    catch (error) { report(error); return []; }
   };
   let publishing: Promise<void> = Promise.resolve();
   const publish = () => publishing = publishing.then(async () => {
     if (!menu || removed) return;
-    try { shown = (await load()).map(item => item.name); }
-    catch (error) { shown = []; report(error); }
-    await menu.update({ items: menuItems(shown) });
+    await menu.update({ items: menuItems(await names()) });
   }).catch(report);
   function changed() {
     for (const listener of [...listeners]) { try { listener(); } catch (error) { report(error); } }
@@ -314,13 +388,15 @@ export async function createWindowWorkspaces<T extends WindowsConfig>(navigator:
   }
   const onAction = (action: MenuAction) => {
     const run = async () => {
-      if (action.itemId === SAVE_ID) {
+      if (action.itemId === saveId) {
         const name = await menuOptions!.requestName();
         if (name !== null) await save(name);
         return;
       }
-      const name = shown[Number(action.itemId.slice(`${MENU_ID}-restore-`.length))];
-      if (name !== undefined) await restore(name);
+      const name = itemNames.get(action.itemId);
+      if (name === undefined) return;
+      const result = await restore(name);
+      if (!result.restored && result.reason === "failed") report(result.error);
     };
     run().catch(report);
   };
@@ -328,18 +404,23 @@ export async function createWindowWorkspaces<T extends WindowsConfig>(navigator:
     const { createMenu } = await import("@legendapp/spark-native-menu").catch(cause => {
       throw new SparkError("E_MODULE_UNAVAILABLE", "The workspace menu requires @legendapp/spark-native-menu", { cause });
     });
-    try { shown = (await load()).map(item => item.name); }
-    catch (error) { report(error); }
-    menu = await createMenu({ id: `spark-workspaces-${++controllers}`, items: menuItems(shown), onAction });
+    menu = await createMenu({ id: owner, items: menuItems(await names()), onAction });
   }
 
   return {
-    list: () => serial(async () => [...await load()]),
+    list: () => serial(async () => (await read()).list),
     save, restore, rename, delete: remove, clear,
     subscribe(listener) {
       if (typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a listener");
       listeners.add(listener);
       return { remove() { listeners.delete(listener); } };
+    },
+    async setMenuLabels(next) {
+      if (removed) throw new SparkError("E_CLOSED", "Workspaces were removed");
+      if (!menu) throw new SparkError("E_INVALID_ARGUMENT", "These workspaces were created without a menu");
+      validLabels(next);
+      labels = { ...next };
+      await publish();
     },
     remove: asyncRegistration(() => { removed = true; listeners.clear(); }, async () => { await publishing; await menu?.remove(); }).remove,
   };

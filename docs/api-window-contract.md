@@ -561,7 +561,7 @@ Added:
 - `openInstance` resolves a `WindowInstance` once the window exists and its services are
   installed: `id`, `name`, `runtime`, `undo`, `isOpen()`, `focus()`, `close()`, `refreshMenus()`,
   `refreshToolbar()`. A closed instance rejects `focus`/`close`/`refreshToolbar` with `E_CLOSED`,
-  so a stale handle never acts on a later window that reuses its ID. Windows opened with `open`
+  so a stale handle never acts on a later window that reuses its ID. `close()` on a window that is already gone natively ends the instance and rejects `E_CLOSED`. Windows opened with `open`
   get the same per-window services.
 - `get(windowId)`, `list(name?)`, `getKeyWindowId()` and `subscribe(listener)` observe the
   navigator's open windows. `remove()` stops the navigator's listeners and menus without closing
@@ -801,7 +801,8 @@ await windows.duplicate(editor, { tab: true });   // as the next tab (macOS)
   the saved frame passed as explicit `position` and `size`. A frame whose display is no longer
   connected moves to the primary display, fitted into its work area, as the coordinate rules allow.
   Tab groups reopen together in tab order (`tabbedWith`), then the saved tab is selected and the
-  saved key window focused. Each restorable state starts from its saved value on first access; a
+  saved key window focused. A warm or parked pooled window that holds a saved ID closes for real first, so the saved
+  window can open with it. Each restorable state starts from its saved value on first access; a
   saved key whose state does not exist yet (its module is not loaded) is kept and saved again. If a
   window fails to open, the windows this restore opened are closed and it rejects with that failure.
   It resolves the windows in the session's order. An app with a removed entry filters
@@ -840,8 +841,10 @@ const workspaces = await createWindowWorkspaces(windows, {
 await workspaces.save('Writing');            // the open windows and the connected displays
 const result = await workspaces.restore('Writing');
 // { restored: true, windows, placements: [{ windowId, displayId, layout: 'exact' | 'moved' | 'scaled' }] }
-// or { restored: false, reason: 'vetoed' | 'interrupted', windowId }
+// or { restored: false, reason: 'vetoed' | 'interrupted', windowId, rolledBack }
+// or { restored: false, reason: 'failed', error, rolledBack }
 await workspaces.list(); await workspaces.rename('Writing', 'Draft'); await workspaces.delete('Draft');
+await workspaces.setMenuLabels({ window: 'نافذة', workspaces: 'مساحات العمل', save: 'حفظ مساحة العمل…' }); // language change
 ```
 
 - **Storage.** `<getDirectory('data')>/workspaces.json` in the app's container, written atomically through
@@ -849,18 +852,33 @@ await workspaces.list(); await workspaces.rename('Writing', 'Draft'); await work
   `{ name, savedAt, displays, session, fullscreenWindowIds }`; `displays` records each display's `id`,
   `persistentId`, `primary` and `workArea`. Reads validate the whole file: JSON that does not parse, another
   version, missing or extra keys, a window on a display the workspace does not record, a fullscreen ID that is
-  not one of its windows or a name used twice rejects `E_INVALID_DATA` with the file's path. A corrupt file is
-  never overwritten: every operation keeps rejecting until `clear()` deletes it. A missing file is an empty list.
+  not one of its windows, a fullscreen ID listed twice, a negative `savedAt` or a name used twice rejects
+  `E_INVALID_DATA` with the file's path, and so do a file over 4 MB (checked before it is read), more than 100
+  workspaces and more than 200 windows in one; saving past those limits rejects `E_INVALID_ARGUMENT`. A corrupt
+  file is never overwritten: every operation keeps rejecting until `clear()` deletes it. A missing file is an
+  empty list. Every operation reads the file again, and changes are written with compare and swap
+  (`writeTextIfUnchanged`; a missing file is created only if it is still missing): a save racing another
+  controller or process is retried on the new file and keeps the other's workspace, and a file that keeps changing
+  rejects `E_BUSY`.
 - **Names.** 1–100 characters, no control characters or surrounding spaces (`E_INVALID_ARGUMENT`). Saving a
   name again replaces that workspace in place; `list()` keeps first-save order. `rename` to a taken name rejects
   `E_ALREADY_EXISTS`; unknown names reject `E_NOT_FOUND`. Operations run one at a time in call order.
 - **Restore.** The navigator first checks the saved session as `restoreSession` does (entries, data, tab
   support), so a workspace of a removed entry rejects before anything closes. Then it closes the navigator's open
-  windows in opening order, each through its close guard: a vetoed or interrupted close stops the restore with
-  `restored: false`, and the windows closed before it stay closed. Then `restoreSession` opens the adapted
-  session, and windows saved in native fullscreen enter fullscreen again (on macOS each gets its own Space). If a
-  window fails to open or enter fullscreen, the windows it opened are closed and it rejects with that failure.
-- **Displays.** Each saved display maps to a connected one: the display with the same `persistentId`; else, for
+  windows in opening order, each through its close guard (a window that already closed is skipped, one gone
+  natively counts as closed). A vetoed or interrupted close stops the restore with `restored: false`. Then
+  `restoreSession` opens the adapted session (releasing parked pooled windows that hold saved IDs), and windows
+  saved in native fullscreen enter fullscreen again (on macOS each gets its own Space). If a window fails to open
+  or enter fullscreen, the windows it opened are closed and it resolves `{ restored: false, reason: 'failed',
+  error }`. Whenever a restore stops after closing windows, it first reopens them from the session it read before
+  closing anything (`rolledBack: true`; a rollback failure goes to `onError` and gives `rolledBack: false`), so the
+  app is not left without its windows.
+- **Not saved.** Attachments (`attachWindow`), close transitions and other runtime relationships are not part of a
+  session and are not restored; the app attaches again after a restore. A fullscreen window's saved frame is its
+  fullscreen frame (AppKit exposes no public pre-fullscreen frame), so after leaving fullscreen a restored window
+  keeps a display-sized frame.
+- **Displays.** Each saved display maps to a connected one: the display with the same `persistentId` (when neither
+  has one, the same display ID); else, for
   the saved primary, the primary display; else the first display not yet taken; else the primary display.
   On the same display with the same work area a frame is `exact`. On a display whose work area has the same
   size it keeps its place (`moved`). Otherwise it keeps its proportions: position and size scale with the work
@@ -869,7 +887,11 @@ await workspaces.list(); await workspaces.rename('Writing', 'Draft'); await work
 - **Menu.** With `menu`, a Window ▸ Workspaces submenu: Save Workspace… (asks `requestName`; `null` cancels)
   and, after a separator, one item per workspace in list order with `restoreShortcuts[i]`. It is published
   before `createWindowWorkspaces` resolves and updated after every change; failures go to `onError` (default
-  `console.error`). Labels are English unless `labels` is passed. Needs `@legendapp/spark-native-menu`
+  `console.error`). Labels are English unless `labels` is passed; `setMenuLabels` relabels it. The item merges into
+  the app's Window menu and sets its title, so `labels.window` must be that menu's title in the app's language.
+  Each workspace name keeps one item ID for the controller's lifetime, so a click names the workspace its item
+  showed even while the menu updates, and item IDs carry the controller's owner ID, so two controllers never share
+  one. Needs `@legendapp/spark-native-menu`
   (`E_MODULE_UNAVAILABLE` without it). `remove()` withdraws the menu; later calls reject `E_CLOSED`.
   Pick shortcuts the app's menus do not use: in the Kitchen Sink an item with ⌃⌘S (the standard Show Sidebar
   shortcut) had no key equivalent in the driver's menu snapshot, while ⌥⌘S and ⌃⌘1–9 did (#446).
@@ -884,8 +906,9 @@ await workspaces.list(); await workspaces.rename('Writing', 'Draft'); await work
   `E_UNSUPPORTED_PLATFORM` before any native call. Windows virtual desktops have a public API
   (`IVirtualDesktopManager`) and Snap Layouts do not; both are part of the Windows task (#445).
 
-Testing: `tests/windows-workspaces.test.ts` covers storage, validation, display adaptation, close vetoes, fullscreen and
-the menu over mocked modules. The Kitchen Sink screen is `multiwindow/workspaces`; its flows are
+Testing: `tests/windows-workspaces.test.ts` covers storage, validation and limits, compare and swap, display adaptation,
+close vetoes, rollback, fullscreen and the menu over mocked modules; `tests/windows-pool.test.ts` restores a pooled
+window's session and workspace. The Kitchen Sink screen is `multiwindow/workspaces`; its flows are
 `e2e/flows/multiwindow/workspaces-*.yaml`.
 
 #### Undo, keyboard, menus and toolbar per window

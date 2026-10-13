@@ -264,6 +264,18 @@ export function createWindowPools(entries: readonly (readonly [string, WindowCon
       void run.then(() => {}, () => {}).then(() => recycling.delete(run));
       return run;
     },
+    /**
+     * A restore needs this saved ID: a warm or parking window that holds it closes for real first, so the restored window
+     * can open with it. Windows no pool knows are left alone.
+     */
+    async free(id: string) {
+      await settle();
+      const pool = known.get(id);
+      if (!pool) return;
+      const index = pool.warm.indexOf(id);
+      if (index >= 0) pool.warm.splice(index, 1);
+      await release(pool, id);
+    },
     /** Closes a pooled window for real, whatever its state (a failed open). */
     async release(id: string) { const pool = known.get(id); if (pool) await release(pool, id); else await windowPoolCommand("discard", { id }).catch(error => { if (nativeError(error).code !== "E_NOT_FOUND") throw error; }); },
     /** A warm root rendered. One no pool knows was restarted by a JavaScript reload (or outlived its navigator) and is released. */

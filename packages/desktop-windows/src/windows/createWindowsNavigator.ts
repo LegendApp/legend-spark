@@ -454,7 +454,10 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
       async focus() { ensureLive(); await showWindow(id, { focus: true }); },
       async close() {
         ensureLive();
-        const result = await closeWindow(id);
+        let result: CloseResult;
+        // Gone natively before its closed event arrived: the instance ends here.
+        try { result = await closeWindow(id); }
+        catch (error) { if (nativeError(error).code === "E_NOT_FOUND") { dispose(record); throw closedError(error); } throw error; }
         if (result.closed) dispose(record);
         return result;
       },
@@ -780,6 +783,8 @@ export function createWindowsNavigator<const T extends WindowsConfig>(config: T 
     }
     const opened = new Map<string, WindowInstance>();
     try {
+      // A closed pooled window parks with its ID: release it so the saved window can open with that ID.
+      for (const saved of order) await pools.free(saved.id);
       for (const saved of order) {
         const first = groupOf.get(saved.id)?.windowIds[0];
         const frame = placement(saved.bounds, displays);
