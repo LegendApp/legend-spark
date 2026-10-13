@@ -1,0 +1,17 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window workspaces are typed unsupported on Windows
+intent: >
+  On Windows, getWindowWorkspaceAvailability reports unsupported-platform and saving a workspace rejects
+  E_UNSUPPORTED_PLATFORM, so nothing is written (implementation: #445).
+checks: [MW-WORKSPACE-07]
+tags: [multiwindow]
+platforms: [windows]
+build: release
+timeout: 60s
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://multiwindow/workspaces" }
+- extendedWaitUntil: { visible: { id: multiwindow-workspaces-root }, timeout: 10s }
+- assertVisible: { id: multiwindow-workspaces-availability-unsupported-platform }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=save-Desk" }
+- assertVisible: { id: multiwindow-workspaces-run-1-steps-1 }
+- assertVisible: { id: multiwindow-workspaces-error-E_UNSUPPORTED_PLATFORM }

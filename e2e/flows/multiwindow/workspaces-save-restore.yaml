@@ -1,0 +1,42 @@
+appId: so.legend.spark.examples.kitchensink
+name: A workspace saves the open windows and restores them at their frames
+intent: >
+  On Multiwindow > Workspaces with two simulated displays (901, primary, and 902), an editor fills the left half of 901
+  and the inspector the right half of 902. Saving "Desk" lists it with two windows on two displays. Closing the windows
+  and restoring Desk reopens both at exactly those frames, each placed exact. Renaming Desk to Home lists Home, and
+  deleting Home leaves no workspace.
+checks: [MW-WORKSPACE-01]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+---
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+      - { id: "902", persistentId: SIM-902, name: Studio Display, primary: false, origin: { x: 1512, y: 0 }, size: { width: 2560, height: 1440 }, workArea: { x: 0, y: 25, width: 2560, height: 1415 }, scaleFactor: 2, safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: Studio Display, gamut: p3 }, edrHeadroom: { current: 1, potential: 1, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces" }
+- extendedWaitUntil: { visible: { id: multiwindow-workspaces-root }, timeout: 10s }
+- assertVisible: { id: multiwindow-workspaces-availability-available }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=clear,editor,inspector,frame-E1-901-0-32-756-950,frame-I-902-1280-25-1280-1415,save-Desk" }
+- assertVisible: { id: multiwindow-workspaces-run-1-steps-6 }
+- assertVisible: { id: multiwindow-workspaces-saved-Desk-2-windows-2-displays }
+- assertVisible: { id: multiwindow-workspaces-window-E1-901-0-32-756x950 }
+- assertVisible: { id: multiwindow-workspaces-window-I-902-1280-25-1280x1415 }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=close" }
+- assertVisible: { id: multiwindow-workspaces-run-2-steps-1 }
+- assertNotVisible: { id: multiwindow-workspaces-window-E1-901-0-32-756x950 }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=restore-Desk" }
+- assertVisible: { id: multiwindow-workspaces-run-3-steps-1 }
+- assertVisible: { id: multiwindow-workspaces-restore-E1-901-exact_I-902-exact }
+- assertVisible: { id: multiwindow-workspaces-window-E1-901-0-32-756x950 }
+- assertVisible: { id: multiwindow-workspaces-window-I-902-1280-25-1280x1415 }
+- assertVisible: { id: multiwindow-workspaces-window-content-I, window: { title: "Inspector" } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=rename-Desk-Home" }
+- assertVisible: { id: multiwindow-workspaces-run-4-steps-1 }
+- assertVisible: { id: multiwindow-workspaces-saved-Home-2-windows-2-displays }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=delete-Home,close" }
+- assertVisible: { id: multiwindow-workspaces-run-5-steps-2 }
+- assertVisible: { id: multiwindow-workspaces-saved-count-0 }
+- assertNotVisible: { id: multiwindow-workspaces-error-other }
+- simulateDisplays: { restore: true }

@@ -1,0 +1,33 @@
+appId: so.legend.spark.examples.kitchensink
+name: Window ▸ Workspaces saves and restores workspaces with shortcuts
+intent: >
+  Window ▸ Workspaces has Save Workspace… with ⌥⌘S. With the name Morning typed on the screen and an editor at
+  100,80 (640 × 480), ⌥⌘S saves Morning, which the menu then lists with ⌃⌘1. After the editor closes, ⌃⌘1
+  restores it at that frame.
+checks: [MW-WORKSPACE-04]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+---
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces" }
+- extendedWaitUntil: { visible: { id: multiwindow-workspaces-root }, timeout: 10s }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=editor,frame-E1-901-100-80-640-480,name-Morning" }
+- assertVisible: { id: multiwindow-workspaces-run-1-steps-3 }
+- assertAppMenu: { path: "Window > Workspaces > Save Workspace…", enabled: true, shortcut: cmd+alt+s }
+- assertAppMenu: { path: "Window > Workspaces > Morning", exists: false }
+- tapOn: { id: multiwindow-workspaces-note }
+- shortcut: cmd+alt+s
+- extendedWaitUntil: { visible: { id: multiwindow-workspaces-saved-Morning-1-windows-1-displays }, timeout: 5s }
+- assertAppMenu: { path: "Window > Workspaces > Morning", enabled: true, shortcut: ctrl+cmd+1 }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=close" }
+- assertVisible: { id: multiwindow-workspaces-run-2-steps-1 }
+- assertNotVisible: { id: multiwindow-workspaces-window-E1-901-100-80-640x480 }
+- tapOn: { id: multiwindow-workspaces-note }
+- shortcut: ctrl+cmd+1
+- extendedWaitUntil: { visible: { id: multiwindow-workspaces-window-E1-901-100-80-640x480 }, timeout: 5s }
+- assertNotVisible: { id: multiwindow-workspaces-error-other }
+- simulateDisplays: { restore: true }

@@ -8,6 +8,8 @@ intent: >
   reads closed). Multiwindow > Window performance then opens from spark-ks://multiwindow/performance and matches its
   golden with nothing run yet (every readout row empty). Multiwindow > Window choreography then opens from
   spark-ks://multiwindow/choreography and matches its golden with no window open (every window row reads closed).
+  Multiwindow > Workspaces then opens from spark-ks://multiwindow/workspaces with one simulated display (901) and
+  matches its golden with no workspace saved and no window open.
 checks: [MW-VISUAL-01]
 tags: [multiwindow]
 platforms: [macos]
@@ -27,3 +29,12 @@ matrix:
 - launchApp: { openUrl: "spark-ks://multiwindow/choreography", stopApp: false }
 - assertVisible: { id: multiwindow-choreography-root }
 - assertScreenshot: { golden: multiwindow-choreography, mask: [{ id: infra-shell-sidebar }] }
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { openUrl: "spark-ks://multiwindow/workspaces", stopApp: false }
+- assertVisible: { id: multiwindow-workspaces-root }
+- launchApp: { openUrl: "spark-ks://multiwindow/workspaces?run=list", stopApp: false }
+- assertVisible: { id: multiwindow-workspaces-run-1-steps-1 }
+- assertScreenshot: { golden: multiwindow-workspaces, mask: [{ id: infra-shell-sidebar }] }
+- simulateDisplays: { restore: true }

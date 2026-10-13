@@ -1,0 +1,40 @@
+appId: so.legend.spark.examples.kitchensink
+name: Restoring a workspace adapts it to the connected displays
+intent: >
+  "Desk" is saved with an editor on the left half of the simulated built-in display 901 and the inspector on the right
+  half of the Studio display 902. With 902 disconnected, restoring Desk puts the editor back exactly and the inspector
+  on the right half of 901 (756,32, 756 × 950: scaled). With another display of the Studio's size (903) connected
+  instead, the inspector goes to 903 at its saved place (1280,25, 1280 × 1415: moved).
+checks: [MW-WORKSPACE-03]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 120s
+---
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+      - { id: "902", persistentId: SIM-902, name: Studio Display, primary: false, origin: { x: 1512, y: 0 }, size: { width: 2560, height: 1440 }, workArea: { x: 0, y: 25, width: 2560, height: 1415 }, scaleFactor: 2, safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: Studio Display, gamut: p3 }, edrHeadroom: { current: 1, potential: 1, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces" }
+- extendedWaitUntil: { visible: { id: multiwindow-workspaces-root }, timeout: 10s }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=editor,inspector,frame-E1-901-0-32-756-950,frame-I-902-1280-25-1280-1415,save-Desk" }
+- assertVisible: { id: multiwindow-workspaces-run-1-steps-5 }
+- assertVisible: { id: multiwindow-workspaces-saved-Desk-2-windows-2-displays }
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=restore-Desk" }
+- assertVisible: { id: multiwindow-workspaces-run-2-steps-1 }
+- assertVisible: { id: multiwindow-workspaces-restore-E1-901-exact_I-901-scaled }
+- assertVisible: { id: multiwindow-workspaces-window-E1-901-0-32-756x950 }
+- assertVisible: { id: multiwindow-workspaces-window-I-901-756-32-756x950 }
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+      - { id: "903", persistentId: SIM-903, name: Other Display, primary: false, origin: { x: 1512, y: 0 }, size: { width: 2560, height: 1440 }, workArea: { x: 0, y: 25, width: 2560, height: 1415 }, scaleFactor: 2, safeArea: { top: 0, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 60, maximum: 60, variable: false }, colorSpace: { name: Other Display, gamut: srgb }, edrHeadroom: { current: 1, potential: 1, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/workspaces?run=restore-Desk" }
+- assertVisible: { id: multiwindow-workspaces-run-3-steps-1 }
+- assertVisible: { id: multiwindow-workspaces-restore-E1-901-exact_I-903-moved }
+- assertVisible: { id: multiwindow-workspaces-window-I-903-1280-25-1280x1415 }
+- assertNotVisible: { id: multiwindow-workspaces-error-other }
+- simulateDisplays: { restore: true }

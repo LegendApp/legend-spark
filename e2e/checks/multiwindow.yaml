@@ -343,3 +343,54 @@ checks:
     spec: "docs/api-window-contract.md §Window choreography"
     covers:
       - ./windows#getWindowChoreographyAvailability
+  MW-WORKSPACE-01:
+    title: getWindowWorkspaceAvailability reports workspaces available on macOS; saving names a workspace of the open windows and connected displays, restoring closes the windows and reopens the saved ones at their exact frames, and workspaces rename and delete
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Workspaces"
+    covers:
+      - ./windows#getWindowWorkspaceAvailability
+      - ./windows#getWindowWorkspaceAvailability().available
+      - ./windows#createWindowWorkspaces
+  MW-WORKSPACE-02:
+    title: Saved workspaces are stored in the app's data directory and survive quitting and relaunching
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Workspaces"
+    covers:
+      - ./windows#createWindowWorkspaces
+  MW-WORKSPACE-03:
+    title: Restoring adapts the layout to the connected displays; a window of a disconnected display keeps its place and proportions on the remaining display (scaled), and another display of the same size takes it at the same place (moved)
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Workspaces"
+    covers:
+      - ./windows#createWindowWorkspaces
+  MW-WORKSPACE-04:
+    title: Window ▸ Workspaces has Save Workspace… (⌥⌘S), which saves under the app's name, and an item per workspace with ⌃⌘1–9; the shortcut restores the workspace
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Workspaces"
+    covers:
+      - ./windows#createWindowWorkspaces
+  MW-WORKSPACE-05:
+    title: A damaged workspaces file is reported as E_INVALID_DATA on load and on save, is not overwritten, and clearing it recovers
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Workspaces"
+    covers:
+      - ./windows#createWindowWorkspaces
+  MW-WORKSPACE-06:
+    title: On screen, a workspace restores on the active Space, with Stage Manager on its windows arrive as new windows do, a fullscreen window returns to fullscreen in its own Space, and unplugging a real display adapts the layout
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Workspaces"
+    covers:
+      - ./windows#createWindowWorkspaces
+  MW-WORKSPACE-07:
+    title: "On Windows, getWindowWorkspaceAvailability reports unsupported-platform and createWindowWorkspaces rejects E_UNSUPPORTED_PLATFORM (implementation: #445)"
+    platforms: [windows]
+    blocking: true
+    spec: "docs/api-window-contract.md §Workspaces"
+    covers:
+      - ./windows#getWindowWorkspaceAvailability
