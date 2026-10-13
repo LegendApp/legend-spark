@@ -556,12 +556,13 @@ static void LegendPrepareWindowForDisplay(NSWindow *window, NSString *background
 
 static void LegendApplyContentLayoutMode(NSWindow *window, NSNumber *maskNumber, BOOL usesTitlebarBackground)
 {
-  if (usesTitlebarBackground) {
+  NSString *contentLayoutMode = objc_getAssociatedObject(window, &LegendContentLayoutModeKey);
+  if ([contentLayoutMode isEqualToString:@"fullSize"] || (usesTitlebarBackground && ![contentLayoutMode isEqualToString:@"contentLayoutGuide"])) {
     window.styleMask = window.styleMask | NSWindowStyleMaskFullSizeContentView;
     return;
   }
 
-  if (maskNumber && (maskNumber.unsignedIntegerValue & NSWindowStyleMaskFullSizeContentView) == 0) {
+  if ([contentLayoutMode isEqualToString:@"contentLayoutGuide"] || (maskNumber && (maskNumber.unsignedIntegerValue & NSWindowStyleMaskFullSizeContentView) == 0)) {
     window.styleMask = window.styleMask & ~NSWindowStyleMaskFullSizeContentView;
   }
 }
@@ -683,7 +684,7 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
   LegendApplyWindowBackgroundColor(window, backgroundColor);
 
   RCTUIView *rootView = LegendManagedRootView(window);
-  if (usesTitlebarBackground && rootView) {
+  if ((usesTitlebarBackground || contentLayoutMode.length > 0) && rootView) {
     LegendEnsureRootViewContainer(window, rootView);
     LegendSizeRootViewToWindow(rootView, window);
   }
@@ -2292,7 +2293,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       }
       [rootView removeFromSuperview];
       targetWindow.contentView = rootView;
-      if (usesTitlebarBackground) {
+      if (usesTitlebarBackground || contentLayoutMode.length > 0) {
         LegendEnsureRootViewContainer(targetWindow, rootView);
       }
       LegendApplyWindowBackgroundColor(targetWindow, backgroundColor);

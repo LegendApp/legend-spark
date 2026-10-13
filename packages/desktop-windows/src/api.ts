@@ -33,8 +33,8 @@ export async function openWindow(options: WindowOpenOptions): Promise<WindowInfo
     try {
       const info = await windowCall("completeOpen", snapshot, isInfo);
       // Common chrome is applied first; explicit AppKit groups own their corresponding fields.
-      if (!snapshot.macos) return publicInfo(info);
-      await updateMacOSWindow(snapshot.id, snapshot.macos);
+      if (!snapshot.macos && snapshot.appearance === undefined && snapshot.backgroundColor === undefined) return publicInfo(info);
+      await updateMacOSWindow(snapshot.id, snapshot);
       // The window now exists: reflect the applied chrome, but a transient read-back
       // failure must not discard a window that opened successfully, so fall back to info.
       try { return await getWindow(snapshot.id); } catch { return publicInfo(info); }
@@ -57,7 +57,7 @@ export async function setWindowOptions(id: string, options: WindowUpdateOptions)
   if (!snapshot.macos || Object.keys(snapshot).some(key => key !== "macos")) {
     await windowCommand("options", { id, options: snapshot });
   }
-  if (snapshot.macos) await updateMacOSWindow(id, snapshot.macos);
+  if (Platform.OS === "macos" && (snapshot.macos || snapshot.appearance !== undefined || snapshot.backgroundColor !== undefined)) await updateMacOSWindow(id, snapshot);
 }
 /** Portable frame change. Animated moves are macOS-only: pass `macos.durationMs` and the call rejects on Windows rather than ignoring the request. */
 export async function setWindowBounds(id: string, value: WindowBounds, options: SetWindowBoundsOptions = {}): Promise<void> {

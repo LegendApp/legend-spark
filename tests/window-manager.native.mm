@@ -110,6 +110,27 @@ int main() { @autoreleasepool {
   NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1280, 820)
     styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
   window.releasedWhenClosed = NO;
+  RCTUIView *rootView = [[RCTUIView alloc] initWithFrame:window.contentView.bounds];
+  window.contentView = rootView;
+  LegendApplyWindowOptions(window, @{ @"windowStyle": @{ @"contentLayoutMode": @"fullSize" } });
+  assert((window.styleMask & NSWindowStyleMaskFullSizeContentView) != 0);
+  assert(window.contentView != rootView);
+  assert(NSEqualRects(rootView.frame, window.contentView.bounds));
+  LegendApplyWindowOptions(window, @{ @"windowStyle": @{ @"appearance": @"dark", @"backgroundColor": @"#191A1B", @"titlebarAppearsTransparent": @YES } });
+  assert(LegendWindowUsesDarkAppearance(window));
+  LegendApplyWindowOptions(window, @{ @"windowStyle": @{ @"appearance": @"light", @"backgroundColor": @"#f5f6f8", @"contentLayoutMode": @"contentLayoutGuide", @"titlebarAppearsTransparent": @YES } });
+  assert(!LegendWindowUsesDarkAppearance(window));
+  assert((window.styleMask & NSWindowStyleMaskFullSizeContentView) == 0);
+  assert((window.styleMask & NSWindowStyleMaskTitled) != 0);
+  assert((window.styleMask & NSWindowStyleMaskResizable) != 0);
+  NSColor *lightBackground = LegendColorFromHexString(@"#f5f6f8");
+  assert([window.backgroundColor isEqual:lightBackground]);
+  assert(CGColorEqualToColor(window.contentView.layer.backgroundColor, lightBackground.CGColor));
+  LegendApplyWindowOptions(window, @{ @"windowStyle": @{ @"contentLayoutMode": @"fullSize" } });
+  assert((window.styleMask & NSWindowStyleMaskFullSizeContentView) != 0);
+  assert(NSEqualRects(rootView.frame, window.contentView.bounds));
+  LegendApplyWindowOptions(window, @{ @"windowStyle": @{ @"appearance": @"system" } });
+  assert(window.appearance == nil);
   manager.windows[@"brightness-probe"] = window;
   NSDictionary *(^options)(double, NSString *) = ^NSDictionary *(double value, NSString *elapsed) {
     return @{ @"windowStyle": @{ @"toolbarItems": @[

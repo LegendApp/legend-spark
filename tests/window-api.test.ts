@@ -101,6 +101,24 @@ test("macOS precreates hidden registered roots and closes a failed opening", asy
   await expect(windows.openWindow({ id: "editor", component: "Editor" })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
   expect(call.mock.calls.at(-1)?.[0]).toBe("discard");
 });
+test("macOS native chrome receives common appearance and background on creation and sparse updates", async () => {
+  platform.OS = "macos";
+  await windows.openWindow({ id: "editor", component: "Editor", appearance: "light", backgroundColor: "#f5f6f8", macos: { titleBar: { transparent: true, contentLayout: "fullSize" } } });
+  const style = { appearance: "light", backgroundColor: "#f5f6f8", titlebarAppearsTransparent: true, contentLayoutMode: "fullSize" };
+  expect(JSON.parse(managed.openWindow.mock.calls[0][0]).windowStyle).toEqual(style);
+  expect(JSON.parse(managed.setWindowOptions.mock.calls[0][1]).windowStyle).toEqual(style);
+  await windows.setWindowOptions("editor", { appearance: "dark", backgroundColor: "#191A1B" });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1]).windowStyle).toEqual({ appearance: "dark", backgroundColor: "#191A1B" });
+  await windows.setWindowOptions("editor", { appearance: "system" });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1]).windowStyle).toEqual({ appearance: "system" });
+  await windows.setWindowOptions("editor", { backgroundColor: "#f5f6f8" });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1]).windowStyle).toEqual({ backgroundColor: "#f5f6f8" });
+  await windows.setWindowOptions("editor", { macos: { titleBar: { contentLayout: "contentLayoutGuide" } } });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1]).windowStyle).toEqual({ contentLayoutMode: "contentLayoutGuide" });
+  await windows.openWindow({ id: "plain", component: "Editor", appearance: "light", backgroundColor: "#f5f6f8" });
+  expect(JSON.parse(managed.openWindow.mock.calls.at(-1)![0]).windowStyle).toEqual({ appearance: "light", backgroundColor: "#f5f6f8" });
+  expect(JSON.parse(managed.setWindowOptions.mock.calls.at(-1)![1]).windowStyle).toEqual({ appearance: "light", backgroundColor: "#f5f6f8" });
+});
 test("a transient macOS read-back failure after chrome is applied keeps the opened window", async () => {
   platform.OS = "macos";
   call.mockImplementation(async (method: string) => {

@@ -2,7 +2,7 @@ import { Platform } from "react-native";
 import { SparkError, invokeNative, parseNativeResult } from "@legendapp/spark-desktop-app/src/contracts";
 import { menuItems } from "@legendapp/spark-desktop-app/src/contracts/menu";
 import Native from "./window-manager/NativeWindowManager";
-import type { MacOSWindowOptions, WindowOpenOptions } from "./types";
+import type { WindowOpenOptions, WindowUpdateOptions } from "./types";
 export function macosNative() {
   if (Platform.OS !== "macos") throw new SparkError("E_UNSUPPORTED_PLATFORM", "This operation requires macOS");
   if (!Native) throw new SparkError("E_MODULE_UNAVAILABLE", "The macOS window module is unavailable");
@@ -12,9 +12,11 @@ export async function macosCommand(operation: () => Promise<string>): Promise<vo
   const result = parseNativeResult(await invokeNative(operation), (value): value is { success: boolean; message?: string } => !!value && typeof value === "object" && typeof (value as any).success === "boolean");
   if (!result.success) throw new SparkError("E_NATIVE", result.message ?? "macOS window operation failed");
 }
-export function macosOptions(options: MacOSWindowOptions | undefined): Record<string, unknown> {
-  if (!options) return {};
+export function macosOptions({ macos: options, appearance, backgroundColor }: Pick<WindowOpenOptions, "macos" | "appearance" | "backgroundColor">): Record<string, unknown> {
   const result: Record<string, unknown> = {}, style: Record<string, unknown> = {};
+  if (appearance !== undefined) style.appearance = appearance;
+  if (backgroundColor !== undefined) style.backgroundColor = backgroundColor;
+  if (!options) return { windowStyle: style };
   if (options.representedUri !== undefined) result.representedURL = options.representedUri;
   if (options.restoreOnLaunch !== undefined) result.restoreOnLaunch = options.restoreOnLaunch;
   if (options.startupSplitView !== undefined) style.startupSplitView = options.startupSplitView;
@@ -46,8 +48,8 @@ export function macosOptions(options: MacOSWindowOptions | undefined): Record<st
   return result;
 }
 export async function createMacOSWindow(options: WindowOpenOptions): Promise<void> {
-  await macosCommand(() => macosNative().openWindow(JSON.stringify({ ...macosOptions(options.macos), identifier: options.id, moduleName: options.component, initialProperties: options.props ?? {}, title: options.title, deferOrderFront: true, sparkOverlay: options.kind === "overlay" })));
+  await macosCommand(() => macosNative().openWindow(JSON.stringify({ ...macosOptions(options), identifier: options.id, moduleName: options.component, initialProperties: options.props ?? {}, title: options.title, deferOrderFront: true, sparkOverlay: options.kind === "overlay" })));
 }
-export async function updateMacOSWindow(id: string, options: MacOSWindowOptions): Promise<void> {
+export async function updateMacOSWindow(id: string, options: WindowUpdateOptions): Promise<void> {
   await macosCommand(() => macosNative().setWindowOptions(id, JSON.stringify(macosOptions(options))));
 }
