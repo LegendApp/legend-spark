@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.0.1-next.4 — preview
+
+Experimental macOS Apple Silicon preview. Native Windows and Intel macOS
+acceptance remain pending. Automated package checks do not certify native UI
+or clean-recipient Runner acceptance.
+
+- test: allow error logs when native preflight rejects a packed build
+- test: allow CLI prefix before native patch preflight summary
+- Revert "release: prepare 0.0.1-next.4"
+- fix: identify native patches in preflight error summary
+- release: prepare 0.0.1-next.4
+- fix: make release recovery safe and retryable
+- feat: fail release builds that use excluded native modules
+- feat: include and automatically patch enriched Markdown
+- feat: include camera with automatic native dependency patches
+- feat: add @legendapp/create-spark for npm create (#288)
+- feat(cli): check and upgrade app dependency pins in spark doctor/upgrade (#279)
+- fix(cli): only guard react-native.config.js when spark writes it (#278)
+- test: compare 1 MiB streaming-writer payload with Buffer.compare
+- Merge pull request #1 from LegendApp/seth/split-view-content-list
+- Merge pull request #3 from LegendApp/seth/fresh-macos-product
+- Merge remote-tracking branch 'origin/main' into HEAD
+- fix(ui): preserve split-view content and divider ownership
+- Merge remote-tracking branch 'origin/main' into HEAD
+- test: make quit-coordinator test robust to slow run loops
+- fix(cli): rebuild when a legacy build receipt lacks verified product metadata
+- Merge pull request #4 from LegendApp/seth/swipe-actions
+- fix(ui): harden native swipe actions
+- docs: record Windows Nitro and notification validation gaps
+- fix: nest Windows toast actions and loop call audio
+- fix: install Windows Nitro through the RNW JSI initializer
+- feat: validate and serialize radio menu items
+- fix: preserve native toolbar controls during menu updates
+- feat(ui): native trackpad swipe actions (ui/swipe)
+- fix(cli): copy the scheme's app product, not the first .app
+- fix(ui): steady split view panes during divider drags
+- feat(ui): native content-list column for SidebarSplitView; fix drag tearing
+- Merge pull request #2 from LegendApp/seth/fix-linux-portable-gates
+- test: pin macOS target arch in host-independent tests
+
 ## 0.0.1-next.3 — preview
 
 Experimental macOS Apple Silicon preview. Native Windows and Intel macOS
