@@ -15,8 +15,9 @@
 namespace spark::motion {
 
 /**
- * Every property is one scalar track. `backgroundColor` is four of them, its OKLCH components (docs/motion.md#colors):
- * lightness 0-1, chroma, hue in degrees (unbounded: the engine keeps the path it travels) and alpha 0-1.
+ * Every property is one scalar track. A color (`backgroundColor`, and a MotionShape's `fillColor` and `strokeColor`) is
+ * four of them, its OKLCH components (docs/motion.md#colors): lightness 0-1, chroma, hue in degrees (unbounded: the engine
+ * keeps the path it travels) and alpha 0-1.
  */
 enum Property : int {
   Opacity, TranslateX, TranslateY, ScaleX, ScaleY, Rotate, RotateX, RotateY, Perspective,
@@ -24,27 +25,47 @@ enum Property : int {
   ShadowOpacity, ShadowRadius, ShadowOffsetX, ShadowOffsetY, Blur,
   MaskInsetTop, MaskInsetBottom, MaskInsetStart, MaskInsetEnd, MaskRadius,
   MaterialIntensity, MaterialTintOpacity, MaterialCrossfade,
+  Morph, StrokeStart, StrokeEnd, StrokeWidth, FillColorL, FillColorC, FillColorH, FillColorAlpha,
+  StrokeColorL, StrokeColorC, StrokeColorH, StrokeColorAlpha,
   PropertyCount
 };
 using Values = std::array<double, PropertyCount>;
 /**
- * At rest: opaque, untransformed, square corners, a transparent background, no shadow, blur or mask, and a backdrop
- * material (docs/motion.md#backdrop-materials) at full intensity, its tint shown, and no crossfade in progress.
+ * At rest: opaque, untransformed, square corners, a transparent background, no shadow, blur or mask, a backdrop
+ * material (docs/motion.md#backdrop-materials) at full intensity, its tint shown, and no crossfade in progress, and a
+ * shape (docs/motion.md#shapes) showing its first path, its whole stroke 1 point wide, with transparent fill and stroke.
  * `materialCrossfade` is the opacity of the material a MotionMaterial crossfades to; only the glue drives it.
  */
-constexpr Values kIdentity = {1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1};
+constexpr Values kIdentity = {1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,
+  0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
 const char *propertyName(Property property);
 std::optional<Property> propertyFromName(const std::string &name);
 
-/** One property's channel on the compositor: the properties of a channel bake together into its layer animations. */
-enum class Channel { Opacity, Transform, BackgroundColor, BorderRadius, Shadow, Blur, Mask, Material, Count };
+/** A color property's four OKLCH components, in order. */
+struct ColorProperty { Property lightness, chroma, hue, alpha; };
+constexpr ColorProperty kBackgroundColor{BackgroundColorL, BackgroundColorC, BackgroundColorH, BackgroundColorAlpha};
+constexpr ColorProperty kFillColor{FillColorL, FillColorC, FillColorH, FillColorAlpha};
+constexpr ColorProperty kStrokeColor{StrokeColorL, StrokeColorC, StrokeColorH, StrokeColorAlpha};
+constexpr ColorProperty kColorProperties[] = {kBackgroundColor, kFillColor, kStrokeColor};
+
+/**
+ * One property's channel on the compositor: the properties of a channel bake together into its layer animations. A
+ * shape's path (`morph`) is its own channel, since each of its samples is a whole path.
+ */
+enum class Channel { Opacity, Transform, BackgroundColor, BorderRadius, Shadow, Blur, Mask, Material, ShapePath, Shape, Count };
 Channel channelOf(Property property);
-/** Whether a property moves something on screen (transforms and mask edges): the Reduce Motion `fade` alternate changes it at once. */
+/**
+ * Whether a property moves something on screen (transforms, mask edges, a shape's morph and the ends of its stroke): the
+ * Reduce Motion `fade` alternate changes it at once.
+ */
 bool travels(Property property);
 
 /** When a spring or decay counts as settled: displacement below `delta`, speed below `speed` (units per second). */
 struct Rest { double delta, speed; };
-/** Per-property defaults: points and degrees settle at 0.01; opacity, scale, color lightness, chroma and alpha, shadow opacity and the material's opacities at 0.0005. */
+/**
+ * Per-property defaults: points and degrees settle at 0.01; opacity, scale, color lightness, chroma and alpha, shadow
+ * opacity, the material's opacities, a shape's morph and the ends of its stroke at 0.0005.
+ */
 Rest restThreshold(Property property);
 
 struct State { double value = 0, velocity = 0; };

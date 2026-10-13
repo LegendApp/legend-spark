@@ -57,6 +57,7 @@ when rendered. There is no JavaScript-driven fallback.
 | `getSymbolEffectAvailability(effect)` | | `Availability` |
 | `MotionMaterial` | Component: a MotionView showing a backdrop material that crossfades and fades | |
 | `getMaterialAvailability(material)` | | `Availability` |
+| `MotionShape` | Component: a MotionView drawing a shape that morphs between paths and draws its stroke | |
 
 A target is a mounted `MotionView`, as received through its `ref`. `animate`,
 `stagger` and `timeline` validate synchronously and throw `SparkError`
@@ -74,8 +75,8 @@ not settle within 60 s, infinite loops whose shared cycle exceeds 20 s
 `E_INVALID_ARGUMENT`.
 
 The API is imperative and works from any code holding a `MotionView` (or `MotionSymbol`) ref.
-`MotionView`, `MotionPresence`, `MotionNumber`, `MotionText`, `MotionSymbol` and `MotionMaterial` are the
-only React-specific exports (components). There are no hooks.
+`MotionView`, `MotionPresence`, `MotionNumber`, `MotionText`, `MotionSymbol`, `MotionMaterial` and `MotionShape` are
+the only React-specific exports (components). There are no hooks.
 
 ## Layout, presence and shared elements
 
@@ -168,7 +169,9 @@ JS: validate and normalize  ── one JSON plan ──▶  RNSparkMotion (Turbo
 (degrees), `perspective` (points), `backgroundColor` (a color), `borderRadius`, `shadowOpacity`,
 `shadowRadius`, `shadowOffsetX`, `shadowOffsetY`, `blur` (points), the mask's `maskInsetTop`,
 `maskInsetBottom`, `maskInsetStart`, `maskInsetEnd` and `maskRadius` (points), and a
-[`MotionMaterial`](#backdrop-materials)'s `materialIntensity` and `materialTintOpacity` (0-1). `scale` drives both
+[`MotionMaterial`](#backdrop-materials)'s `materialIntensity` and `materialTintOpacity` (0-1), and a
+[`MotionShape`](#shapes)'s `morph`, `strokeStart`, `strokeEnd` (0-1), `strokeWidth` (points), `fillColor` and
+`strokeColor` (colors). `scale` drives both
 axes and cannot be combined with `scaleX`/`scaleY`. Velocities are units per second (multiply React Native
 gesture velocities, which are per millisecond, by 1000). Durations and delays are
 milliseconds. A bare number in `animate()` means `spring(value)` with the platform
@@ -262,7 +265,7 @@ values the engine reports.
 
 ### Colors
 
-`backgroundColor` takes `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()` (comma or space
+`backgroundColor` (and a [shape](#shapes)'s `fillColor` and `strokeColor`) takes `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()` (comma or space
 syntax, percentages), `oklch(L C H / A)` (chroma 100% is 0.4) or `transparent`; anything else (named
 colors, platform colors, `color()`) is `E_INVALID_ARGUMENT`. JavaScript converts a color once to
 OKLCH and sends lightness, chroma, hue and alpha as four engine properties
@@ -280,13 +283,14 @@ halfway from blue to yellow is a saturated green, where an sRGB blend is gray.
 * `spring`, `timing`, `keyframes` and `sequence` take colors (all stops of one spec are colors);
   `decay` cannot. `velocity`, `restDelta` and `restSpeed` are `E_UNSUPPORTED_OPTION` on a color
   animation: each component has its own. Scroll links take colors as `output` stops.
-* `getMotionState` reports `colors.backgroundColor` as CSS `oklch(L C H / A)`; `values` carries the
-  four components. `stopMotion(target, ['backgroundColor'])` stops all four.
+* `getMotionState` reports `colors.backgroundColor`, `colors.fillColor` and `colors.strokeColor` as CSS
+  `oklch(L C H / A)`; `values` carries the four components of each (`fillColorL`, …). `stopMotion(target,
+  ['backgroundColor'])` stops all four.
 
 ### Path animation
 
 `motionPath(d, { durationMs, easing = 'easeInOut', rotate, delayMs, repeat, reverse })` turns an
-SVG path (`M`, `L`, `H`, `V`, `C`, `S`, `Q`, `T`, `Z`, absolute and relative) into `translateX`
+SVG path ([path data](#path-data)) into `translateX`
 and `translateY` keyframes, in points from where the view rests (start the path at `M0 0`), and
 with `rotate: true` a `rotate` track that turns the view to the path's heading (degrees, 0 along
 +x, unwrapped). Keyframes sit at even distances along the flattened path (at most 240), and land
@@ -294,6 +298,69 @@ when the easing has covered that share of the length, so the view moves along th
 easing's pace. Spread the result into `animate`; the engine plays it like any keyframes. Arcs
 (`A`) and easings whose control points leave [0, 1] are `E_UNSUPPORTED_OPTION`. The path is not
 mirrored in right-to-left layouts.
+
+### Path data
+
+`motionPath` and `MotionShape` read SVG path data: `M`, `L`, `H`, `V`, `C`, `S`, `Q`, `T` and `Z`, absolute (upper case)
+and relative (lower case), with numbers in SVG's syntax (`-1.5e2`, `.5`, `10-5` is two numbers) separated by whitespace
+and at most one comma. Parsing is strict: any other character, a missing number or data that does not start with `M` is
+`E_INVALID_ARGUMENT` with the offending character's position. Arcs (`A`) are `E_UNSUPPORTED_OPTION`; draw them with
+cubic curves. Lines and quadratic curves become the cubic Bézier curves that draw them exactly.
+
+## Shapes
+
+```tsx
+const STAR = 'M60 12 L72 45 L108 46 L80 68 L89 102 L60 83 L31 102 L40 68 L12 46 L48 45 Z';
+const CIRCLE = 'M60 12 C86.5 12 108 33.5 108 60 C108 86.5 86.5 108 60 108 C33.5 108 12 86.5 12 60 C12 33.5 33.5 12 60 12 Z';
+<MotionShape ref={shape} paths={[CIRCLE, STAR]} initial={{ fillColor: '#2563eb' }} style={{ width: 120, height: 120 }} />
+<MotionShape ref={check} paths={['M16 38 L30 52 L58 22']} lineCap="round" lineJoin="round"
+  initial={{ strokeColor: '#16a34a', strokeWidth: 7, strokeEnd: 0 }} style={{ width: 72, height: 72 }} />
+
+animate(shape.current, { morph: spring(1, { preset: 'bouncy' }), fillColor: timing('#f59e0b') });  // circle to star
+animate(check.current, { strokeEnd: timing(1, { durationMs: 600 }) });                             // draw the checkmark
+```
+
+`MotionShape` is a `MotionView` (every `MotionView` prop, `ref` and operation applies) whose content is a
+`CAShapeLayer`, drawn over the view's own background, with no children (`E_INVALID_ARGUMENT`). Its props are
+`paths` (1 to 16 strings of [path data](#path-data), in points from the view's top-left corner, y down; not mirrored in
+right-to-left layouts), `lineCap` (`butt`, `round`, `square`), `lineJoin` (`miter`, `round`, `bevel`) and `fillRule`
+(`nonzero`, `evenodd`). Everything that animates is a motion property: springs, timing, keyframes, interruption with
+velocity, telemetry, scroll links and captures work on them, baked into Core Animation keyframe animations on the shape
+layer.
+
+| Property | Default | Layer |
+| --- | --- | --- |
+| `morph` | 0 | `path`: `k` shows `paths[k]`; `k + f` is `f` of the way from `paths[k]` to `paths[k + 1]` |
+| `strokeStart`, `strokeEnd` | 0, 1 | `strokeStart`, `strokeEnd`: the drawn part of the stroke, as shares of its length |
+| `strokeWidth` | 1 | `lineWidth`, in points |
+| `fillColor`, `strokeColor` | transparent | `fillColor`, `strokeColor`, in [OKLCH](#colors) |
+
+**Morphing.** A morph interpolates the points of two paths one to one. Paths therefore need the same subpaths (as many
+`M`s, each closed with `Z` or open alike); otherwise the component throws `E_UNSUPPORTED_OPTION` naming the two paths.
+Subpaths with different numbers of segments are subdivided: the longest segments of the shorter one are halved (at their
+curve midpoint, which keeps the shape exact) until every path has as many segments as the longest. Points correspond in
+drawing order from each subpath's `M`, so start the shapes at corresponding points and draw them in the same direction
+(clockwise from the top, say); a star that starts at its left point morphs from a circle that starts at its top with a
+twist. Beyond 0 and the last path, `morph` continues the nearest pair, so a spring's overshoot overshoots the shape.
+
+**Limits and cost.** At most 16 paths of at most 10,000 characters and 128 cubic segments each after subdivision
+(`E_INVALID_ARGUMENT` beyond). JavaScript parses and subdivides the paths once per change of `paths` and sends the
+points as one JSON prop; the native view keeps them in one flat array and builds a path only for the model value (when
+`morph` changes) and for each baked sample of a running morph. A bake of the morph holds one path per sample (at most 120
+per second, [Frame rate and power](#frame-rate-and-power)), each about 50 bytes per segment (three 16-byte points): a one-second morph of a
+128-segment path holds about 750 KB until it ends. The window server interpolates between samples; nothing runs per
+frame. A change of `paths` applies at once, at the current `morph`; a running morph continues on the new paths.
+
+**Who owns the shape properties.** Only a `MotionShape` has them: in `initial`, `animate`, `stagger`, `timeline`,
+`setMotionValues` or a scroll link on another `MotionView` they are `E_UNSUPPORTED_OPTION`.
+
+**Reduce Motion.** Under the `fade` alternate, `morph`, `strokeStart` and `strokeEnd` travel: the shape changes and the
+stroke is drawn at once, and the view fades in there over 200 ms (as a moved view does); `strokeWidth` and the colors fade
+over 200 ms. A drawn progress indicator that should keep moving under Reduce Motion passes `reducedMotion: 'play'` or its
+own `reducedValues`.
+
+**Availability.** A `MotionShape` needs nothing beyond motion: where `getMotionAvailability()` is available it is, and
+elsewhere it throws motion's typed error before reading its paths.
 
 ## Backdrop materials
 
@@ -695,7 +762,10 @@ not exist on Windows; symbol effects there need their own design (#237). `Motion
 `E_UNSUPPORTED_PLATFORM` and `getMaterialAvailability` reports `unsupported-platform` until Composition backdrop
 brushes are wired: the intended glue maps `withinWindow` onto `CreateBackdropBrush` and `behindWindow` onto
 `CreateHostBackdropBrush` (with Acrylic-style blur and tint effects), `materialIntensity` and `materialTintOpacity` onto
-the brush visual's and the tint's `Opacity`, and the crossfade onto two brush visuals (#237).
+the brush visual's and the tint's `Opacity`, and the crossfade onto two brush visuals (#237). `MotionShape` throws
+`E_UNSUPPORTED_PLATFORM` the same way; the intended glue draws a `CompositionSpriteShape` whose `CompositionPathGeometry`
+takes the baked sample paths as `PathKeyFrameAnimation` keyframes (the same point structure), with `TrimStart`/`TrimEnd`,
+`StrokeThickness` and the fill and stroke `CompositionColorBrush`es as their own keyframe animations (#237).
 
 `MotionPresence` and `MotionView`'s layout, presence and shared-element props are typed
 unsupported the same way: both components throw `E_UNSUPPORTED_PLATFORM` when rendered.
@@ -714,8 +784,7 @@ boxes around each mounting transaction (#376).
   presentation.
 * Layout boxes are layout geometry: transforms of ancestors (other than a layout-animated
   ancestor `MotionView`) are not part of them.
-* Shader effects (ripple, dissolve, distortion, glass specular) and particles (#405), and shape
-  morphing and stroke drawing (#406), are not part of motion yet. Backdrop materials crossfade and fade; their
+* Shader effects (ripple, dissolve, distortion, glass specular) and particles (#405) are not part of motion yet. Backdrop materials crossfade and fade; their
   blur radius does not animate ([Backdrop materials](#backdrop-materials)).
 * Reduce Motion, the hidden-window rule and cues apply per plan; a plan with several views
   plays its cues by its first view's state.

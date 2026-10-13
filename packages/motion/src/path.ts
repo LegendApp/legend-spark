@@ -1,5 +1,6 @@
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { easing as resolveEasing, invalid, keyframes, type AnimationOptions, type Easing, type KeyframesSpec } from "./specs";
+import { cubicAt, parseSvgPath, type Point } from "./svg-path";
 
 // Path animation (docs/motion.md#path-animation): an SVG path becomes keyframes of translateX and translateY (and
 // rotate), sampled at even distances along it, so the view moves along the path at the easing's pace. The engine
@@ -18,59 +19,20 @@ export interface MotionPathValues {
   rotate?: KeyframesSpec;
 }
 
-type Point = readonly [number, number];
 const OPTIONS = ["durationMs", "easing", "rotate", "delayMs", "repeat", "reverse"];
 /** Samples per curve segment when measuring, and the spacing of keyframes along the path in points. */
 const FLATTEN = 32, SPACING = 4, MAX_KEYFRAMES = 240;
 
-/** The path's points, curves flattened: M, L, H, V, C, S, Q, T and Z, absolute and relative. Arcs are E_UNSUPPORTED_OPTION. */
+/** The path's points, curves flattened: each subpath's start, then points along its segments. */
 function flatten(d: string): Point[] {
-  if (typeof d !== "string") invalid("A motion path is an SVG path string");
-  const tokens = d.match(/[a-zA-Z]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/g) ?? [];
   const points: Point[] = [];
-  let index = 0, command = "", current: Point = [0, 0], start: Point = [0, 0], control: Point | undefined;
-  const number = () => {
-    const value = Number(tokens[index++]);
-    if (!Number.isFinite(value)) invalid(`The motion path has an invalid number near ${tokens[index - 1] ?? "its end"}`);
-    return value;
-  };
-  const point = (relative: boolean): Point => { const x = number(), y = number(); return relative ? [current[0] + x, current[1] + y] : [x, y]; };
-  const curve = (at: (t: number) => Point) => { for (let i = 1; i <= FLATTEN; i++) points.push(at(i / FLATTEN)); };
-  while (index < tokens.length) {
-    if (/[a-zA-Z]/.test(tokens[index]!)) command = tokens[index++]!;
-    else if (!command) invalid("A motion path starts with M");
-    const relative = command === command.toLowerCase(), kind = command.toUpperCase();
-    if (!points.length && kind !== "M") invalid("A motion path starts with M");
-    let next: Point;
-    switch (kind) {
-      case "M": next = point(relative); start = next; points.push(next); command = relative ? "l" : "L"; control = undefined; current = next; continue;
-      case "L": next = point(relative); points.push(next); control = undefined; break;
-      case "H": next = [relative ? current[0] + number() : number(), current[1]]; points.push(next); control = undefined; break;
-      case "V": next = [current[0], relative ? current[1] + number() : number()]; points.push(next); control = undefined; break;
-      case "C": case "S": {
-        const from = current;
-        const c1: Point = kind === "C" ? point(relative) : control ? [2 * from[0] - control[0], 2 * from[1] - control[1]] : from;
-        const c2 = point(relative);
-        next = point(relative);
-        const end = next;
-        curve(t => { const u = 1 - t; return [u * u * u * from[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * end[0], u * u * u * from[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * end[1]]; });
-        control = c2;
-        break;
-      }
-      case "Q": case "T": {
-        const from = current;
-        const c: Point = kind === "Q" ? point(relative) : control ? [2 * from[0] - control[0], 2 * from[1] - control[1]] : from;
-        next = point(relative);
-        const end = next;
-        curve(t => { const u = 1 - t; return [u * u * from[0] + 2 * u * t * c[0] + t * t * end[0], u * u * from[1] + 2 * u * t * c[1] + t * t * end[1]]; });
-        control = c;
-        break;
-      }
-      case "Z": next = start; points.push(next); control = undefined; command = ""; break;
-      case "A": throw new SparkError("E_UNSUPPORTED_OPTION", "Motion paths do not take arcs; draw them with cubic curves (C)");
-      default: return invalid(`Unknown motion path command ${command}`);
+  for (const { start, segments } of parseSvgPath(d, "The motion path")) {
+    points.push(start);
+    let from = start;
+    for (const segment of segments) {
+      for (let i = 1; i <= FLATTEN; i++) points.push(cubicAt(from, segment, i / FLATTEN));
+      from = [segment[4], segment[5]];
     }
-    current = next;
   }
   if (points.length < 2) invalid("A motion path needs at least two points");
   return points;

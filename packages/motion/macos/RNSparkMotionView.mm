@@ -28,6 +28,7 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
   NSDictionary *_transition;
   NSDictionary *_crossfade;
   SparkMotionMaterialStack *_material;
+  SparkMotionShapeView *_shape;
   uint32_t _owned;
 }
 
@@ -63,6 +64,7 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
 - (NSDictionary *)motionTransition { return _transition; }
 - (SparkMotionMaterialStack *)motionMaterial { return _material; }
 - (NSDictionary *)motionCrossfade { return _crossfade; }
+- (SparkMotionShapeView *)motionShape { return _shape; }
 - (BOOL)motionRightToLeft { return _layoutMetrics.layoutDirection == LayoutDirection::RightToLeft; }
 - (uint32_t)motionOwnedChannels { return _owned; }
 - (void)setMotionOwnedChannels:(uint32_t)owned { _owned = owned; }
@@ -109,6 +111,7 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
     _crossfade = [crossfade isKindOfClass:NSDictionary.class] ? crossfade : nil;
   }
   if (!old || motionProps.tintColor != old->tintColor || motionProps.material != old->material) [self updateMaterial:motionProps changed:!old || motionProps.material != old->material];
+  if (!old || motionProps.shape != old->shape) [self updateShape:motionProps];
   if (_tag) return;
   // `initial` applies once, at mount; later renders never overwrite engine-owned values.
   Values initial = spark::motion::kIdentity;
@@ -153,6 +156,21 @@ static id SparkMotionJSON(const std::string &json) { return json.empty() ? nil :
   // JavaScript validated the material and its availability; only a malformed native prop gets here.
   if (!material) { NSLog(@"Spark motion: material rejected: %@", error); return; }
   [SparkMotionCoordinator.shared host:self crossfadeTo:material];
+}
+
+// A MotionShape (docs/motion.md#shapes) has no React children either: its shape view is its only subview.
+- (void)updateShape:(const SparkMotionViewProps &)props
+{
+  NSDictionary *config = SparkMotionJSON(props.shape);
+  if (![config isKindOfClass:NSDictionary.class]) return;
+  if (!_shape) {
+    _shape = [[SparkMotionShapeView alloc] initWithFrame:self.bounds];
+    [self addSubview:_shape positioned:NSWindowBelow relativeTo:nil];
+  }
+  NSString *error = nil;
+  // JavaScript validated the paths and the limits; only a malformed native prop gets here.
+  if (![_shape setConfig:config error:&error]) { NSLog(@"Spark motion: shape rejected: %@", error); return; }
+  [SparkMotionCoordinator.shared hostDidReshape:self];
 }
 
 - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics

@@ -25,4 +25,7 @@ export { MotionMaterial } from "./MotionMaterial";
 export type { MotionMaterialProps } from "./MotionMaterial";
 export { getMaterialAvailability } from "./materials";
 export type { MotionMaterialName, MotionMaterialBlending, MotionMaterialState } from "./materials";
+export { MotionShape } from "./MotionShape";
+export type { MotionShapeProps } from "./MotionShape";
+export type { MotionShapeLineCap, MotionShapeLineJoin, MotionShapeFillRule } from "./shapes";
 export type { MotionSymbolTarget, SymbolEffect, SymbolEffectDirection, SymbolEffectOptions, SymbolEffectPlayback, SymbolReplaceTransition } from "./symbols";

@@ -16,7 +16,7 @@ test.skipIf(process.platform !== "darwin")("split view, motion view and drag vie
     await runOk("clang++", [
       "-fobjc-arc", "-fblocks", "-std=c++20", "-mmacosx-version-min=14.0", "-I", path.join(motion, "macos"), "-I", path.join(motion, "cpp"),
       "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "CoreImage", "-framework", "Symbols", "-framework", "UniformTypeIdentifiers",
-      input, path.join(motion, "macos/SparkMotionCoordinator.mm"), path.join(motion, "macos/SparkMotionMaterial.mm"), path.join(motion, "cpp/SparkMotion.cpp"), "-o", output,
+      input, path.join(motion, "macos/SparkMotionCoordinator.mm"), path.join(motion, "macos/SparkMotionMaterial.mm"), path.join(motion, "macos/SparkMotionShape.mm"), path.join(motion, "cpp/SparkMotion.cpp"), "-o", output,
     ], { timeout: 60000 });
     expect(await runOk(output, [], { timeout: 15000 })).toContain("Fabric mount props passed");
   } finally { rmSync(directory, { recursive: true, force: true }); }
