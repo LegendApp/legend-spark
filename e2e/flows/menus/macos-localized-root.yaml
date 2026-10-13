@@ -1,0 +1,22 @@
+appId: so.legend.spark.examples.kitchensink
+name: A menu targeting a native root keeps the system's localized title
+intent: >
+  The Menu Audit menu contributes Menu Audit Guide with target { menu: help } and the English label "Help". The
+  contribution merges into the native Help menu, which keeps its title in the launch language: Help in English,
+  مساعدة in Arabic, Aide in French. No second, English Help menu appears.
+checks: [MENU-ROOT-01]
+tags: [menus, internationalization]
+platforms: [macos]
+matrix:
+  locale: [en, ar, fr]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://menus/audit" }
+- assertVisible: { text: Menu ready, within: { id: menus-audit-status } }
+- assertAppMenu: { path: "Help > Menu Audit Guide", enabled: true, when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "Help > KitchenSink Help", when: { matrix: { locale: en } } }
+- assertAppMenu: { path: "مساعدة > Menu Audit Guide", enabled: true, when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "مساعدة > مساعدة KitchenSink", when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "Help > Menu Audit Guide", exists: false, when: { matrix: { locale: ar } } }
+- assertAppMenu: { path: "Aide > Menu Audit Guide", enabled: true, when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "Aide > Aide KitchenSink", when: { matrix: { locale: fr } } }
+- assertAppMenu: { path: "Help > Menu Audit Guide", exists: false, when: { matrix: { locale: fr } } }
