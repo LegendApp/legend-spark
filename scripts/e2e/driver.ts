@@ -10,7 +10,8 @@ import type { FrameTimeline } from "../../packages/desktop-app/src/profiler/trac
 
 export type DriverWindow = "main" | "key" | `id:${string}` | `title:${string}`;
 export type Frame = { x: number; y: number; width: number; height: number };
-export type Capture = { file: string; width: number; height: number; scale: number };
+/** `renderer`: how the app rendered it, Core Animation's renderer (`layers`) or AppKit's view drawing (`views`; docs/test-driver.md#what-a-capture-contains). */
+export type Capture = { file: string; width: number; height: number; scale: number; renderer: "layers" | "views" };
 /**
  * What pointer input addresses: the first visible view with a testID (scrolled into view; `offset` points from its
  * top-left, else its center), or a point in waitFor frame coordinates of a window.
@@ -306,7 +307,7 @@ export class Driver {
   /** Renders a window in-process to `<run directory>/<name>.png` once mounted UI updates settle. */
   async capture(window: DriverWindow, name: string, timeoutMs = 5000): Promise<Capture> {
     const reply = await this.request({ command: "capture", window, name, timeoutMs }, timeoutMs + 10000);
-    return { file: path.join(this.directory, reply.file as string), width: reply.width as number, height: reply.height as number, scale: reply.scale as number };
+    return { file: path.join(this.directory, reply.file as string), width: reply.width as number, height: reply.height as number, scale: reply.scale as number, renderer: reply.renderer as Capture["renderer"] };
   }
   /** The application menu bar, validated as when a user opens it. A driven app shows no menu bar, but has one. */
   async menus() { return (await this.request({ command: "menus" }, 10000)).menus as DriverMenuItem[]; }

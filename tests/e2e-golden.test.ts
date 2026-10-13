@@ -118,11 +118,11 @@ describe("assertScreenshot in the runner", () => {
       mkdirSync(path.dirname(path.join(root, "golden", `${id}.png`)), { recursive: true });
       writePng(path.join(root, "golden", `${id}.png`), golden);
     }
-    const screen = { image: image(100, 100) };
+    const screen: { image: Image; renderer?: "layers" | "views" } = { image: image(100, 100) };
     const backend = new MemoryBackend(new VirtualClock(), {
       name: "driver", kind: "driver", matrix: ["appearance", "locale"], collect: false, commands: handlers,
       elements: [element("clock", { id: "clock", frame: { x: 110, y: 60, width: 5, height: 5 } })],
-      screenshot: async file => { writePng(file, screen.image); return { frame: FRAME, scale: 2 }; },
+      screenshot: async file => { writePng(file, screen.image); return { frame: FRAME, scale: 2, renderer: screen.renderer }; },
     });
     const runDir = path.join(root, "run");
     const run = async () => {
@@ -171,6 +171,14 @@ describe("assertScreenshot in the runner", () => {
     const { run, screen } = setup("- assertScreenshot: home\n", { [GOLDEN]: image(100, 100) });
     fill(screen.image, 50, 50, 1, 1, BLACK);
     expect((await run()).result.failure?.message).toMatch(/^0\.010% of pixels \(1 of 10000\)/);
+  });
+
+  test("a failure says when the capture drew views instead of rendering the layer tree", async () => {
+    const { run, screen } = setup("- assertScreenshot: home\n", { [GOLDEN]: image(100, 100) });
+    fill(screen.image, 50, 50, 1, 1, BLACK);
+    expect((await run()).result.failure?.message).not.toContain("drew views");
+    screen.renderer = "views";
+    expect((await run()).result.failure?.message).toMatch(/approve .*home\.png` \(this capture drew views, not the layer tree goldens are rendered from/);
   });
 
   test("element masks (mapped from screen points) and explicit rects exclude regions", async () => {

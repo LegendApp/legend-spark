@@ -239,7 +239,7 @@ send one request at a time; each reply echoes `id`. Failures are
 | `waitFor` | `testID`, `timeoutMs` (10000) | `window` identifier and `frame` of the first visible view whose accessibility identifier (React Native `testID`) matches. `frame` is in points from the top-left of the window's frame view, the area `capture` renders, so frame × `scale` is the view's pixels in a capture. `E_TIMEOUT` otherwise; `timeoutMs: 0` checks once. |
 | `elements` | | `windows` (`id`, `title`, `key`, `main`, `frame`), front to back, and `elements`: the in-process accessibility view of every window with an identifier. An element is a visible view with a testID, or an accessibility element (controls through their cells) with a role, label or text: `key`, `parent` (the key of the nearest enclosing element), `window`, `id`, `role` (the NSAccessibility role without `AX`: `button`, `staticText`, `radioButton`), `label`, `text` (the string value, else the title, else the displayed text of a view with attributed text, such as React Native `Text`), `value` (the accessibility value as a string, numbers included), `enabled` and `selected` (its `isAccessibilityEnabled` and `isAccessibilitySelected`, a control's through its cell) and `frame` (as `waitFor`). A view inside an element with the same testID (the native control a React Native view hosts) refines that element. The components of an `NSPathControl` and the tab buttons of an `NSTabView` (accessibility elements that are not views) are elements too. A window's `frame` is its frame view, at 0,0. |
 | `setAppAppearance` | `appearance` (`light`/`dark`), `timeoutMs` (10000) | Waits for the first rendered UI to settle (an override set while the app is still launching did not last), then sets `NSApp.appearance` (an app override; the OS setting is untouched; per-window appearances still win). If the effective appearance changed, replies `changed: true` once a UI update has mounted and settled, else `E_TIMEOUT`. `timeoutMs` bounds each wait. |
-| `capture` | `window` (`main`, `key`, `id:<identifier>`, `title:<title>`), `name`, `timeoutMs` (5000) | `file`, `width`, `height` (pixels), `scale`, once mounted UI updates have settled. `E_NOT_SETTLED` if they never do. |
+| `capture` | `window` (`main`, `key`, `id:<identifier>`, `title:<title>`), `name`, `timeoutMs` (5000) | `file`, `width`, `height` (pixels), `scale`, and `renderer`: `layers` or `views`, how it was rendered ([What a capture contains](#what-a-capture-contains)), once mounted UI updates have settled. `E_NOT_SETTLED` if they never do; `E_RENDER` if it cannot be rendered. |
 | `tap` | target, `button` (`left`/`right`/`back`/`forward`), `clickCount` (1-3), `modifiers` | Moves the driver's pointer to the target, then presses and releases `clickCount` times. `back` and `forward` are mouse buttons 3 and 4 (other-mouse events; they need [private event functions](#private-event-functions)). |
 | `hover` | target | Moves the driver's pointer to the target. |
 | `drag` | `from`, `to` (targets in one window), `window`, `steps` (10, 1-500), `modifiers` | Presses at `from`, moves to `to` in `steps` dragged events, releases. |
@@ -378,7 +378,8 @@ never called. So these functions compile only with the preprocessor flag
 
 - **Off (the default)**: the code and the functions' names are absent from the binary.
   `gesture`, and `tap` with `back` or `forward`, fail with `E_UNSUPPORTED`: "The app was built
-  without SPARK_TEST_DRIVER_PRIVATE_EVENTS …". Every other command works.
+  without SPARK_TEST_DRIVER_PRIVATE_EVENTS …". `capture` draws views instead of rendering the layer
+  tree ([What a capture contains](#what-a-capture-contains)), which uses QuartzCore SPI. Every other command works.
 - **On**: an app sets `"macos": { "testDriverPrivateEvents": true }` in `desktop.config.json`.
   The config plugin then exports `SPARK_TEST_DRIVER_PRIVATE_EVENTS=1` in the generated Podfile,
   and the `RNDesktopApp` podspec adds the flag to its `GCC_PREPROCESSOR_DEFINITIONS`, in debug
@@ -552,32 +553,49 @@ and a text below the fold of a scroll view that the audit scrolls to, renders an
 
 ## What a capture contains
 
-`capture` renders the window's frame view (`contentView.superview`, including the title
-bar) with `bitmapImageRepForCachingDisplayInRect:` and `cacheDisplayInRect:`. The PNG is
-at the window's backing scale and tagged with its color space (Display P3 on most Macs).
+`capture` renders the window's whole layer tree (the frame view's, `contentView.superview`, including the title bar)
+with `CARenderer`, Core Animation's own renderer, into a Metal texture in the app's process. It draws what the
+compositor composites from the layers: layer filters (Core Image blur and distortions), shadows, 3D transforms,
+`CAMetalLayer` content, `CAEmitterLayer` particles and within-window backdrops. The PNG is at the window's backing
+scale and tagged with its color space (Display P3 on most Macs). The renderer takes the tree's root from the window's
+`CAContext` for the render and gives it back (QuartzCore SPI: `-[CALayer context]`, `-[CAContext setLayer:]`); if it
+cannot, `capture` fails with `E_RENDER` rather than leave the window without its layers. Without a Metal device
+`capture` fails with `E_RENDER` too.
 
-Measured in `tests/test-driver.native.mm`, a window that was never shown:
+The SPI compiles only with [`SPARK_TEST_DRIVER_PRIVATE_EVENTS`](#private-event-functions), like the private event
+functions. An app built without it (the default) always captures by drawing views, as below; the Kitchen Sink sets it.
+Every `capture` reply names the path it took (`renderer`: `layers` or `views`), and a screenshot that differs from its
+golden says so when it was drawn as views, since the Kitchen Sink's goldens are rendered layers.
 
-| Content | Rendered |
-| --- | --- |
-| Layer background colors (React Native view styles) | Yes, exact color |
-| `drawRect:` content (React Native text) | Yes |
-| Layer `contents` images | Yes |
-| Native controls and labels (`NSButton`, `NSTextField`) | Yes |
-| Title bar and traffic lights | Yes, in the inactive style |
-| Behind-window vibrancy (`NSVisualEffectView`, `BehindWindow`) | No: a flat material gray, because the blur comes from the window server |
-| Selected source-list rows (the unemphasized selection material; driver windows are never key) | Substituted: the selection is a black layer the window server tints with a vibrant compositing filter (a sublayer of an `NSVisualEffectView` on macOS 27, the selection view's own layer on macOS 26), so `capture` hides it under `unemphasizedSelectedContentBackgroundColor` for the row's appearance and restores it afterwards |
-| Window shadow and rounded corners | No: outside the frame view |
+The render is at layer time 0, before any animation on the real clock began, so those animations (AppKit's own, motion
+on the real clock) render at their model values and a capture does not depend on when it was taken. Layers the motion
+[virtual clock](motion.md#virtual-clock-for-the-test-driver) pauses keep their own time, so motion, filters and
+particles under it render at the frozen instant, identically on every run. Motion's render wrapper also commits each
+`MotionView`'s presented values (the engine's state now) for the render, so real-clock motion renders where it is.
 
-`cacheDisplayInRect:` renders a layer's model `transform` and `opacity`, but not Core
-Animation animations (measured while building #52: a layer translated by its model transform
-rendered moved; the same translation as a running `CABasicAnimation` did not). Running motion
-would render at its final values, so the motion module wraps every capture render
-(`SparkTestDriverWrapRender`) and gives each `MotionView` its presented values, the engine's
-state at the current time, for the duration of the render, then restores the model.
+`SPARK_TEST_DRIVER_CAPTURE=views` in the runner's environment (any other value than `layers` or `views` refuses the
+launch, and so does `layers` in an app built without the flag) renders as earlier versions did, with `bitmapImageRepForCachingDisplayInRect:` and `cacheDisplayInRect:`:
+AppKit draws the views, without what only the compositor draws, for comparison.
 
-`-[CALayer renderInContext:]` on the frame view's or content view's layer was also tried.
-For a window that was never shown, it produced an empty, transparent image even after
-`[CATransaction flush]`, with no layer colors, drawn content or images. The driver does
-not offer it. Content the window server composites, such as behind-window vibrancy,
-needs an out-of-process capture, which requires the TCC grant tracked in #50.
+Measured in `tests/test-driver.native.mm` (both ways), a window that was never shown:
+
+| Content | Layers (default) | Views (`SPARK_TEST_DRIVER_CAPTURE=views`) |
+| --- | --- | --- |
+| Layer background colors (React Native view styles), `drawRect:` content (React Native text), layer `contents` images, native controls | Yes | Yes |
+| Title bar and traffic lights | Yes, in the inactive style | Yes, in the inactive style |
+| Layer shadows | Yes | Yes |
+| Core Image layer filters (blur, distortion) | Yes | No |
+| 3D transforms (perspective) | Yes | No: drawn flat, untransformed |
+| Particles of an emitter whose layer is paused | Yes | No |
+| Selected source-list rows (the unemphasized selection material; driver windows are never key) | Yes: the vibrant compositing filter the window server applies is rendered | Substituted: the selection is a black layer the window server tints with a vibrant compositing filter (a sublayer of an `NSVisualEffectView` on macOS 27, the selection view's own layer on macOS 26), so `capture` hides it under `unemphasizedSelectedContentBackgroundColor` for the row's appearance and restores it afterwards |
+| Behind-window vibrancy (`NSVisualEffectView`, `BehindWindow`) | No: a light material fill. The blur samples what is behind the window on screen, which only the window server has | No: a flat material gray |
+| Window shadow and rounded corners | No: outside the frame view | No |
+
+What cannot render in-process: anything the window server composites with other windows or the desktop:
+behind-window vibrancy, wallpaper tinting, and the window's shadow and rounded corners. That needs an out-of-process
+capture, which requires the TCC grant tracked in #50.
+
+Known differences from drawing views, in every Kitchen Sink golden: the title bar's material renders a little lighter
+(gray 76 instead of 70 in dark), and in dark the gradient view drawing showed above the shell header's bottom border is
+gone (that edge is a compositor effect the renderer draws over the window's own content). Neither could be compared
+with the window server's own pixels: that needs the out-of-process capture above.

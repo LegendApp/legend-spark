@@ -54,7 +54,7 @@ export class FakeDriver implements DriverClient {
     this.log.push(`capture ${window} ${name}`);
     const file = path.join(this.directory, `${name}.png`);
     writeFileSync(file, `png ${name}`);
-    return { file, width: 2000, height: 1400, scale: 2 };
+    return { file, width: 2000, height: 1400, scale: 2, renderer: "layers" as const };
   }
   async setClock(mode: "virtual" | "real") { this.log.push(`setClock ${mode}`); }
   async advanceClock(durationMs: number) { this.log.push(`advanceClock ${durationMs}`); }
@@ -338,7 +338,7 @@ const server = net.createServer(socket => {
       else if (message.command === "listeners") reply.listeners = 4;
       else if (message.command === "memory") Object.assign(reply, { footprintMB: 120.5, residentMB: 200 });
       else if (message.command === "stopFrames") Object.assign(reply, { frames: 61, droppedFrames: 0, maxFrameGapMs: 8.3, durationMs: 500, fps: 120, refreshRate: 120 });
-      else if (message.command === "capture") { fs.writeFileSync(path.join(dir, message.name + ".png"), "png", { mode: 0o600 }); Object.assign(reply, { file: message.name + ".png", width: 2000, height: 1400, scale: 2 }); }
+      else if (message.command === "capture") { fs.writeFileSync(path.join(dir, message.name + ".png"), "png", { mode: 0o600 }); Object.assign(reply, { file: message.name + ".png", width: 2000, height: 1400, scale: 2, renderer: "layers" }); }
       send(reply);
       if (message.command === "quit") { socket.end(); server.close(); }
     }

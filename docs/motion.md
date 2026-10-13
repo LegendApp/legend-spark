@@ -313,9 +313,9 @@ changes). `MotionView` rejects an `initial` that sets them when it renders, by t
 from `style` (conservatively: a per-side or per-corner key counts even if all sides are equal). A
 style that changes into one of these after motion took the property is not detected.
 
-**Captures.** Driver captures render in-process, which shows colors, corners, masks and 2D
-transforms, but not shadows, layer filters (blur) or 3D perspective; flows check those through the
-values the engine reports.
+**Captures.** Driver captures render the layer tree with Core Animation's renderer
+([test-driver.md](test-driver.md#what-a-capture-contains)), so they show colors, corners, masks, 2D and 3D transforms,
+shadows and blur, at the virtual clock's frozen instant.
 
 **Reduce Motion.** The `fade` alternate changes the 3D rotation, perspective and mask edges at once
 (they travel) and fades colors, corners, shadows and blur over 200 ms without overshoot.
@@ -502,10 +502,10 @@ covers it). `materialIntensity` below 1 is the app's explicit choice to show wha
 set. `getMotionEnvironment()` reports `reduceTransparency` for apps that choose different content, such as an opaque
 panel instead of a faded-in material.
 
-**Captures.** Driver captures render in-process, where the window server's backdrop blur does not exist: every
-material draws as the same flat fill, whatever its blending mode. Kitchen Sink goldens use `withinWindow` materials and
-are captured at rest (the material faded out, and tinted); flows check materials, intensity, tint and crossfades
-through the values the engine reports.
+**Captures.** Driver captures render the layer tree with Core Animation's renderer
+([test-driver.md](test-driver.md#what-a-capture-contains)), which blurs `withinWindow` materials over the window's own
+content. `behindWindow` materials sample what is behind the window on screen, which only the window server has, so in
+a capture they are a flat fill. Kitchen Sink goldens use `withinWindow` materials.
 
 ## Shader effects and particles
 
@@ -622,12 +622,10 @@ stops the emitters that were not started with `play`.
 **Virtual clock and captures.** The filters and the sweep are animations of the `MotionView`'s own layer, which the
 virtual clock pauses; the dissolve renders a frame when an animation starts and each time the clock advances, at the
 engine's value; the emitter is a sublayer of the paused layer, so the clock holds and advances it. Driver captures
-render in-process with `cacheDisplayInRect:`, which draws the sweep (at its presented value, mid-sweep too) and the
-dissolve's rest states, but not Core Image filters (the ripple and distortion), the Metal mask mid-dissolve, or
-particles. Kitchen Sink goldens are captured at rest, and flows check the effects through the values the engine reports
-and the readouts of `startParticles`. `tests/motion-coordinator.native.mm` renders frozen virtual-clock frames of the
-ripple, distortion and dissolve with `CARenderer`, Core Animation's in-process renderer, which does draw filters and
-Metal layers; the driver's capture does not use it yet.
+render the layer tree with `CARenderer` ([test-driver.md](test-driver.md#what-a-capture-contains)), which draws the
+ripple and distortion filters, the sweep, the Metal mask mid-dissolve and the particles at the frozen instant. A
+seeded emitter (`seed`) places the same particles on every run, so `assertMotion` `frames` and screenshots after
+`advanceClock` compare mid-effect frames with goldens.
 
 ## Text transitions
 
@@ -928,11 +926,12 @@ Low Power Mode, Reduce Motion, display configuration, window screens or occlusio
 so none of their changes re-bakes or pauses an animation there (`tests/motion-coordinator.native.mm`). The flow
 command `assertPaused: { target, when: windowHidden }` is built on it.
 
-A capture (the driver's `capture`) renders views in-process with `cacheDisplayInRect:`, which
-draws model layer values and ignores Core Animation animations. The motion package wraps every
-capture render: each `MotionView` gets its presented values (the engine's state now) while it
-renders, then its model back, in one Core Animation transaction, so the window server never
-sees the swap. A capture mid-motion therefore shows the motion at that instant.
+A capture (the driver's `capture`) renders the layer tree with `CARenderer` at layer time 0
+([test-driver.md](test-driver.md#what-a-capture-contains)): layers the virtual clock pauses render at its frozen
+instant, and animations on the real clock at their model values. The motion package wraps every capture render: each
+`MotionView` gets its presented values (the engine's state now), committed for the render, then its model back. The
+driver window is never on screen, so nothing sees the swap. A capture mid-motion therefore shows the motion at that
+instant on either clock.
 
 The runner's `captureMotion`, `assertMotion` and `interruptAt` are built on these
 ([e2e-flows.md](e2e-flows.md#motion-and-frames)).

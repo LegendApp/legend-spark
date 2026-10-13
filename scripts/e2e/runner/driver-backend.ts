@@ -505,7 +505,7 @@ export class DriverBackend implements Backend {
   async screenshot(file: string, window?: WindowInfo): Promise<Capture> {
     const capture = await this.client().capture(window ? `id:${window.id}` : "main", `capture-${++this.captures}`);
     copyFileSync(capture.file, file);
-    return { frame: { x: 0, y: 0, width: capture.width / capture.scale, height: capture.height / capture.scale }, scale: capture.scale };
+    return { frame: { x: 0, y: 0, width: capture.width / capture.scale, height: capture.height / capture.scale }, scale: capture.scale, renderer: capture.renderer };
   }
 
   /** The app logs of this flow and, while the app runs, a capture of the main window. */

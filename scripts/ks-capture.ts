@@ -44,7 +44,7 @@ try {
   const destination = path.join(out, `${name}.png`);
   copyFileSync(capture.file, destination);
   await driver.quit();
-  console.log(`${destination} (${capture.width}x${capture.height} @${capture.scale}x)`);
+  console.log(`${destination} (${capture.width}x${capture.height} @${capture.scale}x, ${capture.renderer})`);
 } catch (error) {
   if (existsSync(log)) console.error(`App log (last 40 lines):\n${readFileSync(log, "utf8").split("\n").slice(-40).join("\n")}`);
   throw error;
