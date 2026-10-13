@@ -1,0 +1,26 @@
+appId: so.legend.spark.examples.kitchensink
+name: Availability reports an unsigned build truthfully; nothing reaches SMAppService without a team signature
+intent: >
+  The Kitchen Sink is not signed by a team, so Processes and IPC > Privileged helper reports unsigned, and Register and
+  Send reject PrivilegedHelperError E_UNAVAILABLE unsigned without a registration reaching the (simulated) SMAppService.
+  With a team signature simulated, Refresh reports available; the Kitchen Sink embeds no helper plist, so its helper is
+  notFound and Register rejects E_NOT_FOUND notFound. Driver simulation only: nothing is registered with launchd.
+checks: [PROC-HELPERAVAIL-01]
+tags: [processes-ipc]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://processes-ipc/privileged-helper" }
+- assertText: { id: processes-ipc-privileged-helper-availability, equals: '{"available":false,"reason":"unsigned"}' }
+- tapOn: { id: processes-ipc-privileged-helper-register }
+- assertText: { id: processes-ipc-privileged-helper-registration-result, equals: "PrivilegedHelperError:E_UNAVAILABLE:unsigned" }
+- tapOn: { id: processes-ipc-privileged-helper-send }
+- assertText: { id: processes-ipc-privileged-helper-message-result, equals: "PrivilegedHelperError:E_UNAVAILABLE:unsigned" }
+- assertSimulatedPrivilegedHelper: { registrations: 0, messages: 0 }
+- simulatePrivilegedHelper: { signed: true }
+- tapOn: { id: processes-ipc-privileged-helper-refresh }
+- assertText: { id: processes-ipc-privileged-helper-availability, equals: '{"available":true}' }
+- assertText: { id: processes-ipc-privileged-helper-status, equals: notFound }
+- tapOn: { id: processes-ipc-privileged-helper-register }
+- assertText: { id: processes-ipc-privileged-helper-registration-result, equals: "PrivilegedHelperError:E_NOT_FOUND:notFound" }
+- assertSimulatedPrivilegedHelper: { registrations: 0 }
+- takeScreenshot: privileged-helper-availability

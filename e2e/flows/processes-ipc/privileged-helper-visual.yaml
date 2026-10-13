@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: Privileged helper screen matches its golden
+intent: >
+  Processes and IPC > Privileged helper opens from spark-ks://processes-ipc/privileged-helper with the build's real
+  availability (unsigned) and no results yet. The main window matches the approved golden for the appearance and locale
+  (light and dark, English and Arabic), with the shell sidebar masked.
+checks: [PROC-HELPERVISUAL-01]
+tags: [processes-ipc]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://processes-ipc/privileged-helper" }
+- assertText: { id: processes-ipc-privileged-helper-availability, equals: '{"available":false,"reason":"unsigned"}' }
+- assertScreenshot: { golden: processes-ipc-privileged-helper, mask: [{ id: infra-shell-sidebar }] }
