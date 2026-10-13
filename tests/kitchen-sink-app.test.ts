@@ -36,8 +36,8 @@ vi.mock("../examples/kitchen-sink/shell/catalog", async () => {
   const { createCatalog, defineScreens } = await import("../examples/kitchen-sink/shell/registry.ts");
   const component = () => React.createElement("Text", null, "Frame screen body");
   return { catalog: createCatalog([
-    ["./windows/index.tsx", { default: defineScreens("windows", [{ id: "frame", title: "Frame", summary: "Frame summary", component }]) }],
-    ["./future-facing-capabilities/index.tsx", { default: defineScreens("future-facing-capabilities", [{ id: "ai-command-runner", title: "AI: command runner", summary: "Runner summary", component }]) }],
+    ["./windows/index.tsx", { default: defineScreens("windows", [{ id: "frame", title: "Frame", titles: { ar: "الإطار" }, summary: "Frame summary", summaries: { ar: "ملخص الإطار" }, component }]) }],
+    ["./future-facing-capabilities/index.tsx", { default: defineScreens("future-facing-capabilities", [{ id: "ai-command-runner", title: "AI: command runner", titles: { ar: "الذكاء الاصطناعي: مشغّل الأوامر" }, summary: "Runner summary", summaries: { ar: "ملخص المشغّل" }, component }]) }],
   ]) };
 });
 
@@ -62,7 +62,7 @@ const host = (testID: string) => rendered.root.findAll((node: any) => typeof nod
 const text = (node: any): string => node.children.map((child: any) => typeof child === "string" ? child : text(child)).join("");
 const texts = () => rendered.root.findAll((node: any) => node.type === "Text").map(text);
 
-test("the Shell renders Arabic right to left, with a mirrored breadcrumb and the screen's root testID", async () => {
+test("the Shell renders Arabic right to left, with localized screen titles, a mirrored breadcrumb and the screen's root testID", async () => {
   spark.locale = async () => "ar_EG";
   const { navigation, Shell } = await start();
   await mount(Shell);
@@ -70,10 +70,13 @@ test("the Shell renders Arabic right to left, with a mirrored breadcrumb and the
   expect(texts()).toContain("كل الشاشات");
   expect(text(host("infra-shell-theme-toggle")[0])).toBe("المظهر: النظام ← فاتح");
   expect(host("infra-shell-area-windows")[0].props.accessibilityLabel).toBe("النوافذ، شاشة واحدة");
+  const card = host("infra-shell-screen-windows-frame")[0];
+  expect(card.props).toMatchObject({ accessibilityLabel: "الإطار", accessibilityHint: "ملخص الإطار" });
+  expect(card.findAll((node: any) => node.type === "Text").map(text)).toEqual(["الإطار", "ملخص الإطار", "spark-ks://windows/frame"]);
   await act(async () => navigation.navigate({ kind: "screen", area: "windows", screen: "frame" }));
   // One glyph; its right-to-left writing direction makes bidi draw it as "‹", along the reading direction.
   expect(host("infra-shell-breadcrumb-separator").map((node: any) => [text(node), node.props.style.writingDirection])).toEqual([["›", "rtl"], ["›", "rtl"]]);
-  expect(text(host("infra-shell-breadcrumb")[0])).toContain("النوافذ");
+  expect(host("infra-shell-breadcrumb")[0].props.accessibilityLabel).toBe("كل الشاشات › النوافذ › الإطار");
   expect(text(host("windows-frame-root")[0])).toBe("Frame screen body");
 });
 
@@ -96,7 +99,7 @@ test("the Shell renders English left to right and explains links that open no sc
 });
 
 test("a long breadcrumb truncates its middle crumb first, then the current one, and keeps the full path as tooltip and label", async () => {
-  for (const [locale, path] of [["en_US", "All screens › Future-facing capabilities › AI: command runner"], ["ar", "كل الشاشات › القدرات المستقبلية › AI: command runner"]]) {
+  for (const [locale, path, title] of [["en_US", "All screens › Future-facing capabilities › AI: command runner", "AI: command runner"], ["ar", "كل الشاشات › القدرات المستقبلية › الذكاء الاصطناعي: مشغّل الأوامر", "الذكاء الاصطناعي: مشغّل الأوامر"]]) {
     spark.locale = async () => locale!;
     vi.resetModules();
     const { navigation, Shell } = await start();
@@ -108,7 +111,7 @@ test("a long breadcrumb truncates its middle crumb first, then the current one, 
     expect(breadcrumb.props.className).toContain("overflow-hidden");
     const [root, middle] = breadcrumb.findAll((node: any) => node.type === "Pressable");
     const current = breadcrumb.findAll((node: any) => node.type === "Text" && node.props.accessibilityRole === "header");
-    expect(current.map(text)).toEqual(["AI: command runner"]);
+    expect(current.map(text)).toEqual([title]);
     expect([root, middle, current[0]].map(node => node.props.style.flexShrink)).toEqual([0, 1000, 1]);
     expect(middle.props.style.minWidth).toBeGreaterThan(0);
     for (const crumb of breadcrumb.findAll((node: any) => node.type === "Text" && node.props.testID !== "infra-shell-breadcrumb-separator")) expect(crumb.props.numberOfLines).toBe(1);

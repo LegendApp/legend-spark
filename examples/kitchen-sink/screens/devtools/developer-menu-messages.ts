@@ -54,5 +54,5 @@ const ar: DeveloperMenuMessages = {
   targeting: "تعمل العناصر عدا «إعادة التحميل» وتحليل الأداء على النافذة النشطة: بيئة تشغيلها المشتركة، أو بيئة التشغيل المعزولة لنافذة معزولة. وتكون معطّلة ما دامت لا توجد نافذة نشطة فيها واجهة React Native.",
 };
 
-const MESSAGES: Record<Locale, DeveloperMenuMessages> = { en, ar };
-export function useDeveloperMenuMessages(): DeveloperMenuMessages { return MESSAGES[useI18n().locale]; }
+export const DEVELOPER_MENU_MESSAGES: Record<Locale, DeveloperMenuMessages> = { en, ar };
+export function useDeveloperMenuMessages(): DeveloperMenuMessages { return DEVELOPER_MENU_MESSAGES[useI18n().locale]; }

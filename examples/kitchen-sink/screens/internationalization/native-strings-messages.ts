@@ -34,5 +34,5 @@ const ar: NativeStringsMessages = {
   confirm: "تأكيد بتسميات Spark", confirmMessage: "عنوان هذا المربع وأزراره هي الافتراضية في Spark.", confirmed: "متابعة", canceled: "إلغاء",
 };
 
-const MESSAGES: Record<Locale, NativeStringsMessages> = { en, ar };
-export function useNativeStringsMessages(): NativeStringsMessages { return MESSAGES[useI18n().locale]; }
+export const NATIVE_STRINGS_MESSAGES: Record<Locale, NativeStringsMessages> = { en, ar };
+export function useNativeStringsMessages(): NativeStringsMessages { return NATIVE_STRINGS_MESSAGES[useI18n().locale]; }
