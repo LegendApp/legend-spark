@@ -15,6 +15,10 @@ static NSString *Publish(RNNativeMenu *module, NSArray *items) {
 - (void)menuDidClose:(NSMenu *)menu { self.closes++; }
 - (void)menuNeedsUpdate:(NSMenu *)menu { self.updates++; }
 @end
+@interface NewDocumentResponder : NSObject @property NSUInteger runs; @end
+@implementation NewDocumentResponder
+- (void)newDocument:(id)sender { self.runs++; }
+@end
 int main() { @autoreleasepool {
   [NSApplication sharedApplication];
   [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
@@ -192,5 +196,34 @@ int main() { @autoreleasepool {
     @{ @"id": @"jump", @"title": @"Jump", @"shortcut": @{ @"key": @"j", @"modifiers": @(controlCommand) }, @"_sparkOwner": @"clash-owner" } ] };
   Check([Publish(module, @[clash]) isEqual:@"E_BUSY"], @"A shortcut another published item holds was not rejected E_BUSY");
   Check(!Find(main, @{ @"id": @"clash" }, NO) && [sidebar.keyEquivalent isEqual:@"s"], @"Rejected publication was not rolled back");
+  // A Shift shortcut matches only the shifted press, including key events made with keyEventWithType:, which
+  // match a lowercase key equivalent by characters and ignore Shift. File > New holds Command-N (#450).
+  NSMenuItem *fileItem = [[NSMenuItem alloc] initWithTitle:@"File" action:nil keyEquivalent:@""]; fileItem.submenu = [NSMenu new]; [main insertItem:fileItem atIndex:1];
+  NewDocumentResponder *documents = [NewDocumentResponder new];
+  NSMenuItem *newDocument = [fileItem.submenu addItemWithTitle:@"New" action:@selector(newDocument:) keyEquivalent:@"n"]; newDocument.target = documents;
+  NSEventModifierFlags shiftCommand = NSEventModifierFlagShift | NSEventModifierFlagCommand;
+  NSDictionary *notes = @{ @"id": @"notes", @"title": @"Notes", @"_sparkOwner": @"notes-owner", @"items": @[
+    @{ @"id": @"new-note", @"title": @"New note", @"shortcut": @{ @"key": @"n", @"modifiers": @(shiftCommand) }, @"_sparkOwner": @"notes-owner" } ] };
+  Check(!Publish(module, @[notes]), @"Shift shortcut failed to publish");
+  NSMenuItem *newNote = Find(main, @{ @"id": @"new-note" }, YES);
+  Check([newNote.keyEquivalent isEqual:@"N"] && newNote.keyEquivalentModifierMask == shiftCommand && [newDocument.keyEquivalent isEqual:@"n"], @"Shift shortcut did not use AppKit's uppercase key equivalent");
+  NSEvent *(^made)(NSEventModifierFlags, NSString *) = ^(NSEventModifierFlags flags, NSString *characters) {
+    static NSTimeInterval time = 1;
+    return [NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:flags timestamp:time++ windowNumber:0 context:nil characters:characters charactersIgnoringModifiers:characters isARepeat:NO keyCode:45];
+  };
+  NSEvent *(^hardware)(CGEventFlags) = ^(CGEventFlags flags) {
+    static CGEventTimestamp time = 1000000000;
+    CGEventRef copy = CGEventCreateKeyboardEvent(NULL, 45, true); CGEventSetFlags(copy, flags); CGEventSetTimestamp(copy, time += 1000000000);
+    NSEvent *event = [NSEvent eventWithCGEvent:copy]; CFRelease(copy); return event;
+  };
+  for (NSEvent *shifted in @[made(shiftCommand, @"N"), hardware(kCGEventFlagMaskShift | kCGEventFlagMaskCommand)]) {
+    CapturedEvent = nil;
+    Check([main performKeyEquivalent:shifted] && [CapturedEvent[@"itemId"] isEqual:@"new-note"] && !documents.runs, [NSString stringWithFormat:@"Shift-Command-N did not run New note (File > New ran %lu times)", (unsigned long)documents.runs]);
+  }
+  for (NSEvent *plain in @[made(NSEventModifierFlagCommand, @"n"), hardware(kCGEventFlagMaskCommand)]) {
+    CapturedEvent = nil; NSUInteger runs = documents.runs;
+    Check([main performKeyEquivalent:plain] && !CapturedEvent && documents.runs == runs + 1, @"Command-N did not run File > New alone");
+  }
+  Check(!Publish(module, @[]), @"Shift shortcut removal failed");
   puts("Application menu tests passed");
 } return 0; }

@@ -76,6 +76,12 @@ shortcut under a different action (a `type: 'role'` item, for example), publicat
 items share one action, so when two of them use the same shortcut AppKit shows it on both
 and the key runs at most one of them.
 
+A shortcut with Shift and a letter is published as AppKit's uppercase key equivalent (`Cmd+Shift+N`
+becomes `N` with Command and Shift), so it matches only the shifted press. A lowercase key
+equivalent with a Shift mask matches hardware input correctly, but a key event made with
+`+[NSEvent keyEventWithType:…]` (the test driver's, and automation's) is matched by its characters:
+it would run on Command-N and do nothing on Shift-Command-N.
+
 `createMenu` and `useMenu` accept `onOpen(event)` and `onClose(event)`. Their
 `MenuLifecycleEvent` contains `menuId`, the contributed submenu item's ID (including
 nested submenus), not the registration's owner ID. Events are scoped to the current

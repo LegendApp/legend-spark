@@ -143,7 +143,14 @@ RCT_EXPORT_MODULE(NativeMenu)
   if (config[@"checked"]) item.state = [config[@"checked"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
   if ([config[@"mixed"] boolValue]) item.state = NSControlStateValueMixed;
   NSDictionary *shortcut = config[@"shortcut"];
-  if (shortcut) { item.keyEquivalent = shortcut[@"key"]; item.keyEquivalentModifierMask = [shortcut[@"modifiers"] unsignedIntegerValue]; [self claim:config for:item]; }
+  if (shortcut) {
+    NSEventModifierFlags modifiers = [shortcut[@"modifiers"] unsignedIntegerValue];
+    // Shift+letter uses AppKit's uppercase form: a key event made with +[NSEvent keyEventWithType:...] (the test
+    // driver's, automation's) matches a lowercase key equivalent by its characters and ignores Shift (#450).
+    NSString *key = shortcut[@"key"], *upper = key.uppercaseString;
+    item.keyEquivalent = (modifiers & NSEventModifierFlagShift) && upper.length == 1 ? upper : key;
+    item.keyEquivalentModifierMask = modifiers; [self claim:config for:item];
+  }
   // JavaScript guarantees a keyed alternate differs from its primary's modifiers; a keyless pair
   // differs by Option, the mask AppKit compares when folding alternates without key equivalents.
   if (config[@"alternate"]) {
