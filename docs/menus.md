@@ -47,7 +47,7 @@ await menu.update({ items: [] });
 await menu.remove();
 ```
 
-Top-level items are submenus. Contributions merge by stable IDs, never labels. Later owners override matching items; updating an owner moves it to the end of precedence, which lets a focused document publish its commands. Removing it restores earlier contributions and native items. Arrays replace the owner's complete contribution. Use `target: { id }` to bind an existing item under a different callback ID; the original target ID remains its anchor for subsequent contributions. `target: { menu: 'app' | 'file' | 'edit' | 'view' | 'window' | 'help' }` selects a native root; a missing root is created using the supplied label. `placement: { before: target }` or `{ after: target }` positions relative to a sibling. Missing item/placement targets reject `E_NOT_FOUND`, retaining the previous publication. Remove dependent contributions before a root they explicitly target.
+Top-level items are submenus. Contributions merge by stable IDs, never labels. Later owners override matching items; updating an owner moves it to the end of precedence, which lets a focused document publish its commands. Removing it restores earlier contributions and native items. Arrays replace the owner's complete contribution. Use `target: { id }` to bind an existing item under a different callback ID; the original target ID remains its anchor for subsequent contributions. `target: { menu: 'app' | 'file' | 'edit' | 'view' | 'window' | 'help' }` selects a native root. A native root keeps its own title, which the system localizes; the label names only a root Spark creates when it is missing, and a later owner's label then retitles it. `placement: { before: target }` or `{ after: target }` positions relative to a sibling. Missing item/placement targets reject `E_NOT_FOUND`, retaining the previous publication. Remove dependent contributions before a root they explicitly target.
 
 On macOS, `target: { role: 'copy' }` locates a native command regardless of localization. An action targeting a role dispatches to its JavaScript owner. A `type: 'role'` item keeps native responder-chain behavior; it does not emit a JavaScript action. Roles include document commands, editing, application visibility and window commands. The services role must target the existing native services submenu. Symbol/local-image icons are supported. Windows currently supports actions, checkboxes, separators, submenus and accelerators; native role items and images reject rather than being silently ignored. Sliders are reserved for toolbar popup menus.
 
@@ -75,6 +75,12 @@ shortcut under a different action (a `type: 'role'` item, for example), publicat
 `E_BUSY` naming that item and keeps the previous publication. Published action and checkbox
 items share one action, so when two of them use the same shortcut AppKit shows it on both
 and the key runs at most one of them.
+
+A shortcut with Shift and a letter is published as AppKit's uppercase key equivalent (`Cmd+Shift+N`
+becomes `N` with Command and Shift), so it matches only the shifted press. A lowercase key
+equivalent with a Shift mask matches hardware input correctly, but a key event made with
+`+[NSEvent keyEventWithType:…]` (the test driver's, and automation's) is matched by its characters:
+it would run on Command-N and do nothing on Shift-Command-N.
 
 `createMenu` and `useMenu` accept `onOpen(event)` and `onClose(event)`. Their
 `MenuLifecycleEvent` contains `menuId`, the contributed submenu item's ID (including

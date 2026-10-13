@@ -70,17 +70,18 @@ static NSMenuItem *KeyHolder(NSMenu *menu, NSString *identity, NSMenuItem *excep
 @property NSArray *published;
 @property BOOL observing;
 @property NSHashTable<NSMenuItem *> *configured;
+@property NSHashTable<NSMenuItem *> *created;
 - (void)restore;
 @end
 @implementation RNNativeMenu
 RCT_EXPORT_MODULE(NativeMenu)
 + (BOOL)requiresMainQueueSetup { return YES; }
-- (instancetype)init { if (self = [super init]) { _undo = [NSMutableArray new]; _published = @[]; _configured = [NSHashTable weakObjectsHashTable]; } return self; }
+- (instancetype)init { if (self = [super init]) { _undo = [NSMutableArray new]; _published = @[]; _configured = [NSHashTable weakObjectsHashTable]; _created = [NSHashTable weakObjectsHashTable]; } return self; }
 - (NSArray<NSString *> *)supportedEvents { return @[@"NativeMenuAction", @"NativeMenuLifecycle"]; }
 - (void)startObserving { self.observing = YES; }
 - (void)stopObserving { self.observing = NO; }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeMenuSpecJSI>(params); }
-- (void)restore { for (void (^undo)(void) in self.undo.reverseObjectEnumerator) undo(); [self.undo removeAllObjects]; [self.configured removeAllObjects]; }
+- (void)restore { for (void (^undo)(void) in self.undo.reverseObjectEnumerator) undo(); [self.undo removeAllObjects]; [self.configured removeAllObjects]; [self.created removeAllObjects]; }
 - (void)identifyNativeMenus {
   NSMenu *main = NSApp.mainMenu;
   for (NSMenuItem *item in main.itemArray) {
@@ -123,7 +124,14 @@ RCT_EXPORT_MODULE(NativeMenu)
   if (config[@"checked"]) item.state = [config[@"checked"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
   if ([config[@"mixed"] boolValue]) item.state = NSControlStateValueMixed;
   NSDictionary *shortcut = config[@"shortcut"];
-  if (shortcut) { item.keyEquivalent = shortcut[@"key"]; item.keyEquivalentModifierMask = [shortcut[@"modifiers"] unsignedIntegerValue]; [self claim:config for:item]; }
+  if (shortcut) {
+    NSEventModifierFlags modifiers = [shortcut[@"modifiers"] unsignedIntegerValue];
+    // Shift+letter uses AppKit's uppercase form: a key event made with +[NSEvent keyEventWithType:...] (the test
+    // driver's, automation's) matches a lowercase key equivalent by its characters and ignores Shift (#450).
+    NSString *key = shortcut[@"key"], *upper = key.uppercaseString;
+    item.keyEquivalent = (modifiers & NSEventModifierFlagShift) && upper.length == 1 ? upper : key;
+    item.keyEquivalentModifierMask = modifiers; [self claim:config for:item];
+  }
   // JavaScript guarantees a keyed alternate differs from its primary's modifiers; a keyless pair
   // differs by Option, the mask AppKit compares when folding alternates without key equivalents.
   if (config[@"alternate"]) {
@@ -180,6 +188,7 @@ RCT_EXPORT_MODULE(NativeMenu)
       if (root && target[@"menu"]) objc_setAssociatedObject(item, &LocationKey, target[@"menu"], OBJC_ASSOCIATION_COPY_NONATOMIC);
       [menu insertItem:item atIndex:[self index:config[@"placement"] inMenu:menu]];
       [self.undo addObject:^{ if (item.menu) [item.menu removeItem:item]; }];
+      [self.created addObject:item];
     }
     [self.configured addObject:item];
     if (config[@"items"]) {
@@ -191,7 +200,11 @@ RCT_EXPORT_MODULE(NativeMenu)
         [self.undo addObject:^{ if (NSApp.helpMenu == helpMenu) NSApp.helpMenu = previousHelp; }];
       }
       if ([config[@"_sparkLifecycle"] boolValue]) [self observeMenu:item.submenu config:config];
-      [self apply:config to:item];
+      // A native root located by target keeps its title, which the system localizes (#449);
+      // the label names only a root Spark creates.
+      NSMutableDictionary *applied = config.mutableCopy;
+      if (root && target[@"menu"] && ![self.created containsObject:item]) [applied removeObjectForKey:@"title"];
+      [self apply:applied to:item];
       [self install:config[@"items"] into:item.submenu root:NO];
     } else {
       if (item.submenu && ![config[@"role"] isEqual:@"services"]) Fail(@"E_INVALID_ARGUMENT", @"An action cannot replace a submenu; target it with a submenu item");
