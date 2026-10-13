@@ -14,6 +14,7 @@ timeout: 180s
 - launchApp: { openUrl: "spark-ks://multiwindow/windows?run=open,route-1-details,scroll-1-160,select-1-2,split-1-200,frame-1-200-120-700-480,save", stopApp: false }
 - assertVisible: { id: multiwindow-windows-steps-7 }
 - assertVisible: { id: multiwindow-windows-saved-1 }
+- assertVisible: { id: multiwindow-note-scroll-160, window: { title: "Note 1" } }
 # Quit and relaunch without clearing state.
 - launchApp: { openUrl: "spark-ks://multiwindow/windows" }
 - assertVisible: { id: multiwindow-windows-root }

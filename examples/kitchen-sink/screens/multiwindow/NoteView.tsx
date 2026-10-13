@@ -74,7 +74,11 @@ function useRestoredScroll(scroll$: Observable<number>) {
   const target = useValue(scroll$);
   const [actual, setActual] = useState<number | null>(null);
   useEffect(() => {
-    if (pending.current === null && reported.current !== null && reported.current !== target) ref.current?.scrollTo({ y: target, animated: false });
+    if (target === reported.current) return;
+    // Set before the scroll view reported anything (a run link right after opening the details): restore it like a
+    // saved offset, so the first report (0) does not overwrite it.
+    if (reported.current === null) { pending.current = target > 0 ? target : null; sized({}); }
+    else ref.current?.scrollTo({ y: target, animated: false });
   }, [target]);
   const report = (y: number) => { pending.current = null; reported.current = y; setActual(y); scroll$.set(y); };
   const sized = (change: Partial<typeof sizes.current>) => {
