@@ -87,6 +87,13 @@ checks:
     spec: "docs/menus.md Application menus; #74"
     covers:
       - ./menus#createMenu
+  MENU-SHORTCUT-01:
+    title: A published shortcut that a host menu item also uses (View > Show Sidebar's Control-Command-S) keeps its key equivalent and runs on that key
+    platforms: [macos]
+    blocking: true
+    spec: "docs/menus.md macOS application-menu features; #446"
+    covers:
+      - ./menus#createMenu
   MENU-VISUAL-01:
     title: The Application menu audit screen matches its approved golden in light and dark, English and Arabic
     platforms: [macos]

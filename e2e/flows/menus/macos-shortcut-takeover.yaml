@@ -1,0 +1,16 @@
+appId: so.legend.spark.examples.kitchensink
+name: A published menu shortcut takes Control-Command-S over from View > Show Sidebar
+intent: >
+  AppKit withholds a key equivalent while another menu-bar item with a different action has it. The Menu Audit
+  menu publishes Sidebar sample with Control-Command-S, which the template's View > Show Sidebar also uses. Sidebar
+  sample keeps the shortcut in the driver's menu snapshot, and pressing it records the item's action.
+checks: [MENU-SHORTCUT-01]
+tags: [menus]
+platforms: [macos]
+---
+- launchApp: { clearState: true, openUrl: "spark-ks://menus/audit" }
+- assertVisible: { text: Menu ready, within: { id: menus-audit-status } }
+- assertAppMenu: { path: "Menu Audit > Sidebar sample", enabled: true, shortcut: "cmd+ctrl+s" }
+- assertAppMenu: { path: "View > Show Sidebar", exists: true }
+- shortcut: cmd+ctrl+s
+- assertVisible: { text: "/Action sidebar-sample/", within: { id: menus-audit-events } }
