@@ -4,7 +4,8 @@
   "license": "MIT",
   "files": [
     "AppDelegate.mm",
-    "windows"
+    "windows",
+    "SparkCustomize.mm"
   ],
   "dependencies": {
     "@legendapp/spark-desktop-app": "0.0.1-next.4"

@@ -1,7 +1,6 @@
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
+import { buildInvocationCommand } from "./invocation-command.cjs";
 import type { AIInvocation, AIInvocationOptions, AIToolId } from "./types";
-
-const defaultCodexReasoningEffort = "low";
 
 export function buildAIInvocation(tool: AIToolId, prompt: string, options: AIInvocationOptions = {}): AIInvocation {
   if (!["claude", "codex"].includes(tool) || typeof prompt !== "string" || !prompt.trim() || prompt.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "Expected an AI tool and nonempty prompt");
@@ -14,21 +13,5 @@ export function buildAIInvocation(tool: AIToolId, prompt: string, options: AIInv
     if (options.codex.reasoningEffort !== undefined && !["minimal", "low", "medium", "high", "xhigh"].includes(options.codex.reasoningEffort)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown reasoning effort");
     if (tool !== "codex") throw new SparkError("E_UNSUPPORTED_OPTION", "Codex options require the Codex tool");
   }
-  if (tool === "codex") {
-    const model = options.codex?.model;
-    const reasoningEffort = options.codex?.reasoningEffort ?? defaultCodexReasoningEffort;
-    const args: string[] = ["exec", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check"];
-    if (model) {
-      args.push("--model", model);
-    }
-    args.push("--config", `model_reasoning_effort=${reasoningEffort}`, "-");
-
-    return {
-      command: "codex",
-      args,
-      input: prompt,
-    };
-  }
-
-  return { command: "claude", args: ["-p", prompt] };
+  return buildInvocationCommand(tool, prompt, options);
 }

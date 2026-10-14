@@ -170,7 +170,7 @@ export function nativePackages(root: string, { applyExcludes = true } = {}): Nat
   // Host/CNG code can change the native ABI without adding a TurboModule.
   // Fold it into the mandatory app module's compatibility signature for Go.
   const adapters = installed.filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
-    .map(pkg => hashFiles(pkg.root, ["package.json", "AppDelegate.mm", ...readdirSync(pkg.root).filter(name => name.endsWith(".cjs"))])).join(":");
+    .map(pkg => hashFiles(pkg.root, ["package.json", "AppDelegate.mm", "SparkCustomize.mm", ...readdirSync(pkg.root).filter(name => name.endsWith(".cjs"))])).join(":");
   return installed.filter(pkg => !applyExcludes || !excluded.includes(pkg.name))
     .filter(
       (pkg) =>
@@ -270,7 +270,7 @@ export function selection(
 export function hostSourceSignature(root: string) {
   return digest(JSON.stringify(installedPackages(root)
     .filter(pkg => ["@legendapp/spark-desktop-host", "@legendapp/spark-desktop-config"].includes(pkg.name))
-    .map(pkg => [pkg.name, hashFiles(pkg.root, ["package.json", "AppDelegate.mm", "windows", ...readdirSync(pkg.root).filter(file => file.endsWith(".cjs"))])])));
+    .map(pkg => [pkg.name, hashFiles(pkg.root, ["package.json", "AppDelegate.mm", "SparkCustomize.mm", "windows", ...readdirSync(pkg.root).filter(file => file.endsWith(".cjs"))])])));
 }
 export function nativePreparationInputs(root: string, packages: NativePackage[]) {
   return {
@@ -329,6 +329,8 @@ export function runtimeFor(
       ].includes(p.name),
     )
     .map((p) => [p.name, p.json.version]);
+  const config = readAppConfig(root);
+  const customize = config.expo?.extra?.spark?.customize;
   return {
     schema: 1,
     framework: VERSION,
@@ -345,7 +347,13 @@ export function runtimeFor(
         ...(platform === "macos" && mode === "release" ? { releaseSettings: macOSReleaseSettings } : {}),
         modules,
         pins,
-        config: readAppConfig(root),
+        config,
+        customize: platform === "macos" && mode === "release" && customize ? {
+          source: hashFiles(path.resolve(root, customize.sourceRoot ?? "."), customize.files),
+          project: hashFiles(root, ["package.json", entryFile(root), ...readdirSync(root).filter(file => /(?:config\.|^\.babelrc)/.test(file))]),
+          tooling: hashFiles(import.meta.dirname, [...readdirSync(import.meta.dirname).filter(file => file.startsWith("customize-")), "js-runtime.cjs", "runtime-bootstrap.sh", "runtime-downloads.tsv"]),
+          ai: digest(readFileSync(createRequire(createRequire(path.join(root, "package.json")).resolve("@legendapp/spark/ai")).resolve("@legendapp/spark-ai/src/invocation-command.cjs"), "utf8")),
+        } : undefined,
         helpers: resolveHelpers(root, readAppConfig(root).expo?.extra?.spark?.helpers, platform).map(helper => ({ name: helper.name, contents: hashFiles(root, helper.files), modes: helper.modes, directories: helper.directories })),
         adapter: hostSourceSignature(root),
       }),
@@ -375,6 +383,7 @@ export function goConfigurationIssues(config: any): string[] {
   if (expo.scheme || expo.extra?.spark?.documentTypes?.length)
     issues.push("URL schemes and document associations require a custom runtime");
   if (expo.extra?.spark?.menuBarOnly) issues.push("Menu-bar-only activation requires a custom runtime");
+  if (expo.extra?.spark?.customize) issues.push("Customizable apps require a custom release runtime");
   if (expo.extra?.spark?.updates) issues.push("Update feed configuration requires a custom runtime");
   if (Object.keys(expo.extra?.spark?.helpers ?? {}).length) issues.push("Bundled helpers require a custom runtime");
   if (expo.extra?.spark?.customRuntime)

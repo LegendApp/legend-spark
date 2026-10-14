@@ -13,7 +13,7 @@ test("owned configuration schema keys track the public TypeScript contract", () 
     ["SparkApplicationConfig", schema], ["MacOSConfiguration", schema.properties.macos],
     ["MacOSLifecycle", schema.properties.macos.properties.lifecycle], ["SigningConfiguration", schema.properties.signing],
     ["DocumentType", schema.properties.documentTypes.items], ["UpdateConfiguration", schema.properties.updates],
-    ["WindowConfiguration", schema.properties.window],
+    ["WindowConfiguration", schema.properties.window], ["CustomizeConfiguration", schema.properties.customize.oneOf[1]],
   ] as const) {
     let symbol = symbols.find(symbol => symbol.name === name)!;
     if (symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);

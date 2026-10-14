@@ -72,7 +72,8 @@
     "./diagnostics": "./diagnostics.ts",
     "./ai": "./ai.ts",
     "./ai/codex": "./ai-codex.ts",
-    "./camera": "./camera.ts"
+    "./camera": "./camera.ts",
+    "./customize": "./customize.ts"
   },
   "files": [
     "*.ts",

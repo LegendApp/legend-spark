@@ -47,7 +47,9 @@
     "release": "bun scripts/release.ts",
     "release:runner": "bun scripts/release-runner.ts",
     "release:assemble": "bun scripts/prepare-release.ts",
-    "release:publish": "bun scripts/publish-release.ts"
+    "release:publish": "bun scripts/publish-release.ts",
+    "test:customize": "bun scripts/test-customize.mjs",
+    "test:customize:app": "bun scripts/test-customize-app.ts"
   },
   "devDependencies": {
     "@types/react": "19.1.10",

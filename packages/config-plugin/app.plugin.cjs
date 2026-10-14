@@ -6,6 +6,7 @@ const {
   withPodfile,
   withInfoPlist,
   withEntitlementsPlist,
+  withXcodeProject,
 } = require("expo-desktop-config-plugins");
 const { identity } = require("./identity.cjs");
 const { resolveEntitlements } = require("./entitlements.cjs");
@@ -15,6 +16,12 @@ module.exports = function withSparkDesktop(config) {
   if (config.platforms?.length === 1 && config.platforms[0] === "windows") return require("./windows.plugin.cjs")(config);
   // The upstream base mod merges template entitlements into config before
   // callbacks run. Capture the declared values before that mutation.
+  const customize = require("./customize.cjs").validateCustomize(config.extra?.spark?.customize);
+  if (customize && config.macos?.entitlements?.["com.apple.security.app-sandbox"]) throw new Error("Customizable apps require direct distribution without App Sandbox");
+  if (customize) config = withXcodeProject(config, mod => {
+    if (!mod.modResults.hasFile("Security.framework")) mod.modResults.addFramework("Security.framework", { target: mod.modResults.getFirstTarget().uuid });
+    return mod;
+  });
   const declaredEntitlements = structuredClone(config.macos?.entitlements ?? {});
   config = withEntitlementsPlist(config, (mod) => {
     const selection = statePath(mod.modRequest.projectRoot, "native-selection.json", "macos");
@@ -28,7 +35,19 @@ module.exports = function withSparkDesktop(config) {
   });
   config = withAppDelegate(config, (mod) => {
     // Own this adapter; application customizations belong in configuration/plugins.
-    mod.modResults.contents = fs.readFileSync(require.resolve("@legendapp/spark-desktop-host/AppDelegate.mm"), "utf8");
+    mod.modResults.contents = fs.readFileSync(
+      require.resolve("@legendapp/spark-desktop-host/AppDelegate.mm"),
+      "utf8",
+    );
+    if (customize) {
+      const native = fs.readFileSync(require.resolve("@legendapp/spark-desktop-host/SparkCustomize.mm"), "utf8");
+      mod.modResults.contents = '#import <React/RCTReloadCommand.h>\n' + native + '\n' + mod.modResults.contents
+        .replace('  SparkMarkLaunchComplete();', `  SparkCustomizeStart();
+  [NSNotificationCenter.defaultCenter addObserverForName:@"SparkCustomizeReload" object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { RCTTriggerReloadCommandListeners(@"Spark customization"); }];
+  SparkMarkLaunchComplete();`)
+        .replace('return [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];', 'return SparkCustomizeBundleURL();')
+        .replace('return SparkDockMenu;', 'return SparkCustomizeDockMenu(SparkDockMenu);');
+    }
     return mod;
   });
   config = withInfoPlist(config, (mod) => {

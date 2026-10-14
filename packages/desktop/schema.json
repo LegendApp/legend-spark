@@ -452,6 +452,110 @@
     "extends": {
       "const": "expo",
       "description": "Compose desktop options onto the existing Expo configuration."
+    },
+    "customize": {
+      "oneOf": [
+        {
+          "const": false
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repository",
+            "files"
+          ],
+          "properties": {
+            "repository": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+            },
+            "files": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "tag": {
+              "type": "string"
+            },
+            "toolkitRepository": {
+              "type": "string"
+            },
+            "toolkitTag": {
+              "type": "string"
+            },
+            "ui": {
+              "enum": [
+                "default",
+                "custom"
+              ],
+              "default": "default"
+            },
+            "provider": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "endpoint",
+                    "model"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "local",
+                        "remote"
+                      ]
+                    },
+                    "endpoint": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "tool"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "cli"
+                    },
+                    "tool": {
+                      "enum": [
+                        "codex",
+                        "claude"
+                      ]
+                    },
+                    "model": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              ]
+            },
+            "sourceRoot": {
+              "type": "string",
+              "description": "Relative ancestor of the app project. files are relative to this source snapshot root."
+            },
+            "githubClientId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_]+$",
+              "description": "GitHub OAuth app client ID with device flow enabled."
+            }
+          }
+        }
+      ]
     }
   },
   "allOf": [

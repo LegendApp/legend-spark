@@ -66,6 +66,7 @@
     "./settings/paths": "./files"
   },
   "additions": [
+    "./customize",
     "./contracts",
     "./windows/macos",
     "./diagnostics",

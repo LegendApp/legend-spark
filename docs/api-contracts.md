@@ -427,3 +427,9 @@ This document covers every API family and every existing umbrella export. It is 
 Implementation progress and verification are tracked in [API cleanup](api-cleanup.md).
 
 The [API design rules](api-design.md) govern imperative cores and optional React bindings for all capability families.
+
+### App customization
+
+`/customize` owns generation, review, preview, apply, restore-original, migration, cancellation and GitHub submission. The native host owns the app session and recovery; all operations are usable imperatively. `useCustomizeState` observes that session and removes its subscription on unmount without canceling app-owned work. Snapshot requests cannot overwrite a newer native event.
+
+GitHub device flow exposes only the user code, verification URI and expiration. The developer supplies `customize.githubClientId`; GitHub tokens stay in Keychain. `completeCustomizeGitHubAuth` waits for authorization and `cancelEdit` stops waiting; sign-out removes the local credential. `submitEditPullRequest({ title })` publishes the compiled candidate's cumulative patch and contributing prompts to `customize.repository`, returning the PR URL, number, repository and branch. The caller obtains explicit user confirmation for publication; stale affected source and oversized PR bodies reject before mutations. Native failures use Spark error codes and malformed replies reject `E_INVALID_DATA`.
