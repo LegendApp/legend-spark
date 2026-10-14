@@ -406,6 +406,6 @@ and publish the next preview under both npm tags. Use `bun run release --resume`
 to continue the same release. See the [preview release workflow](docs/releases.md)
 for prerequisites, retry behavior, and separate clean-machine acceptance.
 
-### Editable Mac apps
+### Customize Mac apps
 
-Apps can opt in to an in-app AI prompt, downloadable editing tools, and prompt-aware patch migration across releases. See [Editable Mac apps](docs/editable-apps.md) for configuration, GitHub release publishing, and recovery.
+Apps can opt in to an in-app AI prompt, downloadable customization tools, and prompt-aware patch migration across releases. See [Customize Mac apps](docs/customize-apps.md) for configuration, GitHub release publishing, and recovery.

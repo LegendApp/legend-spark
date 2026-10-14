@@ -88,7 +88,7 @@ function applySelection(root, expo) {
 }
 function toExpo(value, target) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Desktop config must be an object");
-  const allowed = ["$schema", "name", "projectId", "version", "window", "macos", "platforms", "scheme", "documentTypes", "menuBarOnly", "updates", "include", "signing", "helpers", "editable", "expo", "expoByPlatform"];
+  const allowed = ["$schema", "name", "projectId", "version", "window", "macos", "platforms", "scheme", "documentTypes", "menuBarOnly", "updates", "include", "signing", "helpers", "customize", "expo", "expoByPlatform"];
   for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new Error(`Unknown desktop configuration field: ${key}`);
   for (const key of ["name", "projectId", "version"]) if (typeof value[key] !== "string" || !value[key].trim()) throw new Error(`Desktop config needs ${key}`);
   const platforms = value.platforms ?? ["macos"];
@@ -99,9 +99,9 @@ function toExpo(value, target) {
   validateWindow(value.window ?? {});
   if (value.include !== undefined && (!Array.isArray(value.include) || value.include.some(x => typeof x !== "string"))) throw new Error("include must be a list of package names");
   require("./helpers.cjs").validateHelpers(value.helpers);
-  require("./editable.cjs").validateEditable(value.editable);
+  require("./customize.cjs").validateCustomize(value.customize);
   const extra = { projectId: value.projectId };
-  for (const key of ["window", "documentTypes", "menuBarOnly", "updates", "include", "signing", "helpers", "editable"]) if (value[key] !== undefined) extra[key] = value[key];
+  for (const key of ["window", "documentTypes", "menuBarOnly", "updates", "include", "signing", "helpers", "customize"]) if (value[key] !== undefined) extra[key] = value[key];
   const overrides = value.expoByPlatform ?? {};
   if (!overrides || typeof overrides !== "object" || Array.isArray(overrides) || Object.keys(overrides).some(p => !platforms.includes(p))) throw new Error("expoByPlatform keys must be supported platforms");
   const backend = merge(value.expo ?? {}, overrides[selected] ?? {});

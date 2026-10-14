@@ -1,7 +1,7 @@
 // GitHub publication stays in Spark's trusted toolkit, outside the AI workspace.
 const crypto = require('node:crypto');
 const path = require('node:path');
-const worker = require('./editable-worker.cjs');
+const worker = require('./customize-worker.cjs');
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function request(url, body, token, fetcher = fetch) {
@@ -16,7 +16,7 @@ async function request(url, body, token, fetcher = fetch) {
   if (!value || typeof value !== 'object') throw fail('E_INVALID_DATA', 'GitHub returned invalid data');
   return value;
 }
-function clientId(value) { if (typeof value !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(value)) throw fail('E_INVALID_ARGUMENT', 'Configure editable.githubClientId with a device-flow-enabled GitHub OAuth app'); return value; }
+function clientId(value) { if (typeof value !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(value)) throw fail('E_INVALID_ARGUMENT', 'Configure customize.githubClientId with a device-flow-enabled GitHub OAuth app'); return value; }
 async function begin(id, fetcher) {
   const value = await request('https://github.com/login/device/code', { client_id: clientId(id), scope: 'public_repo' }, undefined, fetcher);
   if (typeof value.device_code !== 'string' || !value.device_code || typeof value.user_code !== 'string' || !value.user_code || value.verification_uri !== 'https://github.com/login/device' || !Number.isSafeInteger(value.expires_in) || value.expires_in <= 0 || !Number.isSafeInteger(value.interval) || value.interval <= 0) throw fail('E_INVALID_DATA', 'GitHub returned invalid device authorization');
@@ -46,7 +46,7 @@ async function submit(directory, options, token, { fetcher, wait = sleep } = {})
   if (options && Object.keys(options).some(key => key !== 'title')) throw fail('E_UNSUPPORTED_OPTION', 'Unknown pull request option');
   if (!options || typeof options.title !== 'string' || !options.title.trim() || options.title.length > 256) throw fail('E_INVALID_ARGUMENT', 'Enter a PR title of at most 256 characters');
   const manifest = worker.read(path.join(directory, 'manifest.json'));
-  if (!/^[\w.-]+\/[\w.-]+$/.test(manifest.repository || '')) throw fail('E_INVALID_DATA', 'Editable release has no target repository');
+  if (!/^[\w.-]+\/[\w.-]+$/.test(manifest.repository || '')) throw fail('E_INVALID_DATA', 'Customize release has no target repository');
   const ready = worker.verify(directory); // Only publish the exact candidate that passed build/review checks.
   const source = ready.candidate === 'work' ? path.join(directory, 'work') : worker.safe(path.join(directory, 'candidates'), ready.candidate);
   const changes = worker.patch(worker.snapshot(path.join(directory, 'base')), worker.snapshot(source));
@@ -122,12 +122,12 @@ module.exports = { begin, complete, submit, blobHash, repositoryPath };
 if (require.main === module) {
   (async () => {
     const [command, directory] = process.argv.slice(2);
-    const input = JSON.parse(process.env.SPARK_EDITABLE_GITHUB_REQUEST || '{}');
+    const input = JSON.parse(process.env.SPARK_CUSTOMIZE_GITHUB_REQUEST || '{}');
     let result;
     if (command === 'begin') result = await begin(input.clientId);
     else if (command === 'complete') result = await complete(input);
-    else if (command === 'submit') result = await submit(directory, input, process.env.SPARK_EDITABLE_GITHUB_TOKEN);
-    else throw fail('E_INVALID_ARGUMENT', 'Unknown GitHub editing operation');
+    else if (command === 'submit') result = await submit(directory, input, process.env.SPARK_CUSTOMIZE_GITHUB_TOKEN);
+    else throw fail('E_INVALID_ARGUMENT', 'Unknown GitHub customize operation');
     console.log(JSON.stringify(result));
   })().catch(error => { console.error(JSON.stringify({ error: error.code || 'E_NATIVE', message: error.code ? error.message : 'GitHub operation failed' })); process.exitCode = 1; });
 }

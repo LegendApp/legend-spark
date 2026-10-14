@@ -453,7 +453,7 @@
       "const": "expo",
       "description": "Compose desktop options onto the existing Expo configuration."
     },
-    "editable": {
+    "customize": {
       "oneOf": [
         {
           "const": false

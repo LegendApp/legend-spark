@@ -4,14 +4,14 @@ import { pathToFileURL } from 'node:url';
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { copySource, copyDependencies, prepareSource, githubAsset, fileHash, publishEditable } from '../packages/cli/src/editable-artifacts.ts';
+import { copySource, copyDependencies, prepareSource, githubAsset, fileHash, publishCustomize } from '../packages/cli/src/customize-artifacts.ts';
 const require = createRequire(import.meta.url);
-const { validateEditable } = require('../packages/config-plugin/editable.cjs');
-const worker = require('../packages/cli/src/editable-worker.cjs');
-const ai = require('../packages/cli/src/editable-ai.cjs');
+const { validateCustomize } = require('../packages/config-plugin/customize.cjs');
+const worker = require('../packages/cli/src/customize-worker.cjs');
+const ai = require('../packages/cli/src/customize-ai.cjs');
 const b64 = (text: string) => Buffer.from(text).toString('base64');
 let root: string;
-beforeEach(() => { root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'spark-editable-test-'))); });
+beforeEach(() => { root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'spark-customize-test-'))); });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 function file(name: string, value: string) { const target = path.join(root, name); mkdirSync(path.dirname(target), { recursive: true }); writeFileSync(target, value); return target; }
 const asset = { url: 'https://github.com/owner/app/releases/download/v1/source.tgz', sha256: 'a'.repeat(64), size: 100 };
@@ -20,11 +20,11 @@ function workspace(release = 'a', source = 'original\n') {
   const folder = path.join(root, 'source-' + release); mkdirSync(folder); writeFileSync(path.join(folder, 'index.js'), source);
   return worker.prepare(manifest(release), folder, path.join(root, 'toolkit'), path.join(root, 'support'));
 }
-describe('editable release inputs', () => {
+describe('customize release inputs', () => {
   it('requires explicit source and fixed GitHub release identity', () => {
-    expect(validateEditable(false)).toBeUndefined();
-    expect(validateEditable({ repository: 'owner/app', files: ['src', 'package.json'] })).toBeTruthy();
-    for (const files of [['../secret'], ['.env'], ['/tmp'], ['src/../secret'], ['node_modules'], ['macos']]) expect(() => validateEditable({ repository: 'owner/app', files })).toThrow();
+    expect(validateCustomize(false)).toBeUndefined();
+    expect(validateCustomize({ repository: 'owner/app', files: ['src', 'package.json'] })).toBeTruthy();
+    for (const files of [['../secret'], ['.env'], ['/tmp'], ['src/../secret'], ['node_modules'], ['macos']]) expect(() => validateCustomize({ repository: 'owner/app', files })).toThrow();
     expect(() => githubAsset('owner/app', '../main', 'x')).toThrow();
   });
   it('rejects source links and credentials', () => {
@@ -63,9 +63,9 @@ describe('repository source snapshots', () => {
     return path.join(root, 'repo/.legend/demo');
   }
   it('validates ancestor source roots without permitting arbitrary external layouts', () => {
-    expect(validateEditable({ repository: 'owner/app', files: ['apps/demo/src'], sourceRoot: '../..', githubClientId: 'Ov23test' })).toBeTruthy();
-    for (const sourceRoot of ['/tmp', '../another-repo', '', 'a/..']) expect(() => validateEditable({ repository: 'owner/app', files: ['src'], sourceRoot })).toThrow('sourceRoot');
-    expect(() => validateEditable({ repository: 'owner/app', files: ['src'], githubClientId: '' })).toThrow('githubClientId');
+    expect(validateCustomize({ repository: 'owner/app', files: ['apps/demo/src'], sourceRoot: '../..', githubClientId: 'Ov23test' })).toBeTruthy();
+    for (const sourceRoot of ['/tmp', '../another-repo', '', 'a/..']) expect(() => validateCustomize({ repository: 'owner/app', files: ['src'], sourceRoot })).toThrow('sourceRoot');
+    expect(() => validateCustomize({ repository: 'owner/app', files: ['src'], githubClientId: '' })).toThrow('githubClientId');
   });
   it('preserves shared source paths and relocates generated imports and build config', () => {
     const app = project(), target = path.join(root, 'snapshot');
@@ -78,7 +78,7 @@ describe('repository source snapshots', () => {
     expect(req('./babel.config.js')).toEqual({ plugins: [] });
     expect(req('./metro.config.js')).toEqual({ watchFolders: [target], app: path.join(target, 'apps/demo/src') });
     expect(existsSync(path.join(target, 'packages/shared/index.js'))).toBe(true);
-    const trusted = require('../packages/cli/src/editable-policy.cjs').collectTrustedFiles(target);
+    const trusted = require('../packages/cli/src/customize-policy.cjs').collectTrustedFiles(target);
     expect(trusted).toContain('shell/babel.config.js');
     expect(trusted).toContain('apps/demo/babel.config.cjs');
     expect(trusted).not.toContain('apps/demo/src/App.js');
@@ -147,7 +147,7 @@ describe('three-way migrations', () => {
     expect(readFileSync(path.join(dir, 'work/index.js'), 'utf8')).toBe('custom');
   });
 });
-describe('prompt editing', () => {
+describe('prompt customize', () => {
   const request = { prompt: 'Make it blue', endpoint: 'https://example.test/v1/chat/completions', model: 'test', allowSourceSharing: true };
   it('records the exact prompt, base release and patch without activating edits', async () => {
     const dir = workspace(); let call = 0;
@@ -169,7 +169,7 @@ describe('prompt editing', () => {
   });
 });
 
-describe('editing recovery and migration provenance', () => {
+describe('customize recovery and migration provenance', () => {
   it('carries accepted prompts across successive major upgrades', () => {
     const first = workspace('a', 'a\nb\n'), second = workspace('b', 'a\nb\nc\n'), third = workspace('c', 'a\nb\nc\nd\n');
     writeFileSync(path.join(first, 'work/index.js'), 'A\nb\n');
@@ -214,17 +214,17 @@ describe('editing recovery and migration provenance', () => {
 describe('native opt-in configuration', () => {
   const plugin = require('../packages/config-plugin/app.plugin.cjs');
   const base = { name: 'Test', slug: 'test', platforms: ['macos'], macos: { bundleIdentifier: 'test.spark.example' } };
-  it('adds native editing only to opted-in hosts', async () => {
+  it('adds native customize only to opted-in hosts', async () => {
     for (const enabled of [false, true]) {
-      const config = plugin({ ...base, extra: { spark: { editable: enabled ? { repository: 'owner/app', files: ['index.ts'] } : false } } });
+      const config = plugin({ ...base, extra: { spark: { customize: enabled ? { repository: 'owner/app', files: ['index.ts'] } : false } } });
       const result = await config.mods.macos.appDelegate({ ...config, modResults: { contents: '' }, modRequest: { projectRoot: root, platform: 'macos', modName: 'appDelegate', introspect: false } });
-      expect(result.modResults.contents.includes('@interface SparkEditableController')).toBe(enabled);
-      expect(result.modResults.contents.includes('return SparkEditableBundleURL();')).toBe(enabled);
+      expect(result.modResults.contents.includes('@interface SparkCustomizeController')).toBe(enabled);
+      expect(result.modResults.contents.includes('return SparkCustomizeBundleURL();')).toBe(enabled);
       expect(!!config.mods.macos.xcodeproj).toBe(enabled);
     }
   });
-  it('rejects sandboxed editable app distribution', () => {
-    expect(() => plugin({ ...base, macos: { ...base.macos, entitlements: { 'com.apple.security.app-sandbox': true } }, extra: { spark: { editable: { repository: 'owner/app', files: ['index.ts'] } } } })).toThrow('Sandbox');
+  it('rejects sandboxed customize app distribution', () => {
+    expect(() => plugin({ ...base, macos: { ...base.macos, entitlements: { 'com.apple.security.app-sandbox': true } }, extra: { spark: { customize: { repository: 'owner/app', files: ['index.ts'] } } } })).toThrow('Sandbox');
   });
 });
 it('automatically returns compile errors to AI for a bounded repair attempt', async () => {
@@ -239,12 +239,12 @@ it('automatically returns compile errors to AI for a bounded repair attempt', as
 });
 
 it('publishes only verified artifacts and never overwrites a conflicting release asset', async () => {
-  const source = file('.spark/editable/source.tgz', 'source');
-  const toolkit = file('.spark/editable/toolkit.tgz', 'toolkit');
+  const source = file('.spark/customize/source.tgz', 'source');
+  const toolkit = file('.spark/customize/toolkit.tgz', 'toolkit');
   const sourceAsset = { url: githubAsset('owner/app', 'v1', 'source.tgz'), sha256: fileHash(source), size: 6 };
   const toolkitAsset = { url: githubAsset('owner/tools', 'v1', 'toolkit.tgz'), sha256: fileHash(toolkit), size: 7 };
-  file('.spark/editable/manifest.json', JSON.stringify({ source: sourceAsset, toolkit: toolkitAsset }));
-  file('.spark/editable/publish.json', JSON.stringify({ manifest: 'manifest.json', assets: [sourceAsset, toolkitAsset] }));
+  file('.spark/customize/manifest.json', JSON.stringify({ source: sourceAsset, toolkit: toolkitAsset }));
+  file('.spark/customize/publish.json', JSON.stringify({ manifest: 'manifest.json', assets: [sourceAsset, toolkitAsset] }));
   const commands: string[][] = [];
   const execute = async (_root: string, args: string[]) => {
     commands.push(args);
@@ -252,12 +252,12 @@ it('publishes only verified artifacts and never overwrites a conflicting release
     if (args[1] === 'api') return JSON.stringify({ assets: [] });
     return '';
   };
-  await publishEditable(root, execute);
+  await publishCustomize(root, execute);
   expect(commands.filter(args => args[1] === 'release').length).toBe(3);
-  await expect(publishEditable(root, async (_root, args) => args[1] === 'repo' ? JSON.stringify({ visibility: 'PUBLIC' }) : JSON.stringify({ assets: [{ name: 'source.tgz', digest: 'sha256:wrong' }] }))).rejects.toThrow('differs');
-  await expect(publishEditable(root, async () => JSON.stringify({ visibility: 'PRIVATE' }))).rejects.toThrow('public');
+  await expect(publishCustomize(root, async (_root, args) => args[1] === 'repo' ? JSON.stringify({ visibility: 'PUBLIC' }) : JSON.stringify({ assets: [{ name: 'source.tgz', digest: 'sha256:wrong' }] }))).rejects.toThrow('differs');
+  await expect(publishCustomize(root, async () => JSON.stringify({ visibility: 'PRIVATE' }))).rejects.toThrow('public');
   writeFileSync(source, 'tampered');
-  await expect(publishEditable(root, execute)).rejects.toThrow('changed');
+  await expect(publishCustomize(root, execute)).rejects.toThrow('changed');
 });
 
 it('continues an unapplied candidate and saves all contributing prompts on acceptance', async () => {

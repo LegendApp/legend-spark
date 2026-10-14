@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import { fileHash } from '../packages/cli/src/editable-artifacts.ts';
-import { installEditableLocally } from '../scripts/helpers/editable-local.ts';
-import { fixtureReply } from '../scripts/helpers/editable-fixture-provider.ts';
+import { fileHash } from '../packages/cli/src/customize-artifacts.ts';
+import { installCustomizeLocally } from '../scripts/helpers/customize-local.ts';
+import { fixtureReply } from '../scripts/helpers/customize-fixture-provider.ts';
 let root: string;
-beforeEach(() => { root = mkdtempSync(path.join(os.tmpdir(), 'spark-editable-local-')); });
+beforeEach(() => { root = mkdtempSync(path.join(os.tmpdir(), 'spark-customize-local-')); });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 function manifest() {
   const assets = Object.fromEntries(['source','toolkit'].map(kind => {
@@ -18,24 +18,24 @@ function manifest() {
   }));
   return { schema: 1, project: 'test', version: '1', entry: 'fixture.txt', release: 'a'.repeat(64), runtime: { platform: 'macos', mode: 'release' }, ...assets } as any;
 }
-describe.skipIf(process.platform !== 'darwin')('local editing cache', () => {
+describe.skipIf(process.platform !== 'darwin')('local customize cache', () => {
   it('installs pinned archives once without changing the app manifest', async () => {
     const input = manifest(), before = JSON.stringify(input), cache = path.join(root, 'cache');
-    const installed = await installEditableLocally(input, root, cache);
+    const installed = await installCustomizeLocally(input, root, cache);
     expect(readFileSync(path.join(installed.source!, 'fixture.txt'), 'utf8')).toBe('source');
-    expect(await installEditableLocally(input, root, cache)).toEqual(installed);
+    expect(await installCustomizeLocally(input, root, cache)).toEqual(installed);
     expect(readdirSync(cache).sort()).toEqual([input.source.sha256, input.toolkit.sha256].sort());
     expect(JSON.stringify(input)).toBe(before);
   });
   it('rejects tampered archives before populating any cache entries', async () => {
     const input = manifest(), cache = path.join(root, 'cache'); writeFileSync(path.join(root, 'toolkit.tgz'), 'tampered');
-    await expect(installEditableLocally(input, root, cache)).rejects.toThrow('does not match');
+    await expect(installCustomizeLocally(input, root, cache)).rejects.toThrow('does not match');
     expect(existsSync(cache)).toBe(false);
   });
   it('preserves an incomplete existing cache entry for inspection', async () => {
     const input = manifest(), cache = path.join(root, 'cache'); mkdirSync(path.join(cache, input.source.sha256), { recursive: true });
     writeFileSync(path.join(cache, input.source.sha256, 'keep'), 'keep');
-    await expect(installEditableLocally(input, root, cache)).rejects.toThrow('Incomplete cache');
+    await expect(installCustomizeLocally(input, root, cache)).rejects.toThrow('Incomplete cache');
     expect(readFileSync(path.join(cache, input.source.sha256, 'keep'), 'utf8')).toBe('keep');
   });
 });

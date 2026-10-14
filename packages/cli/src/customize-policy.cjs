@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-// Configuration is executable input to compilation, never editable app source.
+// Configuration is executable input to compilation, never customize app source.
 function isBuildConfig(file) {
   const name = path.posix.basename(file);
   return /(?:^|\/)(?:scripts|plugins|transforms)(?:\/|$)/i.test(file) || /(?:^|\.)config(?:\.|$)/i.test(name) || /^(?:app\.json|package\.json|tsconfig.*|jsconfig.*|babel\..*|metro\..*|\.babelrc.*)$/.test(name);
@@ -9,7 +9,7 @@ function isFixed(file, trustedFiles = []) {
   return trustedFiles.includes(file) || isBuildConfig(file) || /(?:^|\/)(?:\.|(?:macos|ios|android|windows|Pods)(?:\/|$))/i.test(file) ||
     /^(?:package\.json|app\.json|\.babelrc.*|babel\..*|metro\..*|tsconfig.*|jsconfig.*|.*lock.*|.*\.(?:sh|bash|zsh|ps1|rb|podspec))$/i.test(path.posix.basename(file));
 }
-function assertEditableChanges(before, after, trustedFiles = []) {
+function assertCustomizeChanges(before, after, trustedFiles = []) {
   for (const file of Object.keys({ ...before, ...after })) {
     if (before[file] !== after[file] && isFixed(file, trustedFiles)) throw new Error(`Build/native/dependency configuration is fixed: ${file}`);
   }
@@ -99,4 +99,4 @@ function collectTrustedFiles(root) {
   }
   scan(); return [...trusted].sort();
 }
-module.exports = { isBuildConfig, isFixed, assertEditableChanges, collectTrustedFiles };
+module.exports = { isBuildConfig, isFixed, assertCustomizeChanges, collectTrustedFiles };

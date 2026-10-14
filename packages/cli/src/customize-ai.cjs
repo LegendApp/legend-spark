@@ -1,9 +1,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { safe, snapshot, restore, patch, read, write, build, reviewPatch } = require('./editable-worker.cjs');
-const { validateProvider } = require('./editable-provider.cjs');
-const { isFixed } = require('./editable-policy.cjs');
+const { safe, snapshot, restore, patch, read, write, build, reviewPatch } = require('./customize-worker.cjs');
+const { validateProvider } = require('./customize-provider.cjs');
+const { isFixed } = require('./customize-policy.cjs');
 const tools = [
   { name: 'list_files', description: 'List source files in the candidate workspace.', properties: {}, required: [] },
   { name: 'read_file', description: 'Read a UTF-8 source file.', properties: { path: { type: 'string' } }, required: ['path'] },
@@ -11,7 +11,7 @@ const tools = [
   { name: 'delete_file', description: 'Delete a source file.', properties: { path: { type: 'string' } }, required: ['path'] },
 ].map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: { type: 'object', properties: tool.properties, required: tool.required, additionalProperties: false } } }));
 function operate(workspace, name, args, trustedFiles = []) {
-  if (!tools.some(tool => tool.function.name === name) || !args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Invalid editing tool request');
+  if (!tools.some(tool => tool.function.name === name) || !args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Invalid customize tool request');
   if (name === 'list_files') return Object.keys(snapshot(workspace));
   const file = safe(workspace, args.path);
   if (/(?:^|\/)(?:\.env(?:\..*)?|.*\.(?:pem|key|p12|p8))$/i.test(args.path)) throw new Error('Credentials cannot be read or edited');
@@ -27,13 +27,13 @@ function operate(workspace, name, args, trustedFiles = []) {
     fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, args.content); return 'Written';
   }
   if (name === 'delete_file') { fs.unlinkSync(file); return 'Deleted'; }
-  throw new Error('Unknown editing tool');
+  throw new Error('Unknown customize tool');
 }
 async function prompt(directory, request, dependencies = {}) {
   const fetcher = dependencies.fetch ?? fetch, compiler = dependencies.build ?? build;
   const provider = validateProvider(request.provider === 'cli' ? { kind: 'cli', tool: request.tool, ...(request.model ? { model: request.model } : {}) } : { kind: request.provider ?? 'remote', endpoint: request.endpoint, model: request.model });
-  const key = provider.kind !== 'remote' ? undefined : request.apiKey ?? process.env.SPARK_EDITABLE_AI_KEY;
-  delete process.env.SPARK_EDITABLE_AI_KEY;
+  const key = provider.kind !== 'remote' ? undefined : request.apiKey ?? process.env.SPARK_CUSTOMIZE_AI_KEY;
+  delete process.env.SPARK_CUSTOMIZE_AI_KEY;
   if (provider.kind !== 'local' && !request.allowSourceSharing) throw new Error('Explicit permission to share source with the selected AI provider is required');
   const endpoint = provider.kind === 'cli' ? undefined : new URL(provider.endpoint);
   if (typeof request.prompt !== 'string' || !request.prompt.trim() || request.prompt.length > 32000) throw new Error('A prompt is required');
@@ -60,7 +60,7 @@ async function prompt(directory, request, dependencies = {}) {
     for (let step = 0; step < 30; step++) {
       const bodyRequest = { model: request.model, messages, tools, tool_choice: 'auto' };
       const signal = AbortSignal.timeout(provider.kind === 'remote' ? 120000 : 600000);
-      const response = provider.kind === 'cli' ? await require('./editable-cli.cjs').complete(provider, bodyRequest, signal) : await fetcher(endpoint.href, { method: 'POST', redirect: 'error', signal, headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) }, body: JSON.stringify(bodyRequest) });
+      const response = provider.kind === 'cli' ? await require('./customize-cli.cjs').complete(provider, bodyRequest, signal) : await fetcher(endpoint.href, { method: 'POST', redirect: 'error', signal, headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) }, body: JSON.stringify(bodyRequest) });
       if (!response.ok) throw new Error(`AI provider returned HTTP ${response.status}`);
       const body = await response.json(), message = body.choices?.[0]?.message;
       if (!message || (message.content != null && typeof message.content !== 'string') || (message.tool_calls != null && !Array.isArray(message.tool_calls))) throw new Error('AI provider did not return a chat-completions message');
@@ -83,13 +83,13 @@ async function prompt(directory, request, dependencies = {}) {
       }
       for (const call of calls) {
         let result;
-        try { result = operate(candidate, call.function.name, JSON.parse(call.function.arguments), manifest.editing?.trustedFiles); }
+        try { result = operate(candidate, call.function.name, JSON.parse(call.function.arguments), manifest.customize?.trustedFiles); }
         catch (error) { result = { error: error.message }; }
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
       }
-      if (step === 29) throw new Error('AI editing reached its 30-step limit; candidate retained for review');
+      if (step === 29) throw new Error('AI customization reached its 30-step limit; candidate retained for review');
     }
-    if (!validated) throw new Error('AI editing reached its step limit without a valid build');
+    if (!validated) throw new Error('AI customization reached its step limit without a valid build');
     event.patch = patch(before, snapshot(candidate)); event.summary = summary;
     event.status = 'needs-review';
     if (migration) state.migration = { ...state.migration, candidate: id, status: 'needs-review', conflicts: [] };

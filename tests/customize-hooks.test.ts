@@ -3,10 +3,10 @@ import { createRequire } from "node:module";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const { create } = createRequire(import.meta.url)("react-test-renderer");
 const source = vi.hoisted(() => ({ get: vi.fn(), listeners: new Set<(state: any) => void>() }));
-vi.mock("../packages/desktop-app/src/editable", () => ({ getEditingState: source.get, onEditingState: (listener: (state: any) => void) => { source.listeners.add(listener); return { remove: () => source.listeners.delete(listener) }; } }));
-import { useEditingState, type EditingHookState } from "../packages/desktop-app/src/editable-hooks";
-let renderer: any, state: EditingHookState;
-function Root() { state = useEditingState(); return null; }
+vi.mock("../packages/desktop-app/src/customize", () => ({ getCustomizeState: source.get, onCustomizeState: (listener: (state: any) => void) => { source.listeners.add(listener); return { remove: () => source.listeners.delete(listener) }; } }));
+import { useCustomizeState, type CustomizeHookState } from "../packages/desktop-app/src/customize-hooks";
+let renderer: any, state: CustomizeHookState;
+function Root() { state = useCustomizeState(); return null; }
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   source.listeners.clear(); source.get.mockReset();

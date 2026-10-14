@@ -17,8 +17,8 @@ export interface MacOSConfiguration {
 export interface SigningConfiguration {
   macos?: { identity?: string; teamId?: string; entitlementsByPath?: Record<string, Record<string, JsonValue>> };
 }
-export type EditableProvider = { kind: 'cli'; tool: 'codex' | 'claude'; model?: string } | { kind: 'local' | 'remote'; endpoint: string; model: string };
-export interface EditableConfiguration {
+export type CustomizeProvider = { kind: 'cli'; tool: 'codex' | 'claude'; model?: string } | { kind: 'local' | 'remote'; endpoint: string; model: string };
+export interface CustomizeConfiguration {
   repository: string;
   tag?: string;
   /** Source snapshot root, relative to and an ancestor of the app project. files are relative to this root. */
@@ -28,7 +28,7 @@ export interface EditableConfiguration {
   toolkitRepository?: string;
   toolkitTag?: string;
   ui?: 'default' | 'custom';
-  provider?: EditableProvider;
+  provider?: CustomizeProvider;
 }
 /** Spark-owned settings carried inside Expo's extra.spark. */
 export interface SparkSettings {
@@ -40,7 +40,7 @@ export interface SparkSettings {
   include?: string[];
   signing?: SigningConfiguration;
   helpers?: Record<string, HelperConfiguration>;
-  editable?: false | EditableConfiguration;
+  customize?: false | CustomizeConfiguration;
   supportedPlatforms?: SparkPlatform[];
 }
 /** Expo retains ownership of its configuration; Spark only adds desktop fields. */

@@ -1,21 +1,21 @@
-#import "../packages/desktop-host/SparkEditable.mm"
+#import "../packages/desktop-host/SparkCustomize.mm"
 #import <objc/runtime.h>
 static int checks;
 static void check(BOOL value, NSString *message) { checks++;if (!value) { NSLog(@"FAIL: %@",message); exit(1); } }
 static int installedMonitors;
-@interface NSEvent (SparkEditableTest)
+@interface NSEvent (SparkCustomizeTest)
 + (id)sparkFixtureMonitor:(NSEventMask)mask handler:(NSEvent *(^)(NSEvent *))handler;
 @end
-@implementation NSEvent (SparkEditableTest)
+@implementation NSEvent (SparkCustomizeTest)
 + (id)sparkFixtureMonitor:(NSEventMask)mask handler:(NSEvent *(^)(NSEvent *))handler {
   installedMonitors++;return [self sparkFixtureMonitor:mask handler:handler];
 }
 @end
-@interface FixtureEditingController : SparkEditableController
+@interface FixtureCustomizeController : SparkCustomizeController
 @property NSString *receivedKey;
 @property NSString *githubToken;
 @end
-@implementation FixtureEditingController
+@implementation FixtureCustomizeController
 - (NSString *)githubCredential:(NSString *)value { if(value)self.githubToken=value;return self.githubToken ?: @""; }
 - (BOOL)githubAuthenticated { return self.githubToken.length>0; }
 - (NSDictionary *)github:(NSString *)command request:(NSDictionary *)request {
@@ -35,7 +35,7 @@ static int installedMonitors;
   return @"{}";
 }
 @end
-@interface FixtureGitHubTransport : SparkEditableController
+@interface FixtureGitHubTransport : SparkCustomizeController
 @end
 @implementation FixtureGitHubTransport
 - (NSString *)download:(NSDictionary *)asset kind:(NSString *)kind { return self.toolkit; }
@@ -46,7 +46,7 @@ static NSDictionary *call(NSString *method,NSDictionary *args) {
   void (^reply)(NSString *,NSString *,NSString *)=^(NSString *value,NSString *code,NSString *message){
     if(code)result=@{@"error":code,@"message":message};else{NSData *data=[value dataUsingEncoding:NSUTF8StringEncoding];id decoded=[NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingFragmentsAllowed error:nil];result=[decoded isKindOfClass:NSDictionary.class] ? decoded : @{};}finished=YES;
   };
-  [NSNotificationCenter.defaultCenter postNotificationName:@"SparkEditableCall" object:nil userInfo:@{@"method":method,@"args":args,@"claim":claim,@"reply":reply}];
+  [NSNotificationCenter.defaultCenter postNotificationName:@"SparkCustomizeCall" object:nil userInfo:@{@"method":method,@"args":args,@"claim":claim,@"reply":reply}];
   check(handled,@"Opted-in native host claims bridge call");
   NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:3];
   while(!finished && deadline.timeIntervalSinceNow>0)[NSRunLoop.currentRunLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
@@ -57,12 +57,12 @@ int main(int argc, const char **argv) { @autoreleasepool {
   Method originalMonitor=class_getClassMethod(NSEvent.class,@selector(addLocalMonitorForEventsMatchingMask:handler:));
   Method fixtureMonitor=class_getClassMethod(NSEvent.class,@selector(sparkFixtureMonitor:handler:));
   method_exchangeImplementations(originalMonitor,fixtureMonitor);
-  SparkEditableController *controller=[SparkEditableController new];
-  check(controller.manifest.count==0 && installedMonitors==0,@"App without editing manifest does not install a key monitor");
+  SparkCustomizeController *controller=[SparkCustomizeController new];
+  check(controller.manifest.count==0 && installedMonitors==0,@"App without customize manifest does not install a key monitor");
   method_exchangeImplementations(originalMonitor,fixtureMonitor);
   SEController=controller;NSMenu *existingMenu=[NSMenu new];[existingMenu addItemWithTitle:@"Existing item" action:nil keyEquivalent:@""];
-  check(SparkEditableDockMenu(existingMenu)==existingMenu && existingMenu.numberOfItems==1,@"App without editing manifest preserves its Dock menu");
-  check(SparkEditableDockMenu(nil)==nil,@"App without editing manifest does not add a Dock menu");
+  check(SparkCustomizeDockMenu(existingMenu)==existingMenu && existingMenu.numberOfItems==1,@"App without customize manifest preserves its Dock menu");
+  check(SparkCustomizeDockMenu(nil)==nil,@"App without customize manifest does not add a Dock menu");
   NSString *folder=[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
   controller.support=folder;controller.directory=[folder stringByAppendingPathComponent:@"release"];
   controller.manifest=@{@"schema":@1,@"release":@"release-1",@"runtime":@{@"fingerprint":@"native-1"}};
@@ -89,10 +89,10 @@ int main(int argc, const char **argv) { @autoreleasepool {
   // Switch the notification owner, then exercise the actual asynchronous native
   // API used by custom React UI, without downloading tools or calling a model.
   [NSNotificationCenter.defaultCenter removeObserver:controller];
-  FixtureEditingController *api=[FixtureEditingController new];api.manifest=@{@"release":@"release-1",@"repository":@"owner/app",@"editing":@{@"ui":@"custom",@"githubClientId":@"client",@"provider":@{@"kind":@"cli",@"tool":@"codex"}}};api.support=folder;api.directory=controller.directory;SEController=api;
-  NSDictionary *savedProvider=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"SparkEditableProvider"];
-  [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SparkEditableProvider"];
-  __block int events=0;id observer=[NSNotificationCenter.defaultCenter addObserverForName:@"SparkDesktopEvent" object:nil queue:nil usingBlock:^(NSNotification *note){if([note.userInfo[@"type"] isEqual:@"editingState"])events++;}];
+  FixtureCustomizeController *api=[FixtureCustomizeController new];api.manifest=@{@"release":@"release-1",@"repository":@"owner/app",@"customize":@{@"ui":@"custom",@"githubClientId":@"client",@"provider":@{@"kind":@"cli",@"tool":@"codex"}}};api.support=folder;api.directory=controller.directory;SEController=api;
+  NSDictionary *savedProvider=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"SparkCustomizeProvider"];
+  [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SparkCustomizeProvider"];
+  __block int events=0;id observer=[NSNotificationCenter.defaultCenter addObserverForName:@"SparkDesktopEvent" object:nil queue:nil usingBlock:^(NSNotification *note){if([note.userInfo[@"type"] isEqual:@"customizeState"])events++;}];
   check([call(@"state",@{})[@"enabled"] boolValue],@"Public state reports enabled");
   check([[call(@"state",@{})[@"provider"] objectForKey:@"kind"] isEqual:@"cli"],@"Published CLI defaults are available");
   check([call(@"configure",@{@"provider":@{@"kind":@"cli",@"tool":@"claude"}}) count]==0,@"Configures CLI without an API key");
@@ -108,21 +108,21 @@ int main(int argc, const char **argv) { @autoreleasepool {
   NSDictionary *authorized=call(@"state",@{});check([authorized[@"githubAuthenticated"] boolValue],@"UI gets auth availability");check(authorized[@"token"]==nil,@"State exposes no token");
   check([call(@"submitPR",@{@"title":@"Blue greeting"})[@"number"] intValue]==1,@"UI can submit reviewed PR");
   call(@"githubSignOut",@{});check(!api.githubToken.length,@"Sign out removes token");
-  check([call(@"submitPR",@{@"title":@"Title",@"unknown":@YES})[@"error"] isEqual:@"E_UNSUPPORTED_OPTION"],@"Editing API rejects unsupported options");
+  check([call(@"submitPR",@{@"title":@"Title",@"unknown":@YES})[@"error"] isEqual:@"E_UNSUPPORTED_OPTION"],@"Customize API rejects unsupported options");
   FixtureGitHubTransport *transport=[FixtureGitHubTransport new];[NSNotificationCenter.defaultCenter removeObserver:transport];transport.toolkit=folder;transport.directory=controller.directory;transport.manifest=@{};
   [@"exec /bin/sh \"$@\"\n" writeToFile:[folder stringByAppendingPathComponent:@"runtime-bootstrap.sh"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
   for(NSString *code in @[@"E_PERMISSION_DENIED",@"E_INVALID_DATA",@"E_TIMEOUT"]){
     NSString *script=[NSString stringWithFormat:@"printf '%%s\\n' '{\"error\":\"%@\",\"message\":\"Safe failure\"}'\nexit 1\n",code];
-    [script writeToFile:[folder stringByAppendingPathComponent:@"editable-github.cjs"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    [script writeToFile:[folder stringByAppendingPathComponent:@"customize-github.cjs"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
     @try{[transport github:@"begin" request:@{}];check(NO,@"Failed subprocess must reject");}
     @catch(NSException *failure){check([failure.name isEqual:code] && [failure.reason isEqual:@"Safe failure"],@"Native GitHub subprocess retains typed error without exposing process output");}
   }
   api.busy=YES;check([call(@"original",@{})[@"error"] isEqual:@"E_BUSY"],@"Recovery action cannot race an ongoing operation");api.busy=NO;
   check(events>=3,@"Native progress reaches public event transport");
-  check(SparkEditableDockMenu(nil).numberOfItems==0,@"Custom UI disables automatic Dock button");
+  check(SparkCustomizeDockMenu(nil).numberOfItems==0,@"Custom UI disables automatic Dock button");
   [api show:nil];check(api.providerChoice.indexOfSelectedItem==1,@"Built-in UI can still open with selected CLI");check(!api.key.enabled,@"CLI UI does not require API key");[api.panel close];
   [NSNotificationCenter.defaultCenter removeObserver:observer];[NSNotificationCenter.defaultCenter removeObserver:api];
-  if(savedProvider)[NSUserDefaults.standardUserDefaults setObject:savedProvider forKey:@"SparkEditableProvider"];else[NSUserDefaults.standardUserDefaults removeObjectForKey:@"SparkEditableProvider"];
+  if(savedProvider)[NSUserDefaults.standardUserDefaults setObject:savedProvider forKey:@"SparkCustomizeProvider"];else[NSUserDefaults.standardUserDefaults removeObjectForKey:@"SparkCustomizeProvider"];
   [NSFileManager.defaultManager removeItemAtPath:folder error:nil];
-  printf("Editable native loader and API: %d checks passed\n",checks);
+  printf("Customize native loader and API: %d checks passed\n",checks);
 } return 0; }

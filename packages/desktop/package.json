@@ -73,7 +73,7 @@
     "./ai": "./ai.ts",
     "./ai/codex": "./ai-codex.ts",
     "./camera": "./camera.ts",
-    "./editable": "./editable.ts"
+    "./customize": "./customize.ts"
   },
   "files": [
     "*.ts",

@@ -1,8 +1,8 @@
 import { createRequire } from 'node:module';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const require = createRequire(import.meta.url);
-const worker = require('../packages/cli/src/editable-worker.cjs');
-const github = require('../packages/cli/src/editable-github.cjs');
+const worker = require('../packages/cli/src/customize-worker.cjs');
+const github = require('../packages/cli/src/customize-github.cjs');
 const bytes = (text: string) => Buffer.from(text).toString('base64');
 const sha = 'a'.repeat(40), tree = 'b'.repeat(40);
 const response = (value: object, status = 200) => ({ ok: status < 400, status, json: async () => value });
@@ -29,10 +29,10 @@ function fetcher(stale = false, fork = false) {
     return response({ sha });
   });
 }
-describe('GitHub editing publication', () => {
+describe('GitHub customize publication', () => {
   it.each([false, true])('publishes a reviewed cumulative patch and prompts with repository paths (fork: %s)', async fork => {
     const transport = fetcher(false, fork);
-    const result = await github.submit('/editing', { title: 'Blue greeting' }, 'secret-token', { fetcher: transport });
+    const result = await github.submit('/customize', { title: 'Blue greeting' }, 'secret-token', { fetcher: transport });
     expect(result).toMatchObject({ number: 42, repository: 'owner/app' });
     const destination = fork ? 'user/app' : 'owner/app';
     expect(calls.find(call => call.url === `https://api.github.com/repos/${destination}/git/trees`)?.body.tree).toEqual([{ path: 'apps/app/src/App.tsx', mode: '100644', type: 'blob', sha }]);
@@ -42,17 +42,17 @@ describe('GitHub editing publication', () => {
     for (const call of calls) { expect(call.options.redirect).toBe('error'); expect(call.options.headers.Authorization).toBe('Bearer secret-token'); }
   });
   it('rejects stale upstream source without any remote writes', async () => {
-    await expect(github.submit('/editing', { title: 'Change' }, 'token', { fetcher: fetcher(true) })).rejects.toMatchObject({ code: 'E_INVALID_DATA' });
+    await expect(github.submit('/customize', { title: 'Change' }, 'token', { fetcher: fetcher(true) })).rejects.toMatchObject({ code: 'E_INVALID_DATA' });
     expect(calls.every(call => call.body === undefined)).toBe(true);
   });
   it('rejects oversized prompts before any remote requests', async () => {
     history[0].prompt = 'x'.repeat(61000);
-    const transport = fetcher(); await expect(github.submit('/editing', { title: 'Change' }, 'token', { fetcher: transport })).rejects.toMatchObject({ code: 'E_INVALID_ARGUMENT' });
+    const transport = fetcher(); await expect(github.submit('/customize', { title: 'Change' }, 'token', { fetcher: transport })).rejects.toMatchObject({ code: 'E_INVALID_ARGUMENT' });
     expect(transport).not.toHaveBeenCalled();
   });
   it('preserves deletions and validates raw repository path traversal', async () => {
     changed[0].after = null;
-    await github.submit('/editing', { title: 'Delete greeting' }, 'token', { fetcher: fetcher() });
+    await github.submit('/customize', { title: 'Delete greeting' }, 'token', { fetcher: fetcher() });
     expect(calls.find(call => call.url.endsWith('/git/trees'))?.body.tree[0].sha).toBeNull();
     for (const value of ['../outside', 'src/../../outside', '/outside', '.git/config', 'src\\secret']) expect(() => github.repositoryPath('', value)).toThrow();
     expect(() => github.repositoryPath('../repo', 'App.tsx')).toThrow();

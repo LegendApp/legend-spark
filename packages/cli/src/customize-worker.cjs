@@ -1,4 +1,4 @@
-// Downloadable editing worker. No toolchain code is linked into the application.
+// Downloadable customize worker. No toolchain code is linked into the application.
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -110,8 +110,8 @@ function merge(base, ours, theirs) {
   return { files, conflicts };
 }
 function validateManifest(manifest) {
-  if (manifest.schema !== 1 || !/^[a-f0-9]{64}$/.test(manifest.release) || manifest.runtime?.platform !== 'macos' || manifest.runtime?.mode !== 'release' || !manifest.project || !manifest.version) throw new Error('Invalid editable manifest');
-  for (const asset of [manifest.source, manifest.toolkit]) if (!asset || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/releases\/download\/[\w.-]+\/[\w.-]+$/.test(asset.url) || !/^[a-f0-9]{64}$/.test(asset.sha256) || !Number.isSafeInteger(asset.size) || asset.size <= 0) throw new Error('Invalid editable asset');
+  if (manifest.schema !== 1 || !/^[a-f0-9]{64}$/.test(manifest.release) || manifest.runtime?.platform !== 'macos' || manifest.runtime?.mode !== 'release' || !manifest.project || !manifest.version) throw new Error('Invalid customize manifest');
+  for (const asset of [manifest.source, manifest.toolkit]) if (!asset || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/releases\/download\/[\w.-]+\/[\w.-]+$/.test(asset.url) || !/^[a-f0-9]{64}$/.test(asset.sha256) || !Number.isSafeInteger(asset.size) || asset.size <= 0) throw new Error('Invalid customize asset');
   if (manifest.projectRoot !== undefined && manifest.projectRoot !== '.') safe('/snapshot', manifest.projectRoot);
   safe('/snapshot', manifest.entry);
   return manifest;
@@ -182,8 +182,8 @@ async function build(directory, candidate = 'work') {
   const state = read(path.join(directory, 'state.json')), manifest = validateManifest(read(path.join(directory, 'manifest.json')));
   const workspace = candidate === 'work' ? path.join(directory, 'work') : safe(path.join(directory, 'candidates'), candidate);
   const toolkit = state.toolkit, metadata = read(path.join(toolkit, 'toolkit.json'));
-  if (metadata.arch !== process.arch || metadata.framework !== manifest.runtime.framework || hash(fs.readFileSync(path.join(toolkit, 'hermesc'))) !== metadata.compiler) throw new Error('Incompatible editing toolkit');
-  require('./editable-policy.cjs').assertEditableChanges(snapshot(path.join(directory, 'base')), snapshot(workspace), manifest.editing?.trustedFiles);
+  if (metadata.arch !== process.arch || metadata.framework !== manifest.runtime.framework || hash(fs.readFileSync(path.join(toolkit, 'hermesc'))) !== metadata.compiler) throw new Error('Incompatible customize toolkit');
+  require('./customize-policy.cjs').assertCustomizeChanges(snapshot(path.join(directory, 'base')), snapshot(workspace), manifest.customize?.trustedFiles);
   attachDependencies(workspace, toolkit);
   const project = !manifest.projectRoot || manifest.projectRoot === '.' ? workspace : safe(workspace, manifest.projectRoot);
   attachDependencies(project, toolkit);
@@ -266,7 +266,7 @@ if (require.main === module) {
     else if (command === 'build') result = await build(args[0], args[1]);
     else if (command === 'verify') result = verify(args[0]);
     else if (command === 'accept') result = accept(args[0]);
-    else if (command === 'prompt') result = await require('./editable-ai.cjs').prompt(args[0], read(args[1]));
+    else if (command === 'prompt') result = await require('./customize-ai.cjs').prompt(args[0], read(args[1]));
     else throw new Error('Expected prepare, migrate, prompt, build, verify, or accept');
     console.log(JSON.stringify(result));
   })().catch(error => { console.error(error.message); process.exitCode = 1; });

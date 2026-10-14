@@ -3750,8 +3750,8 @@
       }
     },
     {
-      "path": "./editable",
-      "sourceTarget": "./editable.ts",
+      "path": "./customize",
+      "sourceTarget": "./customize.ts",
       "kind": "runtime-api",
       "scope": "macos-only",
       "provider": "@legendapp/spark-desktop-app",
@@ -3760,12 +3760,12 @@
       ],
       "relatedCatalogCases": [],
       "providerSources": [
-        "packages/desktop-app/src/editable.ts",
-        "packages/desktop-host/SparkEditable.mm"
+        "packages/desktop-app/src/customize.ts",
+        "packages/desktop-host/SparkCustomize.mm"
       ],
       "platformSourceEvidence": {
         "macos": [
-          "packages/desktop-host/SparkEditable.mm"
+          "packages/desktop-host/SparkCustomize.mm"
         ],
         "windows": [],
         "ios": [],
@@ -3774,40 +3774,40 @@
       },
       "verification": {
         "unitTests": [
-          "tests/editable-api.test.ts",
-          "tests/editable-hooks.test.ts",
-          "tests/editable-github.test.ts",
-          "tests/editable-native.test.ts"
+          "tests/customize-api.test.ts",
+          "tests/customize-hooks.test.ts",
+          "tests/customize-github.test.ts",
+          "tests/customize-native.test.ts"
         ],
         "portableCommand": "bun run test",
         "platformAcceptance": {
           "macos-arm64": {
             "status": "not-tested",
-            "acceptanceCommand": "bun run test:platform --platform macos; docs/editable-apps.md"
+            "acceptanceCommand": "bun run test:platform --platform macos; docs/customize-apps.md"
           },
           "macos-x64": {
             "status": "not-tested",
-            "acceptanceCommand": "bun run test:platform --platform macos; docs/editable-apps.md"
+            "acceptanceCommand": "bun run test:platform --platform macos; docs/customize-apps.md"
           },
           "windows-x64": {
             "status": "not-applicable",
-            "reason": "End-user editing is supported only by opted-in macOS release apps."
+            "reason": "End-user customization is supported only by opted-in macOS release apps."
           },
           "windows-arm64": {
             "status": "not-applicable",
-            "reason": "End-user editing is supported only by opted-in macOS release apps."
+            "reason": "End-user customization is supported only by opted-in macOS release apps."
           },
           "ios": {
             "status": "not-applicable",
-            "reason": "End-user editing is supported only by opted-in macOS release apps."
+            "reason": "End-user customization is supported only by opted-in macOS release apps."
           },
           "android": {
             "status": "not-applicable",
-            "reason": "End-user editing is supported only by opted-in macOS release apps."
+            "reason": "End-user customization is supported only by opted-in macOS release apps."
           },
           "web": {
             "status": "not-applicable",
-            "reason": "End-user editing is supported only by opted-in macOS release apps."
+            "reason": "End-user customization is supported only by opted-in macOS release apps."
           }
         }
       }

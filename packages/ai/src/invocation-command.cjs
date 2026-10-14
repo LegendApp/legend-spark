@@ -1,4 +1,4 @@
-// Shared by the runtime AI API and the standalone editable toolkit.
+// Shared by the runtime AI API and the standalone customize toolkit.
 function buildInvocationCommand(tool, prompt, options = {}) {
   if (tool === 'codex') {
     const args = ['exec', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check'];
