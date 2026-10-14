@@ -93,7 +93,9 @@ export async function create(root: string, archiveManifest: string | undefined, 
   // Upstream can report success after an install failure. Require a usable CLI.
   if (!existsSync(path.join(root, "node_modules/@legendapp/spark/package.json"))) throw new Error(`Dependency installation failed. Run ${manager} install in ${root} and retry.`);
   initializeTemplate(root);
-  migrateProject(root, installedSparkVersion(root));
+  const installed = installedSparkVersion(root);
+  // A new starter already has the current release's configuration and source.
+  migrateProject(root, installed, true, { fromVersion: installed });
   if (example) {
     if (!archiveManifest) { const release = installedRelease(); if (release) verifyMaterializedReleasePackages(release, root); }
     await configureExample(root, example);

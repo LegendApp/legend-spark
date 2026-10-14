@@ -87,6 +87,7 @@ test("single Spark archive resolves public exports and preserves private native 
       cpSync(path.dirname(producer.resolve(`${name}/package.json`)), path.join(app, "node_modules", name), { recursive: true });
     const manifest = req("@legendapp/spark/package.json");
     expect(readFileSync(path.join(destination, "skills/spark/SKILL.md"))).toEqual(readFileSync(path.join(framework, "packages/desktop/skills/spark/SKILL.md")));
+    expect(readFileSync(path.join(destination, "skills/spark/UPGRADING.md"))).toEqual(readFileSync(path.join(framework, "packages/desktop/skills/spark/UPGRADING.md")));
     createRequire(path.join(destination, "package.json"))("./vendor/node_modules/@legendapp/spark-desktop-config/native-patches.cjs").prepareNativePatches(app);
     expect(JSON.parse(readFileSync(path.join(app, "node_modules/react-native-enriched-markdown/package.json"), "utf8")).spark.dependencyPatch.version).toBe("1.0.2");
     expect(readFileSync(path.join(destination, "patches/react-native-enriched-markdown@1.0.2.patch"))).toEqual(

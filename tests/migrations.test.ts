@@ -61,6 +61,7 @@ test("pointer refresh preserves a user Claude skill and does not rewrite unchang
 
 test("unrecorded and older apps migrate once with one shared version across platforms", () => {
   const root = app();
+  migrateProject(root, version, true, { fromVersion: version });
   ensureProjectVersion(root);
   expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(version + "\n");
   expect(readFileSync(path.join(root, ".claude/skills/spark/SKILL.md"), "utf8")).toBe(claudePointer);
@@ -75,7 +76,7 @@ test("unrecorded and older apps migrate once with one shared version across plat
 test("automatic migration stops before any writes when a pending step is unsafe", () => {
   const root = app();
   stamp(root, "0.0.1-next.3");
-  const step = { version: "0.0.1-next.4", automatic: false, apply: () => { writeFileSync(path.join(root, "migrated"), "yes"); } };
+  const step = { version: "0.0.1-next.4", automatic: false, apply: (context: import("../packages/cli/src/migration-helpers.cjs").MigrationContext) => { context.writeFile("migrated", "yes"); } };
   migrations.push(step);
   try {
     expect(() => ensureProjectVersion(root)).toThrow("Run spark upgrade");

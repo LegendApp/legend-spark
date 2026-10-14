@@ -42,6 +42,9 @@ or clean-recipient Runner acceptance.
 
 ## 0.0.1-next.3 — preview
 
+- [Breaking] Public API contracts and window configuration changed. See the
+  versioned [app upgrade notes](packages/desktop/skills/spark/UPGRADING.md#001-next3).
+
 Experimental macOS Apple Silicon preview. Native Windows and Intel macOS
 acceptance remain pending. Automated package checks do not certify native UI
 or clean-recipient Runner acceptance.

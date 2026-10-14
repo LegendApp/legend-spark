@@ -5,6 +5,7 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "skipLibCheck": true,
+    "allowJs": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
@@ -13,6 +14,8 @@
     ]
   },
   "include": [
+    "packages/cli/src/migrations.cjs",
+    "packages/cli/src/migration-helpers.cjs",
     "packages/**/*.ts",
     "fixtures/**/*.ts",
     "scripts/**/*.ts",

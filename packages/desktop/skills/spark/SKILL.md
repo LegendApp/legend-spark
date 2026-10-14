@@ -38,6 +38,12 @@ Native macOS builds need full Xcode (license/first-launch setup and selected dev
 - `.spark/version` records successful migrations. `dev`, `build`, and `doctor` apply safe idempotent migrations after a manual version change; unsafe pending changes or downgrades stop with `run spark upgrade`. Lifecycle scripts are not required for this check.
 - Keep the generated Spark sections in `AGENTS.md` / `CLAUDE.md` and the `.claude/skills/spark/SKILL.md` pointer thin. Instructions live in this installed package, so updating Spark updates the skill.
 
+## Upgrade an app
+
+Read [the packaged upgrade guide](UPGRADING.md). Before updating, retain the old `.spark/version` (or installed package version if unrecorded). Run `spark upgrade --dry-run` through the app's installed CLI, read the dependency pins, install command, ordered migrations, planned file edits and every manual step, then run `spark upgrade`.
+
+After installation, read this skill and `UPGRADING.md` from the **new installed package**. Read every release note with `old < version <= new`, including intermediate previews; `.spark/version` advancing does not mean app source or custom native modules have passed validation. Work through `.spark/upgrade-notes.md`, apply the notes' API/config/native changes, and mark each reviewed item complete. Rerun the dry run and doctor, typecheck/test the app, then rebuild and exercise affected native flows. Keep the notes until all manual steps are resolved. If installation fails, fix its error and rerun upgrade; earlier file edits can remain, and migrations are idempotent.
+
 ## Common failures
 
 - Missing/stale Runner or extra native modules: follow the terminal's compatibility message; build a custom runtime with `b` or `spark build --dev`. A local SDK without release metadata needs a registered local Runner.

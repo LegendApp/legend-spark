@@ -54,7 +54,10 @@ export async function upgrade(root: string, dryRun = false) {
     const issues = upgradeDependencyPins(root, true, pins, requiredOverrides);
     console.log(`Spark ${current} → ${version} (${channel})${dryRun ? " — dry run" : ""}`);
     printDependencyPins(issues);
-    console.log(`Install: ${manager} install\nMigrations: refresh AI skill pointers and apply pending versioned steps.`);
+    const targetMigrations: typeof import("./migrations.cjs") = createRequire(path.join(cli, "package.json"))("./dist/migrations.cjs");
+    const plan = targetMigrations.planMigrations(root, version, { fromVersion: current });
+    console.log(`Install: ${manager} install`);
+    targetMigrations.printMigrationPlan(plan);
     if (dryRun) {
       console.log("No app files changed.");
       return;
@@ -62,6 +65,9 @@ export async function upgrade(root: string, dryRun = false) {
     // Verified patched packages must be present before changing their file: pins.
     await releaseTools.materializeReleasePackages(manifest, root);
     releaseTools.verifyMaterializedReleasePackages(manifest, root);
+    // Scripts and native dependency declarations must reach the installer too.
+    // Keep the old receipt until installation and finalization both succeed.
+    targetMigrations.applyMigrationPlan(root, plan, false);
     upgradeDependencyPins(root, false, pins, requiredOverrides);
     await run(root, managerCommand(manager, ["install"]));
     const req = createRequire(path.join(root, "package.json"));
@@ -70,10 +76,10 @@ export async function upgrade(root: string, dryRun = false) {
     if (readJson(path.join(installed, "package.json")).version !== version) throw new Error(`Installation did not select Spark ${version}. Fix package-manager overrides and run spark upgrade again.`);
     const updatedCLI = cliRoot(installed);
     const { initializeTemplate } = createRequire(path.join(updatedCLI, "package.json"))("./dist/init-template.cjs");
-    const { migrateProject, refreshPointers } = createRequire(path.join(updatedCLI, "package.json"))("./dist/migrations.cjs");
+    const { recordProjectVersion, refreshPointers } = createRequire(path.join(updatedCLI, "package.json"))("./dist/migrations.cjs");
     initializeTemplate(root);
-    migrateProject(root, version, false);
     refreshPointers(root);
+    recordProjectVersion(root, version);
     console.log(`Updated Spark to ${version}.`);
   } finally {
     rmSync(temporary, { recursive: true, force: true });

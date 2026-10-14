@@ -43,7 +43,11 @@ beforeEach(() => {
     const cli = path.join(target, "vendor/node_modules/@legendapp/spark-cli");
     writeJson(path.join(cli, "package.json"), { name: "@legendapp/spark-cli", version: next, type: "module" });
     cpSync(path.join(framework, "packages/cli/dist"), path.join(cli, "dist"), { recursive: true });
-    appendFileSync(path.join(cli, "dist/migrations.cjs"), `\nmodule.exports.migrations.push({ version: ${JSON.stringify(next)}, automatic: false, apply(root) { fs.writeFileSync(path.join(root, '.spark/target-migration'), 'installed release'); } });\n`);
+    appendFileSync(path.join(cli, "dist/migrations.cjs"), `\nmodule.exports.migrations.push({ version: ${JSON.stringify(next)}, automatic: false, apply(context) {
+      context.writeFile('.spark/target-migration', 'installed release');
+      context.editJson('package.json', pkg => { pkg.scripts.check = 'tsc --noEmit'; });
+      context.manualStep('Review the target-only native module change.');
+    } });\n`);
     symlinkSync(path.join(framework, "node_modules"), path.join(cli, "node_modules"));
     const defaults = JSON.parse(readFileSync(path.join(framework, "packages/cli/templates/blank-typescript/package.json"), "utf8"));
     defaults.dependencies.react = "19.2.0";
@@ -56,10 +60,11 @@ beforeEach(() => {
   });
   vi.stubGlobal("fetch", vi.fn(async () => new Response(bytes)));
   vi.mocked(run).mockImplementation(async () => {
-    // The install sees target pins and verified archives; migrations follow it.
+    // The install sees target pins, verified archives and migrated scripts.
     expect(read("package.json").dependencies["@legendapp/spark"]).toBe(next);
     expect(read("package.json").dependencies.react).toBe("19.2.0");
     expect(read("package.json").overrides["@expo/cli"]).toBe("54.0.99");
+    expect(read("package.json").scripts.check).toBe("tsc --noEmit");
     const archive = read("package.json").overrides["@react-native-runtimes/core"].slice("file:./".length);
     expect(readFileSync(path.join(root, archive))).toEqual(bytes);
     expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(current + "\n");
@@ -69,7 +74,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals(); rmSync(root, { recursive: true, force: true }); });
 
-test.each(["npm", "pnpm", "yarn", "bun"] as const)("upgrade installs target release with %s before running its migrations", async manager => {
+test.each(["npm", "pnpm", "yarn", "bun"] as const)("upgrade migrates install inputs and finalizes after %s succeeds", async manager => {
   vi.mocked(packageManager).mockReturnValue(manager);
   await upgrade(root);
   expect(pacote.manifest).toHaveBeenCalledWith("@legendapp/spark@next", expect.any(Object));
@@ -82,6 +87,8 @@ test.each(["npm", "pnpm", "yarn", "bun"] as const)("upgrade installs target rele
   expect(readFileSync(path.join(root, "CLAUDE.md"), "utf8")).toContain("node_modules/@legendapp/spark/skills/spark/SKILL.md");
   expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(next + "\n");
   expect(readFileSync(path.join(root, ".spark/target-migration"), "utf8")).toBe("installed release");
+  expect(readFileSync(path.join(root, ".spark/upgrade-notes.md"), "utf8")).toContain(`../node_modules/@legendapp/spark/skills/spark/UPGRADING.md#${next.replaceAll('.', '')}`);
+  expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Review the target-only native module change."));
   const pkg = read("package.json");
   const overrides = manager === "pnpm" ? pkg.pnpm.overrides : manager === "yarn" ? pkg.resolutions : pkg.overrides;
   expect(overrides["@react-native-runtimes/core"]).toMatch(/^file:\.\/spark-packages\//);
@@ -99,6 +106,9 @@ test("dry-run previews target pins and leaves app files, install and migrations 
   expect(run).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
   expect(console.log).toHaveBeenCalledWith(expect.stringContaining("19.2.0"));
+  expect(console.log).toHaveBeenCalledWith("  Create .spark/target-migration");
+  expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Manual step"));
+  expect(existsSync(path.join(root, ".spark/upgrade-notes.md"))).toBe(false);
 });
 
 test("stable installs stay on latest", async () => {
@@ -107,6 +117,27 @@ test("stable installs stay on latest", async () => {
   writeJson(path.join(root, "node_modules/@legendapp/spark/package.json"), { version: current });
   await upgrade(root, true);
   expect(pacote.manifest).toHaveBeenCalledWith("@legendapp/spark@latest", expect.any(Object));
+});
+
+test("upgrade uses the recorded old version and runs every intermediate migration", async () => {
+  writeFileSync(path.join(root, ".spark/version"), "0.0.1-next.2\n");
+  writeJson(path.join(root, "desktop.config.json"), { projectId: "upgrade-test", platforms: ["macos"], window: { width: 1000, height: 700, restoreFrame: true } });
+  writeFileSync(path.join(root, "source.ts"), `import { showMessageDialog } from '@legendapp/spark/message-dialog';\n`);
+  const before = readFileSync(path.join(root, "desktop.config.json"));
+  await upgrade(root, true);
+  expect(console.log).toHaveBeenCalledWith("Migrations: 0.0.1-next.3 → 0.0.1-next.4 → 0.0.1-next.5");
+  expect(readFileSync(path.join(root, "desktop.config.json"))).toEqual(before);
+  expect(existsSync(path.join(root, ".spark/upgrade-notes.md"))).toBe(false);
+  const install = vi.mocked(run).getMockImplementation()!;
+  // The install fixture asserts the receipt still holds the recorded old version.
+  current = "0.0.1-next.2";
+  vi.mocked(run).mockImplementation(install);
+  await upgrade(root);
+  expect(read("desktop.config.json").window).toEqual({ size: { width: 1000, height: 700 }, restoreBounds: true });
+  expect(readFileSync(path.join(root, "source.ts"), "utf8")).toContain("@legendapp/spark/dialogs");
+  const notes = readFileSync(path.join(root, ".spark/upgrade-notes.md"), "utf8");
+  for (const version of ["0.0.1-next.3", "0.0.1-next.4", "0.0.1-next.5"]) expect(notes).toContain(`[${version}]`);
+  expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(next + "\n");
 });
 
 test("registry and archive failures do not change the app", async () => {
@@ -125,7 +156,7 @@ test("install failure keeps the previous migration stamp and is retryable", asyn
   await expect(upgrade(root)).rejects.toThrow("install failed");
   expect(read("package.json").dependencies["@legendapp/spark"]).toBe(next);
   expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(current + "\n");
-  expect(existsSync(path.join(root, "CLAUDE.md"))).toBe(false);
+  expect(existsSync(path.join(root, "CLAUDE.md"))).toBe(true);
   vi.mocked(run).mockImplementation(install);
   await upgrade(root);
   expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(next + "\n");
