@@ -428,7 +428,7 @@ Implementation progress and verification are tracked in [API cleanup](api-cleanu
 
 The [API design rules](api-design.md) govern imperative cores and optional React bindings for all capability families.
 
-### Customize release customizations
+### App customization
 
 `/customize` owns generation, review, preview, apply, restore-original, migration, cancellation and GitHub submission. The native host owns the app session and recovery; all operations are usable imperatively. `useCustomizeState` observes that session and removes its subscription on unmount without canceling app-owned work. Snapshot requests cannot overwrite a newer native event.
 

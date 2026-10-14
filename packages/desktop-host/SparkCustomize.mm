@@ -6,18 +6,18 @@
 #import <fcntl.h>
 #import <unistd.h>
 
-static NSDictionary *SERead(NSString *file) {
+static NSDictionary *SCRead(NSString *file) {
   NSData *data = [NSData dataWithContentsOfFile:file];
   id value = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
   return [value isKindOfClass:NSDictionary.class] ? value : @{};
 }
-static void SEWrite(NSString *file, NSDictionary *value) {
+static void SCWrite(NSString *file, NSDictionary *value) {
   [NSFileManager.defaultManager createDirectoryAtPath:file.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions:@0700} error:nil];
   NSError *error;
   NSData *data = [NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingPrettyPrinted error:&error];
   if (!data || ![data writeToFile:file options:NSDataWritingAtomic error:&error]) @throw [NSException exceptionWithName:@"SparkCustomize" reason:error.localizedDescription userInfo:nil];
 }
-static NSString *SEHash(NSString *file) {
+static NSString *SCHash(NSString *file) {
   NSInputStream *stream = [NSInputStream inputStreamWithFileAtPath:file]; [stream open];
   CC_SHA256_CTX context; CC_SHA256_Init(&context);
   uint8_t buffer[65536]; NSInteger count;
@@ -26,12 +26,12 @@ static NSString *SEHash(NSString *file) {
   unsigned char bytes[CC_SHA256_DIGEST_LENGTH]; CC_SHA256_Final(bytes, &context);
   NSMutableString *result = [NSMutableString new]; for (NSUInteger i=0;i<sizeof(bytes);i++) [result appendFormat:@"%02x",bytes[i]]; return result;
 }
-static BOOL SEIdentifier(NSString *value, NSString *pattern) {
+static BOOL SCIdentifier(NSString *value, NSString *pattern) {
   return [value isKindOfClass:NSString.class] && [value rangeOfString:pattern options:NSRegularExpressionSearch].location != NSNotFound;
 }
-static NSMutableSet<NSTask *> *SETasks;
-static BOOL SECancelRequested;
-static NSDictionary *SEResult(NSString *output) {
+static NSMutableSet<NSTask *> *SCTasks;
+static BOOL SCCancelRequested;
+static NSDictionary *SCResult(NSString *output) {
   for (NSString *line in [[output componentsSeparatedByString:@"\n"] reverseObjectEnumerator]) {
     NSData *data=[line dataUsingEncoding:NSUTF8StringEncoding];
     id value=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
@@ -39,11 +39,11 @@ static NSDictionary *SEResult(NSString *output) {
   }
   @throw [NSException exceptionWithName:@"E_INVALID_DATA" reason:@"Customize worker returned invalid data" userInfo:nil];
 }
-static NSString *SEPath(void) {
+static NSString *SCPath(void) {
   NSString *current=NSProcessInfo.processInfo.environment[@"PATH"] ?: @"/usr/bin:/bin:/usr/sbin:/sbin";
   return [NSString stringWithFormat:@"%@/.local/bin:%@/.bun/bin:%@/.claude/local:/opt/homebrew/bin:/usr/local/bin:%@",NSHomeDirectory(),NSHomeDirectory(),NSHomeDirectory(),current];
 }
-static NSDictionary *SEProvider(NSDictionary *value) {
+static NSDictionary *SCProvider(NSDictionary *value) {
   if(![value isKindOfClass:NSDictionary.class])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Invalid customize provider" userInfo:nil];
   NSString *kind=value[@"kind"],*model=value[@"model"];
   if([kind isEqual:@"cli"]) {
@@ -61,17 +61,17 @@ static NSDictionary *SEProvider(NSDictionary *value) {
   if(value[@"apiKey"] && (!remote || ![value[@"apiKey"] isKindOfClass:NSString.class]))@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"API keys are only supported for remote providers" userInfo:nil];
   return @{@"kind":kind,@"endpoint":url.string,@"model":model};
 }
-static NSString *SERun(NSString *executable, NSArray *arguments, NSDictionary *environment) {
-  if(SECancelRequested)@throw [NSException exceptionWithName:@"E_ABORTED" reason:@"Customize canceled; partial changes are retained" userInfo:nil];
+static NSString *SCRun(NSString *executable, NSArray *arguments, NSDictionary *environment) {
+  if(SCCancelRequested)@throw [NSException exceptionWithName:@"E_ABORTED" reason:@"Customization canceled; partial changes are retained" userInfo:nil];
   NSTask *task = [NSTask new]; task.executableURL = [NSURL fileURLWithPath:executable]; task.arguments = arguments;
   if (environment) task.environment = environment;
   NSPipe *pipe = [NSPipe pipe]; task.standardOutput = pipe; task.standardError = pipe;
   NSError *error; if (![task launchAndReturnError:&error]) @throw [NSException exceptionWithName:@"SparkCustomize" reason:error.localizedDescription userInfo:nil];
-  @synchronized(NSTask.class) { if(!SETasks)SETasks=[NSMutableSet new]; [SETasks addObject:task]; if(SECancelRequested && task.running)[task terminate]; }
+  @synchronized(NSTask.class) { if(!SCTasks)SCTasks=[NSMutableSet new]; [SCTasks addObject:task]; if(SCCancelRequested && task.running)[task terminate]; }
   NSData *data = [pipe.fileHandleForReading readDataToEndOfFile]; [task waitUntilExit];
-  @synchronized(NSTask.class) { [SETasks removeObject:task]; }
+  @synchronized(NSTask.class) { [SCTasks removeObject:task]; }
   NSString *output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"";
-  if(SECancelRequested)@throw [NSException exceptionWithName:@"E_ABORTED" reason:@"Customize canceled; partial changes are retained" userInfo:nil];
+  if(SCCancelRequested)@throw [NSException exceptionWithName:@"E_ABORTED" reason:@"Customization canceled; partial changes are retained" userInfo:nil];
   if (task.terminationStatus) @throw [NSException exceptionWithName:@"SparkCustomize" reason:[NSString stringWithFormat:@"%@ failed (%d). %@", executable.lastPathComponent, task.terminationStatus, output] userInfo:@{@"output":output}];
   return output;
 }
@@ -97,18 +97,18 @@ static NSString *SERun(NSString *executable, NSArray *arguments, NSDictionary *e
 @property NSWindow *reviewWindow;
 @property NSDictionary *githubSession;
 @end
-static SparkCustomizeController *SEController;
+static SparkCustomizeController *SCController;
 @implementation SparkCustomizeController
 - (instancetype)init {
   if ((self = [super init])) {
-    _manifest = SERead([NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"spark-customize.json"]);
+    _manifest = SCRead([NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"spark-customize.json"]);
     NSString *base = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
     _support = [[base stringByAppendingPathComponent:NSBundle.mainBundle.bundleIdentifier] stringByAppendingPathComponent:@"SparkCustomize"];
     _directory = [[_support stringByAppendingPathComponent:@"releases"] stringByAppendingPathComponent:_manifest[@"release"] ?: @"disabled"];
     _phase=@"idle"; _message=@"Ready to customize";
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(handleCall:) name:@"SparkCustomizeCall" object:nil];
     _forceOriginal = [NSProcessInfo.processInfo.arguments containsObject:@"--spark-original"] || ([NSEvent modifierFlags] & NSEventModifierFlagOption);
-    [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationWillTerminateNotification object:nil queue:nil usingBlock:^(NSNotification *note) { @synchronized(NSTask.class) { for(NSTask *task in SETasks) if(task.running)[task terminate]; } }];
+    [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationWillTerminateNotification object:nil queue:nil usingBlock:^(NSNotification *note) { @synchronized(NSTask.class) { for(NSTask *task in SCTasks) if(task.running)[task terminate]; } }];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(healthy:) name:@"RCTContentDidAppearNotification" object:nil];
     if(_manifest.count && ![_manifest[@"customize"][@"ui"] isEqual:@"custom"])[NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *event) {
       if ((event.modifierFlags & (NSEventModifierFlagCommand|NSEventModifierFlagShift)) == (NSEventModifierFlagCommand|NSEventModifierFlagShift) && [event.charactersIgnoringModifiers.lowercaseString isEqual:@"e"]) { [self show:nil]; return nil; }
@@ -213,7 +213,7 @@ static SparkCustomizeController *SEController;
   return provider;
 }
 - (void)configure:(NSDictionary *)value {
-  NSDictionary *provider=SEProvider(value);
+  NSDictionary *provider=SCProvider(value);
   if(value[@"apiKey"])[self credential:value[@"apiKey"]];
   [NSUserDefaults.standardUserDefaults setObject:provider forKey:@"SparkCustomizeProvider"];
   if(self.panel){[self.providerChoice selectItemAtIndex:[provider[@"kind"] isEqual:@"cli"] ? ([provider[@"tool"] isEqual:@"claude"] ? 1 : 0) : ([provider[@"kind"] isEqual:@"local"] ? 2 : 3)];self.endpoint.stringValue=provider[@"endpoint"] ?: @"";self.model.stringValue=provider[@"model"] ?: @"";self.key.stringValue=[provider[@"kind"] isEqual:@"remote"] ? [self credential:nil] : @"";[self syncProviderFields];}
@@ -223,13 +223,13 @@ static SparkCustomizeController *SEController;
   for(NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:[self.support stringByAppendingPathComponent:@"releases"] error:nil]) {
     if([name isEqual:self.manifest[@"release"]])continue;
     NSString *folder=[[self.support stringByAppendingPathComponent:@"releases"] stringByAppendingPathComponent:name];
-    if(![SERead([folder stringByAppendingPathComponent:@"state.json"])[@"status"] isEqual:@"customized"])continue;
+    if(![SCRead([folder stringByAppendingPathComponent:@"state.json"])[@"status"] isEqual:@"customized"])continue;
     NSDate *date=[[NSFileManager.defaultManager attributesOfItemAtPath:[folder stringByAppendingPathComponent:@"state.json"] error:nil] fileModificationDate];
     if(date && [date compare:newest]==NSOrderedDescending){newest=date;previous=folder;}
   }return previous;
 }
 - (NSDictionary *)state {
-  return @{@"enabled":@(self.manifest.count>0),@"busy":@(self.busy),@"phase":self.phase ?: @"idle",@"message":self.message ?: @"",@"ready":@(SERead([self path:@"ready.json"]).count>0),@"customized":@(!self.forceOriginal && SERead([self path:@"active.json"]).count>0),@"previewing":@(self.previewRecord!=nil),@"migrationAvailable":@([self previousRelease]!=nil),@"provider":[self provider],@"githubAuthenticated":@([self githubAuthenticated]),@"repository":self.manifest[@"repository"] ?: @""};
+  return @{@"enabled":@(self.manifest.count>0),@"busy":@(self.busy),@"phase":self.phase ?: @"idle",@"message":self.message ?: @"",@"ready":@(SCRead([self path:@"ready.json"]).count>0),@"customized":@(!self.forceOriginal && SCRead([self path:@"active.json"]).count>0),@"previewing":@(self.previewRecord!=nil),@"migrationAvailable":@([self previousRelease]!=nil),@"provider":[self provider],@"githubAuthenticated":@([self githubAuthenticated]),@"repository":self.manifest[@"repository"] ?: @""};
 }
 - (void)emitState {
   self.status.stringValue=self.message;
@@ -237,7 +237,7 @@ static SparkCustomizeController *SEController;
 }
 - (void)perform:(NSString *)phase message:(NSString *)message block:(id (^)(void))block completion:(void (^)(id,NSException *))completion {
   if(self.busy){if(completion)completion(nil,[NSException exceptionWithName:@"E_BUSY" reason:@"A customization operation is already running" userInfo:nil]);return;}
-  self.busy=YES;SECancelRequested=NO;self.phase=phase;self.message=message;[self emitState];
+  self.busy=YES;SCCancelRequested=NO;self.phase=phase;self.message=message;[self emitState];
   for(NSButton *button in self.buttons)button.enabled=NO;self.buttons.firstObject.title=@"Cancel";self.buttons.firstObject.enabled=YES;
   self.providerChoice.enabled=NO;self.endpoint.enabled=NO;self.model.enabled=NO;self.key.enabled=NO;
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0), ^{
@@ -255,11 +255,11 @@ static SparkCustomizeController *SEController;
 }
 - (void)cancel {
   if(!self.busy)return;
-  @synchronized(NSTask.class){SECancelRequested=YES;for(NSTask *task in SETasks)if(task.running)[task terminate];}
+  @synchronized(NSTask.class){SCCancelRequested=YES;for(NSTask *task in SCTasks)if(task.running)[task terminate];}
   self.message=@"Canceling; any generated candidate and prompt will be retained.";[self emitState];
 }
 - (NSString *)download:(NSDictionary *)asset kind:(NSString *)kind {
-  if (!SEIdentifier(asset[@"sha256"], @"^[a-f0-9]{64}$") || !SEIdentifier(asset[@"url"], @"^https://github[.]com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases/download/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$") || [asset[@"size"] longLongValue]<=0) @throw [NSException exceptionWithName:@"SparkCustomize" reason:@"Invalid pinned download." userInfo:nil];
+  if (!SCIdentifier(asset[@"sha256"], @"^[a-f0-9]{64}$") || !SCIdentifier(asset[@"url"], @"^https://github[.]com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases/download/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$") || [asset[@"size"] longLongValue]<=0) @throw [NSException exceptionWithName:@"SparkCustomize" reason:@"Invalid pinned download." userInfo:nil];
   NSString *cache=[[[self.support stringByDeletingLastPathComponent] stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Legend Spark/CustomizeToolkits"];
   [NSFileManager.defaultManager createDirectoryAtPath:cache withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions:@0700} error:nil];
   NSString *target=[cache stringByAppendingPathComponent:asset[@"sha256"]];
@@ -267,15 +267,15 @@ static SparkCustomizeController *SEController;
   if (fd<0 || flock(fd,LOCK_EX)) { if(fd>=0)close(fd); @throw [NSException exceptionWithName:@"SparkCustomize" reason:@"Could not lock download cache." userInfo:nil]; }
   NSString *stage=[target stringByAppendingFormat:@".pending-%@",NSUUID.UUID.UUIDString];
   @try {
-    if ([SERead([target stringByAppendingPathComponent:@"complete.json"])[@"sha256"] isEqual:asset[@"sha256"]]) return [target stringByAppendingPathComponent:kind];
+    if ([SCRead([target stringByAppendingPathComponent:@"complete.json"])[@"sha256"] isEqual:asset[@"sha256"]]) return [target stringByAppendingPathComponent:kind];
     [NSFileManager.defaultManager createDirectoryAtPath:stage withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions:@0700} error:nil];
     NSString *archive=[stage stringByAppendingPathComponent:@"download.tgz"];
-    SERun(@"/usr/bin/curl",@[@"--fail",@"--location",@"--proto",@"=https",@"--proto-redir",@"=https",@"--connect-timeout",@"30",@"--max-time",@"1800",@"--max-filesize",[asset[@"size"] stringValue],@"--output",archive,asset[@"url"]],nil);
+    SCRun(@"/usr/bin/curl",@[@"--fail",@"--location",@"--proto",@"=https",@"--proto-redir",@"=https",@"--connect-timeout",@"30",@"--max-time",@"1800",@"--max-filesize",[asset[@"size"] stringValue],@"--output",archive,asset[@"url"]],nil);
     NSDictionary *attributes=[NSFileManager.defaultManager attributesOfItemAtPath:archive error:nil];
-    if (![SEHash(archive) isEqual:asset[@"sha256"]] || [attributes fileSize] != [asset[@"size"] unsignedLongLongValue]) @throw [NSException exceptionWithName:@"SparkCustomize" reason:@"Download checksum or size mismatch." userInfo:nil];
-    SERun(@"/usr/bin/tar",@[@"-xzf",archive,@"-C",stage],nil);
+    if (![SCHash(archive) isEqual:asset[@"sha256"]] || [attributes fileSize] != [asset[@"size"] unsignedLongLongValue]) @throw [NSException exceptionWithName:@"SparkCustomize" reason:@"Download checksum or size mismatch." userInfo:nil];
+    SCRun(@"/usr/bin/tar",@[@"-xzf",archive,@"-C",stage],nil);
     if (![NSFileManager.defaultManager fileExistsAtPath:[stage stringByAppendingPathComponent:kind]]) @throw [NSException exceptionWithName:@"SparkCustomize" reason:@"Incomplete customize archive." userInfo:nil];
-    [NSFileManager.defaultManager removeItemAtPath:archive error:nil]; SEWrite([stage stringByAppendingPathComponent:@"complete.json"],@{@"sha256":asset[@"sha256"]});
+    [NSFileManager.defaultManager removeItemAtPath:archive error:nil]; SCWrite([stage stringByAppendingPathComponent:@"complete.json"],@{@"sha256":asset[@"sha256"]});
     [NSFileManager.defaultManager removeItemAtPath:target error:nil]; NSError *error;
     if (![NSFileManager.defaultManager moveItemAtPath:stage toPath:target error:&error]) @throw [NSException exceptionWithName:@"SparkCustomize" reason:error.localizedDescription userInfo:nil];
     return [target stringByAppendingPathComponent:kind];
@@ -283,28 +283,28 @@ static SparkCustomizeController *SEController;
 }
 - (NSString *)worker:(NSArray *)arguments key:(NSString *)key {
   NSMutableDictionary *env=[NSProcessInfo.processInfo.environment mutableCopy];
-  env[@"PATH"]=SEPath();
+  env[@"PATH"]=SCPath();
   [env removeObjectForKey:@"SPARK_CUSTOMIZE_AI_KEY"];
   [env removeObjectForKey:@"SPARK_CUSTOMIZE_GITHUB_TOKEN"];[env removeObjectForKey:@"SPARK_CUSTOMIZE_GITHUB_REQUEST"];
   env[@"SPARK_HOME"]=[[self.support stringByDeletingLastPathComponent].stringByDeletingLastPathComponent stringByAppendingPathComponent:@"Legend Spark"];
   if(key.length)env[@"SPARK_CUSTOMIZE_AI_KEY"]=key;
   NSArray *args=[@[[self.toolkit stringByAppendingPathComponent:@"runtime-bootstrap.sh"],[self.toolkit stringByAppendingPathComponent:@"customize-worker.cjs"]] arrayByAddingObjectsFromArray:arguments];
-  return SERun(@"/bin/sh",args,env);
+  return SCRun(@"/bin/sh",args,env);
 }
 - (NSDictionary *)github:(NSString *)command request:(NSDictionary *)request {
   // GitHub credentials go only to the trusted submission process, never to the AI worker.
-  NSMutableDictionary *env=[NSProcessInfo.processInfo.environment mutableCopy];env[@"PATH"]=SEPath();
+  NSMutableDictionary *env=[NSProcessInfo.processInfo.environment mutableCopy];env[@"PATH"]=SCPath();
   env[@"SPARK_HOME"]=[[self.support stringByDeletingLastPathComponent].stringByDeletingLastPathComponent stringByAppendingPathComponent:@"Legend Spark"];
   [env removeObjectForKey:@"SPARK_CUSTOMIZE_AI_KEY"];[env removeObjectForKey:@"SPARK_CUSTOMIZE_GITHUB_TOKEN"];
   env[@"SPARK_CUSTOMIZE_GITHUB_REQUEST"]=[[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:request options:0 error:nil] encoding:NSUTF8StringEncoding];
   if([command isEqual:@"submit"])env[@"SPARK_CUSTOMIZE_GITHUB_TOKEN"]=[self githubCredential:nil];
   self.toolkit=[self download:self.manifest[@"toolkit"] kind:@"toolkit"];
   NSArray *args=@[[self.toolkit stringByAppendingPathComponent:@"runtime-bootstrap.sh"],[self.toolkit stringByAppendingPathComponent:@"customize-github.cjs"],command,self.directory];
-  @try{return SEResult(SERun(@"/bin/sh",args,env));}
+  @try{return SCResult(SCRun(@"/bin/sh",args,env));}
   @catch(NSException *error){
     if([error.name hasPrefix:@"E_"])@throw;
     NSDictionary *failure;
-    @try{failure=SEResult(error.userInfo[@"output"] ?: @"");} @catch(NSException *ignored){}
+    @try{failure=SCResult(error.userInfo[@"output"] ?: @"");} @catch(NSException *ignored){}
     if([@[@"E_INVALID_ARGUMENT",@"E_UNSUPPORTED_OPTION",@"E_INVALID_DATA",@"E_PERMISSION_DENIED",@"E_TIMEOUT",@"E_NATIVE"] containsObject:failure[@"error"]] && [failure[@"message"] isKindOfClass:NSString.class])@throw [NSException exceptionWithName:failure[@"error"] reason:failure[@"message"] userInfo:nil];
     // Do not propagate unknown process output to UI: a credential response must stay native.
     @throw [NSException exceptionWithName:@"E_NATIVE" reason:@"GitHub operation failed. Check authorization and whether the source matches the repository." userInfo:nil];
@@ -359,15 +359,15 @@ static SparkCustomizeController *SEController;
 - (NSDictionary *)generateRequest:(NSDictionary *)args {
   NSString *prompt=args[@"prompt"];
   if(![prompt isKindOfClass:NSString.class] || ![prompt stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length || prompt.length>32000)@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Enter a prompt of at most 32000 characters" userInfo:nil];
-  NSDictionary *raw=args[@"provider"] ?: [self provider],*provider=SEProvider(raw);
+  NSDictionary *raw=args[@"provider"] ?: [self provider],*provider=SCProvider(raw);
   if(![provider[@"kind"] isEqual:@"local"] && ![args[@"allowSourceSharing"] isEqual:@YES])@throw [NSException exceptionWithName:@"E_PERMISSION_DENIED" reason:@"Explain source sharing and obtain consent before generating edits" userInfo:nil];
-  if([args[@"migration"] boolValue] && !SERead([self path:@"state.json"])[@"migration"])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Prepare an edit migration first" userInfo:nil];
+  if([args[@"migration"] boolValue] && !SCRead([self path:@"state.json"])[@"migration"])@throw [NSException exceptionWithName:@"E_INVALID_ARGUMENT" reason:@"Prepare an edit migration first" userInfo:nil];
   [self configure:raw];
   NSMutableDictionary *request=[provider mutableCopy];request[@"provider"]=request[@"kind"];[request removeObjectForKey:@"kind"];request[@"prompt"]=prompt;request[@"allowSourceSharing"]=@YES;request[@"migration"]=@([args[@"migration"] boolValue]);return request;
 }
 - (NSDictionary *)runPrompt:(NSDictionary *)request key:(NSString *)key {
-  [self prepare];NSString *file=[self path:@"request.json"];SEWrite(file,request);
-  @try { return SEResult([self worker:@[@"prompt",self.directory,file] key:key]); }
+  [self prepare];NSString *file=[self path:@"request.json"];SCWrite(file,request);
+  @try { return SCResult([self worker:@[@"prompt",self.directory,file] key:key]); }
   @finally { [NSFileManager.defaultManager removeItemAtPath:file error:nil]; }
 }
 - (void)generate:(id)sender { if(self.busy){[self cancel];return;}[self generateMigration:NO]; }
@@ -380,12 +380,12 @@ static SparkCustomizeController *SEController;
   } @catch(NSException *e){self.message=e.reason;[self emitState];}
 }
 - (NSDictionary *)prepareMigration {
-  [self prepare];NSDictionary *migration=SERead([self path:@"state.json"])[@"migration"];
-  if(!migration){NSString *previous=[self previousRelease];if(!previous)return @{@"status":@"none",@"conflicts":@[]};[self worker:@[@"migrate",previous,self.directory] key:nil];migration=SERead([self path:@"state.json"])[@"migration"];}
+  [self prepare];NSDictionary *migration=SCRead([self path:@"state.json"])[@"migration"];
+  if(!migration){NSString *previous=[self previousRelease];if(!previous)return @{@"status":@"none",@"conflicts":@[]};[self worker:@[@"migrate",previous,self.directory] key:nil];migration=SCRead([self path:@"state.json"])[@"migration"];}
   if(![migration[@"conflicts"] count])[self worker:@[@"build",self.directory,migration[@"candidate"]] key:nil];return migration;
 }
 - (void)migrate:(id)sender {
-  if(SERead([self path:@"state.json"])[@"migration"]) {
+  if(SCRead([self path:@"state.json"])[@"migration"]) {
     if(!self.prompt.string.length)self.prompt.string=@"Preserve my previous customizations on this updated app. Use the saved prompts to understand their intent and resolve incompatibilities.";
     [self generateMigration:YES];return;
   }
@@ -398,18 +398,18 @@ static SparkCustomizeController *SEController;
 }
 - (NSDictionary *)editReview {
   NSString *text=[NSString stringWithContentsOfFile:[self path:@"review.txt"] encoding:NSUTF8StringEncoding error:nil] ?: @"";
-  NSDictionary *state=SERead([self path:@"state.json"]);NSMutableArray *history=[NSMutableArray arrayWithArray:state[@"inheritedPrompts"] ?: @[]];[history addObjectsFromArray:state[@"history"] ?: @[]];
+  NSDictionary *state=SCRead([self path:@"state.json"]);NSMutableArray *history=[NSMutableArray arrayWithArray:state[@"inheritedPrompts"] ?: @[]];[history addObjectsFromArray:state[@"history"] ?: @[]];
   // The full diff is already in text; avoid sending stored file contents twice over the bridge.
   NSMutableArray *prompts=[NSMutableArray new];
   for(NSDictionary *item in history){NSMutableDictionary *metadata=[NSMutableDictionary new];for(NSString *key in @[@"id",@"prompt",@"baseRelease",@"created",@"model",@"provider",@"providerKind",@"status",@"summary",@"error"])if(item[key])metadata[key]=item[key];[prompts addObject:metadata];}
   NSMutableDictionary *review=[@{@"text":text,@"prompts":prompts} mutableCopy];
-  NSString *candidate=SERead([self path:@"ready.json"])[@"candidate"];if(candidate)review[@"candidate"]=candidate;return review;
+  NSString *candidate=SCRead([self path:@"ready.json"])[@"candidate"];if(candidate)review[@"candidate"]=candidate;return review;
 }
 - (void)review:(id)sender {
   NSString *content=[NSString stringWithContentsOfFile:[self path:@"review.txt"] encoding:NSUTF8StringEncoding error:nil];
   if(!content.length){self.status.stringValue=@"Generate or migrate a candidate to review changes.";return;}
   NSMutableString *history=[content mutableCopy];[history appendString:@"\n\nSaved prompts\n"];
-  for(NSDictionary *item in SERead([self path:@"state.json"])[@"history"]){[history appendFormat:@"\n%@ — %@\n%@\n",item[@"created"] ?: @"",item[@"status"] ?: @"",item[@"prompt"] ?: @""];}
+  for(NSDictionary *item in SCRead([self path:@"state.json"])[@"history"]){[history appendFormat:@"\n%@ — %@\n%@\n",item[@"created"] ?: @"",item[@"status"] ?: @"",item[@"prompt"] ?: @""];}
   content=history;
   if(!self.reviewWindow){self.reviewWindow=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,800,600) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];self.reviewWindow.releasedWhenClosed=NO;self.reviewWindow.title=@"Review customization";[self.reviewWindow center];}
   NSScrollView *scroll=[[NSScrollView alloc] initWithFrame:self.reviewWindow.contentView.bounds];scroll.autoresizingMask=NSViewWidthSizable|NSViewHeightSizable;scroll.hasVerticalScroller=YES;
@@ -417,9 +417,9 @@ static SparkCustomizeController *SEController;
   self.reviewWindow.contentView=scroll;[self.reviewWindow makeKeyAndOrderFront:nil];
 }
 - (void)activateCandidate:(BOOL)preview {
-  [self prepare];[self worker:@[preview ? @"verify" : @"accept",self.directory] key:nil];NSDictionary *ready=SERead([self path:@"ready.json"]);
-  SEWrite([self path:@"pending.json"],@{@"previous":SERead([self path:@"active.json"]),@"launched":@NO,@"activation":NSUUID.UUID.UUIDString});
-  if(!preview)SEWrite([self path:@"active.json"],ready);
+  [self prepare];[self worker:@[preview ? @"verify" : @"accept",self.directory] key:nil];NSDictionary *ready=SCRead([self path:@"ready.json"]);
+  SCWrite([self path:@"pending.json"],@{@"previous":SCRead([self path:@"active.json"]),@"launched":@NO,@"activation":NSUUID.UUID.UUIDString});
+  if(!preview)SCWrite([self path:@"active.json"],ready);
   dispatch_async(dispatch_get_main_queue(),^{self.previewRecord=preview ? ready : nil;self.forceOriginal=NO;self.started=NO;[self emitState];});
 }
 - (void)reload {
@@ -467,7 +467,7 @@ static SparkCustomizeController *SEController;
   } @catch(NSException *error){done(nil,error);}
 }
 - (void)recoverActivation:(NSString *)activation {
-  if([SERead([self path:@"pending.json"])[@"activation"] isEqual:activation]) { [self show:nil];[self original:nil];self.status.stringValue=@"The customization did not render within 30 seconds. Restored the original; your changes are preserved."; }
+  if([SCRead([self path:@"pending.json"])[@"activation"] isEqual:activation]) { [self show:nil];[self original:nil];self.status.stringValue=@"The customization did not render within 30 seconds. Restored the original; your changes are preserved."; }
 }
 - (void)healthy:(NSNotification *)notification {
   if([notification.object isKindOfClass:NSView.class] && ![(NSView *)notification.object window])return;
@@ -477,41 +477,41 @@ static SparkCustomizeController *SEController;
   NSURL *original=[NSBundle.mainBundle URLForResource:@"main" withExtension:@"jsbundle"];
   if(self.forceOriginal)return original;
   if(!self.started) {
-    NSDictionary *pending=SERead([self path:@"pending.json"]);
-    if([pending[@"launched"] boolValue]) {SEWrite([self path:@"active.json"],pending[@"previous"] ?: @{});[NSFileManager.defaultManager removeItemAtPath:[self path:@"pending.json"] error:nil];}
+    NSDictionary *pending=SCRead([self path:@"pending.json"]);
+    if([pending[@"launched"] boolValue]) {SCWrite([self path:@"active.json"],pending[@"previous"] ?: @{});[NSFileManager.defaultManager removeItemAtPath:[self path:@"pending.json"] error:nil];}
     else if(pending.count) {
       NSString *activation=pending[@"activation"] ?: NSUUID.UUID.UUIDString;
-      SEWrite([self path:@"pending.json"],@{@"previous":pending[@"previous"] ?: @{},@"launched":@YES,@"activation":activation});
+      SCWrite([self path:@"pending.json"],@{@"previous":pending[@"previous"] ?: @{},@"launched":@YES,@"activation":activation});
       dispatch_after(dispatch_time(DISPATCH_TIME_NOW,30*NSEC_PER_SEC),dispatch_get_main_queue(),^{ [self recoverActivation:activation]; });
     }
     self.started=YES;
   }
-  NSDictionary *active=self.previewRecord ?: SERead([self path:@"active.json"]);
-  if(![active[@"release"] isEqual:self.manifest[@"release"]] || ![active[@"fingerprint"] isEqual:self.manifest[@"runtime"][@"fingerprint"]] || !SEIdentifier(active[@"build"],@"^[A-Fa-f0-9-]{36}$"))return original;
+  NSDictionary *active=self.previewRecord ?: SCRead([self path:@"active.json"]);
+  if(![active[@"release"] isEqual:self.manifest[@"release"]] || ![active[@"fingerprint"] isEqual:self.manifest[@"runtime"][@"fingerprint"]] || !SCIdentifier(active[@"build"],@"^[A-Fa-f0-9-]{36}$"))return original;
   NSString *file=[[[self path:@"builds"] stringByAppendingPathComponent:active[@"build"]] stringByAppendingPathComponent:@"main.jsbundle"];
-  if(![SEHash(file) isEqual:active[@"bundleHash"]])return original;
+  if(![SCHash(file) isEqual:active[@"bundleHash"]])return original;
   return [NSURL fileURLWithPath:file];
 }
 @end
 static void SparkCustomizeStart(void) {
-  if(SEController)return;SEController=[SparkCustomizeController new];
-  if(!SEController.manifest.count)return;
-  NSString *notice=[@"SparkCustomizeSeen-" stringByAppendingString:SEController.manifest[@"release"]];
-  if(![SEController.manifest[@"customize"][@"ui"] isEqual:@"custom"] && ![NSUserDefaults.standardUserDefaults boolForKey:notice] && !SERead([SEController path:@"state.json"]).count) {
-    for(NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:[SEController.support stringByAppendingPathComponent:@"releases"] error:nil]) {
-      NSDictionary *state=SERead([[[SEController.support stringByAppendingPathComponent:@"releases"] stringByAppendingPathComponent:name] stringByAppendingPathComponent:@"state.json"]);
+  if(SCController)return;SCController=[SparkCustomizeController new];
+  if(!SCController.manifest.count)return;
+  NSString *notice=[@"SparkCustomizeSeen-" stringByAppendingString:SCController.manifest[@"release"]];
+  if(![SCController.manifest[@"customize"][@"ui"] isEqual:@"custom"] && ![NSUserDefaults.standardUserDefaults boolForKey:notice] && !SCRead([SCController path:@"state.json"]).count) {
+    for(NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:[SCController.support stringByAppendingPathComponent:@"releases"] error:nil]) {
+      NSDictionary *state=SCRead([[[SCController.support stringByAppendingPathComponent:@"releases"] stringByAppendingPathComponent:name] stringByAppendingPathComponent:@"state.json"]);
       if([state[@"status"] isEqual:@"customized"]) {
-        dispatch_async(dispatch_get_main_queue(),^{[SEController show:nil];SEController.status.stringValue=@"This update is running the original app. Your previous changes and prompts are preserved. Choose Migrate edits to bring them forward.";});break;
+        dispatch_async(dispatch_get_main_queue(),^{[SCController show:nil];SCController.status.stringValue=@"This update is running the original app. Your previous changes and prompts are preserved. Choose Migrate edits to bring them forward.";});break;
       }
     }
     [NSUserDefaults.standardUserDefaults setBool:YES forKey:notice];
   }
 }
-static NSURL *SparkCustomizeBundleURL(void) { @try { SparkCustomizeStart();return [SEController bundleURL]; } @catch(NSException *exception) { return [NSBundle.mainBundle URLForResource:@"main" withExtension:@"jsbundle"]; } }
+static NSURL *SparkCustomizeBundleURL(void) { @try { SparkCustomizeStart();return [SCController bundleURL]; } @catch(NSException *exception) { return [NSBundle.mainBundle URLForResource:@"main" withExtension:@"jsbundle"]; } }
 static NSMenu *SparkCustomizeDockMenu(NSMenu *existing) {
   SparkCustomizeStart();
-  if(!SEController.manifest.count || [SEController.manifest[@"customize"][@"ui"] isEqual:@"custom"])return existing;
+  if(!SCController.manifest.count || [SCController.manifest[@"customize"][@"ui"] isEqual:@"custom"])return existing;
   NSMenu *menu=existing ? [existing copy] : [NSMenu new];
   NSMenuItem *item=[[NSMenuItem alloc] initWithTitle:@"Customize app…" action:@selector(show:) keyEquivalent:@""];
-  item.target=SEController;[menu addItem:item];return menu;
+  item.target=SCController;[menu addItem:item];return menu;
 }

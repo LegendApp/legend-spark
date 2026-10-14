@@ -27,8 +27,8 @@ static int installedMonitors;
 - (NSString *)worker:(NSArray *)args key:(NSString *)key {
   self.receivedKey=key;
   if([args.firstObject isEqual:@"prompt"]){
-    NSDictionary *request=SERead(args[2]);SEWrite([self path:@"ready.json"],@{@"candidate":@"fixture"});
-    SEWrite([self path:@"state.json"],@{@"history":@[@{@"prompt":request[@"prompt"],@"status":@"needs-review",@"patch":@[@{@"contents":@"File contents stay on disk"}]}]});
+    NSDictionary *request=SCRead(args[2]);SCWrite([self path:@"ready.json"],@{@"candidate":@"fixture"});
+    SCWrite([self path:@"state.json"],@{@"history":@[@{@"prompt":request[@"prompt"],@"status":@"needs-review",@"patch":@[@{@"contents":@"File contents stay on disk"}]}]});
     [@"Complete candidate review" writeToFile:[self path:@"review.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
     return @"{\"candidate\":\"fixture\",\"status\":\"needs-review\",\"summary\":\"Edited\",\"changedFiles\":[\"App.js\"]}";
   }
@@ -60,7 +60,7 @@ int main(int argc, const char **argv) { @autoreleasepool {
   SparkCustomizeController *controller=[SparkCustomizeController new];
   check(controller.manifest.count==0 && installedMonitors==0,@"App without customize manifest does not install a key monitor");
   method_exchangeImplementations(originalMonitor,fixtureMonitor);
-  SEController=controller;NSMenu *existingMenu=[NSMenu new];[existingMenu addItemWithTitle:@"Existing item" action:nil keyEquivalent:@""];
+  SCController=controller;NSMenu *existingMenu=[NSMenu new];[existingMenu addItemWithTitle:@"Existing item" action:nil keyEquivalent:@""];
   check(SparkCustomizeDockMenu(existingMenu)==existingMenu && existingMenu.numberOfItems==1,@"App without customize manifest preserves its Dock menu");
   check(SparkCustomizeDockMenu(nil)==nil,@"App without customize manifest does not add a Dock menu");
   NSString *folder=[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
@@ -70,26 +70,26 @@ int main(int argc, const char **argv) { @autoreleasepool {
   NSString *file=[[[controller.directory stringByAppendingPathComponent:@"builds"] stringByAppendingPathComponent:build] stringByAppendingPathComponent:@"main.jsbundle"];
   [NSFileManager.defaultManager createDirectoryAtPath:file.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
   [@"compiled custom bundle" writeToFile:file atomically:YES encoding:NSUTF8StringEncoding error:nil];
-  NSDictionary *active=@{@"release":@"release-1",@"fingerprint":@"native-1",@"build":build,@"bundleHash":SEHash(file)};
-  SEWrite([controller path:@"active.json"],active);
+  NSDictionary *active=@{@"release":@"release-1",@"fingerprint":@"native-1",@"build":build,@"bundleHash":SCHash(file)};
+  SCWrite([controller path:@"active.json"],active);
   check([[controller bundleURL].path isEqual:file],@"Loads compatible custom bundle");
   controller.forceOriginal=YES;check(![[controller bundleURL].path isEqual:file],@"Factory override ignores custom bundle");controller.forceOriginal=NO;
-  NSMutableDictionary *wrong=[active mutableCopy];wrong[@"fingerprint"]=@"old-shell";SEWrite([controller path:@"active.json"],wrong);
+  NSMutableDictionary *wrong=[active mutableCopy];wrong[@"fingerprint"]=@"old-shell";SCWrite([controller path:@"active.json"],wrong);
   check(![[controller bundleURL].path isEqual:file],@"Rejects old native fingerprint");
-  SEWrite([controller path:@"active.json"],active);SEWrite([controller path:@"pending.json"],@{@"launched":@YES,@"previous":@{}});controller.started=NO;
+  SCWrite([controller path:@"active.json"],active);SCWrite([controller path:@"pending.json"],@{@"launched":@YES,@"previous":@{}});controller.started=NO;
   check(![[controller bundleURL].path isEqual:file],@"Rolls back interrupted first launch");
-  SEWrite([controller path:@"active.json"],active);SEWrite([controller path:@"pending.json"],@{@"launched":@NO,@"previous":@{}});controller.started=NO;
+  SCWrite([controller path:@"active.json"],active);SCWrite([controller path:@"pending.json"],@{@"launched":@NO,@"previous":@{}});controller.started=NO;
   check([[controller bundleURL].path isEqual:file],@"Activates pending candidate");
-  check([SERead([controller path:@"pending.json"])[@"launched"] boolValue],@"Records launch before executing JS");
+  check([SCRead([controller path:@"pending.json"])[@"launched"] boolValue],@"Records launch before executing JS");
   [controller recoverActivation:@"an-older-preview"];check(!controller.forceOriginal,@"Old preview timeout cannot roll back a newer activation");
-  [controller healthy:nil];check(!SERead([controller path:@"pending.json"]).count,@"First render acknowledges startup");
+  [controller healthy:nil];check(!SCRead([controller path:@"pending.json"]).count,@"First render acknowledges startup");
   [@"corrupt" writeToFile:file atomically:YES encoding:NSUTF8StringEncoding error:nil];check(![[controller bundleURL].path isEqual:file],@"Rejects corrupted bytecode");
   [@"Prompt: Make the greeting blue.\n\nCandidate ready for review.\n\n--- index.js\n+++ index.js\n- original\n+ customized\n" writeToFile:[controller path:@"review.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
   if(argc>1 && strcmp(argv[1],"--ui")==0){[controller show:nil];[NSApp run];}
   // Switch the notification owner, then exercise the actual asynchronous native
   // API used by custom React UI, without downloading tools or calling a model.
   [NSNotificationCenter.defaultCenter removeObserver:controller];
-  FixtureCustomizeController *api=[FixtureCustomizeController new];api.manifest=@{@"release":@"release-1",@"repository":@"owner/app",@"customize":@{@"ui":@"custom",@"githubClientId":@"client",@"provider":@{@"kind":@"cli",@"tool":@"codex"}}};api.support=folder;api.directory=controller.directory;SEController=api;
+  FixtureCustomizeController *api=[FixtureCustomizeController new];api.manifest=@{@"release":@"release-1",@"repository":@"owner/app",@"customize":@{@"ui":@"custom",@"githubClientId":@"client",@"provider":@{@"kind":@"cli",@"tool":@"codex"}}};api.support=folder;api.directory=controller.directory;SCController=api;
   NSDictionary *savedProvider=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"SparkCustomizeProvider"];
   [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SparkCustomizeProvider"];
   __block int events=0;id observer=[NSNotificationCenter.defaultCenter addObserverForName:@"SparkDesktopEvent" object:nil queue:nil usingBlock:^(NSNotification *note){if([note.userInfo[@"type"] isEqual:@"customizeState"])events++;}];
