@@ -57,6 +57,10 @@ npm run macos
 
 `npx @legendapp/create-spark@next MyApp` is equivalent. The creator installs only scaffolding tools before generating an app with the exact tested React, React Native, and Expo baseline. The installed `spark create` command remains available.
 
+New apps include thin AI instruction pointers in `AGENTS.md`, `CLAUDE.md`, and `.claude/skills/spark/SKILL.md`. The maintained skill ships at `node_modules/@legendapp/spark/skills/spark/SKILL.md`, so updating Spark updates the instructions. Existing user instructions outside the marked Spark sections are preserved.
+
+Run the app's installed `spark upgrade --dry-run` to preview the newest release on its current channel (`next` for preview versions, `latest` for stable versions). `spark upgrade` updates the SDK and tested pins, installs with the app's detected npm/pnpm/Yarn/Bun manager, then applies versioned migrations and refreshes the AI pointers. `spark dev`, `spark build`, and `spark doctor` repair safe migration drift automatically; other pending changes stop with upgrade guidance. See [upgrading apps](docs/development.md#upgrade-an-app).
+
 The published CLI resolves patched dependencies from the matching GitHub prerelease and downloads the macOS ARM64 Spark Runner on first desktop launch. A source/local archive without embedded release metadata still needs a registered local SDK. Windows native acceptance remains pending; this release workflow does not supply a Windows Runner.
 
 ## Quick start from source

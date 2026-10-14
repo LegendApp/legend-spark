@@ -16,8 +16,9 @@ export interface DependencyPinIssue {
   missing?: boolean;
 }
 
-export function dependencyPinIssues(pkg: any, platforms: readonly string[]): DependencyPinIssue[] {
-  const required = packages.filter(name => name !== "react-native-macos" || platforms.includes("macos"));
+export function dependencyPinIssues(pkg: any, platforms: readonly string[], expected = expectedDependencyPins): DependencyPinIssue[] {
+  const required = [...packages, ...(expected["@legendapp/spark"] ? ["@legendapp/spark"] : [])].filter(name => name !== "react-native-macos" || platforms.includes("macos"));
+  const checked = Object.keys(expected).filter(name => name !== "react-native-macos" || platforms.includes("macos"));
   const issues: DependencyPinIssue[] = [];
   function check(name: string, value: unknown, where: string[]) {
     // npm and pnpm permit an override to reference a direct dependency's spec.
@@ -27,9 +28,9 @@ export function dependencyPinIssues(pkg: any, platforms: readonly string[]): Dep
       console.log(`Skipping dependency pin check for ${where.join(" → ")}: ${resolved} is managed by the catalog or workspace.`);
       return;
     }
-    if (resolved !== expectedDependencyPins[name]) issues.push({ package: name, found: typeof value === "string" ? value : JSON.stringify(value), expected: expectedDependencyPins[name], where });
+    if (resolved !== expected[name]) issues.push({ package: name, found: typeof value === "string" ? value : JSON.stringify(value), expected: expected[name], where });
   }
-  for (const name of required) {
+  for (const name of checked) {
     let present = false;
     for (const section of ["dependencies", "devDependencies"]) {
       if (Object.hasOwn(pkg[section] ?? {}, name)) {
@@ -37,7 +38,7 @@ export function dependencyPinIssues(pkg: any, platforms: readonly string[]): Dep
         check(name, pkg[section][name], [section, name]);
       }
     }
-    if (!present) issues.push({ package: name, found: "(missing)", expected: expectedDependencyPins[name], where: ["dependencies", name], missing: true });
+    if (!present && required.includes(name)) issues.push({ package: name, found: "(missing)", expected: expected[name], where: ["dependencies", name], missing: true });
   }
   function overrides(entries: any, where: string[], parent?: string) {
     for (const [selector, value] of Object.entries(entries ?? {})) {
@@ -45,7 +46,8 @@ export function dependencyPinIssues(pkg: any, platforms: readonly string[]): Dep
       // Comparators after @, whitespace or || belong to the version range.
       const child = selector.split(/(?<![@\s|])>(?=[@a-zA-Z])/).at(-1)!;
       const segments = child.split("/");
-      const name = selector === "." ? parent : segments.at(-2)?.startsWith("@") ? undefined : required.find(name => new RegExp(`^${name}(?:@[^/]*)?$`).test(segments.at(-1)!));
+      const childName = segments.at(-2)?.startsWith("@") ? segments.slice(-2).join("/") : segments.at(-1)!;
+      const name = selector === "." ? parent : checked.find(name => childName === name || childName.startsWith(name + "@"));
       const location = [...where, selector];
       if (value && typeof value === "object" && !Array.isArray(value)) overrides(value, location, name);
       else if (name) check(name, value, location);
@@ -68,7 +70,7 @@ export function printDependencyPins(issues: DependencyPinIssue[]) {
 }
 
 /** Edit only mismatched values and insert missing pins, preserving existing formatting. */
-export function upgradeDependencyPins(root: string, dryRun = false): DependencyPinIssue[] {
+export function upgradeDependencyPins(root: string, dryRun = false, expected = expectedDependencyPins, requiredOverrides?: { where: string[]; pins: Record<string, string> }): DependencyPinIssue[] {
   const file = path.join(root, "package.json");
   let source = readFileSync(file, "utf8");
   const pkg = JSON.parse(source);
@@ -93,25 +95,45 @@ export function upgradeDependencyPins(root: string, dryRun = false): DependencyP
   const pnpm = property(object, "pnpm")?.initializer;
   rejectDuplicates(pnpm, ["pnpm"], false);
   if (pnpm && ts.isObjectLiteralExpression(pnpm)) rejectDuplicates(property(pnpm, "overrides")?.initializer, ["pnpm", "overrides"]);
-  const issues = dependencyPinIssues(pkg, supportedPlatforms(root));
-  if (!issues.length || dryRun) return issues;
+  const issues = dependencyPinIssues(pkg, supportedPlatforms(root), expected);
+  if (requiredOverrides) {
+    let entries = pkg;
+    for (const key of requiredOverrides.where) entries = entries?.[key];
+    for (const [name, version] of Object.entries(requiredOverrides.pins)) {
+      if (!Object.hasOwn(entries ?? {}, name)) issues.push({ package: name, found: "(missing)", expected: version, where: [...requiredOverrides.where, name], missing: true });
+    }
+  }
+  if (!issues.length) return issues;
   const edits: { start: number; end: number; text: string }[] = [];
   const missing = issues.filter(issue => issue.missing);
   if (missing.length) {
-    if ("dependencies" in pkg && (!pkg.dependencies || typeof pkg.dependencies !== "object" || Array.isArray(pkg.dependencies))) throw new Error("package.json dependencies must be an object. No files were changed.");
     const indent = source.match(/^[\t ]+(?=")/m)?.[0] ?? "  ";
     const newline = source.includes("\r\n") ? "\r\n" : "\n";
-    const dependencies = property(object, "dependencies")?.initializer as ts.ObjectLiteralExpression | undefined;
-    const target = dependencies ?? object;
-    const entries = dependencies ? missing.map(issue => `${JSON.stringify(issue.package)}: ${JSON.stringify(issue.expected)}`)
-      : [`"dependencies": ${JSON.stringify(Object.fromEntries(missing.map(issue => [issue.package, issue.expected])), null, indent)}`];
-    const last = target.properties.at(-1);
-    const baseIndent = source.slice(0, target.getStart(parsed)).match(/(?:^|\n)([\t ]*)[^\n]*$/)![1];
-    const multiline = !last || source.slice(target.getStart(parsed), target.end).includes("\n");
-    const separator = multiline ? newline + baseIndent + indent : " ";
-    const text = entries.map(entry => entry.replaceAll("\n", newline + baseIndent + indent)).join("," + separator);
-    edits.push(last ? { start: last.end, end: last.end, text: "," + separator + text }
-      : { start: target.getStart(parsed) + 1, end: target.end - 1, text: separator + text + newline + baseIndent });
+    const additions: any = {};
+    for (const issue of missing) {
+      let entries = additions;
+      for (const key of issue.where.slice(0, -1)) entries = entries[key] ??= {};
+      entries[issue.where.at(-1)!] = issue.expected;
+    }
+    function insert(target: ts.ObjectLiteralExpression, additions: any, where: string[]) {
+      const entries: string[] = [];
+      for (const [key, value] of Object.entries(additions)) {
+        const existing = property(target, key)?.initializer;
+        if (existing) {
+          if (!ts.isObjectLiteralExpression(existing)) throw new Error(`package.json ${[...where, key].join(" → ")} must be an object. No files were changed.`);
+          insert(existing, value, [...where, key]);
+        } else entries.push(`${JSON.stringify(key)}: ${JSON.stringify(value, null, indent)}`);
+      }
+      if (!entries.length) return;
+      const last = target.properties.at(-1);
+      const baseIndent = source.slice(0, target.getStart(parsed)).match(/(?:^|\n)([\t ]*)[^\n]*$/)![1];
+      const multiline = !last || source.slice(target.getStart(parsed), target.end).includes("\n");
+      const separator = multiline ? newline + baseIndent + indent : " ";
+      const text = entries.map(entry => entry.replaceAll("\n", newline + baseIndent + indent)).join("," + separator);
+      edits.push(last ? { start: last.end, end: last.end, text: "," + separator + text }
+        : { start: target.getStart(parsed) + 1, end: target.end - 1, text: separator + text + newline + baseIndent });
+    }
+    insert(object, additions, []);
   }
   for (const issue of issues) {
     if (issue.missing) continue;
@@ -122,6 +144,6 @@ export function upgradeDependencyPins(root: string, dryRun = false): DependencyP
     edits.push({ start: node.getStart(parsed), end: node.end, text: JSON.stringify(issue.expected) });
   }
   for (const edit of edits.sort((a, b) => b.start - a.start)) source = source.slice(0, edit.start) + edit.text + source.slice(edit.end);
-  writeFileSync(file, source);
+  if (!dryRun) writeFileSync(file, source);
   return issues;
 }

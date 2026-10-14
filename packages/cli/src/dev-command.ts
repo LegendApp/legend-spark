@@ -1,6 +1,7 @@
 import { spawnProcess } from "./process.ts";
 import path from "node:path";
 import { prepareConfig, selectTarget, supportedPlatforms } from "@legendapp/spark-desktop-config/config.cjs";
+import { ensureProjectVersion } from "./project-version.ts";
 import { dev } from "./dev.ts";
 import { findProject } from "./local.ts";
 import { hostPlatform } from "./platform.ts";
@@ -50,6 +51,7 @@ export async function devCommand(args: string[]) {
     return;
   }
   const root = findProject(start);
+  ensureProjectVersion(root);
   const { desktop, initial } = devTargets(supportedPlatforms(root), options.platform ?? process.env.SPARK_PLATFORM);
   // This selects only desktop build/signature state in the supervisor. Expo's
   // child uses shared development config and chooses each JS graph per request.

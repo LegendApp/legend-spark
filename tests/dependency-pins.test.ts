@@ -268,6 +268,9 @@ test.each(["no app", "malformed", "duplicate", "mismatched", "matching"])("docto
   const argv = process.argv;
   const exitCode = process.exitCode;
   const doctor = vi.spyOn(commands, "doctor").mockResolvedValue(undefined);
+  // These fixtures isolate pin diagnostics; migration/CLI guards have their own
+  // installed-app transition coverage in migrations.test.ts.
+  vi.spyOn(await import("../packages/cli/src/project-version.ts"), "ensureProjectVersion").mockImplementation(() => {});
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const error = vi.spyOn(console, "error").mockImplementation(() => {});
   try {

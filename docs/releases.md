@@ -1,5 +1,78 @@
 # Preview release process
 
+## App upgrade contract
+
+Each release must retain the cumulative app-facing notes in
+`packages/desktop/skills/spark/UPGRADING.md`, shipped in the SDK. Add a heading for
+the exact version (including previews), list breaking/behavior changes, show
+before/after app code/config/native examples, and describe required validation.
+Mark breaking releases `Breaking: yes` in the notes and `[Breaking]` in that
+version's changelog section. Keep released version thresholds and notes fixed.
+
+Add an entry to `packages/cli/src/migrations.cjs` for each breaking release and
+for any automated change. Set `breaking: true` for breaking entries. If a release
+only needs app decisions, its migration still emits actionable `manualStep`
+entries linked to its version notes. Nonbreaking releases with no migration must
+still have notes. `tests/upgrade-release-policy.test.ts` gates changelog versions,
+breaking markers and migration coverage; the release workflow runs it in the
+full suite after selecting/bumping the version. Supply notes/migrations for the
+selected version before completing that gate; a version bump alone is incomplete.
+
+Migration `apply(context)` uses the typed `MigrationContext` in
+`migration-helpers.d.cts`; helpers work on an in-memory file view shared by the
+whole ordered chain. **Do not write files directly or run installers from a
+migration.** The planner powers both dry runs and application. Helpers:
+
+- `editJson(file, edit)` edits existing JSON (including package scripts/fields,
+  config and app.json) while retaining indentation and unrelated fields. Missing
+  optional files are skipped; invalid JSON becomes a manual step.
+- `renameFile(from, to)` moves text files; existing destinations require a manual
+  merge. `readFile`/`writeFile` support other source/config updates.
+- `updateTemplate(file, previous, next)` installs missing templates or updates an
+  exact old template; customized files require a manual merge. Pass the exact
+  released content, not the moving current template.
+- `replaceImport(from, to, names?)` uses the existing TypeScript parser to update
+  import/re-export module literals and unambiguous require/dynamic imports.
+  Named API renames preserve local names through aliases. Namespace/dynamic API
+  changes and unsupported references produce manual steps. Changed call semantics
+  need a specific codemod or a manual step, not an import alias.
+- `manualStep(message)` records the version and link to its packaged note; upgrade
+  prints it and retains a checkbox in `.spark/upgrade-notes.md` across retries.
+
+Example release entry (substitute the actual release version):
+
+```js
+{
+  version: '0.0.1-next.5', automatic: false, breaking: true,
+  apply(context) {
+    context.editJson('package.json', /** @param {{ scripts?: Record<string, string> }} pkg */ pkg => {
+      pkg.scripts ??= {};
+      if (pkg.scripts.check === 'old-check') pkg.scripts.check = 'spark doctor';
+    });
+    context.renameFile('src/old-entry.ts', 'src/entry.ts');
+    context.replaceImport('old-module', 'new-module', { oldAPI: 'newAPI' });
+    context.manualStep('Update native startup options as shown in this release note.');
+  },
+}
+```
+
+Use `automatic: true` only for steps safe during dev/build/doctor, without an
+install or an automatic change requiring an app decision; recording optional
+native validation reminders is safe. Unrecorded existing apps with unsafe history
+must use upgrade; newly created starters stamp their current baseline explicitly. Upgrade
+uses the recorded version (installed version only if unrecorded), executes every
+step in semantic-version order, applies install inputs before installation, and
+records the destination only after success. All steps must be idempotent because
+failed attempts can leave edits while retaining the old receipt. There is no
+cross-file or package-manager rollback. Preserve user changes, report conflicts,
+and retain unresolved notes; a receipt is not proof of native/app validation.
+
+Test the helpers, an ordered multi-version jump, dry-run output with no writes,
+manual notes, failure/retry and a second no-op run. The packed-distribution test
+must include both SKILL.md and UPGRADING.md. Run `bun run typecheck` and the full
+suite before release. Rebuilding native runtimes and affected app acceptance are
+separate checks from source migrations.
+
 Legend Spark currently identifies itself as `0.0.1-next.4` and publishes through
 the `next` preview channel. That identity remains experimental until the
 [release readiness matrix](release-readiness.md) and a completed

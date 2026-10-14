@@ -22,6 +22,8 @@ import { findFramework, findProject, sparkHome, creationManifest, packageManifes
 import { readJson, stateFile, VERSION, writeJson } from "./project.ts";
 import { devCommand } from "./dev-command.ts";
 import { printDependencyPins, upgradeDependencyPins } from "./dependency-pins.ts";
+import { upgrade } from "./upgrade.ts";
+import { ensureProjectVersion } from "./project-version.ts";
 import { reportError } from "./errors.ts";
 
 async function main() {
@@ -41,6 +43,7 @@ async function main() {
   if (values.example && (command !== "create" || !examples.includes(values.example as Example))) throw new Error(`Use create --example ${examples.join(" | ")}`);
   if (!values.help && ["build", "prebuild"].includes(command ?? "")) {
     const root = project();
+    ensureProjectVersion(root);
     const selected = readConfig(root).expo.platforms[0];
     if (!["ios", "android", "web"].includes(selected) && (values.device || values.port)) throw new Error("--device and --port are mobile build options; use spark dev for desktop launch options.");
     if (["ios", "android", "web"].includes(selected)) {
@@ -74,7 +77,7 @@ async function main() {
   spark prebuild      Generate a Windows/mobile native project
   spark package       Sign and notarize a distribution archive
   spark doctor        Check app dependency pins and native tooling (exits 1 on issues)
-  spark upgrade       Align app dependency pins with Spark (--dry-run previews changes)
+  spark upgrade       Update Spark on its current release channel (--dry-run previews changes)
 
 Inside an app: npm run dev, npm run build, npm run package (or pnpm, yarn, bun)
 
@@ -158,6 +161,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       let pinIssues = false;
       try { root = project(); } catch { console.log("No Spark app found; skipping dependency pin check."); }
       if (root) {
+        ensureProjectVersion(root);
         try {
           const issues = upgradeDependencyPins(root, true);
           printDependencyPins(issues);
@@ -177,10 +181,7 @@ Overrides: --project <directory>, --port <number>, dev --runner-binary <runtime 
       break;
     }
     case "upgrade": {
-      const issues = upgradeDependencyPins(project(), !!values["dry-run"]);
-      console.log(values["dry-run"] ? "Dependency pin changes (dry run):" : "Dependency pin changes:");
-      printDependencyPins(issues);
-      if (issues.length) console.log(values["dry-run"] ? "No files changed. Run spark upgrade, then run your package manager's install command (npm/pnpm/yarn/bun install)." : "Updated package.json. Run your package manager's install command (npm/pnpm/yarn/bun install).");
+      await upgrade(project(), !!values["dry-run"]);
       break;
     }
     case "updates": {
