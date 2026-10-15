@@ -1,0 +1,24 @@
+{
+  "name": "@legendapp/spark-html",
+  "version": "0.0.1-next.4",
+  "private": true,
+  "license": "MIT",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "react": "19.1.4",
+    "react-native": "0.81.6",
+    "react-native-enriched-html": "1.1.1"
+  },
+  "dependencies": {
+    "@legendapp/spark-rich-text": "0.0.1-next.4"
+  },
+  "peerDependenciesMeta": {
+    "react-native-enriched-html": {
+      "optional": true
+    }
+  }
+}

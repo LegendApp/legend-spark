@@ -133,9 +133,8 @@ test("workspace Nitro adapters and automatic camera patch receipts survive repea
 });
 
 
-test("Markdown installs and repairs independently of camera or Nitro", () => {
+test.each(["react-native-enriched-markdown", "react-native-enriched-html"])("%s installs and repairs independently of camera or Nitro", (name) => {
   const { root, spark, packages } = fixture(true);
-  const name = "react-native-enriched-markdown";
   try {
     const manifest = JSON.parse(readFileSync(path.join(spark, "package.json"), "utf8"));
     manifest.dependencies = { [name]: "1.1.1" };
@@ -145,7 +144,7 @@ test("Markdown installs and repairs independently of camera or Nitro", () => {
     mkdirSync(directory, { recursive: true });
     writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name, version: "1.1.1" }, null, 2) + "\n");
     writeFileSync(path.join(directory, "Native.podspec"), "upstream\n");
-    const patch = "markdown.patch";
+    const patch = `${name}.patch`;
     writeFileSync(path.join(spark, "patches/dependencies.json"), JSON.stringify({ [name]: { version: "1.1.1", integrity: "sha512-fixture", patch } }));
     writeFileSync(path.join(spark, "patches", patch), readFileSync(path.join(spark, "patches/camera", `${names[0]}.patch`)));
     expect(prepareNativePatches(root)).toEqual({ [name]: { root: realpathSync(directory) } });
