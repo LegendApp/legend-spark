@@ -9,7 +9,7 @@ const info = { id: "editor", instanceId: "instance-1", kind: "window", title: "E
 const emit = (event: object) => listeners.forEach(listener => listener({ windowId: "editor", instanceId: "instance-1", ...event }));
 const tick = async () => { for (let n=0;n<10;n++) await Promise.resolve(); };
 beforeEach(() => { platform.OS = "windows"; call.mockReset().mockImplementation(async (method: string) => JSON.stringify(["open", "info", "observe", "completeOpen"].includes(method) ? info : method === "close" ? { closed: true } : null)); managed.openWindow.mockClear(); managed.setWindowOptions.mockClear(); listeners.clear(); });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { emit({ type: "closed" }); vi.restoreAllMocks(); });
 test("availability is answered synchronously without a native call", async () => {
   expect(windows.getWindowAvailability()).toEqual({ available: true });
   platform.OS = "ios";
@@ -90,8 +90,98 @@ test("guard decisions ignore stale requests and failed removal can retry", async
   emit({ ...event, requestId: 1 }); emit({ ...event, requestId: 1 }); await tick(); expect(answers).toHaveLength(1);
   emit({ ...event, requestId: 2 }); await tick(); answers[0](true); await tick(); expect(call.mock.calls.filter(([method]) => method === "replyClose")).toHaveLength(0);
   answers[1](false); await tick(); expect(JSON.parse(call.mock.calls.find(([method]) => method === "replyClose")![1])).toMatchObject({ requestId: 2, allow: false, instanceId: "instance-1" });
-  call.mockRejectedValueOnce(new Error("cleanup")); await expect(guard.remove()).rejects.toMatchObject({ code: "E_NATIVE" }); expect(listeners.size).toBe(0);
+  call.mockRejectedValueOnce(new Error("cleanup")); await expect(guard.remove()).rejects.toMatchObject({ code: "E_NATIVE" }); expect(listeners.size).toBe(1);
   await guard.remove(); const replacement = await windows.beforeWindowClose("editor", () => true); await replacement.remove();
+});
+test("close guard replacement waits for teardown and stays protected throughout the swap", async () => {
+  const previous = vi.fn(() => true), next = vi.fn(() => false);
+  let protectedWindow = false, finishRemoval!: () => void, deferRemoval = false;
+  call.mockImplementation(async (method: string, json: string) => {
+    if (method === "observe") return JSON.stringify(info);
+    if (method === "closeGuard") {
+      const { enabled } = JSON.parse(json);
+      if (deferRemoval) {
+        deferRemoval = false;
+        await new Promise<void>(resolve => { finishRemoval = () => { protectedWindow = enabled; resolve(); }; });
+      } else protectedWindow = enabled;
+    }
+    return "null";
+  });
+  const guard = await windows.beforeWindowClose("editor", previous);
+  const { guardId } = JSON.parse(call.mock.calls.find(([method]) => method === "closeGuard")![1]);
+  deferRemoval = true;
+  const removal = guard.remove();
+  await tick();
+  let replacementReady = false;
+  const replacement = windows.beforeWindowClose("editor", next).then(value => { replacementReady = true; return value; });
+  // Attach immediately so a regression rejecting E_BUSY is reported by the assertion below.
+  void replacement.catch(() => {});
+  await tick();
+  expect(replacementReady).toBe(false);
+  expect(protectedWindow).toBe(true);
+  emit({ type: "beforeClose", guardId, requestId: 1 }); await tick();
+  expect(previous).not.toHaveBeenCalled();
+  expect(call.mock.calls.filter(([method]) => method === "replyClose").map(([, json]) => JSON.parse(json))).toContainEqual(expect.objectContaining({ requestId: 1, allow: false }));
+  finishRemoval();
+  // Native protection must still be present before JavaScript sees the acknowledgement.
+  expect(protectedWindow).toBe(true);
+  await removal;
+  const current = await replacement;
+  emit({ type: "beforeClose", guardId, requestId: 2 }); await tick();
+  expect(next).toHaveBeenCalledOnce();
+  expect(JSON.parse(call.mock.calls.filter(([method]) => method === "replyClose").at(-1)![1])).toMatchObject({ requestId: 2, allow: false });
+  await guard.remove();
+  emit({ type: "beforeClose", guardId, requestId: 3 }); await tick();
+  expect(next).toHaveBeenCalledTimes(2);
+  await current.remove();
+  emit({ type: "beforeClose", guardId, requestId: 4 }); await tick();
+  expect(next).toHaveBeenCalledTimes(2);
+  expect(JSON.parse(call.mock.calls.filter(([method]) => method === "replyClose").at(-1)![1])).toMatchObject({ requestId: 4, allow: true });
+  emit({ type: "closed" }); expect(listeners.size).toBe(0);
+});
+test("only one replacement can wait on close-guard removal, and failed teardown can retry", async () => {
+  const guard = await windows.beforeWindowClose("editor", () => true);
+  let failRemoval!: (error: Error) => void;
+  call.mockImplementationOnce(() => new Promise<string>((_resolve, reject) => { failRemoval = reject; }));
+  const removal = guard.remove(); await tick();
+  const replacement = windows.beforeWindowClose("editor", () => false);
+  await expect(windows.beforeWindowClose("editor", () => true)).rejects.toMatchObject({ code: "E_BUSY" });
+  const outcomes = Promise.allSettled([removal, replacement]);
+  failRemoval(new Error("cleanup"));
+  expect(await outcomes).toEqual([
+    { status: "rejected", reason: expect.objectContaining({ code: "E_NATIVE" }) },
+    { status: "rejected", reason: expect.objectContaining({ code: "E_NATIVE" }) },
+  ]);
+  const current = await windows.beforeWindowClose("editor", () => false);
+  await expect(windows.beforeWindowClose("editor", () => true)).rejects.toMatchObject({ code: "E_BUSY" });
+  await guard.remove(); await current.remove();
+});
+test("a removed owner's late decision cannot allow closing under its replacement", async () => {
+  let answer!: (allow: boolean) => void;
+  const guard = await windows.beforeWindowClose("editor", () => new Promise<boolean>(resolve => { answer = resolve; }));
+  const { guardId } = JSON.parse(call.mock.calls.find(([method]) => method === "closeGuard")![1]);
+  emit({ type: "beforeClose", guardId, requestId: 1 }); await tick();
+  const removal = guard.remove();
+  const handler = vi.fn(() => false), current = await windows.beforeWindowClose("editor", handler);
+  await removal;
+  answer(true); await tick();
+  expect(call.mock.calls.filter(([method]) => method === "replyClose")).toHaveLength(0);
+  emit({ type: "beforeClose", guardId, requestId: 2 }); await tick();
+  expect(handler).toHaveBeenCalledOnce();
+  expect(JSON.parse(call.mock.calls.filter(([method]) => method === "replyClose").at(-1)![1])).toMatchObject({ requestId: 2, allow: false });
+  await current.remove();
+});
+test("acquiring a guard vetoes an automatic close decision already queued without an owner", async () => {
+  const guard = await windows.beforeWindowClose("editor", () => true);
+  const { guardId } = JSON.parse(call.mock.calls.find(([method]) => method === "closeGuard")![1]);
+  await guard.remove();
+  emit({ type: "beforeClose", guardId, requestId: 1 });
+  const handler = vi.fn(() => false), current = await windows.beforeWindowClose("editor", handler);
+  await tick();
+  expect(JSON.parse(call.mock.calls.filter(([method]) => method === "replyClose").at(-1)![1])).toMatchObject({ requestId: 1, allow: false });
+  emit({ type: "beforeClose", guardId, requestId: 2 }); await tick();
+  expect(handler).toHaveBeenCalledOnce();
+  await current.remove();
 });
 test("macOS precreates hidden registered roots and closes a failed opening", async () => {
   platform.OS = "macos";
