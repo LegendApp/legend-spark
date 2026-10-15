@@ -89,11 +89,11 @@ test("single Spark archive resolves public exports and preserves private native 
     expect(readFileSync(path.join(destination, "skills/spark/SKILL.md"))).toEqual(readFileSync(path.join(framework, "packages/desktop/skills/spark/SKILL.md")));
     expect(readFileSync(path.join(destination, "skills/spark/UPGRADING.md"))).toEqual(readFileSync(path.join(framework, "packages/desktop/skills/spark/UPGRADING.md")));
     createRequire(path.join(destination, "package.json"))("./vendor/node_modules/@legendapp/spark-desktop-config/native-patches.cjs").prepareNativePatches(app);
-    expect(JSON.parse(readFileSync(path.join(app, "node_modules/react-native-enriched-markdown/package.json"), "utf8")).spark.dependencyPatch.version).toBe("1.0.2");
-    expect(readFileSync(path.join(destination, "patches/react-native-enriched-markdown@1.0.2.patch"))).toEqual(
-      readFileSync(path.join(framework, "patches/react-native-enriched-markdown@1.0.2.patch")),
+    expect(JSON.parse(readFileSync(path.join(app, "node_modules/react-native-enriched-markdown/package.json"), "utf8")).spark.dependencyPatch.version).toBe("1.1.1");
+    expect(readFileSync(path.join(destination, "patches/react-native-enriched-markdown@1.1.1.patch"))).toEqual(
+      readFileSync(path.join(framework, "patches/react-native-enriched-markdown@1.1.1.patch")),
     );
-    expect(manifest.dependencies["react-native-enriched-markdown"]).toBe("1.0.2");
+    expect(manifest.dependencies["react-native-enriched-markdown"]).toBe("1.1.1");
     expect(manifest.peerDependencies["react-native-enriched-markdown"]).toBeUndefined();
     expect(readFileSync(path.join(destination, "patches/dependencies.json"))).toEqual(readFileSync(path.join(framework, "patches/dependencies.json")));
     expect(manifest.spark.nativePatchRequirements.schema).toBe(1);
