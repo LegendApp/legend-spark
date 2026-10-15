@@ -32,6 +32,8 @@ export function RichText() {
         onChangeText={setEditableMarkdown}
         placeholder="Click to write Markdown"
         style={styles.input}
+        formatting
+        onRequestLink={onRequestLink}
         accessibilityLabel="Editable Markdown"
         testID="editable-markdown"
       />
@@ -52,6 +54,8 @@ export function RichText() {
         onChangeText={setEditableHtml}
         placeholder="Click to write HTML"
         style={styles.input}
+        formatting
+        onRequestLink={onRequestLink}
         accessibilityLabel="Editable HTML"
         testID="editable-html"
       />
