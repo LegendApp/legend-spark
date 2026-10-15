@@ -153,6 +153,8 @@ beforeWindowClose(
 
 Listener registration is asynchronous: native acknowledgement binds the subscription to the current instance. Listeners receive future events only; no implicit initial snapshot. They stop when the identified live instance closes and do not attach to a later instance reusing its ID. Keep one close guard per live window initially: duplicate registration rejects `E_BUSY`; `true` allows close. A thrown/rejected/timed-out decision vetoes close and reports the failure through the framework's error reporting. The native deadline is 30 seconds; timeout reports `E_TIMEOUT` through `onError` (default `console.error`). Forced OS termination cannot be vetoed.
 
+Close-guard removal stops the owner's callbacks immediately. A replacement requested while removal is pending waits for its native acknowledgement; competing replacements still reject `E_BUSY`. Failed removal remains retryable and keeps close requests vetoed. Spark retains one native dispatcher and event subscription until that window instance closes, so replacing owners never disables native protection. With no owner after successful removal, the dispatcher allows close requests automatically. These close requests still require a responsive JavaScript runtime and use the native 30-second deadline.
+
 A future observable window-state hook must subscribe and obtain its snapshot without missing intervening changes. The imperative event API alone does not promise an atomic snapshot/event handoff.
 
 ### Preserve advanced macOS functionality
@@ -213,4 +215,3 @@ const result = await windows.close('editor');
 ```
 
 Type-level acceptance: `documentId` is checked against `Editor` props, required props cannot be omitted, and an identifier override fails compilation. Separate roots still do not inherit arbitrary React providers; the navigator must not imply that they do.
-

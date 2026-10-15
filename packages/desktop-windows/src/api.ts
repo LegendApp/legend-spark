@@ -113,43 +113,80 @@ export async function addWindowListener<K extends keyof WindowEventMap>(id: stri
     try { listener(payload as WindowEventMap[K]); } catch (cause) { report(options, cause); }
   }, [type]);
 }
-const guards = new Map<string, AsyncRegistration>();
+interface CloseGuardOwner {
+  handler: () => boolean | Promise<boolean>;
+  options: WindowListenerOptions;
+  stopped: boolean;
+  registration: AsyncRegistration;
+}
+interface CloseGuard {
+  owner?: CloseGuardOwner;
+  acquire(handler: CloseGuardOwner["handler"], options: WindowListenerOptions): AsyncRegistration;
+}
+const guards = new Map<string, CloseGuard>();
 const creatingGuards = new Set<string>();
 const orphanGuards = new Map<string, AsyncRegistration>();
 let guardSequence = 0;
-/** Each window accepts one close guard; a second registration rejects E_BUSY until the first is removed. Removal is idempotent. */
+/** One owner per window. Replacement waits for removal; native protection survives the handoff. */
 export async function beforeWindowClose(id: string, handler: () => boolean | Promise<boolean>, options: WindowListenerOptions = {}): Promise<AsyncRegistration> {
   windowId(id); object(options, "guard options"); keys(options, ["onError"]);
   if (typeof handler !== "function" || (options.onError !== undefined && typeof options.onError !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Expected window close callbacks");
-  if (orphanGuards.has(id)) { await orphanGuards.get(id)!.remove(); orphanGuards.delete(id); }
-  if (guards.has(id) || creatingGuards.has(id)) throw new SparkError("E_BUSY", "Window already has a close guard");
+  if (creatingGuards.has(id)) throw new SparkError("E_BUSY", "Window already has a close guard");
   creatingGuards.add(id);
+  try {
+    if (orphanGuards.has(id)) { await orphanGuards.get(id)!.remove(); orphanGuards.delete(id); }
+    const existing = guards.get(id);
+    if (existing) {
+      if (existing.owner && !existing.owner.stopped) throw new SparkError("E_BUSY", "Window already has a close guard");
+      if (existing.owner) await existing.owner.registration.remove();
+      if (guards.get(id) === existing) return existing.acquire(handler, options);
+    }
+    return await createCloseGuard(id, handler, options);
+  } finally { creatingGuards.delete(id); }
+}
+async function createCloseGuard(id: string, handler: CloseGuardOwner["handler"], options: WindowListenerOptions): Promise<AsyncRegistration> {
   const guardId = `close-${Date.now()}-${++guardSequence}`;
-  let stopped = false, instance: string | undefined, request: number | undefined, latestRequest = 0;
+  let closed = false, instance: string | undefined, request: number | undefined, latestRequest = 0;
   let subscription: ReturnType<typeof onDesktopEvent>;
-  try { subscription = onDesktopEvent(event => {
-    if (stopped || event.windowId !== id || event.instanceId !== instance) return;
-    if (event.type === "closed") { stopped = true; subscription.remove(); guards.delete(id); return; }
+  const stop = () => { closed = true; request = undefined; subscription.remove(); if (guards.get(id) === guard) guards.delete(id); };
+  const guard: CloseGuard = { acquire(handler, options) {
+    const owner: CloseGuardOwner = { handler, options, stopped: false, registration: asyncRegistration(() => {
+      owner.stopped = true; request = undefined;
+    }, async () => {
+      // Keep the native dispatcher installed for this window instance. Re-arming
+      // acknowledges removal and cancels pending decisions without an unguarded gap.
+      try { if (!closed && instance) await windowCommand("closeGuard", { id, instanceId: instance, guardId, enabled: true }); }
+      catch (cause) { if (nativeError(cause).code !== "E_NOT_FOUND") throw cause; stop(); }
+      if (guard.owner === owner) guard.owner = undefined;
+    }) };
+    guard.owner = owner;
+    return owner.registration;
+  } };
+  const registration = guard.acquire(handler, options);
+  subscription = onDesktopEvent(event => {
+    if (closed || event.windowId !== id || event.instanceId !== instance) return;
+    if (event.type === "closed") { stop(); return; }
     if (event.guardId !== guardId) return;
-    if (event.type === "closeGuardTimeout") { request = undefined; report(options, new SparkError("E_TIMEOUT", "Window close guard exceeded 30 seconds")); return; }
+    const owner = guard.owner;
+    if (event.type === "closeGuardTimeout") { request = undefined; if (owner && !owner.stopped) report(owner.options, new SparkError("E_TIMEOUT", "Window close guard exceeded 30 seconds")); return; }
     if (event.type !== "beforeClose" || !Number.isSafeInteger(event.requestId) || (event.requestId as number) <= latestRequest) return;
     const current = latestRequest = request = event.requestId as number;
-    void Promise.resolve().then(() => stopped ? false : handler()).catch(cause => { report(options, cause); return false; }).then(async allow => {
-      if (stopped || request !== current) return;
-      await windowCommand("replyClose", { id, instanceId: instance, guardId, requestId: current, allow: allow === true });
-    }).catch(cause => report(options, cause)).finally(() => { if (request === current) request = undefined; });
-  }, { types: ["closed", "beforeClose", "closeGuardTimeout"], target: { field: "windowId", value: id } }); } catch (cause) { creatingGuards.delete(id); throw cause; }
-  const registration = asyncRegistration(() => { stopped = true; subscription.remove(); }, async () => {
-    try { if (instance) await windowCommand("closeGuard", { id, instanceId: instance, guardId, enabled: false }); }
-    catch (cause) { if (nativeError(cause).code !== "E_NOT_FOUND") throw cause; }
-    if (guards.get(id) === registration) guards.delete(id);
-  });
+    void Promise.resolve().then(() => owner ? !owner.stopped && owner.handler() : true).catch(cause => { if (owner && !owner.stopped) report(owner.options, cause); return false; }).then(async allow => {
+      if (closed || request !== current) return;
+      await windowCommand("replyClose", { id, instanceId: instance, guardId, requestId: current, allow: guard.owner === owner && allow === true });
+    }).catch(cause => { if (owner && !owner.stopped) report(owner.options, cause); }).finally(() => { if (request === current) request = undefined; });
+  }, { types: ["closed", "beforeClose", "closeGuardTimeout"], target: { field: "windowId", value: id } });
   try {
     instance = (await windowCall("observe", { id }, isInfo)).instanceId;
     await windowCommand("closeGuard", { id, instanceId: instance, guardId, enabled: true });
-    if (!stopped) guards.set(id, registration); return registration;
+    if (!closed) guards.set(id, guard);
+    return registration;
   } catch (cause) {
-    try { await registration.remove(); } catch (cleanup) { orphanGuards.set(id, registration); report(options, cleanup); }
+    const cleanup = asyncRegistration(stop, async () => {
+      try { if (instance) await windowCommand("closeGuard", { id, instanceId: instance, guardId, enabled: false }); }
+      catch (cause) { if (nativeError(cause).code !== "E_NOT_FOUND") throw cause; }
+    });
+    try { await cleanup.remove(); } catch (error) { orphanGuards.set(id, cleanup); report(options, error); }
     throw cause;
-  } finally { creatingGuards.delete(id); }
+  }
 }

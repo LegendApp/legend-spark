@@ -55,6 +55,13 @@ int main() { @autoreleasepool {
   NSString *instance = delegates[@"editor"].instanceId;
   result = nil; call(@"close", @{ @"id": @"editor" }); assert(!result && !window.closed);
   NSDictionary *request = events.lastObject; assert([request[@"type"] isEqual:@"beforeClose"]); assert([request[@"instanceId"] isEqual:instance]);
+  // Re-arming the same dispatcher acknowledges teardown without allowing a native close.
+  call(@"closeGuard", @{ @"id": @"editor", @"instanceId": instance, @"enabled": @YES, @"guardId": @"guard" });
+  assert(!failure && delegates[@"editor"].guarded && !delegates[@"editor"].pending && !window.closed);
+  call(@"replyClose", @{ @"id": @"editor", @"instanceId": instance, @"guardId": @"guard", @"requestId": request[@"requestId"], @"allow": @YES });
+  assert(!window.closed);
+  result = nil; call(@"close", @{ @"id": @"editor" }); assert(!result && !window.closed);
+  request = events.lastObject;
   call(@"replyClose", @{ @"id": @"editor", @"instanceId": instance, @"guardId": @"guard", @"requestId": request[@"requestId"], @"allow": @NO });
   assert(!window.closed); assert(delegates[@"editor"].closeWaiters.count == 0);
   __block NSString *closedResult = nil;
