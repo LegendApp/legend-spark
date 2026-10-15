@@ -58,13 +58,15 @@ coverage and does not promise macOS-only WebKit features.
 
 ## Built-in backend dependencies
 
-Spark installs `react-native-enriched-markdown` 1.0.2 as a pinned dependency and
+Spark installs `react-native-enriched-markdown` 1.1.1 as a pinned dependency and
 applies its checked-in compatibility patch automatically, using the same install
 and native-preparation boundaries as camera. Applications do not need a
 package-manager patch declaration. Reinstalls and disabled install scripts are
 handled by native preparation. The backend remains an ordinary npm dependency;
 its implementation is not extracted into the Spark archive. Production builds
-can prune its native module when unused.
+can prune its native module when unused. Upstream already supports macOS; the
+patch adds fixes and extensions, including list Tab/Shift-Tab indentation, rich
+HTML paste as Markdown, and trailing whitespace preservation on paste.
 
 Markdown math and syntax-highlighting assets retain the upstream per-application
 configuration (`enriched-markdown` in the application's `package.json`). Those
