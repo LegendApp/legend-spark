@@ -289,6 +289,12 @@
     "getGlobalShortcutAvailability",
     "registerGlobalShortcut"
   ],
+  "./html": [
+    "EditableHtml",
+    "HtmlInput",
+    "HtmlInputProps",
+    "HtmlInputRef"
+  ],
   "./links": [
     "Subscription",
     "URLListener",
@@ -297,6 +303,12 @@
     "getInitialURL",
     "openPath",
     "openURL"
+  ],
+  "./markdown": [
+    "EditableMarkdown",
+    "MarkdownInput",
+    "MarkdownInputProps",
+    "MarkdownInputRef"
   ],
   "./menus": [
     "AsyncRegistration",

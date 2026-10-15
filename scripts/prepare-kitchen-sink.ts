@@ -37,6 +37,7 @@ async function prepareKitchenSinkConsumer(root: string, packageManifest?: string
   pkg.dependencies["base64-js"] = "1.5.1";
   pkg.dependencies.uniwind = "1.6.3";
   pkg.dependencies.tailwindcss = "4.2.4";
+  pkg["enriched-markdown"] = { enableCodeHighlight: false, enableMath: false, ...pkg["enriched-markdown"] };
   writeJson(path.join(root, "package.json"), pkg);
   await run(root, managerCommand(packageManager(root), ["install"]));
   writeJson(marker, { managed: true });

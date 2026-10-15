@@ -86,3 +86,10 @@ Package: `@legendapp/spark@0.0.1-next.4`. This matrix is generated from `package
 ## Run instructions
 
 Run source and API test gates with `bun run typecheck` and `bun run test`. For a target acceptance run, use the command in that export's target cell in [the JSON matrix](release-support-matrix.json). The platform runner requires an actual device/host and interactive checks where listed. It records explicit `not-tested`, `failed`, or `not-applicable` outcomes; preparation or bundling alone is not a runtime pass.
+
+## Optional rich text inputs
+
+| Export | Provider and platform source evidence | macOS arm64 | macOS x64 | Windows x64 | Windows ARM64 | iOS | Android | Web | Related tests / catalog cases |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [`./markdown`](../packages/desktop/markdown.ts) | [markdown/package.json](../packages/markdown/package.json)<br>`packages/markdown/src/MarkdownInput.tsx`<br>macos: `packages/rich-text/src/useInputShortcuts.macos.ts` | not-tested | not-tested | N/A | N/A | not-tested | not-tested | not-tested | [tests/rich-text-components.test.ts](../tests/rich-text-components.test.ts)<br>[tests/rich-text-values.test.ts](../tests/rich-text-values.test.ts)<br>[Validation limits](rich-text.md) |
+| [`./html`](../packages/desktop/html.ts) | [html/package.json](../packages/html/package.json)<br>`packages/html/src/HtmlInput.tsx`<br>macos: `packages/rich-text/src/useInputShortcuts.macos.ts`<br>[AppKit backend patch](../patches/react-native-enriched-html@1.1.1.patch) | not-tested | not-tested | N/A | N/A | not-tested | not-tested | not-tested | [tests/rich-text-components.test.ts](../tests/rich-text-components.test.ts)<br>[tests/rich-text-values.test.ts](../tests/rich-text-values.test.ts)<br>[Validation limits](rich-text.md) |
