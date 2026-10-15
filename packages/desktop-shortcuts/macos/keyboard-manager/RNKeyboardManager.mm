@@ -33,7 +33,7 @@ static BOOL SparkKeyboardBoolean(id value) { return [value isKindOfClass:NSNumbe
 // U+001D, Backspace U+0008), which no accelerator can name; accelerators parse AppKit's
 // private-use code and U+007F instead. Tab and Return are also C0 but already spell their
 // accelerators, so only keys whose unmodified character identifies them are substituted.
-static NSString *SparkKeyboardKeyString(NSEvent *event) {
+NSString *SparkKeyboardKeyString(NSEvent *event) {
   NSString *key = [event charactersByApplyingModifiers:0] ?: @"";
   if (key.length == 1 && [key characterAtIndex:0] < 0x20) {
     NSString *unmodified = event.charactersIgnoringModifiers;

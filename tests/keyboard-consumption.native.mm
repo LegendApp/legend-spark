@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import <objc/runtime.h>
 #import <IOKit/hidsystem/IOLLEvent.h>
 #import <IOKit/hidsystem/ev_keymap.h>
 #include <cassert>
@@ -12,6 +13,7 @@ namespace facebook::react {
 struct TurboModule { virtual ~TurboModule() = default; };
 struct ObjCTurboModule { struct InitParams {}; };
 struct NativeKeyboardManagerSpecJSI : TurboModule { NativeKeyboardManagerSpecJSI(ObjCTurboModule::InitParams const &) {} };
+struct NativeDesktopShortcutsSpecJSI : TurboModule { NativeDesktopShortcutsSpecJSI(ObjCTurboModule::InitParams const &) {} };
 }
 static NSMutableArray *events;
 static NSUInteger emitted;
@@ -25,6 +27,10 @@ static NSUInteger emitted;
 @end
 @interface RNKeyboardManager : FixtureEmitter @end
 // ACTUAL_IMPLEMENTATION
+static NSDictionary *SparkArgs(NSString *json) { return [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil]; }
+static void SparkInvalid(RCTPromiseRejectBlock reject, NSString *message) { reject(@"E_INVALID_ARGUMENT", message, nil); }
+@interface RNDesktopShortcuts : FixtureEmitter @end
+// SHORTCUT_IMPLEMENTATION
 @interface FixtureWindow : NSObject
 @property NSString *identifier;
 @end
@@ -147,4 +153,29 @@ int main() { @autoreleasepool {
   [manager invalidate];
   [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
   assert(!Key(manager, YES, @"a", 0));
+  // Exercise the actual app-shortcut monitor with shifted digits used by rich-text lists.
+  __block NSEvent *(^shortcutHandler)(NSEvent *);
+  Method addMonitor = class_getClassMethod(NSEvent.class, @selector(addLocalMonitorForEventsMatchingMask:handler:));
+  IMP replacement = imp_implementationWithBlock(^id(id, NSEventMask, NSEvent *(^handler)(NSEvent *)) { shortcutHandler = [handler copy]; return @1; });
+  IMP original = method_setImplementation(addMonitor, replacement);
+  RNDesktopShortcuts *shortcuts = [RNDesktopShortcuts new];
+  events = [NSMutableArray new];
+  for (NSNumber *digit in @[@7, @8]) {
+    NSString *identifier = digit.stringValue;
+    NSDictionary *args = @{ @"id":identifier, @"key":identifier, @"modifiers":@(cmd | shift) };
+    NSString *json = [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:args options:0 error:nil] encoding:NSUTF8StringEncoding];
+    __block BOOL registered = NO;
+    [shortcuts call:@"register" args:json resolve:^(id) { registered = YES; } reject:^(NSString *, NSString *, NSError *) { assert(false); }];
+    for (int n = 0; n < 100 && !registered; n++) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+    assert(registered && shortcutHandler);
+    NSUInteger before = emitted;
+    assert(shortcutHandler(KeyboardEvent(digit.intValue == 7 ? 26 : 28, true, NX_COMMANDMASK | NX_SHIFTMASK)) == nil);
+    assert(emitted == before + 1);
+    assert([events.lastObject[@"body"][@"id"] isEqual:identifier]);
+  }
+  shortcuts.monitor = nil;
+  [shortcuts invalidate];
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+  method_setImplementation(addMonitor, original);
+  imp_removeBlock(replacement);
 } }
