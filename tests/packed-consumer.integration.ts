@@ -111,8 +111,8 @@ try {
 
   const require = createRequire(path.join(consumer, "package.json"));
   const pkg = require("@legendapp/spark/package.json");
-  if (pkg.version !== VERSION || pkg.peerDependencies.react !== "19.1.4" || pkg.peerDependencies["react-native"] !== "0.81.6") throw new Error("Installed packed Spark peer baseline differs from the release manifest");
-  if (pkg.peerDependencies["react-dom"] !== "19.1.4" || pkg.peerDependenciesMeta?.["react-dom"]?.optional !== true) throw new Error("React DOM must remain an optional public peer");
+  if (pkg.version !== VERSION || pkg.peerDependencies.react !== "^19.1.0" || pkg.peerDependencies["react-native"] !== "0.81.6") throw new Error("Installed packed Spark peer baseline differs from the release manifest");
+  if (pkg.peerDependencies["react-dom"] !== "^19.1.0" || pkg.peerDependenciesMeta?.["react-dom"]?.optional !== true) throw new Error("React DOM must remain an optional public peer");
   if (pkg.packageManager) throw new Error("The published SDK must not impose the repository package manager on consumers");
   await verifyCliRuntimes(consumer);
   const cliToolchain = verifyCliToolchain(consumer);

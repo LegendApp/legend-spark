@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-desktop-windows",
-  "version": "0.0.1-next.4",
+  "version": "0.0.1-next.5",
   "license": "MIT",
   "main": "src/index",
   "react-native": "src/index",
@@ -10,7 +10,7 @@
     "*.podspec"
   ],
   "peerDependencies": {
-    "react": "19.1.4",
+    "react": "^19.1.0",
     "react-native": "0.81.6"
   },
   "codegenConfig": {
@@ -40,8 +40,8 @@
     ]
   },
   "dependencies": {
-    "@legendapp/spark-desktop-app": "0.0.1-next.4",
-    "@legendapp/spark-window-options": "0.0.1-next.4",
+    "@legendapp/spark-desktop-app": "0.0.1-next.5",
+    "@legendapp/spark-window-options": "0.0.1-next.5",
     "@legendapp/state": "^3.0.0-beta.42"
   },
   "private": true

@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-desktop-app",
-  "version": "0.0.1-next.4",
+  "version": "0.0.1-next.5",
   "license": "MIT",
   "main": "src/index",
   "react-native": "src/index",
@@ -12,7 +12,7 @@
     "cpp"
   ],
   "peerDependencies": {
-    "react": "19.1.4",
+    "react": "^19.1.0",
     "react-native": "0.81.6"
   },
   "codegenConfig": {

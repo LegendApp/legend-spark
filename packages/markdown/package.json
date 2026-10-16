@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-markdown",
-  "version": "0.0.1-next.4",
+  "version": "0.0.1-next.5",
   "private": true,
   "license": "MIT",
   "main": "src/index.ts",
@@ -9,12 +9,12 @@
     "src"
   ],
   "peerDependencies": {
-    "react": "19.1.4",
+    "react": "^19.1.0",
     "react-native": "0.81.6",
     "react-native-enriched-markdown": "1.0.2"
   },
   "dependencies": {
-    "@legendapp/spark-rich-text": "0.0.1-next.4"
+    "@legendapp/spark-rich-text": "0.0.1-next.5"
   },
   "peerDependenciesMeta": {
     "react-native-enriched-markdown": {

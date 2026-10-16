@@ -135,7 +135,7 @@ test("single Spark archive resolves public exports and preserves private native 
     expect(JSON.parse(pluginOut).SparkFrameworkVersion).toBe(manifest.version);
     const singletonPeers = ["expo", "react", "react-native", "react-dom"];
     for (const name of singletonPeers) expect(manifest.dependencies).not.toHaveProperty(name);
-    expect(manifest.peerDependencies).toMatchObject({ expo: "54.0.37", react: "19.1.4", "react-native": "0.81.6", "react-dom": "19.1.4" });
+    expect(manifest.peerDependencies).toMatchObject({ expo: "54.0.37", react: "^19.1.0", "react-native": "0.81.6", "react-dom": "^19.1.0" });
     expect(manifest.peerDependenciesMeta["react-dom"]).toEqual({ optional: true });
     expect(manifest.dependencies["@react-native-runtimes/core"]).toBe("0.1.0-alpha.2");
     expect(manifest.dependencies["react-native-nitro-modules"]).toBe("0.37.0");
@@ -227,6 +227,9 @@ test("Create Spark archive is peer-free and runs without installing the framewor
     expect(manifest.name).toBe("@legendapp/create-spark");
     expect(manifest.version).toBe(VERSION);
     expect(manifest.private).toBeUndefined();
+    expect(manifest.publishConfig).toEqual({ access: "public", tag: "next" });
+    expect(manifest.bin).toEqual({ "create-spark": "dist/index.js" });
+    expect(manifest.files).toEqual(["dist", "templates"]);
     expect(manifest.peerDependencies).toBeUndefined();
     expect(Object.keys(manifest.dependencies).sort()).toEqual(["cross-spawn", "expo-desktop", "npm"]);
     for (const name of ["react", "react-dom", "react-native", "react-native-macos", "expo", "@legendapp/spark"]) {
@@ -244,13 +247,13 @@ test("Create Spark archive is peer-free and runs without installing the framewor
     const help = spawnProcess(["node", path.join(destination, manifest.bin["create-spark"]), "--help"], { cwd: root });
     const [out, err, code] = await Promise.all([new Response(help.stdout).text(), new Response(help.stderr).text(), help.exited]);
     expect(code, err).toBe(0);
-    expect(out).toContain("npm create @legendapp/spark MyApp");
+    expect(out).toContain("npm create @legendapp/spark@next MyApp");
     for (const platform of ["ios", "android", "web"]) {
       const app = path.join(root, `App${platform}`);
       const create = spawnProcess(["node", path.join(destination, manifest.bin["create-spark"]), app, "--platform", platform], { cwd: root });
       const [stderr, status] = await Promise.all([new Response(create.stderr).text(), create.exited]);
       expect(status).toBe(1);
-      expect(stderr).toContain(`Use npm create @legendapp/spark@latest ${app} -- --universal for mobile/web targets`);
+      expect(stderr).toContain(`Use npm create @legendapp/spark@next ${app} -- --universal for mobile/web targets`);
       expect(existsSync(app)).toBe(false);
     }
     // Expose the bundle's internals only in the extracted test copy.

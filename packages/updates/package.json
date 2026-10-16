@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-updates",
-  "version": "0.0.1-next.4",
+  "version": "0.0.1-next.5",
   "license": "MIT",
   "main": "src/index.ts",
   "react-native": "src/index.ts",
@@ -11,7 +11,7 @@
     "Sparkle.podspec.json"
   ],
   "peerDependencies": {
-    "react": "19.1.4",
+    "react": "^19.1.0",
     "react-native": "0.81.6"
   },
   "codegenConfig": {
@@ -38,7 +38,7 @@
     ]
   },
   "dependencies": {
-    "@legendapp/spark-desktop-app": "0.0.1-next.4"
+    "@legendapp/spark-desktop-app": "0.0.1-next.5"
   },
   "private": true
 }
