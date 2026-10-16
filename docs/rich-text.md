@@ -1,12 +1,41 @@
-# Rich text inputs
+# Rich text
 
-`@legendapp/spark/markdown` exports `MarkdownInput` and `EditableMarkdown`.
-`@legendapp/spark/html` exports `HtmlInput` and `EditableHtml`. The implementation
+`@legendapp/spark/markdown` exports `Markdown`, `MarkdownInput`, and `EditableMarkdown`.
+`@legendapp/spark/html` exports `Html`, `HtmlInput`, and `EditableHtml`. The implementation
 packages are bundled into Spark, following the other feature packages. Spark
 supplies both native backends; importing another Spark feature does not load
 their JavaScript or retain their native modules in production.
 
-All four accept `value`, `onChangeText`, `placeholder`, `autoFocus`, `onFocus`,
+## Read-only rendering
+
+`Markdown` and `Html` render through the same Enriched native text views as the
+editable previews. Pass a string through `value` or `children`; `value` takes
+precedence, including an empty string. With neither, the reader is empty.
+Both accept React Native `style` (including arrays), view accessibility/test
+props, `selectable` (default `true`), and `onLinkPress({ url })`. The handler
+owns link navigation; the demo displays the URL without opening a browser.
+
+```tsx
+import { Markdown } from "@legendapp/spark/markdown";
+import { Html } from "@legendapp/spark/html";
+
+<Markdown value={"# Hello\n\nRead **Spark** and [Legend](https://legendapp.com)."} />;
+<Html onLinkPress={({ url }) => console.log(url)}>
+  {'<h1>Hello</h1><p>Read <strong>Spark</strong>.</p>'}
+</Html>;
+```
+
+`Markdown` accepts the upstream `markdownStyle` for text and block formatting;
+`style` styles its container. It supports headings, lists, links, code, and
+images, with task checkboxes kept read-only. `Html` accepts the upstream
+`htmlStyle`; supported elements and styling depend on the host backend. On
+macOS it renders headings, lists, links, and code, but images are placeholders
+rather than loaded images, and custom `htmlStyle` is not applied. Syntax
+highlighting and math depend on the application's Enriched build settings.
+
+## Inputs
+
+All four inputs accept `value`, `onChangeText`, `placeholder`, `autoFocus`, `onFocus`,
 `onBlur`, `style`, `accessibilityLabel`, and `testID`. The value is a Markdown or
 HTML string, including its whitespace. A ref provides `focus()` and `blur()`.
 `formatting` adds Bold, Italic, Link, Bullets, and Numbers buttons. Supply
@@ -31,7 +60,7 @@ is not guaranteed to retain its original spelling after an edit.
 
 ## Installation
 
-Spark installs `react-native-enriched-markdown@1.0.2` and
+Spark installs `react-native-enriched-markdown@1.1.1` and
 `react-native-enriched-html@1.1.1` and applies their compatibility patches
 automatically during installation and native preparation. No separate
 installation or package-manager patch configuration is needed. Native preparation
@@ -82,8 +111,9 @@ native reader overlay; it defaults to white.
 
 ## Example and validation
 
-`examples/kitchen-sink/RichText.tsx` shows all four controlled components and
-formatting buttons. `tests/rich-text-values.test.ts` checks value synchronization.
+`examples/kitchen-sink/RichText.tsx` shows both readers with headings, lists,
+links, code, and a Markdown image, plus all four controlled inputs and formatting
+buttons. `tests/rich-text-values.test.ts` checks value synchronization.
 `tests/native-dependency-patches.test.ts` checks backend installation, repair,
 and pruning; `tests/package-distribution.test.ts` checks archive patch delivery.
 `tests/rich-text-shortcuts.test.ts` checks focused shortcut lifetime and callbacks.
