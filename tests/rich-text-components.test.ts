@@ -10,7 +10,7 @@ vi.mock("react-native", () => ({
   View: "View",
   Text: "Text",
   Pressable: "Pressable",
-  StyleSheet: { absoluteFill: {}, flatten: (styles: unknown) => styles, create: (styles: unknown) => styles },
+  StyleSheet: { absoluteFill: {}, flatten: (styles: any): any => Array.isArray(styles) ? Object.assign({}, ...styles.map((style: any) => style || {})) : styles, create: (styles: unknown) => styles },
 }));
 vi.mock("react-native-enriched-html", () => ({
   EnrichedText: "HtmlPreview",
@@ -20,7 +20,7 @@ vi.mock("react-native-enriched-markdown", () => ({
   EnrichedMarkdownText: "MarkdownPreview",
   EnrichedMarkdownTextInput: NativeInput,
 }));
-import { EditableMarkdown, MarkdownInput } from "../packages/markdown/src/MarkdownInput";
+import { EditableMarkdown, Markdown, MarkdownInput } from "../packages/desktop/markdown";
 
 import { EditableHtml, HtmlInput } from "../packages/html/src/HtmlInput";
 
@@ -167,3 +167,39 @@ test("HTML native formatting shortcuts follow focus and link commands use UTF-16
   bold();
   expect(instances[0].toggleBold).toHaveBeenCalledOnce();
 });
+
+for (const { Reader, preview, contentProp, blockStyle } of [
+  { Reader: Markdown, preview: "MarkdownPreview", contentProp: "markdown", blockStyle: "markdownStyle" },
+]) {
+  test(`${preview} renders strings, updates content, and forwards style and link events`, async () => {
+    const onLinkPress = vi.fn();
+    const style = [{ fontSize: 18 }, false as const, { color: "navy" }];
+    const format = { h1: { fontSize: 28 } };
+    const props = { style, onLinkPress, testID: "reader", accessibilityLabel: "Article", [blockStyle]: format };
+    await act(async () => {
+      rendered = create(React.createElement(Reader, props, "First **article**"));
+    });
+    let native = rendered.root.findByType(preview);
+    expect(native.props[contentProp]).toBe("First **article**");
+    expect(native.props[preview === "MarkdownPreview" ? "containerStyle" : "style"]).toEqual({ fontSize: 18, color: "navy" });
+    expect(native.props[blockStyle]).toBe(format);
+    expect(native.props.selectable).toBe(true);
+    expect(native.props.testID).toBe("reader");
+    expect(native.props.accessibilityLabel).toBe("Article");
+    native.props.onLinkPress({ url: "https://legendapp.com" });
+    expect(onLinkPress).toHaveBeenCalledWith({ url: "https://legendapp.com" });
+    expect(instances).toHaveLength(0);
+    expect(registerShortcut).not.toHaveBeenCalled();
+    if (Reader === Markdown) expect(native.props.enableTaskListItemToggle).toBe(false);
+    for (const value of ["Updated article", ""]) {
+      await act(async () => {
+        rendered.update(React.createElement(Reader, { ...props, value, selectable: false }, "Ignored children"));
+      });
+      native = rendered.root.findByType(preview);
+      expect(native.props[contentProp]).toBe(value);
+      expect(native.props.selectable).toBe(false);
+    }
+    await act(async () => { rendered.update(React.createElement(Reader)); });
+    expect(rendered.root.findByType(preview).props[contentProp]).toBe("");
+  });
+}

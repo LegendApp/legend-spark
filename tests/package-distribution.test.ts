@@ -171,6 +171,18 @@ test("single Spark archive resolves public exports and preserves private native 
     for (const subpath of Object.keys(manifest.exports)) {
       expect(realpathSync(req.resolve(`@legendapp/spark/${subpath.slice(2)}`)).startsWith(realpathSync(destination) + path.sep)).toBe(true);
     }
+    for (const [entry, name] of [["markdown", "Markdown"]]) {
+      const source = path.join(destination, `${entry}.ts`);
+      const program = ts.createProgram([source], { moduleResolution: ts.ModuleResolutionKind.Bundler, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, types: [], skipLibCheck: true });
+      const checker = program.getTypeChecker();
+      const exported = checker.getExportsOfModule(checker.getSymbolAtLocation(program.getSourceFile(source)!)!);
+      for (const symbolName of [name, `${name}Props`, `${name}Input`, `Editable${name}`]) {
+        const symbol = exported.find(symbol => symbol.name === symbolName)!;
+        expect(symbol, symbolName).toBeDefined();
+        const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+        expect(target.declarations?.every(declaration => declaration.getSourceFile().fileName.startsWith(destination + path.sep)), symbolName).toBe(true);
+      }
+    }
     expect(req("@legendapp/spark/config").readConfig).toBeTypeOf("function");
     expect(req("@legendapp/spark/metro").withDesktop).toBeTypeOf("function");
     expect(req("@legendapp/spark/native").withSparkNative).toBeTypeOf("function");
