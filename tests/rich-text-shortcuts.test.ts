@@ -81,6 +81,40 @@ test("focused formatting shortcuts use the committed callback and are removed on
   });
   expect(remove).toHaveBeenCalledTimes(6);
 });
+test("focus handoff waits for the previous editor's native shortcut removal", async () => {
+  let finishRemoval!: () => void;
+  const removing = new Promise<void>((resolve) => { finishRemoval = resolve; });
+  const registered = new Set<string>();
+  registerShortcut.mockImplementation(async (key: string) => {
+    if (registered.has(key)) throw new Error("Shortcut is already registered in this scope");
+    registered.add(key);
+    return { remove: async () => { await removing; registered.delete(key); } };
+  });
+  const first = vi.fn(), second = vi.fn();
+  function Editor({ focused, onFormat }: { focused: boolean; onFormat(action: string): void }) {
+    const input = useRef({ focus: vi.fn(), blur: vi.fn() });
+    useInputShortcuts(input, focused, { onFormat, linkEnabled: true });
+    return null;
+  }
+  function Root({ secondFocused }: { secondFocused: boolean }) {
+    return React.createElement(React.Fragment, null,
+      React.createElement(Editor, { focused: !secondFocused, onFormat: first }),
+      React.createElement(Editor, { focused: secondFocused, onFormat: second }),
+    );
+  }
+  await act(async () => { rendered = create(React.createElement(Root, { secondFocused: false })); });
+  const oldHandler = registerShortcut.mock.calls[1][1];
+  await act(async () => { rendered.update(React.createElement(Root, { secondFocused: true })); });
+  const callsBeforeRemoval = registerShortcut.mock.calls.length;
+  await act(async () => { finishRemoval(); });
+  expect(callsBeforeRemoval).toBe(6);
+  expect(registerShortcut).toHaveBeenCalledTimes(12);
+  oldHandler();
+  registerShortcut.mock.calls[7][1]();
+  expect(first).not.toHaveBeenCalled();
+  expect(second).toHaveBeenCalledWith("bold");
+});
+
 afterEach(async () => {
   if (rendered)
     await act(async () => {

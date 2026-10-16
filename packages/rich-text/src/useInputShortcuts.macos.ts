@@ -3,6 +3,9 @@ import { registerShortcut, type AsyncRegistration } from "@legendapp/spark-deskt
 import type { RichTextInputRef, FormattingAction } from "./types";
 import type { InputFormattingShortcuts } from "./useInputShortcuts";
 
+// Native removal is asynchronous; a newly focused editor must await the old owner.
+let pendingCleanup: Promise<void> = Promise.resolve();
+
 export function useInputShortcuts(
   input: RefObject<RichTextInputRef | null>,
   focused: boolean,
@@ -29,19 +32,24 @@ export function useInputShortcuts(
       if (linkEnabled) actions.push(["Cmd+K", "link"]);
       for (const [key, action] of actions) bindings.push([key, () => onFormat.current?.(action)]);
     }
-    for (const [key, handler] of bindings) {
-      void registerShortcut(key, () => {
-        if (active) handler();
-      })
-        .then((registration) => {
-          if (active) shortcuts.add(registration);
-          else void registration.remove().catch(console.error);
-        })
-        .catch(console.error);
-    }
+    const setup = pendingCleanup.then(async () => {
+      if (!active) return;
+      await Promise.all(bindings.map(async ([key, handler]) => {
+        try {
+          const registration = await registerShortcut(key, () => {
+            if (active) handler();
+          });
+          shortcuts.add(registration);
+        } catch (error) {
+          console.error(error);
+        }
+      }));
+    });
     return () => {
       active = false;
-      for (const shortcut of shortcuts) void shortcut.remove().catch(console.error);
+      pendingCleanup = setup.then(async () => {
+        await Promise.all([...shortcuts].map((shortcut) => shortcut.remove().catch(console.error)));
+      });
     };
   }, [input, focused, enabled, linkEnabled]);
 }
