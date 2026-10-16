@@ -1,0 +1,854 @@
+diff --git a/ReactNativeEnrichedHtml.podspec b/ReactNativeEnrichedHtml.podspec
+index 0af0fb0..15ae01c 100644
+--- a/ReactNativeEnrichedHtml.podspec
++++ b/ReactNativeEnrichedHtml.podspec
+@@ -10,12 +10,15 @@ Pod::Spec.new do |s|
+   s.license      = package["license"]
+   s.authors      = package["author"]
+
+-  s.platforms    = { :ios => min_ios_version_supported }
++  s.platforms    = { :ios => min_ios_version_supported, :osx => "14.0" }
+   s.source       = { :git => "https://github.com/software-mansion/react-native-enriched-html.git", :tag => "#{s.version}" }
+
+-  s.source_files = ["ios/**/*.{h,m,mm,cpp}", "cpp/**/*.{h,hpp,c,cpp}"]
++  s.ios.source_files = "ios/**/*.{h,m,mm,cpp}"
++  s.osx.frameworks = "AppKit"
++  s.osx.source_files = ["macos/**/*.{h,mm}", "ios/generated/**/*.{h,cpp,mm}"]
++  s.source_files = "cpp/**/*.{h,hpp,c,cpp}"
+   s.exclude_files = ["cpp/tests/**"]
+-  s.private_header_files = "ios/**/*.h"
++  s.private_header_files = ["ios/**/*.h", "macos/**/*.h"]
+   s.pod_target_xcconfig = {
+     'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/cpp/parser" "${PODS_TARGET_SRCROOT}/cpp/GumboParser"'
+   }
+diff --git a/macos/ENHtml.h b/macos/ENHtml.h
+new file mode 100644
+index 0000000..f3c3153
+--- /dev/null
++++ b/macos/ENHtml.h
+@@ -0,0 +1,12 @@
++#import <AppKit/AppKit.h>
++
++// Semantic attributes survive native editing and are serialized back to HTML.
++FOUNDATION_EXPORT NSAttributedStringKey const ENBlock;
++FOUNDATION_EXPORT NSAttributedStringKey const ENInlineCode;
++FOUNDATION_EXPORT NSAttributedStringKey const ENMention;
++FOUNDATION_EXPORT NSAttributedStringKey const ENImage;
++FOUNDATION_EXPORT NSMutableAttributedString *ENParseHTML(NSString *html, NSDictionary *defaults);
++FOUNDATION_EXPORT NSString *ENSerializeHTML(NSAttributedString *text);
++FOUNDATION_EXPORT void ENDrawListMarkers(NSTextView *view, NSRect dirtyRect);
++FOUNDATION_EXPORT NSDictionary *ENBaseAttributes(CGFloat fontSize, CGFloat lineHeight, NSString *family, NSString *weight, NSString *style, NSColor *color);
++FOUNDATION_EXPORT NSSize ENMeasureHTML(NSString *html, CGFloat width, NSDictionary *defaults);
+diff --git a/macos/ENHtml.mm b/macos/ENHtml.mm
+new file mode 100644
+index 0000000..ca32b6b
+--- /dev/null
++++ b/macos/ENHtml.mm
+@@ -0,0 +1,233 @@
++#import "ENHtml.h"
++#include "GumboParser.h"
++
++NSAttributedStringKey const ENBlock = @"ENBlock";
++NSAttributedStringKey const ENInlineCode = @"ENInlineCode";
++NSAttributedStringKey const ENMention = @"ENMention";
++NSAttributedStringKey const ENImage = @"ENImage";
++
++static NSString *ENString(const char *text) { return text ? @(text) : @""; }
++static NSString *ENEscape(NSString *text) {
++  return [[[text stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"]
++      stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"]
++      stringByReplacingOccurrencesOfString:@"\"" withString:@"&quot;"];
++}
++static BOOL ENStructuralElement(GumboNode *node) {
++  if (node->type != GUMBO_NODE_ELEMENT) return NO;
++  NSString *tag = ENString(gumbo_normalized_tagname(node->v.element.tag));
++  return [@[@"html", @"body", @"p", @"div", @"h1", @"h2", @"h3", @"h4", @"h5", @"h6", @"li", @"ul", @"ol", @"blockquote", @"pre"] containsObject:tag];
++}
++static void ENAppend(GumboNode *node, NSMutableAttributedString *text, NSDictionary *inherited) {
++  if (node->type == GUMBO_NODE_TEXT || node->type == GUMBO_NODE_WHITESPACE) {
++    NSString *value = ENString(node->v.text.text);
++    // Ignore formatting whitespace between block elements.
++    if (node->type == GUMBO_NODE_WHITESPACE && node->parent && node->parent->type == GUMBO_NODE_ELEMENT &&
++        (node->parent->v.element.tag == GUMBO_TAG_UL || node->parent->v.element.tag == GUMBO_TAG_OL)) return;
++    if (node->type == GUMBO_NODE_WHITESPACE && !inherited[ENBlock] && node->parent && node->parent->type == GUMBO_NODE_ELEMENT) {
++      GumboVector siblings = node->parent->v.element.children;
++      for (unsigned int i = 0; i < siblings.length; i++) {
++        if (siblings.data[i] != node) continue;
++        if ((i && ENStructuralElement((GumboNode *)siblings.data[i - 1])) ||
++            (i + 1 < siblings.length && ENStructuralElement((GumboNode *)siblings.data[i + 1]))) return;
++        break;
++      }
++    }
++    [text appendAttributedString:[[NSAttributedString alloc] initWithString:value attributes:inherited]];
++    return;
++  }
++  if (node->type != GUMBO_NODE_ELEMENT && node->type != GUMBO_NODE_DOCUMENT) return;
++  GumboVector children;
++  NSMutableDictionary *attrs = [inherited mutableCopy];
++  NSString *tag = @"";
++  BOOL block = NO;
++  if (node->type == GUMBO_NODE_ELEMENT) {
++    auto &element = node->v.element;
++    tag = ENString(gumbo_normalized_tagname(element.tag));
++    if ([tag isEqual:@"script"] || [tag isEqual:@"style"] || [tag isEqual:@"head"]) return;
++    children = element.children;
++    NSFont *font = attrs[NSFontAttributeName] ?: [NSFont systemFontOfSize:16];
++    if ([tag isEqual:@"b"] || [tag isEqual:@"strong"])
++      attrs[NSFontAttributeName] = [[NSFontManager sharedFontManager] convertFont:font toHaveTrait:NSBoldFontMask];
++    if ([tag isEqual:@"i"] || [tag isEqual:@"em"])
++      attrs[NSFontAttributeName] = [[NSFontManager sharedFontManager] convertFont:font toHaveTrait:NSItalicFontMask];
++    if ([tag isEqual:@"u"]) attrs[NSUnderlineStyleAttributeName] = @(NSUnderlineStyleSingle);
++    if ([tag isEqual:@"s"] || [tag isEqual:@"strike"] || [tag isEqual:@"del"])
++      attrs[NSStrikethroughStyleAttributeName] = @(NSUnderlineStyleSingle);
++    if ([tag isEqual:@"code"]) {
++      attrs[ENInlineCode] = @YES;
++      attrs[NSFontAttributeName] = [NSFont monospacedSystemFontOfSize:font.pointSize weight:NSFontWeightRegular];
++    }
++    block = [@[@"p", @"div", @"h1", @"h2", @"h3", @"h4", @"h5", @"h6", @"li", @"blockquote", @"pre"] containsObject:tag];
++    if (block) {
++      if (text.length && ![text.string hasSuffix:@"\n"])
++        [text appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n" attributes:inherited]];
++      NSString *kind = tag;
++      if ([tag isEqual:@"div"] || [tag isEqual:@"p"])
++        kind = inherited[ENBlock] ?: @"p";
++      if ([tag isEqual:@"li"]) kind = inherited[ENBlock] ?: @"ul";
++      if ([kind isEqual:@"ul"] && gumbo_get_attribute(&element.attributes, "data-checked")) kind = @"checkbox";
++      attrs[ENBlock] = kind;
++      GumboAttribute *checked = gumbo_get_attribute(&element.attributes, "data-checked");
++      if (checked) attrs[@"ENChecked"] = @([ENString(checked->value) isEqual:@"true"]);
++      NSMutableParagraphStyle *paragraph = [attrs[NSParagraphStyleAttributeName] mutableCopy] ?: [NSMutableParagraphStyle new];
++      if ([kind isEqual:@"ul"] || [kind isEqual:@"ol"] || [kind isEqual:@"checkbox"] || [kind isEqual:@"blockquote"]) {
++        paragraph.headIndent = 20;
++        paragraph.firstLineHeadIndent = 20;
++      }
++      attrs[NSParagraphStyleAttributeName] = paragraph;
++      if ([tag hasPrefix:@"h"] && tag.length == 2) {
++        NSInteger level = [[tag substringFromIndex:1] integerValue];
++        attrs[NSFontAttributeName] = [NSFont boldSystemFontOfSize:MAX(font.pointSize, 34 - level * 3)];
++      }
++      if ([tag isEqual:@"pre"]) attrs[NSFontAttributeName] = [NSFont monospacedSystemFontOfSize:font.pointSize weight:NSFontWeightRegular];
++    }
++    if ([tag isEqual:@"ul"] || [tag isEqual:@"ol"]) attrs[ENBlock] = tag;
++    GumboAttribute *style = gumbo_get_attribute(&element.attributes, "style");
++    if (style) {
++      NSString *css = ENString(style->value);
++      NSMutableParagraphStyle *paragraph = [attrs[NSParagraphStyleAttributeName] mutableCopy] ?: [NSMutableParagraphStyle new];
++      if ([css containsString:@"text-align: center"] || [css containsString:@"text-align:center"]) paragraph.alignment = NSTextAlignmentCenter;
++      if ([css containsString:@"text-align: right"] || [css containsString:@"text-align:right"]) paragraph.alignment = NSTextAlignmentRight;
++      if ([css containsString:@"text-align: justify"] || [css containsString:@"text-align:justify"]) paragraph.alignment = NSTextAlignmentJustified;
++      attrs[NSParagraphStyleAttributeName] = paragraph;
++    }
++    if ([tag isEqual:@"a"]) {
++      GumboAttribute *href = gumbo_get_attribute(&element.attributes, "href");
++      if (href) attrs[NSLinkAttributeName] = ENString(href->value);
++    }
++    GumboAttribute *indicator = gumbo_get_attribute(&element.attributes, "data-mention-indicator");
++    if (indicator) {
++      GumboAttribute *payload = gumbo_get_attribute(&element.attributes, "data-mention-payload");
++      attrs[ENMention] = @{@"indicator":ENString(indicator->value), @"payload":payload ? ENString(payload->value) : @"{}"};
++    }
++    if ([tag isEqual:@"br"]) {
++      [text appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n" attributes:attrs]];
++      return;
++    }
++    if ([tag isEqual:@"img"]) {
++      GumboAttribute *src = gumbo_get_attribute(&element.attributes, "src");
++      if (src) {
++        attrs[ENImage] = ENString(src->value);
++        // Retain remote image URLs without synchronous network requests on the UI thread.
++        NSTextAttachment *attachment = [NSTextAttachment new];
++        NSURL *url = [NSURL URLWithString:ENString(src->value)];
++        if (url.isFileURL) attachment.image = [[NSImage alloc] initWithContentsOfURL:url];
++        attrs[NSAttachmentAttributeName] = attachment;
++        [text appendAttributedString:[[NSAttributedString alloc] initWithString:@"\uFFFC" attributes:attrs]];
++      }
++      return;
++    }
++  } else children = node->v.document.children;
++  NSUInteger start = text.length;
++  for (unsigned int i = 0; i < children.length; i++) ENAppend((GumboNode *)children.data[i], text, attrs);
++  if (block && (text.length == start || ![[text attribute:@"ENStructural" atIndex:text.length - 1 effectiveRange:nil] boolValue])) {
++    NSMutableDictionary *delimiter = [attrs mutableCopy];
++    delimiter[@"ENStructural"] = @YES;
++    [text appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n" attributes:delimiter]];
++  }
++}
++
++NSMutableAttributedString *ENParseHTML(NSString *html, NSDictionary *defaults) {
++  NSMutableAttributedString *text = [NSMutableAttributedString new];
++  GumboOutput *output = gumbo_parse(html.UTF8String ?: "");
++  if (output) {
++    ENAppend(output->root, text, defaults);
++    gumbo_destroy_output(&kGumboDefaultOptions, output);
++  }
++  // The final block delimiter is structural, not an extra editor line.
++  if (text.length && [[text attribute:@"ENStructural" atIndex:text.length - 1 effectiveRange:nil] boolValue]) [text deleteCharactersInRange:NSMakeRange(text.length - 1, 1)];
++  return text;
++}
++
++NSString *ENSerializeHTML(NSAttributedString *text) {
++  NSMutableString *html = [NSMutableString stringWithString:@"<html>"];
++  NSUInteger start = 0;
++  NSString *openList = nil;
++  NSRange paragraph;
++  do {
++    paragraph = [text.string paragraphRangeForRange:NSMakeRange(start, 0)];
++    NSUInteger end = NSMaxRange(paragraph);
++    if (end > start && [[text.string substringWithRange:NSMakeRange(end - 1, 1)] isEqual:@"\n"]) end--;
++    NSDictionary *attrs = start < text.length ? [text attributesAtIndex:start effectiveRange:nil] : @{};
++    NSString *kind = attrs[ENBlock] ?: @"p";
++    BOOL list = [@[@"ul", @"ol", @"checkbox"] containsObject:kind];
++    NSString *tag = list ? @"li" : kind;
++    NSString *listTag = list ? ([kind isEqual:@"ol"] ? @"ol" : @"ul") : nil;
++    if (openList && ![openList isEqual:listTag]) { [html appendFormat:@"</%@>", openList]; openList = nil; }
++    if (listTag && !openList) { [html appendFormat:@"<%@>", listTag]; openList = listTag; }
++    NSParagraphStyle *style = attrs[NSParagraphStyleAttributeName];
++    NSString *alignment = @"left";
++    if (style.alignment == NSTextAlignmentCenter) alignment = @"center";
++    if (style.alignment == NSTextAlignmentRight) alignment = @"right";
++    if (style.alignment == NSTextAlignmentJustified) alignment = @"justify";
++    if ([kind isEqual:@"checkbox"]) [html appendFormat:@"<li data-checked=\"%@\" style=\"text-align: %@\">", [attrs[@"ENChecked"] boolValue] ? @"true" : @"false", alignment];
++    else [html appendFormat:@"<%@ style=\"text-align: %@\">", tag, alignment];
++    [text enumerateAttributesInRange:NSMakeRange(start, end - start) options:0 usingBlock:^(NSDictionary *run, NSRange range, BOOL *stop) {
++      if (run[ENImage]) { [html appendFormat:@"<img src=\"%@\" />", ENEscape(run[ENImage])]; return; }
++      NSMutableArray *tags = [NSMutableArray new];
++      NSFontTraitMask traits = [[NSFontManager sharedFontManager] traitsOfFont:run[NSFontAttributeName] ?: [NSFont systemFontOfSize:16]];
++      if (traits & NSBoldFontMask) [tags addObject:@"strong"];
++      if (traits & NSItalicFontMask) [tags addObject:@"em"];
++      if ([run[NSUnderlineStyleAttributeName] integerValue]) [tags addObject:@"u"];
++      if ([run[NSStrikethroughStyleAttributeName] integerValue]) [tags addObject:@"s"];
++      if (run[ENInlineCode]) [tags addObject:@"code"];
++      for (NSString *inlineTag in tags) [html appendFormat:@"<%@>", inlineTag];
++      if (run[NSLinkAttributeName]) [html appendFormat:@"<a href=\"%@\">", ENEscape([run[NSLinkAttributeName] description])];
++      NSDictionary *mention = run[ENMention];
++      if (mention) [html appendFormat:@"<span data-mention-indicator=\"%@\" data-mention-payload=\"%@\">", ENEscape(mention[@"indicator"]), ENEscape(mention[@"payload"])];
++      [html appendString:ENEscape([text.string substringWithRange:range])];
++      if (mention) [html appendString:@"</span>"];
++      if (run[NSLinkAttributeName]) [html appendString:@"</a>"];
++      for (NSString *inlineTag in tags.reverseObjectEnumerator) [html appendFormat:@"</%@>", inlineTag];
++    }];
++    [html appendFormat:@"</%@>", tag];
++
++    start = NSMaxRange(paragraph);
++  } while (start < text.length || (start == text.length && paragraph.length && [text.string hasSuffix:@"\n"]));
++  if (openList) [html appendFormat:@"</%@>", openList];
++  [html appendString:@"</html>"];
++  return html;
++}
++
++NSDictionary *ENBaseAttributes(CGFloat fontSize, CGFloat lineHeight, NSString *family, NSString *weight, NSString *style, NSColor *color) {
++  fontSize = fontSize > 0 ? fontSize : 16;
++  NSFont *font = family.length ? [NSFont fontWithName:family size:fontSize] : nil;
++  font = font ?: [NSFont systemFontOfSize:fontSize];
++  NSFontTraitMask traits = 0;
++  if ([weight isEqual:@"bold"] || weight.integerValue >= 600) traits |= NSBoldFontMask;
++  if ([style isEqual:@"italic"]) traits |= NSItalicFontMask;
++  font = [[NSFontManager sharedFontManager] convertFont:font toHaveTrait:traits];
++  NSMutableParagraphStyle *paragraph = [NSMutableParagraphStyle new];
++  if (lineHeight > 0) paragraph.minimumLineHeight = paragraph.maximumLineHeight = lineHeight;
++  return @{NSFontAttributeName:font, NSForegroundColorAttributeName:color ?: NSColor.labelColor, NSParagraphStyleAttributeName:paragraph};
++}
++NSSize ENMeasureHTML(NSString *html, CGFloat width, NSDictionary *defaults) {
++  width = isfinite(width) ? MAX(1, width) : 100000;
++  NSAttributedString *text = ENParseHTML(html, defaults);
++  NSRect bounds = [text boundingRectWithSize:NSMakeSize(width, CGFLOAT_MAX) options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading];
++  NSParagraphStyle *paragraph = defaults[NSParagraphStyleAttributeName];
++  CGFloat minimumHeight = MAX([defaults[NSFontAttributeName] pointSize] * 1.3, paragraph.minimumLineHeight);
++  return NSMakeSize(MIN(width, ceil(bounds.size.width)), MAX(ceil(bounds.size.height), ceil(minimumHeight)));
++}
++
++// NSTextList stores list metadata, but native text storage needs explicit marker
++// drawing to avoid inserting marker characters into JS text/selection offsets.
++void ENDrawListMarkers(NSTextView *view, NSRect dirtyRect) {
++  NSLayoutManager *layout = view.layoutManager;
++  [layout ensureLayoutForTextContainer:view.textContainer];
++  NSUInteger index = 0, number = 0;
++  while (index < view.string.length) {
++    NSRange paragraph = [view.string paragraphRangeForRange:NSMakeRange(index, 0)];
++    NSDictionary *attrs = [view.textStorage attributesAtIndex:index effectiveRange:nil];
++    NSString *kind = attrs[ENBlock];
++    if ([kind isEqual:@"ol"]) number++; else number = 0;
++    NSString *marker = [kind isEqual:@"ol"] ? [NSString stringWithFormat:@"%lu.", (unsigned long)number] : [kind isEqual:@"ul"] ? @"•" : [kind isEqual:@"checkbox"] ? ([attrs[@"ENChecked"] boolValue] ? @"☑" : @"☐") : nil;
++    if (marker) {
++      NSUInteger glyph = [layout glyphIndexForCharacterAtIndex:index];
++      NSRect line = [layout lineFragmentRectForGlyphAtIndex:glyph effectiveRange:nil];
++      NSRect rect = NSMakeRect(view.textContainerOrigin.x, view.textContainerOrigin.y + line.origin.y, 18, line.size.height);
++      if (NSIntersectsRect(rect, dirtyRect)) [marker drawInRect:rect withAttributes:@{NSFontAttributeName:attrs[NSFontAttributeName] ?: [NSFont systemFontOfSize:16], NSForegroundColorAttributeName:attrs[NSForegroundColorAttributeName] ?: NSColor.labelColor}];
++    }
++    index = NSMaxRange(paragraph);
++  }
++}
+diff --git a/macos/ENShadowNodes.h b/macos/ENShadowNodes.h
+new file mode 100644
+index 0000000..3c34558
+--- /dev/null
++++ b/macos/ENShadowNodes.h
+@@ -0,0 +1,42 @@
++#pragma once
++#include <ReactNativeEnrichedHtml/Props.h>
++#include <ReactNativeEnrichedHtml/EventEmitters.h>
++#include <react/renderer/components/view/ConcreteViewShadowNode.h>
++#include <react/renderer/core/ConcreteComponentDescriptor.h>
++#include <react/renderer/core/LayoutConstraints.h>
++
++namespace facebook::react {
++struct ENInputState {
++  std::string html;
++  bool initialized = false;
++};
++extern const char EnrichedTextInputViewComponentName[];
++extern const char EnrichedTextViewComponentName[];
++class EnrichedTextInputViewShadowNode final : public ConcreteViewShadowNode<EnrichedTextInputViewComponentName, EnrichedTextInputViewProps, EnrichedTextInputViewEventEmitter, ENInputState> {
++ public:
++  using ConcreteViewShadowNode::ConcreteViewShadowNode;
++  EnrichedTextInputViewShadowNode(const ShadowNode &source, const ShadowNodeFragment &fragment) : ConcreteViewShadowNode(source, fragment) {
++    if (getStateData().html != static_cast<const EnrichedTextInputViewShadowNode &>(source).getStateData().html) dirtyLayout();
++  }
++  static ShadowNodeTraits BaseTraits() {
++    auto traits = ConcreteViewShadowNode::BaseTraits();
++    traits.set(ShadowNodeTraits::Trait::LeafYogaNode);
++    traits.set(ShadowNodeTraits::Trait::MeasurableYogaNode);
++    return traits;
++  }
++  Size measureContent(const LayoutContext &, const LayoutConstraints &) const override;
++};
++class EnrichedTextViewShadowNode final : public ConcreteViewShadowNode<EnrichedTextViewComponentName, EnrichedTextViewProps, EnrichedTextViewEventEmitter> {
++ public:
++  using ConcreteViewShadowNode::ConcreteViewShadowNode;
++  static ShadowNodeTraits BaseTraits() {
++    auto traits = ConcreteViewShadowNode::BaseTraits();
++    traits.set(ShadowNodeTraits::Trait::LeafYogaNode);
++    traits.set(ShadowNodeTraits::Trait::MeasurableYogaNode);
++    return traits;
++  }
++  Size measureContent(const LayoutContext &, const LayoutConstraints &) const override;
++};
++using EnrichedTextInputViewComponentDescriptor = ConcreteComponentDescriptor<EnrichedTextInputViewShadowNode>;
++using EnrichedTextComponentDescriptor = ConcreteComponentDescriptor<EnrichedTextViewShadowNode>;
++}
+diff --git a/macos/ENShadowNodes.mm b/macos/ENShadowNodes.mm
+new file mode 100644
+index 0000000..745f6b8
+--- /dev/null
++++ b/macos/ENShadowNodes.mm
+@@ -0,0 +1,20 @@
++#import "ENShadowNodes.h"
++#import "ENHtml.h"
++namespace facebook::react {
++const char EnrichedTextInputViewComponentName[] = "EnrichedTextInputView";
++const char EnrichedTextViewComponentName[] = "EnrichedTextView";
++Size EnrichedTextInputViewShadowNode::measureContent(const LayoutContext &, const LayoutConstraints &constraints) const {
++  auto &state = getStateData();
++  auto html = state.initialized ? state.html : getConcreteProps().defaultValue;
++  const auto &props = getConcreteProps();
++  NSDictionary *defaults = ENBaseAttributes(props.fontSize, props.lineHeight, @(props.fontFamily.c_str()), @(props.fontWeight.c_str()), @(props.fontStyle.c_str()), nil);
++  NSSize size = ENMeasureHTML(@(html.c_str()), constraints.maximumSize.width, defaults);
++  return constraints.clamp({size.width, size.height});
++}
++Size EnrichedTextViewShadowNode::measureContent(const LayoutContext &, const LayoutConstraints &constraints) const {
++  const auto &props = getConcreteProps();
++  NSDictionary *defaults = ENBaseAttributes(props.fontSize, 0, @(props.fontFamily.c_str()), @(props.fontWeight.c_str()), @(props.fontStyle.c_str()), nil);
++  NSSize size = ENMeasureHTML(@(props.text.c_str()), constraints.maximumSize.width, defaults);
++  return constraints.clamp({size.width, size.height});
++}
++}
+diff --git a/macos/EnrichedTextInputView.h b/macos/EnrichedTextInputView.h
+new file mode 100644
+index 0000000..31f9d87
+--- /dev/null
++++ b/macos/EnrichedTextInputView.h
+@@ -0,0 +1,3 @@
++#import <React/RCTViewComponentView.h>
++@interface EnrichedTextInputView : RCTViewComponentView
++@end
+diff --git a/macos/EnrichedTextInputView.mm b/macos/EnrichedTextInputView.mm
+new file mode 100644
+index 0000000..4b56f8b
+--- /dev/null
++++ b/macos/EnrichedTextInputView.mm
+@@ -0,0 +1,400 @@
++#import "EnrichedTextInputView.h"
++#import "ENHtml.h"
++#import "ENShadowNodes.h"
++#import <React/RCTConversions.h>
++#import <ReactNativeEnrichedHtml/RCTComponentViewHelpers.h>
++
++using namespace facebook::react;
++@interface ENPlaceholder : NSTextField
++@end
++@implementation ENPlaceholder
++- (NSView *)hitTest:(NSPoint)point { return nil; }
++@end
++@class ENEditor;
++@interface EnrichedTextInputView () <NSTextViewDelegate, RCTEnrichedTextInputViewViewProtocol>
++- (void)editorFocused:(BOOL)focused;
++- (BOOL)editorKey:(NSEvent *)event;
++@end
++@interface ENEditor : NSTextView
++@property (nonatomic, weak) EnrichedTextInputView *owner;
++@end
++@implementation ENEditor {
++  NSUndoManager *_editorUndoManager;
++}
++- (NSUndoManager *)undoManager {
++  if (!_editorUndoManager) _editorUndoManager = [NSUndoManager new];
++  return _editorUndoManager;
++}
++- (void)drawRect:(NSRect)dirtyRect { [super drawRect:dirtyRect]; ENDrawListMarkers(self, dirtyRect); }
++- (BOOL)becomeFirstResponder {
++  BOOL result = [super becomeFirstResponder];
++  if (result) [self.owner editorFocused:YES];
++  return result;
++}
++- (BOOL)resignFirstResponder {
++  BOOL result = [super resignFirstResponder];
++  if (result) [self.owner editorFocused:NO];
++  return result;
++}
++- (void)keyDown:(NSEvent *)event {
++  if (![self.owner editorKey:event]) [super keyDown:event];
++}
++@end
++
++@implementation EnrichedTextInputView {
++  ENEditor *_editor;
++  NSScrollView *_scrollView;
++  NSTextField *_placeholder;
++  EnrichedTextInputViewShadowNode::ConcreteState::Shared _state;
++  BOOL _initialized;
++  BOOL _autoFocusPending;
++  BOOL _scrollEnabled;
++  NSString *_submitBehavior;
++  NSDictionary *_defaults;
++  NSString *_lastHtml;
++  NSString *_lastText;
++}
+++ (ComponentDescriptorProvider)componentDescriptorProvider {
++  return concreteComponentDescriptorProvider<EnrichedTextInputViewComponentDescriptor>();
++}
++Class<RCTComponentViewProtocol> EnrichedTextInputViewCls(void) { return EnrichedTextInputView.class; }
++- (instancetype)initWithFrame:(NSRect)frame {
++  if ((self = [super initWithFrame:frame])) {
++    _props = std::make_shared<const EnrichedTextInputViewProps>();
++    _editor = [[ENEditor alloc] initWithFrame:NSZeroRect];
++    _editor.owner = self;
++    _editor.delegate = self;
++    _editor.richText = YES;
++    _editor.importsGraphics = NO;
++    _editor.drawsBackground = NO;
++    _editor.textContainerInset = NSZeroSize;
++    _editor.textContainer.lineFragmentPadding = 0;
++    _editor.verticallyResizable = YES;
++    _editor.horizontallyResizable = NO;
++    _editor.autoresizingMask = NSViewWidthSizable;
++    _editor.textContainer.widthTracksTextView = YES;
++    _editor.allowsUndo = YES;
++    _defaults = @{NSFontAttributeName:[NSFont systemFontOfSize:16], NSForegroundColorAttributeName:NSColor.labelColor};
++    _editor.typingAttributes = _defaults;
++    _scrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
++    _scrollView.drawsBackground = NO;
++    _scrollView.borderType = NSNoBorder;
++    _scrollView.documentView = _editor;
++    _placeholder = [ENPlaceholder labelWithString:@""];
++    _placeholder.textColor = NSColor.placeholderTextColor;
++    _placeholder.font = _defaults[NSFontAttributeName];
++    [_editor addSubview:_placeholder];
++    self.contentView = _scrollView;
++  }
++  return self;
++}
++- (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps {
++  const auto &next = *std::static_pointer_cast<EnrichedTextInputViewProps const>(props);
++  const auto &previous = *std::static_pointer_cast<EnrichedTextInputViewProps const>(_props);
++  _defaults = ENBaseAttributes(next.fontSize, next.lineHeight, @(next.fontFamily.c_str()), @(next.fontWeight.c_str()), @(next.fontStyle.c_str()), RCTUIColorFromSharedColor(next.color));
++  NSFont *font = _defaults[NSFontAttributeName];
++  _editor.editable = next.editable;
++  _editor.selectable = YES;
++  _editor.insertionPointColor = RCTUIColorFromSharedColor(next.cursorColor) ?: NSColor.controlAccentColor;
++  _editor.selectedTextAttributes = @{NSBackgroundColorAttributeName:RCTUIColorFromSharedColor(next.selectionColor) ?: NSColor.selectedTextBackgroundColor};
++  _placeholder.stringValue = @(next.placeholder.c_str());
++  _placeholder.textColor = RCTUIColorFromSharedColor(next.placeholderTextColor) ?: NSColor.placeholderTextColor;
++  _placeholder.font = font;
++  _scrollEnabled = next.scrollEnabled;
++  _scrollView.hasVerticalScroller = _scrollEnabled;
++  _submitBehavior = @(next.submitBehavior.c_str());
++  if (!_initialized) {
++    _initialized = YES;
++    [_editor.textStorage setAttributedString:ENParseHTML(@(next.defaultValue.c_str()), _defaults)];
++    _editor.typingAttributes = _defaults;
++  } else if (next.fontSize != previous.fontSize || next.lineHeight != previous.lineHeight || next.color != previous.color || next.fontFamily != previous.fontFamily || next.fontWeight != previous.fontWeight || next.fontStyle != previous.fontStyle) {
++    // Reapply the theme through the same semantic representation used for edits.
++    NSRange selection = _editor.selectedRange;
++    [_editor.textStorage setAttributedString:ENParseHTML(ENSerializeHTML(_editor.textStorage), _defaults)];
++    _editor.selectedRange = selection;
++    _editor.typingAttributes = selection.location < _editor.string.length ? [_editor.textStorage attributesAtIndex:selection.location effectiveRange:nil] : _defaults;
++  }
++  _autoFocusPending = next.autoFocus && (!previous.autoFocus || !oldProps);
++  [super updateProps:props oldProps:oldProps];
++  [self updatePlaceholder];
++  _lastHtml = ENSerializeHTML(_editor.textStorage);
++  _lastText = _editor.string;
++  if (_autoFocusPending && self.window) [self focus];
++}
++- (void)viewDidMoveToWindow {
++  [super viewDidMoveToWindow];
++  if (_autoFocusPending && self.window) [self focus];
++}
++- (void)updateLayoutMetrics:(const LayoutMetrics &)metrics oldLayoutMetrics:(const LayoutMetrics &)oldMetrics {
++  [super updateLayoutMetrics:metrics oldLayoutMetrics:oldMetrics];
++  NSSize size = _scrollView.contentSize;
++  [_editor setFrameSize:NSMakeSize(MAX(1, size.width), MAX(size.height, _editor.frame.size.height))];
++  _editor.textContainer.containerSize = NSMakeSize(MAX(1, size.width), CGFLOAT_MAX);
++  _editor.minSize = NSMakeSize(0, size.height);
++  [self updatePlaceholder];
++}
++- (void)updatePlaceholder {
++  _placeholder.hidden = _editor.string.length > 0;
++  _placeholder.frame = NSMakeRect(0, 0, _editor.bounds.size.width, MAX(24, _placeholder.font.pointSize * 1.5));
++}
++- (void)updateState:(State::Shared const &)state oldState:(State::Shared const &)oldState {
++  _state = std::static_pointer_cast<const EnrichedTextInputViewShadowNode::ConcreteState>(state);
++}
++- (void)publishMeasurement {
++  if (_state) {
++    std::string html = ENSerializeHTML(_editor.textStorage).UTF8String;
++    if (!_state->getData().initialized || _state->getData().html != html) _state->updateState(ENInputState{html, true});
++  }
++}
++- (void)handleCommand:(NSString const *)name args:(NSArray const *)args {
++  RCTEnrichedTextInputViewHandleCommand(self, name, args);
++}
++- (void)focus { _autoFocusPending = NO; if (_editor.editable) [self.window makeFirstResponder:_editor]; }
++- (void)blur { if (self.window.firstResponder == _editor) [self.window makeFirstResponder:nil]; }
++- (void)editorFocused:(BOOL)focused {
++  auto emitter = std::static_pointer_cast<const EnrichedTextInputViewEventEmitter>(_eventEmitter);
++  if (!emitter) return;
++  if (focused) emitter->onInputFocus({}); else emitter->onInputBlur({});
++}
++- (BOOL)editorKey:(NSEvent *)event {
++  NSString *key = event.charactersIgnoringModifiers ?: @"";
++  BOOL enter = event.keyCode == 36 || event.keyCode == 76;
++  if (enter) key = @"Enter";
++  if (event.keyCode == 53) key = @"Escape";
++  if (event.keyCode == 51 || event.keyCode == 117) key = @"Backspace";
++  auto emitter = std::static_pointer_cast<const EnrichedTextInputViewEventEmitter>(_eventEmitter);
++  if (emitter) emitter->onInputKeyPress({.key = key.UTF8String});
++  if (enter && ([_submitBehavior isEqual:@"submit"] || [_submitBehavior isEqual:@"blurAndSubmit"])) {
++    if (emitter) emitter->onSubmitEditing({.text = _editor.string.UTF8String});
++    if ([_submitBehavior isEqual:@"blurAndSubmit"]) [self blur];
++    return YES;
++  }
++  return NO;
++}
++- (NSRange)clampedRange:(NSInteger)start end:(NSInteger)end {
++  NSUInteger length = _editor.string.length;
++  NSUInteger a = MIN(length, MAX(0, start)), b = MIN(length, MAX(0, end));
++  return NSMakeRange(MIN(a, b), MAX(a, b) - MIN(a, b));
++}
++- (void)setSelection:(NSInteger)start end:(NSInteger)end {
++  _editor.selectedRange = [self clampedRange:start end:end];
++  if (_scrollEnabled) [_editor scrollRangeToVisible:_editor.selectedRange];
++}
++- (void)setValue:(NSString *)html {
++  NSMutableAttributedString *replacement = ENParseHTML(html, _defaults);
++  if ([_editor.textStorage isEqualToAttributedString:replacement]) return;
++  NSRange selection = _editor.selectedRange;
++  [_editor.undoManager removeAllActions];
++  [_editor.textStorage setAttributedString:replacement];
++  _editor.typingAttributes = _defaults;
++  [self setSelection:selection.location end:NSMaxRange(selection)];
++  _lastHtml = ENSerializeHTML(_editor.textStorage);
++  _lastText = _editor.string;
++  [self updatePlaceholder];
++  [self publishMeasurement];
++}
++- (void)textDidChange:(NSNotification *)notification { [self changed]; }
++- (void)changed {
++  [self updatePlaceholder];
++  [_editor setNeedsDisplay:YES];
++  [self publishMeasurement];
++  auto emitter = std::static_pointer_cast<const EnrichedTextInputViewEventEmitter>(_eventEmitter);
++  if (!emitter) return;
++  const auto &props = *std::static_pointer_cast<EnrichedTextInputViewProps const>(_props);
++  NSString *text = _editor.string;
++  NSString *html = ENSerializeHTML(_editor.textStorage);
++  if (props.isOnChangeTextSet && ![_lastText isEqual:text]) emitter->onChangeText({.value = text.UTF8String});
++  _lastText = [text copy];
++  if (!_editor.hasMarkedText) {
++    if (props.isOnChangeHtmlSet && ![_lastHtml isEqual:html]) emitter->onChangeHtml({.value = html.UTF8String});
++    _lastHtml = html;
++  }
++  [self emitSelection];
++}
++- (void)textViewDidChangeSelection:(NSNotification *)notification { [self emitSelection]; }
++- (NSDictionary *)activeAttributes {
++  return _editor.selectedRange.length ? [_editor.textStorage attributesAtIndex:_editor.selectedRange.location effectiveRange:nil] : _editor.typingAttributes;
++}
++- (void)emitSelection {
++  auto emitter = std::static_pointer_cast<const EnrichedTextInputViewEventEmitter>(_eventEmitter);
++  if (!emitter) return;
++  NSRange range = _editor.selectedRange;
++  emitter->onChangeSelection({.start = (int)range.location, .end = (int)NSMaxRange(range), .text = [_editor.string substringWithRange:range].UTF8String});
++  NSDictionary *attrs = [self activeAttributes];
++  NSFontTraitMask traits = [[NSFontManager sharedFontManager] traitsOfFont:attrs[NSFontAttributeName] ?: _defaults[NSFontAttributeName]];
++  EnrichedTextInputViewEventEmitter::OnChangeState state{};
++  state.bold.isActive = traits & NSBoldFontMask;
++  state.italic.isActive = traits & NSItalicFontMask;
++  state.underline.isActive = [attrs[NSUnderlineStyleAttributeName] integerValue] != 0;
++  state.strikeThrough.isActive = [attrs[NSStrikethroughStyleAttributeName] integerValue] != 0;
++  state.inlineCode.isActive = [attrs[ENInlineCode] boolValue];
++  state.h1.isActive = [attrs[ENBlock] isEqual:@"h1"];
++  state.h2.isActive = [attrs[ENBlock] isEqual:@"h2"];
++  state.h3.isActive = [attrs[ENBlock] isEqual:@"h3"];
++  state.h4.isActive = [attrs[ENBlock] isEqual:@"h4"];
++  state.h5.isActive = [attrs[ENBlock] isEqual:@"h5"];
++  state.h6.isActive = [attrs[ENBlock] isEqual:@"h6"];
++  state.blockQuote.isActive = [attrs[ENBlock] isEqual:@"blockquote"];
++  state.codeBlock.isActive = [attrs[ENBlock] isEqual:@"pre"];
++  state.orderedList.isActive = [attrs[ENBlock] isEqual:@"ol"];
++  state.unorderedList.isActive = [attrs[ENBlock] isEqual:@"ul"];
++  state.checkboxList.isActive = [attrs[ENBlock] isEqual:@"checkbox"];
++  state.link.isActive = attrs[NSLinkAttributeName] != nil;
++  state.image.isActive = attrs[ENImage] != nil;
++  state.mention.isActive = attrs[ENMention] != nil;
++  NSParagraphStyle *paragraph = attrs[NSParagraphStyleAttributeName];
++  state.alignment = paragraph.alignment == NSTextAlignmentCenter ? "center" : paragraph.alignment == NSTextAlignmentRight ? "right" : paragraph.alignment == NSTextAlignmentJustified ? "justify" : "left";
++  emitter->onChangeState(state);
++  if (attrs[NSLinkAttributeName]) emitter->onLinkDetected({.text = [_editor.string substringWithRange:range].UTF8String, .url = [attrs[NSLinkAttributeName] description].UTF8String, .start = (int)range.location, .end = (int)NSMaxRange(range)});
++}
++- (void)restoreText:(NSAttributedString *)text selection:(NSRange)selection typing:(NSDictionary *)typing {
++  [self recordUndo];
++  [_editor.textStorage setAttributedString:text];
++  [self setSelection:selection.location end:NSMaxRange(selection)];
++  _editor.typingAttributes = typing;
++  [self changed];
++}
++- (void)recordUndo {
++  NSAttributedString *snapshot = [_editor.textStorage copy];
++  NSRange selection = _editor.selectedRange;
++  NSDictionary *typing = [_editor.typingAttributes copy];
++  [_editor.undoManager registerUndoWithTarget:self handler:^(EnrichedTextInputView *view) { [view restoreText:snapshot selection:selection typing:typing]; }];
++}
++- (void)changeAttributes:(void (^)(NSMutableDictionary *))change paragraph:(BOOL)paragraph {
++  [self recordUndo];
++  NSRange selection = _editor.selectedRange;
++  NSRange range = paragraph ? [_editor.string paragraphRangeForRange:selection] : selection;
++  if (range.length) {
++    [_editor.textStorage beginEditing];
++    [_editor.textStorage enumerateAttributesInRange:range options:0 usingBlock:^(NSDictionary *attrs, NSRange run, BOOL *stop) {
++      NSMutableDictionary *updated = [attrs mutableCopy];
++      change(updated);
++      [_editor.textStorage setAttributes:updated range:run];
++    }];
++    [_editor.textStorage endEditing];
++  }
++  NSMutableDictionary *typing = [_editor.typingAttributes mutableCopy];
++  change(typing);
++  _editor.typingAttributes = typing;
++  [self changed];
++}
++- (void)toggleTrait:(NSFontTraitMask)trait {
++  BOOL active = ([[NSFontManager sharedFontManager] traitsOfFont:[self activeAttributes][NSFontAttributeName] ?: _defaults[NSFontAttributeName]] & trait) != 0;
++  [self changeAttributes:^(NSMutableDictionary *attrs) {
++    NSFont *font = attrs[NSFontAttributeName] ?: _defaults[NSFontAttributeName];
++    attrs[NSFontAttributeName] = active ? [[NSFontManager sharedFontManager] convertFont:font toNotHaveTrait:trait] : [[NSFontManager sharedFontManager] convertFont:font toHaveTrait:trait];
++  } paragraph:NO];
++}
++- (void)toggleBold { [self toggleTrait:NSBoldFontMask]; }
++- (void)toggleItalic { [self toggleTrait:NSItalicFontMask]; }
++- (void)toggleAttribute:(NSAttributedStringKey)key value:(id)value {
++  BOOL active = [[self activeAttributes][key] boolValue];
++  [self changeAttributes:^(NSMutableDictionary *attrs) { if (active) [attrs removeObjectForKey:key]; else attrs[key] = value; } paragraph:NO];
++}
++- (void)toggleUnderline { [self toggleAttribute:NSUnderlineStyleAttributeName value:@(NSUnderlineStyleSingle)]; }
++- (void)toggleStrikeThrough { [self toggleAttribute:NSStrikethroughStyleAttributeName value:@(NSUnderlineStyleSingle)]; }
++- (void)toggleInlineCode {
++  BOOL active = [[self activeAttributes][ENInlineCode] boolValue];
++  [self changeAttributes:^(NSMutableDictionary *attrs) {
++    if (active) [attrs removeObjectForKey:ENInlineCode]; else attrs[ENInlineCode] = @YES;
++    attrs[NSFontAttributeName] = active ? _defaults[NSFontAttributeName] : [NSFont monospacedSystemFontOfSize:[_defaults[NSFontAttributeName] pointSize] weight:NSFontWeightRegular];
++  } paragraph:NO];
++}
++- (void)toggleBlock:(NSString *)kind {
++  BOOL active = [[self activeAttributes][ENBlock] isEqual:kind];
++  [self changeAttributes:^(NSMutableDictionary *attrs) {
++    attrs[ENBlock] = active ? @"p" : kind;
++    NSMutableParagraphStyle *style = [attrs[NSParagraphStyleAttributeName] mutableCopy] ?: [NSMutableParagraphStyle new];
++    BOOL list = !active && ([@[@"ol", @"ul", @"checkbox"] containsObject:kind]);
++    style.headIndent = list || (!active && [kind isEqual:@"blockquote"]) ? 20 : 0;
++    style.firstLineHeadIndent = style.headIndent;
++    attrs[NSParagraphStyleAttributeName] = style;
++    if ([kind hasPrefix:@"h"] || [kind isEqual:@"pre"]) {
++      NSFont *font = _defaults[NSFontAttributeName];
++      if (!active && [kind hasPrefix:@"h"] && kind.length == 2) font = [NSFont boldSystemFontOfSize:MAX(font.pointSize, 34 - [[kind substringFromIndex:1] integerValue] * 3)];
++      if (!active && [kind isEqual:@"pre"]) font = [NSFont monospacedSystemFontOfSize:font.pointSize weight:NSFontWeightRegular];
++      attrs[NSFontAttributeName] = font;
++    }
++  } paragraph:YES];
++}
++- (void)toggleH1 { [self toggleBlock:@"h1"]; }
++- (void)toggleH2 { [self toggleBlock:@"h2"]; }
++- (void)toggleH3 { [self toggleBlock:@"h3"]; }
++- (void)toggleH4 { [self toggleBlock:@"h4"]; }
++- (void)toggleH5 { [self toggleBlock:@"h5"]; }
++- (void)toggleH6 { [self toggleBlock:@"h6"]; }
++- (void)toggleCodeBlock { [self toggleBlock:@"pre"]; }
++- (void)toggleBlockQuote { [self toggleBlock:@"blockquote"]; }
++- (void)toggleOrderedList { [self toggleBlock:@"ol"]; }
++- (void)toggleUnorderedList { [self toggleBlock:@"ul"]; }
++- (void)toggleCheckboxList:(BOOL)checked {
++  [self toggleBlock:@"checkbox"];
++  [self changeAttributes:^(NSMutableDictionary *attrs) { attrs[@"ENChecked"] = @(checked); } paragraph:YES];
++}
++- (void)setTextAlignment:(NSString *)alignment {
++  [self changeAttributes:^(NSMutableDictionary *attrs) {
++    NSMutableParagraphStyle *style = [attrs[NSParagraphStyleAttributeName] mutableCopy] ?: [NSMutableParagraphStyle new];
++    style.alignment = [alignment isEqual:@"center"] ? NSTextAlignmentCenter : [alignment isEqual:@"right"] ? NSTextAlignmentRight : [alignment isEqual:@"justify"] ? NSTextAlignmentJustified : NSTextAlignmentLeft;
++    attrs[NSParagraphStyleAttributeName] = style;
++  } paragraph:YES];
++}
++- (void)addLink:(NSInteger)start end:(NSInteger)end text:(NSString *)text url:(NSString *)url {
++  [self recordUndo];
++  NSRange range = [self clampedRange:start end:end];
++  NSMutableDictionary *attrs = [[self activeAttributes] mutableCopy];
++  attrs[NSLinkAttributeName] = url;
++  [_editor.textStorage replaceCharactersInRange:range withAttributedString:[[NSAttributedString alloc] initWithString:text attributes:attrs]];
++  [self setSelection:range.location end:range.location + text.length];
++  [self changed];
++}
++- (void)removeLink:(NSInteger)start end:(NSInteger)end {
++  [self recordUndo];
++  [_editor.textStorage removeAttribute:NSLinkAttributeName range:[self clampedRange:start end:end]];
++  NSMutableDictionary *typing = [_editor.typingAttributes mutableCopy];
++  [typing removeObjectForKey:NSLinkAttributeName];
++  _editor.typingAttributes = typing;
++  [self changed];
++}
++- (void)addImage:(NSString *)uri width:(float)width height:(float)height {
++  NSTextAttachment *attachment = [NSTextAttachment new];
++  NSURL *url = [NSURL URLWithString:uri];
++  if (url.isFileURL) attachment.image = [[NSImage alloc] initWithContentsOfURL:url];
++  NSMutableAttributedString *text = [[NSAttributedString attributedStringWithAttachment:attachment] mutableCopy];
++  [text addAttribute:ENImage value:uri range:NSMakeRange(0, text.length)];
++  [_editor insertText:text replacementRange:_editor.selectedRange];
++  [self changed];
++}
++- (void)startMention:(NSString *)indicator {
++  [_editor insertText:indicator replacementRange:_editor.selectedRange];
++}
++- (void)addMention:(NSString *)indicator text:(NSString *)text payload:(NSString *)payload {
++  NSRange range = _editor.selectedRange;
++  // Replace the currently typed indicator and query, as on the mobile backend.
++  NSString *prefix = [_editor.string substringToIndex:range.location];
++  NSRange marker = [prefix rangeOfString:indicator options:NSBackwardsSearch];
++  if (marker.location != NSNotFound && [[prefix substringFromIndex:marker.location] rangeOfCharacterFromSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].location == NSNotFound)
++    range = NSMakeRange(marker.location, NSMaxRange(range) - marker.location);
++  NSMutableDictionary *attrs = [_defaults mutableCopy];
++  attrs[ENMention] = @{@"indicator":indicator, @"payload":payload};
++  NSAttributedString *mention = [[NSAttributedString alloc] initWithString:[indicator stringByAppendingString:text] attributes:attrs];
++  [_editor insertText:mention replacementRange:range];
++  _editor.typingAttributes = _defaults;
++  [self changed];
++}
++- (void)requestHTML:(NSInteger)requestId {
++  auto emitter = std::static_pointer_cast<const EnrichedTextInputViewEventEmitter>(_eventEmitter);
++  if (emitter) emitter->onRequestHtmlResult({.requestId = (int)requestId, .html = folly::dynamic(ENSerializeHTML(_editor.textStorage).UTF8String)});
++}
++- (void)prepareForRecycle {
++  [self blur];
++  _state.reset();
++  _initialized = NO;
++  _autoFocusPending = NO;
++  _lastHtml = nil;
++  _lastText = nil;
++  [_editor.textStorage setAttributedString:[[NSAttributedString alloc] initWithString:@""]];
++  [_editor.undoManager removeAllActions];
++  _editor.typingAttributes = _defaults;
++  [super prepareForRecycle];
++}
++@end
+diff --git a/macos/EnrichedTextView.h b/macos/EnrichedTextView.h
+new file mode 100644
+index 0000000..889e813
+--- /dev/null
++++ b/macos/EnrichedTextView.h
+@@ -0,0 +1,3 @@
++#import <React/RCTViewComponentView.h>
++@interface EnrichedTextView : RCTViewComponentView
++@end
+diff --git a/macos/EnrichedTextView.mm b/macos/EnrichedTextView.mm
+new file mode 100644
+index 0000000..c54565a
+--- /dev/null
++++ b/macos/EnrichedTextView.mm
+@@ -0,0 +1,50 @@
++#import "EnrichedTextView.h"
++#import "ENHtml.h"
++#import "ENShadowNodes.h"
++#import <React/RCTConversions.h>
++using namespace facebook::react;
++@interface ENReadOnlyTextView : NSTextView
++@end
++@implementation ENReadOnlyTextView
++- (void)drawRect:(NSRect)dirtyRect { [super drawRect:dirtyRect]; ENDrawListMarkers(self, dirtyRect); }
++@end
++@interface EnrichedTextView () <NSTextViewDelegate>
++@end
++@implementation EnrichedTextView {
++  NSTextView *_textView;
++}
+++ (ComponentDescriptorProvider)componentDescriptorProvider {
++  return concreteComponentDescriptorProvider<EnrichedTextComponentDescriptor>();
++}
++Class<RCTComponentViewProtocol> EnrichedTextViewCls(void) { return EnrichedTextView.class; }
++- (instancetype)initWithFrame:(NSRect)frame {
++  if ((self = [super initWithFrame:frame])) {
++    _props = std::make_shared<const EnrichedTextViewProps>();
++    _textView = [[ENReadOnlyTextView alloc] initWithFrame:NSZeroRect];
++    _textView.editable = NO;
++    _textView.drawsBackground = NO;
++    _textView.textContainerInset = NSZeroSize;
++    _textView.textContainer.lineFragmentPadding = 0;
++    _textView.delegate = self;
++    self.contentView = _textView;
++  }
++  return self;
++}
++- (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps {
++  const auto &next = *std::static_pointer_cast<EnrichedTextViewProps const>(props);
++  NSDictionary *defaults = ENBaseAttributes(next.fontSize, 0, @(next.fontFamily.c_str()), @(next.fontWeight.c_str()), @(next.fontStyle.c_str()), RCTUIColorFromSharedColor(next.color));
++  [_textView.textStorage setAttributedString:ENParseHTML(@(next.text.c_str()), defaults)];
++  _textView.selectable = next.selectable;
++  _textView.textContainer.maximumNumberOfLines = MAX(0, next.numberOfLines);
++  [super updateProps:props oldProps:oldProps];
++}
++- (BOOL)textView:(NSTextView *)textView clickedOnLink:(id)link atIndex:(NSUInteger)index {
++  auto emitter = std::static_pointer_cast<const EnrichedTextViewEventEmitter>(_eventEmitter);
++  if (emitter) emitter->onLinkPress({.url = [link description].UTF8String});
++  return YES;
++}
++- (void)prepareForRecycle {
++  [_textView.textStorage setAttributedString:[[NSAttributedString alloc] initWithString:@""]];
++  [super prepareForRecycle];
++}
++@end
+diff --git a/package.json b/package.json
+index 3d770e6..245df64 100644
+--- a/package.json
++++ b/package.json
+@@ -27,6 +27,7 @@
+     "lib",
+     "android",
+     "ios",
++    "macos",
+     "cpp",
+     "*.podspec",
+     "react-native.config.js",
+@@ -75,6 +76,7 @@
+   "keywords": [
+     "react-native",
+     "ios",
++    "macos",
+     "android"
+   ],
+   "repository": {

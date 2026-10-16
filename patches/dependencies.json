@@ -4,5 +4,11 @@
     "url": "https://registry.npmjs.org/react-native-enriched-markdown/-/react-native-enriched-markdown-1.1.1.tgz",
     "integrity": "sha512-JvbRIVy75MAoGCv8V6sSscu11/Ian588wfIgH+j64XFpf6gy5sNNkMyG087MH88jNCf3p7fTjgEAGxZMhEqL4A==",
     "patch": "react-native-enriched-markdown@1.1.1.patch"
+  },
+  "react-native-enriched-html": {
+    "version": "1.1.1",
+    "url": "https://registry.npmjs.org/react-native-enriched-html/-/react-native-enriched-html-1.1.1.tgz",
+    "integrity": "sha512-OlJLESOgA4eqgWQe3BXOK9kFk7iypOnQo22sIce5k/x2eGsOtnAwDPqHnaVfnOZlzzNWh+wXRzxuSL1tSBOkgA==",
+    "patch": "react-native-enriched-html@1.1.1.patch"
   }
 }

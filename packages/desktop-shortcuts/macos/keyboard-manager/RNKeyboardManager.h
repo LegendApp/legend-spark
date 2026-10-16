@@ -3,6 +3,9 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+@class NSEvent;
+FOUNDATION_EXPORT NSString *SparkKeyboardKeyString(NSEvent *event);
+
 @interface RNKeyboardManager : RCTEventEmitter <NativeKeyboardManagerSpec>
 @end
 

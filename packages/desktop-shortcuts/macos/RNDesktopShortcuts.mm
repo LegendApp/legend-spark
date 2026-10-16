@@ -1,4 +1,5 @@
 #import "RNDesktopShortcuts.h"
+#import "keyboard-manager/RNKeyboardManager.h"
 #import <RNDesktopApp/SparkDesktop.h>
 @interface RNDesktopShortcuts ()
 @property NSMutableDictionary *shortcuts;
@@ -25,10 +26,11 @@ RCT_EXPORT_MODULE(NativeDesktopShortcuts)
         self.monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *event) {
           RNDesktopShortcuts *strongSelf = weakSelf;
           NSUInteger flags = event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagShift);
+          NSString *key = SparkKeyboardKeyString(event);
           NSString *windowID = [event.window.identifier hasPrefix:@"spark."] ? [event.window.identifier substringFromIndex:6] : nil;
           NSDictionary *match;
           for (NSDictionary *shortcut in strongSelf.shortcuts.allValues) {
-            if ([shortcut[@"key"] isEqual:event.charactersIgnoringModifiers.lowercaseString] && flags == [shortcut[@"modifiers"] unsignedIntegerValue] &&
+            if ([shortcut[@"key"] isEqual:key] && flags == [shortcut[@"modifiers"] unsignedIntegerValue] &&
               (!shortcut[@"windowId"] || [shortcut[@"windowId"] isEqual:windowID])) {
               // A window-specific binding overrides the app-wide binding.
               if (!match || shortcut[@"windowId"]) match = shortcut;

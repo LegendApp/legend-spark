@@ -73,7 +73,9 @@
     "./ai": "./ai.ts",
     "./ai/codex": "./ai-codex.ts",
     "./camera": "./camera.ts",
-    "./customize": "./customize.ts"
+    "./customize": "./customize.ts",
+    "./markdown": "./markdown.ts",
+    "./html": "./html.ts"
   },
   "files": [
     "*.ts",
@@ -123,7 +125,10 @@
     "@legendapp/spark-codex": "0.0.1-next.4",
     "react-native-vision-camera": "5.2.3",
     "react-native-nitro-image": "0.15.2",
-    "react-native-enriched-markdown": "1.1.1"
+    "react-native-enriched-markdown": "1.1.1",
+    "@legendapp/spark-markdown": "0.0.1-next.4",
+    "@legendapp/spark-html": "0.0.1-next.4",
+    "react-native-enriched-html": "1.1.1"
   },
   "description": "Legend Spark \u2014 native applications with React Native and Expo",
   "bin": {

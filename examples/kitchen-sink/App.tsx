@@ -1,3 +1,4 @@
+import { RichText } from "./RichText";
 import * as documents from "@legendapp/spark/app/documents";
 import { Button } from "./Controls";
 import { ActionButton } from "./ActionButton";
@@ -173,6 +174,7 @@ function KitchenSink({ runtime, projectId }: Props) {
       <Card title="Secure storage"><TextInput accessibilityLabel="Demo secret" secureTextEntry style={styles.input} className="border-border bg-surface text-foreground" placeholderTextColorClassName="accent-muted" value={secret} onChangeText={setSecret} placeholder="Demo secret (stored in Keychain)" /><View style={styles.row}>
         <ActionButton onPress={() => action(async () => { await secureStore.setItemAsync("kitchen-demo", secret); return "Stored demo secret"; })}>Store demo secret</ActionButton><ActionButton onPress={() => action(async () => { setSecret(await secureStore.getItemAsync("kitchen-demo") ?? ""); return "Loaded demo secret"; })}>Load demo secret</ActionButton><ActionButton onPress={() => action(async () => { await secureStore.deleteItemAsync("kitchen-demo"); setSecret(""); return "Deleted demo secret"; })}>Delete demo secret</ActionButton></View></Card>
       <Card title="Native UI"><NativeControls /></Card>
+      <Card title="Rich text"><RichText /></Card>
       <Card title="Expo-aligned APIs"><APIChecks /></Card>
       <Card title="Desktop integrations"><Integrations report={report} />
         <Expansion report={report} /></Card>

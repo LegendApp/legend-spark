@@ -54,6 +54,12 @@ flowchart TD
 | Local distribution | [scripts/pack.ts](scripts/pack.ts), [scripts/prepare-runtimes.ts](scripts/prepare-runtimes.ts) | Content-addressed archives, patched upstream source, SDK registration |
 | Validation | [tests](tests), [fixtures](fixtures), [scripts](scripts), [examples](examples) | Unit/config/codegen checks, native fixtures, external consumers, interactive examples |
 
+The optional `/markdown` and `/html` feature paths bundle small component adapters and
+use pinned upstream editors with automatic compatibility patches. Markdown reuses
+the Legend Apps patch; HTML adds an AppKit backend to Enriched HTML. The shared
+rich-text package owns value-echo synchronization and focused desktop shortcuts.
+See [rich text inputs](docs/rich-text.md) for installation and native validation limits.
+
 Directory names do not always match published package names. In particular, `packages/config-plugin` is the `@legendapp/spark-desktop-config` package. `packages/desktop-windows` implements application windows; its name does not mean Microsoft Windows support.
 
 ## Application creation and local distribution

@@ -73,6 +73,8 @@
     "./ai",
     "./ai/codex",
     "./ui/swipe",
-    "./camera"
+    "./camera",
+    "./markdown",
+    "./html"
   ]
 }

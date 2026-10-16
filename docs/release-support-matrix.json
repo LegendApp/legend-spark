@@ -3680,6 +3680,155 @@
       }
     },
     {
+      "path": "./markdown",
+      "sourceTarget": "./markdown.ts",
+      "kind": "runtime-api",
+      "scope": "optional-rich-text-ui",
+      "provider": "@legendapp/spark-markdown",
+      "intendedTargets": [
+        "macos",
+        "ios",
+        "android",
+        "web"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/rich-text-values.test.ts",
+          "tests/rich-text-shortcuts.test.ts",
+          "tests/rich-text-components.test.ts",
+          "tests/native-dependency-patches.test.ts",
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "bun run test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; then exercise examples/kitchen-sink/RichText.tsx as described in docs/rich-text.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; then exercise examples/kitchen-sink/RichText.tsx as described in docs/rich-text.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "The selected rich text backends have no Windows implementation."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "The selected rich text backends have no Windows implementation."
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform ios; then exercise examples/kitchen-sink/RichText.tsx as described in docs/rich-text.md"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform android; then exercise examples/kitchen-sink/RichText.tsx as described in docs/rich-text.md"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform web; then exercise examples/kitchen-sink/RichText.tsx as described in docs/rich-text.md"
+          }
+        }
+      },
+      "providerSources": [
+        "packages/markdown/package.json",
+        "packages/markdown/src/MarkdownInput.tsx"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/markdown/src/MarkdownInput.tsx",
+          "packages/rich-text/src/useInputShortcuts.macos.ts"
+        ],
+        "windows": [],
+        "ios": [
+          "packages/markdown/src/MarkdownInput.tsx"
+        ],
+        "android": [
+          "packages/markdown/src/MarkdownInput.tsx"
+        ],
+        "web": [
+          "packages/markdown/src/MarkdownInput.tsx"
+        ]
+      }
+    },
+    {
+      "path": "./html",
+      "sourceTarget": "./html.ts",
+      "kind": "runtime-api",
+      "scope": "optional-rich-text-ui",
+      "provider": "@legendapp/spark-html",
+      "intendedTargets": [
+        "macos",
+        "ios",
+        "android",
+        "web"
+      ],
+      "relatedCatalogCases": [],
+      "verification": {
+        "unitTests": [
+          "tests/rich-text-values.test.ts",
+          "tests/rich-text-shortcuts.test.ts",
+          "tests/rich-text-components.test.ts",
+          "tests/native-dependency-patches.test.ts",
+          "tests/package-distribution.test.ts"
+        ],
+        "portableCommand": "bun run test",
+        "platformAcceptance": {
+          "macos-arm64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; then exercise examples/kitchen-sink/RichText.tsx as described in docs/rich-text.md"
+          },
+          "macos-x64": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform macos; then exercise examples/kitchen-sink/RichText.tsx as described in docs/rich-text.md"
+          },
+          "windows-x64": {
+            "status": "not-applicable",
+            "reason": "The selected rich text backends have no Windows implementation."
+          },
+          "windows-arm64": {
+            "status": "not-applicable",
+            "reason": "The selected rich text backends have no Windows implementation."
+          },
+          "ios": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform ios; then exercise examples/kitchen-sink/RichText.tsx as described in docs/rich-text.md"
+          },
+          "android": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform android; then exercise examples/kitchen-sink/RichText.tsx as described in docs/rich-text.md"
+          },
+          "web": {
+            "status": "not-tested",
+            "acceptanceCommand": "bun run test:platform --platform web; then exercise examples/kitchen-sink/RichText.tsx as described in docs/rich-text.md"
+          }
+        }
+      },
+      "providerSources": [
+        "packages/html/package.json",
+        "packages/html/src/HtmlInput.tsx"
+      ],
+      "platformSourceEvidence": {
+        "macos": [
+          "packages/html/src/HtmlInput.tsx",
+          "packages/rich-text/src/useInputShortcuts.macos.ts",
+          "patches/react-native-enriched-html@1.1.1.patch"
+        ],
+        "windows": [],
+        "ios": [
+          "packages/html/src/HtmlInput.tsx"
+        ],
+        "android": [
+          "packages/html/src/HtmlInput.tsx"
+        ],
+        "web": [
+          "packages/html/src/HtmlInput.tsx"
+        ]
+      }
+    },
+    {
       "path": "./camera",
       "sourceTarget": "./camera.ts",
       "kind": "runtime-api",
