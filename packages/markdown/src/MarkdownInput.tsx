@@ -1,7 +1,6 @@
 import { useImperativeHandle, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
-  EnrichedMarkdownText,
   EnrichedMarkdownTextInput,
   type EnrichedMarkdownTextInputInstance,
   type MarkdownStyle,
@@ -15,6 +14,8 @@ import {
   type RichTextInputProps,
   type RichTextInputRef,
 } from "@legendapp/spark-rich-text";
+
+import { Markdown } from "./Markdown";
 
 export interface MarkdownInputProps extends RichTextInputProps {
   markdownStyle?: MarkdownStyle;
@@ -93,11 +94,10 @@ function MarkdownEditor({
         {preview && (
           <InputPreview editing={editing} style={style}>
             {value ? (
-              <EnrichedMarkdownText
-                markdown={value}
+              <Markdown
+                value={value}
                 markdownStyle={markdownStyle}
-                allowTrailingMargin={false}
-                containerStyle={inputStyle}
+                style={inputStyle}
                 selectable={false}
               />
             ) : (

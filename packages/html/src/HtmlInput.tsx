@@ -1,6 +1,6 @@
 import { useImperativeHandle, useRef, useState } from "react";
 import { StyleSheet, Text, View, type NativeSyntheticEvent } from "react-native";
-import { EnrichedText, EnrichedTextInput, type EnrichedTextInputInstance } from "react-native-enriched-html";
+import { EnrichedTextInput, type EnrichedTextInputInstance } from "react-native-enriched-html";
 import {
   FormattingButtons,
   InputPreview,
@@ -8,6 +8,7 @@ import {
   useInputShortcuts,
   type FormattingAction,
 } from "@legendapp/spark-rich-text";
+import { Html } from "./Html";
 import type { HtmlInputProps } from "./types";
 
 export function HtmlInput(props: HtmlInputProps) {
@@ -89,7 +90,7 @@ function HtmlEditor({
         {preview && (
           <InputPreview editing={editing} style={style}>
             {value ? (
-              <EnrichedText style={inputStyle}>{value}</EnrichedText>
+              <Html value={value} style={inputStyle} selectable={false} />
             ) : (
               <Text style={[inputStyle, { color: "#888" }]}>{placeholder}</Text>
             )}
