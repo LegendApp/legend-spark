@@ -48,3 +48,35 @@ int main() { @autoreleasepool {
 } }
 `);
 }, 25000);
+
+test.skipIf(process.platform !== "darwin")("HTML list toggles retain inline formatting and links", () => {
+  const source = readFileSync(path.join(root, "node_modules/react-native-enriched-html/macos/EnrichedTextInputView.mm"), "utf8");
+  const method = (name: string, next: string) => source.slice(source.indexOf(`- (${name}`), source.indexOf(`- (${next}`, source.indexOf(`- (${name}`)));
+  runNative(`
+static NSAttributedStringKey const ENBlock = @"ENBlock";
+@interface Editor : NSObject { NSTextView *_editor; NSDictionary *_defaults; }
+- (void)run;
+@end
+@implementation Editor
+- (void)recordUndo {}
+- (void)changed {}
+${method("NSDictionary *)activeAttributes", "void)emitSelection")}
+${method("void)changeAttributes", "void)toggleTrait")}
+${method("void)toggleBlock", "void)toggleH1")}
+- (void)run {
+  _editor = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 900, 60)];
+  NSFont *font = [[NSFontManager sharedFontManager] convertFont:[NSFont systemFontOfSize:16] toHaveTrait:NSBoldFontMask | NSItalicFontMask];
+  _defaults = @{NSFontAttributeName: [NSFont systemFontOfSize:16]};
+  [_editor.textStorage setAttributedString:[[NSAttributedString alloc] initWithString:@"linked item" attributes:@{NSFontAttributeName:font, NSLinkAttributeName:@"https://legendapp.com"}]];
+  _editor.selectedRange = NSMakeRange(0, _editor.string.length);
+  for (NSString *kind in @[@"ol", @"ul", @"ul"]) {
+    [self toggleBlock:kind];
+    NSDictionary *attributes = [_editor.textStorage attributesAtIndex:0 effectiveRange:nil];
+    assert(([[NSFontManager sharedFontManager] traitsOfFont:attributes[NSFontAttributeName]] & (NSBoldFontMask | NSItalicFontMask)) == (NSBoldFontMask | NSItalicFontMask));
+    assert([attributes[NSLinkAttributeName] isEqual:@"https://legendapp.com"]);
+  }
+}
+@end
+int main() { @autoreleasepool { [NSApplication sharedApplication]; [[Editor new] run]; puts("HTML list formatting passed"); } }
+`);
+}, 25000);

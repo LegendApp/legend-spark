@@ -366,7 +366,7 @@ new file mode 100644
 index 0000000..4b56f8b
 --- /dev/null
 +++ b/macos/EnrichedTextInputView.mm
-@@ -0,0 +1,398 @@
+@@ -0,0 +1,400 @@
 +#import "EnrichedTextInputView.h"
 +#import "ENHtml.h"
 +#import "ENShadowNodes.h"
@@ -678,10 +678,12 @@ index 0000000..4b56f8b
 +    style.headIndent = list || (!active && [kind isEqual:@"blockquote"]) ? 20 : 0;
 +    style.firstLineHeadIndent = style.headIndent;
 +    attrs[NSParagraphStyleAttributeName] = style;
-+    NSFont *font = _defaults[NSFontAttributeName];
-+    if (!active && [kind hasPrefix:@"h"] && kind.length == 2) font = [NSFont boldSystemFontOfSize:MAX(font.pointSize, 34 - [[kind substringFromIndex:1] integerValue] * 3)];
-+    if (!active && [kind isEqual:@"pre"]) font = [NSFont monospacedSystemFontOfSize:font.pointSize weight:NSFontWeightRegular];
-+    attrs[NSFontAttributeName] = font;
++    if ([kind hasPrefix:@"h"] || [kind isEqual:@"pre"]) {
++      NSFont *font = _defaults[NSFontAttributeName];
++      if (!active && [kind hasPrefix:@"h"] && kind.length == 2) font = [NSFont boldSystemFontOfSize:MAX(font.pointSize, 34 - [[kind substringFromIndex:1] integerValue] * 3)];
++      if (!active && [kind isEqual:@"pre"]) font = [NSFont monospacedSystemFontOfSize:font.pointSize weight:NSFontWeightRegular];
++      attrs[NSFontAttributeName] = font;
++    }
 +  } paragraph:YES];
 +}
 +- (void)toggleH1 { [self toggleBlock:@"h1"]; }
