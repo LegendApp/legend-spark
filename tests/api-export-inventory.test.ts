@@ -20,11 +20,11 @@ test("all 63 original exports have a disposition and every public entry has a ta
   }
 });
 
-test("markdown public entry exports its reader, inputs, and their owned props", () => {
-  const entries = ["packages/desktop/markdown.ts"];
+test("rich text public entries export readers, inputs, and their owned props", () => {
+  const entries = ["packages/desktop/markdown.ts", "packages/desktop/html.ts"];
   const program = ts.createProgram(entries, { moduleResolution: ts.ModuleResolutionKind.Bundler, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, types: [], skipLibCheck: true });
   const checker = program.getTypeChecker();
-  for (const [index, name] of ["Markdown"].entries()) {
+  for (const [index, name] of ["Markdown", "Html"].entries()) {
     const source = program.getSourceFile(entries[index])!;
     const exported = checker.getExportsOfModule(checker.getSymbolAtLocation(source)!).map(symbol => symbol.name);
     expect(exported.sort()).toEqual([name, `${name}Props`, `${name}Input`, `${name}InputProps`, `${name}InputRef`, `Editable${name}`].sort());

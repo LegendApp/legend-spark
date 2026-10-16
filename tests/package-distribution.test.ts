@@ -171,7 +171,7 @@ test("single Spark archive resolves public exports and preserves private native 
     for (const subpath of Object.keys(manifest.exports)) {
       expect(realpathSync(req.resolve(`@legendapp/spark/${subpath.slice(2)}`)).startsWith(realpathSync(destination) + path.sep)).toBe(true);
     }
-    for (const [entry, name] of [["markdown", "Markdown"]]) {
+    for (const [entry, name] of [["markdown", "Markdown"], ["html", "Html"]]) {
       const source = path.join(destination, `${entry}.ts`);
       const program = ts.createProgram([source], { moduleResolution: ts.ModuleResolutionKind.Bundler, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, types: [], skipLibCheck: true });
       const checker = program.getTypeChecker();

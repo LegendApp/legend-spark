@@ -22,7 +22,7 @@ vi.mock("react-native-enriched-markdown", () => ({
 }));
 import { EditableMarkdown, Markdown, MarkdownInput } from "../packages/desktop/markdown";
 
-import { EditableHtml, HtmlInput } from "../packages/html/src/HtmlInput";
+import { EditableHtml, Html, HtmlInput } from "../packages/desktop/html";
 
 const instances: Array<{
   selection: number;
@@ -170,6 +170,7 @@ test("HTML native formatting shortcuts follow focus and link commands use UTF-16
 
 for (const { Reader, preview, contentProp, blockStyle } of [
   { Reader: Markdown, preview: "MarkdownPreview", contentProp: "markdown", blockStyle: "markdownStyle" },
+  { Reader: Html, preview: "HtmlPreview", contentProp: "children", blockStyle: "htmlStyle" },
 ]) {
   test(`${preview} renders strings, updates content, and forwards style and link events`, async () => {
     const onLinkPress = vi.fn();
