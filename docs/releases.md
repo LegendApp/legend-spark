@@ -1,5 +1,7 @@
 # Preview release process
 
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
 ## App upgrade contract
 
 Each release must retain the cumulative app-facing notes in
@@ -73,7 +75,7 @@ must include both SKILL.md and UPGRADING.md. Run `bun run typecheck` and the ful
 suite before release. Rebuilding native runtimes and affected app acceptance are
 separate checks from source migrations.
 
-Legend Spark currently identifies itself as `0.0.1-next.4` and publishes through
+Legend Spark currently identifies itself as `0.0.1-next.5` and publishes through
 the `next` preview channel. That identity remains experimental until the
 [release readiness matrix](release-readiness.md) and a completed
 [release evidence dossier](release-test-dossier.md) support a deliberate
@@ -173,10 +175,10 @@ run, preserves a 50 GB reserve, and requires an additional 10 GB of headroom bef
 dependency installation, native builds, and packed-consumer installs. If it stops
 for space, review cleanup and rerun with `--resume`.
 
-This workflow publishes an experimental **macOS Apple Silicon** preview. Its
+This workflow publishes a prerelease for macOS Apple Silicon. Its
 automated checks do not perform native UI or clean-recipient Runner acceptance.
-Record those separately in the dossier; Windows and Intel native acceptance
-remain pending. Promoting npm `latest` does not change that support scope.
+Record those separately in the dossier. Intel macOS is not yet verified.
+Promoting npm `latest` does not change the platform support listed above.
 
 ## Manual release prerequisites
 

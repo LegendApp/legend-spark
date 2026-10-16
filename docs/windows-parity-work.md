@@ -6,13 +6,13 @@ is performed on Windows; generation and bundling never imply runtime success.
 
 - [x] 1. Filesystem and persistent settings (`99cc5d7`).
 - [x] 2. Native message dialogs and context menus (`6fcdee8`).
-- [x] 3. Drag/drop, recent documents, file/URL associations (source implementation; native acceptance pending).
-- [x] 4. Tray and global shortcuts (source implementation; native acceptance pending).
-- [x] 5. Notifications and response lifecycle (source implementation; native acceptance pending).
-- [x] 6. Owned/modal windows and fuller menus (source implementation; native acceptance pending).
-- [x] 7. Processes and system APIs (source implementation; native acceptance pending).
-- [x] 8. Nitro, SQLite, WebView, secondary Hermes runtimes (source integration; native acceptance pending; optional shared-main-module mode remains unsupported).
-- [x] 9. Rich clipboard and development connection/bundle options (source implementation; native acceptance pending).
+- [x] 3. Drag/drop, recent documents, file/URL associations (source implementation; native behavior not yet verified).
+- [x] 4. Tray and global shortcuts (source implementation; native behavior not yet verified).
+- [x] 5. Notifications and response lifecycle (source implementation; native behavior not yet verified).
+- [x] 6. Owned/modal windows and fuller menus (source implementation; native behavior not yet verified).
+- [x] 7. Processes and system APIs (source implementation; native behavior not yet verified).
+- [x] 8. Nitro, SQLite, WebView, secondary Hermes runtimes (source integration; native behavior not yet verified; optional shared-main-module mode remains unsupported).
+- [x] 9. Rich clipboard and development connection/bundle options (source implementation; native behavior not yet verified).
 
 Standalone distribution was deferred for the internal development slice; the
 current task continues the development feature priorities. Track actual native limitations in

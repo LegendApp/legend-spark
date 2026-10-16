@@ -4,21 +4,25 @@
 
 # Legend Spark
 
-**Experimental — not ready for production use.** APIs, native implementations, and tooling may change.
+Legend Spark is a full desktop framework built on React Native and Expo Desktop. Build native apps with menus, windows, filesystem access, drag and drop, keyboard shortcuts, rich text, and Liquid Glass—all from React. Your UI uses React Native's native renderer, and your application JavaScript runs in Hermes.
 
-Legend Spark is an experimental framework for building native desktop applications with React Native and Expo Desktop. It combines desktop APIs with an Expo-style development workflow: start in **Spark Runner**, the shared development runtime, switch to a custom development build when you need additional native code, and build a standalone application containing the native modules it needs.
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 
-The public package is `@legendapp/spark`; the CLI and short name are `spark`.
-APIs are imported from paths such as `@legendapp/spark/files` and
-`@legendapp/spark/ui`. Private implementation modules are bundled inside the single `@legendapp/spark` archive; they are not published separately.
-See the [rename and migration guide](docs/legend-spark-migration.md) when updating
-an existing prototype checkout.
+## Quick start
 
-Application JavaScript runs in **Hermes**. Node and Bun are development tools; neither is embedded as the application's JavaScript runtime. The UI uses React Native's native renderer.
+Install Node 24.19.0 or newer, then create an app from the prerelease channel:
 
-**Current scope:** macOS 14+ with Apple Silicon and Intel build targets. Intel native compilation and runtime acceptance remain pending; see [Intel macOS](docs/macos-intel.md). The packages, CLI, and native runtime are prototypes. A [transferable SDK with optional Spark Runner runtimes](docs/sdk-distribution.md) works outside the checkout; experimental npm packages use the `next` tag; matching SDK archives and macOS development runtimes are distributed through [GitHub prereleases](https://github.com/LegendApp/legend-spark/releases). Windows x64/ARM64 prebuilt and custom development builds are integrated, with native verification still pending; see the [Windows development guide](docs/windows-slice.md). Mobile/web development delegates to Expo. Linux and Mac App Store distribution are not supported by this framework's current workflow.
+```sh
+npm create @legendapp/spark@next MyApp
+cd MyApp
+npm run macos
+```
 
-The checkout currently targets Expo SDK 54 / React Native 0.81 and pins **Expo Desktop 1.0.0**. Expo Desktop owns template creation and native project generation; Expo CLI owns Metro and the development terminal. spark adds desktop actions, runtime compatibility checks, native capabilities, and build orchestration. See the [integration boundary](docs/expo-desktop-integration.md) for the remaining upstream launch requirements.
+`npx @legendapp/create-spark@next MyApp` is equivalent. Use `@next` for this prerelease; unqualified commands and `@latest` use npm's default channel and may resolve an older version. These commands require the matching creator package and release assets to be published.
+
+Start in **Spark Runner**, the shared development runtime. Switch to a custom development build when you add native code, then build a standalone app with the native modules it needs. Node and Bun are development tools; neither is embedded in your app. Bun is optional for app developers.
+
+Import APIs from paths such as `@legendapp/spark/files`, `@legendapp/spark/windows`, and `@legendapp/spark/ui`. The single `@legendapp/spark` package includes the CLI and implementation modules. See the [development guide](docs/development.md) for prerequisites and the [migration guide](docs/legend-spark-migration.md) for existing apps.
 
 ## Start here
 
@@ -29,7 +33,7 @@ The checkout currently targets Expo SDK 54 / React Native 0.81 and pins **Expo D
 - **Try an application:** explore [Kitchen Sink](#explore-the-kitchen-sink), [Notes/Music/Diff Lite](#small-application-examples), or the [native helper example](#native-helper-example).
 - **Understand or change the framework:** read [ARCHITECTURE.md](ARCHITECTURE.md), including its source map and implementation invariants.
 - **Work on Expo Desktop integration:** start with the [integration handoff](docs/expo-desktop-integration.md).
-- **Check what has actually been tested:** see [validation and limitations](#validation-and-limitations). Implementation and recorded acceptance are different things.
+- **Check what has actually been tested:** see [validation and limitations](#validation-and-limitations).
 
 ## The development model
 
@@ -43,25 +47,15 @@ The CLI checks the project's native requirements against the selected runtime. O
 
 The development terminal explains incompatibilities and offers a build/switch action. It does not silently compile on every file change. Switching binaries or restarting Metro can reset application state.
 
-## Install the experimental prerelease
+## Install and upgrade
 
-The release workflow publishes `@legendapp/spark`, containing the CLI and private implementation modules, and the peer-free `@legendapp/create-spark` app creator at the same version and dist-tag. Published prereleases use the `next` tag and require Node 24.19.0 or newer. Bun is optional.
-
-Once the matching npm package and GitHub assets have been published:
-
-```sh
-npm create @legendapp/spark@next MyApp
-cd MyApp
-npm run macos
-```
-
-`npx @legendapp/create-spark@next MyApp` is equivalent. The creator installs only scaffolding tools before generating an app with the exact tested React, React Native, and Expo baseline. The installed `spark create` command remains available.
+The release workflow publishes the SDK and the peer-free `@legendapp/create-spark` creator at matching versions under `next`.
 
 New apps include thin AI instruction pointers in `AGENTS.md`, `CLAUDE.md`, and `.claude/skills/spark/SKILL.md`. The maintained skill ships at `node_modules/@legendapp/spark/skills/spark/SKILL.md`, so updating Spark updates the instructions. Existing user instructions outside the marked Spark sections are preserved.
 
 Run the app's installed `spark upgrade --dry-run` to preview the newest release on its current channel (`next` for preview versions, `latest` for stable versions). `spark upgrade` updates the SDK and tested pins, installs with the app's detected npm/pnpm/Yarn/Bun manager, then applies versioned migrations and refreshes the AI pointers. `spark dev`, `spark build`, and `spark doctor` repair safe migration drift automatically; other pending changes stop with upgrade guidance. See [upgrading apps](docs/development.md#upgrade-an-app).
 
-The published CLI resolves patched dependencies from the matching GitHub prerelease and downloads the macOS ARM64 Spark Runner on first desktop launch. A source/local archive without embedded release metadata still needs a registered local SDK. Windows native acceptance remains pending; this release workflow does not supply a Windows Runner.
+The published CLI resolves patched dependencies from the matching GitHub prerelease and downloads the macOS ARM64 Spark Runner on first desktop launch. A source/local archive without embedded release metadata still needs a registered local SDK. Windows preview, not yet verified; this release workflow does not supply a Windows Runner.
 
 ## Quick start from source
 
@@ -156,7 +150,7 @@ The verifier uses the real CLI and existing native-greeting fixture, and saves `
 
 Windows host source now includes display enumeration, window frame/centering/fullscreen operations, size constraints and basic presentation options, menu following between React windows, and an atomic single-instance guard. The native UI package implements React Native Appearance overrides for WinUI controls. Run `bun run test:windows:features` on Windows to compile and exercise these additions, including simultaneous launches and owner-termination recovery.
 
-**Native Windows verification is still pending.** Local generation/bundle checks do not prove compilation, autolinking, Hermes startup, or Fast Refresh on Windows. Windows production builds, preview builds, signing/MSIX, and clean-machine runtime distribution are outside this development scope. Desktop modules, Nitro, SQLite, WebView2, and secondary Hermes runtimes now have Windows integrations; run `bun run test:platform --platform windows` to exercise their shared contracts. See the [Windows guide](docs/windows-slice.md) for the full setup, test, and diagnostic workflow.
+**Windows preview, not yet verified.** Local generation/bundle checks do not prove compilation, autolinking, Hermes startup, or Fast Refresh on Windows. Windows production builds, preview builds, signing/MSIX, and clean-machine runtime distribution are outside this development scope. Desktop modules, Nitro, SQLite, WebView2, and secondary Hermes runtimes now have Windows integrations; run `bun run test:platform --platform windows` to exercise their shared contracts. See the [Windows guide](docs/windows-slice.md) for the full setup, test, and diagnostic workflow.
 
 ## What the SDK provides
 
@@ -301,6 +295,12 @@ bun run test:all
 
 ## Validation and limitations
 
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+This is a prerelease; APIs and tooling may change. Intel macOS has architecture selection tooling but no verified native build/runtime support; see [Intel macOS](docs/macos-intel.md). Windows currently covers development builds, with details in the [Windows guide](docs/windows-slice.md). Linux and Mac App Store distribution are unsupported. Mobile/web development delegates to Expo.
+
+The checkout uses Expo SDK 54, React Native 0.81, and Expo Desktop 1.0.0. See the [integration boundary](docs/expo-desktop-integration.md) for upstream requirements.
+
 Use the [Mac and Windows manual acceptance checklist](docs/desktop-manual-acceptance.md)
 to validate a checkout on real machines, including runtime rebuilds and OS interactions.
 
@@ -314,9 +314,9 @@ The macOS prebuilt → custom runtime → reduced standalone workflow has record
 | [Desktop expansion validation](docs/desktop-expansion-validation.md) | Expanded APIs, native pruning, and interactive acceptance limits |
 | [Integration validation](docs/integrations-validation.md) | Notifications, tray, updater startup and signing tooling |
 | [Runtimes validation](docs/runtimes-validation.md) | Direct upstream imports, worker behavior, reload, and pruned Release builds |
-| [Streaming files and Trash](docs/file-streams.md#acceptance) | Native macOS binary I/O, handle cleanup and Trash; Windows acceptance pending |
+| [Streaming files and Trash](docs/file-streams.md#acceptance) | Native macOS binary I/O, handle cleanup and Trash; Windows behavior not yet verified |
 | [Helper-process example](examples/sidecar/README.md#complete-requestresponse-example) | Framed requests, deadlines, crash/restart and native macOS process/quit cleanup |
-| [Windows development](docs/windows-slice.md) | Integrated CLI, generation and bundle checks; native acceptance pending |
+| [Windows development](docs/windows-slice.md) | Integrated CLI, generation and bundle checks; native behavior not yet verified |
 | [Packaging status](docs/packaging.md#validation-status) | Simulated notarization pipeline versus real distribution acceptance |
 
 Automatic SDK/runtime downloads, real Developer ID/notarization acceptance, production update installation/relaunch, and broader platform support remain separate release gates. Some OS interaction cases also remain outstanding in their feature reports. No current test result establishes full Windows support.

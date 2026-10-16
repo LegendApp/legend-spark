@@ -1,6 +1,8 @@
 # Intel macOS targets
 
-Spark supports selecting macOS ARM64 or Intel x64 throughout custom development
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+Intel macOS is not yet verified. Spark includes architecture selection for ARM64 and Intel x64 throughout custom development
 builds, standalone builds, Runner registration/downloads, and packaging. The
 default uses the machine architecture; set `SPARK_MACOS_ARCH=x64` or
 `SPARK_MACOS_ARCH=arm64` to override it. Xcode receives `x86_64` for x64.

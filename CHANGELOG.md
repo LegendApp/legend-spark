@@ -1,16 +1,22 @@
 # Changelog
 
+## 0.0.1-next.5 — preview
+
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+- Make the app creator publishable as `@legendapp/create-spark`, with the same version and `next` channel as the SDK.
+- Accept compatible React 19 versions as peers while keeping the starter on the tested React 19.1.4 baseline.
+- Add native Markdown and HTML readers alongside editable rich text, with reviewed public exports.
+- Verify local SDK and creator tarballs by scaffolding, installing, and typechecking a fresh npm app in CI.
+- Rewrite the quick start and clarify platform support and prerelease installation.
+
 ## 0.0.1-next.4 — preview
 
-Experimental macOS Apple Silicon preview. Native Windows and Intel macOS
-acceptance remain pending. Automated package checks do not certify native UI
-or clean-recipient Runner acceptance.
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 
 - test: allow error logs when native preflight rejects a packed build
 - test: allow CLI prefix before native patch preflight summary
-- Revert "release: prepare 0.0.1-next.4"
 - fix: identify native patches in preflight error summary
-- release: prepare 0.0.1-next.4
 - fix: make release recovery safe and retryable
 - feat: fail release builds that use excluded native modules
 - feat: include and automatically patch enriched Markdown
@@ -45,9 +51,7 @@ or clean-recipient Runner acceptance.
 - [Breaking] Public API contracts and window configuration changed. See the
   versioned [app upgrade notes](packages/desktop/skills/spark/UPGRADING.md#001-next3).
 
-Experimental macOS Apple Silicon preview. Native Windows and Intel macOS
-acceptance remain pending. Automated package checks do not certify native UI
-or clean-recipient Runner acceptance.
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
 
 - fix release scripts
 - tweak credentials script for release

@@ -49,7 +49,7 @@ Swift/Kotlin implementations still needs a Windows implementation and native pro
 Nitro support does not automatically port every Nitro library.
 
 Windows external-library integrations are implemented in source, with native build
-and runtime acceptance pending on x64 and ARM64. The platform runner covers Nitro
+and runtime behavior not yet verified on x64 and ARM64. The platform runner covers Nitro
 object identity and buffers, SQLite persistence and transactions, WebView HTML/URL
 loading and messaging, and independent Hermes runtime state, errors, and destruction.
 See [known Windows limits](windows-issues.md). Optional OP-SQLite SQLCipher, libSQL,

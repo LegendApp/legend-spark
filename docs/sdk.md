@@ -1,6 +1,8 @@
 # Desktop SDK
 
-The first SDK targets macOS 14+ on Apple Silicon. Import capabilities through
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+Import capabilities through
 `@legendapp/spark/<feature>`. There is no Node runtime inside the app.
 Each native capability is independently linked so production builds can remove
 unused SDK pods. The small app-context pod is required by the host.

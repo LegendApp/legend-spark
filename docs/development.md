@@ -1,5 +1,7 @@
 # Developing the local prototype
 
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
 ## Create and develop an app
 
 With the local SDK packed and a Spark Runner registered, run from the framework checkout:
