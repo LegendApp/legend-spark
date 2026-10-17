@@ -1210,7 +1210,7 @@ minutes on an M4 Max: the packages come from the npm registry and the two releas
 | `DX-TPL-01` | `spark create --packages <packed manifest>` makes the macOS, Windows and universal templates; each depends on the packed SDK, installs and type-checks (`tsc --noEmit`). |
 | `DX-TPL-02` | `spark build` of the macOS template makes a release app with a Hermes bytecode `main.jsbundle` that `codesign --verify --deep --strict` accepts. |
 | `DX-REPRO-01` | A second release build, after deleting `.spark/` and the generated `macos/` project, has byte-identical JavaScript (`*.jsbundle`, `*.hbc`, `*.js`). |
-| `DX-REPRO-02` | Every other file in the app is byte-identical too. Each difference is listed; for a Mach-O file, whether its `LC_UUID` or other load commands differ. See [Reproducible builds](#reproducible-builds). |
+| `DX-REPRO-02` | Every other file in the app is byte-identical too, apart from what Apple's tools write differently (a Mach-O file may differ only in its code signature), and the builds changed none of the project's files outside `.spark/`, `macos/` and `node_modules`. Each difference is listed. See [Reproducible builds](#reproducible-builds). |
 
 `dev-loop` (`scripts/e2e/audit/dev-loop.ts`) runs `spark dev --clear --no-open --max-workers 2` for the Kitchen Sink and
 launches its dev build in driver mode (`scripts/testing/dev-session.ts`; build it first with `cd examples/kitchen-sink &&
@@ -1239,24 +1239,28 @@ DevTools in the dev loop has its own checks (`checks/devtools.yaml`).
 
 #### Reproducible builds
 
-`DX-REPRO-01` and `DX-REPRO-02` build the macOS template twice. `spark build` prepares the project in place (it patches
-`node_modules` and writes `macos/`, `ios/`, `react-native.config.js` and configuration), so each build starts from an APFS
-clone of the project as `spark create` left it, at the same path. With identical inputs the JavaScript bundle and
-`spark-runtime.json` are byte-identical. Built from an already-prepared project instead, `spark-runtime.json`'s
-`fingerprint` differs, because the first build changed its inputs.
+`DX-REPRO-01` and `DX-REPRO-02` build the macOS template twice from one checkout: the second build starts after deleting
+`.spark/` and the generated `macos/` project, from what the first build left. `spark build` does not change its own
+inputs: it writes generated files only under `.spark/` and `macos/`, and patches installed packages' sources (Spark's
+`node_modules` patches) before it reads any of them. So both builds have the same `spark-runtime.json` (its
+`fingerprint` included), and `DX-REPRO-02` fails if the build changed any of the project's other files.
 
-The native output is not bit-reproducible, because of Apple's tools. On Xcode 27 (macOS 27, arm64), four files differ. For
-each of them, `DX-REPRO-02` checks the parts that should still match:
+The JavaScript bundle, every framework binary (Hermes and the rest) and every other resource are byte-identical. On
+Xcode 27 (macOS 27, arm64) four files differ, because of Apple's tools. For each of them, `DX-REPRO-02` checks the parts
+that should still match:
 
 | File | Why it differs | What must still match |
 |---|---|---|
-| The main executable (`Contents/MacOS/<name>`) | The linker puts two symbol pointers in the other order, so some instructions and `__objc_stubs` refer to other slots. `LC_UUID` is a hash of the output, and the code signature is a hash of the file. | Every load command apart from `LC_UUID`, and the symbols (`nm -m`). |
 | `Assets.car` | `actool` stamps the build time and gives each rendition a unique name, which also changes its digest. | Every rendition's other attributes (`assetutil --info`). |
 | `*.nib` | `ibtool` writes the same objects in another order. | The objects, each with its class and values, with references as the referenced object's class. |
 | `_CodeSignature/CodeResources` | It holds the hashes of the files above. | Nothing more: the files it seals are compared themselves. |
+| The main executable (`Contents/MacOS/<name>`) | Its embedded code signature seals `CodeResources`. | Every byte without the signature (`codesign --remove-signature`), `LC_UUID` included. |
 
-Any other difference, or a difference in what these compare, fails `DX-REPRO-02`. The frameworks' binaries (Hermes and
-the rest) and every other resource are byte-identical.
+The link itself is deterministic because release builds link with small Objective-C selector stubs
+(`-Wl,-objc_stubs_small` in `macOSReleaseSettings`). With the default fast stubs, Xcode 27's `ld` gives `_objc_msgSend`
+two GOT slots and fills them in a varying order, so the same objects linked twice can differ.
+
+Any other difference, or a difference in what these compare, fails `DX-REPRO-02`.
 
 ### Budgets
 
