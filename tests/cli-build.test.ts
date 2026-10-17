@@ -18,13 +18,13 @@ test("rebuilding the source CLI preserves helpers used by active dev sessions", 
     buildCLI(root);
     const directory = statSync(output).ino;
     const helper = statSync(path.join(output, "helper.cjs")).ino;
-    expect(statSync(path.join(output, "npm")).mode & 0o777).toBe(0o755);
+    if (process.platform !== "win32") expect(statSync(path.join(output, "npm")).mode & 0o777).toBe(0o755);
     chmodSync(path.join(output, "npm"), 0o644);
     writeFileSync(path.join(source, "index.ts"), "export const value: number = 2;");
     buildCLI(root);
     expect(statSync(output).ino).toBe(directory);
     expect(statSync(path.join(output, "helper.cjs")).ino).toBe(helper);
-    expect(statSync(path.join(output, "npm")).mode & 0o777).toBe(0o755);
+    if (process.platform !== "win32") expect(statSync(path.join(output, "npm")).mode & 0o777).toBe(0o755);
     expect(readFileSync(path.join(output, "index.js"), "utf8")).toContain("value = 2");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
