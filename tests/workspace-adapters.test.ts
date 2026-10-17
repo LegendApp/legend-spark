@@ -76,10 +76,6 @@ test("Windows platform discovery skips its CLI off Windows and preserves it on W
   try {
     const directory = path.join(f.root, "node_modules/react-native-windows");
     mkdirSync(directory);
-    const manifest = JSON.parse(readFileSync(path.join(f.root, "package.json"), "utf8"));
-    manifest.dependencies["react-native-windows"] = "0.81.35";
-    writeFileSync(path.join(f.root, "package.json"), JSON.stringify(manifest));
-    writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name: "react-native-windows", version: "0.81.35" }));
     const file = path.join(directory, "react-native.config.js");
     const installedConfig = readFileSync("node_modules/react-native-windows/react-native.config.js", "utf8");
     const upstream = installedConfig.slice(installedConfig.indexOf("const cli ="));
