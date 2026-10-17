@@ -8,6 +8,8 @@ import { writeJson } from "../packages/cli/src/project.ts";
 const metro = vi.hoisted(() => ({ run: vi.fn(), sources: [] as string[] }));
 vi.mock("../packages/cli/src/commands.ts", () => ({ doctor: vi.fn(), binary: (_root: string, name: string) => name, run: metro.run }));
 vi.mock("../packages/cli/src/native-patch-preflight.ts", () => ({ assertNativePatchPreflight: vi.fn() }));
+const patches = vi.hoisted(() => ({ installSourcePatches: vi.fn() }));
+vi.mock("@legendapp/spark-desktop-config/source-patches.cjs", () => patches);
 
 let dir: string;
 const write = (file: string, value = "") => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, value); };
@@ -57,6 +59,9 @@ test.each(Object.keys(layouts) as (keyof typeof layouts)[])("%s SDK packages rea
   const { root, sources } = layouts[layout]();
   metro.sources = sources;
   const result = await analyze(root);
+  // The analysis bundles patched sources, so a build's fingerprint does not depend on an earlier build's patching.
+  expect(patches.installSourcePatches).toHaveBeenCalledWith(root);
+  expect(patches.installSourcePatches.mock.invocationCallOrder[0]).toBeLessThan(metro.run.mock.invocationCallOrder[0]!);
   expect(result.included.map(pkg => pkg.name)).toEqual(["@legendapp/spark-ui"]);
   expect(result.excluded.map(pkg => pkg.name)).toEqual(["@legendapp/spark-tray"]);
   expect(result.reasons).toEqual({ "@legendapp/spark-ui": "reachable production import" });

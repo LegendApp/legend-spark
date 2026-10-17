@@ -32,11 +32,19 @@ function installAutolinkingPatch(root) {
     fs.renameSync(temporary, file); // Do not modify package-cache hardlinks.
   }
 }
-// Expo autolinking ignores an app-level `ios: null` override when the package's own
-// react-native.config.js declares iOS, so pass the native selection's exclusions to its CLI.
+// The native selection's exclusions go to the Podfile's autolinkers: Expo modules' (use_expo_modules!, which would
+// otherwise read them from package.json) and React Native's, which ignores an app-level `ios: null` override when the
+// package's own react-native.config.js declares iOS. React Native's autolinker also writes a copy of its output under
+// the project's iOS source directory (an ios/ folder by default) for codegen, which would read it only from macos/ and
+// would then skip its dependency scan, losing Expo Desktop's specs. .spark/ keeps that copy out of the app's files at
+// the depth of macos/, from which the autolinker writes pods' relative paths.
 function excludeNativeModules(podfile, excluded) {
-  const call = /use_native_modules!\(config_command(?: \+ \[[^\]]*\])?\)/;
+  const call = /use_native_modules!\(config_command(?: \+ \[[^\]]*\])*\)/;
+  const expo = /use_expo_modules!(?:\(exclude: \[[^\]]*\]\))?$/m;
   if (!call.test(podfile)) throw new Error("The macOS Podfile no longer calls use_native_modules!(config_command); review spark's native selection.");
-  return podfile.replace(call, `use_native_modules!(config_command + ${JSON.stringify(excluded.flatMap(name => ["--exclude", name]))})`);
+  if (!expo.test(podfile)) throw new Error("The macOS Podfile no longer calls use_expo_modules!; review spark's native selection.");
+  return podfile
+    .replace(expo, `use_expo_modules!(exclude: ${JSON.stringify(excluded)})`)
+    .replace(call, `use_native_modules!(config_command + ["--source-dir", File.expand_path("../.spark", __dir__)] + ${JSON.stringify(excluded.flatMap(name => ["--exclude", name]))})`);
 }
 module.exports = { patchAutolinkingSource, installAutolinkingPatch, excludeNativeModules };
