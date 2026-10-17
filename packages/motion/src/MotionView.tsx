@@ -7,6 +7,7 @@ import { getNativeMotionView } from "./motion-view-host";
 import { usePresenceMotion } from "./presence-hooks";
 import { invalid, transitionSpec, type MotionTransition, type MotionValues } from "./specs";
 
+/** Props of `MotionView`: React Native view props plus the values it mounts with and animates on enter, exit, layout and shared-element changes. */
 export interface MotionViewProps extends ViewProps {
   /**
    * Values applied once, at mount. Motion owns `opacity` and `transform`, so `style` must not set them. `style` may set

@@ -4,6 +4,7 @@ import { animate, motionModule, type MotionTarget } from "./motion";
 import { MotionView } from "./MotionView";
 import { invalid, spring, timing, transitionSpec, type MotionTransition, type SpringOptions, type TimingOptions } from "./specs";
 
+/** Props of `MotionNumber`: the number, its locale and Intl format, the characters' style, and how a changed digit rolls. */
 export interface MotionNumberProps extends Pick<ViewProps, "testID" | "nativeID"> {
   /** Also names each digit's MotionView `<testID>-digit-<n>`, `n` counting from 1 at the units digit, for motion telemetry. */
   testID?: string;

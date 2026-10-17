@@ -12,6 +12,7 @@ import { sharedUnits, textUnits } from "./text-units";
  */
 export type MotionTextTransition = { type: "crossfade"; durationMs?: number } | { type: "typewriter"; characterMs?: number };
 
+/** Props of `MotionText`: the text, the characters' style, and how a change animates. */
 export interface MotionTextProps extends Pick<ViewProps, "testID" | "nativeID"> {
   text: string;
   /** Also names each character's MotionView `<testID>-char-<index>`, for motion telemetry. */

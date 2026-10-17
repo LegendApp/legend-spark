@@ -5,6 +5,7 @@ import { motionModule } from "./motion";
 import { getNativeMotionSymbol } from "./motion-view-host";
 import { requireSymbolEffect, type MotionSymbolTarget, type SymbolReplaceTransition } from "./symbols";
 
+/** Props of `MotionSymbol`: the SF Symbol `name`, its point `size` and `color`, and how a name change animates. */
 export interface MotionSymbolProps extends ViewProps {
   /** An SF Symbol name; one this macOS does not have throws E_NOT_FOUND. */
   name: string;

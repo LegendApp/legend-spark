@@ -1,6 +1,7 @@
 import { useMotionView, type MotionViewProps } from "./MotionView";
 import { emitterJson, type ParticleEmitter } from "./particles";
 
+/** Props of `MotionEmitter`: MotionView props plus the particle `emitter`. */
 export interface MotionEmitterProps extends MotionViewProps {
   /** The emitter: its shape and position, and the particles it emits once startParticles starts it. */
   emitter: ParticleEmitter;

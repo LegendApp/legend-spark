@@ -38,6 +38,7 @@ export interface ParticleCell {
   /** Points per second squared; `{ x: 0, y: 200 }` is gravity. */
   acceleration?: MotionPoint;
 }
+/** A MotionEmitter's `emitter`: where particles are born, how they blend, and the kinds it emits. */
 export interface ParticleEmitter {
   /** Where particles are born: a point, along a line, or inside a rectangle or circle (default `point`). */
   shape?: "point" | "line" | "rectangle" | "circle";
@@ -52,12 +53,14 @@ export interface ParticleEmitter {
   /** One to eight kinds of particle. */
   cells: readonly ParticleCell[];
 }
+/** Options for `startParticles`. */
 export interface ParticleOptions {
   /** Emit for this long, on the view's layer clock, then stop. Default: until stopParticles. */
   durationMs?: number;
   /** While Reduce Motion is on, particles (which travel) are not emitted unless this is `play` (default `fade`: nothing). */
   reducedMotion?: ReducedMotion;
 }
+/** What `startParticles` resolves with. */
 export interface ParticlePlayback {
   /** `particles`, or `none` when Reduce Motion kept them from playing. */
   readonly played: "particles" | "none";

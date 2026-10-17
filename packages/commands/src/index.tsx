@@ -16,8 +16,17 @@ export { createShortcutMap, getReservedShortcuts, getShortcutMapAvailability, sh
 export type { ShortcutMap, ShortcutMapOptions, ShortcutCommand, ShortcutMapScope, ShortcutPlatform, ReservedShortcut, ShortcutConflict, ShortcutConflictParty, ShortcutMapCommandState, ShortcutMapSnapshot, ShortcutMapChange, ShortcutCommandEvent, ShortcutMapHandlers, ShortcutMapRegisterOptions, ShortcutMapMenuBuilder, ShortcutMapFile } from "./shortcut-map";
 export { useShortcutMap } from "./shortcut-map-hooks";
 
+/** The state of `useRoutedHotkeys`: loading, ready with its registration, or failed with the error (and the registration, if it was made). */
 export type HotkeyRegistrationState = { status: "loading" } | { status: "ready"; registration: HotkeyRegistration } | { status: "error"; error: Error; registration?: HotkeyRegistration };
+/**
+ * Options for `useRoutedHotkeys`: the registration options plus the `router` to register with. `onError` reports registration, binding
+ * and enablement failures; `onCleanupError` reports a failed removal (logged to the console without it).
+ */
 export type UseRoutedHotkeysOptions<Id extends string> = HotkeyRegistrationOptions<Id> & { router: HotkeyRouter; onError?: (error: Error) => void; onCleanupError?: (error: unknown, registration: AsyncRegistration) => void };
+/**
+ * Registers command handlers with a router while the component is mounted. Changes to `bindings` and `enabled` update the same
+ * registration; changes to the router, definitions, priority, scope or set of handled commands re-register. Handlers always call the latest props.
+ */
 export function useRoutedHotkeys<Id extends string>(options: UseRoutedHotkeysOptions<Id>): HotkeyRegistrationState {
   const current = useRef(options); useLayoutEffect(() => { current.current = options; });
   const [state, setState] = useState<HotkeyRegistrationState>({ status: "loading" });
@@ -86,10 +95,12 @@ export function useRoutedHotkeys<Id extends string>(options: UseRoutedHotkeysOpt
   }, [enabled]);
   return state;
 }
+/** Options for `useHotkeySuspension`. `scope` defaults to the application; errors are logged to the console without `onError` or `onCleanupError`. */
 export interface HotkeySuspensionOptions {
   active: boolean; router: HotkeyRouter; scope?: HotkeyScope;
   onError?: (error: unknown) => void; onCleanupError?: (error: unknown, registration: AsyncRegistration) => void;
 }
+/** Suspends a router's hotkeys in `scope` while `active` is true and the component is mounted. */
 export function useHotkeySuspension(options: HotkeySuspensionOptions): void {
   const current = useRef(options); useLayoutEffect(() => { current.current = options; });
   const { active, router, scope } = options;
@@ -103,6 +114,10 @@ export function useHotkeySuspension(options: HotkeySuspensionOptions): void {
     return () => { mounted = false; if (registration) dispose(registration); };
   }, [active, router, scope?.kind, scope?.kind === "window" ? scope.windowId : undefined]);
 }
+/**
+ * Props of `HotkeyCapture`. `value` is the accelerator shown, `placeholder` (default `Click to record`) shows without one, and
+ * `onChange` receives a recorded accelerator. `onCaptureChange` reports when recording starts and stops.
+ */
 export interface HotkeyCaptureProps {
   className?: string;
   disabled?: boolean;
@@ -114,6 +129,10 @@ export interface HotkeyCaptureProps {
   value: HotkeyValue | null;
 }
 const activeCapture$ = observable<symbol | null>(null);
+/**
+ * A button that records a hotkey: press it, then the keys; the binding is reported when the key is released. Escape or losing focus cancels.
+ * While it records, routed hotkeys do not fire.
+ */
 export function HotkeyCapture(props: HotkeyCaptureProps) {
   const { className, disabled = false, placeholder = "Click to record", value } = props;
   const current = useRef(props); useLayoutEffect(() => { current.current = props; });
@@ -150,6 +169,11 @@ export function HotkeyCapture(props: HotkeyCaptureProps) {
     <View className="flex-row items-center"><Text className={cn("text-sm text-text-primary", !value && !isCapturing && "text-text-tertiary")}>{error ?? (isCapturing ? display || "Press keys..." : formatHotkey(value, placeholder))}</Text></View>
   </Pressable>;
 }
+/**
+ * Props of `HotkeyBindingsSettingsPage` and `HotkeyBindingsSettingsContent`. `onChange` receives a command's new bindings.
+ * `maxBindingsPerCommand` caps the bindings shown and added (1 shows a single recorder per command); `onResetAll` replaces
+ * the default Reset All (each command's defaults through `onChange`); `showTitle` defaults to true.
+ */
 export interface HotkeyBindingsSettingsPageProps<Id extends string> {
   definitions: readonly HotkeyDefinition<Id>[];
   maxBindingsPerCommand?: number;
@@ -160,6 +184,10 @@ export interface HotkeyBindingsSettingsPageProps<Id extends string> {
   showTitle?: boolean;
   values: HotkeyBindingState<Id>;
 }
+/**
+ * The hotkey settings list without a scroll view: each command's bindings with recorders to change, add, remove or reset them,
+ * conflicting bindings flagged, and a Reset All button.
+ */
 export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
   definitions,
   maxBindingsPerCommand,
@@ -367,6 +395,7 @@ export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
   );
 }
 
+/** `HotkeyBindingsSettingsContent` in a scrolling page, centered at most 896 points wide. */
 export function HotkeyBindingsSettingsPage<HotkeyId extends string>(
   props: HotkeyBindingsSettingsPageProps<HotkeyId>,
 ) {

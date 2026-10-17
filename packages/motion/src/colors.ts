@@ -9,6 +9,7 @@ export type MotionColor = string;
 export type Oklch = readonly [lightness: number, chroma: number, hue: number, alpha: number];
 /** Properties that take colors: a view's background, and a MotionShape's fill and stroke (docs/motion.md#shapes). */
 export const COLOR_PROPERTIES = ["backgroundColor", "fillColor", "strokeColor"] as const;
+/** A property that takes colors: `backgroundColor`, `fillColor` or `strokeColor`. */
 export type MotionColorProperty = typeof COLOR_PROPERTIES[number];
 /** The engine's components of a color property: lightness, chroma, hue and alpha. */
 export type ColorComponent = `${MotionColorProperty}${"L" | "C" | "H" | "Alpha"}`;

@@ -6,6 +6,7 @@ import { invalid, type MotionNumberProperty } from "./specs";
 // Shader effects (docs/motion.md#shader-effects-and-particles): Spark's built-in effects on a MotionShader's layer, each
 // driven by one engine property. There is no user-supplied shader source.
 
+/** The built-in shader effects a MotionShader shows; `getShaderEffectAvailability` says whether one works here. */
 export type ShaderEffect = "ripple" | "dissolve" | "distortion" | "specular";
 /** Points from the view's top-left corner, as a press event's `locationX` and `locationY`. */
 export interface MotionPoint { x: number; y: number }
@@ -47,6 +48,7 @@ export interface SpecularEffect {
   /** Default white. */
   color?: MotionColor;
 }
+/** A MotionShader's `effect` with its settings, by `type`. Each is driven by one motion property (`SHADER_PROPERTIES`). */
 export type MotionShaderEffect = RippleEffect | DissolveEffect | DistortionEffect | SpecularEffect;
 
 /** The engine property each effect is driven by. */

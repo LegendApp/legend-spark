@@ -1,9 +1,16 @@
 import { addKeyboardListener, createKeyboardConsumption, type KeyboardConsumption, type KeyboardConsumptionRule, type KeyboardEvent } from "@legendapp/spark-desktop-shortcuts/src/keyboard-manager";
 import { SparkError, asyncRegistration, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { getDefaultHotkeyBindings, matchesParsedHotkey, parseBinding, normalizeHotkeyBindings, validateDefinitions, type HotkeyBindingState, type HotkeyDefinition } from "./bindings";
+/** Where a hotkey registration or suspension applies: the whole application, or one window by its ID. */
 export type HotkeyScope = { kind: "application" } | { kind: "window"; windowId: string };
+/** What a routed hotkey handler receives: the matched binding, the keyboard event, the keys held now, and whether it is a key repeat. */
 export type HotkeyHandlerContext = { binding: string; event: KeyboardEvent; pressedKeys: ReadonlySet<number>; repeated: boolean };
+/** Handlers by command ID. A handler that returns `false` declines the key, which then goes to the next matching registration. */
 export type RoutedHotkeyHandlers<Id extends string = string> = Partial<Record<Id, (context: HotkeyHandlerContext) => boolean | void>>;
+/**
+ * Options for `HotkeyRouter.register`. `bindings` overrides the definitions' defaults per command; `enabled` defaults to true;
+ * `scope` defaults to the application. Higher `priority` wins (default 100 for a window scope, 0 otherwise); ties go to the later registration.
+ */
 export interface HotkeyRegistrationOptions<Id extends string = string> {
   bindings?: Partial<HotkeyBindingState<Id>>;
   definitions: readonly HotkeyDefinition<Id>[];
@@ -12,6 +19,7 @@ export interface HotkeyRegistrationOptions<Id extends string = string> {
   priority?: number;
   scope?: HotkeyScope;
 }
+/** A live `HotkeyRouter.register` registration; `remove()` releases it. Its methods reject with E_CLOSED once it has been removed. */
 export interface HotkeyRegistration extends AsyncRegistration {
   setEnabled(enabled: boolean): Promise<void>;
   /** Replaces binding overrides. Each keydown fires either the old or the new binding, never both or neither. */
@@ -26,6 +34,10 @@ export function stageHotkeyBindings(registration: HotkeyRegistration, bindings: 
   if (!stage) return Promise.reject(new SparkError("E_INVALID_ARGUMENT", "Expected a command registration"));
   return stage(bindings);
 }
+/**
+ * Routes key-down events to registered command handlers by scope and priority, and has the keyboard manager consume their bindings natively.
+ * `suspend` stops routing in a scope until the returned registration is removed; `getPressedKeys` returns the key codes and modifier bits held now.
+ */
 export interface HotkeyRouter {
   register<Id extends string>(options: HotkeyRegistrationOptions<Id>): Promise<HotkeyRegistration>;
   suspend(scope?: HotkeyScope): Promise<AsyncRegistration>;
@@ -37,6 +49,10 @@ export function setCapturing(value: boolean) { capturing = value; }
 function validateScope(scope: HotkeyScope) {
   if (!scope || (scope.kind !== "application" && scope.kind !== "window") || (scope.kind === "window" && (typeof scope.windowId !== "string" || !scope.windowId))) throw new SparkError("E_INVALID_ARGUMENT", "Expected application or window scope");
 }
+/**
+ * Creates a hotkey router. It listens to the keyboard manager only while it has registrations.
+ * `register` rejects with E_INVALID_ARGUMENT for invalid options and E_UNSUPPORTED_OPTION for unknown ones.
+ */
 export function createHotkeyRouter(): HotkeyRouter {
   type Registration = Required<Pick<HotkeyRegistrationOptions, "definitions" | "handlers" | "scope" | "priority">> & { enabled: boolean; appliedEnabled: boolean; revision: number; bindings: Partial<HotkeyBindingState>; staged?: Partial<HotkeyBindingState>; order: number };
   const registrations = new Set<Registration>(), suspensions = new Set<HotkeyScope>(), pressed = new Set<number>();

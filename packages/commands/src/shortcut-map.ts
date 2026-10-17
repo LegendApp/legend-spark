@@ -11,8 +11,13 @@ import { createHotkeyRouter, stageHotkeyBindings, type HotkeyHandlerContext, typ
 
 /** Where a command is live. `view` commands outrank window commands, which outrank application commands. */
 export type ShortcutMapScope = "application" | "window" | "view" | "global";
+/** A command a shortcut map binds: a `HotkeyDefinition` plus its `scope` (default `application`). */
 export type ShortcutCommand<Id extends string = string> = HotkeyDefinition<Id> & { scope?: ShortcutMapScope };
 export { getReservedShortcuts, type ReservedShortcut, type ShortcutPlatform };
+/**
+ * What a binding collides with: another command in the map, a keyboard or global shortcut registered outside it,
+ * a menu item's key equivalent, or a system shortcut the OS warns about.
+ */
 export type ShortcutConflictParty =
   | { source: "command"; scope: ShortcutMapScope; commandId: string }
   | { source: "shortcut"; scope: "application" }
@@ -20,22 +25,41 @@ export type ShortcutConflictParty =
   | { source: "global-shortcut"; scope: "global" }
   | { source: "menu"; scope: "menu"; menuId: string; itemId: string }
   | { source: "system"; scope: "system"; reserved: ReservedShortcut };
+/** One binding of `commandId` that collides `with` another party. */
 export interface ShortcutConflict<Id extends string = string> { commandId: Id; scope: ShortcutMapScope; binding: string; with: ShortcutConflictParty }
+/** A command as the shortcut map has it now: current and default bindings, whether the user customized it, and its conflicts. */
 export interface ShortcutMapCommandState<Id extends string = string> {
   id: Id; title: string; description?: string; scope: ShortcutMapScope;
   bindings: readonly string[]; defaultBindings: readonly string[]; customized: boolean; conflicts: readonly ShortcutConflict<Id>[];
 }
+/** Every command's state and all conflicts, from `ShortcutMap.getSnapshot`. The same object is returned while nothing in it changes. */
 export interface ShortcutMapSnapshot<Id extends string = string> { commands: readonly ShortcutMapCommandState<Id>[]; conflicts: readonly ShortcutConflict<Id>[] }
+/**
+ * What `ShortcutMap` listeners receive and its changing methods resolve with: the reason, the changed command IDs, and the new snapshot.
+ * `external` means conflicts changed because of registrations outside the map.
+ */
 export interface ShortcutMapChange<Id extends string = string> { reason: "rebind" | "unbind" | "reset" | "external"; commandIds: readonly Id[]; snapshot: ShortcutMapSnapshot<Id> }
+/** What a shortcut map handler receives. `keyboard` is the routed key event's context; global commands have none. */
 export interface ShortcutCommandEvent<Id extends string = string> { commandId: Id; binding: string; scope: ShortcutMapScope; keyboard?: HotkeyHandlerContext }
+/** Handlers by command ID for `ShortcutMap.register`. For keyboard-routed commands, returning `false` declines the key. */
 export type ShortcutMapHandlers<Id extends string = string> = Partial<Record<Id, (event: ShortcutCommandEvent<Id>) => boolean | void>>;
+/** Options for `ShortcutMap.register`. `windowId` is required when a handled command has `window` or `view` scope. */
 export interface ShortcutMapRegisterOptions<Id extends string = string> { handlers: ShortcutMapHandlers<Id>; windowId?: string }
 /** Receives each command's primary binding and returns the menu content to publish. */
 export type ShortcutMapMenuBuilder<Id extends string = string> = (shortcut: (commandId: Id) => string | undefined) => MenuUpdate;
+/**
+ * Options for `createShortcutMap`: the commands, the settings `store` (default Spark settings) and `key` (default `shortcut-map`)
+ * that persist overrides, and the `router` to register with (default a new one).
+ */
 export interface ShortcutMapOptions<Id extends string = string> { commands: readonly ShortcutCommand<Id>[]; store?: SettingsStore; key?: string; router?: HotkeyRouter }
+/** The `version` of a `ShortcutMapFile`. Version 1 data (createHotkeyStore's full binding lists) is migrated on load. */
 export const shortcutMapVersion = 2;
 /** Persisted user changes only: a missing command uses its defaults, and an empty array unbinds it. */
 export type ShortcutMapFile<Id extends string = string> = { version: typeof shortcutMapVersion; overrides: Partial<Record<Id, readonly string[]>> };
+/**
+ * Commands with user-rebindable shortcuts. A change is staged on every registration, attached menu and global shortcut, persisted,
+ * then switched at once, and rolled back if any step fails. Changes reject with E_NOT_FOUND for an unknown command and E_CLOSED after `close()`.
+ */
 export interface ShortcutMap<Id extends string = string> {
   readonly router: HotkeyRouter;
   getSnapshot(): ShortcutMapSnapshot<Id>;
@@ -61,6 +85,10 @@ export function getShortcutMapAvailability(scope: ShortcutMapScope): Availabilit
   return scope === "global" ? getGlobalShortcutAvailability() : getKeyboardAvailability();
 }
 
+/**
+ * Creates a shortcut map and loads its stored overrides. Rejects with E_INVALID_ARGUMENT for invalid options or commands,
+ * E_UNSUPPORTED_OPTION for unknown options, E_BUSY for a default binding the system reserves, and E_INVALID_DATA for invalid stored data.
+ */
 export async function createShortcutMap<Id extends string>(options: ShortcutMapOptions<Id>): Promise<ShortcutMap<Id>> {
   if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected shortcut map options");
   for (const name of Object.keys(options)) if (!["commands", "store", "key", "router"].includes(name)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown shortcut map option: ${name}`);
