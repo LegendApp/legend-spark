@@ -55,7 +55,7 @@ New apps include thin AI instruction pointers in `AGENTS.md`, `CLAUDE.md`, and `
 
 Run the app's installed `spark upgrade --dry-run` to preview the newest release on its current channel (`next` for preview versions, `latest` for stable versions). `spark upgrade` updates the SDK and tested pins, installs with the app's detected npm/pnpm/Yarn/Bun manager, then applies versioned migrations and refreshes the AI pointers. `spark dev`, `spark build`, and `spark doctor` repair safe migration drift automatically; other pending changes stop with upgrade guidance. See [upgrading apps](docs/development.md#upgrade-an-app).
 
-The published CLI resolves patched dependencies from the matching GitHub prerelease and downloads the macOS ARM64 Spark Runner on first desktop launch. A source/local archive without embedded release metadata still needs a registered local SDK. Windows preview, not yet verified; this release workflow does not supply a Windows Runner.
+The published CLI resolves patched dependencies from the matching GitHub prerelease and downloads the macOS ARM64 Spark Runner from that GitHub prerelease on first desktop launch. A source/local archive without embedded release metadata still needs a registered local SDK. Windows preview, not yet verified; this release workflow does not supply a Windows Runner.
 
 ## Quick start from source
 
@@ -240,10 +240,11 @@ CLI. It does not create a second app, pack SDK archives, or compile native code.
 Edit the screens and CSS directly for Fast Refresh. `bun run kitchen-sink` from the
 repository root is a shortcut for this app's `dev` command.
 
-A matching native Spark Runner must be registered. There is no hosted download
-service yet. If you do not have one, explicitly run `bun run rebuild:macos` or
-`bun run rebuild:windows` from the app directory with the native toolchain installed.
-That builds and registers its reusable runtime; repeat only after native changes.
+This source checkout needs a registered local Spark Runner; hosted Runner downloads
+use release metadata embedded in the published CLI. If you do not have a local
+Runner, run `bun run rebuild:macos` or `bun run rebuild:windows` from the app
+directory with the native toolchain installed. That builds and registers its
+reusable runtime; repeat only after native changes.
 See the [Kitchen Sink guide](examples/kitchen-sink/README.md) for registration and
 startup options.
 
