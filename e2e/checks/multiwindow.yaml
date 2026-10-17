@@ -343,6 +343,40 @@ checks:
     spec: "docs/api-window-contract.md §Window choreography"
     covers:
       - ./windows#getWindowChoreographyAvailability
+  MW-CHOREO-12:
+    title: Dragging the notes panel out of the main window and dropping it off every window opens the torn-off window with its top-left corner where the panel landed, grown out of it; dropped back inside the main window it stays docked
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Drag-driven tear-off and merge; docs/drag-drop.md §Tear-off; #436"
+    covers:
+      - ./drag-drop#DragDropView
+      - ./drag-drop#getDragDropAvailability
+      - ./windows#openWindowFrom
+  MW-CHOREO-13:
+    title: Dragging the torn-off window by its title bar over the panel's slot shows the merge preview, moving off the slot removes it, and letting go over it merges the window back with its close transition; a programmatic move over the slot does neither
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Drag-driven tear-off and merge; #436"
+    covers:
+      - ./windows#addWindowDropTarget
+      - ./windows#getWindowChoreographyAvailability
+      - ./windows#setWindowCloseTransition
+  MW-CHOREO-14:
+    title: A drag of the notes panel held over the inspector window spring-loads it, which brings the inspector's window forward, and dropping it there gives the inspector the notes instead of tearing them off
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Drag-driven tear-off and merge (cross-window drag); #436"
+    covers:
+      - ./drag-drop#DragDropView
+      - ./windows#showWindow
+  MW-CHOREO-15:
+    title: On screen, a person dragging the notes panel out sees its snapshot follow the pointer and the window open where it is dropped; dragging the window by its title bar over the slot shows the preview live and dropping merges it; a drag held over the inspector flashes it and brings its window forward
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Drag-driven tear-off and merge (what only a person checks); #436"
+    covers:
+      - ./drag-drop#DragDropView
+      - ./windows#addWindowDropTarget
   MW-WORKSPACE-01:
     title: getWindowWorkspaceAvailability reports workspaces available on macOS; saving names a workspace of the open windows and connected displays, restoring closes the windows and reopens the saved ones at their exact frames, and workspaces rename and delete
     platforms: [macos]

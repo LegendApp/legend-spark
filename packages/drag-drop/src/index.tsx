@@ -3,12 +3,12 @@ import { Platform, UIManager, View, type NativeSyntheticEvent, type ViewProps } 
 import NativeView, { Commands } from "./DesktopDragViewNativeComponent";
 import { SparkError, parseNativeResult, type Availability, type SparkErrorCode } from "@legendapp/spark-desktop-app/src/contracts";
 import {
-  DRAG_DROP_FEATURES, DRAG_DROP_FEATURE_PLATFORMS, dragOptions, dragSource, dragDrop, dragEnd, dragPosition, promisedFileRequest, springLoadHighlight,
-  type DragDropFeature, type DragSource, type DragOptions, type DragOverEvent, type DropEvent, type DragEndEvent, type PromisedFileWriteRequest, type SpringLoadHighlightEvent,
+  DRAG_DROP_FEATURES, DRAG_DROP_FEATURE_PLATFORMS, dragOptions, dragSource, dragDrop, dragEnd, dragPosition, promisedFileRequest, springLoadHighlight, tearOffEvent,
+  type DragDropFeature, type TearOffEvent, type DragSource, type DragOptions, type DragOverEvent, type DropEvent, type DragEndEvent, type PromisedFileWriteRequest, type SpringLoadHighlightEvent,
 } from "./contracts";
 export type {
   ContextualDragOperations, DragDropFeature, DragImage, DragPayload, DragSource, DragOptions, DragOperation, DragOverEvent, DropEvent, DragEndEvent, PromisedFile,
-  PromisedFileWriteRequest, SpringLoadHighlight, SpringLoadHighlightEvent,
+  PromisedFileWriteRequest, SpringLoadHighlight, SpringLoadHighlightEvent, TearOffEvent,
 } from "./contracts";
 /** Props for `DragDropView`: view props, `DragOptions`, a drag `source` and drag event callbacks. `disabled` (default false) ignores drag events. `onError` defaults to `console.error`. */
 export interface DragDropViewProps extends ViewProps, DragOptions {
@@ -25,6 +25,8 @@ export interface DragDropViewProps extends ViewProps, DragOptions {
   onSpringLoad?: () => void;
   /** The spring-loading highlight to draw while a drag hovers (the system flashes it before activating). */
   onSpringLoadHighlight?: (event: SpringLoadHighlightEvent) => void;
+  /** Required with `tearOff`: the drag ended outside every window of the app with no destination accepting it (after `onDragEnd`). Open a window where the view landed. */
+  onTearOff?: (event: TearOffEvent) => void;
   onError?: (error: SparkError) => void;
 }
 /** Drag and drop on this platform, or one of its features. */
@@ -54,14 +56,15 @@ function useUnavailableReport(unavailable: string | undefined, onError: (error: 
 }
 /** A view that is a drag source when `source` is set and a drop target for `acceptedTypes`. Invalid props throw E_INVALID_ARGUMENT. Where drag and drop is unavailable it renders a plain `View` and reports E_UNSUPPORTED_PLATFORM or E_MODULE_UNAVAILABLE through `onError`. macOS and Windows. */
 export function DragDropView({
-  source, sourceOperations, ignoreModifierKeys, dragImage, acceptedOperations, acceptedTypes, springLoading, disabled = false,
-  onDrop, onDragEnter, onDragOver, onDragLeave, onDragEnd, onPromisedFileWrite, onSpringLoad, onSpringLoadHighlight, onError = console.error, ...props
+  source, sourceOperations, ignoreModifierKeys, dragImage, acceptedOperations, acceptedTypes, springLoading, tearOff, disabled = false,
+  onDrop, onDragEnter, onDragOver, onDragLeave, onDragEnd, onPromisedFileWrite, onSpringLoad, onSpringLoadHighlight, onTearOff, onError = console.error, ...props
 }: DragDropViewProps) {
-  const optionsJson = dragOptions({ sourceOperations, ignoreModifierKeys, dragImage, acceptedOperations, acceptedTypes, springLoading }, Platform.OS);
+  const optionsJson = dragOptions({ sourceOperations, ignoreModifierKeys, dragImage, acceptedOperations, acceptedTypes, springLoading, tearOff }, Platform.OS);
   const sourceJson = source === undefined ? "" : JSON.stringify(dragSource(source, Platform.OS));
   if (typeof disabled !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "Expected disabled to be a boolean");
-  for (const handler of [onDrop, onDragEnter, onDragOver, onDragLeave, onDragEnd, onPromisedFileWrite, onSpringLoad, onSpringLoadHighlight, onError]) if (handler !== undefined && typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a drag event callback");
+  for (const handler of [onDrop, onDragEnter, onDragOver, onDragLeave, onDragEnd, onPromisedFileWrite, onSpringLoad, onSpringLoadHighlight, onTearOff, onError]) if (handler !== undefined && typeof handler !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected a drag event callback");
   if (source?.promisedFiles && !onPromisedFileWrite) throw new SparkError("E_INVALID_ARGUMENT", "promisedFiles needs onPromisedFileWrite to write them");
+  if (tearOff && (!source || !onTearOff)) throw new SparkError("E_INVALID_ARGUMENT", "tearOff needs a source and onTearOff");
   const availability = getDragDropAvailability();
   const [failed, setFailed] = useState(false);
   const mounted = useMounted();
@@ -109,5 +112,6 @@ export function DragDropView({
     onDragEnd={event => receive(event, dragEnd, onDragEnd)}
     onPromisedFileWrite={event => void writePromisedFile(event)}
     onSpringLoad={() => { if (mounted.current && !disabled && !failed) onSpringLoad?.(); }}
-    onSpringLoadHighlight={event => receive(event, springLoadHighlight, onSpringLoadHighlight)} />;
+    onSpringLoadHighlight={event => receive(event, springLoadHighlight, onSpringLoadHighlight)}
+    onTearOff={event => receive(event, tearOffEvent, onTearOff)} />;
 }

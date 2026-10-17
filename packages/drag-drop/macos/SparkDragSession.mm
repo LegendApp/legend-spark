@@ -230,8 +230,15 @@ NSDragOperation SparkDragModifierMask(NSDragOperation mask, NSEventModifierFlags
   id<NSSpringLoadingDestination> destination = (id<NSSpringLoadingDestination>)_destination;
   if ([destination respondsToSelector:@selector(springLoadingExited:)]) [destination springLoadingExited:self];
 }
+- (NSDragOperation)moveBy:(NSSize)offset {
+  if (_ended) return NSDragOperationNone;
+  [self moveTo:nil];
+  _screenLocation = NSMakePoint(_screenLocation.x + offset.width, _screenLocation.y - offset.height);
+  return NSDragOperationNone;
+}
 - (NSDragOperation)moveTo:(NSView<NSDraggingDestination> *)destination {
   if (_ended) return NSDragOperationNone;
+  if (destination) _screenLocation = [destination.window convertPointToScreen:[destination convertPoint:NSMakePoint(NSMidX(destination.bounds), NSMidY(destination.bounds)) toView:nil]];
   if (destination != _destination) {
     if (_destination) {
       [self leaveSpringLoading];
@@ -252,7 +259,7 @@ NSDragOperation SparkDragModifierMask(NSDragOperation mask, NSEventModifierFlags
 - (void)end:(NSDragOperation)operation {
   if (_ended) return;
   _ended = YES;
-  if ([_source respondsToSelector:@selector(draggingSession:endedAtPoint:operation:)]) [_source draggingSession:(NSDraggingSession *_Nonnull)nil endedAtPoint:NSZeroPoint operation:operation];
+  if ([_source respondsToSelector:@selector(draggingSession:endedAtPoint:operation:)]) [_source draggingSession:(NSDraggingSession *_Nonnull)nil endedAtPoint:_screenLocation operation:operation];
 }
 - (NSDragOperation)drop {
   NSView<NSDraggingDestination> *destination = _destination;

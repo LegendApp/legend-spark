@@ -46,12 +46,16 @@ export interface DragOptions {
   acceptedTypes?: readonly string[];
   /** Spring-load when a drag of an accepted type hovers (macOS): onSpringLoad after the system's springing delay. Default: false. */
   springLoading?: boolean;
+  /** Tear the source off (macOS): a drag no destination accepts that ends outside every window of the app calls `onTearOff` with where the view landed. Needs `source` and `onTearOff`. Default: false. */
+  tearOff?: boolean;
 }
+/** Payload of `onTearOff` on `DragDropView`: where the dragged view landed, in the source window's content from its top-left corner, as `measureInWindow` reports it (outside the window's bounds, so often negative or past its size). With the window's ID it is a `WindowContentRect` for `openWindowFrom`. */
+export interface TearOffEvent { x: number; y: number; width: number; height: number }
 /** Capabilities beyond basic drag and drop, by platform. */
-export type DragDropFeature = "promisedFiles" | "springLoading" | "dragImage" | "operationMasks";
-export const DRAG_DROP_FEATURES: readonly DragDropFeature[] = ["promisedFiles", "springLoading", "dragImage", "operationMasks"];
+export type DragDropFeature = "promisedFiles" | "springLoading" | "dragImage" | "operationMasks" | "tearOff";
+export const DRAG_DROP_FEATURES: readonly DragDropFeature[] = ["promisedFiles", "springLoading", "dragImage", "operationMasks", "tearOff"];
 /** Platforms implementing each feature (Windows: #365). */
-export const DRAG_DROP_FEATURE_PLATFORMS: Readonly<Record<DragDropFeature, readonly string[]>> = { promisedFiles: ["macos"], springLoading: ["macos"], dragImage: ["macos"], operationMasks: ["macos"] };
+export const DRAG_DROP_FEATURE_PLATFORMS: Readonly<Record<DragDropFeature, readonly string[]>> = { promisedFiles: ["macos"], springLoading: ["macos"], dragImage: ["macos"], operationMasks: ["macos"], tearOff: ["macos"] };
 const operations = ["copy", "move", "link"];
 const builtins = ["files", "text", "urls"];
 const mime = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/;
@@ -120,11 +124,11 @@ function dragImage(image: unknown, platform: string): DragImage {
   if (typeof width !== "number" || typeof height !== "number" || !(width > 0 && width <= 1024) || !(height > 0 && height <= 1024)) invalid("dragImage width and height are points from 1 to 1024");
   return { path: nativePath(image.path as string, platform), width, height };
 }
-const OPTION_KEYS = ["sourceOperations", "ignoreModifierKeys", "dragImage", "acceptedOperations", "acceptedTypes", "springLoading"];
+const OPTION_KEYS = ["sourceOperations", "ignoreModifierKeys", "dragImage", "acceptedOperations", "acceptedTypes", "springLoading", "tearOff"];
 export function dragOptions(options: DragOptions, platform: string): string {
   if (!record(options)) invalid("Expected drag options");
   for (const key of Object.keys(options)) if (!OPTION_KEYS.includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown drag option: ${key}`);
-  const { sourceOperations = ["copy"], acceptedOperations = ["copy"], acceptedTypes: types = builtins, ignoreModifierKeys, springLoading, dragImage: image } = options;
+  const { sourceOperations = ["copy"], acceptedOperations = ["copy"], acceptedTypes: types = builtins, ignoreModifierKeys, springLoading, tearOff, dragImage: image } = options;
   let within: DragOperation[], outside: DragOperation[];
   if (record(sourceOperations)) {
     if (Object.keys(sourceOperations).some(key => key !== "withinApp" && key !== "outsideApp")) invalid("Contextual sourceOperations are { withinApp, outsideApp }");
@@ -133,11 +137,12 @@ export function dragOptions(options: DragOptions, platform: string): string {
   } else within = outside = operationList(sourceOperations, "sourceOperations");
   const accepted = operationList(acceptedOperations, "acceptedOperations");
   if (!strings(types) || new Set(types).size !== types.length || types.some(type => !builtins.includes(type) && !customType(type))) invalid("Invalid or duplicate accepted drag type");
-  for (const [name, value] of [["ignoreModifierKeys", ignoreModifierKeys], ["springLoading", springLoading]] as const) if (value !== undefined && typeof value !== "boolean") invalid(`${name} must be a boolean`);
+  for (const [name, value] of [["ignoreModifierKeys", ignoreModifierKeys], ["springLoading", springLoading], ["tearOff", tearOff]] as const) if (value !== undefined && typeof value !== "boolean") invalid(`${name} must be a boolean`);
   if (ignoreModifierKeys) requireFeature("operationMasks", platform);
   if (springLoading) requireFeature("springLoading", platform);
+  if (tearOff) requireFeature("tearOff", platform);
   return JSON.stringify({ sourceOperations: within, externalOperations: outside, acceptedOperations: accepted, acceptedTypes: [...types], ignoreModifierKeys: ignoreModifierKeys ?? false,
-    springLoading: springLoading ?? false, ...(image === undefined ? {} : { dragImage: dragImage(image, platform) }) });
+    springLoading: springLoading ?? false, ...(tearOff ? { tearOff } : {}), ...(image === undefined ? {} : { dragImage: dragImage(image, platform) }) });
 }
 function position(value: unknown): value is DragOverEvent {
   return record(value) && typeof value.x === "number" && Number.isFinite(value.x) && typeof value.y === "number" && Number.isFinite(value.y) && operations.includes(value.operation as string)
@@ -167,6 +172,11 @@ export function promisedFileRequest(json: string): PromisedFileWriteRequest & { 
   const { id, name, path } = parseNativeResult(json, (value): value is PromisedFileWriteRequest & { id: number } =>
     record(value) && Number.isSafeInteger(value.id) && typeof value.name === "string" && typeof value.path === "string" && value.path.startsWith("/"));
   return { id, name, path };
+}
+const rectangle = (value: unknown): value is TearOffEvent => record(value) && ["x", "y", "width", "height"].every(key => typeof value[key] === "number" && Number.isFinite(value[key])) && (value.width as number) >= 0 && (value.height as number) >= 0;
+export function tearOffEvent(json: string): TearOffEvent {
+  const { x, y, width, height } = parseNativeResult(json, rectangle);
+  return { x, y, width, height };
 }
 export function springLoadHighlight(json: string): SpringLoadHighlightEvent {
   const { highlight } = parseNativeResult(json, (value): value is SpringLoadHighlightEvent => record(value) && ["none", "standard", "emphasized"].includes(value.highlight as string));

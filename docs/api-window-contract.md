@@ -362,9 +362,10 @@ interface WindowAnimationResult { finished: boolean; reducedMotion: boolean }
 getWindowChoreographyAvailability(feature: "zoom" | "frame" | "closeTransition" | "attach"): Availability;
 animateWindowBounds(id, bounds: WindowBounds, transition?): Promise<WindowAnimationResult>;
 stopWindowAnimation(id): Promise<void>;
-openWindowFrom(options: WindowOpenOptions, zoom: { from: WindowSourceRect; closeTo?: WindowSourceRect | null; focusOnClose?: WindowId; transition? }): Promise<WindowZoom>; // { id, bounds, finished }
+openWindowFrom(options: WindowOpenOptions, zoom: { from: WindowSourceRect; closeTo?: WindowSourceRect | null; focusOnClose?: WindowId; landAt?: "frame" | "from"; transition? }): Promise<WindowZoom>; // { id, bounds, finished }
 setWindowCloseTransition(id, value: { to: WindowSourceRect | null; focus?: WindowId; transition? } | null): Promise<void>;
 attachWindow(id, parentId, options: { edge, align?, gap?, magnetic?, hideWhenInactive?, transition?, onChange?, onError? }): Promise<WindowAttachment>; // { id, parentId, attached, remove }
+addWindowDropTarget(id, target: WindowContentRect, options: { onHover?, onDrop, onError? }): Promise<AsyncRegistration>;
 ```
 
 - **Sources.** A `DisplayRect` is in display coordinates. `{ windowId, x, y, width, height }` is a rectangle in that
@@ -384,7 +385,9 @@ attachWindow(id, parentId, options: { edge, align?, gap?, magnetic?, hideWhenIna
   requested (the window shows at `from` as the zoom starts), with the frame it lands on; `finished` resolves when the zoom ends. `show: false`, `modal` and `tabbedWith` reject
   `E_INVALID_ARGUMENT`. If the zoom cannot start (the source's window or display is gone) the window closes again
   and `finished` rejects with the cause. By default the window shrinks back into `from` when it closes
-  (`closeTo: null` turns that off).
+  (`closeTo: null` turns that off). `landAt: "from"` lands the window at its size with its top-left corner at `from`'s,
+  moved onto that display's work area if it would leave it, and `bounds` reports that frame: a panel torn off by a drag
+  opens where it was dropped.
 - **Close transitions and focus handoff.** With a close transition, every close (`closeWindow`, the close button, ⌘W,
   the navigator's `close`) first runs the window's close guard, then shrinks the window into `to` while it fades out
   (`to: null` fades it where it is; a `to` in a window that has closed does the same), then closes it. As the shrink
@@ -414,12 +417,60 @@ attachWindow(id, parentId, options: { edge, align?, gap?, magnetic?, hideWhenIna
   throws `E_INVALID_ARGUMENT`; unknown option keys reject `E_UNSUPPORTED_OPTION` and invalid values
   `E_INVALID_ARGUMENT` before any native call. Tab reordering and the overflow, pinning and thumbnail
   decision are in [Window tabs](#window-tabs) (#435); drag-driven tear-off, merge preview and cross-window
-  drag (#436) are a separate task.
+  drag are [below](#drag-driven-tear-off-and-merge) (#436).
+
+#### Drag-driven tear-off and merge
+
+Tearing a panel off and merging it back (#189) can follow a person's drag (#436), with three pieces that compose with the
+choreography above:
+
+- **Tear-off.** A `DragDropView` source with `tearOff` ([drag-drop](drag-drop.md#tear-off)) calls `onTearOff` when a drag
+  that no destination accepted ends outside every window of the app, with where the view landed in its window's content.
+  With `dragImage: "view"` a snapshot of the view follows the pointer. The app opens the window there:
+  `openWindowFrom(options, { from: { windowId, ...landed }, landAt: "from" })` grows it out of the dropped snapshot at that
+  place, so it stays where it was dropped.
+- **Merge preview and drop.** `addWindowDropTarget(id, target, { onHover, onDrop })` makes `target`, a rectangle in another
+  window's content (the panel's slot), a place to drop window `id` on. While a person drags the window by its title bar
+  (AppKit's `windowWillMove:` with the mouse button down, then its moves until the button comes up), `onHover` reports the
+  pointer entering (`over: true`) and leaving it, so the app draws the drop preview in the slot; letting go over it reports
+  `over: false`, then `onDrop`. Merging is the window's close transition into the slot (`setWindowCloseTransition`, then
+  `closeWindow`). Only a person's drag counts: `setWindowBounds`, animations and AppKit's own placement never hover or
+  drop. The rectangle is measured again on each move, in the coordinates it was registered with; register it again when
+  the slot's layout changes. A window can have several targets; a target in a hidden or minimized window is never over.
+  The registration ends with `remove()` or when the window closes (or is parked in its pool). The target must be in
+  another window (`E_INVALID_ARGUMENT`) that is open (`E_NOT_FOUND`).
+- **Cross-window drag and hover activation.** A `DragDropView` drag already crosses windows of the app, with the
+  dragged view's snapshot as its live image (`dragImage: "view"`). A target window comes forward while a drag hovers
+  over it when its content is a spring-loading destination ([drag-drop](drag-drop.md#spring-loaded-destinations)) whose
+  `onSpringLoad` shows it (`showWindow`): the system's spring-loading delay and force click apply, as for a Finder folder.
+
+`getWindowChoreographyAvailability("dropTarget")` and `getDragDropAvailability("tearOff")` report the two new pieces;
+both are macOS only (`unsupported-platform` on Windows, where `addWindowDropTarget` rejects `E_UNSUPPORTED_PLATFORM` and
+a `DragDropView` with `tearOff` throws it while rendering, before any native call).
+
+**Native tabs and the Spark-drawn tab bar (#436 scope).** AppKit's own tab bar already drags tabs: out into a window of
+their own (where the tab is dropped), into another window's tab bar with AppKit's insertion preview, and along the bar to
+reorder. Spark reports each result through `tabGroupChanged` ([Window tabs](#window-tabs)), as for the menu actions.
+AppKit's tab bar is not public, and AppKit has no tab notifications: it reports no drag start, hover, drop location or
+cancel for a tab, and draws its own previews. So Spark adds no tab drag events and does not read AppKit's private views to
+guess them; the manual flow `e2e/flows/windows/window-tabs-macos.yaml` checks tab drags on screen through the groups the
+screen reports. A tab bar whose tabs tear off and merge with the app's own previews is the Spark-drawn tab bar (#476),
+built from these pieces: each tab a `tearOff` source, and the bar of each window a drop target (`addWindowDropTarget`)
+for torn-off tab windows.
+
+**What only a person checks.** Driver mode shows no windows and never moves the real pointer, so a real window server
+drag (the snapshot following the pointer, the drop off the windows, a title-bar drag hovering the slot, AppKit's move
+notifications during it, the spring-loading flash and the target window coming forward) is in the manual flow
+`e2e/flows/multiwindow/choreography-manual.yaml`. In driver runs the drags are simulated in process: `testDrag` moves the
+pointer by an offset over no window (the `dragOut` flow command) and `testWindowDrag` drags a window by its title bar
+with the driver's own pointer (`dragWindow`) ([test driver](test-driver.md#window-drags)).
 
 Testing: `tests/window-choreography.test.ts` covers validation, ordering and results over a mocked transport;
 `tests/window.native.mm` (choreography suite) covers the animator on the virtual clock, interruption, close transitions,
-focus handoff targets, Reduce Motion and attachments on real `NSWindow`s in driver mode. The Kitchen Sink screen is
-`multiwindow/choreography`; its flows are `e2e/flows/multiwindow/choreography-*.yaml`.
+focus handoff targets, Reduce Motion and attachments on real `NSWindow`s in driver mode, and its window-drag suite drop
+targets (hover, drop, cancel, hidden targets, removal, closing mid-drag, programmatic moves that never count) and
+`landAt`. The Kitchen Sink screen is `multiwindow/choreography`; its flows are `e2e/flows/multiwindow/choreography-*.yaml`
+(drags: `choreography-drag.yaml`).
 
 ### Window tabs
 

@@ -43,6 +43,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | `assertScale` | value → `scale` | `scale`*, `window` | black-box | Assert the backing scale factor of a window. |
 | `snapWindow` | value → `layout` | `layout`*, `window` | black-box | Snap a window to a screen layout. |
 | `tearOff` | — | `tab`*, `from`, `to`* | black-box | Drag a tab out into a new window. |
+| `dragWindow` | — | `window`*, `to`*, `release` | driver | Drag a window by its title bar until the pointer is over a target, then let go, in process (the window follows the pointer); `release: false` keeps holding it there for the next dragWindow of that window. |
 | `mergeInto` | — | `tab`*, `from`, `to`* | black-box | Drag a tab into another window's tab bar. |
 | `saveWorkspace` | value → `name` | `name`* | black-box | Save the window workspace. |
 | `restoreWorkspace` | value → `name` | `name`* | black-box | Restore a saved window workspace. |
@@ -110,6 +111,7 @@ How to write and check flows: [e2e-flows.md](e2e-flows.md). Every command's mapp
 | Command | Short form | Keys | Backend | Summary |
 |---|---|---|---|---|
 | `dragAndDrop` | — | `from`*, `to`*, `modifiers`, `holdAt`, `steps` | black-box | Drag from one target to another (on the driver backend, a Spark drag source drags in process; `holdAt` waits over `to`). |
+| `dragOut` | — | `from`*, `by`*, `modifiers` | driver | Drag a Spark drag source by an offset in points and drop it there over no destination, in process: off the app's windows, a tearOff source tears off. |
 | `dragFromFinder` | — | `files`*, `to`* | black-box | Drag files from the file manager onto a target. |
 | `dragToFinder` | — | `from`*, `expectFile`* | black-box | Drag a target to the file manager and expect a file (on the driver backend, a Spark drag source dropped in a private temporary folder). |
 | `dragToDock` | — | `files`* | black-box | Drag files onto the Dock icon. |

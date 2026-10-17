@@ -3,21 +3,26 @@ import type { View } from "react-native";
 import * as links from "@legendapp/spark/links";
 import { getAppearancePreferences, onSystemEvent } from "@legendapp/spark/system";
 import { SparkError } from "@legendapp/spark/contracts";
+import { getDragDropAvailability } from "@legendapp/spark/drag-drop";
 import {
-  animateWindowBounds, attachWindow, closeWindow, openWindow, createWindowsNavigator, getDisplays, getWindow, getWindowChoreographyAvailability, openWindowFrom, setWindowBounds,
-  setWindowCloseTransition, stopWindowAnimation,
-  type CloseResult, type WindowAnimationResult, type WindowAttachment, type WindowChoreographyFeature, type WindowContentRect, type WindowInstance,
+  addWindowDropTarget, animateWindowBounds, attachWindow, closeWindow, openWindow, createWindowsNavigator, getDisplays, getWindow, getWindowChoreographyAvailability, openWindowFrom, setWindowBounds,
+  setWindowCloseTransition, showWindow, stopWindowAnimation,
+  type AsyncRegistration, type CloseResult, type WindowAnimationResult, type WindowAttachment, type WindowChoreographyFeature, type WindowContentRect, type WindowInstance,
 } from "@legendapp/spark/windows";
 import { ChoreographyInspector } from "./ChoreographyInspector";
 
 /**
  * Multiwindow > Window choreography (docs/api-window-contract.md#window-choreography): a detail window that zooms out of
  * a list row (or a thumbnail) and shrinks back into it, compact↔full and Settings pane resizes, a notes panel torn off
- * into a window and merged back into its slot, an inspector and a palette docked to the main window. The readout lists
+ * into a window and merged back into its slot (by command, or by dragging the panel out and the window back over its slot,
+ * docs/api-window-contract.md#drag-driven-tear-off-and-merge), an inspector and a palette docked to the main window. The
+ * inspector spring-loads: a drag of the notes panel that hovers over it brings its window forward. The readout lists
  * each window's state and bounds as the window API reports them, so driver flows (which never show windows) can check
  * frames at exact times of the virtual clock, and each animation's and close's result.
  */
-export const FEATURES: readonly WindowChoreographyFeature[] = ["zoom", "frame", "closeTransition", "attach"];
+export const FEATURES: readonly WindowChoreographyFeature[] = ["zoom", "frame", "closeTransition", "attach", "dropTarget"];
+/** The notes panel's drag type: the panel tears off, and the inspector accepts it. */
+export const NOTES_TYPE = "application/x-ks-notes";
 export const ITEMS = ["inbox", "drafts", "archive"] as const;
 export type Item = typeof ITEMS[number];
 export const WINDOWS = ["detail", "torn", "inspector", "palette"] as const;
@@ -29,16 +34,20 @@ const content = (window: ChoreographyWindow, label: string) => ({ id: id(window)
 export type WindowState = { visible: boolean; displayId: string; x: number; y: number; width: number; height: number } | null;
 /**
  * `runs` counts deep-link runs and `steps` the steps the latest one finished. `animation` is the latest animation's result
- * (`pending` until it ends) and `close` the latest close's; `attached` each attachment's docking.
+ * (`pending` until it ends) and `close` the latest close's; `attached` each attachment's docking. `mergePreview`: the
+ * torn-off window is dragged over the panel's slot. `activations` counts the inspector's spring loads, and `inspectorDrop`
+ * is what was last dropped on it.
  */
 export type ChoreographyState = {
   windows: Record<ChoreographyWindow, WindowState>; selected: Item; tornOff: boolean;
   attached: Record<"inspector" | "palette", boolean | null>; animation: "none" | "pending" | "finished" | "interrupted" | "reduced";
   close: "none" | "pending" | "closed" | "interrupted" | "vetoed"; reduceMotion: boolean | null; runs: number; steps: number; error: string | null;
+  mergePreview: boolean; activations: number; inspectorDrop: string | null;
 };
 let state: ChoreographyState = {
   windows: { detail: null, torn: null, inspector: null, palette: null }, selected: "inbox", tornOff: false,
   attached: { inspector: null, palette: null }, animation: "none", close: "none", reduceMotion: null, runs: 0, steps: 0, error: null,
+  mergePreview: false, activations: 0, inspectorDrop: null,
 };
 const listeners = new Set<() => void>();
 function update(change: Partial<ChoreographyState>) { state = { ...state, ...change }; for (const listener of listeners) listener(); }
@@ -94,9 +103,9 @@ function closing(window: ChoreographyWindow, after?: (result: CloseResult) => vo
 }
 const LINEAR = { durationMs: 300, easing: "linear" } as const;
 type Source = Parameters<typeof openWindowFrom>[1]["from"];
-const zoomOpen = async (window: ChoreographyWindow, label: string, from: Source | Promise<Source>, options: { linear?: boolean; closeBack?: boolean } = {}) => {
+const zoomOpen = async (window: ChoreographyWindow, label: string, from: Source | Promise<Source>, options: { linear?: boolean; closeBack?: boolean; landAt?: "frame" | "from" } = {}) => {
   const zoom = await openWindowFrom({ ...content(window, label), size: { width: 400, height: 300 } },
-    { from: await from, focusOnClose: "main", transition: options.linear ? LINEAR : { durationMs: 300, easing: "easeOut" }, ...(options.closeBack === false ? { closeTo: null } : {}) });
+    { from: await from, focusOnClose: "main", transition: options.linear ? LINEAR : { durationMs: 300, easing: "easeOut" }, ...(options.closeBack === false ? { closeTo: null } : {}), ...(options.landAt ? { landAt: options.landAt } : {}) });
   track(zoom.finished);
 };
 const resize = async (width: number, height: number) => {
@@ -116,6 +125,26 @@ async function attach(window: "inspector" | "palette", edge: "trailing" | "leadi
   attachments[window] = await attachWindow(id(window), "main", { edge, gap: 8, hideWhenInactive, transition: { durationMs: 0 }, onChange: ({ attached }) => setAttached(attached), onError: report });
   setAttached(attachments[window]!.attached);
 }
+// The torn-off window can be dragged back over the panel's slot: hovering shows the preview, dropping merges it.
+let dropTarget: AsyncRegistration | undefined;
+async function tornOff(from: Source, landAt: "frame" | "from") {
+  await zoomOpen("torn", "Notes", from, { closeBack: false, landAt });
+  update({ tornOff: true, mergePreview: false });
+  await dropTarget?.remove();
+  dropTarget = await addWindowDropTarget(id("torn"), await measure("panel"), { onHover: ({ over }) => update({ mergePreview: over }), onDrop: () => { STEPS.merge!().catch(report); }, onError: report });
+}
+/** The notes panel was dragged out of the main window and dropped at `rect` (main window content coordinates): a window opens there. */
+export function tearOffAt(rect: { x: number; y: number; width: number; height: number }) {
+  tornOff({ windowId: "main", ...rect }, "from").catch(report).finally(refreshNow);
+}
+/** A drag of the notes panel hovered over the inspector: its window comes forward. */
+export function activateInspector() {
+  update({ activations: state.activations + 1 });
+  showWindow(id("inspector")).catch(report);
+}
+export const dropOnInspector = (value: string | undefined) => update({ inspectorDrop: value ?? null });
+/** Drag tear-off and spring loading are macOS features: elsewhere the panel and inspector are plain views. */
+export const dragFeatures = () => ({ tearOff: getDragDropAvailability("tearOff").available, springLoading: getDragDropAvailability("springLoading").available });
 const near = async (window: ChoreographyWindow, dx: number) => {
   const { bounds } = await getWindow(id(window));
   await setWindowBounds(id(window), { ...bounds, x: bounds.x + dx });
@@ -132,12 +161,12 @@ const STEPS: Record<string, () => Promise<unknown>> = {
   "full": () => resize(720, 480),
   "pane-general": () => resize(560, 320),
   "pane-advanced": () => resize(560, 520),
-  "tear-off": async () => { await zoomOpen("torn", "Notes", measure("panel"), { closeBack: false }); update({ tornOff: true }); },
+  "tear-off": async () => tornOff(await measure("panel"), "frame"),
   // The torn-off window shrinks back into the panel's slot where it is now, handing focus to the main window, and the
   // panel returns once it has closed.
   "merge": async () => {
     await setWindowCloseTransition(id("torn"), { to: await measure("panel"), focus: "main", transition: LINEAR });
-    closing("torn", result => { if (result.closed) update({ tornOff: false }); });
+    closing("torn", result => { if (result.closed) update({ tornOff: false, mergePreview: false }); });
   },
   "inspector": async () => {
     inspector = await (navigator ??= inspectorNavigator()).openInstance("choreoInspector");
@@ -160,12 +189,13 @@ const STEPS: Record<string, () => Promise<unknown>> = {
 /** Closes every window this screen opened, without transitions. */
 async function closeAll() {
   for (const window of ["inspector", "palette"] as const) { await attachments[window]?.remove(); delete attachments[window]; }
+  await dropTarget?.remove(); dropTarget = undefined;
   const results = await Promise.allSettled(WINDOWS.map(async window => {
     try { await setWindowCloseTransition(id(window), null); await closeWindow(id(window)); }
     catch (error) { if (!(error instanceof SparkError && error.code === "E_NOT_FOUND")) throw error; }
   }));
   inspector = undefined;
-  update({ tornOff: false, attached: { inspector: null, palette: null }, animation: "none", close: "none", selected: "inbox" });
+  update({ tornOff: false, attached: { inspector: null, palette: null }, animation: "none", close: "none", selected: "inbox", mergePreview: false, activations: 0, inspectorDrop: null });
   const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
   if (failed) throw failed.reason;
 }

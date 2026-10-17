@@ -1163,6 +1163,40 @@
               "type": "object"
             }
           },
+          "dragWindow": {
+            "description": "[driver] Drag a window by its title bar until the pointer is over a target, then let go, in process (the window follows the pointer); `release: false` keeps holding it there for the next dragWindow of that window.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "window": {
+                  "$ref": "#/definitions/window"
+                },
+                "to": {
+                  "$ref": "#/definitions/selector"
+                },
+                "release": {
+                  "type": "boolean"
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "window",
+                "to"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "mergeInto": {
             "description": "Drag a tab into another window's tab bar.",
             "if": {
@@ -3715,6 +3749,53 @@
               "required": [
                 "from",
                 "to"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "object"
+            }
+          },
+          "dragOut": {
+            "description": "[driver] Drag a Spark drag source by an offset in points and drop it there over no destination, in process: off the app's windows, a tearOff source tears off.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "$ref": "#/definitions/selector"
+                },
+                "by": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?%?, ?-?\\d+(\\.\\d+)?%?$",
+                  "description": "a point such as \"50%,20%\" or \"120,48\" (percent of the target, or points from its top-left)"
+                },
+                "modifiers": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "cmd",
+                      "ctrl",
+                      "option",
+                      "alt",
+                      "shift",
+                      "fn"
+                    ]
+                  },
+                  "minItems": 1
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "from",
+                "by"
               ],
               "additionalProperties": false
             },

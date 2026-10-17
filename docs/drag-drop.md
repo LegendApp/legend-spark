@@ -40,6 +40,7 @@ Sources must contain at least one representation. `sourceOperations` defaults to
 | `springLoading` | `springLoading`, `onSpringLoad`, `onSpringLoadHighlight` |
 | `dragImage` | `dragImage` |
 | `operationMasks` | `sourceOperations: { withinApp, outsideApp }`, `ignoreModifierKeys`, `allowedOperations` in events |
+| `tearOff` | `tearOff`, `onTearOff` |
 
 ### Promised files
 
@@ -65,6 +66,18 @@ With `springLoading`, a destination spring-loads when a drag of an accepted type
 
 `dragImage` replaces the default document symbol under the pointer: `'view'` drags a snapshot of the source view at its own position, and `{ path, width, height }` an image file (absolute path or file URL; size in points, 1-1024) centered on the pointer. A missing or unreadable image file starts no drag and reports `E_NOT_FOUND` through `onError`; a view without size reports `E_UNAVAILABLE`.
 
+### Tear-off
+
+With `tearOff`, a source tears off: a drag of it that no destination accepts and that ends outside every window of the app calls `onTearOff` (after `onDragEnd` with `accepted: false`) with `{ x, y, width, height }`, where the view landed. It is the view's frame moved with the pointer, in its window's content from the top-left corner, as `measureInWindow` reports it, so it is usually outside the window's bounds. With the window's ID it is a `WindowContentRect`: open a window there with `openWindowFrom(options, { from: { windowId, ...event }, landAt: "from" })` ([window choreography](api-window-contract.md#drag-driven-tear-off-and-merge)). While the pointer is off the app's windows the drag image does not slide back when the drag ends, so a torn-off view stays where it was dropped; over them it slides back as usual. `tearOff` needs a `source` and `onTearOff` (`E_INVALID_ARGUMENT`). Use `dragImage: "view"` so the view itself follows the pointer.
+
+```tsx
+const windowId = useWindowId();
+<DragDropView source={{ data: { 'application/x-panel': 'notes' } }} dragImage="view" tearOff
+  onTearOff={landed => openWindowFrom({ id: 'notes', component: 'Notes' }, { from: { windowId, ...landed }, landAt: 'from' })}>
+  <NotesPanel />
+</DragDropView>
+```
+
 ### Operations and modifier keys
 
 While the user holds a modifier key, AppKit narrows the source's operations (`NSDraggingInfo.draggingSourceOperationMask`): Control keeps link, otherwise Option keeps copy, otherwise Command keeps move. The destination performs its first accepted operation among those, so a destination accepting `['move', 'copy', 'link']` moves by default, copies with Option and links with Control. `onDragEnter`, `onDragOver` and `onDrop` report the narrowed operations as `allowedOperations` (macOS only). `ignoreModifierKeys` keeps every source operation regardless of the keys held. `sourceOperations` can differ by where the drag ends: `{ withinApp, outsideApp }`, for example moving within the app but only copying to Finder.
@@ -75,6 +88,6 @@ While the user holds a modifier key, AppKit narrows the source's operations (`NS
 
 ## Testing
 
-In test driver mode a drag view never starts a window server drag: that would follow the real pointer. The drag-drop package registers the `testDrag` driver command instead ([test-driver.md](test-driver.md)). It builds the source's real dragging items, puts them on a private pasteboard, and delivers the destination calls AppKit makes, with the modifier narrowing above and spring loading after the system's spring-loading delay. `dropInFolder` writes promised files into a folder as Finder does; it accepts only an existing folder inside a temporary directory. On the driver backend, `dragAndDrop` from a Spark drag source uses it (`holdAt` holds the drag over `to`), and `dragToFinder` drops into a private temporary folder that the runner creates and removes. Drags between views that are not Spark drag sources keep using pointer input.
+In test driver mode a drag view never starts a window server drag: that would follow the real pointer. The drag-drop package registers the `testDrag` driver command instead ([test-driver.md](test-driver.md)). It builds the source's real dragging items, puts them on a private pasteboard, and delivers the destination calls AppKit makes, with the modifier narrowing above and spring loading after the system's spring-loading delay. The pointer starts at the source's center and moves to each destination's center; `{ phase: "move", by: { x, y } }` moves it that many points (y downward) over no destination, as off the app's windows, and the source hears where the drag ended, so a `tearOff` source dropped there tears off (the `dragOut` flow command). Off the windows means outside every window the driver shows. `dropInFolder` writes promised files into a folder as Finder does; it accepts only an existing folder inside a temporary directory. On the driver backend, `dragAndDrop` from a Spark drag source uses it (`holdAt` holds the drag over `to`), and `dragToFinder` drops into a private temporary folder that the runner creates and removes. Drags between views that are not Spark drag sources keep using pointer input.
 
 The window server itself (real pointer drags, how drag images look, Finder accepting a promise, its spring-loading timing and force click) needs the black-box backend (#118, #119). `tests/drag-drop-native.test.ts` covers the native pieces (masks, items, images, promised writes, sessions), and `tests/drag-drop.test.ts` and `tests/drag-drop-component.test.ts` cover the contracts and the mounted component. Windows compilation of the base view remains unverified in this repository.

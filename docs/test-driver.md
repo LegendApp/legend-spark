@@ -275,7 +275,7 @@ display source of `@legendapp/spark/displays` and of window geometry ([displays.
 package moves `@legendapp/spark/clipboard` onto a private pasteboard when the driver starts, and registers
 `setTestClipboard` and `testClipboard` to write and read it as another app would ([clipboard.md](clipboard.md#testing)). The
 drag-drop package registers `testDrag`, which runs a drag between Spark drag views in process as the window server
-would, and drops promised files in a temporary folder as Finder would ([drag-drop.md](drag-drop.md#testing)). The permissions package
+would, moves the pointer off the windows by an offset for a tear-off, and drops promised files in a temporary folder as Finder would ([drag-drop.md](drag-drop.md#testing)). The window package also registers `testWindowDrag` ([window drags](#window-drags)). The permissions package
 answers `@legendapp/spark/permissions` from simulated state in driver mode, never from TCC, and registers
 `simulatePermission` and `testPermission` to set and read it ([permissions.md](permissions.md#testing)). The biometrics package answers `@legendapp/spark/biometrics` from simulated state in driver mode,
 never showing a Touch ID prompt or touching a keychain, and registers `simulateBiometrics` and `testBiometrics`
@@ -601,3 +601,16 @@ Known differences from drawing views, in every Kitchen Sink golden: the title ba
 (gray 76 instead of 70 in dark), and in dark the gradient view drawing showed above the shell header's bottom border is
 gone (that edge is a compositor effect the renderer draws over the window's own content). Neither could be compared
 with the window server's own pixels: that needs the out-of-process capture above.
+
+## Window drags
+
+A person drags a window by its title bar through the window server, which moves the real window under the real pointer.
+A driven app never does that: `testWindowDrag` drags a Spark window in process instead, for drop targets
+(`addWindowDropTarget`, [window choreography](api-window-contract.md#drag-driven-tear-off-and-merge)).
+`{ phase: "begin", window }` grabs the window (its Spark ID or window identifier; a hidden window is `E_INVALID_ARGUMENT`)
+10 points below the middle of its top edge. `{ phase: "move", to }` moves the driver's pointer to the center of the view
+with testID `to` in any window, and the window with it, then reports the drop targets the pointer enters and leaves.
+`{ phase: "drop" }` lets go (over a target: its drop), `{ phase: "cancel" }` lets go dropping nothing. Each reply lists the
+tokens of the targets the pointer is over. The real mouse button never decides a driven drag, and programmatic moves
+(`setWindowBounds`) never hover or drop. The `dragWindow` flow command uses it (`release: false` keeps holding the window
+for the next `dragWindow`; a drag still held when the flow ends is cancelled).

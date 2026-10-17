@@ -54,10 +54,10 @@ test("operation errors report without losing the view; host failures preserve ch
 });
 
 test("features report availability per platform; unknown features are invalid", () => {
-  for (const feature of ["promisedFiles", "springLoading", "dragImage", "operationMasks"] as const) expect(getDragDropAvailability(feature)).toEqual({ available: true });
+  for (const feature of ["promisedFiles", "springLoading", "dragImage", "operationMasks", "tearOff"] as const) expect(getDragDropAvailability(feature)).toEqual({ available: true });
   platform.OS = "windows";
   expect(getDragDropAvailability()).toEqual({ available: true });
-  for (const feature of ["promisedFiles", "springLoading", "dragImage", "operationMasks"] as const) expect(getDragDropAvailability(feature)).toEqual({ available: false, reason: "unsupported-platform" });
+  for (const feature of ["promisedFiles", "springLoading", "dragImage", "operationMasks", "tearOff"] as const) expect(getDragDropAvailability(feature)).toEqual({ available: false, reason: "unsupported-platform" });
   expect(() => getDragDropAvailability("thumbnails" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
 });
 test("unsupported features throw a typed error when rendered on Windows", async () => {
@@ -69,7 +69,7 @@ test("unsupported features throw a typed error when rendered on Windows", async 
     componentDidCatch(error: unknown) { errors.push(error); }
     render() { return this.state.failed ? null : this.props.children; }
   }
-  for (const props of [{ springLoading: true }, { dragImage: "view" as const }, { ignoreModifierKeys: true }, { source: { promisedFiles: [{ name: "a.txt" }] }, onPromisedFileWrite: () => {} }]) {
+  for (const props of [{ springLoading: true }, { dragImage: "view" as const }, { ignoreModifierKeys: true }, { source: { promisedFiles: [{ name: "a.txt" }] }, onPromisedFileWrite: () => {} }, { source: { text: "a" }, tearOff: true, onTearOff: () => {} }]) {
     errors.length = 0;
     vi.spyOn(console, "error").mockImplementation(() => {});
     await act(async () => { rendered = create(React.createElement(Boundary, null, React.createElement(DragDropView, props))); });
@@ -108,4 +108,17 @@ test("spring loading and its highlight reach the current callbacks; native timeo
   expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_TIMEOUT" }));
   await act(async () => native.props.onError(event({ message: "x", unavailable: false, code: "E_BOGUS" })));
   expect(onError).toHaveBeenLastCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
+});
+test("a tear-off needs a source and onTearOff, and reports where the view landed", async () => {
+  for (const props of [{ tearOff: true, onTearOff: () => {} }, { source: { text: "a" }, tearOff: true }]) await expect(mount(props)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  rendered = undefined;
+  const onTearOff = vi.fn(), onError = vi.fn();
+  await mount({ source: { text: "a" }, tearOff: true, onTearOff, onError });
+  const native = rendered.root.findByType("DesktopDragView");
+  expect(JSON.parse(native.props.optionsJson)).toMatchObject({ tearOff: true });
+  native.props.onTearOff(event({ x: -120.5, y: 40, width: 300, height: 90, extra: 1 }));
+  expect(onTearOff).toHaveBeenCalledWith({ x: -120.5, y: 40, width: 300, height: 90 });
+  native.props.onTearOff(event({ x: 1, y: 2, width: -1, height: 3 }));
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
+  expect(onTearOff).toHaveBeenCalledTimes(1);
 });

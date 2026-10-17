@@ -379,6 +379,7 @@
     "PromisedFileWriteRequest",
     "SpringLoadHighlight",
     "SpringLoadHighlightEvent",
+    "TearOffEvent",
     "getDragDropAvailability"
   ],
   "./files": [
@@ -1334,6 +1335,7 @@
     "WindowComponentProps",
     "WindowConfigEntry",
     "WindowContentRect",
+    "WindowDropTargetOptions",
     "WindowEasing",
     "WindowErrorEvent",
     "WindowEventMap",
@@ -1381,6 +1383,7 @@
     "WorkspaceMenuOptions",
     "WorkspacePlacement",
     "WorkspaceRestoreResult",
+    "addWindowDropTarget",
     "addWindowListener",
     "animateWindowBounds",
     "attachWindow",

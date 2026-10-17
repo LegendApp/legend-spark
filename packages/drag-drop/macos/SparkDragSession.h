@@ -51,8 +51,13 @@ FOUNDATION_EXPORT NSDragOperation SparkDragModifierMask(NSDragOperation mask, NS
 @property (nonatomic) NSEventModifierFlags modifiers;
 @property (nonatomic, readonly, nullable) NSView<NSDraggingDestination> *destination;
 @property (nonatomic, readonly) NSUInteger springLoads; // activations so far
+// The pointer in screen coordinates: the destination's center after -moveTo:, or where -moveBy: put it. The source's
+// draggingSession:endedAtPoint:operation: gets it. Set it where the drag starts.
+@property (nonatomic) NSPoint screenLocation;
 // Moves over `destination` (nil: over nothing), at its center. Returns the operation it accepts.
 - (NSDragOperation)moveTo:(nullable NSView<NSDraggingDestination> *)destination;
+// Moves the pointer by `offset` points (y downward) over no destination, as off every window. Returns NSDragOperationNone.
+- (NSDragOperation)moveBy:(NSSize)offset;
 // Drops on the current destination: the operation performed, or NSDragOperationNone.
 - (NSDragOperation)drop;
 - (void)cancel;

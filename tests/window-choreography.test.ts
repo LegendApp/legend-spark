@@ -16,6 +16,7 @@ vi.mock("../packages/desktop-windows/src/api", () => ({
 }));
 vi.mock("../packages/desktop-windows/src/transport", () => ({
   record: (value: unknown) => !!value && typeof value === "object" && !Array.isArray(value),
+  isBounds: (value: any) => !!value && typeof value.displayId === "string" && [value.x, value.y, value.width, value.height].every(Number.isFinite),
   windowCall: vi.fn(async (method: string, args: any, validate: (value: unknown) => boolean) => {
     mocks.calls.push([method, args]);
     const failure = mocks.failures.get(method); if (failure) throw failure;
@@ -39,7 +40,7 @@ beforeEach(() => {
 });
 
 test("availability is truthful per platform and every operation rejects E_UNSUPPORTED_PLATFORM on Windows before any native call", async () => {
-  for (const feature of ["zoom", "frame", "closeTransition", "attach"] as const) expect(choreography.getWindowChoreographyAvailability(feature)).toEqual({ available: true });
+  for (const feature of ["zoom", "frame", "closeTransition", "attach", "dropTarget"] as const) expect(choreography.getWindowChoreographyAvailability(feature)).toEqual({ available: true });
   expect(() => choreography.getWindowChoreographyAvailability("tabs" as never)).toThrow(SparkError);
   mocks.platform.OS = "windows";
   expect(choreography.getWindowChoreographyAvailability("zoom")).toEqual({ available: false, reason: "unsupported-platform" });
@@ -48,6 +49,8 @@ test("availability is truthful per platform and every operation rejects E_UNSUPP
   expect(await code(choreography.stopWindowAnimation("a"))).toBe("E_UNSUPPORTED_PLATFORM");
   expect(await code(choreography.setWindowCloseTransition("a", { to: display }))).toBe("E_UNSUPPORTED_PLATFORM");
   expect(await code(choreography.openWindowFrom({ id: "a", component: "main" }, { from: display }))).toBe("E_UNSUPPORTED_PLATFORM");
+  expect(choreography.getWindowChoreographyAvailability("dropTarget")).toEqual({ available: false, reason: "unsupported-platform" });
+  expect(await code(choreography.addWindowDropTarget("a", row, { onDrop: () => {} }))).toBe("E_UNSUPPORTED_PLATFORM");
   expect(await code(choreography.attachWindow("a", "b", { edge: "trailing" }))).toBe("E_UNSUPPORTED_PLATFORM");
   expect(mocks.calls).toEqual([]);
 });
@@ -159,4 +162,58 @@ test("attach options are validated, and a failed attach removes its listener", a
   mocks.failures.set("attach", new SparkError("E_NOT_FOUND", "The parent window was not found"));
   expect(await attach({ edge: "top" })).toBe("E_NOT_FOUND");
   expect(mocks.listeners.has("p")).toBe(false);
+});
+
+test("landAt from places the opened window at the source before it grows there, and reports where it landed", async () => {
+  const landed = { displayId: "1", x: 5, y: 60, width: 400, height: 300 };
+  mocks.results.set("placeAt", landed);
+  const zoom = await choreography.openWindowFrom({ id: "torn", component: "main" }, { from: row, landAt: "from", closeTo: null });
+  expect(zoom.bounds).toEqual(landed);
+  expect(mocks.calls.map(([method]) => method)).toEqual(["open", "placeAt", "zoomIn"]);
+  expect(calls("placeAt")).toEqual([{ id: "torn", at: row }]);
+  mocks.calls.length = 0;
+  expect((await choreography.openWindowFrom({ id: "torn", component: "main" }, { from: row, landAt: "frame" })).bounds).toEqual({ displayId: "1", x: 10, y: 20, width: 400, height: 300 });
+  expect(calls("placeAt")).toEqual([]);
+  mocks.calls.length = 0;
+  expect(await code(choreography.openWindowFrom({ id: "torn", component: "main" }, { from: row, landAt: "pointer" as never }))).toBe("E_INVALID_ARGUMENT");
+  expect(mocks.calls).toEqual([]);
+  mocks.failures.set("placeAt", new SparkError("E_NOT_FOUND", "The window of the rectangle has closed"));
+  expect(await code(choreography.openWindowFrom({ id: "torn", component: "main" }, { from: row, landAt: "from" }))).toBe("E_NOT_FOUND");
+  expect(calls("discard")).toEqual([{ id: "torn" }]);
+});
+test("a drop target hears only its own hover and drop events, and removing it removes only itself", async () => {
+  const onHover = vi.fn(), onDrop = vi.fn(), onError = vi.fn();
+  const registration = await choreography.addWindowDropTarget("torn", row, { onHover, onDrop, onError });
+  const [{ token, target }] = calls("addDropTarget");
+  expect(target).toEqual(row);
+  const listener = mocks.listeners.get("torn")!;
+  listener({ type: "dropTargetChanged", token, over: true });
+  listener({ type: "dropTargetChanged", token: "other", over: true });
+  listener({ type: "dropTargetChanged", token, over: false });
+  listener({ type: "dropTargetDropped", token });
+  expect(onHover.mock.calls).toEqual([[{ windowId: "torn", over: true }], [{ windowId: "torn", over: false }]]);
+  expect(onDrop.mock.calls).toEqual([[{ windowId: "torn" }]]);
+  listener({ type: "dropTargetChanged", token });
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" }));
+  onDrop.mockImplementationOnce(() => { throw new Error("merge failed"); });
+  listener({ type: "dropTargetDropped", token });
+  expect(onError).toHaveBeenCalledTimes(2);
+  await registration.remove();
+  expect(calls("removeDropTarget")).toEqual([{ id: "torn", token }]);
+  expect(mocks.listeners.has("torn")).toBe(false);
+  // The window already closed: nothing left to remove.
+  const closed = await choreography.addWindowDropTarget("torn", row, { onDrop });
+  mocks.failures.set("removeDropTarget", new SparkError("E_NOT_FOUND", "Window does not exist"));
+  await expect(closed.remove()).resolves.toBeUndefined();
+});
+test("drop target arguments are validated before any native call, and a failed registration removes its listener", async () => {
+  const onDrop = () => {};
+  for (const [target, options, expected] of [
+    [display, { onDrop }, "E_INVALID_ARGUMENT"], [{ ...row, windowId: "torn" }, { onDrop }, "E_INVALID_ARGUMENT"], [{ ...row, width: -1 }, { onDrop }, "E_INVALID_ARGUMENT"],
+    [row, {}, "E_INVALID_ARGUMENT"], [row, { onDrop, onHover: 1 }, "E_INVALID_ARGUMENT"], [row, { onDrop, preview: true }, "E_UNSUPPORTED_OPTION"], [{ ...row, z: 1 }, { onDrop }, "E_UNSUPPORTED_OPTION"],
+  ] as const) expect(await code(choreography.addWindowDropTarget("torn", target as never, options as never))).toBe(expected);
+  expect(mocks.calls).toEqual([]);
+  mocks.failures.set("addDropTarget", new SparkError("E_NOT_FOUND", "The window of the drop target was not found"));
+  expect(await code(choreography.addWindowDropTarget("torn", row, { onDrop }))).toBe("E_NOT_FOUND");
+  expect(mocks.listeners.has("torn")).toBe(false);
 });

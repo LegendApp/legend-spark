@@ -258,6 +258,28 @@ describe("command mapping", () => {
     expect(app.log.filter(line => line.startsWith("testDrag")).at(-1)).toBe('testDrag {"phase":"cancel"}');
   });
 
+  test("dragOut drags a Spark drag source by an offset over no destination and drops it there", async () => {
+    const app = new FakeApp({ source: 1, plain: 1 });
+    app.dragSources = { source: {} };
+    expect((await run("- launchApp\n- dragOut: { from: { id: source }, by: \"-400,12.5\" }", app)).result.status).toBe("passed");
+    expect(app.log.filter(line => line.startsWith("testDrag"))).toEqual(['testDrag {"phase":"begin","from":"source"}', 'testDrag {"phase":"move","by":{"x":-400,"y":12.5}}', 'testDrag {"phase":"drop"}']);
+    expect((await run("- launchApp\n- dragOut: { from: { id: plain }, by: \"10,10\" }", app)).result.failure).toMatchObject({ kind: "unsupported" });
+    expect((await run("- launchApp\n- dragOut: { from: { id: source }, by: \"50%,10\" }", app)).result.failure).toMatchObject({ kind: "invalid" });
+  });
+
+  test("dragWindow drags a window by its title bar in process, holding it with release: false until the next dragWindow", async () => {
+    const app = new FakeApp({ slot: 1, away: 1 });
+    app.dropTargets = { slot: ["t1"] };
+    const flow = "- launchApp\n- dragWindow: { window: { id: spark.main }, to: { id: slot }, release: false }\n- dragWindow: { window: { id: spark.main }, to: { id: away }, release: false }\n- dragWindow: { window: { id: spark.main }, to: { id: slot } }";
+    expect((await run(flow, app)).result.status).toBe("passed");
+    expect(app.log.filter(line => line.startsWith("testWindowDrag"))).toEqual(['testWindowDrag {"phase":"begin","window":"spark.main"}', 'testWindowDrag {"phase":"move","to":"slot"}',
+      'testWindowDrag {"phase":"move","to":"away"}', 'testWindowDrag {"phase":"move","to":"slot"}', 'testWindowDrag {"phase":"drop"}']);
+    // A drag the flow still holds at its end is cancelled.
+    app.log.length = 0;
+    expect((await run("- launchApp\n- dragWindow: { window: { id: spark.main }, to: { id: slot }, release: false }", app)).result.status).toBe("passed");
+    expect(app.log.filter(line => line.startsWith("testWindowDrag")).at(-1)).toBe('testWindowDrag {"phase":"cancel"}');
+  });
+
   test("dragToFinder drops a Spark drag in a private temporary folder and expects the promised file there", async () => {
     const app = new FakeApp({ source: 1, plain: 1 });
     app.dragSources = { source: { promised: ["Notes.txt"] } };

@@ -69,6 +69,7 @@ struct DesktopDragViewEventEmitter : EventEmitter {
   void onPromisedFileWrite(Event event) const {}
   void onSpringLoad(Event event) const {}
   void onSpringLoadHighlight(Event event) const {}
+  void onTearOff(Event event) const {}
 };
 struct SidebarSplitViewComponentDescriptor {};
 struct SparkMotionViewComponentDescriptor {};

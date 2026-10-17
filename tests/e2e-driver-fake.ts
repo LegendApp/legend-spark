@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type SimulatedPrivilegedHelper, type TestPrivilegedHelper, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type TestSpeech, type SimulatedSpeech, type TestCapture, type SimulatedCapture, type TestWebView } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestWindowDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type SimulatedPrivilegedHelper, type TestPrivilegedHelper, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type TestSpeech, type SimulatedSpeech, type TestCapture, type SimulatedCapture, type TestWebView } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -168,6 +168,17 @@ export class FakeDriver implements DriverClient {
     if (!webView) throw new DriverError("E_NOT_FOUND", `No visible view with testID ${testID}`);
     return webView;
   }
+  /** The drop target tokens each testID is, as the app's testWindowDrag command reports them. */
+  dropTargets: () => Record<string, string[]> = () => ({});
+  private windowDragging?: string;
+  async testWindowDrag(request: TestWindowDragRequest) {
+    this.log.push(`testWindowDrag ${JSON.stringify(request)}`);
+    if (request.phase === "begin") { this.windowDragging = request.window; return { over: [] }; }
+    if (!this.windowDragging) throw new DriverError("E_INVALID_ARGUMENT", "No window drag: begin one first");
+    if (request.phase === "move") return { over: this.dropTargets()[request.to] ?? [] };
+    this.windowDragging = undefined;
+    return { over: [] };
+  }
   /** Spark drag sources (FakeApp.dragSources), as the app's testDrag command sees them. */
   dragSources: () => Record<string, DragSource> = () => ({});
   private dragging?: { promised: string[] };
@@ -181,7 +192,7 @@ export class FakeDriver implements DriverClient {
       return { started: true };
     }
     if (!this.dragging) throw new DriverError("E_INVALID_ARGUMENT", "No test drag: begin one first");
-    if (request.phase === "move") return { operation: request.to ? "copy" : "none" };
+    if (request.phase === "move") return { operation: "to" in request && request.to ? "copy" : "none" };
     const { promised } = this.dragging;
     this.dragging = undefined;
     if (request.phase !== "dropInFolder") return { operation: request.phase === "drop" ? "copy" : "none" };
@@ -241,6 +252,8 @@ export class FakeApp implements DriverApp {
   dragSources: Record<string, DragSource> = {};
   /** WKWebViews by testID (FakeDriver.webViews). */
   webViews: Record<string, TestWebView> = {};
+  /** The drop target tokens under each testID during a window drag. */
+  dropTargets: Record<string, string[]> = {};
   /** The simulated biometric state each launch's driver starts with (FakeDriver's default when unset). */
   biometrics?: TestBiometrics;
   /** The simulated authorization state each launch's driver starts with (FakeDriver's default when unset). */
@@ -298,6 +311,7 @@ export class FakeApp implements DriverApp {
       () => ({ startup: this.startup, state: this.state }), () => ({ commits: this.commits, counters: this.counters, memoryMB: this.memoryMB }), () => this.audit, () => this.sockets(driver));
     driver.dragSources = () => this.dragSources;
     driver.webViews = () => this.webViews;
+    driver.dropTargets = () => this.dropTargets;
     if (this.biometrics) driver.biometrics = this.biometrics;
     if (this.authorization) driver.authorization = this.authorization;
     driver.sharing = this.sharing;

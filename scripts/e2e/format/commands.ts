@@ -98,6 +98,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
   assertScale: single("windows", "Assert the backing scale factor of a window.", "scale", num, { window: windowSelector }),
   snapWindow: single("windows", "Snap a window to a screen layout.", "layout", oneOf("leftHalf", "rightHalf", "topHalf", "bottomHalf", "topLeft", "topRight", "bottomLeft", "bottomRight", "maximize", "center"), { window: windowSelector }),
   tearOff: spec("windows", "Drag a tab out into a new window.", { tab: str, from: windowSelector, to: point }, { required: ["tab", "to"] }),
+  dragWindow: spec("windows", "Drag a window by its title bar until the pointer is over a target, then let go, in process (the window follows the pointer); `release: false` keeps holding it there for the next dragWindow of that window.", { window: windowSelector, to: selector, release: bool }, { required: ["window", "to"], driver: true }),
   mergeInto: spec("windows", "Drag a tab into another window's tab bar.", { tab: str, from: windowSelector, to: windowSelector }, { required: ["tab", "to"] }),
   saveWorkspace: single("windows", "Save the window workspace.", "name", str),
   restoreWorkspace: single("windows", "Restore a saved window workspace.", "name", str),
@@ -153,6 +154,7 @@ export const COMMANDS: Readonly<Record<string, CommandSpec>> = {
 
   // Drag & drop
   dragAndDrop: spec("drag", "Drag from one target to another (on the driver backend, a Spark drag source drags in process; `holdAt` waits over `to`).", { from: selector, to: selector, modifiers: list(modifier), holdAt: duration, steps: int(1) }, { required: ["from", "to"] }),
+  dragOut: spec("drag", "Drag a Spark drag source by an offset in points and drop it there over no destination, in process: off the app's windows, a tearOff source tears off.", { from: selector, by: point, modifiers: list(modifier) }, { required: ["from", "by"], driver: true }),
   dragFromFinder: spec("drag", "Drag files from the file manager onto a target.", { files: list(str), to: selector }, { required: ["files", "to"] }),
   dragToFinder: spec("drag", "Drag a target to the file manager and expect a file (on the driver backend, a Spark drag source dropped in a private temporary folder).", { from: selector, expectFile: str }, { required: ["from", "expectFile"] }),
   dragToDock: spec("drag", "Drag files onto the Dock icon.", { files: list(str) }, { required: ["files"] }),
