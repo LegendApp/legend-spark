@@ -1,13 +1,20 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 #include <cmath>
+#include <memory>
 namespace facebook::react {
+struct EventEmitter { virtual ~EventEmitter() = default; };
+struct SidebarSplitViewEventEmitter : EventEmitter {
+  struct OnSidebarCollapsedChange { bool collapsed; };
+  void onSidebarCollapsedChange(OnSidebarCollapsedChange) const {}
+};
 using Float = double;
 struct Point { Float x, y; };
 struct Size { Float width, height; };
 struct Rect { Point origin; Size size; };
 }
 using facebook::react::Float;
+using facebook::react::SidebarSplitViewEventEmitter;
 struct LayoutMetrics {
   facebook::react::Rect frame{};
   struct {} contentInsets, borderWidth, overflowInset;
@@ -57,6 +64,7 @@ const NSUInteger RNComponentViewUpdateMaskLayoutMetrics = 1;
   NSView<RCTComponentViewProtocol> *_sidebarReactView, *_listReactView;
   NSMutableArray<NSDictionary *> *_events;
   id _resizeObserver;
+  std::shared_ptr<const facebook::react::EventEmitter> _eventEmitter;
 }
 - (void)layoutSplitView;
 - (BOOL)applyEstimatedSplitViewLayoutForBounds:(CGRect)bounds layoutReady:(BOOL)ready;
@@ -146,12 +154,12 @@ int main(int argc, char **argv) { @autoreleasepool {
   } else if ([mode isEqual:@"toggle"]) {
     p->_hasList = YES; [p layoutSplitView];
     require(p->_splitViewController.splitViewItems.count == 3,@"List was not installed");
-    p->_sidebarCollapsed = YES; p->_needsPreferredDividerPositions = YES; [p layoutSplitView];
+    p->_sidebarCollapsed = YES; [p updateSidebarCollapsed]; p->_needsPreferredDividerPositions = YES; [p layoutSplitView];
     require(p->_sidebarItem.collapsed && p->_listContainer.bounds.size.width>0,@"Collapsed sidebar lost list pane");
     p->_hasList = NO; p->_needsPreferredDividerPositions = YES; [p layoutSplitView];
     require(p->_splitViewController.splitViewItems.count == 2,@"List was not removed");
     require([p->_events.lastObject[@"list"] doubleValue]==0 && [p->_events.lastObject[@"listX"] doubleValue]==0,@"Removed list retained metrics");
-    p->_hasList = YES; p->_sidebarCollapsed = NO; p->_needsPreferredDividerPositions = YES; [p layoutSplitView];
+    p->_hasList = YES; p->_sidebarCollapsed = NO; [p updateSidebarCollapsed]; p->_needsPreferredDividerPositions = YES; [p layoutSplitView];
     require(p->_splitViewController.splitViewItems.count==3 && !p->_sidebarItem.collapsed,@"List/sidebar did not restore");
   } else {
     p->_hasList = YES; [p layoutSplitView];

@@ -55,6 +55,28 @@ test("split views preserve zero metrics and expose explicit readiness without na
   const panes = rendered.root.findAllByType("View"); expect(panes[0].props.style.width).toBe(0); expect(panes[0].props.style.height).toBe(0); expect(onResize.mock.calls[1][0].phase).toBe("ready");
   native.props.onSplitViewDidResize({ nativeEvent: { ...data, contentWidth: NaN } }); expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onResize).toHaveBeenCalledTimes(2);
 });
+test("split views report native sidebar collapse and validate the callback", async () => {
+  const onSidebarCollapsedChange = vi.fn(), onError = vi.fn();
+  await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", onSidebarCollapsedChange, onError }));
+  const native = rendered.root.findByType("SidebarSplitView");
+  await act(async () => native.props.onSidebarCollapsedChange({ nativeEvent: { collapsed: true } }));
+  await act(async () => native.props.onSidebarCollapsedChange({ nativeEvent: { collapsed: false } }));
+  expect(onSidebarCollapsedChange.mock.calls).toEqual([[true], [false]]);
+  native.props.onSidebarCollapsedChange({ nativeEvent: { collapsed: "yes" } });
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_INVALID_DATA" })); expect(onSidebarCollapsedChange).toHaveBeenCalledTimes(2);
+  await expect(mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", onSidebarCollapsedChange: "no" as never }))).rejects.toThrow("Expected sidebar collapsed change callback");
+});
+test("split views lay out native expansion while the collapsed prop is unchanged", async () => {
+  await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", content: "Content", sidebarCollapsed: true }));
+  const native = rendered.root.findByType("SidebarSplitView");
+  expect(native.findAllByType("View")[0].props.style.width).toBe(0);
+  await act(async () => {
+    native.props.onSidebarCollapsedChange({ nativeEvent: { collapsed: false } });
+    native.props.onSplitViewDidResize({ nativeEvent: { contentHeight: 100, contentWidth: 500, sidebarHeight: 100, sidebarWidth: 220, listHeight: 0, listWidth: 0, listX: 0, contentX: 221, height: 100, isLayoutReady: true } });
+  });
+  expect(native.props.sidebarCollapsed).toBe(true);
+  expect(native.findAllByType("View")[0].props.style.width).toBe(220);
+});
 test("split views host an optional native list column after the sidebar and content panes", async () => {
   const onResize = vi.fn();
   await mount(React.createElement(SidebarSplitView, { sidebar: "Sidebar", list: "List", content: "Content", listWidth: 360, listMinWidth: 280, onResize }));

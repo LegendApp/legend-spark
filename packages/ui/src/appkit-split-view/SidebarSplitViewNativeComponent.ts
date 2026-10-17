@@ -16,6 +16,10 @@ export type SidebarSplitViewResizeEvent = Readonly<{
   sidebarWidth: Double;
 }>;
 
+export type SidebarSplitViewCollapsedChangeEvent = Readonly<{
+  collapsed: boolean;
+}>;
+
 export interface NativeProps extends ViewProps {
   appearance?: string;
   contentTitlebarHeight?: Double;
@@ -26,6 +30,7 @@ export interface NativeProps extends ViewProps {
   hasList?: boolean;
   listMinWidth?: Double;
   listWidth?: Double;
+  onSidebarCollapsedChange?: DirectEventHandler<SidebarSplitViewCollapsedChangeEvent>;
   onSplitViewDidResize?: DirectEventHandler<SidebarSplitViewResizeEvent>;
   sidebarCollapsed?: boolean;
   sidebarMinWidth?: Double;
