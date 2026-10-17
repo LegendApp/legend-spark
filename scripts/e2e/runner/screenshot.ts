@@ -45,7 +45,9 @@ export async function assertScreenshot(backend: Backend, args: Record<string, un
   const result: GoldenResult = { id, golden, actual, status: "missing" };
   flow.record(result);
   const evidence: Artifact[] = [{ kind: "screenshot", path: actual }];
-  const approve = `review it, then approve it with \`bun run e2e:golden approve ${shown(actual)}\``;
+  // Goldens are rendered layers; a capture drawn as views lacks what only the compositor draws, so a diff says so.
+  const drawn = capture.renderer === "views" ? " (this capture drew views, not the layer tree goldens are rendered from: docs/test-driver.md#what-a-capture-contains)" : "";
+  const approve = `review it, then approve it with \`bun run e2e:golden approve ${shown(actual)}\`${drawn}`;
   if (!existsSync(golden)) throw new Failure("assertion", `no golden at ${shown(golden)}; a run never creates one: ${approve}`, { artifacts: evidence });
 
   result.status = "failed";

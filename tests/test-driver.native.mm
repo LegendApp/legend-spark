@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import <QuartzCore/QuartzCore.h>
 #import "SparkTestDriverPrivate.h"
 #import "SparkDesktop.h"
 #include <atomic>
@@ -13,6 +14,7 @@ static NSString *directory;
 static NSMutableArray<NSURL *> *openedURLs;
 static BOOL terminateRequested = NO;
 static std::atomic<bool> mounting{false};
+static BOOL drawViews; // SPARK_TEST_DRIVER_CAPTURE=views: captures draw the views, without what only the compositor draws.
 static NSDictionary *probeFrame; // waitFor's frame for probe-layer: points from the top-left of the captured frame view.
 static const char *token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -142,7 +144,36 @@ static NSWindow *MakeWindow(void) {
   [selectionTable addTableColumn:[[NSTableColumn alloc] initWithIdentifier:@"column"]];
   NSScrollView *list = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 400, 90)];
   list.documentView = selectionTable; list.drawsBackground = NO;
-  for (NSView *view in @[layerColor, drawn, image, effect, button, label, list]) [content addSubview:view];
+  // What only the compositor draws, in the band above the button: a layer shadow, a Core Image blur of stripes, a layer
+  // turned almost edge-on in perspective, and particles of an emitter whose layer is paused two seconds in.
+  CALayer *shadowed = [CALayer layer];
+  shadowed.frame = CGRectMake(20, 150, 40, 30); shadowed.backgroundColor = NSColor.redColor.CGColor;
+  shadowed.shadowOpacity = 1; shadowed.shadowRadius = 0; shadowed.shadowOffset = CGSizeMake(10, -10);
+  NSView *blurred = [[NSView alloc] initWithFrame:NSMakeRect(100, 150, 60, 30)];
+  blurred.wantsLayer = YES; blurred.layerUsesCoreImageFilters = YES; blurred.layer.backgroundColor = NSColor.whiteColor.CGColor;
+  for (CGFloat x = 0; x < 60; x += 4) {
+    CALayer *stripe = [CALayer layer];
+    stripe.frame = CGRectMake(x, 0, 2, 30); stripe.backgroundColor = NSColor.blackColor.CGColor;
+    [blurred.layer addSublayer:stripe];
+  }
+  CIFilter *blur = [CIFilter filterWithName:@"CIGaussianBlur"];
+  [blur setValue:@4 forKey:kCIInputRadiusKey];
+  blurred.layer.filters = @[blur];
+  CALayer *turned = [CALayer layer];
+  turned.frame = CGRectMake(200, 150, 60, 30); turned.backgroundColor = NSColor.blueColor.CGColor;
+  CATransform3D perspective = CATransform3DIdentity;
+  perspective.m34 = -1.0 / 500;
+  turned.transform = CATransform3DRotate(perspective, 80 * M_PI / 180, 0, 1, 0);
+  CALayer *paused = [CALayer layer];
+  paused.frame = CGRectMake(300, 150, 60, 30); paused.speed = 0; paused.timeOffset = 2;
+  CAEmitterLayer *emitter = [CAEmitterLayer layer];
+  emitter.frame = paused.bounds; emitter.emitterPosition = CGPointMake(30, 15); emitter.seed = 1;
+  CAEmitterCell *cell = [CAEmitterCell emitterCell];
+  cell.birthRate = 50; cell.lifetime = 10; cell.contents = image.layer.contents;
+  emitter.emitterCells = @[cell];
+  [paused addSublayer:emitter];
+  for (NSView *view in @[layerColor, drawn, image, effect, button, label, list, blurred]) [content addSubview:view];
+  for (CALayer *layer in @[shadowed, turned, paused]) [content.layer addSublayer:layer];
   window.contentView = content;
   [selectionTable reloadData];
   [selectionTable selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
@@ -356,6 +387,7 @@ static void MakeMenu(void) {
 }
 int main(int argc, char **argv) { @autoreleasepool {
   NSString *mode = argc > 1 ? @(argv[1]) : @"";
+  drawViews = !SPARK_TEST_DRIVER_PRIVATE_EVENTS || (getenv("SPARK_TEST_DRIVER_CAPTURE") && !strcmp(getenv("SPARK_TEST_DRIVER_CAPTURE"), "views"));
   openedURLs = [NSMutableArray new]; pending = [NSMutableData new];
   [NSApplication sharedApplication];
   Delegate *delegate = [Delegate new]; NSApp.delegate = delegate;
@@ -466,6 +498,7 @@ int main(int argc, char **argv) { @autoreleasepool {
     mounting = false;
     NSDictionary *capture = Request(fd, @{ @"command": @"capture", @"window": @"main", @"name": @"cache" });
     Check([capture[@"ok"] boolValue] && [capture[@"file"] isEqual:@"cache.png"], [NSString stringWithFormat:@"capture %@", capture]);
+    Check([capture[@"renderer"] isEqual:drawViews ? @"views" : @"layers"], [NSString stringWithFormat:@"capture names how it rendered (%@)", capture[@"renderer"]]);
     Check([capture[@"width"] doubleValue] == window.frame.size.width * [capture[@"scale"] doubleValue], @"capture covers the window frame including the title bar");
     struct stat file;
     Check(stat([directory stringByAppendingPathComponent:@"cache.png"].fileSystemRepresentation, &file) == 0 && (file.st_mode & 0777) == 0600, @"capture is private");
@@ -1046,6 +1079,18 @@ int main(int argc, char **argv) { @autoreleasepool {
       [NSString stringWithFormat:@"waitFor frames are top-left points of the captured area (%@ sampled %@)", probeFrame, Describe(atFrame)]);
     Check(Near(Sample(@"cache.png", NSMakeRect(100, 200, 100, 100), window), 0, 1, 0), @"capture renders drawRect content");
     Check(Near(Sample(@"cache.png", NSMakeRect(200, 200, 100, 100), window), 0, 0, 1), @"capture renders layer contents");
+    Check(Near(Sample(@"cache.png", NSMakeRect(60, 140, 10, 10), window), 0, 0, 0), @"capture renders layer shadows");
+    // Core Animation's renderer draws filters, perspective and paused particles; drawing views draws none of them.
+    NSColor *blurredStripes = Sample(@"cache.png", NSMakeRect(100, 150, 60, 30), window);
+    Check(drawViews ? Near(blurredStripes, 0, 0, 0) || Near(blurredStripes, 1, 1, 1) : blurredStripes.redComponent > 0.2 && blurredStripes.redComponent < 0.8,
+      [NSString stringWithFormat:@"capture %@ Core Image filters (stripes sampled %@)", drawViews ? @"skips" : @"renders", Describe(blurredStripes)]);
+    Check(Near(Sample(@"cache.png", NSMakeRect(200, 150, 10, 30), window), drawViews ? 0 : 1, drawViews ? 0 : 1, 1),
+      [NSString stringWithFormat:@"capture %@ 3D transforms", drawViews ? @"flattens" : @"renders"]);
+    Check(Near(Sample(@"cache.png", NSMakeRect(300, 150, 60, 30), window), drawViews ? 1 : 0, drawViews ? 1 : 0, 1),
+      [NSString stringWithFormat:@"capture %@ particles of a paused emitter", drawViews ? @"skips" : @"renders"]);
+    // Rendering takes the layer tree's root from the window's context for the render and gives it back.
+    CALayer *root = window.contentView.superview.layer.superlayer;
+    Check(drawViews || [[root valueForKey:@"context"] valueForKey:@"layer"] == root, @"the window's layer tree is back in its context after the capture");
     // Behind-window blur comes from the window server; in-process it is a flat material color.
     NSColor *vibrancy = Sample(@"cache.png", NSMakeRect(300, 200, 100, 100), window);
     printf("behind-window vibrancy renders as %s\n", Describe(vibrancy).UTF8String);

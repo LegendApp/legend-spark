@@ -1,5 +1,10 @@
 #import "SparkTestDriver.h"
 
+// Private CoreGraphics event functions and QuartzCore SPI compile only with this flag (docs/test-driver.md#private-event-functions).
+#ifndef SPARK_TEST_DRIVER_PRIVATE_EVENTS
+#define SPARK_TEST_DRIVER_PRIVATE_EVENTS 0
+#endif
+
 // Shared by the driver's protocol (SparkTestDriver.mm), its input synthesis (SparkTestDriverInput.mm) and its cursor
 // state (SparkTestDriverCursor.mm).
 // Main thread only.
@@ -15,8 +20,8 @@ NSWindow *SparkDriverResolveWindow(id target, NSString **failure);
 NSDictionary *SparkDriverFrame(NSView *view);
 // An NSAccessibility role without AX ("AXButton" is "button"); nil for none or the unknown role.
 NSString *SparkDriverRoleName(id role);
-// What `capture` renders: the window's frame view, inside the modules' render wrappers.
-NSBitmapImageRep *SparkDriverRenderWindow(NSWindow *window);
+// What `capture` renders: the window's frame view, inside the modules' render wrappers; nil with `failure` set otherwise.
+NSBitmapImageRep *SparkDriverRenderWindow(NSWindow *window, NSString **failure);
 // 1-100 of [A-Za-z0-9_-], not starting with -.
 BOOL SparkDriverCaptureName(id name);
 // Creates `file` (a capture name plus extension) in the run directory, never overwriting; 0 or an errno.

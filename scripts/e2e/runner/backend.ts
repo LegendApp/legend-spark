@@ -89,8 +89,11 @@ export interface Backend {
   collect?(dir: string): Promise<Artifact[]>;
 }
 
-/** Where a screenshot came from: the captured area in the coordinate space of element frames, and its pixels per point. */
-export type Capture = { frame: Rect; scale: number };
+/**
+ * Where a screenshot came from: the captured area in the coordinate space of element frames, and its pixels per point.
+ * `renderer`: the driver's capture path (docs/test-driver.md#what-a-capture-contains), when the backend has one.
+ */
+export type Capture = { frame: Rect; scale: number; renderer?: "layers" | "views" };
 
 /** `app`: the app bundle to drive. `state`: an isolated clone (the default) or the exact app with its real state (the release gate). */
 export type BackendFactory = (options: { app?: string; state?: "isolated" | "exact" }) => Backend;

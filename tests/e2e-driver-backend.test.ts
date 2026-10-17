@@ -263,7 +263,7 @@ describe("command mapping", () => {
     const app = new FakeApp({ root: 1 }), backend = new DriverBackend(app), dir = mkdtempSync(path.join(tmpdir(), "e2e-driver-"));
     await backend.start({ flow: { header: { appId: "so.legend.spark.examples.kitchensink" } } as never, matrix: {}, platform: "macos", dir });
     await backend.commands.launchApp!({}, {} as never);
-    expect(await backend.screenshot(path.join(dir, "a.png"))).toEqual({ frame: { x: 0, y: 0, width: 1000, height: 700 }, scale: 2 });
+    expect(await backend.screenshot(path.join(dir, "a.png"))).toEqual({ frame: { x: 0, y: 0, width: 1000, height: 700 }, scale: 2, renderer: "layers" });
     // A window selector captures that window (takeScreenshot { window } evidence for a manualStep), not the main one.
     await backend.screenshot(path.join(dir, "b.png"), { id: "windows-window-options-child", title: "Child", key: false, main: false, frame: FRAME });
     expect(app.log.filter(line => line.startsWith("capture"))).toEqual(["capture main capture-1", "capture id:windows-window-options-child capture-2"]);

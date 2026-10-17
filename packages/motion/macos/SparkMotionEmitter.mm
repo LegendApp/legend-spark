@@ -209,6 +209,9 @@ static BOOL SparkLayerYDown(NSView *host)
 - (void)start:(double)duration host:(NSView *)host
 {
   [self layout:host];
+  // Emission that starts from rest starts the emitter's own clock, so the seeded particles at a time after the start are
+  // the same on every run (a frozen virtual-clock capture included), not a phase of when the host's clock began.
+  if (![self emitting:host] && !self.paused) _layer.beginTime = [_layer.superlayer convertTime:CACurrentMediaTime() fromLayer:nil];
   [_layer removeAnimationForKey:kBurst];
   if (duration > 0) {
     // The model stops emitting; an animation holds the birth rate at 1 for the burst, on the layer's clock.

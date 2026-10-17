@@ -2320,7 +2320,11 @@ static double SparkMotionTarget(const Episode &episode, NSDictionary *until)
     models.emplace_back(host, host.motionModel);
     [host applyMotionModel:presented];
   }
+  // Committed, so a render of the layer tree (CARenderer) sees them too.
+  [CATransaction commit];
   render();
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
   for (const auto &[host, model] : models) [host applyMotionModel:model];
   [CATransaction commit];
 }

@@ -8,7 +8,7 @@ const root = path.resolve(import.meta.dirname, "..");
 const native = path.join(root, "packages/desktop-app/macos");
 // The frame counter records on the frame timeline (SparkFrameTimeline.mm), which compiles with the driver (SPARK_TEST_DRIVER).
 const driverSources = ["SparkTestDriver.mm", "SparkTestDriverInput.mm", "SparkTestDriverCursor.mm", "SparkTestDriverFrames.mm", "SparkTestDriverCommits.mm", "SparkTestDriverAudit.mm", "SparkFrameTimeline.mm", "SparkSandbox.mm"].map(file => path.join(native, file));
-const compile = (sources: string[], output: string, include: string[] = [], flags: string[] = []) => runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "Security",
+const compile = (sources: string[], output: string, include: string[] = [], flags: string[] = []) => runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "Security", "-framework", "Metal",
   "-DSPARK_TEST_DRIVER=1", ...flags, "-I", native, ...include.flatMap(directory => ["-I", directory]), ...sources, "-o", output], { timeout: 120_000 });
 // Gesture and extra mouse button synthesis use private CoreGraphics functions, compiled only on request
 // (docs/test-driver.md#private-event-functions). The harness opts in; `withoutPrivateEvents` is an app that does not.
@@ -60,6 +60,10 @@ test.skipIf(!darwin)("a client that disconnects before its reply cannot kill the
 test.skipIf(!darwin)("protocol: ping, navigate, openFile, waitFor, appearance, settled private captures and quit", async () => {
   await passes("session");
 }, 90_000);
+test.skipIf(!darwin)("SPARK_TEST_DRIVER_CAPTURE=views captures by drawing the views, without what only the compositor draws", async () => {
+  const result = await run(harness, ["session", directory], { timeout: 60_000, env: { ...process.env, SPARK_TEST_DRIVER_CAPTURE: "views" } });
+  expect(result.stdout, outcome(result)).toContain("session passed");
+}, 90_000);
 test.skipIf(!darwin)("startup phases from the kernel's process start to the end of the first UI's mounting", async () => {
   await passes("startup");
 }, 90_000);
@@ -79,7 +83,7 @@ test.skipIf(!darwin)("driver mode keeps the configured window size although a fr
 test.skipIf(!darwin)("input: clicks, drags, hover, scroll, typing and keys reach real AppKit controls in-process without activating, and modal loops do not block the session", async () => {
   await passes("input");
 }, 90_000);
-test.skipIf(!darwin)("without SPARK_TEST_DRIVER_PRIVATE_EVENTS the binary never names the private event functions, and gestures and extra buttons fail typed", async () => {
+test.skipIf(!darwin)("without SPARK_TEST_DRIVER_PRIVATE_EVENTS the binary never names the private event functions, gestures and extra buttons fail typed, and captures draw views", async () => {
   const names = ["CGEventSetWindowLocation", "CGEventGetWindowLocation"];
   const off = readFileSync(withoutPrivateEvents).toString("latin1"), on = readFileSync(harness).toString("latin1");
   for (const name of names) {
@@ -88,6 +92,9 @@ test.skipIf(!darwin)("without SPARK_TEST_DRIVER_PRIVATE_EVENTS the binary never 
   }
   const result = await run(withoutPrivateEvents, ["pointer-off", directory], { timeout: 60_000 });
   expect(result.stdout, outcome(result)).toContain("pointer-off passed");
+  // Captures draw the views there: the layer renderer needs QuartzCore SPI.
+  const session = await run(withoutPrivateEvents, ["session", directory], { timeout: 60_000 });
+  expect(session.stdout, outcome(session)).toContain("session passed");
 }, 90_000);
 test.skipIf(!darwin)("pointer: gestures, pressure, back and forward buttons and cursor queries in-process; cursor hiding is recorded, never applied", async () => {
   await passes("pointer");

@@ -7,9 +7,8 @@ intent: >
   shadow and scale from what its style set and settles at their targets, Blur animates its blur radius, Flip and Tilt
   turn the orange card about its y and x axes in perspective, Wipe hides and shows the content from its leading edge,
   Iris opens a circle from the centre (captured where it starts and ends), and Travel moves the arrow along an SVG path
-  to its end, turned to the path's heading. Goldens are captured at rest only. Captures render in-process, so they show
-  colors, corners, masks and 2D transforms but not shadows, blur or 3D perspective (docs/motion.md#visual-effects);
-  those are checked by the values the engine reports. With Reduce Motion on (simulated), Flip changes the rotation at
+  to its end, turned to the path's heading. Captures render the layer tree with Core Animation's renderer, so the lift's
+  shadow, the blur and the flip in perspective are compared with goldens mid-motion (docs/motion.md#visual-effects). With Reduce Motion on (simulated), Flip changes the rotation at
   once and fades the card in within 250 ms, and the color fades to yellow in 200 ms.
 checks: [MOT-COLOR-01, MOT-EFFECTS-01, MOT-3D-01, MOT-MASK-01, MOT-PATH-01, MOT-FXREDUCE-01, MOT-CLOCK-01]
 tags: [motion-system]
@@ -36,18 +35,18 @@ matrix:
 - assertText: { id: motion-system-visual-effects-color-result, equals: '{"finished":true,"color":"oklch(0.5461 0.2152 262.88 / 1)"}' }
 # Corners, shadow and scale spring together from the style's values; the blur radius follows a timing curve.
 - tapOn: { id: motion-system-visual-effects-lift }
-- assertMotion: { target: { id: motion-system-visual-effects-card }, kind: spring, settlesWithin: 1500ms }
+- assertMotion: { target: { id: motion-system-visual-effects-card }, kind: spring, settlesWithin: 1500ms, frames: { at: [50, 100], golden: effects-lift, mask: [{ id: infra-shell-sidebar }, { id: motion-system-visual-effects-surface-result }] } }
 - captureMotion: { target: { id: motion-system-visual-effects-card }, name: lift }
 - assertText: { id: motion-system-visual-effects-surface-result, equals: '{"finished":true,"borderRadius":20,"shadowOpacity":0.4,"shadowRadius":14,"shadowOffsetY":8,"scaleX":1.05}' }
 - tapOn: { id: motion-system-visual-effects-blur }
-- assertMotion: { target: { id: motion-system-visual-effects-card }, kind: timing, settlesWithin: 450ms }
+- assertMotion: { target: { id: motion-system-visual-effects-card }, kind: timing, settlesWithin: 450ms, frames: { at: [50], golden: effects-blur, mask: [{ id: infra-shell-sidebar }, { id: motion-system-visual-effects-surface-result }] } }
 - assertText: { id: motion-system-visual-effects-surface-result, equals: '{"finished":true,"blur":6}' }
 - tapOn: { id: motion-system-visual-effects-blur }
 - assertMotion: { target: { id: motion-system-visual-effects-card }, kind: timing, settlesWithin: 450ms }
 - assertText: { id: motion-system-visual-effects-surface-result, equals: '{"finished":true,"blur":0}' }
 # 3D: rotations about y and x, in perspective.
 - tapOn: { id: motion-system-visual-effects-flip }
-- assertMotion: { target: { id: motion-system-visual-effects-turn }, kind: spring, settlesWithin: 1500ms }
+- assertMotion: { target: { id: motion-system-visual-effects-turn }, kind: spring, settlesWithin: 1500ms, frames: { at: [25], golden: effects-flip, mask: [{ id: infra-shell-sidebar }, { id: motion-system-visual-effects-depth-result }] } }
 - captureMotion: { target: { id: motion-system-visual-effects-turn }, name: flip }
 - assertText: { id: motion-system-visual-effects-depth-result, equals: '{"finished":true,"rotateY":180,"perspective":500}' }
 - tapOn: { id: motion-system-visual-effects-tilt }

@@ -42,7 +42,7 @@ test("launches with a private run directory and one-time token, then drives the 
     expect(await driver.counters()).toEqual({ windows: 1, views: 10, fileDescriptors: 30, listeners: 4 });
     expect(await driver.memory()).toEqual({ footprintMB: 120.5, residentMB: 200 });
     const capture = await driver.capture("main", "home");
-    expect(capture).toEqual({ file: path.join(driver.directory, "home.png"), width: 2000, height: 1400, scale: 2 });
+    expect(capture).toEqual({ file: path.join(driver.directory, "home.png"), width: 2000, height: 1400, scale: 2, renderer: "layers" });
     expect(readFileSync(capture.file, "utf8")).toBe("png");
     await driver.quit();
     expect(driver.app.exitCode).toBe(0);

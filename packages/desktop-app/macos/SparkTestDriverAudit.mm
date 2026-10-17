@@ -151,7 +151,9 @@ static NSDictionary *SparkAuditPixels(NSView *view, NSRect rect, NSView *root, C
 static NSString *SparkAuditRender(NSWindow *window, NSString *name, NSMutableArray<SparkAuditText *> *pending, NSMutableArray *captures) {
   NSView *root = SparkDriverFrameView(window);
   while (pending.count) {
-    NSBitmapImageRep *rendered = SparkDriverRenderWindow(window);
+    NSString *failure = nil;
+    NSBitmapImageRep *rendered = SparkDriverRenderWindow(window, &failure);
+    if (!rendered) return failure;
     NSBitmapImageRep *rep = [rendered bitmapImageRepByConvertingToColorSpace:NSColorSpace.sRGBColorSpace renderingIntent:NSColorRenderingIntentDefault];
     NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
     if (!png) return @"Rendering produced no image";

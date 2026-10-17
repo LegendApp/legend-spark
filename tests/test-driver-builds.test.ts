@@ -150,7 +150,7 @@ beforeAll(async () => {
   writeFileSync(path.join(directory, "host.mm"), host);
   const compile = (name: string, sources: string[], flags: string[]) => {
     mkdirSync(path.join(app(name), "Contents/MacOS"), { recursive: true });
-    return runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-Oz", "-Wl,-dead_strip", "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "Security",
+    return runOk("clang++", ["-fobjc-arc", "-fblocks", "-std=c++20", "-Oz", "-Wl,-dead_strip", "-framework", "AppKit", "-framework", "QuartzCore", "-framework", "Security", "-framework", "Metal",
       ...flags, "-I", native, "-I", diagnostics, path.join(directory, "host.mm"), ...sources, ...crashSources, "-o", path.join(app(name), "Contents/MacOS", name)], { timeout: 120_000 });
   };
   await Promise.all([compile("Consumer", [], ["-DSPARK_TEST_DRIVER=0"]), compile("Gate", driverSources, ["-DSPARK_TEST_DRIVER=1"])]);

@@ -1,5 +1,6 @@
 #import "SparkTestDriverPrivate.h"
 #import "SparkSandbox.h"
+#import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 #include <atomic>
 #include <fcntl.h>
@@ -10,6 +11,7 @@
 #include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <utility>
 
 // libsystem_pthread: sets the calling thread's working directory to `fd` (-1: back to the process's). Not in the SDK headers.
 extern "C" int pthread_fchdir_np(int fd);
@@ -308,16 +310,89 @@ BOOL SparkDriverCaptureName(id name) {
   NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"];
   return [name rangeOfCharacterFromSet:allowed.invertedSet].location == NSNotFound && [name characterAtIndex:0] != '-';
 }
-// cacheDisplayInRect: draws the view tree, so it works for windows never shown on
-// screen. CALayer rendering does not (docs/test-driver.md has the measurements).
-static NSBitmapImageRep *SparkRender(NSView *view) {
+// How `capture` renders (docs/test-driver.md#what-a-capture-contains): Core Animation's own renderer by default, or
+// with SPARK_TEST_DRIVER_CAPTURE=views AppKit's view drawing, the earlier path, which skips what only the compositor draws.
+// The renderer needs QuartzCore SPI, so it compiles only with SPARK_TEST_DRIVER_PRIVATE_EVENTS; without it views are drawn.
+static BOOL drawViews = !SPARK_TEST_DRIVER_PRIVATE_EVENTS;
+static NSBitmapImageRep *SparkDrawViews(NSView *view) {
   NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect:view.bounds];
   [view cacheDisplayInRect:view.bounds toBitmapImageRep:rep];
   return rep;
 }
+#if SPARK_TEST_DRIVER_PRIVATE_EVENTS
+// QuartzCore SPI: the CAContext a window shows its layer tree through. CARenderer takes the tree's root from it.
+@protocol SparkLayerContext
+@property (strong) CALayer *layer;
+@end
+@interface CALayer (SparkLayerContext)
+- (id<SparkLayerContext>)context;
+@end
+// Renders the window's whole layer tree with CARenderer into a Metal texture, as the compositor would: layer filters,
+// shadows, 3D transforms, Metal layers, particles and within-window backdrops included. Layer time is 0, before every
+// animation that runs on real time began, so those render at their model values (as view drawing renders them), while
+// layers the motion virtual clock pauses render at its frozen instant. The root goes back to the window's context after.
+static NSBitmapImageRep *SparkRenderLayers(NSWindow *window, NSView *view, NSString **failure) {
+  static id<MTLDevice> device;
+  static id<MTLCommandQueue> queue;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ device = MTLCreateSystemDefaultDevice(); queue = [device newCommandQueue]; });
+  CALayer *root = view.layer.superlayer;
+  if (!device || !root) {
+    *failure = !device ? @"No Metal device renders the window's layers; SPARK_TEST_DRIVER_CAPTURE=views draws its views instead" : @"The window has no layer tree";
+    return nil;
+  }
+  const CGFloat scale = window.backingScaleFactor;
+  const NSUInteger width = (NSUInteger)llround(NSWidth(view.bounds) * scale), height = (NSUInteger)llround(NSHeight(view.bounds) * scale);
+  MTLTextureDescriptor *descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:width height:height mipmapped:NO];
+  descriptor.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+  descriptor.storageMode = MTLStorageModeShared;
+  id<MTLTexture> texture = [device newTextureWithDescriptor:descriptor];
+  CARenderer *renderer = [CARenderer rendererWithMTLTexture:texture options:@{ kCARendererMetalCommandQueue: queue, kCARendererColorSpace: (__bridge id)window.colorSpace.CGColorSpace }];
+  id<SparkLayerContext> context = root.context;
+  const CATransform3D transform = root.sublayerTransform;
+  // The renderer draws what transactions commit after it takes the layer.
+  renderer.layer = root;
+  renderer.bounds = CGRectMake(0, 0, width, height);
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  root.sublayerTransform = CATransform3DMakeScale(scale, scale, 1);
+  [CATransaction commit];
+  [CATransaction flush];
+  [renderer beginFrameAtTime:0 timeStamp:NULL];
+  [renderer addUpdateRect:renderer.bounds];
+  [renderer render];
+  [renderer endFrame];
+  id<MTLCommandBuffer> done = [queue commandBuffer];
+  [done commit];
+  [done waitUntilCompleted];
+  renderer.layer = nil;
+  context.layer = root;
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  root.sublayerTransform = transform;
+  [CATransaction commit];
+  if (context && (context.layer != root || root.context != context)) {
+    *failure = @"The window's layer tree could not be given back to its context after the render";
+    return nil;
+  }
+  // BGRA rows from the bottom up, into RGBA rows from the top down.
+  NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:(NSInteger)width pixelsHigh:(NSInteger)height bitsPerSample:8
+    samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bitmapFormat:0 bytesPerRow:(NSInteger)width * 4 bitsPerPixel:32];
+  uint8_t *pixels = rep.bitmapData;
+  for (NSUInteger row = 0; row < height; row++)
+    [texture getBytes:pixels + (height - 1 - row) * width * 4 bytesPerRow:width * 4 fromRegion:MTLRegionMake2D(0, row, width, 1) mipmapLevel:0];
+  for (NSUInteger i = 0; i < width * height * 4; i += 4) std::swap(pixels[i], pixels[i + 2]);
+  return [rep bitmapImageRepByRetaggingWithColorSpace:window.colorSpace];
+}
+#else
+static NSBitmapImageRep *SparkRenderLayers(NSWindow *, NSView *, NSString **failure) {
+  *failure = @"The app was built without SPARK_TEST_DRIVER_PRIVATE_EVENTS (macos.testDriverPrivateEvents), so captures draw views";
+  return nil;
+}
+#endif
 // A selected source-list row in a window that is not key (driver windows never are) draws its selection as
-// a black layer that the window server turns into a tint with a vibrant compositing filter. Drawn in-process
-// the filter is skipped and the row is solid black, so for the capture that layer is hidden under the
+// a black layer that the window server turns into a tint with a vibrant compositing filter. Drawing views
+// skips the filter and the row is solid black, so for the capture that layer is hidden under the
 // system's unemphasized selection color, then restored. The selection is the row view's subview that is not
 // a cell. On macOS 27 it is an NSVisualEffectView (material .selection) whose sublayer has the filter; on
 // macOS 26 it is a private view whose own layer has it.
@@ -348,21 +423,30 @@ static void SparkCoverSelectionMaterials(NSView *view, NSMutableArray<dispatch_b
   }
   for (NSView *child in view.subviews) SparkCoverSelectionMaterials(child, restore);
 }
-// What `capture` renders: the window's frame view, inside the modules' render wrappers, with source-list selections covered.
-NSBitmapImageRep *SparkDriverRenderWindow(NSWindow *window) {
+// What `capture` renders: the window's frame view, inside the modules' render wrappers (with source-list selections
+// covered when drawing views); nil with `failure` set when it cannot be rendered.
+NSBitmapImageRep *SparkDriverRenderWindow(NSWindow *window, NSString **failure) {
   NSView *view = SparkDriverFrameView(window);
   __block NSBitmapImageRep *rep = nil;
+  __block NSString *reason = nil;
   SparkWrapped(0, ^{
     [window layoutIfNeeded];
     [view displayIfNeeded];
+    if (!drawViews) {
+      NSString *layersFailure = nil;
+      rep = SparkRenderLayers(window, view, &layersFailure);
+      reason = layersFailure;
+      return;
+    }
     NSMutableArray<dispatch_block_t> *restore = [NSMutableArray new];
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     SparkCoverSelectionMaterials(view, restore);
-    rep = SparkRender(view);
+    rep = SparkDrawViews(view);
     for (dispatch_block_t undo in restore) undo();
     [CATransaction commit];
   });
+  if (!rep) *failure = reason;
   return rep;
 }
 // Captures are created only inside the runner's private run directory.
@@ -391,13 +475,15 @@ static void SparkCapture(NSDictionary *request, SparkDriverReply reply) {
   if (!SparkDriverCaptureName(name)) { reply(SparkDriverFailure(@"E_INVALID_ARGUMENT", @"Capture names use 1-100 of [A-Za-z0-9_-] and do not start with -")); return; }
   SparkWaitUntil(SparkTimeout(request[@"timeoutMs"], 5), ^{ return SparkSettled(); }, ^(BOOL settled) {
     if (!settled) { reply(SparkDriverFailure(@"E_NOT_SETTLED", @"The UI kept mounting changes until the timeout")); return; }
-    NSBitmapImageRep *rep = SparkDriverRenderWindow(window);
+    NSString *renderFailure = nil;
+    NSBitmapImageRep *rep = SparkDriverRenderWindow(window, &renderFailure);
+    if (!rep) { reply(SparkDriverFailure(@"E_RENDER", renderFailure)); return; }
     NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
     if (!png) { reply(SparkDriverFailure(@"E_RENDER", @"Rendering produced no image")); return; }
     NSString *file = [name stringByAppendingPathExtension:@"png"];
     int error = SparkDriverWriteCapture(file, png);
     if (error) { reply(SparkDriverFailure(@"E_IO", [NSString stringWithFormat:@"%@: %s", file, strerror(error)])); return; }
-    reply(@{ @"ok": @YES, @"file": file, @"width": @(rep.pixelsWide), @"height": @(rep.pixelsHigh), @"scale": @(window.backingScaleFactor) });
+    reply(@{ @"ok": @YES, @"file": file, @"width": @(rep.pixelsWide), @"height": @(rep.pixelsHigh), @"scale": @(window.backingScaleFactor), @"renderer": drawViews ? @"views" : @"layers" });
   });
 }
 static void SparkSetAppearance(NSDictionary *request, SparkDriverReply reply) {
@@ -687,6 +773,12 @@ BOOL SparkTestDriverStart(void) {
   NSString *path = @(directory);
   unsetenv("SPARK_TEST_DRIVER_DIR"); // Child processes never inherit driver mode. Invalidates `directory`.
   if (!path.isAbsolutePath) SparkDriverRefuse(@"SPARK_TEST_DRIVER_DIR must be absolute");
+  const char *capture = getenv("SPARK_TEST_DRIVER_CAPTURE");
+  if (capture && strcmp(capture, "views") && strcmp(capture, "layers")) SparkDriverRefuse(@"SPARK_TEST_DRIVER_CAPTURE is layers or views");
+  if (capture && !strcmp(capture, "layers") && !SPARK_TEST_DRIVER_PRIVATE_EVENTS)
+    SparkDriverRefuse(@"SPARK_TEST_DRIVER_CAPTURE=layers needs an app built with SPARK_TEST_DRIVER_PRIVATE_EVENTS (macos.testDriverPrivateEvents)");
+  if (capture) drawViews = !strcmp(capture, "views");
+  unsetenv("SPARK_TEST_DRIVER_CAPTURE");
   directoryFD = open(path.fileSystemRepresentation, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
   if (directoryFD < 0 || !SparkPrivate(directoryFD, S_IFDIR, 0700)) SparkDriverRefuse(@"The run directory must be a 0700 directory owned by this user");
   token = SparkConsumeToken();
