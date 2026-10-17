@@ -11,6 +11,8 @@ import { hostPlatform, type AppPlatform } from "./platform.ts";
 import { cpSync, existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { createInterface } from "node:readline";
+import { Readable } from "node:stream";
 import { readJson, writeJson } from "./json.ts";
 import { run } from "./commands.ts";
 
@@ -82,7 +84,13 @@ export async function create(root: string, archiveManifest: string | undefined, 
     const child = spawnProcess(nodeCommand(path.resolve(import.meta.dirname, ".."), "expo-desktop", "expo-desktop", [
       "create-app", root, "--template", `file:${templateFile}`, "--yes", "--no-agents-md",
       "--display-name", name, "--rdns", `so.legend.spark.prototype.${name.toLowerCase()}`,
-    ]), { cwd: process.cwd(), env: { ...process.env, PATH: `${npmBin}${path.delimiter}${process.env.PATH ?? ""}`, npm_config_user_agent: `${manager}/spark`, CI: "1", ...(manager === "yarn" ? { YARN_ENABLE_IMMUTABLE_INSTALLS: "false" } : {}) }, stdout: "inherit", stderr: "inherit" });
+    ]), { cwd: process.cwd(), env: { ...process.env, PATH: `${npmBin}${path.delimiter}${process.env.PATH ?? ""}`, npm_config_user_agent: `${manager}/spark`, CI: "1", ...(manager === "yarn" ? { YARN_ENABLE_IMMUTABLE_INSTALLS: "false" } : {}) }, stdout: "pipe", stderr: "inherit" });
+    // Spark owns the next steps; Expo's final block requires an unnecessary prebuild.
+    let projectReady = false;
+    for await (const line of createInterface({ input: Readable.from(child.stdout!), crlfDelay: Infinity })) {
+      if (line.includes("✅ Your project is created!")) projectReady = true;
+      if (!projectReady) process.stdout.write(line + "\n");
+    }
     if (await child.exited) throw new Error("Expo Desktop could not create the app. See its output above.");
   } finally { rmSync(temporary, { recursive: true, force: true }); }
   if (!archiveManifest) {

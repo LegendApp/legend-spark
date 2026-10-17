@@ -36,15 +36,22 @@ test.each(["macos", "windows", "universal"])("create launcher writes %s app poin
     writeJson(path.join(root, "node_modules/@legendapp/spark/package.json"), { version });
     writeFileSync(path.join(root, "AGENTS.md"), "Keep team rules.\n");
     writeFileSync(path.join(root, "CLAUDE.md"), "Keep Claude rules.\n");
-    return { exited: Promise.resolve(0) } as ReturnType<typeof spawnProcess>;
+    const stdout = new ReadableStream<Uint8Array>({ start(controller) {
+      for (const text of ["Installing dependencies\n", "\u001b[1m✅ Your project is ", "created!\u001b[22m\n\nBefore you can run desktop platforms, generate a development build\n- node --run prebuild\n"]) controller.enqueue(new TextEncoder().encode(text));
+      controller.close();
+    } });
+    return { exited: Promise.resolve(0), stdout } as ReturnType<typeof spawnProcess>;
   });
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
   try {
     await createSpark([root, "--packages", manifest, "--package-manager", "npm", "--platform", variant === "windows" ? "windows" : "macos", ...(variant === "universal" ? ["--universal"] : [])]);
+    expect(output.mock.calls.map(([value]) => value).join("")).toBe("Installing dependencies\n");
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("npm run"));
     expect(readFileSync(path.join(root, "AGENTS.md"), "utf8")).toBe(`Keep team rules.\n\n${pointer}\n`);
     expect(readFileSync(path.join(root, "CLAUDE.md"), "utf8")).toBe(`Keep Claude rules.\n\n${pointer}\n`);
     expect(readFileSync(path.join(root, ".claude/skills/spark/SKILL.md"), "utf8")).toBe(claudePointer);
     expect(readFileSync(path.join(root, ".spark/version"), "utf8")).toBe(version + "\n");
     expect(JSON.parse(readFileSync(path.join(root, "desktop.config.json"), "utf8")).projectId).toBe("generated-guid");
-  } finally { log.mockRestore(); }
+  } finally { log.mockRestore(); output.mockRestore(); }
 });
