@@ -11,6 +11,7 @@ platforms: [macos]
 - launchApp: { openUrl: "spark-ks://document-model/documents" }
 - extendedWaitUntil: { visible: { id: document-model-documents-name }, timeout: 15s }
 - tapOn: { id: document-model-documents-new }
+- assertText: { id: document-model-documents-result, equals: "Last result: ok" }
 - tapOn: { id: document-model-documents-edit }
 - assertVisible: { id: document-model-documents-edited }
 - tapOn: { id: document-model-documents-close }

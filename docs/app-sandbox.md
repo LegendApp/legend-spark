@@ -61,6 +61,7 @@ evidence. "Flow" means an `e2e/flows/packaging-distribution/sandbox-*` flow that
 | Security-scoped bookmarks | Work with `files.bookmarks.app-scope`; without it they reject `E_UNAVAILABLE` | `tests/file-integration.test.ts` (sandboxed runs) |
 | Full Disk Access status | `indeterminate` unless a probe succeeds | `tests/file-integration.test.ts` |
 | File versions (`@legendapp/spark/documents` versions) | Fail `E_PERMISSION_DENIED` for a document in the container | `documents-operations` flow against the variant (passes against the direct build); [#462](https://github.com/LegendApp/legend-spark/issues/462) |
+| Document sessions (`@legendapp/spark/documents`) for a document in the container | New, edit, save as and close with unsaved changes work: close awaits the autosave in place | Flow `documents-close-sandbox`; the untitled document's Save changes? alert was not tested (it needs a black-box backend, [#50](https://github.com/LegendApp/legend-spark/issues/50)) |
 | Opening a file the app was not given by macOS | Fails: the test driver's `openFile` delivers a path without the sandbox extension Finder's open would carry | `documents-open-file` flow against the variant (passes against the direct build); Finder's open not tested; [#463](https://github.com/LegendApp/legend-spark/issues/463) |
 | Child processes (`@legendapp/spark/processes`) | Work; every child inherits the sandbox: the container is its home, and it is denied what the app is denied | Native test |
 | Outgoing network connections | Work with `network.client`; `EPERM` without | Native test |
