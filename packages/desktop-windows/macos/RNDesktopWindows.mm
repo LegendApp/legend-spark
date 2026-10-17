@@ -58,6 +58,10 @@ static void PlaceAttached(NSWindow *parent);
 static void StopAnimation(NSWindow *window);
 static BOOL ShrinkBeforeClose(NSWindow *window, NSString *key);
 static void EndAttachments(NSWindow *window);
+@class SparkWindowDelegate;
+static void BeginWindowDrag(SparkWindowDelegate *delegate);
+static void HoverDropTargets(SparkWindowDelegate *delegate, NSPoint pointer);
+static void EndWindowDrag(SparkWindowDelegate *delegate, BOOL drop);
 static char RestingAlphaKey;
 static CGFloat RestingAlpha(NSWindow *window) { NSNumber *alpha = objc_getAssociatedObject(window, &RestingAlphaKey); return alpha ? alpha.doubleValue : window.alphaValue; }
 static BOOL InSimpleFullscreen(NSWindow *window) { return objc_getAssociatedObject(window, &SimpleFullscreenKey) != nil; }
@@ -90,6 +94,14 @@ static void SetTrafficLightPosition(NSWindow *window, id position);
 @property NSDictionary *closeTransition;
 @property BOOL shrinking, shrunk;
 @property NSRect frameBeforeShrink;
+// Drop targets (addWindowDropTarget): token → {windowId, x, y, width, height}; the tokens the pointer is over; whether a
+// person (or the driver's testWindowDrag) is dragging the window by its title bar, where the driver's pointer is, and
+// the mouse-up monitors that end a person's drag.
+@property NSMutableDictionary<NSString *, NSDictionary *> *dropTargets;
+@property NSMutableSet<NSString *> *dropOver;
+@property BOOL windowDragging;
+@property NSPoint dragPointer;
+@property id dragLocalMonitor, dragGlobalMonitor;
 - (void)finishClose:(BOOL)closed;
 - (void)interruptClose;
 - (void)finishFullscreen:(BOOL)success;
@@ -306,6 +318,7 @@ static char TabObservation;
   return allow && !Park(sender, self.windowID);
 }
 - (void)windowWillClose:(NSNotification *)note {
+  EndWindowDrag(self, NO); self.dropTargets = nil;
   [self finishClose:YES]; [self finishFullscreen:NO]; [self observeTabs:NO];
   StopAnimation(note.object); EndAttachments(note.object);
   // A window the user closes leaves its tab group for good; quitting keeps the saved group.
@@ -339,7 +352,17 @@ static char TabObservation;
     });
   }
 }
-- (void)windowDidMove:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidMove:)]) [self.previousDelegate windowDidMove:note]; Event(@"move", self.windowID); Moved(self.window); }
+// A person starts dragging the window by its title bar (AppKit posts no will-move for programmatic moves); the moves
+// of the drag follow, and the mouse button coming up ends it.
+- (void)windowWillMove:(NSNotification *)note {
+  if ([self.previousDelegate respondsToSelector:_cmd]) [self.previousDelegate windowWillMove:note];
+  if (!SparkTestDriverActive() && (NSEvent.pressedMouseButtons & 1)) BeginWindowDrag(self);
+}
+- (void)windowDidMove:(NSNotification *)note {
+  if ([self.previousDelegate respondsToSelector:@selector(windowDidMove:)]) [self.previousDelegate windowDidMove:note];
+  Event(@"move", self.windowID); Moved(self.window);
+  if (self.windowDragging) HoverDropTargets(self, SparkTestDriverActive() ? self.dragPointer : NSEvent.mouseLocation);
+}
 - (void)windowDidResize:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidResize:)]) [self.previousDelegate windowDidResize:note]; Event(@"resize", self.windowID); PlaceAttached(self.window); }
 - (void)windowDidChangeScreen:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidChangeScreen:)]) [self.previousDelegate windowDidChangeScreen:note]; Event(@"screenChanged", self.windowID); }
 - (void)windowDidEnterFullScreen:(NSNotification *)note { if ([self.previousDelegate respondsToSelector:@selector(windowDidEnterFullScreen:)]) [self.previousDelegate windowDidEnterFullScreen:note]; Event(@"enterFullscreen", self.windowID); [self finishFullscreen:YES]; }
@@ -377,6 +400,7 @@ extern "C" void SparkRebindWindowDelegate(NSWindow *window, NSString *key, id<NS
 static BOOL Park(NSWindow *window, NSString *key) {
   SparkWindowDelegate *delegate = delegates[key];
   if (!delegate.parkOnClose || Terminating || (window.styleMask & NSWindowStyleMaskFullScreen) || InSimpleFullscreen(window) || window.miniaturized || window.sheetParent) return NO;
+  EndWindowDrag(delegate, NO); delegate.dropTargets = nil;
   [delegate finishClose:YES]; [delegate finishFullscreen:NO];
   Depart(window, YES);
   Hide(window);
@@ -978,6 +1002,102 @@ static void Moved(NSWindow *window) {
   if (attachment) SettleAttachment(attachment);
   PlaceAttached(window);
 }
+// Drop targets (docs/api-window-contract.md#drag-driven-tear-off-and-merge): while a person drags a window by its title
+// bar, the pointer entering or leaving a target rectangle in another window's content reports dropTargetChanged, and the
+// mouse button coming up over one reports dropTargetDropped after it. In driver mode the testWindowDrag command drags
+// instead, with its own pointer: the real button never decides a driven run. Main thread only.
+static void EmitDropTarget(SparkWindowDelegate *delegate, NSString *token, NSNumber *over) {
+  NSMutableDictionary *event = [@{ @"type": over ? @"dropTargetChanged" : @"dropTargetDropped", @"windowId": delegate.windowID, @"instanceId": delegate.instanceId ?: @"", @"token": token } mutableCopy];
+  if (over) event[@"over"] = over;
+  SparkEmit(event);
+}
+static void HoverDropTargets(SparkWindowDelegate *delegate, NSPoint pointer) {
+  if (!delegate.dropOver) delegate.dropOver = [NSMutableSet new];
+  for (NSString *token in [delegate.dropTargets.allKeys sortedArrayUsingSelector:@selector(compare:)]) {
+    NSDictionary *target = delegate.dropTargets[token];
+    NSWindow *owner = Window(target[@"windowId"]);
+    NSRect frame; NSString *failure = nil;
+    const BOOL over = owner && Visible(owner) && !owner.miniaturized && SourceFrame(target, &frame, &failure) && NSPointInRect(pointer, frame);
+    if (over == [delegate.dropOver containsObject:token]) continue;
+    if (over) [delegate.dropOver addObject:token]; else [delegate.dropOver removeObject:token];
+    EmitDropTarget(delegate, token, @(over));
+  }
+}
+static void EndWindowDrag(SparkWindowDelegate *delegate, BOOL drop) {
+  if (!delegate.windowDragging) return;
+  delegate.windowDragging = NO;
+  if (delegate.dragLocalMonitor) [NSEvent removeMonitor:delegate.dragLocalMonitor];
+  if (delegate.dragGlobalMonitor) [NSEvent removeMonitor:delegate.dragGlobalMonitor];
+  delegate.dragLocalMonitor = nil; delegate.dragGlobalMonitor = nil;
+  NSArray<NSString *> *over = [delegate.dropOver.allObjects sortedArrayUsingSelector:@selector(compare:)];
+  [delegate.dropOver removeAllObjects];
+  for (NSString *token in over) {
+    EmitDropTarget(delegate, token, @NO);
+    if (drop && delegate.dropTargets[token]) EmitDropTarget(delegate, token, nil);
+  }
+}
+static void BeginWindowDrag(SparkWindowDelegate *delegate) {
+  if (delegate.windowDragging || !delegate.dropTargets.count) return;
+  delegate.windowDragging = YES;
+  if (SparkTestDriverActive()) return;
+  __weak SparkWindowDelegate *weak = delegate;
+  void (^released)(void) = ^{ dispatch_async(dispatch_get_main_queue(), ^{
+    SparkWindowDelegate *current = weak;
+    if (!current.windowDragging) return;
+    HoverDropTargets(current, NSEvent.mouseLocation); EndWindowDrag(current, YES);
+  }); };
+  delegate.dragLocalMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseUp handler:^NSEvent *(NSEvent *event) { released(); return event; }];
+  delegate.dragGlobalMonitor = [NSEvent addGlobalMonitorForEventsMatchingMask:NSEventMaskLeftMouseUp handler:^(NSEvent *) { released(); }];
+}
+#if SPARK_TEST_DRIVER
+// testWindowDrag drags a Spark window by its title bar in process, as a person would (docs/test-driver.md):
+// {phase: begin, window} grabs the window (its Spark ID or identifier) 10 points below the middle of its top edge;
+// {phase: move, to} moves the pointer to the center of the view with testID `to`, and the window with it; {phase: drop |
+// cancel} lets go (cancel: as if no target were there). Replies with the drop targets the pointer is over.
+static SparkWindowDelegate *DrivenWindowDrag;
+@interface SparkWindowDragDriver : NSObject
+@end
+@implementation SparkWindowDragDriver
++ (void)load {
+  SparkTestDriverRegisterCommand(@"testWindowDrag", ^(NSDictionary *request, SparkTestDriverReply reply) {
+    NSString *phase = request[@"phase"];
+    auto failure = ^(NSString *code, NSString *message) { reply(@{ @"ok": @NO, @"error": @{ @"code": code, @"message": message } }); };
+    if ([phase isEqual:@"begin"]) {
+      NSString *name = [request[@"window"] isKindOfClass:NSString.class] ? request[@"window"] : nil, *key = nil;
+      for (NSString *candidate in windows) if ([candidate isEqual:name] || ([windows[candidate] isKindOfClass:NSWindow.class] && [((NSWindow *)windows[candidate]).identifier isEqual:name])) key = candidate;
+      NSWindow *window = key ? Window(key) : nil;
+      if (![window isKindOfClass:NSWindow.class]) { failure(@"E_NOT_FOUND", [NSString stringWithFormat:@"No Spark window %@", name]); return; }
+      if (!Visible(window)) { failure(@"E_INVALID_ARGUMENT", @"A hidden window cannot be dragged"); return; }
+      if (DrivenWindowDrag) EndWindowDrag(DrivenWindowDrag, NO);
+      InstallDelegate(window, key);
+      DrivenWindowDrag = delegates[key];
+      DrivenWindowDrag.dragPointer = NSMakePoint(NSMidX(window.frame), NSMaxY(window.frame) - 10);
+      DrivenWindowDrag.windowDragging = YES;
+      reply(@{ @"ok": @YES, @"over": @[] }); return;
+    }
+    SparkWindowDelegate *delegate = DrivenWindowDrag;
+    NSWindow *window = delegate.window;
+    if (!delegate.windowDragging || !window) { DrivenWindowDrag = nil; failure(@"E_INVALID_ARGUMENT", @"No window drag: begin one first"); return; }
+    if ([phase isEqual:@"move"]) {
+      NSView *view = [request[@"to"] isKindOfClass:NSString.class] ? SparkTestDriverFindView(request[@"to"]) : nil;
+      if (!view.window) { failure(@"E_NOT_FOUND", [NSString stringWithFormat:@"No view with testID %@", request[@"to"]]); return; }
+      NSPoint to = [view.window convertPointToScreen:[view convertPoint:NSMakePoint(NSMidX(view.bounds), NSMidY(view.bounds)) toView:nil]];
+      NSPoint from = delegate.dragPointer;
+      delegate.dragPointer = to;
+      // AppKit reports moves of a window that is not on screen late or not at all: the drag hovers here.
+      [window setFrameOrigin:NSMakePoint(NSMinX(window.frame) + to.x - from.x, NSMinY(window.frame) + to.y - from.y)];
+      HoverDropTargets(delegate, to);
+      reply(@{ @"ok": @YES, @"over": [delegate.dropOver.allObjects sortedArrayUsingSelector:@selector(compare:)] ?: @[] });
+    } else if ([phase isEqual:@"drop"] || [phase isEqual:@"cancel"]) {
+      NSArray *over = [delegate.dropOver.allObjects sortedArrayUsingSelector:@selector(compare:)] ?: @[];
+      DrivenWindowDrag = nil;
+      EndWindowDrag(delegate, [phase isEqual:@"drop"]);
+      reply(@{ @"ok": @YES, @"over": over });
+    } else failure(@"E_INVALID_ARGUMENT", @"phase is begin, move, drop or cancel");
+  });
+}
+@end
+#endif
 static NSArray<NSString *> *Edges(void) { return @[@"left", @"right", @"top", @"bottom", @"leading", @"trailing"]; }
 // One sequence for every runtime, so a listener can drop events older than its snapshot. Not /system's
 // "displaysChanged" (onSystemEvent), which carries no payload: the two streams stay separate.
@@ -1106,6 +1226,30 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       Present(window, delegate, ![args[@"focus"] isEqual:@NO], nil); Event(@"visibilityChanged", key);
       Choreograph(window, target, RestingAlpha(window), args, ^(BOOL finished, BOOL reduced) { resolve(AnimationResult(finished, reduced)); if (finished) Moved(window); });
       return;
+    }
+    // Puts the window's top-left corner at `at`'s, kept on that display's work area (openWindowFrom's landAt: "from").
+    if ([method isEqual:@"placeAt"]) {
+      NSRect at, frame = window.frame; NSString *failure = nil;
+      if (!SourceFrame(args[@"at"], &at, &failure)) { reject(@"E_NOT_FOUND", failure, nil); return; }
+      frame.origin = NSMakePoint(NSMinX(at), NSMaxY(at) - NSHeight(frame));
+      NSRect area = SparkOwning(frame).visibleFrame;
+      frame.origin.x = MAX(NSMinX(area), MIN(NSMinX(frame), NSMaxX(area) - NSWidth(frame)));
+      frame.origin.y = MAX(NSMinY(area), MIN(NSMinY(frame), NSMaxY(area) - NSHeight(frame)));
+      [window setFrame:frame display:NO];
+      resolve(SparkJSON(SparkWindowBounds(window))); return;
+    }
+    if ([method isEqual:@"addDropTarget"]) {
+      NSDictionary *target = [args[@"target"] isKindOfClass:NSDictionary.class] ? args[@"target"] : nil;
+      NSString *owner = [target[@"windowId"] isKindOfClass:NSString.class] ? target[@"windowId"] : nil;
+      if (![args[@"token"] isKindOfClass:NSString.class] || !owner || [owner isEqual:key]) { reject(@"E_INVALID_ARGUMENT", @"A drop target is a rectangle in another window's content", nil); return; }
+      if (!Window(owner)) { reject(@"E_NOT_FOUND", @"The window of the drop target was not found", nil); return; }
+      if (!delegate.dropTargets) delegate.dropTargets = [NSMutableDictionary new];
+      delegate.dropTargets[args[@"token"]] = target;
+      resolve(@"null"); return;
+    }
+    if ([method isEqual:@"removeDropTarget"]) {
+      if ([args[@"token"] isKindOfClass:NSString.class]) { [delegate.dropTargets removeObjectForKey:args[@"token"]]; [delegate.dropOver removeObject:args[@"token"]]; }
+      resolve(@"null"); return;
     }
     if ([method isEqual:@"closeTransition"]) { delegate.closeTransition = [args[@"transition"] isKindOfClass:NSDictionary.class] ? args[@"transition"] : nil; resolve(@"null"); return; }
     if ([method isEqual:@"attach"]) {

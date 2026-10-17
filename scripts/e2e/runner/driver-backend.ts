@@ -12,7 +12,7 @@ import { processLog, type ProcessLog } from "../../../packages/cli/src/process.t
 import { formatAccelerator, parseAccelerator } from "../../../packages/desktop-app/src/contracts/accelerator.ts";
 import {
   DriverError, type Counters, type SimulatedSystemEvent, type Capture as DriverCapture, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type DriverWindowInfo,
-  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type SimulatedPrivilegedHelper, type TestPrivilegedHelper, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type SimulatedSpeech, type TestSpeech, type SimulatedCapture, type TestCapture, type TestWebView,
+  type Frame, type Gesture, type InputTarget, type Modifier, type MouseButton, type ProcessSocket, type TestClipboard, type TestDragReply, type TestPermission, type TestDragRequest, type TestWindowDragRequest, type TestWindowDragReply, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type SimulatedPrivilegedHelper, type TestPrivilegedHelper, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type SimulatedSpeech, type TestSpeech, type SimulatedCapture, type TestCapture, type TestWebView,
 } from "../driver.ts";
 import { readPng } from "../golden/diff.ts";
 import { auditCommand, type AuditClient } from "./driver-audit.ts";
@@ -62,6 +62,7 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
   testCapture(): Promise<TestCapture>;
   webView(testID: string): Promise<TestWebView>;
   testDrag(request: TestDragRequest): Promise<TestDragReply>;
+  testWindowDrag(request: TestWindowDragRequest): Promise<TestWindowDragReply>;
   elements(): Promise<{ windows: DriverWindowInfo[]; elements: DriverElement[] }>;
   tap(target: InputTarget, options?: { button?: MouseButton; clickCount?: number; modifiers?: Modifier[] }): Promise<void>;
   gesture(target: InputTarget, gesture: Gesture, modifiers?: Modifier[]): Promise<void>;
@@ -219,6 +220,38 @@ export class DriverBackend implements Backend {
       }
       await client.testDrag({ phase: "drop", modifiers });
     },
+    // A Spark drag source dragged by an offset and dropped over no destination: off the app's windows, a tearOff source tears off.
+    dragOut: async (args, context) => {
+      const by = /^(-?\d+(?:\.\d+)?), ?(-?\d+(?:\.\d+)?)$/.exec(String(args.by));
+      if (!by) throw new Failure("invalid", "dragOut by is an offset in points, such as \"-400,0\"");
+      const from = await context.resolve(args.from);
+      const { modifiers } = this.modifiers(args);
+      const drag = await this.beginDrag(from, modifiers);
+      if (drag === "not-source") throw new Failure("unsupported", `backend driver drags out only a Spark drag source; ${from.element.id ?? from.element.key} is not one`);
+      if (drag === "refused") return;
+      const client = this.client();
+      try { await client.testDrag({ phase: "move", by: { x: Number(by[1]), y: Number(by[2]) }, modifiers }); }
+      catch (error) { await client.testDrag({ phase: "cancel" }); throw error; }
+      await client.testDrag({ phase: "drop", modifiers });
+    },
+    // A title-bar drag of a Spark window in process; `release: false` keeps holding it there for the next dragWindow.
+    dragWindow: async (args, context) => {
+      const window = await context.window(args.window);
+      const to = await context.resolve(args.to);
+      if (!to.element.id) throw new Failure("unsupported", "backend driver drags a window only onto a target with an id");
+      const client = this.client();
+      if (this.windowDrag !== window.id) {
+        if (this.windowDrag) await client.testWindowDrag({ phase: "cancel" });
+        await client.testWindowDrag({ phase: "begin", window: window.id });
+        this.windowDrag = window.id;
+        context.onRestore(`window drag of ${window.id}`, async () => { if (this.windowDrag) { this.windowDrag = undefined; await client.testWindowDrag({ phase: "cancel" }); } });
+      }
+      try { await client.testWindowDrag({ phase: "move", to: to.element.id }); }
+      catch (error) { this.windowDrag = undefined; await client.testWindowDrag({ phase: "cancel" }).catch(() => {}); throw error; }
+      if (args.release === false) return;
+      this.windowDrag = undefined;
+      await client.testWindowDrag({ phase: "drop" });
+    },
     // Finder, as a drop into a private temporary folder: the drag's promised files are written there, never in a user folder.
     dragToFinder: async (args, context) => {
       const name = String(args.expectFile);
@@ -257,6 +290,8 @@ export class DriverBackend implements Backend {
     }),
   });
   private session?: Session;
+  /** The window a held dragWindow (`release: false`) is dragging. */
+  private windowDrag?: string;
   private opened?: InspectedApp;
   private driver?: DriverClient;
   private logs: string[] = [];

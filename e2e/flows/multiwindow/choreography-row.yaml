@@ -3,7 +3,7 @@ name: A detail window zooms out of a list row and back into it
 intent: >
   On Multiwindow > Window choreography with the virtual clock and one simulated display (901), the main window is put
   at 220,100 (1000 × 700) and Drafts is selected in the list. Opening the selected mailbox shows the detail window over
-  the Drafts row, at the row's place on the display (509,471, 174 × 33), and after its 300 ms zoom it is at its frame, 556,357
+  the Drafts row, at the row's place on the display (509,519, 174 × 33), and after its 300 ms zoom it is at its frame, 556,357
   (400 × 300). Closing it shrinks it back into the row: at 300 ms it has closed.
 checks: [MW-CHOREO-03]
 tags: [multiwindow]
@@ -20,7 +20,7 @@ timeout: 120s
 - launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=main-place,select-drafts,zoom" }
 - assertVisible: { id: multiwindow-choreography-run-1-steps-3 }
 - assertVisible: { id: multiwindow-choreography-row-drafts-selected }
-- assertVisible: { id: multiwindow-choreography-detail-shown-901-509-471-174x33 }
+- assertVisible: { id: multiwindow-choreography-detail-shown-901-509-519-174x33 }
 - advanceClock: 300ms
 - extendedWaitUntil: { visible: { id: multiwindow-choreography-animation-finished }, timeout: 5s }
 - assertVisible: { id: multiwindow-choreography-detail-shown-901-556-357-400x300 }

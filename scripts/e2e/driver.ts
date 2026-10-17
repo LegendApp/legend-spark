@@ -25,9 +25,14 @@ export type Modifier = "cmd" | "ctrl" | "option" | "shift" | "fn";
  */
 export type TestDragRequest =
   | { phase: "begin"; from: string; modifiers?: Modifier[] } | { phase: "move"; to: string | null; modifiers?: Modifier[] }
+  | { phase: "move"; by: { x: number; y: number }; modifiers?: Modifier[] }
   | { phase: "drop" | "cancel"; modifiers?: Modifier[] } | { phase: "dropInFolder"; folder: string };
 /** `started` (begin: false when the source refused, reporting why through its onError), `operation`, or the written `files`. */
 export type TestDragReply = { started?: boolean; operation?: string; files?: string[]; items?: number; types?: string[]; image?: { width: number; height: number } };
+/** A title-bar drag of a Spark window in process (the `testWindowDrag` command): grab it, move the pointer to the view with a testID, let go or cancel. */
+export type TestWindowDragRequest = { phase: "begin"; window: string } | { phase: "move"; to: string } | { phase: "drop" | "cancel" };
+/** The tokens of the window's drop targets the pointer is over. */
+export type TestWindowDragReply = { over: string[] };
 /** The app's private test pasteboard: its types, its plain text (null without any) and its change count. */
 export type TestClipboard = { types: string[]; text: string | null; changeCount: number };
 /** The simulated state of one @legendapp/spark/permissions kind (the `testPermission` driver command). */
@@ -336,6 +341,9 @@ export class Driver {
   /** One phase of an in-process drag between Spark drag views; dropInFolder waits for the app to write its promised files. */
   async testDrag(request: TestDragRequest): Promise<TestDragReply> {
     return body<TestDragReply>(await this.request({ command: "testDrag", ...request }, request.phase === "dropInFolder" ? 70000 : 10000));
+  }
+  async testWindowDrag(request: TestWindowDragRequest): Promise<TestWindowDragReply> {
+    return body<TestWindowDragReply>(await this.request({ command: "testWindowDrag", ...request }, 10000));
   }
   /** Reads the app's private test pasteboard as another app's paste would, so the app provides promised data. */
   async testClipboard(timeoutMs = 40000): Promise<TestClipboard> {

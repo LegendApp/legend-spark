@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 import { SparkError, asyncRegistration, nativeError, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { getWindowAvailability, openWindow } from "./api";
-import { record, subscribeToWindowInstance, windowCall, windowCommand } from "./transport";
+import { isBounds, record, subscribeToWindowInstance, windowCall, windowCommand } from "./transport";
 import { bounds, keys, number, object, text, windowId } from "./validation";
 import type { DisplayRect } from "./special";
 import type { WindowBounds, WindowId, WindowOpenOptions } from "./types";
@@ -11,9 +11,9 @@ import type { WindowBounds, WindowId, WindowOpenOptions } from "./types";
 // frames and opacity on the main thread, follows Reduce Motion, and in driver runs follows motion's virtual clock.
 // macOS only for now.
 
-/** A feature `getWindowChoreographyAvailability` reports: `zoom` (`openWindowFrom`), `frame` (`animateWindowBounds`), `closeTransition` (`setWindowCloseTransition`), `attach` (`attachWindow`). */
-export type WindowChoreographyFeature = "zoom" | "frame" | "closeTransition" | "attach";
-const FEATURES: readonly WindowChoreographyFeature[] = ["zoom", "frame", "closeTransition", "attach"];
+/** A feature `getWindowChoreographyAvailability` reports: `zoom` (`openWindowFrom`), `frame` (`animateWindowBounds`), `closeTransition` (`setWindowCloseTransition`), `attach` (`attachWindow`), `dropTarget` (`addWindowDropTarget`). */
+export type WindowChoreographyFeature = "zoom" | "frame" | "closeTransition" | "attach" | "dropTarget";
+const FEATURES: readonly WindowChoreographyFeature[] = ["zoom", "frame", "closeTransition", "attach", "dropTarget"];
 /** The cubic easing curve of a window animation. */
 export type WindowEasing = "linear" | "easeIn" | "easeOut" | "easeInOut";
 const EASINGS: readonly WindowEasing[] = ["linear", "easeIn", "easeOut", "easeInOut"];
@@ -111,12 +111,18 @@ export interface WindowZoomOptions {
   closeTo?: WindowSourceRect | null;
   /** The window that takes key focus when it closes (see `setWindowCloseTransition`). */
   focusOnClose?: WindowId;
+  /**
+   * Where the window lands. `frame` (default): the frame `openWindow` gives it. `from`: at its size, with its top-left
+   * corner at `from`'s (a tab or panel torn off where it was dropped), moved onto that display's work area if it would
+   * leave it.
+   */
+  landAt?: "frame" | "from";
   transition?: WindowTransition;
 }
 /** What `openWindowFrom` resolves with: the opened window and its running zoom. */
 export interface WindowZoom {
   readonly id: WindowId;
-  /** Where the window lands: the frame `openWindow` gave it. */
+  /** Where the window lands: the frame `openWindow` gave it, or with `landAt: "from"` the frame at `from`. */
   readonly bounds: WindowBounds;
   /** Resolves when the zoom ends. */
   readonly finished: Promise<WindowAnimationResult>;
@@ -129,7 +135,8 @@ export interface WindowZoom {
  * sheets (`modal`) and tabs (`tabbedWith`) are rejected.
  */
 export async function openWindowFrom(options: WindowOpenOptions, zoom: WindowZoomOptions): Promise<WindowZoom> {
-  object(options, "window options"); object(zoom, "zoom"); keys(zoom, ["from", "closeTo", "focusOnClose", "transition"]);
+  object(options, "window options"); object(zoom, "zoom"); keys(zoom, ["from", "closeTo", "focusOnClose", "landAt", "transition"]);
+  if (zoom.landAt !== undefined && zoom.landAt !== "frame" && zoom.landAt !== "from") throw new SparkError("E_INVALID_ARGUMENT", 'landAt is "frame" or "from"');
   if (options.show === false || options.modal || options.tabbedWith !== undefined) throw new SparkError("E_INVALID_ARGUMENT", "A zoom shows an ordinary window: show: false, modal and tabbedWith do not apply");
   const from = sourceRect(zoom.from, "from"), timing = transition(zoom.transition);
   const close = zoom.closeTo === null ? null : closeTransition(options.id, { to: zoom.closeTo === undefined ? from : zoom.closeTo, ...(zoom.focusOnClose !== undefined ? { focus: zoom.focusOnClose } : {}), transition: timing });
@@ -141,11 +148,12 @@ export async function openWindowFrom(options: WindowOpenOptions, zoom: WindowZoo
     throw cause;
   };
   if (close) await windowCommand("closeTransition", { id: options.id, transition: close }).catch(discard);
+  const landed = zoom.landAt === "from" ? await windowCall("placeAt", { id: options.id, at: from }, isBounds).catch(discard) : info.bounds;
   // The native zoom shows the window at once; it can only fail before that (the source's window or display is gone).
   const finished = animation("zoomIn", { id: options.id, from, ...timing }).catch(discard);
   // A caller that ignores `finished` gets no unhandled rejection; one that awaits it still gets the failure.
   finished.catch(() => {});
-  return { id: options.id, bounds: info.bounds, finished };
+  return { id: options.id, bounds: landed, finished };
 }
 
 /** The parent edge `attachWindow` docks a window at. `leading` and `trailing` follow the app's layout direction. */
@@ -213,4 +221,45 @@ export async function attachWindow(id: WindowId, parentId: WindowId, options: Wi
     attached = false;
   });
   return { id, parentId, get attached() { return attached; }, remove: registration.remove };
+}
+
+/** Options for `addWindowDropTarget`. */
+export interface WindowDropTargetOptions {
+  /** The pointer moved onto (`over: true`) or off the target while a person drags the window by its title bar: show or remove the drop preview. */
+  onHover?: (event: { windowId: WindowId; over: boolean }) => void;
+  /** The person let go of the window with the pointer over the target (after `onHover` with `over: false`): merge it, for example by closing it into its slot. */
+  onDrop: (event: { windowId: WindowId }) => void;
+  onError?: (error: SparkError) => void;
+}
+let dropTargetSequence = 0;
+/**
+ * Makes `target`, a rectangle in another window's content (a panel's slot), a place to drop the window on by dragging it
+ * by its title bar: `onHover` reports the pointer entering and leaving it during the drag, and `onDrop` letting go over
+ * it. Only a person's drag counts; `setWindowBounds` and animations never hover or drop. The rectangle is measured on each
+ * move of the drag, so register it again when the slot's layout changes. A window can have several targets. The
+ * registration ends with `remove()` or when the window closes.
+ */
+export async function addWindowDropTarget(id: WindowId, target: WindowContentRect, options: WindowDropTargetOptions): Promise<AsyncRegistration> {
+  windowId(id); object(options, "drop target options"); keys(options, ["onHover", "onDrop", "onError"]);
+  const rect = sourceRect(target, "target");
+  if (!("windowId" in rect)) throw new SparkError("E_INVALID_ARGUMENT", "A drop target is a rectangle in a window's content");
+  if (rect.windowId === id) throw new SparkError("E_INVALID_ARGUMENT", "A window cannot be dropped on itself");
+  if (typeof options.onDrop !== "function") throw new SparkError("E_INVALID_ARGUMENT", "onDrop must be a function");
+  for (const key of ["onHover", "onError"] as const) if (options[key] !== undefined && typeof options[key] !== "function") throw new SparkError("E_INVALID_ARGUMENT", `${key} must be a function`);
+  supported("dropTarget");
+  const token = `drop-${Date.now()}-${++dropTargetSequence}`;
+  const report = (cause: unknown) => { try { (options.onError ?? console.error)(nativeError(cause)); } catch (error) { console.error(error); } };
+  const subscription = await subscribeToWindowInstance(id, event => {
+    if (event.token !== token) return;
+    try {
+      if (event.type === "dropTargetDropped") options.onDrop({ windowId: id });
+      else if (typeof event.over === "boolean") options.onHover?.({ windowId: id, over: event.over });
+      else report(new SparkError("E_INVALID_DATA", "Malformed drop target event"));
+    } catch (cause) { report(cause); }
+  }, ["dropTargetChanged", "dropTargetDropped"]);
+  try { await windowCommand("addDropTarget", { id, token, target: rect }); }
+  catch (cause) { await subscription.remove(); throw cause; }
+  return asyncRegistration(() => { void subscription.remove(); }, async () => {
+    try { await windowCommand("removeDropTarget", { id, token }); } catch (cause) { if (nativeError(cause).code !== "E_NOT_FOUND") throw cause; }
+  });
 }

@@ -1,5 +1,6 @@
 #import "RNDesktopDragView.h"
 #import "SparkDragSession.h"
+#import <objc/runtime.h>
 #import <RNDesktopApp/SparkLocalization.h>
 #import <RNDesktopApp/SparkTestDriver.h>
 #import <react/renderer/components/RNDesktopDragSpec/ComponentDescriptors.h>
@@ -16,6 +17,7 @@ static const NSTimeInterval PromisedFileTimeout = 60;
 - (NSDragOperation)sourceMask:(BOOL)outside;
 - (BOOL)canStartDrag;
 - (BOOL)ignoresModifierKeys;
+- (void)beginDragAt:(NSPoint)point;
 @end
 @implementation RNDesktopDragView {
   NSDictionary *_source;
@@ -25,6 +27,9 @@ static const NSTimeInterval PromisedFileTimeout = 60;
   BOOL _mouseDown;
   NSPoint _start;
   SparkPromisedFiles *_promises;
+  // Where the current drag started (the pointer and the view's frame, in screen coordinates), for tearOff.
+  NSPoint _dragOrigin;
+  NSRect _dragFrame;
 }
 - (instancetype)init {
   if (self = [super init]) {
@@ -103,6 +108,23 @@ static const NSTimeInterval PromisedFileTimeout = 60;
 }
 
 #pragma mark Source
+// Whether `point` (screen coordinates) is over a window of the app on screen; in driver mode, over a window the driver
+// shows (the window module's sparkDriverShown flag), since driven windows are never on screen.
+static BOOL OverAppWindow(NSPoint point) {
+  if (SparkTestDriverActive()) {
+    for (NSWindow *window in NSApp.windows)
+      if ([objc_getAssociatedObject(window, NSSelectorFromString(@"sparkDriverShown")) boolValue] && NSPointInRect(point, window.frame)) return YES;
+    return NO;
+  }
+  NSWindow *window = [NSApp windowWithWindowNumber:[NSWindow windowNumberAtPoint:point belowWindowWithWindowNumber:0]];
+  return window.visible;
+}
+// A drag starts at `point` (screen coordinates): remember it and the view's frame for a tear-off.
+- (void)beginDragAt:(NSPoint)point {
+  _dragOrigin = point;
+  _dragFrame = [self.window convertRectToScreen:[self convertRect:self.bounds toView:nil]];
+}
+- (BOOL)tearsOff { return [_options[@"tearOff"] boolValue]; }
 - (NSArray<NSDraggingItem *> *)draggingItemsAt:(NSPoint)location {
   NSError *error = nil;
   NSArray *items = SparkDragItems(_source, _options[@"dragImage"], self, location, SparkLocalizedString(@"Dragged item"), _promises, &error);
@@ -119,13 +141,25 @@ static const NSTimeInterval PromisedFileTimeout = 60;
   if (SparkTestDriverActive()) { [self fail:@"E_UNAVAILABLE" message:@"A driven app drags through the test driver, never the window server"]; return; }
   NSArray *items = [self draggingItemsAt:[self convertPoint:_start fromView:nil]];
   if (!items) return;
-  _dragging = YES; [self beginDraggingSessionWithItems:items event:event source:self];
+  _dragging = YES; [self beginDragAt:[self.window convertPointToScreen:_start]];
+  [self beginDraggingSessionWithItems:items event:event source:self];
+}
+// A tear-off lands where it is dropped: the image slides back only over the app's windows.
+- (void)draggingSession:(NSDraggingSession *)session movedToPoint:(NSPoint)point {
+  if ([self tearsOff]) session.animatesToStartingPositionsOnCancelOrFail = OverAppWindow(point);
 }
 - (NSDragOperation)draggingSession:(NSDraggingSession *)session sourceOperationMaskForDraggingContext:(NSDraggingContext)context { return [self sourceMask:context == NSDraggingContextOutsideApplication]; }
 - (BOOL)ignoreModifierKeysForDraggingSession:(NSDraggingSession *)session { return [_options[@"ignoreModifierKeys"] boolValue]; }
 - (void)draggingSession:(NSDraggingSession *)session endedAtPoint:(NSPoint)point operation:(NSDragOperation)operation {
   _dragging = NO; _mouseDown = NO; auto emitter = [self emitter];
   if (emitter) emitter->onDragEnd({ JSON(@{ @"accepted": @(operation != NSDragOperationNone), @"operation": SparkDragOperationName(operation) }) });
+  // Torn off: the view's frame moved with the pointer, in the window's content from its top-left corner.
+  if (!emitter || operation != NSDragOperationNone || ![self tearsOff] || OverAppWindow(point) || !self.window.contentView) return;
+  NSView *content = self.window.contentView;
+  NSRect landed = NSOffsetRect(_dragFrame, point.x - _dragOrigin.x, point.y - _dragOrigin.y);
+  NSRect local = [content convertRect:[self.window convertRectFromScreen:landed] fromView:nil];
+  const CGFloat y = content.isFlipped ? NSMinY(local) : NSHeight(content.bounds) - NSMaxY(local);
+  emitter->onTearOff({ JSON(@{ @"x": @(NSMinX(local)), @"y": @(y), @"width": @(NSWidth(local)), @"height": @(NSHeight(local)) }) });
 }
 - (void)prepareForRecycle {
   [super prepareForRecycle]; [_promises cancelAll]; _source = nil; _options = nil; [self unregisterDraggedTypes]; [self registerForDraggedTypes:SparkDragPasteboardTypes(DefaultTypes)];
@@ -140,7 +174,8 @@ static const NSTimeInterval PromisedFileTimeout = 60;
 #pragma mark Test driver
 // testDrag runs a drag between Spark drag views in process, as the window server would (docs/drag-drop.md#testing):
 // {phase: begin, from, modifiers?} starts one from the source view containing `from`; {phase: move, to, modifiers?} moves
-// over the drag view containing `to` (null: over nothing); {phase: drop | cancel} ends it; {phase: dropInFolder, folder}
+// over the drag view containing `to` (null: over nothing), or {phase: move, by: {x, y}} moves the pointer by that many
+// points (y downward) over no destination, as off the windows; {phase: drop | cancel} ends it; {phase: dropInFolder, folder}
 // drops it in a folder as Finder would, writing its promised files there. The folder must be in a temporary directory.
 static SparkSimulatedDrag *testDrag;
 static NSDictionary *DriverFailure(NSString *code, NSString *message) { return @{ @"ok": @NO, @"error": @{ @"code": code, @"message": message } }; }
@@ -180,13 +215,20 @@ static BOOL TemporaryFolder(NSString *folder) {
       if (!items) { reply(@{ @"ok": @YES, @"started": @NO }); return; } // the view reported why through onError
       testDrag = [[SparkSimulatedDrag alloc] initWithItems:items source:view sourceMask:[view sourceMask:NO] ignoreModifiers:[view ignoresModifierKeys]];
       testDrag.modifiers = modifiers;
+      testDrag.screenLocation = [view.window convertPointToScreen:[view convertPoint:NSMakePoint(NSMidX(view.bounds), NSMidY(view.bounds)) toView:nil]];
+      [view beginDragAt:testDrag.screenLocation];
       NSRect frame = items.firstObject.draggingFrame;
       reply(@{ @"ok": @YES, @"started": @YES, @"items": @(items.count), @"types": testDrag.draggingPasteboard.types ?: @[], @"image": @{ @"width": @(frame.size.width), @"height": @(frame.size.height) } });
       return;
     }
     if (!testDrag) { reply(DriverFailure(@"E_INVALID_ARGUMENT", @"No test drag: begin one first")); return; }
     testDrag.modifiers = modifiers;
-    if ([phase isEqual:@"move"]) {
+    if ([phase isEqual:@"move"] && request[@"by"]) {
+      NSDictionary *by = request[@"by"];
+      if (![by isKindOfClass:NSDictionary.class] || ![by[@"x"] isKindOfClass:NSNumber.class] || ![by[@"y"] isKindOfClass:NSNumber.class]) { reply(DriverFailure(@"E_INVALID_ARGUMENT", @"by is {x, y} in points, y downward")); return; }
+      [testDrag moveBy:NSMakeSize([by[@"x"] doubleValue], [by[@"y"] doubleValue])];
+      reply(@{ @"ok": @YES, @"operation": @"none" });
+    } else if ([phase isEqual:@"move"]) {
       id to = request[@"to"];
       if (to && to != NSNull.null && (![to isKindOfClass:NSString.class] || !SparkTestDriverFindView(to))) { reply(DriverFailure(@"E_NOT_FOUND", [NSString stringWithFormat:@"No view with testID %@", to])); return; }
       NSDragOperation operation = [testDrag moveTo:to == NSNull.null || !to ? nil : DragViewContaining(to)];

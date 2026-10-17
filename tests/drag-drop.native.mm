@@ -33,10 +33,11 @@ static void Spin(NSTimeInterval seconds) { [NSRunLoop.mainRunLoop runUntilDate:[
 @end
 @interface TestSource : NSObject
 @property NSMutableArray<NSString *> *ended;
+@property NSPoint endedAt;
 @end
 @implementation TestSource
 - (instancetype)init { if ((self = [super init])) _ended = [NSMutableArray new]; return self; }
-- (void)draggingSession:(NSDraggingSession *)session endedAtPoint:(NSPoint)point operation:(NSDragOperation)operation { [_ended addObject:SparkDragOperationName(operation)]; }
+- (void)draggingSession:(NSDraggingSession *)session endedAtPoint:(NSPoint)point operation:(NSDragOperation)operation { [_ended addObject:SparkDragOperationName(operation)]; _endedAt = point; }
 @end
 
 static SparkPromisedFiles *Promises(NSTimeInterval timeout, void (^request)(NSInteger, NSString *, NSString *), NSMutableArray *failuresSeen) {
@@ -214,6 +215,17 @@ static void Session(void) {
   [session moveTo:target]; Spin(0.3);
   CHECK(session.springLoads == 0 && [target.log isEqual:@[@"enter"]]);
   [session cancel];
+  // The pointer goes where the drag moves: a destination's center, or an offset (y downward) over nothing, where a
+  // tear-off lands. The source hears where it ended, in screen coordinates.
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(300, 200, 400, 300) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:YES];
+  target.frame = NSMakeRect(20, 30, 100, 100); [window.contentView addSubview:target]; [target.log removeAllObjects];
+  session = drag(NO); session.screenLocation = NSMakePoint(10, 10);
+  [session moveTo:target];
+  CHECK(NSEqualPoints(session.screenLocation, NSMakePoint(370, 280)));
+  CHECK([session moveBy:NSMakeSize(-500, 40)] == NSDragOperationNone && NSEqualPoints(session.screenLocation, NSMakePoint(-130, 240)) && [target.log.lastObject isEqual:@"exit"]);
+  [source.ended removeAllObjects];
+  CHECK([session drop] == NSDragOperationNone && [source.ended isEqual:@[@"none"]] && NSEqualPoints(source.endedAt, NSMakePoint(-130, 240)));
+  CHECK([session moveBy:NSMakeSize(1, 1)] == NSDragOperationNone && NSEqualPoints(session.screenLocation, NSMakePoint(-130, 240)));
 }
 
 int main(int argc, const char *argv[]) {

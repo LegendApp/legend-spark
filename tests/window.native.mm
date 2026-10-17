@@ -51,6 +51,16 @@ typedef void (^SparkTestDriverClockObserver)(BOOL virtualClock, double advancedM
 static NSMutableArray<SparkTestDriverClockObserver> *clockObservers;
 static void SparkTestDriverObserveClock(SparkTestDriverClockObserver observer) { if (!clockObservers) clockObservers = [NSMutableArray new]; [clockObservers addObject:observer]; }
 static void DriverClock(BOOL virtualClock, double advancedMs) { for (SparkTestDriverClockObserver observer in clockObservers) observer(virtualClock, advancedMs); }
+// The first view with this accessibility identifier (React Native testID) in any window, as the driver finds it.
+static NSView *FindIdentified(NSView *view, NSString *testID) {
+  if ([view.accessibilityIdentifier isEqual:testID]) return view;
+  for (NSView *child in view.subviews) { NSView *found = FindIdentified(child, testID); if (found) return found; }
+  return nil;
+}
+static NSView *SparkTestDriverFindView(NSString *testID) {
+  for (NSWindow *window in NSApp.windows) { NSView *found = FindIdentified(window.contentView, testID); if (found) return found; }
+  return nil;
+}
 // ACTUAL_IMPLEMENTATION
 @interface TestWindow : NSObject
 @property (weak) id<NSWindowDelegate> delegate;
@@ -733,6 +743,80 @@ static void TestChoreography(RNDesktopWindows *api) {
   driverActive = NO;
   puts("Window choreography passed");
 }
+static NSArray<NSDictionary *> *DropEvents(void) { return [events filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"type BEGINSWITH 'dropTarget'"]]; }
+static NSView *Labelled(NSWindow *window, NSString *testID, NSRect frame) { NSView *view = [[NSView alloc] initWithFrame:frame]; view.accessibilityIdentifier = testID; [window.contentView addSubview:view]; return view; }
+static NSPoint ScreenCenter(NSView *view) { return [view.window convertPointToScreen:[view convertPoint:NSMakePoint(NSMidX(view.bounds), NSMidY(view.bounds)) toView:nil]]; }
+// Drag-driven merge: a window dragged by its title bar (the driver's testWindowDrag) over a drop target in another window
+// hovers it and drops on it; programmatic moves never do. landAt "from" places a window at a rectangle's top-left corner.
+static void TestWindowDrag(RNDesktopWindows *api) {
+  driverActive = YES;
+  assert([DriverCommand(@"simulateDisplays", @{ @"displays": @[SimulatedDisplay(@"901", YES, 0, 0, 1512, 982, 32)] })[@"ok"] boolValue]);
+  NSWindow *home = RealWindow(@"drag-home"), *torn = RealWindow(@"drag-torn");
+  Call(api, @"completeOpen", @{ @"id": @"drag-home", @"size": @{ @"width": @600, @"height": @400 }, @"position": @{ @"displayId": @"901", @"x": @100, @"y": @100 } }); assert(!failure);
+  Call(api, @"completeOpen", @{ @"id": @"drag-torn", @"size": @{ @"width": @300, @"height": @200 }, @"position": @{ @"displayId": @"901", @"x": @800, @"y": @500 } }); assert(!failure);
+  const CGFloat height = NSHeight(home.contentView.bounds);
+  NSView *slot = Labelled(home, @"drag-slot", NSMakeRect(20, height - 130, 200, 100)), *away = Labelled(home, @"drag-away", NSMakeRect(400, 20, 50, 50));
+  NSDictionary *target = @{ @"windowId": @"drag-home", @"x": @20, @"y": @30, @"width": @200, @"height": @100 };
+  Call(api, @"addDropTarget", @{ @"id": @"drag-torn", @"token": @"t1", @"target": @{ @"windowId": @"drag-torn", @"x": @0, @"y": @0, @"width": @10, @"height": @10 } }); assert([failure isEqual:@"E_INVALID_ARGUMENT"]);
+  Call(api, @"addDropTarget", @{ @"id": @"drag-torn", @"token": @"t1", @"target": @{ @"windowId": @"drag-gone", @"x": @0, @"y": @0, @"width": @10, @"height": @10 } }); assert([failure isEqual:@"E_NOT_FOUND"]);
+  Call(api, @"addDropTarget", @{ @"id": @"drag-torn", @"token": @"t1", @"target": target }); assert(!failure);
+  [events removeAllObjects];
+  // A programmatic move over the slot neither hovers nor drops.
+  NSPoint center = ScreenCenter(slot);
+  Call(api, @"bounds", @{ @"id": @"drag-torn", @"bounds": @{ @"displayId": @"901", @"x": @(center.x - 150), @"y": @(982 - center.y - 10), @"width": @300, @"height": @200 } }); assert(!failure && !DropEvents().count);
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"move", @"to": @"drag-slot" })[@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
+  // Grabbed 10 points below the middle of its top edge, the window follows the pointer; over the slot it hovers, off it
+  // it stops, and letting go over it drops after the hover ends.
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"begin", @"window": @"drag-torn" })[@"ok"] boolValue]);
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"move", @"to": @"drag-away" })[@"over"] isEqual:@[]]);
+  assert(NSEqualPoints(NSMakePoint(NSMidX(torn.frame), NSMaxY(torn.frame) - 10), ScreenCenter(away)) && !DropEvents().count);
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"move", @"to": @"drag-slot" })[@"over"] isEqual:@[@"t1"]]);
+  assert(DropEvents().count == 1 && [DropEvents()[0] isEqual:(@{ @"type": @"dropTargetChanged", @"windowId": @"drag-torn", @"instanceId": delegates[@"drag-torn"].instanceId, @"token": @"t1", @"over": @YES })]);
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"move", @"to": @"drag-slot" })[@"over"] isEqual:@[@"t1"]] && DropEvents().count == 1);
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"move", @"to": @"drag-away" })[@"over"] isEqual:@[]] && [DropEvents()[1][@"over"] isEqual:@NO]);
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"move", @"to": @"drag-slot" })[@"over"] isEqual:@[@"t1"]]);
+  [events removeAllObjects];
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"drop" })[@"over"] isEqual:@[@"t1"]]);
+  assert(DropEvents().count == 2 && [DropEvents()[0][@"over"] isEqual:@NO] && [DropEvents()[1][@"type"] isEqual:@"dropTargetDropped"] && [DropEvents()[1][@"token"] isEqual:@"t1"]);
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"drop" })[@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
+  // Cancelling ends the hover without a drop; letting go off the slot drops nothing.
+  [events removeAllObjects];
+  DriverCommand(@"testWindowDrag", @{ @"phase": @"begin", @"window": @"drag-torn" }); DriverCommand(@"testWindowDrag", @{ @"phase": @"move", @"to": @"drag-slot" });
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"cancel" })[@"ok"] boolValue] && DropEvents().count == 2 && [DropEvents()[1][@"over"] isEqual:@NO]);
+  [events removeAllObjects];
+  DriverCommand(@"testWindowDrag", @{ @"phase": @"begin", @"window": @"drag-torn" }); DriverCommand(@"testWindowDrag", @{ @"phase": @"move", @"to": @"drag-away" });
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"drop" })[@"over"] isEqual:@[]] && !DropEvents().count);
+  // A hidden target window is not a place to drop; a hidden window cannot be dragged.
+  Call(api, @"hide", @{ @"id": @"drag-home" }); assert(!failure);
+  DriverCommand(@"testWindowDrag", @{ @"phase": @"begin", @"window": @"drag-torn" });
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"move", @"to": @"drag-slot" })[@"over"] isEqual:@[]]);
+  DriverCommand(@"testWindowDrag", @{ @"phase": @"cancel" });
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"begin", @"window": @"drag-home" })[@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"begin", @"window": @"drag-none" })[@"error"][@"code"] isEqual:@"E_NOT_FOUND"]);
+  Call(api, @"show", @{ @"id": @"drag-home", @"focus": @NO }); assert(!failure);
+  // A removed target is gone; closing the window mid-drag ends its hover.
+  Call(api, @"addDropTarget", @{ @"id": @"drag-torn", @"token": @"t2", @"target": target }); assert(!failure);
+  Call(api, @"removeDropTarget", @{ @"id": @"drag-torn", @"token": @"t1" }); assert(!failure);
+  [events removeAllObjects];
+  DriverCommand(@"testWindowDrag", @{ @"phase": @"begin", @"window": @"drag-torn" });
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"move", @"to": @"drag-slot" })[@"over"] isEqual:@[@"t2"]]);
+  Call(api, @"close", @{ @"id": @"drag-torn" }); assert(!failure && !windows[@"drag-torn"]);
+  assert([DropEvents().lastObject[@"over"] isEqual:@NO] && [DropEvents().lastObject[@"token"] isEqual:@"t2"]);
+  assert([DriverCommand(@"testWindowDrag", @{ @"phase": @"drop" })[@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
+  // landAt "from": the window's top-left corner goes to the rectangle's, kept on the display's work area.
+  NSWindow *placed = RealWindow(@"drag-placed");
+  Call(api, @"completeOpen", @{ @"id": @"drag-placed", @"size": @{ @"width": @300, @"height": @200 }, @"show": @NO }); assert(!failure);
+  Call(api, @"placeAt", @{ @"id": @"drag-placed", @"at": target }); assert(!failure);
+  NSRect slotFrame = [home convertRectToScreen:[slot convertRect:slot.bounds toView:nil]];
+  assert(NSMinX(placed.frame) == NSMinX(slotFrame) && NSMaxY(placed.frame) == NSMaxY(slotFrame) && [SparkArgs(reply) isEqual:Bounds(placed)]);
+  Call(api, @"placeAt", @{ @"id": @"drag-placed", @"at": @{ @"displayId": @"901", @"x": @1500, @"y": @960, @"width": @10, @"height": @10 } }); assert(!failure && Near(Bounds(placed), 1212, 782, 300, 200));
+  Call(api, @"placeAt", @{ @"id": @"drag-placed", @"at": @{ @"windowId": @"drag-gone", @"x": @0, @"y": @0, @"width": @1, @"height": @1 } }); assert([failure isEqual:@"E_NOT_FOUND"]);
+  for (NSWindow *window in @[home, torn, placed]) assert(!OnScreen(window));
+  [placed close]; [home close]; Pump();
+  assert([DriverCommand(@"simulateDisplays", @{ @"displays": NSNull.null })[@"ok"] boolValue]);
+  driverActive = NO;
+  puts("Window drag passed");
+}
 static void TestGuards(RNDesktopWindows *api) {
   TestWindow *window = [TestWindow new]; windows[@"editor"] = (NSWindow *)window;
   __block NSString *result = nil;
@@ -769,9 +853,9 @@ int main(int argc, char **argv) { @autoreleasepool {
     @"shown-tabs": ^(RNDesktopWindows *a) { TestShownTabs(a); }, @"tab-restoration": ^(RNDesktopWindows *a) { TestTabRestoration(a); },
     @"displays": ^(RNDesktopWindows *a) { TestDisplays(a); }, @"session-frames": ^(RNDesktopWindows *a) { TestSessionFrames(a); },
     @"special": ^(RNDesktopWindows *a) { TestSpecialWindows(a); }, @"pools": ^(RNDesktopWindows *a) { TestWindowPools(a); },
-    @"choreography": ^(RNDesktopWindows *a) { TestChoreography(a); },
+    @"choreography": ^(RNDesktopWindows *a) { TestChoreography(a); }, @"window-drag": ^(RNDesktopWindows *a) { TestWindowDrag(a); },
   };
   NSString *only = argc > 1 && argv[1][0] != '-' ? @(argv[1]) : nil;
   if (only && !suites[only]) { fprintf(stderr, "Unknown suite %s\n", argv[1]); return 2; }
-  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration", @"displays", @"session-frames", @"special", @"pools", @"choreography"]) if (!only || [only isEqual:name]) suites[name](api);
+  for (NSString *name in @[@"guards", @"options", @"driver", @"tabs", @"shown-tabs", @"tab-restoration", @"displays", @"session-frames", @"special", @"pools", @"choreography", @"window-drag"]) if (!only || [only isEqual:name]) suites[name](api);
 } }

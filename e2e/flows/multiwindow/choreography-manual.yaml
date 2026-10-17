@@ -4,8 +4,11 @@ intent: >
   What only the window server and a person show: zooms and shrinks are continuous on screen, closing hands key focus
   to the main window, a palette dragged by its title bar docks magnetically and then moves with the main window, it
   hides while another app is active, and the system Reduce Motion setting (not the driver's) turns zooms into fades.
+  On screen only: the notes panel dragged out by a person follows the pointer and tears off where it is dropped, the
+  torn-off window dragged by its title bar over the slot shows the merge preview live and merges on release, and a
+  drag held over the inspector flashes it and brings its window forward.
   The driver never shows windows, takes no key focus and never deactivates the app, so this does not run in-process.
-checks: [MW-CHOREO-10]
+checks: [MW-CHOREO-10, MW-CHOREO-15]
 tags: [multiwindow]
 platforms: [macos]
 build: release
@@ -29,5 +32,20 @@ timeout: 15m
 - manualStep:
     instruction: 'Turn on System Settings › Accessibility › Display › Reduce motion, return to the Kitchen Sink, press Open from thumbnail and then Close detail. Turn Reduce motion off again.'
     expect: 'The detail window fades in at its place and fades out on close, without growing or shrinking; Last animation reads Reduce Motion: faded.'
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: 'On-screen only. Press Close all, then drag the Notes panel out of the main window onto an empty part of the desktop and let go. Then drag it a little and let go inside the main window.'
+    expect: 'While you drag, a snapshot of the panel follows the pointer. Dropped outside the window, it does not slide back: a Notes window grows out of the snapshot right where you let go, with its top-left corner at the snapshot''s, and the panel reads Torn off into a window. A drop inside the main window slides the snapshot back and changes nothing.'
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: 'On-screen only. Drag the torn-off Notes window by its title bar until the pointer is over the Notes panel''s slot, hold it there, move it off the slot, then back over it and let go.'
+    expect: 'While the pointer is over the slot, the panel''s border turns the accent color and reads Drop the window here to merge it back, and Merge preview reads over the slot; off the slot both go back. Letting go over the slot shrinks the window into the slot and the panel returns (Last close: closed).'
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: 'On-screen only. Press Attach inspector, click the main window so it covers part of the inspector, then drag the Notes panel onto the visible part of the inspector and hold it there without letting go for two seconds; then let go.'
+    expect: 'After the system spring-loading delay the inspector flashes and its window comes in front of the main window while you still hold the drag; Inspector spring loads counts 1. Letting go there reads Dropped on inspector: notes, and no Notes window opens.'
     evidence: none
     signoff: required

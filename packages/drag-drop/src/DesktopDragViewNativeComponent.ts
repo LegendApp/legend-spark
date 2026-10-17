@@ -16,6 +16,7 @@ export interface NativeProps extends ViewProps {
   onPromisedFileWrite?: DirectEventHandler<Payload>;
   onSpringLoad?: DirectEventHandler<Payload>;
   onSpringLoadHighlight?: DirectEventHandler<Payload>;
+  onTearOff?: DirectEventHandler<Payload>;
 }
 type NativeComponentType = HostComponent<NativeProps>;
 export interface NativeCommands {

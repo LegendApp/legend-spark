@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { ActionButton } from "../../ActionButton";
-import { FEATURES, ITEMS, WINDOWS, availability, closeAllWindows, refreshNow, registerSource, runStep, selectItem, useWindowChoreography, type WindowState } from "./window-choreography";
+import { DragDropView } from "@legendapp/spark/drag-drop";
+import { FEATURES, ITEMS, NOTES_TYPE, WINDOWS, availability, closeAllWindows, dragFeatures, refreshNow, registerSource, runStep, selectItem, tearOffAt, useWindowChoreography, type WindowState } from "./window-choreography";
 import { useChoreographyMessages } from "./choreography-messages";
 
 const BUTTONS = ["zoom", "zoom-thumb", "close", "stop", "compact", "full", "pane-general", "pane-advanced", "tear-off", "merge", "inspector", "palette", "palette-nudge", "palette-away", "palette-back"] as const;
@@ -23,7 +24,8 @@ function Row({ item, label, selected }: { item: typeof ITEMS[number]; label: str
 
 export function Choreography() {
   const t = useChoreographyMessages();
-  const { windows, selected, tornOff, attached, animation, close, reduceMotion, runs, steps, error } = useWindowChoreography();
+  const { windows, selected, tornOff, attached, animation, close, reduceMotion, runs, steps, error, mergePreview, activations, inspectorDrop } = useWindowChoreography();
+  const drag = dragFeatures();
   const panel = useSource("panel");
   const rows: [string, string, string][] = [
     ...WINDOWS.map((window): [string, string, string] => [t.windows[window], t.window(windows[window]), `multiwindow-choreography-${window}-${stateId(windows[window])}`]),
@@ -32,6 +34,9 @@ export function Choreography() {
     [t.animationLabel, t.animation[animation], `multiwindow-choreography-animation-${animation}`],
     [t.closeLabel, t.close[close], `multiwindow-choreography-close-${close}`],
     [t.reduceMotionLabel, t.reduceMotion(reduceMotion), `multiwindow-choreography-reduce-motion-${reduceMotion ?? "unknown"}`],
+    [t.mergePreviewLabel, t.mergePreview(mergePreview), `multiwindow-choreography-merge-preview-${mergePreview ? "over" : "none"}`],
+    [t.activationsLabel, t.activations(activations), `multiwindow-choreography-hover-activations-${activations}`],
+    [t.inspectorDropLabel, t.inspectorDrop(inspectorDrop), `multiwindow-choreography-inspector-drop-${inspectorDrop ?? "none"}`],
   ];
   // Aligned to the leading edge, like the other screens' content.
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-5 p-6">
@@ -39,16 +44,21 @@ export function Choreography() {
     <View className="w-full max-w-3xl gap-1" testID="multiwindow-choreography-availability">
       <Text className="text-sm font-semibold text-foreground" accessibilityRole="header">{t.availability}</Text>
       {FEATURES.map(feature => <Text key={feature} className="text-sm text-foreground" testID={`multiwindow-choreography-availability-${feature}-${availability(feature)}`}>{t.features[feature]}: {availability(feature)}</Text>)}
+      <Text className="text-sm text-foreground" testID={`multiwindow-choreography-availability-dragTearOff-${drag.tearOff ? "available" : "unsupported-platform"}`}>{t.dragTearOff}: {drag.tearOff ? "available" : "unsupported-platform"}</Text>
     </View>
     <View className="w-full max-w-3xl flex-row gap-4">
       <View className="w-48 gap-1 rounded-md border border-border p-2" testID="multiwindow-choreography-list">
         <Text className="px-3 text-sm font-semibold text-muted" accessibilityRole="header">{t.list}</Text>
         {ITEMS.map(item => <Row key={item} item={item} label={t.items[item]} selected={item === selected} />)}
       </View>
-      <View ref={panel} className="flex-1 gap-1 rounded-md border border-border p-3" testID={`multiwindow-choreography-panel-${tornOff ? "torn-off" : "docked"}`}>
-        <Text className="text-sm font-semibold text-foreground" accessibilityRole="header">{t.panel}</Text>
-        <Text className="text-sm text-muted">{tornOff ? t.tornOff : t.panelText}</Text>
-      </View>
+      {/* Drag the panel out of the window to tear it off; drag the torn-off window back over this slot to merge it. */}
+      <DragDropView style={{ flex: 1 }} source={{ data: { [NOTES_TYPE]: "notes" } }} disabled={tornOff} acceptedTypes={[]}
+        {...(drag.tearOff ? { tearOff: true, dragImage: "view" as const, onTearOff: tearOffAt } : {})}>
+        <View ref={panel} className={`flex-1 gap-1 rounded-md border p-3 ${mergePreview ? "border-accent-primary" : "border-border"}`} testID={`multiwindow-choreography-panel-${tornOff ? "torn-off" : "docked"}`}>
+          <Text className="text-sm font-semibold text-foreground" accessibilityRole="header">{t.panel}</Text>
+          <Text className="text-sm text-muted">{tornOff ? (mergePreview ? t.mergeHere : t.tornOff) : t.panelText}</Text>
+        </View>
+      </DragDropView>
     </View>
     <View className="w-full max-w-3xl gap-1 rounded-md border border-border p-3" testID="multiwindow-choreography-readout">
       {rows.map(([label, value, testID]) => <View key={label} className="flex-row gap-3">

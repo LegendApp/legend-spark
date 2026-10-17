@@ -1,0 +1,61 @@
+appId: so.legend.spark.examples.kitchensink
+name: Drag the notes panel off into a window, drag the window back over its slot to merge it, and drag the panel onto the inspector
+intent: >
+  On Multiwindow > Window choreography with the virtual clock and one simulated display (901), the main window is put
+  at 220,100 (1000 × 700). The notes panel dropped inside the main window stays docked. Dragged 750 points to the left
+  and dropped off every window, it tears off: the window opens where the panel landed (-42,449, 488 × 149) and grows
+  out of it in 300 ms to 400 × 300 with its top-left corner there, moved onto the display (0,449).
+  Dragging that window by its title bar over the panel's slot shows the merge preview, moving it off the slot removes
+  the preview, and letting go over the slot merges it back with its close transition. A drag of the panel held over
+  the attached inspector spring-loads it (the inspector's window comes forward) and dropping it there gives the
+  inspector the notes, with no tear-off. Driven drags are simulated in process: no window is shown and the real
+  pointer never moves.
+checks: [MW-CHOREO-12, MW-CHOREO-13, MW-CHOREO-14]
+tags: [multiwindow]
+platforms: [macos]
+timeout: 180s
+---
+- launchApp
+- simulateDisplays:
+    displays:
+      - { id: "901", persistentId: SIM-901, name: Built-in Retina Display, primary: true, origin: { x: 0, y: 0 }, size: { width: 1512, height: 982 }, workArea: { x: 0, y: 32, width: 1512, height: 950 }, scaleFactor: 2, safeArea: { top: 32, left: 0, bottom: 0, right: 0 }, refreshRate: { minimum: 24, maximum: 120, variable: true }, colorSpace: { name: Color LCD, gamut: p3 }, edrHeadroom: { current: 1, potential: 16, reference: null } }
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography" }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-root }, timeout: 10s }
+- assertVisible: { id: multiwindow-choreography-availability-dropTarget-available }
+- assertVisible: { id: multiwindow-choreography-availability-dragTearOff-available }
+- setClock: virtual
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=main-place" }
+- assertVisible: { id: multiwindow-choreography-run-1-steps-1 }
+# Dropped inside the main window, the panel does not tear off.
+- dragOut: { from: { id: multiwindow-choreography-panel-docked }, by: "0,40" }
+- assertVisible: { id: multiwindow-choreography-panel-docked }
+- assertVisible: { id: multiwindow-choreography-torn-closed }
+# Off every window, it tears off where it landed.
+- dragOut: { from: { id: multiwindow-choreography-panel-docked }, by: "-750,0" }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-panel-torn-off }, timeout: 5s }
+- assertVisible: { id: multiwindow-choreography-torn-shown-901--42-449-488x149 }
+- advanceClock: 300ms
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-torn-shown-901-0-449-400x300 }, timeout: 5s }
+# Dragged by its title bar over the slot: the preview shows; off the slot it goes; letting go over it merges.
+- dragWindow: { window: { id: ks-choreo-torn }, to: { id: multiwindow-choreography-panel-torn-off }, release: false }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-merge-preview-over }, timeout: 5s }
+- dragWindow: { window: { id: ks-choreo-torn }, to: { id: multiwindow-choreography-note }, release: false }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-merge-preview-none }, timeout: 5s }
+- dragWindow: { window: { id: ks-choreo-torn }, to: { id: multiwindow-choreography-panel-torn-off } }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-close-pending }, timeout: 5s }
+- advanceClock: 300ms
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-close-closed }, timeout: 5s }
+- assertVisible: { id: multiwindow-choreography-torn-closed }
+- assertVisible: { id: multiwindow-choreography-panel-docked }
+- assertVisible: { id: multiwindow-choreography-merge-preview-none }
+- setClock: real
+# Held over the inspector, the drag spring-loads it; dropped there, the inspector takes the notes.
+- launchApp: { stopApp: false, openUrl: "spark-ks://multiwindow/choreography?run=keep,inspector" }
+- assertVisible: { id: multiwindow-choreography-run-2-steps-2 }
+- dragAndDrop: { from: { id: multiwindow-choreography-panel-docked }, to: { id: multiwindow-choreography-inspector }, holdAt: 2500ms }
+- extendedWaitUntil: { visible: { id: multiwindow-choreography-inspector-drop-notes }, timeout: 5s }
+- assertVisible: { id: multiwindow-choreography-hover-activations-1 }
+- assertVisible: { id: multiwindow-choreography-panel-docked }
+- assertVisible: { id: multiwindow-choreography-torn-closed }
+- assertNotVisible: { id: multiwindow-choreography-error-other }
+- simulateDisplays: { restore: true }

@@ -6,7 +6,11 @@ import type { ChoreographyState, ChoreographyWindow, Item, WindowState } from ".
 export type ChoreographyMessages = {
   title: string;
   availability: string;
-  features: Record<"zoom" | "frame" | "closeTransition" | "attach", string>;
+  features: Record<"zoom" | "frame" | "closeTransition" | "attach" | "dropTarget", string>;
+  dragTearOff: string; mergeHere: string;
+  mergePreviewLabel: string; mergePreview(over: boolean): string;
+  activationsLabel: string; activations(count: number): string;
+  inspectorDropLabel: string; inspectorDrop(value: string | null): string;
   list: string; panel: string; panelText: string; tornOff: string; inspector: string;
   items: Record<Item, string>;
   windows: Record<ChoreographyWindow, string>;
@@ -23,7 +27,11 @@ export type ChoreographyMessages = {
 const en: ChoreographyMessages = {
   title: "Window choreography",
   availability: "Availability",
-  features: { zoom: "Zoom from a source", frame: "Animated frames", closeTransition: "Close transitions and focus handoff", attach: "Attached windows" },
+  features: { zoom: "Zoom from a source", frame: "Animated frames", closeTransition: "Close transitions and focus handoff", attach: "Attached windows", dropTarget: "Drop targets for dragged windows" },
+  dragTearOff: "Drag tear-off", mergeHere: "Drop the window here to merge it back",
+  mergePreviewLabel: "Merge preview", mergePreview: over => over ? "over the slot" : "—",
+  activationsLabel: "Inspector spring loads", activations: count => String(count),
+  inspectorDropLabel: "Dropped on inspector", inspectorDrop: value => value ?? "—",
   list: "Mailboxes", panel: "Notes panel", panelText: "Pinned notes for this mailbox.", tornOff: "Torn off into a window", inspector: "Inspector",
   items: { inbox: "Inbox", drafts: "Drafts", archive: "Archive" },
   windows: { detail: "Detail", torn: "Torn-off notes", inspector: "Inspector", palette: "Palette" },
@@ -33,7 +41,7 @@ const en: ChoreographyMessages = {
   closeLabel: "Last close", close: { none: "—", pending: "closing", closed: "closed", interrupted: "interrupted", vetoed: "vetoed" },
   reduceMotionLabel: "Reduce Motion", reduceMotion: value => value === null ? "— (unchanged since opening)" : value ? "on" : "off",
   run: (runs, steps) => `Run ${runs}: ${steps} steps`,
-  note: "Driven runs never show these windows; the readout is what the window API reports, refreshed when a step or animation ends.",
+  note: "Driven runs never show these windows; the readout is what the window API reports, refreshed when a step or animation ends. Drag the notes panel out of the window to tear it off, and the torn-off window by its title bar back over the slot to merge it.",
   buttons: { zoom: "Open selected mailbox", "zoom-thumb": "Open from thumbnail", close: "Close detail", stop: "Stop animation", compact: "Compact", full: "Full size", "pane-general": "General pane", "pane-advanced": "Advanced pane",
     "tear-off": "Tear off notes", merge: "Merge notes back", inspector: "Attach inspector", palette: "Attach palette", "palette-nudge": "Nudge palette", "palette-away": "Drag palette away",
     "palette-back": "Drag palette back", refresh: "Refresh", "close-all": "Close all" },
@@ -43,7 +51,11 @@ const n = MESSAGES.ar.number;
 const ar: ChoreographyMessages = {
   title: "تنسيق حركة النوافذ",
   availability: "التوفر",
-  features: { zoom: "التكبير من مصدر", frame: "إطارات متحركة", closeTransition: "انتقالات الإغلاق وتسليم التركيز", attach: "نوافذ ملحقة" },
+  features: { zoom: "التكبير من مصدر", frame: "إطارات متحركة", closeTransition: "انتقالات الإغلاق وتسليم التركيز", attach: "نوافذ ملحقة", dropTarget: "أهداف إفلات للنوافذ المسحوبة" },
+  dragTearOff: "الفصل بالسحب", mergeHere: "أفلت النافذة هنا لدمجها من جديد",
+  mergePreviewLabel: "معاينة الدمج", mergePreview: over => over ? "فوق الموضع" : "—",
+  activationsLabel: "مرات تنشيط المفتش", activations: count => n(count),
+  inspectorDropLabel: "ما أُفلت على المفتش", inspectorDrop: value => value === "notes" ? "الملاحظات" : value ?? "—",
   list: "صناديق البريد", panel: "لوحة الملاحظات", panelText: "ملاحظات مثبتة لهذا الصندوق.", tornOff: "مفصولة في نافذة", inspector: "المفتش",
   items: { inbox: "الوارد", drafts: "المسودات", archive: "الأرشيف" },
   windows: { detail: "التفاصيل", torn: "الملاحظات المفصولة", inspector: "المفتش", palette: "لوحة الأدوات" },
@@ -53,7 +65,7 @@ const ar: ChoreographyMessages = {
   closeLabel: "آخر إغلاق", close: { none: "—", pending: "قيد الإغلاق", closed: "أُغلقت", interrupted: "قُطع", vetoed: "رُفض" },
   reduceMotionLabel: "تقليل الحركة", reduceMotion: value => value === null ? "— (لم يتغير منذ الفتح)" : value ? "مُفعّل" : "متوقف",
   run: (runs, steps) => `التشغيل ${n(runs)}: ${n(steps)} خطوات`,
-  note: "التشغيل الآلي لا يُظهر هذه النوافذ أبدًا؛ القراءة هي ما تُبلغ عنه واجهة النوافذ، وتُحدَّث عند انتهاء خطوة أو حركة.",
+  note: "التشغيل الآلي لا يُظهر هذه النوافذ أبدًا؛ القراءة هي ما تُبلغ عنه واجهة النوافذ، وتُحدَّث عند انتهاء خطوة أو حركة. اسحب لوحة الملاحظات خارج النافذة لفصلها، واسحب النافذة المفصولة من شريط عنوانها إلى موضعها لدمجها.",
   buttons: { zoom: "فتح الصندوق المحدد", "zoom-thumb": "فتح من صورة مصغرة", close: "إغلاق التفاصيل", stop: "إيقاف الحركة", compact: "مضغوط", full: "الحجم الكامل", "pane-general": "جزء عام", "pane-advanced": "جزء متقدم",
     "tear-off": "فصل الملاحظات", merge: "إعادة دمج الملاحظات", inspector: "إلحاق المفتش", palette: "إلحاق لوحة الأدوات", "palette-nudge": "تحريك اللوحة قليلًا", "palette-away": "سحب اللوحة بعيدًا",
     "palette-back": "إعادة سحب اللوحة", refresh: "تحديث", "close-all": "إغلاق الكل" },

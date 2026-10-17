@@ -57,6 +57,10 @@ test("drag images, contextual operations, modifier keys and spring loading are v
     expect(() => options({ dragImage })).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
   }
   expect(options({ sourceOperations: { withinApp: ["move", "copy"], outsideApp: ["copy"] } })).toMatchObject({ sourceOperations: ["move", "copy"], externalOperations: ["copy"] });
+  expect(options({ tearOff: true })).toMatchObject({ tearOff: true });
+  expect(options({ tearOff: false })).not.toHaveProperty("tearOff");
+  expect(() => options({ tearOff: "yes" })).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  expect(() => options({ tearOff: true }, "windows")).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
   expect(options({ sourceOperations: ["link"], ignoreModifierKeys: true, springLoading: true })).toMatchObject({ sourceOperations: ["link"], externalOperations: ["link"], ignoreModifierKeys: true, springLoading: true });
   for (const value of [{ sourceOperations: { withinApp: ["copy"] } }, { sourceOperations: { withinApp: ["copy"], outsideApp: ["copy"], other: [] } }, { ignoreModifierKeys: "yes" }, { springLoading: 1 }]) {
     expect(() => options(value)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
