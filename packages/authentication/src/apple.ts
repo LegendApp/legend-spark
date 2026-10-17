@@ -3,7 +3,9 @@ import { availability, checkOptions, isRecord, nullableText, perform, requireNat
 export { AuthorizationError, type AuthorizationAvailability, type AuthorizationErrorReason } from "./shared";
 export type { Availability } from "@legendapp/spark-desktop-app/src/contracts";
 
+/** Information Sign in with Apple can ask the person to share. */
 export type AppleAuthenticationScope = "fullName" | "email";
+/** Options for `signInWithApple`. */
 export interface AppleSignInOptions {
   /** What to ask the person to share. Apple returns them only the first time the person signs in to the app. */
   scopes?: AppleAuthenticationScope[];
@@ -20,10 +22,12 @@ export interface AppleSignInOptions {
   /** Aborting cancels the sheet and rejects E_ABORTED with reason `appCancel`. */
   signal?: AbortSignal;
 }
+/** Name parts the person shared through the `fullName` scope; each is null when not given. */
 export interface AppleIDFullName {
   namePrefix: string | null; givenName: string | null; middleName: string | null;
   familyName: string | null; nameSuffix: string | null; nickname: string | null;
 }
+/** The credential a successful `signInWithApple` returns. */
 export interface AppleIDCredential {
   /** Stable for this person and your team: the account identifier to store. */
   user: string;
@@ -39,7 +43,9 @@ export interface AppleIDCredential {
   fullName: AppleIDFullName | null;
   realUserStatus: "likelyReal" | "unknown" | "unsupported";
 }
+/** Result of `signInWithApple`: the credential, or `cancel` when the person cancels. */
 export type AppleSignInResult = { type: "success"; credential: AppleIDCredential } | { type: "cancel" };
+/** Result of `getAppleIDCredentialState`: whether the Apple ID is still `authorized` for this app. */
 export type AppleIDCredentialState = "authorized" | "revoked" | "notFound" | "transferred";
 
 const SCOPES: readonly AppleAuthenticationScope[] = ["fullName", "email"];

@@ -6,6 +6,10 @@ import { SparkError, invokeNative, nativeError, type Availability } from "@legen
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import type { ProcessOptions, RunCommandOptions, ProcessInput, ProcessResult, ProcessHandle } from "./types";
 export type * from "./types";
+/**
+ * Whether this host can run processes: macOS and Windows with the native module; other platforms report
+ * `unsupported-platform`.
+ */
 export function getProcessAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
   return Native ? { available: true } : { available: false, reason: "missing-module" };
@@ -27,6 +31,10 @@ function object(value: unknown, allowed: string[]): asserts value is Record<stri
 function commandName(value: unknown): asserts value is string {
   if (typeof value !== "string" || !value || /[\\/\0:]/.test(value) || value === "." || value === ".." || value.trim() !== value) invalid("Expected a command name without path components");
 }
+/**
+ * Resolves a bare command name to an absolute executable path, or null when it is not found. Throws
+ * E_INVALID_ARGUMENT for a name with path components and E_UNSUPPORTED_PLATFORM off macOS and Windows.
+ */
 export async function resolveCommand(name: string): Promise<string | null> {
   commandName(name);
   const value = await call("resolveCommand", { command: name }, (value): value is string | null => value === null || typeof value === "string");
@@ -45,6 +53,12 @@ function result(value: unknown, aborted: boolean, limit: number): ProcessResult 
   return { exit: data.terminated ? { type: "terminated", signal: data.terminationSignal as number | null } : { type: "exited", code: data.exitCode as number }, stdout: nativeBytes(data.stdout, limit), stderr: nativeBytes(data.stderr, limit), timedOut: data.timedOut, outputTruncated: data.outputTruncated, aborted };
 }
 let sequence = 0;
+/**
+ * Starts a process and resolves with its handle once it launches. Output streams to `onOutput` and is captured up to
+ * `captureLimitBytes` per stream (default 8 MiB). Throws E_INVALID_ARGUMENT for invalid options, E_UNSUPPORTED_OPTION
+ * for unknown ones, E_ABORTED when `signal` is already aborted, and E_UNSUPPORTED_PLATFORM or E_MODULE_UNAVAILABLE
+ * when processes are unavailable; rejects E_NOT_FOUND when a `command` target does not resolve.
+ */
 export async function spawn(options: ProcessOptions): Promise<ProcessHandle> {
   object(options, ["target", "args", "cwd", "env", "input", "timeoutMs", "signal", "captureLimitBytes", "onOutput"]);
   object(options.target, ["type", "path", "name"]);
@@ -124,6 +138,10 @@ export async function spawn(options: ProcessOptions): Promise<ProcessHandle> {
     terminate,
   };
 }
+/**
+ * Spawns a process, closes its stdin after any `input`, and resolves with its `ProcessResult` when it exits. Terminates
+ * the process before rethrowing a failure. Throws the same errors as `spawn`.
+ */
 export async function runCommand(options: RunCommandOptions): Promise<ProcessResult> {
   const child = await spawn(options);
   try { await child.closeInput(); return await child.exited; }

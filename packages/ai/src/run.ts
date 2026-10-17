@@ -2,6 +2,11 @@ import { runCommand } from "@legendapp/spark-processes";
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { buildAIInvocation } from "./invocations";
 import type { AIToolRunResult, RunAIToolOptions } from "./types";
+/**
+ * Runs a prompt once through the `claude` or `codex` CLI with `runCommand` (macOS and Windows). Resolves with the
+ * process result plus `output`: trimmed stdout, or trimmed stderr when stdout is empty. Throws E_INVALID_ARGUMENT or
+ * E_UNSUPPORTED_OPTION for invalid options; process errors propagate.
+ */
 export async function runAITool(options: RunAIToolOptions): Promise<AIToolRunResult> {
   if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected AI run options");
   for (const key of Object.keys(options)) if (!["prompt", "tool", "timeoutMs", "signal", "cwd", "invocationOptions"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown AI run option: ${key}`);

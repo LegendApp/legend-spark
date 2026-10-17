@@ -1,68 +1,6 @@
 {
   "pageless": [],
   "undocumented": {
-    "./ai": [
-      "AIAvailabilityOptions",
-      "AICodexInvocationOptions",
-      "AICommandAvailability",
-      "AIErrorOutputOptions",
-      "AIInvocation",
-      "AIInvocationOptions",
-      "AIToolId",
-      "AIToolRunResult",
-      "buildAIInvocation",
-      "extractJsonCandidate",
-      "formatAIErrorOutput",
-      "getAICommandAvailability",
-      "parseAIJson",
-      "runAITool",
-      "RunAIToolOptions",
-      "selectPreferredAITool"
-    ],
-    "./ai/codex": [
-      "CodexAvailability",
-      "CodexRunOptions",
-      "CodexRunResult",
-      "runCodexPrompt"
-    ],
-    "./app-intents": [
-      "AppIntentHandlerOptions",
-      "AppIntentInvocation",
-      "AppIntentParameter",
-      "AppIntentParameterType",
-      "AppIntentValue"
-    ],
-    "./apple-authentication": [
-      "AppleAuthenticationScope",
-      "AppleIDCredential",
-      "AppleIDCredentialState",
-      "AppleIDFullName",
-      "AppleSignInOptions",
-      "AppleSignInResult"
-    ],
-    "./auth-session": [
-      "authorize",
-      "AuthSession",
-      "AuthSessionOptions",
-      "AuthSessionResult",
-      "callbackMatches",
-      "CompleteAuthSessionResult",
-      "createAuthSession",
-      "digestStringAsync",
-      "getRandomBytesAsync",
-      "timeout",
-      "validateCount",
-      "validateDigest",
-      "validateRedirect"
-    ],
-    "./biometrics": [
-      "BiometricAuthOptions",
-      "BiometricAuthResult",
-      "BiometricErrorReason",
-      "BiometricPromptOptions",
-      "BiometricSecretOptions",
-      "BiometricStatus"
-    ],
     "./context-menu": [
       "ContextMenuOptions",
       "ContextMenuResult",
@@ -92,50 +30,16 @@
       "LoggerOptions",
       "LoggingOptions"
     ],
-    "./passkeys": [
-      "PasskeyAssertion",
-      "PasskeyAssertionOptions",
-      "PasskeyAssertionResult",
-      "PasskeyRegistration",
-      "PasskeyRegistrationOptions",
-      "PasskeyRegistrationResult",
-      "PasskeyUserVerification"
-    ],
     "./permissions": [
       "PermissionChangeEvent",
       "PermissionListenerOptions",
       "PermissionOptions",
       "PermissionResponse"
     ],
-    "./plugins": [
-      "PLUGIN_CAPABILITIES",
-      "PluginCommand",
-      "PluginFileHandler",
-      "PluginHost",
-      "PluginHostOptions",
-      "PluginInfo",
-      "PluginManifest",
-      "PluginMenuItem",
-      "PluginState"
-    ],
     "./privileged-helper": [
       "AdminAuthorizationOptions",
       "AdminAuthorizationResult",
       "PrivilegedHelperMessageOptions"
-    ],
-    "./processes": [
-      "getProcessAvailability",
-      "ProcessExit",
-      "ProcessHandle",
-      "ProcessInput",
-      "ProcessOptions",
-      "ProcessOutput",
-      "ProcessResult",
-      "ProcessTarget",
-      "resolveCommand",
-      "runCommand",
-      "RunCommandOptions",
-      "spawn"
     ],
     "./secure-storage": [
       "deleteItemAsync",

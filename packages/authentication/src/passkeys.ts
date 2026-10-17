@@ -8,6 +8,7 @@ export type { Availability } from "@legendapp/spark-desktop-app/src/contracts";
  * as in WebAuthn's JSON serialization (`PublicKeyCredential.toJSON()`), so they pass to and from a server unchanged.
  */
 export type Base64URLString = string;
+/** How strongly the authenticator must verify the person (WebAuthn user verification). */
 export type PasskeyUserVerification = "required" | "preferred" | "discouraged";
 interface PasskeyRequestOptions {
   /** The relying party's domain (example.com): the app must be entitled to webcredentials:<it>, and it must list the app. */
@@ -21,6 +22,7 @@ interface PasskeyRequestOptions {
   /** Aborting cancels the sheet and rejects E_ABORTED with reason `appCancel`. */
   signal?: AbortSignal;
 }
+/** Options for `createPasskey` (macOS only). */
 export interface PasskeyRegistrationOptions extends PasskeyRequestOptions {
   /** The user handle, 1–64 bytes; never personal data. */
   userId: Base64URLString;
@@ -33,16 +35,19 @@ export interface PasskeyRegistrationOptions extends PasskeyRequestOptions {
   /** Credential IDs the account already has; one of them on this Mac rejects E_ALREADY_EXISTS. macOS 15 and later. */
   excludeCredentials?: Base64URLString[];
 }
+/** Options for `getPasskey` (macOS only). */
 export interface PasskeyAssertionOptions extends PasskeyRequestOptions {
   /** Only these credentials may answer. Default: any passkey for the relying party. */
   allowCredentials?: Base64URLString[];
 }
+/** A new passkey from `createPasskey`, for your server to verify and store. */
 export interface PasskeyRegistration {
   credentialId: Base64URLString;
   clientDataJSON: Base64URLString;
   /** CBOR attestation object; null when the authenticator returns none. */
   attestationObject: Base64URLString | null;
 }
+/** A passkey assertion from `getPasskey`, for your server to verify against the stored public key. */
 export interface PasskeyAssertion {
   credentialId: Base64URLString;
   /** The user handle given when the passkey was created. */
@@ -51,7 +56,9 @@ export interface PasskeyAssertion {
   authenticatorData: Base64URLString;
   signature: Base64URLString;
 }
+/** Result of `createPasskey`: the registration, or `cancel` when the person cancels. */
 export type PasskeyRegistrationResult = { type: "success"; credential: PasskeyRegistration } | { type: "cancel" };
+/** Result of `getPasskey`: the assertion, or `cancel` when the person cancels. */
 export type PasskeyAssertionResult = { type: "success"; credential: PasskeyAssertion } | { type: "cancel" };
 
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
