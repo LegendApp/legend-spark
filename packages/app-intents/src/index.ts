@@ -4,19 +4,24 @@ import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import Native, { type Spec } from "./NativeDesktopAppIntents";
 export type { AsyncRegistration, Availability } from "@legendapp/spark-desktop-app/src/contracts";
 
+/** Value type of an App Intent parameter, as declared in macos.appIntents. */
 export type AppIntentParameterType = "string" | "number" | "integer" | "boolean";
+/** A declared parameter of an `AppIntent`; an `optional` one arrives as null when left empty. */
 export interface AppIntentParameter { name: string; title: string; type: AppIntentParameterType; optional: boolean }
 /** An intent the app declares in macos.appIntents (docs/app-intents.md#declaring-intents). */
 export interface AppIntent { id: string; title: string; parameters: AppIntentParameter[]; returnsText: boolean }
+/** A parameter value: text, a finite number, a boolean, or null for an optional parameter left empty. */
 export type AppIntentValue = string | number | boolean | null;
 /** Parameter values by name; an optional parameter the person left empty is null. */
 export type AppIntentParameters = Record<string, AppIntentValue>;
+/** One run of an intent, passed to an `AppIntentHandler`: the intent `id` and its parameter values. */
 export interface AppIntentInvocation { id: string; parameters: AppIntentParameters }
 /**
  * Runs an invocation. Return the result text for an intent declared with returnsText (the system shows it and passes
  * it to the next action), nothing otherwise. Throwing fails the intent: the system shows the error's message.
  */
 export type AppIntentHandler = (invocation: AppIntentInvocation) => string | void | Promise<string | void>;
+/** Options for `addAppIntentHandler`. */
 export interface AppIntentHandlerOptions {
   /** Malformed native events and answers the system no longer waits for (the invocation timed out). Default: console.error. */
   onError?: (error: SparkError) => void;

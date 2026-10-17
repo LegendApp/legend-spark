@@ -3,6 +3,7 @@ import { SparkError, type Subscription } from "./contracts";
 import { nativePath } from "./contracts/path";
 import { onDesktopEvent } from "./events";
 import { callAppNative } from "./transport";
+/** A request to open a file (a decoded native `path`) or a non-file URL, delivered by `subscribeToOpenRequests`. `id` deduplicates replayed and live delivery. */
 export type OpenRequest = { type: "file"; id: string; path: string } | { type: "url"; id: string; url: string };
 function request(value: unknown): OpenRequest {
   if (!value || typeof value !== "object") throw new SparkError("E_INVALID_DATA", "Invalid native open request");

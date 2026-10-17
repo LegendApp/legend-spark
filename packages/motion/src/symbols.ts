@@ -9,10 +9,16 @@ import type { NativeProps } from "./SparkMotionSymbolNativeComponent";
 
 /** A mounted `MotionSymbol`, as received through its `ref`. */
 export type MotionSymbolTarget = ComponentRef<HostComponent<NativeProps>>;
+/**
+ * SF Symbol effects for `playSymbolEffect`. `bounce` and `pulse` need macOS 14; `wiggle`, `rotate` and `breathe` macOS 15;
+ * `drawOn` and `drawOff` macOS 26.
+ */
 export type SymbolEffect = "bounce" | "pulse" | "wiggle" | "rotate" | "breathe" | "drawOn" | "drawOff";
 /** How a `MotionSymbol` name change animates. */
 export type SymbolReplaceTransition = "replace" | "downUp" | "upUp" | "offUp";
+/** A symbol effect's direction; which ones an effect takes is listed under `SymbolEffectOptions.direction`. */
 export type SymbolEffectDirection = "up" | "down" | "left" | "right" | "forward" | "backward" | "clockwise" | "counterClockwise";
+/** Options for `playSymbolEffect`. Unknown options reject with E_UNSUPPORTED_OPTION, as does `repeat` with `drawOn` or `drawOff`. */
 export interface SymbolEffectOptions {
   /** Extra plays after the first; `Infinity` plays until removed. Drawing on or off plays once. */
   repeat?: number;
@@ -25,6 +31,7 @@ export interface SymbolEffectOptions {
   /** While Reduce Motion is on: `fade` (default) pulses instead and fades drawing on or off, `instant` plays nothing, `play` plays as written. */
   reducedMotion?: ReducedMotion;
 }
+/** What `playSymbolEffect` resolves with: what played, and a way to stop it. */
 export interface SymbolEffectPlayback {
   /** What played: the effect, `pulse` or `fade` (the Reduce Motion `fade` alternate), or `none` (`instant`). */
   readonly played: SymbolEffect | "fade" | "none";

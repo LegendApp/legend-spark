@@ -15,12 +15,15 @@ async function call<T>(method: string, args: object, validate: (value: unknown) 
 export async function getItemAsync(key: string, options: SecureStoreOptions = {}): Promise<string | null> {
   validateItem(key, options); return call("get", { key }, (value): value is string | null => value === null || typeof value === "string");
 }
+/** Stores a string under `key`, replacing any value there: the Keychain on macOS, Credential Manager on Windows. Keys are 1-200 letters, digits, '.', '-' or '_' (E_INVALID_ARGUMENT); options are not supported (E_UNSUPPORTED_OPTION). */
 export async function setItemAsync(key: string, value: string, options: SecureStoreOptions = {}): Promise<void> {
   validateItem(key, options);
   if (typeof value !== "string") throw new SparkError("E_INVALID_ARGUMENT", "SecureStore values must be strings");
   await call("set", { key, value }, (value): value is null => value === null);
 }
+/** Deletes the value stored under `key`. Deleting a missing key succeeds. */
 export async function deleteItemAsync(key: string, options: SecureStoreOptions = {}): Promise<void> {
   validateItem(key, options); await call("remove", { key }, (value): value is null => value === null);
 }
+/** Whether secure storage works here: macOS or Windows with NativeDesktopSecureStorage installed. Never rejects. */
 export async function isAvailableAsync(): Promise<boolean> { return (Platform.OS === "macos" || Platform.OS === "windows") && !!Native; }

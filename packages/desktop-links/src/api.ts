@@ -6,6 +6,7 @@ import { SparkError, type Availability, type Subscription } from "@legendapp/spa
 export type { Availability, Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 import { callLinks, linksCommand } from "./native";
 import Native from "./NativeDesktopLinks";
+/** Called by `addEventListener("url", ...)` with each URL the app is asked to open while running. */
 export type URLListener = (event: { url: string }) => void;
 function url(value: string) {
   if (typeof value !== "string" || !/^[a-z][a-z0-9+.-]*:/i.test(value) || value.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "URL must include a scheme and contain no NUL");
@@ -13,6 +14,7 @@ function url(value: string) {
 }
 /** Selected Expo Linking contract: resolves true after native launch acceptance. */
 export async function openURL(value: string): Promise<true> { await linksCommand("open", { url: url(value) }); return true; }
+/** Whether some installed app can open `value`. The URL must have a scheme and no NUL, else E_INVALID_ARGUMENT. */
 export function canOpenURL(value: string): Promise<boolean> {
   return Promise.resolve().then(() => callLinks("canOpen", { url: url(value) }, (value): value is boolean => typeof value === "boolean"));
 }

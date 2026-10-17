@@ -17,6 +17,7 @@ async function featureCall<T>(feature: FileFeature, label: string, method: strin
 
 // Security-scoped bookmarks
 
+/** Options for `createBookmark`. `readOnly` (default false) creates a bookmark that grants read access only. */
 export interface CreateBookmarkOptions { readOnly?: boolean }
 /**
  * An open security-scoped access. It lasts until close() resolves; the only other end is JS runtime
@@ -68,7 +69,9 @@ export async function openFullDiskAccessSettings(): Promise<void> {
 
 // Open with
 
+/** An application returned by `getApplicationsForFile`: display name, absolute path, and whether it is the file's default. */
 export interface FileApplication { name: string; path: string; isDefault: boolean }
+/** Whether `getApplicationsForFile` and `openWithApplication` are supported: macOS and Windows. */
 export function getOpenWithAvailability(): Availability { return featureAvailability("openWith"); }
 /** Applications registered to open the file, without duplicates. At most one isDefault. */
 export async function getApplicationsForFile(path: string): Promise<FileApplication[]> {
@@ -92,9 +95,13 @@ function imageSize(options: FileImageOptions, label: string) {
   return size;
 }
 const png = (value: unknown) => isBuffer(value) && value.byteLength > 8 && new Uint8Array(value, 0, 4).join() === "137,80,78,71";
+/** Whether `getFileIcon` is supported: macOS and Windows. */
 export function getFileIconAvailability(): Availability { return featureAvailability("fileIcons"); }
+/** Whether `getAppIcon` is supported: macOS only. */
 export function getAppIconAvailability(): Availability { return featureAvailability("appIcon"); }
+/** Whether `getThumbnail` is supported: macOS and Windows. */
 export function getThumbnailAvailability(): Availability { return featureAvailability("thumbnails"); }
+/** Whether `showQuickLook` is supported: macOS only. */
 export function getQuickLookAvailability(): Availability { return featureAvailability("quickLook"); }
 /** The system icon for an existing file, as size×size PNG bytes (macOS NSWorkspace; Windows IShellItemImageFactory). */
 export async function getFileIcon(path: string, options: FileImageOptions): Promise<Uint8Array> {
@@ -134,6 +141,7 @@ export async function getExtendedAttribute(path: string, name: string): Promise<
   const value = await featureCall<ArrayBuffer | null>("extendedAttributes", "Extended attributes", "getXattr", { path: absolute(path), name: attributeName(name) }, value => value === null || isBuffer(value));
   return value === null ? null : nativeBytes(value);
 }
+/** Sets an extended attribute to the given bytes (macOS). Rejects E_INVALID_ARGUMENT for an empty name or non-Uint8Array value, E_UNSUPPORTED_PLATFORM elsewhere. */
 export async function setExtendedAttribute(path: string, name: string, value: Uint8Array): Promise<void> {
   if (!(value instanceof Uint8Array)) throw new SparkError("E_INVALID_ARGUMENT", "Expected Uint8Array");
   await featureCall("extendedAttributes", "Extended attributes", "setXattr", { path: absolute(path), name: attributeName(name), bytes: value }, isNull);
@@ -150,6 +158,7 @@ export async function removeExtendedAttribute(path: string, name: string): Promi
  * reports URLs an OS recorded. Windows records originURL (ReferrerUrl) and dataURL (HostUrl).
  */
 export interface QuarantineInfo { agentName?: string; originURL?: string; dataURL?: string; timestamp?: number }
+/** Whether `getQuarantine`, `setQuarantine` and `clearQuarantine` are supported: macOS and Windows. */
 export function getQuarantineAvailability(): Availability { return featureAvailability("quarantine"); }
 const quarantineKeys = ["agentName", "originURL", "dataURL", "timestamp"] as const;
 function validQuarantine(value: unknown): value is QuarantineInfo {
@@ -180,6 +189,7 @@ export async function clearQuarantine(path: string): Promise<void> {
 
 /** availableBytes is space available to this user now. macOS importantUsageBytes adds purgeable space the system can free for user-initiated work. */
 export interface DiskSpace { totalBytes: number; availableBytes: number; macos?: { importantUsageBytes: number } }
+/** Whether `getDiskSpace` is supported: macOS and Windows. */
 export function getDiskSpaceAvailability(): Availability { return featureAvailability("diskSpace"); }
 /** Capacity of the volume containing an existing path. */
 export async function getDiskSpace(path: string): Promise<DiskSpace> {

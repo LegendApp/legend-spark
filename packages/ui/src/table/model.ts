@@ -2,6 +2,7 @@ import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 
 /** Leading and trailing follow the layout direction: leading is the right edge in right-to-left layouts. */
 export type TableColumnAlignment = "leading" | "center" | "trailing";
+/** A column of `Table` or `Outline`; `id` keys each row's `cells`. Widths are points. */
 export interface TableColumn {
   id: string;
   title: string;
@@ -19,11 +20,13 @@ export interface TableColumn {
 export interface TableRow { id: string; cells: Readonly<Record<string, string>> }
 /** `children` makes a row expandable, even when it is empty. */
 export interface OutlineRow extends TableRow { children?: readonly OutlineRow[] }
+/** Sort order of a `TableSortDescriptor`. */
 export type TableSortDirection = "ascending" | "descending";
 /** The first descriptor is the primary key; AppKit keeps earlier keys as tie-breakers. */
 export interface TableSortDescriptor { columnId: string; direction: TableSortDirection }
 /** One entry per column, in display order. */
 export interface TableColumnLayout { id: string; width: number }
+/** How many rows a user can select in `Table` or `Outline`. Default `single`. */
 export type TableSelectionMode = "none" | "single" | "multiple";
 
 /** Rows per JSON chunk. Native re-parses only chunks whose text changed. */

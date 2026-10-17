@@ -7,9 +7,11 @@ import type { DisplayId, DisplayInfo } from "./types";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 export type { DisplayId, DisplayInfo } from "./types";
 
+/** Edge insets in logical units (`DisplayDetails.safeArea`). */
 export interface DisplayInsets { top: number; left: number; bottom: number; right: number }
 /** In Hz. A fixed-rate display reports one rate; ProMotion and adaptive-sync displays vary between minimum and maximum. */
 export interface DisplayRefreshRate { minimum: number; maximum: number; variable: boolean }
+/** A display's color profile (`DisplayDetails.colorSpace`). */
 export interface DisplayColorSpace {
   /** The display profile's name as AppKit localizes it ("Color LCD" in English); for showing, not for matching. Null when the profile has none. */
   name: string | null;
@@ -25,6 +27,7 @@ export interface DisplayEDRHeadroom {
   /** In a reference (fixed brightness) preset; null when the display has none. */
   reference: number | null;
 }
+/** A display as `getDisplayDetails` and `addDisplayListener` report it: `DisplayInfo` plus arrangement, safe area, refresh rate, color space and EDR headroom. macOS only. */
 export interface DisplayDetails extends DisplayInfo {
   /** Top-left corner in the display arrangement: logical units from the primary display's top-left, Y downward. */
   origin: { x: number; y: number };
@@ -34,6 +37,7 @@ export interface DisplayDetails extends DisplayInfo {
   colorSpace: DisplayColorSpace;
   edrHeadroom: DisplayEDRHeadroom;
 }
+/** A `DisplayDetails` field, as `DisplayChangeEvent.changed` lists the ones that differ. */
 export type DisplayField = Exclude<keyof DisplayDetails, "id">;
 /** One reported change: the new display list and what differs from the previous one. */
 export interface DisplayChangeEvent {
@@ -42,6 +46,7 @@ export interface DisplayChangeEvent {
   removed: DisplayId[];
   changed: { id: DisplayId; fields: DisplayField[] }[];
 }
+/** Options for `addDisplayListener`. `onError` receives listener failures and malformed events; default `console.error`. */
 export interface DisplayListenerOptions { onError?: (error: SparkError) => void }
 
 const FIELDS: readonly DisplayField[] = ["persistentId", "name", "primary", "origin", "size", "workArea", "scaleFactor", "safeArea", "refreshRate", "colorSpace", "edrHeadroom"];

@@ -5,10 +5,15 @@ import { useControl } from "../control";
 import { callback, finite, identifier, macosViewAvailability, type SpecializedViewProps } from "../specialized";
 import NativeSidebar from "./SidebarNativeComponent";
 import NativeSidebarItem from "./SidebarItemNativeComponent";
+/** A text row for `Sidebar`'s `items`. `id` must be unique and nonempty, `label` nonempty; `selectable` defaults to true. */
 export interface SidebarItemData { id: string; label: string; selectable?: boolean }
+/** A `SidebarItem` row height in logical points, or `auto` to fit its content. */
 export type SidebarRowHeight = number | "auto";
+/** Reported by `onSelectionChange`; `id` is null when no row is selected. */
 export interface SidebarSelectionEvent { id: string | null }
+/** The sidebar's content size in logical points, reported by `onContentLayout`. */
 export interface SidebarContentLayoutEvent { width: number; height: number }
+/** Reported by a `SidebarItem`'s `onContextMenu` on a right-click, with the modifier keys held. */
 export interface SidebarContextMenuEvent {
   id: string;
   /** Logical top-left coordinates within the row and the owning window's content. */
@@ -16,6 +21,10 @@ export interface SidebarContextMenuEvent {
   windowPosition: { x: number; y: number };
   modifiers: { alt: boolean; control: boolean; meta: boolean; shift: boolean };
 }
+/**
+ * Props shared by both `Sidebar` forms. Selection is controlled: `selectedId` must name a selectable row or be null.
+ * `defaultRowHeight` (default 28) and `contentInsetTop` (default 0) are logical points.
+ */
 export interface SidebarBaseProps extends Omit<SpecializedViewProps, "children"> {
   contentInsetTop?: number;
   defaultRowHeight?: number;
@@ -23,7 +32,9 @@ export interface SidebarBaseProps extends Omit<SpecializedViewProps, "children">
   onContentLayout?: (event: SidebarContentLayoutEvent) => void;
   onSelectionChange: (event: SidebarSelectionEvent) => void;
 }
+/** Props for `Sidebar`: either `items` (text rows) or `SidebarItem` children, not both. */
 export type SidebarProps = SidebarBaseProps & ({ items: readonly SidebarItemData[]; children?: never } | { items?: never; children: ReactNode });
+/** Props for `SidebarItem`. `selectable` defaults to true; without `rowHeight` the row uses the sidebar's `defaultRowHeight`. */
 export interface SidebarItemProps extends SpecializedViewProps {
   id: string;
   rowHeight?: SidebarRowHeight;
@@ -33,6 +44,7 @@ export interface SidebarItemProps extends SpecializedViewProps {
 // Inside a Sidebar: the row width the native list reports, which React rows take, since it excludes
 // the source-list insets and a scroller. Undefined until the first native layout.
 const SidebarContext = createContext<{ rowWidth: number | undefined } | null>(null);
+/** Whether `Sidebar` and `SidebarItem` can render: macOS 14 and later with both native views linked. */
 export function getSidebarAvailability() {
   const availability = macosViewAvailability("Sidebar");
   return availability.available ? macosViewAvailability("SidebarItem") : availability;
@@ -47,6 +59,10 @@ function childRows(children: ReactNode): ReactElement<SidebarItemProps>[] {
   });
   return rows;
 }
+/**
+ * A native AppKit source-list sidebar of text `items` or React `SidebarItem` rows. Invalid props throw E_INVALID_ARGUMENT.
+ * Where the native view is unavailable it reports through `onError` and renders the rows in a plain View.
+ */
 export function Sidebar({ items, children, selectedId, contentInsetTop = 0, defaultRowHeight = 28, onContentLayout, onSelectionChange, ref, onError, ...props }: SidebarProps) {
   finite(contentInsetTop, "content inset"); finite(defaultRowHeight, "row height", 1);
   callback(onContentLayout, "content layout");
@@ -94,6 +110,7 @@ export function Sidebar({ items, children, selectedId, contentInsetTop = 0, defa
     <SidebarContext.Provider value={context}>{children}</SidebarContext.Provider>
   </NativeSidebar>;
 }
+/** A React-rendered row of a `Sidebar`, sized to the native list's row width. Outside a Sidebar it throws E_INVALID_ARGUMENT. */
 export function SidebarItem({ id, children, rowHeight, selectable = true, onContextMenu, ref, onError, style, ...props }: SidebarItemProps) {
   const sidebar = useContext(SidebarContext);
   if (!sidebar) throw new SparkError("E_INVALID_ARGUMENT", "SidebarItem requires a Sidebar parent");

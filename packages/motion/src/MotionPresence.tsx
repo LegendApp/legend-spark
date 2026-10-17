@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { motionModule } from "./motion";
 import { PresenceContext, usePresence } from "./presence-hooks";
 
+/** Props of `MotionPresence`: the keyed children whose removal waits for their MotionViews' `exit` animations. */
 export interface MotionPresenceProps { children?: ReactNode }
 
 /**

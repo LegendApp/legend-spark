@@ -4,6 +4,7 @@ import { getPermissionStatus } from "@legendapp/spark-permissions";
 import { call, checkBoolean, checkCallback, checkOptions, checkRange, checkSignal, isNull, isNumber, isRecord, mediaAvailability, requireMedia, uniqueId } from "./shared";
 export type { Availability } from "@legendapp/spark-desktop-app/src/contracts";
 
+/** An installed text-to-speech voice, from `getVoices`. Pass `identifier` as `SpeakOptions.voice`. */
 export interface SpeechVoice {
   identifier: string;
   name: string;
@@ -14,6 +15,7 @@ export interface SpeechVoice {
 }
 /** A word about to be spoken: its range in the text, in UTF-16 code units. */
 export interface SpeechWord { charIndex: number; charLength: number; word: string }
+/** Options for `speak`. Out-of-range `rate`, `pitch` or `volume` rejects E_INVALID_ARGUMENT. */
 export interface SpeakOptions {
   /** A voice identifier from getVoices(). Wins over `language`. */
   voice?: string;
@@ -32,12 +34,15 @@ export interface SpeakOptions {
 }
 /** `finished: false`: stopSpeaking stopped it, spoken or queued. */
 export interface SpeakResult { finished: boolean }
+/** Whether speech is speaking and whether it is paused, from `getSpeakingStatus`. */
 export interface SpeakingStatus { speaking: boolean; paused: boolean }
+/** Options for `pauseSpeaking`. */
 export interface PauseSpeakingOptions {
   /** immediate (default), or after the current word. */
   boundary?: "immediate" | "word";
 }
 
+/** What speech recognition can do for a locale, from `getSpeechRecognizerStatus`. */
 export interface SpeechRecognizerStatus {
   /** The locale identifier asked about (BCP 47). */
   locale: string;
@@ -48,9 +53,13 @@ export interface SpeechRecognizerStatus {
   /** Whether it can recognize on this Mac, without sending audio to Apple. */
   onDevice: boolean;
 }
+/** One recognized word or phrase: `timestamp` and `duration` in seconds into the audio, `confidence` from 0 to 1. */
 export interface SpeechRecognitionSegment { substring: string; timestamp: number; duration: number; confidence: number }
+/** A transcript and its segments, final or partial. */
 export interface SpeechTranscript { transcript: string; segments: SpeechRecognitionSegment[] }
+/** How a recognition ended: a transcript, no speech heard, or cancelled. */
 export type SpeechRecognitionOutcome = ({ status: "recognized" } & SpeechTranscript) | { status: "noSpeech" } | { status: "cancelled" };
+/** Options for `startSpeechRecognition`. */
 export interface SpeechRecognitionOptions {
   /** Default: the current locale. */
   locale?: string;
@@ -66,6 +75,7 @@ export interface SpeechRecognitionOptions {
   /** Aborting cancels the recognition (outcome cancelled). */
   signal?: AbortSignal;
 }
+/** A running recognition from `startSpeechRecognition`. */
 export interface SpeechRecognitionSession {
   /** Settles once: the final transcript, noSpeech, or cancelled; rejects when recognition fails. */
   readonly result: Promise<SpeechRecognitionOutcome>;
@@ -120,12 +130,15 @@ export async function speak(text: string, options: SpeakOptions = {}): Promise<S
 const command = async (method: string, args: Record<string, unknown> = {}) => { await call(requireMedia("Speech"), method, args, isNull); };
 /** Stops the utterance speaking and drops the queued ones; each speak() resolves `finished: false`. */
 export function stopSpeaking(): Promise<void> { return command("stopSpeaking"); }
+/** Pauses speech, immediately or after the current word. Rejects E_INVALID_ARGUMENT for another boundary. */
 export async function pauseSpeaking(options: PauseSpeakingOptions = {}): Promise<void> {
   const boundary = checkOptions(options, ["boundary"], "pause").boundary ?? "immediate";
   if (boundary !== "immediate" && boundary !== "word") throw new SparkError("E_INVALID_ARGUMENT", "boundary is immediate or word");
   await command("pauseSpeaking", { boundary });
 }
+/** Resumes paused speech. */
 export function resumeSpeaking(): Promise<void> { return command("continueSpeaking"); }
+/** Whether speech is speaking or paused now. */
 export async function getSpeakingStatus(): Promise<SpeakingStatus> {
   return call(requireMedia("Speech"), "speakingStatus", {}, (value): value is SpeakingStatus => isRecord(value) && typeof value.speaking === "boolean" && typeof value.paused === "boolean");
 }

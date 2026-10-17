@@ -8,6 +8,7 @@ import type { CloseResult, DisplayId, DisplayInfo, Size, WindowBounds, WindowId,
 // Special window types (docs/api-window-contract.md#special-window-types): ordinary Spark windows opened with
 // AppKit panel styles, levels and collection behaviors, placed and driven by these controllers. macOS only for now.
 
+/** A special window kind `getSpecialWindowAvailability` reports, one per controller in this module. macOS only for now. */
 export type SpecialWindowType = "commandBar" | "hud" | "preview" | "pictureInPicture" | "popover" | "edgeDrawer" | "overlay" | "desktopWidget" | "presenter";
 const TYPES: readonly SpecialWindowType[] = ["commandBar", "hud", "preview", "pictureInPicture", "popover", "edgeDrawer", "overlay", "desktopWidget", "presenter"];
 /** A special window's content: a registered root component and its JSON props, as `openWindow` takes them. */
@@ -20,10 +21,13 @@ export interface SpecialWindowContent {
 }
 /** A rectangle in logical units from a display's top-left corner, of any size (a tray item, a thumbnail). */
 export interface DisplayRect { displayId: DisplayId; x: number; y: number; width: number; height: number }
+/** A corner of a display's work area. */
 export type ScreenCorner = "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
+/** An edge of a display's work area. */
 export type ScreenEdge = "left" | "right" | "top" | "bottom";
 /** Behind-window vibrancy under transparent content (`macos.backgroundMaterial`). */
 export type SpecialWindowMaterial = "popover" | "hudWindow" | "sidebar" | "windowBackground" | "none";
+/** `onError` receives a controller's background failures (a hide after focus loss, a hotkey toggle); default `console.error`. */
 export interface SpecialWindowErrorOptions { onError?: (error: SparkError) => void }
 
 /** Every type is implemented on macOS. Windows reports `unsupported-platform` (Windows follow-up: docs/api-window-contract.md#special-window-types). */
@@ -119,6 +123,7 @@ const PANEL = { panelStyle: "nonactivating", spaces: "all", fullScreenAuxiliary:
 
 // Command bar ---------------------------------------------------------------------------------------------------
 
+/** Options for `createCommandBar`. `size` is 100–20000 logical units. */
 export interface CommandBarOptions extends SpecialWindowContent, SpecialWindowErrorOptions {
   size: Size;
   /** Global accelerator that shows and hides the bar from any app (`@legendapp/spark/global-shortcuts` must be installed). */
@@ -126,10 +131,12 @@ export interface CommandBarOptions extends SpecialWindowContent, SpecialWindowEr
   /** Default `popover`. */
   material?: SpecialWindowMaterial;
 }
+/** Options for `CommandBar.show`. */
 export interface CommandBarShowOptions {
   /** Default: the display under the pointer. */
   displayId?: DisplayId;
 }
+/** The controller `createCommandBar` resolves with. Its commands run in order and reject `E_CLOSED` once the window has closed. */
 export interface CommandBar extends AsyncRegistration {
   readonly id: WindowId;
   readonly shown: boolean;
@@ -187,12 +194,15 @@ export async function createCommandBar(options: CommandBarOptions): Promise<Comm
 
 // HUD -----------------------------------------------------------------------------------------------------------
 
+/** Options for `createHUD`. `size` is 100–20000 logical units; `material` defaults to `hudWindow`. */
 export interface HUDOptions extends SpecialWindowContent { size: Size; material?: SpecialWindowMaterial }
+/** Options for `HUD.show`. `displayId` defaults to the primary display. */
 export interface HUDShowOptions {
   displayId?: DisplayId;
   /** Hides the HUD after this many milliseconds (0–60000, default 1500); 0 keeps it until `hide()`. Showing it again restarts the time. */
   durationMs?: number;
 }
+/** The controller `createHUD` resolves with. Its commands run in order and reject `E_CLOSED` once the window has closed; `remove()` closes the window. */
 export interface HUD extends AsyncRegistration { readonly id: WindowId; readonly shown: boolean; show(options?: HUDShowOptions): Promise<void>; hide(): Promise<void> }
 /**
  * A HUD overlay (the volume or brightness bezel): a borderless, click-through, never-key panel with HUD
@@ -237,6 +247,7 @@ export async function createHUD(options: HUDOptions): Promise<HUD> {
 
 // Preview -------------------------------------------------------------------------------------------------------
 
+/** Options for `openPreviewWindow`. `size` is 100–20000 logical units. */
 export interface PreviewWindowOptions extends SpecialWindowContent {
   size: Size;
   /** Where the previewed item is (a thumbnail): the window grows from it when it opens and shrinks back into it when it closes. */
@@ -244,6 +255,7 @@ export interface PreviewWindowOptions extends SpecialWindowContent {
   /** Default: the display of `from`, else the primary display. */
   displayId?: DisplayId;
 }
+/** The controller `openPreviewWindow` resolves with. `close()` shrinks the window back into `from`, when given, then closes it. */
 export interface PreviewWindow { readonly id: WindowId; close(): Promise<CloseResult> }
 /** Smallest frame a window takes (100 × 100), centered on `from`. */
 function grownFrom(from: DisplayRect): WindowBounds {
@@ -282,6 +294,7 @@ export async function openPreviewWindow(options: PreviewWindowOptions): Promise<
 
 // Picture in picture -------------------------------------------------------------------------------------------
 
+/** Options for `openPictureInPicture`. `size` is 100–20000 logical units and sets the kept aspect ratio. */
 export interface PictureInPictureOptions extends SpecialWindowContent {
   size: Size;
   /** Default `bottomRight`. */
@@ -291,6 +304,7 @@ export interface PictureInPictureOptions extends SpecialWindowContent {
   /** Distance from the work area's edges, 0–500 (default 16). */
   margin?: number;
 }
+/** The controller `openPictureInPicture` resolves with. `snapTo` animates the window to a corner, of its current display by default. */
 export interface PictureInPicture { readonly id: WindowId; snapTo(corner: ScreenCorner, options?: { displayId?: DisplayId }): Promise<void>; close(): Promise<CloseResult> }
 /**
  * A picture-in-picture window: floating above other apps' windows, on every Space and over fullscreen apps,
@@ -334,6 +348,7 @@ export async function openPictureInPicture(options: PictureInPictureOptions): Pr
 
 /** What a popover hangs below: a rectangle (`Tray.getBounds()` for a tray item), or the notch (the menu bar's center on displays without one). */
 export type PopoverAnchor = { type: "rect"; rect: DisplayRect } | { type: "notch"; displayId?: DisplayId };
+/** Options for `openPopover`. `size` is 100–20000 logical units. */
 export interface PopoverOptions extends SpecialWindowContent {
   size: Size;
   anchor: PopoverAnchor;
@@ -342,6 +357,7 @@ export interface PopoverOptions extends SpecialWindowContent {
   /** Default `popover`. */
   material?: SpecialWindowMaterial;
 }
+/** The controller `openPopover` resolves with. Commands reject `E_CLOSED` once the popover has closed. */
 export interface Popover { readonly id: WindowId; close(): Promise<CloseResult> }
 const POPOVER_GAP = 4;
 /**
@@ -391,6 +407,7 @@ export async function openPopover(options: PopoverOptions): Promise<Popover> {
 
 // Edge drawer --------------------------------------------------------------------------------------------------
 
+/** Options for `createEdgeDrawer`. Lengths are logical units. */
 export interface EdgeDrawerOptions extends SpecialWindowContent {
   edge: ScreenEdge;
   /** How far the drawer reaches into the display (100–20000). */
@@ -402,6 +419,7 @@ export interface EdgeDrawerOptions extends SpecialWindowContent {
   /** Default `sidebar`. */
   material?: SpecialWindowMaterial;
 }
+/** The controller `createEdgeDrawer` resolves with. `open` and `close` slide the drawer in and out; commands reject `E_CLOSED` once its window has closed. */
 export interface EdgeDrawer extends AsyncRegistration { readonly id: WindowId; readonly isOpen: boolean; open(): Promise<void>; close(): Promise<void>; toggle(): Promise<void> }
 function drawerFrame({ id, workArea: area }: DisplayInfo, edge: ScreenEdge, thickness: number, length: number | undefined, open: boolean): WindowBounds {
   const vertical = edge === "left" || edge === "right";
@@ -455,6 +473,7 @@ export async function createEdgeDrawer(options: EdgeDrawerOptions): Promise<Edge
 
 // Overlay and desktop widget -----------------------------------------------------------------------------------
 
+/** Options for `openOverlay`. */
 export interface OverlayOptions extends SpecialWindowContent {
   /** Default: the whole primary display. */
   rect?: DisplayRect;
@@ -476,6 +495,7 @@ export async function openOverlay(options: OverlayOptions): Promise<WindowInfo> 
   return openWindow({ ...content(options), kind: "overlay", size: { width: area.width, height: area.height }, position: { displayId: area.displayId, x: area.x, y: area.y }, ignoreMouseEvents: options.clickThrough ?? true });
 }
 
+/** Options for `openDesktopWidget`. `size` (100–20000) and `position` are logical units, `position` from the display's top-left corner. */
 export interface DesktopWidgetOptions extends SpecialWindowContent {
   size: Size;
   position: { displayId: DisplayId; x: number; y: number };
@@ -499,7 +519,9 @@ export async function openDesktopWidget(options: DesktopWidgetOptions): Promise<
 
 // Presenter mode -----------------------------------------------------------------------------------------------
 
+/** Why presenter mode ended: `stop()` was called, a display disconnected, or one of its windows closed. */
 export type PresenterEndReason = "stopped" | "displayRemoved" | "windowClosed";
+/** Options for `startPresenterMode`. The audience and controller windows need different IDs and different displays. */
 export interface PresenterModeOptions {
   /** Fills the audience display, above its menu bar. */
   audience: SpecialWindowContent;
@@ -512,6 +534,7 @@ export interface PresenterModeOptions {
   /** Called once when presenter mode ends; `stop()` ends it with `stopped`. */
   onEnd?: (event: { reason: PresenterEndReason }) => void;
 }
+/** The session `startPresenterMode` resolves with. */
 export interface PresenterMode {
   readonly audienceDisplayId: DisplayId;
   readonly controllerDisplayId: DisplayId;

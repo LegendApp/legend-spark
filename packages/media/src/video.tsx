@@ -9,6 +9,7 @@ export type { Availability, Subscription } from "@legendapp/spark-desktop-app/sr
 
 /** An absolute path, or a file, http or https URL. */
 export interface VideoSource { uri: string }
+/** Options for `createVideoPlayer`. */
 export interface VideoPlayerOptions {
   /** Start over at the end instead of stopping. Default false. */
   loop?: boolean;
@@ -49,6 +50,7 @@ export type VideoPlayerEvent =
   | { type: "fullscreenChange"; fullscreen: boolean; status: VideoStatus }
   | { type: "pictureInPictureChange"; pictureInPicture: boolean; status: VideoStatus }
   | { type: "error"; error: string; status: VideoStatus };
+/** A loaded video from `createVideoPlayer`; show it with `VideoView`. Commands reject E_CLOSED after `remove`. */
 export interface VideoPlayer {
   /** Identifies the player to VideoView. */
   readonly id: string;
@@ -77,7 +79,9 @@ export interface VideoPlayer {
   /** Ends fullscreen and picture in picture, stops playback and releases the player. Idempotent. */
   remove(): Promise<void>;
 }
+/** How `VideoView` scales the video into its bounds. */
 export type VideoContentFit = "contain" | "cover" | "fill";
+/** Props for `VideoView`. */
 export interface VideoViewProps extends ViewProps {
   /** The player to show; null shows nothing. A player may be shown by several views. */
   player: VideoPlayer | null;

@@ -1,6 +1,7 @@
 import { watch } from "@legendapp/spark-file-system";
 import { SparkError, asyncRegistration, type AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 
+/** Options for `watchDocumentReload`. `delayMs` (default 100 ms, nonnegative) debounces change notifications before `onReload`; `shouldReload` can skip a reload; reload failures go to `onError`. */
 export interface DocumentReloadOptions {
   path: string;
   delayMs?: number;

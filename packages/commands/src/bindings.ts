@@ -2,11 +2,20 @@ import { Platform } from "react-native";
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { parseAccelerator, formatAccelerator } from "@legendapp/spark-desktop-app/src/contracts/accelerator";
 import type { KeyboardEvent } from "@legendapp/spark-desktop-shortcuts/src/keyboard-manager";
+/** An accelerator string such as `CmdOrCtrl+Shift+K`. `CmdOrCtrl` is Cmd on macOS and Ctrl on Windows. */
 export type HotkeyValue = string;
+/**
+ * A command hotkeys can trigger: a unique `id`, the `title` and `description` settings show, and its default accelerators.
+ * `repeat` lets key repeat fire it again and `allowExtraModifiers` matches while other modifiers are held; both default to false.
+ */
 export type HotkeyDefinition<Id extends string = string> = { id: Id; title: string; description?: string; defaultBindings: readonly HotkeyValue[]; repeat?: boolean; allowExtraModifiers?: boolean };
+/** Each command's bindings, by command ID. An empty list unbinds the command. */
 export type HotkeyBindingState<Id extends string = string> = Record<Id, readonly HotkeyValue[]>;
+/** The `version` of a `HotkeyFile`; `normalizeHotkeyFile` rejects any other with E_INVALID_DATA. */
 export const hotkeyFileVersion = 1;
+/** The persisted hotkey file `createHotkeyStore` reads and writes: the format version and every command's bindings. */
 export type HotkeyFile<Id extends string = string> = { version: typeof hotkeyFileVersion; bindings: HotkeyBindingState<Id> };
+/** `maxBindingsPerCommand` keeps only each command's first bindings, up to that many (a nonnegative integer; default no limit). */
 export interface HotkeyBindingLimitOptions { maxBindingsPerCommand?: number }
 const platform = () => Platform.OS === "windows" ? "windows" : "macos";
 export function parseBinding(value: string) { return parseAccelerator(value, platform(), { allowUnmodifiedCharacter: true, allowExtendedKeys: true }); }
@@ -15,10 +24,12 @@ export function normalizeBinding(value: string): string {
   if (typeof value === "string" && value.toLowerCase().split("+").some(token => ["cmdorctrl", "commandorcontrol"].includes(token.trim()))) canonical = canonical.replace(platform() === "windows" ? "Ctrl" : "Cmd", "CmdOrCtrl");
   return canonical;
 }
+/** Canonicalizes accelerators (keeping `CmdOrCtrl` as written) and drops duplicates. Throws E_INVALID_ARGUMENT for a non-array or an invalid accelerator. */
 export function normalizeHotkeyBindings(values: readonly string[]): readonly string[] {
   if (!Array.isArray(values)) throw new SparkError("E_INVALID_ARGUMENT", "Hotkey bindings must be an array of accelerators");
   return [...new Set(values.map(normalizeBinding))];
 }
+/** A definition's `defaultBindings`, normalized as `normalizeHotkeyBindings` does. */
 export function getDefaultHotkeyBindings<Id extends string>(definition: HotkeyDefinition<Id>): readonly string[] { return normalizeHotkeyBindings(definition.defaultBindings); }
 export function limitHotkeyBindings(bindings: readonly string[], limit?: number): readonly string[] {
   if (limit !== undefined && (!Number.isInteger(limit) || limit < 0)) throw new SparkError("E_INVALID_ARGUMENT", "maxBindingsPerCommand must be a nonnegative integer");
@@ -34,6 +45,11 @@ export function validateDefinitions<Id extends string>(definitions: readonly Hot
     normalizeHotkeyBindings(definition.defaultBindings);
   }
 }
+/**
+ * Validates a stored hotkey file (or `undefined` for none) against the definitions and returns one with every defined command:
+ * stored bindings where present, defaults otherwise, capped by `maxBindingsPerCommand`. Entries for unknown commands are dropped.
+ * Throws E_INVALID_DATA for a malformed file or invalid stored bindings, E_INVALID_ARGUMENT for invalid definitions or limit.
+ */
 export function normalizeHotkeyFile<Id extends string>(value: unknown, definitions: readonly HotkeyDefinition<Id>[], { maxBindingsPerCommand }: HotkeyBindingLimitOptions = {}): HotkeyFile<Id> {
   validateDefinitions(definitions); limitHotkeyBindings([], maxBindingsPerCommand);
   let persisted: Record<string, unknown> = {};
@@ -52,9 +68,12 @@ export function normalizeHotkeyFile<Id extends string>(value: unknown, definitio
   })) as HotkeyBindingState<Id>;
   return { version: hotkeyFileVersion, bindings };
 }
+/** The file to persist for `value`, normalized as `normalizeHotkeyFile` does (and throwing the same errors). */
 export function serializeHotkeyFile<Id extends string>(value: HotkeyFile<Id>, definitions: readonly HotkeyDefinition<Id>[], options?: HotkeyBindingLimitOptions): HotkeyFile<Id> { return normalizeHotkeyFile(value, definitions, options); }
+/** Whether two binding lists hold the same accelerators in the same order, compared after normalization. */
 export function hotkeyBindingListsEqual(left: readonly string[], right: readonly string[]): boolean { return left.length === right.length && left.every((value, index) => normalizeBinding(value) === normalizeBinding(right[index])); }
 export function bindingKey(value: string): string { return formatAccelerator(parseBinding(value)); }
+/** Accelerators bound to more than one command, mapped to those command IDs. Commands missing from `values` count with their defaults. */
 export function getHotkeyBindingConflicts<Id extends string>(definitions: readonly HotkeyDefinition<Id>[], values: HotkeyBindingState<Id>): Map<string, Id[]> {
   const commands = new Map<string, Id[]>();
   for (const definition of definitions) for (const binding of Object.hasOwn(values, definition.id) ? values[definition.id] : definition.defaultBindings) {
@@ -65,7 +84,12 @@ export function getHotkeyBindingConflicts<Id extends string>(definitions: readon
   return new Map([...commands].filter(([, ids]) => ids.length > 1));
 }
 const modifierMask = (1 << 20) | (1 << 18) | (1 << 19) | (1 << 17) | (1 << 23) | (1 << 16);
+/** Options for `matchesHotkey`. `allowExtraModifiers` (default false) also matches while modifiers beyond the binding's are held. */
 export interface HotkeyMatchOptions { allowExtraModifiers?: boolean }
+/**
+ * Whether a keyboard event presses the accelerator `value`. Key comparison ignores case; Caps Lock, and Fn on navigation and function keys,
+ * are ignored unless the binding includes them. Throws E_INVALID_ARGUMENT for an invalid accelerator.
+ */
 export function matchesHotkey(event: KeyboardEvent, value: string, { allowExtraModifiers = false }: HotkeyMatchOptions = {}): boolean {
   return matchesParsedHotkey(event, parseBinding(value), allowExtraModifiers);
 }
@@ -82,6 +106,10 @@ export function bindingFromEvent(event: KeyboardEvent): string | null {
   if (/^[\uf700-\uf747]$/.test(event.key)) modifiers &= ~(1 << 23);
   try { return normalizeBinding(formatAccelerator({ key: event.key, modifiers })); } catch { return null; }
 }
+/**
+ * An accelerator for display: symbols joined by ` + ` on macOS (`⌘ + ⇧ + K`), and on other platforms names with Cmd shown as Win.
+ * Returns `placeholder` (default empty) for null or undefined.
+ */
 export function formatHotkey(value: string | null | undefined, placeholder = ""): string {
   if (value == null) return placeholder;
   const canonical = normalizeBinding(value);

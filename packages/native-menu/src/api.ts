@@ -6,20 +6,29 @@ import { setShortcutInventory, type ShortcutInventoryEntry } from "@legendapp/sp
 import { composeWindowsMenus } from "./windows-menus";
 import { wireDecorators } from "./wire-decorators";
 type MenuLeaf = Extract<MenuInputItem, { type: "separator" | "action" | "checkbox" | "role" }>;
+/** An application-menu item: an action, checkbox, separator, role or submenu from the shared menu model, plus macOS's `alternate` and checkbox `checked: 'mixed'`. Radio and slider items are not accepted. */
 export type MenuItem = MenuLeaf | (Omit<Extract<MenuInputItem, { type: "submenu" }>, "items"> & { items: readonly MenuItem[] });
+/** Application-menu features for `getMenuAvailability(feature)`. macOS supports all of them; Windows supports only `hiddenItems`. */
 export type MenuFeature = "alternates" | "lifecycle" | "helpSearch" | "mixedState" | "icons" | "hiddenItems";
+/** Passed to `onOpen` and `onClose`. `menuId` is the contributed submenu item's ID, not the owner ID. */
 export interface MenuLifecycleEvent { menuId: string }
+/** Passed to `onAction` when the user chooses an enabled, visible item; `itemId` is its ID. */
 export type MenuAction = Extract<SharedMenuAction, { type: "action" }>;
 export type { MenuIcon, MenuRole, MenuTarget, MenuPlacement, MenuLocation } from "@legendapp/spark-desktop-app/src/contracts/menu";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
+/** A top-level application-menu item. Roots must be submenus. */
 export type MenuRootItem = Extract<MenuItem, { type: "submenu" }>;
+/** Input for `menu.update`: the owner's complete list of root submenus, replacing its previous contribution. */
 export interface MenuUpdate { items: readonly MenuRootItem[] }
+/** Options for `createMenu`. `id` names the owner (1-100 letters, digits, `_` or `-`) and must be unique among live menus. `onOpen` and `onClose` are macOS only. */
 export interface MenuOptions extends MenuUpdate { id: string; onAction?: (action: MenuAction) => void; onOpen?: (event: MenuLifecycleEvent) => void; onClose?: (event: MenuLifecycleEvent) => void }
+/** An application-menu contribution from `createMenu`. `update` republishes its items and rejects `E_CLOSED` after removal; `remove` withdraws them. */
 export interface Menu extends AsyncRegistration { readonly id: string; update(options: MenuUpdate): Promise<void> }
 interface Owner { id: string; token: string; items: MenuWireItem[] }
 let owners = new Map<string, Owner>();
 let sequence = 0, queue: Promise<unknown> = Promise.resolve();
 function serial<T>(operation: () => Promise<T>): Promise<T> { const result = queue.then(operation); queue = result.catch(() => {}); return result; }
+/** Reports application-menu availability on macOS and Windows; with a feature, also whether this host supports it (Windows reports `host-restriction` for every feature except `hiddenItems`). Throws `E_INVALID_ARGUMENT` for an unknown feature. */
 export function getMenuAvailability(feature?: MenuFeature): Availability {
   if (feature !== undefined && !["alternates", "lifecycle", "helpSearch", "mixedState", "icons", "hiddenItems"].includes(feature)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown menu feature");
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
@@ -88,6 +97,11 @@ async function publish(next: Map<string, Owner>): Promise<void> {
   setShortcutInventory(inventoryToken, shortcuts);
 }
 const inventoryToken = {};
+/**
+ * Publishes an owner's contribution to the application menu bar and resolves once native publication is acknowledged. Contributions merge by item ID, and later owners take precedence.
+ * Rejects `E_ALREADY_EXISTS` for a duplicate owner `id`, `E_INVALID_ARGUMENT` for an invalid `id`, items or callbacks, `E_UNSUPPORTED_OPTION` for lifecycle callbacks outside macOS,
+ * and `E_UNSUPPORTED_PLATFORM` or `E_MODULE_UNAVAILABLE` when application menus are unavailable.
+ */
 export async function createMenu(options: MenuOptions): Promise<Menu> {
   available();
   const token = `menu-${Date.now()}-${++sequence}`;

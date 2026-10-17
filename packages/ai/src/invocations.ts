@@ -3,6 +3,12 @@ import type { AIInvocation, AIInvocationOptions, AIToolId } from "./types";
 
 const defaultCodexReasoningEffort = "low";
 
+/**
+ * Builds the command line that runs `prompt` once with the given CLI: `claude -p <prompt>`, or an ephemeral
+ * `codex exec` that ignores user config and reads the prompt from stdin (reasoning effort `low` by default).
+ * Throws E_INVALID_ARGUMENT for an empty prompt or invalid values, and E_UNSUPPORTED_OPTION for unknown options or
+ * Codex options with `claude`.
+ */
 export function buildAIInvocation(tool: AIToolId, prompt: string, options: AIInvocationOptions = {}): AIInvocation {
   if (!["claude", "codex"].includes(tool) || typeof prompt !== "string" || !prompt.trim() || prompt.includes("\0")) throw new SparkError("E_INVALID_ARGUMENT", "Expected an AI tool and nonempty prompt");
   if (!options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected invocation options");

@@ -1,6 +1,11 @@
 import { addAppListener } from "@legendapp/spark-desktop-app";
 import { SparkError, nativeError, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 
+/**
+ * Callbacks for one logical window. `onInitialOpen` runs once at registration; `onReopenRequested` runs when the app is
+ * reopened with no visible windows; `onWindowClosed` runs when the window `windowId` closes. `onError`
+ * receives callback failures.
+ */
 export interface PrimaryWindowLifecycleOptions {
   windowId: string;
   onInitialOpen: () => void | Promise<void>;

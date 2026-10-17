@@ -39,18 +39,28 @@ export interface MotionPlanOptions {
   whenHidden?: "complete" | "pause";
   cues?: readonly MotionCue[];
 }
+/** Options for `animate`: the plan options, a start delay in milliseconds, and the Reduce Motion alternate. */
 export interface AnimateOptions extends MotionPlanOptions {
   delayMs?: number;
   /** The designed Reduce Motion alternate, played instead of `values` while Reduce Motion is on. */
   reducedValues?: MotionAnimationValues;
 }
+/** A started animation plan, from `animate`, `stagger` or `timeline`. */
 export interface MotionAnimation {
   /** Resolves when every animated property settles, `{ finished: false }` if interrupted or unmounted. Rejects with a SparkError the engine raised. */
   readonly finished: Promise<{ finished: boolean }>;
   /** Freezes the animation's properties at their presented values. */
   stop(): Promise<void>;
 }
+/**
+ * Options for `stagger`: `eachMs` between targets' starts (required), the order (`first` by default; `center` starts in the middle and
+ * spreads outward), a start `delayMs`, and the Reduce Motion alternate.
+ */
 export interface StaggerOptions extends MotionPlanOptions { eachMs: number; from?: "first" | "last" | "center"; delayMs?: number; reducedValues?: MotionAnimationValues }
+/**
+ * One step of `timeline`: a MotionView and its values, starting `offsetMs` after the timeline start, or after the previous step's end
+ * with `after: "previous"`, and an optional Reduce Motion alternate.
+ */
 export interface TimelineStep { target: MotionTarget | null; values: MotionAnimationValues; after?: "start" | "previous"; offsetMs?: number; reducedValues?: MotionAnimationValues }
 /** What motion follows of the system and of a view's window. */
 export interface MotionEnvironment {
@@ -66,6 +76,10 @@ export interface MotionEnvironment {
   /** Whether the view's window is visible (not hidden, minimized or fully occluded); null without a view. */
   windowVisible: boolean | null;
 }
+/**
+ * A MotionView's presented state from `getMotionState`, by engine property (colors as their OKLCH components): values,
+ * velocities and the properties animating now.
+ */
 export interface MotionState {
   values: Record<MotionChannelProperty, number>;
   /** Units per second. */
@@ -74,6 +88,7 @@ export interface MotionState {
   /** Color properties as they show now, as CSS `oklch(L C H / A)`. */
   colors: Record<MotionColorProperty, MotionColor>;
 }
+/** Options for `linkScroll`: the scroll view, the `axis` (default `y`), at least two input offsets, and each linked property's outputs. */
 export interface ScrollLinkOptions {
   /** The React Native ScrollView whose `nativeID` matches, in the target's window. */
   source: { nativeID: string };
@@ -85,6 +100,10 @@ export interface ScrollLinkOptions {
   /** Beyond the first and last stop: hold the end values (`clamp`, default) or continue the end segments (`extend`). */
   extrapolate?: "clamp" | "extend";
 }
+/**
+ * Frame telemetry from `recordMotionFrames`: frames sampled on the target's display link and how many animated, dropped or stalled,
+ * the longest gap between frames in milliseconds, the display's refresh rate, and the recording's duration in milliseconds.
+ */
 export interface MotionFrameReport {
   frames: number;
   /** Frames while an animation was due to move. */
@@ -104,6 +123,7 @@ const HAPTICS: readonly MotionHaptic[] = ["generic", "alignment", "levelChange"]
 const PLAN_OPTIONS = ["reducedMotion", "whenHidden", "cues"] as const;
 let nextId = 0;
 
+/** Whether motion works here: macOS only (`unsupported-platform` elsewhere), and `missing-module` without the native module or SparkMotionView. */
 export function getMotionAvailability(): Availability {
   if (Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };
   return NativeSparkMotion && UIManager.hasViewManagerConfig("SparkMotionView") ? { available: true } : { available: false, reason: "missing-module" };

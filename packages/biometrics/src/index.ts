@@ -12,6 +12,7 @@ export type BiometryType = "touchId" | "none" | "unknown";
  * `notPaired`: no Magic Keyboard with Touch ID is paired.
  */
 export type BiometricState = "available" | "notAvailable" | "notEnrolled" | "lockout" | "passcodeNotSet" | "disconnected" | "notPaired";
+/** Result of `getBiometricStatus`: the sensor type and whether each policy can be evaluated now. */
 export interface BiometricStatus {
   biometryType: BiometryType;
   /** Biometrics alone (fallback `app` or `none`, and the biometry secret accesses). */
@@ -25,12 +26,14 @@ export interface BiometricStatus {
  * Password") that ends the prompt with `userFallback`, for the app's own sign-in.
  */
 export type BiometricFallback = "password" | "app" | "none";
+/** Prompt text for `getBiometricSecret`; `BiometricAuthOptions` extends it. */
 export interface BiometricPromptOptions {
   /** Required: why the app asks, shown in the prompt ("unlock your vault"). 1–300 characters. */
   reason: string;
   /** The cancel button's title. 1–60 characters. Default: macOS's. */
   cancelLabel?: string;
 }
+/** Options for `authenticateWithBiometrics`. */
 export interface BiometricAuthOptions extends BiometricPromptOptions {
   /** Default `none`: the login password is offered only when this asks for it. */
   fallback?: BiometricFallback;
@@ -41,15 +44,21 @@ export interface BiometricAuthOptions extends BiometricPromptOptions {
 }
 /** Outcomes the person (or macOS, for `systemCancel`) chose; they resolve. Everything else rejects a BiometricError. */
 export type BiometricOutcome = "userCancel" | "systemCancel" | "userFallback" | "authenticationFailed";
+/** Result of `authenticateWithBiometrics`: success, or the outcome the person (or macOS) chose. */
 export type BiometricAuthResult = { success: true } | { success: false; reason: BiometricOutcome };
 /** `value` is null when there is no secret under the key (then nothing prompts). */
 export type BiometricSecretResult = { success: true; value: string | null } | { success: false; reason: Exclude<BiometricOutcome, "userFallback"> };
 /** Who may read a secret: biometrics enrolled now (adding or removing a fingerprint makes it unreadable), any enrolled biometrics, or biometrics or the login password. */
 export type BiometricSecretAccess = "biometryCurrentSet" | "biometryAny" | "biometryOrPassword";
+/** Options for `setBiometricSecret`. */
 export interface BiometricSecretOptions {
   /** Default `biometryCurrentSet`. */
   access?: BiometricSecretAccess;
 }
+/**
+ * `BiometricError.reason`. Unavailable states, `notInteractive` and `missingEntitlement` reject E_UNAVAILABLE;
+ * `appCancel` rejects E_ABORTED; `invalidContext` rejects E_CLOSED.
+ */
 export type BiometricErrorReason =
   | Exclude<BiometricState, "available">
   | "notInteractive" | "appCancel" | "invalidContext" | "missingEntitlement";

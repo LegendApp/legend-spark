@@ -4,8 +4,11 @@ import type { AudioMetadata } from "./media-types";
 export * from "./media-types";
 /** Seconds throughout. Commands reject when the backend cannot complete them. */
 export type AudioStatus = { playing: boolean; currentTime: number; duration: number; didJustFinish: boolean; error: string | null; volume: number };
+/** Audio to load: a URI or absolute desktop file path, and an optional title for system media controls. */
 export type AudioSource = { uri: string; title?: string };
+/** Options for `createAudioPlayer`. `loadTimeoutMs` bounds loading in ms (default 15000); `signal` aborts loading with E_ABORTED. */
 export interface AudioPlayerOptions { loadTimeoutMs?: number; signal?: AbortSignal }
+/** A loaded audio player. Commands run in order and reject with E_CLOSED after `remove`. Volume is 0 to 1 and `seekTo` takes seconds. */
 export interface AudioPlayer {
   setVolume(volume: number): Promise<void>;
   setMetadata(metadata: AudioMetadata | null): Promise<void>;

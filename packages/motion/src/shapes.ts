@@ -6,8 +6,11 @@ import { parseSvgPath, type Cubic, type Point, type Subpath } from "./svg-path";
 // shape interpolates their points one to one: paths with the same subpaths (each open or closed alike) but different
 // segment counts are subdivided, which keeps each shape exactly; paths whose subpaths differ cannot morph.
 
+/** How a MotionShape's open stroke ends are drawn. */
 export type MotionShapeLineCap = "butt" | "round" | "square";
+/** How a MotionShape's stroke corners are joined. */
 export type MotionShapeLineJoin = "miter" | "round" | "bevel";
+/** Which areas a MotionShape's fill covers where its paths overlap or cross themselves. */
 export type MotionShapeFillRule = "nonzero" | "evenodd";
 export interface MotionShapeStyle { lineCap?: MotionShapeLineCap; lineJoin?: MotionShapeLineJoin; fillRule?: MotionShapeFillRule }
 

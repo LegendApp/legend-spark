@@ -10,6 +10,7 @@ export type {
   ContextualDragOperations, DragDropFeature, DragImage, DragPayload, DragSource, DragOptions, DragOperation, DragOverEvent, DropEvent, DragEndEvent, PromisedFile,
   PromisedFileWriteRequest, SpringLoadHighlight, SpringLoadHighlightEvent,
 } from "./contracts";
+/** Props for `DragDropView`: view props, `DragOptions`, a drag `source` and drag event callbacks. `disabled` (default false) ignores drag events. `onError` defaults to `console.error`. */
 export interface DragDropViewProps extends ViewProps, DragOptions {
   disabled?: boolean;
   source?: DragSource;
@@ -51,6 +52,7 @@ function useUnavailableReport(unavailable: string | undefined, onError: (error: 
     }
   }, [unavailable, onError]);
 }
+/** A view that is a drag source when `source` is set and a drop target for `acceptedTypes`. Invalid props throw E_INVALID_ARGUMENT. Where drag and drop is unavailable it renders a plain `View` and reports E_UNSUPPORTED_PLATFORM or E_MODULE_UNAVAILABLE through `onError`. macOS and Windows. */
 export function DragDropView({
   source, sourceOperations, ignoreModifierKeys, dragImage, acceptedOperations, acceptedTypes, springLoading, disabled = false,
   onDrop, onDragEnter, onDragOver, onDragLeave, onDragEnd, onPromisedFileWrite, onSpringLoad, onSpringLoadHighlight, onError = console.error, ...props

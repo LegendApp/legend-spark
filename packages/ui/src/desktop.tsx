@@ -16,6 +16,11 @@ export { getControlAvailability } from "./availability";
 export { getButtonAvailability } from "./button";
 export type { ButtonVariant, ButtonAvailabilityOptions } from "./types";
 
+/**
+ * A native push button labelled by its string `children` (AppKit on macOS, a native button on Windows). On macOS an omitted
+ * `variant` is a plain push button. AppKit-only variants and explicit sizes throw E_UNSUPPORTED_PLATFORM on Windows; an
+ * unavailable native view reports through `onError` and renders a disabled placeholder.
+ */
 export function Button(props: ButtonProps) {
   validateButton(props);
   requireAppKitButtonOptions(props);
@@ -28,6 +33,10 @@ export function Button(props: ButtonProps) {
   return <NativeButton ref={control.ref} title={children} disabled={control.disabled} variant={variant} controlSize={size} accessibilityLabel={accessibilityLabel}
     onButtonPress={() => { if (control.active()) onPress?.(); }} onUnavailable={control.unavailable} testID={testID} style={[frame, style]} />;
 }
+/**
+ * A native text input on macOS and Windows, controlled (`value`) or uncontrolled (`defaultValue`). Switching modes after
+ * mount throws E_INVALID_ARGUMENT. An unavailable native view reports through `onError` and renders its text disabled.
+ */
 export function TextInput(props: TextInputProps) {
   const control = useControl(props, getControlAvailability("text-input"));
   const value = useTextValue(props);
@@ -59,7 +68,15 @@ function Selection({ segmented, ...props }: SelectProps & { segmented: boolean }
   if (Platform.OS === "windows") return <WindowsSelect {...common} itemsJson={JSON.stringify(options)} disabled={control.disabled} onSelectionChange={changed} onUnavailable={control.unavailable} />;
   return <NativeSelect {...common} itemsJson={JSON.stringify(options)} enabled={!control.disabled} onValueChange={changed} />;
 }
+/**
+ * A native pop-up menu (NSPopUpButton on macOS, a native select on Windows) choosing one of `options`. `value` must match
+ * an option and options need nonempty labels and unique values (E_INVALID_ARGUMENT).
+ */
 export function Select(props: SelectProps) { return <Selection {...props} segmented={false} />; }
+/**
+ * A native NSSegmentedControl with the same options contract as `Select`. macOS only; on Windows it reports
+ * E_UNSUPPORTED_PLATFORM through `onError` and renders a disabled placeholder.
+ */
 export function SegmentedControl(props: SegmentedControlProps) { return <Selection {...props} segmented />; }
 
 export * from "./primitives-controls";

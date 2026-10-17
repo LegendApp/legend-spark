@@ -1,6 +1,7 @@
 import { useMotionView, type MotionViewProps } from "./MotionView";
 import { SHADER_PROPERTIES, shaderEffectJson, type MotionShaderEffect } from "./shaders";
 
+/** Props of `MotionShader`: MotionView props plus the shader `effect`. */
 export interface MotionShaderProps extends MotionViewProps {
   /** The built-in effect over the view and its children; its property (`rippleProgress`, …) animates like any motion property. */
   effect: MotionShaderEffect;

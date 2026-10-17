@@ -13,6 +13,7 @@ export type LogLevel = "debug" | "info" | "notice" | "error" | "fault";
  * a throwing toJSON makes the fields { unserializable: <its message> }.
  */
 export type LogFields = { readonly [key: string]: unknown };
+/** Options for `createLogger`. */
 export interface LoggerOptions {
   /**
    * Shows messages in the unified log as written. Default false: the system stores them as
@@ -30,6 +31,7 @@ export interface Logger {
   error(message: string, fields?: LogFields): void;
   fault(message: string, fields?: LogFields): void;
 }
+/** Log file settings, under `files` in `configureLogging`. Sizes are in bytes. */
 export interface LogFileOptions {
   /** Absolute folder for app.log and its rotated files. Default: ~/Library/Logs/<bundle identifier>. */
   directory?: string;
@@ -38,13 +40,16 @@ export interface LogFileOptions {
   /** app.log plus up to maxFiles - 1 rotated files (app.1.log is the newest). 1 to 100. Default 5. */
   maxFiles?: number;
 }
+/** Options for `configureLogging`. Omitted fields keep their current values. */
 export interface LoggingOptions {
   /** The least severe level written. Default "info". */
   level?: LogLevel;
   /** Merges into the current file settings, or the defaults while files are off; `null` stops writing files. Files are on by default. */
   files?: LogFileOptions | null;
 }
+/** A log file as `getLogFiles` lists it: its absolute path and size in bytes. */
 export interface LogFile { path: string; bytes: number; /** Unix time in milliseconds. */ modifiedAt: number }
+/** Options for `exportDiagnostics`. */
 export interface ExportDiagnosticsOptions {
   /** App details to include in diagnostics.json as `info`, such as the open document's type or a feature flag. */
   info?: LogFields;
@@ -63,6 +68,7 @@ export class LogWriteError extends SparkError {
     this.dropped = dropped;
   }
 }
+/** What `exportDiagnostics` resolves with: the zip's path, its size in bytes, and the files inside it. */
 export interface DiagnosticsExport {
   path: string;
   bytes: number;

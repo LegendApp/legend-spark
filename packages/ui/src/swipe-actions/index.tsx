@@ -5,6 +5,10 @@ import { identifier, macosViewAvailability, type SpecializedViewProps } from "..
 import NativeSwipeActions from "./SwipeActionsNativeComponent";
 /** `dismisses` slides the row away on commit; remove or remount the row to recover after failure/undo. */
 export interface SwipeAction { id: string; title: string; symbol: string; color: string; dismisses?: boolean }
+/**
+ * Props for `SwipeActions`. Action IDs must be unique across both sides and colors are `#RRGGBB` or `#RRGGBBAA`
+ * (E_INVALID_ARGUMENT otherwise). `onAction` receives the ID of the action that ran.
+ */
 export interface SwipeActionsProps extends SpecializedViewProps {
   /** Revealed by swiping right; the first action is outermost and runs on a full swipe. */
   leadingActions?: readonly SwipeAction[];
@@ -24,6 +28,7 @@ function actionsJson(actions: readonly SwipeAction[], ids: Set<string>) {
   }
   return JSON.stringify(actions.map(({ id, title, symbol, color, dismisses = false }) => ({ id, title, symbol, color, dismisses })));
 }
+/** Whether `SwipeActions` can render: macOS 14 and later with the native view linked. */
 export function getSwipeActionsAvailability() { return macosViewAvailability("SwipeActions"); }
 /** Native trackpad swipe actions. In recycling lists, key this view by the logical row ID. */
 export function SwipeActions({ leadingActions = [], trailingActions = [], onAction, ref, onError, ...props }: SwipeActionsProps) {

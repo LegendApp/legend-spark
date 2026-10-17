@@ -6,6 +6,10 @@ import { cubicAt, parseSvgPath, type Point } from "./svg-path";
 // rotate), sampled at even distances along it, so the view moves along the path at the easing's pace. The engine
 // plays them like any keyframes: on the compositor, interruptible, with the Reduce Motion alternate.
 
+/**
+ * Options for `motionPath`: the duration in milliseconds (required), the pace's easing, whether to rotate along the path, and
+ * `delayMs`, `repeat` and `reverse` as in AnimationOptions.
+ */
 export interface MotionPathOptions extends Pick<AnimationOptions, "delayMs" | "repeat" | "reverse"> {
   durationMs: number;
   /** The pace along the path (default `easeInOut`). */
@@ -13,6 +17,7 @@ export interface MotionPathOptions extends Pick<AnimationOptions, "delayMs" | "r
   /** Turn the view to follow the path's direction (degrees, 0 along +x). */
   rotate?: boolean;
 }
+/** What `motionPath` returns: keyframes of `translateX` and `translateY`, plus `rotate` when asked, to spread into `animate`. */
 export interface MotionPathValues {
   translateX: KeyframesSpec;
   translateY: KeyframesSpec;

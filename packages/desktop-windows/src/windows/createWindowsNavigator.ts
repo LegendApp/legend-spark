@@ -13,6 +13,7 @@ import { DefaultErrorFallback, createWindowRoot, type RootContent, type RootHost
 import { createUndoStack } from "./undo";
 import type { DuplicateWindowOptions, IsolatedRuntime, NavigatorWindowOptions, NewWindowTab, NewWindowTabRequest, SavedWindow, UndoMenuLabels, WindowComponentProps, WindowConfigEntry, WindowErrorEvent, WindowInstance, WindowPoolState, WindowSession, WindowSessionFeature, WindowsConfig, WindowsNavigatorOptions } from "./types";
 
+/** The argument of a navigator's `open` and `openInstance` when the component has required props: `props`, plus window options without identity. */
 export type NavigatorOpenOptions<P> = { props: P; options?: NavigatorWindowOptions };
 type OpenArguments<P> = {} extends P ? [options?: { props?: P; options?: NavigatorWindowOptions }] : [options: NavigatorOpenOptions<P>];
 /**
@@ -225,12 +226,13 @@ function contentOf(entry: WindowConfigEntry): RootContent {
   };
 }
 
+type NewTabCheck<T extends WindowsConfig> = { [K in keyof T]: { newTab?: (instance: WindowInstance) => NewWindowTab<T> | Promise<NewWindowTab<T>> } };
 /**
  * Registers named windows. An entry with `id` is a singleton; one without opens a new window per
  * `open`. Each window gets an undo stack, menus that follow the key window, window-scoped hotkeys,
- * a macOS toolbar and an error boundary.
+ * a macOS toolbar and an error boundary. Throws `E_INVALID_ARGUMENT` for an invalid configuration,
+ * including an entry with `hotkeys` when `options.hotkeys` is missing.
  */
-type NewTabCheck<T extends WindowsConfig> = { [K in keyof T]: { newTab?: (instance: WindowInstance) => NewWindowTab<T> | Promise<NewWindowTab<T>> } };
 export function createWindowsNavigator<const T extends WindowsConfig>(config: T & NewTabCheck<T>, options: WindowsNavigatorOptions = {}): WindowsNavigator<T> {
   object(config, "navigator configuration"); object(options, "navigator options");
   keys(options, ["hotkeys", "undoLabels", "errorFallback", "onError"]);

@@ -11,11 +11,19 @@ export type PopoverBehavior = "transient" | "semi-transient" | "application-defi
 export type PopoverEdge = "top" | "bottom" | "leading" | "trailing";
 /** Logical points from the top-left. */
 export interface PopoverRect { x: number; y: number; width: number; height: number }
+/**
+ * What a `Popover` points at: a host view ref, optionally with a rect within it, or a rect in the window's content.
+ * Rects take finite coordinates and nonnegative sizes (E_INVALID_ARGUMENT otherwise).
+ */
 export type PopoverAnchor =
   /** A mounted React Native host view that is not flattened; `rect` is within it and defaults to its bounds. */
   | { ref: RefObject<View | null>; rect?: PopoverRect }
   /** A rect in the owning window's content. */
   | { rect: PopoverRect; ref?: never };
+/**
+ * Props for `Popover`. Defaults: `behavior` `transient`, `preferredEdge` `bottom`, `detachable` false. An anchor ref that
+ * is not mounted while `open` reports E_NOT_FOUND through `onError`.
+ */
 export interface PopoverProps {
   /** Controlled. `onClose` reports a close; keep `open` true to show the popover again. */
   open: boolean;
@@ -36,6 +44,7 @@ export interface PopoverProps {
 const BEHAVIORS: readonly PopoverBehavior[] = ["transient", "semi-transient", "application-defined"];
 const EDGES: readonly PopoverEdge[] = ["top", "bottom", "leading", "trailing"];
 const STATES = ["shown", "closed", "detached"] as const;
+/** Whether `Popover` can render: macOS 14 and later with the native view linked. */
 export function getPopoverAvailability() { return macosViewAvailability("SparkPopover"); }
 
 function validRect(rect: unknown): asserts rect is PopoverRect {

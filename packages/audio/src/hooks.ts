@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createAudioPlayer } from "./index";
 import type { AudioPlayer, AudioPlayerOptions, AudioSource } from "./types";
 
+/** State returned by `useAudioPlayer`: loading, ready with its player, or the error that creation failed with. */
 export type AudioPlayerState = { status: "loading" } | { status: "ready"; player: AudioPlayer } | { status: "error"; error: unknown };
+/** Options for `useAudioPlayer`: the `createAudioPlayer` options plus a cleanup error callback. */
 export interface AudioPlayerHookOptions extends AudioPlayerOptions {
   /** Cleanup failures cannot update an unmounted component. The player permits retry. */
   onCleanupError?(error: unknown, player: AudioPlayer): void;

@@ -13,6 +13,7 @@ export type PermissionKind =
  * `writeOnly`: calendar access to add events but not read them. `unknown`: a state this SDK does not know (a newer macOS).
  */
 export type MacOSPermissionAuthorization = "notDetermined" | "restricted" | "denied" | "authorized" | "writeOnly" | "notGranted" | "unknown";
+/** A permission's state, as `getPermissionStatus` and `requestPermission` resolve it. `macos` carries the native authorization. */
 export interface PermissionResponse {
   kind: PermissionKind;
   /** `denied` includes restricted (parental controls or a device profile), write-only calendar access and not granted. */
@@ -22,11 +23,14 @@ export interface PermissionResponse {
   canAskAgain: boolean | null;
   macos?: { authorization: MacOSPermissionAuthorization };
 }
+/** Options for `getPermissionStatus` and `requestPermission`. */
 export interface PermissionOptions {
   /** Automation only, and required there: the bundle identifier of the app to send Apple events to. */
   target?: string;
 }
+/** Passed to an `addPermissionListener` listener when a permission's state changes: the new response and the one before it. */
 export interface PermissionChangeEvent { kind: Exclude<PermissionKind, "automation">; permission: PermissionResponse; previous: PermissionResponse }
+/** Options for `addPermissionListener`. */
 export interface PermissionListenerOptions {
   /** Kinds to report. Default: every kind except automation, which is per target app and has no change events. */
   kinds?: readonly Exclude<PermissionKind, "automation">[];

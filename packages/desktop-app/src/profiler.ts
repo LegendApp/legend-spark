@@ -6,10 +6,12 @@ import type { DevToolsAvailability, DevToolsRuntime } from "./devtools";
 // in ./profiler/, which @legendapp/spark/runtime-entry requires only in development bundles and which registers itself
 // here, and its native half compiles only into development builds (docs/devtools.md#profiling).
 
+/** Options for `startProfiling`. */
 export interface StartProfilingOptions {
   /** Hermes samples each JavaScript runtime this many times per second, 1 to 10000. Default 1000. */
   samplesPerSecond?: number;
 }
+/** Options for `stopProfiling`. */
 export interface StopProfilingOptions {
   /** An existing directory to write the files into. Default: a new directory in the system's temporary directory. */
   directory?: string;
@@ -27,6 +29,7 @@ export type ProfiledRuntime = { runtime: DevToolsRuntime; path: string; samples:
  * readable. The other runtimes' profiles are written all the same.
  */
 export interface MissingRuntime { runtime: DevToolsRuntime; code: "E_TIMEOUT" | "E_UNAVAILABLE" | "E_INVALID_DATA"; message: string }
+/** What `stopProfiling` wrote: the Chrome trace, a `.cpuprofile` per runtime, the runtimes it could not collect and frame statistics. */
 export interface ProfilingResult {
   /** Where the files are. */
   directory: string;

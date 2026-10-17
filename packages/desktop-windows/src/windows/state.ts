@@ -3,6 +3,7 @@ import { SparkError, type Subscription } from "@legendapp/spark-desktop-app/src/
 import { instanceRecord, isClosedWindow, jsonCopy, restorableStates, windowStates, type StateSeed, type WindowStateInternals } from "./instances";
 import type { WindowInstance } from "./types";
 
+/** Options for `createWindowState`. `initial` creates a window's private value on first access. */
 export interface WindowStateOptions<T> {
   initial: (window: WindowInstance) => T;
   /**
@@ -43,6 +44,10 @@ function validKey(key: unknown): asserts key is string {
   if (typeof key !== "string" || !keyPattern.test(key)) throw new SparkError("E_INVALID_ARGUMENT", "State keys require 1–200 letters, numbers or _ . : -");
 }
 
+/**
+ * Creates a per-window value that can be promoted to, or attached to, an app-scoped value. Throws `E_ALREADY_EXISTS`
+ * when another live state uses `restorationKey` (outside development, where Fast Refresh replaces it).
+ */
 export function createWindowState<T>(options: WindowStateOptions<T>): WindowState<T> {
   if (!options || typeof options.initial !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected an initial(window) function");
   const { initial, restorationKey } = options;

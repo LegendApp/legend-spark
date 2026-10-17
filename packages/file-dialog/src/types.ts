@@ -4,6 +4,7 @@ export interface FileFilter {
   name?: string;
   extensions: readonly string[];
 }
+/** One choice in a pop-up accessory control: `value` is returned when selected, `label` is shown. Values and labels must be unique within the control. */
 export interface DialogAccessoryOption { value: string; label: string }
 /**
  * A native control in the dialog's accessory area. Its final value returns with an accepted
@@ -17,6 +18,7 @@ export type DialogAccessoryControl =
 export type DialogAccessoryValues = Readonly<Record<string, boolean | string>>;
 /** Features beyond the base open/save panels, for `getFileDialogAvailability(feature)`. */
 export type FileDialogFeature = "accessory";
+/** Options shared by `openFileDialog` and `saveFileDialog`. Unknown keys reject E_UNSUPPORTED_OPTION. */
 export interface FileDialogOptions {
   /** Attach to this live Spark window. Omitted presents an unowned dialog. */
   windowId?: string;
@@ -27,6 +29,7 @@ export interface FileDialogOptions {
   /** 1–8 controls shown below the file browser (macOS). Check `getFileDialogAvailability("accessory")`; other targets reject E_UNSUPPORTED_OPTION. */
   accessory?: readonly DialogAccessoryControl[];
 }
+/** Options for `openFileDialog`. `selection` defaults to files; `multiple` (default false) allows several; `title`, `message` and `prompt` (the accept button text) are passed to the native panel. */
 export interface OpenFileDialogOptions extends FileDialogOptions {
   selection?: "files" | "directories";
   multiple?: boolean;
@@ -36,7 +39,9 @@ export interface OpenFileDialogOptions extends FileDialogOptions {
   /** macOS can select files and directories in the same panel. Ignored on other targets. */
   macos?: { mixedSelection?: boolean };
 }
+/** Options for `saveFileDialog`. `defaultName` is the suggested file name. */
 export interface SaveFileDialogOptions extends FileDialogOptions { defaultName?: string }
 /** `accessory` is present only when the options supplied accessory controls. */
 export type OpenFileDialogResult = { canceled: true } | { canceled: false; paths: string[]; accessory?: DialogAccessoryValues };
+/** Result of `saveFileDialog`. `accessory` is present only when the options supplied accessory controls. */
 export type SaveFileDialogResult = { canceled: true } | { canceled: false; path: string; accessory?: DialogAccessoryValues };

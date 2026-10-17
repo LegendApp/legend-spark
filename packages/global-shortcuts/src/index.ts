@@ -5,11 +5,13 @@ import { parseAccelerator } from "@legendapp/spark-desktop-app/src/contracts/acc
 import { SparkError, invokeNative, parseNativeResult, asyncRegistration, type AsyncRegistration, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { setShortcutInventory } from "@legendapp/spark-desktop-app/src/contracts/shortcut-inventory";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
+/** Options for `registerGlobalShortcut`. */
 export interface GlobalShortcutOptions {
   /** Fire on keyboard auto-repeat. Windows registers without MOD_NOREPEAT; macOS hotkeys never deliver repeats, so true rejects there. */
   repeat?: boolean;
 }
 let sequence = 0;
+/** Whether system-wide shortcuts can be registered: macOS and Windows with NativeDesktopGlobalShortcuts installed. Other platforms report `unsupported-platform`. */
 export function getGlobalShortcutAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
   return Native ? { available: true } : { available: false, reason: "missing-module" };

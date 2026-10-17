@@ -35,6 +35,12 @@ function publicInfo(value: NativeWindowInfo): WindowInfo {
   const { id, kind, title, parentId, modal, visible, focused, minimized, maximized, fullscreen, bounds: { displayId, x, y, width, height } } = value;
   return { id, kind, title, parentId, modal, visible, focused, minimized, maximized, fullscreen, bounds: { displayId, x, y, width, height } };
 }
+/**
+ * Opens a window that renders the registered `component` with `props`, and resolves with its state once it exists.
+ * An `overlay` defaults to borderless, transparent, shadowless, always on top and not resizable or minimizable (on macOS
+ * at the `status` level). Rejects `E_INVALID_ARGUMENT` for invalid options, including the host-owned ID `main`, and
+ * `E_UNSUPPORTED_OPTION` for options this platform does not implement.
+ */
 export function openWindow(options: WindowOpenOptions): Promise<WindowInfo> { return open(options, false); }
 /** A window pool's warm window: no use of it is open yet, so the app gets no windowOpened until it is taken. Not public. */
 export function openWarmWindow(options: WindowOpenOptions): Promise<WindowInfo> { return open(options, true); }
@@ -70,8 +76,11 @@ async function open(options: WindowOpenOptions, warm: boolean): Promise<WindowIn
   }
   return publicInfo(await windowCall("open", snapshot, isInfo));
 }
+/** The window's current state. Rejects `E_INVALID_ARGUMENT` for a malformed ID. */
 export async function getWindow(id: string): Promise<WindowInfo> { windowId(id); return publicInfo(await windowCall("info", { id }, isInfo)); }
+/** The current state of every open window. */
 export async function listWindows(): Promise<WindowInfo[]> { return (await windowCall("list", {}, (value): value is NativeWindowInfo[] => Array.isArray(value) && value.every(isInfo))).map(publicInfo); }
+/** Every connected display, in logical units. `getDisplayDetails` from `/displays` adds arrangement, refresh rate and color details (macOS). */
 export async function getDisplays(): Promise<DisplayInfo[]> { return getNativeDisplays(); }
 /** Pointer position in Spark's coordinate vocabulary: logical units relative to the containing display's top-left corner. */
 export async function getCursorPoint(): Promise<CursorPoint> { return windowCall("cursorPoint", {}, (value): value is CursorPoint => record(value) && typeof value.displayId === "string" && Number.isFinite(value.x) && Number.isFinite(value.y)); }
@@ -81,6 +90,10 @@ export async function getCursorPoint(): Promise<CursorPoint> { return windowCall
  */
 export const pooledWindows = new Map<string, boolean>();
 export const noteWindowChanged = (id: string) => { if (pooledWindows.has(id)) pooledWindows.set(id, true); };
+/**
+ * Changes options of an open window; omitted options keep their values. Rejects `E_UNSUPPORTED_OPTION` for
+ * `macos.panelStyle` (fixed at creation), for `macos` groups off macOS and for macOS-only options on Windows.
+ */
 export async function setWindowOptions(id: string, options: WindowUpdateOptions): Promise<void> {
   windowId(id); validateOptions(options, Platform.OS, false);
   noteWindowChanged(id);
@@ -106,25 +119,37 @@ export async function setWindowBounds(id: string, value: WindowBounds, options: 
   }
   await windowCommand("bounds", { id, bounds: value });
 }
+/** Shows the window and, unless `focus: false`, focuses it. */
 export async function showWindow(id: string, options: ShowWindowOptions = {}): Promise<void> {
   windowId(id); object(options, "show options"); keys(options, ["focus"]);
   if (options.focus !== undefined && typeof options.focus !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "focus must be boolean");
   await windowCommand("show", { id, focus: options.focus ?? true });
 }
+/** Centers the window, on the display `displayId` when given. */
 export async function centerWindow(id: string, options: CenterWindowOptions = {}): Promise<void> {
   windowId(id); object(options, "center options"); keys(options, ["displayId"]);
   if (options.displayId !== undefined) text(options.displayId, "display ID", false);
   await windowCommand("center", { id, ...options });
 }
+/** Hides the window without closing it. */
 export async function hideWindow(id: string): Promise<void> { windowId(id); await windowCommand("hide", { id }); }
+/** Minimizes the window. */
 export async function minimizeWindow(id: string): Promise<void> { windowId(id); await windowCommand("minimize", { id }); }
+/** Maximizes the window. */
 export async function maximizeWindow(id: string): Promise<void> { windowId(id); await windowCommand("maximize", { id }); }
+/** Undoes `maximizeWindow`. */
 export async function unmaximizeWindow(id: string): Promise<void> { windowId(id); await windowCommand("unmaximize", { id }); }
+/** Enters (`true`) or leaves (`false`) fullscreen. Rejects `E_INVALID_ARGUMENT` for a non-boolean. */
 export async function setWindowFullscreen(id: string, enabled: boolean): Promise<void> {
   windowId(id); if (typeof enabled !== "boolean") throw new SparkError("E_INVALID_ARGUMENT", "fullscreen must be boolean");
   await windowCommand("fullscreen", { id, enabled });
 }
 const closing = new Map<string, Promise<CloseResult>>();
+/**
+ * Asks the window to close and resolves with the decision: `{ closed: true }`, or `{ closed: false }` with `vetoed`
+ * (a close guard refused) or `interrupted` (an animation cancelled its close transition). Calls while one is pending
+ * share its decision. A missing window rejects `E_NOT_FOUND`.
+ */
 export async function closeWindow(id: string): Promise<CloseResult> {
   windowId(id);
   let pending = closing.get(id);
@@ -134,6 +159,7 @@ export async function closeWindow(id: string): Promise<CloseResult> {
   }
   return pending;
 }
+/** Options for window listeners and handlers. `onError` receives listener failures and malformed events; default `console.error`. */
 export interface WindowListenerOptions { onError?: (error: SparkError) => void }
 function report(options: WindowListenerOptions, cause: unknown) { try { (options.onError ?? console.error)(nativeError(cause)); } catch (error) { console.error(error); } }
 const TAB_EVENTS: readonly string[] = ["tabGroupChanged", "tabSelectionChanged"];

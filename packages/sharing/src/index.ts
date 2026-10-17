@@ -5,9 +5,11 @@ import { onDesktopEvent } from "@legendapp/spark-desktop-app/src/events";
 import Native, { type Spec } from "./NativeDesktopSharing";
 export type { AsyncRegistration, Availability, Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 
+/** A sharing capability, for `getSharingAvailability(feature)`: the share picker, the Services menu, or Core Spotlight indexing. */
 export type SharingFeature = "share" | "services" | "spotlight";
 /** What the share picker offers to services: text, a web URL, or a local file (absolute path or file URL). */
 export type ShareItem = { type: "text"; text: string } | { type: "url"; url: string } | { type: "file"; path: string };
+/** Options for `share`. Unknown keys reject E_UNSUPPORTED_OPTION. */
 export interface ShareOptions {
   /** A mounted view (a ref) the picker points at. Default: the key window's content. */
   anchor?: object;
@@ -16,10 +18,12 @@ export interface ShareOptions {
 export interface ShareResult { service: string | null }
 /** What the person sent from another app's Services menu: its text, files (absolute paths) and web URLs. */
 export interface ServiceInvocation { name: string; text: string | null; files: string[]; urls: string[] }
+/** Options for `addServiceListener` and `addSpotlightListener`. Unknown keys throw E_UNSUPPORTED_OPTION. */
 export interface ListenerOptions {
   /** Malformed native events and errors thrown by the listener. Default: console.error. */
   onError?: (error: SparkError) => void;
 }
+/** An item for `indexSpotlightItems`. `id` and `title` must be nonempty. */
 export interface SpotlightItem {
   /** Unique in the app's index; indexing the same id again replaces the item. */
   id: string;
@@ -31,7 +35,9 @@ export interface SpotlightItem {
   /** Unix ms after which Spotlight drops the item. Default: Core Spotlight's (30 days after indexing). */
   expiresAt?: number;
 }
+/** Which items `deleteSpotlightItems` removes: by id, by domain, or all of them. */
 export type SpotlightDeletion = { ids: readonly string[] } | { domains: readonly string[] } | { all: true };
+/** Payload of `addSpotlightListener`: the `id` of the Spotlight item the person opened. */
 export interface SpotlightOpenEvent { id: string }
 
 /** macOS only. Windows reports `unsupported-platform` (#392). */

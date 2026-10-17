@@ -44,6 +44,7 @@ export function hideCursorUntilMoved(): Promise<void> {
 export type HapticPattern = "generic" | "alignment" | "levelChange";
 /** When the feedback plays: `default` (soon), `now`, or `drawCompleted` (after the next screen update). */
 export type HapticPerformanceTime = "default" | "now" | "drawCompleted";
+/** Options for `performHapticFeedback`. `performanceTime` defaults to `default`; unknown keys reject with E_UNSUPPORTED_OPTION. */
 export interface HapticFeedbackOptions { performanceTime?: HapticPerformanceTime }
 const PATTERNS: readonly HapticPattern[] = ["generic", "alignment", "levelChange"];
 const TIMES: readonly HapticPerformanceTime[] = ["default", "now", "drawCompleted"];
@@ -64,6 +65,10 @@ export function performHapticFeedback(pattern: HapticPattern, options: HapticFee
 
 /** Points; a hot spot is measured from the image's top-left. */
 export interface PointerPoint { x: number; y: number }
+/**
+ * A PointerView's `customCursor`: an SF Symbol (`pointSize` 1 to 256 points) or an image file, which requires an absolute
+ * path and a hot spot. An invalid cursor throws E_INVALID_ARGUMENT.
+ */
 export type CustomCursor =
   /** An SF Symbol at `pointSize` (16); the hot spot defaults to its center. */
   | { type: "symbol"; name: string; pointSize?: number; hotSpot?: PointerPoint }
@@ -85,6 +90,10 @@ export type SmartMagnifyEvent = PointerLocation;
 export interface PressureEvent extends PointerLocation { pressure: number; stage: 0 | 1 | 2; stageTransition: number }
 /** Reported when the button is released. */
 export interface MouseButtonEvent extends PointerLocation { button: "back" | "forward" }
+/**
+ * Props for `PointerView`: a View's props plus a custom cursor and pointer event handlers. Only events with a handler are
+ * captured; the rest pass on to the views behind it.
+ */
 export interface PointerViewProps extends ViewProps {
   /** Covers the view, except descendants with their own cursor. Use it or the `cursor` style, not both. */
   customCursor?: CustomCursor;

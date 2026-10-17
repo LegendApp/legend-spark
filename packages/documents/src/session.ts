@@ -5,6 +5,7 @@ import { SparkError, asyncRegistration, type AsyncRegistration, type Availabilit
 import { watchDocumentReload } from "./reload";
 import { addDocumentVersion, documentFileState, getDocumentVersionsAvailability, restoreDocumentVersion, setDocumentFileLocked } from "./versions";
 
+/** Options for `createDocumentSession`. Unknown keys throw E_UNSUPPORTED_OPTION; `autosave.delayMs` is in milliseconds. */
 export interface DocumentSessionOptions {
   /** Localized name of untitled document number n (1, 2, …). The lowest free number is used; removal frees it. */
   untitledName: (number: number) => string;
@@ -17,6 +18,7 @@ export interface DocumentSessionOptions {
   /** Background failures: autosave, external-change reloads and window updates. */
   onError: (error: unknown) => void;
 }
+/** Snapshot of a `DocumentSession`, returned by `getState()` and `useDocumentSessionState`. */
 export interface DocumentState {
   /** null while untitled. */
   path: string | null;
@@ -32,7 +34,9 @@ export interface DocumentState {
   /** The file changed on disk while there were unsaved edits, or a save found it changed. Resolve with revertToSaved() or save({ overwrite: true }). */
   conflict: boolean;
 }
+/** Result of `DocumentSession.save()`: saved, or not saved because the file changed on disk since it was read. */
 export type DocumentSaveResult = { saved: true } | { saved: false; reason: "conflict" };
+/** Options for `DocumentSession.save()`. */
 export interface DocumentSaveOptions { /** Replace the file even if it changed since it was read. */ overwrite?: boolean }
 /**
  * One document: its contents, file and window. Operations run one at a time in call order. remove() stops
@@ -99,6 +103,7 @@ async function recordVersion(path: string) {
   catch (error) { if (!(error instanceof SparkError && error.code === "E_UNAVAILABLE")) throw error; }
 }
 
+/** Creates an untitled document session (see `DocumentSession`). macOS only: throws E_UNSUPPORTED_PLATFORM elsewhere (see `getDocumentSessionAvailability`). Invalid options throw E_INVALID_ARGUMENT, unknown keys E_UNSUPPORTED_OPTION. */
 export function createDocumentSession(options: DocumentSessionOptions): DocumentSession {
   if (!options || typeof options !== "object") throw new SparkError("E_INVALID_ARGUMENT", "Expected document session options");
   for (const key of Object.keys(options)) if (!["untitledName", "text", "windowId", "autosave", "onError"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown document session option: ${key}`);

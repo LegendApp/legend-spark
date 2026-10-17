@@ -1,12 +1,21 @@
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
+/** A JSON value a settings store can hold. Numbers must be finite. */
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+/** Backend for a settings store or observable file: asynchronous text `read` (undefined when missing), `write` and `remove` by key. Observable files use the complete path as the key. */
 export interface SettingsStorage {
   read(key: string): Promise<string | undefined>;
   write(key: string, value: string): Promise<void>;
   remove(key: string): Promise<void>;
 }
+/** Options for `createSettingsStore`. */
 export interface SettingsStoreOptions { storage: SettingsStorage }
+/** Options for a typed `get`: `decode` validates the stored JSON and returns the application type. */
 export interface SettingsReadOptions<T> { decode(value: Json): T }
+/**
+ * A store of JSON settings by key, from `createSettingsStore` or the default `settings`. Operations are serialized per key; keys are 1-200 characters without NUL.
+ * A missing key reads as undefined. Rejects `E_INVALID_ARGUMENT` for an invalid key or a value that is not finite JSON, and `E_INVALID_DATA` when stored text is not valid JSON.
+ * `update` writes the updater's result and resolves with it.
+ */
 export interface SettingsStore {
   get(key: string): Promise<Json | undefined>;
   get<T>(key: string, options: SettingsReadOptions<T>): Promise<T | undefined>;

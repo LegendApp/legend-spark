@@ -1,5 +1,6 @@
 import { SparkError, parseNativeResult } from "@legendapp/spark-desktop-app/src/contracts";
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
+/** A drag operation a source allows or a destination performs. */
 export type DragOperation = "copy" | "move" | "link";
 /** Custom values are UTF-8 strings keyed by MIME type. JSON schemas belong to the app. */
 export interface DragPayload { files?: readonly string[]; text?: string; urls?: readonly string[]; data?: Readonly<Record<string, string>> }
@@ -18,7 +19,9 @@ export interface PromisedFileWriteRequest { name: string; path: string }
 export type DragImage = "view" | { path: string; width: number; height: number };
 /** Source operations by where the drag ends: within this app, or in another app such as Finder. */
 export interface ContextualDragOperations { withinApp: readonly DragOperation[]; outsideApp: readonly DragOperation[] }
+/** Spring-loading highlight a destination draws while a drag hovers (macOS). */
 export type SpringLoadHighlight = "none" | "standard" | "emphasized";
+/** Payload of `onSpringLoadHighlight` on `DragDropView`. */
 export interface SpringLoadHighlightEvent { highlight: SpringLoadHighlight }
 /** Logical coordinates from the target's top-left corner, positive downward. */
 export interface DragOverEvent {
@@ -26,8 +29,11 @@ export interface DragOverEvent {
   /** Operations the source allows after the modifier keys the user holds narrow them (macOS). */
   allowedOperations?: DragOperation[];
 }
+/** Payload of `onDrop` and `onDragEnter` on `DragDropView`: the dragged representations plus the pointer position and operation. */
 export interface DropEvent extends DragPayload, DragOverEvent {}
+/** Payload of `onDragEnd` on `DragDropView`: whether a destination accepted the drag this view started, and with which operation. */
 export type DragEndEvent = { accepted: true; operation: DragOperation } | { accepted: false; operation: "none" };
+/** Drag source and drop target options for `DragDropView`. Unknown keys throw E_UNSUPPORTED_OPTION; a macOS-only option on another platform throws E_UNSUPPORTED_PLATFORM. */
 export interface DragOptions {
   /** Operations a source allows; contextual operations differ within the app and outside it (macOS). Default: copy. */
   sourceOperations?: readonly DragOperation[] | ContextualDragOperations;

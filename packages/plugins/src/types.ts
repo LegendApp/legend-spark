@@ -5,11 +5,13 @@ export const PLUGIN_API_VERSION = 1;
 
 /** What a plugin may contribute. The manifest requests capabilities; the host grants them per plugin. */
 export type PluginCapability = "commands" | "panels" | "fileTypes" | "menuItems";
+/** Every `PluginCapability`, in a fixed order. */
 export const PLUGIN_CAPABILITIES: readonly PluginCapability[] = ["commands", "panels", "fileTypes", "menuItems"];
 
 /** JSON data: the only values that cross the boundary between the host and a plugin runtime. */
 export type PluginJsonValue = null | boolean | number | string | PluginJsonValue[] | { [key: string]: PluginJsonValue };
 
+/** A plugin's declaration, validated before any of its code runs. */
 export interface PluginManifest {
   /** Reverse-DNS identifier, for example `com.example.word-count`. Contribution IDs start with it. */
   id: string;
@@ -22,11 +24,13 @@ export interface PluginManifest {
   capabilities: readonly PluginCapability[];
 }
 
+/** A command a plugin contributes; its handler is `commands[id]` in the `PluginImplementation`. `title` is 1–200 characters. */
 export interface PluginCommand { id: string; title: string }
 /** A panel renders the named threaded component (`threadedComponent(name, ...)`, bundled with the plugin) in the plugin's runtime. */
 export interface PluginPanel { id: string; title: string; component: string }
 /** Files with one of these extensions (lowercase, without the dot) open through `command`, which receives `{ path }`. */
 export interface PluginFileType { id: string; name: string; extensions: readonly string[]; command: string }
+/** A menu entry a plugin contributes; `command` must be one of the plugin's contributed command IDs. */
 export interface PluginMenuItem { id: string; title: string; command: string }
 
 /** Everything a plugin registers when it activates. Each kind needs its capability. */
@@ -77,6 +81,7 @@ export interface PluginRuntimeModule {
   };
 }
 
+/** Options for `createPluginHost`. */
 export interface PluginHostOptions {
   /** `import * as Runtimes from "@react-native-runtimes/core"`. */
   runtimes: PluginRuntimeModule;
@@ -87,8 +92,10 @@ export interface PluginHostOptions {
   onError?(error: unknown, pluginId: string | null): void;
 }
 
+/** Lifecycle state of a declared plugin. `failed` keeps the reason in `PluginInfo.error`. */
 export type PluginState = "unloaded" | "loading" | "loaded" | "unloading" | "failed";
 
+/** A snapshot of one declared plugin, from `PluginHost.list` or `PluginHost.get`. */
 export interface PluginInfo {
   manifest: PluginManifest;
   granted: readonly PluginCapability[];
@@ -101,8 +108,10 @@ export interface PluginInfo {
   error: { code: string; message: string } | null;
 }
 
+/** A loaded plugin's file type that accepts a path, from `PluginHost.findFileHandlers`. */
 export interface PluginFileHandler { pluginId: string; fileType: PluginFileType }
 
+/** Manages an application's declared plugins; returned by `createPluginHost`. */
 export interface PluginHost {
   /** Every declared plugin, in declaration order. Returns the same array until something changes. */
   list(): readonly PluginInfo[];

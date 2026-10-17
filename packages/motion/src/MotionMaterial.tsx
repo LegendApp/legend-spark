@@ -4,6 +4,10 @@ import { isGlass, requireMaterial, type MotionMaterialBlending, type MotionMater
 import { useMotionView, type MotionViewProps } from "./MotionView";
 import { invalid, transitionSpec, type MotionTransition } from "./specs";
 
+/**
+ * Props of `MotionMaterial`: MotionView props without children, plus the material, its tint and its crossfade.
+ * `blendingMode`, `state` and `emphasized` throw E_UNSUPPORTED_OPTION with a Liquid Glass material.
+ */
 export interface MotionMaterialProps extends Omit<MotionViewProps, "children"> {
   /** The backdrop material. A change crossfades to the new one with `crossfade`. */
   material: MotionMaterialName;

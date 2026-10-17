@@ -7,6 +7,10 @@ import { onAudioEvent } from "./events";
 import { validateSource, type AudioPlayer, type AudioSource, type AudioPlayerOptions, type AudioStatus } from "./types";
 export type { AudioPlayer, AudioSource, AudioStatus, AudioPlayerOptions, Subscription } from "./types";
 let sequence = 0;
+/**
+ * Loads `source` in the native desktop player (macOS, Windows) and resolves once it is ready to play.
+ * Rejects with E_TIMEOUT after `loadTimeoutMs` (default 15000), E_ABORTED when `signal` aborts, E_MODULE_UNAVAILABLE without the native module, and E_INVALID_ARGUMENT or E_UNSUPPORTED_OPTION for bad input.
+ */
 export async function createAudioPlayer(source: AudioSource, options: AudioPlayerOptions = {}): Promise<AudioPlayer> {
   validateSource(source); validatePlayerOptions(options);
   options = { ...options };

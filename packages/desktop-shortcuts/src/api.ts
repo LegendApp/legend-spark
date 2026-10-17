@@ -5,7 +5,9 @@ import { SparkError, invokeNative, parseNativeResult, asyncRegistration, type As
 import { setShortcutInventory } from "@legendapp/spark-desktop-app/src/contracts/shortcut-inventory";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 export { parseAccelerator, type Accelerator } from "@legendapp/spark-desktop-app/src/contracts/accelerator";
+/** Options for `registerShortcut`. `windowId` limits the shortcut to that window (it takes precedence there over an app-wide one); `repeat` fires on key auto-repeat, default false. */
 export interface ShortcutOptions { windowId?: string; repeat?: boolean }
+/** Whether application shortcuts can be registered: macOS and Windows with NativeDesktopShortcuts installed. Other platforms report `unsupported-platform`. */
 export function getShortcutAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
   return Native ? { available: true } : { available: false, reason: "missing-module" };

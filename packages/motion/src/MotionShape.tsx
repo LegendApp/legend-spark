@@ -7,6 +7,7 @@ import { invalid } from "./specs";
 /** The motion properties a MotionShape has (docs/motion.md#shapes). */
 const SHAPE_PROPERTIES = ["morph", "strokeStart", "strokeEnd", "strokeWidth", "fillColor", "strokeColor"];
 
+/** Props of `MotionShape`: MotionView props without children, the `paths` to draw and morph between, and the stroke and fill style. */
 export interface MotionShapeProps extends Omit<MotionViewProps, "children">, MotionShapeStyle {
   /**
    * The shapes, as SVG path data in points from the view's top-left corner (`M`, `L`, `H`, `V`, `C`, `S`, `Q`, `T`, `Z`):

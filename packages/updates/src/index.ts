@@ -6,11 +6,15 @@ import { getAppAvailability, getAppContext } from "@legendapp/spark-desktop-app/
 export type { Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 
 /**
- * `sandboxed`: the app runs in the App Sandbox, the Mac App Store variant, which the App Store updates; it ships
- * without Sparkle (docs/app-sandbox.md).
+ * Why updates are unavailable. `sandboxed`: the app runs in the App Sandbox, the Mac App Store variant, which the App
+ * Store updates; it ships without Sparkle (docs/app-sandbox.md). `go`: running in the reusable Go host the CLI launches.
+ * `development`: a dev or preview build, not a release. `unconfigured`: Info.plist lacks an https SUFeedURL or a valid
+ * SUPublicEDKey.
  */
 export type UpdateUnavailableReason = "unsupported-platform" | "sandboxed" | "missing-module" | "go" | "development" | "unconfigured";
+/** What `getUpdateAvailability` resolves with. */
 export type UpdateAvailability = { available: true } | { available: false; reason: UpdateUnavailableReason };
+/** The Sparkle updater's state, from `getUpdateStatus`. `checkIntervalSeconds` is in seconds. */
 export type UpdateStatus = {
   available: true;
   started: boolean;
@@ -41,10 +45,13 @@ export type UpdateStatus = {
 };
 /** Sparkle's Release minimum. Shorter intervals would be silently clamped, so they are rejected. */
 export const MINIMUM_UPDATE_CHECK_INTERVAL_SECONDS = 3600;
+/** Options for `configureUpdates`. `checkIntervalSeconds` is at least `MINIMUM_UPDATE_CHECK_INTERVAL_SECONDS`. */
 export interface UpdateConfiguration { automaticallyChecks?: boolean; checkIntervalSeconds?: number }
+/** Options for `checkForUpdates`. `interactive` (the default) shows Sparkle's UI; `background` checks quietly. */
 export interface CheckForUpdatesOptions { mode?: "interactive" | "background" }
 /** `version` is the display version; `build` is the CFBundleVersion Sparkle orders, skips and selects deltas by. */
 type UpdateItem = { type: "update"; version: string; build: string };
+/** Update progress from Sparkle, delivered to `onUpdateEvent` listeners. */
 export type UpdateEvent =
   | { type: "update"; state: "checking" | "notAvailable" }
   | UpdateItem & { state: "available" | "downloaded" | "installing" }
@@ -117,6 +124,7 @@ export async function configureUpdates(config: UpdateConfiguration): Promise<voi
 export async function clearSkippedUpdate(): Promise<void> { await command("clearSkipped"); }
 // Item states and the boolean flag each one carries.
 const itemFlags = new Map<string, string | undefined>([["available", undefined], ["downloaded", undefined], ["installing", undefined], ["downloading", "delta"], ["skipped", "major"]]);
+/** Listens for update progress. Throws E_MODULE_UNAVAILABLE without the updater module (macOS only) and E_INVALID_ARGUMENT for a non-function listener. */
 export function onUpdateEvent(listener: (event: UpdateEvent) => void): Subscription {
   if (typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected an update listener");
   native();

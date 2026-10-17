@@ -3,6 +3,10 @@ import { SparkError, invokeNative } from "@legendapp/spark-desktop-app/src/contr
 import type { CodexAppServer } from "./Codex.nitro";
 import { loadCodex } from "./native";
 
+/**
+ * Options for `runCodexPrompt`. `timeoutMs` is 1000 to 86400000 milliseconds (default 120000); `reasoningEffort`
+ * defaults to `low`; `outputSchema` is a JSON schema object for the answer; `cwd` is the run's working directory.
+ */
 export interface CodexRunOptions {
   cwd?: string;
   developerInstructions?: string;
@@ -10,7 +14,12 @@ export interface CodexRunOptions {
   reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
   timeoutMs?: number;
 }
+/**
+ * Result of `getCodexAvailability`: whether the Codex CLI was found, its path, a readable `message`, the app-server
+ * user agent, and a `reason` when unavailable.
+ */
 export interface CodexAvailability { available: boolean; codexPath: string; message: string; userAgent: string; reason?: "unsupported-platform" | "missing-module" | "missing-command" }
+/** Result of `runCodexPrompt`: the final `output` text, the model that answered, and the Codex thread and turn ids. */
 export interface CodexRunResult { model: string; output: string; threadId: string; turnId: string; userAgent: string }
 let codex: CodexAppServer | undefined;
 function getCodex(): CodexAppServer {
@@ -34,6 +43,11 @@ export async function getCodexAvailability(): Promise<CodexAvailability> {
   if (typeof result?.available !== "boolean" || ![result.codexPath, result.message, result.userAgent].every(value => typeof value === "string")) throw new SparkError("E_INVALID_DATA", "Invalid Codex availability");
   return { ...result, ...(result.available ? {} : { reason: "missing-command" as const }) };
 }
+/**
+ * Runs one prompt through the Codex app-server (macOS only) and resolves with the final answer. Throws
+ * E_INVALID_ARGUMENT for an empty prompt or invalid options, E_UNSUPPORTED_OPTION for unknown options,
+ * E_UNSUPPORTED_PLATFORM off macOS, and E_MODULE_UNAVAILABLE when the native module cannot load.
+ */
 export async function runCodexPrompt(prompt: string, options: CodexRunOptions = {}): Promise<CodexRunResult> {
   if (typeof prompt !== "string" || !prompt.trim() || prompt.includes("\0") || !options || typeof options !== "object" || Array.isArray(options)) throw new SparkError("E_INVALID_ARGUMENT", "Expected a prompt and Codex options");
   for (const key of Object.keys(options)) if (!["cwd", "developerInstructions", "outputSchema", "reasoningEffort", "timeoutMs"].includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown Codex option: ${key}`);

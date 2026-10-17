@@ -7,15 +7,23 @@ export { getFileSystemAvailability } from "./native";
 import { createFileHandle, iterateFile, writeFileChunks, type FileMode, type ReadChunksOptions } from "./handles";
 export { FileCleanupError } from "./handles";
 export type { FileHandle, FileMode, ReadChunksOptions } from "./handles";
+/** Result of `stat`: `size` in bytes and `modifiedAt` in Unix milliseconds. */
 export interface FileInfo { type: "file" | "directory" | "symlink"; size: number; modifiedAt: number }
+/** An entry returned by `list`: its name and absolute path. */
 export interface DirectoryEntry { name: string; path: string }
+/** Options for `mkdir`. `recursive` (default true) also creates missing parents. */
 export interface CreateDirectoryOptions { recursive?: boolean }
 /** coordinated: true runs the operation inside an NSFileCoordinator claim (macOS; see getFileCoordinationAvailability). */
 export interface CoordinatedOptions { coordinated?: boolean }
+/** Options for `remove`. `recursive` (default false) is required to delete a nonempty directory. */
 export interface RemoveOptions extends CoordinatedOptions { recursive?: boolean }
+/** Options for `copy` and `move`. `overwrite` (default false) replaces an existing destination instead of rejecting. */
 export interface CopyMoveOptions extends CoordinatedOptions { overwrite?: boolean }
+/** Options for `watch`. `recursive` (default false) watches a directory's descendants too. */
 export interface WatchOptions { recursive?: boolean }
+/** Options for `openFile`. */
 export interface OpenFileOptions { mode?: FileMode }
+/** Options for `writeChunks`: `mode` `write` (default, truncates) or `createNew`, and an abort `signal` (rejects E_ABORTED). */
 export interface WriteChunksOptions { mode?: "write" | "createNew"; signal?: AbortSignal }
 /** NSFileCoordinator claims for the coordinated option. Windows has no coordination service. */
 export function getFileCoordinationAvailability(): Availability { return featureAvailability("coordination"); }
@@ -45,6 +53,7 @@ function coordinatedOption(options: CoordinatedOptions): boolean {
   return coordinated;
 }
 function coordinated(options: CoordinatedOptions, label: string) { return coordinatedOption(checkedOptions(options, ["coordinated"], label)); }
+/** Absolute path of the app's own data, cache or temp directory (on macOS a namespaced folder in Application Support, Caches or the temporary directory). Rejects E_INVALID_ARGUMENT for another kind. */
 export async function getDirectory(kind: "data" | "cache" | "temp"): Promise<string> {
   if (!["data", "cache", "temp"].includes(kind)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid directory kind");
   const path = await call<string>("directory", { kind });
@@ -57,13 +66,16 @@ export async function writeText(path: string, text: string, options: Coordinated
   if (typeof text !== "string") throw new SparkError("E_INVALID_ARGUMENT", "Expected a text string");
   await call("writeText", { path: absolute(path), text, coordinated: coordinated(options, "writeText") });
 }
+/** Reads a whole file as bytes. */
 export async function readBytes(path: string, options: CoordinatedOptions = {}): Promise<Uint8Array> { return nativeBytes(await call<ArrayBuffer>("readBytes", { path: absolute(path), coordinated: coordinated(options, "readBytes") })); }
+/** Writes bytes to a file, replacing its contents. Rejects E_INVALID_ARGUMENT unless `bytes` is a Uint8Array. */
 export async function writeBytes(path: string, bytes: Uint8Array, options: CoordinatedOptions = {}): Promise<void> {
   if (!(bytes instanceof Uint8Array)) throw new SparkError("E_INVALID_ARGUMENT", "Expected Uint8Array");
   await call("writeBytes", { path: absolute(path), bytes, coordinated: coordinated(options, "writeBytes") });
 }
 /** Describes the link itself, without following it. modifiedAt is Unix milliseconds. */
 export async function stat(path: string): Promise<FileInfo> { return call("stat", { path: absolute(path) }); }
+/** Whether something exists at path, without following a final symlink. Rejects with errors other than E_NOT_FOUND. */
 export async function exists(path: string): Promise<boolean> {
   try { await stat(path); return true; } catch (error) {
     if (error instanceof SparkError && error.code === "E_NOT_FOUND") return false;
@@ -77,6 +89,7 @@ export async function list(path: string): Promise<DirectoryEntry[]> {
   const separator = Platform.OS === "windows" ? "\\" : "/";
   return names.sort().map(name => ({ name, path: directory.replace(/[\\/]+$/, "") + separator + name }));
 }
+/** Creates a directory; by default also its missing parents. */
 export async function mkdir(path: string, options: CreateDirectoryOptions = {}): Promise<void> { await call("mkdir", { path: absolute(path), recursive: recursiveOption(options, true) }); }
 /** Absence is success; deleting a nonempty directory requires recursive: true. */
 export async function remove(path: string, options: RemoveOptions = {}): Promise<void> {

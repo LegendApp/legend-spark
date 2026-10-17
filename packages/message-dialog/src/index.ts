@@ -3,7 +3,9 @@ import { SparkError, parseNativeResult, invokeNative, type Availability } from "
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import { frameworkStrings } from "@legendapp/spark-desktop-app/src/framework-strings";
 import Native from "./NativeDesktopMessageDialog";
+/** A button in `showMessage`: `id` is returned when it is chosen, `label` is shown. IDs must be unique. */
 export interface MessageDialogButton { id: string; label: string }
+/** Options for `showMessage`. `title` is required; 1-4 buttons; `defaultButtonId` (default: the first button) and `cancelButtonId` must name a button; `windowId` names the owner window. Unknown keys reject E_UNSUPPORTED_OPTION. */
 export interface MessageDialogOptions {
   title: string;
   message?: string;
@@ -16,12 +18,14 @@ export interface MessageDialogOptions {
   /** A "Don't ask again" style checkbox. Its final state returns as `checked`; persisting it is the caller's choice. */
   checkbox?: { label: string; checked?: boolean };
 }
+/** Result of `showMessage`. */
 export interface MessageDialogResult {
   /** null means the host dismissed the dialog without selecting a button. */
   buttonId: string | null;
   /** The checkbox's final state; present only when options.checkbox was supplied. */
   checked?: boolean;
 }
+/** Options for `confirm`. Unknown keys reject E_UNSUPPORTED_OPTION. */
 export interface ConfirmOptions {
   /** Defaults to Confirm in the app's language. */
   title?: string;
@@ -31,6 +35,7 @@ export interface ConfirmOptions {
   /** Defaults to Cancel in the app's language. */
   cancelLabel?: string;
 }
+/** Options for `showPrompt`. `title` is required; `windowId` names the owner window. Unknown keys reject E_UNSUPPORTED_OPTION. */
 export interface PromptOptions {
   title: string;
   message?: string;
@@ -106,6 +111,7 @@ async function showAlert(wire: Record<string, unknown>, buttonCount: number, inp
   });
 }
 
+/** Shows a modal message dialog and resolves the chosen button's id. Rejects E_INVALID_ARGUMENT for bad options and E_UNSUPPORTED_PLATFORM off macOS and Windows. */
 export async function showMessage(options: MessageDialogOptions): Promise<MessageDialogResult> {
   knownKeys(options, ["title", "message", "kind", "buttons", "defaultButtonId", "cancelButtonId", "windowId", "checkbox"], "dialog");
   const buttons = options.buttons ?? [{ id: "ok", label: "OK" }];
@@ -124,6 +130,7 @@ export async function showMessage(options: MessageDialogOptions): Promise<Messag
   return { buttonId: result.button === -1 ? null : ids[result.button]!, ...(options.checkbox ? { checked: result.checked } : {}) };
 }
 
+/** Shows a Cancel / Continue dialog with `message` and resolves true when Continue is chosen. Rejects E_UNSUPPORTED_PLATFORM off macOS and Windows. */
 export async function confirm(message: string, options: ConfirmOptions = {}): Promise<boolean> {
   knownKeys(options, ["title", "windowId", "confirmLabel", "cancelLabel"], "confirmation");
   requireAvailable();

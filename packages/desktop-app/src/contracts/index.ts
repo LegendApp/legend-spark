@@ -5,6 +5,7 @@ export type SparkErrorCode =
   | "E_NOT_FOUND" | "E_NOT_EMPTY" | "E_ALREADY_EXISTS" | "E_READ_ONLY" | "E_NO_SPACE" | "E_BUSY" | "E_CLOSED"
   | "E_ABORTED" | "E_TIMEOUT" | "E_NATIVE";
 
+/** The error Spark APIs throw and reject with. Branch on `code`, not on `message`. */
 export class SparkError extends Error {
   readonly code: SparkErrorCode;
   constructor(code: SparkErrorCode, message: string, options?: ErrorOptions) {
@@ -14,10 +15,13 @@ export class SparkError extends Error {
   }
 }
 
+/** Result of the `get*Availability()` queries. `unsupported-platform`: not on this OS. `missing-module`: the native module is not installed. `host-restriction`: this host does not support the feature. */
 export type Availability =
   | { available: true }
   | { available: false; reason: "unsupported-platform" | "missing-module" | "host-restriction" };
+/** A listener registration; `remove()` stops its callbacks. */
 export interface Subscription { remove(): void }
+/** A registration that owns native state. `remove()` stops callbacks immediately and resolves when native cleanup finishes; concurrent calls join, and a failed cleanup can be retried. */
 export interface AsyncRegistration { remove(): Promise<void> }
 
 /** Stop callbacks immediately; join concurrent cleanup, and permit retry on failure. */

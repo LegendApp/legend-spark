@@ -1,4 +1,5 @@
 import type { NavigatorWindowOptions } from "@legendapp/spark-desktop-windows/src/windows/types";
+/** Window options for `createSettingsWindowOptions`. They override its defaults, except `show`, which is always false. */
 export type CreateSettingsWindowOptionsInput = NavigatorWindowOptions;
 /** SettingsWindow presents the hidden window when its native layout is ready. */
 export function createSettingsWindowOptions(options: CreateSettingsWindowOptionsInput = {}): NavigatorWindowOptions {

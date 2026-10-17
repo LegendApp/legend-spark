@@ -30,6 +30,7 @@ function appLanguages(value: unknown): value is AppLanguages {
   return languages(result.supported) && languages(result.framework) && typeof result.current === "string" && result.current.length > 0 && (result.override === null || typeof result.override === "string");
 }
 
+/** Returns the app's supported, current, overriding and framework languages. macOS only: rejects `E_UNSUPPORTED_PLATFORM` elsewhere and `E_MODULE_UNAVAILABLE` without NativeDesktopApp. */
 export async function getAppLanguages(): Promise<AppLanguages> {
   requireAvailable();
   const { supported, current, override, framework } = await callAppNative("languages", appLanguages);

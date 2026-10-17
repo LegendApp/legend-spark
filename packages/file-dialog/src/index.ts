@@ -26,11 +26,13 @@ function selection<T>(json: string, key: "paths" | "path", controls: readonly Di
   return { value: result[key] as T, accessory: Object.fromEntries(controls.map(control => [control.id, values[control.id]!])) };
 }
 
+/** Shows the open panel and resolves the chosen absolute paths, or `{ canceled: true }`. Selects files by default, one at a time. Rejects E_INVALID_ARGUMENT or E_UNSUPPORTED_OPTION for bad options, E_UNSUPPORTED_PLATFORM off macOS and Windows. */
 export async function openFileDialog(options: OpenFileDialogOptions = {}): Promise<OpenFileDialogResult> {
   const args = dialogOptions(options, "open", Platform.OS);
   const result = selection(await invokeNative(() => fileDialogNative().open(JSON.stringify(args))), "paths", args.accessory, isPaths);
   return result === null ? { canceled: true } : { canceled: false, paths: result.value, ...(result.accessory && { accessory: result.accessory }) };
 }
+/** Shows the save panel and resolves the chosen absolute path, or `{ canceled: true }`. Rejects E_INVALID_ARGUMENT or E_UNSUPPORTED_OPTION for bad options, E_UNSUPPORTED_PLATFORM off macOS and Windows. */
 export async function saveFileDialog(options: SaveFileDialogOptions = {}): Promise<SaveFileDialogResult> {
   const args = dialogOptions(options, "save", Platform.OS);
   const result = selection(await invokeNative(() => fileDialogNative().save(JSON.stringify(args))), "path", args.accessory, isNativePath);

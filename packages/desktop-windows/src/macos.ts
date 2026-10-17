@@ -13,12 +13,15 @@ export async function setWindowBlur(id: string, options: MacOSWindowBlurOptions)
   noteWindowChanged(id);
   await macosCommand(() => native.setWindowBlur(id, options.radius, options.durationMs ?? 0));
 }
+/** Options for `focusToolbarSearch`. `value` replaces the field's text first; an empty string clears it. */
 export interface FocusToolbarSearchOptions { value?: string }
+/** Focuses the toolbar search item `itemId`. macOS only: rejects `E_UNSUPPORTED_PLATFORM` elsewhere. */
 export async function focusToolbarSearch(id: string, itemId: string, options: FocusToolbarSearchOptions = {}): Promise<void> {
   const native = macosNative(); windowId(id); text(itemId, "toolbar item ID", false); object(options, "search options"); keys(options, ["value"]);
   if (options.value !== undefined) text(options.value, "search value");
   await macosCommand(() => native.focusToolbarSearchItem(id, itemId, options.value ?? null));
 }
+/** Replaces the text of toolbar item `itemId` (a label item's text, or a button's title and label) without resending the toolbar. macOS only: rejects `E_UNSUPPORTED_PLATFORM` elsewhere. */
 export async function setToolbarItemText(id: string, itemId: string, value: string): Promise<void> {
   const native = macosNative(); windowId(id); text(itemId, "toolbar item ID", false); text(value, "toolbar text");
   noteWindowChanged(id);
@@ -41,6 +44,10 @@ export async function showToolbarCustomizationPalette(id: string): Promise<void>
   const native = macosNative(); windowId(id);
   await invokeNative(() => native.runWindowToolbarCustomizationPalette(id));
 }
+/**
+ * Listens for the window's title-bar control, toolbar, segmented, search and toolbar menu events. Registration
+ * acknowledges the live native instance. macOS only: rejects `E_UNSUPPORTED_PLATFORM` elsewhere.
+ */
 export async function addMacOSWindowListener(id: string, listener: (event: MacOSWindowEvent) => void, options: WindowListenerOptions = {}): Promise<AsyncRegistration> {
   macosNative(); windowId(id); object(options, "listener options"); keys(options, ["onError"]);
   if (typeof listener !== "function" || (options.onError !== undefined && typeof options.onError !== "function")) throw new SparkError("E_INVALID_ARGUMENT", "Expected window event callbacks");

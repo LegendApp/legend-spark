@@ -8,6 +8,7 @@ import Native, { type Spec } from "./NativeDesktopPrinting";
 export interface PaperSize { width: number; height: number }
 /** Distances from the edges of the oriented page, in points. */
 export interface PageMargins { top: number; right: number; bottom: number; left: number }
+/** Page orientation in a `PageSetup`; landscape turns the portrait `paperSize` sideways. */
 export type PageOrientation = "portrait" | "landscape";
 /**
  * Plain data, so the caller decides where it lives: in a document's metadata, in an app settings
@@ -41,6 +42,7 @@ export type PrintContent =
   | { type: "pdf"; path: string }
   | { type: "window"; windowId: string }
   | { type: "view"; view: PrintableView };
+/** Options for `print`. Unknown keys reject E_UNSUPPORTED_OPTION; an invalid `pageSetup` rejects E_INVALID_ARGUMENT. */
 export interface PrintOptions {
   /** The initial paper, orientation and margins. Default: the system's (the default printer's paper). */
   pageSetup?: PageSetup;
@@ -51,19 +53,23 @@ export interface PrintOptions {
 }
 /** `canceled: false` means the job went to the printer or the panel's PDF destination, with the page setup the panel settled on. */
 export type PrintResult = { canceled: true } | { canceled: false; pageSetup: PageSetup };
+/** Options for `showPageSetup`. Unknown keys reject E_UNSUPPORTED_OPTION. */
 export interface PageSetupOptions {
   /** The setup the panel starts from. Margins are not in the macOS panel and come back unchanged. */
   pageSetup?: PageSetup;
   /** Shows the panel as a sheet on this window; otherwise it is application-modal. */
   windowId?: string;
 }
+/** Result of `showPageSetup`: canceled, or the page setup the user chose. */
 export type PageSetupResult = { canceled: true } | { canceled: false; pageSetup: PageSetup };
+/** Options for `exportPDF`. Unknown keys reject E_UNSUPPORTED_OPTION. */
 export interface ExportPDFOptions {
   /** Default: the system's page setup, which depends on the default printer; pass one for repeatable output. */
   pageSetup?: PageSetup;
   /** The PDF's Title metadata. */
   title?: string;
 }
+/** Result of `exportPDF`: the written file's absolute path, its page count (at least 1) and the page setup used. */
 export interface ExportPDFResult { path: string; numberOfPages: number; pageSetup: PageSetup }
 /** Parts of printing, for `getPrintingAvailability(feature)`. */
 export type PrintingFeature = "printPanel" | "pageSetup" | "pdfExport";

@@ -1,12 +1,16 @@
 import type { MenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
 export type { MenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
+/** Identifies a window: 1–100 letters, numbers, underscores or hyphens. The host creates the window `main`. */
 export type WindowId = string;
+/** Identifies a connected display. */
 export type DisplayId = string;
+/** A width and height in logical units. */
 export interface Size { width: number; height: number }
 /** Pointer position in logical units relative to the containing display's top-left corner. */
 export interface CursorPoint { displayId: DisplayId; x: number; y: number }
 /** Outer frame in logical units from the identified display's top-left corner. */
 export interface WindowBounds extends Size { displayId: DisplayId; x: number; y: number }
+/** A connected display as `getDisplays` reports it. Sizes and the work area are logical units; `scaleFactor` is physical pixels per logical unit. */
 export interface DisplayInfo {
   id: DisplayId;
   persistentId: string | null;
@@ -16,10 +20,12 @@ export interface DisplayInfo {
   workArea: { x: number; y: number; width: number; height: number };
   scaleFactor: number;
 }
+/** A window's kind and parent: an ordinary window, optionally a child of `parentId`; a modal child of a required, distinct parent; or an overlay, which cannot be modal. */
 export type WindowKind =
   | { kind?: "window"; parentId?: WindowId; modal?: false }
   | { kind: "window"; parentId: WindowId; modal: true }
   | { kind: "overlay"; parentId?: WindowId; modal?: never };
+/** Appearance and behavior options that both `openWindow` and `setWindowOptions` take. */
 export interface WindowAppearanceOptions {
   title?: string;
   appearance?: "system" | "light" | "dark";
@@ -47,6 +53,7 @@ export interface WindowAppearanceOptions {
 }
 /** `automatic` follows the system "Prefer tabs when opening documents" setting, `preferred` joins a tab group when shown, `disallowed` never tabs. */
 export type WindowTabbingMode = "automatic" | "preferred" | "disallowed";
+/** Native window tab behavior (`tabbing`). macOS only for now. */
 export interface WindowTabbingOptions {
   mode?: WindowTabbingMode;
   /** Windows with the same identifier can share a tab group. 1–200 characters. */
@@ -60,7 +67,12 @@ export interface WindowTabGroup {
   selectedWindowId: WindowId | null;
   tabBarVisible: boolean;
 }
+/** Passed to a `handleWindowNewTab` handler: the window whose new-tab button or `newTab` command was used. */
 export interface WindowNewTabEvent { windowId: WindowId }
+/**
+ * Options for `openWindow`. `component` names a registered window component and `props` must be plain, acyclic JSON.
+ * `size` (100–20000) and `position` are logical units, `position` from its display's top-left corner.
+ */
 export type WindowOpenOptions = WindowKind & WindowAppearanceOptions & {
   id: WindowId;
   component: string;
@@ -79,7 +91,9 @@ export type WindowOption = "aspectRatio" | "opacity" | "contentProtection" | "ig
   | "fullScreenAuxiliary" | "stationary" | "ignoresCycle" | "cornerSnapping";
 /** Toolbar capabilities beyond items and style; see `getToolbarAvailability(feature)`. */
 export type ToolbarFeature = "customization" | "displayMode" | "overflow" | "shown" | "sidebarToggle";
+/** Options for `setWindowOptions`: the appearance options plus the `macos` groups that can change after creation. */
 export interface WindowUpdateOptions extends WindowAppearanceOptions { macos?: MacOSWindowUpdateOptions }
+/** A window's current state, as `openWindow`, `getWindow` and `listWindows` report it. */
 export interface WindowInfo {
   id: WindowId;
   kind: "window" | "overlay";
@@ -95,8 +109,11 @@ export interface WindowInfo {
 }
 /** `interrupted`: another animation of the window cancelled its close transition (docs/api-window-contract.md#window-choreography). */
 export type CloseResult = { closed: true } | { closed: false; reason: "vetoed" | "interrupted" };
+/** Options for `showWindow`. `focus` defaults to true. */
 export interface ShowWindowOptions { focus?: boolean }
+/** Options for `centerWindow`: the display to center on. */
 export interface CenterWindowOptions { displayId?: DisplayId }
+/** The payload `addWindowListener` delivers for each event type. Tab events and `occlusionChanged` are macOS only. */
 export interface WindowEventMap {
   focusChanged: { windowId: WindowId; focused: boolean };
   boundsChanged: { windowId: WindowId; bounds: WindowBounds };
@@ -110,6 +127,7 @@ export interface WindowEventMap {
   tabSelectionChanged: { windowId: WindowId; selectedWindowId: WindowId | null };
   closed: { windowId: WindowId };
 }
+/** A button in the window's title bar (`macos.titleBar.controls`); pressing it sends `titleBarAction` with its `id`. `symbol` is an SF Symbol name. */
 export interface MacOSTitleBarControl {
   id: string;
   label?: string;
@@ -119,6 +137,7 @@ export interface MacOSTitleBarControl {
   symbol?: string;
   tooltip?: string;
 }
+/** AppKit title-bar options (`macos.titleBar`). macOS only. */
 export interface MacOSTitleBarOptions {
   contentLayout?: "contentLayoutGuide" | "fullSize";
   transparent?: boolean;
@@ -134,6 +153,7 @@ export interface MacOSTitleBarOptions {
   subtitle?: string;
   controls?: readonly MacOSTitleBarControl[];
 }
+/** One segment of a `segmented` toolbar item; selecting it sends `toolbarSelectionChanged` with its `value`. `symbol` is an SF Symbol name. */
 export interface MacOSToolbarSegment { value: string; label: string; symbol?: string }
 interface ToolbarEntry { id: string; label?: string; placement?: "leading" | "trailing" }
 type ToolbarMenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean; icon?: { type: "symbol"; name: string } };
@@ -142,6 +162,7 @@ type ToolbarMenuItem =
   | (ToolbarMenuEntry & { type: "action" })
   | (ToolbarMenuEntry & { type: "checkbox"; checked: boolean })
   | (ToolbarMenuEntry & { type: "slider"; min: number; max: number; value: number; suffix?: string });
+/** An item of `macos.toolbar.items`: button, menu, label, search, segmented or sidebarToggle. IDs are unique within a toolbar; `width` is 1–20000 logical units. */
 export type MacOSToolbarItem =
   | (ToolbarEntry & { type: "button"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string; monospacedDigits?: boolean; width?: number })
   | (ToolbarEntry & { type: "menu"; disabled?: boolean; bordered?: boolean; symbol?: string; tooltip?: string; width?: number; items: readonly ToolbarMenuItem[] })
@@ -150,7 +171,9 @@ export type MacOSToolbarItem =
   | (ToolbarEntry & { type: "segmented"; segments: readonly MacOSToolbarSegment[]; value: string | null })
   /** The standard sidebar button, with AppKit's symbol, localized label and tooltip. Pressing it sends `toolbarAction` with this ID; the app toggles its sidebar. At most one per toolbar. */
   | (Omit<ToolbarEntry, "label"> & { type: "sidebarToggle" });
+/** Whether toolbar items show icons, labels or both. */
 export type MacOSToolbarDisplayMode = "icon" | "label" | "iconAndLabel";
+/** The window's AppKit `NSToolbar` (`macos.toolbar`). macOS only; see `getToolbarAvailability`. */
 export interface MacOSToolbarOptions {
   /** Attaches (`true`) or removes (`false`) the toolbar. Setting `items`, `shown`, `displayMode` or `customization` also attaches one. */
   visible?: boolean;
@@ -174,6 +197,7 @@ export interface MacOSToolbarOptions {
    */
   customization?: { id: string } | null;
 }
+/** A toolbar as `getToolbarState` reads it from AppKit. */
 export interface MacOSToolbarState {
   shown: boolean;
   displayMode: MacOSToolbarDisplayMode;
@@ -184,6 +208,10 @@ export interface MacOSToolbarState {
   /** Items that do not fit the window's width and are in the toolbar's overflow menu (»). Empty while the toolbar is hidden. */
   overflowItemIds: string[];
 }
+/**
+ * A native sidebar split-view shell drawn before React renders (`macos.startupSplitView`); `null` removes it. The main
+ * window's shell is saved in user defaults for the next launch. Widths are 0–20000 logical units; colors are #RRGGBB or #RRGGBBAA.
+ */
 export interface MacOSStartupSplitViewOptions {
   sidebarWidth: number;
   sidebarMinWidth: number;
@@ -194,6 +222,7 @@ export interface MacOSStartupSplitViewOptions {
   sidebarBackgroundColor: string;
   contentTitlebarHeight?: number;
 }
+/** AppKit-specific window options (`macos`). Rejects `E_UNSUPPORTED_OPTION` off macOS. */
 export interface MacOSWindowOptions {
   /** An NSPanel. `nonactivating` takes key focus without activating the app; `hud` is a titled utility panel with AppKit's dark HUD chrome. */
   panelStyle?: "utility" | "documentModal" | "nonactivating" | "hud";
@@ -223,12 +252,16 @@ export interface MacOSWindowOptions {
 }
 /** Panel class and startup shell are fixed when the native window is created. */
 export type MacOSWindowUpdateOptions = Omit<MacOSWindowOptions, "panelStyle">;
+/** An event `addMacOSWindowListener` delivers: a title-bar control, toolbar item, segment, search field or toolbar menu entry was used. */
 export type MacOSWindowEvent =
   | { type: "titleBarAction"; windowId: string; controlId: string }
   | { type: "toolbarAction"; windowId: string; itemId: string }
   | { type: "toolbarSelectionChanged"; windowId: string; itemId: string; value: string }
   | { type: "toolbarSearchChanged" | "toolbarSearchSubmitted"; windowId: string; itemId: string; value: string; shiftKey: boolean }
   | { type: "toolbarMenuAction"; windowId: string; itemId: string; action: MenuAction };
+/** macOS options for `setWindowBounds`: `durationMs` animates the move (0–60000 ms, default 0). */
 export interface MacOSWindowBoundsOptions { durationMs?: number }
+/** Options for `setWindowBounds`. The `macos` group rejects `E_UNSUPPORTED_OPTION` off macOS. */
 export interface SetWindowBoundsOptions { macos?: MacOSWindowBoundsOptions }
+/** Options for `setWindowBlur`: the blur `radius` (0–1000) and an optional animation `durationMs` (0–60000, default 0). */
 export interface MacOSWindowBlurOptions { radius: number; durationMs?: number }

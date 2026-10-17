@@ -1,3 +1,4 @@
+/** macOS virtual key codes (`KEY_*`, as in `KeyboardEvent.keyCode`; media keys are Spark's own 10001 to 10003) and NSEvent modifier flags (`MODIFIER_*`, as in `KeyboardEvent.modifiers`). */
 export const KeyCodes = {
   KEY_A: 0,
   KEY_S: 1,
@@ -88,6 +89,7 @@ export const KeyCodes = {
   MODIFIER_FUNCTION: 1 << 23,
 } as const;
 
+/** Display names for keys in `KeyCodes` whose name is not their character (Return, Esc, arrows, media keys) and for the brackets, by key code. */
 export const KeyText: Record<number, string> = {
   [KeyCodes.KEY_RETURN]: "Return",
   [KeyCodes.KEY_TAB]: "Tab",

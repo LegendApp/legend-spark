@@ -4,15 +4,25 @@ import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { useControl } from "../control";
 import { appearance, callback, finite, macosViewAvailability, type SpecializedViewProps } from "../specialized";
 import NativeSplitView from "./SidebarSplitViewNativeComponent";
+/** Appearance of a `SidebarSplitView`: follow the system, or force light or dark. Default `system`. */
 export type SidebarSplitViewAppearance = "system" | "light" | "dark";
+/** Material behind the content pane's title-bar strip (`titleBar.content.material`). Default `none`, which draws no material. */
 export type SidebarSplitViewTitlebarMaterial = "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
+/** Pane sizes in logical points, used for `initialPaneMetrics` and as the base of `SidebarSplitViewResizeEvent`. The list fields apply only with a `list` pane. */
 export interface SidebarSplitViewPaneMetrics { contentHeight: number; contentWidth: number; sidebarHeight: number; sidebarWidth: number; listHeight?: number; listWidth?: number }
+/**
+ * Reported by `onResize` after native layout: pane sizes, the list and content x offsets and the split height, in logical points.
+ * `phase` is `provisional` until the native panes are laid out, then `ready`.
+ */
 export interface SidebarSplitViewResizeEvent extends SidebarSplitViewPaneMetrics { listHeight: number; listWidth: number; contentX: number; listX: number; height: number; phase: "provisional" | "ready" }
+/** A color laid over a pane's title-bar area: `#RRGGBB` or `#RRGGBBAA`, with `opacity` from 0 to 1 (default 1). */
 export interface SplitViewTitleBarOverlay { color: string; opacity?: number }
+/** Title-bar treatment for `SidebarSplitView`. `content.height` is the content title-bar height in logical points (default 0). Unknown keys throw E_UNSUPPORTED_OPTION. */
 export interface SplitViewTitleBarOptions {
   content?: { height?: number; material?: SidebarSplitViewTitlebarMaterial; overlay?: SplitViewTitleBarOverlay };
   sidebar?: { overlay?: SplitViewTitleBarOverlay };
 }
+/** Props for `SidebarSplitView`. Widths are logical points. Defaults: `contentMinWidth` 320, `sidebarMinWidth` 180, `listMinWidth` 240, `sidebarCollapsed` false. */
 export interface SidebarSplitViewProps extends Omit<SpecializedViewProps, "children"> {
   sidebar: ReactNode;
   content: ReactNode;
@@ -31,6 +41,7 @@ export interface SidebarSplitViewProps extends Omit<SpecializedViewProps, "child
   titleBar?: SplitViewTitleBarOptions;
   onResize?: (event: SidebarSplitViewResizeEvent) => void;
 }
+/** Whether the native `SidebarSplitView` can render: macOS 14 and later with the native view linked. */
 export function getSplitViewAvailability() { return macosViewAvailability("SidebarSplitView"); }
 function metrics(value: SidebarSplitViewPaneMetrics) {
   if (!value || typeof value !== "object") throw new SparkError("E_INVALID_ARGUMENT", "Expected pane metrics");
@@ -48,6 +59,11 @@ function overlay(value?: SplitViewTitleBarOverlay) {
   if (typeof value.color !== "string" || !/^#(?:[\da-f]{6}|[\da-f]{8})$/i.test(value.color)) throw new SparkError("E_INVALID_ARGUMENT", "Expected #RRGGBB or #RRGGBBAA title-bar color");
   if (value.opacity !== undefined) finite(value.opacity, "overlay opacity", 0, 1);
 }
+/**
+ * A native AppKit split view with a sidebar, an optional middle list and a content pane, each hosting React content.
+ * Invalid props throw E_INVALID_ARGUMENT. Where the native view is unavailable it reports through `onError` and lays
+ * the panes out in a plain row.
+ */
 export function SidebarSplitView({ sidebar, content, list, children, appearance: theme = "system", contentMinWidth = 320, sidebarMinWidth = 180, sidebarWidth, listMinWidth = 240, listWidth, sidebarCollapsed = false, initialPaneMetrics, titleBar = {}, onResize, ref, onError, ...props }: SidebarSplitViewProps) {
   appearance(theme); finite(contentMinWidth, "minimum content width"); finite(sidebarMinWidth, "minimum sidebar width"); finite(listMinWidth, "minimum list width");
   if (sidebarWidth !== undefined) finite(sidebarWidth, "sidebar width", sidebarMinWidth);

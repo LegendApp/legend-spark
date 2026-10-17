@@ -4,6 +4,7 @@ import { absolutePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import type { SettingsStorage } from "../store";
 import { fileStorage } from "../fileStorage";
 
+/** Options for `createObservableFile`. `storage` defaults to file storage, `debounceMs` (delay in milliseconds before an automatic save) to 300, and `saveDefault` (write a missing file before the factory resolves) to false. */
 export interface ObservableFileOptions<T> {
   /** Absolute native path, including the extension. Parent directory must exist. */
   path: string;
@@ -16,6 +17,7 @@ export interface ObservableFileOptions<T> {
   debounceMs?: number;
   saveDefault?: boolean;
 }
+/** A Legend State observable persisted to a file, from `createObservableFile` or `createObservableSettings`. */
 export interface ObservableFile<T> {
   /** Legend State owns this observable API. Mutations after close are not persisted. */
   value$: Observable<T>;
@@ -116,12 +118,16 @@ export async function createObservableFile<T>(options: ObservableFileOptions<T>)
   return handle;
 }
 
+/** One field for `createObservableSettings`: `defaultValue` applies when the field is absent, and `decode` validates a stored value, including null. */
 export interface ObservableSettingsField<T> {
   defaultValue: T;
   decode(value: unknown): T;
 }
+/** Field definitions for `createObservableSettings`, keyed by field name. */
 export type ObservableSettingsFields = Record<string, ObservableSettingsField<any>>;
+/** The settings object `createObservableSettings` persists: each field's decoded type, keyed by field name. */
 export type ObservableSettingsValues<F extends ObservableSettingsFields> = { [K in keyof F]: F[K] extends ObservableSettingsField<infer T> ? T : never };
+/** Options for `createObservableSettings`: `ObservableFileOptions` without `initialValue`, `decode` and `encode`, which `fields` replaces. */
 export interface ObservableSettingsOptions<F extends ObservableSettingsFields> extends Omit<ObservableFileOptions<ObservableSettingsValues<F>>, "initialValue" | "decode" | "encode"> { fields: F }
 /** Field defaults apply only to absent fields; stored null is passed to the decoder.
  * Unknown fields are omitted. Use value$.field directly with Legend State's useValue.

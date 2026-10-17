@@ -15,6 +15,7 @@ export type NetworkSource = "fetch" | "xhr" | "websocket";
  * and `data` and `size` both for a FormData or file upload.
  */
 export interface NetworkBody { data?: string; base64: boolean; size?: number; truncated: boolean }
+/** One captured WebSocket frame. `opcode` is 1 for text and 2 for binary; `at` is milliseconds since the epoch. */
 export interface NetworkFrame extends NetworkBody { direction: "sent" | "received"; opcode: 1 | 2; at: number }
 /** A call frame of the code that started the request. Lines and columns count from 1. */
 export interface NetworkCallFrame { functionName: string; url: string; line: number; column: number }
@@ -47,6 +48,7 @@ export interface NetworkEntry {
   close?: { code: number; reason: string };
   error?: string;
 }
+/** Options for `configureNetworkInspector`. */
 export interface NetworkInspectorOptions {
   /** Header names (any case) whose values are replaced by `[redacted]`. Default: Authorization, Cookie, Set-Cookie. */
   redactHeaders?: readonly string[];

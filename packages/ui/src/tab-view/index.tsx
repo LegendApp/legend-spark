@@ -10,7 +10,9 @@ import NativeTab from "./TabNativeComponent";
 export type TabPosition = "top" | "bottom" | "leading" | "trailing" | "none";
 /** AppKit draws tabs on a bezel, so `line` and `none` require `tabPosition: "none"`. */
 export type TabBorder = "bezel" | "line" | "none";
+/** Reported by `onSelectionChange` with the ID of the tab the user chose. */
 export interface TabViewSelectionEvent { id: string }
+/** Props for `TabView`. Defaults: `tabPosition` `top`, `tabBorder` `bezel`. */
 export interface TabViewProps extends Omit<SpecializedViewProps, "children"> {
   /** Controlled; must name a Tab. */
   selectedId: string;
@@ -20,6 +22,7 @@ export interface TabViewProps extends Omit<SpecializedViewProps, "children"> {
   /** Tab elements or fragments of them, in tab order. */
   children: ReactNode;
 }
+/** Props for `Tab`. `id` must be unique within its TabView and `label` nonempty. */
 export interface TabProps {
   id: string;
   label: string;
@@ -30,6 +33,7 @@ export interface TabProps {
 }
 const POSITIONS: readonly TabPosition[] = ["top", "bottom", "leading", "trailing", "none"];
 const BORDERS: readonly TabBorder[] = ["bezel", "line", "none"];
+/** Whether `TabView` can render: macOS 14 and later with both native views linked. */
 export function getTabViewAvailability() {
   const availability = macosViewAvailability("SparkTabView");
   return availability.available ? macosViewAvailability("SparkTab") : availability;

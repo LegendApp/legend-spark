@@ -15,11 +15,13 @@ let windowsApi: Promise<typeof import("@legendapp/spark-desktop-windows/src/api"
 const loadWindowsApi = () => windowsApi ??= import("@legendapp/spark-desktop-windows/src/api");
 export * from "./options";
 
+/** A settings window page: a unique `id`, the `title` shown in the sidebar and window title, and `render` for its content. */
 export interface SettingsWindowPage<PageId extends string = string> {
   id: PageId;
   title: string;
   render: () => ReactNode;
 }
+/** Props shared by `SettingsWindow` and `VirtualizedSettingsWindow`. Defaults: `appearance` `system`, `backgroundClassName` `bg-background`, `contentBackgroundClassName` the background class, `contentMinWidth` 340 and `sidebarMinWidth` 180. `onError` receives window failures (default: `console.error`). */
 export interface SettingsWindowBaseProps<PageId extends string = string> {
   /** Immutable for this mount. Remount to change the owning window. */
   windowId: string;
@@ -31,10 +33,13 @@ export interface SettingsWindowBaseProps<PageId extends string = string> {
   sidebarMinWidth?: number;
   onError?: (error: SparkError) => void;
 }
+/** Page selection: controlled with `selectedPageId` and `onSelectionChange`, or uncontrolled with an optional `defaultPageId` (default: the first page). The mode cannot change while mounted. */
 export type SettingsWindowSelectionProps<PageId extends string = string> =
   | { selectedPageId: PageId; defaultPageId?: never; onSelectionChange: (pageId: PageId) => void }
   | { selectedPageId?: never; defaultPageId?: PageId; onSelectionChange?: (pageId: PageId) => void };
+/** Props for `SettingsWindow`. */
 export type SettingsWindowProps<PageId extends string = string> = SettingsWindowBaseProps<PageId> & SettingsWindowSelectionProps<PageId>;
+/** Props for `VirtualizedSettingsWindow`. `estimatedItemSize` is a page's estimated height, default 520. */
 export type VirtualizedSettingsWindowProps<PageId extends string = string> = SettingsWindowProps<PageId> & { estimatedItemSize?: number };
 
 function useSettingsSelection<PageId extends string>(props: SettingsWindowProps<PageId>) {
@@ -103,6 +108,10 @@ function useSettingsWindow(windowId: string, title: string, appearance: SidebarS
   return { onResize, markContentReady, report };
 }
 
+/**
+ * A settings window's content: a sidebar of pages beside the selected page. It sets the window title to the page title and shows the hidden window once its native layout is ready.
+ * Throws `E_INVALID_ARGUMENT` for a changed `windowId`, empty or duplicate pages, or a selection that names no page.
+ */
 export function SettingsWindow<PageId extends string = string>(props: SettingsWindowProps<PageId>) {
   const { appearance = "system", backgroundClassName = "bg-background", contentBackgroundClassName = backgroundClassName, contentMinWidth = 340, pages, sidebarMinWidth = 180, windowId, onError } = props;
   const { selected, requestSelection } = useSettingsSelection(props);
@@ -119,6 +128,7 @@ export function SettingsWindow<PageId extends string = string>(props: SettingsWi
   />;
 }
 
+/** Like `SettingsWindow`, but renders every page in one virtualized scrolling list: scrolling selects the page at the top, and selecting a page scrolls to it. Throws `E_INVALID_ARGUMENT` unless `estimatedItemSize` is positive. */
 export function VirtualizedSettingsWindow<PageId extends string = string>(props: VirtualizedSettingsWindowProps<PageId>) {
   const { appearance = "system", backgroundClassName = "bg-background", contentBackgroundClassName = backgroundClassName, contentMinWidth = 340, estimatedItemSize = 520, pages, sidebarMinWidth = 180, windowId, onError } = props;
   if (!Number.isFinite(estimatedItemSize) || estimatedItemSize <= 0) throw new SparkError("E_INVALID_ARGUMENT", "estimatedItemSize must be positive");
@@ -195,12 +205,14 @@ function SettingsToolbarBackground({ variant }: { variant: "content" | "sidebar"
   );
 }
 
+/** Props for `SettingsSidebar`. */
 export type SettingsSidebarProps<PageId extends string = string> = {
   onSelectionChange: (pageId: PageId) => void;
   pages: readonly Pick<SettingsWindowPage<PageId>, "id" | "title">[];
   selectedPageId: PageId;
 };
 
+/** The settings windows' page list. Pressing a page calls `onSelectionChange` with its ID. */
 export function SettingsSidebar<PageId extends string = string>({
   onSelectionChange,
   pages,
@@ -244,12 +256,14 @@ export function SettingsSidebar<PageId extends string = string>({
   );
 }
 
+/** Props for `SettingsPage`. `actions` render above the content, aligned to the end. */
 export interface SettingsPageProps {
   actions?: ReactNode;
   children: ReactNode;
   contentClassName?: string;
 }
 
+/** A scrolling settings page body, centered at a maximum width and inset below the title bar. */
 export function SettingsPage({ actions, children, contentClassName }: SettingsPageProps) {
   return (
     <View className="w-full flex-1 self-stretch overflow-hidden">
@@ -266,6 +280,7 @@ export function SettingsPage({ actions, children, contentClassName }: SettingsPa
   );
 }
 
+/** Props for `SettingsSection`. `card` (default true) groups the children in a `SettingsRowGroup`; `first` (default false) drops the top margin. */
 export interface SettingsSectionProps {
   card?: boolean;
   children?: ReactNode;
@@ -277,6 +292,7 @@ export interface SettingsSectionProps {
   title?: string | null;
 }
 
+/** A group of settings with an optional title, description and `headerRight` content. */
 export function SettingsSection({
   card = true,
   children,
@@ -315,11 +331,13 @@ export function SettingsSection({
   );
 }
 
+/** Props for `SettingsCard`. */
 export interface SettingsCardProps {
   children: ReactNode;
   className?: string;
 }
 
+/** A rounded, bordered container for settings content. */
 export function SettingsCard({ children, className }: SettingsCardProps) {
   return (
     <View className={cn("overflow-hidden rounded-xl border border-border-primary bg-background-secondary/20", className)}>
@@ -328,11 +346,13 @@ export function SettingsCard({ children, className }: SettingsCardProps) {
   );
 }
 
+/** Props for `SettingsRowGroup`. */
 export interface SettingsRowGroupProps {
   children: ReactNode;
   className?: string;
 }
 
+/** A `SettingsCard` whose `SettingsRow` children are separated by hairline borders. */
 export function SettingsRowGroup({ children, className }: SettingsRowGroupProps) {
   return (
     <SettingsRowGroupContext.Provider value>
@@ -341,6 +361,7 @@ export function SettingsRowGroup({ children, className }: SettingsRowGroupProps)
   );
 }
 
+/** Props for `SettingsRow`. `align` (default `start`) is the vertical alignment of the text and control. */
 export interface SettingsRowProps {
   align?: "start" | "center";
   className?: string;
@@ -353,6 +374,7 @@ export interface SettingsRowProps {
   title: string;
 }
 
+/** A settings row: `title` and optional `description` beside its `control`. */
 export function SettingsRow({
   align = "start",
   className,

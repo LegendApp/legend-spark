@@ -20,16 +20,25 @@ export type MotionNumberProperty =
   /** A MotionShader's effect: 0-1 progress, and the distortion's strength from -1 to 1 (docs/motion.md#shader-effects-and-particles). */
   | "rippleProgress" | "dissolveProgress" | "distortion" | "specularProgress";
 export type { MotionColorProperty };
+/** Any property the motion engine animates: a number property or a color property. */
 export type MotionProperty = MotionNumberProperty | MotionColorProperty;
 /** Properties as the engine stores them: `scale` drives `scaleX` and `scaleY`, a color its OKLCH components. */
 export type MotionChannelProperty = Exclude<MotionNumberProperty, "scale"> | ColorComponent;
+/** Values to set at once (`initial`, `setMotionValues`): numbers for number properties, colors for color properties. */
 export type MotionValues = Partial<Record<MotionNumberProperty, number> & Record<MotionColorProperty, MotionColor>>;
 /** What an animation of a property animates to: a number, or a color for a color property. */
 export type MotionValue = number | MotionColor;
+/** A cubic Bézier easing's control points, as in CSS `cubic-bezier()`; x1 and x2 must be within 0-1. */
 export type CubicBezier = readonly [x1: number, y1: number, x2: number, y2: number];
+/** A named easing curve or a cubic Bézier. `easeIn`, `easeOut` and `easeInOut` are CSS's curves; `standard` is (0.4, 0, 0.2, 1). */
 export type Easing = "linear" | "easeIn" | "easeOut" | "easeInOut" | "standard" | CubicBezier;
+/**
+ * Named springs, as response and bounce: `default` 550 ms and 0.175, `smooth` 500 ms and 0, `snappy` 500 ms and 0.15,
+ * `bouncy` 500 ms and 0.3, `interactive` 150 ms and 0.14 (SwiftUI's springs).
+ */
 export type SpringPreset = "default" | "smooth" | "snappy" | "bouncy" | "interactive";
 
+/** Options every animation builder takes. `delayMs` is the start delay in milliseconds. Invalid values throw E_INVALID_ARGUMENT. */
 export interface AnimationOptions {
   /** Start velocity in units per second. Overrides the velocity inherited from an interrupted animation (gesture hand-off). */
   velocity?: number;
@@ -52,7 +61,9 @@ export interface SpringOptions extends AnimationOptions {
   stiffness?: number;
   damping?: number;
 }
+/** Options for `timing`: `durationMs` (default 250) and `easing` (default `easeInOut`). */
 export interface TimingOptions extends AnimationOptions { durationMs?: number; easing?: Easing }
+/** Options for `keyframes`. `durationMs` is the whole animation's length in milliseconds; the easing defaults to `easeInOut`. */
 export interface KeyframesOptions extends AnimationOptions {
   durationMs: number;
   /** Where each value is reached, strictly increasing in (0, 1] and ending at 1. Defaults to even spacing. */
@@ -60,6 +71,7 @@ export interface KeyframesOptions extends AnimationOptions {
   /** One easing, or one per segment. */
   easing?: Easing | readonly Easing[];
 }
+/** Options for `decay`, which cannot repeat or reverse. `deceleration` defaults to 0.998; `clamp` bounds the value. */
 export interface DecayOptions extends Omit<AnimationOptions, "repeat" | "reverse"> {
   /** Velocity retained per millisecond, 0 < deceleration < 1 (React Native's convention). */
   deceleration?: number;
@@ -67,14 +79,20 @@ export interface DecayOptions extends Omit<AnimationOptions, "repeat" | "reverse
   /** The spring that settles on a crossed clamp bound. Defaults to `{ responseMs: 300, bounce: 0 }`. */
   clampSpring?: Omit<SpringOptions, keyof AnimationOptions>;
 }
+/** Options for `sequence`, applied to the whole chain. A sequence of colors takes no velocity. */
 export type SequenceOptions = AnimationOptions;
 
 type Common = { velocity?: number; delayMs?: number; repeat?: number | "infinite"; reverse?: boolean; restDelta?: number; restSpeed?: number };
 type SpringParameters = { mass: number; stiffness: number; damping: number };
+/** A spring from `spring()`, normalized to mass, stiffness and damping. An infinite `repeat` is `"infinite"`. */
 export type SpringSpec<V extends MotionValue = number> = Readonly<Common & SpringParameters & { type: "spring"; to: V }>;
+/** A timing from `timing()`, its easing resolved to a cubic Bézier. */
 export type TimingSpec<V extends MotionValue = number> = Readonly<Common & { type: "timing"; to: V; durationMs: number; easing: CubicBezier }>;
+/** Keyframes from `keyframes()`: the values, their offsets, and one easing for all segments or one per value. */
 export type KeyframesSpec<V extends MotionValue = number> = Readonly<Common & { type: "keyframes"; durationMs: number; values: readonly V[]; offsets: readonly number[]; easings: readonly CubicBezier[] }>;
+/** A decay from `decay()`. With `clamp`, `bounce` holds the clamp spring's mass, stiffness and damping. */
 export type DecaySpec = Readonly<Omit<Common, "repeat" | "reverse"> & { type: "decay"; deceleration: number; clamp?: readonly [number, number]; bounce?: SpringParameters }>;
+/** A sequence from `sequence()`. */
 export type SequenceSpec<V extends MotionValue = number> = Readonly<Common & { type: "sequence"; steps: readonly MotionSpec<V>[] }>;
 /** An animation of numbers, or of colors (`V` is MotionColor): colors cannot decay. */
 export type MotionSpec<V extends MotionValue = number> = SpringSpec<V> | TimingSpec<V> | KeyframesSpec<V> | SequenceSpec<V> | (V extends number ? DecaySpec : never);
@@ -214,6 +232,10 @@ export function keyframes(values: readonly MotionValue[], keyframeOptions: Keyfr
   return seal({ type: "keyframes", durationMs, values: [...values], offsets: [...offsets], easings: list.map(easing), ...common(value) });
 }
 
+/**
+ * Decelerates from the start velocity (`velocity`, or the one inherited from an interrupted animation), as after a fling; numbers only.
+ * Throws E_INVALID_ARGUMENT for invalid options and E_UNSUPPORTED_OPTION for unknown ones.
+ */
 export function decay(decayOptions?: DecayOptions): DecaySpec {
   const value = options(decayOptions, ["velocity", "delayMs", "restDelta", "restSpeed", "deceleration", "clamp", "clampSpring"], "decay");
   const deceleration = number(value.deceleration ?? 0.998, "deceleration", v => v > 0 && v < 1, "between 0 and 1 (exclusive)");

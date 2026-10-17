@@ -2,6 +2,10 @@ import { Platform, UIManager } from "react-native";
 import { SparkError, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { isPrimitiveKind } from "./primitives";
 import type { ControlKind } from "./types";
+/**
+ * Whether a control kind renders natively. Button, TextInput and Select need macOS or Windows, SegmentedControl and the
+ * primitive controls need macOS. Throws E_INVALID_ARGUMENT for an unknown kind.
+ */
 export function getControlAvailability(control: ControlKind): Availability {
   if (isPrimitiveKind(control)) {
     if (Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };

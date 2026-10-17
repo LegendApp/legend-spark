@@ -3,6 +3,7 @@ import { callBinary } from "@legendapp/spark-desktop-app/src/contracts/native-bu
 import { SparkError, invokeNative, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import Native from "./NativeDesktopFileSystem";
+/** Whether the file system module can run: macOS or Windows with the native module installed. */
 export function getFileSystemAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
   return Native ? { available: true } : { available: false, reason: "missing-module" };

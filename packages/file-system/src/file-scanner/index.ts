@@ -2,7 +2,9 @@ import { NativeEventEmitter, Platform } from "react-native";
 import { SparkError, invokeNative, parseNativeResult, type Availability, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 import { nativePath } from "@legendapp/spark-desktop-app/src/contracts/path";
 import Native from "./NativeFileScanner";
+/** A file to mark as skipped in `scanFiles` results: its path relative to the root at `rootIndex` in the scanned paths. */
 export interface FileScanSkipEntry { relativePath: string; rootIndex: number }
+/** A file found by `scanFiles`. `extension` is lowercase without the dot; `rootIndex` is the scanned root it came from. `size` (bytes) and `modifiedAt` (Unix milliseconds) are present only with `includeStats: true`. */
 export interface ScannedFile {
   path: string;
   name: string;
@@ -13,9 +15,13 @@ export interface ScannedFile {
   size?: number;
   skipped: boolean;
 }
+/** Payload of `onProgress` in `scanFiles`, sent after each root finishes. */
 export interface FileScanProgress { completedRoots: number; rootIndex: number; totalRoots: number }
+/** Payload of `onBatch` in `scanFiles`: up to `batchSize` files from the root at `rootIndex`. */
 export interface FileScanBatch extends FileScanProgress { files: ScannedFile[] }
+/** Result of `scanFiles`: the number of files found and per-root error messages (such as a missing root), which do not reject the scan. */
 export interface FileScanResult { totalFiles: number; totalRoots: number; errors: string[] }
+/** Options for `scanFiles`. `extensions` are without dots (case-insensitive; default all files). `batchSize` is 1-10000 (default 64). `includeHidden` and `includeStats` default to false. Unknown keys reject E_UNSUPPORTED_OPTION. */
 export interface FileScanOptions {
   extensions?: readonly string[];
   batchSize?: number;
@@ -28,6 +34,7 @@ export interface FileScanOptions {
   /** Cancellation is cooperative between filesystem operations; the promise waits for native work to stop. */
   signal?: AbortSignal;
 }
+/** Whether `scanFiles` can run: macOS only. */
 export function getFileScanAvailability(): Availability {
   if (Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };
   return Native ? { available: true } : { available: false, reason: "missing-module" };
@@ -43,6 +50,7 @@ function scannedFile(value: unknown, roots: number): ScannedFile {
   return { path: value.absolutePath, name: value.fileName, extension: value.extension, relativePath: value.relativePath, rootIndex: value.rootIndex, size: value.size, modifiedAt: value.modifiedTime, skipped: value.skipped ?? false };
 }
 let nextScan = 0;
+/** Recursively lists the files (not directories) under each path, delivering them through `onBatch`. Rejects E_INVALID_ARGUMENT for bad options, E_ABORTED when `signal` aborts, with the error a callback threw, and E_UNSUPPORTED_PLATFORM off macOS. */
 export async function scanFiles(paths: readonly string[], options: FileScanOptions = {}): Promise<FileScanResult> {
   if (!Array.isArray(paths)) throw new SparkError("E_INVALID_ARGUMENT", "Expected scan paths");
   const roots = Array.from(paths, path => nativePath(path, Platform.OS));

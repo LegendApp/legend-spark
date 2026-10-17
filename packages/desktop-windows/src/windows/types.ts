@@ -6,6 +6,7 @@ import type { HotkeyDefinition } from "@legendapp/spark-commands/src/bindings";
 import type { CloseResult, MacOSToolbarOptions, MacOSWindowEvent, WindowBounds, WindowId, WindowOpenOptions } from "../types";
 
 type WithoutIdentity<T> = T extends unknown ? Omit<T, "id" | "component" | "props"> : never;
+/** `openWindow` options without `id`, `component` and `props`, which the navigator supplies. */
 export type NavigatorWindowOptions = WithoutIdentity<WindowOpenOptions>;
 
 /** The upstream Runtimes module, supplied by the app so Spark never retains Runtimes itself. */
@@ -30,8 +31,11 @@ export interface WindowInstance {
   refreshToolbar(): Promise<void>;
 }
 
+/** A change on a window's undo stack. `label` names it in the Undo and Redo menu items. */
 export interface UndoEntry { label?: string; undo(): void; redo(): void }
+/** A snapshot of an undo stack: whether it can undo or redo, and the labels of the next entries. */
 export interface UndoState { readonly canUndo: boolean; readonly canRedo: boolean; readonly undoLabel: string | null; readonly redoLabel: string | null }
+/** A window's undo history (`WindowInstance.undo`). */
 export interface UndoStack {
   /** Records an already-applied change and clears the redo history. Keeps the latest 100 entries. */
   push(entry: UndoEntry): void;
@@ -44,10 +48,12 @@ export interface UndoStack {
   subscribe(listener: (state: UndoState) => void): { remove(): void };
 }
 
+/** An entry's window-scoped hotkeys: their definitions and, per window, their handlers. Needs `hotkeys` in the navigator options. */
 export interface WindowHotkeys<Id extends string = string> {
   definitions: readonly HotkeyDefinition<Id>[];
   handlers: (instance: WindowInstance) => RoutedHotkeyHandlers<Id>;
 }
+/** An entry's macOS toolbar, built per window, and its toolbar event handler. */
 export interface WindowMacOS {
   toolbar?: (instance: WindowInstance) => MacOSToolbarOptions;
   onToolbarEvent?: (event: MacOSWindowEvent, instance: WindowInstance) => void;
@@ -119,6 +125,7 @@ export interface NewWindowTabRequest { name: string; props?: unknown; options?: 
 type OpenRequestFor<P> = {} extends P ? { props?: P; options?: NavigatorWindowOptions } : { props: P; options?: NavigatorWindowOptions };
 /** A `newTab` result for one of the configuration's entries, with that entry's props. */
 export type NewWindowTab<T extends WindowsConfig> = { [K in keyof T & string]: { name: K } & OpenRequestFor<WindowComponentProps<T[K]>> }[keyof T & string];
+/** Loads an entry's component lazily (`loadComponent`), as a component or a module with a `default` export. */
 export type WindowComponentLoader<P = Record<string, never>> = () => ComponentType<P> | { default: ComponentType<P> } | Promise<ComponentType<P> | { default: ComponentType<P> }>;
 /** Any React component, whatever its props; `open` infers the props from the registered component. */
 export type WindowComponent = ((props: never) => unknown) | (abstract new (props: never) => unknown);
@@ -130,10 +137,13 @@ type Loaded<C> = C | { default: C };
 export type WindowConfigEntry<P = never> = WindowServices & { id?: string } & ([P] extends [never]
   ? { component: WindowComponent; loadComponent?: never } | { component?: never; loadComponent: () => Loaded<WindowComponent> | Promise<Loaded<WindowComponent>> }
   : { component: ComponentType<P>; loadComponent?: never } | { component?: never; loadComponent: WindowComponentLoader<P> });
+/** The named window entries of `createWindowsNavigator`. */
 export type WindowsConfig = Record<string, WindowConfigEntry>;
 type PropsOf<C> = C extends { default: infer D } ? PropsOf<D> : C extends ComponentType<infer P> ? P : never;
+/** The props of an entry's component, from `component` or `loadComponent`. */
 export type WindowComponentProps<T> = T extends { component: infer C } ? PropsOf<C> : T extends { loadComponent: () => infer R } ? PropsOf<Awaited<R>> : never;
 
+/** A failure in one of a navigator's windows, passed to the navigator's `onError`; `phase` says where it happened. */
 export interface WindowErrorEvent {
   windowId: string;
   name: string;
@@ -141,8 +151,11 @@ export interface WindowErrorEvent {
   /** Render and handler failures are application errors; native failures are SparkErrors. */
   error: unknown;
 }
+/** Props of a navigator's `errorFallback`, shown when a window fails to render. `retry` renders the content again; `close` closes the window. */
 export interface ErrorFallbackProps { windowId: string; error: unknown; retry(): void; close(): void }
+/** Titles of the Edit menu and its Undo and Redo items, given the next entry's label. Defaults to English ("Undo <label>"). */
 export interface UndoMenuLabels { edit: string; undo: (label: string | null) => string; redo: (label: string | null) => string }
+/** Options for `createWindowsNavigator`. */
 export interface WindowsNavigatorOptions {
   /** Required when an entry declares hotkeys. */
   hotkeys?: HotkeyRouter;
@@ -179,6 +192,7 @@ export interface WindowSession {
   tabGroups: SavedTabGroup[];
   keyWindowId: WindowId | null;
 }
+/** Options for a navigator's `duplicate`. The copy opens cascaded from the source with its title; entries with an `id` cannot be duplicated. */
 export interface DuplicateWindowOptions {
   /** Shallowly merged over the source's props. */
   props?: Record<string, unknown>;
