@@ -671,8 +671,9 @@ has settled (up to 30 s) and `for` (default 2s) more, it takes one snapshot and 
   `SCRIPT_MARKERS` in `scripts/e2e/runner/driver-release.ts`. An app with no JavaScript to search is a finding too
   ([devtools.md](devtools.md#network-inspector), #271; [devtools.md](devtools.md#profiling), #272;
   [devtools.md](devtools.md#react-devtools), `DEVT-REL-06`, #269).
-- **Native code:** every Mach-O file in the app, at any depth, is searched for the profiler's marker, which its native
-  half (`SparkProfiler.mm`) holds as a string. An app with no Mach-O file is a finding too (#272).
+- **Native code:** every Mach-O file in the app, at any depth, is searched for the network inspector's and the
+  profiler's markers, which their native halves (`SparkNetworkRequests.mm`, `SparkProfiler.mm`) hold as strings
+  (`NATIVE_MARKERS`). An app with no Mach-O file is a finding too (#272, #395).
 
 It is a `build: release` check: a development build connects to the decoy (or the bundle server) and has the Developer
 menu, so it fails. `DEVT-REL-07` (`e2e/flows/devtools/web-inspector-release.yaml`) adds that a release build's WebViews are not

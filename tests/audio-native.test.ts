@@ -22,6 +22,8 @@ test.skipIf(process.platform !== "darwin")("native audio status reads are pure a
 #include <cassert>
 #define RCT_EXPORT_MODULE(name)
 static NSString *SparkLocalizedString(NSString *key) { return key; }
+// RNDesktopApp/SparkNetworkRequests.h without development reporting: the load itself.
+static void SparkLoadURL(NSString *module, NSURLRequest *request, void (^completion)(NSData *, NSURLResponse *, NSError *)) { [[NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:completion] resume]; }
 typedef void (^RCTPromiseResolveBlock)(id);
 typedef void (^RCTPromiseRejectBlock)(NSString *, NSString *, NSError *);
 @interface RCTEventEmitter : NSObject

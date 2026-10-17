@@ -59,7 +59,8 @@ subscription.remove();
 Status subscriptions sample at 250 ms only while observed. They report state, not
 an exact event journal. Removal stops callbacks, and player disposal removes all
 subscriptions. Artwork loading is best effort; transport/decoding failures remain
-visible through player status. Replacing a player does not transfer its listeners.
+visible through player status. On macOS, development builds list an `http(s)` artwork request in
+the [network inspector](devtools.md#native-modules-requests). Replacing a player does not transfer its listeners.
 
 ## Independent system media sessions
 

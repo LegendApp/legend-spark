@@ -28,7 +28,7 @@ static NSFileVersion *VersionFor(NSURL *url, NSString *identifier, NSError **err
 static NSDictionary *Describe(NSFileVersion *version, NSError **error) {
   NSString *identifier = version.URL.lastPathComponent;
   if (!identifier.length) return Fail(error, Coded(@"E_NATIVE", @"A document version has no stored file")), nil;
-  return @{ @"id": identifier, @"name": version.localizedName ?: @"", @"path": version.URL.path ?: @"",
+  return @{ @"id": identifier, @"name": version.localizedName ?: @"",
     @"modifiedAt": @(floor(version.modificationDate.timeIntervalSince1970 * 1000)) };
 }
 static NSDictionary *Add(NSURL *url, NSError **error) {
@@ -56,6 +56,13 @@ NSDictionary *SparkAddFileVersion(NSURL *url, NSError **error) {
   __block NSDictionary *result = nil;
   SparkCoordinate(SparkCoordinateRead, url, nil, error, ^BOOL(NSURL *item, NSURL *unused, NSError **failure) { return (result = Add(item, failure)) != nil; });
   return result;
+}
+
+NSString *SparkReadFileVersion(NSURL *url, NSString *identifier, NSError **error) {
+  if (!Exists(url, error)) return nil;
+  // Precise lifetime: releasing the version revokes a sandboxed process's access to its stored file.
+  __attribute__((objc_precise_lifetime)) NSFileVersion *version = VersionFor(url, identifier, error);
+  return version ? [NSString stringWithContentsOfURL:version.URL encoding:NSUTF8StringEncoding error:error] : nil;
 }
 
 BOOL SparkRestoreFileVersion(NSURL *url, NSString *identifier, NSError **error) {

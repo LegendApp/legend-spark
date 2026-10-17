@@ -5,7 +5,7 @@ intent: >
   settled UI, and checks the running process: it never connected to the decoy, lsof finds no network socket and no
   bound Unix socket but the driver's channel, its menus have no Developer menu or
   other debug item, none of its JavaScript contains the network inspector, the profiler or React DevTools' backend, and
-  none of its native code contains the profiler.
+  none of its native code contains the network inspector or the profiler.
 checks: [DEVT-REL-01, DEVT-REL-02, DEVT-REL-03, DEVT-REL-04, DEVT-REL-05, DEVT-REL-06]
 tags: [devtools, security]
 platforms: [macos]

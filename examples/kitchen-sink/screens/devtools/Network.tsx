@@ -19,7 +19,7 @@ function Section({ title, children }: PropsWithChildren<{ title: string }>) {
 function Entry({ entry }: { entry: NetworkEntry }) {
   const body = entry.responseBody;
   return <View className="gap-1 border-b border-border px-4 py-2" testID={`${ID}-entry-${entry.source}-${entry.state}`}>
-    <Text selectable className="font-mono text-xs text-foreground">{`${entry.source} ${entry.method} ${entry.url}`}</Text>
+    <Text selectable className="font-mono text-xs text-foreground">{`${entry.source}${entry.module ? ` ${entry.module}` : ""} ${entry.method} ${entry.url}`}</Text>
     <Text selectable className="font-mono text-xs text-muted">
       {[entry.state, entry.status, entry.endedAt === undefined ? undefined : `${entry.endedAt - entry.startedAt} ms`,
         body ? `${body.size ?? "?"}${body.truncated ? " (truncated)" : ""} ${body.base64 ? "base64" : "text"}` : undefined,

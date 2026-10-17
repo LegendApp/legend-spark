@@ -8,6 +8,8 @@ import { WebSocketServer } from "ws";
 export const TEXT = "Kitchen Sink network inspector ✓";
 export const BINARY = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
 export const LARGE = "0123456789abcdef".repeat(200 * 1024 / 16);
+// A 1×1 PNG: the Now Playing artwork Spark's audio module loads natively.
+export const ARTWORK = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==", "base64");
 // 1 KB parts: URLSession holds back a response's first 512 bytes (content sniffing), so smaller parts arrive as one.
 export const STREAM = Array.from({ length: 5 }, (_, i) => `chunk-${i + 1} ${".".repeat(1013)}\n`);
 
@@ -24,6 +26,7 @@ export async function serveNetworkFixtures() {
     requests.push({ method: request.method ?? "GET", url: url.pathname, headers: request.headers, body: Buffer.concat(chunks) });
     switch (url.pathname) {
       case "/text": response.writeHead(200, { "content-type": "text/plain; charset=utf-8", "set-cookie": "ks-session=fixture-secret; HttpOnly" }).end(TEXT); return;
+      case "/artwork.png": response.writeHead(200, { "content-type": "image/png", "set-cookie": "ks-session=fixture-secret; HttpOnly" }).end(ARTWORK); return;
       case "/binary": response.writeHead(200, { "content-type": "application/octet-stream" }).end(BINARY); return;
       case "/echo": response.writeHead(200, { "content-type": "application/octet-stream" }).end(Buffer.concat(chunks)); return;
       case "/redirect": response.writeHead(302, { location: "/text" }).end(); return;

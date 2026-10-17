@@ -5,7 +5,7 @@
 // Kitchen Sink's network scenarios and checks both what the app received (unchanged by the inspector) and the Network
 // events DevTools received through the development server.
 import assert from "node:assert/strict";
-import { BINARY, LARGE, STREAM, TEXT, serveNetworkFixtures } from "./testing/network-fixtures.ts";
+import { ARTWORK, BINARY, LARGE, STREAM, TEXT, serveNetworkFixtures } from "./testing/network-fixtures.ts";
 import { startDevSession, type Cdp, type Message } from "./testing/dev-session.ts";
 
 const fixtures = await serveNetworkFixtures();
@@ -49,7 +49,10 @@ try {
   await new Promise(resolve => setTimeout(resolve, 1000));
   assert.deepEqual(network(cdp.events), []);
   assert.equal(await cdp.evaluate("ksNetwork.log().length"), 0);
-  pass("idle: with no DevTools session and no listener, a fetch is neither recorded nor reported");
+  assert.deepEqual(await run("artwork"), { recorded: false });
+  assert.ok(fixtures.requests.some(item => item.url === "/artwork.png"), "the audio module loaded the artwork");
+  assert.deepEqual(network(cdp.events), []);
+  pass("idle: with no DevTools session and no listener, a fetch and a native module's request are neither recorded nor reported");
 
   // 2. With a session (DevTools enables Runtime and Log), requests reach DevTools through the development server.
   await cdp.send("Log.enable");
@@ -120,6 +123,25 @@ try {
   assert.ok(network(cdp.events).some(message => message.method === "Network.webSocketHandshakeResponseReceived" && message.params.requestId === created.requestId));
   pass("WebSocket: the echo returns the text and the binary frame intact; DevTools gets the handshake, text and binary frames, and the close");
 
+  // Native modules' own requests: the audio module loads Now Playing artwork with NSURLSession.
+  const AUDIO = "@legendapp/spark/audio";
+  assert.deepEqual(await run("artwork"), { source: "native", module: AUDIO, state: "finished", status: 200 });
+  const art = await request("artwork.png");
+  assert.equal(art.sent.type, "Other");
+  assert.deepEqual(art.sent.initiator, { type: "other", url: AUDIO });
+  const artResponse = art.events.find(message => message.method === "Network.responseReceived")!.params.response;
+  assert.deepEqual([artResponse.status, artResponse.mimeType, header(artResponse.headers, "Set-Cookie")], [200, "image/png", "[redacted]"]);
+  assert.equal(hex(decoded(await body(art.sent.requestId))), hex(ARTWORK));
+  await cdp.evaluate("ksNetwork.configure({ maxBodySize: 16 })");
+  await run("artwork");
+  const capped = await request("artwork.png");
+  assert.equal(hex(decoded(await body(capped.sent.requestId))), hex(ARTWORK.subarray(0, 16)));
+  const cappedEntry = JSON.parse(await cdp.evaluate("JSON.stringify(ksNetwork.log())")).filter((item: any) => item.url === `${base}artwork.png`).at(-1);
+  assert.deepEqual([cappedEntry.responseBody.size, cappedEntry.responseBody.truncated], [ARTWORK.length, true]);
+  await cdp.evaluate("ksNetwork.configure({ maxBodySize: 65536 })");
+  assert.ok(!JSON.stringify(network(cdp.events)).includes("fixture-secret"), "no secret reached DevTools");
+  pass(`native: the audio module's artwork request reaches DevTools as type Other with initiator ${AUDIO}, responseReceived 200 image/png with Set-Cookie redacted, the ${ARTWORK.length}-byte PNG through getResponseBody, and only its first 16 bytes with maxBodySize 16`);
+
   // 3. getNetworkLog holds the same entries while DevTools observes, redacted and capped.
   const logged = JSON.parse(await cdp.evaluate("JSON.stringify(ksNetwork.log())")) as any[];
   const largeEntry = logged.filter(item => item.url === `${base}large`).at(-1);
@@ -134,7 +156,9 @@ try {
   assert.deepEqual(await run("fetch"), { status: 200, text: TEXT });
   await new Promise(resolve => setTimeout(resolve, 1000));
   assert.equal(network(cdp.events).length, count);
-  pass("detached: after the session ends a fetch is no longer reported");
+  assert.deepEqual(await run("artwork"), { recorded: false });
+  assert.equal(network(cdp.events).length, count);
+  pass("detached: after the session ends a fetch and a native module's request are no longer reported");
 } catch (error) {
   console.error(`Network events: ${JSON.stringify(network(cdp?.events ?? []).map(message => message.method)).slice(0, 4000)}`);
   console.error(`Network log: ${await cdp?.evaluate("JSON.stringify(ksNetwork.log().map(entry => [entry.source, entry.url, entry.state, entry.status, entry.error]))").catch(String)}`);

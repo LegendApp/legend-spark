@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import * as app from "@legendapp/spark/app";
 import {
   addDocumentVersion, createDocumentSession, findDocumentSession, getDocumentSessionAvailability, getDocumentVersionsAvailability,
-  listDocumentVersions, subscribeToOpenRequests, type DocumentSession, type DocumentVersion, type Subscription,
+  listDocumentVersions, readDocumentVersionText, subscribeToOpenRequests, type DocumentSession, type DocumentVersion, type Subscription,
 } from "@legendapp/spark/app/documents";
 import type { Availability } from "@legendapp/spark/contracts";
 import { showMessage } from "@legendapp/spark/dialogs";
@@ -228,7 +228,7 @@ class DocumentsDemo {
       const added = await addDocumentVersion(this.path());
       const versions = await listDocumentVersions(this.path());
       assert(versions.length >= 3 && versions[0]!.id === added.id, `expected the added version first among saved versions, found ${versions.length}`);
-      const oldest = versions.at(-1)!, contents = await readText(oldest.path);
+      const oldest = versions.at(-1)!, contents = await readDocumentVersionText(this.path(), oldest.id);
       await s().restoreVersion(oldest.id);
       assert(s().getState().text === contents && (await listDocumentVersions(this.path())).length === versions.length + 1, "restore mismatch");
       await this.refreshVersions();

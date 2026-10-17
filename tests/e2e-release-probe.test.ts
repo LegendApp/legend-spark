@@ -90,16 +90,17 @@ test("JavaScript that contains the network inspector or the profiler is a findin
   expect(codeProblems(empty)).toEqual([`no JavaScript bundle found in ${empty} to check for the network inspector, the profiler, the React DevTools backend and the React DevTools Select element fix`]);
 });
 
-test("native code that contains the profiler is a finding, in any Mach-O file; an app without native code fails closed (DEVT-REL-05)", () => {
+test("native code that contains the network inspector or the profiler is a finding, in any Mach-O file; an app without native code fails closed (DEVT-REL-04, DEVT-REL-05)", () => {
   const scripts = { "main.jsbundle": HBC("release") };
   expect(codeProblems(appBundle(scripts, { KitchenSink: MACHO("SparkFrameTimeline startFrames") }))).toEqual([]);
   // A file that is not Mach-O is not native code, whatever it holds.
   expect(codeProblems(appBundle(scripts, { KitchenSink: MACHO("release"), "notes.txt": "spark-profiler" }))).toEqual([]);
-  expect(codeProblems(appBundle(scripts, { KitchenSink: MACHO("spark-profiler-XXXXXX"), helper: MACHO("release") }))).toEqual([
+  expect(codeProblems(appBundle(scripts, { KitchenSink: MACHO("spark-profiler-XXXXXX"), helper: MACHO("release"), RNDesktopApp: MACHO("spark-network-inspector:native:%lu") }))).toEqual([
     "Contents/MacOS/KitchenSink contains the profiler (spark-profiler)",
+    "Contents/MacOS/RNDesktopApp contains the network inspector (spark-network-inspector)",
   ]);
   const native = appBundle(scripts, {});
-  expect(codeProblems(native)).toEqual([`no native code found in ${native} to check for the profiler`]);
+  expect(codeProblems(native)).toEqual([`no native code found in ${native} to check for the network inspector and the profiler`]);
 });
 
 const HEADER = "appId: so.legend.spark.examples.kitchensink\nname: Release probe\nintent: The test intent.\n---\n";

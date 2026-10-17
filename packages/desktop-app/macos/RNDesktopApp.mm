@@ -1,6 +1,7 @@
 #import "RNDesktopApp.h"
 #import "SparkDesktop.h"
 #import "SparkDevTools.h"
+#import "SparkNetworkRequests.h"
 #import "SparkProfiler.h"
 #import "SparkLocalization.h"
 @implementation RNDesktopApp { NSMutableSet<NSString *> *_guardIds; BOOL _observing; }
@@ -95,6 +96,12 @@ static SparkProfilerCompletion SparkProfilerSettle(RCTPromiseResolveBlock resolv
       SparkProfilerStop(directory, SparkProfilerSettle(resolve, reject));
     }
     else if ([method isEqual:@"isProfiling"]) resolve(SparkProfilerRecording() ? @"true" : @"false");
+    else if ([method isEqual:@"reportNativeNetwork"]) {
+      id size = args[@"maxBodySize"];
+      if (size != NSNull.null && (![size isKindOfClass:NSNumber.class] || [size integerValue] < 0)) { SparkInvalid(reject, @"Expected maxBodySize, or null to stop"); return; }
+      SparkSetNetworkReporting(size == NSNull.null ? -1 : [size integerValue]);
+      resolve(@"null");
+    }
 #endif
     else SparkInvalid(reject, @"Unknown app operation");
   });

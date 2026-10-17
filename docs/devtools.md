@@ -139,9 +139,11 @@ answered after redirects, timing, the initiator's stack (source-mapped by DevToo
 - **Logs:** the inspector never logs a request, header or body. If it cannot reach the development server while DevTools is
   attached, it warns once per session, with that server's address.
 
-Requests that Spark's native modules make themselves do not pass through the JavaScript runtime and are not listed:
-Sparkle's appcast and update downloads in `@legendapp/spark/updates`
-([#395](https://github.com/LegendApp/legend-spark/issues/395)).
+Requests that Spark's native modules make themselves are listed too, with `source: "native"` and the module's import
+path as `module` (DevTools shows type Other and the module as the initiator), with the same redaction, size caps and
+no cost while nobody looks. They are the app's, not a runtime's, so the shared runtime lists them. Today that is
+`@legendapp/spark/audio` loading Now Playing artwork (`artworkUrl`); see
+[Native modules' requests](#native-modules-requests) for the others.
 
 ```ts
 import { addNetworkListener, configureNetworkInspector, getNetworkInspectorAvailability, getNetworkLog } from "@legendapp/spark/devtools";
@@ -158,8 +160,8 @@ and `missing-module` if `@legendapp/spark/runtime-entry` did not install it. The
 `E_UNSUPPORTED_PLATFORM`, `E_UNAVAILABLE` or `E_MODULE_UNAVAILABLE` when it is unavailable, `E_INVALID_ARGUMENT` for a
 listener that is not a function or an invalid option, and `E_UNSUPPORTED_OPTION` for an unknown option.
 
-A `NetworkEntry` has `id`, `source` (`fetch`, `xhr` or `websocket`), `method`, `url`, `requestHeaders`, `requestBody`,
-`initiator` (call frames, lines and columns from 1), `state`, `startedAt`, `respondedAt`, `endedAt` (milliseconds since
+A `NetworkEntry` has `id`, `source` (`fetch`, `xhr`, `websocket` or `native`), a native request's `module`, `method`,
+`url`, `requestHeaders`, `requestBody`, `initiator` (call frames, lines and columns from 1; empty for a native request), `state`, `startedAt`, `respondedAt`, `endedAt` (milliseconds since
 the epoch), `status`, `responseURL`, `responseHeaders`, `responseBody`, a WebSocket's `frames` and `close`, and
 `error`. An HTTP request is `pending`, then `finished`, `failed` or `canceled`; a WebSocket is `pending`, `open`, then
 `closed` or `failed`. A body (`NetworkBody`) holds `data` (text, or base64 when `base64`), `size` and `truncated`;
@@ -182,7 +184,32 @@ to every attached DevTools session.
 
 Release bundles contain none of it: Metro removes the `__DEV__` branch and the module with it
 (`tests/developer-menu-release.test.ts`), and the release gate's [release-safety probe](e2e-flows.md#release-safety-probe)
-(`DEVT-REL-04`) fails a release build whose JavaScript contains the inspector's marker.
+(`DEVT-REL-04`) fails a release build whose JavaScript or native code contains the inspector's marker
+(`spark-network-inspector`).
+
+### Native modules' requests
+
+A native module loads with `SparkLoadURL(module, request, completion)` (`RNDesktopApp/SparkNetworkRequests.h`), which is
+`NSURLSession.sharedSession`'s `dataTaskWithRequest:completionHandler:` in every build. In development builds, while the
+shared runtime's inspector records, it also reports each HTTP(S) request as a `nativeNetwork` desktop event, with the
+first `maxBodySize` bytes of each body; the inspector turns this on and off (`reportNativeNetwork`). A module with its own
+transport reports through `SparkNetworkRequestWillStart` and `SparkNetworkRequestDidEnd`. All of the reporting is inside
+`#if RCT_DEV`, so release builds compile only the load (`tests/developer-menu-release.test.ts`, and `DEVT-REL-04` in
+native code).
+
+Which native modules make requests:
+
+- `@legendapp/spark/audio`: Now Playing artwork from an `http(s)` `artworkUrl`. Listed.
+- `@legendapp/spark/updates` (Sparkle): its appcast and update downloads happen only in a configured standalone release
+  build. Development builds report `development` and reject every update command, the Spark Runner reports `go`, and
+  the [App Sandbox variant](app-sandbox.md) ships without Sparkle (`sandboxed`). The inspector exists only in
+  development builds, so the two never meet and nothing of Sparkle is listed. Should development builds ever run
+  Sparkle, its delegate sees the update download's request (`updater:willDownloadUpdate:withRequest:`) and could report
+  it through `SparkNetworkRequestWillStart`; Sparkle exposes no request or response for the appcast.
+- Audio and video playback from an `http(s)` source: AVFoundation streams the media itself, with no request Spark can
+  observe. Not listed.
+- `@legendapp/spark/webview`: web content's requests are in Safari's Web Inspector ([Web Inspector](#web-inspector)).
+- The Developer menu's DevTools opener talks to the development server; that is the tool itself, not the app. Not listed.
 
 ## Profiling
 

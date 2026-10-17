@@ -5,6 +5,7 @@ import getDevServer from "react-native/Libraries/Core/Devtools/getDevServer";
 import { registerNetworkInspector, type NetworkEntry } from "../network-inspector";
 import { intercept, readBlob } from "./intercept";
 import { NETWORK_INSPECTOR_MARKER } from "./marker";
+import { nativeRequests } from "./native";
 import { NetworkRecorder } from "./recorder";
 
 /** React Native's debugger session observer (jsinspector-modern): a session is active while DevTools is attached. */
@@ -43,6 +44,8 @@ export function installNetworkInspector(): void {
   const runtime = (globalThis as { __THREADED_RUNTIME_ENV__?: { runtimeName?: string } }).__THREADED_RUNTIME_ENV__?.runtimeName ?? "shared";
   const recorder = new NetworkRecorder(`${NETWORK_INSPECTOR_MARKER}:${runtime}:${Date.now().toString(36)}:`, readBlob);
   const interception = intercept(recorder);
+  // Requests Spark's native modules make are the app's, not a runtime's: the shared runtime lists them.
+  const natives = runtime === "shared" ? nativeRequests(recorder) : undefined;
   const observer = (globalThis as { __DEBUGGER_SESSION_OBSERVER__?: SessionObserver }).__DEBUGGER_SESSION_OBSERVER__;
   const server = getDevServer();
   const listeners = new Set<(entry: NetworkEntry) => void>();
@@ -60,6 +63,7 @@ export function installNetworkInspector(): void {
     if (!attached && devtools) { devtools.close(); devtools = undefined; }
     recorder.observe({ entry: listeners.size ? entry : undefined, devtools: devtools?.send });
     interception.observe(recorder.active);
+    natives?.observe(recorder.active);
   };
   observer?.subscribers.add(update);
   update();
@@ -72,6 +76,6 @@ export function installNetworkInspector(): void {
       return { remove() { if (listeners.delete(registration)) update(); } };
     },
     log: () => recorder.log(),
-    configure: options => recorder.configure(options),
+    configure: options => { recorder.configure(options); update(); },
   });
 }

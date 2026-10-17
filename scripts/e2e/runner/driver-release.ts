@@ -79,8 +79,11 @@ export const SCRIPT_MARKERS: readonly CodeMarker[] = [
   { marker: "connectWithCustomMessagingProtocol", label: "React DevTools backend" },
   { marker: REACT_DEVTOOLS_MARKER, label: "React DevTools Select element fix" },
 ];
-/** What no release build's native code may contain: the profiler's native half (SparkProfiler.mm). */
-export const NATIVE_MARKERS: readonly CodeMarker[] = [{ marker: PROFILER_MARKER, label: "profiler" }];
+/**
+ * What no release build's native code may contain: the network inspector's native reporting (SparkNetworkRequests.mm)
+ * and the profiler's native half (SparkProfiler.mm).
+ */
+export const NATIVE_MARKERS: readonly CodeMarker[] = [{ marker: NETWORK_INSPECTOR_MARKER, label: "network inspector" }, { marker: PROFILER_MARKER, label: "profiler" }];
 
 /**
  * Every JavaScript file of the app (bundles and scripts, by extension, at any depth) that contains a `scripts` marker and
