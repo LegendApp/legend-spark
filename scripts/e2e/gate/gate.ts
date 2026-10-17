@@ -178,11 +178,12 @@ function budgetsFor(plan: GatePlan, results: FlowResult[] | undefined): PlannedB
 /** Each budget against every result that recorded its metric. A blocking budget fails closed: no baseline or no measurement is a failure. */
 function judgeBudgets(plan: GatePlan, results: FlowResult[], reasons: Reason[], warnings: string[]): BudgetEntry[] {
   const machine = plan.machine!.id, entries: BudgetEntry[] = [];
-  const pathOf = new Map(plan.flows.flatMap(flow => flow.ids.map(id => [id, flow.path])));
+  // Baselines are the direct build's: a direct flow's run against the App Sandbox variant is not measured against them.
+  const pathOf = new Map(plan.flows.filter(flow => !flow.sandboxRun).flatMap(flow => flow.ids.map(id => [id, flow.path])));
   const fail = (budget: PlannedBudget, message: string) => budget.blocking === false ? warnings.push(`non-blocking budget ${message}`) : reasons.push({ check: "budgets", message });
   for (const budget of budgetsFor(plan, results)) {
     const blocking = budget.blocking !== false, base = { metric: budget.metric, machine, better: budget.better, baseline: budget.baseline, blocking };
-    const measured = results.filter(result => !budget.flows || matchesAny(pathOf.get(result.id)!, budget.flows))
+    const measured = results.filter(result => pathOf.has(result.id) && (!budget.flows || matchesAny(pathOf.get(result.id)!, budget.flows)))
       .flatMap(result => (result.metrics[budget.metric] ?? []).map(value => ({ flow: result.id, value })));
     if (budget.baseline === "not-measured") {
       const values = measured.map(({ flow, value }) => `${flow}: ${value}`).join(", ");
@@ -306,7 +307,11 @@ export async function runGate(plan: GatePlan, env: GateEnv, { agent = false } = 
       const { report: { flows: run } } = await runSuite(suite.flows.map(flow => flow.file), {
         backends: suite.backends, runDir: suite.dir, app: suite.app, clock, signal: env.signal, deadline: began + timeBudgetMs, host: plan.host, onEvent: printer(env, agent),
       });
-      results.push(...run.map(result => suite.prefix && result.bundle ? { ...result, bundle: path.join(suite.prefix, result.bundle) } : result));
+      // A direct flow's run against the variant has its own ID (sandbox/<run ID>), so both results are judged.
+      const rerun = new Set(suite.flows.filter(flow => flow.sandboxRun).flatMap(flow => flow.ids));
+      results.push(...run.map(result => !suite.prefix ? result : {
+        ...result, ...(rerun.has(`sandbox/${result.id}`) ? { id: `sandbox/${result.id}` } : {}), ...(result.bundle ? { bundle: path.join(suite.prefix, result.bundle) } : {}),
+      }));
     }
   } else if (automated.length) say("flows not run: see the reasons below");
   const flows = judgeFlows(plan, results, runDir, reasons, warnings);

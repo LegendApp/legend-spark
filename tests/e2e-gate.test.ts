@@ -113,6 +113,58 @@ describe("release gate", () => {
     expect(reasons(await run())).toContain("build: flows/app/sandboxed.yaml tests the App Sandbox variant, but gate.yaml has no build.macos.sandbox");
   });
 
+  test("build.macos.sandboxFlows: those direct flows also run against the App Sandbox variant under their own run IDs, and a sandbox regression fails", async () => {
+    const dir = repo(), sandbox = path.join(dir, "build/macos-arm64/KitchenSink-sandbox.app");
+    mkdirSync(sandbox, { recursive: true });
+    edit(dir, "e2e/gate.yaml", 'verifySignature: true }', 'verifySignature: true, sandbox: "build/macos-${ARCH}/KitchenSink-sandbox.app", sandboxFlows: [flows/app/launch.yaml, flows/app/th*.yaml] }');
+    const { env: gateEnv, out } = env(), clock = gateEnv.clock as VirtualClock, factories: unknown[] = [];
+    expect(await gateCommand(["--dry-run"], path.join(dir, "e2e"), gateEnv)).toBe(0);
+    expect(out.join("\n")).toContain("Build: build/macos-arm64/KitchenSink.app (signature will be verified)\nApp Sandbox variant: build/macos-arm64/KitchenSink-sandbox.app\n");
+    expect(out.join("\n")).toContain([
+      "  run            blocking      flows/app/launch.yaml",
+      "  run            blocking      sandbox/flows/app/launch.yaml (App Sandbox variant)",
+      "  run            blocking      flows/app/theme.yaml (2 matrix runs)",
+      "  run            blocking      sandbox/flows/app/theme.yaml (2 matrix runs) (App Sandbox variant)",
+    ].join("\n"));
+    let broken = false;
+    const run = () => runGate(plan(path.join(dir, "e2e"), gateEnv.host()), { ...gateEnv, backends: { ...gateEnv.backends, app: options => {
+      factories.push(options);
+      // The variant regresses: its catalog is missing.
+      return broken && options.app === sandbox ? new MemoryBackend(clock, { name: "app", matrix: ["appearance"], elements: [ELEMENTS[1]!], commands: { launchApp: async () => { await clock.sleep(100); } } }) : gateEnv.backends.app!(options);
+    } } });
+    const report = await run();
+    expect(report.reasons).toEqual([]);
+    expect(factories).toEqual([{ app: path.join(dir, "build/macos-arm64/KitchenSink.app"), state: "exact" }, { app: sandbox, state: "isolated" }]);
+    expect(report.flows.map(flow => [flow.id, flow.status])).toEqual([
+      ["flows/app/ime", "signed-off"], ["flows/app/launch", "passed"], ["sandbox/flows/app/launch", "passed"],
+      ["flows/app/theme[appearance=light]", "passed"], ["flows/app/theme[appearance=dark]", "passed"],
+      ["sandbox/flows/app/theme[appearance=light]", "passed"], ["sandbox/flows/app/theme[appearance=dark]", "passed"],
+    ]);
+    // The direct build's baselines judge only the direct build.
+    expect(report.budgets.map(budget => budget.flow)).toEqual(["flows/app/launch"]);
+    expect(JSON.parse(readFileSync(path.join(dir, "reports/gate/run/sandbox/report.json"), "utf8")).flows.map((flow: { id: string }) => flow.id)).toContain("flows/app/launch");
+
+    broken = true;
+    const regressed = await run();
+    expect(regressed.verdict).toBe("FAIL");
+    expect(reasons(regressed)).toEqual([expect.stringMatching(/^flows: sandbox\/flows\/app\/launch: /)]);
+    expect(regressed.flows.find(flow => flow.id === "flows/app/launch")).toMatchObject({ status: "passed" });
+    expect(regressed.flows.find(flow => flow.id === "sandbox/flows/app/launch")).toMatchObject({ status: "failed", bundle: expect.stringMatching(/^reports\/gate\/run\/sandbox\//) });
+  });
+
+  test("build.macos.sandboxFlows fails the plan for a flow that cannot run there, a glob that matches nothing, or no variant", () => {
+    const dir = repo({ "e2e/flows/app/sandboxed.yaml": 'appId: so.legend.kitchensink\nname: Sandboxed launch\nintent: The App Sandbox variant shows the catalog.\nchecks: [APP-LAUNCH-01]\nvariant: sandbox\n---\n- launchApp\n' });
+    edit(dir, "e2e/gate.yaml", 'verifySignature: true }', 'verifySignature: true, sandbox: "build/macos-${ARCH}/KitchenSink-sandbox.app", sandboxFlows: [flows/app/ime.yaml, flows/app/sandboxed.yaml, flows/app/gone.yaml] }');
+    const planned = () => plan(path.join(dir, "e2e"), AIR).problems.map(problem => `${problem.check}: ${problem.message}`);
+    expect(planned()).toEqual([
+      "manifest: build.macos.sandboxFlows: flows/app/gone.yaml matches no gate flow",
+      "manifest: build.macos.sandboxFlows lists flows/app/ime.yaml, but it is signed off by a person (manual), and a sign-off names the direct build",
+      "manifest: build.macos.sandboxFlows lists flows/app/sandboxed.yaml, but it already tests the App Sandbox variant",
+    ]);
+    edit(dir, "e2e/gate.yaml", ', sandbox: "build/macos-${ARCH}/KitchenSink-sandbox.app", sandboxFlows: [flows/app/ime.yaml, flows/app/sandboxed.yaml, flows/app/gone.yaml]', ", sandboxFlows: [flows/app/launch.yaml]");
+    expect(planned()).toContain("manifest: build.macos.sandboxFlows lists flows to run against the App Sandbox variant, but there is no build.macos.sandbox");
+  });
+
   test("a fully green tree passes and writes one JSON + HTML report", async () => {
     const dir = repo();
     const { env: gateEnv, out } = env();

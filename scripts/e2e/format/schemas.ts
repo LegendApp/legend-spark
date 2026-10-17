@@ -97,6 +97,7 @@ export function buildGateSchema(): Schema {
     symbols: { ...str, description: "The folder of the build's debug symbols (dSYMs), relative to the repository root. ${ARCH} becomes the target's arch." },
     package: { ...str, description: "The spark package output the package audit checks: the distribution ZIP, or the folder holding the one <name>-<version>-<arch>.zip (with its dSYMs archive and updates/ feed), relative to the repository root. ${ARCH} becomes the target's arch." },
     sandbox: { ...str, description: "The App Sandbox variant of the release build (spark build --sandbox), which `variant: sandbox` flows test, relative to the repository root. ${ARCH} becomes the target's arch (docs/app-sandbox.md)." },
+    sandboxFlows: { ...list(str), uniqueItems: true, description: "Globs of direct-build gate flows, relative to e2e/, that must also pass against `sandbox`. Their runs there have the IDs sandbox/<run ID> (docs/app-sandbox.md#testing)." },
   }, ["artifact"]);
   return {
     $schema: DRAFT,

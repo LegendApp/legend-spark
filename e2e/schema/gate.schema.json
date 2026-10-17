@@ -45,6 +45,16 @@
               "type": "string",
               "minLength": 1,
               "description": "The App Sandbox variant of the release build (spark build --sandbox), which `variant: sandbox` flows test, relative to the repository root. ${ARCH} becomes the target's arch (docs/app-sandbox.md)."
+            },
+            "sandboxFlows": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Globs of direct-build gate flows, relative to e2e/, that must also pass against `sandbox`. Their runs there have the IDs sandbox/<run ID> (docs/app-sandbox.md#testing)."
             }
           },
           "required": [
@@ -82,6 +92,16 @@
               "type": "string",
               "minLength": 1,
               "description": "The App Sandbox variant of the release build (spark build --sandbox), which `variant: sandbox` flows test, relative to the repository root. ${ARCH} becomes the target's arch (docs/app-sandbox.md)."
+            },
+            "sandboxFlows": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Globs of direct-build gate flows, relative to e2e/, that must also pass against `sandbox`. Their runs there have the IDs sandbox/<run ID> (docs/app-sandbox.md#testing)."
             }
           },
           "required": [

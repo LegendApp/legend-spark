@@ -29,6 +29,8 @@ export type PlannedFlow = {
   manual: boolean | "partial";
   /** `sandbox`: runs against the App Sandbox variant (`build.<platform>.sandbox`), not the artifact. */
   variant?: "sandbox";
+  /** A direct flow's run against the App Sandbox variant (`build.<platform>.sandboxFlows`): its IDs are the direct ones under `sandbox/`. */
+  sandboxRun?: true;
   name?: string;
   intent?: string;
   /** Manual flows: SHA-256 of the flow file and the runFlow files it reaches (their sign-offs name it); unset when one cannot be read. */
@@ -180,8 +182,11 @@ export function plan(root: string, host: Host, { target: override, only, artifac
   const symbols = build?.symbols && path.resolve(repo, build.symbols.replaceAll("${ARCH}", target!.arch));
   const distribution = (packaged ?? build?.package) && path.resolve(repo, (packaged ?? build!.package!).replaceAll("${ARCH}", target!.arch));
   const sandbox = build?.sandbox && path.resolve(repo, build.sandbox.replaceAll("${ARCH}", target!.arch));
+  const sandboxFlows = build?.sandboxFlows ?? [];
 
   const all = gateFlows(root, manifest), scope = only && select(root, manifest, all, only);
+  if (sandboxFlows.length && !sandbox) problems.push({ check: "manifest", message: `build.${target!.platform}.sandboxFlows lists flows to run against the App Sandbox variant, but there is no build.${target!.platform}.sandbox` });
+  for (const glob of sandboxFlows) if (!all.some(flow => path.matchesGlob(flow.path, glob))) problems.push({ check: "manifest", message: `build.${target!.platform}.sandboxFlows: ${glob} matches no gate flow` });
   const registered = registeredChecks(root, manifest);
   // Blocking: a blocking tag, or a check registered `blocking: true`; otherwise the manifest default.
   const blocking = new Set(registered.filter(([, check]) => check.blocking).map(([id]) => id)), flows: PlannedFlow[] = [], excluded: GatePlan["excluded"] = [];
@@ -200,11 +205,18 @@ export function plan(root: string, host: Host, { target: override, only, artifac
     } catch (error) {
       problems.push({ check: "signoffs", message: `${relative}: ${(error as Error).message}` });
     }
-    flows.push({
+    const flow: PlannedFlow = {
       path: relative, file, ids: suffixes.map(suffix => suffix ? `${id}[${suffix}]` : id),
       blocking: manifest.blocking.default || (header.tags ?? []).some(tag => manifest.blocking.tags.includes(tag)) || (header.checks ?? []).some(check => blocking.has(check)),
       manual: header.manual ?? false, ...(header.variant === "sandbox" ? { variant: "sandbox" as const } : {}), ...(hash ? { hash } : {}), name: header.name, intent: header.intent, ...(manualSteps ? { manualSteps } : {}),
-    });
+    };
+    flows.push(flow);
+    if (!matchesAny(relative, sandboxFlows)) continue;
+    // A sandbox run repeats what the flow checks against the direct build; one that cannot is a manifest mistake, never skipped.
+    const unfit = header.variant === "sandbox" ? "it already tests the App Sandbox variant" : header.manual ? "it is signed off by a person (manual), and a sign-off names the direct build"
+      : header.build === "dev" ? "it tests the dev build" : undefined;
+    if (unfit) problems.push({ check: "manifest", message: `build.${target!.platform}.sandboxFlows lists ${relative}, but ${unfit}` });
+    else flows.push({ ...flow, ids: flow.ids.map(run => `sandbox/${run}`), variant: "sandbox", sandboxRun: true });
   }
   const planned = machine ? (budgets?.budgets ?? []).flatMap(budget => machine.id in budget.baselines ? [{ ...budget, baseline: budget.baselines[machine.id]! }] : []) : [];
   const audits = target && !scope ? registered.flatMap(([id, check]) => check.audit && (!check.platforms || check.platforms.includes(target.platform))

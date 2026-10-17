@@ -1073,7 +1073,7 @@ release target.
 | Key | Meaning |
 |---|---|
 | `suite`, `appId` | Names for the report. |
-| `build.macos` / `build.windows` | `artifact`: the release build to test, relative to the repository root. `${ARCH}` becomes `arm64` or `x64`. `--artifact <path>` replaces it for one run. `verifySignature: true` runs `codesign --verify --deep --strict` (macOS; Windows verification is not implemented, so asking for it fails). The flows get the artifact as `${APP_PATH}`. `sizeBudgetMB` and `symbols` (the build's dSYM folder, relative to the repository root, with `${ARCH}`) are for the [bundle audit](#audits). `sandbox` is the [App Sandbox variant](app-sandbox.md) of the release build (`spark build --sandbox`), with `${ARCH}`: `variant: sandbox` flows run against it (and get it as `${APP_PATH}`), in an isolated session. A `variant: sandbox` flow without it, or a missing variant, fails the gate. |
+| `build.macos` / `build.windows` | `artifact`: the release build to test, relative to the repository root. `${ARCH}` becomes `arm64` or `x64`. `--artifact <path>` replaces it for one run. `verifySignature: true` runs `codesign --verify --deep --strict` (macOS; Windows verification is not implemented, so asking for it fails). The flows get the artifact as `${APP_PATH}`. `sizeBudgetMB` and `symbols` (the build's dSYM folder, relative to the repository root, with `${ARCH}`) are for the [bundle audit](#audits). `sandbox` is the [App Sandbox variant](app-sandbox.md) of the release build (`spark build --sandbox`), with `${ARCH}`: `variant: sandbox` flows run against it (and get it as `${APP_PATH}`), in an isolated session. A `variant: sandbox` flow without it, or a missing variant, fails the gate. `sandboxFlows`: globs of direct-build gate flows (relative to `e2e/`) that must also pass against `sandbox`; each run there is reported as `sandbox/<run ID>`, apart from its direct run. A glob that matches no gate flow, a listed flow that is `variant: sandbox`, `manual` or `build: dev`, or `sandboxFlows` without `sandbox` fails the gate. |
 | `targets` | `{ os, arch, machine? }`. `os` is `macos-<major>` or `windows-<10\|11>`; `arch` is `arm64` or `x64`, as Spark names them. `machine` names a reference machine from the budgets file: that target runs on that hardware and checks its budgets. |
 | `include` | Globs of gate flows, relative to `e2e/`. |
 | `blocking` | `{ tags, default }`. A flow blocks the release when it fails if it has one of `tags`, lists a check registered `blocking: true`, or `default` is true. A non-blocking failure is a warning. |
@@ -1103,8 +1103,10 @@ the run fails without running flows; use `--dry-run` to plan other targets.
 6. **Flows:** the gate flows whose `platforms` include the target's platform, every
    matrix combination, run through the runner with every registered backend for that
    platform. Flows with `manual: true` are not run; `manual: partial` flows are run, and
-   their manual steps are recorded for sign-off. `variant: sandbox` flows run afterwards against `build.<platform>.sandbox`
-   (their runner report is in `run/sandbox/`). Any failed or skipped blocking run fails the gate.
+   their manual steps are recorded for sign-off. `variant: sandbox` flows, and the direct flows `build.<platform>.sandboxFlows`
+   lists, run afterwards against `build.<platform>.sandbox` (their runner report and failure bundles are in `run/sandbox/`;
+   a listed flow's runs there have the IDs `sandbox/<run ID>`, and budgets do not judge them). Any failed or skipped blocking
+   run fails the gate.
 7. **Budgets** on a machine-bound target (see [Budgets](#budgets)).
 8. **Sign-offs** for every manual run (see [Manual sign-offs](#manual-sign-offs)).
 9. **Time budget** for the whole run.
@@ -1119,7 +1121,7 @@ Flows don't run when there is no backend, no build, or this machine cannot be th
 reason for FAIL), `warnings` (non-blocking failures), `suite`, `appId`, `startedAt`,
 `durationMs`, `timeBudgetMs`, `host`, `target`, `machine`, `commit`, `dirty`, `build`
 (`artifact`, `exists`, `signature`), `backends`, `coverage` (`required`, `covered`,
-`problems`), `flows` (one per run ID: `status` is `passed`, `failed`, `skipped`,
+`problems`), `flows` (one per run ID, with a direct flow's run against the App Sandbox variant as `sandbox/<run ID>`: `status` is `passed`, `failed`, `skipped`,
 `not-run`, `signed-off` or `unsigned`, plus `blocking`, `manual`, `failure`, `bundle`, and for manual runs `manualSteps`, `flowHash`
 and `signoff`; `manualSteps` screenshot paths are relative to the repository root),
 `excluded` (flows for other platforms), `budgets` (one entry per measurement:
