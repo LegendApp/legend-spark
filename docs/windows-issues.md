@@ -1,5 +1,7 @@
 # Windows implementation and acceptance
 
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
 Updated 2026-09-15. Windows is an integrated framework target. The development
 feature groups now have source implementations. **Native compilation and runtime
 acceptance are still unverified on both Windows x64 and ARM64.** Generation,

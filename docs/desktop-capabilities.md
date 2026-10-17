@@ -1,5 +1,7 @@
 # Desktop application capabilities
 
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
 The public API is `@legendapp/spark`. Implementation packages are private and
 ship inside that package. Desktop apps should not install the implementation
 packages separately or link parallel native modules for these capabilities.

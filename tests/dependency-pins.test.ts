@@ -10,7 +10,8 @@ test("uses the desktop starter compatibility matrix and accepts exact direct pin
   const spark = JSON.parse(readFileSync(new URL("../packages/desktop/package.json", import.meta.url), "utf8"));
   for (const [name, version] of Object.entries(pins)) {
     expect(version).toBe(template.dependencies[name]);
-    if (spark.peerDependencies[name]) expect(version).toBe(spark.peerDependencies[name]);
+    // Peers may be the exact pin or a caret range from the pinned minor (react: ^19.1.0).
+    if (spark.peerDependencies[name]) expect([version, `^${version.replace(/\.\d+$/, ".0")}`]).toContain(spark.peerDependencies[name]);
   }
   expect(dependencyPinIssues(template, ["macos"])).toEqual([]);
   expect(dependencyPinIssues({ dependencies: { react: pins.react }, devDependencies: { ...pins } }, ["macos"])).toEqual([]);

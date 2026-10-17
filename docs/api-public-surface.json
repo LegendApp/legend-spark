@@ -291,9 +291,11 @@
   ],
   "./html": [
     "EditableHtml",
+    "Html",
     "HtmlInput",
     "HtmlInputProps",
-    "HtmlInputRef"
+    "HtmlInputRef",
+    "HtmlProps"
   ],
   "./links": [
     "Subscription",
@@ -306,9 +308,11 @@
   ],
   "./markdown": [
     "EditableMarkdown",
+    "Markdown",
     "MarkdownInput",
     "MarkdownInputProps",
-    "MarkdownInputRef"
+    "MarkdownInputRef",
+    "MarkdownProps"
   ],
   "./menus": [
     "AsyncRegistration",

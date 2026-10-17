@@ -39,8 +39,8 @@ test("installation errors propagate to the launcher", async () => {
 });
 
 test.each([
-  ["Use create --universal for mobile/web targets", "Use npm create @legendapp/spark@latest MyApp -- --universal for mobile/web targets"],
-  ["Invalid project. Run spark --help.", "Invalid project. Run npm create @legendapp/spark@latest -- --help."],
+  ["Use create --universal for mobile/web targets", "Use npm create @legendapp/spark@next MyApp -- --universal for mobile/web targets"],
+  ["Invalid project. Run spark --help.", "Invalid project. Run npm create @legendapp/spark@next -- --help."],
 ])("creator error uses npm create flag syntax: %s", async (message, expected) => {
   vi.mocked(create).mockRejectedValueOnce(new Error(message));
   await expect(createSpark(["MyApp", "--platform", "ios"])).rejects.toThrow(expected);

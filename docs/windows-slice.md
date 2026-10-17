@@ -1,5 +1,7 @@
 # Windows development support
 
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
 Windows development is integrated into the spark CLI, starter, config plugin, host package, runtime registry, native compatibility checks, and Metro session. There is no separate client toolkit or source ZIP to install.
 
 The current scope is prebuilt and custom development builds on Windows x64 and ARM64 (including Windows on Apple Silicon Parallels). The Windows starter exercises the native host without installing the macOS SDK feature set. The existing `@legendapp/spark-native-greeting` fixture has a Windows implementation for testing the transition to a custom build. The SDK prebuilt profile includes desktop modules, Nitro, SQLite, WebView2, and secondary Hermes runtimes. Production builds and packaging remain outside this development scope. All Windows native implementations await compilation and acceptance.

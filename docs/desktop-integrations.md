@@ -1,7 +1,8 @@
 # Notifications, menu bar and updates
 
-These modules target macOS 14+ on Apple Silicon and are included in the SDK/prebuilt
-runtime. Import them through separate desktop subpaths; production pruning removes
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+These modules are included in the SDK/prebuilt runtime. Import them through separate desktop subpaths; production pruning removes
 unused native modules and removes Sparkle when updates are unused.
 
 ## Notifications

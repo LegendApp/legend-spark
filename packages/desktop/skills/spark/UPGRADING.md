@@ -222,3 +222,25 @@ actions and Nitro initialization changed; validate custom Windows native modules
 AI pointer files now refer to this installed skill. Upgrade preserves user text
 and reports malformed markers. Pointer refresh alone does not migrate application
 call semantics; complete every earlier section in the upgrade interval.
+
+## 0.0.1-next.5
+
+Breaking: no. No app source or configuration migration is required from next.4.
+
+Create new apps with `npm create @legendapp/spark@next MyApp`. The creator and SDK
+share a version and channel. React peers now accept `^19.1.0`; generated apps keep
+the tested React 19.1.4, React Native 0.81.6, and Expo 54.0.37 pins.
+
+Read-only rich text is available alongside the existing editable components:
+
+```tsx
+import { Markdown } from '@legendapp/spark/markdown';
+import { Html } from '@legendapp/spark/html';
+
+<Markdown value="# Preview" />;
+<Html value="<p>Preview</p>" />;
+```
+
+Existing `MarkdownInput` and `HtmlInput` imports continue to work. Typecheck your
+app and exercise any rich text views you add; rebuild a custom runtime if its
+native rich text dependencies changed since your previous SDK version.

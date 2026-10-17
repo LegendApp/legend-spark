@@ -1,15 +1,17 @@
 # Release readiness
 
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
 ## Current decision
 
-`@legendapp/spark` is `0.0.1-next.2`, an experimental `next` preview. The source
+The next candidate is `@legendapp/spark@0.0.1-next.5` on the `next` channel. The source
 and package gates below are useful evidence, but this page does not certify a
 production release. Do not promote this version to `latest` or describe all
 exports as supported on every platform. Record new evidence in a completed
 [release dossier](release-test-dossier.md) tied to an immutable source revision
 and exact archive digest.
 
-The package currently declares **51 export paths**. Forty-nine are functional
+The package currently declares **56 export paths**. Fifty-four are functional
 or tooling entry paths and two expose package/schema metadata. An export is a
 public import boundary; it is not evidence that every platform implements or
 passes that feature. Platform-specific support is determined by native package
@@ -19,15 +21,15 @@ availability and the evidence for that platform.
 
 | Group | Export paths |
 | --- | --- |
-| Application and desktop APIs | `./app`, `./app/documents`, `./audio`, `./auth-session`, `./clipboard`, `./context-menu`, `./dialogs`, `./drag-drop`, `./files`, `./global-shortcuts`, `./links`, `./menus`, `./notifications`, `./processes`, `./secure-storage`, `./settings`, `./settings/observable`, `./settings/window`, `./shortcuts`, `./shortcuts/commands`, `./shortcuts/keyboard`, `./sqlite`, `./system`, `./tray`, `./updates`, `./webview`, `./windows`, `./windows/macos` |
-| UI | `./ui`, `./ui/classnames`, `./ui/glass`, `./ui/search`, `./ui/sidebar`, `./ui/split-view`, `./ui/symbol`, `./ui/swipe`, `./ui/uniwind` |
-| AI and diagnostics | `./ai`, `./ai/codex`, `./diagnostics`, `./contracts` |
+| Application and desktop APIs | `./app`, `./app/documents`, `./audio`, `./auth-session`, `./clipboard`, `./context-menu`, `./dialogs`, `./drag-drop`, `./files`, `./global-shortcuts`, `./links`, `./menus`, `./notifications`, `./processes`, `./secure-storage`, `./settings`, `./settings/observable`, `./settings/window`, `./shortcuts`, `./shortcuts/commands`, `./shortcuts/keyboard`, `./sqlite`, `./system`, `./tray`, `./updates`, `./webview`, `./windows`, `./windows/macos`, `./camera` |
+| UI | `./ui`, `./ui/classnames`, `./ui/glass`, `./ui/search`, `./ui/sidebar`, `./ui/split-view`, `./ui/symbol`, `./ui/swipe`, `./ui/uniwind`, `./markdown`, `./html` |
+| AI and diagnostics | `./ai`, `./ai/codex`, `./diagnostics`, `./contracts`, `./customize` |
 | Configuration and build integration | `./config`, `./config-plugin`, `./expo-config`, `./metro`, `./runtime-entry`, `./metro-gate`, `./init-template`, `./native`, `./cli` |
 | Metadata | `./package.json`, `./schema.json` |
 
 ## Target capability map
 
-The [51-row support matrix](release-support-matrix.md) shows every import path,
+The [56-row support matrix](release-support-matrix.md) shows every import path,
 its provider, intended targets, target-specific acceptance status, related
 source tests, and exact platform command. The corresponding
 [machine-readable matrix](release-support-matrix.json) is checked against the
@@ -70,7 +72,9 @@ read them before marking any native row complete.
 
 `.github/workflows/portable.yml` runs source typecheck and the full Vitest suite
 on Linux and macOS with the Node version in `.nvmrc`.
-Both jobs install from the frozen Bun lockfile and run the complete Vitest suite under Bun; on macOS it includes the Foundation and
+All jobs install from the frozen Bun lockfile. A separate macOS job packs the
+local SDK and creator, scaffolds a fresh npm app, installs it, and runs TypeScript.
+The source jobs run the complete Vitest suite under Bun; on macOS it includes the Foundation and
 Codex compiler-backed fixtures guarded for Darwin. This catches source, manifest,
 archive, peer, patch-inventory, update-policy, and package-manager regressions.
 These focused native fixtures do not claim a complete app build, UI acceptance,

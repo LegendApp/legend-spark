@@ -134,7 +134,7 @@ restoring the previous contribution, shortcuts, payloads, and owner routing.
 
 | Area | Source state | Next useful work |
 | --- | --- | --- |
-| Nitro | Windows host/build/dispatcher/DLL integration around upstream C++; native acceptance pending | Add a separate C++ HybridObject consumer fixture testing sync calls, buffers, async callbacks, and reload. This validates exports and registration; it does not make Swift/Kotlin libraries portable. |
+| Nitro | Windows host/build/dispatcher/DLL integration around upstream C++; native behavior not yet verified | Add a separate C++ HybridObject consumer fixture testing sync calls, buffers, async callbacks, and reload. This validates exports and registration; it does not make Swift/Kotlin libraries portable. |
 | SQLite | `openDatabase` delegates to OP-SQLite and returns its full `DB` type; Windows integration uses bundled SQLite | Document and test the supported DB method set. Optional SQLCipher/libSQL/Turso/vector configurations are not enabled by this Windows recipe; they are not established macOS-parity requirements. |
 | WebView | Direct re-export of upstream `WebView` and `WebViewProps`; Windows uses upstream Fabric WebView2 plus patches | Inventory the Windows-supported props/events used by our examples and publish that subset. A broad upstream type export does not prove every prop works on every platform. Validate navigation vetoes, errors, messaging, injection, and teardown. |
 | Secondary runtimes | Independent Windows Hermes hosts exist; shared-main-module mode explicitly rejects | Defer `useMainNativeModules`, `prewarmBusinessRuntime`, and worker-to-main routing until a concrete app requires them. Do not claim macOS behavioral validation merely because upstream Apple code exposes them. |

@@ -61,7 +61,7 @@ For these native controls, classes allocate the **layout spark**. Use their docu
 
 ## Appearance and responsive layout
 
-Settings defines application-owned background, surface, foreground, muted, and border colors under Uniwind's light/dark variants. Its preference selector calls `Uniwind.setTheme('light' | 'dark' | 'system')`. Uniwind updates its style subscribers and calls React Native Appearance for native chrome; the Windows UI adapter applies manual appearance overrides to its WinUI controls, with native acceptance pending (see [known Windows issues](windows-issues.md)). Browser CSS `color-scheme` keeps HTML controls consistent. Preferences are currently in memory.
+Settings defines application-owned background, surface, foreground, muted, and border colors under Uniwind's light/dark variants. Its preference selector calls `Uniwind.setTheme('light' | 'dark' | 'system')`. Uniwind updates its style subscribers and calls React Native Appearance for native chrome; the Windows UI adapter applies manual appearance overrides to its WinUI controls, with native behavior not yet verified (see [known Windows issues](windows-issues.md)). Browser CSS `color-scheme` keeps HTML controls consistent. Preferences are currently in memory.
 
 Use standard spacing, size, and responsive utilities for static layout. The Settings panel has a maximum width, reduced padding on narrow viewports, and buttons that stack at small widths. Keep dynamic/measured styles in `style`; there is no framework theme provider or parallel token system.
 

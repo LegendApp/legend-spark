@@ -1,6 +1,8 @@
 # Desktop configuration and additional APIs
 
-The SDK targets macOS 14+ on Apple Silicon. APIs are independently imported from
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
+APIs are independently imported from
 `@legendapp/spark/<feature>`. These additions do not embed Node.
 
 ## Configuration

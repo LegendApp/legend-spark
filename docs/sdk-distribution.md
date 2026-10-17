@@ -1,5 +1,7 @@
 # Transferable SDK and prebuilt development clients
 
+macOS 14+ (Apple Silicon) supported; Windows preview, not yet verified
+
 A developer can install this SDK without the framework checkout. The distribution is a directory containing immutable package archives, a manifest, SHA-256 checksums, an installer, and optionally Spark Runner runtimes. Public npm publication and a hosted download service are not required for internal testing.
 
 ## Produce a bundle

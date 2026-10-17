@@ -1,6 +1,6 @@
 {
   "name": "@legendapp/spark-file-dialog",
-  "version": "0.0.1-next.4",
+  "version": "0.0.1-next.5",
   "main": "src/index",
   "react-native": "src/index",
   "codegenConfig": {
@@ -18,7 +18,7 @@
     }
   },
   "peerDependencies": {
-    "react": "19.1.4",
+    "react": "^19.1.0",
     "react-native": "0.81.6"
   },
   "license": "MIT",
@@ -45,6 +45,6 @@
   },
   "private": true,
   "dependencies": {
-    "@legendapp/spark-desktop-app": "0.0.1-next.4"
+    "@legendapp/spark-desktop-app": "0.0.1-next.5"
   }
 }
