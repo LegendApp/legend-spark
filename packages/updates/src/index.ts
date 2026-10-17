@@ -124,7 +124,7 @@ export async function configureUpdates(config: UpdateConfiguration): Promise<voi
 export async function clearSkippedUpdate(): Promise<void> { await command("clearSkipped"); }
 // Item states and the boolean flag each one carries.
 const itemFlags = new Map<string, string | undefined>([["available", undefined], ["downloaded", undefined], ["installing", undefined], ["downloading", "delta"], ["skipped", "major"]]);
-/** Listens for update progress. macOS only: rejects E_UNSUPPORTED_PLATFORM elsewhere and E_MODULE_UNAVAILABLE without the updater module. */
+/** Listens for update progress. Throws E_MODULE_UNAVAILABLE without the updater module (macOS only) and E_INVALID_ARGUMENT for a non-function listener. */
 export function onUpdateEvent(listener: (event: UpdateEvent) => void): Subscription {
   if (typeof listener !== "function") throw new SparkError("E_INVALID_ARGUMENT", "Expected an update listener");
   native();
