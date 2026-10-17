@@ -6,7 +6,7 @@ intent: >
   windows in tab order, the selected one and the tab bar), window 1's last tabGroupChanged and tabSelectionChanged
   events, and the last rejection. Driver mode never shows a window: AppKit's tab groups are regrouped off screen and
   the driver records which tab is selected (docs/test-driver.md). Light and dark, English and Arabic.
-checks: [WIN-TABAVAIL-01, WIN-TABGROUP-01, WIN-TABSELECT-01, WIN-TABEVENTS-01, WIN-TABMERGE-01, WIN-TABMOVE-01, WIN-TABBAR-01, WIN-TABINVALID-01]
+checks: [WIN-TABAVAIL-01, WIN-TABGROUP-01, WIN-TABSELECT-01, WIN-TABREORDER-01, WIN-TABEVENTS-01, WIN-TABMERGE-01, WIN-TABMOVE-01, WIN-TABBAR-01, WIN-TABINVALID-01]
 tags: [windows]
 platforms: [macos]
 timeout: 180s
@@ -31,6 +31,19 @@ matrix:
 - assertVisible: { id: windows-window-tabs-steps-5 }
 - assertVisible: { id: windows-window-tabs-group-1-2-3-selected-2-bar-shown }
 - assertVisible: { id: windows-window-tabs-selection-event-2 }
+# Reorder: window 1 to the end, then the selected tab to the front. The selection stays and window 1 hears the new order;
+# an index past the last tab rejects, and a window without other tabs takes index 0.
+- launchApp: { openUrl: "spark-ks://windows/window-tabs?run=open,tab-1,tab-1,reorder-1-2,reorder-3-0,reorder-2-3", stopApp: false }
+- assertVisible: { id: windows-window-tabs-steps-6 }
+- assertVisible: { id: windows-window-tabs-group-3-2-1-selected-3-bar-shown }
+- assertVisible: { id: windows-window-tabs-group-event-3-2-1 }
+- assertVisible: { id: windows-window-tabs-selection-event-3 }
+- assertVisible: { id: windows-window-tabs-error-E_INVALID_ARGUMENT }
+- takeScreenshot: window-tabs-reordered
+- launchApp: { openUrl: "spark-ks://windows/window-tabs?run=open,reorder-1-0", stopApp: false }
+- assertVisible: { id: windows-window-tabs-steps-2 }
+- assertVisible: { id: windows-window-tabs-group-1-selected-1-bar-hidden }
+- assertNotVisible: { id: windows-window-tabs-error-E_INVALID_ARGUMENT }
 # Move a tab to a new window, then close the selected tab.
 - launchApp: { openUrl: "spark-ks://windows/window-tabs?run=open,tab-1,tab-1,tab-1,move-2,close-4", stopApp: false }
 - assertVisible: { id: windows-window-tabs-steps-6 }

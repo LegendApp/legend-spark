@@ -98,6 +98,19 @@ checks:
     spec: "docs/api-window-contract.md §Window tabs; #64"
     covers:
       - ./windows#addWindowListener
+  WIN-TABREORDER-01:
+    title: moveWindowTab moves a tab to an index of its group's tab order, keeps the selected tab, sends the new order in tabGroupChanged, and rejects an index past the last tab with E_INVALID_ARGUMENT
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs; #435"
+    covers:
+      - ./windows#moveWindowTab
+      - ./windows#addWindowListener
+  WIN-TABCROWD-01:
+    title: On screen, a reordered group's tab bar shows its tabs in the order the readout reports, a tab dragged in the bar reorders the group, and a crowded group keeps every tab in the readout and in Window ▸ Show All Tabs
+    platforms: [macos]
+    blocking: true
+    spec: "docs/api-window-contract.md §Window tabs (overflow, pinned tabs and thumbnails); #435"
   WIN-TABMERGE-01:
     title: mergeAllWindows moves every shown window with the same tabbing identifier into the window's group, and leaves windows whose tabbing is disallowed alone
     platforms: [macos]

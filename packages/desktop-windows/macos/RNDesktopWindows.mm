@@ -185,6 +185,20 @@ static void DetachTab(NSWindow *window) {
   for (NSWindow *tab in rest) [window.tabGroup removeWindow:tab];
   for (NSWindow *tab in rest) if (tab != rest.firstObject) [rest.firstObject.tabGroup addWindow:tab];
 }
+// Puts a group's tabs in `order` (the same windows) without AppKit's selected tab ever leaving the group, so AppKit
+// never orders another tab on screen: a misplaced tab leaves and is inserted at its place, and the selected tab
+// moves by its neighbours moving past it. NO when AppKit did not keep the order or the selection.
+static BOOL ReorderTabs(NSWindowTabGroup *group, NSArray<NSWindow *> *order) {
+  NSWindow *selected = group.selectedWindow;
+  for (NSUInteger index = 0, moves = 0; index < order.count; index++)
+    while (group.windows[index] != order[index]) {
+      BOOL selectedHere = order[index] == selected;
+      NSWindow *tab = selectedHere ? group.windows[index] : order[index];
+      [group removeWindow:tab]; [group insertWindow:tab atIndex:selectedHere ? group.windows.count : index];
+      if (group.windows.count != order.count || ++moves > order.count * order.count) return NO;
+    }
+  return [group.windows isEqual:order] && group.selectedWindow == selected;
+}
 static NSDictionary *TabGroup(NSWindow *window) {
   NSMutableArray *ids = [NSMutableArray new];
   for (NSWindow *tab in TabWindows(window)) { NSString *key = KeyFor(tab); if (key) [ids addObject:key]; }
@@ -1199,6 +1213,17 @@ RCT_EXPORT_MODULE(NativeDesktopWindowManager)
       Event(@"visibilityChanged", key);
     } else if ([method isEqual:@"selectTab"]) {
       if (TabWindows(window).count > 1) SelectTab(window);
+      ScheduleTabs();
+    } else if ([method isEqual:@"moveTab"]) {
+      // `index` counts the group's Spark windows, as WindowTabGroup.windowIds lists them, without this one.
+      NSArray<NSWindow *> *tabs = TabWindows(window);
+      NSMutableArray<NSWindow *> *order = [tabs mutableCopy], *others = [NSMutableArray new];
+      [order removeObject:window];
+      for (NSWindow *tab in order) if (KeyFor(tab)) [others addObject:tab];
+      NSUInteger index = [args[@"index"] unsignedIntegerValue];
+      if (index > others.count) { reject(@"E_INVALID_ARGUMENT", @"The index is past the last tab of the window's group", nil); return; }
+      [order insertObject:window atIndex:index == others.count ? order.count : [order indexOfObject:others[index]]];
+      if (![order isEqual:tabs] && !ReorderTabs(window.tabGroup, order)) { reject(@"E_NATIVE", @"The tab did not move", nil); return; }
       ScheduleTabs();
     } else if ([method isEqual:@"moveTabToNewWindow"]) {
       if (TabWindows(window).count > 1) {

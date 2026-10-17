@@ -193,6 +193,15 @@ export async function getWindowTabGroup(id: string): Promise<WindowTabGroup> { w
 export async function listWindowTabGroups(): Promise<WindowTabGroup[]> { tabsSupported(); return (await windowCall("tabGroups", {}, (value): value is WindowTabGroup[] => Array.isArray(value) && value.every(isTabGroup))).map(tabGroup); }
 /** Makes this window the selected tab of its group. */
 export async function selectWindowTab(id: string): Promise<void> { windowId(id); tabsSupported(); await windowCommand("selectTab", { id }); }
+/**
+ * Moves this tab to `index` of its group's tab order, as `WindowTabGroup.windowIds` counts it: 0 is the first tab,
+ * `windowIds.length - 1` the last. The selection stays; the group's windows hear `tabGroupChanged`. A window without
+ * other tabs takes only 0. Rejects `E_INVALID_ARGUMENT` for an index past the last tab.
+ */
+export async function moveWindowTab(id: string, index: number): Promise<void> {
+  windowId(id); if (!Number.isSafeInteger(index) || index < 0) throw new SparkError("E_INVALID_ARGUMENT", "index must be a non-negative integer");
+  tabsSupported(); await windowCommand("moveTab", { id, index });
+}
 /** Moves this tab out of its group into a window of its own (Window ▸ Move Tab to New Window). */
 export async function moveTabToNewWindow(id: string): Promise<void> { windowId(id); tabsSupported(); await windowCommand("moveTabToNewWindow", { id }); }
 /** Moves every shown window with this window's tabbing identifier into its tab group (Window ▸ Merge All Windows). */

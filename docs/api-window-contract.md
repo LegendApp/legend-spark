@@ -412,8 +412,9 @@ attachWindow(id, parentId, options: { edge, align?, gap?, magnetic?, hideWhenIna
 - **Platforms.** macOS only. On Windows `getWindowChoreographyAvailability` reports `unsupported-platform` for every
   feature and every operation rejects `E_UNSUPPORTED_PLATFORM` before any native call (#434). An unknown feature
   throws `E_INVALID_ARGUMENT`; unknown option keys reject `E_UNSUPPORTED_OPTION` and invalid values
-  `E_INVALID_ARGUMENT` before any native call. Tab groups across windows (#435) and drag-driven tear-off, merge
-  preview and cross-window drag (#436) are separate tasks.
+  `E_INVALID_ARGUMENT` before any native call. Tab reordering and the overflow, pinning and thumbnail
+  decision are in [Window tabs](#window-tabs) (#435); drag-driven tear-off, merge preview and cross-window
+  drag (#436) are a separate task.
 
 Testing: `tests/window-choreography.test.ts` covers validation, ordering and results over a mocked transport;
 `tests/window.native.mm` (choreography suite) covers the animator on the virtual clock, interruption, close transitions,
@@ -434,6 +435,7 @@ interface WindowTabGroup {
 getWindowTabGroup(id: WindowId): Promise<WindowTabGroup>;
 listWindowTabGroups(): Promise<WindowTabGroup[]>; // every Spark window in exactly one group, in no particular order
 selectWindowTab(id: WindowId): Promise<void>;
+moveWindowTab(id: WindowId, index: number): Promise<void>; // reorder within the group
 moveTabToNewWindow(id: WindowId): Promise<void>;  // Window ▸ Move Tab to New Window
 mergeAllWindows(id: WindowId): Promise<void>;     // Window ▸ Merge All Windows, into this window's group
 setWindowTabBarVisible(id: WindowId, visible: boolean): Promise<void>; // View ▸ Show/Hide Tab Bar
@@ -464,6 +466,26 @@ handleWindowNewTab(id: WindowId, handler: (event: { windowId: WindowId }) => unk
   `mergeAllWindows` moves every shown window whose identifier matches, and whose tabbing is not
   `disallowed`, into the window's group; hidden windows stay. It rejects `E_INVALID_ARGUMENT` for a
   window whose own tabbing is `disallowed`.
+- **Reorder.** `moveWindowTab(id, index)` moves the window's tab to `index` of its group, counted as
+  `windowIds` lists the group (0 is the first tab, `windowIds.length - 1` the last). The selected tab
+  stays selected, the group's windows hear `tabGroupChanged` with the new order, and with
+  `restoreBounds` the new order is saved. A window without other tabs takes only 0. An index that is
+  not a non-negative integer rejects `E_INVALID_ARGUMENT` before any native call; one past the last
+  tab rejects `E_INVALID_ARGUMENT` from the window module. AppKit's `insertWindow:atIndex:` places a
+  window that is not in the group, so the window module takes misplaced tabs out with `removeWindow:`
+  and inserts them at their place. It never takes out AppKit's selected tab, because AppKit would
+  order the next tab on screen: the selected tab moves by the other tabs moving past it.
+- **Overflow, pinned tabs and thumbnails (#435 decision).** AppKit's tab bar is not public: AppKit
+  reports no layout for it, so no API says which tabs fit or how a crowded bar shows the rest. Spark
+  does not read AppKit's private views to guess, so it reports no overflow. Every tab stays in
+  `windowIds`, in order, however many there are. For a crowded group, AppKit's own answer is Show All
+  Tabs (the `showAllTabs` menu role), its tab overview with a live thumbnail of every tab. AppKit has
+  no pinned tabs (`NSWindowTab` has no such state), and an order rule cannot pin one, because a person
+  can drag any tab anywhere. So native tabs offer neither pinning nor Spark thumbnails. Pinned tabs,
+  overflow control and thumbnails in an app's own tab UI need a Spark-drawn tab bar. That is a
+  separate task (#476), which also needs window snapshots: `cacheDisplayInRect:` draws a window's views in
+  process, off screen too, with no screen-recording permission. What a crowded tab bar looks like is
+  checked by a person (`e2e/flows/windows/window-tabs-macos.yaml`).
 - **Tab bar.** A group of several tabs always shows its tab bar: hiding it rejects `E_BUSY`. A window
   without other tabs shows or hides it; `disallowed` rejects `E_INVALID_ARGUMENT`.
 - **Hiding and closing.** As in AppKit, `hideWindow` and closing take a window out of its group.
@@ -503,13 +525,14 @@ the previously selected one is reported, where AppKit would select a neighbourin
 automatic tabbing on show (`preferred`, or `automatic` with "Always") never runs, because nothing is
 ordered front: use `tabbedWith` or `mergeAllWindows`. Group membership, order and the tab bar are
 AppKit's in both modes. What only a person can check on screen: the tab bar itself, the + button, the
-menu items' titles and enabled state, dragging tabs, the cascaded frame of a moved tab, and automatic
-tabbing.
+menu items' titles and enabled state, dragging tabs, reordered tabs in the bar, a crowded tab bar, the
+cascaded frame of a moved tab, and automatic tabbing.
 
 `tests/window.native.mm` (run by `tests/window-native.test.ts`) opens tabbed windows that never
 reach the screen and asserts `NSWindow.tabGroup` membership, order and selection, the published
 events and the reported groups after each operation, the restored order and selection, and that no
-window was ever on screen. The Kitchen Sink `windows/window-tabs` screen runs the operations from
+window was ever on screen. Its shown-tabs suite also reorders tabs of transparent windows placed off every
+screen, where AppKit's selection is real. The Kitchen Sink `windows/window-tabs` screen runs the operations from
 `spark-ks://windows/window-tabs?run=…` and its readout encodes the groups and events in test IDs
 (`e2e/flows/windows/window-tabs-*.yaml`).
 

@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import * as links from "@legendapp/spark/links";
 import { SparkError } from "@legendapp/spark/contracts";
 import {
-  addWindowListener, closeWindow, createWindowsNavigator, getWindowAvailability, getWindowTabGroup, listWindowTabGroups, mergeAllWindows, moveTabToNewWindow,
+  addWindowListener, closeWindow, createWindowsNavigator, getWindowAvailability, getWindowTabGroup, listWindowTabGroups, mergeAllWindows, moveTabToNewWindow, moveWindowTab,
   selectWindowTab, setWindowTabBarVisible, type WindowInstance,
 } from "@legendapp/spark/windows";
 import { TabWindow } from "./TabWindow";
@@ -97,10 +97,10 @@ async function closeAll() {
 
 /**
  * One step of a run: `open`, `disallowed` (a window that never tabs), `tab-<n>` (new tab in window n's group),
- * `select-<n>`, `next-<n>` (select the tab after window n's group's selected tab), `merge-<n>`, `move-<n>`
- * (to a new window), `bar-<n>-show|hide`, `close-<n>`.
+ * `select-<n>`, `next-<n>` (select the tab after window n's group's selected tab), `reorder-<n>-<index>` (move window n's
+ * tab to that index of its group), `merge-<n>`, `move-<n>` (to a new window), `bar-<n>-show|hide`, `close-<n>`.
  */
-export const STEP = /^(open|disallowed|tab-\d+|select-\d+|next-\d+|merge-\d+|move-\d+|bar-\d+-(?:show|hide)|close-\d+)$/;
+export const STEP = /^(open|disallowed|tab-\d+|select-\d+|next-\d+|reorder-\d+-\d+|merge-\d+|move-\d+|bar-\d+-(?:show|hide)|close-\d+)$/;
 async function step(name: string) {
   const [verb, target, value] = name.split("-") as [string, string, string?];
   if (verb === "open" || verb === "disallowed") return open(undefined, verb === "disallowed");
@@ -111,6 +111,7 @@ async function step(name: string) {
     const { windowIds, selectedWindowId } = await getWindowTabGroup(id);
     return selectWindowTab(windowIds[(windowIds.indexOf(selectedWindowId ?? id) + 1) % windowIds.length]!);
   }
+  if (verb === "reorder") return moveWindowTab(id, Number(value));
   if (verb === "merge") return mergeAllWindows(id);
   if (verb === "move") return moveTabToNewWindow(id);
   if (verb === "bar") return setWindowTabBarVisible(id, value === "show");
@@ -133,6 +134,7 @@ export const actions = {
   openDisallowed: () => step("disallowed"),
   newTab: () => step("tab-1"),
   selectNext: () => step("next-1"),
+  moveToEnd: async () => step(`reorder-1-${(await getWindowTabGroup(idOf("1"))).windowIds.length - 1}`),
   merge: () => step("merge-1"),
   moveSelected: async () => {
     const { selectedWindowId } = await getWindowTabGroup(idOf("1"));

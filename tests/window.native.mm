@@ -254,12 +254,31 @@ static void TestWindowTabs(RNDesktopWindows *api) {
   assert([LastEvent(@"tabSelectionChanged", @"tab-3")[@"selectedWindowId"] isEqual:@"tab-1"] && !LastEvent(@"tabGroupChanged", @"tab-3"));
   Call(api, @"tabBar", @{ @"id": @"tab-1", @"visible": @NO }); assert([failure isEqual:@"E_BUSY"] && one.tabGroup.tabBarVisible);
 
+  // Reordering keeps the selection and AppKit's selected tab in the group, publishes the new order, and never shows a tab.
+  NSWindow *appKitSelected = one.tabGroup.selectedWindow; NSString *appKitKey = KeyFor(appKitSelected);
+  NSArray *reorders = @[@[@"tab-1", @2], @[@"tab-1", @0], @[@"tab-3", @1], @[appKitKey, @0], @[appKitKey, @2], @[@"tab-2", @0], @[@"tab-3", @2]];
+  for (NSArray *reorder in reorders) {
+    NSArray *before = GroupIds(one); NSMutableArray *expected = [before mutableCopy]; [expected removeObject:reorder[0]]; [expected insertObject:reorder[0] atIndex:[reorder[1] unsignedIntegerValue]];
+    [events removeAllObjects];
+    Call(api, @"moveTab", @{ @"id": reorder[0], @"index": reorder[1] }); assert(!failure && [GroupIds(one) isEqual:expected]);
+    assert(one.tabGroup.selectedWindow == appKitSelected && [SelectedId(one) isEqual:@"tab-1"] && !LastEvent(@"tabSelectionChanged", @"tab-2"));
+    for (NSWindow *window in @[one, two, three]) assert(!OnScreen(window));
+    Pump(); NSDictionary *changed = LastEvent(@"tabGroupChanged", @"tab-2");
+    assert([before isEqual:expected] ? !changed : [changed[@"tabGroup"][@"windowIds"] isEqual:expected]);
+  }
+  Call(api, @"moveTab", @{ @"id": @"tab-1", @"index": @3 }); assert([failure isEqual:@"E_INVALID_ARGUMENT"]);
+  for (NSString *key in @[@"tab-1", @"tab-2", @"tab-3"]) { Call(api, @"moveTab", @{ @"id": key, @"index": @([@[@"tab-1", @"tab-2", @"tab-3"] indexOfObject:key]) }); assert(!failure); }
+  assert([GroupIds(one) isEqual:(@[@"tab-1", @"tab-2", @"tab-3"])]);
+
   // Move Tab to New Window regroups without ordering the window on screen; moving a lone window changes nothing.
   Call(api, @"moveTabToNewWindow", @{ @"id": @"tab-2" }); assert(!failure);
   assert([GroupIds(one) isEqual:(@[@"tab-1", @"tab-3"])] && [GroupIds(two) isEqual:@[@"tab-2"]] && !OnScreen(two));
   assert([LastEvent(@"tabGroupChanged", @"tab-2")[@"tabGroup"] isEqual:(@{ @"windowIds": @[@"tab-2"], @"selectedWindowId": @"tab-2", @"tabBarVisible": @NO })]);
   assert([LastEvent(@"tabGroupChanged", @"tab-3")[@"tabGroup"][@"windowIds"] isEqual:(@[@"tab-1", @"tab-3"])]);
   Call(api, @"moveTabToNewWindow", @{ @"id": @"tab-2" }); assert(!failure && [GroupIds(two) isEqual:@[@"tab-2"]]);
+  // A window without other tabs takes only index 0.
+  Call(api, @"moveTab", @{ @"id": @"tab-2", @"index": @0 }); assert(!failure && [GroupIds(two) isEqual:@[@"tab-2"]]);
+  Call(api, @"moveTab", @{ @"id": @"tab-2", @"index": @1 }); assert([failure isEqual:@"E_INVALID_ARGUMENT"]);
 
   // Merge All Windows joins every shown window with the same identifier, in creation order; hidden and other windows stay.
   NSWindow *four = RealWindow(@"tab-4"), *other = RealWindow(@"tab-other"), *hidden = RealWindow(@"tab-hidden"), *single = RealWindow(@"tab-single");
@@ -329,6 +348,10 @@ static void TestTabRestoration(RNDesktopWindows *api) {
   [opened[0] addTabbedWindow:opened[2] ordered:NSWindowAbove]; [opened[2] addTabbedWindow:opened[1] ordered:NSWindowAbove];
   SelectTab(opened[2]); Pump();
   assert([GroupIds(opened[0]) isEqual:(@[@"restore-a", @"restore-c", @"restore-b"])]);
+  // A reorder is saved like any other change of the group.
+  Call(api, @"moveTab", @{ @"id": @"restore-b", @"index": @0 }); assert(!failure); Pump();
+  assert([[NSUserDefaults.standardUserDefaults dictionaryForKey:SavedStateKey(@"restore-a")][@"tabs"] isEqual:(@[@"restore-b", @"restore-a", @"restore-c"])]);
+  Call(api, @"moveTab", @{ @"id": @"restore-b", @"index": @2 }); assert(!failure); Pump();
   NSMutableDictionary *saved = [NSMutableDictionary new];
   for (NSString *key in ids) {
     NSDictionary *record = [NSUserDefaults.standardUserDefaults dictionaryForKey:SavedStateKey(key)];
@@ -362,16 +385,27 @@ static void TestTabRestoration(RNDesktopWindows *api) {
 static void TestShownTabs(RNDesktopWindows *api) {
   NSScreen *primary = SparkPrimaryScreen();
   NSDictionary *offscreen = @{ @"displayId": SparkScreenId(primary), @"x": @(-4 * NSWidth(primary.frame)), @"y": @0 };
-  NSWindow *first = RealWindow(@"shown-1", OffscreenWindow.class), *second = RealWindow(@"shown-2", OffscreenWindow.class);
+  NSWindow *first = RealWindow(@"shown-1", OffscreenWindow.class), *second = RealWindow(@"shown-2", OffscreenWindow.class), *third = RealWindow(@"shown-3", OffscreenWindow.class);
   NSDictionary *unseen = @{ @"opacity": @0, @"ignoreMouseEvents": @YES, @"position": offscreen };
-  NSMutableDictionary *one = [unseen mutableCopy], *two = [unseen mutableCopy];
+  NSMutableDictionary *one = [unseen mutableCopy], *two = [unseen mutableCopy], *three = [unseen mutableCopy];
   [one addEntriesFromDictionary:@{ @"id": @"shown-1", @"tabbing": @{ @"identifier": @"shown" } }]; [two addEntriesFromDictionary:@{ @"id": @"shown-2", @"tabbedWith": @"shown-1" }];
+  [three addEntriesFromDictionary:@{ @"id": @"shown-3", @"tabbedWith": @"shown-1" }];
   Call(api, @"completeOpen", one); assert(!failure);
   Call(api, @"completeOpen", two); assert(!failure);
-  for (NSWindow *window in @[first, second]) for (NSScreen *screen in NSScreen.screens) if (NSIntersectsRect(window.frame, screen.frame)) { fprintf(stderr, "%s on screen at %s\n", KeyFor(window).UTF8String, NSStringFromRect(window.frame).UTF8String); abort(); }
+  auto unseenCheck = ^(NSArray<NSWindow *> *shown) {
+    for (NSWindow *window in shown) for (NSScreen *screen in NSScreen.screens) if (NSIntersectsRect(window.frame, screen.frame)) { fprintf(stderr, "%s on screen at %s\n", KeyFor(window).UTF8String, NSStringFromRect(window.frame).UTF8String); abort(); }
+  };
+  unseenCheck(@[first, second]);
   assert(first.visible && second.visible && !NSApp.active);
   assert([GroupIds(first) isEqual:(@[@"shown-1", @"shown-2"])] && [SelectedId(first) isEqual:@"shown-2"] && [second.tabbingIdentifier isEqual:@"shown"]);
-  for (NSString *key in @[@"shown-2", @"shown-1"]) { Call(api, @"close", @{ @"id": key }); assert(!failure); }
+  // AppKit's own selection: reordering moves the selected tab and the others without changing it.
+  Call(api, @"completeOpen", three); assert(!failure && [SelectedId(first) isEqual:@"shown-3"]);
+  for (NSArray *reorder in @[@[@"shown-3", @0, @[@"shown-3", @"shown-1", @"shown-2"]], @[@"shown-2", @1, @[@"shown-3", @"shown-2", @"shown-1"]], @[@"shown-3", @2, @[@"shown-2", @"shown-1", @"shown-3"]]]) {
+    Call(api, @"moveTab", @{ @"id": reorder[0], @"index": reorder[1] }); assert(!failure);
+    assert([GroupIds(first) isEqual:reorder[2]] && first.tabGroup.selectedWindow == third && [SelectedId(first) isEqual:@"shown-3"]);
+    unseenCheck(@[first, second, third]); assert(first.visible && second.visible && third.visible && !NSApp.active);
+  }
+  for (NSString *key in @[@"shown-3", @"shown-2", @"shown-1"]) { Call(api, @"close", @{ @"id": key }); assert(!failure); }
   Pump();
   puts("Shown window tabs passed");
 }
