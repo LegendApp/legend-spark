@@ -23,8 +23,8 @@ explicit rebuild.
 
 ## Install or rebuild the native runtime
 
-JavaScript dependencies do not include a native executable. There is no hosted
-prebuilt download service yet. If a matching runtime is already registered, the
+This source example needs a registered local Runner; hosted downloads require
+release metadata embedded in the published CLI. If a matching runtime is registered, the
 run command uses it without compiling. You can register one supplied by another
 machine with `bun ../../scripts/spark.mjs sdk register <runtime-directory>`.
 
