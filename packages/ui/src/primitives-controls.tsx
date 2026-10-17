@@ -43,16 +43,33 @@ function frame<K extends PrimitiveKind>(kind: K, props: PrimitivePropsByKind[K],
   if (kind === "date-picker" && (props as DatePickerProps).variant === "clock-calendar") return { width: (props as DatePickerProps).mode === "date-time" ? 300 : 150, height: 160 };
   return { width: 240, height };
 }
+/** A native AppKit checkbox; `mixed` shows the mixed state. macOS only; elsewhere rendering throws. */
 export function Checkbox(props: CheckboxProps) { return <Primitive kind="checkbox" props={props} />; }
+/** A native group of radio buttons, one per option; `value` must match an option. macOS only; elsewhere rendering throws. */
 export function RadioGroup(props: RadioGroupProps) { return <Primitive kind="radio-group" props={props} />; }
+/** A native NSSwitch with an optional label. macOS only; elsewhere rendering throws. */
 export function Switch(props: SwitchProps) { return <Primitive kind="switch" props={props} />; }
+/** A native NSSlider. Defaults: `min` 0, `max` 100, `step` 1, no tick marks, `continuous` true. macOS only; elsewhere rendering throws. */
 export function Slider(props: SliderProps) { return <Primitive kind="slider" props={props} />; }
+/** A native NSStepper. Defaults: `min` 0, `max` 100, `step` 1. macOS only; elsewhere rendering throws. */
 export function Stepper(props: StepperProps) { return <Primitive kind="stepper" props={props} />; }
+/** A native NSComboBox: editable text with a list of suggested `options`. macOS only; elsewhere rendering throws. */
 export function ComboBox(props: ComboBoxProps) { return <Primitive kind="combo-box" props={props} />; }
+/** A native NSTokenField editing a list of string tokens. macOS only; elsewhere rendering throws. */
 export function TokenField(props: TokenFieldProps) { return <Primitive kind="token-field" props={props} />; }
+/** A native NSPathControl showing a file URL. macOS only; elsewhere rendering throws. */
 export function PathControl(props: PathControlProps) { return <Primitive kind="path-control" props={props} />; }
+/**
+ * A native progress indicator: a determinate bar (`value` 0 to 1), an indeterminate bar, or a spinner. macOS only; elsewhere
+ * rendering throws.
+ */
 export function Progress(props: ProgressProps) { return <Primitive kind="progress" props={props} />; }
+/**
+ * A native NSLevelIndicator that displays `value`; it reports no changes. Defaults: `min` 0, `max` 100. macOS only; elsewhere
+ * rendering throws.
+ */
 export function LevelIndicator(props: LevelIndicatorProps) { return <Primitive kind="level-indicator" props={props} />; }
+/** A native disclosure triangle toggled by `value`; its `label` is accessibility text only. macOS only; elsewhere rendering throws. */
 export function DisclosureTriangle(props: DisclosureTriangleProps) { return <Primitive kind="disclosure-triangle" props={props} />; }
 /** A native date, time or date-and-time picker; values are Unix timestamps in milliseconds. */
 export function DatePicker(props: DatePickerProps) { return <Primitive kind="date-picker" props={props} />; }

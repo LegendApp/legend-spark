@@ -6,10 +6,13 @@ import { getPanelsNative, onPanelEvent } from "./panel-host";
 
 /** The system color panel's picker pages. */
 export type ColorPanelMode = "wheel" | "rgb" | "hsb" | "cmyk" | "gray" | "palettes" | "image" | "pencils";
+/** Why a panel session ended: the user closed the panel (`dismissed`), or another session or a ColorWell took it over (`replaced`). */
 export interface PanelCloseEvent { reason: "dismissed" | "replaced" }
 /** A shared system panel shown for one caller. `close()` stops callbacks at once and hides the panel if this session still owns it. */
 export interface PanelSession { close(): Promise<void> }
+/** A color picked in the color panel, as lowercase sRGB hex: `#rrggbb`, or `#rrggbbaa` when `alpha` is set. */
 export interface ColorPanelChangeEvent { color: string }
+/** Options for `showColorPanel`. Invalid values reject with E_INVALID_ARGUMENT, unknown keys with E_UNSUPPORTED_OPTION. */
 export interface ColorPanelOptions {
   /** sRGB hex; omitted keeps the panel's color. */
   color?: string;
@@ -21,8 +24,14 @@ export interface ColorPanelOptions {
   /** The user closed the panel, or another session or a ColorWell took it over. */
   onClose?: (event: PanelCloseEvent) => void;
 }
+/** Result of `sampleScreenColor`: the picked color as lowercase `#rrggbb`, or `canceled: true`. */
 export type ScreenColorResult = { canceled: true } | { canceled: false; color: string };
+/** A numeric font weight, 100 to 900 in steps of 100. */
 export type FontWeight = 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+/**
+ * The font `showFontPanel` opens with. `family` must be nonempty and `size` above 0 and at most 10000 points; invalid values
+ * reject with E_INVALID_ARGUMENT, unknown keys with E_UNSUPPORTED_OPTION.
+ */
 export interface FontDescriptor {
   family: string;
   /** Points. */
@@ -33,12 +42,15 @@ export interface FontDescriptor {
 }
 /** An installed font, as the system resolved it. */
 export interface ResolvedFont { family: string; postScriptName: string; size: number; weight: FontWeight; italic: boolean }
+/** A font picked in the font panel, as the system resolved it. */
 export interface FontPanelChangeEvent { font: ResolvedFont }
+/** Options for `showFontPanel`. Unknown keys reject with E_UNSUPPORTED_OPTION. */
 export interface FontPanelOptions {
   font: FontDescriptor;
   onChange: (event: FontPanelChangeEvent) => void;
   onClose?: (event: PanelCloseEvent) => void;
 }
+/** The session `showFontPanel` resolves with; `close()` ends it. */
 export interface FontPanelSession extends PanelSession {
   /** The installed font the panel opened with. */
   readonly font: ResolvedFont;
@@ -57,6 +69,7 @@ export function getColorPanelAvailability(feature?: "sampler"): Availability {
   if (feature !== undefined && feature !== "sampler") throw new SparkError("E_INVALID_ARGUMENT", "Unknown color panel feature");
   return availability();
 }
+/** Whether the system font panel can be shown: macOS with the native panels module linked. */
 export function getFontPanelAvailability(): Availability { return availability(); }
 
 async function call(method: string, args: object): Promise<unknown> {

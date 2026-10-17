@@ -5,13 +5,23 @@ import { useControl, useTextValue } from "../control";
 import { macosViewAvailability, appearance } from "../specialized";
 import type { ControlRef, ControlledTextInputProps, UncontrolledTextInputProps } from "../types";
 import NativeSearch, { Commands } from "./TextInputSearchNativeComponent";
+/**
+ * Props for `TextInputSearch`: the `TextInput` props, controlled or uncontrolled, plus `appearance` (default `system`) and
+ * `placeholder` (default empty).
+ */
 export type TextInputSearchProps = (Omit<ControlledTextInputProps, "ref"> | Omit<UncontrolledTextInputProps, "ref">) & {
   appearance?: "dark" | "light" | "system";
   placeholder?: string;
   ref?: Ref<TextInputSearchRef>;
 };
+/**
+ * A `TextInputSearch` ref: layout measurement plus `focus()` and `blur()`, which throw E_CLOSED while the field is not
+ * mounted or not available.
+ */
 export interface TextInputSearchRef extends ControlRef { focus(): void; blur(): void }
+/** Whether `TextInputSearch` can render: macOS 14 and later with the native view linked. */
 export function getSearchAvailability() { return macosViewAvailability("TextInputSearch"); }
+/** A native NSSearchField. Where the native view is unavailable it reports through `onError` and renders its text disabled. */
 export function TextInputSearch({ ref, appearance: theme = "system", placeholder = "", ...props }: TextInputSearchProps) {
   appearance(theme);
   if (typeof placeholder !== "string") throw new SparkError("E_INVALID_ARGUMENT", "Expected search placeholder");

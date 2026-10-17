@@ -17,6 +17,7 @@ export type TextServicesFeature = "services" | "lookUp" | "writingTools" | "find
 export type WritingToolsBehavior = "default" | "complete" | "limited" | "none";
 /** A mounted multiline React Native `TextInput`, or a `Text` with `selectable`. */
 export type TextServicesTarget = ComponentRef<typeof TextInput> | ComponentRef<typeof Text>;
+/** Options for `findText`. Unknown keys reject with E_UNSUPPORTED_OPTION. */
 export interface FindTextOptions {
   /** Match letter case. Default false. */
   caseSensitive?: boolean;
@@ -25,6 +26,7 @@ export interface FindTextOptions {
   /** Select the match before the selection instead of after it. Default false. */
   backwards?: boolean;
 }
+/** What `findText` resolves with. */
 export interface FindTextResult {
   /** Non-overlapping matches in the whole text. */
   matchCount: number;
@@ -40,6 +42,10 @@ declare module "react-native" {
 }
 
 const features: readonly TextServicesFeature[] = ["services", "lookUp", "writingTools", "findBar"];
+/**
+ * Whether a text services feature is usable; macOS only. `services` needs no native module, and `writingTools` reports
+ * `host-restriction` where the system cannot run Writing Tools. Throws E_INVALID_ARGUMENT for an unknown feature.
+ */
 export function getTextServicesAvailability(feature: TextServicesFeature): Availability {
   if (!features.includes(feature)) throw new SparkError("E_INVALID_ARGUMENT", "Unknown text services feature");
   if (Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };

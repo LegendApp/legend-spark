@@ -3,7 +3,12 @@ import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import { useControl } from "../control";
 import { finite, identifier, macosViewAvailability, type SpecializedViewProps } from "../specialized";
 import NativeSFSymbol from "./SFSymbolNativeComponent";
+/** SF Symbol scale relative to its point size. Default `medium`. */
 export type SFSymbolScale = "small" | "medium" | "large";
+/**
+ * Props for `SFSymbol`. `size` is the symbol's point size and the side of its square frame (default 24); `yOffset` moves the
+ * glyph vertically in points (default 0).
+ */
 export interface SFSymbolProps extends Omit<SpecializedViewProps, "children"> {
   name: string;
   color?: ColorValue;
@@ -11,7 +16,12 @@ export interface SFSymbolProps extends Omit<SpecializedViewProps, "children"> {
   size?: number;
   yOffset?: number;
 }
+/** Whether `SFSymbol` can render: macOS 14 and later with the native view linked. */
 export function getSFSymbolAvailability() { return macosViewAvailability("SFSymbol"); }
+/**
+ * A named SF Symbol. An unknown name reports E_NOT_FOUND through `onError`; where the native view is unavailable it reports
+ * through `onError` and renders an empty frame.
+ */
 export function SFSymbol({ name, color, scale = "medium", size = 24, yOffset = 0, ref, onError, style, ...props }: SFSymbolProps) {
   identifier(name, "symbol name"); finite(size, "symbol size", 1); finite(yOffset, "symbol offset", -Infinity);
   if (!["small", "medium", "large"].includes(scale)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid symbol scale");

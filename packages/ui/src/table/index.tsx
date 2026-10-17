@@ -12,6 +12,7 @@ export type { OutlineRow, TableColumn, TableColumnAlignment, TableColumnLayout, 
 
 /** Rows activated by a double-click or Return: the selection, or the clicked row when it is outside the selection. */
 export interface TableActivateEvent { ids: string[] }
+/** Reported by `onContextMenu` on a right-click in the table. */
 export interface TableContextMenuEvent {
   /** The row under the pointer, or null below the last row. */
   rowId: string | null;
@@ -20,6 +21,10 @@ export interface TableContextMenuEvent {
   /** Logical points from the owning window content's top-left, as `showContextMenu` takes them. */
   position: { x: number; y: number };
 }
+/**
+ * Selection props of `Table` and `Outline`. `selectionMode` defaults to `single`; unless it is `none`, selection is controlled
+ * and requires `selectedIds` and `onSelectionChange`.
+ */
 export type TableSelectionProps =
   | { selectionMode: "none"; selectedIds?: never; onSelectionChange?: never }
   | { selectionMode?: Exclude<TableSelectionMode, "none">; selectedIds: readonly string[]; onSelectionChange: (ids: string[]) => void };
@@ -34,6 +39,7 @@ export type TableSortProps =
 export type TableColumnLayoutProps =
   | { columnLayout?: never; onColumnLayoutChange?: (layout: TableColumnLayout[]) => void }
   | { columnLayout: readonly TableColumnLayout[]; onColumnLayoutChange: (layout: TableColumnLayout[]) => void };
+/** Props shared by `Table` and `Outline`, generic over the row type. */
 export type TableBaseProps<Row> = Omit<SpecializedViewProps, "children"> & TableSelectionProps & TableSortProps & TableColumnLayoutProps & {
   columns: readonly import("./model").TableColumn[];
   rows: readonly Row[];
@@ -42,6 +48,7 @@ export type TableBaseProps<Row> = Omit<SpecializedViewProps, "children"> & Table
   onActivate?: (event: TableActivateEvent) => void;
   onContextMenu?: (event: TableContextMenuEvent) => void;
 };
+/** Props for `Table`. Expansion props throw E_UNSUPPORTED_OPTION; they belong to `Outline`. */
 export type TableProps = TableBaseProps<TableRow>;
 /** Expansion is controlled: `onExpandedChange` proposes the expanded row IDs, in display order. */
 export type OutlineProps = TableBaseProps<OutlineRow> & { expandedIds: readonly string[]; onExpandedChange: (ids: string[]) => void };
