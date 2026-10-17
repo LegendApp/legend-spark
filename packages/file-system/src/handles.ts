@@ -1,13 +1,16 @@
 import { SparkError, asyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 import { nativeBytes } from "@legendapp/spark-desktop-app/src/contracts/native-buffer";
 export const MAX_CHUNK_SIZE = 1024 * 1024;
+/** How `openFile` opens a file: `read` and `readWrite` need an existing regular file, `write` truncates, `createNew` rejects if the file exists. Default: `read`. */
 export type FileMode = "read" | "readWrite" | "write" | "createNew";
+/** An open file returned by `openFile`, with positional I/O (offsets in bytes; no shared cursor). `read` and `write` take at most 1 MiB per call; `read` resolves an empty array at end of file. Calls after `close()` reject E_CLOSED. */
 export type FileHandle = {
   read(length: number, offset: number): Promise<Uint8Array>;
   write(bytes: Uint8Array, offset: number): Promise<number>;
   flush(): Promise<void>;
   close(): Promise<void>;
 };
+/** Rejection when closing a file handle or bookmark access failed. `operationFailed` tells whether the operation itself also failed (`operationError`); `retryCleanup` retries the close. */
 export class FileCleanupError extends SparkError {
   readonly operationFailed: boolean;
   readonly operationError: unknown;
@@ -45,6 +48,7 @@ export async function createFileHandle(call: FileCall, path: string, mode: FileM
     close() { return cleanup.remove(); },
   };
 }
+/** Options for `readChunks`: starting `offset` in bytes (default 0), `chunkSize` in bytes from 1 to 1 MiB (default 64 KiB), and an abort `signal` (rejects E_ABORTED). */
 export type ReadChunksOptions = { offset?: number; chunkSize?: number; signal?: AbortSignal };
 export async function* iterateFile(open: () => Promise<FileHandle>, options: ReadChunksOptions = {}) {
   let position = options.offset ?? 0; offset(position); const size = options.chunkSize ?? 64 * 1024; length(size); aborted(options.signal);

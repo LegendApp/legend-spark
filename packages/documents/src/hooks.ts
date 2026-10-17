@@ -4,6 +4,7 @@ import { createDocumentAppController, type DocumentAppController, type DocumentA
 import { watchDocumentReload, type DocumentReloadOptions } from "./reload";
 import type { DocumentSession, DocumentState } from "./session";
 
+/** Options for `useWatchedDocumentReload`: `DocumentReloadOptions` with a nullable `path`. No watch runs while `path` is empty or `enabled` (default true) is false. `onCleanupError` receives failed watch removals; without it they are logged and passed to `onError`. */
 export interface UseWatchedDocumentReloadOptions extends Omit<DocumentReloadOptions, "path"> {
   path: string | null | undefined;
   enabled?: boolean;
@@ -11,6 +12,7 @@ export interface UseWatchedDocumentReloadOptions extends Omit<DocumentReloadOpti
 }
 type ReloadOwner = { registration: AsyncRegistration; removing?: Promise<void> };
 type ReloadLifecycle = { tail: Promise<void>; owner?: ReloadOwner };
+/** Watches `path` with `watchDocumentReload` while mounted and enabled, replacing the watch when `path`, `enabled` or `delayMs` changes. Callbacks always use the latest options; errors go to `onError`. */
 export function useWatchedDocumentReload(options: UseWatchedDocumentReloadOptions): void {
   const latest = useRef(options);
   const lifecycleRef = useRef<ReloadLifecycle | null>(null);
@@ -66,9 +68,11 @@ export function useWatchedDocumentReload(options: UseWatchedDocumentReloadOption
   }, [path, enabled, delayMs]);
 }
 
+/** Options for `useDocumentAppController`: `DocumentAppControllerOptions` plus `onCleanupError`, which receives a failed `remove()` on unmount (otherwise passed to `reportError`). */
 export interface UseDocumentAppControllerOptions extends DocumentAppControllerOptions {
   onCleanupError?: (error: unknown, controller: DocumentAppController) => void;
 }
+/** State returned by `useDocumentAppController`: loading until the controller is ready, then ready with the controller (re-rendered when its window state changes), or error if setup failed. */
 export type DocumentAppControllerState =
   | { status: "loading" }
   | { status: "ready"; controller: DocumentAppController }

@@ -8,16 +8,19 @@ export { createDocumentSession, findDocumentSession, getDocumentSessionAvailabil
 export { getDocumentVersionsAvailability, listDocumentVersions, addDocumentVersion, restoreDocumentVersion, type DocumentVersion } from "./versions";
 export * from "./hooks";
 
+/** Options for `openSelectedDocumentPath`. `allowedFileTypes` are extensions without the dot; `invalidSelectionMessage` replaces the default error text when no selected path passes `isDocumentPath`. */
 export interface OpenSelectedDocumentPathOptions {
   allowedFileTypes: readonly string[];
   invalidSelectionMessage?: string;
   isDocumentPath: (path: string) => boolean;
 }
+/** Options for `getLaunchDocumentPath`. */
 export interface GetLaunchDocumentPathOptions {
   isDocumentPath: (path: string) => boolean;
   launchArguments?: string[];
 }
 
+/** First path in `launchArguments`, then in `process.argv`, that passes `isDocumentPath`, or null. */
 export function getLaunchDocumentPath({
   isDocumentPath,
   launchArguments,
@@ -26,6 +29,7 @@ export function getLaunchDocumentPath({
   return launchArguments?.find(isDocumentPath) ?? argv.find(isDocumentPath) ?? null;
 }
 
+/** Shows the open panel filtered to `allowedFileTypes` and resolves the first selected path that passes `isDocumentPath`, or null when canceled. Throws an `Error` when files were selected but none qualify. */
 export async function openSelectedDocumentPath({
   allowedFileTypes,
   invalidSelectionMessage,

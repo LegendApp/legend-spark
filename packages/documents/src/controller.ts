@@ -3,6 +3,7 @@ import { createPrimaryWindowLifecycle } from "@legendapp/spark-desktop-windows/s
 import { SparkError, asyncRegistration, type AsyncRegistration, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 import { subscribeToOpenRequests } from "./requests";
 
+/** Handle returned by `createDocumentAppController`: tracks whether the document window is open, routes errors and updates the app menu. Methods other than `isDocumentWindowOpen` and `reportError` throw E_CLOSED after `remove()`. */
 export interface DocumentAppController extends AsyncRegistration {
   /** Resolves after document listeners and the menu are installed. Initial-open work reports through reportError. */
   readonly ready: Promise<void>;
@@ -12,6 +13,7 @@ export interface DocumentAppController extends AsyncRegistration {
   subscribe(listener: () => void): Subscription;
   updateMenus(menus: readonly MenuRootItem[]): Promise<void>;
 }
+/** Options for `createDocumentAppController`. `ownerId` (the menu id) and `windowId` must be 1-100 letters, digits, `_` or `-`, or creation throws E_INVALID_ARGUMENT. Without `onReopenRequested`, a reopen request calls `onInitialOpen(undefined, controller)`; open-file requests are only subscribed when `onOpenDocument` is set. */
 export interface DocumentAppControllerOptions {
   onMenuAction?: (action: MenuAction, controller: DocumentAppController) => void | Promise<void>;
   launchArguments?: string[];
