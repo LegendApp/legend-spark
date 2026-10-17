@@ -53,11 +53,14 @@ export interface AdminAuthorization {
   readonly expiresAt: number | null;
   close(): Promise<void>;
 }
+/** What `requestAdminAuthorization` resolves with: the granted `AdminAuthorization`, or `cancel` when the person cancels the prompt. */
 export type AdminAuthorizationResult = { type: "authorized"; authorization: AdminAuthorization } | { type: "cancel" };
+/** Options for `requestAdminAuthorization`. */
 export interface AdminAuthorizationOptions {
   /** Why the app asks, shown in the prompt under the system's own text. 1–500 characters. */
   prompt: string;
 }
+/** Options for `sendPrivilegedHelperMessage`. */
 export interface PrivilegedHelperMessageOptions {
   /** Send the admin rights with the message; the helper checks them and tells its handler whether they hold. */
   authorization?: AdminAuthorization;

@@ -37,6 +37,7 @@ export interface JavaScriptCrashReport extends CrashReportBase {
   /** The engine's stack trace, as `error.stack` had it. */
   stack?: string;
 }
+/** A crash recorded by crash reporting: a native crash or a fatal JavaScript error, told apart by `kind`. */
 export type CrashReport = NativeCrashReport | JavaScriptCrashReport;
 /** How `simulateCrash` crashes: native kinds crash a helper process, "javascript" records a real TypeError through the JavaScript handler. */
 export type SimulatedCrashKind = "badAccess" | "abort" | "uncaughtException" | "trap" | "stackOverflow" | "javascript";

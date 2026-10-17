@@ -3,11 +3,16 @@ import NativeContextMenu from "./NativeContextMenu";
 import { SparkError, invokeNative, type Availability } from "@legendapp/spark-desktop-app/src/contracts";
 import { menuItems, selectableMenuIds, type MenuItem as SharedMenuItem, type MenuAction as SharedMenuAction } from "@legendapp/spark-desktop-app/src/contracts/menu";
 type ContextMenuEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean };
+/** A context menu entry: an action, a checkbox or a separator. `id` is what `showContextMenu` resolves with; disabled and hidden items cannot be chosen. */
 export type MenuItem = { type: "separator" } | (ContextMenuEntry & { type: "action" }) | (ContextMenuEntry & { type: "checkbox"; checked: boolean });
+/** An action item the person chose, by its `id`. */
 export type MenuAction = Extract<SharedMenuAction, { type: "action" }>;
 export type { MenuIcon } from "@legendapp/spark-desktop-app/src/contracts/menu";
+/** Options for `showContextMenu`: the items, the owner window's id, and where to open in that window's content, in logical coordinates. */
 export interface ContextMenuOptions { items: readonly MenuItem[]; windowId: string; position: { x: number; y: number } }
+/** What `showContextMenu` resolves with: the chosen item's `id`, or `canceled: true` when the menu was dismissed or empty. */
 export type ContextMenuResult = { canceled: true } | { canceled: false; itemId: string };
+/** Whether context menus can be shown: macOS and Windows with NativeContextMenu installed. Other platforms report `unsupported-platform`. */
 export function getContextMenuAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
   return NativeContextMenu ? { available: true } : { available: false, reason: "missing-module" };

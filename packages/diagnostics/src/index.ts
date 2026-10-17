@@ -5,10 +5,11 @@ import Native, { type Spec } from "./NativeDesktopDiagnostics";
 import { isFrame, type StackFrame } from "./stack";
 
 export type { StackFrame } from "./stack";
-/** @deprecated Use StackFrame. */
+/** Former name of `StackFrame`, one frame of a stack. @deprecated Use StackFrame. */
 export type HangStackFrame = StackFrame;
 export * from "./crash-reporting";
 
+/** A main-thread hang, as `startHangWatchdog` passes it to `onHang` once the main thread answers again. */
 export interface HangReport {
   /**
    * How long the main thread did not respond, in milliseconds: from the ping it left unanswered until
@@ -30,6 +31,7 @@ export interface HangReport {
    */
   endedBeforeSampling: boolean;
 }
+/** Options for `startHangWatchdog`. */
 export interface HangWatchdogOptions {
   /** A main thread that leaves a ping unanswered this long is hanging. Integer milliseconds, 50 to 60000. Default 250. */
   thresholdMs?: number;

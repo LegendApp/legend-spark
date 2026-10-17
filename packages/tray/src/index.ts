@@ -6,11 +6,15 @@ import { SparkError, asyncRegistration, invokeNative, parseNativeResult, type Av
 import { menuItems, selectableMenuIds, type MenuItem as SharedMenuItem, type MenuWireItem } from "@legendapp/spark-desktop-app/src/contracts/menu";
 type TrayEntry = { id: string; label: string; disabled?: boolean; hidden?: boolean };
 type TrayLeaf = { type: "separator" } | (TrayEntry & { type: "action" }) | (TrayEntry & { type: "checkbox"; checked: boolean });
+/** A tray menu entry: an action, a checkbox, a separator or a submenu of more entries. `id` is what `onAction` receives. */
 export type MenuItem = TrayLeaf | (TrayEntry & { type: "submenu"; items: readonly MenuItem[] });
+/** An action item chosen from a menu, by its `id`. */
 export type MenuAction = Extract<import("@legendapp/spark-desktop-app/src/contracts/menu").MenuAction, { type: "action" }>;
 export type { MenuIcon } from "@legendapp/spark-desktop-app/src/contracts/menu";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
+/** What `onAction` receives: a click on the tray item itself, or the `itemId` of a menu item the person chose. */
 export type TrayAction = { type: "click" } | { type: "action"; itemId: string };
+/** Changes for `Tray.update`; omitted fields stay as they are. A tray needs a title, image or macOS symbol, and cannot have both an image and a symbol (E_INVALID_ARGUMENT). */
 export interface TrayUpdate {
   /** Visible text on macOS; accessible tooltip fallback on Windows. */
   title?: string;
@@ -22,9 +26,11 @@ export interface TrayUpdate {
   /** Replaces macOS presentation options; null clears the symbol. */
   macos?: { symbol?: string | null };
 }
+/** Options for `createTray`. `id` is 1-100 letters, digits, '-' or '_'. */
 export interface TrayOptions extends TrayUpdate { id: string; onAction?: (action: TrayAction) => void }
 /** The tray item on screen, in logical units from its display's top-left corner (the window API's coordinates). */
 export interface TrayBounds { displayId: string; x: number; y: number; width: number; height: number }
+/** A tray (menu bar) item from `createTray`. `remove()` takes it away; `update` after that rejects E_CLOSED. */
 export interface Tray extends AsyncRegistration {
   readonly id: string;
   update(changes: TrayUpdate): Promise<void>;
@@ -32,6 +38,7 @@ export interface Tray extends AsyncRegistration {
   getBounds(): Promise<TrayBounds>;
 }
 interface Wire { id: string; instanceId: string; imagePath: string; title: string; tooltip?: string; symbol: string; menu: MenuWireItem[] }
+/** Whether tray items can be created: macOS and Windows with NativeDesktopTray installed. Other platforms report `unsupported-platform`. */
 export function getTrayAvailability(): Availability {
   if (Platform.OS !== "macos" && Platform.OS !== "windows") return { available: false, reason: "unsupported-platform" };
   return Native ? { available: true } : { available: false, reason: "missing-module" };
@@ -72,6 +79,7 @@ function presentation(options: Wire) {
 const isTrayBounds = (value: unknown): value is TrayBounds => !!value && typeof value === "object" && typeof (value as TrayBounds).displayId === "string" && !!(value as TrayBounds).displayId
   && (["x", "y", "width", "height"] as const).every(key => Number.isFinite((value as TrayBounds)[key])) && (value as TrayBounds).width > 0 && (value as TrayBounds).height > 0;
 let sequence = 0;
+/** Adds a tray item: a menu bar item on macOS, a notification area icon on Windows. Rejects E_UNSUPPORTED_PLATFORM or E_MODULE_UNAVAILABLE when `getTrayAvailability` says so. */
 export async function createTray(options: TrayOptions): Promise<Tray> {
   const changes = validate(options, true);
   if (typeof options.id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(options.id)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid tray id");

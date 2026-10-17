@@ -3,13 +3,21 @@ import Native from "./NativeKeyboardManager";
 import { SparkError, asyncRegistration, invokeNative, type AsyncRegistration, type Availability, type Subscription } from "@legendapp/spark-desktop-app/src/contracts";
 export type { AsyncRegistration } from "@legendapp/spark-desktop-app/src/contracts";
 export { KeyCodes, KeyText } from "./codes";
+/**
+ * A key press or release reported by `addKeyboardListener`. `keyCode` is a macOS virtual key code and `modifiers` a mask of NSEvent
+ * modifier flags (see `KeyCodes`). `consumed`: a shortcut or capture took the key; `captured`: keyboard capture was on. `windowId` is
+ * the Spark window the event was for, or null.
+ */
 export type KeyboardEvent = Readonly<{ repeated: boolean; consumed: boolean; captured: boolean; windowId: string | null; key: string; keyCode: number; modifiers: number }>;
+/** Called by `addKeyboardListener` with each matching key event. Its return value is ignored. */
 export type KeyboardEventListener = (event: KeyboardEvent) => void;
+/** Options for `addKeyboardListener`. `windowIds` reports only events for those windows; default: every event, including those with no window. */
 export type KeyboardListenerOptions = { windowIds?: readonly string[] };
 type Entry = { type: "down" | "up"; listener: KeyboardEventListener; windowIds?: readonly string[] };
 const entries = new Set<Entry>(), consumers = new Set<string>();
 let sequence = 0;
 let subscriptions: Subscription[] = [], monitoring = false, transitions = Promise.resolve();
+/** Whether low-level keyboard monitoring can run: macOS only, with NativeKeyboardManager installed. */
 export function getKeyboardAvailability(): Availability {
   if (Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };
   return Native ? { available: true } : { available: false, reason: "missing-module" };
@@ -58,7 +66,9 @@ export async function addKeyboardListener(type: "down" | "up", listener: Keyboar
   try { await synchronize(); } catch (error) { entries.delete(entry); throw error; }
   return asyncRegistration(() => { entries.delete(entry); }, synchronize);
 }
+/** Whether every bit of `modifier` (a `MODIFIER_*` value or a mask) is set in the event's `modifiers`. */
 export function hasModifier(event: Pick<KeyboardEvent, "modifiers">, modifier: number): boolean { return (event.modifiers & modifier) === modifier; }
+/** ORs `MODIFIER_*` values into one mask, for `hasModifier`. */
 export function createModifierMask(...modifiers: number[]): number { return modifiers.reduce((mask, modifier) => mask | modifier, 0); }
 
 
