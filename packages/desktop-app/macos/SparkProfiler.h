@@ -1,3 +1,4 @@
+#import "SparkProfilerDevTools.h"
 #import "SparkProfilerFiles.h"
 
 // The development profiler's native half (docs/devtools.md#profiling): Hermes's sampling profiler in every JavaScript
@@ -8,7 +9,8 @@ NS_ASSUME_NONNULL_BEGIN
 // Main thread. Whether a recording runs (the Developer menu enables Start or Stop Profiling by it).
 FOUNDATION_EXPORT BOOL SparkProfilerRecording(void);
 // Main thread. Starts Hermes's sampling profiler for every runtime at `samplesPerSecond` and the frame timeline, and
-// emits the desktop event {type: "profiling", recording: true}. E_BUSY while recording; E_UNAVAILABLE without a display.
+// emits the desktop event {type: "profiling", recording: true}. E_BUSY while it or React Native DevTools records
+// (SparkProfilerDevTools.h); E_UNAVAILABLE without a display, or when DevTools' recordings cannot be watched.
 FOUNDATION_EXPORT void SparkProfilerStart(double samplesPerSecond, SparkProfilerCompletion completion);
 // Main thread. Stops (emitting {type: "profiling", recording: false}) and collects every running runtime's samples on
 // its own JS thread, through its NativeDesktopApp module's call invoker. Completes on SparkProfilerQueue with {process,

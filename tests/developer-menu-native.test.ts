@@ -6,7 +6,7 @@ import path from "node:path";
 
 // Compiles the real RNNativeMenu.mm, SparkDeveloperMenu.mm and SparkRuntimeHosts.mm as a development build (RCT_DEV 1),
 // replacing only React Native (hosts, module registries, DevSettings, the perf monitor), @react-native-runtimes/core
-// classes and whether the profiler records (SparkProfiler.mm).
+// classes and whether the profiler or React Native DevTools records (SparkProfiler.mm, SparkProfilerDevTools.mm).
 test.skipIf(process.platform !== "darwin")("the Developer menu targets the key window's runtime and validates against it", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-developer-menu-test-"));
   try {
@@ -27,6 +27,8 @@ static void RCTTriggerReloadCommandListeners(NSString *reason) { ReloadReason = 
 static NSMutableArray<NSDictionary *> *Events;
 static BOOL ProfilerRecording;
 static BOOL SparkProfilerRecording(void) { return ProfilerRecording; }
+static NSString *DevToolsRecording;
+static NSString *SparkProfilerDevToolsRecording(void) { return DevToolsRecording; }
 @interface RCTEventEmitter : NSObject
 - (void)sendEventWithName:(NSString *)name body:(id)body;
 - (void)invalidate;

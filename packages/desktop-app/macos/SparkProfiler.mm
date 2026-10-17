@@ -44,13 +44,38 @@ static double SparkSteadyMicroseconds(void) {
   return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+/**
+ * A DevTools recording whose session ended leaves Hermes sampling, and its samples in each runtime until someone
+ * collects them: turns sampling off and drops them on each runtime's JS thread, so Spark's next recording starts clean.
+ */
+static void SparkProfilerDiscard(void) {
+  SparkHermesRoot()->disableSamplingProfiler();
+  for (const auto &entry : SparkProfiledRuntimes())
+    entry.second->invokeAsync([](jsi::Runtime &runtime) {
+      if (auto *hermes = jsi::castInterface<facebook::hermes::IHermes>(&runtime)) { std::ostringstream discarded; hermes->sampledTraceToStreamInDevToolsFormat(discarded); }
+    });
+}
+
 static SparkFrameTimeline *timeline;
 static double startUs;
 
 BOOL SparkProfilerRecording(void) { return timeline != nil; }
 
+// Why React Native DevTools' recordings cannot be watched, or nil. Watched from launch, before any DevTools session.
+static NSString *devToolsProblem;
+__attribute__((constructor)) static void SparkProfilerWatchDevTools(void) {
+  @autoreleasepool {
+    devToolsProblem = SparkProfilerWatchInspector(NSClassFromString(@"RCTCxxInspectorWebSocketAdapter"), ^{ return SparkProfilerRecording(); }, ^{ SparkProfilerDiscard(); });
+  }
+}
+
 void SparkProfilerStart(double samplesPerSecond, SparkProfilerCompletion completion) {
   if (timeline) { completion(nil, @"E_BUSY", @"Profiling has already started; stop it first"); return; }
+  if (devToolsProblem) { completion(nil, @"E_UNAVAILABLE", devToolsProblem); return; }
+  if (NSString *devTools = SparkProfilerDevToolsRecording()) {
+    completion(nil, @"E_BUSY", [NSString stringWithFormat:@"React Native DevTools is recording with %@, which shares Hermes's sampling profiler: stop it first", devTools]);
+    return;
+  }
   NSString *error;
   SparkFrameTimeline *started = [SparkFrameTimeline startWithMotion:YES error:&error];
   if (!started) { completion(nil, @"E_UNAVAILABLE", error); return; }

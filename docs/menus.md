@@ -138,7 +138,7 @@ language (English and Arabic; other languages use English).
 | Toggle Element Inspector | The key window's runtime. |
 | Toggle Performance Monitor | The key window's runtime (its own frame rates and memory). |
 | Fast Refresh | The key window's runtime; checked while Fast Refresh is on there. |
-| Start Profiling | The app: every JavaScript runtime and the frame timeline ([devtools.md](devtools.md#profiling)). Enabled while nothing records. |
+| Start Profiling | The app: every JavaScript runtime and the frame timeline ([devtools.md](devtools.md#profiling)). Enabled while nothing records, React Native DevTools included ([devtools.md](devtools.md#with-react-native-devtools)). |
 | Stop Profiling… | The app: asks for a folder and saves the profile there. Enabled while a recording runs. |
 | Show Bundle Info | Bundle URL and runtime of the key window, mode, JavaScript engine, React Native and Spark versions, with Copy. |
 
