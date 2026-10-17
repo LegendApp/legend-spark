@@ -70,3 +70,38 @@ test("manifest patches survive receipt stamping, interruption, and repeated inst
     expect(JSON.parse(readFileSync(manifestFile, "utf8")).spark.windowsAdapter).toBe(false);
   } finally { f.close(); }
 });
+
+test("Windows platform discovery skips its CLI off Windows and preserves it on Windows", () => {
+  const f = fixture();
+  try {
+    const directory = path.join(f.root, "node_modules/react-native-windows");
+    mkdirSync(directory);
+    const manifest = JSON.parse(readFileSync(path.join(f.root, "package.json"), "utf8"));
+    manifest.dependencies["react-native-windows"] = "0.81.35";
+    writeFileSync(path.join(f.root, "package.json"), JSON.stringify(manifest));
+    writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name: "react-native-windows", version: "0.81.35" }));
+    const file = path.join(directory, "react-native.config.js");
+    const upstream = readFileSync("node_modules/react-native-windows/react-native.config.js", "utf8");
+    writeFileSync(file, upstream);
+    linkSync(file, path.join(f.root, "cached-windows-config.js"));
+    installWorkspaceAdapters(f.root);
+    const adapted = readFileSync(file, "utf8");
+    installWorkspaceAdapters(f.root);
+    expect(readFileSync(file, "utf8")).toBe(adapted);
+    expect(readFileSync(path.join(f.root, "cached-windows-config.js"), "utf8")).toBe(upstream);
+    const evaluate = new Function("module", "process", "require", adapted);
+    for (const platform of ["darwin", "linux"]) {
+      const module = { exports: {} };
+      evaluate(module, { platform }, () => { throw new Error("Windows CLI loaded off Windows"); });
+      expect(module.exports).toEqual({});
+    }
+    const module = { exports: {} as any };
+    const cli = { commands: [], getHealthChecks: () => ["windows-tools"] };
+    evaluate(module, { platform: "win32" }, (name: string) => {
+      expect(name).toBe("@react-native-windows/cli");
+      return cli;
+    });
+    expect(module.exports.platforms.windows.npmPackageName).toBe("react-native-windows");
+    expect(module.exports.healthChecks).toEqual(["windows-tools"]);
+  } finally { f.close(); }
+});

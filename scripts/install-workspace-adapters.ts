@@ -15,6 +15,18 @@ export function installWorkspaceAdapters(root: string) {
   const config = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
   const installed = new Map(installedPackages(root).map(pkg => [pkg.name, pkg]));
   const pins = JSON.parse(readFileSync(path.join(root, "patches/workspace/upstream.json"), "utf8"));
+  // RNW eagerly probes PowerShell when Metro scans its platform configuration.
+  const windows = installed.get("react-native-windows");
+  if (windows) {
+    const file = path.join(windows.root, "react-native.config.js");
+    const source = readFileSync(file, "utf8");
+    const guard = 'if (process.platform !== "win32") { module.exports = {}; return; }\n';
+    if (!source.startsWith(guard)) {
+      const temporary = `${file}.spark-${process.pid}.tmp`;
+      writeFileSync(temporary, guard + source);
+      renameSync(temporary, file);
+    }
+  }
   for (const [key, file] of Object.entries(config.sparkWorkspacePatches ?? {}) as [string, string][]) {
     const split = key.lastIndexOf("@"), name = key.slice(0, split), version = key.slice(split + 1);
     const pkg = installed.get(name);
