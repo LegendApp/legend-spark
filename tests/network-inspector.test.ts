@@ -28,9 +28,11 @@ const mocks = vi.hoisted(() => {
     sendBinary: vi.fn((...args: unknown[]) => { calls.push(["sendBinary", ...args]); }),
   };
   const originals = { ...networking, ...sockets };
-  return { emitter, calls, networking, sockets, originals, platform: { OS: "macos" }, read: vi.fn(async (blob: { size: number }) => `data:application/octet-stream;base64,${"QUJD".repeat(Math.ceil(blob.size / 3)).slice(0, Math.ceil(blob.size / 3) * 4)}`) };
+  // NativeDesktopApp: its calls, and its desktop events through the emitter.
+  const app = { call: vi.fn(async (method: string, args: string) => { calls.push(["app", method, JSON.parse(args)]); return "null"; }) };
+  return { emitter, calls, networking, sockets, originals, app, platform: { OS: "macos" }, read: vi.fn(async (blob: { size: number }) => `data:application/octet-stream;base64,${"QUJD".repeat(Math.ceil(blob.size / 3)).slice(0, Math.ceil(blob.size / 3) * 4)}`) };
 });
-vi.mock("react-native", () => ({ Platform: mocks.platform, NativeEventEmitter: class { addListener(type: string, listener: (...args: unknown[]) => void) { return mocks.emitter.addListener(type, listener); } } }));
+vi.mock("react-native", () => ({ Platform: mocks.platform, TurboModuleRegistry: { get: (name: string) => name === "NativeDesktopApp" ? mocks.app : null }, NativeEventEmitter: class { addListener(type: string, listener: (...args: unknown[]) => void) { return mocks.emitter.addListener(type, listener); } } }));
 vi.mock("react-native/Libraries/Network/RCTNetworking", () => ({ default: mocks.networking }));
 vi.mock("react-native/Libraries/WebSocket/NativeWebSocketModule", () => ({ default: mocks.sockets }));
 vi.mock("react-native/Libraries/Blob/NativeFileReaderModule", () => ({ default: { readAsDataURL: mocks.read } }));
@@ -329,5 +331,62 @@ describe("public API", () => {
     observer.hasActiveSession = false;
     for (const subscriber of subscribers) subscriber(false);
     expect(mocks.emitter.count()).toBe(0);
+    // Native modules report only while the shared runtime records: off at install, on with the body cap, off again.
+    expect(mocks.calls.filter(call => call[0] === "app")).toEqual([
+      ["app", "reportNativeNetwork", { maxBodySize: null }], ["app", "reportNativeNetwork", { maxBodySize: 65536 }], ["app", "reportNativeNetwork", { maxBodySize: null }],
+      ["app", "reportNativeNetwork", { maxBodySize: 65536 }], ["app", "reportNativeNetwork", { maxBodySize: null }],
+    ]);
+  });
+
+  test("the shared runtime lists native modules' requests, redacted and capped, while it records", async () => {
+    vi.resetModules();
+    mocks.emitter.clear(); mocks.calls.length = 0;
+    globals.__DEV__ = true;
+    (globalThis as { __DEBUGGER_SESSION_OBSERVER__?: unknown }).__DEBUGGER_SESSION_OBSERVER__ = undefined;
+    vi.doMock("react-native/Libraries/Core/Devtools/getDevServer", () => ({ default: () => ({ url: "http://127.0.0.1:8081/", fullBundleUrl: null, bundleLoadedFromServer: true }) }));
+    const { installNetworkInspector } = await import("../packages/desktop-app/src/network-inspector/install");
+    const api = await import("../packages/desktop-app/src/network-inspector");
+    installNetworkInspector();
+    const native = (event: object) => mocks.emitter.emit("desktop", { type: "nativeNetwork", ...event });
+    const request = { phase: "request", module: "@legendapp/spark/audio", method: "GET", url: "http://127.0.0.1/art.png", headers: { Cookie: "c=1" } };
+    native({ ...request, id: "n1" });
+    expect(mocks.emitter.count()).toBe(0);
+
+    const seen: NetworkEntry[] = [];
+    const subscription = api.addNetworkListener(entry => seen.push(entry));
+    api.configureNetworkInspector({ maxBodySize: 4 });
+    native({ ...request, id: "n2" });
+    native({ phase: "end", id: "n2", status: 200, headers: { "Content-Type": "image/png", "Set-Cookie": "s=1" }, url: "http://127.0.0.1/art.png", body: { base64: "AAECAw==", size: 9 } });
+    native({ ...request, id: "n3" });
+    native({ phase: "end", id: "n3", error: "cancelled", canceled: true });
+    native({ phase: "end", id: "n1", status: 200 });
+    const log = api.getNetworkLog();
+    expect(log).toHaveLength(2);
+    expect(log[0]).toMatchObject({ source: "native", module: "@legendapp/spark/audio", initiator: [], state: "finished", status: 200, requestHeaders: { Cookie: REDACTED }, responseHeaders: { "Set-Cookie": REDACTED }, responseBody: { data: "AAECAw==", base64: true, size: 9, truncated: true } });
+    expect(log[1]).toMatchObject({ source: "native", state: "canceled", error: "cancelled" });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(mocks.calls.filter(call => call[0] === "app").map(call => (call[2] as { maxBodySize: unknown }).maxBodySize)).toEqual([null, 65536, 4]);
+    subscription.remove();
+    expect(mocks.emitter.count()).toBe(0);
+    expect(mocks.calls.at(-1)).toEqual(["app", "reportNativeNetwork", { maxBodySize: null }]);
+  });
+
+  test("native requests reach DevTools as type Other with the module as initiator; isolated runtimes do not ask for them", async () => {
+    const { instance, messages } = recorder();
+    const id = instance.request({ source: "native", module: "@legendapp/spark/audio", method: "GET", url: "http://127.0.0.1/art.png" })!;
+    expect(messages[0]).toMatchObject(["Network.requestWillBeSent", { type: "Other", initiator: { type: "other", url: "@legendapp/spark/audio" } }]);
+    instance.fail(id, "offline");
+    expect(messages.at(-1)).toMatchObject(["Network.loadingFailed", { type: "Other", errorText: "offline" }]);
+
+    vi.resetModules();
+    mocks.calls.length = 0;
+    (globalThis as { __THREADED_RUNTIME_ENV__?: unknown }).__THREADED_RUNTIME_ENV__ = { runtimeName: "worker" };
+    try {
+      const { installNetworkInspector } = await import("../packages/desktop-app/src/network-inspector/install");
+      const api = await import("../packages/desktop-app/src/network-inspector");
+      installNetworkInspector();
+      api.addNetworkListener(() => {}).remove();
+      expect(mocks.calls.filter(call => call[0] === "app")).toEqual([]);
+    } finally { delete (globalThis as { __THREADED_RUNTIME_ENV__?: unknown }).__THREADED_RUNTIME_ENV__; }
   });
 });

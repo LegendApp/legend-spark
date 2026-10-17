@@ -6,8 +6,8 @@ intent: >
   bun scripts/test-network-inspector.ts drives it headlessly against loopback fixtures (127.0.0.1 only): it starts
   spark dev, launches the dev build in driver mode, attaches to the shared runtime over CDP as React Native DevTools
   does, and runs the Network screen's scenarios (fetch, XMLHttpRequest, binary up and down, a redirect, a streamed
-  response, an abort, a 200 KB body and a WebSocket echo). Seeing the Network panel itself needs a person.
-checks: [DEVT-NET-01, DEVT-NET-02, DEVT-NET-03]
+  response, an abort, a 200 KB body, a WebSocket echo, and Now Playing artwork, which the audio module loads natively). Seeing the Network panel itself needs a person.
+checks: [DEVT-NET-01, DEVT-NET-02, DEVT-NET-03, DEVT-NET-06]
 tags: [devtools]
 platforms: [macos]
 build: dev
@@ -15,11 +15,11 @@ manual: true
 ---
 - manualStep:
     instruction: After cd examples/kitchen-sink && bun run rebuild:macos, run bun scripts/test-network-inspector.ts from the repository root.
-    expect: It prints PASS for idle, fetch, XMLHttpRequest, binary, redirect, streaming, abort, size cap, WebSocket, log and detached, and exits 0.
+    expect: It prints PASS for idle, fetch, XMLHttpRequest, binary, redirect, streaming, abort, size cap, WebSocket, native, log and detached, and exits 0.
     evidence: none
     signoff: required
 - manualStep:
     instruction: Run bun scripts/testing/network-fixtures.ts, then bun run macos in examples/kitchen-sink. Open DevTools › Network inspector, paste the printed address, press ⌥⌘I and choose the Network panel, then press each scenario button.
-    expect: Each request appears in the Network panel with its method, status, type (Fetch, XHR, WebSocket), timing and initiator; Authorization and Cookie read [redacted]; the response and WebSocket messages show their content. The screen's Recorded requests list shows the same requests.
+    expect: Each request appears in the Network panel with its method, status, type (Fetch, XHR, WebSocket), timing and initiator; Authorization and Cookie read [redacted]; the response and WebSocket messages show their content. Now Playing artwork (native) appears with type Other and initiator @legendapp/spark/audio. The screen's Recorded requests list shows the same requests.
     evidence: none
     signoff: required

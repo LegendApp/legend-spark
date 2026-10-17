@@ -2,6 +2,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <MediaPlayer/MediaPlayer.h>
 #import <RNDesktopApp/SparkLocalization.h>
+#import <RNDesktopApp/SparkNetworkRequests.h>
 /** Native observation exists only while the corresponding public status stream is observed. */
 @interface SparkAudioObservation : NSObject
 @property AVPlayer *player;
@@ -139,9 +140,9 @@ RCT_EXPORT_MODULE(NativeSparkAudio)
   NSString *artwork = metadata[@"artworkUrl"];
   if (!artwork.length) return;
   NSURL *url = [artwork hasPrefix:@"/"] ? [NSURL fileURLWithPath:artwork] : [NSURL URLWithString:artwork];
+  if (!url) return;
   __weak RNSparkAudio *weakSelf = self;
-  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-    NSData *data = [NSData dataWithContentsOfURL:url];
+  SparkLoadURL(@"@legendapp/spark/audio", [NSURLRequest requestWithURL:url], ^(NSData *data, NSURLResponse *response, NSError *error) {
     NSImage *image = data ? [[NSImage alloc] initWithData:data] : nil;
     dispatch_async(dispatch_get_main_queue(), ^{
       RNSparkAudio *owner = weakSelf;

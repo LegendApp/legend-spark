@@ -16,7 +16,7 @@ type Options = Required<{ [K in keyof NetworkInspectorOptions]-?: Exclude<Networ
 export const DEFAULT_OPTIONS: Options = { redactHeaders: ["Authorization", "Cookie", "Set-Cookie"], maxEntries: 100, maxBodySize: 65536, maxLogSize: 4 * 1024 * 1024 };
 const MAX_FRAMES = 50, MAX_STACK = 20;
 export const REDACTED = "[redacted]";
-const CDP_TYPES: Record<NetworkSource, string> = { fetch: "Fetch", xhr: "XHR", websocket: "WebSocket" };
+const CDP_TYPES: Record<NetworkSource, string> = { fetch: "Fetch", xhr: "XHR", websocket: "WebSocket", native: "Other" };
 
 const limit = (value: unknown, name: string, min: number) => {
   if (!Number.isSafeInteger(value) || (value as number) < min) throw new SparkError("E_INVALID_ARGUMENT", `${name} must be an integer of at least ${min}`);
@@ -143,11 +143,14 @@ export class NetworkRecorder {
   }
 
   /** Starts an HTTP request or a WebSocket; returns its id, or undefined while nothing observes. */
-  request(init: { source: NetworkSource; method: string; url: string; headers?: Record<string, unknown>; body?: BodyInput; stack?: string }): string | undefined {
+  /** A `native` request names its `module` and has no stack. */
+  request(init: { source: NetworkSource; module?: string; method: string; url: string; headers?: Record<string, unknown>; body?: BodyInput; stack?: string }): string | undefined {
     if (!this.active) return undefined;
     const id = `${this.prefix}${++this.next}`, startedAt = Date.now();
-    const entry: NetworkEntry = { id, source: init.source, method: init.method.toUpperCase(), url: init.url, requestHeaders: this.redact(init.headers), initiator: callFrames(init.stack, 1), state: "pending", startedAt };
-    const initiator = { type: "script", stack: { callFrames: entry.initiator.map(frame => ({ functionName: frame.functionName, scriptId: "", url: frame.url, lineNumber: frame.line - 1, columnNumber: frame.column - 1 })) } };
+    const entry: NetworkEntry = { id, source: init.source, ...init.module === undefined ? {} : { module: init.module }, method: init.method.toUpperCase(), url: init.url, requestHeaders: this.redact(init.headers), initiator: callFrames(init.stack, 1), state: "pending", startedAt };
+    // DevTools' Initiator column shows a native request's module.
+    const initiator = init.module !== undefined ? { type: "other", url: init.module }
+      : { type: "script", stack: { callFrames: entry.initiator.map(frame => ({ functionName: frame.functionName, scriptId: "", url: frame.url, lineNumber: frame.line - 1, columnNumber: frame.column - 1 })) } };
     if (init.source === "websocket") {
       this.put({ ...entry, frames: [] });
       this.cdp("Network.webSocketCreated", { requestId: id, url: init.url, initiator });

@@ -233,6 +233,14 @@ checks:
     covers:
       - ./devtools#addNetworkListener
       - ./devtools#getNetworkLog
+  DEVT-NET-06:
+    title: 'With React Native DevTools attached or a network listener, an HTTP request that a Spark native module makes itself (the audio module''s Now Playing artwork) is listed in the shared runtime: the entry has source native and module @legendapp/spark/audio, DevTools gets type Other with the module as initiator, Set-Cookie reads [redacted], the body keeps its first maxBodySize bytes; with neither, it is neither recorded nor reported'
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Native modules' requests; #395"
+    covers:
+      - ./devtools#addNetworkListener
+      - ./devtools#getNetworkLog
   DEVT-NET-04:
     title: With a development bundle on macOS getNetworkInspectorAvailability reports available and the Network screen offers its loopback scenarios and an empty log
     platforms: [macos]
@@ -353,10 +361,10 @@ checks:
     covers:
       - ./devtools
   DEVT-REL-04:
-    title: A release build's JavaScript (its Hermes bundles and scripts) contains no network inspector
+    title: A release build contains no network inspector, in its JavaScript (Hermes bundles and scripts) or its native code (every Mach-O file, which would hold native modules' request reporting)
     platforms: [macos]
     blocking: true
-    spec: "#271, #274"
+    spec: "#271, #274, #395"
     covers:
       - ./devtools
   DEVT-REL-05:

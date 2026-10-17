@@ -24,7 +24,7 @@ const en: NetworkMessages = {
   available: "Recording while this screen or DevTools observes. ⌥⌘I opens DevTools; choose Network.",
   server: "Fixture server",
   serverHint: "Run bun scripts/testing/network-fixtures.ts and paste the http://127.0.0.1:<port>/ address it prints.",
-  scenarios: { fetch: "fetch text", xhr: "XMLHttpRequest text", binary: "fetch binary", upload: "POST binary", redirect: "fetch a redirect", stream: "Streamed XMLHttpRequest", abort: "Abort a fetch", large: "fetch 200 KB", websocket: "WebSocket echo" },
+  scenarios: { fetch: "fetch text", xhr: "XMLHttpRequest text", binary: "fetch binary", upload: "POST binary", redirect: "fetch a redirect", stream: "Streamed XMLHttpRequest", abort: "Abort a fetch", large: "fetch 200 KB", websocket: "WebSocket echo", artwork: "Now Playing artwork (native)" },
   empty: "No requests recorded yet.",
 };
 
@@ -36,7 +36,7 @@ const ar: NetworkMessages = {
   available: "يسجّل ما دامت هذه الشاشة أو أدوات المطوّر تراقب. يفتح ⌥⌘I أدوات المطوّر؛ اختر Network.",
   server: "خادم التجارب",
   serverHint: "شغّل bun scripts/testing/network-fixtures.ts والصق عنوان http://127.0.0.1:<port>/ الذي يطبعه.",
-  scenarios: { fetch: "fetch نص", xhr: "XMLHttpRequest نص", binary: "fetch بيانات ثنائية", upload: "POST بيانات ثنائية", redirect: "fetch مع إعادة توجيه", stream: "XMLHttpRequest متدفق", abort: "إلغاء fetch", large: "fetch بحجم 200 كيلوبايت", websocket: "صدى WebSocket" },
+  scenarios: { fetch: "fetch نص", xhr: "XMLHttpRequest نص", binary: "fetch بيانات ثنائية", upload: "POST بيانات ثنائية", redirect: "fetch مع إعادة توجيه", stream: "XMLHttpRequest متدفق", abort: "إلغاء fetch", large: "fetch بحجم 200 كيلوبايت", websocket: "صدى WebSocket", artwork: "صورة «قيد التشغيل» (وحدة أصلية)" },
   empty: "لا طلبات مسجّلة بعد.",
 };
 
