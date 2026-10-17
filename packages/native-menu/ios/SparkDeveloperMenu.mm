@@ -58,8 +58,8 @@ BOOL SparkDeveloperValidate(NSMenuItem *item, NSDictionary *instruction) {
   // Reloading the shared runtime restarts every runtime: the host destroys isolated runtimes on reload.
   if ([action isEqual:@"reload"]) return SparkDeveloperHostFor(@{ @"runtime": @"shared" }) != nil;
   if ([action isEqual:@"openDevTools"] && ![instruction[@"available"] boolValue]) return NO;
-  // Profiling records the whole app, whatever window is key.
-  if ([action isEqual:@"startProfiling"]) return [instruction[@"available"] boolValue] && !SparkProfilerRecording();
+  // Profiling records the whole app, whatever window is key, and not while React Native DevTools records.
+  if ([action isEqual:@"startProfiling"]) return [instruction[@"available"] boolValue] && !SparkProfilerRecording() && !SparkProfilerDevToolsRecording();
   if ([action isEqual:@"stopProfiling"]) return SparkProfilerRecording();
   NSDictionary *target = SparkDeveloperTarget(NSApp.keyWindow);
   id<SparkDeveloperHost> host = target ? SparkDeveloperHostFor(target) : nil;

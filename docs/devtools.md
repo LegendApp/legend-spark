@@ -220,8 +220,8 @@ started it. `startProfiling` and `stopProfiling` reject:
 | `E_INVALID_ARGUMENT` | `samplesPerSecond` is not an integer from 1 to 10000 (default 1000), or `directory` is not an absolute path |
 | `E_UNSUPPORTED_OPTION` | An unknown option |
 | `E_UNSUPPORTED_PLATFORM`, `E_UNAVAILABLE`, `E_MODULE_UNAVAILABLE` | Unavailable, as `getProfilerAvailability()` reports |
-| `E_BUSY` | `startProfiling` while a recording runs |
-| `E_UNAVAILABLE` | `startProfiling` without a display: the frame timeline needs one |
+| `E_BUSY` | `startProfiling` while a recording runs, or while React Native DevTools records ([below](#with-react-native-devtools)) |
+| `E_UNAVAILABLE` | `startProfiling` without a display: the frame timeline needs one; or when React Native DevTools' recordings cannot be watched |
 | `E_NOT_FOUND` | `stopProfiling` with nothing recording, or a `directory` that is not an existing directory; the recording keeps running |
 | `E_ALREADY_EXISTS` | Files of those names are already in `directory`, even after trying 19 other names; nothing is replaced |
 
@@ -248,16 +248,25 @@ that cover none of them), and its frames keep their bundle positions.
 
 #### With React Native DevTools
 
-Hermes has one sampling profiler per process, and React Native DevTools' JavaScript profiler and Performance panel
-drive the same one. They do not tell each other:
+Hermes has one sampling profiler per process, and React Native DevTools' JavaScript profiler (`Profiler.start`) and
+Performance panel (`Tracing.start`) drive the same one. Hermes ignores a second start, and either side's stop turns
+sampling off for both, so Spark keeps the two from overlapping:
 
-- Hermes ignores a second start while sampling runs, so `startProfiling` during a DevTools recording resolves but
-  shares DevTools' sampling rate, and DevTools started during a Spark recording shares Spark's.
-- Either side's stop turns sampling off for both, so whichever stops second has no samples after the first stop.
-- `isProfiling()` and the Developer menu reflect only Spark's recordings.
+- While DevTools records, `startProfiling` rejects `E_BUSY`, naming what DevTools is recording, and
+  **Developer › Start Profiling** is disabled. DevTools' recording is untouched.
+- While Spark records, DevTools' `Profiler.start`, `Tracing.start`, `Profiler.stop` and `Tracing.end` get a CDP error
+  (the profiler or Performance panel reports that Spark's profiler is recording) and never reach Hermes, so DevTools
+  neither shares Spark's sampling rate nor ends its samples.
+- A DevTools session that ends while it records (DevTools closed, or the development server's connection lost) leaves
+  Hermes sampling, with its samples kept in each runtime, and nothing to turn it off; Spark turns it off and drops
+  those samples on each runtime's JavaScript thread, so its next recording starts with its own samples and rate.
 
-Record with one at a time. Detecting a DevTools recording and rejecting `E_BUSY` is
-[#409](https://github.com/LegendApp/legend-spark/issues/409).
+Spark sees DevTools' requests on React Native's inspector connection to the development server
+(`RCTCxxInspectorWebSocketAdapter`), where every DevTools session's CDP messages arrive, and follows each debugged page's
+recordings (`packages/desktop-app/macos/SparkProfilerDevTools.mm`). It watches from launch, in native code, so a
+JavaScript reload neither resets nor loses that state. If React Native's connection does not have the methods Spark
+watches, `startProfiling` rejects `E_UNAVAILABLE` and says so rather than recording blind. `isProfiling()` and
+`addProfilingListener` follow only Spark's recordings.
 
 ### Frame timeline
 
@@ -289,13 +298,13 @@ JavaScript samples too.
 
 `@legendapp/spark/runtime-entry` installs it inside `if (__DEV__)` on macOS, in every JavaScript runtime
 (`packages/desktop-app/src/profiler/`). Its native half, `packages/desktop-app/macos/SparkProfiler.mm`, compiles only
-when `RCT_DEV`. Start enables Hermes's sampling profiler, which samples every Hermes runtime React Native registered for
+when `RCT_DEV`, as does `SparkProfilerDevTools.mm`. Start enables Hermes's sampling profiler, which samples every Hermes runtime React Native registered for
 profiling, and starts the frame timeline. Stop disables it and collects each running runtime's samples on that
 runtime's own JavaScript thread, through its `NativeDesktopApp` module's call invoker, then JavaScript source-maps
 them, builds the trace and asks native code to write the files.
 
 Release bundles contain none of it: Metro removes the `__DEV__` branch and the module with it, and release builds
-compile none of `SparkProfiler.mm` (`tests/developer-menu-release.test.ts`). The release gate's
+compile none of `SparkProfiler.mm` or `SparkProfilerDevTools.mm` (`tests/developer-menu-release.test.ts`). The release gate's
 [release-safety probe](e2e-flows.md#release-safety-probe) (`DEVT-REL-05`) fails a release build whose JavaScript or
 native code contains the profiler's marker (`spark-profiler`, which starts every file name it writes). The frame
 timeline's recorder (`SparkFrameTimeline.mm`) also compiles into builds with the test driver, which the gate needs; it

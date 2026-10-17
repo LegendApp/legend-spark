@@ -79,7 +79,8 @@ export async function startDevSession(options: { prefix: string; env?: Record<st
     // Hermes's awaitPromise does not await React Native's Promise polyfill, so a promise reports into a global.
     const settle = async (expression: string) => {
       const key = `__ksDevToolsResult${++next}`;
-      await evaluate(`(${expression}).then(value => { globalThis.${key} = { value }; }, error => { globalThis.${key} = { error: error.code ?? String(error) }; }), 0`);
+      // Cleared first: a later connection's ids start again, so an earlier connection's result may hold the key.
+      await evaluate(`globalThis.${key} = undefined, (${expression}).then(value => { globalThis.${key} = { value }; }, error => { globalThis.${key} = { error: error.code ?? String(error) }; }), 0`);
       return until(async () => await evaluate(`globalThis.${key}`), `${expression} settles`, 30000) as Promise<{ value?: unknown; error?: string }>;
     };
     return { send, event, evaluate, settle, events, state, close: () => socket.close() };

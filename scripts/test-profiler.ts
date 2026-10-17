@@ -3,10 +3,11 @@
 // (scripts/testing/dev-session.ts) on the Kitchen Sink's Profiling screen, whose worker runtime runs too, and checks:
 // React Native DevTools' Profiler, Tracing (Performance panel) and HeapProfiler (Memory panel) domains on each runtime's
 // target over CDP, then startProfiling/stopProfiling: the Chrome trace and the source-mapped .cpuprofile of each
-// runtime, written only into a temporary directory. Frame and motion checks need a display that is awake: the display
+// runtime, written only into a temporary directory; then that a DevTools recording and Spark's, which share Hermes's
+// one sampling profiler, cannot start or stop each other. Frame and motion checks need a display that is awake: the display
 // link delivers no frames while it sleeps, which the script reports instead of failing.
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { ProfilingResult } from "../packages/desktop-app/src/profiler.ts";
@@ -42,6 +43,13 @@ function fibonacciFrames(profile: CpuProfile, map: ReturnType<typeof sourceMap>)
   for (const frame of frames) assert.ok(frame?.source.endsWith(WORKLOAD) && frame.line >= fibonacci.from && frame.line <= fibonacci.to, `fibonacci maps into ${WORKLOAD}: ${JSON.stringify(frame)}`);
   return frames.length;
 }
+/** How startProfiling settles in `cdp`'s runtime: "started", or "<code>: <message>". */
+async function startOutcome(cdp: Cdp) {
+  await cdp.evaluate("globalThis.__ksStart = undefined, ksProfiling.start().then(() => { globalThis.__ksStart = 'started'; }, error => { globalThis.__ksStart = error.code + ': ' + error.message; }), 0");
+  return await dev.until(async () => await cdp.evaluate("globalThis.__ksStart"), "startProfiling settles", 30000) as string;
+}
+/** The CDP error `method` gets, which must not succeed. */
+const refused = (cdp: Cdp, method: string) => cdp.send(method).then(() => assert.fail(`${method} succeeded`), (error: Error) => error.message);
 /** Chunks of a heap snapshot (HeapProfiler.addHeapSnapshotChunk) since `mark`. */
 const snapshot = (cdp: Cdp, mark: number) => cdp.events.slice(mark).filter(message => message.method === "HeapProfiler.addHeapSnapshotChunk").map(message => message.params.chunk).join("");
 
@@ -172,6 +180,59 @@ try {
   assert.match(path.basename(temporary.directory), /^spark-profiler-/);
   assert.deepEqual(readdirSync(temporary.directory).sort(), [temporary.trace, ...temporary.profiles.map(item => item.path)].map(file => path.basename(file)).sort());
   pass(`default directory: ${temporary.directory}, a new directory in the app's temporary directory with ${readdirSync(temporary.directory).length} files`);
+
+  // 5. React Native DevTools and Spark share Hermes's one sampling profiler. DevTools recording first: startProfiling
+  // rejects E_BUSY, and DevTools' recording keeps its samples.
+  await cdp.send("Profiler.start");
+  assert.match(await startOutcome(cdp), /^E_BUSY: React Native DevTools is recording with the JavaScript profiler \(Profiler\.start\)/);
+  await cdp.evaluate("ksProfiling.workload(300)");
+  const { profile: shared } = await cdp.send("Profiler.stop") as { profile: CpuProfile };
+  const sharedFrames = fibonacciFrames(shared, sharedMap);
+  mark = cdp.events.length;
+  await cdp.send("Tracing.start", {});
+  assert.match(await startOutcome(cdp), /^E_BUSY: React Native DevTools is recording with a Performance panel trace \(Tracing\.start\)/);
+  await cdp.send("Tracing.end");
+  await dev.until(async () => cdp.events.slice(mark).some(message => message.method === "Tracing.tracingComplete"), "Tracing.tracingComplete", 20000);
+  assert.deepEqual(await cdp.settle("ksProfiling.recording()"), { value: false });
+  pass(`DevTools first: startProfiling rejects E_BUSY during Profiler.start (whose profile still has ${shared.samples.length} samples, ${sharedFrames} fibonacci frames) and during Tracing.start`);
+
+  // Spark recording first: DevTools can neither start sampling nor stop Spark's; Spark's profile keeps sampling after.
+  assert.equal(await startOutcome(cdp), "started");
+  for (const method of ["Profiler.start", "Tracing.start"]) assert.match(await refused(cdp, method), /Spark's profiler is recording/);
+  for (const method of ["Profiler.stop", "Tracing.end"]) assert.match(await refused(cdp, method), /React Native DevTools is not recording/);
+  await cdp.evaluate("ksProfiling.workload(300)");
+  const shared2 = path.join(output, "shared-recording");
+  mkdirSync(shared2);
+  const sparkFirst = await cdp.settle(`ksProfiling.stop({ directory: ${JSON.stringify(shared2)} })`);
+  assert.equal(sparkFirst.error, undefined, `stopProfiling: ${sparkFirst.error}`);
+  const sharedProfile = (sparkFirst.value as ProfilingResult).profiles.find(item => item.runtime === "shared")!;
+  const sampledAfter = JSON.parse(readFileSync(sharedProfile.path, "utf8")) as CpuProfile;
+  assert.ok(sampledAfter.nodes.some(node => node.callFrame.functionName === "fibonacci"), "Spark's profile has the workload run after DevTools' Profiler.stop and Tracing.end");
+  pass(`Spark first: DevTools' Profiler.start, Tracing.start, Profiler.stop and Tracing.end get CDP errors; Spark's profile then has ${sharedProfile.samples} samples, the workload after them included`);
+
+  // A DevTools session that ends while recording leaves Hermes sampling, with its samples; Spark turns sampling off and
+  // drops them, so its next recording starts clean rather than with DevTools' samples and rate.
+  await cdp.send("Profiler.start");
+  await cdp.evaluate("ksProfiling.workload(100)");
+  await new Promise(resolve => setTimeout(resolve, 500));
+  cdp.close();
+  cdp = await dev.connect(sharedTarget);
+  await cdp.send("Runtime.enable");
+  const sparkAt = await cdp.evaluate("performance.now()") as number;
+  assert.equal(await startOutcome(cdp), "started");
+  await cdp.evaluate("ksProfiling.workload(100)");
+  const clean = path.join(output, "after-orphan");
+  mkdirSync(clean);
+  const orphanStop = await cdp.settle(`ksProfiling.stop({ directory: ${JSON.stringify(clean)} })`);
+  assert.equal(orphanStop.error, undefined, `stopProfiling: ${orphanStop.error}`);
+  const afterOrphan = orphanStop.value as ProfilingResult;
+  const cleanProfile = JSON.parse(readFileSync(afterOrphan.profiles.find(item => item.runtime === "shared")!.path, "utf8")) as CpuProfile;
+  // Sample times are on performance.now()'s clock, in µs: none from before Spark's start, as DevTools' would be.
+  let at = cleanProfile.startTime;
+  const times = cleanProfile.timeDeltas.map(delta => (at += delta));
+  const before = times.filter(time => time < sparkAt * 1000).length;
+  assert.equal(before, 0, `${before} of ${times.length} samples predate Spark's start at ${sparkAt * 1000} µs (first ${times[0]})`);
+  pass(`a DevTools session closed while recording: startProfiling then starts, and none of its ${times.length} samples predate it`);
 } catch (error) {
   dev.printLogs();
   throw error;

@@ -119,6 +119,9 @@ int main() { @autoreleasepool {
   ProfilerRecording = YES;
   Check(![module validateMenuItem:startProfiling] && [module validateMenuItem:stopProfiling], @"Start Profiling was enabled or Stop Profiling disabled while recording");
   ProfilerRecording = NO;
+  DevToolsRecording = @"the JavaScript profiler (Profiler.start)";
+  Check(![module validateMenuItem:startProfiling] && ![module validateMenuItem:stopProfiling], @"Start or Stop Profiling was enabled while React Native DevTools recorded");
+  DevToolsRecording = nil;
 
   // Shared key window: its runtime's settings, checkmark and monitor.
   KeyWindow = shared;

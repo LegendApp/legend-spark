@@ -77,10 +77,10 @@ test("the native Developer menu compiles only when RCT_DEV", () => {
 test("the native profiler compiles only when RCT_DEV", () => {
   // SparkProfiler.mm is all inside `#if RCT_DEV`, and so is every use of it. The frame timeline it records also serves
   // the test driver, so SparkFrameTimeline compiles with SPARK_TEST_DRIVER too; it holds no profiler code.
-  const profiler = /SparkProfiler|spark-profiler|hermes|Hermes|SamplingProfiler|startProfiling|stopProfiling|writeProfile|isProfiling/, header = /^#import "SparkProfiler(Files)?\.h"$/;
-  for (const name of ["SparkProfiler", "SparkProfilerFiles"])
+  const profiler = /SparkProfiler|spark-profiler|hermes|Hermes|SamplingProfiler|startProfiling|stopProfiling|writeProfile|isProfiling/, header = /^#import "SparkProfiler(Files|DevTools)?\.h"$/;
+  for (const name of ["SparkProfiler", "SparkProfilerFiles", "SparkProfilerDevTools"])
     expect(readFileSync(`packages/desktop-app/macos/${name}.mm`, "utf8")).toMatch(new RegExp(`^#import "${name}\\.h"\\n#if RCT_DEV\\n[\\s\\S]*\\n#endif\\n$`));
-  for (const file of ["packages/desktop-app/macos/SparkProfiler.h", "packages/desktop-app/macos/SparkProfilerFiles.h", "packages/desktop-app/macos/RNDesktopApp.mm", "packages/native-menu/ios/SparkDeveloperMenu.mm", "packages/desktop-app/macos/SparkFrameTimeline.mm"])
+  for (const file of ["packages/desktop-app/macos/SparkProfiler.h", "packages/desktop-app/macos/SparkProfilerFiles.h", "packages/desktop-app/macos/SparkProfilerDevTools.h", "packages/desktop-app/macos/RNDesktopApp.mm", "packages/native-menu/ios/SparkDeveloperMenu.mm", "packages/desktop-app/macos/SparkFrameTimeline.mm"])
     expect(outsideDev(file, profiler, header), file).toEqual([]);
   expect(readFileSync("packages/desktop-app/macos/SparkFrameTimeline.mm", "utf8")).not.toMatch(/SparkProfiler|spark-profiler/);
 });
