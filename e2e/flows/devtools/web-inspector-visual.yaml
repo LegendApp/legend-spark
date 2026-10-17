@@ -1,0 +1,18 @@
+appId: so.legend.spark.examples.kitchensink
+name: The Web Inspector screen matches its goldens
+intent: >
+  DevTools > Web Inspector opens from its spark-ks:// deep link in the running Kitchen Sink and the main window matches
+  the approved golden for the appearance (light and dark, English and Arabic), with the shell sidebar masked. The WebView is masked
+  too: WebKit draws its page out of process, so the in-process capture shows it blank. The gate's
+  builds run JavaScript without __DEV__, so the screen says its WebView is not inspectable.
+checks: [DEVT-VISUAL-05]
+tags: [devtools]
+platforms: [macos]
+matrix:
+  appearance: [light, dark]
+  locale: [en, ar]
+---
+- launchApp: { openUrl: "spark-ks://devtools/web-inspector" }
+- assertVisible: { id: devtools-web-inspector-bundle }
+- assertWebView: { id: devtools-web-inspector-default, inspectable: false }
+- assertScreenshot: { golden: devtools-web-inspector, mask: [{ id: infra-shell-sidebar }, { id: devtools-web-inspector-default }] }

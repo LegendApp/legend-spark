@@ -1,10 +1,11 @@
 import { SparkError } from "@legendapp/spark-desktop-app/src/contracts";
 import type { WebViewProps as BackendProps } from "react-native-webview";
+import { inspectable } from "./inspector";
 import { viewPropKeys } from "./view-props";
 import type { ViewPropKey } from "./view-props";
 import type { WebViewProps, WebViewRef } from "./types";
 
-const ownedProps = new Set(["source", "javaScriptEnabled", "injectedJavaScript", "allowedOrigins", "onMessage", "onLoad", "onError", "onNavigationChange", "onNavigationRequest"]);
+const ownedProps = new Set(["source", "javaScriptEnabled", "injectedJavaScript", "allowedOrigins", "onMessage", "onLoad", "onError", "onNavigationChange", "onNavigationRequest", "inspectable"]);
 /** React Native view props pass through; upstream WebView's specialized surface stays private. */
 const forwardedProps = new Set<string>(viewPropKeys);
 export function backendProps(props: WebViewProps): BackendProps {
@@ -16,6 +17,8 @@ export function backendProps(props: WebViewProps): BackendProps {
     throw new SparkError("E_INVALID_ARGUMENT", "WebView source must specify either uri or html");
   }
   const view: Record<string, unknown> = {};
+  const debugging = inspectable(props.inspectable);
+  if (debugging !== undefined) view.webviewDebuggingEnabled = debugging;
   for (const key of viewPropKeys) {
     const value = props[key as ViewPropKey];
     if (value !== undefined) view[key] = value;

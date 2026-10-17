@@ -1,7 +1,12 @@
-import { expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
+const mocks = vi.hoisted(() => ({ platform: { OS: "macos" }, module: true as boolean }));
+vi.mock("react-native", () => ({ Platform: mocks.platform, TurboModuleRegistry: { get: (name: string) => mocks.module && name === "RNCWebViewModule" ? {} : null } }));
 import { backendProps, webViewRef } from "../packages/webview/src/adapter";
+import { getWebViewInspectorAvailability } from "../packages/webview/src/inspector";
 import { viewPropKeys } from "../packages/webview/src/view-props";
 import type { WebViewProps, WebViewRef } from "../packages/webview/src/types";
+const globals = globalThis as { __DEV__?: boolean };
+beforeEach(() => { mocks.platform.OS = "macos"; mocks.module = true; globals.__DEV__ = true; });
 
 test("WebView adapter maps source, callbacks and owned errors without native envelopes", () => {
   const onMessage = vi.fn(), onLoad = vi.fn(), onError = vi.fn(), onNavigationChange = vi.fn();
@@ -55,4 +60,29 @@ test("owned ref delegates only while mounted and validates string commands", () 
   expect(() => ref.postMessage({} as never)).toThrow(/strings/);
   current = null;
   expect(() => ref.goBack()).toThrow(/not mounted/);
+});
+
+test("the Web Inspector is available on macOS with the WebView module", () => {
+  expect(getWebViewInspectorAvailability()).toEqual({ available: true });
+  mocks.module = false; expect(getWebViewInspectorAvailability()).toEqual({ available: false, reason: "missing-module" });
+  mocks.platform.OS = "windows"; expect(getWebViewInspectorAvailability()).toEqual({ available: false, reason: "unsupported-platform" });
+});
+
+test("WebViews are inspectable in development bundles by default and in release bundles only when they opt in", () => {
+  const source = { html: "inspect me" };
+  expect(backendProps({ source }).webviewDebuggingEnabled).toBe(true);
+  expect(backendProps({ source, inspectable: false }).webviewDebuggingEnabled).toBe(false);
+  globals.__DEV__ = false;
+  expect(backendProps({ source }).webviewDebuggingEnabled).toBe(false);
+  expect(backendProps({ source, inspectable: true }).webviewDebuggingEnabled).toBe(true);
+  expect(() => backendProps({ source, inspectable: "yes" } as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+});
+
+test("where the Web Inspector is unavailable an unset inspectable keeps the backend default and a set one throws", () => {
+  const source = { html: "inspect me" };
+  mocks.platform.OS = "windows";
+  expect(backendProps({ source })).not.toHaveProperty("webviewDebuggingEnabled");
+  for (const value of [true, false]) expect(() => backendProps({ source, inspectable: value })).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
+  mocks.platform.OS = "macos"; mocks.module = false;
+  expect(() => backendProps({ source, inspectable: true })).toThrow(expect.objectContaining({ code: "E_MODULE_UNAVAILABLE" }));
 });

@@ -65,6 +65,8 @@ export type TestSpeech = {
   recognitions: number; listening: boolean; lastRecognition: { locale: string; onDevice: boolean; partialResults: boolean; punctuation: boolean; contextualStrings: string[] } | null;
 };
 /** The simulated state of @legendapp/spark/capture (the `testCapture` driver command). */
+/** A WKWebView as the driver reads it natively (`webView`). */
+export type TestWebView = { inspectable: boolean; url: string | null };
 export type TestCapture = {
   cameras: boolean; microphones: boolean; cameraEntitled: boolean; microphoneEntitled: boolean; recordingAudio: boolean; cameraRunning: boolean; recordingScreen: boolean;
   frames: number; levels: number; photos: number; screenshots: number; recordings: number;
@@ -392,6 +394,8 @@ export class Driver {
   async simulateCapture(state: SimulatedCapture) { return body<{ capture: TestCapture }>(await this.request({ command: "simulateCapture", ...state }, 10000)).capture; }
   /** The simulated capture state: devices, running sessions and what they produced. */
   async testCapture() { return body<{ capture: TestCapture }>(await this.request({ command: "testCapture" }, 10000)).capture; }
+  /** The WKWebView inside the view with this testID: whether Safari's Web Inspector can attach (isInspectable), and its URL. */
+  async webView(testID: string) { return body<TestWebView>(await this.request({ command: "webView", testID }, 10000)); }
   /** Startup phases of this launch, once its first rendered UI has settled; with `testID`, `ready` once that element first showed settled. */
   async startup(timeoutMs = 30000, testID?: string) {
     return (await this.request({ command: "startup", timeoutMs, ...(testID === undefined ? {} : { testID }) }, timeoutMs + 10000)).phases as StartupPhases;

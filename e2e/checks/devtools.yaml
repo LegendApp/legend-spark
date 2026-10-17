@@ -163,6 +163,45 @@ checks:
     spec: "#269"
     covers:
       - ./devtools
+  DEVT-WEB-01:
+    title: With a development bundle on macOS a WebView that sets no inspectable prop is inspectable (its WKWebView's isInspectable), and so is one that sets inspectable true
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Web Inspector; #273"
+    covers:
+      - ./webview#WebView
+      - ./webview#getWebViewInspectorAvailability
+      - ./webview#getWebViewInspectorAvailability().available
+  DEVT-WEB-02:
+    title: Safari's Web Inspector lists a development build's WebView pages under Develop › this Mac › the app and attaches to one; its elements, console and sources are the page's
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Web Inspector; #273"
+    covers:
+      - ./webview#WebView
+  DEVT-WEB-03:
+    title: In a release build a WebView that sets inspectable true is inspectable (its WKWebView's isInspectable), the explicit opt-in
+    platforms: [macos]
+    blocking: true
+    spec: "docs/devtools.md Web Inspector; #273"
+    covers:
+      - ./webview#WebView
+      - ./webview#getWebViewInspectorAvailability
+      - ./webview#getWebViewInspectorAvailability().available
+  DEVT-UNSUP-05:
+    title: On Windows getWebViewInspectorAvailability reports unsupported-platform and the Web Inspector screen shows no WebViews
+    platforms: [windows]
+    blocking: true
+    spec: "#273"
+    covers:
+      - ./webview#getWebViewInspectorAvailability
+  DEVT-VISUAL-05:
+    title: The Web Inspector screen matches its goldens in light and dark, English and Arabic
+    platforms: [macos]
+    blocking: true
+    spec: "#273"
+    covers:
+      - ./webview
   DEVT-VISUAL-01:
     title: The DevTools screen matches its goldens in light and dark, English and Arabic
     platforms: [macos]
@@ -334,3 +373,10 @@ checks:
     spec: "#269, #274"
     covers:
       - ./devtools
+  DEVT-REL-07:
+    title: A running release build's WebViews are not inspectable unless they set inspectable true; a WebView with the default has a WKWebView whose isInspectable is false, so Safari's Web Inspector cannot attach
+    platforms: [macos]
+    blocking: true
+    spec: "#273, #274"
+    covers:
+      - ./webview#WebView

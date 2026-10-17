@@ -8848,6 +8848,38 @@
               "type": "null"
             }
           },
+          "assertWebView": {
+            "description": "[driver] Assert whether Safari's Web Inspector can attach to the WKWebView inside the element `id` (its native isInspectable), polled until it matches. A development bundle's WebViews are inspectable unless they set inspectable: false; a release bundle's only when they set inspectable: true.",
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "inspectable": {
+                  "type": "boolean"
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "timeout": {
+                  "$ref": "#/definitions/duration"
+                }
+              },
+              "required": [
+                "id",
+                "inspectable"
+              ],
+              "additionalProperties": false
+            },
+            "else": {
+              "type": "object"
+            }
+          },
           "assertLoadPaths": {
             "description": "Assert no load path lets a library from outside the bundle or the system into the app: LC_RPATH entries, dependencies (weak ones too) and LC_DYLD_ENVIRONMENT. On Windows: the DLL search order, not implemented yet (#51).",
             "if": {

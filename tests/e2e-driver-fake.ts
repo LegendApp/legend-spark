@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProcessLog } from "../packages/cli/src/process.ts";
-import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type SimulatedPrivilegedHelper, type TestPrivilegedHelper, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type TestSpeech, type SimulatedSpeech, type TestCapture, type SimulatedCapture } from "../scripts/e2e/driver.ts";
+import { DriverError, type AuditFacts, type DriverCursor, type DriverElement, type DriverMenuItem, type DriverWindow, type Frame, type FrameReport, type Gesture, type InputTarget, type Motion, type MotionSample, type MotionState, type MotionUntil, type MotionValues, type SimulatedSystemEvent, type StartupPhases, type CommitReport, type Counters, type TestClipboard, type ProcessSocket, type TestDragRequest, type TestPermission, type SimulatedBiometrics, type TestBiometrics, type SimulatedAuthorization, type TestAuthorization, type SimulatedPrivilegedHelper, type TestPrivilegedHelper, type TestSharing, type SimulatedSharing, type TestAppIntents, type SimulatedAppIntents, type TestSpeech, type SimulatedSpeech, type TestCapture, type SimulatedCapture, type TestWebView } from "../scripts/e2e/driver.ts";
 import type { DriverApp, DriverClient } from "../scripts/e2e/runner/driver-backend.ts";
 
 export const FRAME: Frame = { x: 10, y: 20, width: 100, height: 40 };
@@ -159,6 +159,14 @@ export class FakeDriver implements DriverClient {
   captureState: TestCapture = { cameras: true, microphones: true, cameraEntitled: true, microphoneEntitled: true, recordingAudio: false, cameraRunning: false, recordingScreen: false, frames: 0, levels: 0, photos: 0, screenshots: 0, recordings: 0 };
   async simulateCapture(state: SimulatedCapture) { this.log.push(`simulateCapture ${JSON.stringify(state)}`); return this.captureState = { ...this.captureState, ...state }; }
   async testCapture() { this.log.push("testCapture"); return this.captureState; }
+  /** WKWebViews by the testID of the view that holds them, as the app's webView command reads them. */
+  webViews: () => Record<string, TestWebView> = () => ({});
+  async webView(testID: string) {
+    this.log.push(`webView ${testID}`);
+    const webView = this.webViews()[testID];
+    if (!webView) throw new DriverError("E_NOT_FOUND", `No visible view with testID ${testID}`);
+    return webView;
+  }
   /** Spark drag sources (FakeApp.dragSources), as the app's testDrag command sees them. */
   dragSources: () => Record<string, DragSource> = () => ({});
   private dragging?: { promised: string[] };
@@ -230,6 +238,8 @@ export class FakeApp implements DriverApp {
   readonly drivers: FakeDriver[] = [];
   /** Spark drag sources by testID, and the promised files a drop in a folder writes. */
   dragSources: Record<string, DragSource> = {};
+  /** WKWebViews by testID (FakeDriver.webViews). */
+  webViews: Record<string, TestWebView> = {};
   /** The simulated biometric state each launch's driver starts with (FakeDriver's default when unset). */
   biometrics?: TestBiometrics;
   /** The simulated authorization state each launch's driver starts with (FakeDriver's default when unset). */
@@ -286,6 +296,7 @@ export class FakeApp implements DriverApp {
     const driver: FakeDriver = new FakeDriver(this.log, this.views, () => this.elements, this.menuBar, () => this.motions, () => this.frames, () => this.cursor,
       () => ({ startup: this.startup, state: this.state }), () => ({ commits: this.commits, counters: this.counters, memoryMB: this.memoryMB }), () => this.audit, () => this.sockets(driver));
     driver.dragSources = () => this.dragSources;
+    driver.webViews = () => this.webViews;
     if (this.biometrics) driver.biometrics = this.biometrics;
     if (this.authorization) driver.authorization = this.authorization;
     driver.sharing = this.sharing;

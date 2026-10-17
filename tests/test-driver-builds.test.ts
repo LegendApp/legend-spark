@@ -108,7 +108,7 @@ test.skipIf(!hasRuby)("RNDesktopApp excludes the driver's sources without it, gi
   // Only the driver's own sources match the exclusion.
   const excluded = readdirSync(path.join(root, "packages/desktop-app/macos")).filter(name => /^SparkTestDriver.*\.mm$/.test(name));
   expect(excluded.sort()).toEqual(["SparkTestDriver.mm", "SparkTestDriverAudit.mm", "SparkTestDriverCommits.mm", "SparkTestDriverCursor.mm",
-    "SparkTestDriverFrames.mm", "SparkTestDriverInput.mm", "SparkTestDriverState.mm"]);
+    "SparkTestDriverFrames.mm", "SparkTestDriverInput.mm", "SparkTestDriverState.mm", "SparkTestDriverWebView.mm"]);
 }, 60_000);
 
 test("the Kitchen Sink, which the gate drives as a release build, opts in", () => {
