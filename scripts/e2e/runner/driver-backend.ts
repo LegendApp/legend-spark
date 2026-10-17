@@ -77,10 +77,11 @@ export type DriverClient = MotionClient & InspectClient & RenderClient & AuditCl
 /** The app under test (`KitchenSinkApp` in scripts/e2e/kitchen-sink.ts): prepared per flow, launched in driver mode. */
 export type DriverApp = {
   /**
-   * `dev`: a `build: dev` flow, which needs the development JavaScript bundle (only a dev build can load one). `app` is the
-   * bundle given (not an isolated clone); `release`: it embeds its JavaScript (a release build).
+   * `dev`: a `build: dev` flow, which needs the development JavaScript bundle (only a dev build can load one). `prebundle`:
+   * also bundle what isolated runtimes load, in the background. `app` is the bundle given (not an isolated clone);
+   * `release`: it embeds its JavaScript (a release build).
    */
-  open(options: { dev: boolean }): Promise<{ app: string; release: boolean; bundleId: string; launchedBundleId: string }>;
+  open(options: { dev: boolean; prebundle: boolean }): Promise<{ app: string; release: boolean; bundleId: string; launchedBundleId: string }>;
   /** Launch arguments and environment variables the launch sets itself, so a flow may not; `locale` only when the matrix sets one. */
   readonly reserved: { readonly arguments: readonly string[]; readonly env: readonly string[]; readonly locale: readonly string[] };
   /** Deletes the state of the driver session (docs/e2e-flows.md#app-state) while the app is not running; returns what existed. */
@@ -265,7 +266,7 @@ export class DriverBackend implements Backend {
     this.logs = [];
     this.launches = 0;
     this.countsLaunches = usesLaunchCounters(session.flow);
-    const { app, release, bundleId } = await this.app.open({ dev: session.flow.header.build === "dev" });
+    const { app, release, bundleId } = await this.app.open({ dev: session.flow.header.build === "dev", prebundle: true });
     this.opened = { app, release };
     if (session.flow.header.appId === bundleId) return;
     await this.app.close(); // The runner stops only backends that started.

@@ -329,7 +329,10 @@ maps from the development server. The inspector proxy reports the macOS device a
 ## Verification
 
 The driver backend serves bundled JavaScript itself, without Metro or its inspector proxy, so it cannot reach
-DevTools. `bun scripts/test-devtools.ts` runs a real development session instead, headless:
+DevTools. It serves the worker entry isolated runtimes load, the source maps and `/symbolicate`
+([e2e-flows.md](e2e-flows.md#the-driver-backend)), so `build: dev` flows run worker runtimes and get source-mapped
+profiles (`e2e/dev-flows/devtools/profiling-dev.yaml`). `bun scripts/test-devtools.ts` runs a real development session
+instead, headless:
 
 1. It starts `spark dev --no-open` for the Kitchen Sink, then launches the dev build in driver mode (no window, no
    focus) with development JavaScript from that server (`KitchenSinkApp` with a `devServer`).

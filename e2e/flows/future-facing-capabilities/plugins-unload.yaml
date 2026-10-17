@@ -9,8 +9,9 @@ platforms: [macos]
 ---
 - launchApp: { clearState: true, openUrl: "spark-ks://future-facing-capabilities/plugins" }
 - tapOn: { id: future-facing-capabilities-plugins-hello-load }
-# The first plugin load in a driver session bundles the Runtimes worker entry (scripts/e2e/kitchen-sink.ts).
-- assertText: { id: future-facing-capabilities-plugins-hello-state, equals: loaded, timeout: 60s }
+# A dev build's first worker in a run can wait for the worker entry the driver bundles in the background from session
+# start (scripts/e2e/bundle-server.ts): about 5 s with a warm Metro cache, so 30 s leaves room for a busy Mac.
+- assertText: { id: future-facing-capabilities-plugins-hello-state, equals: loaded, timeout: 30s }
 - tapOn: { id: future-facing-capabilities-plugins-command-hello-greet }
 - assertText: { id: future-facing-capabilities-plugins-output, equals: '{"greeting":"Hello","runtime":"spark-plugin.so.legend.ks.hello","main":false,"hostGlobalVisible":false,"greetings":1}' }
 - tapOn: { id: future-facing-capabilities-plugins-command-hello-greet }
