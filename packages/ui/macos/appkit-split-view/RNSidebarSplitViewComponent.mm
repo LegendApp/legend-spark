@@ -239,8 +239,17 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
 
 - (void)drawDividerInRect:(NSRect)rect
 {
+  // AppKit hands a sidebar's divider a 0.5pt hairline rect but still reserves the full dividerThickness. The
+  // other half of the gap is left to the split view's own backing, which shows as a bright column in dark mode.
+  // Paint the whole gap, then the hairline.
+  NSRect gap = rect;
+  if (self.vertical) {
+    gap.size.width = MAX(rect.size.width, self.dividerThickness);
+  } else {
+    gap.size.height = MAX(rect.size.height, self.dividerThickness);
+  }
   [NSColor.windowBackgroundColor setFill];
-  NSRectFill(rect);
+  NSRectFill(gap);
   [self.dividerColor setFill];
   NSRectFillUsingOperation(rect, NSCompositingOperationSourceOver);
 }
