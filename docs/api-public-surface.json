@@ -1405,6 +1405,7 @@
     "mergeAllWindows",
     "minimizeWindow",
     "moveTabToNewWindow",
+    "moveWindowTab",
     "openDesktopWidget",
     "openOverlay",
     "openPictureInPicture",

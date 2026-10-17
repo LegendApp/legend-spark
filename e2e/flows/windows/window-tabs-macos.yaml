@@ -4,8 +4,10 @@ intent: >
   On screen, the tab windows of Windows > Window tabs show AppKit's tab bar. The + button and Window ▸ New Tab (⌘T)
   open a new tab of the same type through the navigator's newTab callback. Window ▸ Merge All Windows, Window ▸ Move
   Tab to New Window, dragging a tab out, and View ▸ Show/Hide Tab Bar change the groups the screen's readout reports.
-  Only a person can see the tab bar itself; the readout and window count are asserted.
-checks: [WIN-NEWTAB-01, WIN-TABNATIVE-01, WIN-TABMERGE-01, WIN-TABMOVE-01, WIN-TABBAR-01]
+  Reordering with moveWindowTab shows in the bar, dragging a tab within the bar reorders the group, and a crowded group
+  keeps every tab reachable (AppKit reports no overflow; docs/api-window-contract.md §Window tabs). Only a person can
+  see the tab bar itself; the readout and window count are asserted.
+checks: [WIN-NEWTAB-01, WIN-TABNATIVE-01, WIN-TABMERGE-01, WIN-TABMOVE-01, WIN-TABBAR-01, WIN-TABREORDER-01, WIN-TABCROWD-01]
 tags: [windows]
 platforms: [macos]
 build: release
@@ -41,6 +43,36 @@ matrix:
 - assertWindow: { count: 3 }
 - selectMenu: Window > Merge All Windows
 - assertVisible: { id: windows-window-tabs-group-1-2-3-4-selected-4-bar-shown }
+# Reorder through the API: window 1's tab goes to the end and the selection stays.
+- focusWindow: { id: spark.main }
+- tapOn: { id: windows-window-tabs-reorder }
+- assertVisible: { id: windows-window-tabs-group-2-3-4-1-selected-4-bar-shown }
+- focusWindow: { title: Tab 4 }
+- takeScreenshot: { name: window-tabs-reordered-bar, window: { title: Tab 4 } }
+- manualStep:
+    instruction: Look at window-tabs-reordered-bar.
+    expect: The tab bar shows "Tab 2", "Tab 3", "Tab 4", "Tab 1" in that order, with "Tab 4" selected.
+    screenshot: window-tabs-reordered-bar
+    signoff: required
+- manualStep:
+    instruction: >-
+      Dragging a tab within the bar needs a person, so check it live. In the Kitchen Sink, open Windows > Window tabs,
+      press Close all tab windows, Open window, then New tab in window 1 twice, and drag the tab "Tab 1" to the end of
+      the tab bar.
+    expect: The readout's group lists 2, 3, 1 in that order, the order the tab bar shows.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      A crowded tab bar is on screen only, so check it live. In the Kitchen Sink, open Windows > Window tabs, press
+      Close all tab windows, Open window, then New tab in window 1 until the readout lists 20 windows in one group, and
+      make that window as narrow as it goes. Then choose Window > Show All Tabs in it.
+    expect: >-
+      The readout still lists all 20 windows in one group, in the order of the tab bar. Every tab can still be reached:
+      in the tab bar, or in Show All Tabs, which shows all 20 tabs as thumbnails. Note in the sign-off what the bar does
+      with tabs that do not fit.
+    evidence: none
+    signoff: required
 - tearOff: { tab: Tab 1, to: "200,200" }
 - assertVisible: { id: windows-window-tabs-group-1-selected-1-bar-hidden }
 - focusWindow: { title: Tab 1 }

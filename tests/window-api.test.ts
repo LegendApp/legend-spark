@@ -212,7 +212,7 @@ test("macOS opening applies options with the window and enters simple fullscreen
 
 const group = { windowIds: ["editor", "notes"], selectedWindowId: "notes", tabBarVisible: true };
 test("tab groups are macOS-only and validated at the native boundary", async () => {
-  for (const operation of [() => windows.getWindowTabGroup("editor"), () => windows.listWindowTabGroups(), () => windows.selectWindowTab("editor"), () => windows.moveTabToNewWindow("editor"),
+  for (const operation of [() => windows.getWindowTabGroup("editor"), () => windows.listWindowTabGroups(), () => windows.selectWindowTab("editor"), () => windows.moveWindowTab("editor", 0), () => windows.moveTabToNewWindow("editor"),
     () => windows.mergeAllWindows("editor"), () => windows.setWindowTabBarVisible("editor", true), () => windows.handleWindowNewTab("editor", () => {}), () => windows.addWindowListener("editor", "tabGroupChanged", () => {})])
     await expect(operation()).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
   await expect(windows.openWindow({ id: "notes", component: "Notes", tabbedWith: "editor" })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION", message: "Windows does not support tabbedWith yet" });
@@ -222,7 +222,7 @@ test("tab groups are macOS-only and validated at the native boundary", async () 
   call.mockImplementation(async (method: string) => JSON.stringify(method === "tabGroup" ? { ...group, native: true } : method === "tabGroups" ? [group, { windowIds: ["main"], selectedWindowId: "main", tabBarVisible: false }] : null));
   expect(await windows.getWindowTabGroup("editor")).toEqual(group);
   expect(await windows.listWindowTabGroups()).toEqual([group, { windowIds: ["main"], selectedWindowId: "main", tabBarVisible: false }]);
-  for (const [operation, method, args] of [[() => windows.selectWindowTab("notes"), "selectTab", { id: "notes" }], [() => windows.moveTabToNewWindow("notes"), "moveTabToNewWindow", { id: "notes" }],
+  for (const [operation, method, args] of [[() => windows.selectWindowTab("notes"), "selectTab", { id: "notes" }], [() => windows.moveTabToNewWindow("notes"), "moveTabToNewWindow", { id: "notes" }], [() => windows.moveWindowTab("notes", 0), "moveTab", { id: "notes", index: 0 }],
     [() => windows.mergeAllWindows("editor"), "mergeAllWindows", { id: "editor" }], [() => windows.setWindowTabBarVisible("editor", false), "tabBar", { id: "editor", visible: false }]] as const) {
     await operation(); expect(call.mock.calls.at(-1)![0]).toBe(method); expect(JSON.parse(call.mock.calls.at(-1)![1])).toEqual(args);
   }
@@ -230,6 +230,9 @@ test("tab groups are macOS-only and validated at the native boundary", async () 
   await expect(windows.getWindowTabGroup("editor")).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   await expect(windows.setWindowTabBarVisible("editor", "yes" as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
   await expect(windows.selectWindowTab("../editor")).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  call.mockClear();
+  for (const index of [-1, 1.5, Number.NaN, "1" as never]) await expect(windows.moveWindowTab("notes", index)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  expect(call).not.toHaveBeenCalled();
 });
 test("tab listeners deliver validated group and selection changes for the live instance", async () => {
   platform.OS = "macos";

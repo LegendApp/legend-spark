@@ -24,6 +24,7 @@ export function WindowTabs() {
       <ActionButton testID="windows-window-tabs-open" onPress={actions.open}>Open window</ActionButton>
       <ActionButton testID="windows-window-tabs-new-tab" onPress={actions.newTab}>New tab in window 1</ActionButton>
       <ActionButton testID="windows-window-tabs-select" onPress={actions.selectNext}>Select the next tab of window 1</ActionButton>
+      <ActionButton testID="windows-window-tabs-reorder" onPress={actions.moveToEnd}>Move window 1's tab to the end</ActionButton>
       <ActionButton testID="windows-window-tabs-merge" onPress={actions.merge}>Merge all windows into window 1</ActionButton>
       <ActionButton testID="windows-window-tabs-move" onPress={actions.moveSelected}>Move the selected tab to a new window</ActionButton>
       <ActionButton testID="windows-window-tabs-tab-bar" onPress={actions.toggleTabBar}>Show or hide window 1's tab bar</ActionButton>
