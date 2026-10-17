@@ -125,9 +125,10 @@ export function installedPackages(root: string): Package[] {
   }
   return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
-export function hashFiles(root: string, entries: string[], windows = false): string {
+export function hashFiles(root: string, entries: string[], windows = false, excluded: string[] = []): string {
   const hash = createHash("sha256");
   function visit(relative: string) {
+    if (excluded.includes(relative.split(path.sep).join("/"))) return;
     const file = path.join(root, relative);
     if (!existsSync(file)) return;
     try {
@@ -195,8 +196,11 @@ export function nativePackages(root: string, { applyExcludes = true } = {}): Nat
         "common", "nitrogen/generated", "nitro.json",
         "expo-module.config.json",
         "react-native.config.js",
+        ...(pkg.name === "react-native-enriched-markdown" ? ["ratex-version.json"] : []),
         ...readdirSync(pkg.root).filter((name) => name.endsWith(".podspec")),
-      ])),
+      ], false, pkg.name === "react-native-enriched-markdown"
+        // Postinstall restores these assets; their pinned manifests are hashed above.
+        ? ["cpp/highlight/vendor/grammars", "cpp/highlight/vendor/tree-sitter", "ios/vendor"] : [])),
     }));
 }
 export function dependencyStamp(root: string) {
