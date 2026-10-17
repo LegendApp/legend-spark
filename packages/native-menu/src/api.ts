@@ -80,21 +80,39 @@ function snapshot(id: string, value: MenuUpdate, token: string, creating = false
   annotate(items); return items;
 }
 async function publish(next: Map<string, Owner>): Promise<void> {
+  const placed = new Map<MenuWireItem, MenuWireItem>();
   const menus = Platform.OS === "windows"
-    ? composeWindowsMenus(new Map([...next].map(([id, owner]) => [id, owner.items])))
+    ? composeWindowsMenus(new Map([...next].map(([id, owner]) => [id, owner.items])), placed)
     : [...next.values()].flatMap(owner => owner.items);
   const result = await invokeNative(() => NativeMenu!.publish(JSON.stringify(menus)));
-  if (result !== undefined && result !== null) throw new SparkError("E_INVALID_DATA", "Native menu publication returned an unexpected result");
+  // macOS reports the title each item shows (a located native root keeps its system-localized one); Windows shows the composed titles.
   owners = next;
+  const title = Platform.OS === "windows" ? windowsTitle(result, placed) : macosTitle(result);
   // Disabled items are reported too: enabling one makes its key equivalent live again.
   const shortcuts: ShortcutInventoryEntry[] = [];
-  const visit = (menuId: string, items: readonly MenuWireItem[]) => { for (const item of items) {
-    const itemId = item.id ?? item.role;
-    if (item.shortcut && itemId) shortcuts.push({ accelerator: item.shortcut, owner: { source: "menu", menuId, itemId } });
-    if (item.items) visit(menuId, item.items);
+  const visit = (menuId: string, items: readonly MenuWireItem[], parent: readonly string[]) => { for (const item of items) {
+    if (item.separator) continue;
+    const itemId = item.id ?? item.role, path = [...parent, title(item)];
+    if (item.shortcut && itemId) shortcuts.push({ accelerator: item.shortcut, owner: { source: "menu", menuId, itemId, path } });
+    if (item.items) visit(menuId, item.items, path);
   } };
-  for (const owner of next.values()) visit(owner.id, owner.items);
+  for (const owner of next.values()) visit(owner.id, owner.items, []);
   setShortcutInventory(inventoryToken, shortcuts);
+}
+function windowsTitle(result: unknown, placed: ReadonlyMap<MenuWireItem, MenuWireItem>) {
+  if (result !== undefined && result !== null) throw new SparkError("E_INVALID_DATA", "Native menu publication returned an unexpected result");
+  return (item: MenuWireItem) => placed.get(item)!.title!;
+}
+function macosTitle(result: unknown) {
+  let titles: unknown;
+  try { titles = typeof result === "string" ? JSON.parse(result) : undefined; } catch { titles = undefined; }
+  if (!titles || typeof titles !== "object") throw new SparkError("E_INVALID_DATA", "Native menu publication did not report its titles");
+  const shown = titles as Record<string, Record<string, unknown> | undefined>;
+  return (item: MenuWireItem) => {
+    const value = shown[item._sparkOwner!]?.[item.id!];
+    if (typeof value !== "string") throw new SparkError("E_INVALID_DATA", `Native menu publication did not report the title of ${item.id}`);
+    return value;
+  };
 }
 const inventoryToken = {};
 /**

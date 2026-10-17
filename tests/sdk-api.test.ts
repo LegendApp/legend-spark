@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { beforeEach, expect, vi, test } from "vitest";
+import { shownMenuTitles } from "./native-menu-double";
 const calls: { native: string; method: string; args: any }[] = [];
 const handlers = new Map<string, (args: any) => unknown | Promise<unknown>>();
 const subscriptions = new Map<string, Set<(event: any) => void>>();
@@ -13,6 +14,7 @@ function module(name: string) {
       if (key === "binaryCall" && args[2] !== undefined) value.bytes = new Uint8Array(args[2], args[3], args[4]).slice();
       calls.push({ native: name, method, args: value });
       const result = await handlers.get(`${name}.${method}`)?.(value);
+      if (name === "NativeMenu" && key === "publish" && platform.OS === "macos") return result ?? shownMenuTitles(args[0]);
       return key === "call" ? JSON.stringify(result ?? null) : key === "binaryCall" ? result ?? null : result;
     };
   } }));
@@ -286,7 +288,7 @@ test("shortcut surfaces publish their live bindings for shortcut-map conflict re
   expect(getShortcutInventory()).toEqual([
     { accelerator: { key: "k", modifiers: 1 << 20 }, owner: { source: "shortcut", windowId: "editor" } },
     { accelerator: { key: "j", modifiers: (1 << 20) | (1 << 17) }, owner: { source: "global-shortcut" } },
-    { accelerator: { key: "s", modifiers: 1 << 20 }, owner: { source: "menu", menuId: "inventory", itemId: "save" } },
+    { accelerator: { key: "s", modifiers: 1 << 20 }, owner: { source: "menu", menuId: "inventory", itemId: "save", path: ["File", "Save"] } },
   ]);
   await local.remove(); await global.remove(); await menu.remove();
   expect(getShortcutInventory()).toEqual([]);

@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import React, { act, StrictMode } from "react";
 const { create } = createRequire(import.meta.url)("react-test-renderer");
 const { publish, listeners } = vi.hoisted(() => ({ publish: vi.fn(), listeners: new Set<(event: unknown) => void>() }));
-vi.mock("../packages/native-menu/src/NativeMenu", () => ({ default: { publish } }));
+vi.mock("../packages/native-menu/src/NativeMenu", async () => ({ default: { publish: (await import("./native-menu-double")).reportingTitles(json => publish(json)) } }));
 vi.mock("react-native", () => ({ Platform: { OS: "macos" }, NativeEventEmitter: class { addListener(_name: string, listener: (event: unknown) => void) { listeners.add(listener); return { remove() { listeners.delete(listener); } }; } } }));
 import { useMenu, type MenuState, type UseMenuOptions } from "../packages/native-menu/src/hooks";
 const items: UseMenuOptions["items"] = [{ type: "submenu", id: "file", label: "File", items: [{ type: "action", id: "open", label: "Open" }] }];

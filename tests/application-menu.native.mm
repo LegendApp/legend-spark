@@ -1,8 +1,9 @@
 static void Check(BOOL condition, NSString *message) { if (!condition) { NSLog(@"FAIL: %@", message); exit(1); } }
+static NSDictionary *PublishedTitles; // What the last successful publication resolved with.
 static NSString *Publish(RNNativeMenu *module, NSArray *items) {
   __block NSString *failure = nil; __block BOOL resolved = NO;
   NSData *data = [NSJSONSerialization dataWithJSONObject:items options:0 error:nil];
-  [module publish:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] resolve:^(id value) { resolved = YES; } reject:^(NSString *code, NSString *message, NSError *error) { failure = code; }];
+  [module publish:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] resolve:^(id value) { resolved = YES; PublishedTitles = [NSJSONSerialization JSONObjectWithData:[value dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil]; } reject:^(NSString *code, NSString *message, NSError *error) { failure = code; }];
   Check(resolved || failure, @"Native publication never completed"); return failure;
 }
 @interface OriginalMenuDelegate : NSObject <NSMenuDelegate>
@@ -161,6 +162,11 @@ int main() { @autoreleasepool {
   Check(!Publish(module, @[tabs]), @"Tab role publication failed");
   // A located native root keeps its system-localized title; the label names only a root Spark creates (#449).
   Check([windowItem.title isEqual:@"Localized Window"], [NSString stringWithFormat:@"Window menu lost its localized title (got '%@')", windowItem.title]);
+  // Publication reports the titles the menu bar shows, so shortcut conflicts can name items as people see them.
+  NSMenuItem *nextTabItem = Find(windowItem.submenu, @{ @"id": @"next-tab" }, NO);
+  NSDictionary *tabTitles = @{ @"tabs": @"Localized Window", @"new-tab": @"New Tab", @"next-tab": nextTabItem.title };
+  Check(nextTabItem.title.length && [PublishedTitles isEqual:@{ @"tabs-owner": tabTitles }], [NSString stringWithFormat:@"Publication did not report the shown titles (got %@)", PublishedTitles]);
+  Check(!Publish(module, @[tabs]) && [PublishedTitles isEqual:@{ @"tabs-owner": tabTitles }], @"An unchanged publication did not report the shown titles");
   NSMenuItem *newTab = Find(windowItem.submenu, @{ @"id": @"new-tab" }, NO), *nextTab = Find(windowItem.submenu, @{ @"id": @"next-tab" }, NO);
   Check(newTab.action == @selector(newWindowForTab:) && !newTab.target && [windowItem.submenu indexOfItem:newTab] + 1 == [windowItem.submenu indexOfItem:merge], @"newTab role lost its responder action or placement");
   Check(nextTab.action == @selector(selectNextTab:) && Find(windowItem.submenu, @{ @"role": @"mergeAllWindows" }, NO) == merge, @"Tab roles did not map to AppKit's tab actions");

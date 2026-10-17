@@ -16,8 +16,11 @@ function locate(items: MenuWireItem[], target: MenuTarget, recursive: boolean): 
     if (recursive && item.items) { const found = locate(item.items, target, true); if (found) return found; }
   }
 }
-/** Compose fresh snapshots by stable IDs/semantic targets; failed proposals never mutate live owners. */
-export function composeWindowsMenus(owners: ReadonlyMap<string, readonly MenuWireItem[]>): MenuWireItem[] {
+/**
+ * Compose fresh snapshots by stable IDs/semantic targets; failed proposals never mutate live owners.
+ * `placed` receives the composed item each owner item landed in, whose title is the one the menu bar shows.
+ */
+export function composeWindowsMenus(owners: ReadonlyMap<string, readonly MenuWireItem[]>, placed?: Map<MenuWireItem, MenuWireItem>): MenuWireItem[] {
   const result: MenuWireItem[] = [];
   function merge(into: MenuWireItem[], inputs: readonly MenuWireItem[], root: boolean) {
     for (const input of inputs) {
@@ -27,7 +30,7 @@ export function composeWindowsMenus(owners: ReadonlyMap<string, readonly MenuWir
       if (target && input.items) {
         if (!target.items) throw new SparkError("E_INVALID_ARGUMENT", "Submenu target is not a submenu");
         const { items: children, id, target: identity, placement, ...presentation } = input;
-        Object.assign(target, presentation);
+        Object.assign(target, presentation); placed?.set(input, target);
         merge(target.items, children, false);
         if (placement) {
           const old = siblings.indexOf(target), position = insertion(siblings, placement);
@@ -36,6 +39,7 @@ export function composeWindowsMenus(owners: ReadonlyMap<string, readonly MenuWir
       } else {
         // Overlays keep the owner identity and the role AppKit would retain, so later placements still resolve semantic anchors.
         const item = { ...input, ...(target ? { _sparkIdentity: target._sparkIdentity ?? target.id } : {}), ...(target?.role && !input.role ? { role: target.role } : {}), ...(input.items ? { items: [] as MenuWireItem[] } : {}) };
+        placed?.set(input, item);
         if (input.items) merge(item.items!, input.items, false);
         const index = target ? siblings.indexOf(target) : -1;
         const position = input.placement ? insertion(siblings, input.placement) : index < 0 ? siblings.length : index;

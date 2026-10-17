@@ -6,7 +6,11 @@ const state = vi.hoisted(() => ({
   platform: { OS: "macos", constants: { reactNativeVersion: { major: 0, minor: 81, patch: 7, prerelease: null } } },
   installed: true, locale: "en_US", publish: vi.fn(), listeners: new Map<string, Set<(event: unknown) => void>>(),
 }));
-vi.mock("../packages/native-menu/src/NativeMenu", () => ({ get default() { return state.installed ? { publish: state.publish } : undefined; } }));
+vi.mock("../packages/native-menu/src/NativeMenu", async () => {
+  const { reportingTitles } = await import("./native-menu-double");
+  const publish = reportingTitles(json => state.publish(json), () => state.platform.OS === "macos");
+  return { get default() { return state.installed ? { publish } : undefined; } };
+});
 vi.mock("@legendapp/spark-system", () => ({ getSystemInfo: async () => ({ locale: state.locale }) }));
 vi.mock("react-native", () => ({ Platform: state.platform, NativeEventEmitter: class {
   addListener(name: string, listener: (event: unknown) => void) {
@@ -106,8 +110,8 @@ test("the shortcut is free of macOS reservations and yields to a binding another
   const app = await api.createMenu({ id: "app", items: [{ type: "submenu", id: "tools", label: "Tools", items: [{ type: "action", id: "zap", label: "Zap", shortcut: "Ctrl+Cmd+Z" }] }] });
   await settle();
   expect(item("spark-developer-show")).toBeUndefined();
-  expect(api.getDeveloperMenuState()).toEqual({ status: "ready", shortcut: null, shortcutConflict: { shortcut: "Ctrl+Cmd+Z", with: "menu", description: "menu app, item zap" } });
-  expect(warn).toHaveBeenCalledWith(expect.stringContaining("menu app, item zap"));
+  expect(api.getDeveloperMenuState()).toEqual({ status: "ready", shortcut: null, shortcutConflict: { shortcut: "Ctrl+Cmd+Z", with: "menu", description: "menu item Tools › Zap" } });
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining("menu item Tools › Zap"));
   await app.remove();
   await settle();
   expect(item("spark-developer-show")).toMatchObject({ shortcut: { key: "z" } });

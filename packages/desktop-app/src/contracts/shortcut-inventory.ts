@@ -4,7 +4,8 @@ import type { Accelerator } from "./accelerator";
 export type ShortcutInventoryOwner =
   | { source: "shortcut"; windowId?: string }
   | { source: "global-shortcut" }
-  | { source: "menu"; menuId: string; itemId: string };
+  /** `path` is the titles from the menu bar to the item, as the menu shows them. */
+  | { source: "menu"; menuId: string; itemId: string; path: readonly string[] };
 export interface ShortcutInventoryEntry { accelerator: Accelerator; owner: ShortcutInventoryOwner }
 
 const entries = new Map<object, readonly ShortcutInventoryEntry[]>(), listeners = new Set<() => void>();
