@@ -58,19 +58,43 @@ export interface MacOSConfiguration {
   sandbox?: { entitlements?: Record<string, JsonValue> };
   /** App Intents for Shortcuts, Spotlight and Siri, compiled into the app by spark build (docs/app-intents.md). */
   appIntents?: AppIntentConfiguration[];
+  /** Enums App Intent parameters can take: Shortcuts offers their cases in a picker, and App Shortcut phrases can name them. */
+  appEnums?: AppEnumConfiguration[];
+  /** Entities App Intent parameters can take, which JavaScript lists and finds (addAppEntityQueryHandler). */
+  appEntities?: AppEntityConfiguration[];
 }
+/**
+ * Text Shortcuts, Spotlight and Siri show: as written, or translated into each of the app's localizations
+ * ({ "en": "Show Recipe", "ar": "اعرض الوصفة" }), which spark build compiles into a strings catalog.
+ */
+export type LocalizedText = string | Record<string, string>;
 export interface AppIntentConfiguration {
   /** Letters and digits; the intent's identity, so shortcuts that use it break when it changes. */
   id: string;
-  title: string;
-  description?: string;
-  parameters?: { name: string; title: string; type: "string" | "number" | "integer" | "boolean"; optional?: boolean }[];
+  title: LocalizedText;
+  description?: LocalizedText;
+  /** `type` is string, number, integer, boolean, or the id of an enum (appEnums) or entity (appEntities). */
+  parameters?: { name: string; title: LocalizedText; type: string; optional?: boolean; default?: string | number | boolean }[];
+  /** How Shortcuts shows the action, naming parameters as `${name}`: "Show ${recipe} for ${servings}". */
+  parameterSummary?: LocalizedText;
   /** The handler returns text, which the system shows and passes to the next action. Default false. */
   returnsText?: boolean;
   /** Bring the app to the front when the intent runs. Default false. */
   openApp?: boolean;
-  /** An App Shortcut, available without setup. Each phrase names the app once as `${applicationName}`. */
-  shortcut?: { phrases: string[]; shortTitle: string; systemImage: string };
+  /** An App Shortcut, available without setup. Each phrase names the app once as `${applicationName}`, and may name enum parameters as `${name}`. */
+  shortcut?: { phrases: LocalizedText[]; shortTitle: LocalizedText; systemImage: string };
+}
+export interface AppEnumConfiguration {
+  /** Letters and digits, starting with an uppercase letter; parameters name it as their type. */
+  id: string;
+  title: LocalizedText;
+  /** `value` (letters and digits, starting with a lowercase letter) is what JavaScript gets. */
+  cases: { value: string; title: LocalizedText }[];
+}
+export interface AppEntityConfiguration {
+  /** Letters and digits, starting with an uppercase letter; parameters name it as their type. */
+  id: string;
+  title: LocalizedText;
 }
 export interface SigningConfiguration {
   macos?: { identity?: string; teamId?: string; entitlementsByPath?: Record<string, Record<string, JsonValue>> };

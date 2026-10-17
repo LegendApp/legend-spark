@@ -147,11 +147,12 @@ export class FakeDriver implements DriverClient {
   async simulateSpeech(state: SimulatedSpeech) { this.log.push(`simulateSpeech ${JSON.stringify(state)}`); return this.speech = { ...this.speech, ...state }; }
   async testSpeech() { this.log.push("testSpeech"); return this.speech; }
   /** The App Intents simulation (FakeApp.appIntents), as the app's simulateAppIntents and testAppIntents commands keep it. */
-  appIntents: TestAppIntents = { declared: [], registered: [], pending: 0, invocations: [], donations: [] };
+  appIntents: TestAppIntents = { declared: [], registered: [], entities: [], registeredEntities: [], pending: 0, invocations: [], queries: [], donations: [] };
   async simulateAppIntents(request: SimulatedAppIntents) {
     this.log.push(`simulateAppIntents ${JSON.stringify(request)}`);
     if (request.intents) this.appIntents.declared = request.intents.map(intent => String(intent.id));
-    if (request.invoke) this.appIntents.pending++;
+    if (request.entities) this.appIntents.entities = request.entities.map(entity => entity.id);
+    this.appIntents.pending += Number(request.invoke !== undefined) + Number(request.query !== undefined);
     return this.appIntents;
   }
   async testAppIntents() { this.log.push("testAppIntents"); return this.appIntents; }
@@ -237,7 +238,7 @@ export class FakeApp implements DriverApp {
   /** The app's sharing simulation; every launch's driver reads and changes it. */
   sharing: TestSharing = { shares: [], indexed: {}, services: [], registered: [], invocations: 0, answer: null };
   /** The app's App Intents simulation; every launch's driver reads and changes it. */
-  appIntents: TestAppIntents = { declared: [], registered: [], pending: 0, invocations: [], donations: [] };
+  appIntents: TestAppIntents = { declared: [], registered: [], entities: [], registeredEntities: [], pending: 0, invocations: [], queries: [], donations: [] };
   /** Extra elements of the in-process accessibility view; tests may change them while a flow runs. */
   elements: DriverElement[] = [];
   /** Scripted motion telemetry by testID, and the next frame report (or driver failure). */

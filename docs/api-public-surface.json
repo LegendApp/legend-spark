@@ -53,6 +53,9 @@
     "setAppLanguage"
   ],
   "./app-intents": [
+    "AppEntityItem",
+    "AppEntityQuery",
+    "AppEntityQueryHandler",
     "AppIntent",
     "AppIntentHandler",
     "AppIntentHandlerOptions",
@@ -63,6 +66,7 @@
     "AppIntentValue",
     "AsyncRegistration",
     "Availability",
+    "addAppEntityQueryHandler",
     "addAppIntentHandler",
     "donateAppIntent",
     "getAppIntents",

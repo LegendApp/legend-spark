@@ -22,9 +22,9 @@ static NSError *DonationFailure;
 }
 @end
 
-typedef struct { int calls; NSString *text; NSString *code; NSString *message; } Outcome;
+typedef struct { int calls; id text; NSString *code; NSString *message; } Outcome;
 static SparkAppIntentCompletion Completion(Outcome *outcome) {
-  return ^(NSString *text, NSError *error) {
+  return ^(id text, NSError *error) {
     CHECK(NSThread.isMainThread);
     outcome->calls++; outcome->text = text; outcome->code = error ? SparkAppIntentsErrorCode(error) : nil; outcome->message = error.localizedDescription;
   };
@@ -42,7 +42,13 @@ int main() { @autoreleasepool {
       @{ @"name": @"servings", @"title": @"Servings", @"type": @"integer", @"optional": @YES } ] },
     @{ @"id": @"startTimer", @"title": @"Start Timer", @"returnsText": @NO, @"parameters": @[
       @{ @"name": @"minutes", @"title": @"Minutes", @"type": @"number", @"optional": @NO },
-      @{ @"name": @"loud", @"title": @"Loud", @"type": @"boolean", @"optional": @YES } ] } ];
+      @{ @"name": @"loud", @"title": @"Loud", @"type": @"boolean", @"optional": @YES } ] },
+    @{ @"id": @"pickRecipe", @"title": @"Pick Recipe", @"returnsText": @NO, @"parameters": @[
+      @{ @"name": @"recipe", @"title": @"Recipe", @"type": @"enum", @"values": @[@"pancakes", @"soup"], @"default": @"soup", @"optional": @NO },
+      @{ @"name": @"servings", @"title": @"Servings", @"type": @"integer", @"default": @2, @"optional": @NO } ] },
+    @{ @"id": @"openNote", @"title": @"Open Note", @"returnsText": @YES, @"parameters": @[
+      @{ @"name": @"note", @"title": @"Note", @"type": @"entity", @"entity": @"Note", @"optional": @NO } ] } ];
+  NSArray *entities = @[@{ @"id": @"Note", @"title": @"Note" }];
 
   // Declarations as Info.plist lists them: ids and parameter names are identifiers, unique; types are known.
   CHECK([SparkAppIntentDeclarations(declared, &error) isEqual:declared]);
@@ -53,24 +59,35 @@ int main() { @autoreleasepool {
   CHECK(!SparkAppIntentDeclarations(@[@{ @"id": @"show", @"title": @"T", @"returnsText": @1, @"parameters": @[] }], &error));
   CHECK(!SparkAppIntentDeclarations(@[@{ @"id": @"show", @"title": @"T", @"returnsText": @NO, @"parameters": @[@{ @"name": @"Recipe", @"title": @"R", @"type": @"string", @"optional": @NO }] }], &error));
   CHECK(!SparkAppIntentDeclarations(@[@{ @"id": @"show", @"title": @"T", @"returnsText": @NO, @"parameters": @[@{ @"name": @"recipe", @"title": @"R", @"type": @"date", @"optional": @NO }] }], &error));
+  // An enum lists its values and a default is one of them; an entity parameter names its entity and has no default.
+  NSDictionary *(^withParameter)(NSDictionary *) = ^(NSDictionary *parameter) { return @{ @"id": @"show", @"title": @"T", @"returnsText": @NO, @"parameters": @[parameter] }; };
+  CHECK(!SparkAppIntentDeclarations(@[withParameter(@{ @"name": @"r", @"title": @"R", @"type": @"enum", @"values": @[], @"optional": @NO })], &error));
+  CHECK(!SparkAppIntentDeclarations(@[withParameter(@{ @"name": @"r", @"title": @"R", @"type": @"enum", @"values": @[@"a"], @"default": @"b", @"optional": @NO })], &error));
+  CHECK(!SparkAppIntentDeclarations(@[withParameter(@{ @"name": @"r", @"title": @"R", @"type": @"string", @"values": @[@"a"], @"optional": @NO })], &error));
+  CHECK(!SparkAppIntentDeclarations(@[withParameter(@{ @"name": @"r", @"title": @"R", @"type": @"entity", @"optional": @NO })], &error));
+  CHECK(!SparkAppIntentDeclarations(@[withParameter(@{ @"name": @"r", @"title": @"R", @"type": @"entity", @"entity": @"Note", @"default": @"n1", @"optional": @NO })], &error));
+  CHECK(!SparkAppIntentDeclarations(@[withParameter(@{ @"name": @"r", @"title": @"R", @"type": @"integer", @"default": @1.5, @"optional": @NO })], &error));
+  CHECK([SparkAppEntityDeclarations(entities, &error) isEqual:entities]);
+  CHECK(!SparkAppEntityDeclarations(@[entities[0], entities[0]], &error) && [SparkAppIntentsErrorCode(error) isEqual:@"E_INVALID_DATA"]);
+  CHECK(!SparkAppEntityDeclarations(@[@{ @"id": @"Note" }], &error) && !SparkAppEntityDeclarations(@{}, &error));
 
   // An app whose build cannot run intents (the Spark Runner): everything is unavailable with the reason.
-  SparkAppIntents *runner = [[SparkAppIntents alloc] initWithDeclarations:@[] unavailable:@"No intents here" donor:nil simulated:NO];
+  SparkAppIntents *runner = [[SparkAppIntents alloc] initWithDeclarations:@[] entities:@[] unavailable:@"No intents here" donor:nil simulated:NO];
   Outcome runnerPerform = {}, runnerDonate = {};
   CHECK(!runner.available);
-  CHECK(![runner registerHandler:@"showRecipe" error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_UNAVAILABLE"] && [error.localizedDescription isEqual:@"No intents here"]);
+  CHECK(![runner registerHandler:@"showRecipe" kind:SparkAppIntentHandlerIntent error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_UNAVAILABLE"] && [error.localizedDescription isEqual:@"No intents here"]);
   [runner perform:@"showRecipe" parameters:@{ @"recipe": @"Pancakes" } timeout:5 completion:Completion(&runnerPerform)];
   [runner donate:@"showRecipe" parameters:@{ @"recipe": @"Pancakes" } completion:Done(&runnerDonate)];
   Drain();
   CHECK(runnerPerform.calls == 1 && [runnerPerform.code isEqual:@"E_UNAVAILABLE"] && runnerDonate.calls == 1 && [runnerDonate.code isEqual:@"E_UNAVAILABLE"]);
 
   // A compiled app.
-  SparkAppIntents *intents = [[SparkAppIntents alloc] initWithDeclarations:declared unavailable:nil donor:FakeGeneratedAppIntents.class simulated:NO];
+  SparkAppIntents *intents = [[SparkAppIntents alloc] initWithDeclarations:declared entities:entities unavailable:nil donor:FakeGeneratedAppIntents.class simulated:NO];
   NSMutableArray<NSDictionary *> *delivered = [NSMutableArray array];
   intents.delivery = ^(NSDictionary *request) { [delivered addObject:request]; };
   CHECK(intents.available && !intents.simulated);
-  CHECK(![intents registerHandler:@"missing" error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_NOT_FOUND"]);
-  CHECK(![intents registerHandler:@"" error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_INVALID_ARGUMENT"]);
+  CHECK(![intents registerHandler:@"missing" kind:SparkAppIntentHandlerIntent error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_NOT_FOUND"]);
+  CHECK(![intents registerHandler:@"" kind:SparkAppIntentHandlerIntent error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_INVALID_ARGUMENT"]);
 
   // Parameters are checked against the declaration before anything is delivered.
   NSArray *invalid = @[@{}, @{ @"recipe": @1 }, @{ @"recipe": @"A", @"servings": @1.5 }, @{ @"recipe": @"A", @"servings": @YES }, @{ @"recipe": @"A", @"extra": @"x" }, @{ @"recipe": NSNull.null }];
@@ -90,58 +107,98 @@ int main() { @autoreleasepool {
   [intents perform:@"showRecipe" parameters:@{ @"recipe": @"Pancakes" } timeout:5 completion:Completion(&held)];
   Drain();
   CHECK(held.calls == 0 && delivered.count == 0);
-  CHECK([intents registerHandler:@"showRecipe" error:&error]);
-  CHECK(![intents registerHandler:@"showRecipe" error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_BUSY"]);
+  CHECK([intents registerHandler:@"showRecipe" kind:SparkAppIntentHandlerIntent error:&error]);
+  CHECK(![intents registerHandler:@"showRecipe" kind:SparkAppIntentHandlerIntent error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_BUSY"]);
   CHECK(delivered.count == 1 && [delivered[0][@"id"] isEqual:@"showRecipe"] && [delivered[0][@"parameters"] isEqual:(@{ @"recipe": @"Pancakes", @"servings": NSNull.null })]);
-  CHECK([intents answer:delivered[0][@"requestId"] text:@"Pancakes for 2" failure:nil error:&error]);
+  CHECK([intents answer:delivered[0][@"requestId"] result:@"Pancakes for 2" failure:nil error:&error]);
   CHECK(held.calls == 1 && [held.text isEqual:@"Pancakes for 2"] && !held.code);
   // It completed exactly once: a second answer finds nothing.
-  CHECK(![intents answer:delivered[0][@"requestId"] text:@"again" failure:nil error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_CLOSED"]);
+  CHECK(![intents answer:delivered[0][@"requestId"] result:@"again" failure:nil error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_CLOSED"]);
   CHECK(held.calls == 1);
 
   // An intent that returns text must get text, and one that returns none must get none.
   Outcome noText = {}, extraText = {}, failed = {};
   [intents perform:@"showRecipe" parameters:@{ @"recipe": @"Gazpacho", @"servings": @4 } timeout:5 completion:Completion(&noText)];
   CHECK(delivered.count == 2 && [delivered[1][@"parameters"][@"servings"] isEqual:@4]);
-  CHECK(![intents answer:delivered[1][@"requestId"] text:nil failure:nil error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_INVALID_ARGUMENT"]);
+  CHECK(![intents answer:delivered[1][@"requestId"] result:nil failure:nil error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_INVALID_ARGUMENT"]);
   CHECK(noText.calls == 1 && [noText.code isEqual:@"E_INVALID_DATA"]);
-  CHECK([intents registerHandler:@"startTimer" error:&error]);
+  CHECK([intents registerHandler:@"startTimer" kind:SparkAppIntentHandlerIntent error:&error]);
   [intents perform:@"startTimer" parameters:@{ @"minutes": @2.5, @"loud": @YES } timeout:5 completion:Completion(&extraText)];
-  CHECK(![intents answer:delivered[2][@"requestId"] text:@"started" failure:nil error:&error] && [extraText.code isEqual:@"E_INVALID_DATA"]);
+  CHECK(![intents answer:delivered[2][@"requestId"] result:@"started" failure:nil error:&error] && [extraText.code isEqual:@"E_INVALID_DATA"]);
   // A handler's failure reaches the system with its code and message.
   [intents perform:@"startTimer" parameters:@{ @"minutes": @90 } timeout:5 completion:Completion(&failed)];
   NSError *tooLong = [NSError errorWithDomain:SparkAppIntentsErrorDomain code:0 userInfo:@{ @"code": @"E_INVALID_ARGUMENT", NSLocalizedDescriptionKey: @"At most 60 minutes" }];
-  CHECK([intents answer:delivered[3][@"requestId"] text:nil failure:tooLong error:&error]);
+  CHECK([intents answer:delivered[3][@"requestId"] result:nil failure:tooLong error:&error]);
   CHECK(failed.calls == 1 && [failed.code isEqual:@"E_INVALID_ARGUMENT"] && [failed.message isEqual:@"At most 60 minutes"]);
   Outcome timer = {};
   [intents perform:@"startTimer" parameters:@{ @"minutes": @1 } timeout:5 completion:Completion(&timer)];
-  CHECK([intents answer:delivered[4][@"requestId"] text:nil failure:nil error:&error] && timer.calls == 1 && !timer.code && !timer.text);
+  CHECK([intents answer:delivered[4][@"requestId"] result:nil failure:nil error:&error] && timer.calls == 1 && !timer.code && !timer.text);
 
   // The timeout bounds an unanswered invocation; a late answer is refused.
   Outcome slow = {};
   [intents perform:@"showRecipe" parameters:@{ @"recipe": @"Shortbread" } timeout:0.1 completion:Completion(&slow)];
   Drain(0.3);
   CHECK(slow.calls == 1 && [slow.code isEqual:@"E_TIMEOUT"]);
-  CHECK(![intents answer:delivered[5][@"requestId"] text:@"late" failure:nil error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_CLOSED"] && slow.calls == 1);
+  CHECK(![intents answer:delivered[5][@"requestId"] result:@"late" failure:nil error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_CLOSED"] && slow.calls == 1);
 
   // Removing a handler fails what it was given and has not answered; later invocations wait for the next handler.
   Outcome orphaned = {}, waiting = {};
   [intents perform:@"showRecipe" parameters:@{ @"recipe": @"Soup" } timeout:5 completion:Completion(&orphaned)];
-  [intents unregisterHandler:@"showRecipe"];
+  [intents unregisterHandler:@"showRecipe" kind:SparkAppIntentHandlerIntent];
   CHECK(orphaned.calls == 1 && [orphaned.code isEqual:@"E_CLOSED"]);
   [intents perform:@"showRecipe" parameters:@{ @"recipe": @"Stew" } timeout:5 completion:Completion(&waiting)];
   NSUInteger before = delivered.count;
-  CHECK([intents registerHandler:@"showRecipe" error:&error] && delivered.count == before + 1);
-  CHECK([intents answer:delivered.lastObject[@"requestId"] text:@"Stew" failure:nil error:&error] && [waiting.text isEqual:@"Stew"]);
+  CHECK([intents registerHandler:@"showRecipe" kind:SparkAppIntentHandlerIntent error:&error] && delivered.count == before + 1);
+  CHECK([intents answer:delivered.lastObject[@"requestId"] result:@"Stew" failure:nil error:&error] && [waiting.text isEqual:@"Stew"]);
 
   // At most 20 invocations wait for a handler.
-  [intents unregisterHandler:@"showRecipe"];
+  [intents unregisterHandler:@"showRecipe" kind:SparkAppIntentHandlerIntent];
   Outcome waits[21] = {};
   for (int i = 0; i < 21; i++) [intents perform:@"showRecipe" parameters:@{ @"recipe": @"R" } timeout:0.2 completion:Completion(&waits[i])];
   Drain(0.05);
   CHECK(waits[19].calls == 0 && waits[20].calls == 1 && [waits[20].code isEqual:@"E_BUSY"]);
   Drain(0.4);
   CHECK(waits[0].calls == 1 && [waits[0].code isEqual:@"E_TIMEOUT"]);
+
+  // Enum parameters take one of their values, a missing parameter with a default gets it, and an entity parameter is an id.
+  CHECK([intents registerHandler:@"pickRecipe" kind:SparkAppIntentHandlerIntent error:&error] && [intents registerHandler:@"openNote" kind:SparkAppIntentHandlerIntent error:&error]);
+  Outcome badCase = {}, picked = {}, badNote = {}, opened = {};
+  [intents perform:@"pickRecipe" parameters:@{ @"recipe": @"lasagna" } timeout:5 completion:Completion(&badCase)];
+  [intents perform:@"openNote" parameters:@{ @"note": @"" } timeout:5 completion:Completion(&badNote)];
+  Drain(0.01);
+  CHECK(badCase.calls == 1 && [badCase.code isEqual:@"E_INVALID_ARGUMENT"] && [badCase.message isEqual:@"pickRecipe needs recipe to be one of pancakes, soup"]);
+  CHECK(badNote.calls == 1 && [badNote.message isEqual:@"openNote needs note to be the id of a Note"]);
+  before = delivered.count;
+  [intents perform:@"pickRecipe" parameters:@{ @"servings": @4 } timeout:5 completion:Completion(&picked)];
+  CHECK(delivered.count == before + 1 && [delivered.lastObject[@"type"] isEqual:@"appIntentInvoked"] && [delivered.lastObject[@"parameters"] isEqual:(@{ @"recipe": @"soup", @"servings": @4 })]);
+  CHECK([intents answer:delivered.lastObject[@"requestId"] result:nil failure:nil error:&error] && picked.calls == 1 && !picked.code);
+  [intents perform:@"openNote" parameters:@{ @"note": @"n1" } timeout:5 completion:Completion(&opened)];
+  CHECK([delivered.lastObject[@"parameters"] isEqual:@{ @"note": @"n1" }]);
+  CHECK([intents answer:delivered.lastObject[@"requestId"] result:@"Opened Groceries" failure:nil error:&error] && [opened.text isEqual:@"Opened Groceries"]);
+
+  // Entity queries are checked, wait for their entity's query handler as invocations do, and complete once with valid entities.
+  Outcome unknownEntity = {}, badQuery = {}, extraField = {}, suggested = {}, malformed = {}, searched = {};
+  CHECK(![intents registerHandler:@"Missing" kind:SparkAppIntentHandlerEntity error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_NOT_FOUND"]);
+  [intents query:@"Missing" query:@{ @"kind": @"suggested" } timeout:5 completion:Completion(&unknownEntity)];
+  [intents query:@"Note" query:@{ @"kind": @"identifiers", @"identifiers": @[@1] } timeout:5 completion:Completion(&badQuery)];
+  [intents query:@"Note" query:@{ @"kind": @"suggested", @"text": @"x" } timeout:5 completion:Completion(&extraField)];
+  Drain(0.01);
+  CHECK([unknownEntity.code isEqual:@"E_NOT_FOUND"] && [badQuery.code isEqual:@"E_INVALID_ARGUMENT"] && [extraField.code isEqual:@"E_INVALID_ARGUMENT"]);
+  before = delivered.count;
+  [intents query:@"Note" query:@{ @"kind": @"suggested" } timeout:5 completion:Completion(&suggested)];
+  Drain(0.01);
+  CHECK(delivered.count == before && suggested.calls == 0);
+  CHECK([intents registerHandler:@"Note" kind:SparkAppIntentHandlerEntity error:&error]);
+  CHECK(![intents registerHandler:@"Note" kind:SparkAppIntentHandlerEntity error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_BUSY"]);
+  CHECK(delivered.count == before + 1 && [delivered.lastObject isEqual:(@{ @"type": @"appEntityQueried", @"requestId": delivered.lastObject[@"requestId"], @"entity": @"Note", @"query": @{ @"kind": @"suggested" } })]);
+  NSArray *notes = @[@{ @"id": @"n1", @"title": @"Groceries" }, @{ @"id": @"n2", @"title": @"Packing", @"subtitle": @"Trip" }];
+  CHECK([intents answer:delivered.lastObject[@"requestId"] result:notes failure:nil error:&error] && suggested.calls == 1 && [suggested.text isEqual:notes]);
+  [intents query:@"Note" query:@{ @"kind": @"search", @"text": @"pack" } timeout:5 completion:Completion(&malformed)];
+  CHECK(![intents answer:delivered.lastObject[@"requestId"] result:@[@{ @"id": @"n1", @"title": @"A" }, @{ @"id": @"n1", @"title": @"B" }] failure:nil error:&error]
+    && [SparkAppIntentsErrorCode(error) isEqual:@"E_INVALID_ARGUMENT"] && malformed.calls == 1 && [malformed.code isEqual:@"E_INVALID_DATA"]);
+  [intents query:@"Note" query:@{ @"kind": @"search", @"text": @"pack" } timeout:5 completion:Completion(&searched)];
+  [intents unregisterHandler:@"Note" kind:SparkAppIntentHandlerEntity];
+  CHECK(searched.calls == 1 && [searched.code isEqual:@"E_CLOSED"]);
 
   // Donations go to the generated class with checked parameters and complete once, on the main thread.
   Outcome donated = {}, badDonation = {}, failedDonation = {};
@@ -157,23 +214,29 @@ int main() { @autoreleasepool {
 
 #if SPARK_TEST_DRIVER
   // The simulation ignores Info.plist and the generated class: the driver declares intents and donations are recorded.
-  CHECK(![intents simulateDeclarations:declared error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_UNAVAILABLE"]);
-  SparkAppIntents *simulated = [[SparkAppIntents alloc] initWithDeclarations:declared unavailable:@"ignored" donor:FakeGeneratedAppIntents.class simulated:YES];
+  CHECK(![intents simulateDeclarations:declared entities:nil error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_UNAVAILABLE"]);
+  SparkAppIntents *simulated = [[SparkAppIntents alloc] initWithDeclarations:declared entities:entities unavailable:@"ignored" donor:FakeGeneratedAppIntents.class simulated:YES];
   NSMutableArray<NSDictionary *> *simulatedDelivered = [NSMutableArray array];
   simulated.delivery = ^(NSDictionary *request) { [simulatedDelivered addObject:request]; };
   CHECK(simulated.available && simulated.declarations.count == 0);
-  CHECK(![simulated registerHandler:@"showRecipe" error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_NOT_FOUND"]);
-  CHECK(![simulated simulateDeclarations:@[@{ @"id": @"x" }] error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_INVALID_DATA"]);
-  CHECK([simulated simulateDeclarations:declared error:&error] && [simulated registerHandler:@"showRecipe" error:&error]);
+  CHECK(![simulated registerHandler:@"showRecipe" kind:SparkAppIntentHandlerIntent error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_NOT_FOUND"]);
+  CHECK(![simulated simulateDeclarations:@[@{ @"id": @"x" }] entities:nil error:&error] && [SparkAppIntentsErrorCode(error) isEqual:@"E_INVALID_DATA"]);
+  CHECK([simulated simulateDeclarations:declared entities:entities error:&error] && [simulated registerHandler:@"showRecipe" kind:SparkAppIntentHandlerIntent error:&error]);
   Outcome simulatedRun = {}, simulatedDonation = {};
   [simulated perform:@"showRecipe" parameters:@{ @"recipe": @"Pancakes" } timeout:5 completion:Completion(&simulatedRun)];
-  [simulated answer:simulatedDelivered[0][@"requestId"] text:@"Pancakes" failure:nil error:&error];
-  [simulated perform:@"startTimer" parameters:@{} timeout:5 completion:^(NSString *, NSError *) {}];
+  [simulated answer:simulatedDelivered[0][@"requestId"] result:@"Pancakes" failure:nil error:&error];
+  [simulated perform:@"startTimer" parameters:@{} timeout:5 completion:^(id, NSError *) {}];
   [simulated donate:@"showRecipe" parameters:@{ @"recipe": @"Gazpacho" } completion:Done(&simulatedDonation)];
   Drain();
   CHECK(simulatedRun.calls == 1 && simulatedDonation.calls == 1 && !simulatedDonation.code && Donated.count == 2);
+  CHECK([simulated registerHandler:@"Note" kind:SparkAppIntentHandlerEntity error:&error]);
+  [simulated query:@"Note" query:@{ @"kind": @"identifiers", @"identifiers": @[@"n2"] } timeout:5 completion:^(id, NSError *) {}];
+  [simulated answer:simulatedDelivered.lastObject[@"requestId"] result:@[notes[1]] failure:nil error:&error];
+  Drain();
   NSDictionary *state = simulated.simulation;
-  CHECK([state[@"declared"] isEqual:(@[@"showRecipe", @"startTimer"])] && [state[@"registered"] isEqual:@[@"showRecipe"]] && [state[@"pending"] isEqual:@0]);
+  CHECK([state[@"declared"] isEqual:(@[@"showRecipe", @"startTimer", @"pickRecipe", @"openNote"])] && [state[@"registered"] isEqual:@[@"showRecipe"]] && [state[@"pending"] isEqual:@0]);
+  CHECK([state[@"entities"] isEqual:@[@"Note"]] && [state[@"registeredEntities"] isEqual:@[@"Note"]]);
+  CHECK([state[@"queries"] isEqual:(@[@{ @"entity": @"Note", @"query": @{ @"kind": @"identifiers", @"identifiers": @[@"n2"] }, @"entities": @[notes[1]] }])]);
   CHECK([state[@"invocations"] count] == 2 && [state[@"invocations"][0] isEqual:(@{ @"id": @"showRecipe", @"parameters": @{ @"recipe": @"Pancakes", @"servings": NSNull.null }, @"text": @"Pancakes" })]);
   CHECK([state[@"invocations"][1][@"error"][@"code"] isEqual:@"E_INVALID_ARGUMENT"]);
   CHECK([state[@"donations"] isEqual:(@[@{ @"id": @"showRecipe", @"parameters": @{ @"recipe": @"Gazpacho", @"servings": NSNull.null } }])]);

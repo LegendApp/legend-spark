@@ -242,18 +242,27 @@ checks:
       - ./app-intents#getAppIntentsAvailability().available
       - ./app-intents#getAppIntents
   SYS-INTENTS-01:
-    title: "addAppIntentHandler rejects SparkError:E_NOT_FOUND for an undeclared intent, registers declared ones, answers an invocation with its text, fails one with the handler's SparkError code, refuses parameters that do not match the declaration before the handler runs, and completes an intent that returns nothing (driver simulation; nothing reaches the system)"
+    title: "addAppIntentHandler rejects SparkError:E_NOT_FOUND for an undeclared intent, registers declared ones, answers an invocation with its text, passes an enum parameter's case value and fills a missing parameter's default, fails one with the handler's SparkError code, refuses parameters that do not match the declaration (an enum value that is not a case) before the handler runs, and completes an intent that returns nothing (driver simulation; nothing reaches the system)"
     platforms: [macos]
     blocking: true
     spec: "#393 SYS.api-app-intents"
     covers:
       - ./app-intents#addAppIntentHandler
   SYS-INTENTSHELD-01:
-    title: "An invocation that arrives before its handler (as when an intent launches the app) waits and reaches the handler once it registers; one nobody handles ends SparkError:E_TIMEOUT (driver simulation)"
+    title: "An invocation or entity query that arrives before its handler (as when an intent launches the app) waits and reaches the handler once it registers; one nobody handles ends SparkError:E_TIMEOUT (driver simulation)"
     platforms: [macos]
     blocking: true
     spec: "#393 SYS.api-app-intents"
     covers:
+      - ./app-intents#addAppIntentHandler
+      - ./app-intents#addAppEntityQueryHandler
+  SYS-INTENTSENTITY-01:
+    title: "addAppEntityQueryHandler answers the entity's suggested, search and identifier queries with the handler's entities (a query for an undeclared entity ends SparkError:E_NOT_FOUND), and an intent with an entity parameter gets the picked entity's id and fails with the handler's error for an unknown one (driver simulation; nothing reaches the system)"
+    platforms: [macos]
+    blocking: true
+    spec: "#416 SYS.api-app-intents-types"
+    covers:
+      - ./app-intents#addAppEntityQueryHandler
       - ./app-intents#addAppIntentHandler
   SYS-INTENTSDONATE-01:
     title: "donateAppIntent rejects SparkError:E_NOT_FOUND for an undeclared intent and donates a declared one with its parameters (driver simulation; nothing is donated to the system)"
@@ -263,7 +272,7 @@ checks:
     covers:
       - ./app-intents#donateAppIntent
   SYS-INTENTSREAL-01:
-    title: "Real system paths in a build that declares the Kitchen Sink's intents: Shortcuts lists them, runs Show Recipe with its parameters and shows the text the handler returned, shows the handler's error for Start Timer, launches the quit app to run one, offers the App Shortcut in Spotlight, and a donation succeeds"
+    title: "Real system paths in a build that declares the Kitchen Sink's intents: Shortcuts lists them, offers the recipe enum's cases in a picker and the summary with its default, runs Show Recipe with its parameters and shows the text the handler returned, shows the handler's error for Start Timer, lists, searches and opens notes through the entity query, launches the quit app to run one, offers the App Shortcut with a phrase per recipe in Spotlight, shows every title in Arabic and French, and a donation succeeds"
     platforms: [macos]
     blocking: true
     spec: "#393 SYS.api-app-intents"
@@ -272,8 +281,9 @@ checks:
       - ./app-intents#getAppIntents
       - ./app-intents#addAppIntentHandler
       - ./app-intents#donateAppIntent
+      - ./app-intents#addAppEntityQueryHandler
   SYS-INTENTSUNSUP-01:
-    title: "On Windows getAppIntentsAvailability reports unsupported-platform and the App Intents calls reject SparkError:E_UNSUPPORTED_PLATFORM"
+    title: "On Windows getAppIntentsAvailability reports unsupported-platform and the App Intents calls, including addAppEntityQueryHandler, reject SparkError:E_UNSUPPORTED_PLATFORM"
     platforms: [windows]
     blocking: true
     spec: "#393 SYS.api-app-intents"
@@ -282,6 +292,7 @@ checks:
       - ./app-intents#getAppIntents
       - ./app-intents#addAppIntentHandler
       - ./app-intents#donateAppIntent
+      - ./app-intents#addAppEntityQueryHandler
   SYS-INTENTSVISUAL-01:
     title: "The App Intents & Shortcuts screen matches its golden in light and dark, English and Arabic"
     platforms: [macos]

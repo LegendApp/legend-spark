@@ -3,22 +3,24 @@ name: An App Intent invocation waits for its handler and times out without one (
 intent: >
   When an intent launches the app, its invocation arrives before JavaScript registers a handler. In driver mode the
   simulation delivers such an invocation before the App Intents & Shortcuts screen opens: it waits, and reaches the
-  screen's Show Recipe handler once the screen registers it. An invocation of an intent nobody handles ends with
-  SparkError:E_TIMEOUT when its time runs out. Nothing reaches the system.
+  screen's Show Recipe handler once the screen registers it; a KsNote entity query waits the same way for the screen's
+  query handler. An invocation of an intent nobody handles ends with SparkError:E_TIMEOUT when its time runs out.
+  Nothing reaches the system.
 checks: [SYS-INTENTSHELD-01]
 tags: [system-integration]
 platforms: [macos]
 ---
 - launchApp: { clearState: true }
 - runFlow: { file: subflows/declare-app-intents.yaml }
-- simulateAppIntents: { invoke: { id: ksShowRecipe, parameters: { recipe: Pancakes } } }
-- assertAppIntents: { pending: 1, invocations: 0 }
+- simulateAppIntents: { invoke: { id: ksShowRecipe, parameters: { recipe: pancakes } }, query: { entity: KsNote, kind: identifiers, identifiers: [packing] } }
+- assertAppIntents: { pending: 2, invocations: 0, queries: 0 }
 - launchApp: { stopApp: false, openUrl: "spark-ks://system-integration/app-intents" }
-- assertText: { id: system-integration-app-intents-event-0, equals: "ksShowRecipe: Pancakes for 1" }
-- assertAppIntents: { pending: 0, invocations: 1, lastInvocation: { id: ksShowRecipe, text: Pancakes for 1 } }
+- assertText: { id: system-integration-app-intents-event-0, equals: "KsNote identifiers: packing" }
+- assertText: { id: system-integration-app-intents-event-1, equals: "ksShowRecipe: Pancakes for 1" }
+- assertAppIntents: { pending: 0, invocations: 1, lastInvocation: { id: ksShowRecipe, text: Pancakes for 1 }, queries: 1, lastQuery: { entity: KsNote, entities: [packing] } }
 - simulateAppIntents:
     intents:
-      - { id: ksShowRecipe, title: Show Kitchen Sink Recipe, returnsText: true, parameters: [{ name: recipe, title: Recipe, type: string, optional: false }, { name: servings, title: Servings, type: integer, optional: true }] }
+      - { id: ksShowRecipe, title: Show Kitchen Sink Recipe, returnsText: true, parameters: [{ name: recipe, title: Recipe, type: enum, values: [pancakes, gazpacho, soup], optional: false }, { name: servings, title: Servings, type: integer, optional: false, default: 1 }] }
       - { id: ksUnhandled, title: Unhandled, returnsText: false, parameters: [] }
     invoke: { id: ksUnhandled, timeoutMs: 500 }
 - assertAppIntents: { pending: 1 }

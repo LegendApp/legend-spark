@@ -29,6 +29,8 @@
 - assertSimulatedSpeech: { utterances: 1, lastText: Hello, lastRate: 1, listening: false }
 - simulateAppIntents: { intents: [{ id: show, title: Show, returnsText: true, parameters: [{ name: n, title: N, type: integer, optional: true }] }], invoke: { id: show, parameters: { n: 2 }, timeoutMs: 1000 } }   # driver; nothing reaches the system
 - assertAppIntents: { registered: [show], invocations: 1, pending: 0, lastInvocation: { id: show, parameters: { n: 2 }, text: Two, error: null }, donations: 1, lastDonation: { id: show, parameters: { n: 1 } } }
+- simulateAppIntents: { entities: [{ id: Note, title: Note }], query: { entity: Note, kind: identifiers, identifiers: [n1], timeoutMs: 1000 } }   # driver; nothing reaches the system
+- assertAppIntents: { registeredEntities: [Note], queries: 1, lastQuery: { entity: Note, kind: identifiers, entities: [n1], error: null } }
 - simulateCapture: { cameras: true, microphones: false }   # driver; no device, ScreenCaptureKit or TCC
 - assertSimulatedCapture: { cameraRunning: true, photos: 1, minFrames: 10 }
 - setFocusMode: doNotDisturb
