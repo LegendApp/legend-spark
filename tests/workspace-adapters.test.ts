@@ -81,11 +81,13 @@ test("Windows platform discovery skips its CLI off Windows and preserves it on W
     writeFileSync(path.join(f.root, "package.json"), JSON.stringify(manifest));
     writeFileSync(path.join(directory, "package.json"), JSON.stringify({ name: "react-native-windows", version: "0.81.35" }));
     const file = path.join(directory, "react-native.config.js");
-    const upstream = readFileSync("node_modules/react-native-windows/react-native.config.js", "utf8");
+    const installedConfig = readFileSync("node_modules/react-native-windows/react-native.config.js", "utf8");
+    const upstream = installedConfig.slice(installedConfig.indexOf("const cli ="));
     writeFileSync(file, upstream);
     linkSync(file, path.join(f.root, "cached-windows-config.js"));
     installWorkspaceAdapters(f.root);
     const adapted = readFileSync(file, "utf8");
+    expect(adapted).not.toBe(upstream);
     installWorkspaceAdapters(f.root);
     expect(readFileSync(file, "utf8")).toBe(adapted);
     expect(readFileSync(path.join(f.root, "cached-windows-config.js"), "utf8")).toBe(upstream);

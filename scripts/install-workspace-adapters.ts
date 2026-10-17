@@ -16,9 +16,8 @@ export function installWorkspaceAdapters(root: string) {
   const installed = new Map(installedPackages(root).map(pkg => [pkg.name, pkg]));
   const pins = JSON.parse(readFileSync(path.join(root, "patches/workspace/upstream.json"), "utf8"));
   // RNW eagerly probes PowerShell when Metro scans its platform configuration.
-  const windows = installed.get("react-native-windows");
-  if (windows) {
-    const file = path.join(windows.root, "react-native.config.js");
+  const file = path.join(root, "node_modules/react-native-windows/react-native.config.js");
+  if (existsSync(file)) {
     const source = readFileSync(file, "utf8");
     const guard = 'if (process.platform !== "win32") { module.exports = {}; return; }\n';
     if (!source.startsWith(guard)) {
