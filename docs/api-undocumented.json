@@ -1,15 +1,5 @@
 {
-  "pageless": [
-    "./contracts",
-    "./ui/classnames",
-    "./ui/popover",
-    "./ui/search",
-    "./ui/sidebar",
-    "./ui/swipe",
-    "./ui/symbol",
-    "./ui/tab-view",
-    "./webview"
-  ],
+  "pageless": [],
   "undocumented": {
     "./ai": [
       "AIAvailabilityOptions",
