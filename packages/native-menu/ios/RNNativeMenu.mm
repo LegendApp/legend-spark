@@ -86,12 +86,14 @@ static NSMenuItem *KeyHolder(NSMenu *menu, NSString *identity, NSMenuItem *excep
 @property BOOL observing;
 @property NSHashTable<NSMenuItem *> *configured;
 @property NSHashTable<NSMenuItem *> *created;
+/** Each published item as [owner token, item ID, native item], so titles can be read once every owner is installed. */
+@property NSMutableArray<NSArray *> *installed;
 - (void)restore;
 @end
 @implementation RNNativeMenu
 RCT_EXPORT_MODULE(NativeMenu)
 + (BOOL)requiresMainQueueSetup { return YES; }
-- (instancetype)init { if (self = [super init]) { _undo = [NSMutableArray new]; _published = @[]; _configured = [NSHashTable weakObjectsHashTable]; _created = [NSHashTable weakObjectsHashTable]; } return self; }
+- (instancetype)init { if (self = [super init]) { _undo = [NSMutableArray new]; _published = @[]; _configured = [NSHashTable weakObjectsHashTable]; _created = [NSHashTable weakObjectsHashTable]; _installed = [NSMutableArray new]; } return self; }
 #if RCT_DEV
 - (NSArray<NSString *> *)supportedEvents { return @[@"NativeMenuAction", @"NativeMenuLifecycle", @"NativeDeveloperMenu"]; }
 #else
@@ -100,7 +102,7 @@ RCT_EXPORT_MODULE(NativeMenu)
 - (void)startObserving { self.observing = YES; }
 - (void)stopObserving { self.observing = NO; }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params { return std::make_shared<facebook::react::NativeMenuSpecJSI>(params); }
-- (void)restore { for (void (^undo)(void) in self.undo.reverseObjectEnumerator) undo(); [self.undo removeAllObjects]; [self.configured removeAllObjects]; [self.created removeAllObjects]; }
+- (void)restore { for (void (^undo)(void) in self.undo.reverseObjectEnumerator) undo(); [self.undo removeAllObjects]; [self.configured removeAllObjects]; [self.created removeAllObjects]; [self.installed removeAllObjects]; }
 - (void)identifyNativeMenus {
   NSMenu *main = NSApp.mainMenu;
   for (NSMenuItem *item in main.itemArray) {
@@ -210,6 +212,7 @@ RCT_EXPORT_MODULE(NativeMenu)
       [self.created addObject:item];
     }
     [self.configured addObject:item];
+    [self.installed addObject:@[config[@"_sparkOwner"] ?: @"", config[@"id"] ?: @"", item]];
     if (config[@"items"]) {
       if (existing && !item.submenu) Fail(@"E_INVALID_ARGUMENT", @"Submenu target is not a submenu");
       if (!item.submenu) item.submenu = [[NSMenu alloc] initWithTitle:item.title];
@@ -255,16 +258,26 @@ RCT_EXPORT_MODULE(NativeMenu)
     }
   }
 }
+// The title each published item shows, by owner token and item ID: a located native root keeps its system-localized
+// title and a role item without a label has its standard one, so JavaScript can name items as the menu bar does.
+- (NSString *)titles {
+  NSMutableDictionary<NSString *, NSMutableDictionary *> *titles = [NSMutableDictionary new];
+  for (NSArray *entry in self.installed) {
+    NSMutableDictionary *owner = titles[entry[0]] ?: (titles[entry[0]] = [NSMutableDictionary new]);
+    owner[entry[1]] = ((NSMenuItem *)entry[2]).title;
+  }
+  return [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:titles options:0 error:nil] encoding:NSUTF8StringEncoding];
+}
 - (void)publish:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   RCTExecuteOnMainQueue(^{
     NSError *error = nil; id value = [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:&error];
     if (![value isKindOfClass:NSArray.class]) { reject(@"E_INVALID_ARGUMENT", @"Expected menu array", error); return; }
     if (!NSApp.mainMenu) { reject(@"E_UNAVAILABLE", @"Native application menu is unavailable", nil); return; }
-    if ([value isEqual:self.published]) { resolve(nil); return; }
+    if ([value isEqual:self.published]) { resolve([self titles]); return; }
     [self identifyNativeMenus];
     NSArray *previous = self.published;
     [self restore];
-    @try { [self install:value into:NSApp.mainMenu root:YES]; self.published = value; resolve(nil); }
+    @try { [self install:value into:NSApp.mainMenu root:YES]; self.published = value; resolve([self titles]); }
     @catch (NSException *failure) {
       [self restore];
       @try { [self install:previous into:NSApp.mainMenu root:YES]; }

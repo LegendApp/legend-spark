@@ -1,7 +1,11 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import type { MenuFeature, MenuItem, MenuOptions, MenuRootItem } from "../packages/native-menu/src/api";
 const state = vi.hoisted(() => ({ platform: { OS: "macos" }, installed: true, publish: vi.fn(), listeners: new Map<string, Set<(event: unknown) => void>>() }));
-vi.mock("../packages/native-menu/src/NativeMenu", () => ({ get default() { return state.installed ? { publish: state.publish } : undefined; } }));
+vi.mock("../packages/native-menu/src/NativeMenu", async () => {
+  const { reportingTitles } = await import("./native-menu-double");
+  const publish = reportingTitles(json => state.publish(json), () => state.platform.OS === "macos");
+  return { get default() { return state.installed ? { publish } : undefined; } };
+});
 vi.mock("react-native", () => ({ Platform: state.platform, NativeEventEmitter: class {
   addListener(name: string, listener: (event: unknown) => void) {
     if (!state.listeners.has(name)) state.listeners.set(name, new Set());
@@ -28,6 +32,32 @@ test("macOS snapshots alternates, mixed state, hidden items and SF Symbols witho
   expect(wire()[0].items[0]).toMatchObject({ checked: true });
   expect(wire()[0].items[0]).not.toHaveProperty("mixed");
   await menu.remove();
+});
+
+test("menu shortcuts are named by the titles the menu bar shows: a located native root keeps its localized title", async () => {
+  const { shownMenuTitles } = await import("./native-menu-double");
+  const { createMenu } = await api();
+  const { getShortcutInventory } = await import("@legendapp/spark-desktop-app/src/contracts/shortcut-inventory");
+  state.publish.mockImplementation(async (json: string) => shownMenuTitles(json, { "window-root": "نافذة" }));
+  const menu = await createMenu({ id: "located", items: [
+    { type: "submenu", id: "window-root", label: "Window", target: { menu: "window" }, items: [{ type: "submenu", id: "arrange", label: "ترتيب", items: [{ type: "action", id: "tile", label: "تجانب", shortcut: "Ctrl+Cmd+T" }] }] },
+  ] });
+  expect(getShortcutInventory()).toEqual([{ accelerator: { key: "t", modifiers: (1 << 18) | (1 << 20) }, owner: { source: "menu", menuId: "located", itemId: "tile", path: ["نافذة", "ترتيب", "تجانب"] } }]);
+  state.publish.mockResolvedValueOnce(JSON.stringify({}));
+  await expect(menu.update({ items: [{ type: "submenu", id: "window-root", label: "Window", target: { menu: "window" }, items: [] }] })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  state.publish.mockReset().mockResolvedValue(undefined);
+  await menu.remove();
+  expect(getShortcutInventory()).toEqual([]);
+});
+
+test("Windows names menu shortcuts by the composed titles, after a later owner retitles a shared root", async () => {
+  state.platform.OS = "windows";
+  const { createMenu } = await api();
+  const { getShortcutInventory } = await import("@legendapp/spark-desktop-app/src/contracts/shortcut-inventory");
+  const base = await createMenu({ id: "base", items: [{ type: "submenu", id: "tools", label: "Tools", items: [{ type: "action", id: "run", label: "Run", shortcut: "Ctrl+R" }] }] });
+  const retitle = await createMenu({ id: "retitle", items: [{ type: "submenu", id: "tools", label: "Utilities", items: [] }] });
+  expect(getShortcutInventory().map(entry => entry.owner)).toEqual([{ source: "menu", menuId: "base", itemId: "run", path: ["Utilities", "Run"] }]);
+  await retitle.remove(); await base.remove();
 });
 
 test("Help search registers a semantic root independently of its translated label", async () => {

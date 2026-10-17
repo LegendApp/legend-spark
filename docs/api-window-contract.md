@@ -861,7 +861,7 @@ connected now (#191).
 
 ```ts
 const workspaces = await createWindowWorkspaces(windows, {
-  menu: { requestName: () => promptForName(), saveShortcut: 'CmdOrCtrl+Alt+S', restoreShortcuts: ['Ctrl+CmdOrCtrl+1', 'Ctrl+CmdOrCtrl+2'] },
+  menu: { requestName: () => promptForName(), saveShortcut: 'Ctrl+Shift+CmdOrCtrl+S', restoreShortcuts: ['Ctrl+CmdOrCtrl+1', 'Ctrl+CmdOrCtrl+2'] },
 });
 await workspaces.save('Writing');            // the open windows and the connected displays
 const result = await workspaces.restore('Writing');
@@ -920,7 +920,8 @@ await workspaces.setMenuLabels({ workspaces: 'مساحات العمل', save: '�
   one. Needs `@legendapp/spark-native-menu`
   (`E_MODULE_UNAVAILABLE` without it). `remove()` withdraws the menu; later calls reject `E_CLOSED`.
   Pick shortcuts the app's menus do not use: in the Kitchen Sink an item with ⌃⌘S (the standard Show Sidebar
-  shortcut) had no key equivalent in the driver's menu snapshot, while ⌥⌘S and ⌃⌘1–9 did (#446).
+  shortcut) had no key equivalent in the driver's menu snapshot, while ⌥⌘S and ⌃⌘1–9 did (#446). It saves with
+  ⌃⇧⌘S because its Shortcut map binds Toggle sidebar to ⌥⌘S (#477).
 - **Spaces, Stage Manager.** macOS has no public API to read or set which Space a window is on, to place a
   window on another Space, or to read or change Stage Manager's state or sets; Spark does not use private
   window-server API for them. What is possible: windows restore on the active Space, Stage Manager arranges

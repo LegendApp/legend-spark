@@ -46,7 +46,7 @@ export function availability() {
 // Created once for the app: Save Workspace… saves under the name typed on this screen. The menu follows the app's language.
 const menuLabels = () => WORKSPACES_MESSAGES[getAppState().locale ?? "en"].menu;
 const workspaces: Promise<WindowWorkspaces> = createWindowWorkspaces(navigator, {
-  menu: { labels: menuLabels(), requestName: () => state.name.trim() || null, saveShortcut: "CmdOrCtrl+Alt+S", restoreShortcuts: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(digit => `Ctrl+CmdOrCtrl+${digit}`) },
+  menu: { labels: menuLabels(), requestName: () => state.name.trim() || null, saveShortcut: "Ctrl+Shift+CmdOrCtrl+S", restoreShortcuts: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(digit => `Ctrl+CmdOrCtrl+${digit}`) },
   onError: report,
 });
 workspaces.then(controller => {

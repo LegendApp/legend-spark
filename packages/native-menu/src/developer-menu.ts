@@ -68,7 +68,7 @@ const lenient = { allowUnmodifiedCharacter: true, allowExtendedKeys: true };
 const keyOf = (accelerator: string) => formatAccelerator(parseAccelerator(accelerator, "macos", lenient));
 function owner(entry: ShortcutInventoryEntry): Pick<DeveloperMenuShortcutConflict, "with" | "description"> {
   const { owner } = entry;
-  if (owner.source === "menu") return { with: "menu", description: `menu ${owner.menuId}, item ${owner.itemId}` };
+  if (owner.source === "menu") return { with: "menu", description: `menu item ${owner.path.join(" › ")}` };
   if (owner.source === "shortcut") return { with: "shortcut", description: owner.windowId ? `a shortcut registered for window ${owner.windowId}` : "an application shortcut" };
   return { with: "global-shortcut", description: "a global shortcut" };
 }

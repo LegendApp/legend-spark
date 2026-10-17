@@ -139,7 +139,7 @@ describe("validation and conflicts", () => {
     setShortcutInventory(tokens[0], [{ accelerator: parseAccelerator("Cmd+N", "macos"), owner: { source: "shortcut" } }]);
     setShortcutInventory(tokens[1], [{ accelerator: parseAccelerator("Cmd+F", "macos"), owner: { source: "shortcut", windowId: "editor" } }]);
     setShortcutInventory(tokens[2], [{ accelerator: parseAccelerator("Cmd+B", "macos"), owner: { source: "global-shortcut" } }]);
-    setShortcutInventory(tokens[3], [{ accelerator: parseAccelerator("Cmd+Shift+F17", "macos"), owner: { source: "menu", menuId: "app", itemId: "capture-item" } }]);
+    setShortcutInventory(tokens[3], [{ accelerator: parseAccelerator("Cmd+Shift+F17", "macos"), owner: { source: "menu", menuId: "app", itemId: "capture-item", path: ["Capture", "Capture Item"] } }]);
     try {
       await map.rebind("bold", ["CmdOrCtrl+B", "CmdOrCtrl+F"]);
       expect(map.getSnapshot().conflicts.map(({ commandId, binding, with: other }) => [commandId, binding, other])).toEqual([
@@ -149,7 +149,7 @@ describe("validation and conflicts", () => {
         ["bold", "CmdOrCtrl+B", { source: "global-shortcut", scope: "global" }],
         ["bold", "CmdOrCtrl+F", { source: "command", scope: "window", commandId: "find" }],
         ["bold", "CmdOrCtrl+F", { source: "shortcut", scope: "window", windowId: "editor" }],
-        ["capture", "CmdOrCtrl+Shift+F17", { source: "menu", scope: "menu", menuId: "app", itemId: "capture-item" }],
+        ["capture", "CmdOrCtrl+Shift+F17", { source: "menu", scope: "menu", menuId: "app", itemId: "capture-item", path: ["Capture", "Capture Item"] }],
       ]);
       expect(map.validate("new-note", "Cmd+F").conflicts.map(conflict => conflict.with.source)).toEqual(["command", "command", "shortcut"]);
     } finally { for (const token of tokens) setShortcutInventory(token, []); }
@@ -180,14 +180,14 @@ describe("attached menus", () => {
     const map = await createShortcutMap({ commands, store: memoryStore().store });
     const listener = vi.fn(); map.addListener(listener);
     const token = {}, menu = { id: "app", update: vi.fn(async ({ items }: { items: any[] }) => {
-      setShortcutInventory(token, items[0].items.map((item: any) => ({ accelerator: parseAccelerator(item.shortcut, "macos"), owner: { source: "menu", menuId: "app", itemId: item.id } })));
+      setShortcutInventory(token, items[0].items.map((item: any) => ({ accelerator: parseAccelerator(item.shortcut, "macos"), owner: { source: "menu", menuId: "app", itemId: item.id, path: ["File", item.id] } })));
     }) };
     await menu.update({ items: [{ items: [{ id: "new-note", shortcut: "CmdOrCtrl+N" }, { id: "print", shortcut: "CmdOrCtrl+F" }] }] });
     expect(map.getSnapshot().conflicts.map(conflict => [conflict.commandId, conflict.with.source])).toEqual([["new-note", "menu"], ["find", "menu"]]);
     expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({ reason: "external" }));
     const attachment = await map.attachMenu(menu as never, shortcut => ({ items: [{ type: "submenu", id: "file", label: "File", items: [{ id: "new-note", shortcut: shortcut("new-note") }, { id: "print", shortcut: "CmdOrCtrl+F" }] }] as never }));
     // Only the unrelated Print item still conflicts, and subscribers hear about the change.
-    expect(map.getSnapshot().conflicts.map(conflict => [conflict.commandId, conflict.with])).toEqual([["find", { source: "menu", scope: "menu", menuId: "app", itemId: "print" }]]);
+    expect(map.getSnapshot().conflicts.map(conflict => [conflict.commandId, conflict.with])).toEqual([["find", { source: "menu", scope: "menu", menuId: "app", itemId: "print", path: ["File", "print"] }]]);
     expect(listener.mock.lastCall![0].snapshot).toBe(map.getSnapshot());
     await attachment.remove();
     expect(map.getSnapshot().conflicts).toHaveLength(2);

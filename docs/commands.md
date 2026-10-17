@@ -175,7 +175,7 @@ A conflict is `{ commandId, scope, binding, with }`. `with` names the other part
 another command (`source: 'command'` with its scope and ID), a `registerShortcut` registration
 (`source: 'shortcut'`, scope `application` or `window` with its window ID), a
 `registerGlobalShortcut` registration (`source: 'global-shortcut'`), an application menu item
-(`source: 'menu'` with menu and item IDs) or a system warning (`source: 'system'`). The map's
+(`source: 'menu'` with menu and item IDs, and `path`: the titles from the menu bar to the item as the menu shows them, a located native root's in the system's language) or a system warning (`source: 'system'`). The map's
 own global hotkeys and attached menu items are not reported. Conflicts are reported, never
 resolved by overwriting a binding.
 

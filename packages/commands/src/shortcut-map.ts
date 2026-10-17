@@ -23,7 +23,8 @@ export type ShortcutConflictParty =
   | { source: "shortcut"; scope: "application" }
   | { source: "shortcut"; scope: "window"; windowId: string }
   | { source: "global-shortcut"; scope: "global" }
-  | { source: "menu"; scope: "menu"; menuId: string; itemId: string }
+  /** `menuId` and `itemId` identify the item; `path` names it as the menu shows it, from the menu bar title to the item's. */
+  | { source: "menu"; scope: "menu"; menuId: string; itemId: string; path: readonly string[] }
   | { source: "system"; scope: "system"; reserved: ReservedShortcut };
 /** One binding of `commandId` that collides `with` another party. */
 export interface ShortcutConflict<Id extends string = string> { commandId: Id; scope: ShortcutMapScope; binding: string; with: ShortcutConflictParty }
@@ -166,7 +167,7 @@ export async function createShortcutMap<Id extends string>(options: ShortcutMapO
   });
 
   const party = ({ owner }: ShortcutInventoryEntry): ShortcutConflictParty =>
-    owner.source === "menu" ? { source: "menu", scope: "menu", menuId: owner.menuId, itemId: owner.itemId }
+    owner.source === "menu" ? { source: "menu", scope: "menu", menuId: owner.menuId, itemId: owner.itemId, path: owner.path }
     : owner.source === "global-shortcut" ? { source: "global-shortcut", scope: "global" }
     : owner.windowId ? { source: "shortcut", scope: "window", windowId: owner.windowId } : { source: "shortcut", scope: "application" };
   /** Conflicts for `bindings` of `id` against other commands, live registrations outside this map, and OS warnings. */
