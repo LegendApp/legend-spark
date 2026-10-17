@@ -1,5 +1,6 @@
 node_modules/
-.spark/
+.spark/*
+!.spark/version
 .expo/
 .threaded-runtime/
 macos/

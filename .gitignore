@@ -1,6 +1,7 @@
 node_modules/
 .DS_Store
 .spark/
+!examples/kitchen-sink/.spark/
 artifacts/
 dist/
 docs/evidence/
