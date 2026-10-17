@@ -1,13 +1,23 @@
 import type { ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
+import { AppleSignInButton, type AppleSignInButtonStyle, type AppleSignInButtonType } from "@legendapp/spark/apple-authentication";
 import { Button } from "@legendapp/spark/ui/uniwind";
-import { RELYING_PARTY, useSignInDemo } from "./sign-in-demo";
+import { RELYING_PARTY, SIGN_IN_OPTIONS, appleButtonDraws, useSignInDemo } from "./sign-in-demo";
 import { useSignInMessages } from "./sign-in-messages";
 
-// Test IDs: authentication-sign-in-availability-apple and -passkeys (Refresh: -availability-refresh); -apple-sign-in,
-// -apple-state-check and -apple-cancel with results in -apple-result and -apple-state; -passkey-create, -passkey-get and
+// Test IDs: authentication-sign-in-availability-apple and -passkeys (Refresh: -availability-refresh); -apple-sign-in
+// (Apple's button on macOS, the app handling the press; a plain button on Windows), the variants -apple-button-continue,
+// -apple-button-sign-up and -apple-button-outline (the button runs the request), -apple-state-check and -apple-cancel,
+// with results in -apple-result and -apple-state; -passkey-create, -passkey-get and
 // -passkey-cancel with results in -passkey-create-result and -passkey-get-result.
 const ID = "authentication-sign-in";
+const BUTTON_SIZE = { width: 220, height: 32 };
+/** Apple's other titles and styles; each press runs signInWithApple through the button. */
+const VARIANTS: { id: string; buttonType: AppleSignInButtonType; buttonStyle: AppleSignInButtonStyle; cornerRadius?: number }[] = [
+  { id: "continue", buttonType: "continue", buttonStyle: "black" },
+  { id: "sign-up", buttonType: "signUp", buttonStyle: "white" },
+  { id: "outline", buttonType: "signIn", buttonStyle: "whiteOutline", cornerRadius: 16 },
+];
 
 function Section({ title, id, children }: { title: string; id: string; children: ReactNode }) {
   return <View className="gap-2">
@@ -22,7 +32,7 @@ function Result({ id, value }: { id: string; value: string }) {
 /** Sign in with Apple and passkeys (@legendapp/spark/apple-authentication and /passkeys). */
 export function SignIn() {
   const t = useSignInMessages();
-  const { availability, results, user, refresh, signIn, checkState, create, assert, cancel } = useSignInDemo();
+  const { availability, results, user, refresh, signIn, onSignIn, onSignInError, checkState, create, assert, cancel } = useSignInDemo();
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-6" testID={`${ID}-content`}>
     <Text className="text-lg font-bold text-foreground" accessibilityRole="header">{t.title}</Text>
     <Text className="text-sm text-muted">{t.intro}</Text>
@@ -38,8 +48,12 @@ export function SignIn() {
       </View>
     </Section>
     <Section title={t.apple} id="apple">
+      {appleButtonDraws() ? <View className="flex-row flex-wrap gap-2">
+        <AppleSignInButton testID={`${ID}-apple-sign-in`} style={BUTTON_SIZE} onPress={({ windowId }) => void signIn(windowId)} />
+        {VARIANTS.map(({ id, ...variant }) => <AppleSignInButton key={id} testID={`${ID}-apple-button-${id}`} style={BUTTON_SIZE} {...variant}
+          signInOptions={SIGN_IN_OPTIONS} onSignIn={onSignIn} onError={onSignInError} />)}
+      </View> : <Button className="w-36" testID={`${ID}-apple-sign-in`} onPress={() => void signIn()}>{t.signIn}</Button>}
       <View className="flex-row flex-wrap gap-2">
-        <Button className="w-36" testID={`${ID}-apple-sign-in`} onPress={() => void signIn()}>{t.signIn}</Button>
         <Button className="w-36" testID={`${ID}-apple-state-check`} disabled={!user} onPress={() => void checkState()}>{t.credentialState}</Button>
         <Button className="w-36" testID={`${ID}-apple-cancel`} onPress={cancel}>{t.cancel}</Button>
       </View>

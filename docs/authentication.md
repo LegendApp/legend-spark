@@ -90,6 +90,35 @@ Use a new raw nonce for every sign-in and reject one the server has seen before.
 `notFound` or `transferred`. Check it at launch and sign out when it is not `authorized`. It shows nothing, so it never
 resolves a cancel: an AuthenticationServices cancel there is `E_NATIVE`.
 
+### The Sign in with Apple button
+
+Apple requires apps that offer Sign in with Apple to use its button. `AppleSignInButton` is AuthenticationServices'
+`ASAuthorizationAppleIDButton`: Apple draws the logo and the title in the app's language (right to left where that
+language is), and the accessibility label.
+
+```tsx
+import { AppleSignInButton, getAppleAuthenticationAvailability, signInWithApple } from '@legendapp/spark/apple-authentication';
+
+// The button runs signInWithApple(signInOptions) over its own window and reports the outcome:
+<AppleSignInButton signInOptions={{ scopes: ['email'], nonce }} onSignIn={result => ...} onError={error => ...} />
+// Or the app runs the request, with its own signal:
+<AppleSignInButton buttonType="continue" onPress={({ windowId }) => signInWithApple({ windowId, nonce, signal })} />
+```
+
+| Prop | |
+| --- | --- |
+| `buttonType` | `signIn` (default), `continue` or `signUp`: Sign in with Apple, Continue with Apple, Sign up with Apple. |
+| `buttonStyle` | `automatic` (default): black on a light appearance, white on a dark one, following the window as it changes. `black`, `white`, or `whiteOutline` for white backgrounds. |
+| `cornerRadius` | Points, 0 or more. Default: the system's. |
+| `onPress` | The app handles the press; `windowId` is the button's window (undefined in a window Spark did not make). |
+| `signInOptions`, `onSignIn`, `onError` | Without `onPress`: each press calls `signInWithApple({ windowId: <the button's window>, ...signInOptions })`; the result goes to `onSignIn`, a rejection (an `AuthorizationError`, or `E_BUSY`, `E_INVALID_ARGUMENT`) to `onError`. |
+
+Give it `onPress`, or `onSignIn` and `onError`; anything else, or an unknown type or style, throws `E_INVALID_ARGUMENT`
+while rendering. Size it with `style`; it is at least Apple's minimum, 140 × 30 points. It shows whatever the build's
+entitlements, and a press without them rejects `missingEntitlement`, so decide with
+`getAppleAuthenticationAvailability()` whether to show it. macOS only: rendering it on Windows throws
+`E_UNSUPPORTED_PLATFORM` (#423). In driver mode a press reaches the simulated request like any other.
+
 ## Passkeys
 
 Binary values (challenge, user ID, credential IDs and responses) are unpadded base64url strings, as in WebAuthn's JSON

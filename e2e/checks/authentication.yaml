@@ -22,6 +22,14 @@ checks:
     spec: "#146 AUTH.api"
     covers:
       - ./apple-authentication#signInWithApple
+      - ./apple-authentication#AppleSignInButton
+  AUTH-SIWABUTTON-01:
+    title: "AppleSignInButton draws Apple's ASAuthorizationAppleIDButton in each type and style; a press without onPress runs signInWithApple over the button's window and reports the credential, the person's cancel or a typed AuthorizationError (missingEntitlement before any request) through onSignIn and onError (driver simulation; no sheet, no Apple servers)"
+    platforms: [macos]
+    blocking: true
+    spec: "#426 AUTH.button"
+    covers:
+      - ./apple-authentication#AppleSignInButton
   AUTH-SIWASTATE-01:
     title: "getAppleIDCredentialState reports authorized for the signed-in user and revoked, notFound or transferred as Apple answers (driver simulation; no Apple servers)"
     platforms: [macos]
@@ -68,9 +76,10 @@ checks:
       - ./apple-authentication#signInWithApple
       - ./passkeys#createPasskey
   AUTH-VISUAL-01:
-    title: "The Sign in with Apple and passkeys screen matches its golden in light and dark, English and Arabic"
+    title: "The Sign in with Apple and passkeys screen, with Apple's button in each type and style (the automatic style black in light and white in dark, the title in the app's language), matches its golden in light and dark, English and Arabic"
     platforms: [macos]
     blocking: true
-    spec: "#146 AUTH.api"
+    spec: "#146 AUTH.api; #426 AUTH.button"
     covers:
+      - ./apple-authentication#AppleSignInButton
       - ./apple-authentication#getAppleAuthenticationAvailability().available

@@ -1,8 +1,9 @@
 appId: so.legend.spark.examples.kitchensink
 name: Sign in with Apple resolves the credential or the person's cancel; the credential state follows Apple's answer (simulated)
 intent: >
-  With the Sign in with Apple entitlement simulated, Sign in without a simulated answer rejects SparkError:E_UNAVAILABLE
-  and nothing is shown. With answer success it is presented over the main window (spark.main) and resolves the made-up
+  With the Sign in with Apple entitlement simulated, Apple's Sign in with Apple button (AppleSignInButton, the screen
+  handling onPress with the button's window) without a simulated answer rejects SparkError:E_UNAVAILABLE and nothing
+  is shown. With answer success it is presented over the button's window, the main window (spark.main), and resolves the made-up
   credential: the user, the email and name the fullName and email scopes asked for, and the state echoed. Credential
   state then reports authorized, and revoked when Apple says so. With answer cancel, Sign in resolves cancel. Driver
   simulation only: no sheet appears and Apple's servers are never reached.
