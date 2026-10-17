@@ -11,6 +11,7 @@ const module = {
   availability: (args: string) => { availabilityCalls.push(JSON.parse(args)); return availabilityAnswer; },
 };
 vi.doMock("react-native", () => ({ Platform: platform, TurboModuleRegistry: { get: () => module } }));
+vi.doMock("react-native/Libraries/Utilities/codegenNativeComponent", () => ({ default: (name: string) => name }));
 const apple = await import("../packages/authentication/src/apple.ts");
 const passkeys = await import("../packages/authentication/src/passkeys.ts");
 const { SparkError } = await import("../packages/desktop-app/src/contracts/index.ts");
@@ -145,4 +146,46 @@ test("aborting cancels the pending request; an aborted signal never reaches nati
   expect(calls.map(entry => entry.method)).toEqual(["perform", "cancel"]);
   expect(calls[1]!.args).toEqual({ id: calls[0]!.args.id });
   module.call = original;
+});
+
+type ButtonElement = { type: string; props: Record<string, any> };
+const press = (element: ButtonElement, windowId = "main") => element.props.onButtonPress({ nativeEvent: { windowId } });
+
+test("AppleSignInButton validates its props and renders Apple's button", () => {
+  const onPress = vi.fn();
+  const element = apple.AppleSignInButton({ onPress, testID: "b", style: { width: 200 } }) as unknown as ButtonElement;
+  expect(element.type).toBe("DesktopAppleSignInButton");
+  expect(element.props).toMatchObject({ testID: "b", buttonType: "signIn", buttonStyle: "automatic", cornerRadius: -1, style: [{ minWidth: 140, minHeight: 30 }, { width: 200 }] });
+  expect((apple.AppleSignInButton({ onPress, buttonType: "signUp", buttonStyle: "whiteOutline", cornerRadius: 0 }) as unknown as ButtonElement).props)
+    .toMatchObject({ buttonType: "signUp", buttonStyle: "whiteOutline", cornerRadius: 0 });
+  press(element);
+  press(element, "");
+  expect(onPress.mock.calls).toEqual([[{ windowId: "main" }], [{ windowId: undefined }]]);
+  const onSignIn = vi.fn(), onError = vi.fn();
+  for (const props of [{ onPress, buttonType: "logIn" }, { onPress, buttonStyle: "blue" }, { onPress, cornerRadius: -1 }, { onPress, cornerRadius: Number.NaN }, {},
+    { onSignIn }, { onError }, { onPress, onSignIn, onError }, { onPress, signInOptions: {} }, { onSignIn: "no", onError }])
+    expect(() => apple.AppleSignInButton(props as never), JSON.stringify(props)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  platform.OS = "windows";
+  expect(() => apple.AppleSignInButton({ onPress })).toThrow(expect.objectContaining({ code: "E_UNSUPPORTED_PLATFORM" }));
+  expect(calls).toEqual([]);
+});
+
+test("AppleSignInButton without onPress runs signInWithApple over its window and reports the outcome", async () => {
+  const onSignIn = vi.fn(), onError = vi.fn();
+  const element = apple.AppleSignInButton({ signInOptions: { scopes: ["email"], state: "s" }, onSignIn, onError }) as unknown as ButtonElement;
+  reply = () => ({ type: "success", credential: CREDENTIAL });
+  press(element);
+  await vi.waitFor(() => expect(onSignIn).toHaveBeenCalledWith({ type: "success", credential: CREDENTIAL }));
+  expect(calls[0]).toEqual({ method: "perform", args: { id: expect.any(String), operation: "appleId", scopes: ["email"], state: "s", windowId: "main" } });
+  reply = () => ({ type: "failure", reason: "failed", message: "no" });
+  press(element, "");
+  await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "E_UNAVAILABLE", reason: "failed" })));
+  expect(calls[1]!.args).not.toHaveProperty("windowId");
+  // The app's windowId wins over the button's; invalid options reject through onError, never silently.
+  press(apple.AppleSignInButton({ signInOptions: { windowId: "settings" }, onSignIn, onError }) as unknown as ButtonElement);
+  await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(2));
+  expect(calls[2]!.args.windowId).toBe("settings");
+  press(apple.AppleSignInButton({ signInOptions: { scopes: ["phone" as never] }, onSignIn, onError }) as unknown as ButtonElement);
+  await vi.waitFor(() => expect(onError).toHaveBeenLastCalledWith(expect.objectContaining({ code: "E_INVALID_ARGUMENT" })));
+  expect(onSignIn).toHaveBeenCalledTimes(1);
 });

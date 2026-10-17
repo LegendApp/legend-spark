@@ -1,0 +1,30 @@
+appId: so.legend.spark.examples.kitchensink
+name: Apple's Sign in with Apple button runs the request over its window and reports each outcome (simulated)
+intent: >
+  Authentication > Sign in with Apple and passkeys shows Apple's own button (ASAuthorizationAppleIDButton) in each type
+  and style. The variants run signInWithApple themselves (AppleSignInButton with onSignIn and onError). Without the
+  entitlement a press rejects AuthorizationError E_UNAVAILABLE missingEntitlement before any request. With it simulated,
+  Continue with Apple presents over the button's window (spark.main) and resolves the made-up credential with the
+  screen's scopes and state, Sign up with Apple resolves the person's cancel, and the outlined button reports a failed
+  request as a typed error. Driver simulation only: no sheet appears and Apple's servers are never reached.
+checks: [AUTH-SIWABUTTON-01]
+tags: [authentication]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://authentication/sign-in" }
+- simulateAuthorization: { answer: success }
+- tapOn: { id: authentication-sign-in-apple-button-continue }
+- assertText: { id: authentication-sign-in-apple-result, equals: "AuthorizationError:E_UNAVAILABLE:missingEntitlement" }
+- assertSimulatedAuthorization: { requests: 0, pending: 0 }
+- simulateAuthorization: { appleId: true }
+- tapOn: { id: authentication-sign-in-apple-button-continue }
+- assertText: { id: authentication-sign-in-apple-result, equals: "success: user 001234.simulated.0001 · email simulated@privaterelay.appleid.com · name Spark Tester · state kitchen-sink" }
+- assertSimulatedAuthorization: { requests: 1, pending: 0, lastOperation: appleId, lastWindow: spark.main }
+- simulateAuthorization: { answer: cancel }
+- tapOn: { id: authentication-sign-in-apple-button-sign-up }
+- assertText: { id: authentication-sign-in-apple-result, equals: cancel }
+- simulateAuthorization: { answer: failed }
+- tapOn: { id: authentication-sign-in-apple-button-outline }
+- assertText: { id: authentication-sign-in-apple-result, equals: "AuthorizationError:E_UNAVAILABLE:failed" }
+- assertSimulatedAuthorization: { requests: 3, pending: 0 }
+- takeScreenshot: sign-in-apple-button
