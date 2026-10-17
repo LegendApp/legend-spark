@@ -46,7 +46,7 @@ const en: ShortcutMapMessages = {
   party: (party, title) => party.source === "command" ? `${title(party.commandId)} (${en.scopes[party.scope].toLowerCase()} command)`
     : party.source === "shortcut" ? party.scope === "window" ? `a registered shortcut in window ${party.windowId}` : "a registered app shortcut"
     : party.source === "global-shortcut" ? "a global shortcut"
-    : party.source === "menu" ? `menu item ${party.menuId} › ${party.itemId}`
+    : party.source === "menu" ? `menu item ${party.path.join(" › ")}`
     : `a ${party.reserved.platform === "macos" ? "macOS" : "Windows"} system shortcut (${party.reserved.description})`,
   examples: { rebind: "Rebind New note to ⌘⇧N", conflict: "Rebind Find to ⌘S (Document › Save)", reserved: "Rebind Find to ⌘Tab (reserved)" },
   fired: (command, binding, scope) => `Fired ${command} with ${binding} (${scope})`,
@@ -73,7 +73,7 @@ const ar: ShortcutMapMessages = {
   party: (party, title) => party.source === "command" ? `${title(party.commandId)} (أمر ${ar.scopes[party.scope]})`
     : party.source === "shortcut" ? party.scope === "window" ? `اختصار مسجّل في النافذة ${party.windowId}` : "اختصار مسجّل للتطبيق"
     : party.source === "global-shortcut" ? "اختصار عام"
-    : party.source === "menu" ? `عنصر القائمة ${party.menuId} › ${party.itemId}`
+    : party.source === "menu" ? `عنصر القائمة ${party.path.join(" › ")}`
     : `اختصار محجوز للنظام ${party.reserved.platform === "macos" ? "macOS" : "Windows"}`,
   examples: { rebind: "تعيين ⌘⇧N لملاحظة جديدة", conflict: "تعيين ⌘S للبحث (مستند › حفظ)", reserved: "تعيين ⌘Tab للبحث (محجوز)" },
   fired: (command, binding, scope) => `نُفّذ ${command} بالاختصار ${binding} (${scope})`,
