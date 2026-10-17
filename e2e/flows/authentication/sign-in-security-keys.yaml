@@ -1,0 +1,39 @@
+appId: so.legend.spark.examples.kitchensink
+name: Security keys and the prf and largeBlob extensions, with typed availability per macOS feature (simulated)
+intent: >
+  With webcredentials:example.com simulated on a host with every passkey feature, the feature row reports each one
+  available. Create on security key registers a cross-platform passkey with its usb transport; Passkey or security key
+  offers this Mac's passkeys and a security key in one sheet and, with the security key picked, signs in with it. Create
+  with PRF and blob reports prf enabled and largeBlob supported; Sign in with PRF and blob gets the same PRF output for the
+  same salt and writes the blob. With prf, prf on security keys and signals missing from the simulated macOS, the row
+  reports host-restriction for them and a prf request rejects SparkError:E_UNSUPPORTED_OPTION instead of dropping the
+  extension. Driver simulation only: no sheet appears, no security key or relying party is reached.
+checks: [AUTH-SECKEY-01, AUTH-EXT-01]
+tags: [authentication]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://authentication/sign-in" }
+- simulateAuthorization: { webCredentials: [example.com], answer: success, unavailableFeatures: [] }
+- tapOn: { id: authentication-sign-in-availability-refresh }
+- assertText: { id: authentication-sign-in-availability-features, equals: "securityKeys available · prf available · securityKeyPrf available · largeBlob available · signals available" }
+- tapOn: { id: authentication-sign-in-security-key-create }
+- assertText: { id: authentication-sign-in-security-key-result, equals: "success: credential c2ltdWxhdGVkIHBhc3NrZXkgMQ · cross-platform · transports usb" }
+- assertSimulatedAuthorization: { requests: 1, lastOperation: createPasskey, lastOffered: [securityKey], securityKeyPasskeys: 1, lastWindow: spark.main }
+- simulateAuthorization: { choice: securityKey }
+- tapOn: { id: authentication-sign-in-security-key-get }
+- assertText: { id: authentication-sign-in-security-key-result, equals: "success: credential c2ltdWxhdGVkIHBhc3NrZXkgMQ · cross-platform" }
+- assertSimulatedAuthorization: { requests: 2, lastOperation: getPasskey, lastOffered: [platform, securityKey] }
+- simulateAuthorization: { choice: null }
+- tapOn: { id: authentication-sign-in-extensions-create }
+- assertText: { id: authentication-sign-in-extensions-result, equals: "success: credential c2ltdWxhdGVkIHBhc3NrZXkgMg · prf true · largeBlob true" }
+- assertSimulatedAuthorization: { lastOperation: createPasskey, lastExtensions: [largeBlob, prf], lastOffered: [platform] }
+- tapOn: { id: authentication-sign-in-extensions-get }
+- assertText: { id: authentication-sign-in-extensions-result, equals: "success: credential c2ltdWxhdGVkIHBhc3NrZXkgMg · prf same as at registration · largeBlob written true" }
+- assertSimulatedAuthorization: { lastOperation: getPasskey, lastExtensions: [largeBlob, prf] }
+- simulateAuthorization: { unavailableFeatures: [prf, securityKeyPrf, signals] }
+- tapOn: { id: authentication-sign-in-availability-refresh }
+- assertText: { id: authentication-sign-in-availability-features, equals: "securityKeys available · prf host-restriction · securityKeyPrf host-restriction · largeBlob available · signals host-restriction" }
+- tapOn: { id: authentication-sign-in-extensions-create }
+- assertText: { id: authentication-sign-in-extensions-result, equals: "SparkError:E_UNSUPPORTED_OPTION" }
+- assertSimulatedAuthorization: { requests: 4, passkeys: 2 }
+- takeScreenshot: sign-in-security-keys

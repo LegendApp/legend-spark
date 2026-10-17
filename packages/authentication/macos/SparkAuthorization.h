@@ -35,6 +35,12 @@ FOUNDATION_EXPORT NSDictionary *SparkAuthorizationProcessEntitlements(void);
 // webcredentials:<relyingPartyId> (optionally with a ?mode= suffix) in associatedDomains. A wildcard entry
 // (webcredentials:*.example.com) matches subdomains of example.com only; example.com itself needs its own entry.
 FOUNDATION_EXPORT BOOL SparkAuthorizationEntitled(NSDictionary *entitlements, NSString *feature, NSString *_Nullable relyingPartyId);
+// The passkey features getPasskeyAvailability(relyingPartyId, feature) names: securityKeys, prf, securityKeyPrf,
+// largeBlob and signals.
+FOUNDATION_EXPORT NSArray<NSString *> *const SparkPasskeyFeatures;
+// Whether this macOS (and, for signals, this build) has a passkey feature: security keys and largeBlob from macOS 14
+// (the minimum), prf from macOS 15, prf with security keys from macOS 26.4, signals (ASCredentialUpdater) from macOS 26.
+FOUNDATION_EXPORT BOOL SparkPasskeyFeatureSupported(NSString *feature);
 // Unpadded base64url to bytes; nil for anything else (padding, other alphabets, empty).
 FOUNDATION_EXPORT NSData *_Nullable SparkBase64URLDecode(id value);
 FOUNDATION_EXPORT NSString *SparkBase64URLEncode(NSData *data);
@@ -45,8 +51,13 @@ typedef void (^SparkAuthorizationCompletion)(id _Nullable result, NSError *_Null
 // named reason (appCancel when `aborted`: the app cancelled), or nil with E_NATIVE in *failure for an unnamed error.
 FOUNDATION_EXPORT id _Nullable SparkAuthorizationCompleted(NSError *error, BOOL aborted, NSError *_Nullable *_Nonnull failure);
 // A credential AuthenticationServices returned, as a request's credential (binary values as base64url); nil for a
-// credential class no Spark request asks for.
+// credential class no Spark request asks for. Passkey credentials carry authenticatorAttachment, transports (security
+// key registrations from macOS 14.5, else null) and extensions (the prf and largeBlob outputs returned).
 FOUNDATION_EXPORT NSDictionary *_Nullable SparkAuthorizationCredential(id<ASAuthorizationCredential> credential);
+
+// The AuthenticationServices requests of a validated operation (see -perform:), which one controller shows in one sheet:
+// this Mac's passkey first, then a security key, then Sign in with Apple. Creating them shows nothing.
+FOUNDATION_EXPORT NSArray<ASAuthorizationRequest *> *SparkAuthorizationRequests(NSString *operation, NSDictionary *options);
 
 // One pending request: the controller's delegate and presentation context provider (both weak references in the
 // controller), held by SparkAuthorization until it settles. `settle` runs at most once, however often the controller
@@ -65,12 +76,22 @@ FOUNDATION_EXPORT NSDictionary *_Nullable SparkAuthorizationCredential(id<ASAuth
 - (instancetype)initWithSimulated:(BOOL)simulated NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 @property (nonatomic, readonly) BOOL simulated;
-// "available" or "missing-entitlement". feature: appleId, or passkeys with the relying party's domain.
-- (NSString *)availability:(NSString *)feature relyingPartyId:(nullable NSString *)relyingPartyId;
+// "available", "missing-entitlement", or "host-restriction" for a passkey feature this macOS lacks (checked first).
+// feature: appleId, or passkeys with the relying party's domain and optionally one of SparkPasskeyFeatures.
+- (NSString *)availability:(NSString *)feature relyingPartyId:(nullable NSString *)relyingPartyId passkeyFeature:(nullable NSString *)passkeyFeature;
 // operation appleId: scopes (fullName, email), state, nonce. createPasskey: relyingPartyId, challenge, userId (base64url),
-// userName, displayName, userVerification, attestation, excludeCredentials. getPasskey: relyingPartyId, challenge,
-// allowCredentials, userVerification. The sheet is presented over `window`. `identifier` names it for -cancel:.
+// userName, displayName, userVerification, attestation, excludeCredentials, authenticatorAttachment (platform, the
+// default; cross-platform: a security key; any: both in one sheet), extensions (prf, largeBlob). getPasskey:
+// relyingPartyId, challenge, allowCredentials (IDs, or { id, transports } for security keys), userVerification,
+// authenticatorAttachment, extensions, preferImmediatelyAvailableCredentials (performRequestsWithOptions:).
+// getCredential: passkey (getPasskey's options) and/or appleId (appleId's), preferImmediatelyAvailableCredentials: one
+// controller, one sheet. An option this macOS lacks fails E_UNSUPPORTED_OPTION. The sheet is presented over `window`.
+// `identifier` names it for -cancel:.
 - (void)perform:(NSString *)operation options:(NSDictionary *)options window:(NSWindow *)window identifier:(NSString *)identifier completion:(SparkAuthorizationCompletion)completion;
+// A WebAuthn signal to the person's credential manager (ASCredentialUpdater): unknownCredential (relyingPartyId,
+// credentialId), allAcceptedCredentials (relyingPartyId, userId, allAcceptedCredentialIds) or currentUserDetails
+// (relyingPartyId, userId, name). Completes with NSNull; E_UNAVAILABLE before macOS 26; missingEntitlement first.
+- (void)signal:(NSString *)kind options:(NSDictionary *)options completion:(SparkAuthorizationCompletion)completion;
 // Cancels the pending request's controller, which ends it with appCancel. Nothing when it has settled. Closing the
 // window a request is presented over cancels it the same way.
 - (void)cancel:(NSString *)identifier;
@@ -78,11 +99,14 @@ FOUNDATION_EXPORT NSDictionary *_Nullable SparkAuthorizationCredential(id<ASAuth
 - (void)credentialState:(NSString *)user completion:(SparkAuthorizationCompletion)completion;
 #if SPARK_TEST_DRIVER
 // Simulated instances only. Any of appleId (BOOL: the applesignin entitlement), webCredentials (domains), answer
-// (success, cancel, a failure reason, ignore: the request stays until cancelled; NSNull clears it) and credentialState
-// (authorized, revoked, notFound, transferred; NSNull: signed-in users authorized, others notFound).
+// (success, cancel, a failure reason, ignore: the request stays until cancelled; NSNull clears it), credentialState
+// (authorized, revoked, notFound, transferred; NSNull: signed-in users authorized, others notFound), choice (platform,
+// securityKey or appleId: what the person picks in a sheet offering several; NSNull: the first offered) and
+// unavailableFeatures (passkey features the simulated macOS lacks; starts as this macOS's).
 - (BOOL)simulate:(NSDictionary *)state error:(NSError **)error;
-// { appleId, webCredentials, answer, credentialState, requests, pending, lastRequest (NSNull before the first),
-// passkeys: [{ relyingPartyId, credentialId, userName }] }.
+// { appleId, webCredentials, answer, credentialState, choice, unavailableFeatures, requests (shown), pending,
+// lastRequest (NSNull before the first; with offered, extensions, preferImmediatelyAvailableCredentials),
+// passkeys: [{ relyingPartyId, credentialId, userName, authenticatorAttachment }], signals: [{ kind, relyingPartyId }] }.
 - (NSDictionary *)simulation;
 #endif
 @end

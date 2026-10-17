@@ -15,7 +15,7 @@ static SparkAuthorization *Shared(void) {
 
 #if SPARK_TEST_DRIVER
 // Reachable only through an authenticated driver session: {"command": "simulateAuthorization", "appleId"?,
-// "webCredentials"?, "answer"?, "credentialState"?} and {"command": "testAuthorization"}.
+// "webCredentials"?, "answer"?, "credentialState"?, "choice"?, "unavailableFeatures"?} and {"command": "testAuthorization"}.
 @interface SparkAuthorizationDriver : NSObject
 @end
 @implementation SparkAuthorizationDriver
@@ -65,8 +65,9 @@ RCT_EXPORT_MODULE(NativeDesktopAuthentication)
 - (NSString *)availability:(NSString *)json
 {
   NSDictionary *args = SparkArgs(json);
-  id relyingParty = args[@"relyingPartyId"];
-  return [Shared() availability:[args[@"feature"] isKindOfClass:NSString.class] ? args[@"feature"] : @"" relyingPartyId:[relyingParty isKindOfClass:NSString.class] ? relyingParty : nil];
+  id relyingParty = args[@"relyingPartyId"], passkeyFeature = args[@"passkeyFeature"];
+  return [Shared() availability:[args[@"feature"] isKindOfClass:NSString.class] ? args[@"feature"] : @"" relyingPartyId:[relyingParty isKindOfClass:NSString.class] ? relyingParty : nil
+    passkeyFeature:[passkeyFeature isKindOfClass:NSString.class] ? passkeyFeature : nil];
 }
 
 - (void)call:(NSString *)method args:(NSString *)json resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
@@ -92,6 +93,11 @@ RCT_EXPORT_MODULE(NativeDesktopAuthentication)
   }
   else if ([method isEqual:@"cancel"]) { if ([_pending containsObject:identifier]) [authorization cancel:identifier]; resolve(@"null"); }
   else if ([method isEqual:@"credentialState"]) [authorization credentialState:args[@"user"] completion:answer];
+  else if ([method isEqual:@"signal"]) {
+    NSMutableDictionary *options = [args mutableCopy];
+    [options removeObjectForKey:@"kind"];
+    [authorization signal:[args[@"kind"] isKindOfClass:NSString.class] ? args[@"kind"] : @"" options:options completion:answer];
+  }
   else SparkInvalid(reject, @"Unknown authentication operation");
 }
 - (void)forget:(NSString *)identifier { [_pending removeObject:identifier]; }

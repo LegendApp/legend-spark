@@ -8,7 +8,7 @@ intent: >
   entitlements (spark package cannot embed one yet: #424), the domain serving an apple-app-site-association file that
   lists the app under webcredentials, and RELYING_PARTY in screens/authentication/sign-in-demo.ts set to that domain.
   Use a test Apple ID, never a personal one, and delete the passkey and revoke the app in the Apple ID settings
-  afterwards.
+  afterwards. The #427 steps also need a FIDO2 security key you own (never one holding real accounts' credentials).
 checks: [AUTH-REAL-01]
 tags: [authentication]
 platforms: [macos]
@@ -41,5 +41,50 @@ manual: true
     expect: >-
       The sheet names the relying party and ada@example.com. Create shows success: credential <ID>; Sign in with passkey
       shows the same credential ID and user ada@example.com.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      (#427 security keys) With a FIDO2 security key, press Create on security key, insert or tap the key and complete
+      its PIN or touch. Then press Passkey or security key and choose the security key in the sheet.
+    expect: >-
+      The sheet asks for a security key. Create shows success with cross-platform and the key's transports (usb or nfc);
+      Passkey or security key offers this Mac's passkeys and the security key, and shows the same credential with
+      cross-platform.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      (#427 extensions, macOS 15 or later) Press Create with PRF and blob and save the passkey; then press Sign in with
+      PRF and blob and choose it. Read the Passkey features row.
+    expect: >-
+      The row shows prf available (largeBlob available). Create shows prf true and largeBlob true or false as iCloud
+      Keychain answers; Sign in shows prf same as at registration, and largeBlob written true where largeBlob is supported.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      (#427 immediate requests) Delete the passkeys for the relying party in Passwords, then press Sign in if on this
+      Mac. Create a passkey and press it again.
+    expect: >-
+      With no passkey nothing appears (no QR code sheet) and the result shows cancel; with the passkey the sheet appears
+      and the result shows success with its credential.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      (#427 combined requests) Press Passkey or Apple; first choose the passkey, then press it again and choose Sign in
+      with Apple.
+    expect: >-
+      One sheet offers both the passkey and Sign in with Apple. The result shows passkey: credential <ID>, then appleId:
+      user <user>.
+    evidence: none
+    signoff: required
+- manualStep:
+    instruction: >-
+      (#427 signals, macOS 26 or later) Press Signal unknown passkey right after creating a passkey, then open Passwords.
+    expect: >-
+      The result shows signalled unknown credential <ID>, and Passwords no longer lists that passkey (or marks it for
+      removal, as the credential manager decides).
     evidence: none
     signoff: required

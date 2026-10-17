@@ -133,6 +133,57 @@ serialization (`PublicKeyCredential.toJSON()`), so server options and responses 
 The challenge is 16–1024 bytes, the user ID 1–64 bytes, `userVerification` `required`, `preferred` (default) or
 `discouraged`. Your server verifies the responses; Spark never sees a private key.
 
+Both credentials also carry `authenticatorAttachment` (`platform`, or `cross-platform` for a security key or a phone
+reached through the sheet) and `extensions` (the outputs below); a registration carries `transports`.
+
+## Security keys, extensions and signals
+
+Each option maps to one AuthenticationServices API, and an option this macOS lacks rejects `E_UNSUPPORTED_OPTION`
+rather than being dropped. `getPasskeyAvailability(relyingPartyId, feature)` reports each macOS-dependent feature:
+`host-restriction` when this macOS lacks it (checked first), then `missing-entitlement` as without a feature.
+
+| Option or function | AuthenticationServices | Feature (macOS) |
+| --- | --- | --- |
+| `authenticatorAttachment: 'cross-platform'` | `ASAuthorizationSecurityKeyPublicKeyCredentialProvider`: a discoverable ES256 credential (`residentKeyPreference` required); `excludeCredentials` and `allowCredentials` as security key descriptors | `securityKeys` (14) |
+| `authenticatorAttachment: 'any'` | the platform and the security key request in one controller, so one sheet offers both | `securityKeys` (14) |
+| `allowCredentials` / `excludeCredentials` `{ id, transports }` | `ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor` transports (`usb`, `nfc`, `ble`); without them, all three. Transports with `platform` reject `E_INVALID_ARGUMENT` | — |
+| `extensions.prf` | `ASAuthorizationPublicKeyCredentialPRFRegistrationInput` (`{}`: `checkForSupport`) and `…PRFAssertionInput` (`eval`, `evalByCredential`) | `prf` (15); with security keys `securityKeyPrf` (26.4) |
+| `extensions.largeBlob` | `…LargeBlobRegistrationInput` (`support`) and `…LargeBlobAssertionInput` (`read`, or `write` with allowCredentials) | `largeBlob` (14); platform passkeys only: AuthenticationServices has none for security keys, so with `cross-platform` or `any` it rejects `E_UNSUPPORTED_OPTION` |
+| `preferImmediatelyAvailableCredentials: true` (`getPasskey`, `getCredential`) | `performRequestsWithOptions:` `PreferImmediatelyAvailableCredentials` | — (13) |
+| `getCredential({ passkey, appleId })` | the passkey requests and an `ASAuthorizationAppleIDRequest` in one controller | — |
+| `signalUnknownCredential`, `signalAllAcceptedCredentials`, `signalCurrentUserDetails` | `ASCredentialDataManager` (macOS 26.2), `ASCredentialUpdater` (26.0 and 26.1): `reportUnknownPublicKeyCredential`, `reportAllAcceptedPublicKeyCredentials`, `reportPublicKeyCredentialUpdate` | `signals` (26) |
+
+```ts
+import { createPasskey, getCredential, getPasskey, getPasskeyAvailability, signalUnknownCredential } from '@legendapp/spark/passkeys';
+
+// A security key, or this Mac's passkey, in one sheet:
+await getPasskey({ relyingPartyId: 'example.com', challenge, authenticatorAttachment: 'any', windowId });
+// PRF, where this macOS has it:
+if (getPasskeyAvailability('example.com', 'prf').available)
+  await getPasskey({ relyingPartyId: 'example.com', challenge, extensions: { prf: { eval: { first: salt } } }, windowId });
+// No QR-code sheet when this Mac has no passkey for the account:
+const quick = await getPasskey({ relyingPartyId: 'example.com', challenge, preferImmediatelyAvailableCredentials: true, windowId });
+// A passkey or Sign in with Apple:
+const signedIn = await getCredential({ passkey: { relyingPartyId: 'example.com', challenge }, appleId: { scopes: ['email'], nonce }, windowId });
+if (signedIn.type === 'passkey') await server.verify(signedIn.credential); else if (signedIn.type === 'appleId') await server.signInWithApple(signedIn.credential);
+// The server rejected a credential it no longer has:
+await signalUnknownCredential({ relyingPartyId: 'example.com', credentialId });
+```
+
+- Extension values follow WebAuthn's JSON (`PublicKeyCredential.toJSON()`), base64url throughout. PRF salts go to
+  AuthenticationServices unchanged. Outputs list only the extensions asked for that the authenticator answered: a
+  registration's `prf: { enabled, results? }` and `largeBlob: { supported }`; an assertion's `prf: { results }` and
+  `largeBlob: { blob, written }`. An unknown extension or key rejects `E_UNSUPPORTED_OPTION`.
+- `preferImmediatelyAvailableCredentials` shows the sheet only when this Mac has a passkey for the relying party (or
+  Sign in with Apple, in `getCredential`); security keys never count. With none, AuthenticationServices shows nothing
+  and ends the request with the error it uses for a cancel, so the result is `{ type: 'cancel' }`: Spark cannot tell it
+  from the person cancelling. Fall back to a regular request or a password form.
+- `getCredential` resolves `{ type: 'passkey', credential }`, `{ type: 'appleId', credential }` or `{ type: 'cancel' }`;
+  it needs the entitlement of each part (`missingEntitlement` names the first missing).
+- Signals show nothing and resolve when the credential manager has them; they need the passkey entitlement
+  (`missingEntitlement`) and reject `E_UNAVAILABLE` before macOS 26. Apple's update takes a name only, so
+  `signalCurrentUserDetails` has no `displayName`.
+
 ## Requests, cancellation and errors
 
 One authorization request shows at a time; another rejects `E_BUSY`. The sheet is presented over the window named
@@ -163,28 +214,38 @@ the app's memory: no `ASAuthorizationController` is created, nothing is presente
 is reached. The simulation starts from the build's real entitlements, so availability stays truthful (the Kitchen Sink
 has none) until a flow changes it. Two driver commands, built only with the driver (`#if SPARK_TEST_DRIVER`):
 
-- `{"command": "simulateAuthorization", "appleId"?, "webCredentials"?, "answer"?, "credentialState"?}` sets the simulated
+- `{"command": "simulateAuthorization", "appleId"?, "webCredentials"?, "answer"?, "credentialState"?, "choice"?, "unavailableFeatures"?}` sets the simulated
   entitlements (`appleId`: Sign in with Apple; `webCredentials`: passkey domains), how requests end (`success`, `cancel`,
   a failure reason, or `ignore`: the request stays up until cancelled, which ends it with `appCancel`; without an answer,
   `null`, a request rejects `E_UNAVAILABLE`) and the credential state (`null`: users signed in during the run are
   `authorized`, others `notFound`). A success returns made-up credentials (`simulated.identity.token`, a
   `simulated@privaterelay.appleid.com` email, `Spark Tester`); a created passkey is kept and answers later assertions
-  for its relying party, and `getPasskey` with none rejects `E_UNAVAILABLE`.
+  for its relying party, and `getPasskey` with none rejects `E_UNAVAILABLE`. `choice` is what the person picks in a sheet
+  offering several (`platform`, `securityKey`, `appleId`; `null`: the first offered; one not offered rejects
+  `E_UNAVAILABLE`). A security key passkey has transports `usb`; prf outputs are made up from the credential and salt, so
+  the same inputs give the same output; a largeBlob write is kept and read back. An immediate-only request with no
+  passkey on the simulated Mac shows nothing (it does not count as shown) and resolves cancel. `unavailableFeatures`
+  lists the passkey features the simulated macOS lacks (it starts as the real macOS's), for `host-restriction` and
+  `E_UNSUPPORTED_OPTION`. Signals are applied to the simulated passkeys (an unknown credential is removed, a user's
+  unaccepted ones are removed, the user's details rename them) and recorded; nothing reaches a credential manager.
 - `{"command": "testAuthorization"}` replies `authorization`: that state, `requests` shown, `pending`, `lastRequest`
-  (`operation`, the `window` identifier it was presented over, scopes or relying party) and `passkeys`.
+  (`operation`, the `window` identifier it was presented over, scopes or relying party, what the sheet `offered`, the
+  `extensions` and `preferImmediatelyAvailableCredentials`), `passkeys` (with `authenticatorAttachment`) and `signals`.
 
 Flows use them as `simulateAuthorization` and `assertSimulatedAuthorization` ([e2e-flow-commands.md](e2e-flow-commands.md)).
-`tests/authentication.native.mm` checks the error and entitlement mappings, that an unentitled real request stops before
-a controller, and the simulation. The real sheets are checked only by the manual flow
+`tests/authentication.native.mm` checks the error and entitlement mappings, each option's AuthenticationServices request
+(built, never performed), the credential mappings, that an unentitled real request or signal stops before a controller
+or the credential manager, and the simulation; it links `SparkCredentialSignals.swift` as the pod does. The real sheets are checked only by the manual flow
 `e2e/flows/authentication/sign-in-real.yaml`, on a team-signed build.
 
 ## Platforms
 
 | Platform | Availability |
 | --- | --- |
-| macOS | Available in team-signed builds with the entitlements (macOS 14 and later; `excludeCredentials` macOS 15). |
+| macOS | Available in team-signed builds with the entitlements (macOS 14 and later; `excludeCredentials` for platform passkeys and `prf` macOS 15, `prf` with security keys 26.4, signals 26). |
 | Windows | Both availability functions report `unsupported-platform`; the other functions reject `E_UNSUPPORTED_PLATFORM` after validating their arguments. Passkeys through WebAuthn (Windows Hello) and a decision for Sign in with Apple are tracked in #423. |
 
 The Kitchen Sink's Sign in with Apple and passkeys screen (`spark-ks://authentication/sign-in`) shows availability,
-signs in, checks the credential state, creates and uses a passkey, and cancels; its flows are in
+signs in, checks the credential state, creates and uses a passkey, uses a security key, prf and largeBlob, an
+immediate-only and a passkey-or-Apple request and a signal, and cancels; its flows are in
 `e2e/flows/authentication/`.

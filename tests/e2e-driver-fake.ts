@@ -118,7 +118,7 @@ export class FakeDriver implements DriverClient {
   }
   async testBiometrics() { this.log.push("testBiometrics"); return this.biometrics; }
   /** The fake's simulated authorization, as the app's simulateAuthorization and testAuthorization commands keep it. */
-  authorization: TestAuthorization = { appleId: false, webCredentials: [], answer: null, credentialState: null, requests: 0, pending: 0, lastRequest: null, passkeys: [] };
+  authorization: TestAuthorization = { appleId: false, webCredentials: [], answer: null, credentialState: null, choice: null, unavailableFeatures: [], requests: 0, pending: 0, lastRequest: null, passkeys: [], signals: [] };
   async simulateAuthorization(state: SimulatedAuthorization) {
     this.log.push(`simulateAuthorization ${JSON.stringify(state)}`);
     return this.authorization = { ...this.authorization, ...state };

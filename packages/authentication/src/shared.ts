@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { SparkError, invokeNative, parseNativeResult, type Availability, type SparkErrorCode } from "@legendapp/spark-desktop-app/src/contracts";
 import Native, { type Spec } from "./NativeDesktopAuthentication";
+import type { AppleAuthenticationScope, AppleIDCredential } from "./apple";
 
 /**
  * Availability of Sign in with Apple or passkeys. `missing-entitlement`: this build is not signed with the entitlement
@@ -34,13 +35,13 @@ export const isRecord = (value: unknown): value is Record<string, unknown> => !!
 export const text = (value: unknown, maximum: number): value is string => typeof value === "string" && value.length <= maximum && value.trim().length > 0;
 export const nullableText = (value: unknown) => value === null || typeof value === "string";
 
-/** macOS only; Windows reports `unsupported-platform` (#423). */
-export function availability(feature: "appleId" | "passkeys", relyingPartyId?: string): AuthorizationAvailability {
+/** macOS only; Windows reports `unsupported-platform` (#423). `host-restriction`: this macOS lacks `passkeyFeature`. */
+export function availability(feature: "appleId" | "passkeys", relyingPartyId?: string, passkeyFeature?: string): AuthorizationAvailability {
   if (Platform.OS !== "macos") return { available: false, reason: "unsupported-platform" };
   if (!Native) return { available: false, reason: "missing-module" };
-  const answer = Native.availability(JSON.stringify({ feature, relyingPartyId }));
+  const answer = Native.availability(JSON.stringify({ feature, relyingPartyId, passkeyFeature }));
   if (answer === "available") return { available: true };
-  if (answer === "missing-entitlement") return { available: false, reason: "missing-entitlement" };
+  if (answer === "missing-entitlement" || answer === "host-restriction") return { available: false, reason: answer };
   throw new SparkError("E_INVALID_DATA", `Unknown authorization availability: ${answer}`);
 }
 export function requireNative(): Spec {
@@ -62,6 +63,22 @@ export function checkOptions(options: unknown, allowed: readonly string[]): Reco
 export function failure(reason: string, message: string): never {
   if (Object.hasOwn(ERROR_CODES, reason)) throw new AuthorizationError(ERROR_CODES[reason as AuthorizationErrorReason], message, reason as AuthorizationErrorReason);
   throw new SparkError("E_INVALID_DATA", `Unknown authorization failure: ${reason}`);
+}
+
+const SCOPES: readonly AppleAuthenticationScope[] = ["fullName", "email"];
+const NAME_KEYS = ["namePrefix", "givenName", "middleName", "familyName", "nameSuffix", "nickname"] as const;
+export function isAppleIDCredential(value: unknown): value is AppleIDCredential {
+  return isRecord(value) && typeof value.user === "string" && nullableText(value.state) && nullableText(value.identityToken)
+    && nullableText(value.authorizationCode) && nullableText(value.email) && ["likelyReal", "unknown", "unsupported"].includes(value.realUserStatus as string)
+    && Array.isArray(value.authorizedScopes) && value.authorizedScopes.every(scope => SCOPES.includes(scope))
+    && (value.fullName === null || (isRecord(value.fullName) && NAME_KEYS.every(key => nullableText((value.fullName as Record<string, unknown>)[key]))));
+}
+/** A Sign in with Apple request's checked scopes, state and nonce, as native takes them. */
+export function appleIdRequest(options: Record<string, unknown>) {
+  const scopes = options.scopes ?? [];
+  if (!Array.isArray(scopes) || new Set(scopes).size !== scopes.length || !scopes.every(scope => SCOPES.includes(scope))) throw new SparkError("E_INVALID_ARGUMENT", "scopes lists fullName and email at most once each");
+  for (const key of ["state", "nonce"] as const) if (options[key] !== undefined && !text(options[key], 1024)) throw new SparkError("E_INVALID_ARGUMENT", `${key} is 1–1024 characters`);
+  return { scopes, state: options.state, nonce: options.nonce };
 }
 
 let requests = 0;

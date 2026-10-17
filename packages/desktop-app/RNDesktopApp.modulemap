@@ -1,0 +1,4 @@
+// CocoaPods lets a Swift pod (RNDesktopAuthentication) depend only on pods that are modules. This module exports no
+// headers: they stay textual #imports, as some are C++ (cpp/*.hpp) and would not build as a Clang module.
+module RNDesktopApp {
+}

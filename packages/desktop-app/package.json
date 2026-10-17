@@ -8,6 +8,7 @@
     "src",
     "macos",
     "*.podspec",
+    "*.modulemap",
     "react-native.config.js",
     "cpp"
   ],

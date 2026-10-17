@@ -2,14 +2,14 @@ import { createElement } from "react";
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
 import { SparkError, invokeNative, parseNativeResult } from "@legendapp/spark-desktop-app/src/contracts";
 import DesktopAppleSignInButton from "./DesktopAppleSignInButtonNativeComponent";
-import { availability, checkOptions, isRecord, nullableText, perform, requireNative, text, failure, type AuthorizationAvailability } from "./shared";
+import { appleIdRequest, availability, checkOptions, isAppleIDCredential, isRecord, perform, requireNative, text, failure, type AuthorizationAvailability } from "./shared";
 export { AuthorizationError, type AuthorizationAvailability, type AuthorizationErrorReason } from "./shared";
 export type { Availability } from "@legendapp/spark-desktop-app/src/contracts";
 
 /** Information Sign in with Apple can ask the person to share. */
 export type AppleAuthenticationScope = "fullName" | "email";
-/** Options for `signInWithApple`. */
-export interface AppleSignInOptions {
+/** What Sign in with Apple asks for: in `signInWithApple`, and in a combined `getCredential` (`/passkeys`). */
+export interface AppleIDRequest {
   /** What to ask the person to share. Apple returns them only the first time the person signs in to the app. */
   scopes?: AppleAuthenticationScope[];
   /** Returned unchanged in the credential, to match the response to the request. 1–1024 characters. */
@@ -20,6 +20,9 @@ export interface AppleSignInOptions {
    * (docs/authentication.md#verifying-on-your-server). 1–1024 characters.
    */
   nonce?: string;
+}
+/** Options for `signInWithApple`. */
+export interface AppleSignInOptions extends AppleIDRequest {
   /** The window to present over (useWindowId(); "main" for the main window). Default: the key window. */
   windowId?: string;
   /** Aborting cancels the sheet and rejects E_ABORTED with reason `appCancel`. */
@@ -51,15 +54,7 @@ export type AppleSignInResult = { type: "success"; credential: AppleIDCredential
 /** Result of `getAppleIDCredentialState`: whether the Apple ID is still `authorized` for this app. */
 export type AppleIDCredentialState = "authorized" | "revoked" | "notFound" | "transferred";
 
-const SCOPES: readonly AppleAuthenticationScope[] = ["fullName", "email"];
 const STATES: readonly AppleIDCredentialState[] = ["authorized", "revoked", "notFound", "transferred"];
-const NAME_KEYS = ["namePrefix", "givenName", "middleName", "familyName", "nameSuffix", "nickname"] as const;
-function isCredential(value: unknown): value is AppleIDCredential {
-  return isRecord(value) && typeof value.user === "string" && nullableText(value.state) && nullableText(value.identityToken)
-    && nullableText(value.authorizationCode) && nullableText(value.email) && ["likelyReal", "unknown", "unsupported"].includes(value.realUserStatus as string)
-    && Array.isArray(value.authorizedScopes) && value.authorizedScopes.every(scope => SCOPES.includes(scope))
-    && (value.fullName === null || (isRecord(value.fullName) && NAME_KEYS.every(key => nullableText((value.fullName as Record<string, unknown>)[key]))));
-}
 
 /**
  * macOS only; Windows reports `unsupported-platform` (#423). `missing-entitlement` until the app is built with
@@ -74,10 +69,7 @@ export function getAppleAuthenticationAvailability(): AuthorizationAvailability 
  */
 export async function signInWithApple(options: AppleSignInOptions = {}): Promise<AppleSignInResult> {
   const checked = checkOptions(options, ["scopes", "state", "nonce", "windowId", "signal"]);
-  const scopes = checked.scopes ?? [];
-  if (!Array.isArray(scopes) || new Set(scopes).size !== scopes.length || !scopes.every(scope => SCOPES.includes(scope))) throw new SparkError("E_INVALID_ARGUMENT", "scopes lists fullName and email at most once each");
-  for (const key of ["state", "nonce"] as const) if (checked[key] !== undefined && !text(checked[key], 1024)) throw new SparkError("E_INVALID_ARGUMENT", `${key} is 1–1024 characters`);
-  return perform("appleId", { scopes, state: checked.state, nonce: checked.nonce }, checked, isCredential);
+  return perform("appleId", appleIdRequest(checked), checked, isAppleIDCredential);
 }
 
 /**

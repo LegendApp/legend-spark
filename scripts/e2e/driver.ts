@@ -44,11 +44,14 @@ export type TestBiometrics = {
 };
 /** The simulated state of @legendapp/spark/apple-authentication and /passkeys (the `testAuthorization` driver command). */
 export type TestAuthorization = {
-  appleId: boolean; webCredentials: string[]; answer: string | null; credentialState: string | null; requests: number; pending: number;
-  lastRequest: { operation: string; window: string | null; scopes?: string[]; relyingPartyId?: string; userName?: string } | null;
-  passkeys: { relyingPartyId: string; credentialId: string; userName: string }[];
+  appleId: boolean; webCredentials: string[]; answer: string | null; credentialState: string | null; choice: string | null; unavailableFeatures: string[];
+  requests: number; pending: number;
+  lastRequest: { operation: string; window: string | null; offered: string[]; extensions: string[]; preferImmediatelyAvailableCredentials: boolean; scopes?: string[];
+    relyingPartyId?: string; userName?: string; authenticatorAttachment?: string } | null;
+  passkeys: { relyingPartyId: string; credentialId: string; userName: string; authenticatorAttachment: string }[];
+  signals: { kind: string; relyingPartyId: string }[];
 };
-export type SimulatedAuthorization = { appleId?: boolean; webCredentials?: string[]; answer?: string | null; credentialState?: string | null };
+export type SimulatedAuthorization = { appleId?: boolean; webCredentials?: string[]; answer?: string | null; credentialState?: string | null; choice?: string | null; unavailableFeatures?: string[] };
 export type SimulatedBiometrics = { biometryType?: string; biometrics?: string; password?: string; answer?: string | null; enrollmentChanged?: true };
 /** The simulated state of @legendapp/spark/privileged-helper (the `testPrivilegedHelper` driver command). */
 export type TestPrivilegedHelper = {

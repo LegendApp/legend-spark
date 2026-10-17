@@ -55,16 +55,57 @@ checks:
       - ./passkeys#createPasskey
       - ./passkeys#getPasskey
       - ./passkeys#AuthorizationError
-  AUTH-REAL-01:
-    title: "Real sheets on a team-signed build with macos.authentication: both available; Sign in with Apple shows Apple's sheet over the window and returns the credential, cancelling resolves cancel, Cancel request dismisses the sheet; the credential state is authorized; a passkey is created and used for a domain whose association file lists the app"
+  AUTH-SECKEY-01:
+    title: "createPasskey and getPasskey with authenticatorAttachment cross-platform use a security key (ASAuthorizationSecurityKeyPublicKeyCredentialProvider) and report its attachment and transports; any offers this Mac's passkeys and a security key in one sheet; getPasskeyAvailability(relyingPartyId, feature) reports each macOS-dependent passkey feature (driver simulation; no sheet, no security key, no relying party)"
     platforms: [macos]
     blocking: true
-    spec: "#146 AUTH.api; provisioning profiles #424"
+    spec: "#427 AUTH.securityKeys"
+    covers:
+      - ./passkeys#createPasskey
+      - ./passkeys#getPasskey
+      - ./passkeys#getPasskeyAvailability
+  AUTH-EXT-01:
+    title: "The prf and largeBlob WebAuthn extensions reach AuthenticationServices and their outputs come back (prf enabled and the same output for the same salt, largeBlob supported and written); a feature the macOS lacks reports host-restriction and its option rejects E_UNSUPPORTED_OPTION, never dropped (driver simulation)"
+    platforms: [macos]
+    blocking: true
+    spec: "#427 AUTH.extensions"
+    covers:
+      - ./passkeys#createPasskey
+      - ./passkeys#getPasskey
+      - ./passkeys#getPasskeyAvailability
+  AUTH-IMMEDIATE-01:
+    title: "getPasskey with preferImmediatelyAvailableCredentials (performRequestsWithOptions:) shows nothing and resolves cancel without a passkey on this Mac, and signs in with one (driver simulation)"
+    platforms: [macos]
+    blocking: true
+    spec: "#427 AUTH.immediate"
+    covers:
+      - ./passkeys#getPasskey
+  AUTH-COMBINED-01:
+    title: "getCredential offers a passkey and Sign in with Apple in one sheet (one ASAuthorizationController) and reports which the person used (driver simulation; no sheet, no Apple servers)"
+    platforms: [macos]
+    blocking: true
+    spec: "#427 AUTH.combined"
+    covers:
+      - ./passkeys#getCredential
+  AUTH-SIGNAL-01:
+    title: "signalUnknownCredential tells the credential manager (ASCredentialDataManager, macOS 26) the relying party no longer knows a passkey, which removes it; without signals on the macOS it rejects E_UNAVAILABLE (driver simulation; no credential manager is reached)"
+    platforms: [macos]
+    blocking: true
+    spec: "#427 AUTH.signals"
+    covers:
+      - ./passkeys#signalUnknownCredential
+  AUTH-REAL-01:
+    title: "Real sheets on a team-signed build with macos.authentication: both available; Sign in with Apple shows Apple's sheet over the window and returns the credential, cancelling resolves cancel, Cancel request dismisses the sheet; the credential state is authorized; a passkey is created and used for a domain whose association file lists the app; a security key, prf and largeBlob, an immediate-only request, a passkey-or-Apple sheet and a signal work against the real AuthenticationServices (#427)"
+    platforms: [macos]
+    blocking: true
+    spec: "#146 AUTH.api; #427; provisioning profiles #424"
     covers:
       - ./apple-authentication#signInWithApple
       - ./apple-authentication#getAppleIDCredentialState
       - ./passkeys#createPasskey
       - ./passkeys#getPasskey
+      - ./passkeys#getCredential
+      - ./passkeys#signalUnknownCredential
   AUTH-UNSUP-01:
     title: "On Windows getAppleAuthenticationAvailability and getPasskeyAvailability report unsupported-platform and requests reject SparkError:E_UNSUPPORTED_PLATFORM (WebAuthn / Windows Hello: #423)"
     platforms: [windows]

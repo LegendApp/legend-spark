@@ -1,0 +1,42 @@
+appId: so.legend.spark.examples.kitchensink
+name: Immediate-only sign-in, a passkey or Sign in with Apple in one sheet, and credential signals (simulated)
+intent: >
+  With both entitlements simulated, Sign in if on this Mac (preferImmediatelyAvailableCredentials) before any passkey
+  exists shows nothing and resolves cancel; once a passkey is created it signs in with it. Passkey or Apple
+  (getCredential) offers this Mac's passkey and Sign in with Apple in one sheet and reports which the person used: the
+  passkey, then Sign in with Apple when that is picked. Signal unknown passkey (signalUnknownCredential) removes the
+  passkey from the simulated credential manager, so the immediate sign-in shows nothing again; on a macOS without signals
+  it rejects SparkError:E_UNAVAILABLE. Driver simulation only: no sheet appears, neither Apple nor a relying party is
+  reached and no credential manager is told anything.
+checks: [AUTH-IMMEDIATE-01, AUTH-COMBINED-01, AUTH-SIGNAL-01]
+tags: [authentication]
+platforms: [macos]
+---
+- launchApp: { openUrl: "spark-ks://authentication/sign-in" }
+- simulateAuthorization: { appleId: true, webCredentials: [example.com], answer: success, unavailableFeatures: [] }
+- tapOn: { id: authentication-sign-in-immediate-get }
+- assertText: { id: authentication-sign-in-immediate-result, equals: cancel }
+- assertSimulatedAuthorization: { requests: 0, pending: 0, lastOperation: getPasskey, lastImmediate: true }
+- tapOn: { id: authentication-sign-in-passkey-create }
+- assertText: { id: authentication-sign-in-passkey-create-result, equals: "success: credential c2ltdWxhdGVkIHBhc3NrZXkgMQ" }
+- tapOn: { id: authentication-sign-in-immediate-get }
+- assertText: { id: authentication-sign-in-immediate-result, equals: "success: credential c2ltdWxhdGVkIHBhc3NrZXkgMQ" }
+- assertSimulatedAuthorization: { requests: 2, lastImmediate: true }
+- tapOn: { id: authentication-sign-in-combined }
+- assertText: { id: authentication-sign-in-combined-result, equals: "passkey: credential c2ltdWxhdGVkIHBhc3NrZXkgMQ" }
+- assertSimulatedAuthorization: { requests: 3, lastOperation: getCredential, lastOffered: [platform, appleId], lastImmediate: false }
+- simulateAuthorization: { choice: appleId }
+- tapOn: { id: authentication-sign-in-combined }
+- assertText: { id: authentication-sign-in-combined-result, equals: "appleId: user 001234.simulated.0001" }
+- simulateAuthorization: { choice: null }
+- tapOn: { id: authentication-sign-in-signal-unknown }
+- assertText: { id: authentication-sign-in-signal-result, equals: "signalled unknown credential c2ltdWxhdGVkIHBhc3NrZXkgMQ" }
+- assertSimulatedAuthorization: { signals: 1, lastSignal: unknownCredential, passkeys: 0 }
+- tapOn: { id: authentication-sign-in-immediate-get }
+- assertText: { id: authentication-sign-in-immediate-result, equals: cancel }
+- assertSimulatedAuthorization: { requests: 4, pending: 0 }
+- simulateAuthorization: { unavailableFeatures: [signals] }
+- tapOn: { id: authentication-sign-in-signal-unknown }
+- assertText: { id: authentication-sign-in-signal-result, equals: "SparkError:E_UNAVAILABLE" }
+- assertSimulatedAuthorization: { signals: 1 }
+- takeScreenshot: sign-in-combined

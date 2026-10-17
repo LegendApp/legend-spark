@@ -600,10 +600,14 @@ export function assertMenu(menus: readonly DriverMenuItem[], args: Record<string
   }
 }
 export function assertSimulatedAuthorization(authorization: TestAuthorization, args: Record<string, unknown>) {
-  const actual: Record<string, unknown> = { requests: authorization.requests, pending: authorization.pending, lastOperation: authorization.lastRequest?.operation ?? null,
-    lastWindow: authorization.lastRequest?.window ?? null, lastRelyingPartyId: authorization.lastRequest?.relyingPartyId ?? null, passkeys: authorization.passkeys.length };
+  const last = authorization.lastRequest;
+  const actual: Record<string, unknown> = { requests: authorization.requests, pending: authorization.pending, lastOperation: last?.operation ?? null,
+    lastWindow: last?.window ?? null, lastRelyingPartyId: last?.relyingPartyId ?? null, passkeys: authorization.passkeys.length,
+    lastOffered: last?.offered ?? null, lastExtensions: last?.extensions ?? null, lastImmediate: last?.preferImmediatelyAvailableCredentials ?? null,
+    securityKeyPasskeys: authorization.passkeys.filter(passkey => passkey.authenticatorAttachment === "cross-platform").length,
+    signals: authorization.signals.length, lastSignal: authorization.signals.at(-1)?.kind ?? null };
   for (const key of Object.keys(actual))
-    if (args[key] !== undefined && actual[key] !== args[key]) throw new Failure("assertion", `authorization ${key} is ${JSON.stringify(actual[key])}, expected ${JSON.stringify(args[key])}`);
+    if (args[key] !== undefined && JSON.stringify(actual[key]) !== JSON.stringify(args[key])) throw new Failure("assertion", `authorization ${key} is ${JSON.stringify(actual[key])}, expected ${JSON.stringify(args[key])}`);
 }
 export function assertSimulatedPrivilegedHelper(state: TestPrivilegedHelper, args: Record<string, unknown>) {
   const actual: Record<string, unknown> = { registrations: state.registrations, unregistrations: state.unregistrations, settingsOpened: state.settingsOpened, prompts: state.prompts,

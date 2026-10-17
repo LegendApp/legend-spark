@@ -8,14 +8,18 @@ const root = path.resolve(import.meta.dirname, "..");
 const macos = path.join(root, "packages/authentication/macos");
 const flags = ["-fobjc-arc", "-fblocks", "-std=c++20", "-Wall", "-Werror", "-mmacosx-version-min=14.0", "-I", macos];
 
-test.skipIf(process.platform !== "darwin")("ASAuthorizationError codes and entitlements map explicitly, unentitled requests stop before a controller, the simulation answers every outcome without UI, and the core builds without the driver", async () => {
+test.skipIf(process.platform !== "darwin")("ASAuthorizationError codes, entitlements, security keys, extensions and combined requests map explicitly to AuthenticationServices, unentitled requests and signals stop before a controller, the simulation answers every outcome without UI, and the core builds without the driver", async () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), "spark-authentication-native-"));
   try {
-    const binary = path.join(directory, "test");
+    const binary = path.join(directory, "test"), signals = path.join(directory, "signals.o");
+    // The Swift signals class, warning-free, linked in as the pod links it: SparkAuthorization reaches it by name.
+    await runOk("xcrun", ["swiftc", "-swift-version", "5", "-warnings-as-errors", "-parse-as-library", "-target", `${process.arch === "arm64" ? "arm64" : "x86_64"}-apple-macos14.0`,
+      "-module-name", "RNDesktopAuthentication", "-c", path.join(macos, "SparkCredentialSignals.swift"), "-o", signals], { timeout: 120000 });
+    const swiftLibraries = path.join(path.dirname(path.dirname((await runOk("xcrun", ["--find", "swiftc"])).trim())), "lib/swift/macosx");
     await runOk("clang++", [...flags, "-DSPARK_TEST_DRIVER=1", "-framework", "AppKit", "-framework", "AuthenticationServices", "-framework", "Security",
-      path.join(root, "tests/authentication.native.mm"), path.join(macos, "SparkAuthorization.mm"), "-o", binary], { timeout: 60000 });
+      "-L", swiftLibraries, "-L", "/usr/lib/swift", path.join(root, "tests/authentication.native.mm"), path.join(macos, "SparkAuthorization.mm"), signals, "-o", binary], { timeout: 60000 });
     expect(await runOk(binary, [], { timeout: 30000 })).toContain("Authentication native tests passed");
     // Builds without the test driver compile without the simulation.
     await runOk("clang++", [...flags, "-DSPARK_TEST_DRIVER=0", "-c", path.join(macos, "SparkAuthorization.mm"), "-o", path.join(directory, "release.o")], { timeout: 60000 });
   } finally { rmSync(directory, { recursive: true, force: true }); }
-}, 90000);
+}, 240000);

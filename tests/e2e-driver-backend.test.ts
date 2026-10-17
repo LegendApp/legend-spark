@@ -148,12 +148,15 @@ describe("command mapping", () => {
 
   test("simulateAuthorization sets the simulated state; assertSimulatedAuthorization checks requests, the last request and passkeys", async () => {
     const app = new FakeApp();
-    app.authorization = { appleId: true, webCredentials: ["example.com"], answer: null, credentialState: null, requests: 2, pending: 0,
-      lastRequest: { operation: "createPasskey", window: "spark.main", relyingPartyId: "example.com", userName: "ada" }, passkeys: [{ relyingPartyId: "example.com", credentialId: "aWQ", userName: "ada" }] };
-    const { result } = await run("- launchApp\n- simulateAuthorization: { appleId: false, answer: cancel }\n- simulateAuthorization: { webCredentials: [], credentialState: revoked }\n- assertSimulatedAuthorization: { requests: 2, pending: 0, lastOperation: createPasskey, lastWindow: spark.main, lastRelyingPartyId: example.com, passkeys: 1 }", app);
+    app.authorization = { appleId: true, webCredentials: ["example.com"], answer: null, credentialState: null, choice: null, unavailableFeatures: [], requests: 2, pending: 0,
+      lastRequest: { operation: "getCredential", window: "spark.main", offered: ["platform", "securityKey", "appleId"], extensions: ["prf"], preferImmediatelyAvailableCredentials: true, relyingPartyId: "example.com" },
+      passkeys: [{ relyingPartyId: "example.com", credentialId: "aWQ", userName: "ada", authenticatorAttachment: "cross-platform" }], signals: [{ kind: "unknownCredential", relyingPartyId: "example.com" }] };
+    const { result } = await run("- launchApp\n- simulateAuthorization: { appleId: false, answer: cancel }\n- simulateAuthorization: { webCredentials: [], credentialState: revoked, choice: appleId, unavailableFeatures: [signals] }\n- assertSimulatedAuthorization: { requests: 2, pending: 0, lastOperation: getCredential, lastWindow: spark.main, lastRelyingPartyId: example.com, passkeys: 1, lastOffered: [platform, securityKey, appleId], lastExtensions: [prf], lastImmediate: true, securityKeyPasskeys: 1, signals: 1, lastSignal: unknownCredential }", app);
     expect(result.status).toBe("passed");
-    expect(app.log.filter(line => line.includes("Authorization"))).toEqual(['simulateAuthorization {"appleId":false,"answer":"cancel"}', 'simulateAuthorization {"webCredentials":[],"credentialState":"revoked"}', "testAuthorization"]);
-    expect(app.drivers[0]!.authorization).toMatchObject({ appleId: false, answer: "cancel", webCredentials: [], credentialState: "revoked" });
+    expect(app.log.filter(line => line.includes("Authorization"))).toEqual(['simulateAuthorization {"appleId":false,"answer":"cancel"}', 'simulateAuthorization {"webCredentials":[],"credentialState":"revoked","choice":"appleId","unavailableFeatures":["signals"]}', "testAuthorization"]);
+    expect(app.drivers[0]!.authorization).toMatchObject({ appleId: false, answer: "cancel", webCredentials: [], credentialState: "revoked", choice: "appleId", unavailableFeatures: ["signals"] });
+    const offered = await run("- launchApp\n- assertSimulatedAuthorization: { lastOffered: [platform, appleId], timeout: 200ms }", app);
+    expect(offered.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('authorization lastOffered is ["platform","securityKey","appleId"], expected ["platform","appleId"]') });
     const failed = await run("- launchApp\n- assertSimulatedAuthorization: { lastOperation: appleId, timeout: 200ms }");
     expect(failed.result.failure).toMatchObject({ kind: "assertion", message: expect.stringContaining('authorization lastOperation is null, expected "appleId"') });
   });

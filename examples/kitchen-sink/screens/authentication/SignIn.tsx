@@ -9,7 +9,9 @@ import { useSignInMessages } from "./sign-in-messages";
 // (Apple's button on macOS, the app handling the press; a plain button on Windows), the variants -apple-button-continue,
 // -apple-button-sign-up and -apple-button-outline (the button runs the request), -apple-state-check and -apple-cancel,
 // with results in -apple-result and -apple-state; -passkey-create, -passkey-get and
-// -passkey-cancel with results in -passkey-create-result and -passkey-get-result.
+// -passkey-cancel with results in -passkey-create-result and -passkey-get-result; -availability-features; -security-key-create
+// and -security-key-get (-security-key-result), -extensions-create and -extensions-get (-extensions-result),
+// -immediate-get (-immediate-result), -combined (-combined-result) and -signal-unknown (-signal-result).
 const ID = "authentication-sign-in";
 const BUTTON_SIZE = { width: 220, height: 32 };
 /** Apple's other titles and styles; each press runs signInWithApple through the button. */
@@ -32,7 +34,9 @@ function Result({ id, value }: { id: string; value: string }) {
 /** Sign in with Apple and passkeys (@legendapp/spark/apple-authentication and /passkeys). */
 export function SignIn() {
   const t = useSignInMessages();
-  const { availability, results, user, refresh, signIn, onSignIn, onSignInError, checkState, create, assert, cancel } = useSignInDemo();
+  const { availability, results, user, refresh, signIn, onSignIn, onSignInError, checkState, create, assert, cancel,
+    createOnSecurityKey, assertWithSecurityKey, createWithExtensions, assertWithExtensions, assertImmediately, signInEither, signalUnknown } = useSignInDemo();
+  const action = (id: string, label: string, onPress: () => void) => <Button className="w-44" testID={`${ID}-${id}`} onPress={onPress}>{label}</Button>;
   return <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-4 p-6" testID={`${ID}-content`}>
     <Text className="text-lg font-bold text-foreground" accessibilityRole="header">{t.title}</Text>
     <Text className="text-sm text-muted">{t.intro}</Text>
@@ -43,6 +47,8 @@ export function SignIn() {
           <Result id="availability-apple" value={availability.apple} />
           <Text className="text-sm text-foreground">{t.passkeyAvailability} {RELYING_PARTY}</Text>
           <Result id="availability-passkeys" value={availability.passkeys} />
+          <Text className="text-sm text-foreground">{t.featureAvailability}</Text>
+          <Result id="availability-features" value={availability.features} />
         </View>
         <Button className="w-28" testID={`${ID}-availability-refresh`} onPress={refresh}>{t.refresh}</Button>
       </View>
@@ -69,6 +75,26 @@ export function SignIn() {
       </View>
       <Result id="passkey-create-result" value={results.create ?? t.noResult} />
       <Result id="passkey-get-result" value={results.get ?? t.noResult} />
+    </Section>
+    <Section title={t.more} id="more">
+      <View className="flex-row flex-wrap gap-2">
+        {action("security-key-create", t.securityKeyCreate, () => void createOnSecurityKey())}
+        {action("security-key-get", t.securityKeyGet, () => void assertWithSecurityKey())}
+      </View>
+      <Result id="security-key-result" value={results.securityKey ?? t.noResult} />
+      <View className="flex-row flex-wrap gap-2">
+        {action("extensions-create", t.extensionsCreate, () => void createWithExtensions())}
+        {action("extensions-get", t.extensionsGet, () => void assertWithExtensions())}
+      </View>
+      <Result id="extensions-result" value={results.extensions ?? t.noResult} />
+      <View className="flex-row flex-wrap gap-2">
+        {action("immediate-get", t.immediate, () => void assertImmediately())}
+        {action("combined", t.combined, () => void signInEither())}
+        {action("signal-unknown", t.signal, () => void signalUnknown())}
+      </View>
+      <Result id="immediate-result" value={results.immediate ?? t.noResult} />
+      <Result id="combined-result" value={results.combined ?? t.noResult} />
+      <Result id="signal-result" value={results.signal ?? t.noResult} />
     </Section>
     <Text className="text-xs text-muted">{t.driver}</Text>
   </ScrollView>;

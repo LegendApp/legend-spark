@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { SparkError } from "@legendapp/spark/contracts";
 import { getRandomBytesAsync } from "@legendapp/spark/auth-session";
 import { AuthorizationError, getAppleAuthenticationAvailability, getAppleIDCredentialState, signInWithApple, type AppleSignInOptions, type AppleSignInResult } from "@legendapp/spark/apple-authentication";
-import { createPasskey, getPasskey, getPasskeyAvailability } from "@legendapp/spark/passkeys";
+import { createPasskey, getCredential, getPasskey, getPasskeyAvailability, signalUnknownCredential, type PasskeyFeature, type PasskeyRegistration } from "@legendapp/spark/passkeys";
 
 /** The relying party the demo's passkeys belong to. The Kitchen Sink is not entitled to it, so real requests stop at missingEntitlement. */
 export const RELYING_PARTY = "example.com";
@@ -20,11 +20,22 @@ const base64url = (binary: string) => btoa(binary).replace(/\+/g, "-").replace(/
 const challengeFor = async () => getPasskeyAvailability(RELYING_PARTY).available ? base64url(String.fromCharCode(...await getRandomBytesAsync(32))) : UNUSED_CHALLENGE;
 const UNUSED_CHALLENGE = base64url("request rejects before use");
 const USER_ID = base64url("kitchen-sink-user");
+/** Signalled when the screen has created no passkey yet. */
+const UNKNOWN_CREDENTIAL = base64url("no passkey yet");
 /** Results show codes and reasons only, so flows can assert them in any locale. */
 const describeFailure = (cause: unknown) =>
   cause instanceof AuthorizationError ? `AuthorizationError:${cause.code}:${cause.reason}` : cause instanceof SparkError ? `SparkError:${cause.code}` : String(cause);
-const readAvailability = () => ({ apple: JSON.stringify(getAppleAuthenticationAvailability()), passkeys: JSON.stringify(getPasskeyAvailability(RELYING_PARTY)) });
-export type Section = "apple" | "state" | "create" | "get";
+/** The passkey features that depend on the macOS version, shown with their availability. */
+const FEATURES: PasskeyFeature[] = ["securityKeys", "prf", "securityKeyPrf", "largeBlob", "signals"];
+const describeAvailability = (feature: PasskeyFeature) => {
+  const availability = getPasskeyAvailability(RELYING_PARTY, feature);
+  return `${feature} ${availability.available ? "available" : availability.reason}`;
+};
+const readAvailability = () => ({ apple: JSON.stringify(getAppleAuthenticationAvailability()), passkeys: JSON.stringify(getPasskeyAvailability(RELYING_PARTY)), features: FEATURES.map(describeAvailability).join(" · ") });
+/** The PRF salt the demo evaluates at registration and sign-in: the same passkey and salt give the same output. */
+const PRF_SALT = base64url("kitchen-sink prf salt");
+const BLOB = base64url("kitchen-sink large blob");
+export type Section = "apple" | "state" | "create" | "get" | "securityKey" | "extensions" | "immediate" | "combined" | "signal";
 /** Apple's button draws where getAppleAuthenticationAvailability() is not unsupported-platform or missing-module (Windows: #423). */
 export function appleButtonDraws() {
   const availability = getAppleAuthenticationAvailability();
@@ -41,6 +52,9 @@ export function useSignInDemo() {
   const [availability, setAvailability] = useState(readAvailability);
   const [results, setResults] = useState<Partial<Record<Section, string>>>({});
   const [user, setUser] = useState<string>();
+  // The latest passkey created with extensions, for the extension sign-in; the latest of any kind, for the signal.
+  const [extended, setExtended] = useState<PasskeyRegistration>();
+  const [latest, setLatest] = useState<string>();
   const abort = useRef<AbortController | undefined>(undefined);
 
   const refresh = useCallback(() => setAvailability(readAvailability()), []);
@@ -78,8 +92,64 @@ export function useSignInDemo() {
 
   const create = useCallback(() => request("create", async signal => {
     const result = await createPasskey({ relyingPartyId: RELYING_PARTY, challenge: await challengeFor(), userId: USER_ID, userName: USER_NAME, displayName: "Ada", windowId: WINDOW_ID, signal });
+    if (result.type === "cancel") return "cancel";
+    setLatest(result.credential.credentialId);
+    return `success: credential ${result.credential.credentialId}`;
+  }), [request]);
+
+  // A passkey on a security key (authenticatorAttachment cross-platform), then a sign-in offering this Mac's and the key's.
+  const createOnSecurityKey = useCallback(() => request("securityKey", async signal => {
+    const result = await createPasskey({ relyingPartyId: RELYING_PARTY, challenge: await challengeFor(), userId: USER_ID, userName: USER_NAME, authenticatorAttachment: "cross-platform", windowId: WINDOW_ID, signal });
+    if (result.type === "cancel") return "cancel";
+    setLatest(result.credential.credentialId);
+    return `success: credential ${result.credential.credentialId} · ${result.credential.authenticatorAttachment} · transports ${result.credential.transports?.join(",") ?? "null"}`;
+  }), [request]);
+  const assertWithSecurityKey = useCallback(() => request("securityKey", async signal => {
+    const result = await getPasskey({ relyingPartyId: RELYING_PARTY, challenge: await challengeFor(), authenticatorAttachment: "any", windowId: WINDOW_ID, signal });
+    return result.type === "cancel" ? "cancel" : `success: credential ${result.credential.credentialId} · ${result.credential.authenticatorAttachment}`;
+  }), [request]);
+
+  // prf and largeBlob: registration evaluates the salt and asks for blob support; sign-in evaluates it again and writes a blob.
+  const createWithExtensions = useCallback(() => request("extensions", async signal => {
+    const result = await createPasskey({ relyingPartyId: RELYING_PARTY, challenge: await challengeFor(), userId: USER_ID, userName: USER_NAME, windowId: WINDOW_ID, signal,
+      extensions: { prf: { eval: { first: PRF_SALT } }, largeBlob: { support: "required" } } });
+    if (result.type === "cancel") return "cancel";
+    const { credential } = result;
+    setExtended(credential);
+    setLatest(credential.credentialId);
+    return `success: credential ${credential.credentialId} · prf ${credential.extensions.prf?.enabled ?? "none"} · largeBlob ${credential.extensions.largeBlob?.supported ?? "none"}`;
+  }), [request]);
+  const assertWithExtensions = useCallback(() => request("extensions", async signal => {
+    const allowCredentials = extended ? [extended.credentialId] : undefined;
+    const result = await getPasskey({ relyingPartyId: RELYING_PARTY, challenge: await challengeFor(), allowCredentials, windowId: WINDOW_ID, signal,
+      extensions: { prf: { eval: { first: PRF_SALT } }, ...(allowCredentials ? { largeBlob: { write: BLOB } } : {}) } });
+    if (result.type === "cancel") return "cancel";
+    const { prf, largeBlob } = result.credential.extensions;
+    const same = prf && prf.results.first === extended?.extensions.prf?.results?.first;
+    return `success: credential ${result.credential.credentialId} · prf ${prf ? (same ? "same as at registration" : "differs") : "none"} · largeBlob written ${largeBlob?.written ?? "none"}`;
+  }), [request, extended]);
+
+  // Only if a passkey is on this Mac: otherwise nothing is shown and the request resolves cancel.
+  const assertImmediately = useCallback(() => request("immediate", async signal => {
+    const result = await getPasskey({ relyingPartyId: RELYING_PARTY, challenge: await challengeFor(), preferImmediatelyAvailableCredentials: true, windowId: WINDOW_ID, signal });
     return result.type === "cancel" ? "cancel" : `success: credential ${result.credential.credentialId}`;
   }), [request]);
+
+  // A passkey or Sign in with Apple in one sheet.
+  const signInEither = useCallback(() => request("combined", async signal => {
+    const result = await getCredential({ passkey: { relyingPartyId: RELYING_PARTY, challenge: await challengeFor() }, appleId: { scopes: SIGN_IN_OPTIONS.scopes, state: SIGN_IN_OPTIONS.state }, windowId: WINDOW_ID, signal });
+    if (result.type === "cancel") return "cancel";
+    if (result.type === "appleId") setUser(result.credential.user);
+    return result.type === "passkey" ? `passkey: credential ${result.credential.credentialId}` : `appleId: user ${result.credential.user}`;
+  }), [request]);
+
+  // Tells the credential manager the server no longer knows the latest passkey.
+  const signalUnknown = useCallback(async () => {
+    try {
+      await signalUnknownCredential({ relyingPartyId: RELYING_PARTY, credentialId: latest ?? UNKNOWN_CREDENTIAL });
+      show("signal", `signalled unknown credential ${latest ?? UNKNOWN_CREDENTIAL}`);
+    } catch (cause) { show("signal", describeFailure(cause)); }
+  }, [latest, show]);
 
   const assert = useCallback(() => request("get", async signal => {
     const result = await getPasskey({ relyingPartyId: RELYING_PARTY, challenge: await challengeFor(), windowId: WINDOW_ID, signal });
@@ -88,5 +158,6 @@ export function useSignInDemo() {
 
   const cancel = useCallback(() => abort.current?.abort(), []);
 
-  return { availability, results, user, refresh, signIn, onSignIn, onSignInError, checkState, create, assert, cancel };
+  return { availability, results, user, refresh, signIn, onSignIn, onSignInError, checkState, create, assert, cancel,
+    createOnSecurityKey, assertWithSecurityKey, createWithExtensions, assertWithExtensions, assertImmediately, signInEither, signalUnknown };
 }

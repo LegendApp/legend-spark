@@ -24,7 +24,10 @@ Pod::Spec.new do |s|
   # only in apps that set macos.testDriverPrivateEvents (the Spark config plugin exports this variable to the Podfile),
   # so other apps' binaries never name them (docs/test-driver.md#private-event-functions).
   private_events = ENV["SPARK_TEST_DRIVER_PRIVATE_EVENTS"] == "1" ? " SPARK_TEST_DRIVER_PRIVATE_EVENTS=1" : ""
+  # A module without headers (RNDesktopApp.modulemap), so Swift pods may depend on it.
+  s.module_map = "RNDesktopApp.modulemap"
   s.pod_target_xcconfig = driver.merge(
+    "DEFINES_MODULE" => "YES",
     "CLANG_CXX_LANGUAGE_STANDARD" => "c++20",
     "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) SPARK_TEST_DRIVER=$(SPARK_TEST_DRIVER)#{private_events}",
     "SPARK_TEST_DRIVER_SOURCES_0" => "SparkTestDriver*.mm",

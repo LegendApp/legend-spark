@@ -72,11 +72,11 @@ test("options are validated before native", async () => {
 });
 
 test("passkeys send WebAuthn's base64url values and validate the responses", async () => {
-  const registration = { credentialId: "Y3JlZA", clientDataJSON: "e30", attestationObject: null };
+  const registration = { credentialId: "Y3JlZA", clientDataJSON: "e30", attestationObject: null, authenticatorAttachment: "platform", transports: null, extensions: {} };
   reply = () => ({ type: "success", credential: registration });
   expect(await passkeys.createPasskey({ ...REGISTRATION, displayName: "Ada", attestation: "direct", userVerification: "required", excludeCredentials: ["b2xk"] })).toEqual({ type: "success", credential: registration });
   expect(calls[0]!.args).toEqual({ id: expect.any(String), operation: "createPasskey", ...REGISTRATION, displayName: "Ada", attestation: "direct", userVerification: "required", excludeCredentials: ["b2xk"] });
-  const assertion = { credentialId: "Y3JlZA", userId: "dXNlci0x", clientDataJSON: "e30", authenticatorData: "YXV0aA", signature: "c2ln" };
+  const assertion = { credentialId: "Y3JlZA", userId: "dXNlci0x", clientDataJSON: "e30", authenticatorData: "YXV0aA", signature: "c2ln", authenticatorAttachment: "platform", extensions: {} };
   reply = () => ({ type: "success", credential: assertion });
   expect(await passkeys.getPasskey({ relyingPartyId: "example.com", challenge: CHALLENGE, allowCredentials: ["Y3JlZA"] })).toEqual({ type: "success", credential: assertion });
   expect(calls[1]!.args).toEqual({ id: expect.any(String), operation: "getPasskey", relyingPartyId: "example.com", challenge: CHALLENGE, allowCredentials: ["Y3JlZA"] });
@@ -84,6 +84,104 @@ test("passkeys send WebAuthn's base64url values and validate the responses", asy
   await expect(passkeys.getPasskey({ relyingPartyId: "example.com", challenge: CHALLENGE })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
   reply = () => ({ type: "success", credential: registration });
   await expect(passkeys.getPasskey({ relyingPartyId: "example.com", challenge: CHALLENGE })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  for (const credential of [{ ...assertion, authenticatorAttachment: "hybrid" }, { ...assertion, extensions: { prf: { results: { first: "a=" } } } }, { ...assertion, extensions: undefined }]) {
+    reply = () => ({ type: "success", credential });
+    await expect(passkeys.getPasskey({ relyingPartyId: "example.com", challenge: CHALLENGE })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+  for (const credential of [{ ...registration, transports: ["hybrid"] }, { ...registration, extensions: { largeBlob: { supported: "yes" } } }]) {
+    reply = () => ({ type: "success", credential });
+    await expect(passkeys.createPasskey(REGISTRATION)).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  }
+});
+
+const ASSERTION = { relyingPartyId: "example.com", challenge: CHALLENGE };
+const ASSERTED = { credentialId: "a2V5", userId: "dXNlci0x", clientDataJSON: "e30", authenticatorData: "YXV0aA", signature: "c2ln", authenticatorAttachment: "cross-platform", extensions: {} };
+
+test("feature availability: host-restriction before the entitlement, unknown features rejected", () => {
+  availabilityAnswer = "host-restriction";
+  expect(passkeys.getPasskeyAvailability("example.com", "signals")).toEqual({ available: false, reason: "host-restriction" });
+  expect(availabilityCalls.at(-1)).toEqual({ feature: "passkeys", relyingPartyId: "example.com", passkeyFeature: "signals" });
+  availabilityAnswer = "available";
+  for (const feature of ["securityKeys", "prf", "securityKeyPrf", "largeBlob", "signals"] as const) expect(passkeys.getPasskeyAvailability("example.com", feature)).toEqual({ available: true });
+  expect(() => passkeys.getPasskeyAvailability("example.com", "hybrid" as never)).toThrow(expect.objectContaining({ code: "E_INVALID_ARGUMENT" }));
+  platform.OS = "windows";
+  expect(passkeys.getPasskeyAvailability("example.com", "prf")).toEqual({ available: false, reason: "unsupported-platform" });
+});
+
+test("security keys, extensions and immediate requests reach native in WebAuthn's shapes", async () => {
+  reply = () => ({ type: "success", credential: { credentialId: "a2V5", clientDataJSON: "e30", attestationObject: "YXR0", authenticatorAttachment: "cross-platform", transports: ["usb", "nfc"], extensions: { prf: { enabled: true } } } });
+  expect(await passkeys.createPasskey({ ...REGISTRATION, authenticatorAttachment: "cross-platform", excludeCredentials: [{ id: "b2xk", transports: ["usb"] }], extensions: { prf: {} } }))
+    .toMatchObject({ type: "success", credential: { authenticatorAttachment: "cross-platform", transports: ["usb", "nfc"], extensions: { prf: { enabled: true } } } });
+  expect(calls[0]!.args).toEqual({ id: expect.any(String), operation: "createPasskey", ...REGISTRATION, authenticatorAttachment: "cross-platform", excludeCredentials: [{ id: "b2xk", transports: ["usb"] }], extensions: { prf: {} } });
+  reply = () => ({ type: "success", credential: { ...ASSERTED, authenticatorAttachment: "platform", extensions: { prf: { results: { first: "b3V0" } }, largeBlob: { blob: "YmxvYg", written: false } } } });
+  const extensions = { prf: { eval: { first: "c2FsdA" }, evalByCredential: { a2V5: { first: "c2FsdA", second: "dHdv" } } }, largeBlob: { read: true as const } };
+  expect(await passkeys.getPasskey({ ...ASSERTION, allowCredentials: ["a2V5"], extensions, preferImmediatelyAvailableCredentials: true }))
+    .toMatchObject({ type: "success", credential: { extensions: { prf: { results: { first: "b3V0" } }, largeBlob: { blob: "YmxvYg", written: false } } } });
+  expect(calls[1]!.args).toEqual({ id: expect.any(String), operation: "getPasskey", ...ASSERTION, allowCredentials: ["a2V5"], extensions, preferImmediatelyAvailableCredentials: true });
+  reply = () => ({ type: "success", credential: ASSERTED });
+  await passkeys.getPasskey({ ...ASSERTION, authenticatorAttachment: "any", allowCredentials: [{ id: "a2V5", transports: ["ble"] }, "b2xk"] });
+  expect(calls[2]!.args).toMatchObject({ authenticatorAttachment: "any", allowCredentials: [{ id: "a2V5", transports: ["ble"] }, "b2xk"] });
+});
+
+test("invalid or unsupported security key and extension options never reach native", async () => {
+  const invalid = [{ authenticatorAttachment: "hybrid" }, { allowCredentials: [{ id: "a2V5", transports: ["usb"] }] }, { authenticatorAttachment: "cross-platform", allowCredentials: [{ id: "a2V5", transports: ["hybrid"] }] },
+    { authenticatorAttachment: "any", allowCredentials: [{ id: "a2V5", transports: [] }] }, { allowCredentials: [{ transports: ["usb"] }] }, { extensions: { prf: {} } },
+    { extensions: { prf: { eval: { first: "" } } } }, { extensions: { prf: { evalByCredential: { b3RoZXI: { first: "c2FsdA" } } } }, allowCredentials: ["a2V5"] },
+    { extensions: { largeBlob: { read: false } } }, { extensions: { largeBlob: { read: true, write: "YQ" } } }, { extensions: { largeBlob: { write: "YQ" } } }, { preferImmediatelyAvailableCredentials: "yes" }];
+  for (const change of invalid) await expect(passkeys.getPasskey({ ...ASSERTION, ...change } as never), JSON.stringify(change)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  const unsupported = [{ extensions: { credProps: true } }, { extensions: { largeBlob: { read: true } }, authenticatorAttachment: "cross-platform" }, { extensions: { largeBlob: { read: true } }, authenticatorAttachment: "any" },
+    { allowCredentials: [{ id: "a2V5", type: "public-key" }] }, { extensions: { prf: { eval: { first: "c2FsdA", third: "eA" } } } }];
+  for (const change of unsupported) await expect(passkeys.getPasskey({ ...ASSERTION, ...change } as never), JSON.stringify(change)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(passkeys.createPasskey({ ...REGISTRATION, extensions: { largeBlob: { support: "required" } }, authenticatorAttachment: "cross-platform" })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(passkeys.createPasskey({ ...REGISTRATION, extensions: { prf: { evalByCredential: {} } } } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(passkeys.createPasskey({ ...REGISTRATION, extensions: { largeBlob: { support: "always" } } } as never)).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(passkeys.createPasskey({ ...REGISTRATION, preferImmediatelyAvailableCredentials: true } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls).toEqual([]);
+});
+
+test("getCredential offers a passkey and Sign in with Apple in one request and reports which answered", async () => {
+  reply = () => ({ type: "success", credential: CREDENTIAL });
+  expect(await passkeys.getCredential({ passkey: ASSERTION, appleId: { scopes: ["email"] }, windowId: "main" })).toEqual({ type: "appleId", credential: CREDENTIAL });
+  expect(calls[0]!.args).toEqual({ id: expect.any(String), operation: "getCredential", passkey: ASSERTION, appleId: { scopes: ["email"] }, windowId: "main" });
+  reply = () => ({ type: "success", credential: ASSERTED });
+  expect(await passkeys.getCredential({ passkey: { ...ASSERTION, authenticatorAttachment: "any" }, appleId: {}, preferImmediatelyAvailableCredentials: true })).toEqual({ type: "passkey", credential: ASSERTED });
+  expect(calls[1]!.args).toMatchObject({ preferImmediatelyAvailableCredentials: true, appleId: { scopes: [] } });
+  // A credential of a kind not asked for is invalid data.
+  reply = () => ({ type: "success", credential: CREDENTIAL });
+  await expect(passkeys.getCredential({ passkey: ASSERTION })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  reply = () => ({ type: "cancel" });
+  expect(await passkeys.getCredential({ appleId: {} })).toEqual({ type: "cancel" });
+  reply = () => ({ type: "failure", reason: "missingEntitlement", message: "no" });
+  await expect(passkeys.getCredential({ passkey: ASSERTION, appleId: {} })).rejects.toMatchObject({ name: "AuthorizationError", code: "E_UNAVAILABLE", reason: "missingEntitlement" });
+  const count = calls.length;
+  await expect(passkeys.getCredential({})).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(passkeys.getCredential({ appleId: { scopes: ["phone" as never] } })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(passkeys.getCredential({ passkey: { ...ASSERTION, windowId: "main" } as never })).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(passkeys.getCredential({ appleId: { signal: undefined } } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  await expect(passkeys.getCredential({ password: {} } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  expect(calls.length).toBe(count);
+});
+
+test("signals send WebAuthn's values, resolve on success and reject failures", async () => {
+  reply = () => null;
+  await passkeys.signalUnknownCredential({ relyingPartyId: "example.com", credentialId: "a2V5" });
+  await passkeys.signalAllAcceptedCredentials({ relyingPartyId: "example.com", userId: "dXNlci0x", allAcceptedCredentialIds: ["a2V5"] });
+  await passkeys.signalCurrentUserDetails({ relyingPartyId: "example.com", userId: "dXNlci0x", name: "ada@example.org" });
+  expect(calls).toEqual([
+    { method: "signal", args: { kind: "unknownCredential", relyingPartyId: "example.com", credentialId: "a2V5" } },
+    { method: "signal", args: { kind: "allAcceptedCredentials", relyingPartyId: "example.com", userId: "dXNlci0x", allAcceptedCredentialIds: ["a2V5"] } },
+    { method: "signal", args: { kind: "currentUserDetails", relyingPartyId: "example.com", userId: "dXNlci0x", name: "ada@example.org" } }]);
+  reply = () => ({ type: "failure", reason: "missingEntitlement", message: "no" });
+  await expect(passkeys.signalUnknownCredential({ relyingPartyId: "example.com", credentialId: "a2V5" })).rejects.toMatchObject({ code: "E_UNAVAILABLE", reason: "missingEntitlement" });
+  reply = () => ({ done: true });
+  await expect(passkeys.signalUnknownCredential({ relyingPartyId: "example.com", credentialId: "a2V5" })).rejects.toMatchObject({ code: "E_INVALID_DATA" });
+  calls.length = 0;
+  await expect(passkeys.signalUnknownCredential({ relyingPartyId: "Example.com", credentialId: "a2V5" })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(passkeys.signalAllAcceptedCredentials({ relyingPartyId: "example.com", userId: "dXNlci0x", allAcceptedCredentialIds: "a2V5" as never })).rejects.toMatchObject({ code: "E_INVALID_ARGUMENT" });
+  await expect(passkeys.signalCurrentUserDetails({ relyingPartyId: "example.com", userId: "dXNlci0x", name: "Ada", displayName: "Ada" } as never)).rejects.toMatchObject({ code: "E_UNSUPPORTED_OPTION" });
+  platform.OS = "windows";
+  await expect(passkeys.signalUnknownCredential({ relyingPartyId: "example.com", credentialId: "a2V5" })).rejects.toMatchObject({ code: "E_UNSUPPORTED_PLATFORM" });
+  expect(calls).toEqual([]);
 });
 
 test("failures reject a typed AuthorizationError; unknown reasons are invalid data", async () => {
